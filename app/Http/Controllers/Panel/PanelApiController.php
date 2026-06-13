@@ -385,6 +385,7 @@ class PanelApiController extends Controller
         if ($after > 0) $q->where('id', '>', $after);
         $msgs = $q->limit(500)->get()->map(fn (Message $m) => [
             'id'        => (int) $m->id,
+            'wa_id'     => (string) ($m->wa_message_id ?? ''),
             'direction' => (string) $m->direction,
             'sender'    => (string) $m->sender,
             'body'      => (string) $m->body,
@@ -419,7 +420,14 @@ class PanelApiController extends Controller
         $c->save();
 
         try {
-            $wa->driver($t->whatsapp_driver ?: null)->sendText($t->whatsapp_instance, $phone, $body);
+            $quoted = null;
+            $qid = trim((string) $r->input('quoted_id', ''));
+            if ($qid !== '') {
+                $quoted = ['key' => ['id' => $qid]];
+            }
+            $t->whatsapp_driver
+                ? $wa->driver($t->whatsapp_driver)->sendText($t->whatsapp_instance, $phone, $body, $quoted)
+                : $wa->driver()->sendText($t->whatsapp_instance, $phone, $body, $quoted);
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'error' => 'send_failed', 'detail' => $e->getMessage()], 502);
         }

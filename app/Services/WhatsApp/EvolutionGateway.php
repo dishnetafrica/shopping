@@ -24,12 +24,16 @@ class EvolutionGateway implements WhatsAppGateway
         return str_contains($to, '@') ? $to : $to.'@s.whatsapp.net';
     }
 
-    public function sendText(string $instance, string $to, string $message): array
+    public function sendText(string $instance, string $to, string $message, ?array $quoted = null): array
     {
-        return $this->http()->post("/message/sendText/{$instance}", [
+        $payload = [
             'number' => preg_replace('/[^0-9]/', '', $to),
             'text'   => $message,
-        ])->json() ?? [];
+        ];
+        if ($quoted) {
+            $payload['quoted'] = $quoted;   // e.g. ['key' => ['id' => '<wa msg id>']]
+        }
+        return $this->http()->post("/message/sendText/{$instance}", $payload)->json() ?? [];
     }
 
     public function sendImage(string $instance, string $to, string $media, string $caption = ''): array

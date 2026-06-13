@@ -188,6 +188,13 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-13 (later) — Phase 9: WhatsApp-style Chats UI + reply-to (Bhavin + AI)
+- Full visual rebuild of `resources/panel/chats.html` to look like WhatsApp: green header, WhatsApp chat background + dotted texture, tailed bubbles (incoming white / outgoing #d9fdd3) with in-bubble time + ✓✓ ticks, WhatsApp-style list rows (avatar, name, preview, time, green unread badge), rounded pill composer with send button. On phone it renders like the WhatsApp app (green chat header, full-screen list <-> thread with a back arrow).
+- **Reply-to-message**: hover/tap a bubble -> "↩ reply" -> a quote bar appears above the composer; sending includes the quoted message so it shows as a native WhatsApp reply on the customer's phone.
+- Backend for quoting: `WhatsAppGateway::sendText` gained optional `?array $quoted`; `EvolutionGateway` passes `quoted` to `/message/sendText`; `chatThread` now returns each message's `wa_id`; `chatSend` accepts `quoted_id` and builds `['key'=>['id'=>...]]`. `CloudApiGateway` signature updated for interface parity (ignores quoted for now).
+- Replying still auto-takes-over the chat (bot pauses there). Bot on/off toggle + Sync moved into the green list header.
+- Changed: `WhatsAppGateway.php`, `EvolutionGateway.php`, `CloudApiGateway.php`, `PanelApiController.php`, `chats.html`. Brandize still swaps "Family Shopper" -> tenant name at serve time.
+
 ### 2026-06-13 (later) — Phase 8: per-tenant branding (Bhavin + AI)
 - The panel now shows **each business's own name + initials**, not hardcoded "Family Shopper / FS". `SellerPanelController::brandize()` swaps the brand name, the `FS` logo badge, and the iOS app title at serve time using `tenant->name` (initials derived from the name, e.g. "Pals Snacks" -> "PS"). Applied to panel, chats, and setup pages.
 - **PWA manifest is now per-tenant**: `PwaController::manifest()` returns the tenant's name as the installed-app name/short_name (reads the session; manifest `<link>` got `crossorigin="use-credentials"` so the browser sends the cookie). So when Pals Snacks installs the app, their home-screen app says "Pals Snacks".

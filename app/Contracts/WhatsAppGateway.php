@@ -8,7 +8,7 @@ namespace App\Contracts;
 interface WhatsAppGateway
 {
     /** @param string $instance Evolution instance / Cloud phone id for the tenant */
-    public function sendText(string $instance, string $to, string $message): array;
+    public function sendText(string $instance, string $to, string $message, ?array $quoted = null): array;
 
     public function sendImage(string $instance, string $to, string $media, string $caption = ''): array;
 

@@ -15,7 +15,7 @@ class CloudApiGateway implements WhatsAppGateway
         protected string $baseUrl,
     ) {}
 
-    public function sendText(string $instance, string $to, string $message): array
+    public function sendText(string $instance, string $to, string $message, ?array $quoted = null): array
     {
         // $instance == Cloud phone number id
         return Http::withToken($this->token)->post("{$this->baseUrl}/{$instance}/messages", [
