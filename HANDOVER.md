@@ -188,6 +188,17 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-13 (later) — Phase 13: Online payments — MoMo (MTN/Airtel) + Card (Stripe) (Bhavin + AI)
+- Shops can now pay/renew in-app. New `/panel/billing` page: pick Starter/Pro, choose Mobile Money (MTN or Airtel) or Card, pay. Success auto-extends the plan via the Phase 12 `Tenant::applyPaidPlan()` (sets plan, +1 month paid_until, clears trial). Upgrade banner now links here.
+- Providers are env-gated (hidden until keys set):
+  - Flutterwave (UGX MoMo): `App\Services\Billing\Flutterwave` — chargeMobileMoney (type=mobile_money_uganda), verifyByReference/ById, webhook 'verif-hash' check. Customer approves PIN on phone -> webhook -> plan extended. Status endpoint also actively verifies so polling confirms even if webhook is slow.
+  - Stripe (USD card): `App\Services\Billing\StripeGateway` — hosted Checkout in **subscription** mode with inline price_data (true monthly auto-renew, no pre-created Price). Webhook handles checkout.session.completed + invoice.paid (renewals); Stripe-Signature HMAC verified.
+- `payments` table (migration 000014) + `Payment` model record every attempt (provider, plan, amount, currency, tx_ref unique, status pending/successful/failed). Prices: Starter UGX 75,000/$20, Pro UGX 185,000/$50 (in config/plans.php).
+- Routes: papi billing/quote, billing/pay-momo, billing/pay-card, billing/status (authed); api /billing/flutterwave/webhook, /billing/stripe/webhook (public, signature-verified).
+- ENV to enable: FLW_SECRET_KEY, FLW_PUBLIC_KEY, FLW_WEBHOOK_HASH; STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_CURRENCY(=usd). Webhook URLs to register: https://app/api/billing/flutterwave/webhook and .../stripe/webhook.
+- Reality note: MoMo has no card-on-file auto-debit — each monthly MoMo renewal is a fresh PIN approval (one tap from the shop). Stripe cards DO auto-renew monthly. Manual "Mark paid" in /admin still works for cash/offline payments.
+- Added/changed: config/billing.php, config/plans.php, migration 000014, Payment.php, Tenant.php, Flutterwave.php, StripeGateway.php, BillingController.php, billing.html, SellerPanelController.php, web.php, api.php.
+
 ### 2026-06-13 (later) — Phase 12: Plans & billing (Free / Starter / Pro) (Bhavin + AI)
 - Adds the subscription layer the freemium model needs. `config/plans.php` defines Free (30 orders, bot+orders), Starter ($20, unlimited, bot+confirmations), Pro ($50, everything: POS, dispatch, tracking, reports, returns, branding, multi-user).
 - Migration `...000013_add_plan_billing_to_tenants` adds `trial_ends_at`, `paid_until`, `billing_note`. **Grandfathers existing tenants to Pro+10yr** so the live Family Shoppers panel is not locked. New tenants auto-start a 30-day trial via Tenant::booted() creating hook.

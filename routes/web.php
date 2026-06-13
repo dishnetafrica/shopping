@@ -25,6 +25,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel', [SellerPanelController::class, 'show']);
     Route::get('/panel/chats', [SellerPanelController::class, 'chats']);
     Route::get('/panel/setup', [SellerPanelController::class, 'setup']);
+    Route::get('/panel/billing', [\App\Http\Controllers\Billing\BillingController::class, 'page']);
 
     // JSON API the panel calls. GET for everything (the panel uses query-string
     // writes); upload-image is POST. Tenant scoping is automatic.
@@ -77,5 +78,11 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('branch-save',     [PanelApiController::class, 'branchSave']);
         Route::get('branch-delete',   [PanelApiController::class, 'branchDel']);
         Route::get('customer-save',   [PanelApiController::class, 'customerSave']);
+
+        // billing / upgrade (Phase 13)
+        Route::get('billing/quote',    [\App\Http\Controllers\Billing\BillingController::class, 'quote']);
+        Route::post('billing/pay-momo',[\App\Http\Controllers\Billing\BillingController::class, 'payMomo']);
+        Route::post('billing/pay-card',[\App\Http\Controllers\Billing\BillingController::class, 'payCard']);
+        Route::get('billing/status',   [\App\Http\Controllers\Billing\BillingController::class, 'status']);
     });
 });

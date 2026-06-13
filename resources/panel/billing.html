@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upgrade — Family Shopper</title>
+<style>
+  :root{--ink:#10241c;--body:#3f4d47;--muted:#73807a;--green:#0fa653;--green-d:#0c8a45;
+    --gold:#f5b301;--cream:#fbf7ee;--card:#fff;--line:#ece4d4;--red:#d6453c;--radius:16px}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--cream);color:var(--body);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.5}
+  .top{background:#08311f;color:#fff;display:flex;align-items:center;gap:12px;padding:14px 18px}
+  .top a{color:#cfe9da;text-decoration:none;font-size:22px}
+  .top b{font-size:18px}
+  .wrap{width:min(900px,94vw);margin:24px auto}
+  .cur{background:#e9f7ef;border:1px solid #bfe6cf;color:#0c6b3c;border-radius:12px;padding:12px 16px;font-size:14.5px;margin-bottom:22px}
+  h2{color:var(--ink);font-size:20px;margin:0 0 14px}
+  .plans{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:680px){.plans{grid-template-columns:1fr}}
+  .plan{background:var(--card);border:2px solid var(--line);border-radius:var(--radius);padding:20px;cursor:pointer;transition:.15s}
+  .plan:hover{border-color:var(--green)}
+  .plan.sel{border-color:var(--green);box-shadow:0 8px 22px -14px rgba(15,166,83,.7)}
+  .plan .nm{font-weight:800;color:var(--ink);font-size:19px}
+  .plan .pr{font-size:26px;font-weight:800;color:var(--ink);margin:8px 0 2px}
+  .plan .pr small{font-size:13px;color:var(--muted);font-weight:600}
+  .plan .ph{color:var(--muted);font-size:13px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px;margin-top:22px}
+  .seg{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 18px}
+  .seg button{flex:1;min-width:130px;border:2px solid var(--line);background:#fff;border-radius:12px;padding:13px;font-weight:700;cursor:pointer;color:var(--ink);font-size:15px}
+  .seg button.on{border-color:var(--green);background:#eafaf0;color:var(--green-d)}
+  label{display:block;font-weight:600;color:var(--ink);font-size:14px;margin:12px 0 6px}
+  input,select{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit}
+  .pay{margin-top:20px;width:100%;background:var(--green);color:#fff;border:none;border-radius:12px;padding:15px;font-size:17px;font-weight:800;cursor:pointer}
+  .pay:disabled{opacity:.6;cursor:default}
+  .msg{margin-top:16px;padding:13px 15px;border-radius:11px;font-size:14.5px;display:none}
+  .msg.show{display:block}
+  .msg.info{background:#fff7e0;border:1px solid #f0d98a;color:#6b5300}
+  .msg.ok{background:#e9f7ef;border:1px solid #bfe6cf;color:#0c6b3c}
+  .msg.err{background:#fdeceb;border:1px solid #f3b6b1;color:#8a2c25}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid #ffffff66;border-top-color:#fff;border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px;margin-right:7px}
+  @keyframes s{to{transform:rotate(360deg)}}
+  .hide{display:none!important}
+  .muted{color:var(--muted);font-size:13px;margin-top:10px}
+</style>
+</head>
+<body>
+  <div class="top"><a href="/panel" title="Back">‹</a><b>Upgrade your plan</b></div>
+  <div class="wrap">
+    <div class="cur" id="cur">Loading your plan…</div>
+
+    <h2>1 · Choose a plan</h2>
+    <div class="plans" id="plans"></div>
+
+    <div class="card" id="payCard">
+      <h2>2 · How would you like to pay?</h2>
+      <div class="seg" id="methods"></div>
+
+      <div id="momoForm" class="hide">
+        <label>Mobile Money network</label>
+        <div class="seg" id="networks">
+          <button data-net="MTN" class="on">MTN MoMo</button>
+          <button data-net="AIRTEL">Airtel Money</button>
+        </div>
+        <label>Mobile Money number</label>
+        <input id="phone" inputmode="numeric" placeholder="e.g. 0772 123456">
+        <p class="muted">You'll get a prompt on this phone to approve with your PIN.</p>
+      </div>
+
+      <div id="cardForm" class="hide">
+        <p class="muted">You'll be taken to a secure card page. Your card is billed automatically each month — cancel any time.</p>
+      </div>
+
+      <button class="pay" id="payBtn">Pay now</button>
+      <div class="msg" id="msg"></div>
+    </div>
+  </div>
+
+<script>
+var Q=null, PLAN=null, METHOD=null, NET='MTN', POLL=null;
+function $(id){return document.getElementById(id);}
+function ugx(n){return 'UGX '+Number(n||0).toLocaleString();}
+function show(t,cls){var m=$('msg');m.className='msg show '+cls;m.innerHTML=t;}
+function hideMsg(){$('msg').className='msg';}
+
+async function load(){
+  try{
+    var r=await fetch('/papi/billing/quote',{cache:'no-store'});Q=await r.json();
+  }catch(e){ $('cur').textContent='Could not load billing.'; return; }
+
+  var c=Q.current||{};
+  $('cur').innerHTML='Your plan: <b>'+(c.label||c.plan)+'</b>'+(c.paid_until?(' · paid until '+c.paid_until):'');
+
+  // plans
+  $('plans').innerHTML=(Q.plans||[]).map(function(p){
+    return '<div class="plan" data-plan="'+p.key+'" onclick="pickPlan(\''+p.key+'\')">'+
+      '<div class="nm">'+p.name+'</div>'+
+      '<div class="pr">'+ugx(p.price_ugx)+'<small> / month</small></div>'+
+      '<div class="ph">or about $'+p.price_usd+' by card</div></div>';
+  }).join('');
+  pickPlan('pro');
+
+  // methods
+  var m=[];
+  if(Q.providers&&Q.providers.momo)m.push('<button data-m="momo" onclick="pickMethod(\'momo\')">📱 Mobile Money</button>');
+  if(Q.providers&&Q.providers.card)m.push('<button data-m="card" onclick="pickMethod(\'card\')">💳 Card</button>');
+  if(!m.length)m.push('<div class="muted">No online payment is switched on yet. Please contact CloudBSS to pay.</div>');
+  $('methods').innerHTML=m.join('');
+  if(Q.providers&&Q.providers.momo)pickMethod('momo');
+  else if(Q.providers&&Q.providers.card)pickMethod('card');
+  else { $('payBtn').disabled=true; }
+
+  // network buttons
+  Array.prototype.forEach.call($('networks').querySelectorAll('button'),function(b){
+    b.onclick=function(){NET=b.getAttribute('data-net');
+      Array.prototype.forEach.call($('networks').querySelectorAll('button'),function(x){x.classList.remove('on');});
+      b.classList.add('on');};
+  });
+}
+function pickPlan(k){PLAN=k;Array.prototype.forEach.call(document.querySelectorAll('.plan'),function(el){el.classList.toggle('sel',el.getAttribute('data-plan')===k);});}
+function pickMethod(m){METHOD=m;
+  Array.prototype.forEach.call($('methods').querySelectorAll('button'),function(b){b.classList.toggle('on',b.getAttribute('data-m')===m);});
+  $('momoForm').classList.toggle('hide',m!=='momo');
+  $('cardForm').classList.toggle('hide',m!=='card');
+}
+
+$('payBtn').onclick=async function(){
+  if(!PLAN){show('Pick a plan first.','err');return;}
+  if(!METHOD){show('Pick a payment method.','err');return;}
+  hideMsg();$('payBtn').disabled=true;
+
+  if(METHOD==='card'){
+    try{
+      var r=await fetch('/papi/billing/pay-card',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan:PLAN})});
+      var d=await r.json();
+      if(d.ok&&d.redirect){window.location.href=d.redirect;return;}
+      show(d.detail||'Could not start card payment.','err');
+    }catch(e){show('Network error.','err');}
+    $('payBtn').disabled=false;return;
+  }
+
+  // momo
+  var phone=($('phone').value||'').replace(/[^0-9]/g,'');
+  if(phone.length<9){show('Enter a valid Mobile Money number.','err');$('payBtn').disabled=false;return;}
+  show('<span class="spin"></span>Sending request to your phone…','info');
+  try{
+    var r=await fetch('/papi/billing/pay-momo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan:PLAN,phone:phone,network:NET})});
+    var d=await r.json();
+    if(!d.ok){show(d.detail||'Could not start the payment.','err');$('payBtn').disabled=false;return;}
+    show('<span class="spin"></span>'+d.message+' Waiting for confirmation…','info');
+    pollStatus(d.tx_ref);
+  }catch(e){show('Network error.','err');$('payBtn').disabled=false;}
+};
+
+function pollStatus(txRef){
+  var tries=0;
+  clearInterval(POLL);
+  POLL=setInterval(async function(){
+    tries++;
+    try{
+      var r=await fetch('/papi/billing/status?tx_ref='+encodeURIComponent(txRef),{cache:'no-store'});
+      var d=await r.json();
+      if(d.status==='successful'){clearInterval(POLL);show('✅ Payment received! You are now on the <b>'+d.plan.toUpperCase()+'</b> plan. Reloading…','ok');setTimeout(function(){location.href='/panel';},2500);return;}
+      if(d.status==='failed'){clearInterval(POLL);show('❌ Payment was not completed. Please try again.','err');$('payBtn').disabled=false;return;}
+    }catch(e){}
+    if(tries>40){clearInterval(POLL);show('Still waiting… If you approved on your phone, your plan will update shortly. You can close this page.','info');$('payBtn').disabled=false;}
+  },3000);
+}
+
+// returning from Stripe
+if(location.search.indexOf('paid=1')>=0){setTimeout(function(){show('✅ Thank you! If your card went through, your plan is now active.','ok');},300);}
+if(location.search.indexOf('cancelled=1')>=0){setTimeout(function(){show('Payment cancelled. You can try again any time.','info');},300);}
+
+load();
+</script>
+</body>
+</html>
