@@ -180,4 +180,34 @@ HTML;
             ->header('Content-Type', 'text/html; charset=UTF-8')
             ->header('Cache-Control', 'no-store');
     }
+
+    public function scheduled(Request $request)
+    {
+        $user = $request->user();
+        if (! $user || ! $user->tenant_id) {
+            return redirect('/app/login');
+        }
+        $path = resource_path('panel/scheduled.html');
+        if (! is_file($path)) {
+            abort(500, 'Scheduled asset missing.');
+        }
+        return response($this->brandize(file_get_contents($path), $user->tenant), 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
+    }
+
+    public function marketing(Request $request)
+    {
+        $user = $request->user();
+        if (! $user || ! $user->tenant_id) {
+            return redirect('/app/login');
+        }
+        $path = resource_path('panel/marketing.html');
+        if (! is_file($path)) {
+            abort(500, 'Marketing asset missing.');
+        }
+        return response($this->brandize(file_get_contents($path), $user->tenant), 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
+    }
 }

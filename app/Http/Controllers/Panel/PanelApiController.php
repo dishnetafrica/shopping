@@ -10,6 +10,9 @@ use App\Models\LedgerEntry;
 use App\Models\Message;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Campaign;
+use App\Jobs\SendCampaign;
+use App\Services\Marketing\AudienceResolver;
 use App\Models\ReturnRecord;
 use App\Models\Rider;
 use App\Models\User;
@@ -1098,6 +1101,233 @@ class PanelApiController extends Controller
         $u->delete();
 
         return response()->json(['ok' => true]);
+    }
+
+    // ---- Scheduled deliveries ----
+
+    /** Set or clear a delivery schedule on an order. */
+    public function scheduleOrder(Request $r)
+    {
+        $o = Order::find((int) $r->input('order_id', 0));
+        if (! $o) {
+            return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        }
+
+        if ($r->input('mode') === 'now') {
+            $o->scheduled_for = null;
+            $o->sched_stage = null;
+            $o->sched_reminders = null;
+            $o->save();
+            return response()->json(['ok' => true, 'scheduled' => false]);
+        }
+
+        try {
+            $dt = \Carbon\Carbon::parse((string) $r->input('when'));
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => 'bad_date'], 422);
+        }
+        if ($dt->lessThan(now()->subMinute())) {
+            return response()->json(['ok' => false, 'error' => 'past'], 422);
+        }
+
+        $o->scheduled_for = $dt;
+        $o->sched_stage = 'Scheduled';
+        $o->sched_reminders = [];
+        $o->save();
+
+        return response()->json(['ok' => true, 'scheduled' => true, 'when' => $dt->toIso8601String()]);
+    }
+
+    /** Scheduled queue + recent orders that can still be scheduled. */
+    public function scheduledList(Request $r)
+    {
+        $queue = Order::whereNotNull('scheduled_for')->whereNull('delivered_at')
+            ->orderBy('scheduled_for')->limit(200)->get()
+            ->map(fn (Order $o) => [
+                'id'       => (int) $o->id,
+                'order_no' => (string) $o->order_no,
+                'customer' => (string) $o->customer_name,
+                'location' => (string) $o->location,
+                'total'    => (float) $o->total,
+                'when'     => optional($o->scheduled_for)->toIso8601String(),
+                'stage'    => $o->sched_stage ?: 'Scheduled',
+            ])->values();
+
+        $candidates = Order::whereNull('scheduled_for')->whereNull('delivered_at')
+            ->orderByDesc('id')->limit(40)->get()
+            ->map(fn (Order $o) => [
+                'id'       => (int) $o->id,
+                'order_no' => (string) $o->order_no,
+                'customer' => (string) $o->customer_name,
+                'total'    => (float) $o->total,
+            ])->values();
+
+        return response()->json(['ok' => true, 'queue' => $queue, 'candidates' => $candidates]);
+    }
+
+    // ---- Marketing campaigns ----
+
+    public function campaignList(Request $r)
+    {
+        $campaigns = Campaign::orderByDesc('id')->limit(50)->get()
+            ->map(fn (Campaign $c) => [
+                'id'         => (int) $c->id,
+                'name'       => $c->name ?: $c->typeLabel(),
+                'type'       => $c->type,
+                'type_label' => $c->typeLabel(),
+                'audience'   => $c->audience,
+                'status'     => $c->status,
+                'when'       => optional($c->scheduled_for)->toIso8601String(),
+                'stats'      => is_array($c->stats) ? $c->stats : [],
+            ])->values();
+
+        $products = Product::where('active', true)->orderBy('name')->limit(300)
+            ->get(['id', 'name', 'price', 'category']);
+        $categories = $products->pluck('category')->filter()->unique()->values();
+
+        return response()->json([
+            'ok'         => true,
+            'campaigns'  => $campaigns,
+            'products'   => $products,
+            'categories' => $categories,
+            'official'   => $r->user()->tenant->whatsapp_driver === 'cloud',
+        ]);
+    }
+
+    public function campaignSave(Request $r)
+    {
+        $id   = (int) $r->input('id', 0);
+        $data = [
+            'name'        => trim((string) $r->input('name', '')) ?: null,
+            'type'        => $r->input('type', 'promotion'),
+            'audience'    => $r->input('audience', 'all'),
+            'category'    => $r->input('category') ?: null,
+            'message'     => trim((string) $r->input('message', '')),
+            'image_url'   => trim((string) $r->input('image_url', '')) ?: null,
+            'product_ids' => array_values(array_filter(array_map('intval', (array) $r->input('product_ids', [])))),
+            'cta'         => trim((string) $r->input('cta', '')) ?: 'Reply BUY to order instantly.',
+        ];
+        if ($data['message'] === '' && ! $data['product_ids']) {
+            return response()->json(['ok' => false, 'error' => 'empty'], 422);
+        }
+
+        $when = $r->input('scheduled_for');
+        if ($when) {
+            try {
+                $data['scheduled_for'] = \Carbon\Carbon::parse((string) $when);
+            } catch (\Throwable $e) {
+                return response()->json(['ok' => false, 'error' => 'bad_date'], 422);
+            }
+            $data['status'] = 'scheduled';
+        } else {
+            $data['scheduled_for'] = null;
+            $data['status'] = 'draft';
+        }
+
+        $c = $id ? Campaign::find($id) : new Campaign();
+        if ($id && ! $c) {
+            return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        }
+        $c->fill($data)->save();
+
+        return response()->json(['ok' => true, 'id' => $c->id, 'status' => $c->status]);
+    }
+
+    /** Send a campaign immediately (throttled background job). */
+    public function campaignSend(Request $r, AudienceResolver $aud)
+    {
+        $c = Campaign::find((int) $r->input('id', 0));
+        if (! $c) {
+            return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        }
+        $count = $aud->count($c->audience, $c->category);
+        if ($count === 0) {
+            return response()->json(['ok' => false, 'error' => 'no_audience']);
+        }
+
+        $c->update(['status' => 'sending', 'scheduled_for' => null]);
+        SendCampaign::dispatch($c->tenant_id, $c->id);
+
+        return response()->json(['ok' => true, 'queued' => true, 'audience' => $count]);
+    }
+
+    /** Preview how many customers an audience covers. */
+    public function campaignAudience(Request $r, AudienceResolver $aud)
+    {
+        $count = $aud->count((string) $r->input('audience', 'all'), $r->input('category'));
+        return response()->json(['ok' => true, 'count' => $count]);
+    }
+
+    /** AI suggests a promotion the owner can review and approve. */
+    public function campaignSuggest(Request $r)
+    {
+        $kind     = (string) $r->input('kind', 'weekend');     // slow | overstock | new | weekend
+        $products = $this->suggestProducts($kind);
+        $names    = $products->pluck('name')->all();
+        $message  = $this->aiPromo($kind, $names) ?: $this->cannedPromo($kind, $names);
+
+        return response()->json([
+            'ok'       => true,
+            'kind'     => $kind,
+            'type'     => $this->kindToType($kind),
+            'products' => $products->map(fn ($p) => ['id' => (int) $p->id, 'name' => $p->name])->values(),
+            'message'  => $message,
+        ]);
+    }
+
+    protected function suggestProducts(string $kind)
+    {
+        $q = Product::where('active', true);
+        // stock-on-hand is the proxy for slow/overstock until there's enough
+        // order history for true sales-velocity ranking (v2).
+        return match ($kind) {
+            'new'      => $q->orderByDesc('id')->limit(5)->get(),
+            'overstock', 'slow' => $q->orderByDesc('stock')->limit(5)->get(),
+            default    => $q->inRandomOrder()->limit(5)->get(),   // weekend / generic
+        };
+    }
+
+    protected function kindToType(string $kind): string
+    {
+        return ['new' => 'launch', 'slow' => 'discount', 'overstock' => 'discount', 'weekend' => 'seasonal'][$kind] ?? 'promotion';
+    }
+
+    protected function aiPromo(string $kind, array $names): string
+    {
+        if (! (config('openai.api_key') ?: env('OPENAI_API_KEY'))) return '';
+        $list  = $names ? implode(', ', $names) : 'our products';
+        $angle = [
+            'slow'      => 'move slow-selling stock with a friendly limited-time nudge',
+            'overstock' => 'clear overstocked items with a value angle',
+            'new'       => 'announce new arrivals with excitement',
+            'weekend'   => 'a cheerful weekend special',
+        ][$kind] ?? 'a friendly promotion';
+
+        try {
+            $resp = OpenAI::chat()->create([
+                'model'       => env('OPENAI_MODEL', 'gpt-4o-mini'),
+                'temperature' => 0.7,
+                'max_tokens'  => 160,
+                'messages'    => [
+                    ['role' => 'system', 'content' => 'You write short, warm WhatsApp marketing messages for a Ugandan shop. One short paragraph, 1-2 emojis max, no hashtags, under 45 words. End naturally — a call to action is added separately.'],
+                    ['role' => 'user', 'content' => "Write {$angle}. Featured products: {$list}."],
+                ],
+            ]);
+            return trim((string) ($resp->choices[0]->message->content ?? ''));
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
+    protected function cannedPromo(string $kind, array $names): string
+    {
+        $first = $names[0] ?? 'great deals';
+        return match ($kind) {
+            'new'       => "🆕 Just arrived! Fresh stock of {$first} and more is now in. Be the first to grab yours today.",
+            'overstock' => "💛 Stock-clearing special! Great prices on {$first} and more — while stocks last.",
+            'slow'      => "✨ This week only: special prices on {$first} and selected items. Don't miss out!",
+            default     => "🎉 Weekend special! Treat yourself to {$first} and more — order today and we'll deliver.",
+        };
     }
 
     // AI bot setup — owner describes the business in plain words, we generate the persona.
