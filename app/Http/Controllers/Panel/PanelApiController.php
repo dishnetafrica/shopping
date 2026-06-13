@@ -246,9 +246,19 @@ class PanelApiController extends Controller
 
     public function saveOrder(Request $r)
     {
-        $o = Order::find((int) $r->query('row'));
+        $rowId = (int) $r->query('row');
+        $o = $rowId ? Order::find($rowId) : null;
+
+        // No row id -> this is a NEW order (POS / new sale). Create it.
+        $isNew = false;
         if (! $o) {
-            return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+            if ($rowId) {
+                return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+            }
+            $o = new Order();
+            $o->status  = 'New';
+            $o->channel = (string) ($r->query('channel', 'pos'));
+            $isNew = true;
         }
 
         $items = json_decode((string) $r->query('items', '[]'), true);
@@ -267,11 +277,27 @@ class PanelApiController extends Controller
             $o->items_text = implode(', ', $textParts);
         }
 
-        if ($r->filled('total'))  $o->total  = (float) $r->query('total');
-        if ($r->filled('status')) $o->status = (string) $r->query('status');
-        $o->save();
+        if ($r->filled('total'))    $o->total          = (float) $r->query('total');
+        if ($r->filled('status'))   $o->status         = (string) $r->query('status');
+        if ($r->filled('name'))     $o->customer_name  = (string) $r->query('name');
+        if ($r->filled('phone'))    $o->customer_phone = preg_replace('/[^0-9]/', '', (string) $r->query('phone'));
+        if ($r->filled('payment'))  $o->payment        = (string) $r->query('payment');
+        if ($r->filled('location')) $o->location       = (string) $r->query('location');
+        if ($r->filled('channel'))  $o->channel        = (string) $r->query('channel');
 
-        return response()->json(['ok' => true]);
+        $branch = $r->query('branch', '');
+        if ($branch !== '' && is_numeric($branch)) {
+            $o->branch_id = (int) $branch;
+        }
+
+        $o->save();   // OrderObserver assigns order_no + track_token on create
+
+        return response()->json([
+            'ok'       => true,
+            'created'  => $isNew,
+            'id'       => (int) $o->id,
+            'order_no' => (string) $o->order_no,
+        ]);
     }
 
     public function updateProduct(Request $r)

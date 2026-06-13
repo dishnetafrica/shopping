@@ -188,6 +188,11 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-13 (later) — Phase 10: POS place-order fix (Bhavin + AI)
+- Bug: POS "Place order" always failed with "Could not place order". Root cause: `PanelApiController::saveOrder` only handled the EDIT path -- it did `Order::find($row)` and returned `not_found` when no `row` was supplied. POS sends a NEW order with no `row`, so it 404'd every time.
+- Fix: `saveOrder` now CREATES a new Order when `row` is empty (POS / new sale) and UPDATES when `row` is present. On create it fills customer_name, customer_phone, items_json/items_text, total, payment, location, channel ('pos'), status ('New'), and branch_id (when numeric). OrderObserver still assigns the FS-#### order_no + track_token on create. Returns `{ok,created,id,order_no}`.
+- Changed: `PanelApiController.php` only.
+
 ### 2026-06-13 (later) — Phase 9: WhatsApp-style Chats UI + reply-to (Bhavin + AI)
 - Full visual rebuild of `resources/panel/chats.html` to look like WhatsApp: green header, WhatsApp chat background + dotted texture, tailed bubbles (incoming white / outgoing #d9fdd3) with in-bubble time + ✓✓ ticks, WhatsApp-style list rows (avatar, name, preview, time, green unread badge), rounded pill composer with send button. On phone it renders like the WhatsApp app (green chat header, full-screen list <-> thread with a back arrow).
 - **Reply-to-message**: hover/tap a bubble -> "↩ reply" -> a quote bar appears above the composer; sending includes the quoted message so it shows as a native WhatsApp reply on the customer's phone.
