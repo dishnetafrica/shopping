@@ -1,12 +1,19 @@
 <?php
 
 use App\Http\Controllers\Panel\PanelApiController;
+use App\Http\Controllers\Panel\PwaController;
 use App\Http\Controllers\Panel\SellerPanelController;
 use App\Http\Middleware\SetTenantFromUser;
 use Illuminate\Support\Facades\Route;
 
 // Default landing -> the familiar seller panel.
 Route::get('/', fn () => redirect('/panel'));
+
+// PWA assets (public — a manifest / service worker / icon must load without a session).
+Route::get('/manifest.webmanifest', [PwaController::class, 'manifest']);
+Route::get('/sw.js',                [PwaController::class, 'sw']);
+Route::get('/apple-touch-icon.png', fn () => app(PwaController::class)->icon('apple-touch-icon.png'));
+Route::get('/icons/{name}',         [PwaController::class, 'icon']);
 
 // The customer's existing Family Shopper seller UI, served verbatim behind the
 // /app web session. (Filament business panel stays available at /app.)

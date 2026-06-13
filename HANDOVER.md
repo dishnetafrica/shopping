@@ -188,6 +188,13 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-13 (later) — Phase 6: installable mobile app (PWA) + app-style UI (Bhavin + AI)
+- The panel is now an **installable PWA** — owners "Add to Home Screen" and it opens full-screen with its own icon, no browser bars. No native app needed (keeps one codebase). Works on the phones most Kampala owners use; the panel was already responsive (off-canvas drawer at <=820px), so all operations run from mobile.
+- New `App\\Http\\Controllers\\Panel\\PwaController` + public routes: `/manifest.webmanifest`, `/sw.js` (network-first shell cache; never caches `/papi`|`/api` or writes; `Service-Worker-Allowed: /`), `/icons/{name}`, `/apple-touch-icon.png`. Icons generated at `resources/panel/icons/` (192/512 maskable + 180 apple-touch).
+- `seller.html`: PWA head meta + a **mobile bottom tab bar** (Home / Orders / Chats / POS / More) shown only <=820px, with safe-area inset. `chats.html`: PWA meta + a mobile **back-to-list** button in the thread header. `setup.html`: PWA meta. All three register the service worker.
+- New: `PwaController.php`, `resources/panel/icons/*.png`. Changed: `routes/web.php`, `seller.html`, `chats.html`, `setup.html`.
+- Future: per-tenant app name/icon in the manifest (currently static "Family Shopper / Seller"); push notifications for new orders.
+
 ### 2026-06-13 (later) — Phase 5: self-serve onboarding (WhatsApp QR connect + AI bot setup) (Bhavin + AI)
 - New **Setup** page at `/panel/setup` (sidebar link). Two cards: (1) **Connect WhatsApp** by scanning a QR like WhatsApp Web — no Evolution dashboard; (2) **Set up your assistant** — owner describes the shop in plain words, OpenAI writes the bot's welcome message, owner edits + saves.
 - New `App\\Services\\WhatsApp\\EvolutionAdmin`: create instance, fetch QR, poll connectionState, set webhook, disconnect — all from our portal using the global Evolution API key. Defensive about v2.x payload drift (reads QR/state from multiple paths).

@@ -68,12 +68,20 @@
   .hide{display:none!important}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#16231c;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:50}
   .toast.show{opacity:1}
-  @media(max-width:760px){
+  #backBtn{display:none}
+  @media(max-width:760px){ #backBtn{display:inline-block} 
     .list{width:100%;position:absolute;z-index:10;height:calc(100vh - 58px)}
     .list.hide-mobile{display:none}
     .thread{width:100%}
   }
 </style>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0B3D22">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Seller">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 </head>
 <body>
   <div class="top">
@@ -100,6 +108,7 @@
 
       <div id="threadView" class="hide" style="flex:1;display:flex;flex-direction:column;min-width:0">
         <div class="th-head">
+          <button class="pill" id="backBtn" onclick="backToList()">←</button>
           <div class="av" id="thAv">?</div>
           <div style="flex:1;min-width:0">
             <div class="nm" id="thName">—</div>
@@ -154,6 +163,7 @@ function renderList(){
   }).join('');
 }
 
+function backToList(){var l=document.getElementById("listPane");if(l)l.classList.remove("hide-mobile");}
 function openChat(phone){
   var c=CHATS.find(function(x){return x.phone===phone;});
   CURRENT={phone:phone,name:c?c.name:''};
@@ -248,5 +258,6 @@ loadChats();
 listTimer=setInterval(loadChats,15000);
 threadTimer=setInterval(function(){if(CURRENT&&!document.hidden)loadThread(false);},4000);
 </script>
+<script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){});});}</script>
 </body>
 </html>
