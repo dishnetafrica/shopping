@@ -51,8 +51,8 @@ class OrderResource extends Resource
             ->defaultSort('created_at', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('order_no')->label('Order')->searchable()->sortable()->weight('bold'),
-                Tables\Columns\TextColumn::make('customer_name')->searchable()->description(fn ($r) => $r->customer_phone),
-                Tables\Columns\TextColumn::make('items_text')->limit(40)->tooltip(fn ($r) => $r->items_text),
+                Tables\Columns\TextColumn::make('customer_name')->searchable()->description(fn ($record) => $record->customer_phone),
+                Tables\Columns\TextColumn::make('items_text')->limit(40)->tooltip(fn ($record) => $record->items_text),
                 Tables\Columns\TextColumn::make('total')->money('UGX')->sortable(),
                 Tables\Columns\TextColumn::make('status')->badge()->color(fn (string $state) => match ($state) {
                     'New' => 'gray', 'Confirmed' => 'info', 'Packed' => 'warning',
