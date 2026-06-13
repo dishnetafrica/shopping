@@ -474,9 +474,7 @@ class PanelApiController extends Controller
             if ($qid !== '') {
                 $quoted = ['key' => ['id' => $qid]];
             }
-            $t->whatsapp_driver
-                ? $wa->driver($t->whatsapp_driver)->sendText($t->whatsapp_instance, $phone, $body, $quoted)
-                : $wa->driver()->sendText($t->whatsapp_instance, $phone, $body, $quoted);
+            $wa->forTenant($t)->sendText($t->whatsapp_instance, $phone, $body, $quoted);
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'error' => 'send_failed', 'detail' => $e->getMessage()], 502);
         }
@@ -784,6 +782,73 @@ class PanelApiController extends Controller
         $instance = (string) ($r->user()->tenant->whatsapp_instance ?? '');
         if ($instance !== '') $evo->disconnect($instance);
         return response()->json(['ok' => true]);
+    }
+
+    // ---- Official WhatsApp Cloud API (Bring-Your-Own, Pro plan) ----
+
+    /** Current Cloud-API state + the exact values the owner pastes into Meta. */
+    public function waCloudInfo(Request $r)
+    {
+        $t = $r->user()->tenant;
+        return response()->json([
+            'ok'            => true,
+            'plan_ok'       => $t->effectivePlan() === 'pro',
+            'driver'        => (string) ($t->whatsapp_driver ?: 'evolution'),
+            'connected'     => $t->whatsapp_driver === 'cloud' && (bool) $t->setting('cloud_token'),
+            'phone_id'      => $t->whatsapp_driver === 'cloud' ? (string) $t->whatsapp_instance : '',
+            'waba_id'       => (string) $t->setting('cloud_waba', ''),
+            'display_number'=> (string) $t->setting('cloud_display', ''),
+            'token_set'     => (bool) $t->setting('cloud_token'),
+            // values to paste into Meta -> WhatsApp -> Configuration -> Webhook
+            'webhook_url'   => url('/api/webhook/whatsapp/cloud'),
+            'verify_token'  => (string) config('whatsapp.cloud_verify_token'),
+        ]);
+    }
+
+    /** Save the tenant's own Cloud-API credentials and switch them to the cloud driver. */
+    public function waCloudSave(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if ($t->effectivePlan() !== 'pro') {
+            return response()->json(['ok' => false, 'error' => 'upgrade_required', 'feature' => 'cloud_api'], 403);
+        }
+
+        $phoneId = preg_replace('/[^0-9]/', '', (string) $r->input('phone_id', ''));
+        $token   = trim((string) $r->input('token', ''));
+        $waba    = preg_replace('/[^0-9]/', '', (string) $r->input('waba_id', ''));
+        $display = preg_replace('/[^0-9+ ]/', '', (string) $r->input('display_number', ''));
+
+        if ($phoneId === '' || $token === '') {
+            return response()->json(['ok' => false, 'error' => 'missing_fields',
+                'detail' => 'Phone number ID and a permanent access token are required.'], 422);
+        }
+
+        $s = $t->settings ?? [];
+        $s['cloud_token']   = $token;
+        $s['cloud_waba']    = $waba;
+        $s['cloud_display'] = $display;
+        $t->settings          = $s;
+        $t->whatsapp_driver   = 'cloud';
+        $t->whatsapp_instance = $phoneId;     // Cloud API addresses the number by phone_number_id
+        $t->save();
+
+        return response()->json([
+            'ok'           => true,
+            'driver'       => 'cloud',
+            'phone_id'     => $phoneId,
+            'webhook_url'  => url('/api/webhook/whatsapp/cloud'),
+            'verify_token' => (string) config('whatsapp.cloud_verify_token'),
+        ]);
+    }
+
+    /** Switch a tenant back to the Evolution (QR) driver. Cloud creds are kept. */
+    public function waUseEvolution(Request $r)
+    {
+        $t = $r->user()->tenant;
+        $t->whatsapp_driver   = 'evolution';
+        $t->whatsapp_instance = 'shopbot_t' . $t->id;   // next "Connect WhatsApp" re-pairs via QR
+        $t->save();
+        return response()->json(['ok' => true, 'driver' => 'evolution']);
     }
 
     // AI bot setup — owner describes the business in plain words, we generate the persona.

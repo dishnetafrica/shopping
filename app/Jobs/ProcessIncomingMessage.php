@@ -27,7 +27,7 @@ class ProcessIncomingMessage implements ShouldQueue
     {
         $ctx->set($this->tenantId);                 // scope everything to this tenant
         $tenant = Tenant::findOrFail($this->tenantId);
-        $gateway = $wa->driver($tenant->whatsapp_driver ?: $this->driver);
+        $gateway = $wa->forTenant($tenant);
 
         $convo = Conversation::firstOrCreate(
             ['customer_phone' => $this->incoming['from'], 'instance' => $this->incoming['instance']],

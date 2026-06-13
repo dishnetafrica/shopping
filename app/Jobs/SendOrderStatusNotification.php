@@ -38,7 +38,7 @@ class SendOrderStatusNotification implements ShouldQueue
         $text = $messages[$this->status] ?? null;
         if (!$text) return;
 
-        $wa->driver($tenant->whatsapp_driver ?: null)
+        $wa->forTenant($tenant)
            ->sendText($tenant->whatsapp_instance, $order->customer_phone, $text);
 
         MessageLog::record(

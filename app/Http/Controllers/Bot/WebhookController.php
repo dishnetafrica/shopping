@@ -13,6 +13,16 @@ class WebhookController
     /** One webhook for all tenants. /api/webhook/whatsapp/{driver} */
     public function handle(Request $request, string $driver = 'evolution')
     {
+        // Meta Cloud API verification handshake (GET): echo hub.challenge if the
+        // verify token matches the platform's. Tenants paste this token into Meta.
+        if ($request->isMethod('get') && $request->has('hub_challenge')) {
+            $ok = $request->query('hub_mode') === 'subscribe'
+                && hash_equals((string) config('whatsapp.cloud_verify_token'), (string) $request->query('hub_verify_token'));
+            return $ok
+                ? response((string) $request->query('hub_challenge'), 200)->header('Content-Type', 'text/plain')
+                : response('forbidden', 403);
+        }
+
         $incoming = $this->wa->driver($driver)->parseIncoming($request->all());
         if (!$incoming || $incoming['text'] === '') {
             return response()->json(['ok' => true]); // ack & ignore (status events, media-only, etc.)

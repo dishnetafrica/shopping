@@ -42,9 +42,7 @@ class NotifyOwnerNewOrder implements ShouldQueue
 
         foreach ($nums as $n) {
             try {
-                $t->whatsapp_driver
-                    ? $wa->driver($t->whatsapp_driver)->sendText($t->whatsapp_instance, $n, $txt)
-                    : $wa->driver()->sendText($t->whatsapp_instance, $n, $txt);
+                $wa->forTenant($t)->sendText($t->whatsapp_instance, $n, $txt);
                 MessageLog::record($t->id, $n, $t->whatsapp_instance, 'out', 'system', $txt);
             } catch (\Throwable $e) { /* best-effort */ }
         }
