@@ -37,6 +37,6 @@ class AdminPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
                 SetTenantFromUser::class,   // sets super-admin context (sees all tenants)
-            ]);
+            ], isPersistent: true);
     }
 }

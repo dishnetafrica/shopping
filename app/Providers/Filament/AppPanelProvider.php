@@ -39,6 +39,6 @@ class AppPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
                 SetTenantFromUser::class,   // scope every query to the staff member's business
-            ]);
+            ], isPersistent: true);          // run on Livewire requests (forms, imports), not just page loads
     }
 }
