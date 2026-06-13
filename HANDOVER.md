@@ -188,6 +188,32 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-14 — Phase 21: Homepage finalised as v2 (Bhavin's choice) (Bhavin + AI)
+- Bhavin chose the cleaner **11-section v2** homepage over the heavier Phase-20 conversion build. `resources/marketing/index.html` now = v2 (hero + phone mock, how-it-works, see-a-real-order, who-uses, features, dashboard showcase, AI assistant, trust, testimonials, pricing + comparison, final CTA). Wire-ready (number tokens + /app/login + /admin/login). No fake metric counters (the inflated stats band from Phase 20 was dropped — Bhavin correctly flagged it as dishonest for an early-stage startup).
+- Open honesty note for launch: the 3 testimonials in v2 are illustrative/sample — replace with real quotes or remove before going live (same concern as the stats).
+
+### 2026-06-14 — Phase 20: Pre-launch conversion & trust pass (no redesign) (Bhavin + AI)
+- Layout unchanged; added/upgraded sections on `resources/marketing/index.html` to remove the last reasons a Uganda shop owner hesitates:
+  - **Demo video** placeholder below hero ("Watch a customer place an order in under 60 seconds" — drop a Loom/YouTube embed in later).
+  - **Product catalog example** ("Your products appear like this" — Rice/Sugar/Bread/Oil/Milk cards with image, price, add-to-cart).
+  - **Official WhatsApp trust** section ("Works with your existing WhatsApp number" — keep number, customers chat normally, no app, official API available).
+  - **Trust section** updated to the 6 requested signals (secure hosting, daily backups, data ownership, local support, WhatsApp support, training) + a **trust ribbon** before the footer.
+  - **Setup process** ("Go live in 30 minutes" — 5 numbered steps).
+  - **Social proof / stats** before pricing (animated counters: businesses, orders, sales, satisfaction — flagged as illustrative, easy to replace).
+  - **FAQ accordion** before final CTA (8 questions: existing number, no app, setup time, upload products, multi-branch, security, support, cancel).
+  - **Dashboard mockups upgraded** (Orders header + customer names; Products with thumbnails).
+  - **Mobile**: WhatsApp icon on the sticky CTA; **desktop floating WhatsApp "Start free trial" button** that appears after scrolling past the hero.
+- Persona audit baked in: supermarket (catalog + tracking), pharmacy (FAQ security/support, AI escalation example), restaurant (24/7 + delivery) concerns answered in copy.
+- Still wire-ready (same tokens + logins). Standalone review copy at outputs/cloudbss-home-v3.html.
+- Changed: resources/marketing/index.html only.
+
+### 2026-06-14 — Phase 19: Conversion-optimized homepage rebuild (11 sections) (Bhavin + AI)
+- Replaced `resources/marketing/index.html` with a Shopify-grade, conversion-focused homepage. New headline: **"Turn your WhatsApp into an online store."** Mobile-first, scroll-reveal, reduced-motion respected.
+- 11 sections: (1) Hero — phone WhatsApp mock + floating Orders/Delivery cards + "Start free trial" / "Watch demo"; (2) How it works (3 steps); (3) **See a real order** — animated WhatsApp chat with the exact 2-Rice → Pakistan Rice 5kg → Cooking Oil → UGX 45,000 → checkout → confirmed script; (4) Who uses it (6 cards); (5) Features (9-tile grid); (6) **Dashboard showcase** — pure-CSS mockups of Orders / Products / Delivery tracking / Reports; (7) AI sales assistant (dark section + sample convo + escalation); (8) Trust (6 items); (9) Testimonials carousel (3 illustrative Uganda businesses, auto-rotating + dots); (10) Pricing (Free/Starter/Pro with "≈ UGX/day" + most-popular + full comparison table); (11) Final CTA + "Talk to sales".
+- Still wire-ready: `wa.me/256700000000` / `tel:` / email tokens (config-injected) + `/app/login` & `/admin/login`. CTAs map to: Start free trial → wa.me trial; Watch demo → #realorder; Talk to sales → wa.me sales.
+- Standalone review copy also at outputs/cloudbss-home-v2.html. Previous design preserved in git history if you want to revert.
+- Changed: resources/marketing/index.html (full rebuild). No backend/route changes.
+
 ### 2026-06-14 — Phase 18: Cashbook + order payments with customer receipt (Bhavin + AI)
 - **Cashbook** (hybrid-ledger style, single-currency UGX, tenant-isolated). New `ledger_entries` table + `LedgerEntry` model (type in/out, category order_payment|expense|supplier|owner_draw|other, optional order_id, method, received_by, note). Running cash-on-hand = sum(in) − sum(out).
 - **Order payments.** New `orders.amount_paid` column + Order helpers `balanceDue()` / `paymentState()` (unpaid|partial|paid) + `payments()` relation. `recordPayment` endpoint registers an order payment, bumps amount_paid, and **WhatsApps the customer a receipt** ("Payment received… paid in full / balance left UGX Y") via `forTenant()`. Handles part-payments.
