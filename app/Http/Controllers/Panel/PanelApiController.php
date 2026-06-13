@@ -556,6 +556,41 @@ class PanelApiController extends Controller
     }
 
     /**
+     * Re-point this tenant's Evolution instance webhook at our app so incoming
+     * customer messages start logging again (MESSAGES_UPSERT). Then verify by
+     * reading the webhook config back. The panel auto-runs Sync afterwards to
+     * backfill anything already sitting in Evolution's store.
+     */
+    public function chatRelinkWebhook(Request $r, EvolutionAdmin $evo)
+    {
+        if (! $evo->configured()) {
+            return response()->json(['ok' => false, 'error' => 'evolution_not_configured'], 400);
+        }
+        $t = $r->user()->tenant;
+        $instance = (string) ($t->whatsapp_instance ?? '');
+        if ($instance === '') {
+            return response()->json(['ok' => false, 'error' => 'no_instance'], 400);
+        }
+
+        $expected = url('/api/webhook/whatsapp/evolution');
+        $evo->setWebhook($instance, $expected);
+
+        // Read it back so we can tell the operator whether it actually stuck.
+        $wh      = $evo->getWebhook($instance);
+        $current = (string) (data_get($wh, 'url') ?? data_get($wh, 'webhook.url') ?? '');
+        $enabled = (bool)   (data_get($wh, 'enabled') ?? data_get($wh, 'webhook.enabled') ?? false);
+        $linked  = $current !== '' && rtrim($current, '/') === rtrim($expected, '/');
+
+        return response()->json([
+            'ok'       => true,
+            'linked'   => $linked,
+            'enabled'  => $enabled,
+            'current'  => $current,
+            'expected' => $expected,
+        ]);
+    }
+
+    /**
      * Pull human-readable text out of any Baileys/Evolution message shape:
      * plain text, captions, button/list replies, and media (as a labelled
      * placeholder so the bubble still shows). Returns '' only when truly nothing.
