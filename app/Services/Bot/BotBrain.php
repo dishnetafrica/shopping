@@ -62,6 +62,18 @@ class BotBrain
 
             case 'checkout':
                 if (! $cart) return "Your basket is empty. Add a product first, then say *checkout*.";
+                if ($tenant->effectivePlan() === 'free' && $tenant->overOrderCap()) {
+                    // Free plan hit its monthly order limit: don't auto-place,
+                    // nudge the owner (once a day) and let a human take over.
+                    if (\Illuminate\Support\Facades\Cache::add("cap_notice:{$tenant->id}:" . date('Y-m-d'), 1, 86400)) {
+                        \App\Jobs\NotifyOwner::dispatch(
+                            $tenant->id,
+                            "\u{26A0} You've reached your " . $tenant->orderCap() . " free orders this month on CloudBSS. "
+                            . "Upgrade to keep the bot taking orders automatically — open your panel and tap *Upgrade*."
+                        );
+                    }
+                    return "Thank you! \u{1F64F} Please hold on — someone from the shop will confirm your order shortly.";
+                }
                 $convo->state = array_merge($convo->state ?? [], ['step' => 'awaiting_location']);
                 $convo->save();
                 return $this->cartSummary($tenant, $cart)
@@ -167,6 +179,11 @@ class BotBrain
     {
         $cart = is_array($convo->cart) ? $convo->cart : [];
         if (! $cart) { $convo->state = []; $convo->save(); return "Your basket is empty. Add a product to start a new order."; }
+
+        if ($tenant->effectivePlan() === 'free' && $tenant->overOrderCap()) {
+            $convo->state = []; $convo->save();
+            return "Thank you! \u{1F64F} Please hold on — someone from the shop will confirm your order shortly.";
+        }
 
         $total = 0; foreach ($cart as $l) $total += $l['price'] * $l['qty'];
         $itemsText = collect($cart)->map(fn ($l) => "{$l['qty']}x {$l['name']}")->implode(', ');

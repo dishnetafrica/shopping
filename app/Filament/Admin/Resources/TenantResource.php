@@ -47,6 +47,10 @@ class TenantResource extends Resource
             ])->columns(3),
 
             Forms\Components\Section::make('Settings')->schema([
+                Forms\Components\TextInput::make('settings.owner_alert_phone')
+                    ->label('Owner alert WhatsApp')
+                    ->helperText('New-order alerts & payment receipts go here. Full intl format e.g. 256772123456. Comma-separate for several.')
+                    ->columnSpanFull(),
                 Forms\Components\TextInput::make('settings.currency')->default('UGX'),
                 Forms\Components\TextInput::make('settings.usd_ugx')->numeric()->label('1 USD = UGX'),
                 Forms\Components\TextInput::make('settings.usd_ssp')->numeric()->label('1 USD = SSP'),

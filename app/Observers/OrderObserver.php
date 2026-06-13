@@ -23,6 +23,15 @@ class OrderObserver
         }
     }
 
+    /** Alert the owner the moment a new order lands (bot or phone orders). */
+    public function created(Order $order): void
+    {
+        // Skip POS: the owner is standing at the counter, they made it themselves.
+        if ($order->tenant_id && $order->channel !== 'pos') {
+            \App\Jobs\NotifyOwnerNewOrder::dispatch($order->tenant_id, $order->id);
+        }
+    }
+
     /** When status changes (in the panel or by the bot), notify the customer. */
     public function updated(Order $order): void
     {

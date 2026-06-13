@@ -219,6 +219,7 @@ class BillingController extends Controller
                 $pay->status = 'successful';
                 $pay->save();
                 $tenant->applyPaidPlan($plan, 1);
+                $this->sendReceipt($tenant, $pay);
             }
         }
         return response('ok');
@@ -229,5 +230,18 @@ class BillingController extends Controller
     {
         $pay->update(['status' => 'successful']);
         $tenant->applyPaidPlan($pay->plan, (int) ($pay->months ?: 1));
+        $this->sendReceipt($tenant, $pay);
+    }
+
+    /** WhatsApp a payment receipt to the payer / owner. */
+    protected function sendReceipt(Tenant $tenant, Payment $pay): void
+    {
+        $cur   = $pay->currency;
+        $amt   = number_format((float) $pay->amount);
+        $until = optional($tenant->fresh()->paid_until)->toDateString();
+        $txt = "\u{2705} Payment received — {$cur} {$amt}.\n"
+            . 'Your ' . ucfirst($pay->plan) . ' plan is active' . ($until ? " until {$until}" : '') . ".\n"
+            . 'Thank you for using CloudBSS!';
+        \App\Jobs\NotifyOwner::dispatch($tenant->id, $txt, $pay->phone ?: null);
     }
 }

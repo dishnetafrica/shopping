@@ -113,4 +113,12 @@ class Tenant extends Model
         $this->trial_ends_at = null;     // trial is over once they pay
         $this->save();
     }
+
+    /** Phone number(s) that receive new-order alerts & payment receipts. */
+    public function ownerAlertNumbers(): array
+    {
+        $raw  = (string) $this->setting('owner_alert_phone', '');
+        $nums = preg_split('/[,\s]+/', $raw, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        return array_values(array_filter(array_map(fn ($n) => preg_replace('/[^0-9]/', '', $n), $nums)));
+    }
 }
