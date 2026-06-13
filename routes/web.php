@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Marketing\MarketingController;
 use App\Http\Controllers\Panel\PanelApiController;
 use App\Http\Controllers\Panel\PwaController;
 use App\Http\Controllers\Panel\SellerPanelController;
@@ -7,8 +8,9 @@ use App\Http\Controllers\Panel\TrackController;
 use App\Http\Middleware\SetTenantFromUser;
 use Illuminate\Support\Facades\Route;
 
-// Default landing -> the familiar seller panel.
-Route::get('/', fn () => redirect('/panel'));
+// Public CloudBSS marketing landing page. Shop owners log in via /app/login,
+// operator via /admin/login (both linked from the page).
+Route::get('/', [MarketingController::class, 'home']);
 
 // Public customer order-tracking page (no auth — order id + secret token are the key).
 Route::get('/papi/track', [TrackController::class, 'show']);
@@ -52,12 +54,16 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('chats/bot-mode',    [PanelApiController::class, 'chatBotMode']);
         Route::post('chats/sync',        [PanelApiController::class, 'chatSync']);
         Route::get('chats/sync-debug',    [PanelApiController::class, 'chatSyncDebug']);
+        Route::post('chats/relink-webhook', [PanelApiController::class, 'chatRelinkWebhook']);
 
         // self-serve onboarding (WhatsApp QR connect + AI bot setup)
         Route::get('wa/status',      [PanelApiController::class, 'waStatus']);
         Route::post('wa/connect',    [PanelApiController::class, 'waConnect']);
         Route::get('wa/qr',          [PanelApiController::class, 'waQr']);
         Route::post('wa/disconnect', [PanelApiController::class, 'waDisconnect']);
+        Route::get('wa/cloud-info',    [PanelApiController::class, 'waCloudInfo']);
+        Route::post('wa/cloud-save',   [PanelApiController::class, 'waCloudSave']);
+        Route::post('wa/use-evolution',[PanelApiController::class, 'waUseEvolution']);
         Route::post('bot/generate',  [PanelApiController::class, 'botGenerate']);
         Route::post('bot/save',      [PanelApiController::class, 'botSave']);
 

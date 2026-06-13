@@ -1,6 +1,6 @@
 # ShopBot — Handover & Continuation Guide
 
-_Last updated: 13 Jun 2026. Keep this file in the repo root and update it as the system evolves._
+_Last updated: 14 Jun 2026. Keep this file in the repo root and update it as the system evolves._
 
 ---
 
@@ -187,6 +187,29 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 ## 14. Change log
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
+
+### 2026-06-14 — Phase 17: Official Cloud API (BYO, per-tenant) + marketing page wired + HOW-TO guide (Bhavin + AI)
+- **Per-tenant WhatsApp driver.** `WhatsAppManager::forTenant($tenant)` now resolves the gateway per shop and, for the cloud driver, builds `CloudApiGateway` with THAT tenant's own access token (`settings.cloud_token`). All five send sites switched from `driver($t->whatsapp_driver)` to `forTenant($t)`: NotifyOwner, NotifyOwnerNewOrder, ProcessIncomingMessage, SendOrderStatusNotification, PanelApiController::chatSend.
+- **Official Cloud API is BYO, gated to Pro.** New panel endpoints `wa/cloud-info`, `wa/cloud-save` (Pro-gated; stores phone_number_id as `whatsapp_instance`, token/WABA/display in settings, sets driver=cloud), `wa/use-evolution` (switch back). New "Use the official WhatsApp API" card in `setup.html` shows the fields + the exact Callback URL & Verify token to paste into Meta.
+- **Webhook handshake.** `WebhookController` now answers Meta's GET verification (`hub.challenge`) against `config('whatsapp.cloud_verify_token')` (env `WHATSAPP_CLOUD_VERIFY_TOKEN`, default `cloudbss-verify`); POST path unchanged, tenant routed by phone_number_id. The Cloud driver itself (`CloudApiGateway`) was already implemented — only per-tenant creds + verify were missing.
+- **Marketing page is live at `/`** — wired the chosen design (`index_chosen.html`, iPhone-mock hero + animated chat + logins) into `resources/marketing/index.html`.
+- **HOW-TO-GUIDE.md added** — full end-to-end: deploy, env vars, first-run, both WhatsApp connection options, bot setup, plans/payments, go-live checklist, troubleshooting, file map.
+- No migration needed (`whatsapp_driver` column + `settings` JSON already existed).
+- Added/changed: WhatsAppManager.php, CloudApiGateway.php (already done), WebhookController.php, PanelApiController.php, routes/web.php, config/whatsapp.php, resources/panel/setup.html, resources/marketing/index.html, the 4 jobs, HOW-TO-GUIDE.md.
+
+### 2026-06-14 — Phase 16: CloudBSS marketing page is now the front door (/) (Bhavin + AI)
+- `/` no longer redirects to `/panel` — it now serves the **CloudBSS marketing landing page** (`resources/marketing/index.html`) via `MarketingController::home()`. The page is now part of THIS app, so it deploys together (no separate cloudbss-site service to maintain).
+- **Login entry points added to the page**: nav **Log in** → `/app/login` (shop owners); footer **Account → Shop owner login** (`/app/login`) and **Operator login** (`/admin/login`, that's us). `/panel`, `/app`, `/admin` all unchanged.
+- **Contact points are config-driven** (`config/marketing.php`): `MARKETING_WA_NUMBER` / `MARKETING_PHONE` / `MARKETING_EMAIL`. Page ships with placeholder `256700000000`; set the env var once the real CloudBSS marketing WhatsApp line is connected and every wa.me/tel: link updates automatically (no HTML edit). Served raw (not Blade) so its CSS/JS braces are safe.
+- Next (Part B, see Roadmap): give CloudBSS its OWN marketing WhatsApp number + auto-reply bot — planned as a dedicated "operator/marketing" tenant reusing the existing connect + chats + bot machinery, with a sales/FAQ bot persona instead of grocery-ordering.
+- Added/changed: routes/web.php (`/` route), app/Http/Controllers/Marketing/MarketingController.php (new), config/marketing.php (new), resources/marketing/index.html (new — page + login links + .nav-login style).
+
+### 2026-06-14 — Phase 15: "Re-link webhook" button — fix missing incoming messages (Bhavin + AI)
+- **Symptom**: a thread (e.g. +211927797217) showed ONLY outgoing green bubbles — no customer messages on the left. Looked like a UI bug; it is not.
+- **Root cause**: rendering is correct (`direction='in'`→left/white, `'out'`→right/green, bubbles cap 65%). The DB simply had no inbound rows for that number. Incoming messages are only logged when the Evolution instance's **webhook points at our app** and fires `MESSAGES_UPSERT` (real-time path = `WebhookController`→`ProcessIncomingMessage`→`MessageLog::record(..., 'in','customer',...)`). That instance's webhook wasn't pointed at us, so every inbound message was dropped on arrival. A one-sided thread looks "wrong" but is just missing data — it becomes a normal two-sided window once inbound is captured.
+- **Fix**: new **🔗 Re-link** button in the Chats header (next to ⟳ Sync). Calls `POST /papi/chats/relink-webhook` → `PanelApiController::chatRelinkWebhook()` → `EvolutionAdmin::setWebhook()` (registers MESSAGES_UPSERT/UPDATE/CONNECTION/QR), then reads `getWebhook()` back and reports `linked`/`enabled`/`current`/`expected`. On success the panel auto-runs Sync to backfill anything already in Evolution's store. Going forward, new inbound logs in real time.
+- **Operator note**: after connecting/reconnecting a WhatsApp number, click **Re-link** once. To diagnose, `/papi/chats/sync-debug` shows `webhook_url` vs `webhook_expected`.
+- Added/changed: PanelApiController.php (chatRelinkWebhook), routes/web.php (chats/relink-webhook), resources/panel/chats.html (Re-link button + relinkWebhook()).
 
 ### 2026-06-13 (later) — Phase 14: Owner alerts + admin Payments + bot Free-cap (Bhavin + AI)
 - **New-order owner alert**: `OrderObserver::created()` now fires `NotifyOwnerNewOrder` for every new order EXCEPT POS (owner made those at the counter). Job WhatsApps a summary (order no, customer, location, items, total, panel link) to the shop's alert number(s).

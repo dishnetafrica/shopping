@@ -121,6 +121,7 @@
         <a href="/panel" class="panel-link" title="Back to panel">‹</a>
         <span class="b">Family Shopper</span>
         <button class="ic-btn" id="syncBtn" onclick="syncHistory()">⟳ Sync</button>
+        <button class="ic-btn" id="relinkBtn" onclick="relinkWebhook()" title="Re-point the WhatsApp webhook at this app so incoming customer messages are captured">🔗 Re-link</button>
         <div class="bot-wrap">Bot<div class="switch" id="botSwitch" onclick="toggleBot()"><div class="knob"></div></div></div>
       </div>
       <div class="searchbar"><input id="q" placeholder="Search name or number" oninput="renderList()"></div>
@@ -274,6 +275,22 @@ async function syncHistory(){
   try{var r=await fetch('/papi/chats/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});var d=await r.json();
     if(d&&d.ok)toast('Synced '+(d.imported||0)+' messages · '+(d.contacts||0)+' chats');else toast('Sync failed');loadChats();}catch(e){toast('Sync error');}
   if(b){b.disabled=false;b.textContent='⟳ Sync';}
+}
+async function relinkWebhook(){
+  var b=$('relinkBtn');if(b){b.disabled=true;b.innerHTML='<span class="spin"></span>Linking';}
+  try{
+    var r=await fetch('/papi/chats/relink-webhook',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    var d=await r.json();
+    if(d&&d.ok&&d.linked){
+      toast('✅ Webhook linked — incoming messages will now appear. Syncing…');
+      await syncHistory();           // backfill anything already in Evolution's store
+    }else if(d&&d.ok){
+      toast('⚠️ Sent, but webhook didn\'t confirm. Check connection, then try again.');
+    }else{
+      toast(d&&d.error==='no_instance'?'No WhatsApp instance connected yet':'Could not link webhook');
+    }
+  }catch(e){toast('Network error');}
+  if(b){b.disabled=false;b.innerHTML='🔗 Re-link';}
 }
 
 async function sendMsg(){

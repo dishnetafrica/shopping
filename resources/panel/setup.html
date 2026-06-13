@@ -80,6 +80,38 @@
       <div class="hint" id="waInstance"></div>
     </div>
 
+    <!-- OFFICIAL CLOUD API (Pro) -->
+    <div class="card" id="cloudCard">
+      <div class="step">Optional · Pro</div>
+      <h2>Use the official WhatsApp API</h2>
+      <p class="lead">More reliable and ban-safe at scale — connect your own Meta WhatsApp Cloud API number instead of the QR link. Needs a verified Meta Business account.</p>
+
+      <div id="cloudStatus"><span class="badge b-wait"><span class="dot"></span> Checking…</span></div>
+
+      <div id="cloudForm" class="hide" style="margin-top:8px">
+        <label style="display:block;font-weight:600;margin:10px 0 4px;font-size:14px">Phone number ID</label>
+        <input id="clPhoneId" placeholder="e.g. 123456789012345">
+        <label style="display:block;font-weight:600;margin:10px 0 4px;font-size:14px">Permanent access token</label>
+        <input id="clToken" type="password" placeholder="System-user token from Meta">
+        <label style="display:block;font-weight:600;margin:10px 0 4px;font-size:14px">WhatsApp Business Account ID (optional)</label>
+        <input id="clWaba" placeholder="WABA ID">
+        <label style="display:block;font-weight:600;margin:10px 0 4px;font-size:14px">Display number (optional)</label>
+        <input id="clDisplay" placeholder="e.g. +256 700 123456">
+        <div class="row"><button class="btn" id="clSaveBtn" onclick="cloudSave()">Connect official API</button></div>
+      </div>
+
+      <div id="cloudWebhook" class="hide" style="margin-top:14px">
+        <div class="hint"><b>Paste these into Meta → WhatsApp → Configuration → Webhook, then subscribe to the “messages” field:</b></div>
+        <label style="display:block;font-weight:600;margin:10px 0 4px;font-size:14px">Callback URL</label>
+        <input id="clHookUrl" readonly onclick="this.select()">
+        <label style="display:block;font-weight:600;margin:10px 0 4px;font-size:14px">Verify token</label>
+        <input id="clHookTok" readonly onclick="this.select()">
+        <div class="row"><button class="btn danger" id="clBackBtn" onclick="cloudUseEvolution()">Switch back to QR (Evolution)</button></div>
+      </div>
+
+      <div class="hint" id="cloudPlanNote"></div>
+    </div>
+
     <!-- AI BOT SETUP -->
     <div class="card">
       <div class="step">Step 2</div>
@@ -205,7 +237,49 @@ async function botSave(){
   b.disabled=false;
 }
 
+/* ---------- Official Cloud API (Pro) ---------- */
+async function cloudInfo(){
+  try{var r=await fetch('/papi/wa/cloud-info',{cache:'no-store'});var d=await r.json();
+    if(!d.ok)return;
+    var st=$('cloudStatus');
+    if(!d.plan_ok){
+      st.innerHTML='<span class="badge b-off"><span class="dot"></span> Pro plan needed</span>';
+      $('cloudPlanNote').textContent='The official WhatsApp API is available on the Pro plan. Upgrade in Billing to enable it.';
+      return;
+    }
+    $('clHookUrl').value=d.webhook_url;$('clHookTok').value=d.verify_token;
+    if(d.connected){
+      st.innerHTML='<span class="badge b-open"><span class="dot"></span> Official API connected · phone id '+d.phone_id+'</span>';
+      $('cloudForm').classList.add('hide');$('cloudWebhook').classList.remove('hide');
+    }else{
+      st.innerHTML='<span class="badge b-off"><span class="dot"></span> Not using official API</span>';
+      $('clPhoneId').value=d.phone_id||'';$('clWaba').value=d.waba_id||'';$('clDisplay').value=d.display_number||'';
+      $('cloudForm').classList.remove('hide');
+    }
+  }catch(e){}
+}
+async function cloudSave(){
+  var b=$('clSaveBtn');b.disabled=true;b.innerHTML='<span class="spin"></span>Connecting…';
+  try{
+    var body={phone_id:$('clPhoneId').value,token:$('clToken').value,waba_id:$('clWaba').value,display_number:$('clDisplay').value};
+    var r=await fetch('/papi/wa/cloud-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var d=await r.json();
+    if(d&&d.ok){toast('Official API saved — now set the webhook in Meta');cloudInfo();}
+    else if(d&&d.error==='upgrade_required'){toast('Pro plan needed for the official API');}
+    else if(d&&d.error==='missing_fields'){toast('Phone number ID and token are required');}
+    else{toast('Could not connect');}
+  }catch(e){toast('Network error');}
+  b.disabled=false;b.textContent='Connect official API';
+}
+async function cloudUseEvolution(){
+  if(!confirm('Switch back to the QR (Evolution) connection?'))return;
+  try{var r=await fetch('/papi/wa/use-evolution',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    var d=await r.json();if(d&&d.ok){toast('Switched back to QR — reconnect under Step 1');cloudInfo();waCheck();}
+  }catch(e){toast('Could not switch');}
+}
+
 waCheck();
+cloudInfo();
 </script>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){});});}</script>
 </body>

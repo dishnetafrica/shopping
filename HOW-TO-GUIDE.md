@@ -1,0 +1,206 @@
+# CloudBSS / ShopBot — How-To Guide (deploy + run end to end)
+
+_Last updated: 14 Jun 2026. This is the practical "do this, then this" guide. For architecture and history see `HANDOVER.md`._
+
+CloudBSS is a multi-tenant WhatsApp ordering platform (Laravel 11 + Filament v3 + Postgres + Redis), deployed via GitHub → EasyPanel/Docker. One install serves many shops ("tenants").
+
+---
+
+## 0. The 60-second mental model
+
+- **Public site** lives at `/` — the CloudBSS marketing page. Shop owners log in from there.
+- **Shop owners** use the seller panel at `/panel` (orders, chats, POS, riders, setup, billing).
+- **You (operator)** use the admin at `/admin` (create shops, set plans, mark payments, see all payments).
+- **Customers** never log in — they just message the shop's WhatsApp number; the bot does the rest.
+- Each shop connects WhatsApp one of two ways: **QR (Evolution)** — instant, free, ban-risk at scale; or **Official Cloud API** — reliable, needs a Meta account (Pro plan).
+
+URLs (replace host with yours):
+- Public site: `https://app/`
+- Shop login: `https://app/app/login`  · Shop panel: `https://app/panel`
+- Operator login: `https://app/admin/login` · Admin: `https://app/admin`
+
+---
+
+## 1. Deploy (GitHub → EasyPanel)
+
+You do **not** run composer/docker/php locally. The flow is: put files in GitHub → click Deploy in EasyPanel.
+
+1. Push the contents of `shopbot-saas.zip` to your repo (`dishnetafrica/shopping`). Keep `cloudbss-site/` if it exists separately — this app does not contain it; the marketing page now lives inside the app at `resources/marketing/index.html`.
+2. In EasyPanel, the service builds from the `Dockerfile`. Make sure these services exist and are linked: **app**, **Postgres**, **Redis**.
+3. Set environment variables (next section), then click **Deploy**.
+4. First deploy runs migrations automatically (see `docker/` entrypoint). If you ever need to run them by hand, use the EasyPanel console: `php artisan migrate --force`.
+5. Visit `https://app/` — you should see the CloudBSS marketing page.
+
+If a page 500s, open EasyPanel **Logs** and read the last error; that's the fastest path. With `APP_DEBUG=true` (staging only) the error shows in the browser.
+
+---
+
+## 2. Environment variables (.env)
+
+Core (always):
+```
+APP_NAME=CloudBSS
+APP_ENV=production
+APP_KEY=base64:...            # php artisan key:generate once, then keep it
+APP_URL=https://your-app-host
+APP_DEBUG=false               # MUST be false in production
+
+DB_CONNECTION=pgsql
+DB_HOST=...  DB_PORT=5432  DB_DATABASE=...  DB_USERNAME=...  DB_PASSWORD=...
+
+REDIS_HOST=...  REDIS_PORT=6379
+QUEUE_CONNECTION=redis        # jobs (bot replies, owner alerts) run on the queue
+```
+
+WhatsApp — Evolution (QR connection, the default on-ramp):
+```
+WHATSAPP_DRIVER=evolution
+EVOLUTION_BASE_URL=https://your-evolution-server
+EVOLUTION_API_KEY=...
+```
+
+WhatsApp — Official Cloud API (only needed if shops will use BYO official API):
+```
+WHATSAPP_CLOUD_VERIFY_TOKEN=cloudbss-verify   # the token shops paste into Meta's webhook
+# (per-tenant tokens are entered in the panel, not here)
+```
+
+AI bot (sales/marketing auto-reply uses OpenAI):
+```
+OPENAI_API_KEY=sk-...
+```
+
+Marketing page contact points (optional — defaults to placeholder 256700000000):
+```
+MARKETING_WA_NUMBER=2567XXXXXXXX    # digits only, no "+"
+MARKETING_PHONE=+256 7XX XXXXXX
+MARKETING_EMAIL=hello@mycloudbss.com
+```
+
+Payments (only when you turn on in-app paying — see §7):
+```
+FLW_SECRET_KEY=...  FLW_PUBLIC_KEY=...  FLW_WEBHOOK_HASH=...     # Flutterwave (MoMo)
+STRIPE_SECRET_KEY=...  STRIPE_WEBHOOK_SECRET=...  STRIPE_CURRENCY=usd   # Stripe (card)
+```
+
+---
+
+## 3. First-run: create yourself + the first shop
+
+1. Create your operator (admin) user. Easiest: EasyPanel console →
+   `php artisan tinker` →
+   ```php
+   \App\Models\User::create(['name'=>'Operator','email'=>'you@dishnet.com','password'=>bcrypt('CHANGE_ME')]);
+   ```
+   (Or use the seeder if one is configured.)
+2. Log in at `/admin/login`. Change the password immediately.
+3. **Create a shop**: Admin → Businesses → New. Set name, slug, plan, and a staff login (email + password) for the shop owner.
+4. Give the shop owner their `/app/login` details. They land on `/panel`.
+
+---
+
+## 4. Connect a shop's WhatsApp — Option A: QR (Evolution)
+
+Fast, free, no Meta account. Best for Free/Starter and quick trials.
+
+1. Shop owner opens **/panel → Setup**.
+2. **Step 1 → Connect WhatsApp** → a QR appears.
+3. On the shop's phone: WhatsApp → **Linked devices** → **Link a device** → scan. Status flips to **Connected**.
+4. The app auto-points the Evolution webhook at itself so incoming messages are captured.
+5. If customer messages ever stop showing in **Chats**, open Chats → **🔗 Re-link** (re-points the webhook) → it auto-syncs. (Diagnose at `/papi/chats/sync-debug`.)
+
+Caveat: Evolution is an unofficial connection. High-volume or broadcast-style sending can get a number banned by Meta. For serious shops, use Option B.
+
+---
+
+## 5. Connect a shop's WhatsApp — Option B: Official Cloud API (Pro, BYO)
+
+Reliable and ban-safe. The shop brings its own Meta WhatsApp Cloud API number. Requires the **Pro** plan.
+
+**What the shop needs from Meta first** (one-time, on business.facebook.com / Meta for Developers):
+1. A verified **Meta Business** account.
+2. A **WhatsApp Business App** with a phone number added (a number **not** currently active in the WhatsApp app). Note its **Phone number ID** and **WhatsApp Business Account (WABA) ID**.
+3. A **permanent access token** (create a System User in Business Settings, assign the WhatsApp app, generate a token that doesn't expire).
+
+**In the panel** (/panel → Setup → "Use the official WhatsApp API"):
+1. Enter **Phone number ID**, **Permanent access token** (and optionally WABA ID + display number). Click **Connect official API**.
+   - This switches the shop's driver to `cloud` and stores the token against that shop only.
+2. The card now shows a **Callback URL** and a **Verify token**. In Meta → your WhatsApp app → **Configuration → Webhook**:
+   - Callback URL = the shown URL (`https://app/api/webhook/whatsapp/cloud`)
+   - Verify token = the shown token (this is `WHATSAPP_CLOUD_VERIFY_TOKEN`)
+   - Click verify — Meta calls the app and the app echoes the challenge. Then **subscribe to the `messages` field**.
+3. Send a test message to the number → it appears in **Chats**, and the bot replies. Done.
+
+To revert: Setup → **Switch back to QR (Evolution)** (the cloud token is kept in case you switch again).
+
+Notes:
+- On the cloud driver, **Meta charges per conversation** — that bill goes to the shop's own Meta account (BYO). Your flat plan price still covers the software.
+- A number already used in the WhatsApp **app** must be migrated to Cloud API on Meta's side first; that move isn't casually reversible.
+
+---
+
+## 6. Set up the shop's assistant (bot)
+
+1. /panel → Setup → **Step 2: Set up your assistant**.
+2. Fill business name, what they sell, city, delivery note, tone → **Generate welcome message** (uses OpenAI; if no key, it drafts a sensible template).
+3. Edit the greeting/profile if needed → **Save assistant**.
+4. Add products under /panel → Products (or bulk import). The bot prices orders from these.
+5. Toggle the bot on/off per chat from **Chats** (the Bot switch), and **Take over** any chat to reply by hand.
+
+---
+
+## 7. Plans, billing & payments
+
+- Plans (config/plans.php): **Free** (30 orders/mo, bot + orders), **Starter** ($20, unlimited, bot + confirmations), **Pro** ($50, everything: POS, riders, tracking, reports, branding, multi-user, **official Cloud API**).
+- New shops get a **30-day full-feature trial**; existing shops were grandfathered to Pro.
+- **Manual payments** (cash / MoMo you collected yourself): Admin → Businesses → row action **"Mark paid 1 month"** (extends `paid_until`, clears trial).
+- **In-app paying** (optional): set the Flutterwave + Stripe keys (§2), then shops can pay/renew at /panel → Billing (MoMo via Flutterwave, card via Stripe). Register these webhooks in each provider:
+  - Flutterwave: `https://app/api/billing/flutterwave/webhook`
+  - Stripe: `https://app/api/billing/stripe/webhook`
+- See all payments at Admin → Payments (read-only).
+
+---
+
+## 8. Day-to-day for a shop owner (what they actually do)
+
+1. Customer messages the shop's WhatsApp. Bot greets, takes the order, prices it, confirms.
+2. New order pings the owner (owner alert number set in /panel → Business → Settings) and lands in **Orders**.
+3. Owner packs → marks **Packed** → **Send rider** (Pro) → customer gets a live tracking link.
+4. Owner can jump into any **Chat** and take over from the bot at any time.
+5. Counter sales go through **POS** (Pro). Returns, customers, branches all under the panel.
+
+---
+
+## 9. Go-live checklist (do before real customers)
+
+- [ ] `APP_DEBUG=false`, real `APP_KEY`, `APP_URL` correct (https).
+- [ ] Change the operator and every shop's default password.
+- [ ] Replace the marketing number: set `MARKETING_WA_NUMBER` (and `MARKETING_PHONE`) so the site CTAs point to your real sales WhatsApp.
+- [ ] Rotate the Evolution API key from any value shared during development.
+- [ ] If using payments: set the keys, register both webhooks, test one MoMo and one card payment in test mode first.
+- [ ] If using official Cloud API: set `WHATSAPP_CLOUD_VERIFY_TOKEN` to a private value (not the default), and re-share it with shops.
+- [ ] Queue worker is running (bot replies/alerts are queued jobs) — confirm in EasyPanel.
+- [ ] Send yourself a full test order on a real number end to end.
+
+---
+
+## 10. Troubleshooting (fast)
+
+- **Marketing page not showing at /** → deploy didn't pick up `resources/marketing/index.html` / route; check Logs.
+- **Customer messages not in Chats** → webhook not pointed at app. Evolution: Chats → 🔗 Re-link. Cloud: re-check Meta webhook URL + verify token + that `messages` is subscribed.
+- **Bot not replying** → queue worker down, or no OpenAI key, or bot toggled off for that chat.
+- **POS / Dispatch hidden for a shop** → they're on Free/Starter; those are Pro features (working as intended).
+- **Official API "verify" fails in Meta** → the Verify token in Meta must exactly equal `WHATSAPP_CLOUD_VERIFY_TOKEN`.
+- **500 on any page** → EasyPanel Logs, last stack trace. Temporarily set `APP_DEBUG=true` on staging to see it in-browser.
+
+---
+
+## 11. Where things live (quick map)
+
+- Public site: `resources/marketing/index.html` served by `MarketingController` at `/`.
+- Seller panel UI: `resources/panel/*.html` (`seller.html`, `chats.html`, `setup.html`) via `SellerPanelController`.
+- Panel JSON API: `App\Http\Controllers\Panel\PanelApiController` under `/papi/*`.
+- WhatsApp drivers: `app/Services/WhatsApp/` — `EvolutionGateway`, `CloudApiGateway`, resolved per-tenant by `WhatsAppManager::forTenant()`.
+- Inbound webhook: `app/Http/Controllers/Bot/WebhookController` at `/api/webhook/whatsapp/{evolution|cloud}`.
+- Admin (Filament): `app/Filament/Admin/*` at `/admin`.
+- Config: `config/whatsapp.php`, `config/plans.php`, `config/billing.php`, `config/marketing.php`.
