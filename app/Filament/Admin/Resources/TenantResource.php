@@ -51,7 +51,7 @@ class TenantResource extends Resource
             Tables\Columns\TextColumn::make('slug')->badge(),
             Tables\Columns\TextColumn::make('whatsapp_number')->label('WhatsApp'),
             Tables\Columns\TextColumn::make('plan')->badge(),
-            Tables\Columns\TextColumn::make('status')->badge()->color(fn ($s) => $s === 'active' ? 'success' : 'danger'),
+            Tables\Columns\TextColumn::make('status')->badge()->color(fn (string $state) => $state === 'active' ? 'success' : 'danger'),
             Tables\Columns\TextColumn::make('orders_count')->counts('orders')->label('Orders'),
         ])->actions([Tables\Actions\EditAction::make()]);
     }
