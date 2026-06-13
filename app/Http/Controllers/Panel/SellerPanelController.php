@@ -96,7 +96,7 @@ class SellerPanelController extends Controller
     if(P.over_cap){ msg='You have used all '+P.order_cap+' free orders this month.'; cls='locked'; }
     if(msg){
       var b=document.createElement('div'); b.id='planBanner'; if(cls)b.className=cls;
-      b.innerHTML=msg+' <a href="https://wa.me/256700000000?text=I%20want%20to%20upgrade%20my%20CloudBSS%20plan" target="_blank" rel="noopener">Upgrade now →</a>';
+      b.innerHTML=msg+' <a href="/panel/billing">Upgrade now →</a>';
       document.body.insertBefore(b,document.body.firstChild);
     }
   }

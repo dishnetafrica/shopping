@@ -9,18 +9,21 @@ return [
     'free' => [
         'name'      => 'Free',
         'price_usd' => 0,
+        'price_ugx' => 0,
         'order_cap' => 30,
         'features'  => ['bot', 'orders'],
     ],
     'starter' => [
         'name'      => 'Starter',
         'price_usd' => 20,
+        'price_ugx' => 75000,
         'order_cap' => null,
         'features'  => ['bot', 'orders', 'confirmations'],
     ],
     'pro' => [
         'name'      => 'Pro',
         'price_usd' => 50,
+        'price_ugx' => 185000,
         'order_cap' => null,
         'features'  => ['bot', 'orders', 'confirmations', 'pos', 'dispatch', 'tracking', 'reports', 'returns', 'branding', 'multi_user'],
     ],

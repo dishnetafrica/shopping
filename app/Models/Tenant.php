@@ -103,4 +103,14 @@ class Tenant extends Model
         }
         return $nm;
     }
+
+    /** Apply a successful payment: set plan and extend the paid period. */
+    public function applyPaidPlan(string $plan, int $months = 1): void
+    {
+        $base = ($this->paid_until && $this->paid_until->isFuture()) ? $this->paid_until : now();
+        $this->plan = $plan;
+        $this->paid_until = $base->copy()->addMonths(max(1, $months));
+        $this->trial_ends_at = null;     // trial is over once they pay
+        $this->save();
+    }
 }
