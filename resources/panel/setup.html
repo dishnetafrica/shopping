@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setup — Family Shopper</title>
+<style>
+  :root{--green:#15803D;--green-d:#0B3D22;--amber:#C2700A;--red:#B4232A;--blue:#2563A8;
+    --bg:#EEF2EE;--card:#FFF;--ink:#16231C;--muted:#6E7D72;--line:#E2E8E2;--side:#0B3D22;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+  .top{height:58px;background:var(--side);color:#fff;display:flex;align-items:center;gap:14px;padding:0 16px}
+  .top .brand{font-weight:800}.top .sub{color:#cfe7d8;font-size:12px}
+  .top a.back{color:#cfe7d8;text-decoration:none;font-size:13px;border:1px solid #2c5a40;padding:6px 10px;border-radius:8px}
+  .top a.back:hover{background:#0e4a2a}
+  .wrap{max-width:920px;margin:24px auto;padding:0 16px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:760px){.wrap{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .card h2{margin:0 0 4px;font-size:18px}
+  .card .lead{color:var(--muted);font-size:13px;margin:0 0 16px}
+  .step{font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--green);text-transform:uppercase}
+  label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:12px 0 5px}
+  input,textarea,select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;font-family:inherit;outline:none}
+  textarea{resize:vertical;min-height:70px}
+  .btn{background:var(--green);color:#fff;border:none;border-radius:10px;padding:11px 16px;font-weight:700;cursor:pointer;font-size:14px}
+  .btn:hover{background:var(--green-d)}.btn:disabled{opacity:.5}
+  .btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .btn.ghost:hover{background:#f3f7f3}
+  .btn.danger{background:#fff;color:var(--red);border:1px solid #e6c9cb}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  .badge{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:700;padding:6px 12px;border-radius:20px}
+  .badge .dot{width:9px;height:9px;border-radius:50%}
+  .b-open{background:#e6f4ea;color:var(--green)}.b-open .dot{background:var(--green)}
+  .b-wait{background:#fdf6e7;color:var(--amber)}.b-wait .dot{background:var(--amber)}
+  .b-off{background:#f6e9ea;color:var(--red)}.b-off .dot{background:var(--red)}
+  .qrbox{margin-top:16px;text-align:center;padding:16px;border:1px dashed var(--line);border-radius:14px}
+  .qrbox img{width:240px;height:240px;border-radius:10px}
+  .qrbox .pair{margin-top:10px;font-size:13px;color:var(--muted)}
+  .qrbox .pair b{font-size:20px;letter-spacing:3px;color:var(--ink)}
+  .hint{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5}
+  .hide{display:none!important}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#16231c;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:50}
+  .toast.show{opacity:1}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid #ffffff66;border-top-color:#fff;border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px;margin-right:6px}
+  @keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+  <div class="top">
+    <span class="brand">Family Shopper</span><span class="sub">Setup &amp; onboarding</span>
+    <a class="back" href="/panel">← Panel</a>
+  </div>
+
+  <div class="wrap">
+    <!-- WHATSAPP CONNECT -->
+    <div class="card">
+      <div class="step">Step 1</div>
+      <h2>Connect WhatsApp</h2>
+      <p class="lead">Link your WhatsApp number by scanning a QR — just like WhatsApp Web. No technical setup.</p>
+
+      <div id="waStatus"><span class="badge b-wait"><span class="dot"></span> Checking…</span></div>
+
+      <div id="qrbox" class="qrbox hide">
+        <img id="qrimg" alt="WhatsApp QR">
+        <div class="pair" id="pairWrap">or pair with code: <b id="pairCode"></b></div>
+        <div class="hint">Open WhatsApp on the business phone → <b>Linked devices</b> → <b>Link a device</b> → scan this code. It refreshes automatically.</div>
+      </div>
+
+      <div class="row">
+        <button class="btn" id="connectBtn" onclick="waConnect()">Connect WhatsApp</button>
+        <button class="btn danger hide" id="disconnectBtn" onclick="waDisconnect()">Disconnect</button>
+      </div>
+      <div class="hint" id="waInstance"></div>
+    </div>
+
+    <!-- AI BOT SETUP -->
+    <div class="card">
+      <div class="step">Step 2</div>
+      <h2>Set up your assistant</h2>
+      <p class="lead">Describe your shop in plain words and we'll write your WhatsApp assistant's welcome message for you. Edit it, then save.</p>
+
+      <label>Business name</label>
+      <input id="bName" placeholder="e.g. Pals Snacks">
+      <label>What do you sell?</label>
+      <input id="bSells" placeholder="e.g. samosas, chips, soft drinks, snacks">
+      <label>City / area</label>
+      <input id="bCity" placeholder="e.g. Kampala">
+      <label>Delivery (optional)</label>
+      <input id="bDeliv" placeholder="e.g. free delivery within Ntinda">
+      <label>Tone</label>
+      <select id="bTone">
+        <option value="friendly">Friendly</option>
+        <option value="warm and casual">Warm &amp; casual</option>
+        <option value="professional">Professional</option>
+        <option value="fun and playful">Fun &amp; playful</option>
+      </select>
+
+      <div class="row">
+        <button class="btn" id="genBtn" onclick="botGenerate()">✨ Generate welcome message</button>
+      </div>
+
+      <div id="genResult" class="hide">
+        <label>Welcome message (customers see this on “hi”)</label>
+        <textarea id="bGreeting" style="min-height:110px"></textarea>
+        <label>Business profile (internal)</label>
+        <textarea id="bProfile"></textarea>
+        <div class="row">
+          <button class="btn" id="saveBtn" onclick="botSave()">Save assistant</button>
+          <button class="btn ghost" onclick="botGenerate()">Regenerate</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+function $(id){return document.getElementById(id);}
+function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2400);}
+var poll=null;
+
+/* ---------- WhatsApp connect ---------- */
+function setWa(state, instance){
+  var el=$('waStatus');
+  if(state==='open'){el.innerHTML='<span class="badge b-open"><span class="dot"></span> Connected</span>';
+    $('qrbox').classList.add('hide');$('connectBtn').classList.add('hide');$('disconnectBtn').classList.remove('hide');
+    if(poll){clearInterval(poll);poll=null;}}
+  else if(state==='connecting'){el.innerHTML='<span class="badge b-wait"><span class="dot"></span> Waiting for scan…</span>';
+    $('connectBtn').classList.add('hide');$('disconnectBtn').classList.add('hide');}
+  else{el.innerHTML='<span class="badge b-off"><span class="dot"></span> Not connected</span>';
+    $('connectBtn').classList.remove('hide');$('disconnectBtn').classList.add('hide');}
+  $('waInstance').textContent=instance?('Instance: '+instance):'';
+}
+
+async function waCheck(){
+  try{var r=await fetch('/papi/wa/status',{cache:'no-store'});var d=await r.json();
+    if(!d.configured){$('waStatus').innerHTML='<span class="badge b-off"><span class="dot"></span> Evolution not configured</span>';
+      $('waInstance').textContent='Ask the operator to set EVOLUTION_BASE_URL and EVOLUTION_API_KEY.';$('connectBtn').disabled=true;return;}
+    setWa(d.state, d.instance);
+  }catch(e){}
+}
+
+function showQr(qr){
+  if(qr&&qr.base64){var src=qr.base64.indexOf('data:')===0?qr.base64:('data:image/png;base64,'+qr.base64);
+    $('qrimg').src=src;$('qrbox').classList.remove('hide');
+    if(qr.pairingCode){$('pairCode').textContent=qr.pairingCode;$('pairWrap').classList.remove('hide');}
+    else $('pairWrap').classList.add('hide');
+  }
+}
+
+async function waConnect(){
+  $('connectBtn').disabled=true;$('connectBtn').innerHTML='<span class="spin"></span>Starting…';
+  try{var r=await fetch('/papi/wa/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});var d=await r.json();
+    if(!d.ok){toast(d.error==='evolution_not_configured'?'Evolution not configured yet':'Could not start');return;}
+    setWa(d.state||'connecting', d.instance);showQr(d.qr);
+    if(poll)clearInterval(poll);
+    poll=setInterval(refreshConnect,3000);
+  }catch(e){toast('Network error');}
+  $('connectBtn').disabled=false;$('connectBtn').textContent='Connect WhatsApp';
+}
+
+async function refreshConnect(){
+  try{var r=await fetch('/papi/wa/qr',{cache:'no-store'});var d=await r.json();
+    if(!d.ok)return;
+    if(d.state==='open'){setWa('open');toast('WhatsApp connected!');return;}
+    setWa(d.state||'connecting');showQr(d.qr);
+  }catch(e){}
+}
+
+async function waDisconnect(){
+  if(!confirm('Disconnect this WhatsApp number?'))return;
+  try{await fetch('/papi/wa/disconnect',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    toast('Disconnected');setWa('close');}catch(e){toast('Could not disconnect');}
+}
+
+/* ---------- AI bot setup ---------- */
+async function botGenerate(){
+  var b=$('genBtn');b.disabled=true;b.innerHTML='<span class="spin"></span>Writing…';
+  try{
+    var body={business_name:$('bName').value,sells:$('bSells').value,city:$('bCity').value,delivery:$('bDeliv').value,tone:$('bTone').value};
+    var r=await fetch('/papi/bot/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var d=await r.json();
+    if(!d.ok){toast('Could not generate — '+(d.detail||'try again'));}
+    else{$('bGreeting').value=d.greeting||'';$('bProfile').value=d.profile||'';$('genResult').classList.remove('hide');
+      if(d.ai===false)toast('Drafted a template (no AI key set)');}
+  }catch(e){toast('Network error');}
+  b.disabled=false;b.textContent='✨ Generate welcome message';
+}
+
+async function botSave(){
+  var b=$('saveBtn');b.disabled=true;
+  try{
+    var body={greeting:$('bGreeting').value,profile:$('bProfile').value};
+    var r=await fetch('/papi/bot/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var d=await r.json();
+    toast(d&&d.ok?'Assistant saved — the bot will greet customers with this':'Could not save');
+  }catch(e){toast('Network error');}
+  b.disabled=false;
+}
+
+waCheck();
+</script>
+</body>
+</html>

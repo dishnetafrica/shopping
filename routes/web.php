@@ -13,6 +13,7 @@ Route::get('/', fn () => redirect('/panel'));
 Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () {
     Route::get('/panel', [SellerPanelController::class, 'show']);
     Route::get('/panel/chats', [SellerPanelController::class, 'chats']);
+    Route::get('/panel/setup', [SellerPanelController::class, 'setup']);
 
     // JSON API the panel calls. GET for everything (the panel uses query-string
     // writes); upload-image is POST. Tenant scoping is automatic.
@@ -37,6 +38,14 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('chats/send',        [PanelApiController::class, 'chatSend']);
         Route::post('chats/takeover',    [PanelApiController::class, 'chatTakeover']);
         Route::post('chats/bot-mode',    [PanelApiController::class, 'chatBotMode']);
+
+        // self-serve onboarding (WhatsApp QR connect + AI bot setup)
+        Route::get('wa/status',      [PanelApiController::class, 'waStatus']);
+        Route::post('wa/connect',    [PanelApiController::class, 'waConnect']);
+        Route::get('wa/qr',          [PanelApiController::class, 'waQr']);
+        Route::post('wa/disconnect', [PanelApiController::class, 'waDisconnect']);
+        Route::post('bot/generate',  [PanelApiController::class, 'botGenerate']);
+        Route::post('bot/save',      [PanelApiController::class, 'botSave']);
 
         // writes that persist
         Route::get('update-status',  [PanelApiController::class, 'updateStatus']);

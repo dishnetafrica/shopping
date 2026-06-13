@@ -33,6 +33,22 @@ class SellerPanelController extends Controller
             ->header('Cache-Control', 'no-store');
     }
 
+    /** Self-serve onboarding: connect WhatsApp (QR) + generate the bot persona. */
+    public function setup(Request $request)
+    {
+        $user = $request->user();
+        if (! $user || ! $user->tenant_id) {
+            return redirect('/app/login');
+        }
+        $path = resource_path('panel/setup.html');
+        if (! is_file($path)) {
+            abort(500, 'Setup asset missing.');
+        }
+        return response(file_get_contents($path), 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
+    }
+
     /** The live Chats inbox (new screen the old panel never had). */
     public function chats(Request $request)
     {

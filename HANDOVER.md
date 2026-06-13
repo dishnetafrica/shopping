@@ -188,6 +188,14 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-13 (later) — Phase 5: self-serve onboarding (WhatsApp QR connect + AI bot setup) (Bhavin + AI)
+- New **Setup** page at `/panel/setup` (sidebar link). Two cards: (1) **Connect WhatsApp** by scanning a QR like WhatsApp Web — no Evolution dashboard; (2) **Set up your assistant** — owner describes the shop in plain words, OpenAI writes the bot's welcome message, owner edits + saves.
+- New `App\\Services\\WhatsApp\\EvolutionAdmin`: create instance, fetch QR, poll connectionState, set webhook, disconnect — all from our portal using the global Evolution API key. Defensive about v2.x payload drift (reads QR/state from multiple paths).
+- New endpoints (/papi): `wa/status`, `wa/connect` (creates instance `shopbot_t{id}` if the tenant has none, sets webhook to our `/api/webhook/whatsapp/evolution`, returns QR), `wa/qr` (refresh + poll), `wa/disconnect`; `bot/generate` (OpenAI -> {greeting,profile}; template fallback if no API key), `bot/save` (-> `tenant.settings['bot_greeting'|'business_profile']`).
+- `BotBrain` greet now uses `tenant.setting('bot_greeting')` when set, so the generated welcome is what customers actually get.
+- Needs env on the app: `EVOLUTION_BASE_URL`, `EVOLUTION_API_KEY`, `OPENAI_API_KEY`. ⚠️ `wa/connect` uses the tenant's existing instance if set (Family Shoppers = `savan`, the LIVE n8n number) — test with a NEW tenant/number, don't relink savan until cutover.
+- New: `EvolutionAdmin.php`, `resources/panel/setup.html`. Changed: `PanelApiController`, `SellerPanelController`, `BotBrain`, `seller.html` (+Setup nav), `routes/web.php`.
+
 ### 2026-06-13 (later) — Phase 4b: live web Chats inbox + human takeover (Bhavin + AI)
 - New **Chats** screen at `/panel/chats` (linked from the panel sidebar, after Orders). WhatsApp-style 2-pane inbox matching the panel theme: conversation list (name/phone, snippet, time, unread badge, "you" tag) + live thread (customer/bot/agent/system bubbles) + composer.
 - Near-live via polling: list every 15s, open thread every 4s (incremental via `?after=id`). No websockets needed on this stack.

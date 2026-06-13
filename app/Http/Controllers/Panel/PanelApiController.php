@@ -8,10 +8,12 @@ use App\Models\Message;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Rider;
+use App\Services\WhatsApp\EvolutionAdmin;
 use App\Services\WhatsApp\WhatsAppManager;
 use App\Support\MessageLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use OpenAI\Laravel\Facades\OpenAI;
 
 /**
  * JSON API for the Family Shopper seller panel.
@@ -370,6 +372,117 @@ class PanelApiController extends Controller
         $t->settings = $s;
         $t->save();
         return response()->json(['ok' => true, 'bot_mode' => $mode]);
+    }
+
+    /* -------------------------------------------------- self-serve onboarding */
+    // WhatsApp connect — no Evolution dashboard needed: create instance, show QR, poll state.
+    public function waStatus(Request $r, EvolutionAdmin $evo)
+    {
+        if (! $evo->configured()) {
+            return response()->json(['ok' => false, 'configured' => false, 'state' => 'missing']);
+        }
+        $instance = (string) ($r->user()->tenant->whatsapp_instance ?? '');
+        return response()->json([
+            'ok'         => true,
+            'configured' => true,
+            'instance'   => $instance,
+            'state'      => $instance ? $evo->state($instance) : 'missing',
+        ]);
+    }
+
+    public function waConnect(Request $r, EvolutionAdmin $evo)
+    {
+        if (! $evo->configured()) {
+            return response()->json(['ok' => false, 'error' => 'evolution_not_configured'], 400);
+        }
+        $t = $r->user()->tenant;
+        $instance = $t->whatsapp_instance ?: ('shopbot_t' . $t->id);
+        if ($t->whatsapp_instance !== $instance || ! $t->whatsapp_driver) {
+            $t->whatsapp_instance = $instance;
+            $t->whatsapp_driver   = $t->whatsapp_driver ?: 'evolution';
+            $t->save();
+        }
+        $evo->createIfMissing($instance);
+        $evo->setWebhook($instance, url('/api/webhook/whatsapp/evolution'));
+
+        return response()->json([
+            'ok'       => true,
+            'instance' => $instance,
+            'state'    => $evo->state($instance),
+            'qr'       => $evo->qr($instance),
+        ]);
+    }
+
+    public function waQr(Request $r, EvolutionAdmin $evo)
+    {
+        $instance = (string) ($r->user()->tenant->whatsapp_instance ?? '');
+        if ($instance === '') return response()->json(['ok' => false], 400);
+        return response()->json(['ok' => true, 'state' => $evo->state($instance), 'qr' => $evo->qr($instance)]);
+    }
+
+    public function waDisconnect(Request $r, EvolutionAdmin $evo)
+    {
+        $instance = (string) ($r->user()->tenant->whatsapp_instance ?? '');
+        if ($instance !== '') $evo->disconnect($instance);
+        return response()->json(['ok' => true]);
+    }
+
+    // AI bot setup — owner describes the business in plain words, we generate the persona.
+    public function botGenerate(Request $r)
+    {
+        $t     = $r->user()->tenant;
+        $name  = trim((string) $r->input('business_name', $t->name)) ?: $t->name;
+        $sells = trim((string) $r->input('sells', ''));
+        $city  = trim((string) $r->input('city', ''));
+        $tone  = trim((string) $r->input('tone', 'friendly')) ?: 'friendly';
+        $deliv = trim((string) $r->input('delivery', ''));
+        $extra = trim((string) $r->input('extra', ''));
+
+        // No API key -> still useful: build a sensible template instead of failing.
+        if (! (config('openai.api_key') ?: env('OPENAI_API_KEY'))) {
+            $greeting = "Hello \u{1F44B} Welcome to {$name}!"
+                . ($sells ? " We've got {$sells}." : '')
+                . " Just type what you'd like and I'll add it up. Say *cart* to review, or *checkout* when you're ready \u{1F6D2}";
+            return response()->json(['ok' => true, 'ai' => false, 'greeting' => $greeting, 'profile' => $sells]);
+        }
+
+        $sys = "You configure a WhatsApp ordering assistant for a small local shop. "
+            . "Return JSON ONLY: {\"greeting\":\"...\",\"profile\":\"...\"}. "
+            . "greeting = a warm 2-3 line WhatsApp welcome shown when a customer says hi; use the business name; mention what they sell; tell them they can just type what they want, say 'cart' to review and 'checkout' to finish; include 1-2 emojis; no markdown headings. "
+            . "profile = one short paragraph describing the business, for internal reference. Tone: {$tone}.";
+        $usr = "Business name: {$name}\nSells: {$sells}\nCity: {$city}\nDelivery: {$deliv}\nExtra notes: {$extra}";
+
+        try {
+            $resp = OpenAI::chat()->create([
+                'model'       => env('OPENAI_MODEL', 'gpt-4o-mini'),
+                'temperature' => 0.6,
+                'messages'    => [
+                    ['role' => 'system', 'content' => $sys],
+                    ['role' => 'user', 'content' => $usr],
+                ],
+            ]);
+            $c = trim(preg_replace('/```json|```/', '', $resp->choices[0]->message->content ?? ''));
+            $d = json_decode($c, true);
+            return response()->json([
+                'ok'       => true,
+                'ai'       => true,
+                'greeting' => (string) ($d['greeting'] ?? ''),
+                'profile'  => (string) ($d['profile'] ?? ''),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => 'generate_failed', 'detail' => $e->getMessage()], 502);
+        }
+    }
+
+    public function botSave(Request $r)
+    {
+        $t = $r->user()->tenant;
+        $s = $t->settings ?? [];
+        $s['bot_greeting']     = trim((string) $r->input('greeting', ''));
+        $s['business_profile'] = trim((string) $r->input('profile', ''));
+        $t->settings = $s;
+        $t->save();
+        return response()->json(['ok' => true]);
     }
 
     /* -------------------------------------------------- writes pending (3b) */

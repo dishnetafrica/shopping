@@ -48,6 +48,8 @@ class BotBrain
 
         switch ($intent) {
             case 'greet':
+                $custom = trim((string) $tenant->setting('bot_greeting', ''));
+                if ($custom !== '') return $custom;
                 return "Hello \u{1F44B} Welcome to {$tenant->name}! Tell me what you'd like and I'll add it up. "
                      . "Say *cart* to see your basket or *checkout* when ready.";
 
