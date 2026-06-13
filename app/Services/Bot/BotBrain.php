@@ -10,69 +10,122 @@ use App\Services\Pricing;
 use Illuminate\Support\Str;
 
 /**
- * Conversational ordering. Keyword logic is the reliable default; OpenAI NLU
- * is an optional enhancement (Phase 2) layered on top of the same cart model.
+ * Conversational ordering. Understanding is done by BotNlu (OpenAI) when
+ * available; if it's disabled or fails, deterministic keyword parsing takes
+ * over. Either path runs through the SAME cart/checkout executor below, so
+ * pricing and order creation are always deterministic PHP.
  */
 class BotBrain
 {
-    public function __construct(protected ProductSearch $search) {}
+    public function __construct(
+        protected ProductSearch $search,
+        protected BotNlu $nlu,
+    ) {}
 
     public function respond(Tenant $tenant, Conversation $convo, string $text): string
     {
         $text = trim($text);
         if ($text === '') return '';
-        $lc = mb_strtolower($text);
-        $cart = is_array($convo->cart) ? $convo->cart : [];
-        $step = data_get($convo->state, 'step');
 
-        // --- mid-checkout: capturing the delivery location ---
-        if ($step === 'awaiting_location') {
+        // Mid-checkout: the next message is always the delivery location.
+        if (data_get($convo->state, 'step') === 'awaiting_location') {
             return $this->placeOrder($tenant, $convo, $text);
         }
 
-        // --- intents ---
-        if (in_array($lc, ['hi','hello','hey','start','menu','hola'], true)) {
-            return "Hello \u{1F44B} Welcome to {$tenant->name}! Tell me what you'd like and I'll find it. "
-                 . "Type *cart* to see your basket or *checkout* when you're ready.";
+        // Try the LLM first; fall back to keywords.
+        $action = $this->nlu->parse($tenant, $convo, $text);
+        if ($action) {
+            return $this->execute($tenant, $convo, $action['intent'], $action['items'] ?? [], $action['note'] ?? '');
         }
-        if (in_array($lc, ['cart','basket','my order'], true)) {
-            return $this->cartSummary($tenant, $cart) ?: "Your basket is empty. Tell me a product to add.";
-        }
-        if (in_array($lc, ['clear','empty','reset'], true)) {
-            $convo->cart = []; $convo->save();
-            return "Basket cleared. What would you like to order?";
-        }
-        if (in_array($lc, ['checkout','done','confirm','order','place order'], true)) {
-            if (!$cart) return "Your basket is empty. Add a product first, then type *checkout*.";
-            $convo->state = array_merge($convo->state ?? [], ['step' => 'awaiting_location']);
-            $convo->save();
-            return $this->cartSummary($tenant, $cart)."\n\n\u{1F4CD} Please send your *delivery location* (area / landmark) to place the order.";
-        }
+        return $this->keywordRespond($tenant, $convo, $text);
+    }
 
-        // --- "add ..." or "<qty> <product>" => add to cart ---
+    // ---------------- shared executor ----------------
+
+    protected function execute(Tenant $tenant, Conversation $convo, string $intent, array $items, string $note = ''): string
+    {
+        $cart = is_array($convo->cart) ? $convo->cart : [];
+
+        switch ($intent) {
+            case 'greet':
+                return "Hello \u{1F44B} Welcome to {$tenant->name}! Tell me what you'd like and I'll add it up. "
+                     . "Say *cart* to see your basket or *checkout* when ready.";
+
+            case 'view_cart':
+                return $this->cartSummary($tenant, $cart) ?: "Your basket is empty. Tell me a product to add.";
+
+            case 'clear':
+                $convo->cart = []; $convo->save();
+                return "Basket cleared. What would you like to order?";
+
+            case 'checkout':
+                if (! $cart) return "Your basket is empty. Add a product first, then say *checkout*.";
+                $convo->state = array_merge($convo->state ?? [], ['step' => 'awaiting_location']);
+                $convo->save();
+                return $this->cartSummary($tenant, $cart)
+                     . "\n\n\u{1F4CD} Please send your *delivery location* (area / landmark) to place the order.";
+
+            case 'remove':
+                $removed = [];
+                foreach ($items as $it) {
+                    $p = $this->search->find($it['query'])->first();
+                    if (! $p) continue;
+                    $cart = array_values(array_filter($cart, function ($l) use ($p, &$removed) {
+                        if ($l['product_id'] === $p->id) { $removed[] = $l['name']; return false; }
+                        return true;
+                    }));
+                }
+                $convo->cart = $cart; $convo->save();
+                $msg = $removed ? "Removed: ".implode(', ', $removed).".\n\n" : "I couldn't find that in your basket.\n\n";
+                return $msg.($this->cartSummary($tenant, $cart) ?: "Your basket is now empty.");
+
+            case 'add':
+                $added = []; $missed = [];
+                foreach ($items as $it) {
+                    $p = $this->search->find($it['query'])->first();
+                    if (! $p) { $missed[] = $it['query']; continue; }
+                    $net = Pricing::net($tenant, (float) $p->price);
+                    $cart = $this->addToCart($cart, $p->id, $p->name, $net, $it['qty']);
+                    $added[] = "{$it['qty']} x {$p->name}";
+                }
+                $convo->cart = $cart; $convo->save();
+                if (! $added && $missed) {
+                    return "I couldn't find ".implode(', ', $missed).". Try another name, or say *cart* / *checkout*.";
+                }
+                $head = "Added *".implode('*, *', $added)."*.";
+                if ($missed) $head .= "\n(I couldn't find: ".implode(', ', $missed).".)";
+                return $head."\n\n".$this->cartSummary($tenant, $cart)."\n\nAdd more, or say *checkout*.";
+
+            case 'search':
+                $term = $items[0]['query'] ?? '';
+                $results = $term ? $this->search->find($term) : collect();
+                if ($results->isEmpty()) {
+                    return ($note ?: "I couldn't find that.")."\nTell me a product name and I'll check.";
+                }
+                $lines = $results->take(6)->map(
+                    fn ($p) => "• {$p->name} — ".Pricing::money($tenant, Pricing::net($tenant, (float) $p->price))
+                )->implode("\n");
+                return "Here's what I found:\n{$lines}\n\nSay *add <item>* to put it in your basket.";
+
+            default: // unknown
+                return ($note ?: "I can help you shop \u{1F6D2}").
+                    "\nTell me a product to add, say *cart* to review, or *checkout* to finish.";
+        }
+    }
+
+    // ---------------- keyword fallback (used when NLU is off/unavailable) ----------------
+
+    protected function keywordRespond(Tenant $tenant, Conversation $convo, string $text): string
+    {
+        $lc = mb_strtolower($text);
+        if (in_array($lc, ['hi','hello','hey','start','menu','hola'], true)) return $this->execute($tenant, $convo, 'greet', []);
+        if (in_array($lc, ['cart','basket','my order'], true))               return $this->execute($tenant, $convo, 'view_cart', []);
+        if (in_array($lc, ['clear','empty','reset'], true))                  return $this->execute($tenant, $convo, 'clear', []);
+        if (in_array($lc, ['checkout','done','confirm','order','place order'], true)) return $this->execute($tenant, $convo, 'checkout', []);
+
         [$qty, $term] = $this->parseQtyAndTerm($lc, $text);
-        $results = $this->search->find($term);
-
-        if ($results->isEmpty()) {
-            return "I couldn't find \"{$term}\". Try another name, or type *cart* / *checkout*.";
-        }
-
-        // explicit add (or a quantity was given) => add the top match
-        if (Str::startsWith($lc, ['add ', 'i want ', 'buy ']) || $qty > 1 || preg_match('/\b(x|qty|pcs|kg)\b/', $lc)) {
-            $p = $results->first();
-            $net = Pricing::net($tenant, (float) $p->price);
-            $cart = $this->addToCart($cart, $p->id, $p->name, $net, $qty);
-            $convo->cart = $cart; $convo->save();
-            return "Added *{$qty} x {$p->name}*.\n\n".$this->cartSummary($tenant, $cart)
-                 . "\n\nAdd more, or type *checkout*.";
-        }
-
-        // otherwise show matches
-        $cur = $tenant->setting('currency', 'UGX');
-        $lines = $results->take(5)->map(function ($p) use ($tenant) {
-            return "• {$p->name} — ".Pricing::money($tenant, Pricing::net($tenant, (float) $p->price));
-        })->implode("\n");
-        return "Here's what I found:\n{$lines}\n\nReply *add <item>* (e.g. \"add 2 ".$results->first()->name."\").";
+        $isAdd = Str::startsWith($lc, ['add ', 'i want ', 'buy ']) || $qty > 1 || preg_match('/\b(x|qty|pcs|kg)\b/', $lc);
+        return $this->execute($tenant, $convo, $isAdd ? 'add' : 'search', [['query' => $term, 'qty' => $qty]]);
     }
 
     protected function parseQtyAndTerm(string $lc, string $original): array
@@ -86,6 +139,8 @@ class BotBrain
         return [$qty, trim($s) ?: $original];
     }
 
+    // ---------------- cart + order helpers ----------------
+
     protected function addToCart(array $cart, int $id, string $name, float $price, int $qty): array
     {
         foreach ($cart as &$line) {
@@ -97,7 +152,7 @@ class BotBrain
 
     protected function cartSummary(Tenant $tenant, array $cart): string
     {
-        if (!$cart) return '';
+        if (! $cart) return '';
         $total = 0; $lines = [];
         foreach ($cart as $l) {
             $sub = $l['price'] * $l['qty']; $total += $sub;
@@ -109,12 +164,9 @@ class BotBrain
     protected function placeOrder(Tenant $tenant, Conversation $convo, string $location): string
     {
         $cart = is_array($convo->cart) ? $convo->cart : [];
-        if (!$cart) {
-            $convo->state = []; $convo->save();
-            return "Your basket is empty. Add a product to start a new order.";
-        }
-        $total = 0;
-        foreach ($cart as $l) $total += $l['price'] * $l['qty'];
+        if (! $cart) { $convo->state = []; $convo->save(); return "Your basket is empty. Add a product to start a new order."; }
+
+        $total = 0; foreach ($cart as $l) $total += $l['price'] * $l['qty'];
         $itemsText = collect($cart)->map(fn ($l) => "{$l['qty']}x {$l['name']}")->implode(', ');
 
         $order = Order::create([
