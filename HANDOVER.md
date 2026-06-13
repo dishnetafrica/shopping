@@ -188,6 +188,15 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-13 (later) — Phase 14: Owner alerts + admin Payments + bot Free-cap (Bhavin + AI)
+- **New-order owner alert**: `OrderObserver::created()` now fires `NotifyOwnerNewOrder` for every new order EXCEPT POS (owner made those at the counter). Job WhatsApps a summary (order no, customer, location, items, total, panel link) to the shop's alert number(s).
+- **Owner alert number**: `Tenant::ownerAlertNumbers()` reads `settings.owner_alert_phone` (comma-separated allowed). Set per shop in /admin -> Business -> Settings. If empty, alerts/receipts silently skip.
+- **Generic `NotifyOwner` job** (tenantId, text, ?to) — reused for alerts and receipts; logs as 'system' message.
+- **Payment receipt**: `BillingController::sendReceipt()` WhatsApps "Payment received — ... active until <date>" after every successful payment (MoMo markPaid + Stripe webhook). Sent to the payer's MoMo number, else owner number(s).
+- **Bot Free-plan cap (now enforced softly)**: at bot `checkout` (and a safety net in `placeOrder`), if effectivePlan=free AND overOrderCap(30), the bot does NOT auto-place — it replies "someone from the shop will confirm shortly" and nudges the owner once/day (Cache::add dedupe) to upgrade. Customer experience stays graceful; pressure lands on the shop. Paid plans unaffected (unlimited).
+- **Admin Payments list**: read-only `PaymentResource` at /admin (When, Business, provider [Mobile Money/Card], plan, amount in its currency, network, phone, status, ref) with status/provider filters. No create/edit.
+- Added/changed: app/Jobs/NotifyOwner.php, app/Jobs/NotifyOwnerNewOrder.php, Tenant.php, OrderObserver.php, BotBrain.php, BillingController.php, TenantResource.php, PaymentResource.php + Pages/ListPayments.php.
+
 ### 2026-06-13 (later) — Phase 13: Online payments — MoMo (MTN/Airtel) + Card (Stripe) (Bhavin + AI)
 - Shops can now pay/renew in-app. New `/panel/billing` page: pick Starter/Pro, choose Mobile Money (MTN or Airtel) or Card, pay. Success auto-extends the plan via the Phase 12 `Tenant::applyPaidPlan()` (sets plan, +1 month paid_until, clears trial). Upgrade banner now links here.
 - Providers are env-gated (hidden until keys set):
