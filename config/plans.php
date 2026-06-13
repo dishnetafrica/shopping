@@ -11,6 +11,7 @@ return [
         'price_usd' => 0,
         'price_ugx' => 0,
         'order_cap' => 30,
+        'user_cap'  => 1,
         'features'  => ['bot', 'orders'],
     ],
     'starter' => [
@@ -18,6 +19,7 @@ return [
         'price_usd' => 20,
         'price_ugx' => 75000,
         'order_cap' => null,
+        'user_cap'  => 2,
         'features'  => ['bot', 'orders', 'confirmations'],
     ],
     'pro' => [
@@ -25,6 +27,7 @@ return [
         'price_usd' => 50,
         'price_ugx' => 185000,
         'order_cap' => null,
+        'user_cap'  => null,
         'features'  => ['bot', 'orders', 'confirmations', 'pos', 'dispatch', 'tracking', 'reports', 'returns', 'branding', 'multi_user'],
     ],
 ];
