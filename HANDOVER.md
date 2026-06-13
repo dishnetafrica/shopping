@@ -188,6 +188,20 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-13 (later) — Phase 3b (part 2): Settings, Returns, Customers, Branches + tracking page (Bhavin + AI)
+- **All remaining panel saves now persist.** Settings (`settings-save` -> tenant.settings + name/phone), currency & discount (`bot-config-save` -> tenant.settings, feeds bot/quotes), Branches (`branch-save`/`branch-delete` -> Branch model), Customers (`customer-save` -> CustomerProfile; also updates the name on that phone's orders), Returns/refunds (`return` -> ReturnRecord; store credit computed as credit issued minus redeemed and returned in `returns.credit`).
+- Reads upgraded: `settings` now returns fee/currency fields too; `branches` real list; `customers` returns the `{customers:{phone:{...}}}` map the panel reads (note: panel uses `d.customers`, not `d.profiles`).
+- New customer **order-tracking page**: public `GET /papi/track?o=&t=` (TrackController, bypasses tenant scope, matches id+token) — themed status timeline + items + total. This is the link `dispatch` puts in the WhatsApp flow.
+- New: migration `...000012_create_returns_and_customer_profiles.php`, `ReturnRecord`, `CustomerProfile`, `TrackController`. Changed: `PanelApiController` (settingsSave/botConfigSave/branchSave/branchDel/customerSave/returnSave + creditMap/branchesList + richer reads), `routes/web.php`.
+- Phase 3b COMPLETE — every page in the seller panel is now backed by real, tenant-scoped endpoints.
+
+### 2026-06-13 (later) — Phase 3b (part 1): Dispatch + Riders wired (Bhavin + AI)
+- **Dispatch** now persists: `/papi/dispatch` (GET `row,rider,riderphone,phone,name`) finds-or-creates the rider, sets `order.rider_id`, ensures a `track_token`, sets status **Out for delivery** (fires the WhatsApp "on the way" notification via OrderObserver) and returns `{ok,track}` with a `?t=` token the panel reads.
+- **Riders** full CRUD: `/papi/rider-save` (name,phone,active,city,dob,address + identity/payment fields) and `/papi/rider-delete` (id) — both return the refreshed `{riders:[...]}` the panel expects. `riders` read now flattens the new fields.
+- Added JSON `profile` column to `riders` (license_no, nid_no, doc_url, bank_name, account_name, bank_account, pay_notes, pay_type, comm_pct/min/max). Migration auto-runs.
+- New: migration `...000011_extend_riders_profile.php`. Changed: `Rider.php` (+profile), `PanelApiController.php` (dispatch/riderSave/riderDel + ridersList helper), `routes/web.php`.
+- Still pending (still return ok:false): Returns (`return`), Settings save, bot-config-save, Branches, Customers. Plus the customer `/papi/track` page (token is generated; page not built yet).
+
 ### 2026-06-13 (later) — Phase 7: WhatsApp chat history sync (Bhavin + AI)
 - New **⤓ Sync past chats** button in the Chats inbox header. Pulls existing messages out of Evolution's store into our `messages` transcript so past conversations show up in the inbox (not just messages from connect-time onward).
 - `EvolutionAdmin::findMessages($instance,$page,$offset)` — pages `POST /chat/findMessages/{instance}` (Evolution's remoteJid filter is buggy, so we fetch all and bucket by chat ourselves; records read from `messages.records`|`records`|list).

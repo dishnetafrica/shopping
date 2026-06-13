@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
+use App\Models\Branch;
 use App\Models\Conversation;
+use App\Models\CustomerProfile;
 use App\Models\Message;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\ReturnRecord;
 use App\Models\Rider;
 use App\Services\WhatsApp\EvolutionAdmin;
 use App\Services\WhatsApp\WhatsAppManager;
@@ -100,45 +103,117 @@ class PanelApiController extends Controller
 
     public function riders()
     {
-        $rows = Rider::orderBy('name')->get()->map(fn (Rider $r) => [
-            'id'      => (int) $r->id,
-            'name'    => (string) $r->name,
-            'phone'   => (string) ($r->phone ?? ''),
-            'photo'   => (string) ($r->photo ?? ''),
-            'city'    => (string) ($r->city ?? ''),
-            'address' => (string) ($r->address ?? ''),
-            'notes'   => (string) ($r->notes ?? ''),
-            'active'  => (bool) ($r->active ?? true),
-        ]);
+        return response()->json(['riders' => $this->ridersList()]);
+    }
 
-        return response()->json(['riders' => $rows]);
+    /** Full rider list in the shape the panel expects (real cols + flattened profile). */
+    protected function ridersList(): array
+    {
+        return Rider::orderBy('name')->get()->map(function (Rider $r) {
+            $dob = $r->dob ? (is_object($r->dob) ? $r->dob->format('Y-m-d') : substr((string) $r->dob, 0, 10)) : '';
+            $base = [
+                'id'      => (int) $r->id,
+                'name'    => (string) $r->name,
+                'phone'   => (string) ($r->phone ?? ''),
+                'active'  => (bool) ($r->active ?? true),
+                'photo'   => (string) ($r->photo ?? ''),
+                'city'    => (string) ($r->city ?? ''),
+                'dob'     => $dob,
+                'address' => (string) ($r->address ?? ''),
+                'notes'   => (string) ($r->notes ?? ''),
+            ];
+            return array_merge($base, is_array($r->profile) ? $r->profile : []);
+        })->values()->all();
     }
 
     public function returns()
     {
-        return response()->json(['returns' => [], 'credit' => (object) []]);
+        $rows = ReturnRecord::orderByDesc('id')->limit(500)->get()->map(fn (ReturnRecord $x) => [
+            'id'         => (int) $x->id,
+            'orderRow'   => (int) ($x->order_id ?? 0),
+            'date'       => optional($x->created_at)->format('Y-m-d') ?? '',
+            'customer'   => (string) ($x->customer_name ?? ''),
+            'phone'      => (string) ($x->customer_phone ?? ''),
+            'items'      => (string) ($x->items_text ?? ''),
+            'amount'     => (float) $x->amount,
+            'resolution' => (string) $x->resolution,
+            'reason'     => (string) ($x->reason ?? ''),
+        ]);
+        return response()->json(['returns' => $rows, 'credit' => (object) $this->creditMap()]);
+    }
+
+    /** Store credit per phone = credit issued minus credit redeemed. */
+    protected function creditMap(): array
+    {
+        $map = [];
+        foreach (ReturnRecord::all() as $x) {
+            $p = preg_replace('/[^0-9]/', '', (string) $x->customer_phone);
+            if ($p === '') continue;
+            $map[$p] = $map[$p] ?? 0;
+            if ($x->resolution === 'credit') $map[$p] += (float) $x->amount;
+            elseif ($x->resolution === 'redeem') $map[$p] -= (float) $x->amount;
+        }
+        foreach ($map as $k => $v) {
+            if ($v <= 0) unset($map[$k]);
+        }
+        return $map;
     }
 
     public function settings(Request $r)
     {
         $t = $r->user()->tenant;
+        $s = $t->settings ?? [];
         return response()->json([
-            'ok'           => true,
-            'storeName'    => (string) ($t->name ?? 'Family Shopper'),
-            'storePhone'   => (string) ($t->whatsapp_number ?? ''),
-            'storeAddress' => (string) ($t->setting('address', 'Kampala, Uganda')),
-            'storeEmail'   => (string) ($t->setting('email', '')),
+            'ok'            => true,
+            'storeName'     => (string) ($t->name ?? 'Family Shopper'),
+            'storePhone'    => (string) ($t->whatsapp_number ?? ''),
+            'storeAddress'  => (string) ($s['address'] ?? 'Kampala, Uganda'),
+            'storeEmail'    => (string) ($s['email'] ?? ''),
+            'base'          => (float) ($s['base'] ?? 2000),
+            'perKm'         => (float) ($s['perKm'] ?? 700),
+            'min'           => (float) ($s['min'] ?? 2000),
+            'round'         => (float) ($s['round'] ?? 500),
+            'freeOver'      => (float) ($s['freeOver'] ?? 0),
+            'lat'           => (float) ($s['lat'] ?? 0.3428795),
+            'lng'           => (float) ($s['lng'] ?? 32.5825996),
+            'inventoryMode' => (string) ($s['inventoryMode'] ?? 'shared'),
+            'usdUgx'        => (float) ($s['usdUgx'] ?? 3750),
+            'usdSsp'        => (float) ($s['usdSsp'] ?? 7000),
         ]);
     }
 
     public function branches()
     {
-        return response()->json(['branches' => []]);
+        return response()->json(['branches' => $this->branchesList()]);
+    }
+
+    protected function branchesList(): array
+    {
+        return Branch::orderBy('name')->get()->map(fn (Branch $b) => [
+            'id'      => (int) $b->id,
+            'name'    => (string) $b->name,
+            'phone'   => (string) ($b->phone ?? ''),
+            'address' => (string) ($b->address ?? ''),
+            'lat'     => $b->lat,
+            'lng'     => $b->lng,
+        ])->values()->all();
     }
 
     public function customers()
     {
-        return response()->json(['ok' => true, 'profiles' => (object) []]);
+        $map = [];
+        foreach (CustomerProfile::all() as $c) {
+            $map[$c->phone] = [
+                'name'      => (string) ($c->name ?? ''),
+                'alt_phone' => (string) ($c->alt_phone ?? ''),
+                'email'     => (string) ($c->email ?? ''),
+                'address'   => (string) ($c->address ?? ''),
+                'notes'     => (string) ($c->notes ?? ''),
+                'lang'      => (string) ($c->lang ?? ''),
+                'greeting'  => (string) ($c->greeting ?? ''),
+            ];
+        }
+        return response()->json(['ok' => true, 'customers' => (object) $map]);
     }
 
     public function botConfig(Request $r)
@@ -563,6 +638,177 @@ class PanelApiController extends Controller
         $t->settings = $s;
         $t->save();
         return response()->json(['ok' => true]);
+    }
+
+    /* -------------------------------------------------- dispatch + riders (3b) */
+    public function dispatch(Request $r, WhatsAppManager $wa)
+    {
+        $o = Order::find((int) $r->query('row'));
+        if (! $o) {
+            return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        }
+        $rn = trim((string) $r->query('rider', ''));
+        $rp = preg_replace('/[^0-9]/', '', (string) $r->query('riderphone', ''));
+        if ($rn === '') {
+            return response()->json(['ok' => false, 'error' => 'rider_required'], 422);
+        }
+
+        // Find-or-create the rider for this tenant, keep phone fresh.
+        $rider = Rider::where('name', $rn)->first();
+        if (! $rider) {
+            $rider = Rider::create(['name' => $rn, 'phone' => $rp, 'active' => true]);
+        } elseif ($rp !== '' && $rider->phone !== $rp) {
+            $rider->phone = $rp;
+            $rider->save();
+        }
+
+        $o->rider_id = $rider->id;
+        if (empty($o->track_token)) {
+            $o->track_token = \Illuminate\Support\Str::random(12);
+        }
+        $o->status = 'Out for delivery';   // OrderObserver -> WhatsApp "on the way" + logs it
+        $o->save();
+
+        return response()->json([
+            'ok'    => true,
+            'track' => url('/papi/track?o=' . $o->id . '&t=' . $o->track_token),
+        ]);
+    }
+
+    public function riderSave(Request $r)
+    {
+        $name = trim((string) $r->query('name', ''));
+        if ($name === '') {
+            return response()->json(['ok' => false, 'error' => 'name_required'], 422);
+        }
+        $id = $r->query('id');
+        $rider = $id ? Rider::find((int) $id) : null;
+        if (! $rider) $rider = new Rider();
+
+        $rider->name    = $name;
+        $rider->phone   = preg_replace('/[^0-9]/', '', (string) $r->query('phone', ''));
+        $rider->active  = $r->query('active', 'true') === 'true';
+        $rider->city    = (string) $r->query('city', '');
+        $rider->dob     = $r->query('dob') ?: null;
+        $rider->address = (string) $r->query('address', '');
+
+        $profile = [];
+        foreach (['license_no', 'nid_no', 'doc_url', 'bank_name', 'account_name', 'bank_account', 'pay_notes', 'pay_type', 'comm_pct', 'comm_min', 'comm_max'] as $k) {
+            if ($r->filled($k)) $profile[$k] = (string) $r->query($k);
+        }
+        $rider->profile = $profile ?: null;
+        $rider->save();
+
+        return response()->json(['ok' => true, 'riders' => $this->ridersList()]);
+    }
+
+    public function riderDel(Request $r)
+    {
+        $rider = Rider::find((int) $r->query('id', 0));
+        if ($rider) $rider->delete();
+        return response()->json(['ok' => true, 'riders' => $this->ridersList()]);
+    }
+
+    /* -------------------------------------------------- settings / config (3b) */
+    public function settingsSave(Request $r)
+    {
+        $t = $r->user()->tenant;
+        $s = $t->settings ?? [];
+        foreach (['storeName', 'storePhone', 'storeAddress', 'storeEmail', 'base', 'perKm', 'min', 'round', 'freeOver', 'lat', 'lng', 'inventoryMode', 'usdUgx', 'usdSsp'] as $k) {
+            if ($r->has($k)) $s[$k] = $r->query($k);
+        }
+        $s['address'] = (string) $r->query('storeAddress', $s['address'] ?? '');
+        $s['email']   = (string) $r->query('storeEmail', $s['email'] ?? '');
+        if ($r->filled('storeName'))  $t->name = (string) $r->query('storeName');
+        if ($r->filled('storePhone')) $t->whatsapp_number = preg_replace('/[^0-9+]/', '', (string) $r->query('storePhone'));
+        $t->settings = $s;
+        $t->save();
+        return response()->json(['ok' => true, 'settings' => $s]);
+    }
+
+    public function botConfigSave(Request $r)
+    {
+        $t = $r->user()->tenant;
+        $s = $t->settings ?? [];
+        foreach (['currency', 'usdUgx', 'usdSsp', 'discountPct', 'discountAmt'] as $k) {
+            if ($r->has($k)) $s[$k] = $r->query($k);
+        }
+        $s['showSwitcher'] = ($r->query('showSwitcher', '0') === '1');
+        $t->settings = $s;
+        $t->save();
+        return response()->json(['ok' => true]);
+    }
+
+    /* -------------------------------------------------- branches (3b) */
+    public function branchSave(Request $r)
+    {
+        $name = trim((string) $r->query('name', ''));
+        if ($name === '') return response()->json(['ok' => false, 'error' => 'name_required'], 422);
+        $id = $r->query('id');
+        $b = $id ? Branch::find((int) $id) : null;
+        if (! $b) $b = new Branch();
+        $b->name    = $name;
+        $b->phone   = (string) $r->query('phone', '');
+        $b->address = (string) $r->query('address', '');
+        $b->lat     = is_numeric($r->query('lat')) ? (float) $r->query('lat') : null;
+        $b->lng     = is_numeric($r->query('lng')) ? (float) $r->query('lng') : null;
+        $b->save();
+        return response()->json(['ok' => true, 'branches' => $this->branchesList()]);
+    }
+
+    public function branchDel(Request $r)
+    {
+        $b = Branch::find((int) $r->query('id', 0));
+        if ($b) $b->delete();
+        return response()->json(['ok' => true, 'branches' => $this->branchesList()]);
+    }
+
+    /* -------------------------------------------------- customers (3b) */
+    public function customerSave(Request $r)
+    {
+        $phone = preg_replace('/[^0-9]/', '', (string) $r->query('phone', ''));
+        if ($phone === '') return response()->json(['ok' => false, 'error' => 'phone_required'], 422);
+        $c = CustomerProfile::firstOrNew(['phone' => $phone]);
+        $c->name      = (string) $r->query('name', '');
+        $c->alt_phone = (string) $r->query('alt_phone', '');
+        $c->email     = (string) $r->query('email', '');
+        $c->address   = (string) $r->query('address', '');
+        $c->lang      = (string) $r->query('lang', '');
+        $c->greeting  = (string) $r->query('greeting', '');
+        $c->notes     = (string) $r->query('notes', '');
+        $c->save();
+        // The panel says editing the name updates it on their orders too.
+        if (trim((string) $c->name) !== '') {
+            Order::where('customer_phone', $phone)->update(['customer_name' => $c->name]);
+        }
+        return response()->json(['ok' => true]);
+    }
+
+    /* -------------------------------------------------- returns / refunds (3b) */
+    public function returnSave(Request $r)
+    {
+        $o      = Order::find((int) $r->query('row'));
+        $phone  = preg_replace('/[^0-9]/', '', (string) $r->query('phone', ''));
+        $res    = (string) $r->query('resolution', 'adjust');
+        $amount = (float) $r->query('amount', 0);
+
+        ReturnRecord::create([
+            'order_id'       => $o?->id,
+            'customer_phone' => $phone,
+            'customer_name'  => (string) $r->query('name', ''),
+            'items_text'     => (string) $r->query('items', ''),
+            'amount'         => $amount,
+            'resolution'     => $res,
+            'reason'         => (string) $r->query('reason', ''),
+        ]);
+
+        // adjust / redeem reduce the order's outstanding total
+        if ($r->filled('newtotal') && $o) {
+            $o->total = (float) $r->query('newtotal');
+            $o->save();
+        }
+
+        return response()->json(['ok' => true, 'credit' => (object) $this->creditMap()]);
     }
 
     /* -------------------------------------------------- writes pending (3b) */

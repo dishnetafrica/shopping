@@ -3,11 +3,15 @@
 use App\Http\Controllers\Panel\PanelApiController;
 use App\Http\Controllers\Panel\PwaController;
 use App\Http\Controllers\Panel\SellerPanelController;
+use App\Http\Controllers\Panel\TrackController;
 use App\Http\Middleware\SetTenantFromUser;
 use Illuminate\Support\Facades\Route;
 
 // Default landing -> the familiar seller panel.
 Route::get('/', fn () => redirect('/panel'));
+
+// Public customer order-tracking page (no auth — order id + secret token are the key).
+Route::get('/papi/track', [TrackController::class, 'show']);
 
 // PWA assets (public — a manifest / service worker / icon must load without a session).
 Route::get('/manifest.webmanifest', [PwaController::class, 'manifest']);
@@ -63,14 +67,14 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('upload-image',  [PanelApiController::class, 'uploadImage']);
 
         // writes wired in Phase 3b (return ok:false -> panel saves locally for now)
-        Route::match(['get', 'post'], 'dispatch',        [PanelApiController::class, 'pending']);
-        Route::match(['get', 'post'], 'rider-save',      [PanelApiController::class, 'pending']);
-        Route::match(['get', 'post'], 'rider-delete',    [PanelApiController::class, 'pending']);
-        Route::match(['get', 'post'], 'return',          [PanelApiController::class, 'pending']);
-        Route::match(['get', 'post'], 'settings-save',   [PanelApiController::class, 'pending']);
-        Route::match(['get', 'post'], 'bot-config-save', [PanelApiController::class, 'pending']);
-        Route::match(['get', 'post'], 'branch-save',     [PanelApiController::class, 'pending']);
-        Route::match(['get', 'post'], 'branch-delete',   [PanelApiController::class, 'pending']);
-        Route::match(['get', 'post'], 'customer-save',   [PanelApiController::class, 'pending']);
+        Route::get('dispatch',     [PanelApiController::class, 'dispatch']);
+        Route::get('rider-save',   [PanelApiController::class, 'riderSave']);
+        Route::get('rider-delete', [PanelApiController::class, 'riderDel']);
+        Route::get('return',          [PanelApiController::class, 'returnSave']);
+        Route::get('settings-save',   [PanelApiController::class, 'settingsSave']);
+        Route::get('bot-config-save', [PanelApiController::class, 'botConfigSave']);
+        Route::get('branch-save',     [PanelApiController::class, 'branchSave']);
+        Route::get('branch-delete',   [PanelApiController::class, 'branchDel']);
+        Route::get('customer-save',   [PanelApiController::class, 'customerSave']);
     });
 });
