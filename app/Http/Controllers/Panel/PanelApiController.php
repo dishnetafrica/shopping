@@ -493,7 +493,16 @@ class PanelApiController extends Controller
         $phone  = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));
         $active = (bool) ((int) $r->input('active', 1));
         $c = Conversation::where('customer_phone', $phone)->first();
-        if ($c) { $c->agent_active = $active; $c->save(); }
+        if ($c) {
+            $c->agent_active = $active;
+            if (! $active) {
+                // Handing back to the bot — clear the loop guard so it doesn't instantly re-pause.
+                $s = is_array($c->state) ? $c->state : [];
+                unset($s['lg_out_times'], $s['lg_last_out'], $s['lg_last_out_at'], $s['lg_paused'], $s['lg_alerted']);
+                $c->state = $s;
+            }
+            $c->save();
+        }
         return response()->json(['ok' => true, 'agent_active' => $active]);
     }
 
