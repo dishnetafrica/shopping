@@ -11,6 +11,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // EasyPanel/Traefik sits in front of the app — trust its forwarded headers.
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'tenant.user'   => \App\Http\Middleware\SetTenantFromUser::class,
             'tenant.domain' => \App\Http\Middleware\IdentifyTenantByDomain::class,
