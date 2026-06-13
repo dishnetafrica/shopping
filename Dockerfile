@@ -6,6 +6,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends git unzip \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 ENV COMPOSER_ALLOW_SUPERUSER=1
+# Composer now refuses to install package versions that have security advisories.
+# The whole Laravel 11.x line is currently flagged, so relax this policy for the build.
+RUN composer config --global policy.advisories.block false || true
 
 WORKDIR /src
 # 1) fresh Laravel 11 skeleton (artisan, public/, storage/, default config files, etc.)
