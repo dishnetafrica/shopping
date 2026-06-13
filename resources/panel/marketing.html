@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Marketing campaigns</title>
+<style>
+  :root{--green:#0a7d3c;--green-d:#075c2c;--ink:#10241c;--mute:#6a7a70;--line:#e6ece8;--bg:#f5f7f5;--card:#fff;--amber:#b8860b;--red:#c0392b;--blue:#1f6feb}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+  a{color:inherit;text-decoration:none}
+  .top{background:var(--green-d);color:#fff;display:flex;align-items:center;gap:12px;padding:14px 18px;position:sticky;top:0;z-index:5}
+  .top .bk{font-size:20px}.top h1{font-size:18px;font-weight:700}
+  .wrap{max-width:820px;margin:0 auto;padding:18px 16px 60px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+  h3{font-size:15px;font-weight:700;margin-bottom:12px}
+  label{display:block;font-size:12.5px;font-weight:600;color:var(--mute);margin:11px 0 4px}
+  input,select,textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:14px;font-family:inherit;background:#fff}
+  textarea{min-height:84px;resize:vertical}
+  .rowf{display:flex;gap:10px}.rowf>*{flex:1}
+  .btn{margin-top:14px;width:100%;background:var(--green);color:#fff;border:none;border-radius:10px;padding:11px;font-weight:700;font-size:15px;cursor:pointer}
+  .btn:hover{background:var(--green-d)}
+  .btn.ghost{background:#eef3ef;color:var(--green-d)}
+  .btns{display:flex;gap:10px}.btns>*{flex:1}
+  .warn{background:#fdecec;border:1px solid #f3c4c0;border-radius:12px;padding:14px 16px;font-size:13.5px;color:#7a241d;margin-bottom:16px}
+  .warn b{display:block;margin-bottom:4px}
+  .warn a{color:var(--red);font-weight:700}
+  .ai{display:flex;gap:8px;flex-wrap:wrap}
+  .ai .b{border:1px dashed var(--green);background:#f1f9f4;color:var(--green-d);border-radius:20px;padding:7px 13px;font-size:12.5px;font-weight:700;cursor:pointer}
+  .plist{max-height:190px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px}
+  .pi{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px}
+  .pi:hover{background:var(--bg)}.pi input{width:auto}
+  .pi .nm{flex:1}.pi .pr{font-size:12.5px;color:var(--mute);font-family:"Space Mono",monospace}
+  .aud{font-size:12.5px;color:var(--green-d);font-weight:700;margin-top:6px}
+  .c{border:1px solid var(--line);border-radius:11px;padding:13px;margin-bottom:9px}
+  .c .h{display:flex;justify-content:space-between;gap:10px;align-items:center}
+  .c .nm{font-weight:700}.c .meta{font-size:12px;color:var(--mute);margin-top:2px}
+  .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:9px;white-space:nowrap}
+  .b-draft{background:#eef0f2;color:#555}.b-scheduled{background:#e1ecff;color:var(--blue)}
+  .b-sending{background:#fff4d6;color:var(--amber)}.b-sent{background:#e7f6ec;color:var(--green-d)}.b-failed{background:#fdecec;color:var(--red)}
+  .stats{display:flex;gap:16px;margin-top:9px;font-size:12.5px;color:var(--mute)}
+  .stats b{color:var(--ink)}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111b21;color:#fff;padding:11px 16px;border-radius:10px;font-size:13.5px;opacity:0;transition:.2s;pointer-events:none;z-index:50}
+  .toast.show{opacity:1}
+  .hint{font-size:12px;color:var(--mute);margin-top:6px}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid #ffffff66;border-top-color:#fff;border-radius:50%;animation:s .7s linear infinite;vertical-align:-1px;margin-right:6px}
+  @keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="top"><a class="bk" href="/panel">‹</a><h1>Marketing campaigns</h1></div>
+
+<div class="wrap">
+  <div class="warn" id="banWarn">
+    <b>⚠️ Send responsibly — protect your number</b>
+    Blasting many messages at once on a normal WhatsApp connection can get your number <b>blocked by WhatsApp</b>. CloudBSS sends slowly (a few seconds between each) to reduce that risk, and you should only message customers who know you. For large or frequent campaigns, switch on the <a href="/panel/setup">official WhatsApp Business API</a> first.
+  </div>
+
+  <div class="card">
+    <h3>New campaign</h3>
+
+    <label>Let AI draft it (optional)</label>
+    <div class="ai">
+      <span class="b" onclick="suggest('weekend')">🎉 Weekend special</span>
+      <span class="b" onclick="suggest('new')">🆕 New arrivals</span>
+      <span class="b" onclick="suggest('overstock')">📦 Clear overstock</span>
+      <span class="b" onclick="suggest('slow')">🐌 Slow movers</span>
+    </div>
+
+    <div class="rowf" style="margin-top:6px">
+      <div><label>Campaign type</label>
+        <select id="cType">
+          <option value="promotion">Product Promotion</option>
+          <option value="launch">New Product Launch</option>
+          <option value="discount">Discount Campaign</option>
+          <option value="seasonal">Seasonal Offer</option>
+        </select>
+      </div>
+      <div><label>Send to</label>
+        <select id="cAud" onchange="audChange()">
+          <option value="all">All customers</option>
+          <option value="recent">Recent customers (30 days)</option>
+          <option value="inactive">Inactive customers (60+ days)</option>
+          <option value="vip">VIP customers (top spenders)</option>
+          <option value="category">By product category</option>
+        </select>
+      </div>
+    </div>
+    <div id="catRow" style="display:none"><label>Category</label><select id="cCat"></select></div>
+    <div class="aud" id="audCount"></div>
+
+    <label>Message</label>
+    <textarea id="cMsg" placeholder="Write your promotional message…"></textarea>
+
+    <label>Featured products (added to the message)</label>
+    <div class="plist" id="plist"><div class="hint">Loading products…</div></div>
+
+    <label>Image URL (optional)</label>
+    <input id="cImg" placeholder="https://… link to a promo image">
+    <div class="hint">Paste a link to an image. (Direct upload is coming soon.)</div>
+
+    <label>Call to action</label>
+    <input id="cCta" value="Reply BUY to order instantly.">
+
+    <label>Schedule (optional)</label>
+    <div class="rowf"><input id="cDate" type="date"><input id="cTime" type="time"></div>
+    <div class="hint">Leave blank to send now or save as a draft.</div>
+
+    <div class="btns">
+      <button class="btn ghost" onclick="save(false)">Save draft</button>
+      <button class="btn" id="sendBtn" onclick="sendNow()">Send / schedule</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Campaigns</h3>
+    <div id="list"><div class="hint">Loading…</div></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  var $=function(i){return document.getElementById(i);},PRODUCTS=[],EDIT_ID=0;
+  function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2800);}
+  function esc(s){return (s||'').replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
+  function ugx(n){return 'UGX '+Math.round(n||0).toLocaleString();}
+
+  async function load(){
+    try{
+      var r=await fetch('/papi/campaigns',{cache:'no-store'});var d=await r.json();if(!d.ok)return;
+      PRODUCTS=d.products||[];
+      $('plist').innerHTML=PRODUCTS.length?PRODUCTS.map(function(p){
+        return '<label class="pi"><input type="checkbox" value="'+p.id+'"><span class="nm">'+esc(p.name)+'</span><span class="pr">'+ugx(p.price)+'</span></label>';
+      }).join(''):'<div class="hint">No products yet — add some under Products.</div>';
+      var cat=$('cCat');cat.innerHTML=(d.categories||[]).map(function(c){return '<option>'+esc(c)+'</option>';}).join('')||'<option value="">(no categories)</option>';
+      if(!d.official){$('banWarn').style.display='';}
+      renderList(d.campaigns||[]);
+      audChange();
+    }catch(e){}
+  }
+
+  function renderList(cs){
+    var l=$('list');
+    if(!cs.length){l.innerHTML='<div class="hint">No campaigns yet. Create one above.</div>';return;}
+    l.innerHTML=cs.map(function(c){
+      var s=c.stats||{},when=c.when?new Date(c.when).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+      var stat=(c.status==='sent'||c.status==='sending')?
+        '<div class="stats"><span>Targeted <b>'+(s.targeted||0)+'</b></span><span>Sent <b>'+(s.sent||0)+'</b></span><span>Failed <b>'+(s.failed||0)+'</b></span></div>':
+        (c.status==='scheduled'&&when?'<div class="meta">Scheduled for '+when+'</div>':'');
+      return '<div class="c"><div class="h"><div><div class="nm">'+esc(c.name)+'</div>'+
+        '<div class="meta">'+esc(c.type_label)+' · to '+esc(c.audience)+'</div></div>'+
+        '<span class="badge b-'+c.status+'">'+c.status+'</span></div>'+stat+'</div>';
+    }).join('');
+  }
+
+  function audChange(){
+    var a=$('cAud').value;$('catRow').style.display=a==='category'?'block':'none';
+    previewAudience();
+  }
+  async function previewAudience(){
+    var a=$('cAud').value,cat=a==='category'?$('cCat').value:null;
+    $('audCount').textContent='Counting customers…';
+    try{
+      var r=await fetch('/papi/campaign/audience',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({audience:a,category:cat})});
+      var d=await r.json();
+      $('audCount').textContent=d.ok?('≈ '+d.count+' customer'+(d.count===1?'':'s')+' will receive this'):'';
+    }catch(e){$('audCount').textContent='';}
+  }
+  $('cCat')&&$('cCat').addEventListener('change',previewAudience);
+
+  function selectedProducts(){
+    return [].slice.call(document.querySelectorAll('#plist input:checked')).map(function(i){return +i.value;});
+  }
+  function schedISO(){
+    if(!$('cDate').value||!$('cTime').value)return null;
+    return new Date($('cDate').value+'T'+$('cTime').value).toISOString();
+  }
+  function payload(){
+    return {id:EDIT_ID,type:$('cType').value,audience:$('cAud').value,category:$('cAud').value==='category'?$('cCat').value:null,
+      message:$('cMsg').value,image_url:$('cImg').value,product_ids:selectedProducts(),cta:$('cCta').value,scheduled_for:schedISO()};
+  }
+
+  async function save(silent){
+    var p=payload();
+    if(!p.message&&!p.product_ids.length){toast('Write a message or pick a product');return null;}
+    try{
+      var r=await fetch('/papi/campaign/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+      var d=await r.json();
+      if(d&&d.ok){EDIT_ID=d.id;if(!silent)toast(d.status==='scheduled'?'Campaign scheduled':'Draft saved');load();return d;}
+      toast('Could not save');return null;
+    }catch(e){toast('Network error');return null;}
+  }
+
+  async function sendNow(){
+    var iso=schedISO();
+    var d=await save(true);if(!d)return;
+    if(iso){toast('Campaign scheduled');return;}   // saving with a date already schedules it
+    if(!confirm('Send this campaign now? Messages go out slowly to protect your number.'))return;
+    var b=$('sendBtn');b.disabled=true;b.innerHTML='<span class="spin"></span>Queuing…';
+    try{
+      var r=await fetch('/papi/campaign/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:d.id})});
+      var j=await r.json();
+      if(j&&j.ok){toast('Sending to ≈ '+j.audience+' customers (throttled)');EDIT_ID=0;load();}
+      else if(j&&j.error==='no_audience'){toast('No customers match that audience yet');}
+      else{toast('Could not send');}
+    }catch(e){toast('Network error');}
+    b.disabled=false;b.textContent='Send / schedule';
+  }
+
+  async function suggest(kind){
+    toast('Asking the AI…');
+    try{
+      var r=await fetch('/papi/campaign/suggest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:kind})});
+      var d=await r.json();if(!d.ok)return;
+      $('cMsg').value=d.message||'';
+      if(d.type)$('cType').value=d.type;
+      var ids=(d.products||[]).map(function(p){return p.id;});
+      document.querySelectorAll('#plist input').forEach(function(i){i.checked=ids.indexOf(+i.value)>=0;});
+      toast('Draft ready — review and edit before sending');
+    }catch(e){toast('Could not get a suggestion');}
+  }
+
+  load();
+</script>
+</body>
+</html>

@@ -216,6 +216,29 @@ Set it up once:
 
 Now any message to that number gets an AI sales reply (`MarketingBrain`), with a graceful canned fallback if the AI is unavailable. You can **Take over** any sales chat from `/panel → Chats`, exactly like a shop does. (Normal shop tenants are unaffected — they keep the ordering bot.)
 
+## 8d. The scheduler (required for scheduled deliveries & timed campaigns)
+
+Scheduled-delivery reminders and timed campaigns are driven by `shopbot:process-scheduled`, run every minute by `routes/console.php`. The EasyPanel image already runs a **scheduler** process; if you ever run it yourself, the cron is:
+```
+* * * * * cd /app && php artisan schedule:run >> /dev/null 2>&1
+```
+A **queue worker** must also be running (it sends the WhatsApp messages): `php artisan queue:work`. Without the worker, reminders and campaigns are computed but never delivered. Test once with `php artisan shopbot:process-scheduled`.
+
+## 8e. Scheduled deliveries
+
+`/panel → 🗓️ Scheduled` lets the shop pick an un-delivered order and set a delivery time (today-later / tomorrow / custom). Each scheduled order moves through **Scheduled → Preparing → Ready For Dispatch → Out For Delivery** automatically as its time approaches, and the owner gets a WhatsApp at:
+- **2h before** — "needs preparation"
+- **30m before** — "assign a rider"
+- **at the time** — "dispatch now"
+
+The queue groups orders by day with a live countdown. (v1 schedules from the panel; conversational "schedule for tomorrow" capture inside the bot is the next step. Stored in `orders.scheduled_for / sched_stage / sched_reminders`.)
+
+## 8f. Marketing campaigns ⚠️ (mind the ban risk)
+
+`/panel → 📣 Marketing` is the campaign builder: pick products, write or **AI-draft** a message (weekend / new arrivals / overstock / slow movers), add an image URL, choose an audience (all / recent / inactive / VIP / by category), then send now or schedule. Messages = text + product lines + a CTA ("Reply BUY to order instantly.").
+
+**Ban risk is real.** Mass-broadcasting on the unofficial (Evolution) connection is the fastest way to get a number blocked. Mitigations built in: `SendCampaign` sends **one message at a time with a 4–9s jitter**, and the page shows a prominent warning. For real campaign volume, connect the **official WhatsApp Business API** first (Setup → official WhatsApp). Audience resolution lives in `AudienceResolver`; "by category" is a best-effort text match on order items (v2 = exact line-item join). Image upload is by URL for now (direct upload is a follow-up).
+
 ## 9. Go-live checklist (do before real customers)
 
 - [ ] `APP_DEBUG=false`, real `APP_KEY`, `APP_URL` correct (https).

@@ -28,6 +28,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/chats', [SellerPanelController::class, 'chats']);
     Route::get('/panel/cashbook', [SellerPanelController::class, 'cashbook']);
     Route::get('/panel/staff', [SellerPanelController::class, 'staff']);
+    Route::get('/panel/scheduled', [SellerPanelController::class, 'scheduled']);
+    Route::get('/panel/marketing', [SellerPanelController::class, 'marketing']);
     Route::get('/panel/setup', [SellerPanelController::class, 'setup']);
     Route::get('/panel/billing', [\App\Http\Controllers\Billing\BillingController::class, 'page']);
 
@@ -76,6 +78,17 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('staff',          [PanelApiController::class, 'staffList']);
         Route::post('staff/add',     [PanelApiController::class, 'staffAdd']);
         Route::post('staff/delete',  [PanelApiController::class, 'staffDelete']);
+
+        // scheduled deliveries
+        Route::get('scheduled',          [PanelApiController::class, 'scheduledList']);
+        Route::post('schedule-order',    [PanelApiController::class, 'scheduleOrder']);
+
+        // marketing campaigns
+        Route::get('campaigns',          [PanelApiController::class, 'campaignList']);
+        Route::post('campaign/save',     [PanelApiController::class, 'campaignSave']);
+        Route::post('campaign/send',     [PanelApiController::class, 'campaignSend']);
+        Route::post('campaign/audience', [PanelApiController::class, 'campaignAudience']);
+        Route::post('campaign/suggest',  [PanelApiController::class, 'campaignSuggest']);
         Route::post('bot/generate',  [PanelApiController::class, 'botGenerate']);
         Route::post('bot/save',      [PanelApiController::class, 'botSave']);
 
