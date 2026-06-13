@@ -50,6 +50,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('chats/takeover',    [PanelApiController::class, 'chatTakeover']);
         Route::post('chats/bot-mode',    [PanelApiController::class, 'chatBotMode']);
         Route::post('chats/sync',        [PanelApiController::class, 'chatSync']);
+        Route::get('chats/sync-debug',    [PanelApiController::class, 'chatSyncDebug']);
 
         // self-serve onboarding (WhatsApp QR connect + AI bot setup)
         Route::get('wa/status',      [PanelApiController::class, 'waStatus']);

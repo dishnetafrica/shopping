@@ -12,11 +12,18 @@ use App\Http\Controllers\Controller;
  */
 class PwaController extends Controller
 {
-    public function manifest()
+    public function manifest(\Illuminate\Http\Request $r)
     {
+        $name = 'ShopBot Seller';
+        $u = $r->user();
+        if ($u && $u->tenant && trim((string) $u->tenant->name) !== '') {
+            $name = trim((string) $u->tenant->name);
+        }
+        $short = mb_strlen($name) <= 12 ? $name : $this->initials($name);
+
         return response()->json([
-            'name'             => 'Family Shopper Seller',
-            'short_name'       => 'Seller',
+            'name'             => $name,
+            'short_name'       => $short,
             'description'      => 'Manage orders, products and WhatsApp chats',
             'start_url'        => '/panel',
             'scope'            => '/',
@@ -29,6 +36,16 @@ class PwaController extends Controller
                 ['src' => '/icons/app-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable'],
             ],
         ])->header('Content-Type', 'application/manifest+json');
+    }
+
+    protected function initials(string $name): string
+    {
+        $i = '';
+        foreach (preg_split('/\s+/', trim($name)) as $p) {
+            if ($p !== '') $i .= mb_strtoupper(mb_substr($p, 0, 1));
+            if (mb_strlen($i) >= 2) break;
+        }
+        return $i !== '' ? $i : 'Shop';
     }
 
     public function sw()

@@ -450,6 +450,50 @@ class PanelApiController extends Controller
     }
 
     /**
+     * Diagnostic — open in the browser while logged in to see exactly where the
+     * chat-history chain is breaking. Shows what's in our DB and what Evolution
+     * returns (status, totals, top-level keys, sample record keys).
+     */
+    public function chatSyncDebug(Request $r, EvolutionAdmin $evo)
+    {
+        $t = $r->user()->tenant;
+        $instance = (string) ($t->whatsapp_instance ?? '');
+
+        $out = [
+            'evolution_configured' => $evo->configured(),
+            'tenant_id'            => $t->id,
+            'instance'             => $instance,
+            'our_db_messages'      => Message::count(),
+            'our_db_conversations' => Conversation::count(),
+        ];
+
+        if ($evo->configured() && $instance !== '') {
+            $raw  = $evo->findMessagesRaw($instance, 1, 5);
+            $body = $raw['body'];
+            $recs = data_get($body, 'messages.records');
+            $out['evolution_http_status']    = $raw['status'];
+            $out['evolution_top_level_keys'] = is_array($body) ? array_keys($body) : [];
+            $out['evolution_messages_total'] = data_get($body, 'messages.total');
+            $out['evolution_records_on_page'] = is_array($recs) ? count($recs) : null;
+            $out['evolution_sample_record_keys'] = (is_array($recs) && isset($recs[0]) && is_array($recs[0]))
+                ? array_keys($recs[0]) : [];
+            // a tiny redacted sample so we can see the field layout without leaking much
+            if (is_array($recs) && isset($recs[0])) {
+                $out['evolution_sample'] = [
+                    'fromMe'    => data_get($recs[0], 'key.fromMe'),
+                    'remoteJid' => data_get($recs[0], 'key.remoteJid'),
+                    'hasText'   => (bool) (data_get($recs[0], 'message.conversation') ?? data_get($recs[0], 'message.extendedTextMessage.text')),
+                    'timestamp' => data_get($recs[0], 'messageTimestamp'),
+                ];
+            }
+        } else {
+            $out['note'] = $instance === '' ? 'Tenant has no whatsapp_instance set' : 'EVOLUTION_BASE_URL / EVOLUTION_API_KEY not set';
+        }
+
+        return response()->json($out);
+    }
+
+    /**
      * One-time (re-runnable) backfill: pull existing WhatsApp messages out of
      * Evolution's store into our transcript so past chats appear in the inbox.
      * De-duplicates on wa_message_id, so running it again is safe.

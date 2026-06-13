@@ -26,11 +26,33 @@ class SellerPanelController extends Controller
             abort(500, 'Seller panel asset missing.');
         }
 
-        $html = file_get_contents($path);
+        $html = $this->brandize(file_get_contents($path), $user->tenant);
 
         return response($html, 200)
             ->header('Content-Type', 'text/html; charset=UTF-8')
             ->header('Cache-Control', 'no-store');
+    }
+
+    /** Swap the hardcoded "Family Shopper / FS" branding for the tenant's own. */
+    protected function brandize(string $html, $tenant): string
+    {
+        $name = trim((string) ($tenant->name ?? 'Shop'));
+        $name = preg_replace('/[<>"\']/', '', $name) ?: 'Shop';
+        $initials = $this->initialsFor($name);
+        $html = str_replace('Family Shopper', $name, $html);
+        $html = str_replace('<div class="lg">FS</div>', '<div class="lg">' . $initials . '</div>', $html);
+        $html = str_replace('content="Seller"', 'content="' . $name . '"', $html);
+        return $html;
+    }
+
+    protected function initialsFor(string $name): string
+    {
+        $i = '';
+        foreach (preg_split('/\s+/', trim($name)) as $p) {
+            if ($p !== '') $i .= mb_strtoupper(mb_substr($p, 0, 1));
+            if (mb_strlen($i) >= 2) break;
+        }
+        return $i !== '' ? $i : mb_strtoupper(mb_substr($name, 0, 2));
     }
 
     /** Self-serve onboarding: connect WhatsApp (QR) + generate the bot persona. */
@@ -44,7 +66,7 @@ class SellerPanelController extends Controller
         if (! is_file($path)) {
             abort(500, 'Setup asset missing.');
         }
-        return response(file_get_contents($path), 200)
+        return response($this->brandize(file_get_contents($path), $request->user()->tenant), 200)
             ->header('Content-Type', 'text/html; charset=UTF-8')
             ->header('Cache-Control', 'no-store');
     }

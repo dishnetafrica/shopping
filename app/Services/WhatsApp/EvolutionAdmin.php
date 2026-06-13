@@ -116,6 +116,7 @@ class EvolutionAdmin
     {
         try {
             $d = $this->http()->post("/chat/findMessages/{$instance}", [
+                'where'  => (object) [],
                 'page'   => $page,
                 'offset' => $offset,
             ])->json() ?? [];
@@ -126,6 +127,21 @@ class EvolutionAdmin
             return (is_array($d) && array_is_list($d)) ? $d : [];
         } catch (\Throwable $e) {
             return [];
+        }
+    }
+
+    /** Diagnostic: return the raw status + decoded body so we can see the shape. */
+    public function findMessagesRaw(string $instance, int $page = 1, int $offset = 5): array
+    {
+        try {
+            $resp = $this->http()->post("/chat/findMessages/{$instance}", [
+                'where'  => (object) [],
+                'page'   => $page,
+                'offset' => $offset,
+            ]);
+            return ['status' => $resp->status(), 'body' => $resp->json() ?? []];
+        } catch (\Throwable $e) {
+            return ['status' => 0, 'body' => ['error' => $e->getMessage()]];
         }
     }
 }

@@ -188,6 +188,13 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-13 (later) — Phase 8: per-tenant branding (Bhavin + AI)
+- The panel now shows **each business's own name + initials**, not hardcoded "Family Shopper / FS". `SellerPanelController::brandize()` swaps the brand name, the `FS` logo badge, and the iOS app title at serve time using `tenant->name` (initials derived from the name, e.g. "Pals Snacks" -> "PS"). Applied to panel, chats, and setup pages.
+- **PWA manifest is now per-tenant**: `PwaController::manifest()` returns the tenant's name as the installed-app name/short_name (reads the session; manifest `<link>` got `crossorigin="use-credentials"` so the browser sends the cookie). So when Pals Snacks installs the app, their home-screen app says "Pals Snacks".
+- Backward compatible: the Family Shoppers tenant still shows "Family Shopper / FS" (its name is unchanged). A business's brand follows `tenant->name`, which the Settings page already updates.
+- Changed: `SellerPanelController.php` (brandize + initials), `PwaController.php` (dynamic manifest + initials), `seller.html`/`chats.html`/`setup.html` (manifest crossorigin).
+- Still generic per tenant: the app **icon** PNG (green badge) — dynamic per-tenant icon is a future nice-to-have; the app *name* differentiates for now.
+
 ### 2026-06-13 (later) — Phase 3b (part 2): Settings, Returns, Customers, Branches + tracking page (Bhavin + AI)
 - **All remaining panel saves now persist.** Settings (`settings-save` -> tenant.settings + name/phone), currency & discount (`bot-config-save` -> tenant.settings, feeds bot/quotes), Branches (`branch-save`/`branch-delete` -> Branch model), Customers (`customer-save` -> CustomerProfile; also updates the name on that phone's orders), Returns/refunds (`return` -> ReturnRecord; store credit computed as credit issued minus redeemed and returned in `returns.credit`).
 - Reads upgraded: `settings` now returns fee/currency fields too; `branches` real list; `customers` returns the `{customers:{phone:{...}}}` map the panel reads (note: panel uses `d.customers`, not `d.profiles`).
