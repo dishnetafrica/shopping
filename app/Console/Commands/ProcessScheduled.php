@@ -43,6 +43,13 @@ class ProcessScheduled extends Command
         }
 
         $this->info('Processed ' . $orders->count() . ' scheduled orders, dispatched ' . $due->count() . ' campaigns.');
+
+        // Keep the diagnostics trail lean.
+        try {
+            \Illuminate\Support\Facades\DB::table('bot_events')
+                ->where('created_at', '<', now()->subDays(3))->delete();
+        } catch (\Throwable $e) { /* table may not exist yet */ }
+
         return self::SUCCESS;
     }
 

@@ -1339,6 +1339,25 @@ class PanelApiController extends Controller
         };
     }
 
+    /** Recent bot-pipeline events for this shop (powers /panel/diagnostics). */
+    public function diagnostics(Request $r)
+    {
+        $tid  = $r->user()->tenant->id;
+        $rows = \Illuminate\Support\Facades\DB::table('bot_events')
+            ->where('tenant_id', $tid)
+            ->orderByDesc('id')->limit(80)->get()
+            ->map(fn ($e) => [
+                'time'   => (string) $e->created_at,
+                'phone'  => $e->phone,
+                'stage'  => $e->stage,
+                'detail' => $e->detail,
+                'ms'     => $e->ms,
+                'trace'  => substr((string) $e->trace, -6),
+            ])->values();
+
+        return response()->json(['ok' => true, 'events' => $rows]);
+    }
+
     // AI bot setup — owner describes the business in plain words, we generate the persona.
     public function botGenerate(Request $r)
     {

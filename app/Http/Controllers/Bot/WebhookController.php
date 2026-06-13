@@ -25,15 +25,22 @@ class WebhookController
 
         $incoming = $this->wa->driver($driver)->parseIncoming($request->all());
         if (!$incoming || $incoming['text'] === '') {
+            \App\Support\BotTrace::log(null, uniqid('m_'), null, 'ignored', 'empty / status / group / fromMe');
             return response()->json(['ok' => true]); // ack & ignore (status events, media-only, etc.)
         }
+
+        $trace = $incoming['messageId'] ?: uniqid('m_');
+        $incoming['trace'] = $trace;
 
         // Resolve tenant by the instance/number that RECEIVED the message.
         $tenant = Tenant::where('whatsapp_instance', $incoming['instance'])->first();
         if (!$tenant) {
+            \App\Support\BotTrace::log(null, $trace, $incoming['from'], 'no_tenant', 'instance=' . $incoming['instance']);
             return response()->json(['ok' => true, 'note' => 'no tenant for instance']);
         }
 
+        \App\Support\BotTrace::log($tenant->id, $trace, $incoming['from'], 'queued');
+        $incoming['t_recv'] = microtime(true);   // for end-to-end latency logging
         ProcessIncomingMessage::dispatch($tenant->id, $driver, $incoming);
         return response()->json(['ok' => true]);
     }
