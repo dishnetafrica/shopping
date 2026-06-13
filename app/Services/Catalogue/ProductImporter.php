@@ -48,7 +48,8 @@ class ProductImporter
             return ['error' => 'no product-name column found (looked for "Product Name" / "name")'];
         }
 
-        $tenantId = app(TenantContext::class)->id();
+        $tenantId = app(TenantContext::class)->id() ?? auth()->user()?->tenant_id;
+        if (! $tenantId) { fclose($fh); return ['error' => 'no active business — please log out and back in, then retry']; }
         $now = now();
         $created = 0; $updated = 0; $skipped = 0; $errors = [];
         $batch = [];
