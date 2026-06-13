@@ -112,7 +112,28 @@ If you've used all your logins, you'll see an **Upgrade** link — moving to a h
 
 ---
 
-## 8. Plans & paying for CloudBSS
+## 8. Scheduled deliveries 🗓️
+
+Some customers want their order *later* — after work, or tomorrow morning. Open **Scheduled**, pick the order, and choose a time (today later / tomorrow / a custom date & time).
+
+CloudBSS then reminds you on WhatsApp so nothing slips:
+- **2 hours before** — start preparing it.
+- **30 minutes before** — pack it and assign a rider.
+- **At delivery time** — dispatch now.
+
+The queue shows everything coming up, grouped by day, with a countdown to each delivery.
+
+## 9. Marketing to your customers 📣
+
+Open **Marketing** to send a promotion on WhatsApp — a message, your products, an image and a "Reply BUY to order" call to action.
+
+1. Tap an **AI idea** (Weekend special, New arrivals, Clear overstock, Slow movers) to have it draft the message for you — then edit it to sound like you.
+2. Choose **who** receives it: all customers, recent ones, inactive ones, your VIPs, or buyers of a certain category. You'll see roughly how many people that is.
+3. Tick the products to feature, add an image link if you have one, and **send now** or **schedule** for later.
+
+> ⚠️ **Please send responsibly.** Only message customers who know you, and don't blast huge lists too often — WhatsApp can block a number that sends too much, too fast. CloudBSS deliberately sends slowly to protect you. For big or frequent campaigns, ask us to switch on the **official WhatsApp Business** connection first.
+
+## 10. Plans & paying for CloudBSS
 
 - **Free** — up to 30 orders a month, 1 login. Great for trying it out.
 - **Starter** — unlimited orders, 2 logins.
@@ -122,7 +143,7 @@ New shops start with a **30-day free trial** of all features. To pay or upgrade,
 
 ---
 
-## 9. Getting help
+## 11. Getting help
 
 - Message us on **WhatsApp** — the same way your customers message you.
 - We set you up and train your team, so you're never stuck.
