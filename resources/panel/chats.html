@@ -25,6 +25,8 @@
   .list{width:400px;min-width:330px;background:var(--wa-panel);border-right:1px solid var(--wa-line);display:flex;flex-direction:column}
   .list-head{height:60px;background:var(--wa-green);color:#fff;display:flex;align-items:center;gap:10px;padding:0 16px;flex-shrink:0}
   .list-head .b{font-weight:700;font-size:17px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .panel-link{color:#fff;text-decoration:none;font-size:26px;line-height:1;font-weight:600;opacity:.92;margin:-2px 2px 0 -4px;flex-shrink:0}
+  .panel-link:active{opacity:.6}
   .ic-btn{background:rgba(255,255,255,.12);border:none;color:#fff;border-radius:8px;padding:7px 10px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px}
   .ic-btn:active{background:rgba(255,255,255,.25)}
   .bot-wrap{display:flex;align-items:center;gap:6px;font-size:11px;color:#d7efe8}
@@ -116,6 +118,7 @@
     <!-- LIST -->
     <div class="list" id="listPane">
       <div class="list-head">
+        <a href="/panel" class="panel-link" title="Back to panel">‹</a>
         <span class="b">Family Shopper</span>
         <button class="ic-btn" id="syncBtn" onclick="syncHistory()">⟳ Sync</button>
         <div class="bot-wrap">Bot<div class="switch" id="botSwitch" onclick="toggleBot()"><div class="knob"></div></div></div>

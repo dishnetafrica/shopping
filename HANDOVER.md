@@ -188,6 +188,13 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-13 (later) — Phase 11: capture incoming (non-text) messages + back link (Bhavin + AI)
+- Bug: Chats threads showed only outgoing (green) bubbles; customer messages were missing. Root cause: `chatSync` extracted text only from `conversation`/`extendedTextMessage.text` and SKIPPED everything else, so customer replies sent as button/list taps, photos, voice notes, etc. were dropped on import.
+- Fix: new `waMessageText()` extractor unwraps ephemeral/view-once wrappers and reads captions, button/list/template replies, and reactions; media with no caption becomes a labelled placeholder (📷 Photo, 🎤 Voice message, 📄 Document, 📍 Location, etc.) so the inbound bubble still appears on the left. Re-run Sync to backfill.
+- UX: restored the "‹ Panel" back link (dropped in the Phase 9 redesign) in the green Chats list header, so you can return to the seller panel.
+- Note for two-way live chat: customer messages only log in real time if the instance webhook points at our app (`/api/webhook/whatsapp/evolution`). Check `webhook_url` in `/papi/chats/sync-debug`; if it's not ours, re-point via Setup -> Connect.
+- Changed: `PanelApiController.php`, `chats.html`.
+
 ### 2026-06-13 (later) — Phase 10: POS place-order fix (Bhavin + AI)
 - Bug: POS "Place order" always failed with "Could not place order". Root cause: `PanelApiController::saveOrder` only handled the EDIT path -- it did `Order::find($row)` and returned `not_found` when no `row` was supplied. POS sends a NEW order with no `row`, so it 404'd every time.
 - Fix: `saveOrder` now CREATES a new Order when `row` is empty (POS / new sale) and UPDATES when `row` is present. On create it fills customer_name, customer_phone, items_json/items_text, total, payment, location, channel ('pos'), status ('New'), and branch_id (when numeric). OrderObserver still assigns the FS-#### order_no + track_token on create. Returns `{ok,created,id,order_no}`.

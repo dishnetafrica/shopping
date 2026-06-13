@@ -533,6 +533,44 @@ class PanelApiController extends Controller
     }
 
     /**
+     * Pull human-readable text out of any Baileys/Evolution message shape:
+     * plain text, captions, button/list replies, and media (as a labelled
+     * placeholder so the bubble still shows). Returns '' only when truly nothing.
+     */
+    private function waMessageText(array $m): string
+    {
+        $msg = data_get($m, 'message', []);
+        if (! is_array($msg)) return '';
+
+        // unwrap ephemeral / view-once / caption wrappers
+        foreach (['ephemeralMessage.message', 'viewOnceMessage.message', 'viewOnceMessageV2.message', 'documentWithCaptionMessage.message'] as $w) {
+            $inner = data_get($msg, $w);
+            if (is_array($inner)) $msg = $inner;
+        }
+
+        $t = data_get($msg, 'conversation')
+            ?? data_get($msg, 'extendedTextMessage.text')
+            ?? data_get($msg, 'imageMessage.caption')
+            ?? data_get($msg, 'videoMessage.caption')
+            ?? data_get($msg, 'documentMessage.caption')
+            ?? data_get($msg, 'buttonsResponseMessage.selectedDisplayText')
+            ?? data_get($msg, 'listResponseMessage.title')
+            ?? data_get($msg, 'templateButtonReplyMessage.selectedDisplayText')
+            ?? data_get($msg, 'reactionMessage.text');
+        if (is_string($t) && trim($t) !== '') return $t;
+
+        // media with no caption -> labelled placeholder (still shows in thread)
+        if (data_get($msg, 'imageMessage'))    return '📷 Photo';
+        if (data_get($msg, 'videoMessage'))    return '🎬 Video';
+        if (data_get($msg, 'audioMessage'))    return '🎤 Voice message';
+        if (data_get($msg, 'stickerMessage'))  return '🌟 Sticker';
+        if (data_get($msg, 'documentMessage')) return '📄 '.((string) (data_get($msg, 'documentMessage.fileName') ?: 'Document'));
+        if (data_get($msg, 'locationMessage')) return '📍 Location';
+        if (data_get($msg, 'contactMessage'))  return '👤 Contact';
+        return '';
+    }
+
+    /**
      * One-time (re-runnable) backfill: pull existing WhatsApp messages out of
      * Evolution's store into our transcript so past chats appear in the inbox.
      * De-duplicates on wa_message_id, so running it again is safe.
@@ -568,9 +606,8 @@ class PanelApiController extends Controller
                 $waId = (string) data_get($m, 'key.id', '');
                 if ($waId !== '' && $existing->has($waId)) continue;
 
-                $text = (string) (data_get($m, 'message.conversation')
-                    ?? data_get($m, 'message.extendedTextMessage.text') ?? '');
-                if (trim($text) === '') continue; // skip media-only / empty
+                $text = $this->waMessageText($m);
+                if (trim($text) === '') continue; // truly nothing (no text, no media)
 
                 $fromMe = (bool) data_get($m, 'key.fromMe', false);
                 $phone  = preg_replace('/[^0-9]/', '', explode('@', $remote)[0]);
