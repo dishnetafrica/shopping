@@ -23,8 +23,20 @@ class TenantResource extends Resource
                 Forms\Components\TextInput::make('slug')->required()->helperText('Subdomain, e.g. "acme" → acme.yourdomain.com')
                     ->unique(ignoreRecord: true),
                 Forms\Components\TextInput::make('order_prefix')->default('ORD')->maxLength(6),
-                Forms\Components\Select::make('plan')->options(['starter'=>'Starter','pro'=>'Pro'])->default('starter'),
                 Forms\Components\Select::make('status')->options(['active'=>'Active','suspended'=>'Suspended'])->default('active'),
+            ])->columns(2),
+
+            Forms\Components\Section::make('Plan & billing')->schema([
+                Forms\Components\Select::make('plan')
+                    ->options(['free'=>'Free','starter'=>'Starter ($20/mo)','pro'=>'Pro ($50/mo)'])
+                    ->default('free')->required()
+                    ->helperText('What they pay for. During an active trial they get full Pro features regardless.'),
+                Forms\Components\DateTimePicker::make('trial_ends_at')
+                    ->label('Trial ends')->helperText('Full features until this date. Leave set to +30 days for new shops; clear it to end the trial.'),
+                Forms\Components\DateTimePicker::make('paid_until')
+                    ->label('Paid until')->helperText('After they pay (e.g. Mobile Money), set this to one month ahead. If it lapses, the plan auto-drops to Free.'),
+                Forms\Components\TextInput::make('billing_note')
+                    ->label('Billing note')->helperText('e.g. "MTN MoMo UGX 185,000 — 13 Jun"')->maxLength(190),
             ])->columns(2),
 
             Forms\Components\Section::make('WhatsApp')->schema([
@@ -50,10 +62,38 @@ class TenantResource extends Resource
             Tables\Columns\TextColumn::make('name')->searchable()->sortable(),
             Tables\Columns\TextColumn::make('slug')->badge(),
             Tables\Columns\TextColumn::make('whatsapp_number')->label('WhatsApp'),
-            Tables\Columns\TextColumn::make('plan')->badge(),
+            Tables\Columns\TextColumn::make('plan')->badge()
+                ->color(fn (string $state) => match ($state) { 'pro' => 'success', 'starter' => 'warning', default => 'gray' }),
+            Tables\Columns\TextColumn::make('trial_ends_at')->label('Trial ends')->date()->placeholder('—'),
+            Tables\Columns\TextColumn::make('paid_until')->label('Paid until')->date()->placeholder('—')
+                ->color(fn ($state) => $state && $state->isPast() ? 'danger' : null),
             Tables\Columns\TextColumn::make('status')->badge()->color(fn (string $state) => $state === 'active' ? 'success' : 'danger'),
             Tables\Columns\TextColumn::make('orders_count')->counts('orders')->label('Orders'),
-        ])->actions([Tables\Actions\EditAction::make()]);
+        ])->actions([
+            Tables\Actions\Action::make('markPaid')
+                ->label('Mark paid 1 month')->icon('heroicon-o-banknotes')->color('success')
+                ->requiresConfirmation()
+                ->form([
+                    Forms\Components\Select::make('plan')->options(['starter'=>'Starter ($20)','pro'=>'Pro ($50)'])->default('pro')->required(),
+                    Forms\Components\TextInput::make('note')->label('Payment note')->placeholder('MTN MoMo ref / amount'),
+                ])
+                ->action(function (Tenant $record, array $data) {
+                    $base = ($record->paid_until && $record->paid_until->isFuture()) ? $record->paid_until : now();
+                    $record->plan = $data['plan'];
+                    $record->paid_until = $base->copy()->addMonth();
+                    $record->trial_ends_at = null; // trial over once they're paying
+                    if (! empty($data['note'])) $record->billing_note = $data['note'];
+                    $record->save();
+                }),
+            Tables\Actions\Action::make('startTrial')
+                ->label('Start 30-day trial')->icon('heroicon-o-gift')->color('warning')
+                ->requiresConfirmation()
+                ->action(function (Tenant $record) {
+                    $record->trial_ends_at = now()->addDays(30);
+                    $record->save();
+                }),
+            Tables\Actions\EditAction::make(),
+        ]);
     }
 
     public static function getPages(): array

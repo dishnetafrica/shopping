@@ -42,7 +42,71 @@ class SellerPanelController extends Controller
         $html = str_replace('Family Shopper', $name, $html);
         $html = str_replace('<div class="lg">FS</div>', '<div class="lg">' . $initials . '</div>', $html);
         $html = str_replace('content="Seller"', 'content="' . $name . '"', $html);
+        $html = $this->injectPlan($html, $tenant);
         return $html;
+    }
+
+    /**
+     * Inject the tenant's current plan as window.PLAN and a small script that
+     * hides locked menu items and shows an upgrade banner. Keeps the panel
+     * HTML itself untouched; everything is decided server-side from the plan.
+     */
+    protected function injectPlan(string $html, $tenant): string
+    {
+        if (! $tenant || ! method_exists($tenant, 'effectivePlan')) return $html;
+
+        $plan = [
+            'plan'        => $tenant->effectivePlan(),
+            'label'       => $tenant->planLabel(),
+            'trial_days'  => $tenant->trialDaysLeft(),
+            'order_cap'   => $tenant->orderCap(),
+            'orders_used' => $tenant->ordersThisMonth(),
+            'over_cap'    => $tenant->overOrderCap(),
+            'features'    => [
+                'pos'      => $tenant->can('pos'),
+                'dispatch' => $tenant->can('dispatch'),
+                'reports'  => $tenant->can('reports'),
+                'returns'  => $tenant->can('returns'),
+                'branding' => $tenant->can('branding'),
+            ],
+        ];
+        $json = json_encode($plan, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        // NOTE: replace 256700000000 with your CloudBSS sales WhatsApp number.
+        $script = <<<'HTML'
+<style>
+#planBanner{position:sticky;top:0;z-index:60;background:#fff7e0;border-bottom:1px solid #f0d98a;color:#6b5300;
+  padding:9px 16px;font-size:13.5px;display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;text-align:center}
+#planBanner.locked{background:#fdeceb;border-color:#f3b6b1;color:#8a2c25}
+#planBanner a{color:inherit;font-weight:800;text-decoration:underline}
+</style>
+<script>
+(function(){
+  var P=window.PLAN||{},F=P.features||{};
+  var map={pos:'pos',dispatch:'dispatch',riders:'dispatch',reports:'reports',returns:'returns'};
+  function go(){
+    Object.keys(map).forEach(function(pg){
+      if(F[map[pg]]===false){
+        document.querySelectorAll('a.nav[data-page="'+pg+'"]').forEach(function(a){a.style.display='none';});
+      }
+    });
+    var msg='',cls='';
+    if(P.trial_days>0){ msg='✨ Free trial — '+P.trial_days+' day'+(P.trial_days==1?'':'s')+' of full features left.'; }
+    else if(P.plan==='free'){ msg='You are on the Free plan. Counter sales, riders, tracking and reports are locked.'; cls='locked'; }
+    if(P.over_cap){ msg='You have used all '+P.order_cap+' free orders this month.'; cls='locked'; }
+    if(msg){
+      var b=document.createElement('div'); b.id='planBanner'; if(cls)b.className=cls;
+      b.innerHTML=msg+' <a href="https://wa.me/256700000000?text=I%20want%20to%20upgrade%20my%20CloudBSS%20plan" target="_blank" rel="noopener">Upgrade now →</a>';
+      document.body.insertBefore(b,document.body.firstChild);
+    }
+  }
+  if(document.readyState!=='loading')go(); else document.addEventListener('DOMContentLoaded',go);
+})();
+</script>
+HTML;
+
+        $inject = '<script>window.PLAN=' . $json . ';</script>' . $script;
+        return str_replace('</body>', $inject . '</body>', $html);
     }
 
     protected function initialsFor(string $name): string

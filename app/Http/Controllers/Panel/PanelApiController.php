@@ -244,10 +244,33 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /**
+     * Return a 403 upgrade signal if the tenant's plan lacks a feature.
+     * The panel reads {error:'upgrade_required'} and shows an upgrade prompt.
+     */
+    private function planDeny(Request $r, string $feature)
+    {
+        $t = $r->user()->tenant ?? null;
+        if ($t && ! $t->can($feature)) {
+            return response()->json([
+                'ok'      => false,
+                'error'   => 'upgrade_required',
+                'feature' => $feature,
+                'plan'    => $t->effectivePlan(),
+            ], 403);
+        }
+        return null;
+    }
+
     public function saveOrder(Request $r)
     {
         $rowId = (int) $r->query('row');
         $o = $rowId ? Order::find($rowId) : null;
+
+        // Creating a NEW order from the panel (POS / new sale) is a paid feature.
+        if (! $rowId) {
+            if ($d = $this->planDeny($r, 'pos')) return $d;
+        }
 
         // No row id -> this is a NEW order (POS / new sale). Create it.
         $isNew = false;
@@ -789,6 +812,7 @@ class PanelApiController extends Controller
     /* -------------------------------------------------- dispatch + riders (3b) */
     public function dispatch(Request $r, WhatsAppManager $wa)
     {
+        if ($d = $this->planDeny($r, 'dispatch')) return $d;
         $o = Order::find((int) $r->query('row'));
         if (! $o) {
             return response()->json(['ok' => false, 'error' => 'not_found'], 404);
@@ -823,6 +847,7 @@ class PanelApiController extends Controller
 
     public function riderSave(Request $r)
     {
+        if ($d = $this->planDeny($r, 'dispatch')) return $d;
         $name = trim((string) $r->query('name', ''));
         if ($name === '') {
             return response()->json(['ok' => false, 'error' => 'name_required'], 422);
@@ -850,6 +875,7 @@ class PanelApiController extends Controller
 
     public function riderDel(Request $r)
     {
+        if ($d = $this->planDeny($r, 'dispatch')) return $d;
         $rider = Rider::find((int) $r->query('id', 0));
         if ($rider) $rider->delete();
         return response()->json(['ok' => true, 'riders' => $this->ridersList()]);
@@ -888,6 +914,7 @@ class PanelApiController extends Controller
     /* -------------------------------------------------- branches (3b) */
     public function branchSave(Request $r)
     {
+        if ($d = $this->planDeny($r, 'pos')) return $d;
         $name = trim((string) $r->query('name', ''));
         if ($name === '') return response()->json(['ok' => false, 'error' => 'name_required'], 422);
         $id = $r->query('id');
@@ -904,6 +931,7 @@ class PanelApiController extends Controller
 
     public function branchDel(Request $r)
     {
+        if ($d = $this->planDeny($r, 'pos')) return $d;
         $b = Branch::find((int) $r->query('id', 0));
         if ($b) $b->delete();
         return response()->json(['ok' => true, 'branches' => $this->branchesList()]);
@@ -933,6 +961,7 @@ class PanelApiController extends Controller
     /* -------------------------------------------------- returns / refunds (3b) */
     public function returnSave(Request $r)
     {
+        if ($d = $this->planDeny($r, 'returns')) return $d;
         $o      = Order::find((int) $r->query('row'));
         $phone  = preg_replace('/[^0-9]/', '', (string) $r->query('phone', ''));
         $res    = (string) $r->query('resolution', 'adjust');
