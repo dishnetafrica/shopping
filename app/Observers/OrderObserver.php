@@ -1,0 +1,33 @@
+<?php
+namespace App\Observers;
+
+use App\Jobs\SendOrderStatusNotification;
+use App\Models\Order;
+use App\Models\Tenant;
+use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Str;
+
+class OrderObserver
+{
+    /** Per-tenant continuous order numbers: <PREFIX>-1024 */
+    public function creating(Order $order): void
+    {
+        if (empty($order->order_no) && $order->tenant_id) {
+            $prefix = Tenant::find($order->tenant_id)?->order_prefix ?: 'ORD';
+            try { $seq = Redis::incr("tenant:{$order->tenant_id}:order_seq"); }
+            catch (\Throwable $e) { $seq = Order::withoutGlobalScopes()->where('tenant_id', $order->tenant_id)->count() + 1; }
+            $order->order_no = $prefix.'-'.$seq;
+        }
+        if (empty($order->track_token)) {
+            $order->track_token = Str::lower(Str::random(12));
+        }
+    }
+
+    /** When status changes (in the panel or by the bot), notify the customer. */
+    public function updated(Order $order): void
+    {
+        if ($order->wasChanged('status') && $order->customer_phone) {
+            SendOrderStatusNotification::dispatch($order->tenant_id, $order->id, $order->status);
+        }
+    }
+}
