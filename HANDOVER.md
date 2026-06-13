@@ -188,6 +188,13 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-13 (later) — Phase 7: WhatsApp chat history sync (Bhavin + AI)
+- New **⤓ Sync past chats** button in the Chats inbox header. Pulls existing messages out of Evolution's store into our `messages` transcript so past conversations show up in the inbox (not just messages from connect-time onward).
+- `EvolutionAdmin::findMessages($instance,$page,$offset)` — pages `POST /chat/findMessages/{instance}` (Evolution's remoteJid filter is buggy, so we fetch all and bucket by chat ourselves; records read from `messages.records`|`records`|list).
+- `PanelApiController::chatSync` (`POST /papi/chats/sync`): maps Baileys records -> messages (in/out by `key.fromMe`, body from `conversation`/`extendedTextMessage.text`, original `messageTimestamp` preserved as created_at), de-dupes on `wa_message_id` (re-runnable), bulk-inserts, updates conversation `last_message_at`. Cap ~5000/run (re-run for more). Skips groups/broadcast/media-only.
+- Note: only what Evolution has stored is available (recent window WhatsApp synced to the device), not the full lifetime archive. Historical outbound is labelled `bot` generically.
+- Changed: `EvolutionAdmin.php`, `PanelApiController.php`, `routes/web.php`, `chats.html`.
+
 ### 2026-06-13 (later) — Phase 6: installable mobile app (PWA) + app-style UI (Bhavin + AI)
 - The panel is now an **installable PWA** — owners "Add to Home Screen" and it opens full-screen with its own icon, no browser bars. No native app needed (keeps one codebase). Works on the phones most Kampala owners use; the panel was already responsive (off-canvas drawer at <=820px), so all operations run from mobile.
 - New `App\\Http\\Controllers\\Panel\\PwaController` + public routes: `/manifest.webmanifest`, `/sw.js` (network-first shell cache; never caches `/papi`|`/api` or writes; `Service-Worker-Allowed: /`), `/icons/{name}`, `/apple-touch-icon.png`. Icons generated at `resources/panel/icons/` (192/512 maskable + 180 apple-touch).

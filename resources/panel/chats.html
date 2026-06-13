@@ -88,7 +88,9 @@
     <span class="brand">Family Shopper</span><span class="sub">Live chats</span>
     <a class="back" href="/panel">← Panel</a>
     <span class="spacer"></span>
-    <div class="bot">
+    <button class="back" id="syncBtn" onclick="syncHistory()" style="cursor:pointer;background:none">⤓ Sync past chats</button>
+      <span class="spacer" style="flex:0"></span>
+      <div class="bot">
       <span>Bot auto-reply</span>
       <div class="switch" id="botSwitch" onclick="toggleBot()"><div class="knob"></div></div>
     </div>
@@ -135,6 +137,13 @@ function initials(name,phone){var n=(name||'').trim();if(n)return n.split(/\s+/)
 function tm(s){if(!s)return '';var t=s.slice(11,16);return t;}
 function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2200);}
 
+async function syncHistory(){
+  var b=document.getElementById("syncBtn");if(b){b.disabled=true;b.textContent="Syncing\u2026";}
+  try{var r=await fetch("/papi/chats/sync",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});var d=await r.json();
+    if(d&&d.ok)toast("Synced "+d.imported+" past messages");else toast(d&&d.error==="evolution_not_configured"?"Evolution not configured":"Sync failed");
+    loadChats();}catch(e){toast("Sync error");}
+  if(b){b.disabled=false;b.textContent="\u2913 Sync past chats";}
+}
 async function loadChats(){
   try{
     var r=await fetch('/papi/chats',{cache:'no-store'});

@@ -374,6 +374,86 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true, 'bot_mode' => $mode]);
     }
 
+    /**
+     * One-time (re-runnable) backfill: pull existing WhatsApp messages out of
+     * Evolution's store into our transcript so past chats appear in the inbox.
+     * De-duplicates on wa_message_id, so running it again is safe.
+     */
+    public function chatSync(Request $r, EvolutionAdmin $evo)
+    {
+        if (! $evo->configured()) {
+            return response()->json(['ok' => false, 'error' => 'evolution_not_configured'], 400);
+        }
+        $t = $r->user()->tenant;
+        $instance = (string) ($t->whatsapp_instance ?? '');
+        if ($instance === '') {
+            return response()->json(['ok' => false, 'error' => 'no_instance'], 400);
+        }
+
+        $existing  = Message::whereNotNull('wa_message_id')->pluck('wa_message_id')->flip();
+        $imported  = 0;
+        $scanned   = 0;
+        $convoLast = [];
+        $offset    = 200;
+        $maxPages  = 25; // cap ~5000 messages per run; re-run for more (dedup handles it)
+
+        for ($page = 1; $page <= $maxPages; $page++) {
+            $records = $evo->findMessages($instance, $page, $offset);
+            if (! $records) break;
+
+            $rows = [];
+            foreach ($records as $m) {
+                $scanned++;
+                $remote = (string) data_get($m, 'key.remoteJid', '');
+                if ($remote === '' || str_contains($remote, '@g.us') || str_contains($remote, 'broadcast')) continue;
+
+                $waId = (string) data_get($m, 'key.id', '');
+                if ($waId !== '' && $existing->has($waId)) continue;
+
+                $text = (string) (data_get($m, 'message.conversation')
+                    ?? data_get($m, 'message.extendedTextMessage.text') ?? '');
+                if (trim($text) === '') continue; // skip media-only / empty
+
+                $fromMe = (bool) data_get($m, 'key.fromMe', false);
+                $phone  = preg_replace('/[^0-9]/', '', explode('@', $remote)[0]);
+                $ts     = (int) data_get($m, 'messageTimestamp', 0);
+                $when   = $ts > 0 ? date('Y-m-d H:i:s', $ts) : now()->toDateTimeString();
+
+                $rows[] = [
+                    'tenant_id'     => $t->id,
+                    'customer_phone' => $phone,
+                    'instance'      => $instance,
+                    'direction'     => $fromMe ? 'out' : 'in',
+                    'sender'        => $fromMe ? 'bot' : 'customer',
+                    'body'          => $text,
+                    'wa_message_id' => $waId ?: null,
+                    'status'        => null,
+                    'meta'          => null,
+                    'created_at'    => $when,
+                    'updated_at'    => $when,
+                ];
+                if ($waId !== '') $existing[$waId] = true;
+                $imported++;
+                if (! isset($convoLast[$phone]) || $convoLast[$phone] < $when) $convoLast[$phone] = $when;
+            }
+            if ($rows) Message::insert($rows);
+            if (count($records) < $offset) break; // reached the last page
+        }
+
+        foreach ($convoLast as $phone => $when) {
+            $c = Conversation::firstOrCreate(
+                ['customer_phone' => $phone, 'instance' => $instance],
+                ['tenant_id' => $t->id, 'state' => [], 'cart' => []]
+            );
+            if (! $c->last_message_at || $c->last_message_at->lt($when)) {
+                $c->last_message_at = $when;
+                $c->save();
+            }
+        }
+
+        return response()->json(['ok' => true, 'imported' => $imported, 'scanned' => $scanned]);
+    }
+
     /* -------------------------------------------------- self-serve onboarding */
     // WhatsApp connect — no Evolution dashboard needed: create instance, show QR, poll state.
     public function waStatus(Request $r, EvolutionAdmin $evo)

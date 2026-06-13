@@ -106,4 +106,26 @@ class EvolutionAdmin
         } catch (\Throwable $e) {
         }
     }
+
+    /**
+     * Fetch a page of stored messages for an instance. Evolution's remoteJid
+     * filter is unreliable, so we pull everything and bucket by chat ourselves.
+     * `offset` is the page size. Returns the raw Baileys-style records.
+     */
+    public function findMessages(string $instance, int $page = 1, int $offset = 200): array
+    {
+        try {
+            $d = $this->http()->post("/chat/findMessages/{$instance}", [
+                'page'   => $page,
+                'offset' => $offset,
+            ])->json() ?? [];
+            $recs = data_get($d, 'messages.records');
+            if (is_array($recs)) return $recs;
+            $recs = data_get($d, 'records');
+            if (is_array($recs)) return $recs;
+            return (is_array($d) && array_is_list($d)) ? $d : [];
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
 }
