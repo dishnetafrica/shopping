@@ -486,6 +486,11 @@ class PanelApiController extends Controller
                     'timestamp' => data_get($recs[0], 'messageTimestamp'),
                 ];
             }
+            $out['evolution_chats_count'] = count($evo->findChats($instance));
+            $wh = $evo->getWebhook($instance);
+            $out['webhook_url']      = data_get($wh, 'url') ?? data_get($wh, 'webhook.url');
+            $out['webhook_enabled']  = data_get($wh, 'enabled') ?? data_get($wh, 'webhook.enabled');
+            $out['webhook_expected'] = url('/api/webhook/whatsapp/evolution');
         } else {
             $out['note'] = $instance === '' ? 'Tenant has no whatsapp_instance set' : 'EVOLUTION_BASE_URL / EVOLUTION_API_KEY not set';
         }
@@ -570,7 +575,33 @@ class PanelApiController extends Controller
             }
         }
 
-        return response()->json(['ok' => true, 'imported' => $imported, 'scanned' => $scanned]);
+        // Also pull the CONTACT/CHAT list so every number shows in the inbox even
+        // if its message bodies aren't in Evolution's store. Names come along too.
+        $contacts = 0;
+        foreach ($evo->findChats($instance) as $ch) {
+            $remote = (string) (data_get($ch, 'remoteJid') ?? data_get($ch, 'id') ?? '');
+            if ($remote === '' || str_contains($remote, '@g.us') || str_contains($remote, 'broadcast')) continue;
+            $phone = preg_replace('/[^0-9]/', '', explode('@', $remote)[0]);
+            if ($phone === '') continue;
+
+            $c = Conversation::firstOrCreate(
+                ['customer_phone' => $phone, 'instance' => $instance],
+                ['tenant_id' => $t->id, 'state' => [], 'cart' => []]
+            );
+            if (! $c->last_message_at) {
+                $c->last_message_at = now();
+                $c->save();
+            }
+            $contacts++;
+
+            $name = trim((string) (data_get($ch, 'pushName') ?? data_get($ch, 'name') ?? ''));
+            if ($name !== '') {
+                $cp = CustomerProfile::firstOrNew(['phone' => $phone]);
+                if (! $cp->name) { $cp->name = $name; $cp->save(); }
+            }
+        }
+
+        return response()->json(['ok' => true, 'imported' => $imported, 'scanned' => $scanned, 'contacts' => $contacts]);
     }
 
     /* -------------------------------------------------- self-serve onboarding */

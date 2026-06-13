@@ -144,4 +144,27 @@ class EvolutionAdmin
             return ['status' => 0, 'body' => ['error' => $e->getMessage()]];
         }
     }
+
+    /** Current webhook config for the instance (so we can see where events go). */
+    public function getWebhook(string $instance): array
+    {
+        try {
+            return $this->http()->get("/webhook/find/{$instance}")->json() ?? [];
+        } catch (\Throwable $e) {
+            return ['error' => $e->getMessage()];
+        }
+    }
+
+    /** Contacts / chats list for the instance (one entry per conversation). */
+    public function findChats(string $instance): array
+    {
+        try {
+            $d = $this->http()->post("/chat/findChats/{$instance}", ['where' => (object) []])->json() ?? [];
+            if (is_array($d) && array_is_list($d)) return $d;
+            $recs = data_get($d, 'chats.records') ?? data_get($d, 'records');
+            return is_array($recs) ? $recs : [];
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
 }
