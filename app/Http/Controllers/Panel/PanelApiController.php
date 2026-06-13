@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Conversation;
 use App\Models\CustomerProfile;
+use App\Models\LedgerEntry;
 use App\Models\Message;
 use App\Models\Order;
 use App\Models\Product;
@@ -849,6 +850,170 @@ class PanelApiController extends Controller
         $t->whatsapp_instance = 'shopbot_t' . $t->id;   // next "Connect WhatsApp" re-pairs via QR
         $t->save();
         return response()->json(['ok' => true, 'driver' => 'evolution']);
+    }
+
+    // ---- Cashbook (money in/out) + order payments ----
+
+    /** Cashbook view: balance, period totals, recent entries, and orders still owing. */
+    public function cashbook(Request $r)
+    {
+        $t      = $r->user()->tenant;
+        $period = (string) $r->query('period', '30');   // today | 7 | 30 | all
+        $since  = match ($period) {
+            'today' => now()->startOfDay(),
+            '7'     => now()->subDays(7),
+            'all'   => null,
+            default => now()->subDays(30),
+        };
+
+        // All-time cash position.
+        $allIn  = (float) LedgerEntry::where('type', 'in')->sum('amount');
+        $allOut = (float) LedgerEntry::where('type', 'out')->sum('amount');
+
+        // Period totals.
+        $pq = LedgerEntry::query();
+        if ($since) $pq->where('created_at', '>=', $since);
+        $periodIn  = (float) (clone $pq)->where('type', 'in')->sum('amount');
+        $periodOut = (float) (clone $pq)->where('type', 'out')->sum('amount');
+
+        $eq = LedgerEntry::orderByDesc('id');
+        if ($since) $eq->where('created_at', '>=', $since);
+        $entries = $eq->limit(200)->get()->map(function (LedgerEntry $e) {
+            $orderNo = '';
+            if ($e->order_id) {
+                $o = Order::find($e->order_id);
+                $orderNo = $o ? (string) $o->order_no : '';
+            }
+            return [
+                'id'       => (int) $e->id,
+                'type'     => (string) $e->type,
+                'category' => (string) $e->category,
+                'order_no' => $orderNo,
+                'amount'   => (float) $e->amount,
+                'currency' => (string) $e->currency,
+                'method'   => (string) ($e->method ?? ''),
+                'by'       => (string) ($e->received_by ?? ''),
+                'note'     => (string) ($e->note ?? ''),
+                'at'       => optional($e->created_at)->format('Y-m-d H:i'),
+            ];
+        });
+
+        $owing = Order::whereColumn('amount_paid', '<', 'total')
+            ->orderByDesc('id')->limit(50)->get()
+            ->map(fn (Order $o) => [
+                'id'       => (int) $o->id,
+                'order_no' => (string) $o->order_no,
+                'customer' => (string) ($o->customer_name ?: $o->customer_phone),
+                'total'    => (float) $o->total,
+                'paid'     => (float) $o->amount_paid,
+                'balance'  => $o->balanceDue(),
+            ])->values();
+
+        return response()->json([
+            'ok'          => true,
+            'balance'     => round($allIn - $allOut, 2),
+            'period'      => $period,
+            'period_in'   => round($periodIn, 2),
+            'period_out'  => round($periodOut, 2),
+            'period_net'  => round($periodIn - $periodOut, 2),
+            'currency'    => 'UGX',
+            'entries'     => $entries,
+            'owing'       => $owing,
+        ]);
+    }
+
+    /** Add a manual cashbook entry — money in (other income) or out (expense/supplier/draw). */
+    public function cashbookAdd(Request $r)
+    {
+        $t      = $r->user()->tenant;
+        $type   = $r->input('type') === 'out' ? 'out' : 'in';
+        $amount = round((float) $r->input('amount', 0), 2);
+        $cat    = trim((string) $r->input('category', 'other')) ?: 'other';
+        $method = trim((string) $r->input('method', '')) ?: null;
+        $note   = trim((string) $r->input('note', '')) ?: null;
+
+        if ($amount <= 0) {
+            return response()->json(['ok' => false, 'error' => 'bad_amount'], 422);
+        }
+
+        LedgerEntry::create([
+            'type'        => $type,
+            'category'    => $cat,
+            'amount'      => $amount,
+            'currency'    => 'UGX',
+            'method'      => $method,
+            'received_by' => (string) ($r->user()->name ?? ''),
+            'note'        => $note,
+        ]);
+
+        $balance = (float) LedgerEntry::where('type', 'in')->sum('amount')
+                 - (float) LedgerEntry::where('type', 'out')->sum('amount');
+
+        return response()->json(['ok' => true, 'balance' => round($balance, 2)]);
+    }
+
+    /** Register a payment against an order, then WhatsApp the customer a receipt. */
+    public function recordPayment(Request $r, WhatsAppManager $wa)
+    {
+        $t      = $r->user()->tenant;
+        $ref    = trim((string) $r->input('order', ''));   // order_no or numeric id
+        $amount = round((float) $r->input('amount', 0), 2);
+        $method = trim((string) $r->input('method', 'cash')) ?: 'cash';
+        $note   = trim((string) $r->input('note', '')) ?: null;
+        $notify = $r->input('notify', '1') !== '0';
+
+        if ($ref === '' || $amount <= 0) {
+            return response()->json(['ok' => false, 'error' => 'bad_input'], 422);
+        }
+
+        $order = ctype_digit($ref)
+            ? Order::find((int) $ref)
+            : Order::where('order_no', $ref)->first();
+        if (! $order) {
+            return response()->json(['ok' => false, 'error' => 'order_not_found'], 404);
+        }
+
+        LedgerEntry::create([
+            'type'        => 'in',
+            'category'    => 'order_payment',
+            'order_id'    => $order->id,
+            'amount'      => $amount,
+            'currency'    => 'UGX',
+            'method'      => $method,
+            'received_by' => (string) ($r->user()->name ?? ''),
+            'note'        => $note,
+        ]);
+
+        $order->amount_paid = round((float) $order->amount_paid + $amount, 2);
+        $order->save();
+
+        $balance = $order->balanceDue();
+        $state   = $order->paymentState();
+
+        // Receipt to the customer.
+        $sent = false;
+        if ($notify && $order->customer_phone) {
+            $amt = number_format($amount);
+            $txt = $state === 'paid'
+                ? "✅ Payment received: UGX {$amt} for order *{$order->order_no}*. Paid in full — thank you! 🛍"
+                : "✅ Payment received: UGX {$amt} for order *{$order->order_no}*. Balance left: *UGX " . number_format($balance) . "*.";
+            try {
+                $wa->forTenant($t)->sendText($t->whatsapp_instance, $order->customer_phone, $txt);
+                MessageLog::record($t->id, $order->customer_phone, $t->whatsapp_instance, 'out', 'system', $txt);
+                $sent = true;
+            } catch (\Throwable $e) {
+                $sent = false;
+            }
+        }
+
+        return response()->json([
+            'ok'          => true,
+            'order_no'    => (string) $order->order_no,
+            'amount_paid' => (float) $order->amount_paid,
+            'balance'     => $balance,
+            'state'       => $state,
+            'notified'    => $sent,
+        ]);
     }
 
     // AI bot setup — owner describes the business in plain words, we generate the persona.

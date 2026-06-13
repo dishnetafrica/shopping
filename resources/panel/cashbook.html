@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Cashbook — Seller</title>
+<style>
+  :root{--green:#0a7d3c;--green-d:#075c2c;--ink:#10241c;--mute:#6a7a70;--line:#e6ece8;--bg:#f5f7f5;--card:#fff;--red:#c0392b;--amber:#b8860b}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+  a{color:inherit;text-decoration:none}
+  .top{background:var(--green-d);color:#fff;display:flex;align-items:center;gap:12px;padding:14px 18px;position:sticky;top:0;z-index:5}
+  .top .bk{font-size:20px;opacity:.9}
+  .top h1{font-size:18px;font-weight:700}
+  .top .grow{margin-left:auto}
+  .wrap{max-width:920px;margin:0 auto;padding:18px 16px 60px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+  .bal{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 22px}
+  .bal .big{font-size:34px;font-weight:800;letter-spacing:-.5px}
+  .bal .lbl{font-size:13px;color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+  .periods{display:flex;gap:6px;margin:14px 0 6px;flex-wrap:wrap}
+  .periods button{border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--ink)}
+  .periods button.on{background:var(--green);color:#fff;border-color:var(--green)}
+  .mini{display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;font-size:14px}
+  .mini b{font-weight:800}
+  .in{color:var(--green)}.out{color:var(--red)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  h3{font-size:15px;font-weight:700;margin-bottom:12px}
+  label{display:block;font-size:12.5px;font-weight:600;color:var(--mute);margin:9px 0 4px}
+  select,input,textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:14px;font-family:inherit;background:#fff}
+  textarea{min-height:46px;resize:vertical}
+  .rowf{display:flex;gap:10px}.rowf>*{flex:1}
+  .chk{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13.5px;color:var(--ink)}
+  .chk input{width:auto}
+  .btn{margin-top:12px;width:100%;background:var(--green);color:#fff;border:none;border-radius:10px;padding:11px;font-weight:700;font-size:15px;cursor:pointer}
+  .btn:hover{background:var(--green-d)}.btn[disabled]{opacity:.6}
+  .btn.alt{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .seg{display:flex;gap:8px;margin-bottom:4px}
+  .seg button{flex:1;border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px;font-weight:700;cursor:pointer;color:var(--mute)}
+  .seg button.on.in{background:var(--green);color:#fff;border-color:var(--green)}
+  .seg button.on.out{background:var(--red);color:#fff;border-color:var(--red)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}
+  th{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute)}
+  td.amt{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+  .tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:#eef3ef;color:var(--green-d)}
+  .empty{color:var(--mute);text-align:center;padding:26px}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111b21;color:#fff;padding:11px 16px;border-radius:10px;font-size:13.5px;opacity:0;transition:.2s;pointer-events:none;z-index:50}
+  .toast.show{opacity:1}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid #ffffff66;border-top-color:#fff;border-radius:50%;animation:s .7s linear infinite;vertical-align:-1px;margin-right:6px}
+  @keyframes s{to{transform:rotate(360deg)}}
+  @media (max-width:680px){.grid{grid-template-columns:1fr}.bal .big{font-size:28px}}
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="bk" href="/panel" title="Back to panel">‹</a>
+  <h1>Cashbook</h1>
+</div>
+
+<div class="wrap">
+  <!-- balance -->
+  <div class="card">
+    <div class="bal">
+      <div><div class="lbl">Cash on hand</div><div class="big" id="balance">—</div></div>
+    </div>
+    <div class="periods" id="periods">
+      <button data-p="today">Today</button>
+      <button data-p="7">7 days</button>
+      <button data-p="30" class="on">30 days</button>
+      <button data-p="all">All</button>
+    </div>
+    <div class="mini">
+      <span>In: <b class="in" id="pIn">—</b></span>
+      <span>Out: <b class="out" id="pOut">—</b></span>
+      <span>Net: <b id="pNet">—</b></span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- record order payment -->
+    <div class="card">
+      <h3>Record a payment for an order</h3>
+      <label>Order (still owing)</label>
+      <select id="payOrder" onchange="fillBalance()"><option value="">— pick an order —</option></select>
+      <div class="rowf">
+        <div><label>Amount (UGX)</label><input id="payAmt" type="number" min="0" placeholder="0"></div>
+        <div><label>Method</label>
+          <select id="payMethod"><option value="cash">Cash</option><option value="momo">Mobile Money</option><option value="card">Card</option><option value="bank">Bank</option></select>
+        </div>
+      </div>
+      <label>Note (optional)</label>
+      <input id="payNote" placeholder="e.g. paid to rider">
+      <label class="chk"><input type="checkbox" id="payNotify" checked> WhatsApp the customer a receipt</label>
+      <button class="btn" id="payBtn" onclick="recordPayment()">Record payment</button>
+    </div>
+
+    <!-- add entry -->
+    <div class="card">
+      <h3>Add money in / out</h3>
+      <div class="seg" id="seg">
+        <button class="on in" data-t="in" onclick="setType('in')">Money in</button>
+        <button data-t="out" onclick="setType('out')">Money out</button>
+      </div>
+      <div class="rowf">
+        <div><label>Amount (UGX)</label><input id="entAmt" type="number" min="0" placeholder="0"></div>
+        <div><label>Category</label>
+          <select id="entCat">
+            <option value="expense">Expense</option>
+            <option value="supplier">Supplier payment</option>
+            <option value="owner_draw">Owner draw</option>
+            <option value="other">Other income</option>
+          </select>
+        </div>
+      </div>
+      <label>Method (optional)</label>
+      <select id="entMethod"><option value="cash">Cash</option><option value="momo">Mobile Money</option><option value="bank">Bank</option><option value="card">Card</option></select>
+      <label>Note (optional)</label>
+      <input id="entNote" placeholder="e.g. transport, restock sugar">
+      <button class="btn" id="entBtn" onclick="addEntry()">Add entry</button>
+    </div>
+  </div>
+
+  <!-- entries -->
+  <div class="card">
+    <h3>Recent entries</h3>
+    <table>
+      <thead><tr><th>When</th><th>What</th><th>Method</th><th style="text-align:right">Amount</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  var $=function(id){return document.getElementById(id);};
+  var PERIOD='30', ENT_TYPE='in';
+  function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2300);}
+  function ugx(n){return 'UGX '+Number(n||0).toLocaleString();}
+  function catLabel(c){return ({order_payment:'Order payment',expense:'Expense',supplier:'Supplier',owner_draw:'Owner draw',other:'Other'})[c]||c;}
+
+  async function load(){
+    try{
+      var r=await fetch('/papi/cashbook?period='+PERIOD,{cache:'no-store'});var d=await r.json();
+      if(!d.ok)return;
+      $('balance').textContent=ugx(d.balance);
+      $('pIn').textContent=ugx(d.period_in);
+      $('pOut').textContent=ugx(d.period_out);
+      $('pNet').textContent=ugx(d.period_net);
+      // owing orders
+      var sel=$('payOrder');var cur=sel.value;
+      sel.innerHTML='<option value="">— pick an order —</option>';
+      (d.owing||[]).forEach(function(o){
+        var op=document.createElement('option');op.value=o.order_no;
+        op.dataset.bal=o.balance;
+        op.textContent=o.order_no+' · '+o.customer+' · owes '+ugx(o.balance);
+        sel.appendChild(op);
+      });
+      sel.value=cur;
+      // rows
+      var tb=$('rows');
+      if(!d.entries||!d.entries.length){tb.innerHTML='<tr><td colspan="4" class="empty">No entries yet.</td></tr>';return;}
+      tb.innerHTML=d.entries.map(function(e){
+        var what=catLabel(e.category)+(e.order_no?(' · '+e.order_no):'')+(e.note?(' — '+e.note):'');
+        var sign=e.type==='in'?'+':'−';var cls=e.type==='in'?'in':'out';
+        return '<tr><td>'+(e.at||'')+'</td><td><span class="tag">'+catLabel(e.category)+'</span> '+
+          (e.order_no?('<b>'+e.order_no+'</b> '):'')+(e.note?escapeH(e.note):'')+'</td>'+
+          '<td>'+(e.method||'')+'</td><td class="amt '+cls+'">'+sign+' '+Number(e.amount).toLocaleString()+'</td></tr>';
+      }).join('');
+    }catch(err){}
+  }
+  function escapeH(s){return (s||'').replace(/[&<>"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];});}
+
+  function fillBalance(){var o=$('payOrder').selectedOptions[0];if(o&&o.dataset.bal)$('payAmt').value=o.dataset.bal;}
+
+  $('periods').addEventListener('click',function(e){
+    if(e.target.tagName!=='BUTTON')return;
+    PERIOD=e.target.dataset.p;
+    [].forEach.call(this.children,function(b){b.classList.toggle('on',b===e.target);});
+    load();
+  });
+
+  function setType(t){ENT_TYPE=t;
+    [].forEach.call($('seg').children,function(b){b.className=(b.dataset.t===t?('on '+t):'');});
+  }
+
+  async function recordPayment(){
+    var order=$('payOrder').value, amt=$('payAmt').value;
+    if(!order){toast('Pick an order first');return;}
+    if(!(parseFloat(amt)>0)){toast('Enter an amount');return;}
+    var b=$('payBtn');b.disabled=true;b.innerHTML='<span class="spin"></span>Saving…';
+    try{
+      var body={order:order,amount:amt,method:$('payMethod').value,note:$('payNote').value,notify:$('payNotify').checked?'1':'0'};
+      var r=await fetch('/papi/record-payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      var d=await r.json();
+      if(d&&d.ok){
+        toast((d.state==='paid'?'Paid in full':'Payment recorded — balance '+ugx(d.balance))+(d.notified?' · customer notified':''));
+        $('payAmt').value='';$('payNote').value='';
+        load();
+      }else if(d&&d.error==='order_not_found'){toast('Order not found');}
+      else{toast('Could not record payment');}
+    }catch(e){toast('Network error');}
+    b.disabled=false;b.textContent='Record payment';
+  }
+
+  async function addEntry(){
+    var amt=$('entAmt').value;
+    if(!(parseFloat(amt)>0)){toast('Enter an amount');return;}
+    var b=$('entBtn');b.disabled=true;b.innerHTML='<span class="spin"></span>Saving…';
+    try{
+      var body={type:ENT_TYPE,amount:amt,category:$('entCat').value,method:$('entMethod').value,note:$('entNote').value};
+      var r=await fetch('/papi/cashbook/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      var d=await r.json();
+      if(d&&d.ok){toast('Saved — cash on hand '+ugx(d.balance));$('entAmt').value='';$('entNote').value='';load();}
+      else{toast('Could not save');}
+    }catch(e){toast('Network error');}
+    b.disabled=false;b.textContent='Add entry';
+  }
+
+  load();
+</script>
+</body>
+</html>

@@ -188,6 +188,14 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-14 — Phase 18: Cashbook + order payments with customer receipt (Bhavin + AI)
+- **Cashbook** (hybrid-ledger style, single-currency UGX, tenant-isolated). New `ledger_entries` table + `LedgerEntry` model (type in/out, category order_payment|expense|supplier|owner_draw|other, optional order_id, method, received_by, note). Running cash-on-hand = sum(in) − sum(out).
+- **Order payments.** New `orders.amount_paid` column + Order helpers `balanceDue()` / `paymentState()` (unpaid|partial|paid) + `payments()` relation. `recordPayment` endpoint registers an order payment, bumps amount_paid, and **WhatsApps the customer a receipt** ("Payment received… paid in full / balance left UGX Y") via `forTenant()`. Handles part-payments.
+- **Money in/out** via `cashbookAdd` for expenses/supplier/owner-draw/other income ("pay as per requirement").
+- **New Cashbook page** `/panel/cashbook` (`cashbook.html`, served by `SellerPanelController::cashbook()`): balance + period totals, "record payment for an order" (owing-orders picker, prefilled balance, notify toggle), "add money in/out", recent-entries table. Added a **💰 Cashbook** link to the seller nav.
+- Migration `2026_01_01_000015` (idempotent: hasTable/hasColumn guards). Kept separate from the subscription `payments` table (what shops pay CloudBSS) — this is each shop's own till.
+- Added/changed: migration 000015, LedgerEntry.php, Order.php, PanelApiController.php (cashbook/cashbookAdd/recordPayment + import), SellerPanelController.php (cashbook page), routes/web.php, resources/panel/cashbook.html (new), resources/panel/seller.html (nav link), HOW-TO-GUIDE.md (§8a).
+
 ### 2026-06-14 — Phase 17: Official Cloud API (BYO, per-tenant) + marketing page wired + HOW-TO guide (Bhavin + AI)
 - **Per-tenant WhatsApp driver.** `WhatsAppManager::forTenant($tenant)` now resolves the gateway per shop and, for the cloud driver, builds `CloudApiGateway` with THAT tenant's own access token (`settings.cloud_token`). All five send sites switched from `driver($t->whatsapp_driver)` to `forTenant($t)`: NotifyOwner, NotifyOwnerNewOrder, ProcessIncomingMessage, SendOrderStatusNotification, PanelApiController::chatSend.
 - **Official Cloud API is BYO, gated to Pro.** New panel endpoints `wa/cloud-info`, `wa/cloud-save` (Pro-gated; stores phone_number_id as `whatsapp_instance`, token/WABA/display in settings, sets driver=cloud), `wa/use-evolution` (switch back). New "Use the official WhatsApp API" card in `setup.html` shows the fields + the exact Callback URL & Verify token to paste into Meta.

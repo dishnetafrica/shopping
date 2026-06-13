@@ -171,6 +171,24 @@ Notes:
 
 ---
 
+## 8a. Cashbook & order payments (how the customer knows you got the money)
+
+The **Cashbook** (/panel → 💰 Cashbook) is the shop's money record: money in (order payments + other income) and money out (expenses, supplier payments, owner draws), with a running **cash-on-hand** balance and Today / 7-day / 30-day / All totals.
+
+**Registering a payment against an order** (this is what triggers the customer's confirmation):
+1. /panel → **Cashbook** → "Record a payment for an order".
+2. Pick the order from the **still-owing** list (it shows who owes how much), the amount prefills to the balance — adjust for part payments.
+3. Choose method (cash / MoMo / card / bank), add a note, keep **"WhatsApp the customer a receipt"** ticked.
+4. **Record payment.** The shop's balance updates, the order's paid amount + balance update, and the customer gets a WhatsApp:
+   - Paid in full → *"✅ Payment received: UGX X for order #FS-1042. Paid in full — thank you!"*
+   - Part payment → *"✅ Payment received: UGX X for order #FS-1042. Balance left: UGX Y."*
+
+Orders track `amount_paid` and a state of **unpaid / partial / paid**, so partial payments and pay-on-delivery both work — record each instalment as it comes in.
+
+**Money in/out as needed** ("pay as per requirement"): use "Add money in / out" for expenses, restock/supplier payments, owner draws, or other income. These move the cash-on-hand balance but aren't tied to an order.
+
+It's single-currency UGX and tenant-isolated (each shop sees only its own book). Entries are kept separately from subscription `payments` (what shops pay *you*) — this cashbook is the shop's own till.
+
 ## 9. Go-live checklist (do before real customers)
 
 - [ ] `APP_DEBUG=false`, real `APP_KEY`, `APP_URL` correct (https).

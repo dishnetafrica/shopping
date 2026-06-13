@@ -9,9 +9,23 @@ class Order extends Model
 {
     use BelongsToTenant;
     protected $fillable = ['tenant_id','order_no','customer_name','customer_phone','items_text',
-        'items_json','total','location','payment','status','channel','rider_id','branch_id','track_token','delivered_at'];
-    protected $casts = ['items_json'=>'array','total'=>'decimal:2','delivered_at'=>'datetime'];
+        'items_json','total','amount_paid','location','payment','status','channel','rider_id','branch_id','track_token','delivered_at'];
+    protected $casts = ['items_json'=>'array','total'=>'decimal:2','amount_paid'=>'decimal:2','delivered_at'=>'datetime'];
 
     public function items(): HasMany { return $this->hasMany(OrderItem::class); }
     public function rider() { return $this->belongsTo(Rider::class); }
+    public function payments(): HasMany { return $this->hasMany(LedgerEntry::class)->where('category', 'order_payment'); }
+
+    public function balanceDue(): float
+    {
+        return round(max(0, (float) $this->total - (float) $this->amount_paid), 2);
+    }
+
+    /** unpaid | partial | paid */
+    public function paymentState(): string
+    {
+        $paid = (float) $this->amount_paid;
+        if ($paid <= 0) return 'unpaid';
+        return $paid + 0.01 >= (float) $this->total ? 'paid' : 'partial';
+    }
 }

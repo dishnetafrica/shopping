@@ -26,6 +26,7 @@ Route::get('/icons/{name}',         [PwaController::class, 'icon']);
 Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () {
     Route::get('/panel', [SellerPanelController::class, 'show']);
     Route::get('/panel/chats', [SellerPanelController::class, 'chats']);
+    Route::get('/panel/cashbook', [SellerPanelController::class, 'cashbook']);
     Route::get('/panel/setup', [SellerPanelController::class, 'setup']);
     Route::get('/panel/billing', [\App\Http\Controllers\Billing\BillingController::class, 'page']);
 
@@ -64,6 +65,11 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('wa/cloud-info',    [PanelApiController::class, 'waCloudInfo']);
         Route::post('wa/cloud-save',   [PanelApiController::class, 'waCloudSave']);
         Route::post('wa/use-evolution',[PanelApiController::class, 'waUseEvolution']);
+
+        // cashbook + order payments
+        Route::get('cashbook',          [PanelApiController::class, 'cashbook']);
+        Route::post('cashbook/add',     [PanelApiController::class, 'cashbookAdd']);
+        Route::post('record-payment',   [PanelApiController::class, 'recordPayment']);
         Route::post('bot/generate',  [PanelApiController::class, 'botGenerate']);
         Route::post('bot/save',      [PanelApiController::class, 'botSave']);
 
