@@ -188,6 +188,15 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-13 (later) — Phase 12: Plans & billing (Free / Starter / Pro) (Bhavin + AI)
+- Adds the subscription layer the freemium model needs. `config/plans.php` defines Free (30 orders, bot+orders), Starter ($20, unlimited, bot+confirmations), Pro ($50, everything: POS, dispatch, tracking, reports, returns, branding, multi-user).
+- Migration `...000013_add_plan_billing_to_tenants` adds `trial_ends_at`, `paid_until`, `billing_note`. **Grandfathers existing tenants to Pro+10yr** so the live Family Shoppers panel is not locked. New tenants auto-start a 30-day trial via Tenant::booted() creating hook.
+- `Tenant` gains plan logic: `onTrial/trialDaysLeft`, `effectivePlan()` (trial -> pro; paid plan active unless `paid_until` lapsed -> free), `can($feature)`, `orderCap/ordersThisMonth/overOrderCap`, `planLabel()`.
+- Enforcement: `PanelApiController::planDeny()` returns `{ok:false,error:'upgrade_required',feature}` (403). Gated: new POS order (saveOrder w/o row) -> 'pos'; dispatch/riderSave/riderDel -> 'dispatch'; branchSave/branchDel -> 'pos'; returnSave -> 'returns'.
+- Panel UI: `SellerPanelController::injectPlan()` injects `window.PLAN` + a script that HIDES locked nav items (POS/Dispatch/Riders/Reports/Returns) and shows a sticky upgrade/trial banner. Panel HTML untouched. Upgrade link uses placeholder wa.me 256700000000 (operator's sales number — REPLACE).
+- Operator workflow (`/admin` -> Businesses): plan/trial/paid_until/billing_note fields + row actions **"Mark paid 1 month"** (sets plan, extends paid_until +1mo, clears trial, logs note) and **"Start 30-day trial"**. This is how you handle Mobile Money payments manually — no payment gateway yet.
+- Changed/added: config/plans.php, migration 000013, Tenant.php, PanelApiController.php, SellerPanelController.php, TenantResource.php, InitialSeeder.php.
+
 ### 2026-06-13 (later) — Phase 11: capture incoming (non-text) messages + back link (Bhavin + AI)
 - Bug: Chats threads showed only outgoing (green) bubbles; customer messages were missing. Root cause: `chatSync` extracted text only from `conversation`/`extendedTextMessage.text` and SKIPPED everything else, so customer replies sent as button/list taps, photos, voice notes, etc. were dropped on import.
 - Fix: new `waMessageText()` extractor unwraps ephemeral/view-once wrappers and reads captions, button/list/template replies, and reactions; media with no caption becomes a labelled placeholder (📷 Photo, 🎤 Voice message, 📄 Document, 📍 Location, etc.) so the inbound bubble still appears on the left. Re-run Sync to backfill.
