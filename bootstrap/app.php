@@ -13,13 +13,14 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         // EasyPanel/Traefik sits in front of the app — trust its forwarded headers.
         $middleware->trustProxies(at: '*');
+        $middleware->redirectGuestsTo('/app/login');
 
         $middleware->alias([
             'tenant.user'   => \App\Http\Middleware\SetTenantFromUser::class,
             'tenant.domain' => \App\Http\Middleware\IdentifyTenantByDomain::class,
         ]);
         // WhatsApp webhook is called by Evolution/Meta — exclude from CSRF.
-        $middleware->validateCsrfTokens(except: ['api/webhook/*']);
+        $middleware->validateCsrfTokens(except: ['api/webhook/*', 'papi/*']);
     })
     ->withExceptions(function (Exceptions $exceptions) {})
     ->create();

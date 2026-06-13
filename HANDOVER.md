@@ -188,6 +188,14 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-13 (later) — Phase 3a: customer's real seller-panel UI (Bhavin + AI)
+- Replaced the "too basic" Filament business UI with the customer's existing **Family Shopper — Seller Panel** served verbatim at **`/panel`** (12 pages, unchanged HTML/CSS/JS).
+- Only its backend config was repointed: `BASE`/`EP` now hit new tenant-scoped Laravel endpoints under **`/papi/*`** returning the same JSON shapes the old n8n webhooks did. Session token injected so it boots straight into the dashboard (no separate OTP).
+- New: `app/Http/Controllers/Panel/SellerPanelController.php` (serves HTML behind `/app` session), `app/Http/Controllers/Panel/PanelApiController.php` (all endpoints), `resources/panel/seller.html` (patched UI). Changed: `routes/web.php` (+`/panel` +`/papi` group), `bootstrap/app.php` (csrf except `papi/*`, guests -> `/app/login`).
+- Live & persisting: orders + products + riders reads, update-status (fires WA notify), save-order, add/update product, image upload, bot-config read.
+- Phase 3b pending (return `ok:false` -> panel shows "saved on this device only"): dispatch, rider save/delete, returns, settings-save, bot-config-save, branches, customers-save. Plus `/papi/track` page.
+- Login: `/app/login` as staff, then open `/panel`.
+
 ### 2026-06-13 — Initial build & launch (Bhavin + AI)
 - Stood up ShopBot on EasyPanel: Dockerfile-assembled Laravel 11 + Filament v3, Postgres `saaspg`, Redis `redissaas`, queue + scheduler. App live at `evo-shopping.1gk84r.easypanel.host`.
 - Multi-tenancy (BelongsToTenant + TenantContext + SetTenantFromUser). Operator panel `/admin`, business panel `/app`.

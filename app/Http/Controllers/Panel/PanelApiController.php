@@ -1,0 +1,268 @@
+<?php
+
+namespace App\Http\Controllers\Panel;
+
+use App\Http\Controllers\Controller;
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\Rider;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+
+/**
+ * JSON API for the Family Shopper seller panel.
+ *
+ * The panel (resources/panel/seller.html) is the customer's existing UI, unchanged.
+ * It calls these endpoints (GET, with query-string params for writes) and expects
+ * the SAME JSON shapes its old n8n webhooks returned. We map our Eloquent models
+ * to those exact shapes here. Tenant scoping is automatic: the route group runs
+ * SetTenantFromUser, so every Order/Product query is filtered by the logged-in
+ * staff member's tenant via the BelongsToTenant global scope.
+ *
+ * Phase 3a (this file): reads (orders, products, riders) + the core writes that
+ * persist for real (status, save order, add/update product, image upload) +
+ * bot-config read. The remaining writes return {ok:false} so the panel shows its
+ * honest "saved on this device only" fallback until Phase 3b wires them.
+ */
+class PanelApiController extends Controller
+{
+    /* ----------------------------------------------------------- auth (no-op) */
+    // Login screen is skipped (we inject a session token), but keep these working
+    // so logout -> re-login inside the panel also succeeds against our session.
+    public function authRequest()
+    {
+        return response()->json(['ok' => true]);
+    }
+
+    public function authVerify(Request $r)
+    {
+        if (! $r->user()) {
+            return response()->json(['ok' => false, 'error' => 'unauthorized'], 401);
+        }
+        return response()->json(['ok' => true, 'token' => 'session', 'role' => 'owner', 'branch' => '']);
+    }
+
+    /* -------------------------------------------------------------- reads */
+    public function orders()
+    {
+        $rows = Order::with('rider')->orderByDesc('id')->limit(800)->get()->map(function (Order $o) {
+            return [
+                'id'            => (int) $o->id,
+                'order_no'      => (string) ($o->order_no ?? ''),
+                'created_at'    => optional($o->created_at)->format('Y-m-d H:i:s') ?? '',
+                'delivery_date' => optional($o->delivered_at)->format('Y-m-d H:i:s') ?? '',
+                'name'          => (string) ($o->customer_name ?? ''),
+                'phone'         => (string) ($o->customer_phone ?? ''),
+                'location'      => (string) ($o->location ?? ''),
+                'payment'       => (string) ($o->payment ?? ''),
+                'status'        => (string) ($o->status ?: 'New'),
+                'channel'       => (string) ($o->channel ?? ''),
+                'rider'         => (string) ($o->rider->name ?? ''),
+                'rider_phone'   => (string) ($o->rider->phone ?? ''),
+                'track_token'   => (string) ($o->track_token ?? ''),
+                'branch'        => (string) ($o->branch_id ?? ''),
+                'items_json'    => is_array($o->items_json) ? $o->items_json : [],
+                'items'         => (string) ($o->items_text ?? ''),
+                'total_ugx'     => (float) ($o->total ?? 0),
+            ];
+        });
+
+        return response()->json(['orders' => $rows]);
+    }
+
+    public function products()
+    {
+        $rows = Product::orderBy('name')->get()->map(function (Product $p) {
+            return [
+                'Product Name' => (string) $p->name,
+                'Variant'      => '',
+                'Brand'        => '',
+                'Category'     => (string) ($p->category ?? ''),
+                'Keywords'     => (string) ($p->keywords ?? ''),
+                'Price_UGX'    => (float) ($p->base_price ?? $p->price ?? 0),
+                'Stock'        => (int) ($p->stock ?? 0),
+                'StockByBranch'=> null,
+                'Barcode'      => (string) ($p->barcode ?? ''),
+                'Item_Code'    => (string) ($p->sku ?? ''),
+                'Image'        => (string) ($p->image_url ?? ''),
+                '_row'         => (int) $p->id,
+            ];
+        });
+
+        return response()->json(['products' => $rows]);
+    }
+
+    public function riders()
+    {
+        $rows = Rider::orderBy('name')->get()->map(fn (Rider $r) => [
+            'id'      => (int) $r->id,
+            'name'    => (string) $r->name,
+            'phone'   => (string) ($r->phone ?? ''),
+            'photo'   => (string) ($r->photo ?? ''),
+            'city'    => (string) ($r->city ?? ''),
+            'address' => (string) ($r->address ?? ''),
+            'notes'   => (string) ($r->notes ?? ''),
+            'active'  => (bool) ($r->active ?? true),
+        ]);
+
+        return response()->json(['riders' => $rows]);
+    }
+
+    public function returns()
+    {
+        return response()->json(['returns' => [], 'credit' => (object) []]);
+    }
+
+    public function settings(Request $r)
+    {
+        $t = $r->user()->tenant;
+        return response()->json([
+            'ok'           => true,
+            'storeName'    => (string) ($t->name ?? 'Family Shopper'),
+            'storePhone'   => (string) ($t->whatsapp_number ?? ''),
+            'storeAddress' => (string) ($t->setting('address', 'Kampala, Uganda')),
+            'storeEmail'   => (string) ($t->setting('email', '')),
+        ]);
+    }
+
+    public function branches()
+    {
+        return response()->json(['branches' => []]);
+    }
+
+    public function customers()
+    {
+        return response()->json(['ok' => true, 'profiles' => (object) []]);
+    }
+
+    public function botConfig(Request $r)
+    {
+        $t = $r->user()->tenant;
+        return response()->json(['config' => [
+            'usdUgx'       => (float) $t->setting('usdUgx', 3750),
+            'usdSsp'       => (float) $t->setting('usdSsp', 7000),
+            'currency'     => (string) $t->setting('currency', 'auto'),
+            'showSwitcher' => (bool) $t->setting('showSwitcher', false),
+            'discountPct'  => (float) $t->setting('discountPct', 0),
+            'discountAmt'  => (float) $t->setting('discountAmt', 0),
+        ]]);
+    }
+
+    /* -------------------------------------------------- writes that persist */
+    public function updateStatus(Request $r)
+    {
+        $o = Order::find((int) $r->query('row'));
+        if (! $o) {
+            return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        }
+        $o->status = (string) $r->query('status', $o->status);
+        if (! $o->customer_phone && $r->filled('phone')) $o->customer_phone = $r->query('phone');
+        if (! $o->customer_name && $r->filled('name'))   $o->customer_name = $r->query('name');
+        $o->save(); // OrderObserver fires the WhatsApp status notification
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function saveOrder(Request $r)
+    {
+        $o = Order::find((int) $r->query('row'));
+        if (! $o) {
+            return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        }
+
+        $items = json_decode((string) $r->query('items', '[]'), true);
+        if (is_array($items)) {
+            $clean = [];
+            $textParts = [];
+            foreach ($items as $it) {
+                $name = trim((string) ($it['name'] ?? ''));
+                if ($name === '') continue;
+                $qty   = (int) ($it['qty'] ?? 1);
+                $price = (float) ($it['price'] ?? 0);
+                $clean[] = ['name' => $name, 'qty' => $qty, 'price' => $price];
+                $textParts[] = $qty.'x '.$name;
+            }
+            $o->items_json = $clean;
+            $o->items_text = implode(', ', $textParts);
+        }
+
+        if ($r->filled('total'))  $o->total  = (float) $r->query('total');
+        if ($r->filled('status')) $o->status = (string) $r->query('status');
+        $o->save();
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function updateProduct(Request $r)
+    {
+        $p = Product::find((int) $r->query('row'));
+        if (! $p) {
+            return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        }
+        $price = (float) $r->query('price', 0);
+        $p->base_price = $price;
+        $p->price      = $price;
+        $p->stock      = (int) $r->query('stock', $p->stock);
+        $img = trim((string) $r->query('image', ''));
+        if ($img !== '') $p->image_url = $img;
+        $p->save();
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function addProduct(Request $r)
+    {
+        $name = trim((string) $r->query('name', ''));
+        $price = (float) $r->query('price', 0);
+        if ($name === '' || $price <= 0) {
+            return response()->json(['ok' => false, 'error' => 'name_and_price_required'], 422);
+        }
+        $variant = trim((string) $r->query('variant', ''));
+        $full = $variant !== '' ? $name.' '.$variant : $name;
+
+        Product::create([
+            'name'       => $full,
+            'category'   => (string) $r->query('category', ''),
+            'keywords'   => (string) $r->query('keywords', ''),
+            'base_price' => $price,
+            'price'      => $price,
+            'stock'      => (int) $r->query('stock', 0),
+            'image_url'  => trim((string) $r->query('image', '')),
+            'active'     => true,
+        ]);
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function uploadImage(Request $r)
+    {
+        $data = (string) $r->input('data', '');
+        $name = (string) $r->input('name', 'upload');
+        if ($data === '') {
+            return response()->json(['ok' => false, 'error' => 'no_data'], 422);
+        }
+        // strip optional data-URI prefix
+        if (str_contains($data, ',')) {
+            $data = substr($data, strpos($data, ',') + 1);
+        }
+        $bin = base64_decode($data, true);
+        if ($bin === false) {
+            return response()->json(['ok' => false, 'error' => 'bad_base64'], 422);
+        }
+        $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION)) ?: 'jpg';
+        if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) $ext = 'jpg';
+        $tenant = $r->user()->tenant_id ?: 0;
+        $file = 'products/'.$tenant.'/'.uniqid('p_', true).'.'.$ext;
+        Storage::disk('public')->put($file, $bin);
+
+        return response()->json(['ok' => true, 'url' => Storage::url($file)]);
+    }
+
+    /* -------------------------------------------------- writes pending (3b) */
+    // Return ok:false so the panel shows its honest "saved on this device only"
+    // fallback rather than silently dropping data. Wired for real in Phase 3b.
+    public function pending()
+    {
+        return response()->json(['ok' => false, 'pending' => true]);
+    }
+}
