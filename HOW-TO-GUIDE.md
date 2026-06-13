@@ -189,6 +189,33 @@ Orders track `amount_paid` and a state of **unpaid / partial / paid**, so partia
 
 It's single-currency UGX and tenant-isolated (each shop sees only its own book). Entries are kept separately from subscription `payments` (what shops pay *you*) — this cashbook is the shop's own till.
 
+## 8b. Staff logins (seat-capped by plan)
+
+Each shop manages its own team under **/panel → 👤 Staff** — self-serve, no operator action needed.
+- The page shows seat usage (e.g. "1 of 2 used") and an add form (name, email, 6+ char password, optional role). New staff sign in at **/app/login**.
+- Caps come from `config/plans.php` → `user_cap`: **Free 1, Starter 2, Pro unlimited** (trial = unlimited). Change the numbers there if you want different limits.
+- At the limit, the add form is replaced with an upgrade prompt; `staffAdd` also enforces server-side (returns `upgrade_required`). A shop can't remove its own login or the last remaining one.
+- You (operator) can still create users directly in tinker if ever needed; the per-shop screen is the normal path.
+
+## 8c. CloudBSS's own marketing/sales bot (OpenAI)
+
+You can run an AI sales assistant on CloudBSS's *own* WhatsApp line — it answers questions about CloudBSS, quotes pricing, pushes the free trial, and hands hot leads to you. It reuses the whole tenant machinery; it just thinks like a salesperson instead of a shop.
+
+Set it up once:
+1. **Create a tenant** for yourself in `/admin` → Businesses → New (e.g. name "CloudBSS").
+2. **Connect its WhatsApp** number under that tenant's `/panel → Setup` (QR or official Cloud API) — use a number separate from any real shop.
+3. **Mark it as the marketing line.** In the EasyPanel console:
+   ```php
+   php artisan tinker
+   $t = \App\Models\Tenant::where('name','CloudBSS')->first();
+   $t->settings = array_merge($t->settings ?? [], ['bot_kind' => 'marketing']);
+   $t->save();
+   ```
+4. Make sure `OPENAI_API_KEY` is set (and optionally `OPENAI_MODEL`, default `gpt-4o-mini`).
+5. Point the website at this number: set `MARKETING_WA_NUMBER` to it, so every "Start free trial" / "Talk to sales" CTA opens a chat with the bot.
+
+Now any message to that number gets an AI sales reply (`MarketingBrain`), with a graceful canned fallback if the AI is unavailable. You can **Take over** any sales chat from `/panel → Chats`, exactly like a shop does. (Normal shop tenants are unaffected — they keep the ordering bot.)
+
 ## 9. Go-live checklist (do before real customers)
 
 - [ ] `APP_DEBUG=false`, real `APP_KEY`, `APP_URL` correct (https).

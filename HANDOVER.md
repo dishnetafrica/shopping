@@ -188,6 +188,20 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-14 — Phase 23: OpenAI marketing sales bot + honest homepage testimonials (Bhavin + AI)
+- **CloudBSS sales bot (OpenAI).** New `MarketingBrain` service: OpenAI chat (same `openai-php/laravel` facade as BotNlu, `OPENAI_MODEL` default gpt-4o-mini) with a CloudBSS sales system prompt (what it does, UGX pricing, free trial, human hand-off), short rolling history in `conversation.state`, and a canned fallback if no key. `Tenant::isMarketing()` reads `settings.bot_kind === 'marketing'`. `ProcessIncomingMessage` now routes marketing tenants to `MarketingBrain`, shops to `BotBrain`. Operator hand-off via existing Chats takeover works unchanged.
+  - Setup is documented in HOW-TO §8c: create a "CloudBSS" tenant, connect its WhatsApp, set `bot_kind=marketing` via tinker, set `OPENAI_API_KEY` + `MARKETING_WA_NUMBER`.
+- **Honest homepage.** Replaced the 3 fabricated testimonials (and "What businesses are saying") with an honest **"Be one of our first businesses"** early-access section — no invented customers/quotes, matching the earlier removal of fake stats. (Carousel JS left in place, no-ops with no `.test` carousel items.)
+- In-app payments needs no build — it's been ready since Phase 13; it only needs the operator's Flutterwave/Stripe keys + webhook registration (see HOW-TO §7).
+- Added/changed: app/Services/Bot/MarketingBrain.php (new), ProcessIncomingMessage.php, Tenant.php (isMarketing), resources/marketing/index.html (testimonials→early-access), HOW-TO-GUIDE.md (§8c).
+
+### 2026-06-14 — Phase 22: Staff logins (seat caps) + customer guide (Bhavin + AI)
+- **Per-plan seat caps now real.** `config/plans.php` gains `user_cap` (Free 1, Starter 2, Pro unlimited; trial = unlimited). `Tenant::userCap()/staffCount()/atUserLimit()` added.
+- **Self-serve Staff management** at `/panel → 👤 Staff` (`staff.html`, served by `SellerPanelController::staff()`): seat-usage bar, add login (name/email/6+ password/role → signs in at /app/login), remove login. `staffList/staffAdd/staffDelete` endpoints; `staffAdd` enforces the cap server-side (`upgrade_required`) and rejects duplicate emails; can't delete self or the last login. Added **👤 Staff** to seller nav.
+- Users created here get the shop's `tenant_id` and the User model's `password` 'hashed' cast; they access `/app` (and thus `/panel`) since `canAccessPanel` only needs a tenant_id.
+- **Docs:** new **CUSTOMER-GUIDE.md** (shop-owner facing: sign in, panel tour, connect WhatsApp, assistant, orders, cashbook/getting paid, staff, plans, help). Operator **HOW-TO-GUIDE.md** gains §8b (staff). 
+- Added/changed: config/plans.php, Tenant.php, PanelApiController.php (+User import, 3 staff methods), SellerPanelController.php (staff page), routes/web.php, resources/panel/staff.html (new) + seller.html (nav), CUSTOMER-GUIDE.md (new), HOW-TO-GUIDE.md.
+
 ### 2026-06-14 — Phase 21: Homepage finalised as v2 (Bhavin's choice) (Bhavin + AI)
 - Bhavin chose the cleaner **11-section v2** homepage over the heavier Phase-20 conversion build. `resources/marketing/index.html` now = v2 (hero + phone mock, how-it-works, see-a-real-order, who-uses, features, dashboard showcase, AI assistant, trust, testimonials, pricing + comparison, final CTA). Wire-ready (number tokens + /app/login + /admin/login). No fake metric counters (the inflated stats band from Phase 20 was dropped — Bhavin correctly flagged it as dishonest for an early-stage startup).
 - Open honesty note for launch: the 3 testimonials in v2 are illustrative/sample — replace with real quotes or remove before going live (same concern as the stats).

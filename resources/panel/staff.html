@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Staff — Seller</title>
+<style>
+  :root{--green:#0a7d3c;--green-d:#075c2c;--ink:#10241c;--mute:#6a7a70;--line:#e6ece8;--bg:#f5f7f5;--card:#fff;--red:#c0392b;--amber:#b8860b}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+  a{color:inherit;text-decoration:none}
+  .top{background:var(--green-d);color:#fff;display:flex;align-items:center;gap:12px;padding:14px 18px;position:sticky;top:0;z-index:5}
+  .top .bk{font-size:20px;opacity:.9}.top h1{font-size:18px;font-weight:700}
+  .wrap{max-width:760px;margin:0 auto;padding:18px 16px 60px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+  h3{font-size:15px;font-weight:700;margin-bottom:12px}
+  .seat{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  .seat .big{font-size:24px;font-weight:800}
+  .seat .lbl{font-size:13px;color:var(--mute);font-weight:600}
+  .bar{height:8px;background:#e9efea;border-radius:6px;margin-top:12px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--green);border-radius:6px;transition:width .3s}
+  label{display:block;font-size:12.5px;font-weight:600;color:var(--mute);margin:9px 0 4px}
+  input,select{width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:14px;font-family:inherit;background:#fff}
+  .rowf{display:flex;gap:10px}.rowf>*{flex:1}
+  .btn{margin-top:12px;width:100%;background:var(--green);color:#fff;border:none;border-radius:10px;padding:11px;font-weight:700;font-size:15px;cursor:pointer}
+  .btn:hover{background:var(--green-d)}.btn[disabled]{opacity:.55;cursor:not-allowed}
+  .list{display:flex;flex-direction:column;gap:8px}
+  .u{display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid var(--line);border-radius:11px;background:#fff}
+  .u .av{width:38px;height:38px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;font-weight:800;flex-shrink:0}
+  .u .nm{font-weight:700}.u .em{font-size:12.5px;color:var(--mute)}
+  .u .role{margin-left:auto;font-size:11px;font-weight:700;background:#eef3ef;color:var(--green-d);padding:3px 9px;border-radius:9px}
+  .u .del{background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:4px 6px}
+  .u .me{font-size:11px;color:var(--mute);font-weight:600}
+  .note{margin-top:10px;font-size:13px;color:var(--mute)}
+  .lock{background:#fff7e6;border:1px solid #f3e2b8;border-radius:11px;padding:14px;font-size:14px;color:#8a6d1f}
+  .lock a{color:var(--green-d);font-weight:700}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111b21;color:#fff;padding:11px 16px;border-radius:10px;font-size:13.5px;opacity:0;transition:.2s;pointer-events:none;z-index:50}
+  .toast.show{opacity:1}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid #ffffff66;border-top-color:#fff;border-radius:50%;animation:s .7s linear infinite;vertical-align:-1px;margin-right:6px}
+  @keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="top"><a class="bk" href="/panel" title="Back to panel">‹</a><h1>Staff &amp; logins</h1></div>
+
+<div class="wrap">
+  <div class="card">
+    <div class="seat">
+      <div><div class="big" id="seatText">—</div><div class="lbl" id="planText"></div></div>
+    </div>
+    <div class="bar"><i id="seatBar" style="width:0%"></i></div>
+    <div class="note" id="seatNote"></div>
+  </div>
+
+  <div class="card" id="addCard">
+    <h3>Add a staff login</h3>
+    <div class="rowf">
+      <div><label>Name</label><input id="sName" placeholder="e.g. Sarah"></div>
+      <div><label>Role (optional)</label><input id="sRole" placeholder="e.g. cashier"></div>
+    </div>
+    <label>Email</label>
+    <input id="sEmail" type="email" placeholder="name@shop.com">
+    <label>Password (min 6 characters)</label>
+    <input id="sPass" type="password" placeholder="set a password">
+    <button class="btn" id="addBtn" onclick="addStaff()">Add login</button>
+    <div class="note">They sign in at <b>/app/login</b> with this email and password.</div>
+  </div>
+
+  <div class="card">
+    <h3>Current logins</h3>
+    <div class="list" id="list"><div class="note">Loading…</div></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  var $=function(i){return document.getElementById(i);};
+  function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2400);}
+  function initials(n){return (n||'?').trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();}
+
+  async function load(){
+    try{
+      var r=await fetch('/papi/staff',{cache:'no-store'});var d=await r.json();
+      if(!d.ok)return;
+      $('planText').textContent=d.plan+' plan';
+      if(d.unlimited){
+        $('seatText').textContent=d.used+' staff login'+(d.used===1?'':'s');
+        $('seatBar').style.width='100%';
+        $('seatNote').textContent='Unlimited logins on your plan.';
+      }else{
+        $('seatText').textContent=d.used+' of '+d.cap+' login'+(d.cap===1?'':'s')+' used';
+        $('seatBar').style.width=Math.min(100,(d.used/d.cap)*100)+'%';
+        $('seatNote').textContent=d.at_limit?'You have used all your logins on this plan.':'';
+      }
+      // add form vs locked
+      var ac=$('addCard');
+      if(d.at_limit){
+        ac.innerHTML='<h3>Add a staff login</h3><div class="lock">You\u2019ve reached your plan\u2019s login limit ('+d.cap+'). <a href="/panel/billing">Upgrade</a> to add more staff, or remove a login below.</div>';
+      }
+      // list
+      var l=$('list');
+      l.innerHTML=d.staff.map(function(u){
+        return '<div class="u"><span class="av">'+initials(u.name)+'</span>'+
+          '<div><div class="nm">'+esc(u.name)+'</div><div class="em">'+esc(u.email)+'</div></div>'+
+          '<span class="role">'+esc(u.role)+'</span>'+
+          (u.self?'<span class="me">you</span>':'<button class="del" title="Remove" onclick="delStaff('+u.id+",'"+esc(u.name)+"'"+')">\u00d7</button>')+
+          '</div>';
+      }).join('');
+    }catch(e){}
+  }
+  function esc(s){return (s||'').replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
+
+  async function addStaff(){
+    var name=$('sName').value,email=$('sEmail').value,pass=$('sPass').value,role=$('sRole').value;
+    if(!name||!email||pass.length<6){toast('Name, valid email and a 6+ character password needed');return;}
+    var b=$('addBtn');b.disabled=true;b.innerHTML='<span class="spin"></span>Adding…';
+    try{
+      var r=await fetch('/papi/staff/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,email:email,password:pass,role:role})});
+      var d=await r.json();
+      if(d&&d.ok){toast('Staff login added');$('sName').value='';$('sEmail').value='';$('sPass').value='';$('sRole').value='';load();}
+      else if(d&&d.error==='upgrade_required'){toast('Plan login limit reached — upgrade to add more');load();}
+      else if(d&&d.error==='email_taken'){toast('That email is already in use');}
+      else if(d&&d.error==='bad_input'){toast(d.detail||'Check the details');}
+      else{toast('Could not add login');}
+    }catch(e){toast('Network error');}
+    b.disabled=false;b.textContent='Add login';
+  }
+
+  async function delStaff(id,name){
+    if(!confirm('Remove '+name+'\u2019s login? They will no longer be able to sign in.'))return;
+    try{
+      var r=await fetch('/papi/staff/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});
+      var d=await r.json();
+      if(d&&d.ok){toast('Login removed');load();}
+      else if(d&&d.error==='last_user'){toast('You can\u2019t remove the last login');}
+      else if(d&&d.error==='cannot_delete_self'){toast('You can\u2019t remove your own login');}
+      else{toast('Could not remove');}
+    }catch(e){toast('Network error');}
+  }
+
+  load();
+</script>
+</body>
+</html>

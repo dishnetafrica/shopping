@@ -4,6 +4,7 @@ namespace App\Jobs;
 use App\Models\Conversation;
 use App\Models\Tenant;
 use App\Services\Bot\BotBrain;
+use App\Services\Bot\MarketingBrain;
 use App\Services\WhatsApp\WhatsAppManager;
 use App\Support\MessageLog;
 use App\Support\TenantContext;
@@ -23,7 +24,7 @@ class ProcessIncomingMessage implements ShouldQueue
         public array $incoming,
     ) {}
 
-    public function handle(TenantContext $ctx, WhatsAppManager $wa, BotBrain $brain): void
+    public function handle(TenantContext $ctx, WhatsAppManager $wa, BotBrain $brain, MarketingBrain $marketing): void
     {
         $ctx->set($this->tenantId);                 // scope everything to this tenant
         $tenant = Tenant::findOrFail($this->tenantId);
@@ -55,7 +56,9 @@ class ProcessIncomingMessage implements ShouldQueue
             return;
         }
 
-        $reply = $brain->respond($tenant, $convo, $this->incoming['text']);
+        $reply = $tenant->isMarketing()
+            ? $marketing->respond($tenant, $convo, $this->incoming['text'])
+            : $brain->respond($tenant, $convo, $this->incoming['text']);
         $convo->last_message_at = now();
         $convo->save();
 

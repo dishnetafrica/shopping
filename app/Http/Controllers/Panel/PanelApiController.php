@@ -12,6 +12,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\ReturnRecord;
 use App\Models\Rider;
+use App\Models\User;
 use App\Services\WhatsApp\EvolutionAdmin;
 use App\Services\WhatsApp\WhatsAppManager;
 use App\Support\MessageLog;
@@ -1014,6 +1015,89 @@ class PanelApiController extends Controller
             'state'       => $state,
             'notified'    => $sent,
         ]);
+    }
+
+    // ---- Staff logins (seat-capped by plan) ----
+
+    /** List this shop's staff logins + seat usage. */
+    public function staffList(Request $r)
+    {
+        $t   = $r->user()->tenant;
+        $me  = (int) $r->user()->id;
+        $cap = $t->userCap();
+
+        $staff = User::where('tenant_id', $t->id)->orderBy('id')->get()
+            ->map(fn (User $u) => [
+                'id'    => (int) $u->id,
+                'name'  => (string) $u->name,
+                'email' => (string) $u->email,
+                'role'  => (string) ($u->role ?: 'staff'),
+                'self'  => (int) $u->id === $me,
+            ])->values();
+
+        return response()->json([
+            'ok'        => true,
+            'staff'     => $staff,
+            'used'      => $staff->count(),
+            'cap'       => $cap,                       // null = unlimited
+            'unlimited' => $cap === null,
+            'at_limit'  => $t->atUserLimit(),
+            'plan'      => $t->planLabel(),
+        ]);
+    }
+
+    /** Add a staff login for this shop (blocked at the plan's seat limit). */
+    public function staffAdd(Request $r)
+    {
+        $t     = $r->user()->tenant;
+        $name  = trim((string) $r->input('name', ''));
+        $email = strtolower(trim((string) $r->input('email', '')));
+        $pass  = (string) $r->input('password', '');
+        $role  = trim((string) $r->input('role', 'staff')) ?: 'staff';
+
+        if ($t->atUserLimit()) {
+            return response()->json(['ok' => false, 'error' => 'upgrade_required', 'feature' => 'multi_user', 'cap' => $t->userCap()], 403);
+        }
+        if ($name === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($pass) < 6) {
+            return response()->json(['ok' => false, 'error' => 'bad_input',
+                'detail' => 'Name, a valid email and a password of at least 6 characters are required.'], 422);
+        }
+        if (User::where('email', $email)->exists()) {
+            return response()->json(['ok' => false, 'error' => 'email_taken'], 409);
+        }
+
+        User::create([
+            'tenant_id' => $t->id,
+            'name'      => $name,
+            'email'     => $email,
+            'password'  => $pass,           // 'hashed' cast hashes on save
+            'role'      => $role,
+        ]);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** Remove a staff login (cannot remove yourself or the last login). */
+    public function staffDelete(Request $r)
+    {
+        $t  = $r->user()->tenant;
+        $id = (int) $r->input('id', 0);
+        $me = (int) $r->user()->id;
+
+        if ($id === $me) {
+            return response()->json(['ok' => false, 'error' => 'cannot_delete_self'], 422);
+        }
+        if (User::where('tenant_id', $t->id)->count() <= 1) {
+            return response()->json(['ok' => false, 'error' => 'last_user'], 422);
+        }
+
+        $u = User::where('tenant_id', $t->id)->where('id', $id)->first();
+        if (! $u) {
+            return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        }
+        $u->delete();
+
+        return response()->json(['ok' => true]);
     }
 
     // AI bot setup — owner describes the business in plain words, we generate the persona.

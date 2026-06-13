@@ -27,6 +27,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel', [SellerPanelController::class, 'show']);
     Route::get('/panel/chats', [SellerPanelController::class, 'chats']);
     Route::get('/panel/cashbook', [SellerPanelController::class, 'cashbook']);
+    Route::get('/panel/staff', [SellerPanelController::class, 'staff']);
     Route::get('/panel/setup', [SellerPanelController::class, 'setup']);
     Route::get('/panel/billing', [\App\Http\Controllers\Billing\BillingController::class, 'page']);
 
@@ -70,6 +71,11 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('cashbook',          [PanelApiController::class, 'cashbook']);
         Route::post('cashbook/add',     [PanelApiController::class, 'cashbookAdd']);
         Route::post('record-payment',   [PanelApiController::class, 'recordPayment']);
+
+        // staff logins (seat-capped by plan)
+        Route::get('staff',          [PanelApiController::class, 'staffList']);
+        Route::post('staff/add',     [PanelApiController::class, 'staffAdd']);
+        Route::post('staff/delete',  [PanelApiController::class, 'staffDelete']);
         Route::post('bot/generate',  [PanelApiController::class, 'botGenerate']);
         Route::post('bot/save',      [PanelApiController::class, 'botSave']);
 

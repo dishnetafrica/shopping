@@ -36,6 +36,29 @@ class Tenant extends Model
         return data_get($this->settings, $key, $default);
     }
 
+    /** Staff-login seat limit for the active plan. null = unlimited. */
+    public function userCap(): ?int
+    {
+        return config('plans.' . $this->effectivePlan() . '.user_cap', 1);
+    }
+
+    public function staffCount(): int
+    {
+        return User::where('tenant_id', $this->id)->count();
+    }
+
+    public function atUserLimit(): bool
+    {
+        $cap = $this->userCap();
+        return $cap !== null && $this->staffCount() >= $cap;
+    }
+
+    /** A "marketing" tenant is CloudBSS's own sales line — uses the sales bot, not the shop bot. */
+    public function isMarketing(): bool
+    {
+        return $this->setting('bot_kind') === 'marketing';
+    }
+
     // ---------------- Plans & billing ----------------
 
     public function onTrial(): bool
