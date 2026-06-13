@@ -30,6 +30,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/staff', [SellerPanelController::class, 'staff']);
     Route::get('/panel/scheduled', [SellerPanelController::class, 'scheduled']);
     Route::get('/panel/marketing', [SellerPanelController::class, 'marketing']);
+    Route::get('/panel/diagnostics', [SellerPanelController::class, 'diagnostics']);
     Route::get('/panel/setup', [SellerPanelController::class, 'setup']);
     Route::get('/panel/billing', [\App\Http\Controllers\Billing\BillingController::class, 'page']);
 
@@ -89,6 +90,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('campaign/send',     [PanelApiController::class, 'campaignSend']);
         Route::post('campaign/audience', [PanelApiController::class, 'campaignAudience']);
         Route::post('campaign/suggest',  [PanelApiController::class, 'campaignSuggest']);
+
+        // bot pipeline diagnostics
+        Route::get('diagnostics',        [PanelApiController::class, 'diagnostics']);
         Route::post('bot/generate',  [PanelApiController::class, 'botGenerate']);
         Route::post('bot/save',      [PanelApiController::class, 'botSave']);
 

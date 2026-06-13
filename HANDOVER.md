@@ -188,6 +188,21 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-14 — Phase 26: Bot pipeline diagnostics (n8n-style trace) (Bhavin + AI)
+- **Why:** in n8n you could see where a message got stuck; the native pipeline had logs only on success. Now every step is traced.
+- **Migration 000017** `bot_events` (trace, phone, stage, detail, ms, created_at). Run `php artisan migrate --path=database/migrations/2026_01_01_000017_create_bot_events.php`.
+- **`App\Support\BotTrace::log()`** writes a step to bot_events + app log (`bot.trace`), wrapped in try/catch so tracing can't break handling.
+- **Instrumented the whole path:** WebhookController logs `queued` / `ignored` / `no_tenant` (+ generates a `trace` id passed to the job). `ProcessIncomingMessage` logs `started`, `skipped` (with reason: agent handling / bot off / echo / debounce), `paused` (loop), `empty`, `error` (brain/send now wrapped in try/catch so failures are recorded, not silently dropped), and `replied` (with total ms).
+- **Diagnostics page** `/panel → 🩺 Diagnostics` (`diagnostics.html`, endpoint `diagnostics`): live, auto-refreshing, color-coded list — newest first. Key tell: `queued` but no `started` = **queue worker not running**. Nav link added.
+- **Pruning:** `ProcessScheduled` cron deletes bot_events older than 3 days (try/catch guarded).
+- Docs: HOW-TO §8h. New files: migration 000017, app/Support/BotTrace.php, resources/panel/diagnostics.html. Changed: WebhookController.php, ProcessIncomingMessage.php, PanelApiController.php (diagnostics endpoint), SellerPanelController.php (page), ProcessScheduled.php (prune), routes/web.php, resources/panel/seller.html.
+
+### 2026-06-14 — Phase 25: Bot loop guard + latency logging + chats scroll fix (Bhavin + AI)
+- **Loop guard** in `ProcessIncomingMessage`: echo guard (incoming == our last reply), 2s debounce, and a rate breaker (≥5 replies/45s or ≥12/10min) that pauses the chat (`agent_active=true`), alerts the owner once via NotifyOwner, and logs `bot.loop_paused`. Counters live in `conversation.state` (lg_* keys). `chatTakeover` clears them when the bot is re-enabled. Catches other bots, autoresponders, and shop-to-shop loops; the existing fromMe/group filter still covers self-echo.
+- **Latency logging**: WebhookController stamps `t_recv`; the job logs `bot.latency` per reply with `queue_ms / brain_ms / send_ms / total_ms`. HOW-TO §8g explains reading it and tuning workers. (Context: old n8n+Sheets ≈ 1 min; native Postgres path should be a few seconds, dominated by the OpenAI call, if a queue worker runs.)
+- **Chats scroll fix**: `resources/panel/chats.html` — added `min-height:0` to `.items`, `.thread`, `#threadView`, `.msgs` (flexbox overflow bug; body has overflow:hidden so the page couldn't scroll either). Removed a stray U+FFFD char introduced mid-edit.
+- Changed: app/Jobs/ProcessIncomingMessage.php, app/Http/Controllers/Bot/WebhookController.php, app/Http/Controllers/Panel/PanelApiController.php (chatTakeover reset), resources/panel/chats.html, HOW-TO-GUIDE.md. No migration.
+
 ### 2026-06-14 — Phase 24: Scheduled deliveries + marketing campaigns + AI promos (Bhavin + AI)
 - **Migration 000016** (idempotent): `orders.scheduled_for / sched_stage / sched_reminders`; new **`campaigns`** table. Run `php artisan migrate --path=database/migrations/2026_01_01_000016_scheduled_orders_and_campaigns.php`.
 - **Scheduled deliveries.** Order helpers + `/panel → 🗓️ Scheduled` (`scheduled.html`): pick an order, set today-later/tomorrow/custom; queue grouped by day with live countdowns. Endpoints `scheduledList` / `scheduleOrder`. Workflow advances **Scheduled→Preparing→Ready For Dispatch→Out For Delivery** via the new cron, with owner WhatsApp reminders at 2h / 30m / due (each fires once, tracked in `sched_reminders`). v1 schedules from the panel; bot conversational capture is next.

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Bot diagnostics</title>
+<style>
+  :root{--green:#0a7d3c;--green-d:#075c2c;--ink:#10241c;--mute:#6a7a70;--line:#e6ece8;--bg:#f5f7f5;--card:#fff;--amber:#b8860b;--red:#c0392b;--blue:#1f6feb}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+  a{color:inherit;text-decoration:none}
+  .top{background:var(--green-d);color:#fff;display:flex;align-items:center;gap:12px;padding:14px 18px;position:sticky;top:0;z-index:5}
+  .top .bk{font-size:20px}.top h1{font-size:18px;font-weight:700;flex:1}
+  .live{font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;opacity:.92}
+  .dot{width:8px;height:8px;border-radius:50%;background:#7fe0a5;animation:p 1.4s infinite}
+  @keyframes p{0%,100%{opacity:1}50%{opacity:.3}}
+  .wrap{max-width:860px;margin:0 auto;padding:16px 14px 60px}
+  .intro{color:var(--mute);font-size:13px;margin-bottom:12px}
+  .ev{display:flex;align-items:flex-start;gap:11px;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin-bottom:7px}
+  .ev .tm{font-size:11.5px;color:var(--mute);min-width:62px;font-variant-numeric:tabular-nums;padding-top:2px}
+  .ev .mid{flex:1;min-width:0}
+  .ev .ph{font-weight:700;font-size:14px}
+  .ev .dt{font-size:13px;color:var(--mute);margin-top:1px;word-break:break-word}
+  .ev .tr{font-size:10.5px;color:#aab4ae;font-family:"Space Mono",monospace;margin-top:3px}
+  .stage{font-size:11px;font-weight:700;padding:4px 9px;border-radius:9px;white-space:nowrap;text-transform:capitalize}
+  .ms{font-size:11px;color:var(--mute);margin-left:6px}
+  .s-queued,.s-started{background:#e1ecff;color:var(--blue)}
+  .s-replied{background:#e7f6ec;color:var(--green-d)}
+  .s-skipped,.s-empty,.s-ignored{background:#eef0f2;color:#555}
+  .s-paused{background:#fff4d6;color:var(--amber)}
+  .s-error,.s-no_tenant{background:#fdecec;color:var(--red)}
+  .empty{color:var(--mute);font-size:14px;padding:20px 0;text-align:center}
+  .legend{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+  .legend .stage{cursor:default}
+</style>
+</head>
+<body>
+<div class="top"><a class="bk" href="/panel">‹</a><h1>Bot diagnostics</h1><span class="live"><span class="dot"></span> live</span></div>
+
+<div class="wrap">
+  <div class="intro">Every customer message and what the bot did with it — newest first, refreshing automatically. Use this to see <b>where a message stopped</b>.</div>
+  <div class="legend">
+    <span class="stage s-queued">queued</span><span class="stage s-started">started</span>
+    <span class="stage s-replied">replied</span><span class="stage s-skipped">skipped</span>
+    <span class="stage s-paused">paused</span><span class="stage s-empty">empty</span>
+    <span class="stage s-error">error</span>
+  </div>
+  <div id="list"><div class="empty">Loading…</div></div>
+</div>
+
+<script>
+  var $=function(i){return document.getElementById(i);};
+  function esc(s){return (s||'').replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
+  function tm(s){try{return new Date(s.replace(' ','T')+'Z').toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '';}}
+
+  async function load(){
+    try{
+      var r=await fetch('/papi/diagnostics',{cache:'no-store'});var d=await r.json();if(!d.ok)return;
+      var l=$('list');
+      if(!d.events.length){l.innerHTML='<div class="empty">No bot activity yet. Send a WhatsApp message to your shop number and it will appear here.</div>';return;}
+      l.innerHTML=d.events.map(function(e){
+        var st=esc(e.stage);
+        return '<div class="ev">'+
+          '<div class="tm">'+tm(e.time)+'</div>'+
+          '<div class="mid">'+
+            '<div class="ph">'+(e.phone?('+'+esc(e.phone)):'—')+'<span class="stage s-'+st+'" style="margin-left:8px">'+st+'</span>'+(e.ms?('<span class="ms">'+e.ms+' ms</span>'):'')+'</div>'+
+            (e.detail?'<div class="dt">'+esc(e.detail)+'</div>':'')+
+            '<div class="tr">#'+esc(e.trace)+'</div>'+
+          '</div></div>';
+      }).join('');
+    }catch(e){}
+  }
+  load();
+  setInterval(load,4000);
+</script>
+</body>
+</html>

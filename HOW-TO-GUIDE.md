@@ -239,9 +239,33 @@ The queue groups orders by day with a live countdown. (v1 schedules from the pan
 
 **Ban risk is real.** Mass-broadcasting on the unofficial (Evolution) connection is the fastest way to get a number blocked. Mitigations built in: `SendCampaign` sends **one message at a time with a 4–9s jitter**, and the page shows a prominent warning. For real campaign volume, connect the **official WhatsApp Business API** first (Setup → official WhatsApp). Audience resolution lives in `AudienceResolver`; "by category" is a best-effort text match on order items (v2 = exact line-item join). Image upload is by URL for now (direct upload is a follow-up).
 
-## 9. Go-live checklist (do before real customers)
+## 8g. Measuring bot response time
 
-- [ ] `APP_DEBUG=false`, real `APP_KEY`, `APP_URL` correct (https).
+Every auto-reply logs a timing line so you can see real latency instead of guessing. In the app logs (EasyPanel → logs, or `tail -f storage/logs/laravel.log`) look for `bot.latency`:
+```
+bot.latency {"tenant":1,"from":"2567...","mode":"shop","queue_ms":40,"brain_ms":1850,"send_ms":260,"total_ms":2150}
+```
+- `total_ms` — end-to-end, webhook received → reply sent (this is what the customer feels).
+- `queue_ms` — time the job waited for a worker. **If this is large, run more queue workers** (`php artisan queue:work`, several copies for busy hours).
+- `brain_ms` — the OpenAI call (the usual dominant cost; keep `OPENAI_MODEL=gpt-4o-mini` for speed, or it falls back to instant keyword parsing if the AI is off/slow).
+- `send_ms` — the WhatsApp send.
+
+A paused loop logs `bot.loop_paused` with the trip counts. Compared with the old n8n + Google Sheets flow (~1 min), expect a few seconds, dominated by `brain_ms` — provided a queue worker is running.
+
+## 8h. Diagnostics — "where did the message get stuck?"
+
+Like watching an n8n execution, `/panel → 🩺 Diagnostics` shows every inbound message and what the bot did with it, newest-first, auto-refreshing. Each message has a short trace id; you'll see its steps:
+- **queued** — webhook received it and handed it to the worker.
+- **started** — the worker picked it up. *(If you see `queued` but never `started`, the **queue worker isn't running**.)*
+- **skipped** — with the reason: *a person is handling this chat* (Take over), *bot is switched off*, *echo*, or *debounced*.
+- **paused** — the loop guard tripped.
+- **replied** — sent, with the latency in ms.
+- **empty** — the bot decided not to answer.
+- **error** — brain (OpenAI) or send failed, with the error message.
+
+So a message with no reply is no longer a mystery: the last stage tells you exactly where and why it stopped. Events are also in the app log as `bot.trace`, and pruned after 3 days. Backed by the `bot_events` table (migration 000017).
+
+## 9. Go-live checklist (do before real customers)- [ ] `APP_DEBUG=false`, real `APP_KEY`, `APP_URL` correct (https).
 - [ ] Change the operator and every shop's default password.
 - [ ] Replace the marketing number: set `MARKETING_WA_NUMBER` (and `MARKETING_PHONE`) so the site CTAs point to your real sales WhatsApp.
 - [ ] Rotate the Evolution API key from any value shared during development.
