@@ -4,6 +4,7 @@ namespace App\Jobs;
 use App\Models\Order;
 use App\Models\Tenant;
 use App\Services\WhatsApp\WhatsAppManager;
+use App\Support\MessageLog;
 use App\Support\TenantContext;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -39,5 +40,10 @@ class SendOrderStatusNotification implements ShouldQueue
 
         $wa->driver($tenant->whatsapp_driver ?: null)
            ->sendText($tenant->whatsapp_instance, $order->customer_phone, $text);
+
+        MessageLog::record(
+            $this->tenantId, $order->customer_phone, $tenant->whatsapp_instance,
+            'out', 'system', $text
+        );
     }
 }

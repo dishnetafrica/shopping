@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
+use App\Models\Conversation;
+use App\Models\Message;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Rider;
+use App\Services\WhatsApp\WhatsAppManager;
+use App\Support\MessageLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -256,6 +260,116 @@ class PanelApiController extends Controller
         Storage::disk('public')->put($file, $bin);
 
         return response()->json(['ok' => true, 'url' => Storage::url($file)]);
+    }
+
+    /* -------------------------------------------------- live chats (4b) */
+    public function chats(Request $r)
+    {
+        $convos = Conversation::orderByDesc('last_message_at')->limit(100)->get();
+        $phones = $convos->pluck('customer_phone')->filter()->unique()->values()->all();
+
+        $lasts = collect();
+        $names = collect();
+        if ($phones) {
+            $lastIds = Message::whereIn('customer_phone', $phones)
+                ->selectRaw('max(id) as id')->groupBy('customer_phone')->pluck('id')->all();
+            $lasts = Message::whereIn('id', $lastIds)->get()->keyBy('customer_phone');
+            $names = Order::whereIn('customer_phone', $phones)->orderByDesc('id')
+                ->get(['customer_phone', 'customer_name'])
+                ->groupBy('customer_phone')->map(fn ($g) => $g->first()->customer_name);
+        }
+
+        $list = $convos->map(function (Conversation $c) use ($lasts, $names) {
+            $m = $lasts->get($c->customer_phone);
+            return [
+                'phone'        => (string) $c->customer_phone,
+                'name'         => (string) ($names->get($c->customer_phone) ?? ''),
+                'last'         => $m ? (string) $m->body : '',
+                'last_sender'  => $m ? (string) $m->sender : '',
+                'last_at'      => optional($c->last_message_at)->format('Y-m-d H:i:s') ?? '',
+                'unread'       => (int) $c->unread,
+                'agent_active' => (bool) $c->agent_active,
+            ];
+        })->values();
+
+        return response()->json([
+            'chats'    => $list,
+            'bot_mode' => (string) $r->user()->tenant->setting('bot_mode', 'auto'),
+        ]);
+    }
+
+    public function chatThread(Request $r)
+    {
+        $phone = preg_replace('/[^0-9]/', '', (string) $r->query('phone', ''));
+        if ($phone === '') return response()->json(['messages' => []]);
+        $after = (int) $r->query('after', 0);
+
+        $q = Message::where('customer_phone', $phone)->orderBy('id');
+        if ($after > 0) $q->where('id', '>', $after);
+        $msgs = $q->limit(500)->get()->map(fn (Message $m) => [
+            'id'        => (int) $m->id,
+            'direction' => (string) $m->direction,
+            'sender'    => (string) $m->sender,
+            'body'      => (string) $m->body,
+            'at'        => optional($m->created_at)->format('Y-m-d H:i:s') ?? '',
+        ]);
+
+        $c = Conversation::where('customer_phone', $phone)->first();
+        $agent = false;
+        if ($c) {
+            if ($after === 0 && $c->unread) { $c->unread = 0; $c->save(); } // viewing clears the badge
+            $agent = (bool) $c->agent_active;
+        }
+
+        return response()->json(['messages' => $msgs, 'agent_active' => $agent]);
+    }
+
+    public function chatSend(Request $r, WhatsAppManager $wa)
+    {
+        $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));
+        $body  = trim((string) $r->input('body', ''));
+        if ($phone === '' || $body === '') {
+            return response()->json(['ok' => false, 'error' => 'empty'], 422);
+        }
+        $t = $r->user()->tenant;
+
+        // Sending by hand = take over this chat so the bot stops auto-replying.
+        $c = Conversation::firstOrCreate(
+            ['customer_phone' => $phone, 'instance' => $t->whatsapp_instance],
+            ['tenant_id' => $t->id, 'state' => [], 'cart' => []]
+        );
+        $c->agent_active = true;
+        $c->save();
+
+        try {
+            $wa->driver($t->whatsapp_driver ?: null)->sendText($t->whatsapp_instance, $phone, $body);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => 'send_failed', 'detail' => $e->getMessage()], 502);
+        }
+
+        MessageLog::record($t->id, $phone, $t->whatsapp_instance, 'out', 'agent', $body);
+        return response()->json(['ok' => true]);
+    }
+
+    public function chatTakeover(Request $r)
+    {
+        $phone  = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));
+        $active = (bool) ((int) $r->input('active', 1));
+        $c = Conversation::where('customer_phone', $phone)->first();
+        if ($c) { $c->agent_active = $active; $c->save(); }
+        return response()->json(['ok' => true, 'agent_active' => $active]);
+    }
+
+    public function chatBotMode(Request $r)
+    {
+        $mode = (string) $r->input('mode', 'auto');
+        if (! in_array($mode, ['auto', 'off'], true)) $mode = 'auto';
+        $t = $r->user()->tenant;
+        $s = $t->settings ?? [];
+        $s['bot_mode'] = $mode;
+        $t->settings = $s;
+        $t->save();
+        return response()->json(['ok' => true, 'bot_mode' => $mode]);
     }
 
     /* -------------------------------------------------- writes pending (3b) */

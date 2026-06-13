@@ -12,6 +12,7 @@ Route::get('/', fn () => redirect('/panel'));
 // /app web session. (Filament business panel stays available at /app.)
 Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () {
     Route::get('/panel', [SellerPanelController::class, 'show']);
+    Route::get('/panel/chats', [SellerPanelController::class, 'chats']);
 
     // JSON API the panel calls. GET for everything (the panel uses query-string
     // writes); upload-image is POST. Tenant scoping is automatic.
@@ -29,6 +30,13 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('branches',   [PanelApiController::class, 'branches']);
         Route::get('customers',  [PanelApiController::class, 'customers']);
         Route::get('bot-config', [PanelApiController::class, 'botConfig']);
+
+        // live chats inbox (Phase 4b)
+        Route::get('chats',              [PanelApiController::class, 'chats']);
+        Route::get('chats/thread',       [PanelApiController::class, 'chatThread']);
+        Route::post('chats/send',        [PanelApiController::class, 'chatSend']);
+        Route::post('chats/takeover',    [PanelApiController::class, 'chatTakeover']);
+        Route::post('chats/bot-mode',    [PanelApiController::class, 'chatBotMode']);
 
         // writes that persist
         Route::get('update-status',  [PanelApiController::class, 'updateStatus']);

@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chats — Family Shopper</title>
+<style>
+  :root{--green:#15803D;--green-d:#0B3D22;--amber:#C2700A;--red:#B4232A;--blue:#2563A8;
+    --bg:#EEF2EE;--card:#FFF;--ink:#16231C;--muted:#6E7D72;--line:#E2E8E2;--side:#0B3D22;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);height:100vh;overflow:hidden}
+  .top{height:58px;background:var(--side);color:#fff;display:flex;align-items:center;gap:14px;padding:0 16px}
+  .top .brand{font-weight:800;letter-spacing:.2px}
+  .top .sub{color:#cfe7d8;font-size:12px}
+  .top a.back{color:#cfe7d8;text-decoration:none;font-size:13px;border:1px solid #2c5a40;padding:6px 10px;border-radius:8px}
+  .top a.back:hover{background:#0e4a2a}
+  .spacer{flex:1}
+  .bot{display:flex;align-items:center;gap:8px;font-size:13px}
+  .switch{position:relative;width:46px;height:26px;border-radius:20px;background:#3a6b50;cursor:pointer;transition:.15s}
+  .switch.on{background:#22c55e}
+  .switch .knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.15s}
+  .switch.on .knob{left:23px}
+  .wrap{display:flex;height:calc(100vh - 58px)}
+  /* list */
+  .list{width:340px;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column}
+  .list .search{padding:10px;border-bottom:1px solid var(--line)}
+  .list .search input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;outline:none}
+  .list .items{overflow-y:auto;flex:1}
+  .ci{display:flex;gap:10px;padding:11px 12px;border-bottom:1px solid #f1f5f1;cursor:pointer;align-items:center}
+  .ci:hover{background:#f6faf6}
+  .ci.sel{background:#eaf5ee}
+  .ci .av{width:40px;height:40px;border-radius:50%;background:#dcefe0;color:var(--green);font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px}
+  .ci .mid{flex:1;min-width:0}
+  .ci .nm{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ci .sn{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ci .rt{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+  .ci .tm{color:var(--muted);font-size:11px}
+  .ci .bdg{background:var(--green);color:#fff;border-radius:11px;min-width:20px;height:20px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 6px}
+  .ci .tag{font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;background:#eef2ee;color:var(--muted)}
+  .ci .tag.agent{background:#e6f4ea;color:var(--green)}
+  /* thread */
+  .thread{flex:1;display:flex;flex-direction:column;min-width:0}
+  .th-head{height:60px;border-bottom:1px solid var(--line);background:var(--card);display:flex;align-items:center;gap:12px;padding:0 16px}
+  .th-head .av{width:40px;height:40px;border-radius:50%;background:#dcefe0;color:var(--green);font-weight:700;display:flex;align-items:center;justify-content:center}
+  .th-head .nm{font-weight:700}
+  .th-head .ph{color:var(--muted);font-size:12px}
+  .pill{font-size:12px;font-weight:600;padding:7px 12px;border-radius:9px;border:1px solid var(--line);background:#fff;cursor:pointer}
+  .pill:hover{background:#f3f7f3}
+  .pill.warn{border-color:#e7d2a8;background:#fdf6e7;color:var(--amber)}
+  .pill.on{background:var(--green);color:#fff;border-color:var(--green)}
+  .msgs{flex:1;overflow-y:auto;padding:18px;background:#f3f6f3;display:flex;flex-direction:column;gap:8px}
+  .row{display:flex}
+  .row.out{justify-content:flex-end}
+  .bub{max-width:64%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word;box-shadow:0 1px 1px rgba(0,0,0,.05)}
+  .row.in .bub{background:#fff;border-bottom-left-radius:4px}
+  .row.out .bub{background:#dcf8c6;border-bottom-right-radius:4px}
+  .row.out.agent .bub{background:#c9ead0}
+  .row.out.system .bub{background:#fdf0d6}
+  .meta{font-size:10px;color:var(--muted);margin-top:3px;display:flex;gap:6px;align-items:center}
+  .meta .who{font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+  .who.bot{color:var(--blue)} .who.agent{color:var(--green)} .who.system{color:var(--amber)}
+  .composer{border-top:1px solid var(--line);background:var(--card);padding:12px;display:flex;gap:10px;align-items:flex-end}
+  .composer textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:11px;padding:11px 13px;font-size:14px;font-family:inherit;max-height:120px;outline:none}
+  .composer button{background:var(--green);color:#fff;border:none;border-radius:11px;padding:0 20px;height:44px;font-weight:700;cursor:pointer}
+  .composer button:disabled{opacity:.5}
+  .empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);flex-direction:column;gap:8px;text-align:center;padding:20px}
+  .empty .big{font-size:40px}
+  .hide{display:none!important}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#16231c;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:50}
+  .toast.show{opacity:1}
+  @media(max-width:760px){
+    .list{width:100%;position:absolute;z-index:10;height:calc(100vh - 58px)}
+    .list.hide-mobile{display:none}
+    .thread{width:100%}
+  }
+</style>
+</head>
+<body>
+  <div class="top">
+    <span class="brand">Family Shopper</span><span class="sub">Live chats</span>
+    <a class="back" href="/panel">← Panel</a>
+    <span class="spacer"></span>
+    <div class="bot">
+      <span>Bot auto-reply</span>
+      <div class="switch" id="botSwitch" onclick="toggleBot()"><div class="knob"></div></div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="list" id="listPane">
+      <div class="search"><input id="q" placeholder="Search name or number…" oninput="renderList()"></div>
+      <div class="items" id="items"></div>
+    </div>
+
+    <div class="thread">
+      <div id="threadEmpty" class="empty">
+        <div class="big">💬</div>
+        <div>Select a conversation to view the chat.<br>Messages update automatically.</div>
+      </div>
+
+      <div id="threadView" class="hide" style="flex:1;display:flex;flex-direction:column;min-width:0">
+        <div class="th-head">
+          <div class="av" id="thAv">?</div>
+          <div style="flex:1;min-width:0">
+            <div class="nm" id="thName">—</div>
+            <div class="ph" id="thPhone"></div>
+          </div>
+          <button class="pill" id="takeBtn" onclick="toggleTakeover()">Take over</button>
+        </div>
+        <div class="msgs" id="msgs"></div>
+        <div class="composer">
+          <textarea id="input" rows="1" placeholder="Type a reply… (sending takes the chat over from the bot)"></textarea>
+          <button id="sendBtn" onclick="sendMsg()">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+var CHATS=[], CURRENT=null, LASTID=0, BOTMODE='auto', listTimer=null, threadTimer=null;
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function initials(name,phone){var n=(name||'').trim();if(n)return n.split(/\s+/).map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();var p=(phone||'').replace(/[^0-9]/g,'');return p.slice(-2)||'?';}
+function tm(s){if(!s)return '';var t=s.slice(11,16);return t;}
+function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2200);}
+
+async function loadChats(){
+  try{
+    var r=await fetch('/papi/chats',{cache:'no-store'});
+    var d=await r.json();
+    CHATS=Array.isArray(d.chats)?d.chats:[];
+    BOTMODE=d.bot_mode||'auto';
+    $('botSwitch').classList.toggle('on',BOTMODE==='auto');
+    renderList();
+  }catch(e){}
+}
+
+function renderList(){
+  var q=($('q').value||'').toLowerCase();
+  var list=CHATS.filter(function(c){return !q || (c.name+' '+c.phone).toLowerCase().indexOf(q)>=0;});
+  if(!list.length){$('items').innerHTML='<div style="padding:24px;color:var(--muted);font-size:13px;text-align:center">No conversations yet.</div>';return;}
+  $('items').innerHTML=list.map(function(c){
+    var sel=CURRENT&&CURRENT.phone===c.phone?' sel':'';
+    var who=c.last_sender==='customer'?'':(c.last_sender==='agent'?'You: ':(c.last_sender==='bot'?'Bot: ':(c.last_sender==='system'?'Update: ':'')));
+    var tag=c.agent_active?'<span class="tag agent">you</span>':'';
+    var badge=c.unread>0?'<span class="bdg">'+c.unread+'</span>':'';
+    return '<div class="ci'+sel+'" onclick="openChat(\''+esc(c.phone)+'\')">'+
+      '<div class="av">'+esc(initials(c.name,c.phone))+'</div>'+
+      '<div class="mid"><div class="nm">'+esc(c.name||c.phone)+'</div>'+
+      '<div class="sn">'+esc(who)+esc(c.last||'')+'</div></div>'+
+      '<div class="rt"><span class="tm">'+tm(c.last_at)+'</span>'+badge+tag+'</div></div>';
+  }).join('');
+}
+
+function openChat(phone){
+  var c=CHATS.find(function(x){return x.phone===phone;});
+  CURRENT={phone:phone,name:c?c.name:''};
+  LASTID=0;
+  $('threadEmpty').classList.add('hide');
+  $('threadView').classList.remove('hide');
+  $('thAv').textContent=initials(CURRENT.name,phone);
+  $('thName').textContent=CURRENT.name||phone;
+  $('thPhone').textContent='+'+phone.replace(/[^0-9]/g,'');
+  $('msgs').innerHTML='';
+  if(window.matchMedia('(max-width:760px)').matches)$('listPane').classList.add('hide-mobile');
+  renderList();
+  loadThread(true);
+}
+
+async function loadThread(full){
+  if(!CURRENT)return;
+  try{
+    var url='/papi/chats/thread?phone='+encodeURIComponent(CURRENT.phone)+(full?'':'&after='+LASTID);
+    var r=await fetch(url,{cache:'no-store'});
+    var d=await r.json();
+    var msgs=Array.isArray(d.messages)?d.messages:[];
+    if(full)$('msgs').innerHTML='';
+    if(msgs.length){
+      var atBottom=isAtBottom();
+      $('msgs').insertAdjacentHTML('beforeend',msgs.map(bubble).join(''));
+      LASTID=msgs[msgs.length-1].id;
+      if(full||atBottom)scrollBottom();
+    }
+    setTakeover(!!d.agent_active);
+  }catch(e){}
+}
+
+function bubble(m){
+  var out=m.direction==='out';
+  var cls='row '+(out?'out '+(m.sender||''):'in');
+  var who=out?'<span class="who '+esc(m.sender)+'">'+esc(m.sender)+'</span>':'';
+  return '<div class="'+cls+'"><div><div class="bub">'+esc(m.body)+'</div>'+
+    '<div class="meta" style="'+(out?'justify-content:flex-end':'')+'">'+who+'<span>'+tm(m.at)+'</span></div></div></div>';
+}
+
+function isAtBottom(){var el=$('msgs');return el.scrollHeight-el.scrollTop-el.clientHeight<80;}
+function scrollBottom(){var el=$('msgs');el.scrollTop=el.scrollHeight;}
+
+function setTakeover(active){
+  CURRENT&&(CURRENT.agent=active);
+  var b=$('takeBtn');
+  if(active){b.textContent='Hand back to bot';b.className='pill on';}
+  else{b.textContent='Take over';b.className='pill';}
+}
+
+async function toggleTakeover(){
+  if(!CURRENT)return;
+  var next=!(CURRENT.agent);
+  try{
+    await fetch('/papi/chats/takeover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:CURRENT.phone,active:next?1:0})});
+    setTakeover(next);
+    toast(next?'You have taken over this chat — bot is paused here':'Handed back to the bot');
+    loadChats();
+  }catch(e){toast('Could not update');}
+}
+
+async function toggleBot(){
+  var next=BOTMODE==='auto'?'off':'auto';
+  try{
+    var r=await fetch('/papi/chats/bot-mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:next})});
+    var d=await r.json();BOTMODE=d.bot_mode||next;
+    $('botSwitch').classList.toggle('on',BOTMODE==='auto');
+    toast(BOTMODE==='auto'?'Bot auto-reply is ON':'Bot auto-reply is OFF — you reply manually');
+  }catch(e){toast('Could not update bot setting');}
+}
+
+async function sendMsg(){
+  if(!CURRENT)return;
+  var inp=$('input');var body=(inp.value||'').trim();
+  if(!body)return;
+  $('sendBtn').disabled=true;
+  try{
+    var r=await fetch('/papi/chats/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:CURRENT.phone,body:body})});
+    var d=await r.json();
+    if(d&&d.ok){inp.value='';autoGrow();setTakeover(true);loadThread(false);loadChats();}
+    else{toast(d&&d.error==='send_failed'?'WhatsApp send failed — check the instance is connected':'Could not send');}
+  }catch(e){toast('Network error');}
+  $('sendBtn').disabled=false;
+}
+
+function autoGrow(){var t=$('input');t.style.height='auto';t.style.height=Math.min(t.scrollHeight,120)+'px';}
+$('input').addEventListener('input',autoGrow);
+$('input').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}});
+
+loadChats();
+listTimer=setInterval(loadChats,15000);
+threadTimer=setInterval(function(){if(CURRENT&&!document.hidden)loadThread(false);},4000);
+</script>
+</body>
+</html>

@@ -188,6 +188,21 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-13 (later) — Phase 4b: live web Chats inbox + human takeover (Bhavin + AI)
+- New **Chats** screen at `/panel/chats` (linked from the panel sidebar, after Orders). WhatsApp-style 2-pane inbox matching the panel theme: conversation list (name/phone, snippet, time, unread badge, "you" tag) + live thread (customer/bot/agent/system bubbles) + composer.
+- Near-live via polling: list every 15s, open thread every 4s (incremental via `?after=id`). No websockets needed on this stack.
+- **Human takeover**: per-chat "Take over / Hand back to bot" (sets `conversation.agent_active`); sending a manual reply auto-takes-over so the bot goes quiet. **Global bot switch** in the header (sets `tenant.settings['bot_mode']` auto|off).
+- New: `resources/panel/chats.html`. Changed: `resources/panel/seller.html` (+Chats nav link), `PanelApiController` (chats/thread/send/takeover/bot-mode endpoints), `SellerPanelController` (serve chats page), `routes/web.php`.
+- Endpoints (tenant-scoped, under /papi): `GET chats`, `GET chats/thread`, `POST chats/send`, `POST chats/takeover`, `POST chats/bot-mode`. `chats/send` calls Evolution `sendText` + logs via MessageLog.
+- Needs Phase 4a deployed (messages table). Chats only populate once WhatsApp traffic flows through the NEW app (connect a test Evolution instance + set `EVOLUTION_BASE_URL`/`EVOLUTION_API_KEY`).
+
+### 2026-06-13 (later) — Phase 4a: message logging + bot on/off + takeover hook (Bhavin + AI)
+- New `messages` table (full WhatsApp transcript, in/out, sender = customer|bot|agent|system). New `App\\Models\\Message`, new `App\\Support\\MessageLog::record()` — the single write path every inbound/outbound message goes through, so the transcript is complete and the inbox list stays in sync.
+- `conversations` gained `agent_active` (human took over -> bot stays quiet), `unread` (badge), `last_inbound_at`.
+- `ProcessIncomingMessage`: now logs every inbound message (even when bot is off), honours `tenant->setting('bot_mode')` (`auto` replies; anything else = monitor-only) and `conversation->agent_active`, and logs the bot's outbound reply.
+- `SendOrderStatusNotification`: order-status WhatsApp messages now logged as `system` so they show in the thread.
+- Migration auto-runs on deploy (additive/safe). Foundation for Phase 4b (web Chats inbox + human takeover UI + bot on/off toggle).
+
 ### 2026-06-13 (later) — Phase 3a: customer's real seller-panel UI (Bhavin + AI)
 - Replaced the "too basic" Filament business UI with the customer's existing **Family Shopper — Seller Panel** served verbatim at **`/panel`** (12 pages, unchanged HTML/CSS/JS).
 - Only its backend config was repointed: `BASE`/`EP` now hit new tenant-scoped Laravel endpoints under **`/papi/*`** returning the same JSON shapes the old n8n webhooks did. Session token injected so it boots straight into the dashboard (no separate OTP).
