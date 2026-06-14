@@ -41,7 +41,7 @@ class OtpLogin extends BaseLogin
     public function mount(): void
     {
         if (Filament::auth()->check()) {
-            redirect()->intended(Filament::getUrl());
+            redirect()->intended('/panel/m');
         }
     }
 
@@ -95,7 +95,7 @@ class OtpLogin extends BaseLogin
         Filament::auth()->login($user, remember: true);
         session()->regenerate();
 
-        return redirect()->intended(Filament::getUrl());
+        return redirect()->intended('/panel/m');
     }
 
     public function startOver(): void
@@ -124,6 +124,6 @@ class OtpLogin extends BaseLogin
         }
 
         session()->regenerate();
-        return redirect()->intended(Filament::getUrl());
+        return redirect()->intended('/panel/m');
     }
 }
