@@ -152,6 +152,22 @@ class BotBrain
             return "\u{1F44D} Great! Tell me what you'd like, say *cart* to review, or *checkout* when ready.";
         }
 
+        // declines: "no", "cancel", "i don't want anything" etc. are NOT product
+        // searches — never run them through the catalogue (that's what matched
+        // "Dent"/"Donut"/"Dot" for "i dont want anything").
+        $declineExact = ['no','nope','nah','cancel','stop','nothing','none','not interested',
+            'no thanks','no thank you','nothing else','no more','thats all','that\'s all',
+            'im good','i\'m good','nahi','kuch nahi'];
+        $declineNorm = preg_replace('/[^a-z\s]/', '', $lc);
+        if (in_array($lc, $declineExact, true) || in_array($declineNorm, $declineExact, true)
+            || preg_match('/\b(dont|do not|not)\s+want\b/', $declineNorm)
+            || str_contains($declineNorm, 'not interested')) {
+            $hasCart = is_array($convo->cart) && count($convo->cart) > 0;
+            return $hasCart
+                ? "No problem \u{1F642} Whenever you're ready, tell me another product, say *cart* to review, or *checkout* to finish."
+                : "No problem \u{1F642} Whenever you're ready, just tell me a product you'd like and I'll help you shop.";
+        }
+
         // hand off to the deterministic shopping engine (fresh matcher per message:
         // its token cache is request-scoped, so nothing carries between tenants)
         $engine  = new ShoppingEngine(

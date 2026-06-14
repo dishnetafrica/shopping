@@ -28,6 +28,9 @@ class CatalogueMatcher
         'it','that','this','one','yes','no','ok','okay','send','deliver','today','now','am','are',
         'what','which','available','stock','check','with','and','plus','add','got','any','there',
         'kindly','u','more','also','list',
+        // negatives / fillers — never products; keep them out of fuzzy matching
+        'dont','don','not','nope','nah','none','nothing','anything','something','everything',
+        'else','thanks','thank','thx','just','looking','wanna','im','nahi','kuch','dun','dont',
     ];
 
     public const UNITS = [
@@ -111,6 +114,19 @@ class CatalogueMatcher
         $qWords = array_keys($qWords);
         $nq = implode(' ', $q);
 
+        // Build the catalogue-wide token set so fuzzy matching is a TYPO FALLBACK
+        // only: if a query word matches some product exactly, we must not also
+        // fuzzy-pull look-alikes (e.g. "rice" should never drag in "race").
+        $allTokens = [];
+        foreach ($products as $p) {
+            foreach ($this->productTokens($p) as $t) $allTokens[$t] = true;
+        }
+        $hasExact = [];
+        foreach ($q as $w) {
+            $sing = (mb_strlen($w) > 3 && str_ends_with($w, 's')) ? rtrim($w, 's') : null;
+            $hasExact[$w] = isset($allTokens[$w]) || ($sing !== null && isset($allTokens[$sing]));
+        }
+
         $scored = [];
         foreach ($products as $p) {
             $pt = $this->productTokens($p);
@@ -125,7 +141,8 @@ class CatalogueMatcher
                 foreach ($cand as $cw) {
                     if (isset($ptSet[$cw])) { $matched = true; break; }
                 }
-                if (!$matched && mb_strlen($w) >= 4) {
+                // Fuzzy ONLY when this word matches nothing exactly in the whole catalogue.
+                if (!$matched && ! $hasExact[$w] && mb_strlen($w) >= 4) {
                     foreach ($pt as $s) {
                         if ($w[0] === $s[0] && abs(strlen($s) - strlen($w)) <= 1 && self::damerau($w, $s) <= 1) { $matched = true; break; }
                     }
