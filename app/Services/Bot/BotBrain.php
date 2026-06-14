@@ -142,6 +142,15 @@ class BotBrain
     {
         $lc = mb_strtolower(trim($text));
 
+        // ---- Session expiry & cart recovery ----------------------------------------
+        // After 10 min idle, transient context (clarification options, last query,
+        // checkout step) expires so an old session can't pollute a new one. A stored
+        // cart survives: on return we ask continue-vs-fresh rather than silently
+        // appending the new request to a stale cart. After 24 h the cart is discarded.
+        if (($reentry = $this->handleSessionLifecycle($tenant, $convo, $text)) !== null) {
+            return $reentry;
+        }
+
         // ---- Cart management (remove / clear / change quantity, by number or name) ----
         // Explicit cart commands take priority and must never product-search.
         if (\App\Services\Bot\CartEditor::isEditIntent($lc)) {
@@ -330,6 +339,98 @@ class BotBrain
                 return "Hello \u{1F44B} Welcome to {$shop}! Tell me what you'd like and I'll add it up. "
                      . "Say *cart* to see your basket or *checkout* when ready.";
         }
+    }
+
+    protected const SESSION_IDLE = 600;     // 10 min: expire clarification/shopping context
+    protected const CART_TTL     = 86400;   // 24 h: discard a stale cart entirely
+
+    /**
+     * Manage idle expiry and cart recovery. Returns a reply string to short-circuit, or null
+     * to let normal handling continue (with context already expired and the activity stamp
+     * refreshed). Pure decision logic lives in sessionDecision() for testing.
+     */
+    protected function handleSessionLifecycle(Tenant $tenant, Conversation $convo, string $text): ?string
+    {
+        $st   = is_array($convo->state) ? $convo->state : [];
+        $cart = is_array($convo->cart) ? $convo->cart : [];
+
+        // (1) Awaiting the customer's continue-vs-fresh choice from a prior return.
+        if (! empty($st['awaiting_cart_choice'])) {
+            $choice = self::cartChoice($text);
+            if ($choice === 'continue') {
+                unset($st['awaiting_cart_choice']);
+                $st['last_activity'] = time();
+                $convo->state = $st; $convo->save();
+                return "Great \u{1F642} continuing your previous cart:\n\n"
+                     . ($this->cartSummary($tenant, $cart) ?: '')
+                     . "\n\nAdd more, or say *checkout*.";
+            }
+            // 'new' or anything else -> fresh cart; a non-choice message then falls through
+            // to be processed as a brand-new request.
+            $convo->cart = [];
+            unset($st['awaiting_cart_choice']);
+            $st['last_activity'] = time();
+            $convo->state = $st; $convo->save();
+            if ($choice === 'new') {
+                return "Started a fresh cart \u{1F6D2} What would you like to order?";
+            }
+            return null; // process $text as a new request on the now-empty cart
+        }
+
+        // (2) Idle-based expiry.
+        $decision = self::sessionDecision((int) ($st['last_activity'] ?? 0), time(), count($cart));
+
+        if ($decision['expire_context']) {
+            unset($st['options'], $st['last_query'], $st['last_kind'], $st['step'],
+                  $st['checkout_token'], $st['pending']);
+        }
+        if ($decision['discard_cart']) {
+            $convo->cart = [];
+        }
+        if ($decision['ask_recovery']) {
+            $st['awaiting_cart_choice'] = true;
+            $st['last_activity'] = time();
+            $convo->state = $st; $convo->save();
+            $n = count($cart);
+            return "\u{1F44B} Welcome back! You have a previous cart ({$n} " . ($n === 1 ? 'item' : 'items') . ").\n"
+                 . "1. Continue previous cart\n"
+                 . "2. Start a new cart\n\n"
+                 . "Reply *1* or *2*.";
+        }
+
+        $st['last_activity'] = time();
+        $convo->state = $st; $convo->save();
+        return null;
+    }
+
+    /**
+     * Pure idle decision. Returns flags for what to do given idle seconds and cart size.
+     * @return array{expire_context:bool,discard_cart:bool,ask_recovery:bool}
+     */
+    public static function sessionDecision(int $lastActivity, int $now, int $cartCount): array
+    {
+        $idle = $lastActivity > 0 ? ($now - $lastActivity) : 0;
+        $expired = $lastActivity > 0 && $idle > self::SESSION_IDLE;
+        $tooOld  = $lastActivity > 0 && $idle > self::CART_TTL;
+        return [
+            'expire_context' => $expired,
+            'discard_cart'   => $expired && $tooOld && $cartCount > 0,
+            'ask_recovery'   => $expired && ! $tooOld && $cartCount > 0,
+        ];
+    }
+
+    /** Resolve a continue-vs-fresh reply. Returns 'continue' | 'new' | null. */
+    public static function cartChoice(string $text): ?string
+    {
+        $t = trim(mb_strtolower(preg_replace('/[^a-z0-9\s]+/i', ' ', $text)));
+        $t = trim(preg_replace('/\s+/', ' ', $t));
+        $continue = ['1', 'continue', 'continue previous cart', 'continue previous', 'keep', 'keep it',
+            'previous', 'previous cart', 'old', 'old cart', 'resume', 'yes', 'yeah', 'yep', 'continue cart'];
+        $new = ['2', 'new', 'new cart', 'start new', 'start a new cart', 'start new cart', 'fresh',
+            'fresh cart', 'start over', 'start fresh', 'clear', 'no', 'restart', 'new one'];
+        if (in_array($t, $continue, true)) return 'continue';
+        if (in_array($t, $new, true)) return 'new';
+        return null;
     }
 
     /** Build a fresh engine (request-scoped token cache) and handle one message. */
