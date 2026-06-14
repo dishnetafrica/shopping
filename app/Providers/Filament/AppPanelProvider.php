@@ -24,8 +24,8 @@ class AppPanelProvider extends PanelProvider
         return $panel
             ->id('app')
             ->path('app')
-            ->login()
-            ->profile()                 // built-in Account page (/app/profile): change name + password
+            ->login(\App\Filament\Auth\OtpLogin::class)   // OTP-only (WhatsApp), no password
+            ->profile()                 // Account page (/app/profile): edit name/email
             ->brandName('ShopBot')
             ->colors(['primary' => Color::Emerald])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
