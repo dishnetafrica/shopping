@@ -230,6 +230,8 @@ class BotBrain
                 return $this->businessResponse($tenant, IntentClassifier::businessKind($lc));
             case IntentClassifier::CATEGORY:
                 return $this->categoryResponse($tenant, $convo, $text);
+            case IntentClassifier::PRICE:
+                return $this->priceResponse($tenant, IntentClassifier::priceQuery($lc) ?? $text);
             case IntentClassifier::LOCATION:
                 return $this->captureLocation($tenant, $convo, $text);
             case IntentClassifier::UNKNOWN:
@@ -247,7 +249,46 @@ class BotBrain
             return $result['reply'];
         }
 
+        // No catalogue match. If the customer clearly named a product, say we don't stock it
+        // (instead of a vague "didn't catch that").
+        $want = trim(preg_replace('/\b(do you (have|sell|stock)|have you got|got any|any|looking for|i (want|need)|please|pls)\b/i', ' ', mb_strtolower($text)));
+        $want = trim(preg_replace('/\s+/', ' ', $want));
+        if ($want !== '' && mb_strlen($want) >= 3 && preg_match('/[a-z]/i', $want)) {
+            return "Sorry, we don't stock *{$want}* right now \u{1F642} Tell me another product, or say *menu* to see what we have.";
+        }
+
         return $this->execute($tenant, $convo, 'unknown', []);
+    }
+
+    /**
+     * Answer a price question ("how much is X") with the matching product price(s).
+     * Never mutates the cart. Falls back to a clear "not stocked" message on a miss.
+     */
+    protected function priceResponse(Tenant $tenant, string $query): string
+    {
+        $query = trim($query);
+        $cat   = $this->tenantCatalogue($tenant);
+        $cands = (new \App\Services\Bot\CatalogueMatcher())->search($query, $cat);
+        $cur   = $this->currencyFor($tenant);
+
+        if (! $cands) {
+            return "Sorry, I couldn't find *{$query}* \u{1F642} We may not stock it. Tell me another product, or say *menu* to browse.";
+        }
+
+        $prods = array_slice(array_map(fn ($c) => $c['product'], $cands), 0, 6);
+
+        if (count($prods) === 1) {
+            $p = $prods[0];
+            return "*{$p['name']}* is {$cur} " . number_format((float) $p['price'])
+                 . ".\n\nWant me to add it? Just say *add {$p['name']}* or tell me the quantity.";
+        }
+
+        $lines = [];
+        foreach ($prods as $p) {
+            $lines[] = "• {$p['name']} — {$cur} " . number_format((float) $p['price']);
+        }
+        return "Here are the prices for *{$query}*:\n" . implode("\n", $lines)
+             . "\n\nTell me which one you'd like, or the quantity.";
     }
 
     /** Build a fresh engine (request-scoped token cache) and handle one message. */

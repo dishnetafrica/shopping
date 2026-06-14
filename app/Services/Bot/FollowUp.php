@@ -24,16 +24,22 @@ class FollowUp
         'premium' => ['premium', 'premium one', 'expensive one', 'higher quality', 'better one',
             'best one', 'top one', 'high end', 'something better'],
         'larger'  => ['larger', 'larger size', 'larger one', 'bigger', 'bigger size', 'bigger one',
-            'large size', 'big one', 'bigger pack', 'large one'],
-        'smaller' => ['smaller', 'smaller size', 'smaller one', 'small one', 'small size', 'smaller pack'],
+            'large size', 'big one', 'bigger pack', 'large one', 'big', 'big size', 'large',
+            'big size one', 'bigger size one', 'biggest', 'big pack', 'family size', 'family pack',
+            'big size pack', 'big quantity', 'big bottle'],
+        'smaller' => ['smaller', 'smaller size', 'smaller one', 'small one', 'small size', 'smaller pack',
+            'small', 'small pack', 'small bottle', 'smallest', 'mini'],
     ];
 
     // generic "what we're showing" nouns (incl. common typos) — never specific products
     private const GENERIC = 'items?|itmes?|itme|iteams?|things?|stuff|options?|opt|brands?|choices?|'
         . 'products?|prodcuts?|varieties|variety|types?|kinds?|ones?|selections?|range|flavou?rs?';
 
-    private const LEAD = ['do you have', 'do u have', 'got any', 'got', 'any', 'show me', 'show', 'give me',
-        'gimme', 'i want', 'can i get', 'u have', 'you have', 'pls', 'please', 'send me', 'some'];
+    private const LEAD = ['you dont have', 'you don t have', 'u dont have', 'u don t have', 'dont have',
+        'don t have', 'you have no', 'there is no', 'theres no', 'no', 'havent got', 'have you got',
+        'do you have', 'do u have', 'got any', 'got', 'any', 'show me', 'show', 'give me',
+        'gimme', 'i want', 'i need', 'can i get', 'u have', 'you have', 'pls', 'please', 'send me', 'some',
+        'i am meaning', 'am meaning', 'i mean', 'i meant', 'meaning', 'i wanted'];
     private const TRAIL = ['if u have', 'if you have', 'if available', 'available', 'in stock', 'please', 'pls',
         'plz', 'for me', 'then', 'now', 'u have', 'you have', 'do you have', 'with you'];
 

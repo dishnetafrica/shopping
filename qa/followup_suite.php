@@ -38,6 +38,9 @@ $fu=['more brands'=>'more','show more'=>'more','other options'=>'more','any othe
      'more options you have'=>'more','any other brands'=>'more'];
 foreach($fu as $t=>$exp){ ck("\"$t\" -> $exp", FollowUp::parse($t)===$exp, var_export(FollowUp::parse($t),true)); }
 foreach(['more rice','rice','2','milk','add sugar','do you have more bread','more 2kg rice'] as $t){ ck("\"$t\" -> not a follow-up", FollowUp::parse($t)===null, var_export(FollowUp::parse($t),true)); }
+foreach(['you dont have big size'=>'larger','you don t have big size'=>'larger','big size'=>'larger','big'=>'larger',
+         'large size'=>'larger','small size'=>'smaller','do you have big size'=>'larger'] as $t=>$exp){
+  ck("\"$t\" -> $exp", FollowUp::parse($t)===$exp, var_export(FollowUp::parse($t),true)); }
 
 echo "\n[CONTEXT] engine records last_query when it shows options\n";
 $a=$e->handle('do you have wipes',$C,[],[]);

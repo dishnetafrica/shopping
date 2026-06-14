@@ -20,6 +20,7 @@ final class IntentClassifier
     public const FEEDBACK    = 'feedback';
     public const THANKS      = 'thanks';
     public const QUESTION    = 'question';
+    public const PRICE       = 'price';
     public const CANCEL      = 'cancel';
     public const DECLINE     = 'decline';
     public const HUMAN_AGENT = 'human_agent';
@@ -68,6 +69,9 @@ final class IntentClassifier
 
         // A bare category term ("spirits", "snacks") -> category listing, not a raw search.
         if (CategoryDictionary::isCategory($text)) return self::CATEGORY;
+
+        // "how much is X" / "price of X" -> answer the price, never silently add to cart.
+        if (self::priceQuery($lc) !== null) return self::PRICE;
 
         // A STRONG shopping signal (catalogue word / qty+unit / shop verb) wins outright.
         if (self::hasStrongProductSignal($text, $lc, $catalogueTokenSet)) return self::SHOPPING;
@@ -159,6 +163,36 @@ final class IntentClassifier
         return self::matchesAny($lc, self::PRAISE);
     }
 
+    /**
+     * If this is a price question ("how much is X", "price of X", "X price"),
+     * returns the product part; otherwise null. Delivery-price questions are excluded
+     * (those are handled as a business inquiry).
+     */
+    public static function priceQuery(string $lc): ?string
+    {
+        $lc = trim(preg_replace('/\s+/', ' ', $lc));
+        $pats = [
+            '/^how much (?:is|are|for|does|do)\s+(?:a |an |the )?(.+?)(?:\s+cost)?\??$/',
+            '/^how much\s+(.+?)\??$/',
+            '/^(?:what(?:\'s| is)\s+)?(?:the\s+)?price (?:of|for)\s+(.+?)\??$/',
+            '/^(?:what(?:\'s| is)\s+)?(?:the\s+)?cost (?:of|for)\s+(.+?)\??$/',
+            '/^(?:what(?:\'s| is)\s+)?(?:the\s+)?rate (?:of|for)\s+(.+?)\??$/',
+            '/^(.+?)\s+price\??$/',
+        ];
+        $reject = ['', 'delivery', 'the delivery', 'delivery fee', 'shipping', 'transport',
+            'what', 'whats', 'how', 'much', 'is', 'are', 'the', 'a', 'an', 'it', 'this', 'that', 'them'];
+        foreach ($pats as $re) {
+            if (preg_match($re, $lc, $m)) {
+                $prod = trim($m[1]);
+                if (in_array($prod, $reject, true)) return null;
+                if (preg_match('/^(what|whats|how|much|is|are|the|please|tell me)\b/', $prod)) return null;
+                if (preg_match('/\bdelivery\b/', $prod)) return null;
+                return $prod;
+            }
+        }
+        return null;
+    }
+
     private static function isQuestion(string $lc): bool
     {
         if (str_ends_with(trim($lc), '?')) return true;
@@ -210,7 +244,9 @@ final class IntentClassifier
         $lc = ' ' . trim($lc) . ' ';
         if (preg_match('/\b(are you|you|do you|are u|u)\s+deliver(?:ing|y)?\b/', $lc)
             || preg_match('/\bdeliver(?:y|ing)?\s+(?:today|now|available)\b/', $lc)
-            || preg_match('/\bdo you do delivery\b/', $lc)) {
+            || preg_match('/\bdo you do delivery\b/', $lc)
+            || preg_match('/\bdelivery\s+(fee|charge|cost|price|rate)\b/', $lc)
+            || preg_match('/\bhow much.{0,15}\bdelivery\b/', $lc)) {
             return 'delivery';
         }
         if (preg_match('/\b(are you|you|r u|are u)\s+(open|closed|working|available)\b/', $lc)
