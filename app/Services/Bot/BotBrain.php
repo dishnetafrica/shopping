@@ -182,24 +182,16 @@ class BotBrain
                 $convo->save();
                 return $res['reply'];
             }
-            // A greeting / small-talk mid-clarification shouldn't get a robotic re-prompt:
-            // greet back and keep the options live so they can still pick a number.
-            if (\App\Services\Bot\GreetingDictionary::isGreeting($text)) {
-                return $this->greetingReply($tenant, $text)
-                     . "\n\nYour options are still above \u{1F446} reply with the *number* when you're ready.";
+
+            // ---- Intent Override Layer ----
+            // The reply isn't a selection. A delivery/price/business/location/greeting/decline/
+            // checkout/availability message must be answered — NOT met with "reply with a number".
+            // Informational answers keep the option list live so the customer can still pick.
+            if (($ov = $this->pendingOverride($tenant, $convo, $text, $lc, $catalogue)) !== null) {
+                return $ov;
             }
 
-            // "Thanks" / "Okay" / "Noted" / 👍 / "Will check" -> don't keep asking them to pick.
-            // Close warmly and drop the pending list.
-            if ($this->isClosingAck($text)) {
-                $st = is_array($convo->state) ? $convo->state : [];
-                unset($st['options']);
-                $convo->state = $st; $convo->save();
-                return "You're welcome \u{1F60A}\n\nLet me know if you'd like to order any item or search for another product.";
-            }
-
-            // Reply neither resolved the selection nor started a new product. Keep the
-            // pending options (state survives) and re-prompt — never add on an ambiguous reply.
+            // Genuinely ambiguous (no recognised intent): keep options and re-prompt.
             return "Please reply with the *number* you want from the list above (e.g. *1*, or *1 2 3*) — or type a product name to search again.";
         }
 
@@ -496,6 +488,107 @@ class BotBrain
         return in_array($t, $ack, true);
     }
 
+    /**
+     * Intent Override Layer. While a numbered list is pending and the reply is NOT a selection,
+     * recognise a real intent (delivery/price/business/location/greeting/thanks/decline/checkout/
+     * availability/category/new product) and answer it. Returns the reply, or null to re-prompt.
+     * Informational answers KEEP the pending options; decline/thanks/checkout clear them; a new
+     * product/category search replaces them.
+     */
+    protected function pendingOverride(Tenant $tenant, Conversation $convo, string $text, string $lc, array $catalogue): ?string
+    {
+        // "Only those ones you have?" / "Is that all?" -> confirm the current list is complete.
+        if ($this->asksIfListComplete($lc)) {
+            return $this->confirmCurrentList($tenant, $convo);
+        }
+
+        // Closing acknowledgement -> warm close, drop the list.
+        if ($this->isClosingAck($text)) {
+            $st = is_array($convo->state) ? $convo->state : []; unset($st['options']);
+            $convo->state = $st; $convo->save();
+            return "You're welcome \u{1F60A}\n\nLet me know if you'd like to order any item or search for another product.";
+        }
+
+        $intent = IntentClassifier::classify($text, IntentClassifier::tokenSetFromProducts($catalogue));
+        $keepNote = "\n\n(Your options are still above \u{1F446} reply with a *number* when you're ready.)";
+
+        switch ($intent) {
+            case IntentClassifier::GREETING:
+                return $this->greetingReply($tenant, $text) . $keepNote;
+            case IntentClassifier::THANKS:
+                $st = is_array($convo->state) ? $convo->state : []; unset($st['options']);
+                $convo->state = $st; $convo->save();
+                return "You're welcome \u{1F60A}\n\nLet me know if you'd like to order any item or search for another product.";
+            case IntentClassifier::BUSINESS:
+                return $this->businessResponse($tenant, IntentClassifier::businessKind($lc)) . $keepNote;
+            case IntentClassifier::PRICE:
+                return $this->priceResponse($tenant, IntentClassifier::priceQuery($lc) ?? $text) . $keepNote;
+            case IntentClassifier::CATALOG:
+                return $this->catalogResponse($tenant) . $keepNote;
+            case IntentClassifier::SHOP_START:
+                return "\u{1F6D2} Sure! Tell me what you'd like to add" . $keepNote;
+            case IntentClassifier::LOCATION:
+                return $this->captureLocation($tenant, $convo, $text); // stores area, keeps options
+            case IntentClassifier::HUMAN_AGENT:
+                $convo->agent_active = true; $convo->save();
+                \App\Jobs\NotifyOwner::dispatch($tenant->id, "\u{1F64B} +{$convo->customer_phone} asked for a person. Open Chats to take over.");
+                return "\u{1F642} Sure — I'm letting the shop know. Someone will reply here shortly.";
+            case IntentClassifier::DECLINE:
+                $st = is_array($convo->state) ? $convo->state : []; unset($st['options']);
+                $convo->state = $st; $convo->save();
+                $hasCart = is_array($convo->cart) && count($convo->cart) > 0;
+                return $hasCart
+                    ? "No problem \u{1F642} say *cart* to review, or *checkout* to finish whenever you're ready."
+                    : "No problem \u{1F642} tell me a product whenever you'd like to order.";
+            case IntentClassifier::CHECKOUT:
+                return $this->execute($tenant, $convo, 'checkout', []);
+            case IntentClassifier::CATEGORY:
+                return $this->categoryResponse($tenant, $convo, $text); // replaces options with the category list
+            case IntentClassifier::SHOPPING:
+                // a new product / availability query ("you don't have cous cous") -> fresh search,
+                // which replaces the pending options with the new results.
+                if (($b = $this->tryCategoryBrowse($tenant, $convo, $text, $catalogue)) !== null) return $b;
+                $r = $this->runShoppingEngine($tenant, $convo, $text, $catalogue);
+                if ($r['handled']) {
+                    $convo->cart = $r['cart']; $convo->state = $r['state']; $convo->save();
+                    return $r['reply'];
+                }
+                return null; // couldn't resolve -> re-prompt
+            default:
+                return null; // QUESTION / UNKNOWN -> re-prompt
+        }
+    }
+
+    /** "Only those ones you have?" / "is that all?" — asking whether the shown list is complete. */
+    protected function asksIfListComplete(string $lc): bool
+    {
+        $t = trim(preg_replace('/[^a-z\s]/', '', mb_strtolower($lc)));
+        $t = trim(preg_replace('/\s+/', ' ', $t));
+        $phrases = ['only those', 'only these', 'only those ones', 'only these ones', 'only that',
+            'only those ones you have', 'only what you have', 'is that all', 'is this all', 'that all',
+            'thats all you have', 'is that all you have', 'are those all', 'are these all',
+            'those are the only ones', 'is that the only ones', 'only those you have', 'just those'];
+        if (in_array($t, $phrases, true)) return true;
+        return (bool) preg_match('/^(is|are)\b.*\b(all|only)\b.*\b(you have|in stock|available)\b/', $t)
+            || (bool) preg_match('/^only\b.*\byou have\b/', $t);
+    }
+
+    /** Re-affirm the currently shown options as the complete list for the active query. */
+    protected function confirmCurrentList(Tenant $tenant, Conversation $convo): string
+    {
+        $st   = is_array($convo->state) ? $convo->state : [];
+        $opts = is_array($st['options'] ?? null) ? $st['options'] : [];
+        if (! $opts) return "Tell me a product and I'll show you what we have \u{1F642}";
+        $q    = trim((string) ($st['last_query'] ?? ''));
+        $cur  = $this->currencyFor($tenant);
+        $lines = [];
+        foreach ($opts as $o) {
+            $lines[] = "  {$o['n']}. {$o['name']} — {$cur} " . number_format((float) ($o['price'] ?? 0));
+        }
+        $head = $q !== '' ? "Yes \u{1F642} those are the *{$q}* options we currently have:" : "Yes \u{1F642} those are what we currently have:";
+        return $head . "\n" . implode("\n", $lines) . "\n\nWould you like to add any of these? Reply with the *number*.";
+    }
+
     /** Build a fresh engine (request-scoped token cache) and handle one message. */
     protected function runShoppingEngine(Tenant $tenant, Conversation $convo, string $text, array $catalogue): array
     {
@@ -735,7 +828,9 @@ class BotBrain
         $hours = trim((string) $tenant->setting('business_hours', ''));
         switch ($kind) {
             case 'delivery':
-                return "\u{1F6F5} Yes — we're delivering today! Tell me what you'd like and your area, and I'll arrange delivery.";
+                return "\u{1F6F5} Yes \u{1F60A} we deliver across Kampala and the surrounding areas.\n"
+                     . "The delivery fee depends on your location — share your *location* or drop a WhatsApp *location pin* "
+                     . "and I'll check the charge for you. You can keep adding items meanwhile.";
             case 'location':
                 $addr = trim((string) $tenant->setting('address', ''));
                 return $addr !== ''

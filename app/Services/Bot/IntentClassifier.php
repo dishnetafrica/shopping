@@ -305,9 +305,9 @@ final class IntentClassifier
     public static function businessKind(string $lc): string
     {
         $lc = ' ' . trim($lc) . ' ';
-        if (preg_match('/\b(are you|you|do you|are u|u)\s+deliver(?:ing|y)?\b/', $lc)
-            || preg_match('/\bdeliver(?:y|ing)?\s+(?:today|now|available)\b/', $lc)
-            || preg_match('/\bdo you do delivery\b/', $lc)
+        if (preg_match('/\b(are you|you|do you|do u|are u|u)\s+(?:do\s+|offer\s+|have\s+|doing\s+)?deliver(?:ies|ing|y)?\b/', $lc)
+            || preg_match('/\bdeliver(?:ies|y|ing)?\s+(?:today|now|available)\b/', $lc)
+            || preg_match('/\bdo you do deliver(?:ies|y|ing)?\b/', $lc)
             || preg_match('/\bdelivery\s+(fee|charge|cost|price|rate)\b/', $lc)
             || preg_match('/\bhow much.{0,15}\bdelivery\b/', $lc)) {
             return 'delivery';

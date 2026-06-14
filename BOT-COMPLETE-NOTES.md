@@ -1,50 +1,48 @@
-# CloudBSS bot — complete set (+ category-focused search, ack rule)
+# CloudBSS bot — complete set (+ Intent Override Layer)
 
 Cumulative. Deploy = push files + `php artisan optimize:clear`. No migration.
-Includes 3 non-bot files (deploy too): EvolutionGateway, WebhookController, ProcessIncomingMessage.
+Non-bot files included (deploy too): EvolutionGateway, WebhookController, ProcessIncomingMessage.
 
-## NEW — Category-focused product search (no more snacks/blades in a rice search)
-Root cause: the parser split "Indian gate rice Chenab, super, brown rice, SWT P,1,LG ,Ravi rice,MB"
-into 7 fragments (incl. noise "super","lg","mb"), each searched separately -> noise fragments
-matched snacks/gum/blades. A per-fragment filter can't fix that.
+## NEW — Intent Override Layer (the priority-1 fix)
+Before, while a numbered list was pending, ANY non-number reply got "Please reply with the number"
+— even live buying signals. Now, when the reply isn't a selection, the bot classifies it and a real
+intent INTERRUPTS the selection flow:
 
-Fix: a whole-message **category browse**. When a long query (>=4 content tokens) is dominated by
-ONE product category at >=70% of the match score, the bot shows ONLY that category's products
-(max 20, best/exact-brand first) as a clean numbered list, and ignores unrelated products that
-merely collide on tokens. Verified on the exact query: returns 11 Rice products, ZERO non-rice
-(snacks/baby cereal/gum/blades/hing all excluded), and includes "India Gate Basmati Feast"
-(rice by category even though its name has no "rice"). Guards: "rice 2kg"/"milk" (short/precise)
-and genuinely multi-category queries ("rice sugar oil soap") do NOT trigger it — they go to the
-normal per-item add path. General (category-driven), not rice-hardcoded.
+- **Delivery question** ("Do you do deliveries?", incl. plural / "do you do deliveries") ->
+  delivery answer that invites a location pin. Options stay live.
+- **Price question** ("how much is X") -> price answer. Options stay live.
+- **Business / hours / location-of-shop** -> business answer. Options stay live.
+- **Availability of the SHOWN list** ("Only those ones you have?", "is that all?") -> re-affirms the
+  current list: "Yes 😊 those are the *Shan* options we currently have: 1. … Would you like to add any?"
+- **New product / availability of ANOTHER item** ("You don't have cous cous") -> fresh search for
+  that product, replacing the old options ("Yes, we have Cous Cous: …").
+- **Greeting** -> greet + keep options. **Thanks / Okay / 👍 / Will check** -> warm close, drop list.
+- **No / not interested** -> decline. **Checkout** -> checkout. **Location pin/text** -> capture it.
+Only a genuinely unrecognised reply still gets the (kept-options) re-prompt.
 
-## NEW — Acknowledgement rule
-While a numbered list is showing, "Thanks / Okay / Noted / 👍 / Will check / asante / webale" no
-longer re-prompts "reply with a number". It closes warmly and drops the list:
-  "You're welcome 😊  Let me know if you'd like to order any item or search for another product."
-(A bare number still selects; a greeting greets + keeps options.)
-
-## HONEST gaps vs the full spec (need data we don't have yet)
-- **Brand sub-headers** (India Gate / Chenab / Ravi / MB as group headings): products have no
-  `brand` field, only `name` + `category`. I present a clean single numbered Rice list instead of
-  per-brand groups. Exact grouping like your mock-up needs a `brand` column (small migration +
-  populate from the name, or set in admin). Say the word and I'll add it — buildOptions already
-  supports multiple labelled groups with continuous numbering, so the list would render exactly
-  like your example.
-- **Popularity ranking**: there's no sales/order-count field, so ranking is exact-brand/name >
-  category-relevance (popularity not included). I can add it once order counts are tracked.
+## NEW — Tidy clarify headings
+Headings no longer echo the raw sentence. "Oh I have forgotten kolam rice how much is it" now lists
+under *Kolam rice* (the words the query and matched products share), not the whole sentence.
 
 ## Carried forward
-Location pins -> Google Maps link · shopping-start intent · session expiry & cart recovery ·
-fuzzy cross-match guard (Shell≠Hello) · multilingual greetings · price questions · big-size
-follow-up · do-you-sell + clear miss · Cart Management Engine · follow-ups · Bugs 1–7.
+Category-focused search (no snacks/blades in a rice search) · location pins -> Google Maps link ·
+shopping-start intent · session expiry & cart recovery · fuzzy guard (Shell≠Hello) · multilingual
+greetings · big-size follow-up · Cart Management Engine · follow-ups · Bugs 1–7.
 
-## Tests — 497 assertions, 0 failures
-search-focus 8 · session 22 · greeting 51 · cart 41 · followup 49 · realcustomer 49 · intent 75 ·
-location 34 · commerce-bugs 16 · phase-1 63 · defaults 18 · delivery 31 · decline 15 · final 25.
+## Priority order (yours)
+1. Intent Override Layer ✅ (this build)  2. Search ranking (category-focus shipped; brand-grouping
+needs a `brand` field)  3. Cart editing ✅  4. Checkout ✅  5. Delivery zones ✅ (+pins)  6–8. Voice/
+Image/PDF (parked).
+
+## Tests — 516 assertions, 0 failures
+override 19 · search-focus 8 · session 22 · greeting 51 · cart 41 · followup 49 · realcustomer 49 ·
+intent 75 · location 34 · commerce-bugs 16 · phase-1 63 · defaults 18 · delivery 31 · decline 15 · final 25.
 
 ## Honest scope
-categoryBrowse + the matcher are unit-tested directly (incl. the exact failing query). The reply
-path runs through Laravel — confirm live by sending the rice query (should list rice only) and by
-replying "thanks"/👍 to a list (should close warmly, not re-prompt). Not live until deployed.
+The classifier + detectors are unit-tested directly (delivery/price/business/availability + the
+"is that all" detector). The override DISPATCH runs through Laravel/Conversation (loads the pending
+options, keeps/clears state) and can't be executed here — confirm live: show a list, then send
+"Do you do deliveries?" (delivery answer, list stays), "only those ones you have?" (re-affirm list),
+"you don't have cous cous" (cous cous results), "thanks"/👍 (warm close). Not live until deployed.
 
 ## STILL OUTSTANDING (not code): silent-bot incident — infra (worker / WhatsApp session / logs).

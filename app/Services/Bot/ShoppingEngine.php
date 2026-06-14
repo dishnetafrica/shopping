@@ -20,6 +20,28 @@ class ShoppingEngine
 
     private function money(float $a): string { return $this->currency . ' ' . number_format($a); }
 
+    /**
+     * A tidy heading for a clarify list: the words the customer's query and the matched products
+     * actually share ("oh i have forgotten kolam rice how much is it" -> "kolam rice"). Falls back
+     * to the cleaned query when there's no overlap.
+     */
+    private function cleanLabel(string $query, array $products): string
+    {
+        $qt = $this->matcher->tokens($query);
+        if (! $qt) return trim($query);
+        $names = [];
+        foreach ($products as $p) {
+            foreach ($this->matcher->tokens((string) ($p['name'] ?? '')) as $t) $names[$t] = true;
+        }
+        $common = [];
+        foreach ($qt as $t) {
+            if (isset($names[$t]) && ! in_array($t, $common, true)) $common[] = $t;
+        }
+        if ($common) return implode(' ', $common);
+        // no overlap: drop obvious filler, keep the rest
+        return implode(' ', array_slice($qt, 0, 4));
+    }
+
     public function handle(string $text, array $products, array $cart, array $state): array
     {
         $pending = $state['options'] ?? [];
@@ -59,12 +81,12 @@ class ShoppingEngine
                 // qty for a clarification is an explicit COUNT only — a size token (e.g. "200g")
                 // is the thing being clarified, never a quantity. Selection adds 1 unless the
                 // customer gave a real count ("2 sikandar peanuts").
-                $groups[] = ['label' => $item['query'], 'qty' => (int) ($item['count'] ?? 1), 'products' => $res['products']];
+                $groups[] = ['label' => $this->cleanLabel($item['query'], $res['products']), 'qty' => (int) ($item['count'] ?? 1), 'products' => $res['products']];
                 continue;
             }
             if ($res['status'] === 'size_unavailable') {
                 $sizeNotes[] = '*' . $res['requested'] . '* isn\'t available — we have *' . implode('*, *', $res['available']) . '*';
-                $groups[] = ['label' => $item['query'], 'qty' => (int) ($item['count'] ?? 1), 'products' => $res['products']];
+                $groups[] = ['label' => $this->cleanLabel($item['query'], $res['products']), 'qty' => (int) ($item['count'] ?? 1), 'products' => $res['products']];
                 continue;
             }
             $p = $res['product'];
@@ -78,7 +100,7 @@ class ShoppingEngine
                     $hintVariants = array_merge($hintVariants, $res['siblings'] ?? []);
                 }
             } else {
-                $groups[] = ['label' => $item['query'], 'qty' => (int) ($item['count'] ?? 1), 'products' => [$p]];
+                $groups[] = ['label' => $this->cleanLabel($item['query'], [$p]), 'qty' => (int) ($item['count'] ?? 1), 'products' => [$p]];
             }
         }
 
