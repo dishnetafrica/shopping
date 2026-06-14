@@ -61,6 +61,18 @@ class FollowUp
             if (in_array($core, $phrases, true)) return $mod;
         }
 
+        // 1b) price OBJECTION ("too expensive", "that's costly", "over budget") -> cheaper.
+        // Runs AFTER the exact match above so a request for "expensive one" (premium) is
+        // never flipped. Matches objection-shaped phrases, not a bare "expensive one".
+        if (preg_match('/\b(too|very|so|bit|really|way)\s+(expensive|costly|pricey|dear|much)\b/', $t)
+            || preg_match('/^(expensive|costly|pricey)$/', $core)
+            || preg_match('/\b(over|out of|beyond|above)\s+(my\s+)?budget\b/', $t)
+            || preg_match('/\bcan\s*t\s+afford\b/', $t)
+            || preg_match('/\bnot\s+affordable\b/', $t)
+            || preg_match('/\b(any ?thing|some ?thing|show( me)?)\s+cheaper\b/', $t)) {
+            return 'cheaper';
+        }
+
         // 2) generic "more / other / what else" — robust to typos and trailing "you have"
         $g = self::GENERIC;
         $morePatterns = [

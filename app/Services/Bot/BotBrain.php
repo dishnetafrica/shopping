@@ -151,6 +151,27 @@ class BotBrain
             return $reentry;
         }
 
+        // ---- Pending order confirmation (read-back) ----
+        // A wholesale list / best-guess was read back and is awaiting *OK*. This must run
+        // BEFORE the command words below, because "confirm"/"ok" would otherwise be eaten by
+        // the checkout/affirmation handlers. The engine commits on yes, drops on no, and on
+        // anything else clears the proposal and lets us reprocess the message normally.
+        $stPO = is_array($convo->state) ? $convo->state : [];
+        if (! empty($stPO['pending_order'])) {
+            $catalogue = $this->tenantCatalogue($tenant);
+            $res = $this->runShoppingEngine($tenant, $convo, $text, $catalogue);
+            if ($res['handled']) {
+                $convo->cart  = $res['cart'];
+                $convo->state = $res['state'];
+                $convo->save();
+                return $res['reply'];
+            }
+            // Not yes/no: the engine cleared the proposal; persist that and fall through so the
+            // message is handled as a fresh request (new product, edit, greeting, etc.).
+            $convo->state = $res['state'];
+            $convo->save();
+        }
+
         // ---- Cart management (remove / clear / change quantity, by number or name) ----
         // Explicit cart commands take priority and must never product-search.
         if (\App\Services\Bot\CartEditor::isEditIntent($lc)) {
@@ -166,6 +187,15 @@ class BotBrain
         // real selection) is left untouched.
         if (($fu = $this->tryFollowUp($tenant, $convo, $text)) !== null) {
             return $fu;
+        }
+
+        // ---- Human shopkeeper layer: opinion / doubt / comparison ----
+        // "which one is good?", "are you sure?", "which is better, X or Y?" are answered like a
+        // shop attendant (recommend / reaffirm / compare — on real data), not with a product
+        // search. It returns null for everything else (numbers, orders, greetings, plain product
+        // names) so the normal flow below is untouched.
+        if (($sa = $this->trySalesAssistant($tenant, $convo, $text)) !== null) {
+            return $sa;
         }
 
         // ---- Active clarification takes priority ----
@@ -396,7 +426,7 @@ class BotBrain
 
         if ($decision['expire_context']) {
             unset($st['options'], $st['last_query'], $st['last_kind'], $st['step'],
-                  $st['checkout_token'], $st['pending']);
+                  $st['checkout_token'], $st['pending'], $st['pending_order'], $st['pending_resolved'], $st['last_recommended']);
         }
         if ($decision['discard_cart']) {
             $convo->cart = [];
@@ -507,7 +537,7 @@ class BotBrain
 
         // Closing acknowledgement -> warm close, drop the list.
         if ($this->isClosingAck($text)) {
-            $st = is_array($convo->state) ? $convo->state : []; unset($st['options']);
+            $st = is_array($convo->state) ? $convo->state : []; unset($st['options'], $st['pending_resolved'], $st['pending_order'], $st['last_recommended']);
             $convo->state = $st; $convo->save();
             return "You're welcome \u{1F60A}\n\nLet me know if you'd like to order any item or search for another product.";
         }
@@ -524,7 +554,7 @@ class BotBrain
             case IntentClassifier::GREETING:
                 return $this->greetingReply($tenant, $text) . $keepNote;
             case IntentClassifier::THANKS:
-                $st = is_array($convo->state) ? $convo->state : []; unset($st['options']);
+                $st = is_array($convo->state) ? $convo->state : []; unset($st['options'], $st['pending_resolved'], $st['pending_order'], $st['last_recommended']);
                 $convo->state = $st; $convo->save();
                 return "You're welcome \u{1F60A}\n\nLet me know if you'd like to order any item or search for another product.";
             case IntentClassifier::BUSINESS:
@@ -542,7 +572,7 @@ class BotBrain
                 \App\Jobs\NotifyOwner::dispatch($tenant->id, "\u{1F64B} +{$convo->customer_phone} asked for a person. Open Chats to take over.");
                 return "\u{1F642} Sure — I'm letting the shop know. Someone will reply here shortly.";
             case IntentClassifier::DECLINE:
-                $st = is_array($convo->state) ? $convo->state : []; unset($st['options']);
+                $st = is_array($convo->state) ? $convo->state : []; unset($st['options'], $st['pending_resolved'], $st['pending_order'], $st['last_recommended']);
                 $convo->state = $st; $convo->save();
                 $hasCart = is_array($convo->cart) && count($convo->cart) > 0;
                 return $hasCart
@@ -631,6 +661,17 @@ class BotBrain
     }
 
     /** Build a fresh engine (request-scoped token cache) and handle one message. */
+    /**
+     * The human-shopkeeper conversational layer (recommend / reaffirm / compare).
+     * Persists its own state when it handles the message; returns null to fall through.
+     */
+    protected function trySalesAssistant(Tenant $tenant, Conversation $convo, string $text): ?string
+    {
+        $catalogue = $this->tenantCatalogue($tenant);
+        return (new \App\Services\Bot\SalesAssistantBrain($this->clarify))
+            ->respond($tenant, $convo, $text, $catalogue, $this->currencyFor($tenant));
+    }
+
     protected function runShoppingEngine(Tenant $tenant, Conversation $convo, string $text, array $catalogue): array
     {
         $engine = new ShoppingEngine(
@@ -955,7 +996,7 @@ class BotBrain
 
         $convo->cart = $res['cart'];
         $st = is_array($convo->state) ? $convo->state : [];
-        unset($st['options']);            // editing the cart ends any pending clarification
+        unset($st['options'], $st['pending_resolved'], $st['pending_order'], $st['last_recommended']);   // editing the cart ends any pending clarification
         $convo->state = $st;
         $convo->save();
 

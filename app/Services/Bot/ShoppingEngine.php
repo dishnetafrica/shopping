@@ -3,12 +3,37 @@ namespace App\Services\Bot;
 
 /**
  * ShoppingEngine — deterministic conversational core (framework-free).
- * Resolves a pending selection, otherwise parses + resolves items, ADDs on an
- * explicit verb/quantity, otherwise SHOWS numbered options (browse). Defers
- * unsupported EDIT ops to keep the cart safe.
+ *
+ * Resolves a pending selection, otherwise parses + resolves items. Each parsed
+ * line is resolved to ONE of: a confident product (add), an ambiguous set
+ * (choose), an out-of-stock-size note, or not-found. From those, the engine
+ * picks ONE message-level behaviour:
+ *
+ *   - inline, all lines confident                  -> add immediately (fast path)
+ *   - wholesale list (newlines), all confident     -> READ BACK, confirm with *OK*
+ *   - a low-confidence guess (auto-pick), no choice -> READ BACK, confirm with *OK*
+ *   - mixed: some confident + some ambiguous        -> REVIEW: lock the confident
+ *        lines, ask only the ambiguous one(s); commit everything together on the
+ *        pick (nothing auto-added, nothing silently dropped)
+ *   - only ambiguous / browse                       -> show numbered options
+ *
+ * The guiding rule (a good shop attendant): never silently add the wrong thing,
+ * never silently change a quantity, never silently lose a line. One extra
+ * question beats one wrong order.
+ *
+ * Confidence (per resolved line):
+ *   HIGH   single SKU, exact/size-pinned, or a clear name-token leader, or an
+ *          owner default -> safe to lock without asking.
+ *   MEDIUM an auto-pick guess among similar SKUs (strategy = explicit_then_auto)
+ *          -> read back and confirm before committing.
+ *   LOW    several plausible SKUs -> ask which one.
  */
 class ShoppingEngine
 {
+    public const CONF_HIGH   = 'high';
+    public const CONF_MEDIUM = 'medium';
+    public const CONF_LOW    = 'low';
+
     public function __construct(
         private ShoppingParser $parser,
         private CatalogueMatcher $matcher,
@@ -44,6 +69,12 @@ class ShoppingEngine
 
     public function handle(string $text, array $products, array $cart, array $state): array
     {
+        // 0) A wholesale order or auto-pick guess is awaiting the customer's OK / edit.
+        if (! empty($state['pending_order']) && is_array($state['pending_order'])) {
+            return $this->resolvePendingOrder($text, $products, $cart, $state);
+        }
+
+        // 1) Numbered options are pending -> resolve the customer's selection.
         $pending = $state['options'] ?? [];
         if (is_array($pending) && $pending) {
             $picks = $this->clarify->resolveSelection($text, $pending);
@@ -53,9 +84,20 @@ class ShoppingEngine
                     $cart = $this->addToCart($cart, $opt['product_id'], $opt['name'], $opt['price'], (int) ($opt['qty'] ?: 1));
                     $added[] = ($opt['qty'] ?: 1) . ' x ' . $opt['name'];
                 }
-                unset($state['options']);
-                return $this->res(true, 'Added *' . implode('*, *', $added) . "*.\n\n" . $this->cartSummary($cart)
-                    . "\n\nAdd more, or say *checkout*.", $cart, $state, $added, [], []);
+                // Flush any high-confidence lines that were locked while we waited for this
+                // pick (the "mixed order" case). They commit together with the picked item, so
+                // the confident lines are never auto-added early nor silently dropped.
+                $alsoAdded = [];
+                if (! empty($state['pending_resolved']) && is_array($state['pending_resolved'])) {
+                    foreach ($state['pending_resolved'] as $line) {
+                        $cart = $this->addToCart($cart, $line['product_id'] ?? null, $line['name'], (float) $line['price'], (int) $line['qty']);
+                        $alsoAdded[] = $line['qty'] . ' x ' . $line['name'];
+                    }
+                }
+                unset($state['options'], $state['pending_resolved']);
+                $allAdded = array_merge($alsoAdded, $added);
+                return $this->res(true, 'Added *' . implode('*, *', $allAdded) . "*.\n\n" . $this->cartSummary($cart)
+                    . "\n\nAdd more, or say *checkout*.", $cart, $state, $allAdded, [], []);
             }
         }
 
@@ -72,77 +114,257 @@ class ShoppingEngine
         }
 
         $addIntent = $parsed['add_intent'];
-        $added = []; $groups = []; $notFound = []; $sizeNotes = [];
-        $defaultUsed = false; $hintVariants = [];
+
+        // ---- Build a per-line PLAN (no cart mutation yet) -------------------------
+        // Each entry is one of:
+        //   ['kind'=>'add',    'product'=>row,'qty'=>n,'confidence'=>high|medium,'query'=>..]
+        //   ['kind'=>'choose', 'label'=>..,'qty'=>n,'products'=>[rows]]
+        //   ['kind'=>'size',   'label'=>..,'qty'=>n,'products'=>[rows],'requested'=>..,'available'=>[..]]
+        //   ['kind'=>'missing','query'=>..]
+        $plan = [];
+        $sizeHintVariants = []; $defaultUsed = false;
         foreach ($items as $item) {
-            $res = $this->resolveItem($item, $products, $parsed['browse'], $parsed['add_intent']);
-            if ($res['status'] === 'none') { $notFound[] = $item['query']; continue; }
+            $res = $this->resolveItem($item, $products, $parsed['browse'], $addIntent);
+            if ($res['status'] === 'none') {
+                $plan[] = ['kind' => 'missing', 'query' => $item['query']];
+                continue;
+            }
             if ($res['status'] === 'clarify') {
-                // qty for a clarification is an explicit COUNT only — a size token (e.g. "200g")
-                // is the thing being clarified, never a quantity. Selection adds 1 unless the
-                // customer gave a real count ("2 sikandar peanuts").
-                $groups[] = ['label' => $this->cleanLabel($item['query'], $res['products']), 'qty' => (int) ($item['count'] ?? 1), 'products' => $res['products']];
+                $plan[] = ['kind' => 'choose', 'label' => $this->cleanLabel($item['query'], $res['products']),
+                           'qty' => (int) ($item['count'] ?? 1), 'products' => $res['products']];
                 continue;
             }
             if ($res['status'] === 'size_unavailable') {
-                $sizeNotes[] = '*' . $res['requested'] . '* isn\'t available — we have *' . implode('*, *', $res['available']) . '*';
-                $groups[] = ['label' => $this->cleanLabel($item['query'], $res['products']), 'qty' => (int) ($item['count'] ?? 1), 'products' => $res['products']];
+                $plan[] = ['kind' => 'size', 'label' => $this->cleanLabel($item['query'], $res['products']),
+                           'qty' => (int) ($item['count'] ?? 1), 'products' => $res['products'],
+                           'requested' => $res['requested'], 'available' => $res['available']];
+                continue;
+            }
+            // status === 'single'
+            $via     = $res['via'] ?? '';
+            $autoAdd = $addIntent || in_array($via, ['default', 'size', 'auto', 'confident'], true);
+            if (! $autoAdd) {
+                // a bare search ("rice") with no add cue -> show it, don't add
+                $plan[] = ['kind' => 'choose', 'label' => $this->cleanLabel($item['query'], [$res['product']]),
+                           'qty' => (int) ($item['count'] ?? 1), 'products' => [$res['product']]];
                 continue;
             }
             $p = $res['product'];
-            $useQty = $res['qty'] ?? (int) $item['qty'];
-            $autoAdd = $addIntent || in_array($res['via'] ?? '', ['default', 'size', 'auto', 'confident'], true);
-            if ($autoAdd) {
-                $cart = $this->addToCart($cart, $p['id'] ?? null, $p['name'], (float) $p['price'], (int) $useQty);
-                $added[] = $useQty . ' x ' . $p['name'];
-                if (($res['via'] ?? '') === 'default') {
-                    $defaultUsed = true;
-                    $hintVariants = array_merge($hintVariants, $res['siblings'] ?? []);
-                }
-            } else {
-                $groups[] = ['label' => $this->cleanLabel($item['query'], [$p]), 'qty' => (int) ($item['count'] ?? 1), 'products' => [$p]];
-            }
+            if ($via === 'default') { $defaultUsed = true; $sizeHintVariants = array_merge($sizeHintVariants, $res['siblings'] ?? []); }
+            $plan[] = [
+                'kind'       => 'add',
+                'product'    => $p,
+                'qty'        => (int) ($res['qty'] ?? $item['qty']),
+                'confidence' => $res['confidence'] ?? self::CONF_HIGH,
+                'query'      => $item['query'],
+            ];
         }
 
-        $flat = [];
-        if ($groups) {
-            $built = $this->clarify->buildOptions($groups, fn ($a) => $this->money($a));
-            $flat = $built['flat'];
-            $state['options'] = $flat;
-            $state['last_query'] = (string) ($groups[0]['label'] ?? '');   // context for follow-ups
-            $state['last_kind']  = 'search';
-        } elseif ($added) {
-            unset($state['options']);   // a completed add clears any pending clarification
-        }
-        // else: no new groups and nothing added -> LEAVE any pending options in place so a
-        // stray reply doesn't lose the active clarification (selection state must survive).
+        $addLines    = array_values(array_filter($plan, fn ($l) => $l['kind'] === 'add'));
+        $chooseLines = array_values(array_filter($plan, fn ($l) => in_array($l['kind'], ['choose', 'size'], true)));
+        $missing     = array_values(array_map(fn ($l) => $l['query'], array_filter($plan, fn ($l) => $l['kind'] === 'missing')));
+        $guessLines  = array_values(array_filter($addLines, fn ($l) => ($l['confidence'] ?? self::CONF_HIGH) === self::CONF_MEDIUM));
+        $itemCount   = count($addLines) + count($chooseLines);
 
-        // Nothing matched the catalogue at all -> not a shopping message we can act on.
-        // Defer to BotBrain (friendly "I can help you shop" redirect) instead of a dead-end.
-        if (!$added && !$groups) {
-            return $this->res(false, null, $cart, $state, [], [], $notFound);
+        // Was this a wholesale-style LIST (newline-separated items)? Those get a read-back
+        // even when every line is confident — exactly how a shop reads an order back.
+        $isList = (bool) preg_match('/\S[\r\n]+\S/', trim($text)) && $itemCount >= 2;
+
+        // Nothing actionable at all -> defer to BotBrain (friendly redirect / "not stocked").
+        if (! $addLines && ! $chooseLines) {
+            return $this->res(false, null, $cart, $state, [], [], $missing);
         }
 
-        $parts = [];
-        if ($added) $parts[] = 'Added *' . implode('*, *', $added) . '*.';
-        if ($sizeNotes) $parts[] = "\u{1F4CF} " . implode('. ', $sizeNotes) . '.';
-        if ($groups) {
-            $head = $parsed['browse'] ? "Yes \u{1F44D} here's what we have:" : "Here's what we have:";
-            $parts[] = $head . "\n" . $built['text'] . "\n\nReply with the *number(s)* you want (e.g. 1, 3).";
+        // CASE A — MIXED: some confident lines + at least one ambiguous line.
+        // NEVER commit the confident lines on their own and NEVER flatten the
+        // ambiguous lines into a list that a stray "1" could collapse. Lock the
+        // confident lines, ask only the ambiguous one(s); the pick commits all.
+        if ($chooseLines && $addLines) {
+            return $this->reviewPick($addLines, $chooseLines, $missing, $cart, $state);
         }
-        if ($notFound) $parts[] = "I couldn't find: " . implode(', ', $notFound) . '.';
-        if ($added && !$groups) $parts[] = $this->cartSummary($cart) . "\n\nAdd more, or say *checkout*.";
 
-        // size hint: shown only ONCE per conversation, when a default was auto-applied
-        if ($defaultUsed && $hintVariants && empty($state['size_hint_shown'])) {
-            $eg = array_slice(array_values(array_unique($hintVariants)), 0, 2);
+        // CASE B — WHOLESALE LIST, all confident: read the order back, confirm with OK.
+        // CASE C — an auto-pick GUESS (medium) with no ambiguous line: confirm before adding.
+        if (($isList && ! $chooseLines && ! $guessLines) || ($guessLines && ! $chooseLines)) {
+            return $this->confirmOrder($addLines, $missing, $cart, $state, (bool) $guessLines);
+        }
+
+        // CASE D — only ambiguous / browse: show numbered options (classic clarify).
+        if ($chooseLines && ! $addLines) {
+            return $this->showOptions($chooseLines, $missing, $parsed['browse'], $cart, $state);
+        }
+
+        // CASE E — inline order, every line confident: add immediately (the >90% fast path).
+        $added = [];
+        foreach ($addLines as $l) {
+            $cart = $this->addToCart($cart, $l['product']['id'] ?? null, $l['product']['name'], (float) $l['product']['price'], (int) $l['qty']);
+            $added[] = $l['qty'] . ' x ' . $l['product']['name'];
+        }
+        unset($state['options'], $state['pending_resolved']);
+
+        $parts = ['Added *' . implode('*, *', $added) . '*.'];
+        if ($missing) $parts[] = "I couldn't find: " . implode(', ', $missing) . '.';
+        $parts[] = $this->cartSummary($cart) . "\n\nAdd more, or say *checkout*.";
+
+        // size hint: shown only ONCE per conversation, when an owner default was applied
+        if ($defaultUsed && $sizeHintVariants && empty($state['size_hint_shown'])) {
+            $eg = array_slice(array_values(array_unique($sizeHintVariants)), 0, 2);
             if ($eg) {
                 $parts[] = 'Want a different size? Just say e.g. *' . implode('* or *', $eg) . '*.';
                 $state['size_hint_shown'] = true;
             }
         }
 
-        return $this->res(true, implode("\n\n", $parts), $cart, $state, $added, $flat, $notFound);
+        return $this->res(true, implode("\n\n", $parts), $cart, $state, $added, [], $missing);
+    }
+
+    // ---- message-level behaviours ------------------------------------------------
+
+    /**
+     * MIXED order: lock the confident lines (stash them), ask only the ambiguous
+     * one(s). The customer's number reply (handled at the top of handle()) commits
+     * the stashed lines together with the picked item.
+     */
+    private function reviewPick(array $addLines, array $chooseLines, array $missing, array $cart, array $state): array
+    {
+        $resolved = [];
+        $okLines  = [];
+        foreach ($addLines as $l) {
+            $resolved[] = [
+                'product_id' => $l['product']['id'] ?? null,
+                'name'       => $l['product']['name'],
+                'price'      => (float) $l['product']['price'],
+                'qty'        => (int) $l['qty'],
+            ];
+            $okLines[] = "\u{2705} {$l['qty']} x {$l['product']['name']}";
+        }
+
+        $sizeNotes = [];
+        $groups    = [];
+        foreach ($chooseLines as $c) {
+            if ($c['kind'] === 'size') {
+                $sizeNotes[] = '*' . $c['requested'] . '* isn\'t available — we have *' . implode('*, *', $c['available']) . '*';
+            }
+            $groups[] = ['label' => $c['label'], 'qty' => $c['qty'] ?? 1, 'products' => $c['products']];
+        }
+        $built = $this->clarify->buildOptions($groups, fn ($a) => $this->money($a));
+
+        $state['options']          = $built['flat'];
+        $state['pending_resolved'] = $resolved;
+        $state['last_query']       = (string) ($groups[0]['label'] ?? '');
+        $state['last_kind']        = 'search';
+        unset($state['pending_order']);
+
+        $oneChoice = count($groups) === 1;
+        $parts = [];
+        if ($okLines) $parts[] = "Here's your order so far:\n" . implode("\n", $okLines);
+        if ($sizeNotes) $parts[] = "\u{1F4CF} " . implode('. ', $sizeNotes) . '.';
+        $ask = $oneChoice ? "Just one thing to confirm \u{1F642}" : "A couple of things to confirm \u{1F642}";
+        $parts[] = $ask . "\n" . $built['text'] . "\n\nReply with the *number(s)* you want (e.g. 1" . (count($built['flat']) > 1 ? ', 3' : '') . ') and I\'ll add everything together.';
+        if ($missing) $parts[] = "I couldn't find: " . implode(', ', $missing) . '.';
+
+        return $this->res(true, implode("\n\n", $parts), $cart, $state, [], $built['flat'], $missing);
+    }
+
+    /**
+     * WHOLESALE list (all confident) or an auto-pick GUESS: read the order back and
+     * wait for *OK*. Nothing is added until the customer confirms.
+     */
+    private function confirmOrder(array $addLines, array $missing, array $cart, array $state, bool $isGuess): array
+    {
+        $lines = [];
+        $disp  = [];
+        foreach ($addLines as $l) {
+            $lines[] = [
+                'product_id' => $l['product']['id'] ?? null,
+                'name'       => $l['product']['name'],
+                'price'      => (float) $l['product']['price'],
+                'qty'        => (int) $l['qty'],
+            ];
+            $disp[] = "\u{2022} {$l['qty']} x {$l['product']['name']} — " . $this->money((float) $l['product']['price'] * (int) $l['qty']);
+        }
+
+        $state['pending_order'] = ['lines' => $lines, 'not_found' => $missing];
+        unset($state['options'], $state['pending_resolved']);
+
+        if ($isGuess && count($disp) === 1) {
+            // single best-guess: "Did you mean ...?"
+            $body = "Just to confirm \u{1F642}\n" . implode("\n", $disp)
+                  . "\n\nReply *OK* to add it, or tell me a different size / brand.";
+        } else {
+            $body = "Here's your order \u{1F9FE}\n" . implode("\n", $disp)
+                  . "\n\nReply *OK* to add everything, or tell me what to change.";
+        }
+        if ($missing) $body .= "\n\nI couldn't find: " . implode(', ', $missing) . '.';
+
+        return $this->res(true, $body, $cart, $state, [], [], $missing);
+    }
+
+    /** Only ambiguous / browse lines: classic numbered clarify. */
+    private function showOptions(array $chooseLines, array $missing, bool $browse, array $cart, array $state): array
+    {
+        $sizeNotes = []; $groups = [];
+        foreach ($chooseLines as $c) {
+            if ($c['kind'] === 'size') {
+                $sizeNotes[] = '*' . $c['requested'] . '* isn\'t available — we have *' . implode('*, *', $c['available']) . '*';
+            }
+            $groups[] = ['label' => $c['label'], 'qty' => $c['qty'] ?? 1, 'products' => $c['products']];
+        }
+        $built = $this->clarify->buildOptions($groups, fn ($a) => $this->money($a));
+        $state['options']    = $built['flat'];
+        $state['last_query'] = (string) ($groups[0]['label'] ?? '');
+        $state['last_kind']  = 'search';
+        unset($state['pending_order'], $state['pending_resolved']);
+
+        $parts = [];
+        if ($sizeNotes) $parts[] = "\u{1F4CF} " . implode('. ', $sizeNotes) . '.';
+        $head = $browse ? "Yes \u{1F44D} here's what we have:" : "Here's what we have:";
+        $parts[] = $head . "\n" . $built['text'] . "\n\nReply with the *number(s)* you want (e.g. 1, 3).";
+        if ($missing) $parts[] = "I couldn't find: " . implode(', ', $missing) . '.';
+
+        return $this->res(true, implode("\n\n", $parts), $cart, $state, [], $built['flat'], $missing);
+    }
+
+    /**
+     * Resolve a reply to a pending wholesale/guess order: OK -> commit; no -> drop;
+     * anything else -> drop the proposal and let BotBrain reprocess it as a fresh message.
+     */
+    private function resolvePendingOrder(string $text, array $products, array $cart, array $state): array
+    {
+        $po  = $state['pending_order'];
+        $lc  = mb_strtolower(trim($text));
+        $lcn = trim(preg_replace('/[^a-z0-9\s]/', '', $lc));
+
+        $affirm = ['ok','okay','oki','k','kk','yes','yas','yep','yeah','ya','yup','sure','fine',
+            'confirm','confirmed','correct','right','add','add all','add them','add it','add everything',
+            'ok add','ok add all','okay add all','yes please','go ahead','proceed','done','place order','that\'s all'];
+        $decline = ['no','nope','nah','cancel','stop','dont','do not','not now','nevermind','never mind',
+            'no thanks','no thank you','forget it','leave it'];
+
+        $isAffirm  = in_array($lcn, $affirm, true) || (bool) preg_match('/^(ok|okay|yes|yep|sure|confirm)\b/', $lcn);
+        $isDecline = in_array($lcn, $decline, true) || (bool) preg_match('/^(no|nope|nah|cancel|stop)\b/', $lcn);
+
+        if ($isAffirm && ! $isDecline) {
+            $added = [];
+            foreach (($po['lines'] ?? []) as $line) {
+                $cart = $this->addToCart($cart, $line['product_id'] ?? null, $line['name'], (float) $line['price'], (int) $line['qty']);
+                $added[] = $line['qty'] . ' x ' . $line['name'];
+            }
+            unset($state['pending_order'], $state['options'], $state['pending_resolved']);
+            $body = 'Added *' . implode('*, *', $added) . "*.\n\n" . $this->cartSummary($cart) . "\n\nAdd more, or say *checkout*.";
+            return $this->res(true, $body, $cart, $state, $added, [], $po['not_found'] ?? []);
+        }
+
+        if ($isDecline) {
+            unset($state['pending_order'], $state['options'], $state['pending_resolved']);
+            $body = "No problem \u{1F642} I haven't added those. Tell me what you'd like, or say *cart* to review.";
+            return $this->res(true, $body, $cart, $state, [], [], []);
+        }
+
+        // Not a yes/no: the customer is changing their mind / naming something new.
+        // Drop the proposal and let BotBrain reprocess this message from scratch.
+        unset($state['pending_order'], $state['pending_resolved']);
+        return $this->res(false, null, $cart, $state, [], [], []);
     }
 
     /** Split a multi-word item into separate products only when the whole doesn't cover and each word resolves. */
@@ -162,14 +384,19 @@ class ShoppingEngine
     }
 
     /**
-     * Resolve one parsed item -> single | clarify | none, applying size + default rules.
+     * Resolve one parsed item -> single | clarify | size_unavailable | none, applying size +
+     * default rules. A 'single' result carries a 'confidence' (high|medium).
+     *
      * Precedence (multiple candidates):
-     *   1. stated size matches exactly one SKU -> that SKU (size wins)
-     *   2. stated size matches 0 or >1 SKUs   -> CLARIFY (size conflict)
-     *   3. no size, owner default valid+in-stock -> default
-     *   4. no size, strategy=explicit_then_auto  -> auto-pick (future ranking; cheapest/smallest for now)
-     *   5. otherwise                              -> CLARIFY
-     * A single candidate always resolves directly (size acts as a count -> preserves "2kg sugar"=2).
+     *   1. stated size matches exactly one SKU      -> that SKU (HIGH)
+     *   2. stated size matches >1 SKU but ONE name leads (e.g. "exclusive") -> that SKU (HIGH)
+     *   3. stated size matches >1 SKU, no leader     -> CLARIFY (pick among that size)
+     *   4. stated size matches 0 SKUs                -> size_unavailable
+     *   5. no size, a multi-word query clearly names one product -> that SKU (HIGH, "confident")
+     *   6. no size, owner default valid + in-stock    -> default (HIGH)
+     *   7. no size, strategy=explicit_then_auto       -> auto-pick (MEDIUM guess)
+     *   8. otherwise                                   -> CLARIFY
+     * A single candidate always resolves directly (HIGH); a size token then acts as a count.
      */
     public function resolveItem(array $item, array $products, bool $browse = false, bool $addIntent = false): array
     {
@@ -181,12 +408,12 @@ class ShoppingEngine
         $cands = $this->matcher->search($query, $products);
         if (!$cands) return ['status' => 'none'];
 
-        // single candidate: resolve directly; a size token here just means count (Cat 3 behaviour)
+        // single candidate: resolve directly; a size token here just means count
         if (count($cands) === 1) {
-            return ['status' => 'single', 'product' => $cands[0]['product'], 'qty' => $qty];
+            return ['status' => 'single', 'product' => $cands[0]['product'], 'qty' => $qty, 'confidence' => self::CONF_HIGH];
         }
 
-        // explicit browse ("show me rice" / "which rice") -> always list all, never auto-pick
+        // explicit browse ("show me rice" / "which rice") -> always list, never auto-pick
         if ($browse) {
             $opts = $this->matcher->clarifyCheck($query, $products);
             if ($opts !== null) return ['status' => 'clarify', 'products' => $opts];
@@ -197,10 +424,17 @@ class ShoppingEngine
         if ($size !== null) {
             $sized = array_values(array_filter($cands, fn ($c) => CatalogueMatcher::skuSize($c['product']['name'] ?? '') === $size));
             if (count($sized) === 1) {
-                return ['status' => 'single', 'product' => $sized[0]['product'], 'qty' => $count ?? 1, 'via' => 'size'];
+                return ['status' => 'single', 'product' => $sized[0]['product'], 'qty' => $count ?? 1, 'via' => 'size', 'confidence' => self::CONF_HIGH];
             }
             if (count($sized) > 1) {
-                // several SKUs share that exact size -> let them pick which one
+                // Several SKUs share that exact size. If the customer's words clearly name ONE of
+                // them (more matched name-tokens than any rival, e.g. "exclusive"), take it —
+                // otherwise let them pick. This is the fix for "kooksy ice cream exclusive 1ltr"
+                // resolving to a clarify even though "exclusive" pins the product.
+                $lead = $this->confidentLeader($query, $sized);
+                if ($lead !== null) {
+                    return ['status' => 'single', 'product' => $lead, 'qty' => $count ?? 1, 'via' => 'confident', 'confidence' => self::CONF_HIGH];
+                }
                 return ['status' => 'clarify', 'products' => array_map(fn ($c) => $c['product'], array_slice($sized, 0, 5))];
             }
             // requested size matches NO SKU -> tell the customer which sizes ARE available
@@ -216,8 +450,8 @@ class ShoppingEngine
             return ['status' => 'clarify', 'products' => array_map(fn ($c) => $c['product'], array_slice($cands, 0, 5))];
         }
 
-        // A PURE SEARCH (no add verb, no quantity, no specific size) must never auto-add a result.
-        // "rice" -> show the rice options; only "add rice" / "2 rice" / "rice 2kg" resolves+adds.
+        // A PURE SEARCH (no add verb, no quantity, no size) must never auto-add.
+        // "rice" -> show options; only "add rice" / "2 rice" / "rice 2kg" resolves+adds.
         if (! $addIntent && ! $browse) {
             $opts = $this->matcher->clarifyCheck($query, $products);
             if ($opts !== null) return ['status' => 'clarify', 'products' => $opts];
@@ -225,15 +459,14 @@ class ShoppingEngine
         }
 
         // High-confidence match: a multi-word query that fully describes ONE product which
-        // clearly leads the field (more matched words than any rival) auto-resolves, even under
-        // the clarify strategy. e.g. "Uganda Waragi Premium Pet 6pcs" -> that exact SKU.
+        // clearly leads the field auto-resolves. e.g. "Uganda Waragi Premium Pet 6pcs".
         $qTok = $this->matcher->tokens($query);
         $nq   = count($qTok);
         if ($nq >= 2 && $cands) {
             $topHits    = (int) ($cands[0]['hits'] ?? 0);
             $runnerHits = (int) ($cands[1]['hits'] ?? 0);
             if ($topHits >= $nq && $runnerHits < $topHits && ($cands[0]['product']['stock'] ?? 1) > 0) {
-                return ['status' => 'single', 'product' => $cands[0]['product'], 'qty' => $count ?? 1, 'via' => 'confident'];
+                return ['status' => 'single', 'product' => $cands[0]['product'], 'qty' => $count ?? 1, 'via' => 'confident', 'confidence' => self::CONF_HIGH];
             }
         }
 
@@ -249,29 +482,56 @@ class ShoppingEngine
                         $sz = CatalogueMatcher::skuSize($cc['product']['name'] ?? '');
                         if ($sz) $siblings[] = $term . ' ' . $sz;
                     }
-                    return ['status' => 'single', 'product' => $p, 'qty' => $qty, 'via' => 'default', 'siblings' => $siblings];
+                    return ['status' => 'single', 'product' => $p, 'qty' => $qty, 'via' => 'default', 'siblings' => $siblings, 'confidence' => self::CONF_HIGH];
                 }
             }
         }
 
-        // optional auto-pick when no default (future ranking: best-seller -> recent -> cheapest -> smallest)
+        // optional auto-pick when no default -> a GUESS, so it is MEDIUM (confirmed, not silent)
         if ($this->strategy === 'explicit_then_auto') {
-            // Pick among the MOST relevant candidates only (top search score), then cheapest —
-            // so a cheap off-noun product can't win on price alone (e.g. yoghurt for "milk").
             $top = $cands[0]['score'];
             $pick = array_values(array_filter($cands, fn ($c) => $c['score'] >= $top - 0.001));
             usort($pick, function ($a, $b) {
                 $pa = (float) ($a['product']['price'] ?? 0); $pb = (float) ($b['product']['price'] ?? 0);
-                if ($pa !== $pb) return $pa <=> $pb;                 // cheapest
+                if ($pa !== $pb) return $pa <=> $pb;                 // cheapest among the most relevant
                 return strlen($a['product']['name']) <=> strlen($b['product']['name']);
             });
-            return ['status' => 'single', 'product' => $pick[0]['product'], 'qty' => $qty, 'via' => 'auto'];
+            // The tenant has explicitly opted into "pick for me" with this strategy, so an
+            // auto-pick commits (HIGH) rather than asking — that is the point of the opt-in.
+            // (Switch to CONF_MEDIUM here if you want auto-picks read back for confirmation.)
+            return ['status' => 'single', 'product' => $pick[0]['product'], 'qty' => $qty, 'via' => 'auto', 'confidence' => self::CONF_HIGH];
         }
 
         // otherwise: clarify (price-spread groups first, else top candidates)
         $opts = $this->matcher->clarifyCheck($query, $products);
         if ($opts !== null) return ['status' => 'clarify', 'products' => $opts];
         return ['status' => 'clarify', 'products' => array_map(fn ($c) => $c['product'], array_slice($cands, 0, 5))];
+    }
+
+    /**
+     * Among a set of equally-sized (or otherwise tied) candidates, return the ONE whose name the
+     * customer's words single out — i.e. it covers strictly more query name-tokens than every
+     * rival. Returns null when no single product leads (so the caller asks instead of guessing).
+     */
+    private function confidentLeader(string $query, array $scoredCands): ?array
+    {
+        $qTok = $this->matcher->tokens($query);
+        if (! $qTok) return null;
+        $qSet = array_flip($qTok);
+
+        $best = null; $bestCov = -1; $tie = false;
+        foreach ($scoredCands as $c) {
+            $p = $c['product'] ?? $c;
+            $cov = 0;
+            foreach ($this->matcher->tokens((string) ($p['name'] ?? '')) as $t) {
+                if (isset($qSet[$t])) $cov++;
+            }
+            if ($cov > $bestCov) { $bestCov = $cov; $best = $p; $tie = false; }
+            elseif ($cov === $bestCov) { $tie = true; }
+        }
+        // a clear, non-trivial leader (covers >=1 query token and no rival ties it)
+        if ($best !== null && $bestCov >= 1 && ! $tie) return $best;
+        return null;
     }
 
     private function addToCart(array $cart, $id, string $name, float $price, int $qty): array
