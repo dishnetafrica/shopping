@@ -79,9 +79,11 @@ class ShoppingEngine
             $built = $this->clarify->buildOptions($groups, fn ($a) => $this->money($a));
             $flat = $built['flat'];
             $state['options'] = $flat;
-        } else {
-            unset($state['options']);
+        } elseif ($added) {
+            unset($state['options']);   // a completed add clears any pending clarification
         }
+        // else: no new groups and nothing added -> LEAVE any pending options in place so a
+        // stray reply doesn't lose the active clarification (selection state must survive).
 
         // Nothing matched the catalogue at all -> not a shopping message we can act on.
         // Defer to BotBrain (friendly "I can help you shop" redirect) instead of a dead-end.
@@ -187,7 +189,10 @@ class ShoppingEngine
 
         // optional auto-pick when no default (future ranking: best-seller -> recent -> cheapest -> smallest)
         if ($this->strategy === 'explicit_then_auto') {
-            $pick = $cands;
+            // Pick among the MOST relevant candidates only (top search score), then cheapest —
+            // so a cheap off-noun product can't win on price alone (e.g. yoghurt for "milk").
+            $top = $cands[0]['score'];
+            $pick = array_values(array_filter($cands, fn ($c) => $c['score'] >= $top - 0.001));
             usort($pick, function ($a, $b) {
                 $pa = (float) ($a['product']['price'] ?? 0); $pb = (float) ($b['product']['price'] ?? 0);
                 if ($pa !== $pb) return $pa <=> $pb;                 // cheapest

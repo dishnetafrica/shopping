@@ -132,22 +132,31 @@ class CatalogueMatcher
             $pt = $this->productTokens($p);
             if (!$pt) continue;
             $ptSet = array_flip($pt);
+            $nameSet = array_flip($this->tokens($p['name'] ?? ''));   // NAME tokens weigh more than keyword/category
             $score = 0.0; $hits = 0;
             if ($this->normName($p['name'] ?? '') === $nq) $score += 1000;
             foreach ($q as $w) {                     // count hits over ORIGINAL query tokens (coverage)
                 $cand = [$w];
                 if (mb_strlen($w) > 3 && str_ends_with($w, 's')) $cand[] = rtrim($w, 's');
-                $matched = false;
+                $inName = false; $inAny = false;
                 foreach ($cand as $cw) {
-                    if (isset($ptSet[$cw])) { $matched = true; break; }
+                    if (isset($nameSet[$cw])) { $inName = true; $inAny = true; break; }
+                    if (isset($ptSet[$cw]))   { $inAny = true; }
                 }
                 // Fuzzy ONLY when this word matches nothing exactly in the whole catalogue.
-                if (!$matched && ! $hasExact[$w] && mb_strlen($w) >= 4) {
+                if (!$inAny && ! $hasExact[$w] && mb_strlen($w) >= 4) {
                     foreach ($pt as $s) {
-                        if ($w[0] === $s[0] && abs(strlen($s) - strlen($w)) <= 1 && self::damerau($w, $s) <= 1) { $matched = true; break; }
+                        if ($w[0] === $s[0] && abs(strlen($s) - strlen($w)) <= 1 && self::damerau($w, $s) <= 1) {
+                            $inAny = true;
+                            if (isset($nameSet[$s])) $inName = true;
+                            break;
+                        }
                     }
                 }
-                if ($matched) { $hits++; $score += 100; }
+                // A match in the product NAME (e.g. "Milk") dominates a match that only
+                // appears in keywords/category (e.g. a yoghurt that lists "milk").
+                if ($inName)      { $hits++; $score += 120; }
+                elseif ($inAny)   { $hits++; $score += 40; }
             }
             if ($hits === 0 && $score < 1000) continue;
             $score += ($hits / max(1, count($q))) * 50;

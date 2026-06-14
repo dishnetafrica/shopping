@@ -142,6 +142,25 @@ class BotBrain
     {
         $lc = mb_strtolower(trim($text));
 
+        // ---- Active clarification takes priority ----
+        // If we previously showed options, a reply like "1" or "1 2 3" must resolve
+        // that selection — it must NOT be swallowed by the greeting/affirmation/intent
+        // checks below (which would otherwise treat a bare number as "unknown").
+        $state0 = is_array($convo->state) ? $convo->state : [];
+        if (! empty($state0['options']) && is_array($state0['options'])) {
+            $catalogue = $this->tenantCatalogue($tenant);
+            $res = $this->runShoppingEngine($tenant, $convo, $text, $catalogue);
+            if ($res['handled']) {
+                $convo->cart  = $res['cart'];
+                $convo->state = $res['state'];
+                $convo->save();
+                return $res['reply'];
+            }
+            // Reply neither resolved the selection nor started a new product. Keep the
+            // pending options (state survives) and re-prompt — never add on an ambiguous reply.
+            return "Please reply with the *number* you want from the list above (e.g. *1*, or *1 2 3*) — or type a product name to search again.";
+        }
+
         // command words win before shopping parsing
         if (in_array($lc, ['hi','hello','hey','start','menu','hola','good morning','good afternoon','good evening','jai shree krishna','jsk','namaste','namaskar','salaam','salam'], true)) return $this->execute($tenant, $convo, 'greet', []);
         if (in_array($lc, ['cart','basket','my order','my cart','view cart'], true))           return $this->execute($tenant, $convo, 'view_cart', []);
@@ -193,17 +212,8 @@ class BotBrain
             // CART / CHECKOUT / DECLINE are already handled above; anything else is SHOPPING.
         }
 
-        // hand off to the deterministic shopping engine (fresh matcher per message:
-        // its token cache is request-scoped, so nothing carries between tenants)
-        $engine  = new ShoppingEngine(
-            $this->parser, new CatalogueMatcher(), $this->clarify,
-            $this->currencyFor($tenant),
-            $this->tenantDefaults($tenant),
-            $this->defaultStrategy($tenant),
-        );
-        $cart    = is_array($convo->cart) ? $convo->cart : [];
-        $state   = is_array($convo->state) ? $convo->state : [];
-        $result  = $engine->handle($text, $catalogue, $cart, $state);
+        // hand off to the deterministic shopping engine
+        $result = $this->runShoppingEngine($tenant, $convo, $text, $catalogue);
 
         if ($result['handled']) {
             $convo->cart  = $result['cart'];
@@ -213,6 +223,20 @@ class BotBrain
         }
 
         return $this->execute($tenant, $convo, 'unknown', []);
+    }
+
+    /** Build a fresh engine (request-scoped token cache) and handle one message. */
+    protected function runShoppingEngine(Tenant $tenant, Conversation $convo, string $text, array $catalogue): array
+    {
+        $engine = new ShoppingEngine(
+            $this->parser, new CatalogueMatcher(), $this->clarify,
+            $this->currencyFor($tenant),
+            $this->tenantDefaults($tenant),
+            $this->defaultStrategy($tenant),
+        );
+        $cart  = is_array($convo->cart) ? $convo->cart : [];
+        $state = is_array($convo->state) ? $convo->state : [];
+        return $engine->handle($text, $catalogue, $cart, $state);
     }
 
     /** Tenant catalogue as plain rows (net prices applied) for the matcher. */
