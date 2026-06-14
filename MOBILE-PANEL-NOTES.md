@@ -25,14 +25,21 @@ No migration. After push: `php artisan optimize:clear` (and `route:clear` if rou
   which creates a real order (OrderObserver assigns the order_no) that appears in the feed.
   Creating a POS order is plan-gated on `pos`; on a lower plan the sheet shows "POS needs a higher plan".
   A counter sale is recorded with `status=Delivered` and no customer name/phone (none required).
+  After the order saves, POS also posts the cash received to the cashbook:
+  `POST /papi/cashbook/add` (type=in, category=sale, method=<payment>, note="POS sale <order_no>").
+  This is best-effort/non-fatal — if the ledger post fails, the sale order is still saved.
+  (`papi/*` is CSRF-excepted in bootstrap/app.php, so POST works on the session cookie alone.)
+- **Stock guard** — when a product has tracked stock > 0, the cart cannot exceed it (tap shows
+  "Only N in stock"). Stock 0 is treated as untracked and sells freely, so shops that don't
+  track inventory are never blocked.
 - Branding (shop name, initials, plan, phone) injected server-side from the tenant.
 - Auth loss (401/419) -> auto-redirect to `/app/login`.
 
 ## Notes
 - **More** — deep-links into the existing full panel pages (`/panel`, `/panel/chats`,
   `/panel/cashbook`, `/panel/scheduled`, `/panel/marketing`, `/panel/setup`).
-- POS records the sale as an **order** (items + total + payment). It does NOT yet post a separate
-  cash entry to the cashbook ledger — say the word if you want POS cash to also hit `cashbook/add`.
+- POS records the sale as an **order** AND a cashbook **ledger** entry (cash/MoMo in). The order is
+  the sales record; the ledger entry is the cash-drawer record.
 
 ## Add to phone home screen
 The page is `apple-mobile-web-app-capable`; on a phone, open `/panel/m` and "Add to Home Screen"
@@ -49,7 +56,10 @@ for an app-like launch. (It reuses the panel session cookie, so no separate logi
    without reloading.
 7. Chats tab lists real conversations with unread badges; tapping opens /panel/chats.
 8. POS tab: search loads real products; tap to add; "Review & charge" -> pick payment -> Charge.
-   A new order (channel=pos, Delivered) should be created and appear in the Orders feed.
+   A new order (channel=pos, Delivered) is created and appears in the Orders feed, and a cashbook
+   "in" entry for the same amount appears under /panel/cashbook.
+9. Try adding a low-stock item past its quantity -> should stop with "Only N in stock" (only
+   for products whose Stock > 0).
 
 If Orders/Chats show the "Couldn't load" state, it's the session or the endpoint, not the UI:
 check you're logged in (cookie present), that `/papi/orders` returns JSON in the browser, and
