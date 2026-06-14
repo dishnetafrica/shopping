@@ -63,6 +63,10 @@ class SellerPanelController extends Controller
         $json = json_encode($boot, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $html = str_replace('<!--SHOP_BOOT-->', '<script>window.SHOP=' . $json . ';</script>', $html);
 
+        // Home-screen app label + browser tab show the tenant's own name.
+        $html = str_replace('content="Seller"', 'content="' . $name . '"', $html);
+        $html = str_replace('<title>Seller Panel</title>', '<title>' . $name . '</title>', $html);
+
         return response($html, 200)
             ->header('Content-Type', 'text/html; charset=UTF-8')
             ->header('Cache-Control', 'no-store');

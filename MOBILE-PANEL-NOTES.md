@@ -64,3 +64,28 @@ for an app-like launch. (It reuses the panel session cookie, so no separate logi
 If Orders/Chats show the "Couldn't load" state, it's the session or the endpoint, not the UI:
 check you're logged in (cookie present), that `/papi/orders` returns JSON in the browser, and
 the queue worker / WhatsApp connection for step 6.
+
+
+## Install to phone home screen (the DishNet/PWA way)
+The page is now a proper installable app — it reuses the existing PWA plumbing
+(`/manifest.webmanifest`, `/sw.js`, icons) so it behaves like the DishNet app.
+
+Files touched for this:
+- `resources/panel/mobile.html` — adds `<link rel="manifest" href="/manifest.webmanifest?app=m">`,
+  apple-touch-icon, status-bar + web-app-capable metas, and registers `/sw.js`.
+- `app/Http/Controllers/Panel/PwaController.php` — `manifest()` now honors `?app=m` and sets
+  `start_url=/panel/m`, so the installed icon opens the mobile panel (not the desktop `/panel`).
+- `app/Http/Controllers/Panel/SellerPanelController.php` — `mobile()` brandizes the home-screen
+  label + tab title with the tenant's own name.
+
+How the owner installs it:
+- **iPhone (Safari):** open `/panel/m`, tap Share -> **Add to Home Screen** -> Add. Tapping the
+  icon launches full-screen (no Safari bars), straight into the panel — no URL to remember.
+- **Android (Chrome):** open `/panel/m`, menu -> **Install app** / **Add to Home screen**.
+
+Notes:
+- The service worker is **network-first** and explicitly never caches `/papi/*` or `/api/*`, so
+  Orders/Chats/POS always hit live data; only the static shell/icons are cached for fast launch.
+- iOS standalone apps use a separate cookie jar. If the session has expired, launching the icon
+  redirects to `/app/login`; after signing in, open the icon again (it lands on `/panel/m`).
+  Sessions are long-lived, so day-to-day the icon opens straight into the panel.

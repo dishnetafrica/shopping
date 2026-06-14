@@ -21,11 +21,14 @@ class PwaController extends Controller
         }
         $short = mb_strlen($name) <= 12 ? $name : $this->initials($name);
 
+        // ?app=m -> the mobile-first panel opens straight into /panel/m
+        $start = $r->query('app') === 'm' ? '/panel/m' : '/panel';
+
         return response()->json([
             'name'             => $name,
             'short_name'       => $short,
             'description'      => 'Manage orders, products and WhatsApp chats',
-            'start_url'        => '/panel',
+            'start_url'        => $start,
             'scope'            => '/',
             'display'          => 'standalone',
             'orientation'      => 'portrait',
