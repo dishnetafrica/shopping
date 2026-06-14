@@ -19,6 +19,8 @@
   .btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
   .btn.blue{background:var(--blue)} .btn.red{background:var(--red)} .btn.dark{background:#374151}
   .hide{display:none!important}
+  .side a.nav.sub{padding-left:34px;font-size:13px;opacity:.92}
+  .side a.nav.sub .i{opacity:.55}
   /* layout */
   .app{display:flex;min-height:100vh}
   .side{width:230px;background:var(--side);color:#cfe7d8;flex-shrink:0;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
@@ -254,6 +256,9 @@
       <a class="nav" href="/panel/diagnostics"><span class="i">🩺</span> Diagnostics</a>
       <a class="nav" href="/panel/setup"><span class="i">🚀</span> Setup</a>
       <a class="nav" data-page="dispatch"><span class="i">🚦</span> Dispatch</a>
+      <a class="nav sub" data-page="dispatch"><span class="i">└</span> Delivery Board</a>
+      <a class="nav sub" data-page="riders"><span class="i">└</span> Riders</a>
+      <a class="nav sub" data-page="deliveryZones"><span class="i">└</span> Delivery Zones</a>
       <a class="nav" data-page="customers"><span class="i">👥</span> Customers</a>
       <a class="nav" data-page="pos"><span class="i">🧾</span> POS</a>
       <a class="nav" data-page="category"><span class="i">🗂</span> Category</a>
@@ -262,8 +267,14 @@
       <a class="nav" data-page="riders"><span class="i">🛵</span> Riders</a>
       <a class="nav" data-page="returns"><span class="i">↩</span> Returns</a>
       <a class="nav" data-page="settings"><span class="i">⚙</span> Settings</a>
+      <a class="nav sub" data-page="profile"><span class="i">└</span> Profile</a>
+      <a class="nav sub" data-page="security"><span class="i">└</span> Security</a>
+      <a class="nav sub" data-page="orderNotifs"><span class="i">└</span> Order Notifications</a>
+      <a class="nav sub" data-page="smartDefaults"><span class="i">└</span> Smart Defaults</a>
+      <a class="nav sub" href="/panel/setup"><span class="i">└</span> WhatsApp Settings</a>
+      <a class="nav sub" data-page="subscription"><span class="i">└</span> Subscription</a>
       <a class="nav" data-page="help"><span class="i">❓</span> Help</a>
-      <a class="nav" href="/app/profile"><span class="i">👤</span> Account</a>
+      <a class="nav" data-page="profile"><span class="i">👤</span> Account</a>
       <a class="nav" id="navLogout"><span class="i">⏻</span> Logout</a>
     </nav>
   </aside>
@@ -499,6 +510,10 @@
           <div class="head">Out for delivery <span class="count" id="dbTransitCount" style="margin-left:auto"></span></div>
           <div class="body"><div id="dbTransit"></div></div>
         </div>
+        <div class="card">
+          <div class="head">Live delivery board</div>
+          <div class="body"><div id="delivBoard"><div class="empty">Loading…</div></div></div>
+        </div>
       </div>
       <div id="pageRiders" class="hide">
         <div class="crumb">Home / <b>Riders</b></div>
@@ -506,6 +521,91 @@
           <div class="head">Delivery riders <button class="btn" id="addRiderBtn" style="margin-left:auto">+ Add rider</button></div>
           <div class="body"><div id="ridersList"></div></div>
         </div>
+      </div>
+
+      <!-- ============ DELIVERY ZONES ============ -->
+      <div id="pageDeliveryZones" class="hide">
+        <div class="crumb">Home / Dispatch / <b>Delivery Zones</b></div>
+        <div class="card">
+          <div class="head">Delivery zones <button class="btn" onclick="zoneEdit(null)" style="margin-left:auto">+ Add zone</button></div>
+          <div class="body"><div id="zonesList"></div></div>
+        </div>
+        <div class="card hide" id="zoneFormCard">
+          <div class="head" id="zoneFormTitle">New zone</div>
+          <div class="body">
+            <input type="hidden" id="zId">
+            <div class="fg"><label>Name</label><input id="zName" placeholder="Zone A — Kisaasi/Kyanja"></div>
+            <div class="fg"><label>Area keywords (comma separated)</label><input id="zKw" placeholder="kisaasi, kyanja, ntinda"></div>
+            <div class="fg"><label>Flat fee</label><input id="zFlat" type="number" value="0"></div>
+            <div class="fg"><label>Per-km fee (optional)</label><input id="zPerKm" type="number" placeholder="leave blank for none"></div>
+            <div class="fg"><label>Minimum fee</label><input id="zMin" type="number" value="0"></div>
+            <div class="fg"><label>Free over subtotal (optional)</label><input id="zFree" type="number" placeholder="e.g. 50000"></div>
+            <div class="fg"><label>ETA (minutes)</label><input id="zEta" type="number" value="45"></div>
+            <div class="fg"><label><input id="zActive" type="checkbox" checked> Active</label></div>
+            <div style="display:flex;gap:8px"><button class="btn blue" onclick="zoneSave()">Save zone</button><button class="btn" onclick="show($('zoneFormCard'),false)">Cancel</button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ PROFILE ============ -->
+      <div id="pageProfile" class="hide">
+        <div class="crumb">Home / Settings / <b>Profile</b></div>
+        <div class="card"><div class="head">Your profile</div><div class="body">
+          <div class="fg"><label>Name</label><input id="pfName"></div>
+          <div class="fg"><label>Email</label><input id="pfEmail" type="email"></div>
+          <div class="fg"><label>Login phone (WhatsApp)</label><input id="pfPhone" disabled></div>
+          <button class="btn blue" onclick="profileSave()">Save profile</button>
+        </div></div>
+      </div>
+
+      <!-- ============ SECURITY ============ -->
+      <div id="pageSecurity" class="hide">
+        <div class="crumb">Home / Settings / <b>Security</b></div>
+        <div class="card"><div class="head">Sign-in</div><div class="body">
+          <div class="note">You sign in with a one-time code sent to your WhatsApp number. A password is optional and is only used as a fallback if OTP is unavailable.</div>
+          <div class="fg"><label>Current password (if set)</label><input id="secCur" type="password"></div>
+          <div class="fg"><label>New password (min 8 chars)</label><input id="secNew" type="password"></div>
+          <div class="fg"><label>Confirm new password</label><input id="secNew2" type="password"></div>
+          <button class="btn blue" onclick="passwordSave()">Update password</button>
+        </div></div>
+      </div>
+
+      <!-- ============ ORDER NOTIFICATIONS ============ -->
+      <div id="pageOrderNotifs" class="hide">
+        <div class="crumb">Home / Settings / <b>Order Notifications</b></div>
+        <div class="card"><div class="head">Who gets notified on a new order <button class="btn" onclick="notifEdit(null)" style="margin-left:auto">+ Add recipient</button></div>
+          <div class="body"><div class="note">These WhatsApp numbers receive an alert the moment a customer places an order.</div><div id="notifsList"></div></div>
+        </div>
+        <div class="card hide" id="notifFormCard"><div class="head" id="notifFormTitle">New recipient</div><div class="body">
+          <input type="hidden" id="nId">
+          <div class="fg"><label>Name</label><input id="nName" placeholder="e.g. Shop manager"></div>
+          <div class="fg"><label>WhatsApp number</label><input id="nPhone" placeholder="2567XXXXXXXX"></div>
+          <div class="fg"><label><input id="nActive" type="checkbox" checked> Active</label></div>
+          <div style="display:flex;gap:8px"><button class="btn blue" onclick="notifSave()">Save</button><button class="btn" onclick="show($('notifFormCard'),false)">Cancel</button></div>
+        </div></div>
+      </div>
+
+      <!-- ============ SMART DEFAULTS ============ -->
+      <div id="pageSmartDefaults" class="hide">
+        <div class="crumb">Home / Settings / <b>Smart Defaults</b></div>
+        <div class="card"><div class="head">Smart defaults <button class="btn" onclick="defEdit(null)" style="margin-left:auto">+ Add default</button></div>
+          <div class="body"><div class="note">When a customer types a term, the bot adds this product by default (e.g. “bread” → “Superloaf 600g”).</div><div id="defsList"></div></div>
+        </div>
+        <div class="card hide" id="defFormCard"><div class="head">New default</div><div class="body">
+          <input type="hidden" id="dId">
+          <div class="fg"><label>Customer term</label><input id="dTerm" placeholder="bread"></div>
+          <div class="fg"><label>Product</label><select id="dProduct"></select></div>
+          <div class="fg"><label><input id="dActive" type="checkbox" checked> Active</label></div>
+          <div style="display:flex;gap:8px"><button class="btn blue" onclick="defSave()">Save</button><button class="btn" onclick="show($('defFormCard'),false)">Cancel</button></div>
+        </div></div>
+      </div>
+
+      <!-- ============ SUBSCRIPTION ============ -->
+      <div id="pageSubscription" class="hide">
+        <div class="crumb">Home / Settings / <b>Subscription</b></div>
+        <div class="card"><div class="head">Your plan</div><div class="body">
+          <div id="subInfo" class="note">Manage your CloudBSS plan here. To upgrade or change your plan, contact support on WhatsApp and we'll switch it over.</div>
+        </div></div>
       </div>
       <!-- ============ RETURNS ============ -->
       <div id="pageReturns" class="hide">
@@ -795,7 +895,12 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   settings:'/papi/settings',settingsSave:'/papi/settings-save',
   branches:'/papi/branches',branchSave:'/papi/branch-save',branchDel:'/papi/branch-delete',
   custProfiles:'/papi/customers',custSave:'/papi/customer-save',
-  botcfg:'/papi/bot-config',botcfgSave:'/papi/bot-config-save'};
+  botcfg:'/papi/bot-config',botcfgSave:'/papi/bot-config-save',
+  dboard:'/papi/delivery/board',dassign:'/papi/delivery/assign',dstatus:'/papi/delivery/status',dsuggest:'/papi/delivery/suggest-rider',
+  zones:'/papi/delivery/zones',zoneSave:'/papi/delivery/zone-save',zoneDel:'/papi/delivery/zone-delete',
+  profile:'/papi/profile',profileSave:'/papi/profile-save',pwChange:'/papi/password-change',
+  notifs:'/papi/notifications',notifSave:'/papi/notif-save',notifDel:'/papi/notif-delete',
+  defaults:'/papi/defaults',defSave:'/papi/default-save',defDel:'/papi/default-delete'};
 var BOT_CUR='auto', SHOW_SWITCHER=false;
 var token=localStorage.getItem('fs_token')||'', phone='', timer=null, filtersInit=false;
 var CATALOGUE=[], ORDERS=[], RIDERS=[], RETURNS=[], CREDIT={};
@@ -1127,12 +1232,18 @@ function showPage(p){
   $('pageReturns').classList.toggle('hide',p!=='returns');
   $('pageSettings').classList.toggle('hide',p!=='settings');
   $('pageHelp').classList.toggle('hide',p!=='help');
+  $('pageDeliveryZones').classList.toggle('hide',p!=='deliveryZones');
+  $('pageProfile').classList.toggle('hide',p!=='profile');
+  $('pageSecurity').classList.toggle('hide',p!=='security');
+  $('pageOrderNotifs').classList.toggle('hide',p!=='orderNotifs');
+  $('pageSmartDefaults').classList.toggle('hide',p!=='smartDefaults');
+  $('pageSubscription').classList.toggle('hide',p!=='subscription');
   if(p==='orders'){$('detailView').classList.add('hide');$('listView').classList.remove('hide');}
   document.querySelectorAll('.side a.nav').forEach(function(a){a.classList.toggle('on',a.dataset.page===p);});
-  var T={dash:'Dashboard',pos:'POS',reports:'Reports',products:'Products',category:'Categories',riders:'Riders',returns:'Returns',orders:'Orders',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide'};
+  var T={dash:'Dashboard',pos:'POS',reports:'Reports',products:'Products',category:'Categories',riders:'Riders',returns:'Returns',orders:'Orders',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription'};
   $('pageTitle').textContent=T[p]||'Orders';
   if(p==='dash')renderDash(); else if(p==='pos')posInit(); else if(p==='reports')reportsInit();
-  else if(p==='products')pmInit(); else if(p==='category')renderCategories(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='dispatch')renderDispatchBoard(); else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='help'){} else renderList();
+  else if(p==='products')pmInit(); else if(p==='category')renderCategories(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else renderList();
   closeSide(); window.scrollTo(0,0);
 }
 function openSide(){$('side').classList.add('open');$('backdrop').classList.add('show');}
@@ -2123,6 +2234,160 @@ function logout(){
   try{localStorage.removeItem('fs_token');localStorage.removeItem('fs_branch');localStorage.removeItem('fs_role');}catch(e){}
   token='';if(timer)clearInterval(timer);location.reload();
 }
+/* ===================== OWNER CONSOLIDATION (Dispatch + Settings in-panel) ===================== */
+function dmoney(x){return (typeof CUR!=='undefined'&&CUR?CUR:'UGX')+' '+(Number(x)||0).toLocaleString();}
+function qtok(){return '?token='+encodeURIComponent(token);}
+
+/* ---- Delivery Board (deliveries lifecycle) ---- */
+var DELIV={};
+async function loadDeliveries(){try{var r=await fetch(EP.dboard+qtok(),{cache:'no-store'});var d=await r.json();DELIV=(d&&d.board)?d.board:{};}catch(e){DELIV={};}}
+function delivLabel(s){return {assigned:'Assigned',picked:'Picked up',out:'Out for delivery',delivered:'Delivered',failed:'Failed'}[s]||s;}
+function renderDeliveriesBoard(){
+  var el=$('delivBoard'); if(!el)return;
+  var cols=['assigned','picked','out','delivered','failed'];
+  var next={assigned:['picked','out','failed'],picked:['out','failed'],out:['delivered','failed'],delivered:[],failed:[]};
+  var html=cols.map(function(s){
+    var items=DELIV[s]||[];
+    var cards=items.map(function(d){
+      var adv=(next[s]||[]).map(function(n){return '<button class="btn" onclick="advanceDelivery('+d.id+',\''+n+'\')">'+delivLabel(n)+'</button>';}).join(' ');
+      var assign='<button class="btn" onclick="assignRider('+d.id+')">'+(d.rider?('Rider: '+esc(d.rider)):'Assign rider')+'</button>';
+      return '<div class="card" style="margin:6px 0"><div class="body">'+
+        '<div style="font-weight:700">'+esc(d.order_no)+' · '+esc(d.customer)+'</div>'+
+        '<div style="font-size:12px;color:var(--muted)">'+esc(d.location||'')+(d.zone?(' · '+esc(d.zone)):'')+'</div>'+
+        '<div style="font-size:12px">Fee '+dmoney(d.fee)+' · COD '+dmoney(d.cod)+'</div>'+
+        '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">'+assign+(adv?(' '+adv):'')+'</div></div></div>';
+    }).join('')||'<div class="empty">None</div>';
+    return '<div style="flex:1;min-width:190px"><div class="head">'+delivLabel(s)+' <span class="count">'+items.length+'</span></div>'+cards+'</div>';
+  }).join('');
+  el.innerHTML='<div style="display:flex;gap:10px;overflow-x:auto">'+html+'</div>';
+}
+async function assignRider(id){
+  if(!RIDERS.length){await loadRiders();}
+  if(!RIDERS.length){alert('Add a rider first (Dispatch → Riders).');return;}
+  var names=RIDERS.filter(function(r){return r.active!==false;});
+  var pick=prompt('Assign which rider?\n'+names.map(function(r,i){return (i+1)+'. '+r.name;}).join('\n'),'1');
+  if(!pick)return; var idx=parseInt(pick,10)-1; var r=names[idx]; if(!r){alert('Invalid choice');return;}
+  var oid=delivOrderId(id);
+  try{var resp=await fetch(EP.dassign+qtok()+'&order_id='+encodeURIComponent(oid)+'&rider='+encodeURIComponent(r.name)+'&riderphone='+encodeURIComponent(r.phone||''),{cache:'no-store'});var d=await resp.json();if(!d.ok){alert('Assign failed: '+(d.error||''));return;}}catch(e){alert('Network error');return;}
+  await loadDeliveries();renderDeliveriesBoard();
+}
+function delivOrderId(deliveryId){var oid=null;Object.keys(DELIV).forEach(function(s){(DELIV[s]||[]).forEach(function(d){if(d.id===deliveryId)oid=d.order_id||null;});});return oid||deliveryId;}
+async function advanceDelivery(id,status){
+  var extra='';
+  if(status==='failed'){var why=prompt('Reason for failed delivery?','');if(why===null)return;extra='&reason='+encodeURIComponent(why);}
+  if(status==='delivered'){var rcp=prompt('Received by (optional):','');if(rcp)extra='&recipient_name='+encodeURIComponent(rcp);extra+='&cod_collected=true';}
+  try{var r=await fetch(EP.dstatus+qtok()+'&id='+id+'&status='+encodeURIComponent(status)+extra,{cache:'no-store'});var d=await r.json();if(!d.ok){alert('Update failed: '+(d.error||''));return;}}catch(e){alert('Network error');return;}
+  await loadDeliveries();renderDeliveriesBoard();
+}
+
+/* ---- Delivery Zones ---- */
+var ZONES=[];
+function zonesInit(){loadZones().then(renderZones);}
+async function loadZones(){try{var r=await fetch(EP.zones+qtok(),{cache:'no-store'});var d=await r.json();ZONES=(d&&d.zones)?d.zones:[];}catch(e){ZONES=[];}}
+function renderZones(){
+  show($('zoneFormCard'),false);
+  var el=$('zonesList');if(!el)return;
+  if(!ZONES.length){el.innerHTML='<div class="empty">No zones yet. Tap “+ Add zone”. Until you add zones, the bot uses your default delivery fee from Settings.</div>';return;}
+  el.innerHTML=ZONES.map(function(z){
+    var meta=[dmoney(z.flat_fee)+' flat'];if(z.per_km_fee)meta.push('+'+dmoney(z.per_km_fee)+'/km');if(z.free_over)meta.push('free over '+dmoney(z.free_over));meta.push('ETA '+z.eta+'m');
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)">'+
+      '<div><div style="font-weight:700">'+esc(z.name)+(z.active?'':' <span style="color:var(--muted)">(inactive)</span>')+'</div>'+
+      '<div style="font-size:12px;color:var(--muted)">'+(z.keywords||[]).map(esc).join(', ')+'</div>'+
+      '<div style="font-size:12px">'+meta.join(' · ')+'</div></div>'+
+      '<div style="display:flex;gap:6px"><button class="btn" onclick="zoneEdit('+z.id+')">Edit</button><button class="btn red" onclick="zoneDelete('+z.id+')">Delete</button></div></div>';
+  }).join('');
+}
+function zoneEdit(id){
+  var z=id?ZONES.find(function(x){return x.id===id;}):null;
+  $('zId').value=z?z.id:'';$('zName').value=z?z.name:'';$('zKw').value=z?(z.keywords||[]).join(', '):'';
+  $('zFlat').value=z?z.flat_fee:0;$('zPerKm').value=(z&&z.per_km_fee!=null)?z.per_km_fee:'';$('zMin').value=z?z.min_fee:0;
+  $('zFree').value=(z&&z.free_over!=null)?z.free_over:'';$('zEta').value=z?z.eta:45;$('zActive').checked=z?!!z.active:true;
+  $('zoneFormTitle').textContent=z?'Edit zone':'New zone';show($('zoneFormCard'),true);
+}
+async function zoneSave(){
+  var qs=qtok()+'&id='+encodeURIComponent($('zId').value)+'&name='+encodeURIComponent($('zName').value)+
+    '&keywords='+encodeURIComponent($('zKw').value)+'&flat_fee='+encodeURIComponent($('zFlat').value||0)+
+    '&min_fee='+encodeURIComponent($('zMin').value||0)+'&eta='+encodeURIComponent($('zEta').value||45)+
+    '&active='+($('zActive').checked?'true':'false');
+  if($('zPerKm').value!=='')qs+='&per_km_fee='+encodeURIComponent($('zPerKm').value);
+  if($('zFree').value!=='')qs+='&free_over='+encodeURIComponent($('zFree').value);
+  try{var r=await fetch(EP.zoneSave+qs,{cache:'no-store'});var d=await r.json();if(!d.ok){alert('Save failed');return;}}catch(e){alert('Network error');return;}
+  await loadZones();renderZones();
+}
+async function zoneDelete(id){if(!confirm('Delete this zone?'))return;try{await fetch(EP.zoneDel+qtok()+'&id='+id,{cache:'no-store'});}catch(e){}await loadZones();renderZones();}
+
+/* ---- Profile ---- */
+function profileInit(){loadProfile();}
+async function loadProfile(){try{var r=await fetch(EP.profile+qtok(),{cache:'no-store'});var d=await r.json();var p=d.profile||{};$('pfName').value=p.name||'';$('pfEmail').value=p.email||'';$('pfPhone').value=p.phone||'';}catch(e){}}
+async function profileSave(){
+  var qs=qtok()+'&name='+encodeURIComponent($('pfName').value)+'&email='+encodeURIComponent($('pfEmail').value);
+  try{var r=await fetch(EP.profileSave+qs,{cache:'no-store'});var d=await r.json();alert(d.ok?'Profile saved':'Save failed');}catch(e){alert('Network error');}
+}
+
+/* ---- Security (optional password; OTP is the real login) ---- */
+function securityInit(){$('secCur').value='';$('secNew').value='';$('secNew2').value='';}
+async function passwordSave(){
+  if($('secNew').value!==$('secNew2').value){alert('New passwords do not match');return;}
+  if(($('secNew').value||'').length<8){alert('Password must be at least 8 characters');return;}
+  var qs=qtok()+'&current='+encodeURIComponent($('secCur').value)+'&new='+encodeURIComponent($('secNew').value);
+  try{var r=await fetch(EP.pwChange+qs,{cache:'no-store'});var d=await r.json();
+    if(d.ok){alert('Password updated');securityInit();}
+    else alert(d.error==='wrong_current'?'Current password is incorrect':(d.error==='too_short'?'Password too short':'Update failed'));
+  }catch(e){alert('Network error');}
+}
+
+/* ---- Order Notification Recipients ---- */
+var NOTIFS=[];
+function notifsInit(){loadNotifs().then(renderNotifs);}
+async function loadNotifs(){try{var r=await fetch(EP.notifs+qtok(),{cache:'no-store'});var d=await r.json();NOTIFS=(d&&d.recipients)?d.recipients:[];}catch(e){NOTIFS=[];}}
+function renderNotifs(){
+  show($('notifFormCard'),false);
+  var el=$('notifsList');if(!el)return;
+  if(!NOTIFS.length){el.innerHTML='<div class="empty">No extra recipients. The store owner number is always notified.</div>';return;}
+  el.innerHTML=NOTIFS.map(function(n){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)">'+
+      '<div><div style="font-weight:700">'+esc(n.name)+(n.active?'':' <span style="color:var(--muted)">(off)</span>')+'</div>'+
+      '<div style="font-size:12px;color:var(--muted)">'+esc(n.phone)+'</div></div>'+
+      '<div style="display:flex;gap:6px"><button class="btn" onclick="notifEdit('+n.id+')">Edit</button><button class="btn red" onclick="notifDelete('+n.id+')">Delete</button></div></div>';
+  }).join('');
+}
+function notifEdit(id){var n=id?NOTIFS.find(function(x){return x.id===id;}):null;$('nId').value=n?n.id:'';$('nName').value=n?n.name:'';$('nPhone').value=n?n.phone:'';$('nActive').checked=n?!!n.active:true;$('notifFormTitle').textContent=n?'Edit recipient':'New recipient';show($('notifFormCard'),true);}
+async function notifSave(){
+  var qs=qtok()+'&id='+encodeURIComponent($('nId').value)+'&name='+encodeURIComponent($('nName').value)+'&phone='+encodeURIComponent($('nPhone').value)+'&active='+($('nActive').checked?'true':'false');
+  try{var r=await fetch(EP.notifSave+qs,{cache:'no-store'});var d=await r.json();if(!d.ok){alert(d.error==='phone_required'?'Enter a WhatsApp number':'Save failed');return;}}catch(e){alert('Network error');return;}
+  await loadNotifs();renderNotifs();
+}
+async function notifDelete(id){if(!confirm('Remove this recipient?'))return;try{await fetch(EP.notifDel+qtok()+'&id='+id,{cache:'no-store'});}catch(e){}await loadNotifs();renderNotifs();}
+
+/* ---- Smart Defaults ---- */
+var DEFS=[];
+function defsInit(){loadDefs().then(renderDefs);}
+async function loadDefs(){try{var r=await fetch(EP.defaults+qtok(),{cache:'no-store'});var d=await r.json();DEFS=(d&&d.defaults)?d.defaults:[];}catch(e){DEFS=[];}}
+function renderDefs(){
+  show($('defFormCard'),false);
+  var el=$('defsList');if(!el)return;
+  if(!DEFS.length){el.innerHTML='<div class="empty">No smart defaults yet.</div>';return;}
+  el.innerHTML=DEFS.map(function(x){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)">'+
+      '<div><div style="font-weight:700">“'+esc(x.term)+'” → '+esc(x.product)+(x.active?'':' <span style="color:var(--muted)">(off)</span>')+'</div>'+
+      '<div style="font-size:12px;color:var(--muted)">'+esc(x.source||'owner')+'</div></div>'+
+      '<div style="display:flex;gap:6px"><button class="btn" onclick="defEdit('+x.id+')">Edit</button><button class="btn red" onclick="defDelete('+x.id+')">Delete</button></div></div>';
+  }).join('');
+}
+function defProductOptions(sel){
+  var opts=(CATALOGUE||[]).map(function(p){var id=p._row||p.id;var nm=p.Item_Name||p.name||('#'+id);return '<option value="'+id+'"'+(String(sel)===String(id)?' selected':'')+'>'+esc(nm)+'</option>';}).join('');
+  $('dProduct').innerHTML='<option value="">— choose product —</option>'+opts;
+}
+function defEdit(id){var x=id?DEFS.find(function(z){return z.id===id;}):null;$('dId').value=x?x.id:'';$('dTerm').value=x?x.term:'';defProductOptions(x?x.product_id:'');$('dActive').checked=x?!!x.active:true;show($('defFormCard'),true);}
+async function defSave(){
+  if(!$('dTerm').value||!$('dProduct').value){alert('Enter a term and choose a product');return;}
+  var qs=qtok()+'&id='+encodeURIComponent($('dId').value)+'&term='+encodeURIComponent($('dTerm').value)+'&product_id='+encodeURIComponent($('dProduct').value)+'&active='+($('dActive').checked?'true':'false');
+  try{var r=await fetch(EP.defSave+qs,{cache:'no-store'});var d=await r.json();if(!d.ok){alert('Save failed');return;}}catch(e){alert('Network error');return;}
+  await loadDefs();renderDefs();
+}
+async function defDelete(id){if(!confirm('Delete this default?'))return;try{await fetch(EP.defDel+qtok()+'&id='+id,{cache:'no-store'});}catch(e){}await loadDefs();renderDefs();}
+/* ===================== END OWNER CONSOLIDATION ===================== */
+
 document.querySelectorAll('.side a.nav').forEach(function(a){if(a.dataset.page)a.onclick=function(){showPage(a.dataset.page);};});
 var _lo=$('logoutBtn'); if(_lo)_lo.onclick=logout;
 var _nlo=$('navLogout'); if(_nlo)_nlo.onclick=logout;

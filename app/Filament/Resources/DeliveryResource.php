@@ -17,6 +17,12 @@ use Filament\Tables\Table;
 class DeliveryResource extends Resource
 {
     protected static ?string $model = Delivery::class;
+
+    /** Owner workflows live in the Seller Panel now; keep this in /app for super-admins only. */
+    public static function shouldRegisterNavigation(): bool
+    {
+        return (bool) (auth()->user()?->is_super_admin);
+    }
     protected static ?string $navigationIcon = 'heroicon-o-truck';
     protected static ?string $navigationLabel = 'Delivery Board';
     protected static ?string $modelLabel = 'delivery';

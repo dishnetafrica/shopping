@@ -46,6 +46,7 @@ class DeliveryController
         $rows = Delivery::with(['order', 'rider', 'zone'])->orderByDesc('id')->limit(500)->get()
             ->map(fn (Delivery $d) => [
                 'id'        => $d->id,
+                'order_id'  => (int) ($d->order->id ?? 0),
                 'order_no'  => (string) ($d->order->order_no ?? ''),
                 'customer'  => (string) ($d->order->customer_name ?? 'Customer'),
                 'phone'     => (string) ($d->order->customer_phone ?? ''),
@@ -112,11 +113,12 @@ class DeliveryController
 
     protected function fallbackRule(Tenant $tenant): array
     {
+        $s = $tenant->settings ?? [];
         return [
-            'base'      => (int) $tenant->setting('delivery_base', 0),
-            'per_km'    => (int) $tenant->setting('delivery_per_km', 0),
-            'min'       => (int) $tenant->setting('delivery_min', 0),
-            'free_over' => (int) $tenant->setting('delivery_free_over', 0),
+            'base'      => (int) ($s['base'] ?? 0),
+            'per_km'    => (int) ($s['perKm'] ?? 0),
+            'min'       => (int) ($s['min'] ?? 0),
+            'free_over' => (int) ($s['freeOver'] ?? 0),
         ];
     }
 }

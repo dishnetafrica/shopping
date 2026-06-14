@@ -293,13 +293,14 @@ class BotBrain
         // D1 — server-authoritative delivery fee + ETA from the matched zone (no extra
         // confirmation step). Text-location match for now; per-km needs a shared pin.
         $subtotal = (int) round($total);
+        $sset = $tenant->settings ?? [];
         $quote = (new \App\Services\Delivery\ZoneResolver())->quote(
             $location, null, null, $subtotal,
             [
-                'base'      => (int) $tenant->setting('delivery_base', 0),
-                'per_km'    => (int) $tenant->setting('delivery_per_km', 0),
-                'min'       => (int) $tenant->setting('delivery_min', 0),
-                'free_over' => (int) $tenant->setting('delivery_free_over', 0),
+                'base'      => (int) ($sset['base'] ?? 0),
+                'per_km'    => (int) ($sset['perKm'] ?? 0),
+                'min'       => (int) ($sset['min'] ?? 0),
+                'free_over' => (int) ($sset['freeOver'] ?? 0),
             ]
         );
         $deliveryFee = (int) $quote['fee'];

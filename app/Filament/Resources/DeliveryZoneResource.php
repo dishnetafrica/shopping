@@ -15,6 +15,12 @@ use Filament\Tables\Table;
 class DeliveryZoneResource extends Resource
 {
     protected static ?string $model = DeliveryZone::class;
+
+    /** Owner workflows live in the Seller Panel now; keep this in /app for super-admins only. */
+    public static function shouldRegisterNavigation(): bool
+    {
+        return (bool) (auth()->user()?->is_super_admin);
+    }
     protected static ?string $navigationIcon = 'heroicon-o-map';
     protected static ?string $navigationGroup = 'Settings';
     protected static ?string $navigationLabel = 'Delivery Zones';

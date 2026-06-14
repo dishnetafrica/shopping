@@ -51,8 +51,22 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('delivery/quote',         [\App\Http\Controllers\Panel\DeliveryController::class, 'quote']);
         Route::get('delivery/board',         [\App\Http\Controllers\Panel\DeliveryController::class, 'board']);
         Route::get('delivery/suggest-rider', [\App\Http\Controllers\Panel\DeliveryController::class, 'suggestRider']);
-        Route::post('delivery/assign',       [\App\Http\Controllers\Panel\DeliveryController::class, 'assign']);
-        Route::post('delivery/status',       [\App\Http\Controllers\Panel\DeliveryController::class, 'status']);
+        Route::get('delivery/assign',       [\App\Http\Controllers\Panel\DeliveryController::class, 'assign']);
+        Route::get('delivery/status',       [\App\Http\Controllers\Panel\DeliveryController::class, 'status']);
+
+        // Owner-facing settings moved into the Seller Panel (no /app shell)
+        Route::get('delivery/zones',         [\App\Http\Controllers\Panel\PanelOwnerController::class, 'zones']);
+        Route::get('delivery/zone-save',    [\App\Http\Controllers\Panel\PanelOwnerController::class, 'zoneSave']);
+        Route::get('delivery/zone-delete',  [\App\Http\Controllers\Panel\PanelOwnerController::class, 'zoneDelete']);
+        Route::get('profile',                [\App\Http\Controllers\Panel\PanelOwnerController::class, 'profile']);
+        Route::get('profile-save',          [\App\Http\Controllers\Panel\PanelOwnerController::class, 'profileSave']);
+        Route::get('password-change',       [\App\Http\Controllers\Panel\PanelOwnerController::class, 'passwordChange']);
+        Route::get('notifications',          [\App\Http\Controllers\Panel\PanelOwnerController::class, 'notifications']);
+        Route::get('notif-save',            [\App\Http\Controllers\Panel\PanelOwnerController::class, 'notifSave']);
+        Route::get('notif-delete',          [\App\Http\Controllers\Panel\PanelOwnerController::class, 'notifDelete']);
+        Route::get('defaults',               [\App\Http\Controllers\Panel\PanelOwnerController::class, 'defaults']);
+        Route::get('default-save',          [\App\Http\Controllers\Panel\PanelOwnerController::class, 'defaultSave']);
+        Route::get('default-delete',        [\App\Http\Controllers\Panel\PanelOwnerController::class, 'defaultDelete']);
         Route::get('settings',   [PanelApiController::class, 'settings']);
         Route::get('branches',   [PanelApiController::class, 'branches']);
         Route::get('customers',  [PanelApiController::class, 'customers']);

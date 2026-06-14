@@ -20,6 +20,12 @@ use Filament\Tables\Table;
 class ProductDefaultResource extends Resource
 {
     protected static ?string $model = ProductDefault::class;
+
+    /** Owner workflows live in the Seller Panel now; keep this in /app for super-admins only. */
+    public static function shouldRegisterNavigation(): bool
+    {
+        return (bool) (auth()->user()?->is_super_admin);
+    }
     protected static ?string $navigationIcon = 'heroicon-o-sparkles';
     protected static ?string $navigationLabel = 'Smart Defaults';
     protected static ?string $modelLabel = 'default';
