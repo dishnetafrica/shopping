@@ -207,6 +207,8 @@ class BotBrain
                 $convo->save();
                 \App\Jobs\NotifyOwner::dispatch($tenant->id, "\u{1F64B} +{$convo->customer_phone} asked to speak with a person. Open Chats to take over.");
                 return "\u{1F642} Sure — I'm letting the shop know. Someone will reply here shortly. Meanwhile you can keep typing your order if you like.";
+            case IntentClassifier::LOCATION:
+                return $this->captureLocation($tenant, $convo, $text);
             case IntentClassifier::UNKNOWN:
                 return "I didn't quite catch that \u{1F642} Tell me a product to add, say *cart* to review, or *checkout* when ready.";
             // CART / CHECKOUT / DECLINE are already handled above; anything else is SHOPPING.
@@ -237,6 +239,52 @@ class BotBrain
         $cart  = is_array($convo->cart) ? $convo->cart : [];
         $state = is_array($convo->state) ? $convo->state : [];
         return $engine->handle($text, $catalogue, $cart, $state);
+    }
+
+    /** A customer volunteered a delivery location (outside checkout): store it, never search. */
+    protected function captureLocation(Tenant $tenant, Conversation $convo, string $text): string
+    {
+        $det  = \App\Services\Bot\LocationDictionary::detect($text);
+        $area = $det['area'] ?? \App\Services\Bot\LocationDictionary::canonicalize($text);
+        $city = $det['city'] ?? null;
+
+        $st = is_array($convo->state) ? $convo->state : [];
+        $st['delivery_area'] = $area;
+        $st['delivery_text'] = trim($text);
+        $convo->state = $st;
+        $convo->save();
+
+        $where = $city ? "{$area}, {$city}" : $area;
+        $cart  = is_array($convo->cart) ? $convo->cart : [];
+
+        if ($cart) {
+            $subtotal = 0; foreach ($cart as $l) $subtotal += $l['price'] * $l['qty'];
+            $q   = $this->deliveryQuote($tenant, (int) round($subtotal), $area);
+            $fee = (int) $q['fee'];
+            $eta = $q['zone']['eta_minutes'] ?? 45;
+            $cur = $this->currencyFor($tenant);
+            $feeLine = $fee > 0
+                ? "Delivery is about *{$cur} " . number_format($fee) . "* (~{$eta} min)."
+                : "Delivery ~{$eta} min.";
+            return "\u{1F4CD} Got it — delivering to *{$where}*. {$feeLine}\n\nSay *checkout* to place your order, or add more items.";
+        }
+
+        return "\u{1F4CD} Got it — I'll deliver to *{$where}*. Tell me what you'd like to order, then say *checkout* when ready.";
+    }
+
+    /** Server-authoritative zone/fee/ETA for a location text (canonicalised for matching). */
+    protected function deliveryQuote(Tenant $tenant, int $subtotal, string $locationText): array
+    {
+        $sset = $tenant->settings ?? [];
+        return (new \App\Services\Delivery\ZoneResolver())->quote(
+            \App\Services\Bot\LocationDictionary::canonicalize($locationText), null, null, $subtotal,
+            [
+                'base'      => (int) ($sset['base'] ?? 0),
+                'per_km'    => (int) ($sset['perKm'] ?? 0),
+                'min'       => (int) ($sset['min'] ?? 0),
+                'free_over' => (int) ($sset['freeOver'] ?? 0),
+            ]
+        );
     }
 
     /** Tenant catalogue as plain rows (net prices applied) for the matcher. */
@@ -315,18 +363,16 @@ class BotBrain
         $itemsText = collect($cart)->map(fn ($l) => "{$l['qty']}x {$l['name']}")->implode(', ');
 
         // D1 — server-authoritative delivery fee + ETA from the matched zone (no extra
-        // confirmation step). Text-location match for now; per-km needs a shared pin.
+        // confirmation step). Location text is canonicalised (misspellings -> canonical
+        // area) so zone keyword matching is reliable; if the checkout reply names no area
+        // but one was volunteered earlier, use that.
         $subtotal = (int) round($total);
-        $sset = $tenant->settings ?? [];
-        $quote = (new \App\Services\Delivery\ZoneResolver())->quote(
-            $location, null, null, $subtotal,
-            [
-                'base'      => (int) ($sset['base'] ?? 0),
-                'per_km'    => (int) ($sset['perKm'] ?? 0),
-                'min'       => (int) ($sset['min'] ?? 0),
-                'free_over' => (int) ($sset['freeOver'] ?? 0),
-            ]
-        );
+        $zoneText = $location;
+        if (\App\Services\Bot\LocationDictionary::detect($location) === null
+            && ! empty($convo->state['delivery_area'])) {
+            $zoneText = (string) $convo->state['delivery_area'];
+        }
+        $quote = $this->deliveryQuote($tenant, $subtotal, $zoneText);
         $deliveryFee = (int) $quote['fee'];
         $zoneId      = $quote['zone']['id'] ?? null;
         $zoneName    = $quote['zone']['name'] ?? null;

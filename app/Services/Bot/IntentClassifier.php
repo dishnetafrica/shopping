@@ -25,6 +25,7 @@ final class IntentClassifier
     public const HUMAN_AGENT = 'human_agent';
     public const CHECKOUT    = 'checkout';
     public const CART        = 'cart';
+    public const LOCATION    = 'location';
     public const UNKNOWN     = 'unknown';
 
     private const GREETINGS = ['hi','hii','hey','hello','helo','yo','hiya','start','menu','hola',
@@ -42,7 +43,7 @@ final class IntentClassifier
         'cool','brilliant','helpful'];
 
     private const SHOP_VERBS = ['add','buy','order','purchase','want to buy','looking for','do you have',
-        'do you sell','i need','i want','gimme','give me','get me','send me','bring me','deliver'];
+        'do you sell','i need','i want','gimme','give me','get me','send me','bring me'];
 
     public static function classify(string $text, array $catalogueTokenSet = []): string
     {
@@ -55,8 +56,16 @@ final class IntentClassifier
         if (self::isCheckout($lc))   return self::CHECKOUT;
         if (self::isCart($lc))       return self::CART;
 
-        // Genuine shopping signal -> search is allowed (incl. typo fuzzy in the engine).
-        if (self::hasProductSignal($text, $lc, $catalogueTokenSet)) return self::SHOPPING;
+        // A STRONG shopping signal (catalogue word / qty+unit / shop verb) wins outright.
+        if (self::hasStrongProductSignal($text, $lc, $catalogueTokenSet)) return self::SHOPPING;
+
+        // A delivery location (known Kampala/Juba area, or a cue + landmark) must be
+        // recognised as a LOCATION and never product-searched — even a bare area name.
+        if (LocationDictionary::looksLikeLocation($text)) return self::LOCATION;
+
+        // A short bare term that isn't conversational -> likely a product or a typo;
+        // let the engine try (its fuzzy match is a typo-fallback, returns nothing if no hit).
+        if (self::hasWeakProductSignal($lc, $text)) return self::SHOPPING;
 
         // Otherwise it's conversational — never search.
         if (self::isThanks($lc))   return self::THANKS;
@@ -80,7 +89,7 @@ final class IntentClassifier
 
     // ---- signal detection -------------------------------------------------
 
-    private static function hasProductSignal(string $raw, string $lc, array $tokenSet): bool
+    private static function hasStrongProductSignal(string $raw, string $lc, array $tokenSet): bool
     {
         $content = self::contentWords($raw);
 
@@ -95,11 +104,16 @@ final class IntentClassifier
         }
         // 3) an explicit shopping verb together with some content
         if ($content && self::matchesAny($lc, self::SHOP_VERBS)) return true;
-        // 4) a SHORT bare term that isn't conversational — likely a product or a typo;
-        //    let the engine try (its fuzzy match is a typo-fallback, returns nothing if no hit).
-        if ($content && count($content) <= 3 && ! self::isConversational($lc)) return true;
 
         return false;
+    }
+
+    private static function hasWeakProductSignal(string $lc, string $raw): bool
+    {
+        $content = self::contentWords($raw);
+        // 4) a SHORT bare term that isn't conversational — likely a product or a typo;
+        //    let the engine try (its fuzzy match is a typo-fallback, returns nothing if no hit).
+        return $content && count($content) <= 3 && ! self::isConversational($lc);
     }
 
     private static function isConversational(string $lc): bool
