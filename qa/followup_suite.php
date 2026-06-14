@@ -33,9 +33,11 @@ ck('"wine opener" is SHOPPING (not business)', IC::classify('wine opener',$TS)==
 echo "\n[ISSUE 2/3] follow-up phrase detection\n";
 $fu=['more brands'=>'more','show more'=>'more','other options'=>'more','any other options'=>'more','what else'=>'more',
      'more brands if u have'=>'more','different size'=>'more','larger size'=>'larger','bigger'=>'larger',
-     'cheaper one'=>'cheaper','cheapest'=>'cheaper','premium one'=>'premium','smaller size'=>'smaller'];
+     'cheaper one'=>'cheaper','cheapest'=>'cheaper','premium one'=>'premium','smaller size'=>'smaller',
+     'more itmes you have'=>'more','more items'=>'more','more items you have'=>'more','what else do you have'=>'more',
+     'more options you have'=>'more','any other brands'=>'more'];
 foreach($fu as $t=>$exp){ ck("\"$t\" -> $exp", FollowUp::parse($t)===$exp, var_export(FollowUp::parse($t),true)); }
-foreach(['more rice','rice','2','milk','add sugar'] as $t){ ck("\"$t\" -> not a follow-up", FollowUp::parse($t)===null, var_export(FollowUp::parse($t),true)); }
+foreach(['more rice','rice','2','milk','add sugar','do you have more bread','more 2kg rice'] as $t){ ck("\"$t\" -> not a follow-up", FollowUp::parse($t)===null, var_export(FollowUp::parse($t),true)); }
 
 echo "\n[CONTEXT] engine records last_query when it shows options\n";
 $a=$e->handle('do you have wipes',$C,[],[]);

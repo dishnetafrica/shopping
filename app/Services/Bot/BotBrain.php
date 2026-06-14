@@ -379,6 +379,16 @@ class BotBrain
         $prods = $this->applyModifier($prods, $mod);
         $prods = array_slice($prods, 0, 12);
 
+        // "more" with nothing new to show (e.g. only 3 Haldiram items, all already listed) ->
+        // say so instead of re-printing the same list.
+        if ($mod === 'more') {
+            $prevIds = array_filter(array_map(fn ($o) => $o['product_id'] ?? null, (array) ($st['options'] ?? [])));
+            $newIds  = array_filter(array_map(fn ($p) => $p['id'] ?? null, $prods));
+            if ($prevIds && $newIds && ! array_diff($newIds, $prevIds)) {
+                return "That's everything we have for *{$q}* \u{1F642} Say *menu* to browse other categories, or tell me another product.";
+            }
+        }
+
         $cur   = $this->currencyFor($tenant);
         $built = $this->clarify->buildOptions(
             [['label' => $q, 'qty' => 1, 'products' => $prods]],
