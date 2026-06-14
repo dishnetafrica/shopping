@@ -20,14 +20,19 @@ No migration. After push: `php artisan optimize:clear` (and `route:clear` if rou
   - Rider picker -> `GET /papi/riders`
 - **Chats** — `GET /papi/chats` inbox (unread counts, BOT/YOU state from `last_sender`/`agent_active`);
   tapping a chat opens the full `/panel/chats` page. Polls every 25s.
+- **POS** — `GET /papi/products` loads your real catalogue (search-and-tap, no customer details).
+  Charge -> `GET /papi/save-order?channel=pos&status=Delivered&payment=…&total=…&items=[{name,qty,price}]`
+  which creates a real order (OrderObserver assigns the order_no) that appears in the feed.
+  Creating a POS order is plan-gated on `pos`; on a lower plan the sheet shows "POS needs a higher plan".
+  A counter sale is recorded with `status=Delivered` and no customer name/phone (none required).
 - Branding (shop name, initials, plan, phone) injected server-side from the tenant.
 - Auth loss (401/419) -> auto-redirect to `/app/login`.
 
-## What is PREVIEW (clearly labelled in the UI, NOT yet wired)
-- **POS** — local quick-tally only. Recording a POS sale to the books needs the order-create
-  contract (`save-order`) which I did not wire blind. Next step if you want it.
+## Notes
 - **More** — deep-links into the existing full panel pages (`/panel`, `/panel/chats`,
   `/panel/cashbook`, `/panel/scheduled`, `/panel/marketing`, `/panel/setup`).
+- POS records the sale as an **order** (items + total + payment). It does NOT yet post a separate
+  cash entry to the cashbook ledger — say the word if you want POS cash to also hit `cashbook/add`.
 
 ## Add to phone home screen
 The page is `apple-mobile-web-app-capable`; on a phone, open `/panel/m` and "Add to Home Screen"
@@ -43,6 +48,8 @@ for an app-like launch. (It reuses the panel session cookie, so no separate logi
 6. Place a real WhatsApp order on the connected number; within ~25s it should appear under New
    without reloading.
 7. Chats tab lists real conversations with unread badges; tapping opens /panel/chats.
+8. POS tab: search loads real products; tap to add; "Review & charge" -> pick payment -> Charge.
+   A new order (channel=pos, Delivered) should be created and appear in the Orders feed.
 
 If Orders/Chats show the "Couldn't load" state, it's the session or the endpoint, not the UI:
 check you're logged in (cookie present), that `/papi/orders` returns JSON in the browser, and

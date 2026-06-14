@@ -141,21 +141,45 @@
   .tag.you{color:var(--amber-d);background:var(--amber-wash)}
   .preview-note{background:var(--amber-wash);color:var(--amber-d);border-radius:11px;padding:10px 13px;
     font-size:12px;font-weight:500;margin-bottom:14px;display:flex;gap:8px;align-items:flex-start}
-  .pos-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:16px}
-  .pi{background:var(--card);border-radius:13px;box-shadow:var(--shadow);padding:11px 9px;text-align:center;cursor:pointer;transition:.15s}
-  .pi:active{transform:scale(.96)}
-  .pi .em{font-size:25px}.pi .pn{font-size:11px;font-weight:600;margin-top:5px;line-height:1.25}
-  .pi .pp{font-family:var(--mono);font-size:10.5px;color:var(--teal-d);margin-top:3px;font-weight:700}
-  .cart{background:var(--card);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
-  .cart h4{font-family:var(--display);font-size:13px;padding:13px 15px 9px;display:flex;align-items:center;gap:8px}
-  .cart h4 .n{font-family:var(--mono);font-size:10px;background:var(--teal);color:#fff;border-radius:20px;padding:2px 8px;margin-left:auto}
-  .cl{display:flex;align-items:center;gap:8px;padding:8px 15px;font-size:12.5px;border-top:1px solid var(--line-soft)}
-  .cl .q{font-family:var(--mono);font-weight:700;color:var(--teal-d)}.cl .nm{flex:1}.cl .pr{font-family:var(--mono);font-weight:700}
-  .cart .sum{display:flex;align-items:center;padding:13px 15px;border-top:1.5px dashed var(--line)}
-  .cart .sum .lab{font-weight:600}.cart .sum .tot{font-family:var(--mono);font-weight:700;font-size:17px;margin-left:auto}
-  .cart .checkout{display:block;width:100%;border:0;background:var(--amber);color:#fff;font-family:var(--body);
-    font-weight:700;font-size:14px;padding:15px;cursor:pointer}
-  .pos-empty{padding:20px 15px;text-align:center;color:var(--ink-faint);font-size:12.5px}
+  .pos-search{position:sticky;top:0;z-index:8;display:flex;align-items:center;gap:8px;background:var(--paper);
+    padding:2px 0 12px}
+  .pos-search span{position:absolute;left:13px;font-size:14px;color:var(--ink-faint);pointer-events:none}
+  .pos-search input{width:100%;border:0;background:var(--card);box-shadow:var(--shadow);border-radius:12px;
+    padding:12px 14px 12px 36px;font-family:var(--body);font-size:13.5px;color:var(--ink)}
+  .pos-search input:focus{outline:2px solid var(--teal);outline-offset:0}
+  .prow{display:flex;align-items:center;gap:11px;background:var(--card);border-radius:12px;box-shadow:var(--shadow);
+    padding:11px 13px;margin-bottom:9px;cursor:pointer;transition:.12s}
+  .prow:active{transform:scale(.985)}
+  .prow .pinfo{flex:1;min-width:0}
+  .prow .pn{font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .prow .pc{font-size:11px;color:var(--ink-faint);margin-top:1px}
+  .prow .pp{font-family:var(--mono);font-weight:700;font-size:13px;color:var(--teal-d);white-space:nowrap}
+  .prow .padd{width:30px;height:30px;border-radius:9px;background:var(--teal-wash);color:var(--teal-d);
+    display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:600;flex:0 0 auto}
+  .prow.incart .padd{background:var(--teal);color:#fff}
+  .prow .qbadge{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--teal-d);min-width:18px;text-align:center}
+  .lowstock{color:var(--amber-d)}
+  .pos-empty{padding:30px 15px;text-align:center;color:var(--ink-faint);font-size:12.5px}
+  .posbar{position:absolute;left:0;right:0;bottom:calc(58px + env(safe-area-inset-bottom));z-index:40;
+    margin:0 12px;background:var(--ink);color:#fff;border-radius:14px;padding:10px 12px 10px 16px;
+    display:none;align-items:center;gap:10px;box-shadow:0 12px 30px -10px rgba(0,0,0,.55);transform:translateY(8px);opacity:0;transition:.2s}
+  .posbar.show{display:flex;transform:translateY(0);opacity:1}
+  .pb-info b{font-size:13px}.pb-info span{display:block;font-family:var(--mono);font-size:11px;color:#C7C0B5;margin-top:1px}
+  .pb-go{margin-left:auto;border:0;background:var(--amber);color:#fff;font-family:var(--body);font-weight:700;
+    font-size:13px;padding:11px 16px;border-radius:11px;cursor:pointer}
+  .pcl{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--line-soft)}
+  .pcl .pcn{flex:1;font-size:13px;font-weight:500}
+  .pcl .pcp{font-family:var(--mono);font-size:12px;font-weight:700;min-width:74px;text-align:right}
+  .step{display:flex;align-items:center;gap:0;background:var(--line-soft);border-radius:9px;overflow:hidden}
+  .step button{border:0;background:transparent;width:28px;height:28px;font-size:16px;font-weight:700;color:var(--teal-d);cursor:pointer}
+  .step .sq{font-family:var(--mono);font-size:12px;font-weight:700;min-width:20px;text-align:center}
+  .pay-row{display:flex;gap:7px;margin:14px 0 4px}
+  .pay-row button{flex:1;border:0;background:var(--line-soft);color:var(--ink-soft);font-family:var(--body);
+    font-weight:600;font-size:12px;padding:10px 6px;border-radius:10px;cursor:pointer}
+  .pay-row button.sel{background:var(--teal);color:#fff}
+  .charge-btn{width:100%;border:0;background:var(--amber);color:#fff;font-family:var(--body);font-weight:700;
+    font-size:15px;padding:15px;border-radius:13px;cursor:pointer;margin-top:12px}
+  .charge-btn[disabled]{opacity:.55}
   .menu{background:var(--card);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
   .mi{display:flex;align-items:center;gap:13px;padding:15px;border-bottom:1px solid var(--line-soft);cursor:pointer;text-decoration:none;color:inherit}
   .mi:last-child{border-bottom:0}
@@ -224,14 +248,8 @@
     </section>
 
     <section class="pane" id="pane-pos">
-      <div class="preview-note"><span>⚠️</span><span>Quick tally preview — recording POS sales to your books is the next step. Real WhatsApp orders are on the Orders tab.</span></div>
-      <div class="pos-grid" id="posgrid"></div>
-      <div class="cart">
-        <h4>Walk-in sale <span class="n" id="cart-n">0 items</span></h4>
-        <div id="cart-lines"><div class="pos-empty">Tap products above to start a tally.</div></div>
-        <div class="sum"><span class="lab">Total</span><span class="tot" id="cart-tot">UGX 0</span></div>
-        <button class="checkout" id="pos-checkout">Total up sale</button>
-      </div>
+      <div class="pos-search"><span>🔎</span><input id="posq" type="search" placeholder="Search products to add…" autocomplete="off" autocapitalize="off"></div>
+      <div id="poslist"><div class="loading"><div class="spin"></div></div></div>
     </section>
 
     <section class="pane" id="pane-more">
@@ -259,6 +277,24 @@
     <button data-p="pos"><span class="ni">🛒</span>POS</button>
     <button data-p="more"><span class="ni">⋯</span>More</button>
   </nav>
+
+  <!-- POS sticky charge bar -->
+  <div class="posbar" id="posbar"><div class="pb-info"><b id="pb-count">0 items</b><span id="pb-total">UGX 0</span></div><button class="pb-go" id="pb-go">Review &amp; charge</button></div>
+
+  <!-- POS cart sheet -->
+  <div class="sheet-bg" id="posSheetBg"></div>
+  <div class="sheet" id="posSheet">
+    <div class="grab"></div>
+    <h3>Charge sale</h3>
+    <div class="sub">Walk-in counter sale — no customer details needed.</div>
+    <div id="posCartLines"></div>
+    <div class="pay-row" id="payRow">
+      <button data-pay="Cash" class="sel">💵 Cash</button>
+      <button data-pay="MTN MoMo">MTN MoMo</button>
+      <button data-pay="Airtel MoMo">Airtel MoMo</button>
+    </div>
+    <button class="charge-btn" id="chargeBtn">Charge UGX 0</button>
+  </div>
 
   <!-- rider sheet -->
   <div class="sheet-bg" id="sheetBg"></div>
@@ -498,27 +534,110 @@ function renderChats(list, botMode){
 }
 function setChatBadge(n){ const b=document.getElementById("nb-chats"); b.textContent=n; b.classList.toggle("show", n>0); }
 
-/* ---------- POS (local tally preview) ---------- */
-const POS = [["🍚","Rice 2kg",9000],["🫘","Beans 1kg",6500],["🛢️","Oil 1L",11000],["🧂","Sugar 1kg",4500],
-  ["🥛","Milk 1L",3800],["🍞","Bread",4000],["🥚","Eggs tray",14000],["🧈","Blue Band",9500],["🧴","Soap",3500]];
-let cart = {};
-function renderPos(){
-  document.getElementById("posgrid").innerHTML = POS.map((p,i)=>`<div class="pi" data-i="${i}"><div class="em">${p[0]}</div><div class="pn">${p[1]}</div><div class="pp">${fmt(p[2])}</div></div>`).join("");
-  document.querySelectorAll(".pi").forEach(el=>el.addEventListener("click",()=>{ const i=el.dataset.i; cart[i]=(cart[i]||0)+1; renderCart(); }));
-  renderCart();
+/* ---------- POS (live: real catalogue + save-order) ---------- */
+let products = [], productsLoaded = false, cart = {}, pay = "Cash";
+function mapProduct(p){
+  return { id:p["_row"], name:p["Product Name"]||"", price:Number(p["Price_UGX"]||0),
+    cat:p["Category"]||"", stock:Number(p["Stock"]||0) };
 }
-function renderCart(){
-  const keys=Object.keys(cart), lines=document.getElementById("cart-lines"); let tot=0,n=0;
-  if(!keys.length){ lines.innerHTML='<div class="pos-empty">Tap products above to start a tally.</div>'; }
-  else lines.innerHTML = keys.map(i=>{ const p=POS[i],q=cart[i]; tot+=p[2]*q; n+=q;
-    return `<div class="cl"><span class="q">${q}\u00d7</span><span class="nm">${p[1]}</span><span class="pr">${fmt(p[2]*q)}</span></div>`; }).join("");
-  document.getElementById("cart-tot").textContent = fmt(tot);
-  document.getElementById("cart-n").textContent = n+(n===1?" item":" items");
+async function loadProducts(){
+  if(productsLoaded) return;
+  document.getElementById("poslist").innerHTML = '<div class="loading"><div class="spin"></div></div>';
+  try{
+    const d = await api("/products");
+    products = (d.products||[]).map(mapProduct).filter(p=>p.name);
+    productsLoaded = true; renderProducts();
+  }catch(e){
+    if(e.message==="auth") return;
+    document.getElementById("poslist").innerHTML =
+      '<div class="empty"><div class="ic">⚠️</div><p>Couldn\u2019t load products.</p><button class="retry" onclick="loadProducts()">Try again</button></div>';
+  }
 }
-document.getElementById("pos-checkout").addEventListener("click",()=>{
-  const tot=Object.keys(cart).reduce((s,i)=>s+POS[i][2]*cart[i],0);
-  if(!tot){ toast("Add items first"); return; }
-  toast("Sale total "+fmt(tot)+" (tally only)"); cart={}; renderCart();
+function renderProducts(){
+  const q = (document.getElementById("posq").value||"").trim().toLowerCase();
+  const list = (q ? products.filter(p=>p.name.toLowerCase().includes(q)||p.cat.toLowerCase().includes(q)) : products).slice(0,60);
+  const box = document.getElementById("poslist");
+  if(!products.length){ box.innerHTML = '<div class="pos-empty">No products in your catalogue yet. Add them in the full panel.</div>'; return; }
+  if(!list.length){ box.innerHTML = '<div class="pos-empty">No products match \u201c'+esc(q)+'\u201d.</div>'; return; }
+  box.innerHTML = list.map(p=>{
+    const inc = cart[p.id];
+    const low = p.stock>0 && p.stock<=5 ? `<span class="lowstock">· ${p.stock} left</span>` : "";
+    return `<div class="prow ${inc?"incart":""}" data-id="${p.id}">
+      <div class="pinfo"><div class="pn">${esc(p.name)}</div><div class="pc">${esc(p.cat||"Item")} ${low}</div></div>
+      <div class="pp">${fmt(p.price)}</div>
+      ${inc?`<span class="qbadge">${inc.qty}\u00d7</span>`:""}
+      <div class="padd">+</div></div>`;
+  }).join("");
+  box.querySelectorAll(".prow").forEach(el=> el.addEventListener("click", ()=> addToCart(Number(el.dataset.id))));
+}
+function addToCart(id){
+  const p = products.find(x=>x.id===id); if(!p) return;
+  if(cart[id]) cart[id].qty++; else cart[id] = {name:p.name, price:p.price, qty:1};
+  renderProducts(); updatePosBar();
+}
+function cartTotal(){ return Object.values(cart).reduce((s,c)=>s+c.price*c.qty,0); }
+function cartCount(){ return Object.values(cart).reduce((s,c)=>s+c.qty,0); }
+function updatePosBar(){
+  const bar = document.getElementById("posbar"), n = cartCount();
+  const show = activePane==="pos" && n>0;
+  bar.classList.toggle("show", show);
+  if(n){ document.getElementById("pb-count").textContent = n+(n===1?" item":" items");
+    document.getElementById("pb-total").textContent = fmt(cartTotal()); }
+}
+function renderPosCart(){
+  const lines = document.getElementById("posCartLines");
+  const keys = Object.keys(cart);
+  if(!keys.length){ lines.innerHTML = '<div class="pos-empty">Cart is empty.</div>'; }
+  else lines.innerHTML = keys.map(id=>{ const c=cart[id];
+    return `<div class="pcl"><span class="pcn">${esc(c.name)}</span>
+      <div class="step"><button data-id="${id}" data-d="-1">\u2212</button><span class="sq">${c.qty}</span><button data-id="${id}" data-d="1">+</button></div>
+      <span class="pcp">${fmt(c.price*c.qty)}</span></div>`; }).join("");
+  lines.querySelectorAll(".step button").forEach(b=> b.addEventListener("click", ()=>{
+    const id=b.dataset.id, d=Number(b.dataset.d);
+    if(cart[id]){ cart[id].qty += d; if(cart[id].qty<=0) delete cart[id]; }
+    renderPosCart(); renderProducts(); updatePosBar();
+    document.getElementById("chargeBtn").textContent = "Charge "+fmt(cartTotal());
+    if(!cartCount()) closePosSheet();
+  }));
+  document.getElementById("chargeBtn").textContent = "Charge "+fmt(cartTotal());
+}
+function openPosSheet(){
+  if(!cartCount()) return;
+  renderPosCart();
+  document.getElementById("posSheetBg").classList.add("on");
+  document.getElementById("posSheet").classList.add("on");
+}
+function closePosSheet(){ document.getElementById("posSheet").classList.remove("on"); document.getElementById("posSheetBg").classList.remove("on"); }
+document.getElementById("posSheetBg").addEventListener("click", closePosSheet);
+document.getElementById("pb-go").addEventListener("click", openPosSheet);
+document.getElementById("posq").addEventListener("input", ()=>{ if(productsLoaded) renderProducts(); });
+document.getElementById("payRow").addEventListener("click", e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  document.querySelectorAll("#payRow button").forEach(x=>x.classList.remove("sel"));
+  b.classList.add("sel"); pay = b.dataset.pay;
+});
+document.getElementById("chargeBtn").addEventListener("click", async ()=>{
+  const items = Object.values(cart).map(c=>({name:c.name, qty:c.qty, price:c.price}));
+  const total = cartTotal();
+  if(!items.length){ toast("Add items first"); return; }
+  const btn = document.getElementById("chargeBtn"); btn.disabled = true;
+  try{
+    const url = "/save-order?channel=pos&status=Delivered"
+      + "&payment=" + encodeURIComponent(pay)
+      + "&total=" + total
+      + "&items=" + encodeURIComponent(JSON.stringify(items));
+    const d = await api(url);
+    if(d && d.ok===false){
+      toast((d.error||"").indexOf("plan")>=0 ? "POS needs a higher plan" : (d.error||"Couldn\u2019t save sale"));
+    } else {
+      toast("Sale " + (d.order_no||"") + " recorded ✓");
+      cart = {}; pay = "Cash";
+      document.querySelectorAll("#payRow button").forEach((x,i)=>x.classList.toggle("sel", i===0));
+      closePosSheet(); renderProducts(); updatePosBar();
+      loadOrders(true);
+    }
+  }catch(e){ if(e.message!=="auth") toast("Network error"); }
+  btn.disabled = false;
 });
 
 /* ---------- nav + polling ---------- */
@@ -531,6 +650,8 @@ document.getElementById("nav").addEventListener("click", e=>{
   document.querySelector(".screen").scrollTop = 0;
   if(activePane==="chats") loadChats();
   if(activePane==="orders") loadOrders(true);
+  if(activePane==="pos") loadProducts();
+  updatePosBar();
 });
 document.getElementById("seg").addEventListener("click", e=>{
   const b=e.target.closest("button"); if(!b) return;
@@ -550,7 +671,7 @@ let tT; function toast(m){ const t=document.getElementById("toast"); t.textConte
   clearTimeout(tT); tT=setTimeout(()=>t.classList.remove("show"),2100); }
 
 /* ---------- init ---------- */
-boot(); renderPos(); loadOrders(); loadChats(true); startPolling();
+boot(); loadOrders(); loadChats(true); startPolling();
 </script>
 </body>
 </html>
