@@ -189,6 +189,15 @@ class BotBrain
                      . "\n\nYour options are still above \u{1F446} reply with the *number* when you're ready.";
             }
 
+            // "Thanks" / "Okay" / "Noted" / 👍 / "Will check" -> don't keep asking them to pick.
+            // Close warmly and drop the pending list.
+            if ($this->isClosingAck($text)) {
+                $st = is_array($convo->state) ? $convo->state : [];
+                unset($st['options']);
+                $convo->state = $st; $convo->save();
+                return "You're welcome \u{1F60A}\n\nLet me know if you'd like to order any item or search for another product.";
+            }
+
             // Reply neither resolved the selection nor started a new product. Keep the
             // pending options (state survives) and re-prompt — never add on an ambiguous reply.
             return "Please reply with the *number* you want from the list above (e.g. *1*, or *1 2 3*) — or type a product name to search again.";
@@ -257,6 +266,12 @@ class BotBrain
             case IntentClassifier::UNKNOWN:
                 return "I didn't quite catch that \u{1F642} Tell me a product to add, say *cart* to review, or *checkout* when ready.";
             // CART / CHECKOUT / DECLINE are already handled above; anything else is SHOPPING.
+        }
+
+        // Broad multi-brand browse ("india gate rice chenab ... ravi rice mb") -> show only the
+        // dominant category's products, never unrelated items that collide on noise tokens.
+        if (($browse = $this->tryCategoryBrowse($tenant, $convo, $text, $catalogue)) !== null) {
+            return $browse;
         }
 
         // hand off to the deterministic shopping engine
@@ -435,6 +450,50 @@ class BotBrain
         if (in_array($t, $continue, true)) return 'continue';
         if (in_array($t, $new, true)) return 'new';
         return null;
+    }
+
+    /**
+     * If the message is a confident single-category browse, present that category's products as a
+     * clean numbered list (max 20, best/exact-brand first) and never unrelated categories.
+     */
+    protected function tryCategoryBrowse(Tenant $tenant, Conversation $convo, string $text, array $catalogue): ?string
+    {
+        $res = (new \App\Services\Bot\CatalogueMatcher())->categoryBrowse($text, $catalogue, 20);
+        if ($res === null) return null;
+
+        $cur   = $this->currencyFor($tenant);
+        $label = $res['category'] !== '' ? $res['category'] : 'Options';
+        $built = $this->clarify->buildOptions(
+            [['label' => $label, 'qty' => 1, 'products' => $res['products']]],
+            fn ($a) => $cur . ' ' . number_format((float) $a)
+        );
+
+        $st = is_array($convo->state) ? $convo->state : [];
+        $st['options']    = $built['flat'];
+        $st['last_query'] = $label;
+        $st['last_kind']  = 'search';
+        $st['last_activity'] = time();
+        $convo->state     = $st;
+        $convo->save();
+
+        return "Here are the *{$label}* options we have:\n" . $built['text']
+             . "\n\nReply with the *number(s)* you want — e.g. *3*, or *2 x 3* for two of item 3.";
+    }
+
+    /** A closing acknowledgement ("thanks", "okay", "noted", 👍, "will check") — not a selection. */
+    protected function isClosingAck(string $text): bool
+    {
+        foreach (["\u{1F44D}", "\u{1F64F}", "\u{1F44C}", "\u{1F642}"] as $e) {  // 👍 🙏 👌 🙂
+            if (str_contains($text, $e)) return true;
+        }
+        $t = trim(preg_replace('/[^a-z\s]/', '', mb_strtolower($text)));
+        $t = trim(preg_replace('/\s+/', ' ', $t));
+        $ack = ['thanks', 'thank you', 'thankyou', 'thank u', 'thx', 'ty', 'tnx',
+            'asante', 'asante sana', 'webale', 'shukran', 'dhanyavaad',
+            'ok', 'okay', 'okey', 'okie', 'k', 'kk', 'noted', 'alright', 'all right',
+            'got it', 'gotit', 'will check', 'i will check', 'let me check', 'checking',
+            'cool', 'fine', 'sure', 'great', 'nice one', 'no problem', 'np', 'understood', 'sawa'];
+        return in_array($t, $ack, true);
     }
 
     /** Build a fresh engine (request-scoped token cache) and handle one message. */

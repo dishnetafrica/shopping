@@ -171,6 +171,76 @@ class CatalogueMatcher
         return $scored;
     }
 
+    /**
+     * Broad multi-term browse ("india gate rice chenab super brown rice ravi rice mb"):
+     * when a long query is dominated by ONE product category/head term, return only that
+     * category's products (best first), ignoring unrelated products that merely collide on
+     * noise tokens (snacks/blades/gum). Returns null when it isn't a confident single-category
+     * browse, so precise/short/multi-category queries fall through to normal handling.
+     *
+     * @return array{category:string,products:array}|null
+     */
+    public function categoryBrowse(string $query, array $products, int $limit = 20): ?array
+    {
+        $q = $this->tokens($query);
+        if (count($q) < 4) return null;                 // not a broad browse — leave to normal path
+
+        $scored = $this->search($query, $products);
+        if (count($scored) < 4) return null;
+
+        // score mass per category
+        $catScore = []; $total = 0.0; $catLabel = [];
+        foreach ($scored as $s) {
+            $raw = trim((string) ($s['product']['category'] ?? ''));
+            $c   = mb_strtolower($raw);
+            $catScore[$c] = ($catScore[$c] ?? 0) + $s['score'];
+            $total += $s['score'];
+            if ($raw !== '' && ! isset($catLabel[$c])) $catLabel[$c] = $raw;
+        }
+        if ($total <= 0) return null;
+        arsort($catScore);
+        $domCat  = (string) array_key_first($catScore);
+        $domConf = $catScore[$domCat] / $total;
+
+        // head term = the query token present in the most product NAMES (e.g. "rice")
+        $cov = [];
+        foreach (array_unique($q) as $w) {
+            $n = 0;
+            foreach ($scored as $s) {
+                if (in_array($w, $this->tokens((string) ($s['product']['name'] ?? '')), true)) $n++;
+            }
+            $cov[$w] = $n;
+        }
+        arsort($cov);
+        $domHead = (string) array_key_first($cov);
+        $headCov = $cov[$domHead] ?? 0;
+
+        // Decide the focus set.
+        $prods = []; $label = '';
+        if ($domCat !== '' && $domConf >= 0.70) {
+            // confident category: keep that category, plus any product whose NAME carries the head
+            foreach ($scored as $s) {
+                $c = mb_strtolower(trim((string) ($s['product']['category'] ?? '')));
+                $inHead = $headCov >= 2 && in_array($domHead, $this->tokens((string) ($s['product']['name'] ?? '')), true);
+                if ($c === $domCat || $inHead) $prods[] = $s['product'];
+            }
+            $label = $catLabel[$domCat] ?? ucfirst($domHead);
+        } elseif ($headCov >= 4) {
+            // no usable category data: focus by the dominant head term in the name
+            foreach ($scored as $s) {
+                if (in_array($domHead, $this->tokens((string) ($s['product']['name'] ?? '')), true)) {
+                    $prods[] = $s['product'];
+                }
+            }
+            $label = ucfirst($domHead);
+        } else {
+            return null;
+        }
+
+        if (count($prods) < 4) return null;             // not enough to call it a category browse
+        return ['category' => $label, 'products' => array_slice($prods, 0, max(1, $limit))];
+    }
+
     /** Normalise a size token: "2 kg"->"2kg", "500 ml"->"500ml", "1 Litre"->"1l". Null if none. */
     public static function normSize(string $s): ?string
     {
