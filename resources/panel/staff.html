@@ -60,10 +60,12 @@
     </div>
     <label>Email</label>
     <input id="sEmail" type="email" placeholder="name@shop.com">
-    <label>Password (min 6 characters)</label>
+    <label>WhatsApp number (for easy login)</label>
+    <input id="sPhone" type="tel" inputmode="tel" placeholder="e.g. 256700123456">
+    <label>Password (optional if a WhatsApp number is set)</label>
     <input id="sPass" type="password" placeholder="set a password">
     <button class="btn" id="addBtn" onclick="addStaff()">Add login</button>
-    <div class="note">They sign in at <b>/app/login</b> with this email and password.</div>
+    <div class="note">They sign in at <b>/app/login</b> — by WhatsApp number (a code is sent), or by email + password.</div>
   </div>
 
   <div class="card">
@@ -102,7 +104,7 @@
       var l=$('list');
       l.innerHTML=d.staff.map(function(u){
         return '<div class="u"><span class="av">'+initials(u.name)+'</span>'+
-          '<div><div class="nm">'+esc(u.name)+'</div><div class="em">'+esc(u.email)+'</div></div>'+
+          '<div><div class="nm">'+esc(u.name)+'</div><div class="em">'+esc(u.email)+(u.phone?(' · '+esc(u.phone)):'')+'</div></div>'+
           '<span class="role">'+esc(u.role)+'</span>'+
           (u.self?'<span class="me">you</span>':'<button class="del" title="Remove" onclick="delStaff('+u.id+",'"+esc(u.name)+"'"+')">\u00d7</button>')+
           '</div>';
@@ -113,14 +115,16 @@
 
   async function addStaff(){
     var name=$('sName').value,email=$('sEmail').value,pass=$('sPass').value,role=$('sRole').value;
-    if(!name||!email||pass.length<6){toast('Name, valid email and a 6+ character password needed');return;}
+    var phone=($('sPhone').value||'').replace(/\D+/g,'');
+    if(!name||!email||(!phone&&pass.length<6)){toast('Add a name, email, and a WhatsApp number (or a 6+ character password)');return;}
     var b=$('addBtn');b.disabled=true;b.innerHTML='<span class="spin"></span>Adding…';
     try{
-      var r=await fetch('/papi/staff/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,email:email,password:pass,role:role})});
+      var r=await fetch('/papi/staff/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,email:email,phone:phone,password:pass,role:role})});
       var d=await r.json();
-      if(d&&d.ok){toast('Staff login added');$('sName').value='';$('sEmail').value='';$('sPass').value='';$('sRole').value='';load();}
+      if(d&&d.ok){toast('Staff login added');$('sName').value='';$('sEmail').value='';$('sPhone').value='';$('sPass').value='';$('sRole').value='';load();}
       else if(d&&d.error==='upgrade_required'){toast('Plan login limit reached — upgrade to add more');load();}
       else if(d&&d.error==='email_taken'){toast('That email is already in use');}
+      else if(d&&d.error==='phone_taken'){toast('That WhatsApp number is already in use');}
       else if(d&&d.error==='bad_input'){toast(d.detail||'Check the details');}
       else{toast('Could not add login');}
     }catch(e){toast('Network error');}

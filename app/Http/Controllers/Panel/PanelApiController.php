@@ -1043,6 +1043,7 @@ class PanelApiController extends Controller
                 'id'    => (int) $u->id,
                 'name'  => (string) $u->name,
                 'email' => (string) $u->email,
+                'phone' => (string) ($u->phone ?? ''),
                 'role'  => (string) ($u->role ?: 'staff'),
                 'self'  => (int) $u->id === $me,
             ])->values();
@@ -1064,25 +1065,35 @@ class PanelApiController extends Controller
         $t     = $r->user()->tenant;
         $name  = trim((string) $r->input('name', ''));
         $email = strtolower(trim((string) $r->input('email', '')));
+        $phone = preg_replace('/\D+/', '', (string) $r->input('phone', ''));
         $pass  = (string) $r->input('password', '');
         $role  = trim((string) $r->input('role', 'staff')) ?: 'staff';
 
         if ($t->atUserLimit()) {
             return response()->json(['ok' => false, 'error' => 'upgrade_required', 'feature' => 'multi_user', 'cap' => $t->userCap()], 403);
         }
-        if ($name === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($pass) < 6) {
+        // Need name + email, and a login method: a WhatsApp number (OTP) OR a 6+ char password.
+        if ($name === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL) || ($phone === '' && strlen($pass) < 6)) {
             return response()->json(['ok' => false, 'error' => 'bad_input',
-                'detail' => 'Name, a valid email and a password of at least 6 characters are required.'], 422);
+                'detail' => 'Name, a valid email, and either a WhatsApp number or a password of at least 6 characters are required.'], 422);
         }
         if (User::where('email', $email)->exists()) {
             return response()->json(['ok' => false, 'error' => 'email_taken'], 409);
         }
+        if ($phone !== '' && User::where('phone', $phone)->exists()) {
+            return response()->json(['ok' => false, 'error' => 'phone_taken'], 409);
+        }
+
+        // If they'll sign in by WhatsApp and no password was set, store a random one
+        // so the column is satisfied; their real login is the OTP.
+        $password = strlen($pass) >= 6 ? $pass : \Illuminate\Support\Str::random(24);
 
         User::create([
             'tenant_id' => $t->id,
             'name'      => $name,
             'email'     => $email,
-            'password'  => $pass,           // 'hashed' cast hashes on save
+            'phone'     => $phone !== '' ? $phone : null,
+            'password'  => $password,        // 'hashed' cast hashes on save
             'role'      => $role,
         ]);
 
