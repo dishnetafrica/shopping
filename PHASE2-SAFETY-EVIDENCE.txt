@@ -1,0 +1,112 @@
+CloudBSS Production Safety — EVIDENCE (run 2026-06-14T06:29:45Z, PHP 8.3.6)
+Engines available in sandbox: PHP CLI, pdo_sqlite. NOT available: Laravel runtime, Postgres, Redis, queue workers, staging host, k6.
+
+################ 1. EXISTING TEST SUITES ################
+--- conversational_commerce (Cat 1-20) ---
+PHASE 1 (shipped scope):  63/63  = 100.0%
+ALL 20 CATEGORIES:        78/88  = 88.6%  (Phase-2 categories counted as not-yet-built)
+  No crashes ................ PASS
+  No empty responses ........ PASS
+  No incorrect cart mods .... PASS (edit verbs deferred, cart never wrongly added)
+  No customer dead-ends ..... PASS (every input yields a reply or safe redirect)
+--- default_strategy ---
+PASS 18  FAIL 0
+--- final_regression ---
+PASS 25   FAIL 0
+--- performance_scale (Cat 21-26) ---
+--- CATEGORY 26: load — MEASURED single-core brain cost + PROJECTION ---
+MEASURED CHECKS: 18/18 passed
+
+################ 2. IDEMPOTENCY TESTS ################
+  PASS  first delivery is processed
+  PASS  duplicate delivery is skipped (not processed again)
+  PASS  only one receipt stored
+  PASS  a genuinely new message still processes
+  PASS  same id under another tenant is independent
+  PASS  1000 duplicate deliveries -> processed exactly once
+  PASS  first checkout creates an order
+  PASS  repeat of the SAME checkout creates NO new order
+  PASS  exactly one order exists
+  PASS  a new checkout (new token) creates a new order
+  PASS  order key stable across retries
+  PASS  order key differs per tenant/conversation/token
+  PASS  duplicate recipient in audience is sent once
+  PASS  job restart re-sends to nobody
+  PASS  recipient normalisation dedups formatting
+  PASS  already-claimed normalised recipient is skipped
+  PASS  same conversation -> same lock key (serialised)
+  PASS  different customer -> different lock key (parallel ok)
+  PASS  different tenant, same number -> different lock key (isolation)
+  PASS  checkout lock distinct from conversation lock
+========= RESULT =========
+PASS 20   FAIL 0
+--- PHPUnit IdempotencyTest ---
+IdempotencyTest: PASS 4  FAIL 0
+
+################ 3. REAL-SQL VERIFICATION (sqlite, exact unique indexes) ################
+=== SEEDING / FLOOD ===
+tenant1 conv10: delivered 1002 messages (1000 dup of M1 + M2 + M3)
+delivered id 'SHARED' under tenant1 AND tenant2
+5 double-checkouts (10 deliveries) + 1 genuine new order; createOrder() returned true 6 times
+campaign 7: audience of 5 (with dup + formatting variant); first pass sent=3, restart pass sent=0
+
+========================= SQL VERIFICATION =========================
+
+[row counts]
+  message_receipts = 5 rows
+  orders = 6 rows
+  campaign_messages = 3 rows
+
+--- 2A duplicate message receipts (expect 0 rows) ---
+SELECT tenant_id, whatsapp_message_id, count(*) n FROM message_receipts GROUP BY tenant_id, whatsapp_message_id HAVING count(*) > 1
+(0 rows)
+
+--- 2A cart effect — one rice line, qty = DISTINCT ids processed (M1,M2,M3,SHARED = 4) ---
+SELECT id, tenant_id, cart_qty FROM conversations WHERE id = 10
+  {"id":10,"tenant_id":1,"cart_qty":4}
+
+--- tenant isolation — 'SHARED' processed once PER tenant (expect 2 rows, tenants 1 & 2) ---
+SELECT tenant_id, count(*) n FROM message_receipts WHERE whatsapp_message_id='SHARED' GROUP BY tenant_id
+  {"tenant_id":1,"n":1}
+  {"tenant_id":2,"n":1}
+
+--- 2C duplicate orders by idempotency_key (expect 0 rows) ---
+SELECT idempotency_key, count(*) n FROM orders GROUP BY idempotency_key HAVING count(*) > 1
+(0 rows)
+
+--- 2C order count — 5 double-checkouts collapse to 5 + 1 genuine = 6 ---
+SELECT count(*) orders FROM orders
+  {"orders":6}
+
+--- 2D duplicate campaign sends (expect 0 rows) ---
+SELECT campaign_id, recipient, count(*) n FROM campaign_messages GROUP BY campaign_id, recipient HAVING count(*) > 1
+(0 rows)
+
+--- 2D campaign recipients — 5 audience entries (1 dup + 1 format variant) -> 3 distinct ---
+SELECT count(*) recipients FROM campaign_messages WHERE campaign_id=7
+  {"recipients":3}
+
+========================= FAILURE COUNTS =========================
+duplicate message receipts ....... 0
+duplicate orders ................. 0
+duplicate campaign sends ......... 0
+tenant-isolation rows for SHARED . 2 (expected 2)
+restart re-sends ................. 0 (expected 0)
+TOTAL ASSERTION FAILURES ......... 0
+RESULT: PASS
+
+################ 4. CONVERSATION ORDERING INVARIANT ################
+completion order: A:Rice -> B:Milk -> C:Flour -> A:Sugar -> B:Bread -> A:Oil
+
+  PASS  conv A order = [Rice,Sugar,Oil]  (expected [Rice,Sugar,Oil])
+  PASS  conv B order = [Milk,Bread]  (expected [Milk,Bread])
+  PASS  conv C order = [Flour]  (expected [Flour])
+  PASS  cross-conversation parallelism observed (max concurrent = 3, >1)
+
+ORDERING/PARALLELISM FAILURES: 0
+RESULT: PASS
+
+################ 5. STAGING-ONLY (NOT RUN HERE — no infra in sandbox) ################
+Load test, chaos test, queue metrics, and LIVE Postgres SQL require the deployed
+app + Redis + Postgres + traffic generator. They cannot run in this sandbox and are
+NOT fabricated. Runbook to generate that evidence on staging is in PHASE2-STAGING-RUNBOOK.md.
