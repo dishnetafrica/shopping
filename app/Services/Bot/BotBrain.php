@@ -451,6 +451,51 @@ class BotBrain
         return $engine->handle($text, $catalogue, $cart, $state);
     }
 
+    /**
+     * A customer shared a WhatsApp location pin (static or live). We build a Google Maps link
+     * (so customer, shop and rider can all tap it), snap to a delivery zone for the fee, store
+     * the pin, and either place the order (if mid-checkout) or save it and prompt to checkout.
+     */
+    public function handleLocationPin(Tenant $tenant, Conversation $convo, float $lat, float $lng, ?string $name = null, ?string $address = null): string
+    {
+        $link  = self::mapsLink($lat, $lng);
+        $label = trim((string) ($name ?: $address ?: ''));
+        $cart  = is_array($convo->cart) ? $convo->cart : [];
+
+        // Snap to a zone (by pin) to name the area / quote the fee.
+        $subtotal = 0; foreach ($cart as $l) $subtotal += $l['price'] * $l['qty'];
+        $quote    = $this->deliveryQuote($tenant, (int) round($subtotal), $label, $lat, $lng);
+        $zoneName = $quote['zone']['name'] ?? null;
+        $area     = $zoneName ?: ($label !== '' ? $label : 'your pinned location');
+
+        // Persist the pin on the conversation for checkout / rider.
+        $st = is_array($convo->state) ? $convo->state : [];
+        $st['delivery_area'] = $area;
+        $st['delivery_lat']  = $lat;
+        $st['delivery_lng']  = $lng;
+        $st['delivery_maps'] = $link;
+        $st['delivery_text'] = $label !== '' ? $label : $area;
+        $st['last_activity'] = time();
+        $convo->state = $st;
+        $convo->save();
+
+        // Mid-checkout: place the order straight away using the pin.
+        if (($st['step'] ?? null) === 'awaiting_location' && $cart) {
+            return $this->placeOrder($tenant, $convo, $area, $lat, $lng, $link);
+        }
+
+        $cur = $this->currencyFor($tenant);
+        $line = "\u{1F4CD} Got your location: {$link}";
+        if ($zoneName) {
+            $fee = (int) $quote['fee']; $eta = $quote['zone']['eta_minutes'] ?? 45;
+            $line .= "\nThat's in *{$zoneName}* — delivery " . ($fee > 0 ? "{$cur} " . number_format($fee) : 'free') . " (~{$eta} min).";
+        }
+        if ($cart) {
+            return $line . "\n\nSay *checkout* to place your order to this location, or add more items.";
+        }
+        return $line . "\n\nSaved \u{1F642} Tell me what you'd like to order and I'll deliver here.";
+    }
+
     /** A customer volunteered a delivery location (outside checkout): store it, never search. */
     protected function captureLocation(Tenant $tenant, Conversation $convo, string $text): string
     {
@@ -483,18 +528,28 @@ class BotBrain
     }
 
     /** Server-authoritative zone/fee/ETA for a location text (canonicalised for matching). */
-    protected function deliveryQuote(Tenant $tenant, int $subtotal, string $locationText): array
+    protected function deliveryQuote(Tenant $tenant, int $subtotal, string $locationText, ?float $lat = null, ?float $lng = null): array
     {
         $sset = $tenant->settings ?? [];
+        $originLat = isset($sset['lat']) && is_numeric($sset['lat']) ? (float) $sset['lat'] : null;
+        $originLng = isset($sset['lng']) && is_numeric($sset['lng']) ? (float) $sset['lng'] : null;
         return (new \App\Services\Delivery\ZoneResolver())->quote(
-            \App\Services\Bot\LocationDictionary::canonicalize($locationText), null, null, $subtotal,
+            \App\Services\Bot\LocationDictionary::canonicalize($locationText), $lat, $lng, $subtotal,
             [
                 'base'      => (int) ($sset['base'] ?? 0),
                 'per_km'    => (int) ($sset['perKm'] ?? 0),
                 'min'       => (int) ($sset['min'] ?? 0),
                 'free_over' => (int) ($sset['freeOver'] ?? 0),
-            ]
+            ],
+            $originLat, $originLng
         );
+    }
+
+    /** Build a tappable Google Maps link from a customer pin. */
+    public static function mapsLink(float $lat, float $lng): string
+    {
+        return 'https://maps.google.com/?q=' . rtrim(rtrim(number_format($lat, 6, '.', ''), '0'), '.')
+             . ',' . rtrim(rtrim(number_format($lng, 6, '.', ''), '0'), '.');
     }
 
     /**
@@ -771,7 +826,7 @@ class BotBrain
         return "\u{1F6D2} *Your basket*\n" . implode("\n", $lines) . "\n*Total: " . Pricing::money($tenant, $total) . "*";
     }
 
-    protected function placeOrder(Tenant $tenant, Conversation $convo, string $location): string
+    protected function placeOrder(Tenant $tenant, Conversation $convo, string $location, ?float $lat = null, ?float $lng = null, ?string $mapsLink = null): string
     {
         $cart = is_array($convo->cart) ? $convo->cart : [];
         if (! $cart) { $convo->state = []; $convo->save(); return "Your basket is empty. Add a product to start a new order."; }
@@ -781,20 +836,27 @@ class BotBrain
             return "Thank you! \u{1F64F} Please hold on — someone from the shop will confirm your order shortly.";
         }
 
+        // Carry a pin volunteered earlier (e.g. before the cart was full) into this checkout.
+        if ($lat === null && isset($convo->state['delivery_lat'], $convo->state['delivery_lng'])) {
+            $lat = (float) $convo->state['delivery_lat'];
+            $lng = (float) $convo->state['delivery_lng'];
+            $mapsLink = $mapsLink ?: (string) ($convo->state['delivery_maps'] ?? '');
+        }
+
         $total = 0; foreach ($cart as $l) $total += $l['price'] * $l['qty'];
         $itemsText = collect($cart)->map(fn ($l) => "{$l['qty']}x {$l['name']}")->implode(', ');
 
-        // D1 — server-authoritative delivery fee + ETA from the matched zone (no extra
-        // confirmation step). Location text is canonicalised (misspellings -> canonical
-        // area) so zone keyword matching is reliable; if the checkout reply names no area
-        // but one was volunteered earlier, use that.
+        // D1 — server-authoritative delivery fee + ETA. Prefer the pin (lat/lng) when present;
+        // otherwise canonicalise the location text. If the reply names no area but one was
+        // volunteered earlier, use that.
         $subtotal = (int) round($total);
         $zoneText = $location;
-        if (\App\Services\Bot\LocationDictionary::detect($location) === null
+        if ($lat === null
+            && \App\Services\Bot\LocationDictionary::detect($location) === null
             && ! empty($convo->state['delivery_area'])) {
             $zoneText = (string) $convo->state['delivery_area'];
         }
-        $quote = $this->deliveryQuote($tenant, $subtotal, $zoneText);
+        $quote = $this->deliveryQuote($tenant, $subtotal, $zoneText, $lat, $lng);
         $deliveryFee = (int) $quote['fee'];
         $zoneId      = $quote['zone']['id'] ?? null;
         $zoneName    = $quote['zone']['name'] ?? null;
@@ -802,15 +864,20 @@ class BotBrain
         $etaAt       = now()->addMinutes((int) $etaMins);
         $grand       = $subtotal + $deliveryFee;
 
-        // 2C — Order idempotency. Same checkout (token) retried => same key => one
-        // order. The lock serialises concurrent attempts; the unique key is the
-        // ultimate guard. firstOrCreate returns the existing order on a repeat.
+        // What we store + show as the delivery location: a tappable maps link when we have a pin
+        // (so the shop and rider just click to navigate), with the area label alongside.
+        $locStored = $location;
+        if ($mapsLink) {
+            $locStored = ($zoneName ?: ($location !== '' ? $location : 'Pinned location')) . ' — ' . $mapsLink;
+        }
+
+        // 2C — Order idempotency.
         $token = (string) (data_get($convo->state, 'checkout_token') ?: ('cart:' . md5(json_encode($cart))));
         $key   = \App\Support\Idempotency::orderKey($tenant->id, $convo->id, $token);
 
         $order = \Illuminate\Support\Facades\Cache::lock(
             \App\Support\Idempotency::checkoutLock($tenant->id, $convo->id), 10
-        )->block(5, function () use ($key, $convo, $itemsText, $cart, $grand, $location, $deliveryFee, $zoneId, $etaAt) {
+        )->block(5, function () use ($key, $convo, $itemsText, $cart, $grand, $locStored, $deliveryFee, $zoneId, $etaAt) {
             return Order::firstOrCreate(
                 ['idempotency_key' => $key],
                 [
@@ -821,7 +888,7 @@ class BotBrain
                     'delivery_fee'     => $deliveryFee,
                     'delivery_zone_id' => $zoneId,
                     'eta_at'           => $etaAt,
-                    'location'         => $location,
+                    'location'         => $locStored,
                     'status'           => 'New',
                     'channel'          => 'whatsapp',
                 ]
@@ -845,8 +912,10 @@ class BotBrain
                          : "\u{1F6F5} Delivery {$cur} " . number_format($deliveryFee) . " · ETA ~{$etaMins} min")
             : "\u{1F6F5} Free delivery · ETA ~{$etaMins} min";
 
+        $deliverTo = $mapsLink ? ($zoneName ? "{$zoneName}\n{$mapsLink}" : $mapsLink) : $location;
+
         return "\u{2705} Order *{$order->order_no}* received!\n" . $this->cartSummary($tenant, $cart)
-             . "\n\u{1F4CD} Deliver to: {$location}\n{$feeLine}"
+             . "\n\u{1F4CD} Deliver to: {$deliverTo}\n{$feeLine}"
              . "\n\u{1F4B0} Total: {$cur} " . number_format($grand)
              . "\n\nWe'll confirm and dispatch shortly. Thank you!";
     }

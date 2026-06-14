@@ -65,10 +65,29 @@ class EvolutionGateway implements WhatsAppGateway
         $text = data_get($msg, 'message.conversation')
             ?? data_get($msg, 'message.extendedTextMessage.text', '');
 
+        // Location pin (static or live). Coordinates let the bot build a Google Maps link
+        // and snap to a delivery zone; without this the message has no text and is dropped.
+        $locMsg = data_get($msg, 'message.locationMessage')
+            ?? data_get($msg, 'message.liveLocationMessage');
+        $lat = $lng = null; $locName = $locAddr = null;
+        if (is_array($locMsg)) {
+            $lat = data_get($locMsg, 'degreesLatitude');
+            $lng = data_get($locMsg, 'degreesLongitude');
+            $locName = data_get($locMsg, 'name');
+            $locAddr = data_get($locMsg, 'address');
+            if ($lat !== null && $lng !== null && (string) $text === '') {
+                $text = trim((string) ($locName ?: $locAddr)) ?: '📍 location';
+            }
+        }
+
         return [
             'instance'  => (string) $instance,
             'from'      => preg_replace('/[^0-9]/', '', explode('@', (string) $remote)[0]),
             'text'      => (string) $text,
+            'lat'       => $lat !== null ? (float) $lat : null,
+            'lng'       => $lng !== null ? (float) $lng : null,
+            'loc_name'  => $locName !== null ? (string) $locName : null,
+            'loc_address' => $locAddr !== null ? (string) $locAddr : null,
             'messageId' => (string) data_get($msg, 'key.id', ''),
             'raw'       => $payload,
         ];

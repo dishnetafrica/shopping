@@ -143,9 +143,19 @@ class ProcessIncomingMessage implements ShouldQueue
 
         $tBrain = microtime(true);
         try {
-            $reply = $tenant->isMarketing()
-                ? $marketing->respond($tenant, $convo, $text)
-                : $brain->respond($tenant, $convo, $text);
+            $hasPin = isset($this->incoming['lat'], $this->incoming['lng'])
+                && $this->incoming['lat'] !== null && $this->incoming['lng'] !== null;
+            if ($hasPin && ! $tenant->isMarketing()) {
+                $reply = $brain->handleLocationPin(
+                    $tenant, $convo,
+                    (float) $this->incoming['lat'], (float) $this->incoming['lng'],
+                    $this->incoming['loc_name'] ?? null, $this->incoming['loc_address'] ?? null
+                );
+            } else {
+                $reply = $tenant->isMarketing()
+                    ? $marketing->respond($tenant, $convo, $text)
+                    : $brain->respond($tenant, $convo, $text);
+            }
         } catch (\Throwable $e) {
             BotTrace::log($this->tenantId, $trace, $from, 'error', 'brain: ' . $e->getMessage());
             return;

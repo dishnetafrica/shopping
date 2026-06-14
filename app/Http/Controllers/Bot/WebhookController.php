@@ -24,8 +24,9 @@ class WebhookController
         }
 
         $incoming = $this->wa->driver($driver)->parseIncoming($request->all());
-        if (!$incoming || $incoming['text'] === '') {
-            return response()->json(['ok' => true]); // status / presence / group / fromMe — not a customer text
+        $hasPin = $incoming && ! empty($incoming['lat']) && ! empty($incoming['lng']);
+        if (!$incoming || ($incoming['text'] === '' && !$hasPin)) {
+            return response()->json(['ok' => true]); // status / presence / group / fromMe — not a customer message
         }
 
         $trace = $incoming['messageId'] ?: uniqid('m_');

@@ -1,44 +1,54 @@
-# CloudBSS bot — complete set (commerce + intents + cart + greetings + sessions + shop-start)
+# CloudBSS bot — complete set (+ WhatsApp location pins → Google Maps link)
 
-Cumulative. The 10 files in app/Services/Bot/ are the full current bot and supersede all earlier
-bundles. No migration. Deploy = push files + `php artisan optimize:clear`.
+Cumulative. Deploy = push files + `php artisan optimize:clear`. No migration.
+This build changes 3 files OUTSIDE app/Services/Bot/ — deploy them too:
+  app/Services/WhatsApp/EvolutionGateway.php
+  app/Http/Controllers/Bot/WebhookController.php
+  app/Jobs/ProcessIncomingMessage.php
 
-## NEW — Shopping-Start intent
-"Have an order to make" was searched -> "we don't stock have an order to make". Now an
-intent-to-shop message is recognised BEFORE product search and gets a friendly prompt:
+## NEW — WhatsApp location pins (static + live) → Google Maps link
+Why it did nothing before: the webhook dropped any message with empty text, and the Evolution
+parser only read text — so a location pin never reached the bot.
 
-  🛒 Great! What would you like to order today?
-  Examples: *Rice 5kg*, *Sugar 2kg*, *Milk 1 litre*, *Bread 2 pcs*.
-  You can send several items in one message.
+Now:
+- **Parser** extracts `locationMessage` / `liveLocationMessage` -> lat/lng (+ name/address).
+- **Webhook** lets a pin through even with empty text.
+- **Bot** builds a tappable Google Maps link `https://maps.google.com/?q=LAT,LNG`, snaps the pin to
+  a delivery zone (existing ZoneResolver haversine) for the fee/ETA, stores the pin + link on the
+  conversation, and:
+    * mid-checkout -> places the order immediately using the pin;
+    * otherwise -> confirms ("📍 Got your location: <link> — that's in *Zone*, delivery UGX X")
+      and saves it so *checkout* delivers there.
+- **Order.location** stores "Zone — <maps link>" (no new column), so the customer confirmation,
+  the owner alert, and the rider's order view all show a link they just tap to navigate —
+  exactly like the n8n flow. Live location is treated as a single pin (first fix); we don't track
+  the moving stream.
 
-Covers: have/make/place an order, can i order, want to shop / start shopping, want/need to buy,
-need groceries/supplies/stock/products/items, etc. Whole-message match only, so "I want to order
-rice" / "can i order milk" still search the product, and bare "order" / "place order" stay
-checkout. Required tests pass: "Have an order to make", "Need groceries", "Want to shop",
-"Can I place an order".
+Reverse geocoding is intentionally NOT used: the link is the deliverable; zone-snapping gives the
+fee; the rider navigates by tapping. Tenants can still set their shop origin (settings lat/lng)
+to get distance-based fees for per-km zones.
 
 ## Carried forward
-Session expiry & cart recovery (10-min idle; continue-vs-fresh prompt; 24h TTL) ·
-fuzzy cross-match guard (Shell never matches Hello — current code already blocks it) ·
-multilingual greetings (EN/Swahili/Luganda/Juba-Arabic incl. script/India; greet beats a pending
-clarification) · price questions · "big size" follow-up · "do you sell X" + clear miss reply ·
-Cart Management Engine (numbered basket; remove/clear/change by number or name) · follow-up
-phrasing & typos · business intent · Bugs 1–7.
+Shopping-start intent · session expiry & cart recovery · fuzzy cross-match guard (Shell≠Hello) ·
+multilingual greetings (incl. Arabic script; greet beats pending clarification) · price questions ·
+"big size" follow-up · "do you sell X" + clear miss · Cart Management Engine · follow-ups · Bugs 1–7.
 
-## Files (deploy all 10)
-BotBrain, IntentClassifier, ShoppingEngine, CatalogueMatcher, LocationDictionary, CartCorrection,
-CategoryDictionary, FollowUp, CartEditor, GreetingDictionary.
+## Files
+Bot (10): BotBrain, IntentClassifier, ShoppingEngine, CatalogueMatcher, LocationDictionary,
+CartCorrection, CategoryDictionary, FollowUp, CartEditor, GreetingDictionary.
+Plus: EvolutionGateway, WebhookController, ProcessIncomingMessage.
 
 ## Tests — 489 assertions, 0 failures
 session 22 · greeting 51 · cart 41 · followup 49 · realcustomer 49 · intent 75 · location 34 ·
 commerce-bugs 16 · phase-1 63 · defaults 18 · delivery 31 · decline 15 · final 25.
+Pure parts of the pin path verified directly: maps-link format and pin→zone snap.
 
 ## Honest scope
-Classifier logic unit-tested directly; the reply path runs through Laravel — confirm live with
-"Have an order to make", "Need groceries", "Want to shop", "Can I place an order" (friendly prompt,
-no search), and that "I want to order rice" still adds rice. This transcript ran on old code; not
-live until deployed.
+The pin EXTRACTION (parser) + webhook guard + the bot handler run through Laravel and can't be
+executed here — confirm live by sending a location pin from WhatsApp (mid-checkout it should place
+the order with the link; otherwise it should confirm + save). The pure pieces (maps link, zone
+snap by coordinates, fee) are unit-verified. The Evolution payload key for live location may vary
+by version — if a live-location pin doesn't register, check `message.liveLocationMessage` shape in
+storage/logs and tell me the exact keys.
 
-## STILL OUTSTANDING (not code): silent-bot incident
-Unchanged — infra (queue worker / Evolution WhatsApp session / uncaught exception). Check the
-worker, the WhatsApp connection, and storage/logs/laravel.log.
+## STILL OUTSTANDING (not code): silent-bot incident — infra (worker / WhatsApp session / logs).
