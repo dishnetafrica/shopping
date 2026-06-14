@@ -378,6 +378,58 @@ class SalesAssistantBrain
         return $out;
     }
 
+    /**
+     * Keep only candidates that belong to the same product category as the term's strongest
+     * matches — so a request for "rice" never recommends "D.rice Samosa" (a snack whose name
+     * merely contains the token "rice"). Pure.
+     *
+     * @param array $hits matcher->search() output: [['product'=>...,'score'=>...], ...]
+     * @return array list of product rows, coherent with the term
+     */
+    public static function coherentCandidates(string $term, array $hits): array
+    {
+        if (! $hits) return [];
+        $m = new CatalogueMatcher();
+        $tt = $m->tokens($term);
+        if (! $tt) return array_map(fn ($h) => $h['product'], $hits);
+        $head = $tt[0];
+
+        // 1) the head term must appear in the product NAME (drops keyword/category-only
+        //    and fuzzy noise — a yoghurt that merely lists "milk" is not a milk).
+        $named = [];
+        foreach ($hits as $h) {
+            if (in_array($head, $m->tokens((string) ($h['product']['name'] ?? '')), true)) {
+                $named[] = $h;
+            }
+        }
+        if (! $named) $named = $hits;
+
+        // 2) dominant category by score mass; when one category clearly leads, keep only it.
+        $catScore = []; $total = 0.0;
+        foreach ($named as $h) {
+            $c = mb_strtolower(trim((string) ($h['product']['category'] ?? '')));
+            if ($c === '') continue;
+            $catScore[$c] = ($catScore[$c] ?? 0) + (float) $h['score'];
+            $total += (float) $h['score'];
+        }
+        if ($catScore && $total > 0) {
+            arsort($catScore);
+            $domCat  = (string) array_key_first($catScore);
+            $domConf = $catScore[$domCat] / $total;
+            if ($domConf >= 0.5) {
+                $kept = [];
+                foreach ($named as $h) {
+                    if (mb_strtolower(trim((string) ($h['product']['category'] ?? ''))) === $domCat) {
+                        $kept[] = $h;
+                    }
+                }
+                if ($kept) $named = $kept;
+            }
+        }
+
+        return array_map(fn ($h) => $h['product'], $named);
+    }
+
     /** Strip opinion/question filler to leave the product term. Pure. */
     public static function stripCues(string $text): string
     {
@@ -419,7 +471,7 @@ class SalesAssistantBrain
         if ($term !== '') {
             $hits = $m->search($term, $catalogue);
             if ($hits) {
-                return [$term, array_map(fn ($c) => $c['product'], array_slice($hits, 0, 6))];
+                return [$term, array_slice(self::coherentCandidates($term, $hits), 0, 6)];
             }
         }
 
@@ -428,7 +480,7 @@ class SalesAssistantBrain
         if ($last !== '') {
             $hits = $m->search($last, $catalogue);
             if ($hits) {
-                return [$last, array_map(fn ($c) => $c['product'], array_slice($hits, 0, 6))];
+                return [$last, array_slice(self::coherentCandidates($last, $hits), 0, 6)];
             }
         }
 

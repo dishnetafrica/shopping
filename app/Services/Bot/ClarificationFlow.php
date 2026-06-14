@@ -64,11 +64,21 @@ class ClarificationFlow
         }
 
         if (preg_match_all('/\d+/', $low, $m)) {
-            $nums = array_map('intval', $m[0]);
-            foreach ($flat as $opt) {
-                if (in_array($opt['n'], $nums, true)) $picked[] = $opt;
+            // A digit only counts as a row pick when the message is SELECTION-SHAPED — nothing
+            // but numbers and connectors. "5 coke 10 rice" is a NEW order (quantities + product
+            // words), never a pick of rows 5 and 10 from a previously shown list. Without this
+            // guard a fresh order's quantities get applied to a stale option list (state
+            // contamination), silently committing the wrong products.
+            $residue = preg_replace('/\d+/', ' ', $low);
+            $residue = preg_replace('/\b(and|&|or|plus|n|no|nos|number|numbers|option|options|item|items|the|please|pls|add|take|get|i|want|buy)\b/', ' ', $residue);
+            $residue = preg_replace('/[^a-z]+/', '', $residue);
+            if ($residue === '') {
+                $nums = array_map('intval', $m[0]);
+                foreach ($flat as $opt) {
+                    if (in_array($opt['n'], $nums, true)) $picked[] = $opt;
+                }
+                if ($picked) return $picked;
             }
-            if ($picked) return $picked;
         }
 
         // name-substring fallback ("pakistan", "add local rice")
