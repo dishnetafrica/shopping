@@ -151,6 +151,23 @@ class BotBrain
             return $reentry;
         }
 
+        // ---- Conversation stage decomposition ----
+        // A single message that spans several shopping stages ("Need rice / which is good? /
+        // add 2 / checkout") is handled ONE stage at a time, like a shop attendant: keep only
+        // the earliest stage and let the rest arrive as the customer's next messages. Skipped
+        // when a clarification / read-back / location step is already in progress, because then
+        // the message is a REPLY to that step, not a fresh multi-stage journey.
+        $stStage   = is_array($convo->state) ? $convo->state : [];
+        $inProgress = ! empty($stStage['options']) || ! empty($stStage['pending_order'])
+            || ! empty($stStage['pending_resolved']) || (($stStage['step'] ?? null) === 'awaiting_location');
+        if (! $inProgress && \App\Services\Bot\ConversationStageAnalyzer::isMultiStage($text)) {
+            $lead = \App\Services\Bot\ConversationStageAnalyzer::leadSegment($text);
+            if ($lead !== '' && $lead !== $text) {
+                $text = $lead;
+                $lc   = mb_strtolower(trim($text));
+            }
+        }
+
         // ---- Pending order confirmation (read-back) ----
         // A wholesale list / best-guess was read back and is awaiting *OK*. This must run
         // BEFORE the command words below, because "confirm"/"ok" would otherwise be eaten by
@@ -187,6 +204,15 @@ class BotBrain
             if (($edit = $this->tryCartEdit($tenant, $convo, $text)) !== null) {
                 return $edit;
             }
+        }
+
+        // ---- Discovery context (multi-message recommendation flow) ----
+        // "Need rice" then "Not basmati" then "Family of 5" build ONE growing context in
+        // state.discovery and produce a recommendation, instead of each message being parsed
+        // (and searched) on its own. Wins over product search; breaks out the moment the
+        // customer places a concrete order line ("5 coke") or selects/checks out.
+        if (($disc = $this->tryDiscovery($tenant, $convo, $text)) !== null) {
+            return $disc;
         }
 
         // ---- Follow-up within the active product/category context ----
@@ -235,7 +261,7 @@ class BotBrain
             // new message — this is the core fix for state contamination across turns.
             if ($this->isFreshProductRequest($text, $catalogue)) {
                 $st = is_array($convo->state) ? $convo->state : [];
-                unset($st['options'], $st['pending_resolved'], $st['pending_order'], $st['last_recommended']);
+                unset($st['options'], $st['pending_resolved'], $st['pending_order'], $st['last_recommended'], $st['discovery']);
                 $convo->state = $st;
                 $convo->save();
                 // fall through to normal processing below (no return)
@@ -446,7 +472,7 @@ class BotBrain
 
         if ($decision['expire_context']) {
             unset($st['options'], $st['last_query'], $st['last_kind'], $st['step'],
-                  $st['checkout_token'], $st['pending'], $st['pending_order'], $st['pending_resolved'], $st['last_recommended']);
+                  $st['checkout_token'], $st['pending'], $st['pending_order'], $st['pending_resolved'], $st['last_recommended'], $st['discovery']);
         }
         if ($decision['discard_cart']) {
             $convo->cart = [];
@@ -557,7 +583,7 @@ class BotBrain
 
         // Closing acknowledgement -> warm close, drop the list.
         if ($this->isClosingAck($text)) {
-            $st = is_array($convo->state) ? $convo->state : []; unset($st['options'], $st['pending_resolved'], $st['pending_order'], $st['last_recommended']);
+            $st = is_array($convo->state) ? $convo->state : []; unset($st['options'], $st['pending_resolved'], $st['pending_order'], $st['last_recommended'], $st['discovery']);
             $convo->state = $st; $convo->save();
             return "You're welcome \u{1F60A}\n\nLet me know if you'd like to order any item or search for another product.";
         }
@@ -574,7 +600,7 @@ class BotBrain
             case IntentClassifier::GREETING:
                 return $this->greetingReply($tenant, $text) . $keepNote;
             case IntentClassifier::THANKS:
-                $st = is_array($convo->state) ? $convo->state : []; unset($st['options'], $st['pending_resolved'], $st['pending_order'], $st['last_recommended']);
+                $st = is_array($convo->state) ? $convo->state : []; unset($st['options'], $st['pending_resolved'], $st['pending_order'], $st['last_recommended'], $st['discovery']);
                 $convo->state = $st; $convo->save();
                 return "You're welcome \u{1F60A}\n\nLet me know if you'd like to order any item or search for another product.";
             case IntentClassifier::BUSINESS:
@@ -592,7 +618,7 @@ class BotBrain
                 \App\Jobs\NotifyOwner::dispatch($tenant->id, "\u{1F64B} +{$convo->customer_phone} asked for a person. Open Chats to take over.");
                 return "\u{1F642} Sure — I'm letting the shop know. Someone will reply here shortly.";
             case IntentClassifier::DECLINE:
-                $st = is_array($convo->state) ? $convo->state : []; unset($st['options'], $st['pending_resolved'], $st['pending_order'], $st['last_recommended']);
+                $st = is_array($convo->state) ? $convo->state : []; unset($st['options'], $st['pending_resolved'], $st['pending_order'], $st['last_recommended'], $st['discovery']);
                 $convo->state = $st; $convo->save();
                 $hasCart = is_array($convo->cart) && count($convo->cart) > 0;
                 return $hasCart
@@ -705,6 +731,48 @@ class BotBrain
         $catalogue = $this->tenantCatalogue($tenant);
         return (new \App\Services\Bot\SalesAssistantBrain($this->clarify))
             ->respond($tenant, $convo, $text, $catalogue, $this->currencyFor($tenant));
+    }
+
+    /**
+     * Multi-message discovery. Keeps a single growing context in state.discovery so qualifiers
+     * arriving over several messages ("Need rice" → "Not basmati" → "Family of 5") refine ONE
+     * recommendation instead of being searched independently. The recommendation itself is
+     * produced by the existing SalesAssistantBrain opinion path (fed a canonical sentence built
+     * from the accumulated context), so the deterministic pick logic is unchanged. Returns null
+     * to let the normal pipeline handle non-discovery messages.
+     */
+    protected function tryDiscovery(Tenant $tenant, Conversation $convo, string $text): ?string
+    {
+        $catalogue = $this->tenantCatalogue($tenant);
+        $st     = is_array($convo->state) ? $convo->state : [];
+        $active = (isset($st['discovery']) && is_array($st['discovery'])) ? $st['discovery'] : null;
+
+        $d = \App\Services\Bot\DiscoveryContextBuilder::decide($active, $text, $catalogue);
+
+        if ($d['action'] === 'skip') {
+            // A concrete order line ("5 coke") ends discovery and falls through to normal adding.
+            if ($active !== null && \App\Services\Bot\DiscoveryContextBuilder::looksLikeConcreteAdd($text, $catalogue)) {
+                unset($st['discovery']);
+                $convo->state = $st;
+                $convo->save();
+            }
+            return null;
+        }
+
+        $st['discovery'] = $d['ctx'];
+        $convo->state = $st;
+        $convo->save();
+
+        if ($d['action'] === 'ask') {
+            return "Happy to help you choose \u{1F642} What are you shopping for — rice, flour, oil, sugar…?";
+        }
+
+        // enter / enrich: recommend from the full accumulated context via the tested opinion path
+        $synth = \App\Services\Bot\DiscoveryContextBuilder::toOpinionText($d['ctx']);
+        $reply = (new \App\Services\Bot\SalesAssistantBrain($this->clarify))
+            ->respond($tenant, $convo, $synth, $catalogue, $this->currencyFor($tenant));
+
+        return $reply ?? "Sure \u{1F642} Tell me a bit more and I'll recommend the right one.";
     }
 
     protected function runShoppingEngine(Tenant $tenant, Conversation $convo, string $text, array $catalogue): array
@@ -1031,7 +1099,7 @@ class BotBrain
 
         $convo->cart = $res['cart'];
         $st = is_array($convo->state) ? $convo->state : [];
-        unset($st['options'], $st['pending_resolved'], $st['pending_order'], $st['last_recommended']);   // editing the cart ends any pending clarification
+        unset($st['options'], $st['pending_resolved'], $st['pending_order'], $st['last_recommended'], $st['discovery']);   // editing the cart ends any pending clarification
         $convo->state = $st;
         $convo->save();
 

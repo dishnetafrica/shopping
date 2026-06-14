@@ -48,15 +48,23 @@ class SalesAssistantBrain
 
     public function respond(Tenant $tenant, Conversation $convo, string $text, array $catalogue, string $currency): ?string
     {
-        $intent = self::detect($text);
-        if ($intent === null) {
-            return null;
-        }
-
         $st    = is_array($convo->state) ? $convo->state : [];
         $byId  = [];
         foreach ($catalogue as $p) {
             $byId[(int) ($p['id'] ?? 0)] = $p;
+        }
+
+        // Unit-price / best-value question ("which is cheapest per kg?") — a reasoning task over
+        // the named brand (or the active list), not a catalogue search. Runs first so the words
+        // "per kg" are never treated as products. Falls through if it can't compute.
+        if (self::detectValue($text)) {
+            $r = $this->handleValue($tenant, $convo, $text, $catalogue, $byId, $st, $currency);
+            if ($r !== null) return $r;
+        }
+
+        $intent = self::detect($text);
+        if ($intent === null) {
+            return null;
         }
 
         if ($intent === self::DOUBT) {
@@ -76,6 +84,23 @@ class SalesAssistantBrain
     private function handleOpinion(Tenant $tenant, Conversation $convo, string $text, array $catalogue, array $byId, array $st, string $currency): ?string
     {
         [$term, $candidates] = $this->subject($text, $catalogue, $st);
+
+        // Structured discovery context ("family of 5", "not expensive", "daily use") — used to
+        // bias the pick (budget/size) and to shape the wording. Built from the discovery part
+        // of the message; harmless (all-null) when the customer gave no extra context.
+        $ctx = DiscoveryContextBuilder::build(self::discoverySegment($text), $catalogue);
+
+        // an explicit size ("rice 5kg") pins the pack; otherwise a big household nudges larger
+        if (! empty($ctx['size']) && $candidates) {
+            $want = $ctx['size'];
+            $sized = array_values(array_filter($candidates, function ($p) use ($want) {
+                $s = self::parseSize((string) ($p['name'] ?? ''));
+                return $s && $s['unit'] === $want['unit'] && abs($s['value'] - $want['value']) < 0.01;
+            }));
+            if ($sized) $candidates = $sized;
+        } elseif (($ctx['family_size'] ?? 0) >= 4 && $candidates) {
+            $candidates = $this->preferLargerPacks($candidates);
+        }
 
         // owner's default for the term (independent of the search candidates)
         $defaultProduct = null;
@@ -102,7 +127,7 @@ class SalesAssistantBrain
         }
 
         $sellerQty = $this->bestSellerQty($tenant, $this->idsOf($candidates, $defaultProduct));
-        $pick      = self::pickRecommendation($term, $candidates, $defaultProduct, $sellerQty);
+        $pick      = self::pickRecommendation($term, $candidates, $defaultProduct, $sellerQty, $ctx);
         $product   = $pick['product'];
         if (! $product) {
             return "Sure \u{1F642} Which product would you like me to recommend?";
@@ -126,20 +151,27 @@ class SalesAssistantBrain
         foreach ($sellerQty as $id => $q) { if ($q > $topQty) { $topQty = $q; $topId = (int) $id; } }
         $isTopSeller = $pid > 0 && $pid === $topId && $topQty > 0;
 
+        // recommendation clause (without a leading "For ..." — the context phrase supplies that)
         switch ($pick['tag']) {
             case 'popular':
-                $lead = "For {$label}, most customers choose *{$product['name']}* ({$price}) — it's our most popular.";
+                $clause = "most customers choose *{$product['name']}* ({$price}) — it's our most popular.";
+                break;
+            case 'premium':
+                $clause = "*{$product['name']}* ({$price}) is our top-of-the-range choice.";
                 break;
             case 'pick':
-                $lead = "For {$label} I'd recommend *{$product['name']}* ({$price})"
-                      . ($isTopSeller ? " — and it's what most customers buy." : ".");
+                $clause = "I'd recommend *{$product['name']}* ({$price})"
+                        . ($isTopSeller ? " — and it's what most customers buy." : ".");
                 break;
             case 'value':
-                $lead = "For {$label}, *{$product['name']}* ({$price}) is the best value for money.";
+                $clause = "*{$product['name']}* ({$price}) is the best value for money.";
                 break;
             default:
-                $lead = "For {$label} I'd go with *{$product['name']}* ({$price}).";
+                $clause = "I'd go with *{$product['name']}* ({$price}).";
         }
+
+        $phrase = DiscoveryContextBuilder::phrase($ctx);
+        $lead   = $phrase !== '' ? ($phrase . $clause) : ("For {$label}, " . $clause);
 
         $msg  = $lead . "\n";
         $msg .= "Reply *1* to add it to your basket";
@@ -155,6 +187,108 @@ class SalesAssistantBrain
         ]);
 
         return $msg;
+    }
+
+    /** Keep candidates within ~60% of the largest pack size (soft nudge for big households). */
+    private function preferLargerPacks(array $candidates): array
+    {
+        $max = 0.0;
+        foreach ($candidates as $p) { $max = max($max, self::sizeValue((string) ($p['name'] ?? ''))); }
+        if ($max <= 0) return $candidates;   // no parseable sizes — leave as-is
+        $kept = [];
+        foreach ($candidates as $p) {
+            $v = self::sizeValue((string) ($p['name'] ?? ''));
+            if ($v <= 0 || $v >= $max * 0.6) $kept[] = $p;   // keep unknowns + the larger packs
+        }
+        return $kept ?: $candidates;
+    }
+
+    /**
+     * Answer a unit-price / best-value question by RANKING, not searching: resolve the product
+     * set the customer means (a named brand like "India Gate", else the active list), compute
+     * price per kg / litre, and present the cheapest. Returns null if it can't resolve a set or
+     * compute prices, so the caller can fall back to normal handling.
+     */
+    private function handleValue(Tenant $tenant, Conversation $convo, string $text, array $catalogue, array $byId, array $st, string $currency): ?string
+    {
+        $set = $this->valueSet($text, $catalogue, $st);
+        if (count($set) < 2) return null;
+
+        $rank = self::unitPriceRanking($set, self::valueUnit($text));
+        if (! $rank) return null;                 // no parseable sizes — can't compute per-unit
+
+        $unit  = $rank[0]['unit'];
+        $money = fn ($a) => $currency . ' ' . number_format((float) $a);
+        $top   = array_slice($rank, 0, 3);
+
+        $prods = []; $lines = []; $n = 0;
+        foreach ($top as $r) {
+            $n++;
+            $prods[] = $r['product'];
+            $lines[] = "  {$n}. {$r['product']['name']} — " . $money(round($r['unit_price'])) . "/{$unit}";
+        }
+        $built = $this->clarify->buildOptions(
+            [['label' => 'best value', 'qty' => 1, 'products' => $prods]],
+            $money
+        );
+
+        $msg  = "Best value per {$unit} \u{1F642}\n" . implode("\n", $lines) . "\n";
+        $msg .= "Reply *1* to add it to your basket.";
+
+        $this->persist($convo, $st, $built['flat'], '', null);
+        return $msg;
+    }
+
+    /** The product set a value question refers to: a named brand/term, else the active context. */
+    private function valueSet(string $text, array $catalogue, array $st): array
+    {
+        $m = new CatalogueMatcher();
+
+        // strip the value/question words, leaving the brand or product term
+        $cleaned = preg_replace(
+            '/\b(which|what|one|ones|is|are|the|a|an|cheaper|cheapest|lowest|highest|best|value|deal|price|priced|per|kg|kilo|kilogram|litre|liter|lt|l|in|for|money|of|good|most|me|tell|show|do|you|have|got|by)\b/i',
+            ' ',
+            mb_strtolower($text)
+        );
+        $brand = $m->tokens($cleaned);
+
+        if ($brand) {
+            // products covering the MOST brand tokens (>=2 for a multi-word brand) — so "india
+            // gate" keeps India Gate SKUs and drops "Cow & Gate" / unrelated single-token hits.
+            $maxHit = 0; $best = [];
+            foreach ($catalogue as $p) {
+                $hit = count(array_intersect($brand, $m->tokens((string) ($p['name'] ?? ''))));
+                if ($hit > $maxHit) { $maxHit = $hit; $best = [$p]; }
+                elseif ($hit === $maxHit && $hit > 0) { $best[] = $p; }
+            }
+            $need = count($brand) >= 2 ? 2 : 1;
+            if ($maxHit >= $need && count($best) >= 2) return $best;
+
+            // single product noun ("cheapest rice per kg") -> coherent product candidates
+            if (count($brand) === 1) {
+                $hits = $m->search($brand[0], $catalogue);
+                if ($hits) return self::coherentCandidates($brand[0], $hits);
+            }
+        }
+
+        // fall back to the active list / last search
+        $opts = $st['options'] ?? null;
+        if (is_array($opts) && $opts) {
+            $byId = [];
+            foreach ($catalogue as $p) $byId[(int) ($p['id'] ?? 0)] = $p;
+            $set = [];
+            foreach ($opts as $o) {
+                $id = (int) ($o['product_id'] ?? 0);
+                if ($id && isset($byId[$id])) $set[] = $byId[$id];
+            }
+            if ($set) return $set;
+        }
+        $last = (string) ($st['last_query'] ?? '');
+        if ($last !== '') {
+            $hits = $m->search($last, $catalogue);
+            if ($hits) return array_map(fn ($h) => $h['product'], array_slice($hits, 0, 12));
+        }
+        return [];
     }
 
     private function handleCompare(Tenant $tenant, Conversation $convo, string $text, array $catalogue, array $byId, array $st, string $currency): ?string
@@ -318,8 +452,21 @@ class SalesAssistantBrain
      * Priority: owner's default -> best-seller among candidates -> best value -> first match.
      * @return array{product: ?array, basis: string}
      */
-    public static function pickRecommendation(string $term, array $candidates, ?array $defaultProduct, array $sellerQtyById): array
+    public static function pickRecommendation(string $term, array $candidates, ?array $defaultProduct, array $sellerQtyById, array $context = []): array
     {
+        $budget = $context['budget'] ?? null;
+
+        // An explicit budget is the customer's own constraint — honour it over the generic
+        // default. "Not expensive" -> the most affordable; "premium" -> the top of the range.
+        if ($budget === 'low') {
+            $v = self::cheapestInStock($candidates);
+            if ($v) return ['product' => $v, 'tag' => 'value', 'basis' => 'the most affordable option'];
+        }
+        if ($budget === 'high') {
+            $p = self::dearestInStock($candidates);
+            if ($p) return ['product' => $p, 'tag' => 'premium', 'basis' => 'our top-of-the-range choice'];
+        }
+
         if ($defaultProduct !== null) {
             return ['product' => $defaultProduct, 'tag' => 'pick', 'basis' => 'the one we recommend here'];
         }
@@ -336,11 +483,7 @@ class SalesAssistantBrain
         }
 
         // best value: cheapest in-stock candidate
-        $value = null;
-        foreach ($candidates as $p) {
-            if (($p['stock'] ?? 1) <= 0) continue;
-            if ($value === null || (float) $p['price'] < (float) $value['price']) $value = $p;
-        }
+        $value = self::cheapestInStock($candidates);
         if ($value !== null) {
             return ['product' => $value, 'tag' => 'value', 'basis' => 'great value for the price'];
         }
@@ -349,6 +492,107 @@ class SalesAssistantBrain
             return ['product' => $candidates[0], 'tag' => 'first', 'basis' => 'a good choice'];
         }
         return ['product' => null, 'tag' => 'none', 'basis' => ''];
+    }
+
+    private static function cheapestInStock(array $candidates): ?array
+    {
+        $v = null;
+        foreach ($candidates as $p) {
+            if (($p['stock'] ?? 1) <= 0) continue;
+            if ($v === null || (float) $p['price'] < (float) $v['price']) $v = $p;
+        }
+        return $v;
+    }
+
+    private static function dearestInStock(array $candidates): ?array
+    {
+        $v = null;
+        foreach ($candidates as $p) {
+            if (($p['stock'] ?? 1) <= 0) continue;
+            if ($v === null || (float) $p['price'] > (float) $v['price']) $v = $p;
+        }
+        return $v;
+    }
+
+    /** Coarse pack size in a comparable unit (g / ml) for a soft "bigger pack" nudge. 0 = unknown. */
+    public static function sizeValue(string $name): float
+    {
+        if (! preg_match('/(\d+(?:\.\d+)?)\s*(kg|gm|g|ml|cl|ltr|litre|liter|l)\b/i', mb_strtolower($name), $m)) {
+            return 0.0;
+        }
+        $n = (float) $m[1];
+        return match ($m[2]) {
+            'kg'                                  => $n * 1000,
+            'g', 'gm'                             => $n,
+            'l', 'ltr', 'litre', 'liter'          => $n * 1000,
+            'cl'                                  => $n * 10,
+            'ml'                                  => $n,
+            default                               => $n,
+        };
+    }
+
+    /** Parse a pack size into a comparable unit. Mass -> kg, volume -> l. @return array{value:float,unit:string}|null */
+    public static function parseSize(string $name): ?array
+    {
+        if (! preg_match('/(\d+(?:\.\d+)?)\s*(kg|gm|g|ml|cl|ltrs?|litres?|liters?|lt|l)\b/i', mb_strtolower($name), $m)) {
+            return null;
+        }
+        $n = (float) $m[1];
+        switch ($m[2]) {
+            case 'kg':                                              return ['value' => $n,        'unit' => 'kg'];
+            case 'g': case 'gm':                                    return ['value' => $n / 1000, 'unit' => 'kg'];
+            case 'l': case 'lt': case 'ltr': case 'ltrs':
+            case 'litre': case 'litres': case 'liter': case 'liters': return ['value' => $n,      'unit' => 'l'];
+            case 'cl':                                              return ['value' => $n / 100,  'unit' => 'l'];
+            case 'ml':                                              return ['value' => $n / 1000, 'unit' => 'l'];
+        }
+        return null;
+    }
+
+    /**
+     * Rank products by UNIT price (per kg or per litre), cheapest first. Products without a
+     * parseable size in the chosen unit are skipped (you can't compute a per-kg price without
+     * a weight). @return array<int,array{product:array,unit:string,unit_price:float}>
+     */
+    public static function unitPriceRanking(array $products, ?string $unit = null): array
+    {
+        if ($unit === null) {
+            $c = ['kg' => 0, 'l' => 0];
+            foreach ($products as $p) {
+                $s = self::parseSize((string) ($p['name'] ?? ''));
+                if ($s) $c[$s['unit']]++;
+            }
+            $unit = $c['l'] > $c['kg'] ? 'l' : 'kg';
+        }
+        $rows = [];
+        foreach ($products as $p) {
+            if (($p['stock'] ?? 1) <= 0) continue;
+            $s = self::parseSize((string) ($p['name'] ?? ''));
+            if (! $s || $s['unit'] !== $unit || $s['value'] <= 0) continue;
+            $rows[] = ['product' => $p, 'unit' => $unit, 'unit_price' => (float) $p['price'] / $s['value']];
+        }
+        usort($rows, fn ($a, $b) => $a['unit_price'] <=> $b['unit_price']);
+        return $rows;
+    }
+
+    /** Is this a unit-price / best-value comparison question? Pure. */
+    public static function detectValue(string $text): bool
+    {
+        $s = mb_strtolower($text);
+        return (bool) (preg_match('/\bper\s*(kg|kilo|kilogram|litre|liter|lt|l)\b/', $s)
+            || preg_match('/\bbest (value|deal)\b/', $s)
+            || preg_match('/\bvalue for money\b/', $s)
+            || preg_match('/\b(cheapest|lowest|best price) per\b/', $s)
+            || preg_match('/\bcheaper per\b/', $s));
+    }
+
+    /** The unit a value question asks about, or null to infer from the product set. */
+    public static function valueUnit(string $text): ?string
+    {
+        $s = mb_strtolower($text);
+        if (preg_match('/\bper\s*(litre|liter|lt|l)\b/', $s)) return 'l';
+        if (preg_match('/\bper\s*(kg|kilo|kilogram)\b/', $s)) return 'kg';
+        return null;
     }
 
     /** Split "X vs Y", "compare X and Y", "difference between X and Y", "X or Y". Pure. */
@@ -403,6 +647,18 @@ class SalesAssistantBrain
             }
         }
         if (! $named) $named = $hits;
+
+        // 1b) the term must be the HEAD noun of the name, not a modifier. tokens() strips size
+        //     tokens, so "Kolam Rice 5kg" -> [kolam,rice] (rice is head) but "D.rice Samosa" ->
+        //     [rice,samosa] and "Rice Crisps" -> [rice,crisps] (rice modifies a snack). This
+        //     drops rice-flavoured snacks from a rice recommendation regardless of category.
+        $headed = [];
+        foreach ($named as $h) {
+            $toks = $m->tokens((string) ($h['product']['name'] ?? ''));
+            $idx  = array_search($head, $toks, true);
+            if ($idx !== false && $idx === count($toks) - 1) $headed[] = $h;
+        }
+        if ($headed) $named = $headed;   // keep the modifier-only set only if nothing is head
 
         // 2) dominant category by score mass; when one category clearly leads, keep only it.
         $catScore = []; $total = 0.0;

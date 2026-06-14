@@ -26,6 +26,9 @@ class CartEditor
         if (self::isClear($lc)) return true;
         if (preg_match('/\b(remove|delete|take out)\b/', $lc)) return true;
         if (preg_match('/^(change|make|set|reduce|increase|update)\b.*\d/', $lc)) return true;
+        // "update" / "update order" with a quantity anywhere — not only at the start
+        // ("i need 10 pcs update order" is a quantity update, not a product search).
+        if (preg_match('/\bupdate\b/', $lc) && preg_match('/\d/', $lc)) return true;
         if (CartCorrection::newQuantity($text) !== null) return true;
         return false;
     }

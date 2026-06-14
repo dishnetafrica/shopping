@@ -16,7 +16,7 @@ class CartCorrection
         $lc = mb_strtolower(trim($text));
 
         // A correction needs an explicit cue — otherwise "2 milk" would look like one.
-        if (! preg_match('/\b(change|make it|set it to|set to|only|just)\b/', $lc)) {
+        if (! preg_match('/\b(change|make it|set it to|set to|update|increase to|reduce to|only|just)\b/', $lc)) {
             return null;
         }
 
