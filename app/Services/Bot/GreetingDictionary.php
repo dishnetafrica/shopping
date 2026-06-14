@@ -20,17 +20,20 @@ class GreetingDictionary
         // Swahili (Kenya / Tanzania / Uganda)
         'sw' => ['habari', 'habari yako', 'habari gani', 'habari za leo', 'habari ya leo', 'habari zako',
             'mambo', 'mambo vipi', 'poa', 'poa sana', 'sasa', 'sasa za', 'hujambo', 'sijambo',
-            'shikamoo', 'marahaba', 'karibu', 'niaje', 'vipi', 'salama', 'jambo', 'habari za asubuhi'],
+            'shikamoo', 'marahaba', 'karibu', 'niaje', 'vipi', 'salama', 'jambo', 'habari za asubuhi',
+            'umeze ute', 'umeze', 'umezeute', 'umeamkaje', 'umeshindaje', 'mzima'],
 
         // Luganda (Uganda)
         'lg' => ['oli otya', 'oli otya nno', 'oli otya nnyo', 'oli otyano', 'wasuze otya', 'wasuze otyano',
             'gyebale', 'gyebale ko', 'gyebaleko', 'agandi', 'osiibye otya', 'osiibye otyano', 'kyokka'],
 
-        // Juba Arabic / Arabic (South Sudan)
+        // Juba Arabic / Arabic (South Sudan) — romanised + Arabic script
         'ar' => ['salam', 'salaam', 'salam alaikum', 'assalam alaikum', 'assalamu alaikum', 'asalaam alaikum',
             'as salam alaikum', 'salamu alaikum', 'marhaba', 'marhaban', 'keif halak', 'kef halak',
             'keif halek', 'kaif halak', 'sabah al khair', 'sabah el kheir', 'sabah alkhair',
-            'masa al khair', 'masa el kheir', 'ahlan', 'ahlan wa sahlan'],
+            'masa al khair', 'masa el kheir', 'ahlan', 'ahlan wa sahlan',
+            'سلام', 'السلام عليكم', 'سلام عليكم', 'مرحبا', 'مرحبا بك', 'اهلا', 'اهلا وسهلا', 'اهلا بك',
+            'صباح الخير', 'مساء الخير', 'صباح النور', 'مساء النور', 'كيف حالك', 'كيفك', 'كيف الحال'],
 
         // India (Gujarati / Hindi — for the shop's Indian customers)
         'in' => ['namaste', 'namaskar', 'jai shree krishna', 'jai shri krishna', 'jsk', 'ram ram', 'jai shri ram'],
@@ -86,8 +89,14 @@ class GreetingDictionary
 
     private static function norm(string $s): string
     {
-        $s = mb_strtolower(trim($s));
-        $s = preg_replace('/[^a-z0-9\s]+/', ' ', $s);
-        return trim(preg_replace('/\s+/', ' ', $s));
+        $s = trim($s);
+        // Arabic normalisation: drop harakat (diacritics) + tatweel, unify alef/ya variants
+        $s = preg_replace('/[\x{064B}-\x{065F}\x{0670}\x{0640}]/u', '', $s);
+        $s = preg_replace('/[\x{0623}\x{0625}\x{0622}]/u', "\u{0627}", $s); // أ إ آ -> ا
+        $s = preg_replace('/\x{0649}/u', "\u{064A}", $s);                    // ى -> ي
+        $s = mb_strtolower($s);
+        // keep letters/numbers of ANY script (Latin, Arabic, …) + spaces
+        $s = preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $s);
+        return trim(preg_replace('/\s+/u', ' ', $s));
     }
 }

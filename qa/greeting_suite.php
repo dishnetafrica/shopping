@@ -39,6 +39,12 @@ foreach(['Habari Salt','habari salt 1kg','rice','2kg sugar','do you have milk','
 }
 ck('"how much is salt" -> PRICE', IC::classify('how much is salt',$cat)===IC::PRICE, IC::classify('how much is salt',$cat));
 
+echo "\n[Arabic script + regional]\n";
+foreach(['مساء الخير','صباح الخير','السلام عليكم','مرحبا','سلام','كيفك','أهلا','Umeze ute?','umeze ute'] as $t){
+  ck("\"$t\" detect -> greeting", G::detect($t)!==null, ($d=G::detect($t))?$d['lang'].'/'.$d['kind']:'null');
+}
+ck('"مساء الخير" lang=ar', ($d=G::detect('مساء الخير')) && $d['lang']==='ar');
+
 echo "\nRESULT: PASS $pass  FAIL $fail\n";
 if($fails){echo "Fails:\n";foreach($fails as $f)echo "  - $f\n";}
 exit($fail?1:0);

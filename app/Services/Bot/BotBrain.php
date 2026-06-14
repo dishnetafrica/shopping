@@ -173,6 +173,13 @@ class BotBrain
                 $convo->save();
                 return $res['reply'];
             }
+            // A greeting / small-talk mid-clarification shouldn't get a robotic re-prompt:
+            // greet back and keep the options live so they can still pick a number.
+            if (\App\Services\Bot\GreetingDictionary::isGreeting($text)) {
+                return $this->greetingReply($tenant, $text)
+                     . "\n\nYour options are still above \u{1F446} reply with the *number* when you're ready.";
+            }
+
             // Reply neither resolved the selection nor started a new product. Keep the
             // pending options (state survives) and re-prompt — never add on an ambiguous reply.
             return "Please reply with the *number* you want from the list above (e.g. *1*, or *1 2 3*) — or type a product name to search again.";

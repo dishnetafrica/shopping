@@ -3,47 +3,47 @@
 Cumulative. The 10 files in app/Services/Bot/ are the full current bot and supersede all earlier
 bundles. No migration. Deploy = push files + `php artisan optimize:clear`.
 
-## NEW — Multilingual greeting layer (GreetingDictionary.php)
-Problem: "Habari" was matched to *Habari Salt* and returned products. Now a greeting layer runs
-BEFORE product search and matches the WHOLE message, so a bare greeting greets while
-"Habari Salt 1kg" still shops.
+## NEW in this build (greeting follow-ups)
+Two real failures fixed:
 
-Languages: English, Swahili (Kenya/Tanzania), Luganda (Uganda), Juba Arabic (South Sudan),
-plus India (Namaste / Jai Shree Krishna) for the shop's Indian customers. Small-talk
-("how are you", "are you there") greets too; thanks words (asante, webale, shukran) -> THANKS.
+1. **Greeting during a clarification** — "Umeze ute?" / "مساء الخير" arrived while a numbered
+   option list was pending, so the bot replied "reply with the number…". Now a greeting
+   mid-clarification greets back AND keeps the options live ("Your options are still above 👆
+   reply with the number when you're ready"). A bare number still resolves the selection.
 
-Localised replies:
-  Habari    -> "Habari 😊 Karibu <shop>. What would you like today?"
-  Oli otya  -> "Bulungi 😊 What can I get for you today?"
-  Salaam    -> "Salaam 👋 Welcome to <shop>. How can I help you today?"
-  (English keeps the tenant's custom bot_greeting if set.)
+2. **Arabic-script greetings** — "مساء الخير" (good evening), "صباح الخير", "السلام عليكم",
+   "مرحبا", "سلام", "كيفك", "أهلا" now recognised. Normalisation is Unicode-aware (keeps Arabic
+   letters, strips harakat/tatweel, unifies alef/ya variants), so spelling variants match.
+   Also added Swahili "Umeze ute" / "umeze" (NOTE: I'm inferring this is a greeting from context
+   — please confirm the language/meaning; it's harmless since it's not a product).
 
-Required tests pass — Habari · Mambo · Poa · Oli otya · Gyebale · Salaam · Marhaba all greet,
-none search. The buckets are data-only so they can be made tenant/country-configurable later
-(Uganda, Kenya, Tanzania, South Sudan, Rwanda).
+## Multilingual greeting layer (GreetingDictionary.php)
+Runs BEFORE product search and matches the WHOLE message, so "Habari" greets while "Habari Salt"
+shops. Languages: English, Swahili, Luganda, Juba Arabic (romanised + script), India
+(Namaste / Jai Shree Krishna). Small-talk ("how are you", "are you there") greets;
+thanks (asante, webale, shukran) -> THANKS. Localised replies (Habari/Karibu, Bulungi, Salaam).
+Buckets are data-only -> easy to make tenant/country-configurable later.
 
-## Carried forward (this build)
-- Price questions ("how much is X") answer a price, never silent-add; delivery-price -> business.
-- "You don't have big size" -> size follow-up on the active context, not a literal search.
-- "Do you sell X" stays a product search; clear "we don't stock X" on a miss.
-- Cart Management Engine (numbered basket; remove/clear/change by number or name).
-- Follow-up phrasing ("more items you have", typos); business intent; Bugs 1–7.
+## Carried forward
+Price questions ("how much is X") answer a price (delivery-price -> business); "you don't have
+big size" -> size follow-up; "do you sell X" stays a search; clear "we don't stock X" on a miss;
+Cart Management Engine (numbered basket; remove/clear/change by number or name); follow-up
+phrasing & typos; business intent; Bugs 1–7.
 
 ## Files (deploy all 10)
 BotBrain, IntentClassifier, ShoppingEngine, CatalogueMatcher, LocationDictionary, CartCorrection,
 CategoryDictionary, FollowUp, CartEditor, GreetingDictionary.
 
-## Tests — 443 assertions, 0 failures
-greeting 41 · cart 41 · followup 49 · realcustomer 49 · intent 61 · location 34 ·
+## Tests — 453 assertions, 0 failures
+greeting 51 · cart 41 · followup 49 · realcustomer 49 · intent 61 · location 34 ·
 commerce-bugs 16 · phase-1 63 · defaults 18 · delivery 31 · decline 15 · final 25.
 
 ## Honest scope
-GreetingDictionary + classifier logic are unit-tested directly. The reply path
-(greetingReply -> tenant name, custom greeting) runs through Laravel — confirm live on WhatsApp
-with the exact words: Habari, Mambo, Poa, Oli otya, Gyebale, Salaam, Marhaba. Note this transcript
-ran on old code; these (and earlier) fixes are not live until you deploy.
+Dictionary + classifier are unit-tested directly. The reply + state-keeping path runs through
+Laravel/Conversation — confirm live with: مساء الخير and Umeze ute? while a clarification list is
+showing (should greet + keep options), and the bare greetings Habari/Mambo/Salaam.
 
-## STILL OUTSTANDING (not code): the bot went silent earlier
-The "Why are you replying" transcript showed the bot stop responding mid-session — that is an
-infra symptom (queue worker / Evolution WhatsApp session / uncaught exception), not a
-classifier bug. Check the queue worker, the WhatsApp instance connection, and laravel.log.
+## STILL OUTSTANDING (not code): silent-bot incident
+Earlier "Why are you replying" transcript = the bot stopped responding mid-session. That is infra
+(queue worker / Evolution WhatsApp session / uncaught exception), not a classifier bug. Check the
+worker, the WhatsApp instance connection, and storage/logs/laravel.log.
