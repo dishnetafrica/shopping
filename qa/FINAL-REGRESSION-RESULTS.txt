@@ -1,0 +1,48 @@
+
+============ FINAL PRE-PRODUCTION REGRESSION ============
+
+-- DEFAULT SKU TESTS (Rice default = Rice 5kg) --
+  PASS  Rice -> Rice 5kg added
+  PASS  5 rice -> 5 x Rice 5kg
+  PASS  Rice 2kg -> Rice 2kg added
+  PASS  Show me rice -> lists all rice, none added
+  PASS  Which rice do you have? -> lists all rice, none added
+
+-- MULTI PRODUCT DEFAULTS (Rice=5kg, Sugar=1kg) --
+  PASS  Rice and Sugar -> both added (5kg + 1kg)
+  PASS  2 Rice and 3 Sugar -> 2x Rice 5kg, 3x Sugar 1kg
+
+-- MIXED SIZE + DEFAULT --
+  PASS  Rice and Sugar 2kg -> Rice 5kg default + Sugar 2kg
+
+-- OUT OF STOCK (Rice 5kg OOS) --
+  PASS  Rice (default OOS) -> clarify, nothing added
+  PASS  Rice (default OOS) -> OOS SKU never added
+
+-- MULTI STORE / TENANT ISOLATION --
+  PASS  Store A Rice -> Rice 5kg
+  PASS  Store B Rice -> Rice 1kg
+  PASS  different result per tenant
+  PASS  A used A-catalogue id (3), B used B-catalogue id (101) — no cross-catalogue leak
+
+-- BROWSE OVERRIDE (never auto-add) --
+  PASS  "Show me Rice" -> never auto-adds (cart empty, options listed)
+  PASS  "Rice options" -> never auto-adds (cart empty, options listed)
+  PASS  "Which Rice" -> never auto-adds (cart empty, options listed)
+
+-- STRESS: 1000 x "Rice" (same conversation) --
+   1000 msgs in 37.9ms | cart lines: 1 | rice qty: 1000
+  PASS  no crash
+  PASS  no duplicate cart lines (exactly 1 rice line)
+  PASS  quantity merged to 1000 (idempotent add path)
+  PASS  only the default SKU present
+
+-- STRESS: 500 A + 500 B interleaved (tenant leakage) --
+  PASS  no crash (interleaved)
+  PASS  Store A cart only Rice 5kg
+  PASS  Store B cart only Rice 1kg
+  PASS  no tenant leakage (A has no B id, B has no A id)
+
+============ RESULT ============
+PASS 25   FAIL 0
+ALL GREEN ✅

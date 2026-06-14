@@ -26,7 +26,8 @@ class ShoppingParser
         $browse = (bool) (
             str_contains($raw, '?') ||
             preg_match('/\b(do you have|do you stock|do you sell|do you carry|have you got|got any|is there|any\b)/', $low) ||
-            preg_match('/^(show me|show|list|what do you have|whats|gimme a list)\b/', $low)
+            preg_match('/\b(which|what|whats|options?|available)\b/', $low) ||
+            preg_match('/^(show me|show|list|gimme a list)\b/', $low)
         );
 
         // strip leading intent/filler phrases
@@ -94,27 +95,58 @@ class ShoppingParser
         return (bool) preg_match('/^(?:' . self::UNIT_ALT . ')$/', $t);
     }
 
+    private const SIZE_UNIT = 'kgs|kg|gms|gm|grams|gram|mg|ml|cl|ltrs|ltr|lt|litres|litre|liters|liter|g|l';
+
     private function parseItem(string $frag): array
     {
         $f = trim($frag);
         $f = preg_replace('/^(?:add|buy|want|need|take|get|give me|i want|i need|order)\s+/', '', $f);
         $f = trim($f);
 
-        $qty = 1; $explicit = false;
-        if (preg_match('/^(\d+)\s*(?:' . self::UNIT_ALT . ')?\b\s*(?:of\s+)?/', $f, $m)) {
-            $qty = max(1, (int) $m[1]); $explicit = true;
+        // size token (number + weight/volume unit) anywhere -> used to disambiguate variants
+        $size = null;
+        if (preg_match('/(\d+(?:\.\d+)?)\s*(?:' . self::SIZE_UNIT . ')\b/i', $f, $sm)) {
+            $size = \App\Services\Bot\CatalogueMatcher::normSize($sm[0]);
+        }
+
+        $count = null;      // an explicit COUNT distinct from a size token
+        $sizeNum = null;    // the number that belonged to a size token
+        $explicit = false;
+
+        // leading number (+optional unit)
+        if (preg_match('/^(\d+)\s*(' . self::SIZE_UNIT . '|' . self::UNIT_ALT . ')?\b\s*(?:of\s+)?/', $f, $m)) {
+            $isSizeUnit = isset($m[2]) && $m[2] !== '' && preg_match('/^(?:' . self::SIZE_UNIT . ')$/i', $m[2]);
+            if ($isSizeUnit) { $sizeNum = (int) $m[1]; }
+            else { $count = max(1, (int) $m[1]); }
+            $explicit = true;
             $f = trim(substr($f, strlen($m[0])));
         } elseif (preg_match('/^(a|an)\s+/', $f, $m)) {
             $f = trim(substr($f, strlen($m[0])));
         }
-        if (!$explicit && preg_match('/\s+x?(\d+)\s*(?:' . self::UNIT_ALT . ')?$/', $f, $m)) {
-            $qty = max(1, (int) $m[1]); $explicit = true;
-            $f = trim(preg_replace('/\s+x?\d+\s*(?:' . self::UNIT_ALT . ')?$/', '', $f));
+
+        // trailing number (+optional unit) if we have not already taken a count
+        if ($count === null && preg_match('/\s+x?(\d+)\s*(' . self::SIZE_UNIT . '|' . self::UNIT_ALT . ')?$/', $f, $m)) {
+            $isSizeUnit = isset($m[2]) && $m[2] !== '' && preg_match('/^(?:' . self::SIZE_UNIT . ')$/i', $m[2]);
+            if ($isSizeUnit && $sizeNum === null) { $sizeNum = (int) $m[1]; }
+            else { $count = max(1, (int) $m[1]); }
+            $explicit = true;
+            $f = trim(preg_replace('/\s+x?\d+\s*(?:' . self::SIZE_UNIT . '|' . self::UNIT_ALT . ')?$/', '', $f));
         }
-        $f = preg_replace('/^(?:' . self::UNIT_ALT . ')\b\s*/', '', $f);
+
+        $f = preg_replace('/^(?:' . self::SIZE_UNIT . '|' . self::UNIT_ALT . ')\b\s*/', '', $f);
         $f = preg_replace('/^of\s+/', '', $f);
         $f = trim($f);
 
-        return ['query' => $f, 'qty' => $qty, 'unit' => null, '_explicit_qty' => $explicit];
+        // qty = count interpretation (preserves "2kg sugar" => 2 when there is a single SKU)
+        $qty = $count ?? $sizeNum ?? 1;
+
+        return [
+            'query' => $f,
+            'qty' => max(1, (int) $qty),
+            'count' => $count,          // explicit separate count (null if none)
+            'size' => $size,            // normalised size token e.g. "2kg" (null if none)
+            'unit' => null,
+            '_explicit_qty' => $explicit,
+        ];
     }
 }

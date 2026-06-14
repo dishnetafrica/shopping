@@ -14,6 +14,8 @@ class ShoppingEngine
         private CatalogueMatcher $matcher,
         private ClarificationFlow $clarify,
         private string $currency = 'UGX',
+        private array $defaults = [],        // term => product_id (tenant defaults)
+        private string $strategy = 'explicit', // 'off' | 'explicit' | 'explicit_then_auto'
     ) {}
 
     private function money(float $a): string { return $this->currency . ' ' . number_format($a); }
@@ -49,17 +51,24 @@ class ShoppingEngine
 
         $addIntent = $parsed['add_intent'];
         $added = []; $groups = []; $notFound = [];
+        $defaultUsed = false; $hintVariants = [];
         foreach ($items as $item) {
-            $res = $this->resolveItem($item['query'], (int) $item['qty'], $products);
+            $res = $this->resolveItem($item, $products, $parsed['browse']);
             if ($res['status'] === 'none') { $notFound[] = $item['query']; continue; }
             if ($res['status'] === 'clarify') {
                 $groups[] = ['label' => $item['query'], 'qty' => (int) $item['qty'], 'products' => $res['products']];
                 continue;
             }
             $p = $res['product'];
-            if ($addIntent) {
-                $cart = $this->addToCart($cart, $p['id'] ?? null, $p['name'], (float) $p['price'], (int) $item['qty']);
-                $added[] = $item['qty'] . ' x ' . $p['name'];
+            $useQty = $res['qty'] ?? (int) $item['qty'];
+            $autoAdd = $addIntent || in_array($res['via'] ?? '', ['default', 'size', 'auto'], true);
+            if ($autoAdd) {
+                $cart = $this->addToCart($cart, $p['id'] ?? null, $p['name'], (float) $p['price'], (int) $useQty);
+                $added[] = $useQty . ' x ' . $p['name'];
+                if (($res['via'] ?? '') === 'default') {
+                    $defaultUsed = true;
+                    $hintVariants = array_merge($hintVariants, $res['siblings'] ?? []);
+                }
             } else {
                 $groups[] = ['label' => $item['query'], 'qty' => (int) $item['qty'], 'products' => [$p]];
             }
@@ -89,6 +98,15 @@ class ShoppingEngine
         if ($notFound) $parts[] = "I couldn't find: " . implode(', ', $notFound) . '.';
         if ($added && !$groups) $parts[] = $this->cartSummary($cart) . "\n\nAdd more, or say *checkout*.";
 
+        // size hint: shown only ONCE per conversation, when a default was auto-applied
+        if ($defaultUsed && $hintVariants && empty($state['size_hint_shown'])) {
+            $eg = array_slice(array_values(array_unique($hintVariants)), 0, 2);
+            if ($eg) {
+                $parts[] = 'Want a different size? Just say e.g. *' . implode('* or *', $eg) . '*.';
+                $state['size_hint_shown'] = true;
+            }
+        }
+
         return $this->res(true, implode("\n\n", $parts), $cart, $state, $added, $flat, $notFound);
     }
 
@@ -103,18 +121,85 @@ class ShoppingEngine
         $out = [];
         foreach ($qtoks as $w) {
             if (!$this->matcher->search($w, $products)) return [$item];   // a word doesn't resolve -> don't split
-            $out[] = ['query' => $w, 'qty' => $item['qty'], 'unit' => null];
+            $out[] = ['query' => $w, 'qty' => $item['qty'], 'count' => $item['count'] ?? null, 'size' => null, 'unit' => null];
         }
         return $out;
     }
 
-    public function resolveItem(string $query, int $qty, array $products): array
+    /**
+     * Resolve one parsed item -> single | clarify | none, applying size + default rules.
+     * Precedence (multiple candidates):
+     *   1. stated size matches exactly one SKU -> that SKU (size wins)
+     *   2. stated size matches 0 or >1 SKUs   -> CLARIFY (size conflict)
+     *   3. no size, owner default valid+in-stock -> default
+     *   4. no size, strategy=explicit_then_auto  -> auto-pick (future ranking; cheapest/smallest for now)
+     *   5. otherwise                              -> CLARIFY
+     * A single candidate always resolves directly (size acts as a count -> preserves "2kg sugar"=2).
+     */
+    public function resolveItem(array $item, array $products, bool $browse = false): array
     {
+        $query = $item['query'];
+        $qty = (int) ($item['qty'] ?? 1);
+        $size = $item['size'] ?? null;
+        $count = $item['count'] ?? null;
+
         $cands = $this->matcher->search($query, $products);
         if (!$cands) return ['status' => 'none'];
+
+        // single candidate: resolve directly; a size token here just means count (Cat 3 behaviour)
+        if (count($cands) === 1) {
+            return ['status' => 'single', 'product' => $cands[0]['product'], 'qty' => $qty];
+        }
+
+        // explicit browse ("show me rice" / "which rice") -> always list all, never auto-pick
+        if ($browse) {
+            $opts = $this->matcher->clarifyCheck($query, $products);
+            if ($opts !== null) return ['status' => 'clarify', 'products' => $opts];
+            return ['status' => 'clarify', 'products' => array_map(fn ($c) => $c['product'], array_slice($cands, 0, 5))];
+        }
+
+        // multiple candidates ---------------------------------------------------
+        if ($size !== null) {
+            $sized = array_values(array_filter($cands, fn ($c) => CatalogueMatcher::skuSize($c['product']['name'] ?? '') === $size));
+            if (count($sized) === 1) {
+                return ['status' => 'single', 'product' => $sized[0]['product'], 'qty' => $count ?? 1, 'via' => 'size'];
+            }
+            // 0 or >1 matches for the stated size -> ask (size conflict)
+            return ['status' => 'clarify', 'products' => array_map(fn ($c) => $c['product'], array_slice($cands, 0, 5))];
+        }
+
+        // no size: try the owner's default for this term
+        $term = implode(' ', $this->matcher->tokens($query));
+        if ($this->strategy !== 'off' && $term !== '' && isset($this->defaults[$term])) {
+            $pid = $this->defaults[$term];
+            foreach ($cands as $c) {
+                $p = $c['product'];
+                if (($p['id'] ?? null) == $pid && ($p['stock'] ?? 1) > 0) {
+                    $siblings = [];
+                    foreach ($cands as $cc) {
+                        $sz = CatalogueMatcher::skuSize($cc['product']['name'] ?? '');
+                        if ($sz) $siblings[] = $term . ' ' . $sz;
+                    }
+                    return ['status' => 'single', 'product' => $p, 'qty' => $qty, 'via' => 'default', 'siblings' => $siblings];
+                }
+            }
+        }
+
+        // optional auto-pick when no default (future ranking: best-seller -> recent -> cheapest -> smallest)
+        if ($this->strategy === 'explicit_then_auto') {
+            $pick = $cands;
+            usort($pick, function ($a, $b) {
+                $pa = (float) ($a['product']['price'] ?? 0); $pb = (float) ($b['product']['price'] ?? 0);
+                if ($pa !== $pb) return $pa <=> $pb;                 // cheapest
+                return strlen($a['product']['name']) <=> strlen($b['product']['name']);
+            });
+            return ['status' => 'single', 'product' => $pick[0]['product'], 'qty' => $qty, 'via' => 'auto'];
+        }
+
+        // otherwise: clarify (price-spread groups first, else top candidates)
         $opts = $this->matcher->clarifyCheck($query, $products);
         if ($opts !== null) return ['status' => 'clarify', 'products' => $opts];
-        return ['status' => 'single', 'product' => $cands[0]['product']];
+        return ['status' => 'clarify', 'products' => array_map(fn ($c) => $c['product'], array_slice($cands, 0, 5))];
     }
 
     private function addToCart(array $cart, $id, string $name, float $price, int $qty): array

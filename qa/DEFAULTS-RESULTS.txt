@@ -1,0 +1,42 @@
+
+========= DEFAULT PRODUCT STRATEGY — TEST SUITE =========
+
+-- A. Default applied to generic request (fewer questions) --
+  PASS  A1 "Rice" -> Added default Rice 5kg
+  PASS  A2 "5 rice" -> 5 x default Rice 5kg
+  PASS  A3 "milk" -> Added default Fresh Dairy 1L
+
+-- B. Size wins over default (order accuracy) --
+  PASS  B1 "rice 2kg" -> Pearl Rice 2kg (not default), qty 1
+  PASS  B2 "2 5kg rice" -> 2 x Rice 5kg
+  PASS  B3 "1kg rice" -> Local Rice 1kg
+
+-- C. Size conflict -> clarify (no wrong order) --
+  PASS  C1 "rice 3kg" (not stocked) -> clarify, nothing added
+
+-- D. No default -> clarify (never guess) --
+  PASS  D1 "Rice" with no default -> shows options, nothing added
+  PASS  D2 "milk" (no milk default) -> shows options, nothing added
+
+-- E. Single SKU unaffected (Cat 3 preserved) --
+  PASS  E1 "2kg sugar" (single 1kg SKU) -> 2 x Kinyara Sugar 1kg
+  PASS  E2 "sugar" (single SKU) -> shown (browse), nothing added
+
+-- F. Out-of-stock / broken default -> clarify, never add dead SKU --
+  PASS  F1 default out of stock -> clarify, nothing added
+
+-- G. Size hint shown only ONCE per conversation --
+  PASS  G1 hint shown on first default use
+  PASS  G2 hint NOT shown again later in same conversation
+  PASS  G3 state flag set
+
+-- H. Strategy: off (always ask) and explicit_then_auto (always pick) --
+  PASS  H1 strategy=off -> ignores default, clarifies
+  PASS  H2 strategy=explicit_then_auto, no default -> auto-picks cheapest (Local Rice 1kg)
+
+-- I. Browse still overrides default --
+  PASS  I1 "show me rice" -> lists all, nothing added
+
+========= RESULT =========
+PASS 18  FAIL 0
+ALL GREEN ✅

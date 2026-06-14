@@ -1,72 +1,44 @@
-# CloudBSS — Phase 1 Brain Migration (deploy bundle)
+# CloudBSS — Phase 2: Default Product Strategy (deploy bundle)
 
-Deterministic conversational brain ported from the production n8n workflow into
-CloudBSS, plus the full test + scale suites. **Phase 1 only** (gap analysis
-approved; Phase 2/3/4 frozen).
+Reduces clarification friction: an owner-set **default SKU per term** so a generic
+"Rice" adds the default instead of asking — while preserving order accuracy.
 
-## What to deploy
-
-These five files are the production change (drop into the repo at these paths):
-
+## Deploy (drop into repo at these paths)
 ```
-app/Services/Bot/CatalogueMatcher.php     NEW
-app/Services/Bot/ShoppingParser.php       NEW
-app/Services/Bot/ClarificationFlow.php    NEW
-app/Services/Bot/ShoppingEngine.php       NEW
-app/Services/Bot/BotBrain.php             EDIT (keywordRespond -> engine; +tenantCatalogue/currencyFor)
+app/Services/Bot/CatalogueMatcher.php     EDIT  + normSize/skuSize, fuzzy first-char guard, token cache
+app/Services/Bot/ShoppingParser.php       EDIT  + size vs count parsing, newline lists
+app/Services/Bot/ShoppingEngine.php       EDIT  + size/default/auto resolution, size-hint-once
+app/Services/Bot/ClarificationFlow.php    (unchanged from Phase 1)
+app/Services/Bot/BotBrain.php             EDIT  loads tenant defaults + strategy into the engine
+app/Models/ProductDefault.php             NEW
+app/Filament/Resources/ProductDefaultResource.php (+ Pages/)   NEW  "Smart Defaults" admin
+database/migrations/2026_06_14_000001_create_product_defaults_table.php  NEW
 ```
+Run after deploy: `php artisan migrate` then `php artisan test`.
 
-`tests/`, `qa/`, `load/`, and the `*.md` files are CI / QA / docs — they live in
-the repo but are **not** copied by your Dockerfile, so they never deploy. That's
-intended.
+## Behaviour (resolution precedence, multiple SKUs)
+1. stated size matches one SKU  -> that SKU (size wins)
+2. stated size matches 0 / >1   -> CLARIFY (size conflict)
+3. no size + valid owner default -> add default
+4. no size + strategy=explicit_then_auto -> auto-pick (cheapest/smallest for now)
+5. otherwise                    -> CLARIFY
+Single SKU always resolves directly ("2kg sugar" with a 1kg SKU = qty 2).
+"show me / which" always lists all variants (browse overrides default).
 
-### Integration notes
-- `BotBrain`'s constructor gains 3 zero-arg services — Laravel autowires them, no
-  service-provider binding needed (it's resolved from the container via the job).
-- The OpenAI NLU path and `execute()/placeOrder` are untouched; the engine is the
-  deterministic floor that works with the AI off.
+## Settings
+- `tenants.settings.default_strategy` = off | explicit | explicit_then_auto  (platform default: **explicit**)
+- Admin → **Smart Defaults**: set a default SKU per customer word.
 
-## Contents
+## Tests (all green here)
+- `qa/default_strategy_suite.php` — 18/18 (defaults, size, conflict, hint-once, accuracy)
+- `qa/conversational_commerce_suite.php` — Phase-1 63/63 (no regression)
+- `qa/performance_scale_suite.php` — 18/18
+- `tests/Unit/ProductDefaultStrategyTest.php` — 11 tests (php artisan test)
+- `tests/Unit/ShoppingEngineTest.php` — 11 tests
 
-```
-app/Services/Bot/*.php                     production code
-tests/Unit/ShoppingEngineTest.php          repo unit test (php artisan test --filter=ShoppingEngineTest)
-qa/conversational_commerce_suite.php       Categories 1-20 functional suite (php qa/...)
-qa/performance_scale_suite.php             Categories 21-26 perf/scale suite
-qa/qa_catalogue.php                        synthetic catalogue generator
-qa/TEST-REPORT.md                          functional pass/fail report
-qa/PERF-REPORT.md                          performance & scale report
-qa/RESULTS.txt / PERF-RESULTS.txt          captured run output
-load/k6_webhook.js                         staging load test (the real Category 26)
-NOTES.md                                   deploy + behaviour notes
-```
-
-## Test status (captured)
-
-- Functional (Cat 1-20): **Phase-1 scope 63/63 = 100%**; all production criteria PASS.
-  The 10 non-passing are Categories 10 & 11 (advanced edits + replacements) =
-  Phase 2, flagged PENDING, fail-safe (no wrong cart mods).
-- Performance (Cat 21-26): **18/18 measured checks pass**. ~6 ms/message at 1000
-  SKUs. Concurrency rows are projections — run `load/k6_webhook.js` on staging for
-  the true end-to-end test.
-
-## Run the suites locally
-
-```
-php qa/conversational_commerce_suite.php
-php qa/performance_scale_suite.php
-php artisan test --filter=ShoppingEngineTest
-```
-
-## Open decisions / Phase 2
-
-1. **Bare list = show, not auto-add** (a verb/quantity is required to add). Confirm
-   or flip (one-line change).
-2. **Big-catalogue clarify friction**: generic words clarify when many SKUs share a
-   price spread — add a per-item default SKU in Phase 2.
-3. Infra before concurrency sign-off: per-tenant catalogue cache + messageId de-dup
-   + staging k6 run.
-4. Phase 2 unlocks Categories 9(remove)/10/11/12/13-flow/16 (cart-edit engine,
-   reorder, checkout flow, escalation).
-```
-```
+## Notes
+- Filament resource lints clean but couldn't be run here (no app runtime) —
+  verify against your Filament v3 on staging.
+- `qa/ROADMAP.md` lists deferred items: auto-pick ranking, Store Learning,
+  Customer Learning (per-customer variant), guided defaults page.
+- `qa/Default-Product-Strategy-Design.md` is the approved design.

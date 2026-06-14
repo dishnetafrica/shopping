@@ -145,6 +145,31 @@ class CatalogueMatcher
         return $scored;
     }
 
+    /** Normalise a size token: "2 kg"->"2kg", "500 ml"->"500ml", "1 Litre"->"1l". Null if none. */
+    public static function normSize(string $s): ?string
+    {
+        if (!preg_match('/(\d+(?:\.\d+)?)\s*(kgs|kg|gms|gms|gm|grams|gram|g|mg|ml|cl|ltrs|ltr|lt|litres|litre|liters|liter|l)\b/i', mb_strtolower($s), $m)) {
+            return null;
+        }
+        $num = rtrim(rtrim($m[1], '0'), '.'); // 2.0 -> 2
+        $unit = $m[2];
+        $unit = match (true) {
+            in_array($unit, ['kgs','kg'], true) => 'kg',
+            in_array($unit, ['gms','gm','grams','gram','g'], true) => 'g',
+            $unit === 'mg' => 'mg',
+            $unit === 'ml' => 'ml',
+            $unit === 'cl' => 'cl',
+            default => 'l', // ltr/litre/liter/l
+        };
+        return $num . $unit;
+    }
+
+    /** Extract a product's pack size from its name (first weight/volume token). */
+    public static function skuSize(string $name): ?string
+    {
+        return self::normSize($name);
+    }
+
     /** Clarify guard: single generic word -> >=2 SKUs with >=3x price spread -> ask. */
     public function clarifyCheck(string $query, array $products): ?array
     {

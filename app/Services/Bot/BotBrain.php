@@ -149,8 +149,14 @@ class BotBrain
             return "\u{1F44D} Great! Tell me what you'd like, say *cart* to review, or *checkout* when ready.";
         }
 
-        // hand off to the deterministic shopping engine
-        $engine  = new ShoppingEngine($this->parser, $this->matcher, $this->clarify, $this->currencyFor($tenant));
+        // hand off to the deterministic shopping engine (fresh matcher per message:
+        // its token cache is request-scoped, so nothing carries between tenants)
+        $engine  = new ShoppingEngine(
+            $this->parser, new CatalogueMatcher(), $this->clarify,
+            $this->currencyFor($tenant),
+            $this->tenantDefaults($tenant),
+            $this->defaultStrategy($tenant),
+        );
         $cart    = is_array($convo->cart) ? $convo->cart : [];
         $state   = is_array($convo->state) ? $convo->state : [];
         $result  = $engine->handle($text, $this->tenantCatalogue($tenant), $cart, $state);
@@ -186,6 +192,23 @@ class BotBrain
     {
         $c = (string) $tenant->setting('currency', 'UGX');
         return $c !== '' ? $c : 'UGX';
+    }
+
+    /** Owner-set default SKUs as term => product_id for this tenant. */
+    protected function tenantDefaults(Tenant $tenant): array
+    {
+        return \App\Models\ProductDefault::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('active', true)
+            ->pluck('product_id', 'term')
+            ->all();
+    }
+
+    /** 'off' | 'explicit' | 'explicit_then_auto' — platform default is 'explicit'. */
+    protected function defaultStrategy(Tenant $tenant): string
+    {
+        $s = (string) $tenant->setting('default_strategy', 'explicit');
+        return in_array($s, ['off', 'explicit', 'explicit_then_auto'], true) ? $s : 'explicit';
     }
 
     // ---------------- cart + order helpers ----------------

@@ -4,9 +4,9 @@ PHP 8.3.6  |  single core: 1 cores available
 
 --- CATEGORY 21: catalogue scale 500 / 1000 / 2000 ---
 products | 1x search    | 8-item parse   | full handle()    | catalogue    | peak mem  
-500      | 695.4 µs    | 8.819 ms       | 2.950 ms         | 0.00 MB      | 1.20 MB   
-1000     | 1,440.7 µs  | 17.948 ms      | 5.736 ms         | 0.00 MB      | 1.80 MB   
-2000     | 2,903.6 µs  | 36.904 ms      | 11.370 ms        | 0.00 MB      | 2.99 MB   
+500      | 697.0 µs    | 8.851 ms       | 2.588 ms         | 0.00 MB      | 1.23 MB   
+1000     | 1,402.5 µs  | 17.314 ms      | 5.113 ms         | 0.00 MB      | 1.82 MB   
+2000     | 2,836.9 µs  | 35.636 ms      | 10.477 ms        | 0.00 MB      | 3.02 MB   
    PASS  21.1 single search < 5ms @2000
    PASS  21.2 full 8-item handle < 80ms @2000
    PASS  21.3 single-item handle < 40ms @2000
@@ -30,7 +30,7 @@ products | 1x search    | 8-item parse   | full handle()    | catalogue    | pea
          per-conversation queue serialisation + messageId de-dup + optional debounce.
 
 --- CATEGORY 24: 20-product single message ---
-   20 items submitted | added: 0 | clarify: 20 | not-found: 0 | time: 41.607 ms
+   20 items submitted | added: 0 | clarify: 20 | not-found: 0 | time: 42.689 ms
    PASS  24.1 no timeout (<150ms)
    PASS  24.2 no product loss (>=18 of 20 resolved to cart/clarify)
 
@@ -41,11 +41,11 @@ products | 1x search    | 8-item parse   | full handle()    | catalogue    | pea
    PASS  25.3 multiple options per staple (>=8 total)
 
 --- CATEGORY 26: load — MEASURED single-core brain cost + PROJECTION ---
-   measured: 6.348 ms/message  |  ~158 msg/sec/core (brain only, catalogue in-memory)
+   measured: 6.300 ms/message  |  ~159 msg/sec/core (brain only, catalogue in-memory)
    concurrent   | 4 workers      | 8 workers      | 16 workers    
-   100          | 158.7 ms       | 79.4 ms        | 39.7 ms       
-   500          | 793.5 ms       | 396.8 ms       | 198.4 ms      
-   1000         | 1,587.1 ms     | 793.5 ms       | 396.8 ms      
+   100          | 157.5 ms       | 78.8 ms        | 39.4 ms       
+   500          | 787.5 ms       | 393.8 ms       | 196.9 ms      
+   1000         | 1,575.0 ms     | 787.5 ms       | 393.8 ms      
    (= time for the BRAIN to clear that many simultaneous 1-message bursts; excludes DB/WhatsApp/OpenAI)
    PASS  26.1 brain latency < 15ms/message @1000 SKUs
    PASS  26.2 peak memory per run < 64MB
