@@ -111,6 +111,14 @@
   .acts{max-height:0;overflow:hidden;transition:max-height .26s ease;background:#FCFAF5;border-top:1px solid var(--line-soft)}
   .order.open .acts{max-height:220px}
   .acts .inner{padding:11px 13px;display:flex;flex-wrap:wrap;gap:8px}
+  .o-cta{display:flex;align-items:center;gap:8px;margin-top:13px}
+  .o-cta .btn.primary{flex:1}
+  .o-cta .cta-done{flex:1;font-size:12px;color:var(--ink-faint);font-weight:600}
+  .more-btn{flex:0 0 auto;width:44px;height:44px;border:0;border-radius:11px;background:#fff;
+    box-shadow:inset 0 0 0 1.5px var(--line);color:var(--ink-soft);font-size:20px;line-height:1;cursor:pointer}
+  .more-btn:active{transform:scale(.95)}
+  .cnote{margin-top:9px;font-size:12px;color:var(--ink-soft);background:var(--line-soft);
+    border-radius:8px;padding:7px 10px;line-height:1.4}
   .btn{flex:1;min-width:calc(50% - 4px);border:0;border-radius:10px;padding:11px 10px;font-family:var(--body);
     font-weight:600;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:.15s}
   .btn:active{transform:scale(.97)}
@@ -433,24 +441,31 @@ function renderFeed(){
           <span class="o-ch">● WhatsApp</span><span class="o-time">${timeAgo(o.created)}</span></div>
         <div class="o-cust"><span class="nm">${esc(o.name)}</span><span class="ph">${esc(o.phone)}</span></div>
         <div class="chips">
-          ${o.area?`<span class="chip loc">📍 ${esc(o.area)}</span>`:""}
           ${o.pay?`<span class="chip pay">${esc(o.pay)}</span>`:""}
           <span class="chip">${o.items.reduce((s,[,q])=>s+(q||1),0)} items</span>
         </div>
         <div class="items">${itemsLine(o.items)}</div>
+        ${o.area?`<div class="cnote">💬 ${esc(o.area)}</div>`:""}
         ${o.rider?`<div class="rider-tag"><span class="dot"></span>Rider <b>${esc(o.rider)}</b>${o.riderPhone?" · "+esc(o.riderPhone):""}</div>`:""}
         <hr class="perf">
         <div class="o-foot"><div class="o-total">${fmt(o.total)}<span>incl. delivery</span></div>
           <span class="pill ${pillClass(o.status)}">${esc(o.status)}</span></div>
+        <div class="o-cta">
+          ${next?`<button class="btn primary" data-act="advance">${ADV[o.status]||"Advance"}</button>`:`<span class="cta-done">${o.status==="Cancelled"?"Order cancelled":"Order completed"}</span>`}
+          ${!done?`<button class="more-btn" data-act="more" title="More options">\u22EF</button>`:""}
+        </div>
       </div>
       <div class="acts"><div class="inner">
-        ${next?`<button class="btn primary" data-act="advance">${ADV[o.status]||"Advance"}</button>`:""}
         ${(!done && !o.rider)?`<button class="btn gold" data-act="rider">Assign rider</button>`:""}
-        ${o.phone?`<a class="btn ghost" href="tel:${esc(o.phone.replace(/[^0-9+]/g,''))}">Call</a>`:""}
-        ${!done?`<button class="btn ghost" data-act="cancel">Cancel</button>`:""}
+        ${o.phone?`<a class="btn ghost" href="tel:${esc(o.phone.replace(/[^0-9+]/g,''))}">Call customer</a>`:""}
+        ${!done?`<button class="btn ghost" data-act="cancel">Cancel order</button>`:""}
       </div></div>`;
     card.querySelector(".body").addEventListener("click", ()=> card.classList.toggle("open"));
-    card.querySelectorAll("[data-act]").forEach(b=> b.addEventListener("click", e=>{ e.stopPropagation(); doAction(o, b.dataset.act, b); }));
+    card.querySelectorAll("[data-act]").forEach(b=> b.addEventListener("click", e=>{
+      e.stopPropagation();
+      if(b.dataset.act==="more"){ card.classList.toggle("open"); return; }
+      doAction(o, b.dataset.act, b);
+    }));
     feed.appendChild(card);
   });
 }
