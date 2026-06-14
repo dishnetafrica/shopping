@@ -236,7 +236,8 @@ class BotBrain
             case IntentClassifier::GREETING:
                 return $this->greetingReply($tenant, $text);
             case IntentClassifier::QUESTION:
-                return "\u{1F642} Happy to help! Tell me a product to order, say *cart* to review, or *checkout* to finish — and for anything else I'll connect you to the shop.";
+                return \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant))
+                    ?? "\u{1F642} Happy to help! Tell me a product to order, say *cart* to review, or *checkout* to finish — and for anything else I'll connect you to the shop.";
             case IntentClassifier::HUMAN_AGENT:
                 $convo->agent_active = true;
                 $convo->save();
@@ -257,7 +258,8 @@ class BotBrain
             case IntentClassifier::LOCATION:
                 return $this->captureLocation($tenant, $convo, $text);
             case IntentClassifier::UNKNOWN:
-                return "I didn't quite catch that \u{1F642} Tell me a product to add, say *cart* to review, or *checkout* when ready.";
+                return \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant))
+                    ?? "I didn't quite catch that \u{1F642} Tell me a product to add, say *cart* to review, or *checkout* when ready.";
             // CART / CHECKOUT / DECLINE are already handled above; anything else is SHOPPING.
         }
 
@@ -561,6 +563,10 @@ class BotBrain
                 }
                 return null; // couldn't resolve -> re-prompt
             default:
+                // An everyday question while a list is up -> answer it, keep the list live.
+                if (($faq = \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant))) !== null) {
+                    return $faq . $keepNote;
+                }
                 return null; // QUESTION / UNKNOWN -> re-prompt
         }
     }
@@ -600,6 +606,28 @@ class BotBrain
     {
         return "Yes \u{1F60A} please send your WhatsApp *location pin* and I'll calculate the exact delivery fee.\n"
              . "Tap \u{1F4CE} (or +) \u{2192} *Location* \u{2192} *Send your current location*.";
+    }
+
+    /** Context passed to the FAQ matcher so answers use the tenant's real settings. */
+    protected function faqContext(Tenant $tenant): array
+    {
+        $payments = $tenant->setting('payment_methods', null);
+        if (is_string($payments) && $payments !== '') {
+            $payments = array_map('trim', explode(',', $payments));
+        }
+        $areas = $tenant->setting('delivery_areas', null);
+        if (is_string($areas) && $areas !== '') {
+            $areas = array_map('trim', explode(',', $areas));
+        }
+        return array_filter([
+            'currency'        => $this->currencyFor($tenant),
+            'payments'        => is_array($payments) ? $payments : null,
+            'hours'           => trim((string) $tenant->setting('business_hours', '')) ?: null,
+            'deliver_areas'   => is_array($areas) ? $areas : null,
+            'min_order'       => $tenant->setting('min_order', null),
+            'delivery_note'   => trim((string) $tenant->setting('delivery_note', '')) ?: null,
+            'pay_on_delivery' => $tenant->setting('pay_on_delivery', true),
+        ], fn ($v) => $v !== null);
     }
 
     /** Build a fresh engine (request-scoped token cache) and handle one message. */

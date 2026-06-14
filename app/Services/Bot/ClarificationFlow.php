@@ -49,6 +49,20 @@ class ClarificationFlow
         $low = mb_strtolower(trim($reply));
         $picked = [];
 
+        // SIZE / VARIANT reply (e.g. "6kg", "500 ml", "the 2 litre one") after showing variants:
+        // prefer the option whose NAME carries that size over treating the digits as a row number.
+        if (preg_match('/\b(\d+(?:\.\d+)?)\s*(kgs?|kg|gms?|grams?|g|mg|ml|cl|ltrs?|litres?|liters?|lt|l|pcs?|packs?|pkts?|dozen|btls?|bottles?|tins?)\b/', $low, $sm)) {
+            $num  = $sm[1];
+            $unit = rtrim($sm[2], 's');
+            foreach ($flat as $opt) {
+                $n = mb_strtolower($opt['name']);
+                if (preg_match('/\b' . preg_quote($num, '/') . '\s*' . preg_quote($unit, '/') . 's?\b/', $n)) {
+                    $picked[] = $opt;
+                }
+            }
+            if ($picked) return $picked;
+        }
+
         if (preg_match_all('/\d+/', $low, $m)) {
             $nums = array_map('intval', $m[0]);
             foreach ($flat as $opt) {
