@@ -73,6 +73,14 @@ ck('"how much is delivery"', $c('how much is delivery'), I::BUSINESS);
 ck('"delivery fee"', $c('delivery fee'), I::BUSINESS);
 ck('"are you open"', $c('are you open'), I::BUSINESS);
 
+echo "\n[shop-start -> SHOP_START; products/checkout unaffected]\n";
+foreach(['Have an order to make','I want to place an order','Need groceries','Need to buy items','Can I order',
+         'Want to shop','Need supplies','Need stock','Can I place an order','I need products'] as $t) ck("\"$t\"", $c($t), I::SHOP_START);
+ck('"i want to order rice" -> SHOPPING', $c('i want to order rice'), I::SHOPPING);
+ck('"can i order milk" -> SHOPPING', $c('can i order milk'), I::SHOPPING);
+ck('"order" -> CHECKOUT', $c('order'), I::CHECKOUT);
+ck('"place order" -> CHECKOUT', $c('place order'), I::CHECKOUT);
+
 echo "\nRESULT: PASS $pass  FAIL $fail\n";
 if($fails){echo "Fails:\n";foreach($fails as $f)echo "  - $f\n";}
 exit($fail?1:0);

@@ -248,6 +248,10 @@ class BotBrain
                 return $this->categoryResponse($tenant, $convo, $text);
             case IntentClassifier::PRICE:
                 return $this->priceResponse($tenant, IntentClassifier::priceQuery($lc) ?? $text);
+            case IntentClassifier::SHOP_START:
+                return "\u{1F6D2} Great! What would you like to order today?\n"
+                     . "Examples: *Rice 5kg*, *Sugar 2kg*, *Milk 1 litre*, *Bread 2 pcs*.\n"
+                     . "You can send several items in one message.";
             case IntentClassifier::LOCATION:
                 return $this->captureLocation($tenant, $convo, $text);
             case IntentClassifier::UNKNOWN:

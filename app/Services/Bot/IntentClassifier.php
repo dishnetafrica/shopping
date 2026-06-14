@@ -21,6 +21,7 @@ final class IntentClassifier
     public const THANKS      = 'thanks';
     public const QUESTION    = 'question';
     public const PRICE       = 'price';
+    public const SHOP_START  = 'shop_start';
     public const CANCEL      = 'cancel';
     public const DECLINE     = 'decline';
     public const HUMAN_AGENT = 'human_agent';
@@ -73,6 +74,10 @@ final class IntentClassifier
         // Multilingual greeting / small-talk (whole-message) -> GREETING, never a product search.
         // Must run before the strong-signal check so "Habari" isn't matched to "Habari Salt".
         if (GreetingDictionary::isGreeting($text)) return self::GREETING;
+
+        // "Have an order to make", "need groceries", "want to shop" -> a shopping-start prompt,
+        // never a product search. Whole-message only, so "I want to order rice" still searches.
+        if (self::isShopStart($lc)) return self::SHOP_START;
 
         // "how much is X" / "price of X" -> answer the price, never silently add to cart.
         if (self::priceQuery($lc) !== null) return self::PRICE;
@@ -165,6 +170,60 @@ final class IntentClassifier
     private static function isFeedback(string $lc): bool
     {
         return self::matchesAny($lc, self::PRAISE);
+    }
+
+    /**
+     * Whole-message "I want to start shopping" intent ("have an order to make", "need groceries",
+     * "want to shop") — NOT a product. Returns true only when the entire message is such a phrase,
+     * so "I want to order rice" still routes to a product search.
+     */
+    private static function isShopStart(string $lc): bool
+    {
+        $t = trim(preg_replace('/[^a-z\s]+/', ' ', mb_strtolower($lc)));
+        $t = trim(preg_replace('/\s+/', ' ', $t));
+        // strip trailing filler
+        foreach (['now', 'today', 'please', 'pls', 'here', 'online', 'from you', 'with you', 'first'] as $f) {
+            $t = trim(preg_replace('/\s+' . preg_quote($f, '/') . '$/', '', $t));
+        }
+        if ($t === '') return false;
+
+        $phrases = [
+            // have / make an order
+            'have an order to make', 'i have an order to make', 'have an order', 'i have an order',
+            'got an order to make', 'have order to make', 'i have order to make', 'have an order to place',
+            'i want to make an order', 'want to make an order', 'i would like to make an order', 'make an order',
+            'i want to make order', 'i have an order to make please',
+            // place an order
+            'i want to place an order', 'want to place an order', 'place an order', 'can i place an order',
+            'could i place an order', 'may i place an order', 'i would like to place an order',
+            'would like to place an order', 'i need to place an order', 'let me place an order',
+            'i wish to place an order', 'how do i place an order', 'how can i place an order',
+            // order (verb, no product)
+            'can i order', 'could i order', 'may i order', 'i want to order', 'want to order',
+            'i need to order', 'need to order', 'let me order', 'i would like to order',
+            'would like to order', 'i wish to order', 'i want to order items', 'i want to order something',
+            'i would like to order something', 'i want to order some items',
+            // shop
+            'want to shop', 'i want to shop', 'can i shop', 'let me shop', 'i would like to shop',
+            'would like to shop', 'start shopping', 'begin shopping', 'i want to do shopping',
+            'want to do shopping', 'do shopping', 'i want to do some shopping', 'lets shop', 'let s shop',
+            'lets go shopping', 'i want to start shopping', 'wanna shop', 'i wanna shop', 'i want shopping',
+            // buy
+            'i want to buy', 'want to buy', 'i need to buy', 'need to buy', 'can i buy',
+            'i would like to buy', 'i want to buy something', 'want to buy something',
+            'need to buy something', 'need to buy items', 'need to buy some items', 'i want to buy items',
+            'want to buy stuff', 'i need to buy stuff', 'i want to buy some items', 'i want to buy groceries',
+            // groceries / supplies / stock / products
+            'need groceries', 'i need groceries', 'want groceries', 'i want groceries', 'buy groceries',
+            'get groceries', 'order groceries', 'need some groceries', 'i need some groceries',
+            'i want to buy groceries', 'buy some groceries',
+            'need supplies', 'i need supplies', 'need stock', 'i need stock', 'need provisions',
+            'i need provisions', 'need some supplies',
+            'i need products', 'need products', 'i need items', 'need items', 'need some items',
+            'i need some items', 'need things', 'need stuff', 'i need stuff', 'i need some products',
+        ];
+
+        return in_array($t, $phrases, true);
     }
 
     /**
