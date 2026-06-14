@@ -4,6 +4,7 @@ namespace App\Services\Bot;
 use App\Models\Conversation;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Product;
 use App\Models\Tenant;
 use App\Services\Catalogue\ProductSearch;
 use App\Services\Pricing;
@@ -20,6 +21,9 @@ class BotBrain
     public function __construct(
         protected ProductSearch $search,
         protected BotNlu $nlu,
+        protected ShoppingParser $parser,
+        protected CatalogueMatcher $matcher,
+        protected ClarificationFlow $clarify,
     ) {}
 
     public function respond(Tenant $tenant, Conversation $convo, string $text): string
@@ -127,30 +131,61 @@ class BotBrain
         }
     }
 
-    // ---------------- keyword fallback (used when NLU is off/unavailable) ----------------
+    // ---------------- deterministic brain (used when NLU is off/unavailable) ----------------
+    // Ported from the production n8n workflow: multi-item, quantity-any-position,
+    // synonyms, category, fuzzy matching, and clarify-on-ambiguity with numbered options.
 
     protected function keywordRespond(Tenant $tenant, Conversation $convo, string $text): string
     {
-        $lc = mb_strtolower($text);
-        if (in_array($lc, ['hi','hello','hey','start','menu','hola'], true)) return $this->execute($tenant, $convo, 'greet', []);
-        if (in_array($lc, ['cart','basket','my order'], true))               return $this->execute($tenant, $convo, 'view_cart', []);
-        if (in_array($lc, ['clear','empty','reset'], true))                  return $this->execute($tenant, $convo, 'clear', []);
-        if (in_array($lc, ['checkout','done','confirm','order','place order'], true)) return $this->execute($tenant, $convo, 'checkout', []);
+        $lc = mb_strtolower(trim($text));
 
-        [$qty, $term] = $this->parseQtyAndTerm($lc, $text);
-        $isAdd = Str::startsWith($lc, ['add ', 'i want ', 'buy ']) || $qty > 1 || preg_match('/\b(x|qty|pcs|kg)\b/', $lc);
-        return $this->execute($tenant, $convo, $isAdd ? 'add' : 'search', [['query' => $term, 'qty' => $qty]]);
+        // command words win before shopping parsing
+        if (in_array($lc, ['hi','hello','hey','start','menu','hola','good morning','good afternoon','good evening','jai shree krishna','jsk','namaste','namaskar','salaam','salam'], true)) return $this->execute($tenant, $convo, 'greet', []);
+        if (in_array($lc, ['cart','basket','my order','my cart','view cart'], true))           return $this->execute($tenant, $convo, 'view_cart', []);
+        if (in_array($lc, ['clear','empty','reset','clear cart','empty cart'], true))           return $this->execute($tenant, $convo, 'clear', []);
+        if (in_array($lc, ['checkout','done','confirm','order','place order','proceed to checkout','proceed','finish'], true)) return $this->execute($tenant, $convo, 'checkout', []);
+        // affirmations: a bare "good/ok/yes" is chat, not a product search
+        if (in_array($lc, ['ok','okay','yes','yeah','yep','good','nice','cool','great','thanks','thank you','thx','sure','fine'], true)) {
+            return "\u{1F44D} Great! Tell me what you'd like, say *cart* to review, or *checkout* when ready.";
+        }
+
+        // hand off to the deterministic shopping engine
+        $engine  = new ShoppingEngine($this->parser, $this->matcher, $this->clarify, $this->currencyFor($tenant));
+        $cart    = is_array($convo->cart) ? $convo->cart : [];
+        $state   = is_array($convo->state) ? $convo->state : [];
+        $result  = $engine->handle($text, $this->tenantCatalogue($tenant), $cart, $state);
+
+        if ($result['handled']) {
+            $convo->cart  = $result['cart'];
+            $convo->state = $result['state'];
+            $convo->save();
+            return $result['reply'];
+        }
+
+        return $this->execute($tenant, $convo, 'unknown', []);
     }
 
-    protected function parseQtyAndTerm(string $lc, string $original): array
+    /** Tenant catalogue as plain rows (net prices applied) for the matcher. */
+    protected function tenantCatalogue(Tenant $tenant): array
     {
-        $s = preg_replace('/^(add|i want|buy)\s+/i', '', $original);
-        $qty = 1;
-        if (preg_match('/(\d+)\s*x?\s*/i', $s, $m)) {
-            $qty = max(1, (int) $m[1]);
-            $s = trim(preg_replace('/(\d+)\s*x?\s*/i', '', $s, 1));
-        }
-        return [$qty, trim($s) ?: $original];
+        return Product::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('active', true)
+            ->get()
+            ->map(fn ($p) => [
+                'id'       => $p->id,
+                'name'     => (string) $p->name,
+                'category' => (string) ($p->category ?? ''),
+                'keywords' => (string) ($p->keywords ?? ''),
+                'price'    => Pricing::net($tenant, (float) $p->price),
+                'stock'    => $p->stock ?? 1,
+            ])->all();
+    }
+
+    protected function currencyFor(Tenant $tenant): string
+    {
+        $c = (string) $tenant->setting('currency', 'UGX');
+        return $c !== '' ? $c : 'UGX';
     }
 
     // ---------------- cart + order helpers ----------------

@@ -1,0 +1,60 @@
+
+============== CloudBSS PERFORMANCE & SCALE SUITE (Cat 21-26) ==============
+PHP 8.3.6  |  single core: 1 cores available
+
+--- CATEGORY 21: catalogue scale 500 / 1000 / 2000 ---
+products | 1x search    | 8-item parse   | full handle()    | catalogue    | peak mem  
+500      | 695.4 µs    | 8.819 ms       | 2.950 ms         | 0.00 MB      | 1.20 MB   
+1000     | 1,440.7 µs  | 17.948 ms      | 5.736 ms         | 0.00 MB      | 1.80 MB   
+2000     | 2,903.6 µs  | 36.904 ms      | 11.370 ms        | 0.00 MB      | 2.99 MB   
+   PASS  21.1 single search < 5ms @2000
+   PASS  21.2 full 8-item handle < 80ms @2000
+   PASS  21.3 single-item handle < 40ms @2000
+   PASS  21.4 catalogue memory < 12MB @2000
+
+--- CATEGORY 22: FMCG / tobacco quantities ---
+   "20 Vimal 10 Coke 5 Rice"  => 20x vimal, 10x coke, 5x rice
+   "20 Vimal and 10 Coke"  => 20x vimal, 10x coke
+   "Need: 20 Vimal 10 Coke 5 Rice"  => 20x vimal, 10x coke, 5x rice
+   PASS  22.1 Vimal qty 20 extracted
+   PASS  22.2 Coke qty 10 extracted
+   PASS  22.3 Rice qty 5 extracted
+   PASS  22.4 "20 Vimal and 10 Coke" -> 2 items, qty 20 & 10
+   PASS  22.5 "Need:" prefix stripped, 3 items qty kept
+   resolution @800 SKUs: Vimal added x20, Coke/Rice -> clarify when multiple SKUs share the word (qty preserved into options)
+
+--- CATEGORY 23: rapid sequential messages / context ---
+   PASS  23.1 clarify from msg1 resolved by selection in msg2
+   PASS  23.2 existing cart preserved across rapid browses
+   NOTE: true rapid-fire ordering/de-dup is an INFRA guarantee (see report):
+         per-conversation queue serialisation + messageId de-dup + optional debounce.
+
+--- CATEGORY 24: 20-product single message ---
+   20 items submitted | added: 0 | clarify: 20 | not-found: 0 | time: 41.607 ms
+   PASS  24.1 no timeout (<150ms)
+   PASS  24.2 no product loss (>=18 of 20 resolved to cart/clarify)
+
+--- CATEGORY 25: high ambiguity -> clarification ---
+   options offered for: Rice, Milk, Oil, Sugar | cart lines: 0
+   PASS  25.1 nothing auto-added (no guessing)
+   PASS  25.2 clarification offered for all 4 staples
+   PASS  25.3 multiple options per staple (>=8 total)
+
+--- CATEGORY 26: load — MEASURED single-core brain cost + PROJECTION ---
+   measured: 6.348 ms/message  |  ~158 msg/sec/core (brain only, catalogue in-memory)
+   concurrent   | 4 workers      | 8 workers      | 16 workers    
+   100          | 158.7 ms       | 79.4 ms        | 39.7 ms       
+   500          | 793.5 ms       | 396.8 ms       | 198.4 ms      
+   1000         | 1,587.1 ms     | 793.5 ms       | 396.8 ms      
+   (= time for the BRAIN to clear that many simultaneous 1-message bursts; excludes DB/WhatsApp/OpenAI)
+   PASS  26.1 brain latency < 15ms/message @1000 SKUs
+   PASS  26.2 peak memory per run < 64MB
+
+--------------------------------------------------------------------------------
+MEASURED CHECKS: 18/18 passed
+
+HONESTY NOTE: Cat 21/24/25 and Cat 26's per-message cost are REAL measurements.
+Cat 26 concurrency rows are PROJECTIONS from the measured single-core cost.
+A true end-to-end load test (DB + queue + WhatsApp Cloud API + OpenAI) must run
+against staging — see load/k6_webhook.js and the report's methodology.
+================================================================================

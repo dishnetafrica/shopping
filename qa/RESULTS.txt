@@ -1,0 +1,141 @@
+
+================ CloudBSS CONVERSATIONAL COMMERCE — TEST REPORT ================
+
+CAT 1  Basic search        3/3
+   [PASS] P1     Rice
+   [PASS] P1     Sugar
+   [PASS] P1     Cooking Oil
+
+CAT 2  Multi-product       6/6
+   [PASS] P1     Rice and sugar
+   [PASS] P1     Rice, sugar and bread
+   [PASS] P1     Rice, sugar, bread and oil
+   [PASS] P1     Milk and cooking oil
+   [PASS] P1     Rice & sugar
+   [PASS] P1     Rice + sugar
+
+CAT 3  Quantity            8/8
+   [PASS] P1     2 sugar
+   [PASS] P1     Sugar 2
+   [PASS] P1     2kg sugar
+   [PASS] P1     2 kg sugar
+   [PASS] P1     5 rice
+   [PASS] P1     Rice 5
+   [PASS] P1     3 bread
+   [PASS] P1     2 cooking oil
+
+CAT 4  Shopping lists      3/3
+   [PASS] P1     2 sugar 3 milk 1 bread
+   [PASS] P1     Rice Sugar Oil
+   [PASS] P1     Need: 2 sugar 1 oil 3 milk
+
+CAT 5  Local language      6/6
+   [PASS] P1     Sakar
+   [PASS] P1     Tel
+   [PASS] P1     Doodh
+   [PASS] P1     Atta
+   [PASS] P1     Sakar 2kg
+   [PASS] P1     Tel and sakar
+
+CAT 6  Natural language    6/6
+   [PASS] P1     Do you have rice?
+   [PASS] P1     Do you have rice and sugar?
+   [PASS] P1     I need some rice
+   [PASS] P1     Can I get cooking oil?
+   [PASS] P1     I want sugar and bread
+   [PASS] P1     Give me rice, oil and milk
+
+CAT 7  Typos               6/6
+   [PASS] P1     Suger
+   [PASS] P1     Shugar
+   [PASS] P1     Coocking oil
+   [PASS] P1     Milkk
+   [PASS] P1     Rcie
+   [PASS] P1     Bred
+
+CAT 8  Category search     5/5
+   [PASS] P1     Show me rice
+   [PASS] P1     Show me oils
+   [PASS] P1     Show me drinks
+   [PASS] P1     Show me flour
+   [PASS] P1     Show me biscuits
+
+CAT 9  Cart ops            5/5
+   [PASS] P1     Add 2 sugar
+   [PASS] P1     Add 3 bread
+   [PASS] P2     Remove sugar
+   [PASS] P2     Remove 1 bread
+   [PASS] P1     Clear cart
+
+CAT 10 Advanced edits      0/7
+   [PEND] P2     Make sugar 5
+   [PEND] P2     Change sugar to 10
+   [PEND] P2     One more sugar
+   [PEND] P2     Double sugar
+   [PEND] P2     Half sugar
+   [PEND] P2     Remove the second item
+   [PEND] P2     Remove the last item
+
+CAT 11 Replacements        0/3
+   [PEND] P2     Instead of sugar add rice
+   [PEND] P2     Replace rice with oil
+   [PEND] P2     Swap bread for milk
+
+CAT 12 Reorder             3/3
+   [PASS] P2     Repeat my last order
+   [PASS] P2     Order same again
+   [PASS] P2     My usual order
+
+CAT 13 Checkout            3/3
+   [PASS] P1     Checkout
+   [PASS] P1     Proceed to checkout
+   [PASS] P1     Place order
+
+CAT 14 Customer details    3/3
+   [PASS] P2     My name is John
+   [PASS] P2     Same name
+   [PASS] P2     Use previous details
+
+CAT 15 Location            3/3
+   [PASS] P2     Kisaasi
+   [PASS] P2     Kisaasi near Total Petrol Station
+   [PASS] P2     I'll send location
+
+CAT 16 Escalation          4/4
+   [PASS] P2     I want to talk to a human
+   [PASS] P2     Call me
+   [PASS] P2     Manager please
+   [PASS] P2     Complaint
+
+CAT 17 Greetings           5/5
+   [PASS] P1     Hello
+   [PASS] P1     Hi
+   [PASS] P1     Good morning
+   [PASS] P1     Jai Shree Krishna
+   [PASS] P1     Salaam
+
+CAT 18 Off-topic           3/3
+   [PASS] P1     How was your day?
+   [PASS] P1     Who made you?
+   [PASS] P1     Tell me a joke
+
+CAT 19 Edge cases          5/5
+   [PASS] P1     .
+   [PASS] P1     ???
+   [PASS] P1     asdfghjkl
+   [PASS] P1     123456
+   [PASS] P1     (blank)
+
+CAT 20 Stress              1/1
+   [PASS] P1     2 sugar, 3 milk, 4 bread, 2 rice, 1 oil, 3 soda, 2 biscuits, 1 flour
+
+--------------------------------------------------------------------------------
+PHASE 1 (shipped scope):  63/63  = 100.0%
+ALL 20 CATEGORIES:        78/88  = 88.6%  (Phase-2 categories counted as not-yet-built)
+
+PRODUCTION CRITERIA:
+  No crashes ................ PASS
+  No empty responses ........ PASS
+  No incorrect cart mods .... PASS (edit verbs deferred, cart never wrongly added)
+  No customer dead-ends ..... PASS (every input yields a reply or safe redirect)
+================================================================================
