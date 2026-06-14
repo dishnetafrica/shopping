@@ -2,6 +2,7 @@
 require dirname(__DIR__).'/app/Services/Bot/CatalogueMatcher.php';
 require dirname(__DIR__).'/app/Services/Bot/LocationDictionary.php';
 require dirname(__DIR__).'/app/Services/Bot/CartCorrection.php';
+require dirname(__DIR__).'/app/Services/Bot/CategoryDictionary.php';
 require dirname(__DIR__).'/app/Services/Bot/IntentClassifier.php';
 require dirname(__DIR__).'/app/Services/Bot/ShoppingParser.php';
 require dirname(__DIR__).'/app/Services/Bot/ClarificationFlow.php';
@@ -60,6 +61,38 @@ echo "\n[REQUIRED] Sikandar peanuts -> option 2 adds ONE item, never 200\n";
 $r1=$e->handle('sikandar peanuts',$C,[],[]);     // no size: plain clarify
 $r2=$e->handle('2',$C,$r1['cart'],$r1['state']);
 ck('select option 2 -> 1 item', count($r2['cart'])===1 && qtys($r2['cart'])===[1], 'qty='.implode(',',qtys($r2['cart'])));
+
+echo "\n[BUG 5] high-confidence product match auto-resolves (even under clarify strategy)\n";
+$WC=[
+  $mk('Uganda Waragi Premium Gin Pet 200ml',2600), $mk('Uganda Waragi Classic Sachet',800),
+  $mk('Uganda Waragi Premium 750ml',12000), $mk('Tusker Lager 500ml',4000),
+];
+$e2=eng('explicit');
+$w=$e2->handle('uganda waragi premium pet 6pcs',$WC,[],[]);
+ck('no clarification shown (auto-resolved)', empty($w['state']['options']), count($w['state']['options']??[]).' opts');
+ck('auto-added exactly one line', count($w['cart'])===1, implode('|',names($w['cart'])));
+ck('that line is the Premium Pet', count($w['cart'])===1 && stripos(names($w['cart'])[0],'pet')!==false, names($w['cart'])[0]??'');
+ck('quantity is 6 (from 6pcs)', qtys($w['cart'])===[6], 'qty='.implode(',',qtys($w['cart'])));
+// a genuinely ambiguous query must still clarify (no false confidence)
+$amb=$e2->handle('uganda waragi',$WC,[],[]);
+ck('"uganda waragi" still clarifies (3 share the lead)', !empty($amb['state']['options']) && count($amb['cart'])===0);
+
+echo "\n[BUG 7] category intelligence — 'spirits' = alcohol, not surgical/cleaning spirit\n";
+ck('match("spirits") = Spirits', (\App\Services\Bot\CategoryDictionary::match('spirits')['name']??null)==='Spirits');
+ck('"show me spirits" -> Spirits', (\App\Services\Bot\CategoryDictionary::match('show me spirits')['name']??null)==='Spirits');
+ck('"surgical spirit" is NOT a category', \App\Services\Bot\CategoryDictionary::match('surgical spirit')===null);
+ck('"vodka" is NOT a category term', \App\Services\Bot\CategoryDictionary::match('vodka')===null);
+ck('classify "spirits" = CATEGORY', IC::classify('spirits',$TS)===IC::CATEGORY, IC::classify('spirits',$TS));
+ck('classify "surgical spirit" = SHOPPING', IC::classify('surgical spirit',$TS)===IC::SHOPPING, IC::classify('surgical spirit',$TS));
+// filter logic (same as BotBrain categoryResponse) on a mixed catalogue
+$def=\App\Services\Bot\CategoryDictionary::match('spirits'); $inc=$def['include']; $exc=$def['exclude'];
+$sample=['Uganda Waragi 200ml','Smirnoff Vodka 750ml','Bond 7 Whisky','Surgical Spirit 100ml','Roll On Spirit','Cleaning Spirit 500ml'];
+$keep=[];
+foreach($sample as $nm){ $h=strtolower($nm); $bad=false; foreach($exc as $x){ if($x&&strpos($h,$x)!==false){$bad=true;break;} } if($bad)continue; $ok=false; foreach($inc as $k){ if(strpos($h,$k)!==false){$ok=true;break;} } if($ok)$keep[]=$nm; }
+ck('Waragi / Vodka / Whisky kept', in_array('Uganda Waragi 200ml',$keep)&&in_array('Smirnoff Vodka 750ml',$keep)&&in_array('Bond 7 Whisky',$keep), implode(', ',$keep));
+ck('Surgical Spirit excluded', !in_array('Surgical Spirit 100ml',$keep));
+ck('Roll On Spirit excluded', !in_array('Roll On Spirit',$keep));
+ck('Cleaning Spirit excluded', !in_array('Cleaning Spirit 500ml',$keep));
 
 echo "\nRESULT: PASS $pass  FAIL $fail\n";
 if($fails){echo "Fails:\n";foreach($fails as $f)echo "  - $f\n";}

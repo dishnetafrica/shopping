@@ -69,7 +69,7 @@ class ShoppingEngine
             }
             $p = $res['product'];
             $useQty = $res['qty'] ?? (int) $item['qty'];
-            $autoAdd = $addIntent || in_array($res['via'] ?? '', ['default', 'size', 'auto'], true);
+            $autoAdd = $addIntent || in_array($res['via'] ?? '', ['default', 'size', 'auto', 'confident'], true);
             if ($autoAdd) {
                 $cart = $this->addToCart($cart, $p['id'] ?? null, $p['name'], (float) $p['price'], (int) $useQty);
                 $added[] = $useQty . ' x ' . $p['name'];
@@ -190,6 +190,19 @@ class ShoppingEngine
                         'products' => array_map(fn ($c) => $c['product'], array_slice($cands, 0, 5))];
             }
             return ['status' => 'clarify', 'products' => array_map(fn ($c) => $c['product'], array_slice($cands, 0, 5))];
+        }
+
+        // High-confidence match: a multi-word query that fully describes ONE product which
+        // clearly leads the field (more matched words than any rival) auto-resolves, even under
+        // the clarify strategy. e.g. "Uganda Waragi Premium Pet 6pcs" -> that exact SKU.
+        $qTok = $this->matcher->tokens($query);
+        $nq   = count($qTok);
+        if ($nq >= 2 && $cands) {
+            $topHits    = (int) ($cands[0]['hits'] ?? 0);
+            $runnerHits = (int) ($cands[1]['hits'] ?? 0);
+            if ($topHits >= $nq && $runnerHits < $topHits && ($cands[0]['product']['stock'] ?? 1) > 0) {
+                return ['status' => 'single', 'product' => $cands[0]['product'], 'qty' => $count ?? 1, 'via' => 'confident'];
+            }
         }
 
         // no size: try the owner's default for this term

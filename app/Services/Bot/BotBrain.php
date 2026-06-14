@@ -215,6 +215,8 @@ class BotBrain
                 return "\u{1F642} Sure — I'm letting the shop know. Someone will reply here shortly. Meanwhile you can keep typing your order if you like.";
             case IntentClassifier::CATALOG:
                 return $this->catalogResponse($tenant);
+            case IntentClassifier::CATEGORY:
+                return $this->categoryResponse($tenant, $convo, $text);
             case IntentClassifier::LOCATION:
                 return $this->captureLocation($tenant, $convo, $text);
             case IntentClassifier::UNKNOWN:
@@ -293,6 +295,47 @@ class BotBrain
                 'free_over' => (int) ($sset['freeOver'] ?? 0),
             ]
         );
+    }
+
+    /**
+     * Category intent ("spirits", "snacks"): list members of that category as selectable
+     * options, excluding false-friends ("surgical spirit"). Never a raw product search.
+     */
+    protected function categoryResponse(Tenant $tenant, Conversation $convo, string $text): string
+    {
+        $def = \App\Services\Bot\CategoryDictionary::match($text);
+        if (! $def) return $this->catalogResponse($tenant);
+
+        $cat = $this->tenantCatalogue($tenant);
+        $inc = $def['include']; $exc = $def['exclude']; $terms = $def['terms'];
+        $matches = [];
+        foreach ($cat as $p) {
+            $hay  = mb_strtolower(((string) ($p['name'] ?? '')) . ' ' . ((string) ($p['keywords'] ?? '')) . ' ' . ((string) ($p['category'] ?? '')));
+            $pcat = mb_strtolower((string) ($p['category'] ?? ''));
+            $bad = false;
+            foreach ($exc as $x) { if ($x !== '' && str_contains($hay, $x)) { $bad = true; break; } }
+            if ($bad) continue;
+            $ok = false;
+            foreach ($terms as $t) { if ($pcat !== '' && str_contains($pcat, $t)) { $ok = true; break; } }
+            if (! $ok) { foreach ($inc as $k) { if (str_contains($hay, $k)) { $ok = true; break; } } }
+            if ($ok) $matches[] = $p;
+        }
+
+        if (! $matches) {
+            return "We don't have any *{$def['name']}* listed right now \u{1F642} Tell me a product name and I'll check.";
+        }
+        $matches = array_slice($matches, 0, 12);
+        $cur = $this->currencyFor($tenant);
+        $built = $this->clarify->buildOptions(
+            [['label' => $def['name'], 'qty' => 1, 'products' => $matches]],
+            fn ($a) => $cur . ' ' . number_format((float) $a)
+        );
+        $st = is_array($convo->state) ? $convo->state : [];
+        $st['options'] = $built['flat'];
+        $convo->state  = $st;
+        $convo->save();
+
+        return "\u{1F6D2} *{$def['name']}* — here's what we have:\n" . $built['text'] . "\n\nReply with the *number(s)* you want.";
     }
 
     /** Catalog/menu intent: show what the shop sells without running a product search. */

@@ -1,6 +1,7 @@
 <?php
 require dirname(__DIR__).'/app/Services/Bot/CatalogueMatcher.php';
 require dirname(__DIR__).'/app/Services/Bot/LocationDictionary.php';
+require dirname(__DIR__).'/app/Services/Bot/CategoryDictionary.php';
 require dirname(__DIR__).'/app/Services/Bot/IntentClassifier.php';
 require dirname(__DIR__).'/app/Services/Delivery/ZoneResolver.php';
 use App\Services\Bot\{LocationDictionary as L, IntentClassifier as IC, CatalogueMatcher};

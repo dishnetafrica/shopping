@@ -26,6 +26,7 @@ final class IntentClassifier
     public const CHECKOUT    = 'checkout';
     public const CART        = 'cart';
     public const CATALOG     = 'catalog';
+    public const CATEGORY    = 'category';
     public const LOCATION    = 'location';
     public const UNKNOWN     = 'unknown';
 
@@ -59,6 +60,9 @@ final class IntentClassifier
 
         // "menu" / "catalog" / "price list" -> show the catalogue, never product-search.
         if (self::isCatalog($lc))    return self::CATALOG;
+
+        // A bare category term ("spirits", "snacks") -> category listing, not a raw search.
+        if (CategoryDictionary::isCategory($text)) return self::CATEGORY;
 
         // A STRONG shopping signal (catalogue word / qty+unit / shop verb) wins outright.
         if (self::hasStrongProductSignal($text, $lc, $catalogueTokenSet)) return self::SHOPPING;
