@@ -25,8 +25,7 @@ class WebhookController
 
         $incoming = $this->wa->driver($driver)->parseIncoming($request->all());
         if (!$incoming || $incoming['text'] === '') {
-            \App\Support\BotTrace::log(null, uniqid('m_'), null, 'ignored', 'empty / status / group / fromMe');
-            return response()->json(['ok' => true]); // ack & ignore (status events, media-only, etc.)
+            return response()->json(['ok' => true]); // status / presence / group / fromMe — not a customer text
         }
 
         $trace = $incoming['messageId'] ?: uniqid('m_');

@@ -1344,7 +1344,9 @@ class PanelApiController extends Controller
     {
         $tid  = $r->user()->tenant->id;
         $rows = \Illuminate\Support\Facades\DB::table('bot_events')
-            ->where('tenant_id', $tid)
+            ->where(function ($q) use ($tid) {
+                $q->where('tenant_id', $tid)->orWhere('stage', 'no_tenant');
+            })
             ->orderByDesc('id')->limit(80)->get()
             ->map(fn ($e) => [
                 'time'   => (string) $e->created_at,
