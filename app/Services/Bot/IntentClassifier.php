@@ -25,6 +25,7 @@ final class IntentClassifier
     public const HUMAN_AGENT = 'human_agent';
     public const CHECKOUT    = 'checkout';
     public const CART        = 'cart';
+    public const CATALOG     = 'catalog';
     public const LOCATION    = 'location';
     public const UNKNOWN     = 'unknown';
 
@@ -55,6 +56,9 @@ final class IntentClassifier
         if (self::isHumanAgent($lc)) return self::HUMAN_AGENT;
         if (self::isCheckout($lc))   return self::CHECKOUT;
         if (self::isCart($lc))       return self::CART;
+
+        // "menu" / "catalog" / "price list" -> show the catalogue, never product-search.
+        if (self::isCatalog($lc))    return self::CATALOG;
 
         // A STRONG shopping signal (catalogue word / qty+unit / shop verb) wins outright.
         if (self::hasStrongProductSignal($text, $lc, $catalogueTokenSet)) return self::SHOPPING;
@@ -181,6 +185,14 @@ final class IntentClassifier
     private static function isCart(string $lc): bool
     {
         return in_array($lc, ['cart','basket','my cart','my order','my basket','view cart','show cart'], true);
+    }
+
+    private static function isCatalog(string $lc): bool
+    {
+        return (bool) preg_match('/\b(menu|catalog|catalogue|price\s?list|product\s?list|products\s?list)\b/', $lc)
+            || self::matchesAny($lc, ['what do you have', 'what do you sell', 'what all do you have',
+                'everything you have', 'show me everything', 'list of products', 'show all products',
+                'all your products', 'see all products']);
     }
 
     // ---- helpers ----------------------------------------------------------

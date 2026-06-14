@@ -177,7 +177,10 @@ class CatalogueMatcher
         if (!preg_match('/(\d+(?:\.\d+)?)\s*(kgs|kg|gms|gms|gm|grams|gram|g|mg|ml|cl|ltrs|ltr|lt|litres|litre|liters|liter|l)\b/i', mb_strtolower($s), $m)) {
             return null;
         }
-        $num = rtrim(rtrim($m[1], '0'), '.'); // 2.0 -> 2
+        $num = $m[1];
+        if (strpos($num, '.') !== false) {
+            $num = rtrim(rtrim($num, '0'), '.'); // 2.0 -> 2, 1.50 -> 1.5
+        }                                        // but 500 stays 500, 250 stays 250
         $unit = $m[2];
         $unit = match (true) {
             in_array($unit, ['kgs','kg'], true) => 'kg',

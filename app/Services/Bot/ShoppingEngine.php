@@ -50,13 +50,21 @@ class ShoppingEngine
         }
 
         $addIntent = $parsed['add_intent'];
-        $added = []; $groups = []; $notFound = [];
+        $added = []; $groups = []; $notFound = []; $sizeNotes = [];
         $defaultUsed = false; $hintVariants = [];
         foreach ($items as $item) {
             $res = $this->resolveItem($item, $products, $parsed['browse']);
             if ($res['status'] === 'none') { $notFound[] = $item['query']; continue; }
             if ($res['status'] === 'clarify') {
-                $groups[] = ['label' => $item['query'], 'qty' => (int) $item['qty'], 'products' => $res['products']];
+                // qty for a clarification is an explicit COUNT only — a size token (e.g. "200g")
+                // is the thing being clarified, never a quantity. Selection adds 1 unless the
+                // customer gave a real count ("2 sikandar peanuts").
+                $groups[] = ['label' => $item['query'], 'qty' => (int) ($item['count'] ?? 1), 'products' => $res['products']];
+                continue;
+            }
+            if ($res['status'] === 'size_unavailable') {
+                $sizeNotes[] = '*' . $res['requested'] . '* isn\'t available — we have *' . implode('*, *', $res['available']) . '*';
+                $groups[] = ['label' => $item['query'], 'qty' => (int) ($item['count'] ?? 1), 'products' => $res['products']];
                 continue;
             }
             $p = $res['product'];
@@ -70,7 +78,7 @@ class ShoppingEngine
                     $hintVariants = array_merge($hintVariants, $res['siblings'] ?? []);
                 }
             } else {
-                $groups[] = ['label' => $item['query'], 'qty' => (int) $item['qty'], 'products' => [$p]];
+                $groups[] = ['label' => $item['query'], 'qty' => (int) ($item['count'] ?? 1), 'products' => [$p]];
             }
         }
 
@@ -93,6 +101,7 @@ class ShoppingEngine
 
         $parts = [];
         if ($added) $parts[] = 'Added *' . implode('*, *', $added) . '*.';
+        if ($sizeNotes) $parts[] = "\u{1F4CF} " . implode('. ', $sizeNotes) . '.';
         if ($groups) {
             $head = $parsed['browse'] ? "Yes \u{1F44D} here's what we have:" : "Here's what we have:";
             $parts[] = $head . "\n" . $built['text'] . "\n\nReply with the *number(s)* you want (e.g. 1, 3).";
@@ -166,7 +175,20 @@ class ShoppingEngine
             if (count($sized) === 1) {
                 return ['status' => 'single', 'product' => $sized[0]['product'], 'qty' => $count ?? 1, 'via' => 'size'];
             }
-            // 0 or >1 matches for the stated size -> ask (size conflict)
+            if (count($sized) > 1) {
+                // several SKUs share that exact size -> let them pick which one
+                return ['status' => 'clarify', 'products' => array_map(fn ($c) => $c['product'], array_slice($sized, 0, 5))];
+            }
+            // requested size matches NO SKU -> tell the customer which sizes ARE available
+            $avail = [];
+            foreach ($cands as $c) {
+                $sz = CatalogueMatcher::skuSize($c['product']['name'] ?? '');
+                if ($sz) $avail[$sz] = true;
+            }
+            if ($avail) {
+                return ['status' => 'size_unavailable', 'requested' => $size, 'available' => array_keys($avail),
+                        'products' => array_map(fn ($c) => $c['product'], array_slice($cands, 0, 5))];
+            }
             return ['status' => 'clarify', 'products' => array_map(fn ($c) => $c['product'], array_slice($cands, 0, 5))];
         }
 

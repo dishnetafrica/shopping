@@ -162,7 +162,7 @@ class BotBrain
         }
 
         // command words win before shopping parsing
-        if (in_array($lc, ['hi','hello','hey','start','menu','hola','good morning','good afternoon','good evening','jai shree krishna','jsk','namaste','namaskar','salaam','salam'], true)) return $this->execute($tenant, $convo, 'greet', []);
+        if (in_array($lc, ['hi','hello','hey','start','hola','good morning','good afternoon','good evening','jai shree krishna','jsk','namaste','namaskar','salaam','salam'], true)) return $this->execute($tenant, $convo, 'greet', []);
         if (in_array($lc, ['cart','basket','my order','my cart','view cart'], true))           return $this->execute($tenant, $convo, 'view_cart', []);
         if (in_array($lc, ['clear','empty','reset','clear cart','empty cart'], true))           return $this->execute($tenant, $convo, 'clear', []);
         if (in_array($lc, ['checkout','done','confirm','order','place order','proceed to checkout','proceed','finish'], true)) return $this->execute($tenant, $convo, 'checkout', []);
@@ -187,6 +187,12 @@ class BotBrain
                 : "No problem \u{1F642} Whenever you're ready, just tell me a product you'd like and I'll help you shop.";
         }
 
+        // ---- Quantity correction on the existing cart ("make it 1", "only 1 pkt") ----
+        // A correction must update the last item, never trigger a product search.
+        if (($corr = $this->tryQuantityCorrection($tenant, $convo, $lc)) !== null) {
+            return $corr;
+        }
+
         // ---- Intent classification (runs BEFORE any catalogue search) ----
         // The bot is a shop assistant, not a search engine: conversational messages
         // (feedback / greeting / thanks / questions / gibberish) must never search.
@@ -207,6 +213,8 @@ class BotBrain
                 $convo->save();
                 \App\Jobs\NotifyOwner::dispatch($tenant->id, "\u{1F64B} +{$convo->customer_phone} asked to speak with a person. Open Chats to take over.");
                 return "\u{1F642} Sure — I'm letting the shop know. Someone will reply here shortly. Meanwhile you can keep typing your order if you like.";
+            case IntentClassifier::CATALOG:
+                return $this->catalogResponse($tenant);
             case IntentClassifier::LOCATION:
                 return $this->captureLocation($tenant, $convo, $text);
             case IntentClassifier::UNKNOWN:
@@ -285,6 +293,63 @@ class BotBrain
                 'free_over' => (int) ($sset['freeOver'] ?? 0),
             ]
         );
+    }
+
+    /** Catalog/menu intent: show what the shop sells without running a product search. */
+    protected function catalogResponse(Tenant $tenant): string
+    {
+        $cat = $this->tenantCatalogue($tenant);
+        if (! $cat) return "Tell me what you're looking for and I'll check if we have it \u{1F642}";
+
+        $byCat = [];
+        foreach ($cat as $p) {
+            $c = trim((string) ($p['category'] ?? '')) ?: 'Other';
+            $byCat[$c][] = (string) ($p['name'] ?? '');
+        }
+        $total = count($cat);
+        $cur   = $this->currencyFor($tenant);
+
+        // Large catalogue with real categories -> list categories (counts); else list items.
+        if (count($byCat) > 1 && $total > 25) {
+            $cats = array_keys($byCat);
+            sort($cats);
+            $lines = array_map(fn ($c) => '• ' . $c . ' (' . count($byCat[$c]) . ')', $cats);
+            return "\u{1F4D6} *Our menu* — {$total} products in " . count($cats) . " categories:\n"
+                 . implode("\n", $lines)
+                 . "\n\nReply with a *category* or a *product name* to see prices and order.";
+        }
+
+        $lines = [];
+        foreach ($cat as $p) {
+            $nm = (string) ($p['name'] ?? '');
+            if ($nm === '') continue;
+            $pr = isset($p['price']) ? ' — ' . $cur . ' ' . number_format((float) $p['price']) : '';
+            $lines[] = '• ' . $nm . $pr;
+            if (count($lines) >= 30) { $lines[] = '…and more — just ask for a product.'; break; }
+        }
+        return "\u{1F4D6} *Our menu:*\n" . implode("\n", $lines) . "\n\nReply with a *product name* to order.";
+    }
+
+    /**
+     * A quantity-correction message ("make it 1", "only 1 pkt", "one packet only")
+     * updates the LAST cart item's quantity. Returns a reply, or null if it isn't one.
+     */
+    protected function tryQuantityCorrection(Tenant $tenant, Conversation $convo, string $lc): ?string
+    {
+        $n = \App\Services\Bot\CartCorrection::newQuantity($lc);
+        if ($n === null) return null;
+
+        $cart = is_array($convo->cart) ? array_values($convo->cart) : [];
+        if (! $cart) {
+            return "Your basket is empty — add a product first, then you can change its quantity.";
+        }
+        $last = count($cart) - 1;
+        $cart[$last]['qty'] = $n;
+        $convo->cart = $cart;
+        $convo->save();
+
+        $name = $cart[$last]['name'] ?? 'item';
+        return "\u{270F}\u{FE0F} Updated to *{$n} x {$name}*.\n\n" . $this->cartSummary($tenant, $cart) . "\n\nAdd more, or say *checkout*.";
     }
 
     /** Tenant catalogue as plain rows (net prices applied) for the matcher. */
