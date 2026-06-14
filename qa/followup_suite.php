@@ -3,6 +3,7 @@ require dirname(__DIR__).'/app/Services/Bot/CatalogueMatcher.php';
 require dirname(__DIR__).'/app/Services/Bot/LocationDictionary.php';
 require dirname(__DIR__).'/app/Services/Bot/CategoryDictionary.php';
 require dirname(__DIR__).'/app/Services/Bot/FollowUp.php';
+require dirname(__DIR__).'/app/Services/Bot/GreetingDictionary.php';
 require dirname(__DIR__).'/app/Services/Bot/IntentClassifier.php';
 require dirname(__DIR__).'/app/Services/Bot/ShoppingParser.php';
 require dirname(__DIR__).'/app/Services/Bot/ClarificationFlow.php';

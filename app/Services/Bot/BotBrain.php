@@ -179,7 +179,7 @@ class BotBrain
         }
 
         // command words win before shopping parsing
-        if (in_array($lc, ['hi','hello','hey','start','hola','good morning','good afternoon','good evening','jai shree krishna','jsk','namaste','namaskar','salaam','salam'], true)) return $this->execute($tenant, $convo, 'greet', []);
+        if (\App\Services\Bot\GreetingDictionary::isGreeting($lc)) return $this->greetingReply($tenant, $text);
         if (in_array($lc, ['cart','basket','my order','my cart','view cart'], true))           return $this->execute($tenant, $convo, 'view_cart', []);
         if (in_array($lc, ['clear','empty','reset','clear cart','empty cart'], true))           return $this->execute($tenant, $convo, 'clear', []);
         if (in_array($lc, ['checkout','done','confirm','order','place order','proceed to checkout','proceed','finish'], true)) return $this->execute($tenant, $convo, 'checkout', []);
@@ -216,7 +216,7 @@ class BotBrain
             case IntentClassifier::THANKS:
                 return "\u{1F60A} You're welcome! Anything else you'd like to order? Say *cart* to review or *checkout* when ready.";
             case IntentClassifier::GREETING:
-                return $this->execute($tenant, $convo, 'greet', []);
+                return $this->greetingReply($tenant, $text);
             case IntentClassifier::QUESTION:
                 return "\u{1F642} Happy to help! Tell me a product to order, say *cart* to review, or *checkout* to finish — and for anything else I'll connect you to the shop.";
             case IntentClassifier::HUMAN_AGENT:
@@ -289,6 +289,40 @@ class BotBrain
         }
         return "Here are the prices for *{$query}*:\n" . implode("\n", $lines)
              . "\n\nTell me which one you'd like, or the quantity.";
+    }
+
+    /**
+     * Localised greeting reply based on the detected language of the customer's greeting.
+     * Never product-searches. Falls back to the tenant's custom greeting for English.
+     */
+    protected function greetingReply(Tenant $tenant, string $text): string
+    {
+        $shop = $tenant->name;
+        $d    = \App\Services\Bot\GreetingDictionary::detect($text) ?? ['lang' => 'en', 'kind' => 'greet'];
+
+        if ($d['kind'] === 'smalltalk') {
+            return "\u{1F642} I'm here and ready! What can I get for you today at {$shop}?";
+        }
+
+        switch ($d['lang']) {
+            case 'sw':
+                return "Habari \u{1F60A} Karibu {$shop}.\nWhat would you like today?";
+            case 'lg':
+                return "Bulungi \u{1F60A}\nWhat can I get for you today?";
+            case 'ar':
+                return "Salaam \u{1F44B}\nWelcome to {$shop}.\nHow can I help you today?";
+            case 'in':
+                if (preg_match('/krishna/i', $text)) {
+                    return "\u{1F64F} Jai Shree Krishna! Welcome to {$shop} — what would you like today?";
+                }
+                return "Namaste \u{1F64F}\nWelcome to {$shop}! What would you like today?";
+            case 'en':
+            default:
+                $custom = trim((string) $tenant->setting('bot_greeting', ''));
+                if ($custom !== '') return $custom;
+                return "Hello \u{1F44B} Welcome to {$shop}! Tell me what you'd like and I'll add it up. "
+                     . "Say *cart* to see your basket or *checkout* when ready.";
+        }
     }
 
     /** Build a fresh engine (request-scoped token cache) and handle one message. */

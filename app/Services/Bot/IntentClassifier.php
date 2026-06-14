@@ -39,7 +39,7 @@ final class IntentClassifier
 
     private const THANKS_WORDS = ['thanks','thank you','thank u','thanx','thankyou','thx','ty','asante',
         'asante sana','dhanyavaad','dhanyavad','shukran','appreciate it','appreciated','much appreciated',
-        'thank you so much','thanks a lot','many thanks'];
+        'thank you so much','thanks a lot','many thanks','webale','webale nyo','webale ko','mwebale'];
 
     private const PRAISE = ['good','great','nice','better','best','improved','improving','improvement',
         'fast','faster','quick','quicker','speedy','perfect','excellent','awesome','amazing','smooth',
@@ -69,6 +69,10 @@ final class IntentClassifier
 
         // A bare category term ("spirits", "snacks") -> category listing, not a raw search.
         if (CategoryDictionary::isCategory($text)) return self::CATEGORY;
+
+        // Multilingual greeting / small-talk (whole-message) -> GREETING, never a product search.
+        // Must run before the strong-signal check so "Habari" isn't matched to "Habari Salt".
+        if (GreetingDictionary::isGreeting($text)) return self::GREETING;
 
         // "how much is X" / "price of X" -> answer the price, never silently add to cart.
         if (self::priceQuery($lc) !== null) return self::PRICE;
