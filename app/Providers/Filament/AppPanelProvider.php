@@ -25,6 +25,7 @@ class AppPanelProvider extends PanelProvider
             ->id('app')
             ->path('app')
             ->login()
+            ->profile()                 // built-in Account page (/app/profile): change name + password
             ->brandName('ShopBot')
             ->colors(['primary' => Color::Emerald])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
