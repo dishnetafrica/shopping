@@ -119,10 +119,16 @@ final class IntentClassifier
     {
         $content = self::contentWords($raw);
 
-        // 1) any word matches a catalogue word exactly (singular/plural)
-        foreach ($content as $w) {
-            if (isset($tokenSet[$w])) return true;
-            if (mb_strlen($w) > 3 && str_ends_with($w, 's') && isset($tokenSet[rtrim($w, 's')])) return true;
+        // 1) a word matches a catalogue word — but only a STRONG signal when the message
+        //    reads like a product request, not a question/sentence that merely mentions one
+        //    ("how do I identify your DELIVERY guy", "how FAST will I receive my GOODS").
+        //    Real availability/add requests ("do you have rice", "i want rice", "2kg sugar")
+        //    still fire via the qty+unit and shop-verb rules below, so nothing real is lost.
+        if (! self::isConversational($lc) && ! self::looksLikeSentence($lc)) {
+            foreach ($content as $w) {
+                if (isset($tokenSet[$w])) return true;
+                if (mb_strlen($w) > 3 && str_ends_with($w, 's') && isset($tokenSet[rtrim($w, 's')])) return true;
+            }
         }
         // 2) a quantity + unit (e.g. "2kg", "500 ml") — a real size, not "10 sec"
         if (preg_match('/\b\d+\s*(kgs?|gms?|grams?|g|mg|ml|cl|ltrs?|lt|litres?|liters?|l|pcs?|pkts?|packs?|packets?|dozen|btls?|bottles?|tins?|jars?)\b/', $lc)) {
@@ -130,6 +136,9 @@ final class IntentClassifier
         }
         // 3) an explicit shopping verb together with some content
         if ($content && self::matchesAny($lc, self::SHOP_VERBS)) return true;
+
+        // 4) a complaint about missing stock — "you don't have/stock/sell X" -> search X
+        if (preg_match('/\b(you|u|ya)\s+(do(n\'?t| not)|dont)\s+(have|stock|sell|got|carry|keep)\b/', $lc)) return true;
 
         return false;
     }
@@ -139,13 +148,24 @@ final class IntentClassifier
         $content = self::contentWords($raw);
         // 4) a SHORT bare term that isn't conversational — likely a product or a typo;
         //    let the engine try (its fuzzy match is a typo-fallback, returns nothing if no hit).
-        return $content && count($content) <= 3 && ! self::isConversational($lc);
+        return $content && count($content) <= 3 && ! self::isConversational($lc) && ! self::looksLikeSentence($lc);
     }
 
     private static function isConversational(string $lc): bool
     {
         return self::isGreeting($lc) || self::isThanks($lc) || self::isFeedback($lc)
             || self::isQuestion($lc) || self::isDecline($lc) || self::isHumanAgent($lc);
+    }
+
+    /**
+     * A natural-language sentence (vs a product term), so a catalogue word inside it is
+     * incidental — "how do I identify your DELIVERY guy" must not become a product search.
+     */
+    private static function looksLikeSentence(string $lc): bool
+    {
+        $n = count(self::words($lc));
+        if ($n >= 5) return true;
+        return $n >= 3 && (bool) preg_match('/\b(you|your|ur|we|our|they|them|hope|ready|serious|trust|scam|scums|scum|please|sure|okay|maybe|will|would|should|how|why|when|who|receive|received|identify|coming|arrive|arriving)\b/', $lc);
     }
 
     // ---- conversational detectors ----------------------------------------
@@ -297,7 +317,8 @@ final class IntentClassifier
     private static function isQuestion(string $lc): bool
     {
         if (str_ends_with(trim($lc), '?')) return true;
-        return (bool) preg_match('/^(do|does|are|is|can|could|will|would|what|when|where|why|which|how)\b/', $lc)
+        return (bool) preg_match('/^(what|when|where|why|which|how|who)\b/', $lc)
+            || (bool) preg_match('/^(do|does|did|are|is|was|were|can|could|will|would|should|have|has)\s+(i|we|you|u|ya|they|it|there|my|your|the)\b/', $lc)
             || self::matchesAny($lc, ['are you open','do you deliver','what time','opening hours','where are you','how long','how much is delivery']);
     }
 
@@ -361,6 +382,18 @@ final class IntentClassifier
         if (preg_match('/\bwhere (?:are you|is your shop|is the shop|are u)\b/', $lc)
             || preg_match('/\byour (?:shop )?location\b/', $lc)) {
             return 'location';
+        }
+        // Order status & "who's delivering / how do I identify the rider" -> a status answer,
+        // never a product search. Scoped to the customer's OWN order / rider identity, so a
+        // general "how long for delivery" stays a normal question.
+        if (preg_match('/\b(where|how\'?s|status of|track)\b.{0,24}\b(my |the |this )?(order|delivery|parcel|package)\b/', $lc)
+            || preg_match('/\b(my|the|this)\s+(order|delivery|parcel|package)\b.{0,24}\b(coming|arrive|arriving|ready|on the way|where|status)\b/', $lc)
+            || preg_match('/\bwhen will (i|my|it)\b.{0,20}\b(arrive|come|get|receive|deliver)/', $lc)
+            || preg_match('/\bhow (fast|long|soon)\b.{0,20}\b(i .{0,12}(receive|get)|receive my|get my|my (order|goods|delivery))\b/', $lc)
+            || preg_match('/\bwho(?:\'?s| is| s)?\s+(deliver\w*|bring\w*)/', $lc)
+            || preg_match('/\bidentify\b.{0,20}(deliver\w*|rider)/', $lc)
+            || preg_match('/\bdelivery (guy|man|person|driver|rider|boy)\b/', $lc)) {
+            return 'status';
         }
         return '';
     }

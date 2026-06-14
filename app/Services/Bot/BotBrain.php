@@ -840,6 +840,10 @@ class BotBrain
     {
         $hours = trim((string) $tenant->setting('business_hours', ''));
         switch ($kind) {
+            case 'status':
+                return "\u{1F69A} Your order is being handled. The moment it's out for delivery we'll message you "
+                     . "the rider's *name and number*, so you'll know exactly who is bringing it. "
+                     . "If you've only just ordered, please allow a little time for it to be packed \u{1F642}";
             case 'delivery':
                 $area = \App\Services\Bot\IntentClassifier::deliveryArea(mb_strtolower($text));
                 if ($area !== null && $area !== '') {
