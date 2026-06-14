@@ -31,7 +31,7 @@
   PASS  "Which Rice" -> never auto-adds (cart empty, options listed)
 
 -- STRESS: 1000 x "Rice" (same conversation) --
-   1000 msgs in 37.9ms | cart lines: 1 | rice qty: 1000
+   1000 msgs in 62.8ms | cart lines: 1 | rice qty: 1000
   PASS  no crash
   PASS  no duplicate cart lines (exactly 1 rice line)
   PASS  quantity merged to 1000 (idempotent add path)

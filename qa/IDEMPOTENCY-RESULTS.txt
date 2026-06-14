@@ -1,0 +1,34 @@
+
+========= PRODUCTION SAFETY — IDEMPOTENCY LOGIC =========
+
+[2A] Message dedup
+  PASS  first delivery is processed
+  PASS  duplicate delivery is skipped (not processed again)
+  PASS  only one receipt stored
+  PASS  a genuinely new message still processes
+  PASS  same id under another tenant is independent
+  PASS  1000 duplicate deliveries -> processed exactly once
+
+[2C] Order idempotency
+  PASS  first checkout creates an order
+  PASS  repeat of the SAME checkout creates NO new order
+  PASS  exactly one order exists
+  PASS  a new checkout (new token) creates a new order
+  PASS  order key stable across retries
+  PASS  order key differs per tenant/conversation/token
+
+[2D] Campaign idempotency
+  PASS  duplicate recipient in audience is sent once
+  PASS  job restart re-sends to nobody
+  PASS  recipient normalisation dedups formatting
+  PASS  already-claimed normalised recipient is skipped
+
+[2B] Conversation lock keys
+  PASS  same conversation -> same lock key (serialised)
+  PASS  different customer -> different lock key (parallel ok)
+  PASS  different tenant, same number -> different lock key (isolation)
+  PASS  checkout lock distinct from conversation lock
+
+========= RESULT =========
+PASS 20   FAIL 0
+ALL GREEN ✅

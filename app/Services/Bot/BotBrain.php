@@ -78,7 +78,10 @@ class BotBrain
                     }
                     return "Thank you! \u{1F64F} Please hold on — someone from the shop will confirm your order shortly.";
                 }
-                $convo->state = array_merge($convo->state ?? [], ['step' => 'awaiting_location']);
+                $convo->state = array_merge($convo->state ?? [], [
+                    'step' => 'awaiting_location',
+                    'checkout_token' => (string) Str::uuid(),   // 2C: seeds the order idempotency key
+                ]);
                 $convo->save();
                 return $this->cartSummary($tenant, $cart)
                      . "\n\n\u{1F4CD} Please send your *delivery location* (area / landmark) to place the order.";
@@ -246,20 +249,36 @@ class BotBrain
         $total = 0; foreach ($cart as $l) $total += $l['price'] * $l['qty'];
         $itemsText = collect($cart)->map(fn ($l) => "{$l['qty']}x {$l['name']}")->implode(', ');
 
-        $order = Order::create([
-            'customer_phone' => $convo->customer_phone,
-            'items_text'     => $itemsText,
-            'items_json'     => $cart,
-            'total'          => $total,
-            'location'       => $location,
-            'status'         => 'New',
-            'channel'        => 'whatsapp',
-        ]);
-        foreach ($cart as $l) {
-            OrderItem::create([
-                'order_id' => $order->id, 'product_id' => $l['product_id'],
-                'name' => $l['name'], 'price' => $l['price'], 'qty' => $l['qty'],
-            ]);
+        // 2C — Order idempotency. Same checkout (token) retried => same key => one
+        // order. The lock serialises concurrent attempts; the unique key is the
+        // ultimate guard. firstOrCreate returns the existing order on a repeat.
+        $token = (string) (data_get($convo->state, 'checkout_token') ?: ('cart:' . md5(json_encode($cart))));
+        $key   = \App\Support\Idempotency::orderKey($tenant->id, $convo->id, $token);
+
+        $order = \Illuminate\Support\Facades\Cache::lock(
+            \App\Support\Idempotency::checkoutLock($tenant->id, $convo->id), 10
+        )->block(5, function () use ($key, $convo, $itemsText, $cart, $total, $location) {
+            return Order::firstOrCreate(
+                ['idempotency_key' => $key],
+                [
+                    'customer_phone' => $convo->customer_phone,
+                    'items_text'     => $itemsText,
+                    'items_json'     => $cart,
+                    'total'          => $total,
+                    'location'       => $location,
+                    'status'         => 'New',
+                    'channel'        => 'whatsapp',
+                ]
+            );
+        });
+
+        if ($order->wasRecentlyCreated) {
+            foreach ($cart as $l) {
+                OrderItem::create([
+                    'order_id' => $order->id, 'product_id' => $l['product_id'],
+                    'name' => $l['name'], 'price' => $l['price'], 'qty' => $l['qty'],
+                ]);
+            }
         }
 
         $convo->cart = []; $convo->state = []; $convo->save();

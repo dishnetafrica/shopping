@@ -14,17 +14,37 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 
 class ProcessIncomingMessage implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    /** Generous attempts: WithoutOverlapping releases (not fails) while a sibling runs. */
+    public int $tries = 25;
+    public int $backoff = 3;
+
     public function __construct(
         public int $tenantId,
         public string $driver,
         public array $incoming,
     ) {}
+
+    /**
+     * 2B — Conversation serialization. Only one message per conversation is
+     * processed at a time; others release and retry, preserving order.
+     */
+    public function middleware(): array
+    {
+        $key = \App\Support\Idempotency::conversationLock(
+            $this->tenantId,
+            (string) ($this->incoming['instance'] ?? ''),
+            (string) ($this->incoming['from'] ?? ''),
+        );
+
+        return [(new WithoutOverlapping($key))->releaseAfter(3)->expireAfter(30)];
+    }
 
     public function handle(TenantContext $ctx, WhatsAppManager $wa, BotBrain $brain, MarketingBrain $marketing): void
     {
@@ -37,6 +57,16 @@ class ProcessIncomingMessage implements ShouldQueue
             ['customer_phone' => $this->incoming['from'], 'instance' => $this->incoming['instance']],
             ['state' => [], 'cart' => []]
         );
+
+        // 2A — Message idempotency. Claim this WhatsApp message id exactly once.
+        // A duplicate delivery / queue retry that reaches here is dropped before it
+        // can log, reply, or touch the cart. (Concurrency is already prevented by
+        // the per-conversation lock in middleware(), so claiming here is safe.)
+        $mid = (string) ($this->incoming['messageId'] ?? '');
+        if ($mid !== '' && ! \App\Models\MessageReceipt::claim($this->tenantId, $convo->id, $mid)) {
+            BotTrace::log($this->tenantId, (string) $mid, (string) $this->incoming['from'], 'skipped', 'duplicate message id');
+            return;
+        }
 
         // Always log what the customer said — even if the bot is off or a human
         // has taken over. This is what powers the live web inbox.

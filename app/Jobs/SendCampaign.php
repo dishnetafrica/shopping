@@ -45,8 +45,14 @@ class SendCampaign implements ShouldQueue
         $stats['started_at'] = now()->toIso8601String();
         $c->update(['status' => 'sending', 'stats' => $stats]);
 
-        $sent = 0; $failed = 0;
+        $sent = 0; $failed = 0; $skipped = 0;
         foreach ($phones as $to) {
+            $recipient = \App\Support\Idempotency::recipient((string) $to);
+            // 2D — claim this recipient. A retried/restarted job skips anyone already handled.
+            if (! \App\Models\CampaignMessage::claim($t->id, $c->id, $recipient)) {
+                $skipped++;
+                continue;
+            }
             try {
                 if ($c->image_url) {
                     $gateway->sendImage($t->whatsapp_instance, $to, $c->image_url, $caption);
@@ -54,8 +60,10 @@ class SendCampaign implements ShouldQueue
                     $gateway->sendText($t->whatsapp_instance, $to, $caption);
                 }
                 MessageLog::record($t->id, $to, $t->whatsapp_instance, 'out', 'system', '[campaign] ' . $caption);
+                \App\Models\CampaignMessage::markSent($c->id, $recipient, null, 'sent');
                 $sent++;
             } catch (\Throwable $e) {
+                \App\Models\CampaignMessage::markSent($c->id, $recipient, null, 'failed');
                 $failed++;
             }
             // Throttle: 4–9s jitter between messages (ban-risk mitigation).

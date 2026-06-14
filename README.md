@@ -1,44 +1,40 @@
-# CloudBSS — Phase 2: Default Product Strategy (deploy bundle)
+# CloudBSS — Phase 2 Complete (Default Strategy + Production Safety)
 
-Reduces clarification friction: an owner-set **default SKU per term** so a generic
-"Rice" adds the default instead of asking — while preserving order accuracy.
+Self-consistent drop of every Phase 2 file. Unzip into the repo root, commit, push.
 
-## Deploy (drop into repo at these paths)
+## Deploy
 ```
-app/Services/Bot/CatalogueMatcher.php     EDIT  + normSize/skuSize, fuzzy first-char guard, token cache
-app/Services/Bot/ShoppingParser.php       EDIT  + size vs count parsing, newline lists
-app/Services/Bot/ShoppingEngine.php       EDIT  + size/default/auto resolution, size-hint-once
-app/Services/Bot/ClarificationFlow.php    (unchanged from Phase 1)
-app/Services/Bot/BotBrain.php             EDIT  loads tenant defaults + strategy into the engine
-app/Models/ProductDefault.php             NEW
-app/Filament/Resources/ProductDefaultResource.php (+ Pages/)   NEW  "Smart Defaults" admin
-database/migrations/2026_06_14_000001_create_product_defaults_table.php  NEW
+php artisan migrate        # product_defaults, message_receipts, orders.idempotency_key, campaign_messages
+php artisan test           # unit + feature suites
 ```
-Run after deploy: `php artisan migrate` then `php artisan test`.
+**Queue driver must be Redis** (WithoutOverlapping + Cache::lock need an atomic store).
 
-## Behaviour (resolution precedence, multiple SKUs)
-1. stated size matches one SKU  -> that SKU (size wins)
-2. stated size matches 0 / >1   -> CLARIFY (size conflict)
-3. no size + valid owner default -> add default
-4. no size + strategy=explicit_then_auto -> auto-pick (cheapest/smallest for now)
-5. otherwise                    -> CLARIFY
-Single SKU always resolves directly ("2kg sugar" with a 1kg SKU = qty 2).
-"show me / which" always lists all variants (browse overrides default).
+## What's inside
+**Default Product Strategy (approved, shipped earlier):**
+- app/Services/Bot/{CatalogueMatcher,ShoppingParser,ClarificationFlow,ShoppingEngine,BotBrain}.php
+- app/Models/ProductDefault.php · app/Filament/Resources/ProductDefaultResource(+Pages)
+- database/migrations/...000001_create_product_defaults_table.php
 
-## Settings
-- `tenants.settings.default_strategy` = off | explicit | explicit_then_auto  (platform default: **explicit**)
-- Admin → **Smart Defaults**: set a default SKU per customer word.
+**Production Safety (2A–2F, this drop):**
+- 2A dedup:    app/Models/MessageReceipt.php · ...000002_create_message_receipts_table.php · ProcessIncomingMessage (claim)
+- 2B order:    ProcessIncomingMessage::middleware() WithoutOverlapping (per-conversation lock)
+- 2C orders:   app/Models/Order.php (idempotency_key) · ...000003_add_idempotency_key_to_orders · BotBrain::placeOrder (lock + firstOrCreate)
+- 2D campaign: app/Models/CampaignMessage.php · ...000004_create_campaign_messages_table.php · SendCampaign (per-recipient claim)
+- shared:      app/Support/Idempotency.php (pure key helpers)
 
-## Tests (all green here)
-- `qa/default_strategy_suite.php` — 18/18 (defaults, size, conflict, hint-once, accuracy)
-- `qa/conversational_commerce_suite.php` — Phase-1 63/63 (no regression)
-- `qa/performance_scale_suite.php` — 18/18
-- `tests/Unit/ProductDefaultStrategyTest.php` — 11 tests (php artisan test)
-- `tests/Unit/ShoppingEngineTest.php` — 11 tests
+## Tests (captured outputs in qa/)
+- qa/idempotency_suite.php — 20/20 (dedup, order, campaign, lock keys)
+- qa/final_regression_suite.php — 25/25 (default strategy real-world)
+- qa/conversational_commerce_suite.php — Phase-1 63/63
+- qa/default_strategy_suite.php — 18/18 · qa/performance_scale_suite.php — 18/18
+- tests/Unit/* + tests/Feature/ProductionSafetyTest.php (php artisan test)
 
-## Notes
-- Filament resource lints clean but couldn't be run here (no app runtime) —
-  verify against your Filament v3 on staging.
-- `qa/ROADMAP.md` lists deferred items: auto-pick ranking, Store Learning,
-  Customer Learning (per-customer variant), guided defaults page.
-- `qa/Default-Product-Strategy-Design.md` is the approved design.
+## Docs
+- qa/PRODUCTION-SAFETY.md — success-criteria mapping, transaction boundaries, trade-offs, load methodology + verification SQL
+- qa/ROADMAP.md — deferred (auto-pick, store/customer learning, cart-edit engine)
+- load/k6_webhook.js (ramp) + load/k6_safety.js (duplicate/double-checkout chaos)
+
+## Honest status
+- Brain + idempotency LOGIC: unit-tested green here.
+- DB/queue/Redis integration: lint-clean, **verify on staging** (php artisan test + k6_safety.js + the SQL checks in PRODUCTION-SAFETY.md).
+- One trade-off chosen: no-duplicates over at-least-once replies (see doc §2E).

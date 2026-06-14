@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Order extends Model
 {
     use BelongsToTenant;
-    protected $fillable = ['tenant_id','order_no','customer_name','customer_phone','items_text',
+    protected $fillable = ['tenant_id','order_no','idempotency_key','customer_name','customer_phone','items_text',
         'items_json','total','amount_paid','location','payment','status','channel','rider_id','branch_id','track_token','delivered_at',
         'scheduled_for','sched_stage','sched_reminders'];
     protected $casts = ['items_json'=>'array','total'=>'decimal:2','amount_paid'=>'decimal:2','delivered_at'=>'datetime',
