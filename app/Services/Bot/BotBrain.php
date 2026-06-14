@@ -168,6 +168,31 @@ class BotBrain
                 : "No problem \u{1F642} Whenever you're ready, just tell me a product you'd like and I'll help you shop.";
         }
 
+        // ---- Intent classification (runs BEFORE any catalogue search) ----
+        // The bot is a shop assistant, not a search engine: conversational messages
+        // (feedback / greeting / thanks / questions / gibberish) must never search.
+        $catalogue = $this->tenantCatalogue($tenant);
+        $intent = IntentClassifier::classify($text, IntentClassifier::tokenSetFromProducts($catalogue));
+
+        switch ($intent) {
+            case IntentClassifier::FEEDBACK:
+                return "\u{1F64F} Thank you for the feedback! Glad it's working well for you. Whenever you're ready, just tell me what you'd like to order.";
+            case IntentClassifier::THANKS:
+                return "\u{1F60A} You're welcome! Anything else you'd like to order? Say *cart* to review or *checkout* when ready.";
+            case IntentClassifier::GREETING:
+                return $this->execute($tenant, $convo, 'greet', []);
+            case IntentClassifier::QUESTION:
+                return "\u{1F642} Happy to help! Tell me a product to order, say *cart* to review, or *checkout* to finish — and for anything else I'll connect you to the shop.";
+            case IntentClassifier::HUMAN_AGENT:
+                $convo->agent_active = true;
+                $convo->save();
+                \App\Jobs\NotifyOwner::dispatch($tenant->id, "\u{1F64B} +{$convo->customer_phone} asked to speak with a person. Open Chats to take over.");
+                return "\u{1F642} Sure — I'm letting the shop know. Someone will reply here shortly. Meanwhile you can keep typing your order if you like.";
+            case IntentClassifier::UNKNOWN:
+                return "I didn't quite catch that \u{1F642} Tell me a product to add, say *cart* to review, or *checkout* when ready.";
+            // CART / CHECKOUT / DECLINE are already handled above; anything else is SHOPPING.
+        }
+
         // hand off to the deterministic shopping engine (fresh matcher per message:
         // its token cache is request-scoped, so nothing carries between tenants)
         $engine  = new ShoppingEngine(
@@ -178,7 +203,7 @@ class BotBrain
         );
         $cart    = is_array($convo->cart) ? $convo->cart : [];
         $state   = is_array($convo->state) ? $convo->state : [];
-        $result  = $engine->handle($text, $this->tenantCatalogue($tenant), $cart, $state);
+        $result  = $engine->handle($text, $catalogue, $cart, $state);
 
         if ($result['handled']) {
             $convo->cart  = $result['cart'];
