@@ -290,6 +290,25 @@ class BotBrain
         $total = 0; foreach ($cart as $l) $total += $l['price'] * $l['qty'];
         $itemsText = collect($cart)->map(fn ($l) => "{$l['qty']}x {$l['name']}")->implode(', ');
 
+        // D1 — server-authoritative delivery fee + ETA from the matched zone (no extra
+        // confirmation step). Text-location match for now; per-km needs a shared pin.
+        $subtotal = (int) round($total);
+        $quote = (new \App\Services\Delivery\ZoneResolver())->quote(
+            $location, null, null, $subtotal,
+            [
+                'base'      => (int) $tenant->setting('delivery_base', 0),
+                'per_km'    => (int) $tenant->setting('delivery_per_km', 0),
+                'min'       => (int) $tenant->setting('delivery_min', 0),
+                'free_over' => (int) $tenant->setting('delivery_free_over', 0),
+            ]
+        );
+        $deliveryFee = (int) $quote['fee'];
+        $zoneId      = $quote['zone']['id'] ?? null;
+        $zoneName    = $quote['zone']['name'] ?? null;
+        $etaMins     = $quote['zone']['eta_minutes'] ?? 45;
+        $etaAt       = now()->addMinutes((int) $etaMins);
+        $grand       = $subtotal + $deliveryFee;
+
         // 2C — Order idempotency. Same checkout (token) retried => same key => one
         // order. The lock serialises concurrent attempts; the unique key is the
         // ultimate guard. firstOrCreate returns the existing order on a repeat.
@@ -298,17 +317,20 @@ class BotBrain
 
         $order = \Illuminate\Support\Facades\Cache::lock(
             \App\Support\Idempotency::checkoutLock($tenant->id, $convo->id), 10
-        )->block(5, function () use ($key, $convo, $itemsText, $cart, $total, $location) {
+        )->block(5, function () use ($key, $convo, $itemsText, $cart, $grand, $location, $deliveryFee, $zoneId, $etaAt) {
             return Order::firstOrCreate(
                 ['idempotency_key' => $key],
                 [
-                    'customer_phone' => $convo->customer_phone,
-                    'items_text'     => $itemsText,
-                    'items_json'     => $cart,
-                    'total'          => $total,
-                    'location'       => $location,
-                    'status'         => 'New',
-                    'channel'        => 'whatsapp',
+                    'customer_phone'   => $convo->customer_phone,
+                    'items_text'       => $itemsText,
+                    'items_json'       => $cart,
+                    'total'            => $grand,            // items + delivery
+                    'delivery_fee'     => $deliveryFee,
+                    'delivery_zone_id' => $zoneId,
+                    'eta_at'           => $etaAt,
+                    'location'         => $location,
+                    'status'           => 'New',
+                    'channel'          => 'whatsapp',
                 ]
             );
         });
@@ -324,7 +346,15 @@ class BotBrain
 
         $convo->cart = []; $convo->state = []; $convo->save();
 
-        return "\u{2705} Order *{$order->order_no}* received!\n".$this->cartSummary($tenant, $cart)
-             . "\n\u{1F4CD} Deliver to: {$location}\n\nWe'll confirm and dispatch shortly. Thank you!";
+        $cur = $this->currencyFor($tenant);
+        $feeLine = $deliveryFee > 0
+            ? ($zoneName ? "\u{1F6F5} {$zoneName} · delivery {$cur} " . number_format($deliveryFee) . " · ETA ~{$etaMins} min"
+                         : "\u{1F6F5} Delivery {$cur} " . number_format($deliveryFee) . " · ETA ~{$etaMins} min")
+            : "\u{1F6F5} Free delivery · ETA ~{$etaMins} min";
+
+        return "\u{2705} Order *{$order->order_no}* received!\n" . $this->cartSummary($tenant, $cart)
+             . "\n\u{1F4CD} Deliver to: {$location}\n{$feeLine}"
+             . "\n\u{1F4B0} Total: {$cur} " . number_format($grand)
+             . "\n\nWe'll confirm and dispatch shortly. Thank you!";
     }
 }

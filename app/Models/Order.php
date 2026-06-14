@@ -10,8 +10,8 @@ class Order extends Model
     use BelongsToTenant;
     protected $fillable = ['tenant_id','order_no','idempotency_key','customer_name','customer_phone','items_text',
         'items_json','total','amount_paid','location','payment','status','channel','rider_id','branch_id','track_token','delivered_at',
-        'scheduled_for','sched_stage','sched_reminders'];
-    protected $casts = ['items_json'=>'array','total'=>'decimal:2','amount_paid'=>'decimal:2','delivered_at'=>'datetime',
+        'scheduled_for','sched_stage','sched_reminders','delivery_fee','delivery_zone_id','eta_at'];
+    protected $casts = ['items_json'=>'array','total'=>'decimal:2','amount_paid'=>'decimal:2','delivered_at'=>'datetime','eta_at'=>'datetime',
         'scheduled_for'=>'datetime','sched_reminders'=>'array'];
 
     public function items(): HasMany { return $this->hasMany(OrderItem::class); }

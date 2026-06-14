@@ -46,6 +46,13 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('products',   [PanelApiController::class, 'products']);
         Route::get('riders',     [PanelApiController::class, 'riders']);
         Route::get('returns',    [PanelApiController::class, 'returns']);
+
+        // Delivery Management V2 (D1/D2)
+        Route::get('delivery/quote',         [\App\Http\Controllers\Panel\DeliveryController::class, 'quote']);
+        Route::get('delivery/board',         [\App\Http\Controllers\Panel\DeliveryController::class, 'board']);
+        Route::get('delivery/suggest-rider', [\App\Http\Controllers\Panel\DeliveryController::class, 'suggestRider']);
+        Route::post('delivery/assign',       [\App\Http\Controllers\Panel\DeliveryController::class, 'assign']);
+        Route::post('delivery/status',       [\App\Http\Controllers\Panel\DeliveryController::class, 'status']);
         Route::get('settings',   [PanelApiController::class, 'settings']);
         Route::get('branches',   [PanelApiController::class, 'branches']);
         Route::get('customers',  [PanelApiController::class, 'customers']);
