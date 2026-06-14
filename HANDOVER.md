@@ -188,6 +188,12 @@ Keep changes consistent with the conventions in §5 and §9, and update this fil
 
 _Newest first. Every session appends one entry here: date, who/what, and a one-line summary of what changed. Bump the "Last updated" date at the top of this file too._
 
+### 2026-06-14 — Hotfix: duplicate OrderResource fatal (deploy-blocking) (Bhavin + AI)
+- **Symptom:** deploy logs showed a fatal `Cannot declare class App\Filament\Resources\OrderResource, because the name is already in use at app/Filament/Admin/Resources/OrderResource.php:13`, crashing post-deploy artisan (config:cache/optimize) — which silently prevented the OpenAI key from loading, so the bot stayed on keyword-only matching.
+- **Cause:** a stray `app/Filament/Admin/Resources/OrderResource.php` existed in the deployed repo (NOT in our canonical code) with the wrong namespace `App\Filament\Resources`, colliding with the real seller-panel `app/Filament/Resources/OrderResource.php`. A zip can't delete it, so we **overwrote** it: corrected namespace to `App\Filament\Admin\Resources`, hidden from admin nav (`shouldRegisterNavigation()=false`), with its own `Pages\ListOrders`. Now a distinct class, no collision.
+- After redeploy, artisan completes → config caches with `OPENAI_API_KEY` → AI/NLU finally active. (Webhook was already correctly pointed to `/api/webhook/whatsapp/evolution` after the earlier Evolution fix.)
+- New/changed: app/Filament/Admin/Resources/OrderResource.php (overwrite), app/Filament/Admin/Resources/OrderResource/Pages/ListOrders.php (new).
+
 ### 2026-06-14 — Phase 26: Bot pipeline diagnostics (n8n-style trace) (Bhavin + AI)
 - **Why:** in n8n you could see where a message got stuck; the native pipeline had logs only on success. Now every step is traced.
 - **Migration 000017** `bot_events` (trace, phone, stage, detail, ms, created_at). Run `php artisan migrate --path=database/migrations/2026_01_01_000017_create_bot_events.php`.
