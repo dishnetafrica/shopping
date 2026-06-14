@@ -63,6 +63,22 @@ ok('removes only -> NOT conflicted',        ! MLG::isConflicted("remove milk\nre
 ok('single line -> NOT conflicted',         ! MLG::isConflicted("Need rice"));
 ok('single-line multi-item -> NOT conflicted', ! MLG::isConflicted("2 rice and 1 oil"));
 
+sec('F5 — a whole conversation in one message: lead on the discovery product, not the soup');
+$blob = "Need rice\nWhich one is good?\nNot basmati\nDaily use\nFamily of 5\nNot expensive\nWhat do most customers buy?\nOk add 2\nNeed oil also\nToo expensive\nAny cheaper?\nAdd that\nDeliver Ntinda\nSend location pin\nCheckout";
+$mk2 = $mk; $j=0; // extend catalogue with the colliding flour + oils
+$cat2 = array_merge($cat, [
+  ['id'=>50,'name'=>'Family Rice Flour 1kg','price'=>4000,'stock'=>20,'category'=>'Flour','keywords'=>''],
+  ['id'=>51,'name'=>'India Gate Basmati Rice 5kg','price'=>48000,'stock'=>20,'category'=>'Rice','keywords'=>''],
+  ['id'=>52,'name'=>'Sunflower Oil 2L','price'=>18000,'stock'=>20,'category'=>'Oil','keywords'=>''],
+]);
+$seg = SA::discoverySegment($blob);
+ok('discovery segment stops before "add"',  ! str_contains($seg, 'add') && str_contains($seg, 'rice'));
+ok('subject term is "rice" (not soup/flour)', SA::subjectTerm($seg, $cat2) === 'rice');
+ok('"not basmati" recorded as exclusion',     isset(SA::excludedTerms($seg)['basmati']));
+$co = SA::coherentCandidates('rice', (new CatalogueMatcher())->search('rice', $cat2));
+ok('Family Rice Flour excluded (wrong category)', ! in_array('Family Rice Flour 1kg', $names($co), true));
+ok('value pick is a real rice',               SA::pickRecommendation('rice', $co, null, [])['product']['category'] === 'Rice');
+
 echo "\n========= RESULT =========\n";
 echo "PASS $PASS  FAIL $FAIL\n";
 exit($FAIL===0?0:1);
