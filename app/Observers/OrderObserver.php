@@ -23,6 +23,27 @@ class OrderObserver
         }
     }
 
+    /**
+     * Stamp the delivery date the moment the status becomes "Delivered" (from any
+     * path: panel dropdown, Filament, or the bot). Runs before the write so the
+     * timestamp persists in the same save. Clears it if the order is moved back
+     * out of Delivered.
+     */
+    public function updating(Order $order): void
+    {
+        if (! $order->isDirty('status')) {
+            return;
+        }
+        $isDelivered   = strcasecmp((string) $order->status, 'Delivered') === 0;
+        $wasDelivered  = strcasecmp((string) $order->getOriginal('status'), 'Delivered') === 0;
+
+        if ($isDelivered && empty($order->delivered_at)) {
+            $order->delivered_at = now();
+        } elseif (! $isDelivered && $wasDelivered) {
+            $order->delivered_at = null;
+        }
+    }
+
     /** Alert the owner the moment a new order lands (bot or phone orders). */
     public function created(Order $order): void
     {
