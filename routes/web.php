@@ -25,6 +25,7 @@ Route::get('/icons/{name}',         [PwaController::class, 'icon']);
 // /app web session. (Filament business panel stays available at /app.)
 Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () {
     Route::get('/panel', [SellerPanelController::class, 'show']);
+    Route::get('/panel/m', [SellerPanelController::class, 'mobile']);
     Route::get('/panel/chats', [SellerPanelController::class, 'chats']);
     Route::get('/panel/cashbook', [SellerPanelController::class, 'cashbook']);
     Route::get('/panel/staff', [SellerPanelController::class, 'staff']);

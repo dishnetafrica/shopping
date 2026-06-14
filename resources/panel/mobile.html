@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0E6E5C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Seller">
+<title>Seller Panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!--SHOP_BOOT-->
+<style>
+  :root{
+    --paper:#FBF7F0; --card:#FFFFFF; --ink:#181613; --ink-soft:#6B6358; --ink-faint:#A39A8B;
+    --line:#EAE1D1; --line-soft:#F1EADD;
+    --teal:#0E6E5C; --teal-d:#0A5648; --teal-wash:#E7F1EE;
+    --amber:#E8821E; --amber-d:#C56A0C; --amber-wash:#FBEEDD;
+    --s-new:#C56A0C; --s-new-bg:#FBEEDD;
+    --s-confirmed:#2563EB; --s-confirmed-bg:#E6EDFD;
+    --s-prep:#7C3AED; --s-prep-bg:#F0E9FE;
+    --s-out:#0E6E5C; --s-out-bg:#E7F1EE;
+    --s-done:#16794C; --s-done-bg:#E4F2EA;
+    --s-cancel:#8A8276; --s-cancel-bg:#F0ECE3;
+    --shadow:0 1px 2px rgba(24,22,19,.05), 0 8px 24px -16px rgba(24,22,19,.35);
+    --display:'Space Grotesk',system-ui,sans-serif;
+    --body:'Inter',system-ui,-apple-system,sans-serif;
+    --mono:'Space Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--body);color:var(--ink);background:#2B2722;display:flex;align-items:center;
+    justify-content:center;min-height:100vh;line-height:1.45;-webkit-font-smoothing:antialiased}
+  .device{width:100%;max-width:412px;height:100vh;max-height:920px;background:var(--paper);
+    position:relative;overflow:hidden;display:flex;flex-direction:column;
+    box-shadow:0 40px 80px -20px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.04)}
+  @media(min-width:520px){
+    body{padding:28px}
+    .device{border-radius:44px;border:10px solid #14110D;height:892px}
+    .device::before{content:"";position:absolute;top:10px;left:50%;transform:translateX(-50%);
+      width:128px;height:26px;background:#14110D;border-radius:0 0 16px 16px;z-index:60}
+  }
+  .top{background:var(--teal);color:#fff;padding:22px 18px 16px;position:relative;z-index:5;flex:0 0 auto}
+  @media(min-width:520px){.top{padding-top:34px}}
+  .top .row{display:flex;align-items:center;gap:11px}
+  .crest{width:38px;height:38px;border-radius:11px;flex:0 0 auto;
+    background:linear-gradient(150deg,#fff,#EAF4F1);color:var(--teal-d);font-family:var(--display);
+    font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;letter-spacing:-.5px;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.5)}
+  .shop{font-family:var(--display);font-weight:600;font-size:17px;letter-spacing:-.2px}
+  .shop small{display:block;font-family:var(--mono);font-size:10.5px;font-weight:400;color:#BFE0D7;letter-spacing:.3px;margin-top:1px}
+  .top .bell{margin-left:auto;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.13);
+    display:flex;align-items:center;justify-content:center;font-size:17px;position:relative;text-decoration:none}
+  .top .bell.live::after{content:"";position:absolute;width:7px;height:7px;border-radius:50%;
+    background:var(--amber);top:8px;right:8px;box-shadow:0 0 0 2px var(--teal)}
+  .stats{display:flex;gap:10px;margin-top:16px}
+  .stat{flex:1;background:rgba(255,255,255,.10);border-radius:14px;padding:11px 13px}
+  .stat .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.6px;text-transform:uppercase;color:#BFE0D7}
+  .stat .v{font-family:var(--display);font-weight:700;font-size:21px;margin-top:3px;letter-spacing:-.5px}
+  .stat .v span{font-size:12px;font-weight:500;color:#CDE6DF}
+  .screen{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+  .screen::-webkit-scrollbar{width:0}
+  .pane{display:none;padding:14px 14px 96px}
+  .pane.on{display:block;animation:rise .28s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){.pane.on{animation:none}}
+  .seg{display:flex;gap:4px;background:#F0E9DC;border-radius:12px;padding:4px;margin-bottom:14px}
+  .seg button{flex:1;border:0;background:transparent;font-family:var(--body);font-weight:600;font-size:12.5px;
+    color:var(--ink-soft);padding:8px 4px;border-radius:9px;cursor:pointer;display:flex;align-items:center;
+    justify-content:center;gap:5px;transition:.18s}
+  .seg button .cnt{font-family:var(--mono);font-size:10px;background:#E0D6C4;color:var(--ink-soft);
+    border-radius:20px;padding:1px 6px;font-weight:700}
+  .seg button.sel{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
+  .seg button.sel .cnt{background:var(--amber);color:#fff}
+  .order{position:relative;background:var(--card);border-radius:0 0 14px 14px;margin-bottom:16px;
+    box-shadow:var(--shadow);overflow:hidden;cursor:pointer}
+  .order::before{content:"";display:block;height:9px;
+    background:radial-gradient(circle at 7px 9px,transparent 0 6px,var(--card) 6px) repeat-x;
+    background-size:14px 9px;background-position:0 -3px;filter:drop-shadow(0 -1px 0 var(--line-soft))}
+  .order .body{padding:13px 15px 14px}
+  .o-head{display:flex;align-items:baseline;gap:8px}
+  .o-no{font-family:var(--mono);font-weight:700;font-size:13px}
+  .o-ch{font-size:11px;color:#1FA855;font-weight:600;display:inline-flex;align-items:center;gap:3px}
+  .o-time{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-faint)}
+  .o-cust{display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap}
+  .o-cust .nm{font-weight:600;font-size:14.5px}
+  .o-cust .ph{font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .chip{font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:7px;background:var(--line-soft);
+    color:var(--ink-soft);display:inline-flex;align-items:center;gap:4px}
+  .chip.pay{background:var(--amber-wash);color:var(--amber-d)}
+  .chip.loc{background:var(--teal-wash);color:var(--teal-d)}
+  .items{margin-top:11px;font-size:12.5px;color:var(--ink-soft);line-height:1.5}
+  .items b{color:var(--ink);font-weight:600}
+  .perf{border:0;border-top:1.5px dashed var(--line);margin:12px 0 11px}
+  .o-foot{display:flex;align-items:center;gap:10px}
+  .o-total{font-family:var(--mono);font-weight:700;font-size:16px}
+  .o-total span{font-size:10.5px;color:var(--ink-faint);font-weight:400;display:block;letter-spacing:.4px}
+  .pill{margin-left:auto;font-size:11px;font-weight:700;padding:5px 11px;border-radius:20px}
+  .p-new{color:var(--s-new);background:var(--s-new-bg)}
+  .p-confirmed{color:var(--s-confirmed);background:var(--s-confirmed-bg)}
+  .p-preparing{color:var(--s-prep);background:var(--s-prep-bg)}
+  .p-out{color:var(--s-out);background:var(--s-out-bg)}
+  .p-delivered{color:var(--s-done);background:var(--s-done-bg)}
+  .p-cancelled{color:var(--s-cancel);background:var(--s-cancel-bg)}
+  .acts{max-height:0;overflow:hidden;transition:max-height .26s ease;background:#FCFAF5;border-top:1px solid var(--line-soft)}
+  .order.open .acts{max-height:220px}
+  .acts .inner{padding:11px 13px;display:flex;flex-wrap:wrap;gap:8px}
+  .btn{flex:1;min-width:calc(50% - 4px);border:0;border-radius:10px;padding:11px 10px;font-family:var(--body);
+    font-weight:600;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:.15s}
+  .btn:active{transform:scale(.97)}
+  .btn[disabled]{opacity:.5}
+  .btn.primary{background:var(--teal);color:#fff}
+  .btn.gold{background:var(--amber);color:#fff}
+  .btn.ghost{background:#fff;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line)}
+  .btn.full{min-width:100%}
+  .rider-tag{margin-top:9px;font-size:11.5px;color:var(--ink-soft);display:flex;align-items:center;gap:6px}
+  .rider-tag b{color:var(--ink)}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--teal);display:inline-block}
+  .empty,.loading{text-align:center;color:var(--ink-faint);padding:54px 24px}
+  .empty .ic{font-size:34px}
+  .empty p{margin-top:10px;font-size:13.5px}
+  .spin{width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--teal);border-radius:50%;
+    margin:0 auto;animation:sp .8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .retry{margin-top:14px;border:0;background:var(--teal);color:#fff;font-weight:600;font-size:12.5px;
+    padding:9px 18px;border-radius:10px;cursor:pointer;font-family:var(--body)}
+  .chat{display:flex;align-items:center;gap:12px;padding:13px 6px;border-bottom:1px solid var(--line-soft);cursor:pointer}
+  .av{width:46px;height:46px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+    font-family:var(--display);font-weight:600;color:#fff;font-size:15px}
+  .chat .meta{flex:1;min-width:0}
+  .chat .meta .top2{display:flex;align-items:baseline;gap:8px}
+  .chat .nm{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62%}
+  .chat .tm{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--ink-faint)}
+  .chat .ms{font-size:12.5px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .chat .unread{background:var(--amber);color:#fff;font-family:var(--mono);font-weight:700;font-size:10px;
+    border-radius:20px;min-width:18px;height:18px;padding:0 5px;display:flex;align-items:center;justify-content:center;margin-top:4px}
+  .chat .tag{font-size:10px;border-radius:6px;padding:1px 6px;font-weight:600}
+  .tag.bot{color:var(--teal-d);background:var(--teal-wash)}
+  .tag.you{color:var(--amber-d);background:var(--amber-wash)}
+  .preview-note{background:var(--amber-wash);color:var(--amber-d);border-radius:11px;padding:10px 13px;
+    font-size:12px;font-weight:500;margin-bottom:14px;display:flex;gap:8px;align-items:flex-start}
+  .pos-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:16px}
+  .pi{background:var(--card);border-radius:13px;box-shadow:var(--shadow);padding:11px 9px;text-align:center;cursor:pointer;transition:.15s}
+  .pi:active{transform:scale(.96)}
+  .pi .em{font-size:25px}.pi .pn{font-size:11px;font-weight:600;margin-top:5px;line-height:1.25}
+  .pi .pp{font-family:var(--mono);font-size:10.5px;color:var(--teal-d);margin-top:3px;font-weight:700}
+  .cart{background:var(--card);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+  .cart h4{font-family:var(--display);font-size:13px;padding:13px 15px 9px;display:flex;align-items:center;gap:8px}
+  .cart h4 .n{font-family:var(--mono);font-size:10px;background:var(--teal);color:#fff;border-radius:20px;padding:2px 8px;margin-left:auto}
+  .cl{display:flex;align-items:center;gap:8px;padding:8px 15px;font-size:12.5px;border-top:1px solid var(--line-soft)}
+  .cl .q{font-family:var(--mono);font-weight:700;color:var(--teal-d)}.cl .nm{flex:1}.cl .pr{font-family:var(--mono);font-weight:700}
+  .cart .sum{display:flex;align-items:center;padding:13px 15px;border-top:1.5px dashed var(--line)}
+  .cart .sum .lab{font-weight:600}.cart .sum .tot{font-family:var(--mono);font-weight:700;font-size:17px;margin-left:auto}
+  .cart .checkout{display:block;width:100%;border:0;background:var(--amber);color:#fff;font-family:var(--body);
+    font-weight:700;font-size:14px;padding:15px;cursor:pointer}
+  .pos-empty{padding:20px 15px;text-align:center;color:var(--ink-faint);font-size:12.5px}
+  .menu{background:var(--card);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+  .mi{display:flex;align-items:center;gap:13px;padding:15px;border-bottom:1px solid var(--line-soft);cursor:pointer;text-decoration:none;color:inherit}
+  .mi:last-child{border-bottom:0}
+  .mi .mic{width:34px;height:34px;border-radius:10px;background:var(--teal-wash);color:var(--teal-d);
+    display:flex;align-items:center;justify-content:center;font-size:16px;flex:0 0 auto}
+  .mi .mt{font-weight:600;font-size:13.5px}.mi .md{font-size:11px;color:var(--ink-faint);margin-top:1px}
+  .mi .arr{margin-left:auto;color:var(--ink-faint);font-size:18px}
+  .secline{font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint);margin:18px 4px 8px}
+  .nav{flex:0 0 auto;display:flex;background:var(--card);border-top:1px solid var(--line);
+    padding:7px 6px calc(7px + env(safe-area-inset-bottom));position:relative;z-index:30}
+  .nav button{flex:1;border:0;background:transparent;cursor:pointer;display:flex;flex-direction:column;align-items:center;
+    gap:3px;padding:5px 0;color:var(--ink-faint);font-family:var(--body);font-size:10px;font-weight:600;position:relative;transition:.15s}
+  .nav button .ni{font-size:20px;line-height:1}
+  .nav button.sel{color:var(--teal-d)}
+  .nav button .nb{position:absolute;top:1px;right:calc(50% - 18px);background:var(--amber);color:#fff;font-family:var(--mono);
+    font-size:9px;font-weight:700;border-radius:20px;min-width:15px;height:15px;padding:0 4px;display:none;align-items:center;justify-content:center}
+  .nav button .nb.show{display:flex}
+  .toast{position:absolute;left:50%;bottom:84px;transform:translate(-50%,16px);background:var(--ink);color:#fff;
+    font-size:12.5px;font-weight:500;padding:10px 16px;border-radius:11px;opacity:0;transition:.25s;z-index:50;
+    pointer-events:none;max-width:86%;text-align:center;box-shadow:0 10px 30px -8px rgba(0,0,0,.5)}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  /* rider sheet */
+  .sheet-bg{position:absolute;inset:0;background:rgba(20,17,13,.45);opacity:0;pointer-events:none;transition:.2s;z-index:70}
+  .sheet-bg.on{opacity:1;pointer-events:auto}
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-radius:20px 20px 0 0;
+    transform:translateY(100%);transition:.28s cubic-bezier(.2,.8,.2,1);z-index:71;max-height:72%;overflow-y:auto;
+    padding:8px 16px calc(20px + env(safe-area-inset-bottom))}
+  .sheet.on{transform:translateY(0)}
+  .sheet .grab{width:38px;height:4px;border-radius:4px;background:var(--line);margin:8px auto 12px}
+  .sheet h3{font-family:var(--display);font-size:15px;margin-bottom:3px}
+  .sheet .sub{font-size:12px;color:var(--ink-faint);margin-bottom:12px}
+  .rider{display:flex;align-items:center;gap:11px;padding:11px 4px;border-bottom:1px solid var(--line-soft);cursor:pointer}
+  .rider .ra{width:38px;height:38px;border-radius:50%;background:var(--teal-wash);color:var(--teal-d);
+    font-family:var(--display);font-weight:600;display:flex;align-items:center;justify-content:center;font-size:14px}
+  .rider .rn{font-weight:600;font-size:13.5px}.rider .rp{font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
+  .rider .go{margin-left:auto;color:var(--teal);font-size:18px}
+</style>
+</head>
+<body>
+<div class="device">
+  <header class="top">
+    <div class="row">
+      <div class="crest" id="crest">FS</div>
+      <div class="shop"><span id="shopName">Seller</span><small id="hsub">Live panel</small></div>
+      <a class="bell live" id="bell" href="/panel">🔔</a>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="k">New now</div><div class="v" id="st-new">—</div></div>
+      <div class="stat"><div class="k">Orders today</div><div class="v" id="st-orders">—</div></div>
+      <div class="stat"><div class="k">Sales today</div><div class="v" id="st-sales">—</div></div>
+    </div>
+  </header>
+
+  <div class="screen">
+    <section class="pane on" id="pane-orders">
+      <div class="seg" id="seg">
+        <button data-f="active" class="sel">Live <span class="cnt" id="c-active">0</span></button>
+        <button data-f="new">New <span class="cnt" id="c-new">0</span></button>
+        <button data-f="done">Done <span class="cnt" id="c-done">0</span></button>
+      </div>
+      <div id="feed"><div class="loading"><div class="spin"></div></div></div>
+    </section>
+
+    <section class="pane" id="pane-chats">
+      <div id="chats"><div class="loading"><div class="spin"></div></div></div>
+    </section>
+
+    <section class="pane" id="pane-pos">
+      <div class="preview-note"><span>⚠️</span><span>Quick tally preview — recording POS sales to your books is the next step. Real WhatsApp orders are on the Orders tab.</span></div>
+      <div class="pos-grid" id="posgrid"></div>
+      <div class="cart">
+        <h4>Walk-in sale <span class="n" id="cart-n">0 items</span></h4>
+        <div id="cart-lines"><div class="pos-empty">Tap products above to start a tally.</div></div>
+        <div class="sum"><span class="lab">Total</span><span class="tot" id="cart-tot">UGX 0</span></div>
+        <button class="checkout" id="pos-checkout">Total up sale</button>
+      </div>
+    </section>
+
+    <section class="pane" id="pane-more">
+      <div class="secline">Open in full panel</div>
+      <div class="menu">
+        <a class="mi" href="/panel"><div class="mic">🗂️</div><div><div class="mt">Dashboard & products</div><div class="md">Catalogue, stock, reports</div></div><div class="arr">›</div></a>
+        <a class="mi" href="/panel/chats"><div class="mic">💬</div><div><div class="mt">Live chats</div><div class="md">Reply, take over from the bot</div></div><div class="arr">›</div></a>
+        <a class="mi" href="/panel/cashbook"><div class="mic">🧾</div><div><div class="mt">Cashbook</div><div class="md">Payments & expenses</div></div><div class="arr">›</div></a>
+        <a class="mi" href="/panel/scheduled"><div class="mic">📅</div><div><div class="mt">Scheduled deliveries</div><div class="md">Upcoming runs</div></div><div class="arr">›</div></a>
+        <a class="mi" href="/panel/marketing"><div class="mic">📣</div><div><div class="mt">Marketing</div><div class="md">Broadcasts & campaigns</div></div><div class="arr">›</div></a>
+        <a class="mi" href="/panel/setup"><div class="mic">⚙️</div><div><div class="mt">Setup & WhatsApp</div><div class="md">Connection, bot, hours</div></div><div class="arr">›</div></a>
+      </div>
+      <div class="secline" id="acct">Account</div>
+      <div class="menu">
+        <a class="mi" href="/app/logout" onclick="return false" id="signout"><div class="mic">↩︎</div><div><div class="mt">Sign out</div><div class="md" id="planLine">—</div></div><div class="arr">›</div></a>
+      </div>
+    </section>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <nav class="nav" id="nav">
+    <button data-p="orders" class="sel"><span class="ni">🧾</span>Orders<span class="nb" id="nb-orders"></span></button>
+    <button data-p="chats"><span class="ni">💬</span>Chats<span class="nb" id="nb-chats"></span></button>
+    <button data-p="pos"><span class="ni">🛒</span>POS</button>
+    <button data-p="more"><span class="ni">⋯</span>More</button>
+  </nav>
+
+  <!-- rider sheet -->
+  <div class="sheet-bg" id="sheetBg"></div>
+  <div class="sheet" id="sheet">
+    <div class="grab"></div>
+    <h3 id="sheetTitle">Assign a rider</h3>
+    <div class="sub" id="sheetSub">Sends the order out for delivery and notifies the customer on WhatsApp.</div>
+    <div id="riderList"></div>
+  </div>
+</div>
+
+<script>
+const API = "/papi";
+const FLOW = ["New","Confirmed","Preparing","Out for delivery","Delivered"];
+const PCLASS = {"New":"p-new","Confirmed":"p-confirmed","Preparing":"p-preparing","Out for delivery":"p-out","Delivered":"p-delivered","Cancelled":"p-cancelled"};
+const ADV = {"New":"Confirm order","Confirmed":"Start preparing","Preparing":"Send out for delivery","Out for delivery":"Mark delivered"};
+const fmt = n => "UGX " + Number(n||0).toLocaleString("en-UG");
+const SHOP = window.SHOP || {name:"Seller", initials:"FS", phone:"", plan:""};
+
+let orders = [], filter = "active", ordersLoaded = false, ridersCache = null, activePane = "orders", poll = null;
+
+/* ---------- fetch helper (session cookies; redirect on auth loss) ---------- */
+async function api(path, opts){
+  const r = await fetch(API + path, Object.assign({credentials:"same-origin", headers:{"Accept":"application/json"}}, opts||{}));
+  if (r.status === 401 || r.status === 419){ location.href = "/app/login"; throw new Error("auth"); }
+  if (!r.ok) throw new Error("http " + r.status);
+  return r.json();
+}
+
+/* ---------- header branding ---------- */
+function boot(){
+  document.getElementById("shopName").textContent = SHOP.name || "Seller";
+  document.getElementById("crest").textContent = SHOP.initials || "•";
+  document.getElementById("hsub").textContent = (SHOP.plan ? SHOP.plan + " · " : "") + "Live panel";
+  document.getElementById("planLine").textContent = SHOP.plan ? (SHOP.plan + " plan") : "End session";
+}
+
+/* ---------- orders ---------- */
+function timeAgo(s){
+  if(!s) return "";
+  const t = Date.parse(s.replace(" ","T"));
+  if(isNaN(t)) return "";
+  const m = Math.max(0, Math.round((Date.now()-t)/60000));
+  if(m < 1) return "just now";
+  if(m < 60) return m + " min ago";
+  const h = Math.round(m/60); if(h < 24) return h + (h===1?" hr ago":" hrs ago");
+  const d = Math.round(h/24); return d + (d===1?" day ago":" days ago");
+}
+function itemsOf(o){
+  if(Array.isArray(o.items_json) && o.items_json.length){
+    const arr = o.items_json.map(it=>{
+      if(it==null || typeof it!=="object") return null;
+      const n = it.name||it.product||it.title||it.item||it.label||"";
+      const q = it.qty||it.quantity||it.count||it.units||null;
+      return n ? [String(n), q] : null;
+    }).filter(Boolean);
+    if(arr.length) return arr;
+  }
+  return o.items ? [[String(o.items), null]] : [];
+}
+function mapOrder(o){
+  return { id:o.id, no:o.order_no || ("#"+o.id), name:o.name||"Customer", phone:o.phone||"",
+    area:o.location||"", pay:o.payment||"", status:o.status||"New", rider:o.rider||null,
+    riderPhone:o.rider_phone||"", total:Number(o.total_ugx||0), created:o.created_at||"", items:itemsOf(o) };
+}
+function isToday(s){ if(!s) return false; const t=new Date(s.replace(" ","T")), n=new Date();
+  return t.getFullYear()===n.getFullYear()&&t.getMonth()===n.getMonth()&&t.getDate()===n.getDate(); }
+function inGroup(o){
+  if(filter==="new") return o.status==="New";
+  if(filter==="done") return o.status==="Delivered"||o.status==="Cancelled";
+  return ["New","Confirmed","Preparing","Out for delivery"].includes(o.status);
+}
+async function loadOrders(silent){
+  if(!silent && !ordersLoaded) document.getElementById("feed").innerHTML = '<div class="loading"><div class="spin"></div></div>';
+  try{
+    const d = await api("/orders");
+    orders = (d.orders||[]).map(mapOrder);
+    ordersLoaded = true; refresh();
+  }catch(e){
+    if(e.message==="auth") return;
+    if(!silent) document.getElementById("feed").innerHTML =
+      '<div class="empty"><div class="ic">⚠️</div><p>Couldn\u2019t load orders.<br>Check your connection.</p><button class="retry" onclick="loadOrders()">Try again</button></div>';
+  }
+}
+function itemsLine(items){ return items.map(([n,q]) => q ? `<b>${esc(n)}</b> \u00d7${q}` : esc(n)).join(", "); }
+function esc(s){ return String(s).replace(/[<>&]/g, c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c])); }
+function pillClass(s){ return PCLASS[s] || "p-new"; }
+
+function refresh(){
+  const count = f => orders.filter(o=>{
+    if(f==="new") return o.status==="New";
+    if(f==="done") return o.status==="Delivered"||o.status==="Cancelled";
+    return ["New","Confirmed","Preparing","Out for delivery"].includes(o.status);
+  }).length;
+  document.getElementById("c-active").textContent = count("active");
+  document.getElementById("c-new").textContent = count("new");
+  document.getElementById("c-done").textContent = count("done");
+  const newCount = orders.filter(o=>o.status==="New").length;
+  const todays = orders.filter(o=>isToday(o.created));
+  const sales = todays.filter(o=>o.status!=="Cancelled").reduce((s,o)=>s+o.total,0);
+  document.getElementById("st-new").textContent = newCount;
+  document.getElementById("st-orders").textContent = todays.length || orders.length;
+  document.getElementById("st-sales").innerHTML = (sales>=1000 ? (sales/1000).toFixed(0)+"K" : sales) + ' <span>UGX</span>';
+  const nb = document.getElementById("nb-orders");
+  nb.textContent = newCount; nb.classList.toggle("show", newCount>0);
+  renderFeed();
+}
+function renderFeed(){
+  const feed = document.getElementById("feed");
+  const list = orders.filter(inGroup);
+  if(!list.length){
+    feed.innerHTML = `<div class="empty"><div class="ic">🧾</div><p>No ${filter==="done"?"completed":filter} orders right now.<br>New WhatsApp orders appear here automatically.</p></div>`;
+    return;
+  }
+  feed.innerHTML = "";
+  list.forEach(o=>{
+    const next = FLOW[FLOW.indexOf(o.status)+1];
+    const done = o.status==="Delivered"||o.status==="Cancelled";
+    const card = document.createElement("div");
+    card.className = "order";
+    card.innerHTML = `
+      <div class="body">
+        <div class="o-head"><span class="o-no">${esc(o.no)}</span>
+          <span class="o-ch">● WhatsApp</span><span class="o-time">${timeAgo(o.created)}</span></div>
+        <div class="o-cust"><span class="nm">${esc(o.name)}</span><span class="ph">${esc(o.phone)}</span></div>
+        <div class="chips">
+          ${o.area?`<span class="chip loc">📍 ${esc(o.area)}</span>`:""}
+          ${o.pay?`<span class="chip pay">${esc(o.pay)}</span>`:""}
+          <span class="chip">${o.items.reduce((s,[,q])=>s+(q||1),0)} items</span>
+        </div>
+        <div class="items">${itemsLine(o.items)}</div>
+        ${o.rider?`<div class="rider-tag"><span class="dot"></span>Rider <b>${esc(o.rider)}</b>${o.riderPhone?" · "+esc(o.riderPhone):""}</div>`:""}
+        <hr class="perf">
+        <div class="o-foot"><div class="o-total">${fmt(o.total)}<span>incl. delivery</span></div>
+          <span class="pill ${pillClass(o.status)}">${esc(o.status)}</span></div>
+      </div>
+      <div class="acts"><div class="inner">
+        ${next?`<button class="btn primary" data-act="advance">${ADV[o.status]||"Advance"}</button>`:""}
+        ${(!done && !o.rider)?`<button class="btn gold" data-act="rider">Assign rider</button>`:""}
+        ${o.phone?`<a class="btn ghost" href="tel:${esc(o.phone.replace(/[^0-9+]/g,''))}">Call</a>`:""}
+        ${!done?`<button class="btn ghost" data-act="cancel">Cancel</button>`:""}
+      </div></div>`;
+    card.querySelector(".body").addEventListener("click", ()=> card.classList.toggle("open"));
+    card.querySelectorAll("[data-act]").forEach(b=> b.addEventListener("click", e=>{ e.stopPropagation(); doAction(o, b.dataset.act, b); }));
+    feed.appendChild(card);
+  });
+}
+
+async function doAction(o, act, btn){
+  if(act==="advance"){
+    const next = FLOW[FLOW.indexOf(o.status)+1];
+    if(next==="Out for delivery"){ return openRiderSheet(o); }   // dispatch path (rider + WA notify)
+    return setStatus(o, next, btn);
+  }
+  if(act==="rider"){ return openRiderSheet(o); }
+  if(act==="cancel"){ return setStatus(o, "Cancelled", btn); }
+}
+async function setStatus(o, status, btn){
+  if(btn) btn.disabled = true;
+  try{
+    const d = await api("/update-status?row="+encodeURIComponent(o.id)+"&status="+encodeURIComponent(status));
+    toast(d && d.ok===false ? (d.error||"Couldn\u2019t update") : (o.no+" \u2192 "+status));
+  }catch(e){ if(e.message!=="auth") toast("Network error"); }
+  await loadOrders(true);
+}
+
+/* ---------- rider sheet -> dispatch ---------- */
+async function openRiderSheet(o){
+  const sheet = document.getElementById("sheet"), bg = document.getElementById("sheetBg");
+  document.getElementById("sheetTitle").textContent = o.rider ? ("Re-assign "+o.no) : ("Assign rider · "+o.no);
+  const list = document.getElementById("riderList");
+  list.innerHTML = '<div class="loading"><div class="spin"></div></div>';
+  bg.classList.add("on"); sheet.classList.add("on");
+  if(!ridersCache){
+    try{ const d = await api("/riders"); ridersCache = (d.riders||[]); }
+    catch(e){ if(e.message==="auth") return; ridersCache = []; }
+  }
+  const active = ridersCache.filter(r=>r.active!==false);
+  if(!active.length){
+    list.innerHTML = '<div class="pos-empty">No riders saved yet. Add riders in the full panel under Riders.</div>';
+    return;
+  }
+  list.innerHTML = "";
+  active.forEach(r=>{
+    const row = document.createElement("div");
+    row.className = "rider";
+    const ini = (r.name||"?").split(" ").map(w=>w[0]).slice(0,2).join("");
+    row.innerHTML = `<div class="ra">${esc(ini)}</div><div><div class="rn">${esc(r.name)}</div>
+      <div class="rp">${esc(r.phone||"no phone")}</div></div><div class="go">→</div>`;
+    row.addEventListener("click", ()=> dispatchTo(o, r));
+    list.appendChild(row);
+  });
+}
+function closeSheet(){ document.getElementById("sheet").classList.remove("on"); document.getElementById("sheetBg").classList.remove("on"); }
+document.getElementById("sheetBg").addEventListener("click", closeSheet);
+async function dispatchTo(o, r){
+  closeSheet();
+  try{
+    const d = await api("/dispatch?row="+encodeURIComponent(o.id)+"&rider="+encodeURIComponent(r.name)+"&riderphone="+encodeURIComponent(r.phone||""));
+    if(d && d.ok===false){
+      toast((d.error||"").indexOf("plan")>=0 ? "Dispatch needs a higher plan" : (d.error||"Couldn\u2019t dispatch"));
+    } else { toast(r.name+" dispatched 🛵"); }
+  }catch(e){ if(e.message!=="auth") toast("Network error"); }
+  await loadOrders(true);
+}
+
+/* ---------- chats ---------- */
+async function loadChats(silent){
+  const box = document.getElementById("chats");
+  if(!silent && box.querySelector(".chat")===null) box.innerHTML = '<div class="loading"><div class="spin"></div></div>';
+  try{
+    const d = await api("/chats");
+    renderChats(d.chats||[], d.bot_mode||"auto");
+  }catch(e){
+    if(e.message==="auth") return;
+    if(!silent) box.innerHTML = '<div class="empty"><div class="ic">⚠️</div><p>Couldn\u2019t load chats.</p><button class="retry" onclick="loadChats()">Try again</button></div>';
+  }
+}
+const AVC = ["#0E6E5C","#C56A0C","#7C3AED","#2563EB","#16794C","#9A3412"];
+function renderChats(list, botMode){
+  const box = document.getElementById("chats");
+  let unreadTotal = 0;
+  if(!list.length){ box.innerHTML = '<div class="empty"><div class="ic">💬</div><p>No conversations yet.<br>Customer chats will show up here.</p></div>'; setChatBadge(0); return; }
+  box.innerHTML = list.map((c,i)=>{
+    const name = c.name || c.phone || "Customer";
+    const ini = name.replace(/\+/g,"").split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase() || "•";
+    unreadTotal += (c.unread||0);
+    const tag = c.agent_active ? '<span class="tag you">YOU</span> ' : (c.last_sender==="bot" ? '<span class="tag bot">BOT</span> ' : "");
+    return `<div class="chat" data-ph="${esc(c.phone)}">
+      <div class="av" style="background:${AVC[i%AVC.length]}">${esc(ini)}</div>
+      <div class="meta"><div class="top2"><span class="nm">${esc(name)}</span><span class="tm">${esc(timeAgo(c.last_at))}</span></div>
+        <div class="ms">${tag}${esc(c.last||"")}</div></div>
+      ${c.unread?`<span class="unread">${c.unread}</span>`:""}</div>`;
+  }).join("");
+  box.querySelectorAll(".chat").forEach(el=> el.addEventListener("click", ()=> location.href = "/panel/chats"));
+  setChatBadge(unreadTotal);
+}
+function setChatBadge(n){ const b=document.getElementById("nb-chats"); b.textContent=n; b.classList.toggle("show", n>0); }
+
+/* ---------- POS (local tally preview) ---------- */
+const POS = [["🍚","Rice 2kg",9000],["🫘","Beans 1kg",6500],["🛢️","Oil 1L",11000],["🧂","Sugar 1kg",4500],
+  ["🥛","Milk 1L",3800],["🍞","Bread",4000],["🥚","Eggs tray",14000],["🧈","Blue Band",9500],["🧴","Soap",3500]];
+let cart = {};
+function renderPos(){
+  document.getElementById("posgrid").innerHTML = POS.map((p,i)=>`<div class="pi" data-i="${i}"><div class="em">${p[0]}</div><div class="pn">${p[1]}</div><div class="pp">${fmt(p[2])}</div></div>`).join("");
+  document.querySelectorAll(".pi").forEach(el=>el.addEventListener("click",()=>{ const i=el.dataset.i; cart[i]=(cart[i]||0)+1; renderCart(); }));
+  renderCart();
+}
+function renderCart(){
+  const keys=Object.keys(cart), lines=document.getElementById("cart-lines"); let tot=0,n=0;
+  if(!keys.length){ lines.innerHTML='<div class="pos-empty">Tap products above to start a tally.</div>'; }
+  else lines.innerHTML = keys.map(i=>{ const p=POS[i],q=cart[i]; tot+=p[2]*q; n+=q;
+    return `<div class="cl"><span class="q">${q}\u00d7</span><span class="nm">${p[1]}</span><span class="pr">${fmt(p[2]*q)}</span></div>`; }).join("");
+  document.getElementById("cart-tot").textContent = fmt(tot);
+  document.getElementById("cart-n").textContent = n+(n===1?" item":" items");
+}
+document.getElementById("pos-checkout").addEventListener("click",()=>{
+  const tot=Object.keys(cart).reduce((s,i)=>s+POS[i][2]*cart[i],0);
+  if(!tot){ toast("Add items first"); return; }
+  toast("Sale total "+fmt(tot)+" (tally only)"); cart={}; renderCart();
+});
+
+/* ---------- nav + polling ---------- */
+document.getElementById("nav").addEventListener("click", e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  document.querySelectorAll("#nav button").forEach(x=>x.classList.remove("sel")); b.classList.add("sel");
+  document.querySelectorAll(".pane").forEach(p=>p.classList.remove("on"));
+  activePane = b.dataset.p;
+  document.getElementById("pane-"+activePane).classList.add("on");
+  document.querySelector(".screen").scrollTop = 0;
+  if(activePane==="chats") loadChats();
+  if(activePane==="orders") loadOrders(true);
+});
+document.getElementById("seg").addEventListener("click", e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  document.querySelectorAll("#seg button").forEach(x=>x.classList.remove("sel")); b.classList.add("sel");
+  filter=b.dataset.f; renderFeed();
+});
+function startPolling(){
+  if(poll) clearInterval(poll);
+  poll = setInterval(()=>{ if(document.hidden) return;
+    if(activePane==="orders") loadOrders(true);
+    else if(activePane==="chats") loadChats(true);
+  }, 25000);
+}
+
+/* ---------- toast ---------- */
+let tT; function toast(m){ const t=document.getElementById("toast"); t.textContent=m; t.classList.add("show");
+  clearTimeout(tT); tT=setTimeout(()=>t.classList.remove("show"),2100); }
+
+/* ---------- init ---------- */
+boot(); renderPos(); loadOrders(); loadChats(true); startPolling();
+</script>
+</body>
+</html>

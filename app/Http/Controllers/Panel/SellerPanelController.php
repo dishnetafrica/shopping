@@ -33,6 +33,41 @@ class SellerPanelController extends Controller
             ->header('Cache-Control', 'no-store');
     }
 
+    /**
+     * Mobile-first Seller Panel (Orders + Chats wired live to /papi/*).
+     * Same session/tenant guard as show(); injects tenant branding via window.SHOP.
+     */
+    public function mobile(Request $request)
+    {
+        $user = $request->user();
+        if (! $user || ! $user->tenant_id) {
+            return redirect('/app/login');
+        }
+
+        $path = resource_path('panel/mobile.html');
+        if (! is_file($path)) {
+            abort(500, 'Mobile panel asset missing.');
+        }
+
+        $html   = file_get_contents($path);
+        $tenant = $user->tenant;
+        $name   = trim((string) ($tenant->name ?? 'Shop'));
+        $name   = (preg_replace('/[<>"\']/', '', $name) ?: 'Shop');
+
+        $boot = [
+            'name'     => $name,
+            'initials' => $this->initialsFor($name),
+            'phone'    => (string) ($tenant->whatsapp_number ?? ''),
+            'plan'     => (method_exists($tenant, 'planLabel') ? (string) $tenant->planLabel() : ''),
+        ];
+        $json = json_encode($boot, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $html = str_replace('<!--SHOP_BOOT-->', '<script>window.SHOP=' . $json . ';</script>', $html);
+
+        return response($html, 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
+    }
+
     /** Swap the hardcoded "Family Shopper / FS" branding for the tenant's own. */
     protected function brandize(string $html, $tenant): string
     {
