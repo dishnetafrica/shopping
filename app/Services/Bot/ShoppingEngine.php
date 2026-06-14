@@ -75,7 +75,7 @@ class ShoppingEngine
         $added = []; $groups = []; $notFound = []; $sizeNotes = [];
         $defaultUsed = false; $hintVariants = [];
         foreach ($items as $item) {
-            $res = $this->resolveItem($item, $products, $parsed['browse']);
+            $res = $this->resolveItem($item, $products, $parsed['browse'], $parsed['add_intent']);
             if ($res['status'] === 'none') { $notFound[] = $item['query']; continue; }
             if ($res['status'] === 'clarify') {
                 // qty for a clarification is an explicit COUNT only — a size token (e.g. "200g")
@@ -171,7 +171,7 @@ class ShoppingEngine
      *   5. otherwise                              -> CLARIFY
      * A single candidate always resolves directly (size acts as a count -> preserves "2kg sugar"=2).
      */
-    public function resolveItem(array $item, array $products, bool $browse = false): array
+    public function resolveItem(array $item, array $products, bool $browse = false, bool $addIntent = false): array
     {
         $query = $item['query'];
         $qty = (int) ($item['qty'] ?? 1);
@@ -214,6 +214,14 @@ class ShoppingEngine
                         'products' => array_map(fn ($c) => $c['product'], array_slice($cands, 0, 5))];
             }
             return ['status' => 'clarify', 'products' => array_map(fn ($c) => $c['product'], array_slice($cands, 0, 5))];
+        }
+
+        // A PURE SEARCH (no add verb, no quantity, no specific size) must never auto-add a result.
+        // "rice" -> show the rice options; only "add rice" / "2 rice" / "rice 2kg" resolves+adds.
+        if (! $addIntent && ! $browse) {
+            $opts = $this->matcher->clarifyCheck($query, $products);
+            if ($opts !== null) return ['status' => 'clarify', 'products' => $opts];
+            return ['status' => 'clarify', 'products' => array_map(fn ($c) => $c['product'], array_slice($cands, 0, 8))];
         }
 
         // High-confidence match: a multi-word query that fully describes ONE product which

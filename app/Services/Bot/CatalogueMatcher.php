@@ -16,7 +16,7 @@ class CatalogueMatcher
         'lot'=>'flour','atta'=>'flour','aata'=>'flour','maida'=>'flour',
         'chokha'=>'rice','chawal'=>'rice','chaval'=>'rice',
         'ghi'=>'ghee','ghyu'=>'ghee','namak'=>'salt','mithu'=>'salt',
-        'chai'=>'tea','cha'=>'tea','pani'=>'water','paani'=>'water',
+        'chai'=>'tea','cha'=>'tea','coke'=>'coca','cok'=>'coca','pani'=>'water','paani'=>'water',
         'anda'=>'eggs','ande'=>'eggs','sabu'=>'soap','sabun'=>'soap',
         'mirch'=>'chilli','mirchi'=>'chilli','haldi'=>'turmeric','jeera'=>'cumin','jiru'=>'cumin',
         'gud'=>'jaggery','toor'=>'dal','tuvar'=>'dal','daal'=>'dal','dal'=>'dal',

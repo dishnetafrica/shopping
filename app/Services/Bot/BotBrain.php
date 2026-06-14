@@ -196,6 +196,7 @@ class BotBrain
         }
 
         // command words win before shopping parsing
+        if (\App\Services\Bot\IntentClassifier::isLocationHelp($lc)) return $this->locationHelpReply();
         if (\App\Services\Bot\GreetingDictionary::isGreeting($lc)) return $this->greetingReply($tenant, $text);
         if (in_array($lc, ['cart','basket','my order','my cart','view cart'], true))           return $this->execute($tenant, $convo, 'view_cart', []);
         if (in_array($lc, ['clear','empty','reset','clear cart','empty cart'], true))           return $this->execute($tenant, $convo, 'clear', []);
@@ -244,7 +245,7 @@ class BotBrain
             case IntentClassifier::CATALOG:
                 return $this->catalogResponse($tenant);
             case IntentClassifier::BUSINESS:
-                return $this->businessResponse($tenant, IntentClassifier::businessKind($lc));
+                return $this->businessResponse($tenant, IntentClassifier::businessKind($lc), $text);
             case IntentClassifier::CATEGORY:
                 return $this->categoryResponse($tenant, $convo, $text);
             case IntentClassifier::PRICE:
@@ -509,6 +510,11 @@ class BotBrain
             return "You're welcome \u{1F60A}\n\nLet me know if you'd like to order any item or search for another product.";
         }
 
+        // "Can I send a location pin?" -> instructions, keep the list.
+        if (\App\Services\Bot\IntentClassifier::isLocationHelp($lc)) {
+            return $this->locationHelpReply();
+        }
+
         $intent = IntentClassifier::classify($text, IntentClassifier::tokenSetFromProducts($catalogue));
         $keepNote = "\n\n(Your options are still above \u{1F446} reply with a *number* when you're ready.)";
 
@@ -520,7 +526,7 @@ class BotBrain
                 $convo->state = $st; $convo->save();
                 return "You're welcome \u{1F60A}\n\nLet me know if you'd like to order any item or search for another product.";
             case IntentClassifier::BUSINESS:
-                return $this->businessResponse($tenant, IntentClassifier::businessKind($lc)) . $keepNote;
+                return $this->businessResponse($tenant, IntentClassifier::businessKind($lc), $text) . $keepNote;
             case IntentClassifier::PRICE:
                 return $this->priceResponse($tenant, IntentClassifier::priceQuery($lc) ?? $text) . $keepNote;
             case IntentClassifier::CATALOG:
@@ -587,6 +593,13 @@ class BotBrain
         }
         $head = $q !== '' ? "Yes \u{1F642} those are the *{$q}* options we currently have:" : "Yes \u{1F642} those are what we currently have:";
         return $head . "\n" . implode("\n", $lines) . "\n\nWould you like to add any of these? Reply with the *number*.";
+    }
+
+    /** Instructions for sharing a WhatsApp location pin. */
+    protected function locationHelpReply(): string
+    {
+        return "Yes \u{1F60A} please send your WhatsApp *location pin* and I'll calculate the exact delivery fee.\n"
+             . "Tap \u{1F4CE} (or +) \u{2192} *Location* \u{2192} *Send your current location*.";
     }
 
     /** Build a fresh engine (request-scoped token cache) and handle one message. */
@@ -823,11 +836,25 @@ class BotBrain
     }
 
     /** Business inquiry answer ("are you open?", "delivering today?"). Never a product search. */
-    protected function businessResponse(Tenant $tenant, string $kind): string
+    protected function businessResponse(Tenant $tenant, string $kind, string $text = ''): string
     {
         $hours = trim((string) $tenant->setting('business_hours', ''));
         switch ($kind) {
             case 'delivery':
+                $area = \App\Services\Bot\IntentClassifier::deliveryArea(mb_strtolower($text));
+                if ($area !== null && $area !== '') {
+                    $q   = $this->deliveryQuote($tenant, 0, $area);
+                    $cur = $this->currencyFor($tenant);
+                    if (! empty($q['zone'])) {
+                        $zn  = $q['zone']['name'] ?? ucfirst($area);
+                        $fee = (int) $q['fee'];
+                        $eta = $q['zone']['eta_minutes'] ?? 45;
+                        return "\u{1F6F5} Delivery to *{$zn}* is " . ($fee > 0 ? "*{$cur} " . number_format($fee) . "*" : '*free*')
+                             . " (~{$eta} min). Tell me what you'd like to order \u{1F642}";
+                    }
+                    return "\u{1F6F5} Yes, we deliver to *" . ucfirst($area) . "*! The exact fee depends on the spot — "
+                         . "drop your *location pin* (tap \u{1F4CE} \u{2192} Location) and I'll calculate it. You can start adding items meanwhile.";
+                }
                 return "\u{1F6F5} Yes \u{1F60A} we deliver across Kampala and the surrounding areas.\n"
                      . "The delivery fee depends on your location — share your *location* or drop a WhatsApp *location pin* "
                      . "and I'll check the charge for you. You can keep adding items meanwhile.";

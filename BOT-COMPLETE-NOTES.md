@@ -1,48 +1,52 @@
-# CloudBSS bot — complete set (+ Intent Override Layer)
+# CloudBSS bot — complete set (+ P1 auto-add fix, delivery pricing, location help)
 
 Cumulative. Deploy = push files + `php artisan optimize:clear`. No migration.
 Non-bot files included (deploy too): EvolutionGateway, WebhookController, ProcessIncomingMessage.
 
-## NEW — Intent Override Layer (the priority-1 fix)
-Before, while a numbered list was pending, ANY non-number reply got "Please reply with the number"
-— even live buying signals. Now, when the reply isn't a selection, the bot classifies it and a real
-intent INTERRUPTS the selection flow:
+## P1 FIX — a bare search must NEVER auto-add to cart
+"Rice" was adding "India Gate Basmati Rice" to the cart (the owner-default / auto-pick path fired
+without an add intent). Now a PURE search (no add verb, no quantity, no specific size) always
+CLARIFIES — it never adds. The default / auto-pick / high-confidence resolution only applies when
+the customer signalled intent to add:
+  - "rice"            -> shows rice options (nothing added)
+  - "add rice" / "2 rice" / "10 rice" -> adds (uses owner default / auto-pick)
+  - "rice 2kg"        -> adds the 2kg SKU (specific size)
+  - "5 coke 10 rice 2 sugar" -> adds all three
+(The defaults/final-regression suites were updated to this contract; tenant-isolation,
+idempotency and OOS coverage preserved via the add path.)
 
-- **Delivery question** ("Do you do deliveries?", incl. plural / "do you do deliveries") ->
-  delivery answer that invites a location pin. Options stay live.
-- **Price question** ("how much is X") -> price answer. Options stay live.
-- **Business / hours / location-of-shop** -> business answer. Options stay live.
-- **Availability of the SHOWN list** ("Only those ones you have?", "is that all?") -> re-affirms the
-  current list: "Yes 😊 those are the *Shan* options we currently have: 1. … Would you like to add any?"
-- **New product / availability of ANOTHER item** ("You don't have cous cous") -> fresh search for
-  that product, replacing the old options ("Yes, we have Cous Cous: …").
-- **Greeting** -> greet + keep options. **Thanks / Okay / 👍 / Will check** -> warm close, drop list.
-- **No / not interested** -> decline. **Checkout** -> checkout. **Location pin/text** -> capture it.
-Only a genuinely unrecognised reply still gets the (kept-options) re-prompt.
+## NEW — Delivery price to a named area
+"How much to Ntinda?" / "How much delivery to Kisaasi?" / "delivery fee to Bugolobi" now answer
+with the zone fee + ETA when that area is a configured zone, otherwise ask for a pin:
+  - zone configured -> "🛵 Delivery to *Ntinda* is *UGX X* (~Y min). Tell me what you'd like."
+  - not configured  -> "🛵 Yes, we deliver to *Ntinda*! … drop your location pin and I'll calculate it."
+Requires a price cue ("how much" / fee / charge / cost), so "Deliver to Jebel" stays a LOCATION
+capture (the customer stating where to deliver), not a price query.
 
-## NEW — Tidy clarify headings
-Headings no longer echo the raw sentence. "Oh I have forgotten kolam rice how much is it" now lists
-under *Kolam rice* (the words the query and matched products share), not the whole sentence.
+## NEW — Location-pin help
+"Can I send a location pin?" / "share location" / "send my location" ->
+  "Yes 😊 please send your WhatsApp *location pin* and I'll calculate the exact delivery fee.
+   Tap 📎 → Location → Send your current location."
+Works both normally and while a selection list is pending (keeps the list).
 
 ## Carried forward
-Category-focused search (no snacks/blades in a rice search) · location pins -> Google Maps link ·
-shopping-start intent · session expiry & cart recovery · fuzzy guard (Shell≠Hello) · multilingual
-greetings · big-size follow-up · Cart Management Engine · follow-ups · Bugs 1–7.
+Intent Override Layer (delivery/price/business/availability/greeting/thanks/decline/checkout while
+a list is pending) · category-focused search (no snacks/blades in a rice search) · tidy clarify
+headings · location pins -> Google Maps link · shopping-start intent · session expiry & cart
+recovery · fuzzy guard (Shell≠Hello) · multilingual greetings · Cart Management Engine · Bugs 1–7.
 
-## Priority order (yours)
-1. Intent Override Layer ✅ (this build)  2. Search ranking (category-focus shipped; brand-grouping
-needs a `brand` field)  3. Cart editing ✅  4. Checkout ✅  5. Delivery zones ✅ (+pins)  6–8. Voice/
-Image/PDF (parked).
-
-## Tests — 516 assertions, 0 failures
-override 19 · search-focus 8 · session 22 · greeting 51 · cart 41 · followup 49 · realcustomer 49 ·
-intent 75 · location 34 · commerce-bugs 16 · phase-1 63 · defaults 18 · delivery 31 · decline 15 · final 25.
+## Tests — 529 assertions, 0 failures
+override 29 · search-focus 8 · session 22 · greeting 51 · cart 41 · followup 49 · realcustomer 49 ·
+intent 75 · location 34 · commerce-bugs 16 · phase-1 63 · defaults 21 · delivery 31 · decline 15 · final 25.
 
 ## Honest scope
-The classifier + detectors are unit-tested directly (delivery/price/business/availability + the
-"is that all" detector). The override DISPATCH runs through Laravel/Conversation (loads the pending
-options, keeps/clears state) and can't be executed here — confirm live: show a list, then send
-"Do you do deliveries?" (delivery answer, list stays), "only those ones you have?" (re-affirm list),
-"you don't have cous cous" (cous cous results), "thanks"/👍 (warm close). Not live until deployed.
+The classifier/engine logic is unit-tested directly (incl. the P1 bare-search-vs-add cases and the
+delivery-area / location-help detectors). The dispatch + state run through Laravel — confirm live:
+"Rice" (options, nothing added), "10 Rice / 5 Coke 10 Rice 2 Sugar" (cart updated), "How much to
+Ntinda?" (fee or pin ask), "Can I send a location pin?" (instructions). Not live until deployed.
 
-## STILL OUTSTANDING (not code): silent-bot incident — infra (worker / WhatsApp session / logs).
+## Bug 3 (the silence) is STILL infra, not code
+"Can I send a location pin?" / "2 Kolam Rice" getting NO reply = the message pipeline stopped
+(queue worker crashed, Evolution WhatsApp session dropped, or an uncaught exception). Every one of
+those inputs now has a defined handler here, so if they still go silent live, it is NOT the bot
+logic — check the queue worker, the WhatsApp/Evolution connection, and storage/logs/laravel.log.

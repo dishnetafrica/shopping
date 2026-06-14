@@ -227,6 +227,44 @@ final class IntentClassifier
     }
 
     /**
+     * Extract the area from a delivery-price question: "how much to Ntinda",
+     * "how much delivery to Kisaasi", "delivery to Bugolobi", "what's the fee to Mukono".
+     * Returns the area string, or null.
+     */
+    public static function deliveryArea(string $lc): ?string
+    {
+        $lc = trim(preg_replace('/\s+/', ' ', mb_strtolower($lc)));
+        // must carry a PRICE cue ("how much" / fee / charge / cost / rate) — a bare
+        // "deliver to X" is the customer stating their location, not a price question.
+        $pats = [
+            '/^how much\b.*\bto\s+(.+?)\??$/',
+            '/\b(?:delivery|deliver)\s+(?:fee|charge|cost|rate|price)\s+to\s+(.+?)\??$/',
+            '/^(?:whats|what is|what s)\s+(?:the\s+)?(?:delivery\s+)?(?:fee|charge|cost|rate|price)\s+to\s+(.+?)\??$/',
+            '/\b(?:fee|charge|cost|rate)\s+(?:of delivery\s+)?to\s+(.+?)\??$/',
+        ];
+        foreach ($pats as $re) {
+            if (preg_match($re, $lc, $m)) {
+                $area = trim($m[1]);
+                $area = trim(preg_replace('/\b(today|now|please|pls|for me|area|town)\b/', '', $area));
+                $area = trim(preg_replace('/\s+/', ' ', $area));
+                if ($area !== '' && mb_strlen($area) >= 2 && ! preg_match('/\bdelivery\b/', $area)) return $area;
+            }
+        }
+        return null;
+    }
+
+    /** "Can I send a location pin?", "share location", "how do I send my location". */
+    public static function isLocationHelp(string $lc): bool
+    {
+        $t = trim(preg_replace('/[^a-z\s]/', ' ', mb_strtolower($lc)));
+        $t = trim(preg_replace('/\s+/', ' ', $t));
+        if (preg_match('/\b(send|share|drop|use|give|attach)\b.*\b(location|pin|gps|map)\b/', $t)) return true;
+        if (preg_match('/\b(location|pin)\b.*\b(send|share|how|where)\b/', $t)) return true;
+        return in_array($t, ['share location', 'location', 'my location', 'location pin', 'send location',
+            'share my location', 'send my location', 'share pin', 'send pin'], true);
+    }
+
+    /**
      * If this is a price question ("how much is X", "price of X", "X price"),
      * returns the product part; otherwise null. Delivery-price questions are excluded
      * (those are handled as a business inquiry).
@@ -309,7 +347,8 @@ final class IntentClassifier
             || preg_match('/\bdeliver(?:ies|y|ing)?\s+(?:today|now|available)\b/', $lc)
             || preg_match('/\bdo you do deliver(?:ies|y|ing)?\b/', $lc)
             || preg_match('/\bdelivery\s+(fee|charge|cost|price|rate)\b/', $lc)
-            || preg_match('/\bhow much.{0,15}\bdelivery\b/', $lc)) {
+            || preg_match('/\bhow much.{0,15}\bdelivery\b/', $lc)
+            || self::deliveryArea($lc) !== null) {           // "how much to Ntinda", "delivery to X"
             return 'delivery';
         }
         if (preg_match('/\b(are you|you|r u|are u)\s+(open|closed|working|available)\b/', $lc)
