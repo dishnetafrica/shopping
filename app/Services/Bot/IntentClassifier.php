@@ -27,6 +27,7 @@ final class IntentClassifier
     public const CART        = 'cart';
     public const CATALOG     = 'catalog';
     public const CATEGORY    = 'category';
+    public const BUSINESS    = 'business';
     public const LOCATION    = 'location';
     public const UNKNOWN     = 'unknown';
 
@@ -57,6 +58,10 @@ final class IntentClassifier
         if (self::isHumanAgent($lc)) return self::HUMAN_AGENT;
         if (self::isCheckout($lc))   return self::CHECKOUT;
         if (self::isCart($lc))       return self::CART;
+
+        // Business questions ("are you open?", "what time do you close?", "delivering today?")
+        // -> a business answer, never a product search.
+        if (self::isBusiness($lc))   return self::BUSINESS;
 
         // "menu" / "catalog" / "price list" -> show the catalogue, never product-search.
         if (self::isCatalog($lc))    return self::CATALOG;
@@ -197,6 +202,34 @@ final class IntentClassifier
             || self::matchesAny($lc, ['what do you have', 'what do you sell', 'what all do you have',
                 'everything you have', 'show me everything', 'list of products', 'show all products',
                 'all your products', 'see all products']);
+    }
+
+    /** Returns 'open' | 'delivery' | 'location' | 'general' for a business question, else ''. */
+    public static function businessKind(string $lc): string
+    {
+        $lc = ' ' . trim($lc) . ' ';
+        if (preg_match('/\b(are you|you|do you|are u|u)\s+deliver(?:ing|y)?\b/', $lc)
+            || preg_match('/\bdeliver(?:y|ing)?\s+(?:today|now|available)\b/', $lc)
+            || preg_match('/\bdo you do delivery\b/', $lc)) {
+            return 'delivery';
+        }
+        if (preg_match('/\b(are you|you|r u|are u)\s+(open|closed|working|available)\b/', $lc)
+            || preg_match('/\bopen (?:for orders|today|now)\b/', $lc)
+            || preg_match('/\b(still open|opening hours|business hours|working hours|closing time|opening time)\b/', $lc)
+            || preg_match('/\bwhat time (?:do you )?(?:open|close)\b/', $lc)
+            || preg_match('/\bwhat (?:are|r) your hours\b/', $lc)) {
+            return 'open';
+        }
+        if (preg_match('/\bwhere (?:are you|is your shop|is the shop|are u)\b/', $lc)
+            || preg_match('/\byour (?:shop )?location\b/', $lc)) {
+            return 'location';
+        }
+        return '';
+    }
+
+    private static function isBusiness(string $lc): bool
+    {
+        return self::businessKind($lc) !== '';
     }
 
     // ---- helpers ----------------------------------------------------------

@@ -199,6 +199,19 @@ class CatalogueMatcher
         return self::normSize($name);
     }
 
+    /** Numeric magnitude of a pack size in grams/ml for sorting (1kg->1000, 500g->500). Null if none. */
+    public static function sizeMagnitude(string $name): ?float
+    {
+        $s = self::skuSize($name);
+        if ($s === null || ! preg_match('/^(\d+(?:\.\d+)?)(kg|g|mg|l|ml|cl)$/', $s, $m)) return null;
+        $n = (float) $m[1];
+        return match ($m[2]) {
+            'kg' => $n * 1000, 'g' => $n, 'mg' => $n / 1000,
+            'l'  => $n * 1000, 'cl' => $n * 10, 'ml' => $n,
+            default => $n,
+        };
+    }
+
     /** Clarify guard: single generic word -> >=2 SKUs with >=3x price spread -> ask. */
     public function clarifyCheck(string $query, array $products): ?array
     {

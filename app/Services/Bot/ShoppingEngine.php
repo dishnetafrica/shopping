@@ -87,6 +87,8 @@ class ShoppingEngine
             $built = $this->clarify->buildOptions($groups, fn ($a) => $this->money($a));
             $flat = $built['flat'];
             $state['options'] = $flat;
+            $state['last_query'] = (string) ($groups[0]['label'] ?? '');   // context for follow-ups
+            $state['last_kind']  = 'search';
         } elseif ($added) {
             unset($state['options']);   // a completed add clears any pending clarification
         }

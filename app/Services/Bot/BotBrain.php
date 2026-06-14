@@ -142,6 +142,15 @@ class BotBrain
     {
         $lc = mb_strtolower(trim($text));
 
+        // ---- Follow-up within the active product/category context ----
+        // "more brands", "other options", "larger size", "cheaper one" continue the last
+        // list rather than searching for the literal words. Must run before the pending
+        // selection check (a follow-up phrase is never a number), but a numeric reply (a
+        // real selection) is left untouched.
+        if (($fu = $this->tryFollowUp($tenant, $convo, $text)) !== null) {
+            return $fu;
+        }
+
         // ---- Active clarification takes priority ----
         // If we previously showed options, a reply like "1" or "1 2 3" must resolve
         // that selection — it must NOT be swallowed by the greeting/affirmation/intent
@@ -215,6 +224,8 @@ class BotBrain
                 return "\u{1F642} Sure — I'm letting the shop know. Someone will reply here shortly. Meanwhile you can keep typing your order if you like.";
             case IntentClassifier::CATALOG:
                 return $this->catalogResponse($tenant);
+            case IntentClassifier::BUSINESS:
+                return $this->businessResponse($tenant, IntentClassifier::businessKind($lc));
             case IntentClassifier::CATEGORY:
                 return $this->categoryResponse($tenant, $convo, $text);
             case IntentClassifier::LOCATION:
@@ -331,11 +342,98 @@ class BotBrain
             fn ($a) => $cur . ' ' . number_format((float) $a)
         );
         $st = is_array($convo->state) ? $convo->state : [];
-        $st['options'] = $built['flat'];
-        $convo->state  = $st;
+        $st['options']    = $built['flat'];
+        $st['last_query'] = $def['name'];
+        $st['last_kind']  = 'category';
+        $convo->state     = $st;
         $convo->save();
 
         return "\u{1F6D2} *{$def['name']}* — here's what we have:\n" . $built['text'] . "\n\nReply with the *number(s)* you want.";
+    }
+
+    /**
+     * Follow-up within the active context ("more brands", "larger size", "cheaper one").
+     * Re-lists the last search/category, applying the modifier. Null if not a follow-up
+     * or there is no active context to continue.
+     */
+    protected function tryFollowUp(Tenant $tenant, Conversation $convo, string $text): ?string
+    {
+        $mod = \App\Services\Bot\FollowUp::parse($text);
+        if ($mod === null) return null;
+
+        $st   = is_array($convo->state) ? $convo->state : [];
+        $q    = (string) ($st['last_query'] ?? '');
+        $kind = (string) ($st['last_kind'] ?? '');
+        if ($q === '') return null;   // no context yet — let normal handling deal with it
+
+        if ($kind === 'category') {
+            return $this->categoryResponse($tenant, $convo, $q);
+        }
+
+        $cat   = $this->tenantCatalogue($tenant);
+        $cands = (new \App\Services\Bot\CatalogueMatcher())->search($q, $cat);
+        if (! $cands) {
+            return "I don't have other options for *{$q}* right now \u{1F642} Tell me another product.";
+        }
+        $prods = array_map(fn ($c) => $c['product'], $cands);
+        $prods = $this->applyModifier($prods, $mod);
+        $prods = array_slice($prods, 0, 12);
+
+        $cur   = $this->currencyFor($tenant);
+        $built = $this->clarify->buildOptions(
+            [['label' => $q, 'qty' => 1, 'products' => $prods]],
+            fn ($a) => $cur . ' ' . number_format((float) $a)
+        );
+        $st['options']    = $built['flat'];
+        $st['last_query'] = $q;
+        $st['last_kind']  = 'search';
+        $convo->state     = $st;
+        $convo->save();
+
+        $head = [
+            'more'    => "More *{$q}* options:",
+            'cheaper' => "Cheaper *{$q}* options (lowest price first):",
+            'premium' => "Premium *{$q}* options (highest first):",
+            'larger'  => "Larger *{$q}* sizes:",
+            'smaller' => "Smaller *{$q}* sizes:",
+        ][$mod] ?? "More *{$q}* options:";
+
+        return $head . "\n" . $built['text'] . "\n\nReply with the *number(s)* you want.";
+    }
+
+    /** Sort a candidate product list for a follow-up modifier. */
+    protected function applyModifier(array $prods, string $mod): array
+    {
+        $price = fn ($p) => (float) ($p['price'] ?? 0);
+        $size  = fn ($p) => \App\Services\Bot\CatalogueMatcher::sizeMagnitude((string) ($p['name'] ?? '')) ?? -1;
+        switch ($mod) {
+            case 'cheaper': usort($prods, fn ($a, $b) => $price($a) <=> $price($b)); break;
+            case 'premium': usort($prods, fn ($a, $b) => $price($b) <=> $price($a)); break;
+            case 'larger':  usort($prods, fn ($a, $b) => $size($b) <=> $size($a)); break;
+            case 'smaller': usort($prods, fn ($a, $b) => $size($a) <=> $size($b)); break;
+            // 'more' / default: keep relevance order from the matcher
+        }
+        return $prods;
+    }
+
+    /** Business inquiry answer ("are you open?", "delivering today?"). Never a product search. */
+    protected function businessResponse(Tenant $tenant, string $kind): string
+    {
+        $hours = trim((string) $tenant->setting('business_hours', ''));
+        switch ($kind) {
+            case 'delivery':
+                return "\u{1F6F5} Yes — we're delivering today! Tell me what you'd like and your area, and I'll arrange delivery.";
+            case 'location':
+                $addr = trim((string) $tenant->setting('address', ''));
+                return $addr !== ''
+                    ? "\u{1F4CD} We're at {$addr}. We're open and taking orders — tell me what you'd like."
+                    : "We're open and taking orders \u{1F642} Tell me what you'd like and where to deliver.";
+            case 'open':
+            case 'general':
+            default:
+                $h = $hours !== '' ? " Our hours: {$hours}." : '';
+                return "\u{2705} Yes, we're open and accepting orders!{$h} Tell me what you'd like, or say *menu* to browse.";
+        }
     }
 
     /** Catalog/menu intent: show what the shop sells without running a product search. */
