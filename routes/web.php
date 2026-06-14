@@ -100,6 +100,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         // staff logins (seat-capped by plan)
         Route::get('staff',          [PanelApiController::class, 'staffList']);
         Route::post('staff/add',     [PanelApiController::class, 'staffAdd']);
+        Route::post('staff/update',  [PanelApiController::class, 'staffUpdate']);
         Route::post('staff/delete',  [PanelApiController::class, 'staffDelete']);
 
         // scheduled deliveries

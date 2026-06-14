@@ -1123,6 +1123,51 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /** Update an existing staff login (name/email/phone/role, optional new password). */
+    public function staffUpdate(Request $r)
+    {
+        $t  = $r->user()->tenant;
+        $id = (int) $r->input('id', 0);
+        $u  = User::where('tenant_id', $t->id)->where('id', $id)->first();
+        if (! $u) {
+            return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        }
+
+        $name  = trim((string) $r->input('name', (string) $u->name));
+        $email = strtolower(trim((string) $r->input('email', (string) $u->email)));
+        $phone = preg_replace('/\D+/', '', (string) $r->input('phone', (string) $u->phone));
+        $role  = trim((string) $r->input('role', (string) ($u->role ?: 'staff'))) ?: 'staff';
+        $pass  = (string) $r->input('password', '');
+
+        if ($name === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return response()->json(['ok' => false, 'error' => 'bad_input',
+                'detail' => 'Name and a valid email are required.'], 422);
+        }
+        // A working sign-in method must remain: a WhatsApp number, a new password,
+        // or an existing password already on the account.
+        if ($phone === '' && strlen($pass) < 6 && ! $u->password) {
+            return response()->json(['ok' => false, 'error' => 'bad_input',
+                'detail' => 'Set a WhatsApp number or a password (6+ characters) so they can sign in.'], 422);
+        }
+        if (User::where('email', $email)->where('id', '!=', $u->id)->exists()) {
+            return response()->json(['ok' => false, 'error' => 'email_taken'], 409);
+        }
+        if ($phone !== '' && User::where('phone', $phone)->where('id', '!=', $u->id)->exists()) {
+            return response()->json(['ok' => false, 'error' => 'phone_taken'], 409);
+        }
+
+        $u->name  = $name;
+        $u->email = $email;
+        $u->phone = $phone !== '' ? $phone : null;
+        $u->role  = $role;
+        if (strlen($pass) >= 6) {
+            $u->password = $pass;   // 'hashed' cast re-hashes on save
+        }
+        $u->save();
+
+        return response()->json(['ok' => true]);
+    }
+
     // ---- Scheduled deliveries ----
 
     /** Set or clear a delivery schedule on an order. */
