@@ -142,6 +142,14 @@ class BotBrain
     {
         $lc = mb_strtolower(trim($text));
 
+        // ---- Cart management (remove / clear / change quantity, by number or name) ----
+        // Explicit cart commands take priority and must never product-search.
+        if (\App\Services\Bot\CartEditor::isEditIntent($lc)) {
+            if (($edit = $this->tryCartEdit($tenant, $convo, $text)) !== null) {
+                return $edit;
+            }
+        }
+
         // ---- Follow-up within the active product/category context ----
         // "more brands", "other options", "larger size", "cheaper one" continue the last
         // list rather than searching for the literal words. Must run before the pending
@@ -194,12 +202,6 @@ class BotBrain
             return $hasCart
                 ? "No problem \u{1F642} Whenever you're ready, tell me another product, say *cart* to review, or *checkout* to finish."
                 : "No problem \u{1F642} Whenever you're ready, just tell me a product you'd like and I'll help you shop.";
-        }
-
-        // ---- Quantity correction on the existing cart ("make it 1", "only 1 pkt") ----
-        // A correction must update the last item, never trigger a product search.
-        if (($corr = $this->tryQuantityCorrection($tenant, $convo, $lc)) !== null) {
-            return $corr;
         }
 
         // ---- Intent classification (runs BEFORE any catalogue search) ----
@@ -482,25 +484,42 @@ class BotBrain
     }
 
     /**
-     * A quantity-correction message ("make it 1", "only 1 pkt", "one packet only")
-     * updates the LAST cart item's quantity. Returns a reply, or null if it isn't one.
+     * Apply a cart command (remove / clear / change quantity). Returns a confirmation reply,
+     * or null if it isn't actually a cart edit (so normal handling proceeds).
      */
-    protected function tryQuantityCorrection(Tenant $tenant, Conversation $convo, string $lc): ?string
+    protected function tryCartEdit(Tenant $tenant, Conversation $convo, string $text): ?string
     {
-        $n = \App\Services\Bot\CartCorrection::newQuantity($lc);
-        if ($n === null) return null;
-
         $cart = is_array($convo->cart) ? array_values($convo->cart) : [];
         if (! $cart) {
-            return "Your basket is empty — add a product first, then you can change its quantity.";
+            return "Your basket is empty — add a product first, then you can remove or change items \u{1F642}";
         }
-        $last = count($cart) - 1;
-        $cart[$last]['qty'] = $n;
-        $convo->cart = $cart;
+        $res = \App\Services\Bot\CartEditor::apply($cart, $text);
+        if ($res === null) {
+            return "I couldn't find that in your basket. Say *cart* to see it with line numbers, then e.g. *remove item 2* or *make Beer 3*.";
+        }
+
+        $convo->cart = $res['cart'];
+        $st = is_array($convo->state) ? $convo->state : [];
+        unset($st['options']);            // editing the cart ends any pending clarification
+        $convo->state = $st;
         $convo->save();
 
-        $name = $cart[$last]['name'] ?? 'item';
-        return "\u{270F}\u{FE0F} Updated to *{$n} x {$name}*.\n\n" . $this->cartSummary($tenant, $cart) . "\n\nAdd more, or say *checkout*.";
+        if ($res['cleared']) {
+            return "\u{2705} Cart cleared. Your basket is empty — tell me what you'd like to order.";
+        }
+
+        $parts = [];
+        if (! empty($res['removed'])) {
+            $parts[] = "\u{2705} Removed: " . implode(', ', array_map(fn ($n) => "*{$n}*", $res['removed']));
+        }
+        if (! empty($res['changed'])) {
+            $parts[] = "\u{2705} Updated: " . implode(', ', array_map(fn ($c) => "*{$c['name']}* → {$c['qty']}", $res['changed']));
+        }
+        if (! $res['cart']) {
+            $parts[] = 'Your basket is now empty — tell me what you\'d like to order.';
+            return implode("\n", $parts);
+        }
+        return implode("\n", $parts) . "\n\n" . $this->cartSummary($tenant, $res['cart']) . "\n\nAdd more, or say *checkout*.";
     }
 
     /** Tenant catalogue as plain rows (net prices applied) for the matcher. */
@@ -557,12 +576,12 @@ class BotBrain
     protected function cartSummary(Tenant $tenant, array $cart): string
     {
         if (! $cart) return '';
-        $total = 0; $lines = [];
+        $total = 0; $lines = []; $i = 0;
         foreach ($cart as $l) {
-            $sub = $l['price'] * $l['qty']; $total += $sub;
-            $lines[] = "• {$l['qty']} x {$l['name']} — ".Pricing::money($tenant, $sub);
+            $sub = $l['price'] * $l['qty']; $total += $sub; $i++;
+            $lines[] = "{$i}. {$l['name']} x{$l['qty']} — " . Pricing::money($tenant, $sub);
         }
-        return "\u{1F6D2} *Your basket*\n".implode("\n", $lines)."\n*Total: ".Pricing::money($tenant, $total)."*";
+        return "\u{1F6D2} *Your basket*\n" . implode("\n", $lines) . "\n*Total: " . Pricing::money($tenant, $total) . "*";
     }
 
     protected function placeOrder(Tenant $tenant, Conversation $convo, string $location): string

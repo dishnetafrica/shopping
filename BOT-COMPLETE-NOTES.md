@@ -1,42 +1,48 @@
-# CloudBSS bot — complete commerce/intent set (Issues + Bugs 1–7)
+# CloudBSS bot — complete commerce/intent/cart set
 
-Cumulative. The 8 files in app/Services/Bot/ are the full current bot; deploying this set
-gives everything from the recent sessions and supersedes all earlier bot bundles.
-No migration (context lives in the conversation `state` JSON). `php artisan optimize:clear`.
+Cumulative. The 9 files in app/Services/Bot/ are the full current bot and supersede all
+earlier bot bundles. No migration (cart + context live in the conversation `state`/`cart` JSON).
+Deploy = push files + `php artisan optimize:clear`.
 
-## Latest fix — follow-up phrasing was too narrow
-Real test: after "haldiram" (3 items shown), "more itmes you have ?" returned random
-products. Two problems: the fix wasn't deployed yet, AND the detector didn't recognise
-"more items you have" (or the typo "itmes"). Now the follow-up detector handles the generic
-pattern "more / other / what else + items|options|brands|things|products…" (with common
-typos and trailing "you have"), while still rejecting "more rice" / "do you have more bread"
-(those name a product and stay searches). When a "more" follow-up has nothing new to show
-(e.g. only 3 Haldiram items, all already listed), the bot replies
-"That's everything we have for *haldiram* — say *menu* to browse other categories."
+## NEW — Cart Management Engine (CartEditor.php)
+Real test: a 7-line cart, customer typed "Remove item 1,2,3" and the bot ignored it. The cart
+could only be added to, never edited, and it wasn't even numbered. Now:
 
-## Business + follow-up (this session)
-- **Business intent:** "are you open / open for orders / what time do you close / delivering
-  today / working" -> business answer, never a search. "can opener"/"wine opener" stay
-  product searches. Optional tenant settings `business_hours`, `address` enrich the reply.
-- **Follow-up context:** the engine records the active list (`last_query`,`last_kind`);
-  "more …"/"other options"/"what else" continue it; "cheaper/premium/larger/smaller" re-sort
-  it. Checked before the selection step, so a numeric "2" is still a selection.
+- **Numbered basket everywhere** — "1. Redbull x4 / 2. Beer x4 / …" so line references work.
+- **Remove by number** — remove item 1 · remove item 1,2,3 · delete item 4 · remove 1,3
+  (removes from the end inward so indices stay valid).
+- **Remove by name** — remove Redbull · delete Splash Juice · remove beer (case-insensitive substring).
+- **Clear** — clear cart · empty · remove everything · delete all · cancel order.
+- **Change quantity** — change item 2 to 5 · make Redbull 10 · reduce Beer to 2 ·
+  increase Splash Juice to 6 · make it 3 (last item) · only 2.
+- **Confirmations** — "✅ Removed: *Redbull*, *Beer*" / "✅ Updated: *Beer* → 2", then the
+  updated numbered basket. Empty result -> "Your basket is now empty".
 
-## Carried forward (already in this set)
-Bug 1 selection≠quantity · Bug 2 cart correction · Bug 3 size availability (+normSize fix) ·
-Bug 4 catalog intent · Bug 5 high-confidence auto-resolve · Bug 6 location intelligence ·
-Bug 7 category intelligence.
+Routing: a cart command is detected (CartEditor::isEditIntent) and handled BEFORE follow-up
+and BEFORE the numeric-selection step, so "remove item 2" edits the cart while a bare "2"
+is still a clarification selection. A cart command never triggers a product search; editing
+also clears any pending clarification. Requires a number for change/make (so "make me chapati"
+stays a search). Editing on an empty cart returns a gentle "basket is empty" message.
 
-## Files (deploy all 8)
+## Follow-up phrasing (previous fix, included)
+"more items you have" / "more itmes you have" (typo) / "what else do you have" continue the
+active context; "more rice" / "do you have more bread" stay product searches. "more" with
+nothing new -> "That's everything we have for *X*".
+
+## Carried forward
+Business intent · follow-up context (more/cheaper/premium/larger/smaller) · Bug 1 selection≠qty ·
+Bug 2 cart correction · Bug 3 size availability · Bug 4 catalog intent · Bug 5 high-confidence
+auto-resolve · Bug 6 location intelligence · Bug 7 category intelligence.
+
+## Files (deploy all 9)
 app/Services/Bot/: BotBrain.php, IntentClassifier.php, ShoppingEngine.php, CatalogueMatcher.php,
-LocationDictionary.php, CartCorrection.php, CategoryDictionary.php, FollowUp.php
+LocationDictionary.php, CartCorrection.php, CategoryDictionary.php, FollowUp.php, CartEditor.php
 
-## Test results — 342 assertions, 0 failures
-followup 42 · realcustomer 49 · intent 49 · location 34 · commerce-bugs 16 · phase-1 63 ·
-defaults 18 · delivery 31 · decline 15 · final 25.
+## Tests — 383 assertions, 0 failures
+cart 41 · followup 42 · realcustomer 49 · intent 49 · location 34 · commerce-bugs 16 ·
+phase-1 63 · defaults 18 · delivery 31 · decline 15 · final 25.
 
 ## Honest scope
-Pure logic is unit-tested directly. The business/follow-up/category replies run through
-Laravel/Conversation — confirm live on WhatsApp (the "more itmes you have" case especially).
-Follow-up re-lists the context afresh (no true pagination); "more" with nothing new now says
-so rather than repeating the list.
+CartEditor's resolution logic is unit-tested directly on real cart arrays. The mutation +
+reply path runs through Laravel/Conversation (loads $convo->cart, saves, formats) which can't
+execute here — confirm live on WhatsApp with the exact 7-line cart from the report.
