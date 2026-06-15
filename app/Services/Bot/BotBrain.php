@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.16-44  blinkit-variant-card';
+    public const VERSION = '2026.06.16-45  track-tenant-brand-lazy-img';
 
     public function __construct(
         protected ProductSearch $search,

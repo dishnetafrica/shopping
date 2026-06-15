@@ -320,7 +320,7 @@ function variantCard(grp){
   var key=grp.category+'|'+grp.base.toLowerCase();
   var def=grp.variants[0],p=def.product;
   var ic=catIcon(grp.category);
-  var img='<div class="img" onclick="openVariantPicker('+jk(key)+')">'+ic+(grp.image?'<img src="'+esc(grp.image)+'" onerror="this.style.display=\'none\'">':'')+'<span class="opts">'+grp.variants.length+' sizes</span></div>';
+  var img='<div class="img" onclick="openVariantPicker('+jk(key)+')">'+ic+(grp.image?'<img src="'+esc(grp.image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+'<span class="opts">'+grp.variants.length+' sizes</span></div>';
   var unit=def.grams?('<div class="unit">'+ugx(Math.round(p.price/def.grams*1000))+' / kg</div>'):'';
   var totalInCart=grp.variants.reduce(function(s,v){return s+((CART[v.product.name]||{}).qty||0);},0);
   var ctrl=totalInCart
@@ -331,7 +331,7 @@ function variantCard(grp){
 function openVariantPicker(key){
   var grp=GROUPS[key];if(!grp)return;
   $('sheetTitle').textContent=grp.base;
-  var thumb=grp.image?'<img src="'+esc(grp.image)+'">':catIcon(grp.category);
+  var thumb=grp.image?'<img src="'+esc(grp.image)+'" loading="lazy" decoding="async">':catIcon(grp.category);
   var rows=grp.variants.map(function(v){
     var p=v.product,c=CART[p.name];
     var unit=v.grams?(' <span class="vunit">\u00b7 '+ugx(Math.round(p.price/v.grams*1000))+'/kg</span>'):'';
@@ -351,7 +351,7 @@ function gridG(list){var arr=groupProducts(list);arr.forEach(function(g){GROUPS[
 function prodCard(p){
   var key=p.name, inCart=CART[key];
   var ic=catIcon(p.category);
-  var img='<div class="img">'+ic+(p.image?'<img src="'+esc(p.image)+'" onerror="this.style.display=\'none\'">':'')+'</div>';
+  var img='<div class="img">'+ic+(p.image?'<img src="'+esc(p.image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+'</div>';
   var ctrl=inCart?('<div class="stp"><button onclick="dec('+jk(key)+')">−</button><span>'+inCart.qty+'</span><button onclick="inc('+jk(key)+')">+</button></div>'):('<button class="add" onclick="inc('+jk(key)+')">Add</button>');
   return '<div class="pc">'+img+'<div class="bd"><div class="nm">'+esc(p.name)+'</div><div class="pr">'+ugx(p.price)+'</div>'+ctrl+'</div></div>';
 }

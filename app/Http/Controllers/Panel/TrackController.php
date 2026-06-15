@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Models\Tenant;
 use Illuminate\Http\Request;
 
 /**
@@ -33,6 +34,16 @@ class TrackController extends Controller
         $idx     = array_search($current, $steps, true);
         if ($idx === false) $idx = 0;
 
+        // Brand the page with the order's OWN shop, not the default tenant.
+        $tenant   = Tenant::find($order->tenant_id);
+        $shopName = $tenant?->name ?: 'Shop';
+        $cur      = $tenant ? (string) $tenant->setting('currency', 'UGX') : 'UGX';
+        $logoRaw  = $tenant ? (string) $tenant->setting('logo', '') : '';
+        $logoUrl  = ($logoRaw !== '' && (str_starts_with($logoRaw, 'http') || str_starts_with($logoRaw, '/'))) ? $logoRaw : '';
+        $header   = $logoUrl !== ''
+            ? '<img class="logo" src="' . e($logoUrl) . '" alt=""><span>' . e($shopName) . '</span>'
+            : '🛒 ' . e($shopName);
+
         $rows = '';
         foreach (($order->items_json ?? []) as $it) {
             $rows .= '<tr><td>' . e($it['qty'] ?? 1) . '× ' . e($it['name'] ?? '') . '</td></tr>';
@@ -50,12 +61,12 @@ class TrackController extends Controller
         }
 
         $body = '<div class="card">'
-            . '<div class="hdr">🛒 Family Shopper</div>'
+            . '<div class="hdr">' . $header . '</div>'
             . '<h1>Order ' . e($order->order_no ?: ('#' . $order->id)) . '</h1>'
             . '<div class="status">' . e($current) . '</div>'
             . '<div class="timeline">' . $timeline . '</div>'
             . ($rows ? '<table>' . $rows . '</table>' : '')
-            . '<div class="tot">Total: UGX ' . number_format((float) $order->total) . '</div>'
+            . '<div class="tot">Total: ' . e($cur) . ' ' . number_format((float) $order->total) . '</div>'
             . ($order->location ? '<div class="loc">📍 ' . e($order->location) . '</div>' : '')
             . '</div>';
 
@@ -69,7 +80,8 @@ class TrackController extends Controller
             . '<title>Track your order</title><style>'
             . 'body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#EEF2EE;color:#16231C;padding:18px}'
             . '.card{max-width:460px;margin:24px auto;background:#fff;border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.06)}'
-            . '.hdr{color:' . $brand . ';font-weight:800;font-size:14px;margin-bottom:6px}'
+            . '.hdr{color:' . $brand . ';font-weight:800;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:8px}'
+            . '.hdr .logo{width:26px;height:26px;border-radius:6px;object-fit:cover}'
             . 'h1{font-size:20px;margin:0 0 4px}'
             . '.status{display:inline-block;background:#e6f4ea;color:#15803D;font-weight:700;padding:5px 12px;border-radius:20px;font-size:13px;margin:8px 0 14px}'
             . '.timeline{display:flex;flex-direction:column;gap:9px;margin:12px 0}'

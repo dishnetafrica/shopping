@@ -1753,7 +1753,7 @@ function bindThaliPhoto(){
   var f=$('thPhotoFile');if(!f||f._b)return;f._b=true;
   f.onchange=async function(){var file=f.files&&f.files[0];if(!file||!_thPhotoDay)return;
     toast('Uploading photo\u2026');
-    var data=await shrinkImage(file,1280,.82); if(!data){toast('Could not read image');return;}
+    var data=await shrinkImage(file,1100,.8); if(!data){toast('Could not read image');return;}
     try{var up=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:(file.name||'flyer')+'.jpg',data:data})});
       var d=await up.json();
       if(d&&d.ok&&d.url){TH_MODEL.images[_thPhotoDay]=d.url;$('thumb_'+_thPhotoDay).innerHTML=thThumb(_thPhotoDay);toast('Flyer photo set');}
@@ -1828,7 +1828,7 @@ function bindCatPhoto(){
   f.onchange=async function(){
     var file=f.files&&f.files[0];if(!file||!_catPhotoTarget)return;
     toast('Uploading photo\u2026');
-    var data=await shrinkImage(file,1280,.82); if(!data){toast('Could not read image');return;}
+    var data=await shrinkImage(file,1100,.8); if(!data){toast('Could not read image');return;}
     try{
       var up=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:(file.name||'photo')+'.jpg',data:data})});
       var d=await up.json();
