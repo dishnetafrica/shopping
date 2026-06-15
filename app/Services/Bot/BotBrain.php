@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.16-45  track-tenant-brand-lazy-img';
+    public const VERSION = '2026.06.16-46  thali-timezone-kampala';
 
     public function __construct(
         protected ProductSearch $search,
@@ -494,7 +494,7 @@ class BotBrain
     /** Answer "what's in today's / Monday's thali" with the day's set menu. */
     protected function thaliMenuReply(Tenant $tenant, array $cfg, string $lc): string
     {
-        $tz  = (string) $tenant->setting('timezone', config('app.timezone', 'Africa/Kampala'));
+        $tz  = (string) $tenant->setting('timezone', 'Africa/Kampala');
         $cur = $this->currencyFor($tenant);
         $day = \App\Services\Bot\ThaliMenu::dayFromText($lc) ?? \App\Services\Bot\ThaliMenu::todayKey($tz);
         return \App\Services\Bot\ThaliMenu::render($cfg, $day, $cur);
@@ -545,7 +545,7 @@ class BotBrain
         $cfg   = (array) ($tenant->setting('thali', []) ?: []);
         $label = '';
         if (\App\Services\Bot\ThaliMenu::enabled($cfg)) {
-            $tz    = (string) $tenant->setting('timezone', config('app.timezone', 'Africa/Kampala'));
+            $tz    = (string) $tenant->setting('timezone', 'Africa/Kampala');
             $day   = \App\Services\Bot\ThaliMenu::todayKey($tz);
             $items = $cfg['days'][$day] ?? [];
             $items = is_array($items) ? array_values(array_filter(array_map('trim', $items))) : [];

@@ -122,7 +122,7 @@ class StorefrontController extends Controller
     {
         $cfg = (array) ($tenant->setting('thali', []) ?: []);
         if (! \App\Services\Bot\ThaliMenu::enabled($cfg)) return null;
-        $tz    = (string) $tenant->setting('timezone', config('app.timezone', 'Africa/Kampala'));
+        $tz    = (string) $tenant->setting('timezone', 'Africa/Kampala');
         $day   = \App\Services\Bot\ThaliMenu::todayKey($tz);
         $items = $cfg['days'][$day] ?? [];
         $items = is_array($items) ? array_values(array_filter(array_map('trim', $items))) : [];
