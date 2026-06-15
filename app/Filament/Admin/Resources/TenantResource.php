@@ -3,6 +3,7 @@ namespace App\Filament\Admin\Resources;
 
 use App\Filament\Admin\Resources\TenantResource\Pages;
 use App\Models\Tenant;
+use App\Models\User;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -25,6 +26,14 @@ class TenantResource extends Resource
                 Forms\Components\TextInput::make('order_prefix')->default('ORD')->maxLength(6),
                 Forms\Components\Select::make('status')->options(['active'=>'Active','suspended'=>'Suspended'])->default('active'),
             ])->columns(2),
+
+            Forms\Components\Section::make('Owner login')
+                ->description('Lets the shop owner sign in at /app. They log in with this WhatsApp number via a one-time code (no password). Fill it in and Save — the login is created automatically.')
+                ->schema([
+                    Forms\Components\TextInput::make('owner_name')->label('Owner name'),
+                    Forms\Components\TextInput::make('owner_phone')->label('Owner WhatsApp number')->tel()
+                        ->helperText('Full intl format, e.g. 256772123456. The login code is delivered over this shop’s WhatsApp, so its instance must be connected.'),
+                ])->columns(2),
 
             Forms\Components\Section::make('Plan & billing')->schema([
                 Forms\Components\Select::make('plan')
@@ -107,5 +116,31 @@ class TenantResource extends Resource
             'create' => Pages\CreateTenant::route('/create'),
             'edit'   => Pages\EditTenant::route('/{record}/edit'),
         ];
+    }
+
+    /** The shop-owner login for a tenant (the 'owner' user, else the first non-admin user). */
+    public static function ownerOf(Tenant $tenant): ?User
+    {
+        return User::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderByRaw("CASE WHEN role = 'owner' THEN 0 ELSE 1 END")
+            ->first();
+    }
+
+    /** Create or update the owner login from the form fields. No-op if no phone given. */
+    public static function upsertOwner(Tenant $tenant, ?string $name, ?string $phone): ?User
+    {
+        $phone = trim((string) $phone);
+        if ($phone === '') return null;
+
+        $user = self::ownerOf($tenant) ?? new User(['tenant_id' => $tenant->id, 'role' => 'owner']);
+        $user->tenant_id = $tenant->id;
+        if (empty($user->role)) $user->role = 'owner';
+        if (! empty($name)) $user->name = $name;
+        $user->phone = $phone;
+        $user->is_super_admin = false;
+        $user->save();
+
+        return $user;
     }
 }
