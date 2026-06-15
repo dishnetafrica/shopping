@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.15-26  web-order-customer-ack';
+    public const VERSION = '2026.06.15-27  no-echo-chitchat';
 
     public function __construct(
         protected ProductSearch $search,
@@ -389,15 +389,23 @@ class BotBrain
             return $result['reply'];
         }
 
-        // No catalogue match. If the customer clearly named a product, say we don't stock it
-        // (instead of a vague "didn't catch that").
+        // No catalogue match. Say "we don't stock X" ONLY when X really looks like a product
+        // term — never echo a greeting or a natural-language question back to the customer
+        // (no "we don't stock *hello will you be coming tomorrow*").
         $want = trim(preg_replace('/\b(do you (have|sell|stock)|have you got|got any|any|looking for|i (want|need)|please|pls)\b/i', ' ', mb_strtolower($text)));
         $want = trim(preg_replace('/\s+/', ' ', $want));
-        if ($want !== '' && mb_strlen($want) >= 3 && preg_match('/[a-z]/i', $want)) {
+        $wantWords = $want === '' ? [] : preg_split('/\s+/', $want, -1, PREG_SPLIT_NO_EMPTY);
+        $conversational = '/\b(hi|hii|hey|hello|helo|hiya|yo|hola|salaam|salam|will|would|can|could|are|is|am|was|were|you|your|u|when|what|why|how|who|tomorrow|today|tonight|now|later|soon|coming|come|reach|open|closed?|deliver|delivery|time|hours?|there|available|reply|call|phone|number|whatsapp|thanks|thank)\b/i';
+        if ($want !== '' && count($wantWords) <= 4 && preg_match('/[a-z]/i', $want) && ! preg_match($conversational, $want)) {
             return "Sorry, we don't stock *{$want}* right now \u{1F642} Tell me another product, or say *menu* to see what we have.";
         }
 
-        return $this->execute($tenant, $convo, 'unknown', []);
+        // Conversational / off-topic message: try the FAQ, else a warm catch-all that never
+        // blames the wording and routes anything else to the shop (it's saved in Chats for them).
+        if (($faq = \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant))) !== null) {
+            return $faq;
+        }
+        return "\u{1F44B} Hi! I'm {$tenant->name}'s ordering assistant. Tell me a product like *rice* or *sugar*, or say *menu* to see what we have \u{2014} and for anything else, the shop will reply here shortly.";
     }
 
     /**
