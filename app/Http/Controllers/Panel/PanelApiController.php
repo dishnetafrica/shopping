@@ -776,6 +776,10 @@ class PanelApiController extends Controller
         $evo->createIfMissing($instance);
         $evo->setWebhook($instance, url('/api/webhook/whatsapp/evolution'));
 
+        // Fresh connect attempt: clear any manual/alert flags so a future real drop alerts.
+        $t->putSetting('wa_conn_state', 'connecting');
+        $t->putSetting('wa_down_alerted', false);
+
         return response()->json([
             'ok'       => true,
             'instance' => $instance,
@@ -793,8 +797,12 @@ class PanelApiController extends Controller
 
     public function waDisconnect(Request $r, EvolutionAdmin $evo)
     {
-        $instance = (string) ($r->user()->tenant->whatsapp_instance ?? '');
+        $t = $r->user()->tenant;
+        $instance = (string) ($t->whatsapp_instance ?? '');
         if ($instance !== '') $evo->disconnect($instance);
+        // Deliberate disconnect — suppress the "went offline" alert.
+        $t->putSetting('wa_conn_state', 'manual_off');
+        $t->putSetting('wa_down_alerted', false);
         return response()->json(['ok' => true]);
     }
 

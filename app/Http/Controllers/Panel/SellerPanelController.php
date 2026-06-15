@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * Serves the customer's familiar "Family Shopper — Seller Panel" UI verbatim.
@@ -37,6 +38,15 @@ class SellerPanelController extends Controller
      * Mobile-first Seller Panel (Orders + Chats wired live to /papi/*).
      * Same session/tenant guard as show(); injects tenant branding via window.SHOP.
      */
+    /** Real session logout for the custom /panel (the JS button only cleared old localStorage). */
+    public function logout(Request $request)
+    {
+        Auth::guard('web')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+        return redirect('/app/login');
+    }
+
     public function mobile(Request $request)
     {
         $user = $request->user();

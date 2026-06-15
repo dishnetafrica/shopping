@@ -36,6 +36,16 @@ class Tenant extends Model
         return data_get($this->settings, $key, $default);
     }
 
+    /** Write a single setting (dot-notation supported) and persist. */
+    public function putSetting(string $key, $value): void
+    {
+        $s = $this->settings ?? [];
+        if (! is_array($s)) $s = [];
+        data_set($s, $key, $value);
+        $this->settings = $s;
+        $this->save();
+    }
+
     /** Staff-login seat limit for the active plan. null = unlimited. */
     public function userCap(): ?int
     {

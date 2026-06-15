@@ -8,6 +8,14 @@ return [
     // inbound messages are routed to the right tenant by phone_number_id.
     'cloud_verify_token' => env('WHATSAPP_CLOUD_VERIFY_TOKEN', 'cloudbss-verify'),
 
+    // A CONNECTED Evolution instance used to send platform alerts (e.g. "your
+    // WhatsApp went offline"). It must be a DIFFERENT number from the shops it
+    // alerts, because a shop's own number is the one that's down. Point this at
+    // the operator's support line or a dedicated CloudBSS notifications number.
+    'alert_instance' => env('WHATSAPP_ALERT_INSTANCE', ''),
+    // Operator number that also receives shop-down alerts (digits only, e.g. 211927797217).
+    'operator_alert_phone' => env('OPERATOR_ALERT_PHONE', ''),
+
     'drivers' => [
         'evolution' => [
             'base_url' => env('EVOLUTION_BASE_URL'),

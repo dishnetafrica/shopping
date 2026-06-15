@@ -1125,7 +1125,7 @@ function startApp(){
   timer=setInterval(function(){if(!document.hidden)loadData(true);},20000);
 }
 function showLogin(){show($('login'),true);$('app').classList.add('hide');}
-function resetToLogin(){token='';localStorage.removeItem('fs_token');localStorage.removeItem('fs_branch');localStorage.removeItem('fs_role');if(timer)clearInterval(timer);location.reload();}
+function resetToLogin(){token='';localStorage.removeItem('fs_token');localStorage.removeItem('fs_branch');localStorage.removeItem('fs_role');if(timer)clearInterval(timer);location.href='/panel/logout';}
 async function sendCode(){
   phone=(($('phoneInput').value)||'').replace(/[^0-9]/g,'');
   if(phone.length<9){lnote('Enter your full number incl. country code','err');return;}
@@ -2236,7 +2236,7 @@ async function deleteBranch(id){
 function logout(){
   if(!confirm('Log out of the seller panel?'))return;
   try{localStorage.removeItem('fs_token');localStorage.removeItem('fs_branch');localStorage.removeItem('fs_role');}catch(e){}
-  token='';if(timer)clearInterval(timer);location.reload();
+  token='';if(timer)clearInterval(timer);location.href='/panel/logout';
 }
 /* ===================== OWNER CONSOLIDATION (Dispatch + Settings in-panel) ===================== */
 function dmoney(x){return (typeof CUR!=='undefined'&&CUR?CUR:'UGX')+' '+(Number(x)||0).toLocaleString();}
