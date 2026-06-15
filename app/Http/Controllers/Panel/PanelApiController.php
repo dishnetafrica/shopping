@@ -339,8 +339,7 @@ class PanelApiController extends Controller
         $p->base_price = $price;
         $p->price      = $price;
         $p->stock      = (int) $r->query('stock', $p->stock);
-        $img = trim((string) $r->query('image', ''));
-        if ($img !== '') $p->image_url = $img;
+        if ($r->has('image')) $p->image_url = trim((string) $r->query('image', ''));
         $p->save();
 
         return response()->json(['ok' => true]);

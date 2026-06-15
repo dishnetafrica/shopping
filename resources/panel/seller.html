@@ -1626,7 +1626,7 @@ function prodImgField(url){
   return '<div class="mfield"><label>Photo</label>'+
     '<img id="pImgPrev" class="pimgprev"'+(url?(' src="'+esc(url)+'"'):' style="display:none"')+' onerror="this.style.display=\'none\'">'+
     '<input id="pImg" placeholder="Image URL (or upload below)" value="'+esc(url||'')+'">'+
-    '<div style="margin-top:8px"><button class="btn ghost" id="pImgUp" type="button">\u2191 Upload photo</button></div>'+
+    '<div style="margin-top:8px"><button class="btn ghost" id="pImgUp" type="button">\u2191 Upload photo</button> <button class="btn ghost" id="pImgRm" type="button" style="color:#B4232A">Remove photo</button></div>'+
     '<input id="pImgFile" type="file" accept="image/*" style="display:none">'+
     '<div style="margin-top:6px;font-size:12px;line-height:1.5;color:#6b7280">'+
       'Best: a <b>square</b> photo, about <b>800\u00d7800 px</b> (up to 1000\u00d71000), saved as <b>JPG</b> and <b>under 300 KB</b>. '+
@@ -1635,6 +1635,7 @@ function prodImgField(url){
 }
 function bindProdImg(){
   var t=$('pImg'),pv=$('pImgPrev'),up=$('pImgUp'),f=$('pImgFile');
+  var rm=$('pImgRm'); if(rm)rm.onclick=function(){if(t)t.value='';if(pv)pv.style.display='none';toast('Photo removed \u2014 press Save to apply');};
   if(t)t.oninput=function(){if(pv){if(t.value){pv.src=t.value;pv.style.display='';}else pv.style.display='none';}};
   if(up&&f){
     up.onclick=function(){f.click();};
