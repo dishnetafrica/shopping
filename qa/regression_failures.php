@@ -326,6 +326,29 @@ ok('category stays "rice" across the whole discovery (never "family")', ($acc['c
 ok('family/budget/exclude all accumulated on the rice context',
    ($acc['family_size'] ?? 0) === 5 && ($acc['budget'] ?? '') === 'low' && in_array('basmati', $acc['exclude'] ?? [], true));
 
+sec('F19 — bare "rice" ranks REAL rice above rice-named snacks (product-type scoring)');
+$rmatch = new \App\Services\Bot\CatalogueMatcher();
+$rankcat = [
+    ['id'=>1,'name'=>'D.rice Samosa','price'=>1000,'stock'=>9,'category'=>'Rice','keywords'=>''],
+    ['id'=>2,'name'=>'Gaga Rice Crisps 35GMS','price'=>1000,'stock'=>9,'category'=>'Rice','keywords'=>''],
+    ['id'=>3,'name'=>'Minaxi Rice Powa 400G','price'=>2400,'stock'=>9,'category'=>'Rice','keywords'=>''],
+    ['id'=>4,'name'=>'Maharashtra Kolam Rice 5KG','price'=>30000,'stock'=>9,'category'=>'Rice','keywords'=>''],
+    ['id'=>5,'name'=>'Super Rice 1KG','price'=>5500,'stock'=>9,'category'=>'Rice','keywords'=>''],
+    ['id'=>6,'name'=>'India Gate Basmati Rice 1KG','price'=>14000,'stock'=>9,'category'=>'Rice','keywords'=>''],
+    ['id'=>7,'name'=>'Jk Brooms India','price'=>7500,'stock'=>9,'category'=>'Household','keywords'=>''],
+];
+$rank = fn($q) => array_map(fn($r)=>$r['product']['name'], $rmatch->search($q,$rankcat));
+$top3 = array_slice($rank('rice'), 0, 3);
+$snacks = ['D.rice Samosa','Gaga Rice Crisps 35GMS','Minaxi Rice Powa 400G'];
+ok('"rice": top 3 are all REAL rice (no snacks)', empty(array_intersect($top3, $snacks)));
+$pos = array_flip($rank('rice'));
+ok('real rice outranks D.rice Samosa',   ($pos['Super Rice 1KG'] ?? 99) < ($pos['D.rice Samosa'] ?? 0));
+ok('real rice outranks Rice Crisps',     ($pos['Maharashtra Kolam Rice 5KG'] ?? 99) < ($pos['Gaga Rice Crisps 35GMS'] ?? 0));
+ok('"need rice" ranks real rice first',  ! in_array((array_slice($rank('need rice'),0,1)[0] ?? ''), $snacks, true));
+// multi-word/brand queries are unaffected (still correct)
+ok('"india gate" still ranks India Gate first', (array_slice($rank('india gate'),0,1)[0] ?? '') === 'India Gate Basmati Rice 1KG');
+ok('"basmati rice" ranks a basmati rice first', str_contains((array_slice($rank('basmati rice'),0,1)[0] ?? ''), 'Basmati'));
+
 echo "\n========= RESULT =========\n";
 echo "PASS $PASS  FAIL $FAIL\n";
 exit($FAIL===0?0:1);

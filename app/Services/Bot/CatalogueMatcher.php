@@ -40,6 +40,20 @@ class CatalogueMatcher
         'bars','sachet','sachets','roll','rolls','dozen','loaf','loaves','nos','no',
     ];
 
+    /** Filler/intent words that aren't the product subject ("need rice" -> subject "rice"). */
+    private const QUERY_FILLER = [
+        'need' => true, 'want' => true, 'wanted' => true, 'get' => true, 'give' => true,
+        'gimme' => true, 'looking' => true, 'for' => true, 'some' => true, 'the' => true,
+        'please' => true, 'pls' => true, 'buy' => true, 'order' => true, 'show' => true,
+        'have' => true, 'you' => true, 'do' => true, 'me' => true, 'my' => true,
+        'a' => true, 'an' => true, 'i' => true, 'any' => true,
+    ];
+
+    private static function depluralize(string $w): string
+    {
+        return (mb_strlen($w) > 3 && str_ends_with($w, 's')) ? rtrim($w, 's') : $w;
+    }
+
     public function tokens(string $s): array
     {
         $s = mb_strtolower(trim($s));
@@ -132,7 +146,8 @@ class CatalogueMatcher
             $pt = $this->productTokens($p);
             if (!$pt) continue;
             $ptSet = array_flip($pt);
-            $nameSet = array_flip($this->tokens($p['name'] ?? ''));   // NAME tokens weigh more than keyword/category
+            $nameToks = $this->tokens($p['name'] ?? '');   // ordered NAME tokens (sizes/units stripped)
+            $nameSet = array_flip($nameToks);               // NAME tokens weigh more than keyword/category
             $score = 0.0; $hits = 0;
             if ($this->normName($p['name'] ?? '') === $nq) $score += 1000;
             foreach ($q as $w) {                     // count hits over ORIGINAL query tokens (coverage)
@@ -162,6 +177,27 @@ class CatalogueMatcher
             $score += ($hits / max(1, count($q))) * 50;
             if (($p['stock'] ?? 1) > 0) $score += 5;
             $score -= max(0, count($pt) - 1);
+
+            // --- product-type relevance (single-subject queries like "rice", "oil", "atta") ---
+            // Float products whose HEAD NOUN is the asked-for type ("...Rice") above ones that only
+            // contain the word as a modifier ("Rice Crisps", "Rice Powa", "D.rice Samosa"). Scoped
+            // to single-subject queries so brand / multi-word searches ("india gate", "basmati
+            // rice") keep their normal coverage scoring, which already ranks them correctly.
+            $contentQ = array_values(array_filter($q, fn ($w) => ! isset(self::QUERY_FILLER[$w])));
+            if (count($contentQ) === 1) {
+                $qHead  = $contentQ[0];
+                $qHeadS = self::depluralize($qHead);
+                $pHead  = $nameToks ? self::depluralize((string) end($nameToks)) : '';
+                $pType  = self::depluralize(mb_strtolower(trim((string) ($p['product_type'] ?? ''))));
+                if ($pType !== '' && $pType === $qHeadS) {
+                    $score += 250;            // explicit product_type tag (best signal, if set)
+                } elseif ($pHead !== '' && $pHead === $qHeadS) {
+                    $score += 200;            // the query word IS this product's head noun -> real "<type>"
+                } elseif (isset($nameSet[$qHead]) || isset($nameSet[$qHeadS])) {
+                    $score -= 50;             // present only as a modifier -> demote below the real thing
+                }
+            }
+
             $scored[] = ['product' => $p, 'score' => $score, 'hits' => $hits];
         }
         usort($scored, function ($a, $b) {
