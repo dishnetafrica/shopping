@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.15-5  unknown-falls-through-to-search';
+    public const VERSION = '2026.06.15-6  pin-then-confirm-checkout';
 
     public function __construct(
         protected ProductSearch $search,
@@ -81,7 +81,18 @@ class BotBrain
                     }
                     return "Thank you! \u{1F64F} Please hold on — someone from the shop will confirm your order shortly.";
                 }
-                $convo->state = array_merge($convo->state ?? [], [
+                $st = is_array($convo->state) ? $convo->state : [];
+                // Already have a pin volunteered before checkout? Place the order now using it —
+                // don't make the customer send their location a second time.
+                if (! empty($st['delivery_lat']) && ! empty($st['delivery_lng'])) {
+                    return $this->placeOrder(
+                        $tenant, $convo,
+                        (string) ($st['delivery_area'] ?? 'your pinned location'),
+                        (float) $st['delivery_lat'], (float) $st['delivery_lng'],
+                        ((string) ($st['delivery_maps'] ?? '')) ?: null
+                    );
+                }
+                $convo->state = array_merge($st, [
                     'step' => 'awaiting_location',
                     'checkout_token' => (string) Str::uuid(),   // 2C: seeds the order idempotency key
                 ]);
@@ -869,7 +880,12 @@ class BotBrain
             $line .= "\nThat's in *{$zoneName}* — delivery " . ($fee > 0 ? "{$cur} " . number_format($fee) : 'free') . " (~{$eta} min).";
         }
         if ($cart) {
-            return $line . "\n\nSay *checkout* to place your order to this location, or add more items.";
+            $fee   = (int) ($quote['fee'] ?? 0);
+            $grand = (int) round($subtotal) + $fee;
+            return $line
+                . "\n\n" . $this->cartSummary($tenant, $cart)
+                . "\n\u{1F4B0} *Total with delivery: {$cur} " . number_format($grand) . "*"
+                . "\n\nReply *confirm* to place this order, or add more items.";
         }
         return $line . "\n\nSaved \u{1F642} Tell me what you'd like to order and I'll deliver here.";
     }
