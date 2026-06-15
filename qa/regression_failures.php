@@ -219,6 +219,22 @@ ok('cold qualifier "Not basmati" asks for the category',   DCB::decide(null,'Not
 ok('"which rice is good" stays with SA, not discovery',    DCB::decide(null,'which rice is good',$dcat)['action'] === 'skip');
 ok('selection "2" mid-discovery skips (handled by selection)', DCB::decide($act,'2',$dcat)['action'] === 'skip');
 
+sec('F12 — "8 2 1 each 5 pcs" selects rows 8,2,1 at 5 pcs each (not a search)');
+$cf = new \App\Services\Bot\ClarificationFlow();
+$flat = [];
+foreach (['Sona Basmati 5KG','Union Basmati 5KG','Daawat Basmati 2KG','Daawat Basmati 5KG','Royal Basmati 4.5Kg','Aeroplane Basmati 1KG','Charminar Basmati 1Kg','Charminar Basmati 5Kg'] as $i=>$n) {
+    $flat[] = ['n'=>$i+1,'product_id'=>$i+1,'name'=>$n,'price'=>1000,'qty'=>1];
+}
+$qof = function(array $picks){ $o=[]; foreach($picks as $p) $o[$p['n']]=$p['qty']; ksort($o); return $o; };
+$p = $cf->resolveSelection('8 2 1 each 5 pcs', $flat);
+ok('selects exactly rows 1,2,8',  array_keys($qof($p)) === [1,2,8]);
+ok('every picked row qty = 5',    $qof($p) === [1=>5,2=>5,8=>5]);
+ok('"1 and 3 each 2 pcs" -> rows 1,3 qty 2', $cf->resolveSelection('1 and 3 each 2 pcs',$flat) && $qof($cf->resolveSelection('1 and 3 each 2 pcs',$flat)) === [1=>2,3=>2]);
+ok('"2 each 3" -> row 2 qty 3',   $qof($cf->resolveSelection('2 each 3',$flat)) === [2=>3]);
+ok('plain "1, 3" still qty 1',    $qof($cf->resolveSelection('1, 3',$flat)) === [1=>1,3=>1]);
+ok('plain "8 2 1" still qty 1',   $qof($cf->resolveSelection('8 2 1',$flat)) === [1=>1,2=>1,8=>1]);
+ok('fresh order "5 coke 10 rice" is NOT a selection', $cf->resolveSelection('5 coke 10 rice',$flat) === []);
+
 echo "\n========= RESULT =========\n";
 echo "PASS $PASS  FAIL $FAIL\n";
 exit($FAIL===0?0:1);

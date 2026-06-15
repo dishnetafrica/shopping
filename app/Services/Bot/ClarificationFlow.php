@@ -63,6 +63,20 @@ class ClarificationFlow
             if ($picked) return $picked;
         }
 
+        // Multi-row selection with a per-row quantity ("8 2 1 each 5 pcs", "1 and 3, 2 each").
+        // The quantity is the number bound to "each" or a unit (pcs/packs); the remaining numbers
+        // are the row picks. Without this, "each 5 pcs" leaves residue and the whole reply is
+        // rejected as a selection and product-searched ("we don't stock 8 2 1 each 5 pcs").
+        if (($re = $this->rowsWithEach($low)) !== null) {
+            [$rows, $qtyEach] = $re;
+            foreach ($flat as $opt) {
+                if (in_array($opt['n'], $rows, true)) {
+                    $o = $opt; $o['qty'] = $qtyEach; $picked[] = $o;
+                }
+            }
+            if ($picked) return $picked;
+        }
+
         if (preg_match_all('/\d+/', $low, $m)) {
             // A digit only counts as a row pick when the message is SELECTION-SHAPED — nothing
             // but numbers and connectors. "5 coke 10 rice" is a NEW order (quantities + product
@@ -95,5 +109,48 @@ class ClarificationFlow
     public function looksLikeSelection(string $reply, array $flat): bool
     {
         return count($this->resolveSelection($reply, $flat)) > 0;
+    }
+
+    /**
+     * Parse a "rows + per-row quantity" reply like "8 2 1 each 5 pcs" into [[rows], qtyEach].
+     * The quantity is the number bound to "each" or a unit (pcs/packs/...); all other numbers are
+     * row picks. Returns null when there is no per-row quantity, so plain "1 3" keeps its qty-1
+     * behaviour and fresh orders ("5 coke 10 rice") are not misread as row selections.
+     */
+    private function rowsWithEach(string $low): ?array
+    {
+        $unit  = 'pcs?|packs?|pkts?|units?|nos?|dozen|btls?|bottles?|tins?';
+        $hasEach = (bool) preg_match('/\beach\b/', $low);
+        $qty  = null;
+        $work = $low;
+
+        foreach ([
+            '/\beach\s+(\d+)\s*(?:' . $unit . ')?\b/',   // "each 5", "each 5 pcs"
+            '/\b(\d+)\s*(?:' . $unit . ')\s+each\b/',     // "5 pcs each"
+            '/\b(\d+)\s+each\b/',                          // "5 each"
+        ] as $reqty) {
+            if (preg_match($reqty, $work, $mm, PREG_OFFSET_CAPTURE)) {
+                $qty  = (int) $mm[1][0];
+                $work = substr_replace($work, str_repeat(' ', strlen($mm[0][0])), (int) $mm[0][1], strlen($mm[0][0]));
+                break;
+            }
+        }
+        // "each" stated but the quantity sits with a unit elsewhere ("8 2 1 each 5 pcs" already
+        // handled above; this covers "8 2 1 each, 5 pcs"): take the unit-bound number.
+        if ($hasEach && $qty === null && preg_match('/\b(\d+)\s*(?:' . $unit . ')\b/', $work, $mm, PREG_OFFSET_CAPTURE)) {
+            $qty  = (int) $mm[1][0];
+            $work = substr_replace($work, str_repeat(' ', strlen($mm[0][0])), (int) $mm[0][1], strlen($mm[0][0]));
+        }
+
+        if ($qty === null || $qty < 1) return null;
+
+        // whatever remains must be only row numbers + harmless connectors
+        $work = preg_replace('/\b(each|' . $unit . '|and|&|or|plus|n|no|nos|number|numbers|option|options|item|items|the|of|please|pls|add|take|get|i|want|buy)\b/', ' ', $work);
+        $residue = preg_replace('/[^a-z]+/', '', preg_replace('/\d+/', ' ', $work));
+        if ($residue !== '') return null;
+        if (! preg_match_all('/\d+/', $work, $rm)) return null;
+
+        $rows = array_values(array_unique(array_map('intval', $rm[0])));
+        return $rows ? [$rows, $qty] : null;
     }
 }

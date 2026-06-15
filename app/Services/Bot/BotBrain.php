@@ -18,6 +18,9 @@ use Illuminate\Support\Str;
  */
 class BotBrain
 {
+    /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
+    public const VERSION = '2026.06.15-1  discovery+per-each-select';
+
     public function __construct(
         protected ProductSearch $search,
         protected BotNlu $nlu,
@@ -141,6 +144,12 @@ class BotBrain
     protected function keywordRespond(Tenant $tenant, Conversation $convo, string $text): string
     {
         $lc = mb_strtolower(trim($text));
+
+        // ---- Build stamp ----  "version" / "build" reports exactly which code is live, plus the
+        // server's last-write time of this file — the simplest way to confirm a deploy landed.
+        if (in_array($lc, ['version', 'build', '!version', '!ping', 'diag'], true)) {
+            return $this->versionStamp();
+        }
 
         // ---- Session expiry & cart recovery ----------------------------------------
         // After 10 min idle, transient context (clarification options, last query,
@@ -731,6 +740,14 @@ class BotBrain
         $catalogue = $this->tenantCatalogue($tenant);
         return (new \App\Services\Bot\SalesAssistantBrain($this->clarify))
             ->respond($tenant, $convo, $text, $catalogue, $this->currencyFor($tenant));
+    }
+
+    /** Build stamp: the live VERSION plus this file's last-write time on the server. */
+    protected function versionStamp(): string
+    {
+        $when  = @filemtime((new \ReflectionClass($this))->getFileName());
+        $stamp = $when ? gmdate('Y-m-d H:i', $when) . ' UTC' : 'unknown';
+        return "\u{1F6E0} Build *" . self::VERSION . "*\nThis file last updated on the server: {$stamp}";
     }
 
     /**
