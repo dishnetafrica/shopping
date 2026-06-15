@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.15-4  checkout-phrasing';
+    public const VERSION = '2026.06.15-5  unknown-falls-through-to-search';
 
     public function __construct(
         protected ProductSearch $search,
@@ -343,8 +343,14 @@ class BotBrain
             case IntentClassifier::LOCATION:
                 return $this->captureLocation($tenant, $convo, $text);
             case IntentClassifier::UNKNOWN:
-                return \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant))
-                    ?? "I didn't quite catch that \u{1F642} Tell me a product to add, say *cart* to review, or *checkout* when ready.";
+                // Don't dead-end. An "unknown" message often still names a product behind question
+                // framing or a typo ("ou have balaji masala wafer in stock"). Try the FAQ, then
+                // fall through to category-browse + product search; only if those also find nothing
+                // does the "don't stock / didn't catch" fallback below apply.
+                if (($faq = \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant))) !== null) {
+                    return $faq;
+                }
+                break;
             // CART / CHECKOUT / DECLINE are already handled above; anything else is SHOPPING.
         }
 

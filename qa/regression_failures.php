@@ -280,6 +280,19 @@ ok('"order 5 rice" is NOT checkout (still an add)', ! ICchk::looksLikeCheckout('
 ok('"i want to order rice" is NOT checkout',        ! ICchk::looksLikeCheckout('i want to order rice'));
 ok('"dove soap" is NOT checkout',                   ! ICchk::looksLikeCheckout('dove soap'));
 
+sec('F16 — framed/typo availability question still finds the product (UNKNOWN falls through)');
+$bcat = [
+    ['id'=>1,'name'=>'Balaji Namkeens 70G','price'=>2000,'stock'=>9,'category'=>'Snacks','keywords'=>''],
+    ['id'=>2,'name'=>'Balaji Pop Rings 65','price'=>2500,'stock'=>9,'category'=>'Snacks','keywords'=>''],
+    ['id'=>3,'name'=>'Balaji Wafers 45G','price'=>3000,'stock'=>9,'category'=>'Snacks','keywords'=>''],
+];
+$mb = new \App\Services\Bot\CatalogueMatcher();
+$hit = fn($q) => count($mb->search($q,$bcat)) > 0;
+ok('"ou have balaji masala wafer in stock" finds products', $hit('ou have balaji masala wafer in stock'));
+ok('"do you have balaji masala wafer in stock" finds products', $hit('do you have balaji masala wafer in stock'));
+ok('"balaji masala wafer" finds products', $hit('balaji masala wafer'));
+ok('gibberish finds nothing (still falls to "didn\'t catch")', ! $hit('asdfghjkl zxcvbnm'));
+
 echo "\n========= RESULT =========\n";
 echo "PASS $PASS  FAIL $FAIL\n";
 exit($FAIL===0?0:1);
