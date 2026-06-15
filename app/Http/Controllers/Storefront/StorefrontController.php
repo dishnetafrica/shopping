@@ -185,6 +185,19 @@ class StorefrontController extends Controller
         $o = new Order();
         $o->status         = 'New';
         $o->channel        = 'web';
+
+        // Optional "schedule for later" — sets scheduled_for (feeds the panel's Scheduled page).
+        $whenRaw = trim((string) $r->input('when', ''));
+        if ($whenRaw !== '') {
+            try {
+                $when = \Illuminate\Support\Carbon::parse($whenRaw);
+                if ($when->isFuture()) {
+                    $o->scheduled_for = $when;
+                    $o->sched_stage   = 'scheduled';
+                    $itemsText .= '  |  Scheduled for: ' . $when->format('D j M, g:i A');
+                }
+            } catch (\Throwable $e) { /* ignore unparseable date */ }
+        }
         $o->customer_name  = $name;
         $o->customer_phone = $phone;
         $o->items_json     = $clean;

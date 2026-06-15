@@ -147,6 +147,12 @@ var $=function(id){return document.getElementById(id);};
 var PRODUCTS=[], CATS=[], CART={}, CAT='all', Q='', CAT_IMG={}, THALI=null, VSEL={};
 var TINTS=['#EEF2FB','#FDEEF3','#EAF6EF','#FFF4E6','#F1EEFB','#E9F5F9','#FCEEEA','#EEF7F0'];
 var STORE_KEY='cb_cart_'+(SHOP.slug||'shop'), DELV_KEY='cb_delv_'+(SHOP.slug||'shop');
+var CUST_KEY='cb_cust_'+(SHOP.slug||'shop'), LAST_KEY='cb_last_'+(SHOP.slug||'shop');
+var CUST=null, LASTORDER=null;
+function loadCust(){try{CUST=JSON.parse(localStorage.getItem(CUST_KEY)||'null');}catch(e){CUST=null;} try{LASTORDER=JSON.parse(localStorage.getItem(LAST_KEY)||'null');}catch(e){LASTORDER=null;}}
+function saveCust(c){CUST=c;try{localStorage.setItem(CUST_KEY,JSON.stringify(c));}catch(e){}}
+function saveLast(items){LASTORDER={items:items,at:Date.now()};try{localStorage.setItem(LAST_KEY,JSON.stringify(LASTORDER));}catch(e){}}
+function forgetCust(){CUST=null;try{localStorage.removeItem(CUST_KEY);}catch(e){} render();}
 function ugx(n){return CUR+' '+(Number(n)||0).toLocaleString('en-US');}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function jk(s){return JSON.stringify(String(s)).replace(/"/g,'&quot;');}
@@ -318,6 +324,23 @@ function gridHtml(items){return '<div class="grid">'+items.map(prodCard).join(''
 
 function thaliProduct(){return PRODUCTS.find(function(p){return /thali/i.test(p.name)||/thali/i.test(p.category);});}
 function addThali(){var p=thaliProduct();if(p){inc(p.name);return;}if(THALI){var k='Kathiyawadi Thali';if(!CART[k])CART[k]={name:k,price:THALI.price||0,qty:0};CART[k].qty++;saveCart();render();bar();}}
+function welcomeBanner(){
+  if(!CUST||!CUST.name)return '';
+  var canRe=LASTORDER&&LASTORDER.items&&LASTORDER.items.length;
+  var re=canRe?'<button onclick="reorderLast()" style="border:0;background:var(--green);color:#fff;font-weight:700;border-radius:9px;padding:8px 14px;font-size:13px;cursor:pointer">\u21BB Reorder last ('+LASTORDER.items.length+' items)</button>':'';
+  return '<div style="display:flex;align-items:center;gap:10px;background:#F1F8F3;border:1px solid #CDEBD6;border-radius:13px;padding:11px 13px;margin:0 0 14px">'+
+    '<div style="flex:1"><div style="font-weight:700;font-size:14px">Welcome back, '+esc(CUST.name)+' \uD83D\uDC4B</div>'+
+    '<div style="font-size:11px;color:var(--muted)">Your details are saved on this device \u00B7 <a href="#" onclick="event.preventDefault();forgetCust()" style="color:#B4232A;font-weight:600">Not you?</a></div></div>'+
+    re+'</div>';
+}
+function reorderLast(){
+  if(!LASTORDER||!LASTORDER.items)return;
+  var added=0,missing=0;
+  LASTORDER.items.forEach(function(it){var p=prod(it.name);if(p){if(!CART[p.name])CART[p.name]={name:p.name,price:p.price,qty:0};CART[p.name].qty+=(it.qty||1);added++;}else{missing++;}});
+  saveCart();render();bar();
+  if(added){openCart();} 
+  if(missing){setTimeout(function(){alert(missing+' item(s) from your last order are no longer available and were skipped.');},200);}
+}
 function thaliBanner(){
   if(!THALI||((!THALI.items||!THALI.items.length)&&!THALI.image))return '';
   var inCart=cartItems().some(function(i){return /thali/i.test(i.name);});
@@ -361,7 +384,7 @@ function render(){
     return;
   }
   if(CAT==='all'){
-    c.innerHTML=thaliBanner()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){
+    c.innerHTML=welcomeBanner()+thaliBanner()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){
       var ci=CAT_IMG[cat.name];
       var inner=ci?('<div class="ci" style="background:#fff"><img src="'+esc(ci)+'" onerror="this.style.display=\'none\'"></div>')
                   :('<div class="ci" style="background:'+TINTS[i%TINTS.length]+'">'+catIcon(cat.name)+'</div>');
@@ -401,14 +424,15 @@ function openCart(){
 function openCheckout(){
   $('sheetTitle').textContent='Delivery details';
   $('sheetBody').innerHTML=
-    '<div class="field"><label>Your name</label><input id="coName" value="'+esc(qp('n'))+'" placeholder="Full name"></div>'+
-    '<div class="field"><label>WhatsApp number</label><input id="coPhone" inputmode="numeric" value="'+esc(qp('c'))+'" placeholder="2567…"></div>'+
-    '<div class="field"><label>Delivery address</label><textarea id="coAddr" rows="2" placeholder="Area, road, landmark"></textarea></div>'+
+    '<div class="field"><label>Your name</label><input id="coName" value="'+esc((CUST&&CUST.name)||qp('n'))+'" placeholder="Full name"></div>'+
+    '<div class="field"><label>WhatsApp number</label><input id="coPhone" inputmode="numeric" value="'+esc((CUST&&CUST.phone)||qp('c'))+'" placeholder="2567…"></div>'+
+    '<div class="field"><label>Delivery address</label><textarea id="coAddr" rows="2" placeholder="Area, road, landmark">'+esc((CUST&&CUST.addr)||'')+'</textarea></div>'+
     '<div class="field"><label>Special instructions <span style="color:#98a2b3;font-weight:400">(optional)</span></label><textarea id="coNote" rows="2" placeholder="e.g. in the thali remove dal &amp; add kadhi \u00B7 less spicy \u00B7 leave at gate"></textarea></div>'+
     '<div class="field"><label>Delivery location (GPS pin)</label>'+
     '<button type="button" class="locbtn" id="locBtn" onclick="captureLoc()">📍 Share my current location</button>'+
     '<div id="locMsg" class="locmsg">Optional — sends an exact map pin so the rider finds you fast.</div></div>'+
     '<div class="field"><label>Payment</label><select id="coPay"><option>Cash on delivery</option><option>Mobile money</option></select></div>'+
+    '<div class="field"><label>Schedule for later <span style="color:#98a2b3;font-weight:400">(optional — leave blank to deliver now)</span></label><input id="coWhen" type="datetime-local"></div>'+
     '<div class="totrow g"><span>Total ('+cartCount()+' items)</span><span>'+ugx(cartTotal())+'</span></div>'+
     '<button class="place" id="placeBtn" onclick="placeOrder()">Place order</button>'+
     '<button class="place" style="background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="openCart()">← Back to cart</button>';
@@ -430,17 +454,17 @@ function captureLoc(){
   );
 }
 async function placeOrder(){
-  var name=($('coName').value||'').trim(), phone=($('coPhone').value||'').replace(/[^0-9]/g,''), addr=($('coAddr').value||'').trim(), pay=$('coPay').value, note=(($('coNote')||{}).value||'').trim();
+  var name=($('coName').value||'').trim(), phone=($('coPhone').value||'').replace(/[^0-9]/g,''), addr=($('coAddr').value||'').trim(), pay=$('coPay').value, note=(($('coNote')||{}).value||'').trim(), when=(($('coWhen')||{}).value||'').trim();
   if(!name){alert('Please enter your name');return;}
   if(phone.length<7){alert('Please enter your WhatsApp number');return;}
   if(!addr && !GEO){alert('Please enter your delivery address or share your location');return;}
-  var payload={name:name,phone:phone,location:addr,payment:pay,note:note,items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty};}),total:cartTotal(),channel:'web'};
+  var payload={name:name,phone:phone,location:addr,payment:pay,note:note,when:when,items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty};}),total:cartTotal(),channel:'web'};
   if(GEO){payload.geo=GEO.lat+','+GEO.lng;payload.maps_url=mapsUrl(GEO);}
   var btn=$('placeBtn');btn.disabled=true;btn.textContent='Placing…';
   try{
     var r=await fetch(SUBMIT_URL,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)});
     var d=await r.json();
-    if(d&&d.ok){CART={};saveCart();bar();$('sheetTitle').textContent='Order placed';
+    if(d&&d.ok){saveCust({name:name,phone:phone,addr:addr});saveLast(payload.items);CART={};saveCart();bar();render();$('sheetTitle').textContent='Order placed';
       var shopName=SHOP.name||'us';
       $('sheetBody').innerHTML='<div class="ok"><div class="big">🙏</div><h2>Order placed!</h2><p>Tap below to confirm your order on WhatsApp — our team will arrange delivery.</p>'+
         (d.order_no?'<div class="ono">'+esc(d.order_no)+'</div>':'')+'<div style="margin-top:18px">'+
@@ -461,7 +485,7 @@ async function placeOrder(){
 })();
 
 $('q').addEventListener('input',function(){Q=this.value;render();});
-loadCart(); bar(); restoreDelv(); load();
+loadCart(); loadCust(); bar(); restoreDelv(); load();
 </script>
 </body>
 </html>
