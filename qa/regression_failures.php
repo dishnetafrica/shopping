@@ -349,6 +349,23 @@ ok('"need rice" ranks real rice first',  ! in_array((array_slice($rank('need ric
 ok('"india gate" still ranks India Gate first', (array_slice($rank('india gate'),0,1)[0] ?? '') === 'India Gate Basmati Rice 1KG');
 ok('"basmati rice" ranks a basmati rice first', str_contains((array_slice($rank('basmati rice'),0,1)[0] ?? ''), 'Basmati'));
 
+sec('F20 — switching product resets qualifiers ("cooking oil" then "milk" is NOT "cooking milk")');
+$scat = [
+    ['id'=>1,'name'=>'Kimbo Oil 500G','price'=>3900,'stock'=>9,'category'=>'Oil','keywords'=>''],
+    ['id'=>2,'name'=>'Vito Milk 500ML','price'=>500,'stock'=>9,'category'=>'Milk','keywords'=>''],
+    ['id'=>3,'name'=>'Sona Basmati Rice 5KG','price'=>60000,'stock'=>9,'category'=>'Rice','keywords'=>''],
+];
+$oilCtx = ['category'=>'oil','exclude'=>[],'budget'=>null,'usage'=>'cooking','family_size'=>null,'size'=>null];
+$switched = DCB::merge($oilCtx, DCB::fromMessage('need milk',$scat));
+ok('switching to milk drops the oil "cooking" usage', ($switched['usage'] ?? null) === null);
+ok('switching to milk sets category to milk',         ($switched['category'] ?? '') === 'milk');
+$riceCtx = ['category'=>'rice','exclude'=>['basmati'],'budget'=>null,'usage'=>'daily','family_size'=>5,'size'=>null];
+$same = DCB::merge($riceCtx, DCB::fromMessage('not expensive',$scat));
+ok('same product keeps accumulated qualifiers', ($same['usage'] ?? '') === 'daily' && ($same['family_size'] ?? 0) === 5 && in_array('basmati', $same['exclude'] ?? [], true));
+ok('same product adds the new qualifier',       ($same['budget'] ?? '') === 'low');
+$switched2 = DCB::merge($riceCtx, DCB::fromMessage('need oil',$scat));
+ok('rice->oil resets to oil with no rice qualifiers', ($switched2['category'] ?? '') === 'oil' && empty($switched2['exclude']) && ($switched2['family_size'] ?? null) === null);
+
 echo "\n========= RESULT =========\n";
 echo "PASS $PASS  FAIL $FAIL\n";
 exit($FAIL===0?0:1);

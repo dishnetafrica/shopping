@@ -81,9 +81,17 @@ class DiscoveryContextBuilder
     }
 
     /** Merge a new message's signals into the running context. Scalars overwrite only when the
-     *  new value is non-empty (so "Not basmati" never wipes category); excludes accumulate. */
+     *  new value is non-empty (so "Not basmati" never wipes category); excludes accumulate.
+     *  A NEW product subject resets the qualifiers — they belonged to the previous product, so
+     *  "cooking oil" followed by "milk" must NOT become "cooking milk". */
     public static function merge(array $base, array $incoming): array
     {
+        $inCat   = self::singular(trim((string) ($incoming['category'] ?? '')));
+        $baseCat = self::singular(trim((string) ($base['category'] ?? '')));
+        if ($inCat !== '' && $baseCat !== '' && $inCat !== $baseCat) {
+            return $incoming;   // switched product: start fresh, carry none of the old qualifiers
+        }
+
         $out = $base;
         foreach (['category', 'budget', 'usage', 'family_size', 'size'] as $k) {
             if (! empty($incoming[$k])) $out[$k] = $incoming[$k];
@@ -93,6 +101,11 @@ class DiscoveryContextBuilder
             is_array($incoming['exclude'] ?? null) ? $incoming['exclude'] : []
         )));
         return $out;
+    }
+
+    private static function singular(string $w): string
+    {
+        return (mb_strlen($w) > 3 && str_ends_with($w, 's')) ? rtrim($w, 's') : $w;
     }
 
     /** True when the message contributed ANY discovery signal worth keeping. */
