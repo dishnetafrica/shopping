@@ -4,8 +4,11 @@ namespace App\Filament\Admin\Resources;
 use App\Filament\Admin\Resources\TenantResource\Pages;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\Catalogue\ProductImporter;
+use App\Support\TenantContext;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -105,8 +108,51 @@ class TenantResource extends Resource
                     $record->trial_ends_at = now()->addDays(30);
                     $record->save();
                 }),
+            Tables\Actions\Action::make('importProducts')
+                ->label('Import products')->icon('heroicon-o-arrow-up-tray')->color('gray')
+                ->modalHeading(fn (Tenant $record) => 'Import products into ' . $record->name)
+                ->modalDescription('Upload a pricelist CSV (name, price, category, keywords, stock — or a standard POS export). Imports straight into this business.')
+                ->form([
+                    Forms\Components\FileUpload::make('file')->label('CSV file')
+                        ->acceptedFileTypes(['text/csv', 'text/plain', 'application/vnd.ms-excel', 'application/csv'])
+                        ->storeFiles(false)->required(),
+                    Forms\Components\Toggle::make('replace')->label('Replace the whole catalogue')
+                        ->helperText('On: clears this business’s products first, then loads the file (recommended for a full pricelist). Off: adds/updates by name.')
+                        ->default(true),
+                ])
+                ->action(function (Tenant $record, array $data) {
+                    $r = self::importCsvForTenant($record, $data['file'], (bool) ($data['replace'] ?? true));
+                    if (isset($r['error'])) {
+                        Notification::make()->title('Import failed')->body($r['error'])->danger()->send();
+                        return;
+                    }
+                    $body = ! empty($r['updated'])
+                        ? "Created {$r['created']}, updated {$r['updated']}"
+                        : "Loaded {$r['created']} products.";
+                    Notification::make()->title('Import complete — ' . $record->name)->body($body)->success()->send();
+                }),
             Tables\Actions\EditAction::make(),
         ]);
+    }
+
+    /** Run a CSV import scoped to one tenant (used by both the list-row and edit-page buttons). */
+    public static function importCsvForTenant(Tenant $tenant, mixed $file, bool $replace): array
+    {
+        $f = is_array($file) ? reset($file) : $file;
+        $path = is_object($f) && method_exists($f, 'getRealPath') ? $f->getRealPath()
+            : (is_string($f) ? $f : null);
+        if (! $path) return ['error' => 'Could not read the uploaded file'];
+
+        // Scope to THIS tenant so the importer's delete/insert only touches this business, then restore.
+        $ctx = app(TenantContext::class);
+        $ctx->asSuperAdmin(false);
+        $ctx->set($tenant->id);
+        try {
+            return app(ProductImporter::class)->importCsv($path, $replace ? 'replace' : 'merge');
+        } finally {
+            $ctx->set(null);
+            $ctx->asSuperAdmin(true);
+        }
     }
 
     public static function getRelations(): array
