@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.15-1  discovery+per-each-select';
+    public const VERSION = '2026.06.15-2  discovery-fresh-candidates';
 
     public function __construct(
         protected ProductSearch $search,
@@ -777,6 +777,13 @@ class BotBrain
         }
 
         $st['discovery'] = $d['ctx'];
+        if ($d['action'] === 'enter' || $d['action'] === 'enrich') {
+            // A discovery recommendation must derive its OWN candidates from a fresh, coherence-
+            // filtered search on the accumulated subject — never inherit the previous numbered
+            // list. Without this, "rice" (showing snacks) then "i need basmati" recommends the
+            // cheapest *snack* because the stale options short-circuit the search.
+            unset($st['options'], $st['pending_resolved'], $st['last_recommended']);
+        }
         $convo->state = $st;
         $convo->save();
 

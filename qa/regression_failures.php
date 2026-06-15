@@ -235,6 +235,27 @@ ok('plain "1, 3" still qty 1',    $qof($cf->resolveSelection('1, 3',$flat)) === 
 ok('plain "8 2 1" still qty 1',   $qof($cf->resolveSelection('8 2 1',$flat)) === [1=>1,2=>1,8=>1]);
 ok('fresh order "5 coke 10 rice" is NOT a selection', $cf->resolveSelection('5 coke 10 rice',$flat) === []);
 
+sec('F13 — discovery recommends a REAL product, never a stale snack ("rice"→"i need basmati")');
+$ccat = [
+    ['id'=>1,'name'=>'D.rice Samosa','price'=>1000,'stock'=>9,'category'=>'Rice','keywords'=>''],
+    ['id'=>2,'name'=>'Gaga Rice Crisps 35GMS','price'=>1000,'stock'=>9,'category'=>'Rice','keywords'=>''],
+    ['id'=>3,'name'=>'Minaxi Rice Powa 400G','price'=>2400,'stock'=>9,'category'=>'Rice','keywords'=>''],
+    ['id'=>4,'name'=>'Sona Basmati Rice 5KG','price'=>60000,'stock'=>9,'category'=>'Rice','keywords'=>''],
+    ['id'=>5,'name'=>'Union Basmati Rice 5KG','price'=>48500,'stock'=>9,'category'=>'Rice','keywords'=>''],
+    ['id'=>6,'name'=>'India Gate Basmati 1KG','price'=>14000,'stock'=>9,'category'=>'Rice','keywords'=>''],
+];
+$mm = new \App\Services\Bot\CatalogueMatcher();
+$names = fn($ps) => array_map(fn($p)=>$p['name'], $ps);
+$riceCands = \App\Services\Bot\SalesAssistantBrain::coherentCandidates('rice', $mm->search('rice',$ccat));
+ok('"rice" candidates EXCLUDE D.rice Samosa snack', ! in_array('D.rice Samosa', $names($riceCands), true));
+ok('"rice" candidates EXCLUDE Rice Crisps',          ! in_array('Gaga Rice Crisps 35GMS', $names($riceCands), true));
+ok('"rice" candidates EXCLUDE Rice Powa',            ! in_array('Minaxi Rice Powa 400G', $names($riceCands), true));
+ok('"rice" candidates KEEP real basmati rice',       in_array('Sona Basmati Rice 5KG', $names($riceCands), true));
+ok('"i need basmati" resolves subject to basmati',   \App\Services\Bot\SalesAssistantBrain::subjectTerm('i need basmati',$ccat) === 'basmati');
+$basCands = \App\Services\Bot\SalesAssistantBrain::coherentCandidates('basmati', $mm->search('basmati',$ccat));
+ok('"basmati" candidates are all real basmati (no snacks)',
+   $basCands && empty(array_intersect($names($basCands), ['D.rice Samosa','Gaga Rice Crisps 35GMS','Minaxi Rice Powa 400G'])));
+
 echo "\n========= RESULT =========\n";
 echo "PASS $PASS  FAIL $FAIL\n";
 exit($FAIL===0?0:1);
