@@ -171,6 +171,8 @@ class PanelApiController extends Controller
         return response()->json([
             'ok'            => true,
             'storeName'     => (string) ($t->name ?? 'Family Shopper'),
+            'slug'          => (string) ($t->slug ?? ''),
+            'customDomain'  => (string) ($t->custom_domain ?? ''),
             'storePhone'    => (string) ($t->whatsapp_number ?? ''),
             'storeAddress'  => (string) ($s['address'] ?? 'Kampala, Uganda'),
             'storeEmail'    => (string) ($s['email'] ?? ''),
@@ -1637,9 +1639,32 @@ class PanelApiController extends Controller
         $s['email']   = (string) $r->query('storeEmail', $s['email'] ?? '');
         if ($r->filled('storeName'))  $t->name = (string) $r->query('storeName');
         if ($r->filled('storePhone')) $t->whatsapp_number = preg_replace('/[^0-9+]/', '', (string) $r->query('storePhone'));
+
+        if ($r->has('customDomain')) {
+            $d = strtolower(trim((string) $r->query('customDomain')));
+            $d = preg_replace('#^https?://#', '', $d);   // drop scheme
+            $d = preg_replace('#/.*$#', '', $d);          // drop any path
+            $d = preg_replace('/^www\./', '', $d);        // normalise www.
+            $d = trim($d);
+            if ($d === '') {
+                $t->custom_domain = null;
+            } elseif (! preg_match('/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/', $d)) {
+                return response()->json(['ok' => false, 'error' => 'Enter a valid domain like palssnack.com'], 422);
+            } elseif (\App\Models\Tenant::where('custom_domain', $d)->where('id', '!=', $t->id)->exists()) {
+                return response()->json(['ok' => false, 'error' => 'That domain is already used by another shop.'], 422);
+            } else {
+                $t->custom_domain = $d;
+            }
+        }
+
         $t->settings = $s;
         $t->save();
-        return response()->json(['ok' => true, 'settings' => $s]);
+        return response()->json([
+            'ok'           => true,
+            'settings'     => $s,
+            'slug'         => (string) $t->slug,
+            'customDomain' => (string) ($t->custom_domain ?? ''),
+        ]);
     }
 
     public function botConfigSave(Request $r)

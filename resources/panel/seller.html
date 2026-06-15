@@ -655,6 +655,7 @@
               <div class="mfield"><label>WhatsApp / phone</label><input id="setPhone"></div>
               <div class="mfield"><label>Address</label><input id="setAddr"></div>
               <div class="mfield"><label>Email</label><input id="setEmail"></div>
+              <div class="mfield"><label>Custom domain (optional)</label><input id="setDomain" placeholder="e.g. palssnack.com"><div class="note" id="setDomainNote" style="margin-top:4px"></div></div>
               <div class="note">Shown on the From block of every printed invoice.</div>
             </div>
           </div>
@@ -935,7 +936,7 @@ var BOT_CUR='auto', SHOW_SWITCHER=false;
 var token=localStorage.getItem('fs_token')||'', phone='', timer=null, filtersInit=false;
 var CATALOGUE=[], ORDERS=[], RIDERS=[], RETURNS=[], CREDIT={};
 var CUSTPROFILE={};
-var SETTINGS={storeName:'Family Shopper',storePhone:'+256 7xx xxx xxx',storeAddress:'Kampala, Uganda',storeEmail:'orders@familyshopper.ug',logo:''};
+var SETTINGS={storeName:'Family Shopper',storePhone:'+256 7xx xxx xxx',storeAddress:'Kampala, Uganda',storeEmail:'orders@familyshopper.ug',logo:'',slug:'',customDomain:''};
 var BRANCHES=[], BRANCH_FILTER='', INVENTORY_MODE='shared', MY_BRANCH=localStorage.getItem('fs_branch')||'', MY_ROLE=localStorage.getItem('fs_role')||'owner';
 function branchOrders(){return BRANCH_FILTER?ORDERS.filter(function(o){return String(o.branch||'')===BRANCH_FILTER;}):ORDERS;}
 function branchName(id){var b=BRANCHES.find(function(x){return String(x.id)===String(id);});return b?b.name:id;}
@@ -2237,6 +2238,8 @@ function applySettings(s){
   if(s.storePhone!=null)SETTINGS.storePhone=s.storePhone;
   if(s.storeAddress!=null)SETTINGS.storeAddress=s.storeAddress;
   if(s.storeEmail!=null)SETTINGS.storeEmail=s.storeEmail;
+  if(s.slug!=null)SETTINGS.slug=s.slug;
+  if(s.customDomain!=null)SETTINGS.customDomain=s.customDomain;
   if(s.logo!=null)SETTINGS.logo=s.logo;
   if(s.lat!=null&&s.lat!=='')STORE.lat=Number(s.lat)||STORE.lat;
   if(s.lng!=null&&s.lng!=='')STORE.lng=Number(s.lng)||STORE.lng;
@@ -2256,6 +2259,8 @@ async function loadSettings(){
 function settingsInit(){
   $('setName').value=SETTINGS.storeName||'';$('setPhone').value=SETTINGS.storePhone||'';
   $('setAddr').value=SETTINGS.storeAddress||'';$('setEmail').value=SETTINGS.storeEmail||'';
+  if($('setDomain'))$('setDomain').value=SETTINGS.customDomain||'';
+  if($('setDomainNote'))$('setDomainNote').innerHTML=domainHint();
   (function(){var pv=$('setLogoPrev'); if(pv)pv.innerHTML=SETTINGS.logo?('<img src="'+esc(SETTINGS.logo)+'" style="width:100%;height:100%;object-fit:cover">'):shopInitials(SETTINGS.storeName||'');
     var lb=$('setLogoBtn'); if(lb)lb.onclick=function(){var f=$('setLogoFile'); if(f){f.value='';f.click();}};
     var lc=$('setLogoClear'); if(lc)lc.onclick=function(e){e.preventDefault();SETTINGS.logo='';if($('setLogoPrev'))$('setLogoPrev').textContent=shopInitials(SETTINGS.storeName||'');applyStoreIdentity();toast('Logo removed \u2014 press Save settings');};
@@ -2310,10 +2315,19 @@ function setFeePreview(){
   if(free>0)txt+='  \u00b7  free over '+ugx(free);
   if($('setFeePreview'))$('setFeePreview').textContent='Preview: '+txt;
 }
+function domainHint(){
+  var slug=SETTINGS.slug||'';
+  var live=slug?('mycloudbss.com/'+esc(slug)):'mycloudbss.com';
+  var h='Your shop is always live at <b>'+live+'</b>.';
+  if(SETTINGS.customDomain){h+='<br>To use <b>'+esc(SETTINGS.customDomain)+'</b>: point its DNS A-record to our server, then it serves your shop at the domain root. HTTPS is enabled on our side.';}
+  else{h+='<br>Add your own domain above to also serve the shop at your domain.';}
+  return h;
+}
 async function saveSettings(){
   SETTINGS.storeName=($('setName').value||'').trim();SETTINGS.storePhone=($('setPhone').value||'').trim();
   SETTINGS.storeAddress=($('setAddr').value||'').trim();SETTINGS.storeEmail=($('setEmail').value||'').trim();
   var body={storeName:SETTINGS.storeName,storePhone:SETTINGS.storePhone,storeAddress:SETTINGS.storeAddress,storeEmail:SETTINGS.storeEmail,logo:SETTINGS.logo||'',
+    customDomain:($('setDomain')?($('setDomain').value||'').trim():(SETTINGS.customDomain||'')),
     base:Number($('setBase').value)||0,perKm:Number($('setPerKm').value)||0,min:Number($('setMin').value)||0,round:Number($('setRound').value)||1,
     freeOver:Number($('setFree').value)||0,lat:Number($('setLat').value)||STORE.lat,lng:Number($('setLng').value)||STORE.lng,
     inventoryMode:($('setInvMode')?$('setInvMode').value:INVENTORY_MODE),
@@ -2323,7 +2337,8 @@ async function saveSettings(){
   Object.keys(body).forEach(function(k){qs+='&'+k+'='+encodeURIComponent(body[k]);});
   $('setSave').disabled=true;$('setStatus').textContent='Saving\u2026';
   try{var r=await fetch(EP.settingsSave+qs,{cache:'no-store'});var d=await r.json();
-    if(d&&d.ok){applySettings(d.settings||body);$('setStatus').textContent='Saved '+new Date().toLocaleTimeString();toast('Settings saved');}
+    if(d&&d.ok){applySettings(d.settings||body);if(d.customDomain!=null)SETTINGS.customDomain=d.customDomain;if(d.slug!=null)SETTINGS.slug=d.slug;if($('setDomain'))$('setDomain').value=SETTINGS.customDomain||'';if($('setDomainNote'))$('setDomainNote').innerHTML=domainHint();$('setStatus').textContent='Saved '+new Date().toLocaleTimeString();toast('Settings saved');}
+    else if(d&&d.error){$('setStatus').textContent=d.error;toast(d.error);}
     else{applySettings(body);$('setStatus').textContent='Saved locally \u2014 backend webhook not live yet';toast('Saved on this device only');}
   }catch(e){applySettings(body);$('setStatus').textContent='Saved locally \u2014 network/backend error';toast('Saved on this device only');}
   // ---- bot & panel currency config (shared via fs:botcfg) ----
