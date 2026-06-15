@@ -51,6 +51,12 @@ class OrderObserver
         if ($order->tenant_id && $order->channel !== 'pos') {
             \App\Jobs\NotifyOwnerNewOrder::dispatch($order->tenant_id, $order->id);
         }
+
+        // Website orders: instantly confirm to the customer on WhatsApp (bot orders
+        // are already confirmed in-chat, so only do this for the web channel).
+        if ($order->tenant_id && $order->channel === 'web' && $order->customer_phone) {
+            \App\Jobs\NotifyCustomerOrderReceived::dispatch($order->tenant_id, $order->id);
+        }
     }
 
     /** When status changes (in the panel or by the bot), notify the customer. */
