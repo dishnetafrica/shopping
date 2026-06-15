@@ -103,6 +103,20 @@ ok('batch prompt lists vocab',        str_contains($spb, 'cooking_oil') && str_c
 ok('batch prompt demands results[]',  str_contains($spb, '"results"'));
 ok('batch prompt: strict JSON only',  stripos($spb, 'STRICT JSON') !== false);
 
+sec('looksMeaningless() — bare codes/numbers carry no product signal');
+ok('"30056640" is meaningless',        E::looksMeaningless('30056640') === true);
+ok('"300ML" alone is meaningless',      E::looksMeaningless('300ML') === true);
+ok('"2PIN Plug" is classifiable',       E::looksMeaningless('2PIN Plug') === false);
+ok('"200 Men Perfume" classifiable',    E::looksMeaningless('200 Men Perfume 100ML') === false);
+ok('"Kimbo Oil 500G" classifiable',     E::looksMeaningless('Kimbo Oil 500G') === false);
+// parseBatch must force a meaningless name to other even if the model was confident
+$codeItems = [['id'=>901,'name'=>'30056640'],['id'=>902,'name'=>'Kolam Rice 5KG']];
+$codeResp = '{"results":[{"i":1,"product_type":"cosmetic_oil","confidence":0.9},{"i":2,"product_type":"rice","confidence":0.97}]}';
+$cpb = E::parseBatch($codeResp, $codeItems);
+ok('code-name forced to other despite 0.9', ($cpb[901]['product_type'] ?? '') === 'other');
+ok('code-name decision is skip',            E::decision($cpb[901]) === 'skip');
+ok('real name beside it still classified',  ($cpb[902]['product_type'] ?? '') === 'rice');
+
 echo "\n========= RESULT =========\n";
 echo "PASS $P  FAIL $F\n";
 exit($F === 0 ? 0 : 1);

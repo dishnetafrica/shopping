@@ -99,6 +99,20 @@ class ProductEnrichmentService
         return ['product_type' => $type, 'confidence' => round($conf, 3), 'in_vocab' => true];
     }
 
+    /**
+     * A name carries no product signal (bare SKU/code/number, e.g. "30056640") if it has no
+     * alphabetic word of 3+ letters. Such names must never be auto-classified — the model will
+     * happily hallucinate a confident type for them.
+     */
+    public static function looksMeaningless(string $name): bool
+    {
+        $alpha = preg_replace('/[^a-z]/i', ' ', $name);
+        foreach (preg_split('/\s+/', trim((string) $alpha), -1, PREG_SPLIT_NO_EMPTY) as $w) {
+            if (mb_strlen($w) >= 3) return false;
+        }
+        return true;
+    }
+
     /** Decide what to do with a validated classification: apply | review | skip. */
     public static function decision(array $validated): string
     {
@@ -124,6 +138,8 @@ class ProductEnrichmentService
             '- Aromatherapy oils (clove, eucalyptus, tea-tree) => essential_oil. Hair oils => hair_oil.',
             '- Plain grain rice => rice. Rice-based crisps/puffs/snacks => snack.',
             '- Single ground spice => spice. Branded masala/seasoning blends (e.g. Chicken 65) => spice_mix.',
+            '- Perfumes, deodorants, body sprays => personal_care (a perfume is NOT an oil).',
+            '- A name that is only a number/code with no real product word => other.',
             '- If genuinely unsure, use other with low confidence. Never invent a type.',
             'Respond with STRICT JSON only, no prose, no markdown:',
             '{"product_type":"<one_vocab_value>","confidence":<0..1>,"reason":"<short>"}',
@@ -182,7 +198,8 @@ class ProductEnrichmentService
             '- Aromatherapy (clove, eucalyptus, tea-tree) => essential_oil. Hair oils => hair_oil.',
             '- Plain grain rice => rice. Rice crisps/puffs/snacks => snack.',
             '- Single ground spice => spice. Branded masala/seasoning blends => spice_mix.',
-            '- Insecticide/cleaners => cleaning. Razors/blades/soap/shampoo => personal_care.',
+            '- Insecticide/cleaners => cleaning. Razors/blades/soap/shampoo/perfume/deodorant => personal_care.',
+            '- A name that is only a number/code with no real product word => other.',
             '- If genuinely unsure, use other with low confidence. Never invent a type.',
             'Respond with STRICT JSON only, no prose, no markdown, exactly one entry per input number:',
             '{"results":[{"i":1,"product_type":"<vocab>","confidence":<0..1>}, ...]}',
@@ -248,6 +265,11 @@ class ProductEnrichmentService
             if (! is_array($r)) continue;
             $i = (int) ($r['i'] ?? $r['index'] ?? 0);
             if ($i < 1 || $i > count($items)) continue;
+            // Hard guard: a code-only name can't be trusted to any confident type.
+            if (self::looksMeaningless((string) ($items[$i - 1]['name'] ?? ''))) {
+                $out[$items[$i - 1]['id']] = ['product_type' => 'other', 'confidence' => 0.0, 'in_vocab' => false];
+                continue;
+            }
             $out[$items[$i - 1]['id']] = self::validate($r);
         }
         return $out;
@@ -286,6 +308,9 @@ class ProductEnrichmentService
             }
 
             $v = self::validate($raw);                 // defence in depth even if classifier pre-validated
+            if (self::looksMeaningless($name)) {
+                $v = ['product_type' => 'other', 'confidence' => 0.0, 'in_vocab' => false];
+            }
             $decision = self::decision($v);
             $summary[$decision] = ($summary[$decision] ?? 0) + 1;
 
