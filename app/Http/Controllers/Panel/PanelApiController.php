@@ -393,6 +393,29 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true, 'url' => Storage::url($file)]);
     }
 
+    /** Category tile photos: a { "Category Name": "image url" } map in tenant settings. */
+    public function categoryImages(Request $r)
+    {
+        $map = $r->user()->tenant->setting('category_images', []);
+        if (! is_array($map)) $map = [];
+        return response()->json(['ok' => true, 'images' => (object) $map]);
+    }
+
+    public function categoryImageSave(Request $r)
+    {
+        $t   = $r->user()->tenant;
+        $cat = trim((string) $r->input('category', ''));
+        if ($cat === '') return response()->json(['ok' => false, 'error' => 'no_category'], 422);
+
+        $url = trim((string) $r->input('url', ''));
+        $map = $t->setting('category_images', []);
+        if (! is_array($map)) $map = [];
+        if ($url === '') unset($map[$cat]); else $map[$cat] = $url;
+        $t->putSetting('category_images', $map);
+
+        return response()->json(['ok' => true]);
+    }
+
     /* -------------------------------------------------- live chats (4b) */
     public function chats(Request $r)
     {

@@ -139,7 +139,7 @@ var GEO  = null;                               // captured delivery GPS pin {lat
 /* ===================================================================================== */
 
 var $=function(id){return document.getElementById(id);};
-var PRODUCTS=[], CATS=[], CART={}, CAT='all', Q='';
+var PRODUCTS=[], CATS=[], CART={}, CAT='all', Q='', CAT_IMG={};
 var TINTS=['#EEF2FB','#FDEEF3','#EAF6EF','#FFF4E6','#F1EEFB','#E9F5F9','#FCEEEA','#EEF7F0'];
 var STORE_KEY='cb_cart_'+(SHOP.slug||'shop'), DELV_KEY='cb_delv_'+(SHOP.slug||'shop');
 function ugx(n){return CUR+' '+(Number(n)||0).toLocaleString('en-US');}
@@ -161,7 +161,8 @@ async function load(){
     var d=await r.json();
     PRODUCTS=(Array.isArray(d.products)?d.products:[]).map(mapProduct).filter(function(p){return p.name && p.price>0;});
     if(d.settings){var ph=String(d.settings.waNumber||d.settings.storePhone||'').replace(/[^0-9]/g,'');if(ph)WA_NUMBER=ph;
-      if(d.settings.currency)CUR=String(d.settings.currency);}
+      if(d.settings.currency)CUR=String(d.settings.currency);
+      if(d.settings.category_images)CAT_IMG=d.settings.category_images||{};}
     if(Array.isArray(d.branches)&&d.branches.length){
       var bs=d.branches.map(function(b){return {name:String(b.name||b.title||'Branch'),lat:Number(b.lat),lng:Number(b.lng)};}).filter(function(b){return isFinite(b.lat)&&isFinite(b.lng);});
       if(bs.length)BRANCHES=bs;
@@ -292,7 +293,10 @@ function render(){
   }
   if(CAT==='all'){
     c.innerHTML='<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){
-      return '<button class="cat" onclick="setCat('+jk(cat.name)+')"><div class="ci" style="background:'+TINTS[i%TINTS.length]+'">'+catIcon(cat.name)+'</div><div class="nm">'+esc(cat.name)+'</div></button>';
+      var ci=CAT_IMG[cat.name];
+      var inner=ci?('<div class="ci" style="background:#fff"><img src="'+esc(ci)+'" onerror="this.style.display=\'none\'"></div>')
+                  :('<div class="ci" style="background:'+TINTS[i%TINTS.length]+'">'+catIcon(cat.name)+'</div>');
+      return '<button class="cat" onclick="setCat('+jk(cat.name)+')">'+inner+'<div class="nm">'+esc(cat.name)+'</div></button>';
     }).join('')+'</div>';
     return;
   }

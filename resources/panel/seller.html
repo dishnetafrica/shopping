@@ -476,7 +476,8 @@
         <div class="crumb">Home / <b>Categories</b></div>
         <div class="card">
           <div class="head">Categories <span class="count" id="catCount" style="margin-left:auto"></span></div>
-          <div class="body"><div class="pgrid" id="catGrid"></div></div>
+          <div class="body"><div class="pgrid" id="catGrid"></div>
+          <input type="file" id="catPhotoFile" accept="image/*" style="display:none"></div>
         </div>
       </div>
       <!-- ============ RIDERS ============ -->
@@ -889,6 +890,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   updStatus:'/papi/update-status',saveOrder:'/papi/save-order',
   updProduct:'/papi/update-product',addProduct:'/papi/add-product',
   uploadImage:'/papi/upload-image',
+  catImages:'/papi/category-images',catImageSave:'/papi/category-image-save',
   dispatch:'/papi/dispatch',
   riders:'/papi/riders',riderSave:'/papi/rider-save',riderDel:'/papi/rider-delete',
   ret:'/papi/return',returns:'/papi/returns',
@@ -1243,7 +1245,7 @@ function showPage(p){
   var T={dash:'Dashboard',pos:'POS',reports:'Reports',products:'Products',category:'Categories',riders:'Riders',returns:'Returns',orders:'Orders',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription'};
   $('pageTitle').textContent=T[p]||'Orders';
   if(p==='dash')renderDash(); else if(p==='pos')posInit(); else if(p==='reports')reportsInit();
-  else if(p==='products')pmInit(); else if(p==='category')renderCategories(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else renderList();
+  else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else renderList();
   closeSide(); window.scrollTo(0,0);
 }
 function openSide(){$('side').classList.add('open');$('backdrop').classList.add('show');}
@@ -1676,13 +1678,55 @@ async function saveNewProduct(){
   $('aSave').disabled=false;$('aSave').textContent='Add product';
 }
 /* ---------------- CATEGORIES ---------------- */
+var CAT_IMG={}, _catPhotoTarget='';
+async function loadCatImages(){
+  try{var r=await fetch(EP.catImages+'?token='+encodeURIComponent(token),{cache:'no-store'});var d=await r.json();CAT_IMG=(d&&d.images)?d.images:{};}catch(e){CAT_IMG={};}
+}
 function renderCategories(){
+  bindCatPhoto();
   var m={};CATALOGUE.forEach(function(p){var c=(p.category||'').trim()||'Uncategorised';m[c]=(m[c]||0)+1;});
   _cats=Object.keys(m).sort();
   $('catCount').textContent=_cats.length+' categories';
   $('catGrid').innerHTML=_cats.length?_cats.map(function(c,i){
-    return '<div class="pcard" onclick="openCat('+i+')"><div class="nm">'+esc(c)+'</div><div class="pr">'+m[c]+'</div><div class="st">products</div></div>';
+    var img=CAT_IMG[c];
+    var thumb=img
+      ? '<div onclick="openCat('+i+')" style="height:84px;border-radius:10px;margin-bottom:6px;background-size:cover;background-position:center;cursor:pointer;background-image:url(\''+esc(img)+'\')"></div>'
+      : '<div onclick="openCat('+i+')" style="height:84px;border-radius:10px;margin-bottom:6px;background:#F1F3F7;display:grid;place-items:center;font-size:26px;cursor:pointer">\uD83D\uDDC2</div>';
+    return '<div class="pcard">'+thumb+
+      '<div class="nm" onclick="openCat('+i+')" style="cursor:pointer">'+esc(c)+'</div>'+
+      '<div class="pr">'+m[c]+'</div><div class="st">products</div>'+
+      '<div style="margin-top:6px;display:flex;gap:10px">'+
+        '<a href="#" onclick="event.preventDefault();catPhoto('+i+')" style="font-size:12px;font-weight:700;color:var(--green,#0C831F)">'+(img?'Change photo':'Add photo')+'</a>'+
+        (img?'<a href="#" onclick="event.preventDefault();catPhotoClear('+i+')" style="font-size:12px;font-weight:700;color:#B4232A">Remove</a>':'')+
+      '</div></div>';
   }).join(''):'<div class="empty">No categories</div>';
+}
+function catPhoto(i){_catPhotoTarget=_cats[i];var f=$('catPhotoFile');if(f){f.value='';f.click();}}
+function catPhotoClear(i){var c=_cats[i];if(!confirm('Remove the photo for "'+c+'"?'))return;saveCatImage(c,'');}
+async function saveCatImage(cat,url){
+  try{
+    var r=await fetch(EP.catImageSave+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category:cat,url:url})});
+    var d=await r.json();
+    if(d&&d.ok){if(url)CAT_IMG[cat]=url;else delete CAT_IMG[cat];renderCategories();toast(url?'Category photo set':'Photo removed');}
+    else toast('Could not save photo');
+  }catch(e){toast('Could not save photo');}
+}
+function bindCatPhoto(){
+  var f=$('catPhotoFile');if(!f||f._bound)return;f._bound=true;
+  f.onchange=function(){
+    var file=f.files&&f.files[0];if(!file||!_catPhotoTarget)return;
+    var rd=new FileReader();
+    rd.onload=async function(){
+      toast('Uploading photo\u2026');
+      try{
+        var up=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:file.name,data:rd.result})});
+        var d=await up.json();
+        if(d&&d.ok&&d.url)await saveCatImage(_catPhotoTarget,d.url);
+        else toast('Upload failed \u2014 try a smaller image');
+      }catch(e){toast('Upload failed');}
+    };
+    rd.readAsDataURL(file);
+  };
 }
 function openCat(i){var c=_cats[i];pmCatFilter=(c==='Uncategorised'?'':c);pmQuery='';showPage('products');}
 /* ---------------- RIDER / DISPATCH ---------------- */

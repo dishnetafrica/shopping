@@ -109,6 +109,7 @@ class StorefrontController extends Controller
                 'waNumber' => preg_replace('/[^0-9]/', '', (string) ($tenant->whatsapp_number ?? '')),
                 'currency' => $this->currency($tenant),
                 'delivery' => (object) ($tenant->setting('delivery', []) ?: []),
+                'category_images' => (object) ($tenant->setting('category_images', []) ?: []),
             ],
         ])->header('Cache-Control', 'no-store');
     }
