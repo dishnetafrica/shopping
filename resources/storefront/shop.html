@@ -455,7 +455,7 @@ async function placeOrder(){
 (function brand(){
   document.title=(SHOP.name||'Shop')+' — Shop';
   var hb=document.querySelector('.top b'); if(hb)hb.textContent=SHOP.name||'Shop';
-  var lg=document.querySelector('.top .lg'); if(lg)lg.textContent=SHOP.initials||'SH';
+  var lg=document.querySelector('.top .lg'); if(lg){ if(SHOP.logo){lg.innerHTML='<img src="'+esc(SHOP.logo)+'" style="width:100%;height:100%;object-fit:cover">';lg.style.background='#fff';} else {lg.textContent=SHOP.initials||'SH';} }
   var fn=$('footName'); if(fn)fn.textContent=(SHOP.name||'Shop')+(SHOP.city?(' · '+SHOP.city):'');
   var sl=$('staffLink'); if(sl)sl.href=ADMIN_URL;
 })();

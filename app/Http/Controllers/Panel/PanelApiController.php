@@ -174,6 +174,7 @@ class PanelApiController extends Controller
             'storePhone'    => (string) ($t->whatsapp_number ?? ''),
             'storeAddress'  => (string) ($s['address'] ?? 'Kampala, Uganda'),
             'storeEmail'    => (string) ($s['email'] ?? ''),
+            'logo'          => (string) ($s['logo'] ?? ''),
             'base'          => (float) ($s['base'] ?? 2000),
             'perKm'         => (float) ($s['perKm'] ?? 700),
             'min'           => (float) ($s['min'] ?? 2000),
@@ -1632,6 +1633,7 @@ class PanelApiController extends Controller
         foreach (['storeName', 'storePhone', 'storeAddress', 'storeEmail', 'base', 'perKm', 'min', 'round', 'freeOver', 'lat', 'lng', 'inventoryMode', 'usdUgx', 'usdSsp'] as $k) {
             if ($r->has($k)) $s[$k] = $r->query($k);
         }
+        if ($r->has('logo')) $s['logo'] = trim((string) $r->query('logo'));
         $s['address'] = (string) $r->query('storeAddress', $s['address'] ?? '');
         $s['email']   = (string) $r->query('storeEmail', $s['email'] ?? '');
         if ($r->filled('storeName'))  $t->name = (string) $r->query('storeName');

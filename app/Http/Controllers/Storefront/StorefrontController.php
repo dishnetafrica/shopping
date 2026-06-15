@@ -65,6 +65,7 @@ class StorefrontController extends Controller
             'slug'         => (string) $tenant->slug,
             'initials'     => $this->initials((string) $tenant->name),
             'currency'     => $this->currency($tenant),
+            'logo'         => $tenant->setting('logo', '') ? $this->imageUrl((string) $tenant->setting('logo', '')) : '',
             'waNumber'     => preg_replace('/[^0-9]/', '', (string) ($tenant->whatsapp_number ?? '')),
             'city'         => (string) $tenant->setting('city', ''),
             'catalogueUrl' => url('/' . $tenant->slug . '/catalogue'),

@@ -248,7 +248,7 @@
 </div>
 <div class="app hide" id="app">
   <aside class="side" id="side">
-    <div class="brand"><div class="lg">FS</div><b>Family Shopper<br><span style="font-size:11px;font-weight:500;opacity:.75">Seller panel</span></b></div>
+    <div class="brand"><div class="lg" id="sideLogo">FS</div><b><span id="sideName">Family Shopper</span><br><span style="font-size:11px;font-weight:500;opacity:.75">Seller panel</span></b></div>
     <nav>
       <a class="nav on" data-page="dash"><span class="i">▦</span> Dashboard</a>
       <a class="nav" data-page="orders"><span class="i">🛒</span> Orders</a>
@@ -368,7 +368,7 @@
           <div class="card"><div class="head">Order Details <span style="font-weight:500;font-size:12px;opacity:.85">— edit quantities, add or delete items</span></div><div class="body">
             <div class="inv" id="printArea">
               <div class="ihead">
-                <div class="brand"><div class="lg">FS</div><div><h2>Family Shopper</h2><div style="font-size:12px;color:var(--muted)">Groceries delivered fast — Kampala</div></div></div>
+                <div class="brand"><div class="lg" id="invLogo">FS</div><div><h2 id="invName">Family Shopper</h2><div style="font-size:12px;color:var(--muted)">Groceries delivered fast — Kampala</div></div></div>
                 <div class="date" id="invDate"></div>
               </div>
               <div class="parties">
@@ -651,6 +651,7 @@
             <div class="head">Store profile</div>
             <div class="body">
               <div class="mfield"><label>Store name</label><input id="setName"></div>
+              <div class="mfield"><label>Shop logo</label><div style="display:flex;align-items:center;gap:12px"><div id="setLogoPrev" style="width:54px;height:54px;border-radius:12px;background:#F1F3F7;display:grid;place-items:center;font-weight:800;color:#9aa3b2;overflow:hidden;flex:none"></div><div><button type="button" class="btn" id="setLogoBtn">Upload logo</button> <a href="#" id="setLogoClear" style="font-size:12px;font-weight:700;color:#B4232A;margin-left:8px">Remove</a><div style="font-size:11px;color:var(--muted);margin-top:4px">Square image works best · any size (auto-shrunk)</div></div></div><input type="file" id="setLogoFile" accept="image/*" style="display:none"></div>
               <div class="mfield"><label>WhatsApp / phone</label><input id="setPhone"></div>
               <div class="mfield"><label>Address</label><input id="setAddr"></div>
               <div class="mfield"><label>Email</label><input id="setEmail"></div>
@@ -934,7 +935,7 @@ var BOT_CUR='auto', SHOW_SWITCHER=false;
 var token=localStorage.getItem('fs_token')||'', phone='', timer=null, filtersInit=false;
 var CATALOGUE=[], ORDERS=[], RIDERS=[], RETURNS=[], CREDIT={};
 var CUSTPROFILE={};
-var SETTINGS={storeName:'Family Shopper',storePhone:'+256 7xx xxx xxx',storeAddress:'Kampala, Uganda',storeEmail:'orders@familyshopper.ug'};
+var SETTINGS={storeName:'Family Shopper',storePhone:'+256 7xx xxx xxx',storeAddress:'Kampala, Uganda',storeEmail:'orders@familyshopper.ug',logo:''};
 var BRANCHES=[], BRANCH_FILTER='', INVENTORY_MODE='shared', MY_BRANCH=localStorage.getItem('fs_branch')||'', MY_ROLE=localStorage.getItem('fs_role')||'owner';
 function branchOrders(){return BRANCH_FILTER?ORDERS.filter(function(o){return String(o.branch||'')===BRANCH_FILTER;}):ORDERS;}
 function branchName(id){var b=BRANCHES.find(function(x){return String(x.id)===String(id);});return b?b.name:id;}
@@ -2211,9 +2212,15 @@ async function submitReturn(){
   $('retSave').disabled=false;$('retSave').textContent='Process return';
 }
 /* ---------------- SETTINGS ---------------- */
+function shopInitials(n){n=String(n||'').trim();if(!n)return 'SH';var w=n.split(/\s+/);var a=(w[0]||'')[0]||'';var b=(w[1]||'')[0]||'';return (a+b||a||'S').toUpperCase();}
+function brandMark(el,logo,ini){if(!el)return;if(logo){el.innerHTML='<img src="'+esc(logo)+'" style="width:100%;height:100%;object-fit:cover">';}else{el.textContent=ini;}}
 function applyStoreIdentity(){
+  var name=SETTINGS.storeName||'Family Shopper', ini=shopInitials(name), logo=SETTINGS.logo||'';
+  brandMark($('sideLogo'),logo,ini); brandMark($('invLogo'),logo,ini);
+  if($('sideName'))$('sideName').textContent=name;
+  if($('invName'))$('invName').textContent=name;
   var fb=$('fromBlk');
-  if(fb)fb.innerHTML='<h4>From</h4><b>'+esc(SETTINGS.storeName||'Family Shopper')+'</b><br>'+
+  if(fb)fb.innerHTML='<h4>From</h4><b>'+esc(name)+'</b><br>'+
     esc(SETTINGS.storeAddress||'')+'<br>WhatsApp: '+esc(SETTINGS.storePhone||'')+'<br>'+esc(SETTINGS.storeEmail||'');
 }
 function rateNote(){
@@ -2229,6 +2236,7 @@ function applySettings(s){
   if(s.storePhone!=null)SETTINGS.storePhone=s.storePhone;
   if(s.storeAddress!=null)SETTINGS.storeAddress=s.storeAddress;
   if(s.storeEmail!=null)SETTINGS.storeEmail=s.storeEmail;
+  if(s.logo!=null)SETTINGS.logo=s.logo;
   if(s.lat!=null&&s.lat!=='')STORE.lat=Number(s.lat)||STORE.lat;
   if(s.lng!=null&&s.lng!=='')STORE.lng=Number(s.lng)||STORE.lng;
   if(s.base!=null&&s.base!=='')DELIV.base=Number(s.base)||0;
@@ -2247,6 +2255,11 @@ async function loadSettings(){
 function settingsInit(){
   $('setName').value=SETTINGS.storeName||'';$('setPhone').value=SETTINGS.storePhone||'';
   $('setAddr').value=SETTINGS.storeAddress||'';$('setEmail').value=SETTINGS.storeEmail||'';
+  (function(){var pv=$('setLogoPrev'); if(pv)pv.innerHTML=SETTINGS.logo?('<img src="'+esc(SETTINGS.logo)+'" style="width:100%;height:100%;object-fit:cover">'):shopInitials(SETTINGS.storeName||'');
+    var lb=$('setLogoBtn'); if(lb)lb.onclick=function(){var f=$('setLogoFile'); if(f){f.value='';f.click();}};
+    var lc=$('setLogoClear'); if(lc)lc.onclick=function(e){e.preventDefault();SETTINGS.logo='';if($('setLogoPrev'))$('setLogoPrev').textContent=shopInitials(SETTINGS.storeName||'');applyStoreIdentity();toast('Logo removed \u2014 press Save settings');};
+    var lf=$('setLogoFile'); if(lf&&!lf._b){lf._b=true;lf.onchange=async function(){var file=lf.files&&lf.files[0];if(!file)return;toast('Uploading logo\u2026');var data=await shrinkImage(file,512,.85);if(!data){toast('Could not read image');return;}try{var up=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'logo.jpg',data:data})});var d=await up.json();if(d&&d.ok&&d.url){SETTINGS.logo=d.url;if($('setLogoPrev'))$('setLogoPrev').innerHTML='<img src="'+esc(d.url)+'" style="width:100%;height:100%;object-fit:cover">';applyStoreIdentity();toast('Logo set \u2014 press Save settings');}else toast('Upload failed');}catch(e){toast('Upload failed');}};}
+  })();
   $('setBase').value=DELIV.base;$('setPerKm').value=DELIV.perKm;$('setMin').value=DELIV.min;
   $('setRound').value=DELIV.round;$('setFree').value=DELIV.freeOver;
   $('setLat').value=STORE.lat;$('setLng').value=STORE.lng;
@@ -2299,7 +2312,7 @@ function setFeePreview(){
 async function saveSettings(){
   SETTINGS.storeName=($('setName').value||'').trim();SETTINGS.storePhone=($('setPhone').value||'').trim();
   SETTINGS.storeAddress=($('setAddr').value||'').trim();SETTINGS.storeEmail=($('setEmail').value||'').trim();
-  var body={storeName:SETTINGS.storeName,storePhone:SETTINGS.storePhone,storeAddress:SETTINGS.storeAddress,storeEmail:SETTINGS.storeEmail,
+  var body={storeName:SETTINGS.storeName,storePhone:SETTINGS.storePhone,storeAddress:SETTINGS.storeAddress,storeEmail:SETTINGS.storeEmail,logo:SETTINGS.logo||'',
     base:Number($('setBase').value)||0,perKm:Number($('setPerKm').value)||0,min:Number($('setMin').value)||0,round:Number($('setRound').value)||1,
     freeOver:Number($('setFree').value)||0,lat:Number($('setLat').value)||STORE.lat,lng:Number($('setLng').value)||STORE.lng,
     inventoryMode:($('setInvMode')?$('setInvMode').value:INVENTORY_MODE),
