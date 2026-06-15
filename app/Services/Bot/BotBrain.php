@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.15-3  discovery-recommends-only-with-qualifiers';
+    public const VERSION = '2026.06.15-4  checkout-phrasing';
 
     public function __construct(
         protected ProductSearch $search,
@@ -285,7 +285,7 @@ class BotBrain
         if (\App\Services\Bot\GreetingDictionary::isGreeting($lc)) return $this->greetingReply($tenant, $text);
         if (in_array($lc, ['cart','basket','my order','my cart','view cart'], true))           return $this->execute($tenant, $convo, 'view_cart', []);
         if (in_array($lc, ['clear','empty','reset','clear cart','empty cart'], true))           return $this->execute($tenant, $convo, 'clear', []);
-        if (in_array($lc, ['checkout','done','confirm','order','place order','proceed to checkout','proceed','finish'], true)) return $this->execute($tenant, $convo, 'checkout', []);
+        if (\App\Services\Bot\IntentClassifier::looksLikeCheckout($lc)) return $this->execute($tenant, $convo, 'checkout', []);
         // affirmations: a bare "good/ok/yes" is chat, not a product search
         if (in_array($lc, ['ok','okay','yes','yeah','yep','good','nice','cool','great','thanks','thank you','thx','sure','fine'], true)) {
             return "\u{1F44D} Great! Tell me what you'd like, say *cart* to review, or *checkout* when ready.";

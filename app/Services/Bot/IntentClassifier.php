@@ -439,4 +439,27 @@ final class IntentClassifier
     {
         return array_values(array_filter(self::words($s), fn ($t) => ! in_array($t, CatalogueMatcher::STOP, true)));
     }
+
+    /**
+     * Checkout intent, tolerant of natural phrasing ("done order now", "place my order", "i'm
+     * done"), not just the bare word "checkout". Deliberately does NOT fire on product order lines
+     * ("order 5 rice") — those carry a quantity/product and must still add. Without this guard,
+     * "done order now" fell through to product search and the matcher corrected "done" -> "Dove".
+     */
+    public static function looksLikeCheckout(string $lc): bool
+    {
+        $lc = trim($lc);
+        if (in_array($lc, ['checkout','check out','done','confirm','order','place order',
+            'place my order','order now','proceed to checkout','proceed','finish'], true)) {
+            return true;
+        }
+        if (preg_match('/\b(check\s?out|place (my |an |the )?order|order now|proceed to (pay|checkout|payment)|complete (my )?order|finish(ed)? (placing |my )?order)\b/', $lc)) {
+            return true;
+        }
+        // "done" meaning finished ("i'm done", "all done", "done order now", "done ordering")
+        if (preg_match('/\b(i\'?m|im|all)\s+done\b|\bdone\s+(order|ordering|now|please|checkout)\b/', $lc)) {
+            return true;
+        }
+        return false;
+    }
 }

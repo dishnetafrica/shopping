@@ -268,6 +268,18 @@ ok('"daily use" IS a qualifier -> recommend',              DCB::hasQualifier(DCB
 $acc = DCB::merge(DCB::fromMessage('need rice',$ccat), DCB::fromMessage('not basmati',$ccat));
 ok('"need rice" then "not basmati" -> qualifier present (recommend)', DCB::hasQualifier($acc));
 
+sec('F15 — "done order now" is checkout, not a search for "done" (which matched Dove)');
+use App\Services\Bot\IntentClassifier as ICchk;
+ok('"done order now" -> checkout',   ICchk::looksLikeCheckout('done order now'));
+ok('"order now" -> checkout',        ICchk::looksLikeCheckout('order now'));
+ok('"i\'m done" -> checkout',        ICchk::looksLikeCheckout("i'm done"));
+ok('"place my order" -> checkout',   ICchk::looksLikeCheckout('place my order'));
+ok('"done" -> checkout',             ICchk::looksLikeCheckout('done'));
+ok('"checkout" -> checkout',         ICchk::looksLikeCheckout('checkout'));
+ok('"order 5 rice" is NOT checkout (still an add)', ! ICchk::looksLikeCheckout('order 5 rice'));
+ok('"i want to order rice" is NOT checkout',        ! ICchk::looksLikeCheckout('i want to order rice'));
+ok('"dove soap" is NOT checkout',                   ! ICchk::looksLikeCheckout('dove soap'));
+
 echo "\n========= RESULT =========\n";
 echo "PASS $PASS  FAIL $FAIL\n";
 exit($FAIL===0?0:1);
