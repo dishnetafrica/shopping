@@ -40,6 +40,13 @@ class CatalogueMatcher
         'bars','sachet','sachets','roll','rolls','dozen','loaf','loaves','nos','no',
     ];
 
+    /** product_types that share a base noun with food items but are NOT grocery/edible, so a
+     *  generic food query ("oil") should rank them below the edible variant ("cooking_oil"). */
+    private const NON_FOOD_TYPES = [
+        'skincare_oil', 'cosmetic_oil', 'essential_oil', 'hair_oil', 'massage_oil',
+        'cleaning', 'personal_care', 'household',
+    ];
+
     /** Filler/intent words that aren't the product subject ("need rice" -> subject "rice"). */
     private const QUERY_FILLER = [
         'need' => true, 'want' => true, 'wanted' => true, 'get' => true, 'give' => true,
@@ -185,16 +192,26 @@ class CatalogueMatcher
             // rice") keep their normal coverage scoring, which already ranks them correctly.
             $contentQ = array_values(array_filter($q, fn ($w) => ! isset(self::QUERY_FILLER[$w])));
             if (count($contentQ) === 1) {
-                $qHead  = $contentQ[0];
-                $qHeadS = self::depluralize($qHead);
-                $pHead  = $nameToks ? self::depluralize((string) end($nameToks)) : '';
-                $pType  = self::depluralize(mb_strtolower(trim((string) ($p['product_type'] ?? ''))));
-                if ($pType !== '' && $pType === $qHeadS) {
-                    $score += 250;            // explicit product_type tag (best signal, if set)
-                } elseif ($pHead !== '' && $pHead === $qHeadS) {
-                    $score += 200;            // the query word IS this product's head noun -> real "<type>"
-                } elseif (isset($nameSet[$qHead]) || isset($nameSet[$qHeadS])) {
-                    $score -= 50;             // present only as a modifier -> demote below the real thing
+                $qHeadS = self::depluralize($contentQ[0]);
+                $pType  = self::depluralize(str_replace([' ', '-'], '_', mb_strtolower(trim((string) ($p['product_type'] ?? '')))));
+                if ($pType !== '') {
+                    // product_type is set (enriched): it drives ranking. "cooking_oil" → base "oil".
+                    $typeBase = str_contains($pType, '_') ? substr((string) strrchr($pType, '_'), 1) : $pType;
+                    if ($pType === $qHeadS) {
+                        $score += 250;                                   // exact type ("rice" == "rice")
+                    } elseif ($typeBase === $qHeadS) {
+                        // same base noun as the query ("cooking_oil"/"skincare_oil" for "oil"):
+                        // prefer the edible/grocery variant, demote the non-food one.
+                        $score += in_array($pType, self::NON_FOOD_TYPES, true) ? -150 : 220;
+                    }
+                } else {
+                    // not yet enriched → fall back to the head-noun heuristic
+                    $pHead = $nameToks ? self::depluralize((string) end($nameToks)) : '';
+                    if ($pHead !== '' && $pHead === $qHeadS) {
+                        $score += 200;            // the query word IS this product's head noun
+                    } elseif (isset($nameSet[$contentQ[0]]) || isset($nameSet[$qHeadS])) {
+                        $score -= 50;             // present only as a modifier -> demote
+                    }
                 }
             }
 

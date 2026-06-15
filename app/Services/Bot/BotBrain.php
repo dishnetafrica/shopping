@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.15-10  category-switch-resets-qualifiers';
+    public const VERSION = '2026.06.15-11  product-enrichment';
 
     public function __construct(
         protected ProductSearch $search,
@@ -1233,12 +1233,13 @@ class BotBrain
             ->where('active', true)
             ->get()
             ->map(fn ($p) => [
-                'id'       => $p->id,
-                'name'     => (string) $p->name,
-                'category' => (string) ($p->category ?? ''),
-                'keywords' => (string) ($p->keywords ?? ''),
-                'price'    => Pricing::net($tenant, (float) $p->price),
-                'stock'    => $p->stock ?? 1,
+                'id'           => $p->id,
+                'name'         => (string) $p->name,
+                'category'     => (string) ($p->category ?? ''),
+                'keywords'     => (string) ($p->keywords ?? ''),
+                'product_type' => (string) ($p->product_type ?? ''),   // drives matcher +250 tier
+                'price'        => Pricing::net($tenant, (float) $p->price),
+                'stock'        => $p->stock ?? 1,
             ])->all();
     }
 
