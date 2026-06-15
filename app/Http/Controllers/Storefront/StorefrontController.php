@@ -164,6 +164,17 @@ class StorefrontController extends Controller
             return response()->json(['ok' => false, 'error' => 'Your cart is empty.'], 422);
         }
 
+        // Special instructions / change request (e.g. "in the thali remove dal & add kadhi").
+        $note = trim((string) $r->input('note', ''));
+        $note = mb_substr(preg_replace('/\s+/', ' ', $note), 0, 300);
+        $itemsText = implode(', ', $textParts);
+        if ($note !== '') {
+            foreach ($clean as &$cl) {                       // stamp the thali line for the kitchen
+                if (stripos($cl['name'], 'thali') !== false) $cl['name'] .= ' · Note: ' . $note;
+            }
+            unset($cl);
+            $itemsText .= '  |  Note: ' . $note;             // always visible on the order + alerts
+        }
         // Address + optional map pin go into one human-readable location string for the rider.
         $location = trim((string) $r->input('location', ''));
         if ($maps = trim((string) $r->input('maps_url', ''))) {
@@ -176,7 +187,7 @@ class StorefrontController extends Controller
         $o->customer_name  = $name;
         $o->customer_phone = $phone;
         $o->items_json     = $clean;
-        $o->items_text     = implode(', ', $textParts);
+        $o->items_text     = $itemsText;
         $o->total          = $r->filled('total') ? (float) $r->input('total') : $calcTotal;
         if ($pay = trim((string) $r->input('payment', ''))) $o->payment = $pay;
         if ($location !== '') $o->location = $location;

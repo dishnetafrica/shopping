@@ -404,6 +404,7 @@ function openCheckout(){
     '<div class="field"><label>Your name</label><input id="coName" value="'+esc(qp('n'))+'" placeholder="Full name"></div>'+
     '<div class="field"><label>WhatsApp number</label><input id="coPhone" inputmode="numeric" value="'+esc(qp('c'))+'" placeholder="2567…"></div>'+
     '<div class="field"><label>Delivery address</label><textarea id="coAddr" rows="2" placeholder="Area, road, landmark"></textarea></div>'+
+    '<div class="field"><label>Special instructions <span style="color:#98a2b3;font-weight:400">(optional)</span></label><textarea id="coNote" rows="2" placeholder="e.g. in the thali remove dal &amp; add kadhi \u00B7 less spicy \u00B7 leave at gate"></textarea></div>'+
     '<div class="field"><label>Delivery location (GPS pin)</label>'+
     '<button type="button" class="locbtn" id="locBtn" onclick="captureLoc()">📍 Share my current location</button>'+
     '<div id="locMsg" class="locmsg">Optional — sends an exact map pin so the rider finds you fast.</div></div>'+
@@ -429,11 +430,11 @@ function captureLoc(){
   );
 }
 async function placeOrder(){
-  var name=($('coName').value||'').trim(), phone=($('coPhone').value||'').replace(/[^0-9]/g,''), addr=($('coAddr').value||'').trim(), pay=$('coPay').value;
+  var name=($('coName').value||'').trim(), phone=($('coPhone').value||'').replace(/[^0-9]/g,''), addr=($('coAddr').value||'').trim(), pay=$('coPay').value, note=(($('coNote')||{}).value||'').trim();
   if(!name){alert('Please enter your name');return;}
   if(phone.length<7){alert('Please enter your WhatsApp number');return;}
   if(!addr && !GEO){alert('Please enter your delivery address or share your location');return;}
-  var payload={name:name,phone:phone,location:addr,payment:pay,items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty};}),total:cartTotal(),channel:'web'};
+  var payload={name:name,phone:phone,location:addr,payment:pay,note:note,items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty};}),total:cartTotal(),channel:'web'};
   if(GEO){payload.geo=GEO.lat+','+GEO.lng;payload.maps_url=mapsUrl(GEO);}
   var btn=$('placeBtn');btn.disabled=true;btn.textContent='Placing…';
   try{
