@@ -44,7 +44,8 @@ class StorefrontController extends Controller
     private function imageUrl(?string $value): string
     {
         if (! $value) return '';
-        return Str::startsWith($value, ['http://', 'https://'])
+        // Already a usable URL or root-relative path (e.g. "/storage/..") — don't re-wrap.
+        return Str::startsWith($value, ['http://', 'https://', '/'])
             ? $value
             : Storage::disk('public')->url($value);
     }
