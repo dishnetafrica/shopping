@@ -76,6 +76,33 @@ ok('summary counts: skip>=1',         ($s['skip'] ?? 0) >= 1);
 ok('summary counts: unclassified=1',  ($s['unclassified'] ?? 0) === 1);
 ok('plan() returns rows for every product', count($plan['rows']) === count($products));
 
+sec('parseBatch() — map batch model response to ids, validate, handle gaps');
+$items = [
+    ['id'=>101,'name'=>'Fortune Sunflower Oil 1L'],
+    ['id'=>102,'name'=>'Bio-Oil 60ML'],
+    ['id'=>103,'name'=>'Kolam Rice 5KG'],
+    ['id'=>104,'name'=>'Mystery Thing'],
+];
+$good = '{"results":[{"i":1,"product_type":"cooking_oil","confidence":0.95},{"i":2,"product_type":"skincare_oil","confidence":0.9},{"i":3,"product_type":"rice","confidence":0.97},{"i":4,"product_type":"gizmo","confidence":0.99}]}';
+$pb = E::parseBatch($good, $items);
+ok('batch maps i=1 -> id 101 cooking_oil', ($pb[101]['product_type'] ?? '') === 'cooking_oil');
+ok('batch maps i=2 -> id 102 skincare_oil', ($pb[102]['product_type'] ?? '') === 'skincare_oil');
+ok('batch out-of-vocab gizmo -> other',     ($pb[104]['product_type'] ?? '') === 'other');
+$gap = '{"results":[{"i":1,"product_type":"cooking_oil","confidence":0.95},{"i":3,"product_type":"rice","confidence":0.9}]}';
+$pb2 = E::parseBatch($gap, $items);
+ok('omitted item stays null (unclassified)', $pb2[102] === null && $pb2[104] === null);
+ok('present items still classified',         ($pb2[101]['product_type'] ?? '') === 'cooking_oil' && ($pb2[103]['product_type'] ?? '') === 'rice');
+ok('bare JSON array (no results key) works', (E::parseBatch('[{"i":1,"product_type":"rice","confidence":0.9}]', $items)[101]['product_type'] ?? '') === 'rice');
+ok('out-of-range index ignored safely',      E::parseBatch('{"results":[{"i":99,"product_type":"rice","confidence":0.9}]}', $items)[101] === null);
+ok('garbage content -> all null',            count(array_filter(E::parseBatch('not json', $items))) === 0);
+ok('fenced json ```json ... ``` parsed',     (E::parseBatch("```json\n{\"results\":[{\"i\":1,\"product_type\":\"cooking_oil\",\"confidence\":0.9}]}\n```", $items)[101]['product_type'] ?? '') === 'cooking_oil');
+
+sec('systemPromptBatch() — vocab + one-entry-per-number JSON');
+$spb = E::systemPromptBatch();
+ok('batch prompt lists vocab',        str_contains($spb, 'cooking_oil') && str_contains($spb, 'spice_mix'));
+ok('batch prompt demands results[]',  str_contains($spb, '"results"'));
+ok('batch prompt: strict JSON only',  stripos($spb, 'STRICT JSON') !== false);
+
 echo "\n========= RESULT =========\n";
 echo "PASS $P  FAIL $F\n";
 exit($F === 0 ? 0 : 1);
