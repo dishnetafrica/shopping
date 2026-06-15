@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.16-48  custom-domain-panel-field';
+    public const VERSION = '2026.06.16-49  bot-greeting-website-link';
 
     public function __construct(
         protected ProductSearch $search,
@@ -64,9 +64,10 @@ class BotBrain
         switch ($intent) {
             case 'greet':
                 $custom = trim((string) $tenant->setting('bot_greeting', ''));
-                if ($custom !== '') return $custom;
-                return "Hello \u{1F44B} Welcome to {$tenant->name}! Tell me what you'd like and I'll add it up. "
-                     . "Say *cart* to see your basket or *checkout* when ready.";
+                $g = $custom !== '' ? $custom
+                    : "Hello \u{1F44B} Welcome to {$tenant->name}! Tell me what you'd like and I'll add it up. "
+                    . "Say *cart* to see your basket or *checkout* when ready.";
+                return $g . $this->websiteNudge($tenant);
 
             case 'view_cart':
                 return $this->cartSummary($tenant, $cart) ?: "Your basket is empty. Tell me a product to add.";
@@ -575,23 +576,48 @@ class BotBrain
 
         switch ($d['lang']) {
             case 'sw':
-                return "Habari \u{1F60A} Karibu {$shop}.\nWhat would you like today?";
+                $msg = "Habari \u{1F60A} Karibu {$shop}.\nWhat would you like today?";
+                break;
             case 'lg':
-                return "Bulungi \u{1F60A}\nWhat can I get for you today?";
+                $msg = "Bulungi \u{1F60A}\nWhat can I get for you today?";
+                break;
             case 'ar':
-                return "Salaam \u{1F44B}\nWelcome to {$shop}.\nHow can I help you today?";
+                $msg = "Salaam \u{1F44B}\nWelcome to {$shop}.\nHow can I help you today?";
+                break;
             case 'in':
                 if (preg_match('/krishna/i', $text)) {
-                    return "\u{1F64F} Jai Shree Krishna! Welcome to {$shop} — what would you like today?";
+                    $msg = "\u{1F64F} Jai Shree Krishna! Welcome to {$shop} — what would you like today?";
+                } else {
+                    $msg = "Namaste \u{1F64F}\nWelcome to {$shop}! What would you like today?";
                 }
-                return "Namaste \u{1F64F}\nWelcome to {$shop}! What would you like today?";
+                break;
             case 'en':
             default:
                 $custom = trim((string) $tenant->setting('bot_greeting', ''));
-                if ($custom !== '') return $custom;
-                return "Hello \u{1F44B} Welcome to {$shop}! Tell me what you'd like and I'll add it up. "
-                     . "Say *cart* to see your basket or *checkout* when ready.";
+                $msg = $custom !== '' ? $custom
+                    : "Hello \u{1F44B} Welcome to {$shop}! Tell me what you'd like and I'll add it up. "
+                    . "Say *cart* to see your basket or *checkout* when ready.";
+                break;
         }
+
+        return $msg . $this->websiteNudge($tenant);
+    }
+
+    /** The shop's public storefront URL: custom domain if set, else the mycloudbss slug URL. */
+    protected function storefrontUrl(Tenant $tenant): string
+    {
+        $dom = trim((string) $tenant->custom_domain);
+        if ($dom !== '') return 'https://' . $dom;
+        $slug = trim((string) $tenant->slug);
+        return $slug !== '' ? 'https://mycloudbss.com/' . $slug : '';
+    }
+
+    /** A short "order on our website" line for greetings (off when bot_website_link === '0'). */
+    protected function websiteNudge(Tenant $tenant): string
+    {
+        if ((string) $tenant->setting('bot_website_link', '1') === '0') return '';
+        $url = $this->storefrontUrl($tenant);
+        return $url !== '' ? "\n\n\u{1F6D2} Or browse & order on our website: {$url}" : '';
     }
 
     protected const SESSION_IDLE = 600;     // 10 min: expire clarification/shopping context
