@@ -1738,15 +1738,14 @@ function thaliPhoto(day){_thPhotoDay=day;var f=$('thPhotoFile');if(f){f.value=''
 function thaliPhotoClear(day){TH_MODEL.images[day]='';$('thumb_'+day).innerHTML=thThumb(day);}
 function bindThaliPhoto(){
   var f=$('thPhotoFile');if(!f||f._b)return;f._b=true;
-  f.onchange=function(){var file=f.files&&f.files[0];if(!file||!_thPhotoDay)return;
-    var rd=new FileReader();
-    rd.onload=async function(){toast('Uploading photo\u2026');
-      try{var up=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:file.name,data:rd.result})});
-        var d=await up.json();
-        if(d&&d.ok&&d.url){TH_MODEL.images[_thPhotoDay]=d.url;$('thumb_'+_thPhotoDay).innerHTML=thThumb(_thPhotoDay);toast('Flyer photo set');}
-        else toast('Upload failed \u2014 try a smaller image');
-      }catch(e){toast('Upload failed');}
-    };rd.readAsDataURL(file);
+  f.onchange=async function(){var file=f.files&&f.files[0];if(!file||!_thPhotoDay)return;
+    toast('Uploading photo\u2026');
+    var data=await shrinkImage(file,1280,.82); if(!data){toast('Could not read image');return;}
+    try{var up=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:(file.name||'flyer')+'.jpg',data:data})});
+      var d=await up.json();
+      if(d&&d.ok&&d.url){TH_MODEL.images[_thPhotoDay]=d.url;$('thumb_'+_thPhotoDay).innerHTML=thThumb(_thPhotoDay);toast('Flyer photo set');}
+      else toast('Upload failed \u2014 try a smaller image');
+    }catch(e){toast('Upload failed');}
   };
 }
 async function saveThali(){
@@ -1790,21 +1789,39 @@ async function saveCatImage(cat,url){
     else toast('Could not save photo');
   }catch(e){toast('Could not save photo');}
 }
-function bindCatPhoto(){
-  var f=$('catPhotoFile');if(!f||f._bound)return;f._bound=true;
-  f.onchange=function(){
-    var file=f.files&&f.files[0];if(!file||!_catPhotoTarget)return;
+function shrinkImage(file,maxDim,quality){
+  maxDim=maxDim||1280;quality=quality||0.82;
+  return new Promise(function(res){
     var rd=new FileReader();
-    rd.onload=async function(){
-      toast('Uploading photo\u2026');
-      try{
-        var up=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:file.name,data:rd.result})});
-        var d=await up.json();
-        if(d&&d.ok&&d.url)await saveCatImage(_catPhotoTarget,d.url);
-        else toast('Upload failed \u2014 try a smaller image');
-      }catch(e){toast('Upload failed');}
+    rd.onerror=function(){res(null);};
+    rd.onload=function(){
+      var img=new Image();
+      img.onload=function(){
+        var w=img.width,h=img.height,scale=Math.min(1,maxDim/Math.max(w,h));
+        var cw=Math.max(1,Math.round(w*scale)),ch=Math.max(1,Math.round(h*scale));
+        try{var c=document.createElement('canvas');c.width=cw;c.height=ch;var x=c.getContext('2d');
+          x.fillStyle='#fff';x.fillRect(0,0,cw,ch);x.drawImage(img,0,0,cw,ch);
+          res(c.toDataURL('image/jpeg',quality));}
+        catch(e){res(rd.result);}
+      };
+      img.onerror=function(){res(rd.result);};
+      img.src=rd.result;
     };
     rd.readAsDataURL(file);
+  });
+}
+function bindCatPhoto(){
+  var f=$('catPhotoFile');if(!f||f._bound)return;f._bound=true;
+  f.onchange=async function(){
+    var file=f.files&&f.files[0];if(!file||!_catPhotoTarget)return;
+    toast('Uploading photo\u2026');
+    var data=await shrinkImage(file,1280,.82); if(!data){toast('Could not read image');return;}
+    try{
+      var up=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:(file.name||'photo')+'.jpg',data:data})});
+      var d=await up.json();
+      if(d&&d.ok&&d.url)await saveCatImage(_catPhotoTarget,d.url);
+      else toast('Upload failed \u2014 try a smaller image');
+    }catch(e){toast('Upload failed');}
   };
 }
 function openCat(i){var c=_cats[i];pmCatFilter=(c==='Uncategorised'?'':c);pmQuery='';showPage('products');}
