@@ -27,6 +27,10 @@ class UsersRelationManager extends RelationManager
             Forms\Components\TextInput::make('phone')->label('WhatsApp number')->tel()->required()
                 ->helperText('Full intl format e.g. 256772123456. They sign in at /app with this via a one-time WhatsApp code.'),
             Forms\Components\TextInput::make('email')->email()->label('Email (optional)'),
+            Forms\Components\TextInput::make('password')->password()->revealable()
+                ->label('Password (optional)')
+                ->helperText('Set this only if they’ll sign in by email + password. Leave blank for WhatsApp-code login.')
+                ->dehydrated(fn ($state) => filled($state)),
             Forms\Components\Select::make('role')
                 ->options(['owner' => 'Owner', 'staff' => 'Staff'])
                 ->default('owner')->required(),
@@ -46,7 +50,12 @@ class UsersRelationManager extends RelationManager
             ->headerActions([
                 Tables\Actions\CreateAction::make()
                     ->label('Add login')
-                    ->mutateFormDataUsing(fn (array $data) => array_merge($data, ['is_super_admin' => false])),
+                    ->mutateFormDataUsing(function (array $data) {
+                        $data['is_super_admin'] = false;
+                        // OTP login has no password; the column is NOT NULL, so fill a random one.
+                        if (empty($data['password'])) $data['password'] = \Illuminate\Support\Str::random(40);
+                        return $data;
+                    }),
             ])
             ->actions([
                 Tables\Actions\EditAction::make()

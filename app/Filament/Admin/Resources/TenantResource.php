@@ -141,11 +141,14 @@ class TenantResource extends Resource
         if ($phone === '') return null;
 
         $user = self::ownerOf($tenant) ?? new User(['tenant_id' => $tenant->id, 'role' => 'owner']);
+        $isNew = ! $user->exists;
         $user->tenant_id = $tenant->id;
         if (empty($user->role)) $user->role = 'owner';
         if (! empty($name)) $user->name = $name;
         $user->phone = $phone;
         $user->is_super_admin = false;
+        // OTP-only login has no password, but the column is NOT NULL — fill a random one on create.
+        if ($isNew) $user->password = \Illuminate\Support\Str::random(40);
         $user->save();
 
         return $user;
