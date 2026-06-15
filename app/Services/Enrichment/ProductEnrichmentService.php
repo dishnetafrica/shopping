@@ -3,7 +3,6 @@
 namespace App\Services\Enrichment;
 
 use Illuminate\Support\Facades\Log;
-use OpenAI\Laravel\Facades\OpenAI;
 
 /**
  * ProductEnrichmentService
@@ -143,7 +142,9 @@ class ProductEnrichmentService
 
         $user = trim($name) . ($category !== '' ? " (aisle: {$category})" : '');
         try {
-            $resp = OpenAI::chat()->create([
+            // Build the client with the key we resolved ourselves (env-backed), so this works
+            // even when config/openai.php isn't published and config('openai.api_key') is empty.
+            $resp = \OpenAI::client($this->apiKey)->chat()->create([
                 'model' => $this->model,
                 'temperature' => 0,
                 'response_format' => ['type' => 'json_object'],
@@ -163,6 +164,93 @@ class ProductEnrichmentService
             Log::warning('ProductEnrichment classifyOne failed', ['name' => $name, 'error' => $e->getMessage()]);
             return null;
         }
+    }
+
+    // ---------------------------------------------------------------- batch classification (scale)
+
+    /** Vocabulary-constrained, JSON-only instruction for classifying a NUMBERED LIST at once. */
+    public static function systemPromptBatch(): string
+    {
+        $vocab = implode(', ', self::VOCAB);
+        return implode("\n", [
+            'You classify grocery-shop products into product_type values.',
+            'For EACH numbered product, choose exactly ONE value from this controlled vocabulary:',
+            $vocab . '.',
+            'Rules:',
+            '- Edible cooking oils (sunflower, vegetable, mustard, olive, palm) => cooking_oil.',
+            '- Skin/body oils (bio-oil, baby oil) => skincare_oil. Perfume/beauty oils => cosmetic_oil.',
+            '- Aromatherapy (clove, eucalyptus, tea-tree) => essential_oil. Hair oils => hair_oil.',
+            '- Plain grain rice => rice. Rice crisps/puffs/snacks => snack.',
+            '- Single ground spice => spice. Branded masala/seasoning blends => spice_mix.',
+            '- Insecticide/cleaners => cleaning. Razors/blades/soap/shampoo => personal_care.',
+            '- If genuinely unsure, use other with low confidence. Never invent a type.',
+            'Respond with STRICT JSON only, no prose, no markdown, exactly one entry per input number:',
+            '{"results":[{"i":1,"product_type":"<vocab>","confidence":<0..1>}, ...]}',
+        ]);
+    }
+
+    /**
+     * Classify a batch in ONE API call. $items is a list of ['id','name','category'].
+     * Returns [productId => validated|null]; ids the model omitted/garbled stay null (unclassified).
+     * Fails safe: any error returns all-null so a batch never half-writes.
+     */
+    public function classifyMany(array $items): array
+    {
+        $items = array_values($items);
+        $out = [];
+        foreach ($items as $it) $out[$it['id']] = null;
+        if (! $this->isEnabled() || ! $items) return $out;
+
+        $lines = [];
+        foreach ($items as $k => $it) {
+            $nm  = trim((string) ($it['name'] ?? ''));
+            $cat = trim((string) ($it['category'] ?? ''));
+            $lines[] = ($k + 1) . '. ' . $nm . ($cat !== '' ? " (aisle: {$cat})" : '');
+        }
+
+        try {
+            $resp = \OpenAI::client($this->apiKey)->chat()->create([
+                'model' => $this->model,
+                'temperature' => 0,
+                'response_format' => ['type' => 'json_object'],
+                'messages' => [
+                    ['role' => 'system', 'content' => self::systemPromptBatch()],
+                    ['role' => 'user', 'content' => 'Classify these ' . count($items) . " products:\n" . implode("\n", $lines)],
+                ],
+            ]);
+            $content = (string) ($resp->choices[0]->message->content ?? '');
+            return self::parseBatch($content, $items);
+        } catch (\Throwable $e) {
+            Log::warning('ProductEnrichment classifyMany failed', ['count' => count($items), 'error' => $e->getMessage()]);
+            return $out;
+        }
+    }
+
+    /**
+     * Pure: map a batch model response back to product ids and validate each. The prompt numbered
+     * items 1..N in $items order; results carry that "i". Missing/garbled entries stay null.
+     * @param array $items list of ['id'=>..]; @return array [id => validated|null]
+     */
+    public static function parseBatch(string $content, array $items): array
+    {
+        $items = array_values($items);
+        $out = [];
+        foreach ($items as $it) $out[$it['id']] = null;
+
+        $content = trim(preg_replace('/^```(?:json)?|```$/m', '', trim($content)));
+        $decoded = json_decode($content, true);
+        if (! is_array($decoded)) return $out;
+
+        $results = $decoded['results'] ?? (array_is_list($decoded) ? $decoded : null);
+        if (! is_array($results)) return $out;
+
+        foreach ($results as $r) {
+            if (! is_array($r)) continue;
+            $i = (int) ($r['i'] ?? $r['index'] ?? 0);
+            if ($i < 1 || $i > count($items)) continue;
+            $out[$items[$i - 1]['id']] = self::validate($r);
+        }
+        return $out;
     }
 
     // ---------------------------------------------------------------- planning (dry-run safe)
