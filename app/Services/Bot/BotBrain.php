@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.15-27  no-echo-chitchat';
+    public const VERSION = '2026.06.15-28  forward-questions-to-shop';
 
     public function __construct(
         protected ProductSearch $search,
@@ -341,7 +341,7 @@ class BotBrain
                 return $this->greetingReply($tenant, $text);
             case IntentClassifier::QUESTION:
                 return \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant))
-                    ?? "\u{1F642} Happy to help! Tell me a product to order, say *cart* to review, or *checkout* to finish — and for anything else I'll connect you to the shop.";
+                    ?? $this->forwardQuestionToShop($tenant, $convo, $text);
             case IntentClassifier::HUMAN_AGENT:
                 $convo->agent_active = true;
                 $convo->save();
@@ -400,10 +400,13 @@ class BotBrain
             return "Sorry, we don't stock *{$want}* right now \u{1F642} Tell me another product, or say *menu* to see what we have.";
         }
 
-        // Conversational / off-topic message: try the FAQ, else a warm catch-all that never
-        // blames the wording and routes anything else to the shop (it's saved in Chats for them).
+        // Conversational / off-topic message: try the FAQ, then forward genuine questions to
+        // the shop; otherwise a warm catch-all that never blames the wording.
         if (($faq = \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant))) !== null) {
             return $faq;
+        }
+        if (preg_match('/\?|\b(will|would|can|could|do|does|are|is|when|what|how|why|provide|deliver|delivery|open|close|closed|available|price|cost|charge|free|refund|return|exchange)\b/i', $text)) {
+            return $this->forwardQuestionToShop($tenant, $convo, $text);
         }
         return "\u{1F44B} Hi! I'm {$tenant->name}'s ordering assistant. Tell me a product like *rice* or *sugar*, or say *menu* to see what we have \u{2014} and for anything else, the shop will reply here shortly.";
     }
@@ -443,6 +446,29 @@ class BotBrain
      * Localised greeting reply based on the detected language of the customer's greeting.
      * Never product-searches. Falls back to the tenant's custom greeting for English.
      */
+    /**
+     * The bot can't answer a customer question: actually forward it to the shop owner
+     * (debounced to once per ~10 min per conversation so we don't spam), and tell the
+     * customer truthfully that it's been passed on. The message is also in Chats.
+     */
+    protected function forwardQuestionToShop(Tenant $tenant, $convo, string $text): string
+    {
+        $st   = is_array($convo->state) ? $convo->state : [];
+        $last = (int) ($st['q_pinged_at'] ?? 0);
+        if (time() - $last > 600) {
+            $q = trim(mb_substr(trim($text), 0, 160));
+            \App\Jobs\NotifyOwner::dispatch(
+                $tenant->id,
+                "\u{2753} +{$convo->customer_phone} asked: \"{$q}\"\nOpen Chats to reply."
+            );
+            $st['q_pinged_at'] = time();
+            $convo->state = $st;
+            $convo->save();
+        }
+        return "\u{1F642} Good question \u{2014} I've passed it to the shop and they'll reply here shortly. "
+             . "Meanwhile you can keep adding items, or say *menu* to see what we have.";
+    }
+
     protected function greetingReply(Tenant $tenant, string $text): string
     {
         $shop = $tenant->name;
