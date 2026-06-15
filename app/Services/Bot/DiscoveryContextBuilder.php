@@ -76,6 +76,14 @@ class DiscoveryContextBuilder
             || ! empty($c['usage']) || ! empty($c['family_size']) || ! empty($c['size']);
     }
 
+    /** True when there is advisory context beyond the bare product — a qualifier that justifies a
+     *  single recommendation. A bare category/brand alone is a search, not an advice request. */
+    public static function hasQualifier(array $c): bool
+    {
+        return ! empty($c['exclude']) || ! empty($c['usage'])
+            || ! empty($c['budget']) || ! empty($c['family_size']) || ! empty($c['size']);
+    }
+
     /** True when the message is really a concrete order line ("5 coke", "rice 5kg"), which must
      *  NOT be swallowed by discovery — it's a buy, not a question. */
     public static function looksLikeConcreteAdd(string $text, array $catalogue): bool

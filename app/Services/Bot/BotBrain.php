@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.15-2  discovery-fresh-candidates';
+    public const VERSION = '2026.06.15-3  discovery-recommends-only-with-qualifiers';
 
     public function __construct(
         protected ProductSearch $search,
@@ -777,21 +777,32 @@ class BotBrain
         }
 
         $st['discovery'] = $d['ctx'];
-        if ($d['action'] === 'enter' || $d['action'] === 'enrich') {
-            // A discovery recommendation must derive its OWN candidates from a fresh, coherence-
-            // filtered search on the accumulated subject — never inherit the previous numbered
-            // list. Without this, "rice" (showing snacks) then "i need basmati" recommends the
-            // cheapest *snack* because the stale options short-circuit the search.
-            unset($st['options'], $st['pending_resolved'], $st['last_recommended']);
-        }
-        $convo->state = $st;
-        $convo->save();
 
         if ($d['action'] === 'ask') {
+            $convo->state = $st;
+            $convo->save();
             return "Happy to help you choose \u{1F642} What are you shopping for — rice, flour, oil, sugar…?";
         }
 
-        // enter / enrich: recommend from the full accumulated context via the tested opinion path
+        // Recommend ONLY when the customer has given advisory context — a qualifier beyond the
+        // bare product (an exclusion, usage, budget, household size or pack size). A bare product /
+        // brand / variety ("basmati rice", "india gate") is a NARROWING SEARCH: hand it to the
+        // reliable ranked product search, which understands multi-word phrases, rather than
+        // collapsing it to one token and guessing a single pick (which surfaced a broom for
+        // "india gate"). Discovery stays armed, so the moment a qualifier arrives we recommend.
+        if (! \App\Services\Bot\DiscoveryContextBuilder::hasQualifier($d['ctx'])) {
+            $convo->state = $st;       // keep discovery armed; let the normal search list it
+            $convo->save();
+            return null;
+        }
+
+        // Advisory recommendation: derive fresh, coherence-filtered candidates for the accumulated
+        // subject — never inherit the previous numbered list (stale options would short-circuit
+        // the search and recommend the cheapest item already on screen).
+        unset($st['options'], $st['pending_resolved'], $st['last_recommended']);
+        $convo->state = $st;
+        $convo->save();
+
         $synth = \App\Services\Bot\DiscoveryContextBuilder::toOpinionText($d['ctx']);
         $reply = (new \App\Services\Bot\SalesAssistantBrain($this->clarify))
             ->respond($tenant, $convo, $synth, $catalogue, $this->currencyFor($tenant));

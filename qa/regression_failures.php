@@ -256,6 +256,18 @@ $basCands = \App\Services\Bot\SalesAssistantBrain::coherentCandidates('basmati',
 ok('"basmati" candidates are all real basmati (no snacks)',
    $basCands && empty(array_intersect($names($basCands), ['D.rice Samosa','Gaga Rice Crisps 35GMS','Minaxi Rice Powa 400G'])));
 
+sec('F14 — bare product/brand is a SEARCH; only qualifiers trigger a single recommendation');
+ok('"need rice" (bare) has NO qualifier -> search',        ! DCB::hasQualifier(DCB::fromMessage('need rice',$ccat)));
+ok('"do you have basmati rice" (bare) -> search',          ! DCB::hasQualifier(DCB::fromMessage('do you have basmati rice',$ccat)));
+ok('"i need india gate" (bare brand) -> search',           ! DCB::hasQualifier(DCB::fromMessage('i need india gate',$ccat)));
+ok('"not basmati" IS a qualifier -> recommend',            DCB::hasQualifier(DCB::fromMessage('not basmati',$ccat)));
+ok('"family of 5" IS a qualifier -> recommend',            DCB::hasQualifier(DCB::fromMessage('family of 5',$ccat)));
+ok('"not expensive" IS a qualifier -> recommend',          DCB::hasQualifier(DCB::fromMessage('not expensive',$ccat)));
+ok('"daily use" IS a qualifier -> recommend',              DCB::hasQualifier(DCB::fromMessage('daily use',$ccat)));
+// accumulated context: bare entry then a qualifier flips to recommend
+$acc = DCB::merge(DCB::fromMessage('need rice',$ccat), DCB::fromMessage('not basmati',$ccat));
+ok('"need rice" then "not basmati" -> qualifier present (recommend)', DCB::hasQualifier($acc));
+
 echo "\n========= RESULT =========\n";
 echo "PASS $PASS  FAIL $FAIL\n";
 exit($FAIL===0?0:1);
