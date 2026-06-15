@@ -123,7 +123,11 @@
     .side{position:fixed;left:0;top:0;z-index:30;transform:translateX(-100%);transition:.2s}
     .side.open{transform:translateX(0)} .topbar .ham{display:block} .backdrop.show{display:block}
   }
-  @media print{body *{visibility:hidden}#printArea,#printArea *{visibility:visible}#printArea{position:absolute;inset:0;padding:24px}}
+  .billedit{border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-family:inherit;font-size:13px;background:#fff;color:var(--ink)}
+  #dCustName.billedit{font-weight:700;font-size:15px;width:100%;max-width:320px;margin:1px 0 6px;display:block}
+  textarea#dCustAddr.billedit{width:100%;max-width:360px;margin:2px 0 6px;resize:vertical;display:block}
+  @media print{body *{visibility:hidden}#printArea,#printArea *{visibility:visible}#printArea{position:absolute;inset:0;padding:24px}
+    .billedit{border:none!important;padding:0!important;resize:none!important;font:inherit!important;background:transparent!important;max-width:none!important}}
   .pos{display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start}
   @media(max-width:980px){.pos{grid-template-columns:1fr}}
   .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:10px}
@@ -1221,10 +1225,14 @@ async function saveInvoice(){
   var items=current.items.map(function(it){return {name:it.name,qty:it.qty,price:it.price};});
   var sub=items.reduce(function(s,it){return s+(Number(it.price)||0)*(Number(it.qty)||0);},0);
   var total=sub+(Number(current.deliveryFee)||0);
-  var qs='?token='+encodeURIComponent(token)+'&row='+current.id+'&items='+encodeURIComponent(JSON.stringify(items))+'&total='+total+'&status='+encodeURIComponent(current.status);
+  var nm=(($('dCustName')||{}).value||'').trim();
+  var addr=(($('dCustAddr')||{}).value||'').trim();
+  var loc=addr; if(addr&&current.pin&&addr.indexOf(current.pin)<0)loc=addr+' \u2014 '+current.pin; else if(!addr&&current.pin)loc=current.pin;
+  if(nm){current.customer=nm;} if(addr){current.locClean=addr;}
+  var qs='?token='+encodeURIComponent(token)+'&row='+current.id+'&items='+encodeURIComponent(JSON.stringify(items))+'&total='+total+'&status='+encodeURIComponent(current.status)+'&name='+encodeURIComponent(nm)+'&location='+encodeURIComponent(loc);
   $('saveBtn').disabled=true;
   try{var r=await fetch(EP.saveOrder+qs,{cache:'no-store'});var d=await r.json();
-    if(d&&d.ok){current.total=total;var o=ORDERS.find(function(x){return x.id===current.id;});if(o){o.items=items;o.total=total;}toast('Saved · '+ugx(total));renderInvoice();}
+    if(d&&d.ok){current.total=total;var o=ORDERS.find(function(x){return x.id===current.id;});if(o){o.items=items;o.total=total;if(nm)o.customer=nm;if(addr)o.locClean=addr;}toast('Saved · '+ugx(total));openOrder(current.id);}
     else toast('Could not save');
   }catch(e){toast('Network error');}
   $('saveBtn').disabled=false;
@@ -1415,9 +1423,12 @@ function openOrder(id){
   $('listView').classList.add('hide');$('detailView').classList.remove('hide');window.scrollTo(0,0);
   $('crumbId').textContent='Order '+oNo(current);
   $('invDate').innerHTML='Order date: <b>'+esc(fmtDate(current.oDate))+'</b><br>Invoice '+oNo(current);
-  $('toBlk').innerHTML='<h4>Bill to</h4><b>'+esc(current.customer)+'</b><br>'+
+  $('toBlk').innerHTML='<h4>Bill to</h4>'+
+    '<input id="dCustName" class="billedit" value="'+esc(current.customer||'')+'" placeholder="Customer name">'+
     (current.phone?'<a href="https://wa.me/'+esc(String(current.phone).replace(/[^0-9]/g,''))+'" target="_blank">'+esc(current.phone)+'</a><br>':'')+
-    locHtml(current)+'Payment: '+esc(current.payment)+creditBadge(current.phone);
+    (current.pin?'<a href="'+esc(current.pin)+'" target="_blank">\uD83D\uDCCD Open delivery pin</a><br>':'')+
+    '<textarea id="dCustAddr" class="billedit" rows="2" placeholder="Delivery address">'+esc(current.locClean||'')+'</textarea>'+
+    'Payment: '+esc(current.payment)+creditBadge(current.phone);
   $('dStatus').innerHTML=STATUSES.map(function(s){return '<option '+(s.v===current.status?'selected':'')+'>'+s.v+'</option>';}).join('');
   $('dStatus').onchange=function(){saveStatus(current.id,this.value);};
   if($('addSearch')){$('addSearch').value='';$('addSearch').oninput=function(){renderAddOptions(this.value);};
