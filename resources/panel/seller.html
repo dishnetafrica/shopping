@@ -1589,7 +1589,11 @@ function prodImgField(url){
     '<img id="pImgPrev" class="pimgprev"'+(url?(' src="'+esc(url)+'"'):' style="display:none"')+' onerror="this.style.display=\'none\'">'+
     '<input id="pImg" placeholder="Image URL (or upload below)" value="'+esc(url||'')+'">'+
     '<div style="margin-top:8px"><button class="btn ghost" id="pImgUp" type="button">\u2191 Upload photo</button></div>'+
-    '<input id="pImgFile" type="file" accept="image/*" style="display:none"></div>';
+    '<input id="pImgFile" type="file" accept="image/*" style="display:none">'+
+    '<div style="margin-top:6px;font-size:12px;line-height:1.5;color:#6b7280">'+
+      'Best: a <b>square</b> photo, about <b>800\u00d7800 px</b> (up to 1000\u00d71000), saved as <b>JPG</b> and <b>under 300 KB</b>. '+
+      'Square avoids cropping on WhatsApp; smaller files send faster on mobile data. Minimum 500\u00d7500 px so it stays sharp.'+
+    '</div></div>';
 }
 function bindProdImg(){
   var t=$('pImg'),pv=$('pImgPrev'),up=$('pImgUp'),f=$('pImgFile');
