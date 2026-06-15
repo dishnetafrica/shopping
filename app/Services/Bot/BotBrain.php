@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.16-49  bot-greeting-website-link';
+    public const VERSION = '2026.06.16-50  website-link-custom-domain-only';
 
     public function __construct(
         protected ProductSearch $search,
@@ -612,12 +612,12 @@ class BotBrain
         return $slug !== '' ? 'https://mycloudbss.com/' . $slug : '';
     }
 
-    /** A short "order on our website" line for greetings (off when bot_website_link === '0'). */
+    /** A short "order on our website" line — only for shops that have their own domain. */
     protected function websiteNudge(Tenant $tenant): string
     {
         if ((string) $tenant->setting('bot_website_link', '1') === '0') return '';
-        $url = $this->storefrontUrl($tenant);
-        return $url !== '' ? "\n\n\u{1F6D2} Or browse & order on our website: {$url}" : '';
+        $dom = trim((string) $tenant->custom_domain);
+        return $dom !== '' ? "\n\n\u{1F6D2} Or browse & order on our website: https://{$dom}" : '';
     }
 
     protected const SESSION_IDLE = 600;     // 10 min: expire clarification/shopping context
