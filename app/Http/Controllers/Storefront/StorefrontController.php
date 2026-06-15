@@ -1,0 +1,192 @@
+<?php
+
+namespace App\Http\Controllers\Storefront;
+
+use App\Http\Controllers\Controller;
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\Tenant;
+use App\Support\TenantContext;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+
+/**
+ * Public customer storefront, one per tenant, served at mycloudbss.com/{shop}.
+ * No auth: customers browse the tenant catalogue, build a cart, and place an
+ * order that lands in the seller panel exactly like a bot/phone order
+ * (OrderObserver assigns order_no + track_token and alerts the owner).
+ */
+class StorefrontController extends Controller
+{
+    /** Single-segment paths that must never be treated as a shop slug. */
+    private const RESERVED = [
+        'app', 'admin', 'panel', 'papi', 'api', 'storage', 'livewire',
+        'build', 'vendor', 'up', 'login', 'logout', 'register',
+    ];
+
+    /** Resolve a shop slug to a tenant, set the tenant context, or 404. */
+    private function tenant(string $shop): Tenant
+    {
+        $slug = strtolower(trim($shop));
+        abort_if(in_array($slug, self::RESERVED, true), 404);
+
+        $tenant = Tenant::where('slug', $slug)->first();
+        abort_if(! $tenant, 404);
+        abort_if(($tenant->status ?? 'active') === 'suspended', 404);
+
+        app(TenantContext::class)->set($tenant->id);
+
+        return $tenant;
+    }
+
+    /** Make a stored image path into an absolute URL the browser can load. */
+    private function imageUrl(?string $value): string
+    {
+        if (! $value) return '';
+        return Str::startsWith($value, ['http://', 'https://'])
+            ? $value
+            : Storage::disk('public')->url($value);
+    }
+
+    private function currency(Tenant $tenant): string
+    {
+        $c = (string) $tenant->setting('currency', 'UGX');
+        return ($c === '' || strtolower($c) === 'auto') ? 'UGX' : strtoupper($c);
+    }
+
+    /** The shop page itself. */
+    public function show(string $shop)
+    {
+        $tenant = $this->tenant($shop);
+
+        $cfg = [
+            'name'         => (string) $tenant->name,
+            'slug'         => (string) $tenant->slug,
+            'initials'     => $this->initials((string) $tenant->name),
+            'currency'     => $this->currency($tenant),
+            'waNumber'     => preg_replace('/[^0-9]/', '', (string) ($tenant->whatsapp_number ?? '')),
+            'city'         => (string) $tenant->setting('city', ''),
+            'catalogueUrl' => url('/' . $tenant->slug . '/catalogue'),
+            'orderUrl'     => url('/' . $tenant->slug . '/order'),
+            'panelUrl'     => url('/panel'),
+            'branches'     => $this->branches($tenant),
+            'delivery'     => (object) ($tenant->setting('delivery', []) ?: []),
+        ];
+
+        $path = resource_path('storefront/shop.html');
+        $html = is_file($path) ? file_get_contents($path) : '<h1>Shop unavailable</h1>';
+        $html = str_replace('__SHOP_CONFIG__', json_encode($cfg, JSON_UNESCAPED_UNICODE), $html);
+
+        return response($html, 200)
+            ->header('Content-Type', 'text/html; charset=utf-8')
+            ->header('Cache-Control', 'no-store');
+    }
+
+    /** Public catalogue feed (same JSON shape the panel/products feed uses). */
+    public function catalogue(string $shop)
+    {
+        $tenant = $this->tenant($shop);
+
+        $rows = Product::where('active', true)->orderBy('name')->get()->map(function (Product $p) {
+            return [
+                'Product Name' => (string) $p->name,
+                'Variant'      => '',
+                'Brand'        => '',
+                'Category'     => (string) ($p->category ?? 'Other'),
+                'Keywords'     => (string) ($p->keywords ?? ''),
+                'Price_UGX'    => (float) ($p->base_price ?? $p->price ?? 0),
+                'Stock'        => (int) ($p->stock ?? 0),
+                'Image'        => $this->imageUrl($p->image_url),
+                '_row'         => (int) $p->id,
+            ];
+        })->values();
+
+        return response()->json([
+            'products' => $rows,
+            'branches' => $this->branches($tenant),
+            'settings' => [
+                'waNumber' => preg_replace('/[^0-9]/', '', (string) ($tenant->whatsapp_number ?? '')),
+                'currency' => $this->currency($tenant),
+                'delivery' => (object) ($tenant->setting('delivery', []) ?: []),
+            ],
+        ])->header('Cache-Control', 'no-store');
+    }
+
+    /** Create a real order from the web cart. */
+    public function placeOrder(string $shop, Request $r)
+    {
+        $tenant = $this->tenant($shop);
+
+        $name  = trim((string) $r->input('name', ''));
+        $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));
+        $items = $r->input('items', []);
+
+        if ($name === '' || strlen($phone) < 7 || ! is_array($items) || ! count($items)) {
+            return response()->json(['ok' => false, 'error' => 'Please add items and your name + WhatsApp number.'], 422);
+        }
+
+        $clean = [];
+        $textParts = [];
+        $calcTotal = 0.0;
+        foreach ($items as $it) {
+            $pname = trim((string) ($it['name'] ?? ''));
+            if ($pname === '') continue;
+            $qty   = max(1, (int) ($it['qty'] ?? 1));
+            $price = (float) ($it['price'] ?? 0);
+            $clean[] = ['name' => $pname, 'qty' => $qty, 'price' => $price];
+            $textParts[] = $qty . 'x ' . $pname;
+            $calcTotal += $qty * $price;
+        }
+        if (! count($clean)) {
+            return response()->json(['ok' => false, 'error' => 'Your cart is empty.'], 422);
+        }
+
+        // Address + optional map pin go into one human-readable location string for the rider.
+        $location = trim((string) $r->input('location', ''));
+        if ($maps = trim((string) $r->input('maps_url', ''))) {
+            $location = $location !== '' ? ($location . ' — ' . $maps) : $maps;
+        }
+
+        $o = new Order();
+        $o->status         = 'New';
+        $o->channel        = 'web';
+        $o->customer_name  = $name;
+        $o->customer_phone = $phone;
+        $o->items_json     = $clean;
+        $o->items_text     = implode(', ', $textParts);
+        $o->total          = $r->filled('total') ? (float) $r->input('total') : $calcTotal;
+        if ($pay = trim((string) $r->input('payment', ''))) $o->payment = $pay;
+        if ($location !== '') $o->location = $location;
+        $o->save(); // OrderObserver: assigns order_no + track_token, dispatches NotifyOwnerNewOrder
+
+        return response()->json([
+            'ok'        => true,
+            'order_no'  => (string) $o->order_no,
+            'track_url' => $o->track_token ? url('/papi/track?o=' . $o->id . '&t=' . $o->track_token) : null,
+        ]);
+    }
+
+    private function initials(string $name): string
+    {
+        $name = preg_replace('/[^A-Za-z0-9 ]/', '', $name);
+        $parts = preg_split('/\s+/', trim($name)) ?: [];
+        $a = strtoupper(substr($parts[0] ?? 'S', 0, 1));
+        $b = strtoupper(substr($parts[1] ?? ($parts[0] ?? 'H'), count($parts) > 1 ? 0 : 1, 1));
+        return ($a . $b) ?: 'SH';
+    }
+
+    private function branches(Tenant $tenant): array
+    {
+        $raw = $tenant->setting('branches', []);
+        if (! is_array($raw)) return [];
+        $out = [];
+        foreach ($raw as $b) {
+            $lat = (float) ($b['lat'] ?? 0);
+            $lng = (float) ($b['lng'] ?? 0);
+            if ($lat == 0.0 && $lng == 0.0) continue;
+            $out[] = ['name' => (string) ($b['name'] ?? 'Branch'), 'lat' => $lat, 'lng' => $lng];
+        }
+        return $out;
+    }
+}

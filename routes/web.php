@@ -144,3 +144,20 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('billing/status',   [\App\Http\Controllers\Billing\BillingController::class, 'status']);
     });
 });
+
+/*
+|--------------------------------------------------------------------------
+| Public customer storefront — mycloudbss.com/{shop}
+|--------------------------------------------------------------------------
+| One storefront per tenant, resolved by slug. Registered LAST so it never
+| shadows '/', '/panel', or Filament's '/app' and '/admin'. The slug regex
+| also excludes reserved single-segment paths via a negative lookahead, so
+| even if route order changed, /app & /admin would fall through to Filament.
+*/
+$shopSlug = '(?!(app|admin|panel|papi|api|storage|livewire|build|vendor|up|login|logout|register)$)[a-z0-9][a-z0-9\-]*';
+
+Route::middleware('web')->group(function () use ($shopSlug) {
+    Route::get('/{shop}',           [\App\Http\Controllers\Storefront\StorefrontController::class, 'show'])->where('shop', $shopSlug);
+    Route::get('/{shop}/catalogue', [\App\Http\Controllers\Storefront\StorefrontController::class, 'catalogue'])->where('shop', $shopSlug);
+    Route::post('/{shop}/order',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'placeOrder'])->where('shop', $shopSlug);
+});

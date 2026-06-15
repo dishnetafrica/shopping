@@ -39,6 +39,8 @@ class ProductResource extends Resource
                 Forms\Components\TextInput::make('image_url')->label('Image link (paste a URL)')->columnSpanFull(),
                 Forms\Components\FileUpload::make('image_upload')->label('…or upload a photo')
                     ->image()->disk('public')->directory('products')->visibility('public')
+                    ->imageResizeMode('cover')->imageResizeTargetWidth('800')->imageResizeTargetHeight('800')
+                    ->helperText('Best: a square photo, about 800×800 px (min 500×500), JPG, under 300 KB. Square avoids cropping on WhatsApp and sends fast on mobile data.')
                     ->columnSpanFull(),
             ]),
         ]);
