@@ -434,6 +434,35 @@ final class IntentClassifier
         return $out;
     }
 
+    /**
+     * A short, unambiguous "yes, go ahead" — used to confirm a pending action (e.g. place the
+     * order after the priced summary). Deliberately narrow: "yes add rice" is NOT an affirmation,
+     * it's a new request, so it won't accidentally place an order.
+     */
+    public static function isAffirmative(string $lc): bool
+    {
+        $lc = trim($lc);
+        if (in_array($lc, ['yes','yess','yeah','yeahh','yep','yup','ya','ok','okay','okk','k','kk',
+            'sure','fine','alright','alright then','right','correct','confirm','confirmed','confirm order',
+            'proceed','done','place it','place order','place the order','place my order','order it',
+            'go ahead','do it','send it','yes please','yes confirm','ok confirm','place'], true)) {
+            return true;
+        }
+        return (bool) preg_match('/^(go ahead|place (the |my )?order|confirm( order| it)?|place it|do it|send it|yes,?\s*(please|confirm|go ahead))$/', $lc);
+    }
+
+    /** A short "no / not yet" — used to HOLD a pending order confirmation without cancelling the
+     *  cart (distinct from the classify-level isDecline, which means "I don't want anything"). */
+    public static function isHold(string $lc): bool
+    {
+        $lc = trim($lc);
+        if (in_array($lc, ['no','nope','nah','not yet','no thanks','no thank you','cancel','wait',
+            'hold on','stop','not now','later','maybe later'], true)) {
+            return true;
+        }
+        return (bool) preg_match('/^(not yet|hold on|cancel|maybe later|not now)$/', $lc);
+    }
+
     /** Content words = words minus stop-words (the bits that could name a product). */
     private static function contentWords(string $s): array
     {

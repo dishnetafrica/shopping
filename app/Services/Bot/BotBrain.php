@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.15-6  pin-then-confirm-checkout';
+    public const VERSION = '2026.06.15-8  qualifier-not-category';
 
     public function __construct(
         protected ProductSearch $search,
@@ -37,6 +37,14 @@ class BotBrain
         // Mid-checkout: the next message is always the delivery location.
         if (data_get($convo->state, 'step') === 'awaiting_location') {
             return $this->placeOrder($tenant, $convo, $text);
+        }
+
+        // Awaiting a yes/no on the priced order (a pin was sent with items in the cart). A plain
+        // "yes/ok/go ahead" places it; "no/not yet" holds; anything else is a fresh request.
+        if (data_get($convo->state, 'step') === 'awaiting_confirm') {
+            if (($c = $this->handleOrderConfirm($tenant, $convo, $text)) !== null) {
+                return $c;
+            }
         }
 
         // Try the LLM first; fall back to keywords.
@@ -179,7 +187,7 @@ class BotBrain
         // the message is a REPLY to that step, not a fresh multi-stage journey.
         $stStage   = is_array($convo->state) ? $convo->state : [];
         $inProgress = ! empty($stStage['options']) || ! empty($stStage['pending_order'])
-            || ! empty($stStage['pending_resolved']) || (($stStage['step'] ?? null) === 'awaiting_location');
+            || ! empty($stStage['pending_resolved']) || (($stStage['step'] ?? null) === 'awaiting_location') || (($stStage['step'] ?? null) === 'awaiting_confirm');
         if (! $inProgress && \App\Services\Bot\ConversationStageAnalyzer::isMultiStage($text)) {
             $lead = \App\Services\Bot\ConversationStageAnalyzer::leadSegment($text);
             if ($lead !== '' && $lead !== $text) {
@@ -759,6 +767,41 @@ class BotBrain
             ->respond($tenant, $convo, $text, $catalogue, $this->currencyFor($tenant));
     }
 
+    /**
+     * The customer was shown a priced order (pin + cart) and asked to confirm. A plain "yes / ok /
+     * go ahead" places it using the stored pin; "no / not yet" holds the cart; anything else (a new
+     * product, an edit, another pin) leaves confirm mode and is processed normally. Returns null to
+     * fall through to the normal pipeline.
+     */
+    protected function handleOrderConfirm(Tenant $tenant, Conversation $convo, string $text): ?string
+    {
+        $lc = mb_strtolower(trim($text));
+        $st = is_array($convo->state) ? $convo->state : [];
+
+        if (\App\Services\Bot\IntentClassifier::isAffirmative($lc)
+            || \App\Services\Bot\IntentClassifier::looksLikeCheckout($lc)) {
+            if (! empty($st['delivery_lat']) && ! empty($st['delivery_lng'])) {
+                return $this->placeOrder(
+                    $tenant, $convo,
+                    (string) ($st['delivery_area'] ?? 'your pinned location'),
+                    (float) $st['delivery_lat'], (float) $st['delivery_lng'],
+                    ((string) ($st['delivery_maps'] ?? '')) ?: null
+                );
+            }
+            unset($st['step']); $convo->state = $st; $convo->save();
+            return "\u{1F4CD} Please send your *delivery location* (area / landmark) to place the order.";
+        }
+
+        if (\App\Services\Bot\IntentClassifier::isHold($lc)) {
+            unset($st['step']); $convo->state = $st; $convo->save();
+            return "No problem \u{1F642} Add more items, or say *confirm* when you're ready to place the order.";
+        }
+
+        // a fresh request — leave confirm mode and let the normal pipeline handle it
+        unset($st['step']); $convo->state = $st; $convo->save();
+        return null;
+    }
+
     /** Build stamp: the live VERSION plus this file's last-write time on the server. */
     protected function versionStamp(): string
     {
@@ -882,6 +925,10 @@ class BotBrain
         if ($cart) {
             $fee   = (int) ($quote['fee'] ?? 0);
             $grand = (int) round($subtotal) + $fee;
+            $st = is_array($convo->state) ? $convo->state : [];
+            $st['step'] = 'awaiting_confirm';      // a plain "yes" now places the order
+            $convo->state = $st;
+            $convo->save();
             return $line
                 . "\n\n" . $this->cartSummary($tenant, $cart)
                 . "\n\u{1F4B0} *Total with delivery: {$cur} " . number_format($grand) . "*"

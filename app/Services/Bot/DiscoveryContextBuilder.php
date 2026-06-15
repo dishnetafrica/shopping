@@ -45,13 +45,39 @@ class DiscoveryContextBuilder
     {
         $b = self::build($text, $catalogue);
         return [
-            'category'    => (string) ($b['product'] ?? ''),
+            'category'    => self::categorySubject($text, $catalogue),
             'exclude'     => $b['exclude'] ?? [],
             'budget'      => $b['budget'] ?? null,
             'usage'       => $b['usage'] ?? null,
             'family_size' => $b['family_size'] ?? null,
             'size'        => $b['size'] ?? null,
         ];
+    }
+
+    /**
+     * The product/category subject of a message, with qualifier phrases removed FIRST so a
+     * qualifier-only message ("Family of 5", "Not expensive", "Daily use") yields no category and
+     * can't overwrite the accumulated one. Without this, "Family of 5" matched a product literally
+     * named "...Family..." (e.g. "Nuvita Family") and hijacked a rice discovery into a biscuit.
+     */
+    public static function categorySubject(string $text, array $catalogue): string
+    {
+        $s = mb_strtolower($text);
+        // household size: "family of 5", "5 people", "for 5"
+        $s = preg_replace('/\bfamily of \d+\b|\b\d+\s+(people|persons?|members?|of us|heads?|adults?|kids?)\b|\bfor \d+\b/', ' ', $s);
+        // usage
+        $s = preg_replace('/\bdaily( use| meals?)?\b|\beveryday\b|\bregular use\b|\bhome use\b|\bfor (daily|home|cooking)\b|\bbiryani\b|\bpulao\b|\bspecial( occasion)?\b|\bparty\b|\bguests?\b|\bfeast\b|\bcooking\b|\bfrying\b|\bbaking\b/', ' ', $s);
+        // budget
+        $s = preg_replace('/\bnot (too )?(expensive|costly|pricey)\b|\bcheap(est|er)?\b|\baffordable\b|\bbudget\b|\binexpensive\b|\beconomical\b|\blow ?price\b|\bvalue for money\b|\bpremium\b|\b(best|high|top) quality\b|\bfinest\b/', ' ', $s);
+        // negations ("not basmati", "no sugar") — the excluded term lives in exclude, not category
+        $s = preg_replace('/\b(not|no|without)\s+\w+/', ' ', $s);
+        // pack sizes
+        $s = preg_replace('/\b\d+(\.\d+)?\s*(kg|kgs|g|gm|gms|grams?|ml|l|ltr|litres?|liters?|pcs?|packs?|pkts?)\b/', ' ', $s);
+        // leftover bare "family"/"people" words (e.g. "big family") that are not products
+        $s = preg_replace('/\bfamily\b|\bpeople\b|\bhousehold\b/', ' ', $s);
+        $s = trim(preg_replace('/\s+/', ' ', $s));
+
+        return $s === '' ? '' : SalesAssistantBrain::subjectTerm($s, $catalogue);
     }
 
     /** Merge a new message's signals into the running context. Scalars overwrite only when the

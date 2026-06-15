@@ -293,6 +293,39 @@ ok('"do you have balaji masala wafer in stock" finds products', $hit('do you hav
 ok('"balaji masala wafer" finds products', $hit('balaji masala wafer'));
 ok('gibberish finds nothing (still falls to "didn\'t catch")', ! $hit('asdfghjkl zxcvbnm'));
 
+sec('F17 — at the confirm prompt, "yes" places the order; product messages do not');
+use App\Services\Bot\IntentClassifier as ICc;
+ok('"yes" is affirmative',        ICc::isAffirmative('yes'));
+ok('"ok" is affirmative',         ICc::isAffirmative('ok'));
+ok('"go ahead" is affirmative',   ICc::isAffirmative('go ahead'));
+ok('"place order" is affirmative',ICc::isAffirmative('place order'));
+ok('"confirm" is affirmative',    ICc::isAffirmative('confirm'));
+ok('"yes add rice" is NOT a bare affirmation (new request)', ! ICc::isAffirmative('yes add rice'));
+ok('"5 coke" is NOT affirmative', ! ICc::isAffirmative('5 coke'));
+ok('"no" holds the order',           ICc::isHold('no'));
+ok('"not yet" holds the order',      ICc::isHold('not yet'));
+ok('"cancel" holds the order',       ICc::isHold('cancel'));
+ok('"yes" is NOT a hold',      ! ICc::isHold('yes'));
+
+sec('F18 — qualifier phrases never become the category (no "Nuvita Family" for "Family of 5")');
+$fcat = [
+    ['id'=>1,'name'=>'Super Rice 1KG','price'=>5500,'stock'=>9,'category'=>'Rice','keywords'=>''],
+    ['id'=>2,'name'=>'Sona Basmati Rice 5KG','price'=>60000,'stock'=>9,'category'=>'Rice','keywords'=>''],
+    ['id'=>3,'name'=>'Nuvita Family 75 Gms','price'=>1000,'stock'=>9,'category'=>'Biscuits','keywords'=>''],
+];
+ok('"Family of 5" yields NO category',        DCB::fromMessage('Family of 5',$fcat)['category'] === '');
+ok('"Family of 5" still captures family_size 5', DCB::fromMessage('Family of 5',$fcat)['family_size'] === 5);
+ok('"Not expensive" yields NO category',      DCB::fromMessage('Not expensive',$fcat)['category'] === '');
+ok('"Daily use" yields NO category',          DCB::fromMessage('Daily use',$fcat)['category'] === '');
+ok('"Need rice" still yields category rice',  DCB::fromMessage('Need rice',$fcat)['category'] === 'rice');
+$acc = null;
+foreach (['Need rice','Not basmati','Family of 5','Not expensive'] as $m) {
+    $dd = DCB::decide($acc,$m,$fcat); if (in_array($dd['action'],['enter','enrich','ask'],true)) $acc = $dd['ctx'];
+}
+ok('category stays "rice" across the whole discovery (never "family")', ($acc['category'] ?? '') === 'rice');
+ok('family/budget/exclude all accumulated on the rice context',
+   ($acc['family_size'] ?? 0) === 5 && ($acc['budget'] ?? '') === 'low' && in_array('basmati', $acc['exclude'] ?? [], true));
+
 echo "\n========= RESULT =========\n";
 echo "PASS $PASS  FAIL $FAIL\n";
 exit($FAIL===0?0:1);
