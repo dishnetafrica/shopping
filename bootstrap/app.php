@@ -20,7 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant.domain' => \App\Http\Middleware\IdentifyTenantByDomain::class,
         ]);
         // WhatsApp webhook is called by Evolution/Meta — exclude from CSRF.
-        $middleware->validateCsrfTokens(except: ['api/webhook/*', 'papi/*', '*/order']);
+        $middleware->validateCsrfTokens(except: ['api/webhook/*', 'papi/*', '*/order', '*/auth/*', '*/account/*']);
     })
     ->withExceptions(function (Exceptions $exceptions) {})
     ->create();
