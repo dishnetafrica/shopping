@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Product;
 use App\Models\Tenant;
 use App\Services\Enrichment\ProductEnrichmentService;
+use App\Support\TenantContext;
 use Illuminate\Console\Command;
 
 /**
@@ -43,6 +44,11 @@ class EnrichProductsCommand extends Command
 
         $apply = (bool) $this->option('apply');
         $limit = (int) $this->option('limit');
+
+        // CLI has no "active tenant", so the BelongsToTenant global scope would hide every
+        // product (tenant_id = null). Run as super-admin to bypass it; --tenant still scopes
+        // via the explicit where below.
+        app(TenantContext::class)->asSuperAdmin(true);
 
         $q = Product::query();
         if ($t = $this->option('tenant')) $q->where('tenant_id', $t);
