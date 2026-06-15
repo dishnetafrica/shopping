@@ -128,6 +128,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('upload-image',  [PanelApiController::class, 'uploadImage']);
         Route::get('category-images',     [PanelApiController::class, 'categoryImages']);
         Route::post('category-image-save',[PanelApiController::class, 'categoryImageSave']);
+        Route::get('thali',               [PanelApiController::class, 'thaliGet']);
+        Route::post('thali-save',         [PanelApiController::class, 'thaliSave']);
 
         // writes wired in Phase 3b (return ok:false -> panel saves locally for now)
         Route::get('dispatch',     [PanelApiController::class, 'dispatch']);

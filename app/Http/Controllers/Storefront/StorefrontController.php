@@ -110,8 +110,29 @@ class StorefrontController extends Controller
                 'currency' => $this->currency($tenant),
                 'delivery' => (object) ($tenant->setting('delivery', []) ?: []),
                 'category_images' => (object) ($tenant->setting('category_images', []) ?: []),
+                'thali' => $this->todayThali($tenant),
             ],
         ])->header('Cache-Control', 'no-store');
+    }
+
+    /** Today's set-meal for the storefront (computed server-side so it matches the bot). */
+    private function todayThali(Tenant $tenant): ?array
+    {
+        $cfg = (array) ($tenant->setting('thali', []) ?: []);
+        if (! \App\Services\Bot\ThaliMenu::enabled($cfg)) return null;
+        $tz    = (string) $tenant->setting('timezone', config('app.timezone', 'Africa/Kampala'));
+        $day   = \App\Services\Bot\ThaliMenu::todayKey($tz);
+        $items = $cfg['days'][$day] ?? [];
+        $items = is_array($items) ? array_values(array_filter(array_map('trim', $items))) : [];
+        $imgs  = is_array($cfg['images'] ?? null) ? $cfg['images'] : [];
+        return [
+            'price'    => (int) ($cfg['price'] ?? 0),
+            'note'     => (string) ($cfg['note'] ?? ''),
+            'day'      => $day,
+            'day_name' => \App\Services\Bot\ThaliMenu::dayName($day),
+            'items'    => $items,
+            'image'    => ($imgs[$day] ?? '') !== '' ? $this->imageUrl((string) $imgs[$day]) : '',
+        ];
     }
 
     /** Create a real order from the web cart. */

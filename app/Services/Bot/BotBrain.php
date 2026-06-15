@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.15-28  forward-questions-to-shop';
+    public const VERSION = '2026.06.15-32  thali-flyer-view';
 
     public function __construct(
         protected ProductSearch $search,
@@ -305,6 +305,17 @@ class BotBrain
         if (in_array($lc, ['cart','basket','my order','my cart','view cart'], true))           return $this->execute($tenant, $convo, 'view_cart', []);
         if (in_array($lc, ['clear','empty','reset','clear cart','empty cart'], true))           return $this->execute($tenant, $convo, 'clear', []);
         if (\App\Services\Bot\IntentClassifier::looksLikeCheckout($lc)) return $this->execute($tenant, $convo, 'checkout', []);
+
+        // ---- Daily set-meal (thali) ----
+        $thaliCfg = (array) ($tenant->setting('thali', []) ?: []);
+        if (\App\Services\Bot\ThaliMenu::enabled($thaliCfg)) {
+            if (\App\Services\Bot\ThaliMenu::isMenuQuery($lc)) {
+                return $this->thaliMenuReply($tenant, $thaliCfg, $lc);
+            }
+            if (($this->cartHasThali($convo) || str_contains($lc, 'thali')) && \App\Services\Bot\ThaliMenu::isModification($lc)) {
+                return $this->thaliModificationReply($tenant, $convo, $text);
+            }
+        }
         // affirmations: a bare "good/ok/yes" is chat, not a product search
         if (in_array($lc, ['ok','okay','yes','yeah','yep','good','nice','cool','great','thanks','thank you','thx','sure','fine'], true)) {
             return "\u{1F44D} Great! Tell me what you'd like, say *cart* to review, or *checkout* when ready.";
@@ -467,6 +478,55 @@ class BotBrain
         }
         return "\u{1F642} Good question \u{2014} I've passed it to the shop and they'll reply here shortly. "
              . "Meanwhile you can keep adding items, or say *menu* to see what we have.";
+    }
+
+    /** True if the active cart already contains a thali line. */
+    protected function cartHasThali($convo): bool
+    {
+        if (! is_array($convo->cart)) return false;
+        foreach ($convo->cart as $line) {
+            $n = is_array($line) ? ($line['name'] ?? '') : (string) $line;
+            if (stripos((string) $n, 'thali') !== false) return true;
+        }
+        return false;
+    }
+
+    /** Answer "what's in today's / Monday's thali" with the day's set menu. */
+    protected function thaliMenuReply(Tenant $tenant, array $cfg, string $lc): string
+    {
+        $tz  = (string) $tenant->setting('timezone', config('app.timezone', 'Africa/Kampala'));
+        $cur = $this->currencyFor($tenant);
+        $day = \App\Services\Bot\ThaliMenu::dayFromText($lc) ?? \App\Services\Bot\ThaliMenu::todayKey($tz);
+        return \App\Services\Bot\ThaliMenu::render($cfg, $day, $cur);
+    }
+
+    /** A set-meal can't be changed by the bot — promise a call before dispatch and tell the shop. */
+    protected function thaliModificationReply(Tenant $tenant, $convo, string $text): string
+    {
+        $this->forwardQuestionToShop($tenant, $convo, 'Thali change request: ' . $text);
+        return "\u{1F44C} Noted! The thali is a set meal, but we can usually adjust it. "
+             . "Our team will *call you before dispatch* to confirm your changes. "
+             . "You can keep adding items, or say *checkout* when ready.";
+    }
+
+    /** Append the day's actual dishes to any thali line name (for the kitchen/record). */
+    protected function stampThaliDishes(Tenant $tenant, array $cart): array
+    {
+        $cfg = (array) ($tenant->setting('thali', []) ?: []);
+        if (! \App\Services\Bot\ThaliMenu::enabled($cfg)) return $cart;
+        $tz    = (string) $tenant->setting('timezone', config('app.timezone', 'Africa/Kampala'));
+        $day   = \App\Services\Bot\ThaliMenu::todayKey($tz);
+        $items = $cfg['days'][$day] ?? [];
+        $items = is_array($items) ? array_values(array_filter(array_map('trim', $items))) : [];
+        if (! $items) return $cart;
+        $label = \App\Services\Bot\ThaliMenu::dayName($day) . ': ' . implode(', ', $items);
+        foreach ($cart as &$line) {
+            $n = (string) ($line['name'] ?? '');
+            if (stripos($n, 'thali') !== false && strpos($n, '(') === false) {
+                $line['name'] = $n . ' (' . $label . ')';
+            }
+        }
+        return $cart;
     }
 
     protected function greetingReply(Tenant $tenant, string $text): string
@@ -1326,6 +1386,9 @@ class BotBrain
     {
         $cart = is_array($convo->cart) ? $convo->cart : [];
         if (! $cart) { $convo->state = []; $convo->save(); return "Your basket is empty. Add a product to start a new order."; }
+
+        // Record the actual dishes on any thali line so the kitchen sees what to cook.
+        $cart = $this->stampThaliDishes($tenant, $cart);
 
         if ($tenant->effectivePlan() === 'free' && $tenant->overOrderCap()) {
             $convo->state = []; $convo->save();

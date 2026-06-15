@@ -262,6 +262,7 @@
       <a class="nav" data-page="customers"><span class="i">👥</span> Customers</a>
       <a class="nav" data-page="pos"><span class="i">🧾</span> POS</a>
       <a class="nav" data-page="category"><span class="i">🗂</span> Category</a>
+      <a class="nav" data-page="thali"><span class="i">🍽</span> Daily Thali</a>
       <a class="nav" data-page="products"><span class="i">📦</span> Products</a>
       <a class="nav" data-page="reports"><span class="i">📊</span> Reports</a>
       <a class="nav" data-page="riders"><span class="i">🛵</span> Riders</a>
@@ -478,6 +479,27 @@
           <div class="head">Categories <span class="count" id="catCount" style="margin-left:auto"></span></div>
           <div class="body"><div class="pgrid" id="catGrid"></div>
           <input type="file" id="catPhotoFile" accept="image/*" style="display:none"></div>
+        </div>
+      </div>
+      <!-- ============ DAILY THALI ============ -->
+      <div id="pageThali" class="hide">
+        <div class="crumb">Home / <b>Daily Thali</b></div>
+        <div class="card">
+          <div class="head">Daily Thali (set meal)</div>
+          <div class="body">
+            <p style="color:#667085;font-size:13px;margin:0 0 12px">A rotating set meal with a different menu each weekday. Customers can ask the WhatsApp bot "what's today's thali" and it replies with that day's dishes. Changes you make here are live immediately.</p>
+            <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:14px">
+              <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px"><input type="checkbox" id="thEnabled" style="width:18px;height:18px"> Thali enabled</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:14px">Price
+                <input id="thPrice" type="number" min="0" step="100" style="width:120px;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-weight:700">
+              </label>
+            </div>
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px">Note (optional, shown under the menu)</label>
+            <input id="thNote" type="text" placeholder="Pure veg · menu changes daily" style="width:100%;max-width:520px;border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:16px">
+            <div id="thDays" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px"></div>
+            <input type="file" id="thPhotoFile" accept="image/*" style="display:none">
+            <div style="margin-top:18px"><button class="btn" id="thSaveBtn" onclick="saveThali()">Save thali menu</button></div>
+          </div>
         </div>
       </div>
       <!-- ============ RIDERS ============ -->
@@ -891,6 +913,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   updProduct:'/papi/update-product',addProduct:'/papi/add-product',
   uploadImage:'/papi/upload-image',
   catImages:'/papi/category-images',catImageSave:'/papi/category-image-save',
+  thali:'/papi/thali',thaliSave:'/papi/thali-save',
   dispatch:'/papi/dispatch',
   riders:'/papi/riders',riderSave:'/papi/rider-save',riderDel:'/papi/rider-delete',
   ret:'/papi/return',returns:'/papi/returns',
@@ -1230,6 +1253,7 @@ function showPage(p){
   $('pageReports').classList.toggle('hide',p!=='reports');
   $('pageProducts').classList.toggle('hide',p!=='products');
   $('pageCategory').classList.toggle('hide',p!=='category');
+  $('pageThali').classList.toggle('hide',p!=='thali');
   $('pageRiders').classList.toggle('hide',p!=='riders');
   $('pageReturns').classList.toggle('hide',p!=='returns');
   $('pageSettings').classList.toggle('hide',p!=='settings');
@@ -1242,10 +1266,10 @@ function showPage(p){
   $('pageSubscription').classList.toggle('hide',p!=='subscription');
   if(p==='orders'){$('detailView').classList.add('hide');$('listView').classList.remove('hide');}
   document.querySelectorAll('.side a.nav').forEach(function(a){a.classList.toggle('on',a.dataset.page===p);});
-  var T={dash:'Dashboard',pos:'POS',reports:'Reports',products:'Products',category:'Categories',riders:'Riders',returns:'Returns',orders:'Orders',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription'};
+  var T={dash:'Dashboard',pos:'POS',reports:'Reports',products:'Products',category:'Categories',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription'};
   $('pageTitle').textContent=T[p]||'Orders';
   if(p==='dash')renderDash(); else if(p==='pos')posInit(); else if(p==='reports')reportsInit();
-  else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else renderList();
+  else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else renderList();
   closeSide(); window.scrollTo(0,0);
 }
 function openSide(){$('side').classList.add('open');$('backdrop').classList.add('show');}
@@ -1682,6 +1706,61 @@ var CAT_IMG={}, _catPhotoTarget='';
 async function loadCatImages(){
   try{var r=await fetch(EP.catImages+'?token='+encodeURIComponent(token),{cache:'no-store'});var d=await r.json();CAT_IMG=(d&&d.images)?d.images:{};}catch(e){CAT_IMG={};}
 }
+/* ---------------- DAILY THALI ---------------- */
+var TH_DAYS=[['mon','Monday'],['tue','Tuesday'],['wed','Wednesday'],['thu','Thursday'],['fri','Friday'],['sat','Saturday'],['sun','Sunday']];
+var TH_MODEL=null,_thPhotoDay=null;
+async function thaliInit(){
+  var cfg={enabled:false,price:0,note:'',days:{},images:{}};
+  try{var r=await fetch(EP.thali+'?token='+encodeURIComponent(token));var d=await r.json();if(d&&d.ok&&d.thali)cfg=d.thali;}catch(e){}
+  TH_MODEL={enabled:!!cfg.enabled,price:cfg.price||0,note:cfg.note||'',days:{},images:{}};
+  TH_DAYS.forEach(function(dd){var it=(cfg.days&&cfg.days[dd[0]])||[];TH_MODEL.days[dd[0]]=Array.isArray(it)?it.slice():[];TH_MODEL.images[dd[0]]=(cfg.images&&cfg.images[dd[0]])||'';});
+  $('thEnabled').checked=TH_MODEL.enabled;$('thPrice').value=TH_MODEL.price||'';$('thNote').value=TH_MODEL.note||'';
+  renderThaliDays();bindThaliPhoto();
+}
+function thThumb(day){
+  var u=TH_MODEL.images[day];
+  if(u)return '<div style="height:120px;border-radius:9px;background:#f4f4f4 center/cover no-repeat;background-image:url(\''+esc(u)+'\')"></div>'+
+    '<div style="display:flex;gap:12px;margin-top:5px"><a href="#" onclick="event.preventDefault();thaliPhoto(\''+day+'\')" style="font-size:12px;font-weight:700;color:var(--green,#0C831F)">Change flyer</a>'+
+    '<a href="#" onclick="event.preventDefault();thaliPhotoClear(\''+day+'\')" style="font-size:12px;font-weight:700;color:#B4232A">Remove</a></div>';
+  return '<a href="#" onclick="event.preventDefault();thaliPhoto(\''+day+'\')" style="display:block;height:120px;border:1.5px dashed #cdd3dd;border-radius:9px;display:grid;place-items:center;color:#8a93a3;font-size:13px;font-weight:600;text-decoration:none">+ Add flyer photo</a>';
+}
+function renderThaliDays(){
+  $('thDays').innerHTML=TH_DAYS.map(function(dd){var day=dd[0];
+    return '<div style="border:1px solid var(--line);border-radius:11px;padding:12px;background:#fff">'+
+      '<div style="font-weight:700;font-size:14px;margin-bottom:6px">'+dd[1]+'</div>'+
+      '<div id="thumb_'+day+'">'+thThumb(day)+'</div>'+
+      '<textarea id="thd_'+day+'" oninput="thInput(\''+day+'\')" rows="6" placeholder="One dish per line" style="width:100%;margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13px;resize:vertical;font-family:inherit">'+esc((TH_MODEL.days[day]||[]).join('\n'))+'</textarea>'+
+    '</div>';
+  }).join('');
+}
+function thInput(day){TH_MODEL.days[day]=($('thd_'+day).value||'').split('\n').map(function(x){return x.trim();}).filter(Boolean);}
+function thaliPhoto(day){_thPhotoDay=day;var f=$('thPhotoFile');if(f){f.value='';f.click();}}
+function thaliPhotoClear(day){TH_MODEL.images[day]='';$('thumb_'+day).innerHTML=thThumb(day);}
+function bindThaliPhoto(){
+  var f=$('thPhotoFile');if(!f||f._b)return;f._b=true;
+  f.onchange=function(){var file=f.files&&f.files[0];if(!file||!_thPhotoDay)return;
+    var rd=new FileReader();
+    rd.onload=async function(){toast('Uploading photo\u2026');
+      try{var up=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:file.name,data:rd.result})});
+        var d=await up.json();
+        if(d&&d.ok&&d.url){TH_MODEL.images[_thPhotoDay]=d.url;$('thumb_'+_thPhotoDay).innerHTML=thThumb(_thPhotoDay);toast('Flyer photo set');}
+        else toast('Upload failed \u2014 try a smaller image');
+      }catch(e){toast('Upload failed');}
+    };rd.readAsDataURL(file);
+  };
+}
+async function saveThali(){
+  if(!TH_MODEL)return;
+  TH_DAYS.forEach(function(dd){thInput(dd[0]);});
+  TH_MODEL.enabled=$('thEnabled').checked;TH_MODEL.price=parseInt($('thPrice').value||'0',10)||0;TH_MODEL.note=($('thNote').value||'').trim();
+  var btn=$('thSaveBtn');if(btn){btn.disabled=true;btn.textContent='Saving\u2026';}
+  try{
+    var r=await fetch(EP.thaliSave+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:TH_MODEL.enabled,price:TH_MODEL.price,note:TH_MODEL.note,days:TH_MODEL.days,images:TH_MODEL.images})});
+    var d=await r.json();toast(d&&d.ok?'Thali menu saved':'Could not save');
+  }catch(e){toast('Could not save');}
+  if(btn){btn.disabled=false;btn.textContent='Save thali menu';}
+}
+
 function renderCategories(){
   bindCatPhoto();
   var m={};CATALOGUE.forEach(function(p){var c=(p.category||'').trim()||'Uncategorised';m[c]=(m[c]||0)+1;});

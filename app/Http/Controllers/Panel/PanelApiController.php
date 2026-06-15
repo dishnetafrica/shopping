@@ -416,6 +416,53 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /** Daily set-meal (thali) config for the editor. */
+    public function thaliGet(Request $r)
+    {
+        $cfg = $r->user()->tenant->setting('thali', []);
+        if (! is_array($cfg)) $cfg = [];
+        $days = is_array($cfg['days'] ?? null) ? $cfg['days'] : [];
+        $imgs = is_array($cfg['images'] ?? null) ? $cfg['images'] : [];
+        $out  = [];
+        $outImg = [];
+        foreach (['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as $d) {
+            $items  = is_array($days[$d] ?? null) ? $days[$d] : [];
+            $out[$d] = array_values(array_filter(array_map(fn ($x) => trim((string) $x), $items), fn ($x) => $x !== ''));
+            $outImg[$d] = $this->imageUrl((string) ($imgs[$d] ?? ''));
+        }
+        return response()->json(['ok' => true, 'thali' => [
+            'enabled' => (bool) ($cfg['enabled'] ?? false),
+            'price'   => (int) ($cfg['price'] ?? 0),
+            'note'    => (string) ($cfg['note'] ?? ''),
+            'days'    => (object) $out,
+            'images'  => (object) $outImg,
+        ]]);
+    }
+
+    public function thaliSave(Request $r)
+    {
+        $t    = $r->user()->tenant;
+        $days = (array) $r->input('days', []);
+        $imgsIn = (array) $r->input('images', []);
+        $clean = [];
+        $cleanImg = [];
+        foreach (['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as $d) {
+            $items = $days[$d] ?? [];
+            if (is_string($items)) $items = preg_split('/\r\n|\r|\n/', $items);
+            $items = array_map(fn ($x) => trim((string) $x), (array) $items);
+            $clean[$d] = array_values(array_filter($items, fn ($x) => $x !== ''));
+            $cleanImg[$d] = trim((string) ($imgsIn[$d] ?? ''));
+        }
+        $t->putSetting('thali', [
+            'enabled' => $r->boolean('enabled'),
+            'price'   => max(0, (int) $r->input('price', 0)),
+            'note'    => trim((string) $r->input('note', '')),
+            'days'    => $clean,
+            'images'  => $cleanImg,
+        ]);
+        return response()->json(['ok' => true]);
+    }
+
     /* -------------------------------------------------- live chats (4b) */
     public function chats(Request $r)
     {
