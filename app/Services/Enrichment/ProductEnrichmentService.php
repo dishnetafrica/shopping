@@ -2,8 +2,8 @@
 
 namespace App\Services\Enrichment;
 
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use OpenAI\Laravel\Facades\OpenAI;
 
 /**
  * ProductEnrichmentService
@@ -55,18 +55,16 @@ class ProductEnrichmentService
     public function __construct(
         private string $apiKey = '',
         private string $model = 'gpt-4o-mini',
-        private string $endpoint = 'https://api.openai.com/v1/chat/completions',
         private float $timeout = 20.0,
     ) {
     }
 
-    /** Build from config/env so callers don't hand-wire keys. */
+    /** Build from the SAME key/model source the rest of the bot uses (BotNlu, MarketingBrain). */
     public static function fromConfig(): self
     {
         return new self(
-            (string) (config('services.openai.key') ?? env('OPENAI_API_KEY', '')),
-            (string) (config('shopbot.enrichment.model') ?? 'gpt-4o-mini'),
-            (string) (config('shopbot.enrichment.endpoint') ?? 'https://api.openai.com/v1/chat/completions'),
+            (string) (config('openai.api_key') ?: env('OPENAI_API_KEY', '')),
+            (string) env('OPENAI_MODEL', 'gpt-4o-mini'),
         );
     }
 
@@ -145,21 +143,17 @@ class ProductEnrichmentService
 
         $user = trim($name) . ($category !== '' ? " (aisle: {$category})" : '');
         try {
-            $resp = Http::withToken($this->apiKey)
-                ->timeout($this->timeout)
-                ->asJson()
-                ->post($this->endpoint, [
-                    'model' => $this->model,
-                    'temperature' => 0,
-                    'response_format' => ['type' => 'json_object'],
-                    'messages' => [
-                        ['role' => 'system', 'content' => self::systemPrompt()],
-                        ['role' => 'user', 'content' => $user],
-                    ],
-                ]);
+            $resp = OpenAI::chat()->create([
+                'model' => $this->model,
+                'temperature' => 0,
+                'response_format' => ['type' => 'json_object'],
+                'messages' => [
+                    ['role' => 'system', 'content' => self::systemPrompt()],
+                    ['role' => 'user', 'content' => $user],
+                ],
+            ]);
 
-            if (! $resp->successful()) return null;
-            $content = (string) ($resp->json('choices.0.message.content') ?? '');
+            $content = trim((string) ($resp->choices[0]->message->content ?? ''));
             $content = trim(preg_replace('/^```(?:json)?|```$/m', '', $content));
             $decoded = json_decode($content, true);
             if (! is_array($decoded)) return null;
