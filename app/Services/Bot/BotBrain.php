@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.15-34  upload-autoresize';
+    public const VERSION = '2026.06.15-35  thali-change-notes';
 
     public function __construct(
         protected ProductSearch $search,
@@ -500,32 +500,67 @@ class BotBrain
         return \App\Services\Bot\ThaliMenu::render($cfg, $day, $cur);
     }
 
-    /** A set-meal can't be changed by the bot — promise a call before dispatch and tell the shop. */
+    /** A set-meal can't be re-priced by the bot — capture the change, echo it, promise a call, tell the shop. */
     protected function thaliModificationReply(Tenant $tenant, $convo, string $text): string
     {
-        $this->forwardQuestionToShop($tenant, $convo, 'Thali change request: ' . $text);
-        return "\u{1F44C} Noted! The thali is a set meal, but we can usually adjust it. "
-             . "Our team will *call you before dispatch* to confirm your changes. "
-             . "You can keep adding items, or say *checkout* when ready.";
-    }
+        $note = trim(preg_replace('/\s+/', ' ', $text));
 
-    /** Append the day's actual dishes to any thali line name (for the kitchen/record). */
-    protected function stampThaliDishes(Tenant $tenant, array $cart): array
-    {
-        $cfg = (array) ($tenant->setting('thali', []) ?: []);
-        if (! \App\Services\Bot\ThaliMenu::enabled($cfg)) return $cart;
-        $tz    = (string) $tenant->setting('timezone', config('app.timezone', 'Africa/Kampala'));
-        $day   = \App\Services\Bot\ThaliMenu::todayKey($tz);
-        $items = $cfg['days'][$day] ?? [];
-        $items = is_array($items) ? array_values(array_filter(array_map('trim', $items))) : [];
-        if (! $items) return $cart;
-        $label = \App\Services\Bot\ThaliMenu::dayName($day) . ': ' . implode(', ', $items);
-        foreach ($cart as &$line) {
-            $n = (string) ($line['name'] ?? '');
-            if (stripos($n, 'thali') !== false && strpos($n, '(') === false) {
-                $line['name'] = $n . ' (' . $label . ')';
+        // Attach the note to the thali line if it's already in the cart; otherwise stash it for checkout.
+        $cart = is_array($convo->cart) ? $convo->cart : [];
+        $attached = false;
+        foreach ($cart as &$l) {
+            if (stripos((string) ($l['name'] ?? ''), 'thali') !== false) {
+                $prev = trim((string) ($l['note'] ?? ''));
+                $l['note'] = $prev !== '' ? ($prev . '; ' . $note) : $note;
+                $attached = true;
             }
         }
+        unset($l);
+        if ($attached) {
+            $convo->cart = $cart;
+        } else {
+            $st = is_array($convo->state) ? $convo->state : [];
+            $prev = trim((string) ($st['thali_note'] ?? ''));
+            $st['thali_note'] = $prev !== '' ? ($prev . '; ' . $note) : $note;
+            $convo->state = $st;
+        }
+        $convo->save();
+
+        $this->forwardQuestionToShop($tenant, $convo, 'Thali change request: ' . $note);
+
+        $p = \App\Services\Bot\ThaliMenu::parseModification($text);
+        $bits = '';
+        if ($p['remove']) $bits .= "\n\u{2796} Remove: " . implode(', ', $p['remove']);
+        if ($p['add'])    $bits .= "\n\u{2795} Add: " . implode(', ', $p['add']);
+        if ($bits === '') $bits = "\n\u{201C}" . $note . "\u{201D}";
+
+        return "\u{1F44C} Got it — noted for your thali:" . $bits
+             . "\n\nIt's a set meal, so our team will *call you before dispatch* to confirm this and any price difference. "
+             . "Say *add thali* to put it on your order, or *checkout* when you're ready.";
+    }
+
+    /** Append the day's dishes and any customer note to thali line names (for the kitchen/record). */
+    protected function stampThaliDishes(Tenant $tenant, array $cart): array
+    {
+        $cfg   = (array) ($tenant->setting('thali', []) ?: []);
+        $label = '';
+        if (\App\Services\Bot\ThaliMenu::enabled($cfg)) {
+            $tz    = (string) $tenant->setting('timezone', config('app.timezone', 'Africa/Kampala'));
+            $day   = \App\Services\Bot\ThaliMenu::todayKey($tz);
+            $items = $cfg['days'][$day] ?? [];
+            $items = is_array($items) ? array_values(array_filter(array_map('trim', $items))) : [];
+            if ($items) $label = \App\Services\Bot\ThaliMenu::dayName($day) . ': ' . implode(', ', $items);
+        }
+        foreach ($cart as &$line) {
+            $n = (string) ($line['name'] ?? '');
+            if (stripos($n, 'thali') === false) continue;
+            $add = '';
+            if ($label !== '' && strpos($n, '(') === false) $add .= ' (' . $label . ')';
+            $note = trim((string) ($line['note'] ?? ''));
+            if ($note !== '' && stripos($n, 'note:') === false) $add .= ' · Note: ' . $note;
+            if ($add !== '') $line['name'] = $n . $add;
+        }
+        unset($line);
         return $cart;
     }
 
@@ -1378,6 +1413,10 @@ class BotBrain
         foreach ($cart as $l) {
             $sub = $l['price'] * $l['qty']; $total += $sub; $i++;
             $lines[] = "{$i}. {$l['name']} x{$l['qty']} — " . Pricing::money($tenant, $sub);
+            $note = trim((string) ($l['note'] ?? ''));
+            if ($note !== '' && stripos((string) $l['name'], 'note:') === false) {
+                $lines[] = "   \u{21B3} _note: {$note}_";
+            }
         }
         return "\u{1F6D2} *Your basket*\n" . implode("\n", $lines) . "\n*Total: " . Pricing::money($tenant, $total) . "*";
     }
@@ -1387,7 +1426,17 @@ class BotBrain
         $cart = is_array($convo->cart) ? $convo->cart : [];
         if (! $cart) { $convo->state = []; $convo->save(); return "Your basket is empty. Add a product to start a new order."; }
 
-        // Record the actual dishes on any thali line so the kitchen sees what to cook.
+        // Record the actual dishes + any customer change-note on the thali line for the kitchen.
+        $stateNote = trim((string) ($convo->state['thali_note'] ?? ''));
+        if ($stateNote !== '') {
+            foreach ($cart as &$cl) {
+                if (stripos((string) ($cl['name'] ?? ''), 'thali') !== false) {
+                    $prev = trim((string) ($cl['note'] ?? ''));
+                    $cl['note'] = $prev !== '' ? ($prev . '; ' . $stateNote) : $stateNote;
+                }
+            }
+            unset($cl);
+        }
         $cart = $this->stampThaliDishes($tenant, $cart);
 
         if ($tenant->effectivePlan() === 'free' && $tenant->overOrderCap()) {

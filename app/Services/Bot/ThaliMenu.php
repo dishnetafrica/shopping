@@ -100,6 +100,34 @@ class ThaliMenu
         return $lines;
     }
 
+    /** Loosely split an add/remove request into pieces for a friendly echo. Raw text is the source of truth. */
+    public static function parseModification(string $text): array
+    {
+        $lc = ' ' . mb_strtolower($text) . ' ';
+        $clean = function (string $s): string {
+            $s = trim(preg_replace('/\s+/', ' ', $s));
+            $s = trim($s, " .,;:-");
+            return $s;
+        };
+        $stop = '(?=\s*(?:,|\.|;|and\b|but\b|also\b|plus\b|add\b|extra\b|remove\b|without\b|instead\b|in place\b|$))';
+        $removes = [];
+        $adds = [];
+        if (preg_match_all('/\b(?:remove|without|no|skip|don\'?t want|do not want|take out|leave out)\s+(?:the\s+)?([a-z][a-z0-9 &]{1,28}?)' . $stop . '/', $lc, $m)) {
+            foreach ($m[1] as $x) { $x = $clean($x); if ($x !== '') $removes[] = $x; }
+        }
+        if (preg_match_all('/\b(?:add|include|put|give me|i want|want|extra|more)\s+(?:some\s+|an?\s+)?([a-z][a-z0-9 &]{1,28}?)' . $stop . '/', $lc, $m)) {
+            foreach ($m[1] as $x) {
+                $x = $clean($x);
+                if ($x !== '' && ! in_array($x, ['to', 'it', 'that', 'this', 'something', 'else', 'the thali', 'thali'], true)) $adds[] = $x;
+            }
+        }
+        return [
+            'remove' => array_values(array_unique($removes)),
+            'add'    => array_values(array_unique($adds)),
+            'raw'    => trim($text),
+        ];
+    }
+
     /** Flyer-seeded weekly menu (Mon–Sat) for Pal's — used to seed tenant settings. */
     public static function palsSeed(): array
     {

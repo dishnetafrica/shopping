@@ -57,4 +57,21 @@ check("enabled true", ThaliMenu::enabled($cfg), true);
 check("enabled false (off)", ThaliMenu::enabled(['enabled'=>false,'days'=>['mon'=>['x']]]), false);
 check("enabled false (empty)", ThaliMenu::enabled([]), false);
 
+
+// --- parseModification ---
+function show($a){return implode('|',$a);}
+$cases=[
+  ['remove dal and add kadhi', ['dal'], ['kadhi']],
+  ['no onion, extra rotli', ['onion'], ['rotli']],
+  ['remove gulab jamun', ['gulab jamun'], []],
+  ['add paneer sabji', [], ['paneer sabji']],
+  ['without dal rice, add extra papad', ['dal rice'], ['papad']],
+];
+foreach($cases as $c){
+  $r=ThaliMenu::parseModification($c[0]);
+  check("mod parse remove: ".$c[0], in_array_all($c[1],$r['remove']), true);
+  check("mod parse add: ".$c[0],    in_array_all($c[2],$r['add']),    true);
+}
+function in_array_all($need,$hay){foreach($need as $n){$ok=false;foreach($hay as $h){if(strpos($h,$n)!==false||strpos($n,$h)!==false){$ok=true;break;}}if(!$ok)return false;}return true;}
+
 echo "\n==== thali stress test: PASS {$pass}  FAIL {$fail} ====\n";
