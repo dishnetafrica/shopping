@@ -28,12 +28,12 @@ class TenantResource extends Resource
             ])->columns(2),
 
             Forms\Components\Section::make('Owner login')
-                ->description('Lets the shop owner sign in at /app. They log in with this WhatsApp number via a one-time code (no password). Fill it in and Save — the login is created automatically.')
+                ->description('Lets the shop owner sign in at /app. They log in with this WhatsApp number via a one-time code (no password). Fill it in and Save — the login is created automatically. (To edit or add more logins later, use the Logins table below.)')
                 ->schema([
                     Forms\Components\TextInput::make('owner_name')->label('Owner name'),
                     Forms\Components\TextInput::make('owner_phone')->label('Owner WhatsApp number')->tel()
                         ->helperText('Full intl format, e.g. 256772123456. The login code is delivered over this shop’s WhatsApp, so its instance must be connected.'),
-                ])->columns(2),
+                ])->columns(2)->visibleOn('create'),
 
             Forms\Components\Section::make('Plan & billing')->schema([
                 Forms\Components\Select::make('plan')
@@ -107,6 +107,13 @@ class TenantResource extends Resource
                 }),
             Tables\Actions\EditAction::make(),
         ]);
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            TenantResource\RelationManagers\UsersRelationManager::class,
+        ];
     }
 
     public static function getPages(): array
