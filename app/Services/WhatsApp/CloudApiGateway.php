@@ -56,4 +56,9 @@ class CloudApiGateway implements WhatsAppGateway
             'raw'       => $payload,
         ];
     }
+
+    public function fetchContacts(string $instance): array
+    {
+        return []; // Cloud API has no contact-list endpoint
+    }
 }

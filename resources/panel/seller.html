@@ -538,6 +538,7 @@
                 <option value="spend">Top spend</option><option value="orders">Most orders</option><option value="recent">Most recent</option><option value="name">Name A–Z</option>
               </select>
               <button class="btn ghost" onclick="custCSV()">⤵ CSV</button>
+              <button class="btn ghost" onclick="importWaContacts()">⤓ Import WhatsApp contacts</button>
             </div>
             <div id="custChips" style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px"></div>
             <div class="tablewrap"><table><thead><tr><th>Name</th><th>Phone</th><th>Orders</th><th>Spent</th><th>Avg</th><th>Last order</th><th>Credit</th></tr></thead><tbody id="custRows"></tbody></table></div>
@@ -940,7 +941,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   catImages:'/papi/category-images',catImageSave:'/papi/category-image-save',
   thali:'/papi/thali',thaliSave:'/papi/thali-save',
   dispatch:'/papi/dispatch',
-  riders:'/papi/riders',riderSave:'/papi/rider-save',riderDel:'/papi/rider-delete',
+  riders:'/papi/riders',riderSave:'/papi/rider-save',riderDel:'/papi/rider-delete',importContacts:'/papi/contacts-import',
   ret:'/papi/return',returns:'/papi/returns',
   settings:'/papi/settings',settingsSave:'/papi/settings-save',
   branches:'/papi/branches',branchSave:'/papi/branch-save',branchDel:'/papi/branch-delete',
@@ -2059,6 +2060,15 @@ function custInit(){
 function custChips(){
   var chips=[['all','All'],['new','New'],['repeat','Repeat'],['vip','VIP'],['dormant','Dormant 45d+'],['credit','Has credit']];
   $('custChips').innerHTML=chips.map(function(c){return '<span class="chip'+(CUST_FILTER===c[0]?' on':'')+'" onclick="custSetFilter(\''+c[0]+'\')">'+c[1]+'</span>';}).join('');
+}
+async function importWaContacts(){
+  if(!confirm('Import your WhatsApp contacts as customers?\n\nThis adds every number your business phone knows \u2014 suppliers, staff and others, not only buyers. Do NOT bulk-message imported people who never ordered; WhatsApp can ban your number for spam.\n\nContinue?'))return;
+  toast('Fetching WhatsApp contacts\u2026');
+  try{var r=await fetch(EP.importContacts+'?token='+encodeURIComponent(token),{cache:'no-store'});var d=await r.json();
+    if(d&&d.ok){toast('Imported '+d.added+' new \u00b7 '+d.skipped+' already existed');loadCustProfiles().then(function(){loadData(true);renderCustomers();});}
+    else if(d&&d.error==='whatsapp_not_connected'){toast('Connect WhatsApp first in Settings.');}
+    else{toast('Could not import'+(d&&d.detail?(': '+d.detail):''));}
+  }catch(e){toast('Network error');}
 }
 function custSetFilter(f){CUST_FILTER=f;custChips();renderCustomers();}
 function renderCustomers(){

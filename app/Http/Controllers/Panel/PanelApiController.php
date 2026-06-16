@@ -343,6 +343,7 @@ class PanelApiController extends Controller
         $p->price      = $price;
         $p->stock      = (int) $r->query('stock', $p->stock);
         if ($r->has('image')) $p->image_url = trim((string) $r->query('image', ''));
+        if ($r->filled('category')) $p->category = trim((string) $r->query('category', ''));
         $p->save();
 
         return response()->json(['ok' => true]);
@@ -569,8 +570,38 @@ class PanelApiController extends Controller
             return response()->json(['ok' => false, 'error' => 'send_failed', 'detail' => $e->getMessage()], 502);
         }
 
+
         MessageLog::record($t->id, $phone, $t->whatsapp_instance, 'out', 'agent', $body);
         return response()->json(['ok' => true]);
+    }
+
+    /** Pull the connected WhatsApp instance's contacts and add the new ones as customers. */
+    public function importContacts(Request $r, WhatsAppManager $wa)
+    {
+        $t = $r->user()->tenant;
+        $instance = (string) ($t->whatsapp_instance ?? '');
+        if ($instance === '') {
+            return response()->json(['ok' => false, 'error' => 'whatsapp_not_connected'], 422);
+        }
+        try {
+            $contacts = $wa->forTenant($t)->fetchContacts($instance);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => 'fetch_failed', 'detail' => $e->getMessage()], 502);
+        }
+
+        $added = 0; $skipped = 0;
+        foreach ($contacts as $c) {
+            $phone = preg_replace('/[^0-9]/', '', (string) ($c['phone'] ?? ''));
+            if ($phone === '') continue;
+            if (CustomerProfile::where('phone', $phone)->exists()) { $skipped++; continue; }
+            $cp = new CustomerProfile();
+            $cp->phone = $phone;
+            if (! empty($c['name'])) $cp->name = $c['name'];
+            $cp->notes = 'Imported from WhatsApp';
+            $cp->save(); // tenant_id stamped by the global scope
+            $added++;
+        }
+        return response()->json(['ok' => true, 'added' => $added, 'skipped' => $skipped, 'total' => count($contacts)]);
     }
 
     public function chatTakeover(Request $r)

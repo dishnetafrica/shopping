@@ -74,6 +74,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('settings',   [PanelApiController::class, 'settings']);
         Route::get('branches',   [PanelApiController::class, 'branches']);
         Route::get('customers',  [PanelApiController::class, 'customers']);
+        Route::get('contacts-import', [PanelApiController::class, 'importContacts']);
         Route::get('bot-config', [PanelApiController::class, 'botConfig']);
 
         // live chats inbox (Phase 4b)

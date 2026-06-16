@@ -51,6 +51,49 @@ class EvolutionGateway implements WhatsAppGateway
         $this->http()->post("/chat/markMessageAsRead/{$instance}", ['readMessages' => [['id' => $messageId]]]);
     }
 
+    public function fetchContacts(string $instance): array
+    {
+        $rows = [];
+        // Evolution v2: POST /chat/findContacts/{instance} with an empty filter.
+        try {
+            $resp = $this->http()->post("/chat/findContacts/{$instance}", ['where' => (object) []])->json();
+            $rows = $this->normalizeContacts($resp);
+        } catch (\Throwable $e) {
+            $rows = [];
+        }
+        // Older builds expose GET /chat/fetchContacts/{instance}.
+        if (! $rows) {
+            try {
+                $resp = $this->http()->get("/chat/fetchContacts/{$instance}")->json();
+                $rows = $this->normalizeContacts($resp);
+            } catch (\Throwable $e) {
+                // leave empty
+            }
+        }
+        return $rows;
+    }
+
+    protected function normalizeContacts($resp): array
+    {
+        if (! is_array($resp)) return [];
+        $list = $resp;
+        if (isset($resp['contacts']) && is_array($resp['contacts'])) $list = $resp['contacts'];
+        elseif (isset($resp['data']) && is_array($resp['data'])) $list = $resp['data'];
+
+        $out = []; $seen = [];
+        foreach ($list as $c) {
+            if (! is_array($c)) continue;
+            $jid = (string) ($c['remoteJid'] ?? $c['id'] ?? $c['jid'] ?? '');
+            if ($jid === '' || str_contains($jid, '@g.us') || str_contains($jid, 'broadcast') || str_contains($jid, '@newsletter')) continue;
+            $phone = preg_replace('/[^0-9]/', '', explode('@', $jid)[0]);
+            if ($phone === '' || strlen($phone) < 7 || isset($seen[$phone])) continue;
+            $seen[$phone] = true;
+            $name = trim((string) ($c['pushName'] ?? $c['name'] ?? $c['verifiedName'] ?? ''));
+            $out[] = ['phone' => $phone, 'name' => $name];
+        }
+        return $out;
+    }
+
     public function parseIncoming(array $payload): ?array
     {
         // Evolution "messages.upsert" shape (defensive — varies by version).

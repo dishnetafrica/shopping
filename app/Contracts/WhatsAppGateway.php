@@ -16,4 +16,7 @@ interface WhatsAppGateway
 
     /** Normalise an incoming webhook payload to: [instance, from, text, messageId, raw] */
     public function parseIncoming(array $payload): ?array;
+
+    /** Return the instance's known contacts as [['phone'=>digits,'name'=>string], ...]. */
+    public function fetchContacts(string $instance): array;
 }
