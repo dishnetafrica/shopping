@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.16-63  campaign-drip-throttle';
+    public const VERSION = '2026.06.16-65  website-order-ack';
 
     public function __construct(
         protected ProductSearch $search,
@@ -47,6 +47,13 @@ class BotBrain
             }
         }
 
+        // A customer tapping "Confirm on WhatsApp" after a website checkout sends a fixed
+        // message ("I just placed order ORD-NN on the website. Please confirm..."). Acknowledge
+        // it instead of funnelling it into cart/shopping logic (which replied "basket is empty").
+        if (($ack = $this->tryWebsiteOrderAck($tenant, $convo, $text)) !== null) {
+            return $ack;
+        }
+
         // Try the LLM first; fall back to keywords.
         $action = $this->nlu->parse($tenant, $convo, $text);
         if ($action) {
@@ -56,6 +63,41 @@ class BotBrain
     }
 
     // ---------------- shared executor ----------------
+
+    protected function tryWebsiteOrderAck(Tenant $tenant, Conversation $convo, string $text): ?string
+    {
+        $lc = mb_strtolower($text);
+
+        // High-precision: only a *past-tense* placed-order confirmation, not "I want to place an order".
+        $isPlaced = preg_match('/\bplaced\s+(an?\s+)?order\b/u', $lc) === 1
+            || (str_contains($lc, 'on the website') && (str_contains($lc, 'confirm') || str_contains($lc, 'order')));
+        if (! $isPlaced) return null;
+
+        // Pull an order number if present (ORD-12 / ORD 12 / ORD12).
+        $ref = '';
+        if (preg_match('/\bORD[-\s]?\d+\b/i', $text, $m)) {
+            $ref = preg_replace('/^ORD[-\s]?/i', 'ORD-', strtoupper(trim($m[0])));
+        }
+
+        // Resolve the order (tenant-scoped) by number, else the customer's most recent (30 min).
+        $order = null;
+        if ($ref !== '') {
+            $order = \App\Models\Order::where('order_no', $ref)->latest('id')->first();
+        }
+        if (! $order) {
+            $phone = preg_replace('/[^0-9]/', '', (string) $convo->customer_phone);
+            if ($phone !== '') {
+                $order = \App\Models\Order::where('customer_phone', 'like', '%' . $phone)
+                    ->where('created_at', '>=', now()->subMinutes(30))->latest('id')->first();
+            }
+        }
+
+        $name   = ($order && $order->customer_name) ? ' ' . trim((string) $order->customer_name) : '';
+        $refTxt = ($order && $order->order_no) ? " *{$order->order_no}*" : ($ref !== '' ? " *{$ref}*" : '');
+
+        return "\u{2705} Thank you{$name}! We've received your website order{$refTxt} and our team will confirm and arrange delivery shortly. \u{1F69A}"
+             . "\n\nNeed anything else? Tell me a product or say *menu*.";
+    }
 
     protected function execute(Tenant $tenant, Conversation $convo, string $intent, array $items, string $note = ''): string
     {
