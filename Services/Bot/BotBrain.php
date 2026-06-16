@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.16-56  call-rider-on-track';
+    public const VERSION = '2026.06.16-61  menu-website-nudge';
 
     public function __construct(
         protected ProductSearch $search,
@@ -1327,7 +1327,8 @@ class BotBrain
             $lines = array_map(fn ($c) => '• ' . $c . ' (' . count($byCat[$c]) . ')', $cats);
             return "\u{1F4D6} *Our menu* — {$total} products in " . count($cats) . " categories:\n"
                  . implode("\n", $lines)
-                 . "\n\nReply with a *category* or a *product name* to see prices and order.";
+                 . "\n\nReply with a *category* or a *product name* to see prices and order."
+                 . $this->websiteNudge($tenant);
         }
 
         $lines = [];
@@ -1338,7 +1339,7 @@ class BotBrain
             $lines[] = '• ' . $nm . $pr;
             if (count($lines) >= 30) { $lines[] = '…and more — just ask for a product.'; break; }
         }
-        return "\u{1F4D6} *Our menu:*\n" . implode("\n", $lines) . "\n\nReply with a *product name* to order.";
+        return "\u{1F4D6} *Our menu:*\n" . implode("\n", $lines) . "\n\nReply with a *product name* to order." . $this->websiteNudge($tenant);
     }
 
     /**
