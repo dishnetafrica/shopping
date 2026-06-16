@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.16-69  per-number-bot-mute';
+    public const VERSION = '2026.06.16-70  thali-menu-website-pointer';
 
     public function __construct(
         protected ProductSearch $search,
@@ -558,7 +558,23 @@ class BotBrain
         $day = \App\Services\Bot\ThaliMenu::dayFromText($lc) ?? \App\Services\Bot\ThaliMenu::todayKey($tz);
         $session = \App\Services\Bot\ThaliMenu::sessionFromText($lc)
             ?? \App\Services\Bot\ThaliMenu::session($cfg, $tz);
-        return \App\Services\Bot\ThaliMenu::render($cfg, $day, $cur, $session);
+        return \App\Services\Bot\ThaliMenu::render($cfg, $day, $cur, $session)
+            . $this->websiteThaliNudge($tenant, $cfg);
+    }
+
+    /**
+     * Menu-specific website pointer for lunch/dinner questions (custom-domain shops).
+     * Because this already contains the domain, the global website append is skipped,
+     * so the customer sees this tailored line instead of the generic "browse & order".
+     */
+    protected function websiteThaliNudge(Tenant $tenant, array $cfg): string
+    {
+        if ((string) $tenant->setting('bot_website_link', '1') === '0') return '';
+        $dom = trim((string) $tenant->custom_domain);
+        if ($dom === '') return '';
+        $both = \App\Services\Bot\ThaliMenu::hasNight($cfg);
+        $what = $both ? "lunch & dinner menu (switch between them)" : "full menu with photos";
+        return "\n\n\u{1F37D}\u{FE0F} See the {$what} on our website: https://{$dom}";
     }
 
     /** A set-meal can't be re-priced by the bot — capture the change, echo it, promise a call, tell the shop. */
