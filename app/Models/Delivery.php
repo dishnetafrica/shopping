@@ -18,12 +18,13 @@ class Delivery extends Model
 
     protected $fillable = ['tenant_id','order_id','rider_id','zone_id','status','fee','distance_km',
         'eta_at','assigned_at','picked_at','out_at','delivered_at','failed_at','failed_reason',
-        'proof_photo_url','recipient_name','cod_amount','cod_collected','rider_token'];
+        'proof_photo_url','recipient_name','cod_amount','cod_collected','rider_token','rider_lat','rider_lng','rider_loc_at'];
 
     protected $casts = [
         'eta_at'        => 'datetime', 'assigned_at' => 'datetime', 'picked_at' => 'datetime',
         'out_at'        => 'datetime', 'delivered_at' => 'datetime', 'failed_at' => 'datetime',
         'cod_collected' => 'boolean', 'distance_km' => 'float',
+        'rider_lat' => 'float', 'rider_lng' => 'float', 'rider_loc_at' => 'datetime',
     ];
 
     public function order(): BelongsTo  { return $this->belongsTo(Order::class); }

@@ -71,9 +71,36 @@ class TrackController extends Controller
             $avatar = $rp !== ''
                 ? '<img class="ravatar" src="' . e($rp) . '" alt="">'
                 : '<div class="ravatar rph">' . e(mb_strtoupper(mb_substr((string) $rider->name, 0, 1))) . '</div>';
+            $riderPhone = preg_replace('/[^0-9+]/', '', (string) ($rider->phone ?? ''));
+            $callBtn = $riderPhone !== ''
+                ? '<a class="callbtn" href="tel:' . e($riderPhone) . '">📞 Call</a>'
+                : '';
             $riderBlock = '<div class="rider">' . $avatar
-                . '<div><div class="rlabel">Your delivery partner</div>'
-                . '<div class="rname">' . e((string) $rider->name) . '</div></div></div>';
+                . '<div style="flex:1"><div class="rlabel">Your delivery partner</div>'
+                . '<div class="rname">' . e((string) $rider->name) . '</div></div>'
+                . $callBtn . '</div>';
+
+            // Live location: show distance/last-seen if the rider has pinged recently.
+            $delivery = \App\Models\Delivery::withoutGlobalScopes()
+                ->where('order_id', $order->id)->latest('id')->first();
+            if ($delivery && $delivery->rider_lat && $delivery->rider_loc_at
+                && $delivery->rider_loc_at->gt(now()->subMinutes(20))) {
+                $rlat = (float) $delivery->rider_lat;
+                $rlng = (float) $delivery->rider_lng;
+                $ago  = $delivery->rider_loc_at->diffForHumans(null, true);
+                $mapUrl = 'https://www.google.com/maps?q=' . $rlat . ',' . $rlng;
+                $distTxt = '';
+                if (preg_match('/(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/', (string) $order->location, $cm)) {
+                    $km = $this->haversineKm((float) $cm[1], (float) $cm[2], $rlat, $rlng);
+                    $distTxt = $km < 1
+                        ? 'about ' . max(50, (int) round($km * 1000 / 50) * 50) . ' m away'
+                        : 'about ' . number_format($km, 1) . ' km away';
+                }
+                $riderBlock .= '<div class="live"><span class="pulse"></span>'
+                    . '<span>Rider is ' . ($distTxt !== '' ? e($distTxt) : 'on the way')
+                    . ' · updated ' . e($ago) . ' ago</span>'
+                    . '<a href="' . e($mapUrl) . '" target="_blank" rel="noopener">See on map</a></div>';
+            }
         }
 
         $body = '<div class="card">'
@@ -88,6 +115,15 @@ class TrackController extends Controller
             . '</div>';
 
         return $this->page($body, $brand);
+    }
+
+    private function haversineKm(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $r = 6371.0;
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+        $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+        return $r * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 
     protected function page(string $body, string $brand)
@@ -112,6 +148,11 @@ class TrackController extends Controller
             . '.ravatar.rph{display:flex;align-items:center;justify-content:center;background:#15803D;color:#fff;font-weight:800;font-size:20px}'
             . '.rlabel{font-size:11px;color:#6E7D72;font-weight:700;text-transform:uppercase;letter-spacing:.04em}'
             . '.rname{font-size:16px;font-weight:800;margin-top:1px}'
+            . '.callbtn{flex:none;background:#15803D;color:#fff;font-weight:800;text-decoration:none;border-radius:10px;padding:9px 16px;font-size:14px}'
+            . '.live{display:flex;align-items:center;gap:8px;background:#EAF6EE;border:1px solid #CDEBD6;border-radius:11px;padding:9px 12px;margin:-6px 0 14px;font-size:13px;font-weight:600;color:#15803D}'
+            . '.live a{margin-left:auto;color:#0A6E1A;font-weight:800;text-decoration:none;white-space:nowrap}'
+            . '.pulse{width:9px;height:9px;border-radius:50%;background:#15803D;flex:none;box-shadow:0 0 0 0 rgba(21,128,61,.5);animation:pl 1.6s infinite}'
+            . '@keyframes pl{0%{box-shadow:0 0 0 0 rgba(21,128,61,.5)}70%{box-shadow:0 0 0 9px rgba(21,128,61,0)}100%{box-shadow:0 0 0 0 rgba(21,128,61,0)}}'
             . '</style></head><body>' . $body . '</body></html>';
 
         return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');

@@ -82,7 +82,9 @@ class DeliveryService
             . 'Drop: ' . ($order->location ?: 'see customer') . "\n"
             . 'Customer: ' . ($order->customer_name ?: 'Customer') . ' (+' . $order->customer_phone . ")\n"
             . "Items: {$items}\n"
-            . 'Collect (COD): ' . $cur . ' ' . number_format((float) $delivery->cod_amount);
+            . 'Collect (COD): ' . $cur . ' ' . number_format((float) $delivery->cod_amount) . "\n\n"
+            . "\u{1F4CD} Open & tap *Start sharing my location* so the customer can track you:\n"
+            . url('/r/' . $delivery->rider_token);
         try {
             $this->wa->forTenant($tenant)->sendText($tenant->whatsapp_instance, $rider->phone, $msg);
             MessageLog::record($tenant->id, $rider->phone, $tenant->whatsapp_instance, 'out', 'system', $msg);

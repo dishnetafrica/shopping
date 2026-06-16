@@ -14,6 +14,8 @@ Route::get('/', [MarketingController::class, 'home']);
 
 // Public customer order-tracking page (no auth — order id + secret token are the key).
 Route::get('/papi/track', [TrackController::class, 'show']);
+Route::get('/r/{token}',     [\App\Http\Controllers\Panel\RiderTrackController::class, 'show']);
+Route::post('/r/{token}/loc', [\App\Http\Controllers\Panel\RiderTrackController::class, 'loc']);
 
 // PWA assets (public — a manifest / service worker / icon must load without a session).
 Route::get('/manifest.webmanifest', [PwaController::class, 'manifest']);
