@@ -173,6 +173,7 @@ class PanelApiController extends Controller
             'storeName'     => (string) ($t->name ?? 'Family Shopper'),
             'slug'          => (string) ($t->slug ?? ''),
             'customDomain'  => (string) ($t->custom_domain ?? ''),
+            'onboarded'     => (bool) ($s['onboarded'] ?? false),
             'storePhone'    => (string) ($t->whatsapp_number ?? ''),
             'storeAddress'  => (string) ($s['address'] ?? 'Kampala, Uganda'),
             'storeEmail'    => (string) ($s['email'] ?? ''),
@@ -419,6 +420,18 @@ class PanelApiController extends Controller
     }
 
     /** Daily set-meal (thali) config for the editor. */
+    /** Resolve a stored image path to a usable URL (mirrors StorefrontController). */
+    private function imageUrl(?string $value): string
+    {
+        $value = (string) $value;
+        if ($value === '') return '';
+        // Already absolute (http/https) or root-relative (/storage/..) — use as-is.
+        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://') || str_starts_with($value, '/')) {
+            return $value;
+        }
+        return Storage::disk('public')->url($value);
+    }
+
     public function thaliGet(Request $r)
     {
         $cfg = $r->user()->tenant->setting('thali', []);
@@ -1607,6 +1620,7 @@ class PanelApiController extends Controller
         $rider->city    = (string) $r->query('city', '');
         $rider->dob     = $r->query('dob') ?: null;
         $rider->address = (string) $r->query('address', '');
+        if ($r->has('photo')) $rider->photo = trim((string) $r->query('photo', ''));
 
         $profile = [];
         foreach (['license_no', 'nid_no', 'doc_url', 'bank_name', 'account_name', 'bank_account', 'pay_notes', 'pay_type', 'comm_pct', 'comm_min', 'comm_max'] as $k) {
@@ -1631,7 +1645,7 @@ class PanelApiController extends Controller
     {
         $t = $r->user()->tenant;
         $s = $t->settings ?? [];
-        foreach (['storeName', 'storePhone', 'storeAddress', 'storeEmail', 'base', 'perKm', 'min', 'round', 'freeOver', 'lat', 'lng', 'inventoryMode', 'usdUgx', 'usdSsp'] as $k) {
+        foreach (['storeName', 'storePhone', 'storeAddress', 'storeEmail', 'base', 'perKm', 'min', 'round', 'freeOver', 'lat', 'lng', 'inventoryMode', 'usdUgx', 'usdSsp', 'onboarded'] as $k) {
             if ($r->has($k)) $s[$k] = $r->query($k);
         }
         if ($r->has('logo')) $s['logo'] = trim((string) $r->query('logo'));

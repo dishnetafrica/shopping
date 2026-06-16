@@ -953,7 +953,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   defaults:'/papi/defaults',defSave:'/papi/default-save',defDel:'/papi/default-delete'};
 var BOT_CUR='auto', SHOW_SWITCHER=false;
 var token=localStorage.getItem('fs_token')||'', phone='', timer=null, filtersInit=false;
-var CATALOGUE=[], ORDERS=[], RIDERS=[], RETURNS=[], CREDIT={};
+var CATALOGUE=[], ORDERS=[], RIDERS=[], RETURNS=[], CREDIT={}, RM_PHOTO='';
 var CUSTPROFILE={};
 var SETTINGS={storeName:'Family Shopper',storePhone:'+256 7xx xxx xxx',storeAddress:'Kampala, Uganda',storeEmail:'orders@familyshopper.ug',logo:'',slug:'',customDomain:'',onboarded:false};
 var BRANCHES=[], BRANCH_FILTER='', INVENTORY_MODE='shared', MY_BRANCH=localStorage.getItem('fs_branch')||'', MY_ROLE=localStorage.getItem('fs_role')||'owner';
@@ -2185,7 +2185,12 @@ function openRiderModal(id){
   function v(k){return r&&r[k]!=null?String(r[k]):'';}
   var comm=(v('pay_type')==='commission');
   $('modalTitle').textContent=r?'Edit rider':'Add rider';
+  RM_PHOTO=v('photo');
   $('modalBody').innerHTML=
+    '<div class="mfield"><label>Rider photo</label><div style="display:flex;align-items:center;gap:12px"><div id="rmPhotoPrev" style="width:64px;height:64px;border-radius:50%;overflow:hidden;background:#EEF2FB;display:grid;place-items:center;font-weight:800;color:#2E3340;flex:none">'+rmPhotoInner(v('name'))+'</div>'+
+      '<div><button type="button" class="btn ghost" id="rmPhotoBtn">\u2191 Upload photo</button> <button type="button" class="btn ghost" id="rmPhotoRm" style="color:#B4232A">Remove</button>'+
+      '<div class="note" style="margin-top:4px">Shown to customers on their tracking link.</div></div>'+
+      '<input type="file" id="rmPhotoFile" accept="image/*" style="display:none"></div></div>'+
     '<div class="inrow"><div class="mfield" style="flex:1"><label>Rider name *</label><input id="rmName" value="'+esc(v('name'))+'"></div>'+
       '<div class="mfield" style="flex:1"><label>Phone (2567\u2026)</label><input id="rmPhone" value="'+esc(v('phone'))+'"></div></div>'+
     '<div class="mfield"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="rmActive" style="width:auto" '+(!r||r.active!==false?'checked':'')+'> Active (available for dispatch)</label></div>'+
@@ -2209,6 +2214,17 @@ function openRiderModal(id){
     '<button class="lbtn" id="rmSave" style="margin-top:12px">Save rider</button>';
   $('modal').classList.remove('hide');
   $('rmSave').onclick=function(){saveRider(id);};
+  bindRiderPhoto(v('name'));
+}
+function rmPhotoInner(name){ return RM_PHOTO?('<img src="'+esc(RM_PHOTO)+'" style="width:100%;height:100%;object-fit:cover">'):esc(((name||'?').trim()[0]||'?').toUpperCase()); }
+function bindRiderPhoto(name){
+  var btn=$('rmPhotoBtn'),rm=$('rmPhotoRm'),f=$('rmPhotoFile'),pv=$('rmPhotoPrev');
+  if(btn&&f)btn.onclick=function(){f.value='';f.click();};
+  if(rm)rm.onclick=function(){RM_PHOTO='';if(pv)pv.innerHTML=rmPhotoInner($('rmName')?$('rmName').value:name);};
+  if(f&&!f._b){f._b=true;f.onchange=async function(){var file=f.files&&f.files[0];if(!file)return;toast('Uploading photo\u2026');var data=await shrinkImage(file,512,.85);if(!data){toast('Could not read image');return;}
+    try{var up=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'rider.jpg',data:data})});var d=await up.json();
+      if(d&&d.ok&&d.url){RM_PHOTO=d.url;if(pv)pv.innerHTML='<img src="'+esc(d.url)+'" style="width:100%;height:100%;object-fit:cover">';toast('Photo set \u2014 press Save rider');}else toast('Upload failed');}catch(e){toast('Upload failed');}
+  };}
 }
 async function saveRider(id){
   var name=($('rmName').value||'').trim(), phone=($('rmPhone').value||'').replace(/[^0-9]/g,''), active=$('rmActive').checked;
@@ -2218,7 +2234,7 @@ async function saveRider(id){
     bank_name:g('rmBank'),account_name:g('rmAccName'),bank_account:g('rmAcc'),pay_notes:g('rmPayNotes'),
     pay_type:($('rmPayType')?$('rmPayType').value:'fixed') };
   if(f.pay_type==='commission'){ f.comm_pct=g('rmCommPct'); f.comm_min=g('rmCommMin'); f.comm_max=g('rmCommMax'); }
-  var qs='?token='+encodeURIComponent(token)+'&name='+encodeURIComponent(name)+'&phone='+encodeURIComponent(phone)+'&active='+(active?'true':'false')+(id?'&id='+encodeURIComponent(id):'');
+  var qs='?token='+encodeURIComponent(token)+'&name='+encodeURIComponent(name)+'&phone='+encodeURIComponent(phone)+'&active='+(active?'true':'false')+'&photo='+encodeURIComponent(RM_PHOTO||'')+(id?'&id='+encodeURIComponent(id):'');
   for(var k in f){ if(f.hasOwnProperty(k)&&f[k]!=='') qs+='&'+k+'='+encodeURIComponent(f[k]); }
   $('rmSave').disabled=true;
   try{var r=await fetch(EP.riderSave+qs,{cache:'no-store'});var d=await r.json();

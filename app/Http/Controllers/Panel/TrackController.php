@@ -60,11 +60,28 @@ class TrackController extends Controller
                 . '<span style="' . ($done ? 'font-weight:700' : 'color:#9aa7a0') . '">' . e($s) . '</span></div>';
         }
 
+        // Delivery partner card — reassures the customer who is bringing the order.
+        $riderBlock = '';
+        $rider = $order->rider;
+        if ($rider) {
+            $rp = trim((string) ($rider->photo ?? ''));
+            if ($rp !== '' && ! str_starts_with($rp, 'http') && ! str_starts_with($rp, '/') && ! str_starts_with($rp, 'data:')) {
+                $rp = '/storage/' . $rp;
+            }
+            $avatar = $rp !== ''
+                ? '<img class="ravatar" src="' . e($rp) . '" alt="">'
+                : '<div class="ravatar rph">' . e(mb_strtoupper(mb_substr((string) $rider->name, 0, 1))) . '</div>';
+            $riderBlock = '<div class="rider">' . $avatar
+                . '<div><div class="rlabel">Your delivery partner</div>'
+                . '<div class="rname">' . e((string) $rider->name) . '</div></div></div>';
+        }
+
         $body = '<div class="card">'
             . '<div class="hdr">' . $header . '</div>'
             . '<h1>Order ' . e($order->order_no ?: ('#' . $order->id)) . '</h1>'
             . '<div class="status">' . e($current) . '</div>'
             . '<div class="timeline">' . $timeline . '</div>'
+            . $riderBlock
             . ($rows ? '<table>' . $rows . '</table>' : '')
             . '<div class="tot">Total: ' . e($cur) . ' ' . number_format((float) $order->total) . '</div>'
             . ($order->location ? '<div class="loc">📍 ' . e($order->location) . '</div>' : '')
@@ -90,6 +107,11 @@ class TrackController extends Controller
             . 'table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}'
             . 'td{padding:7px 0;border-bottom:1px solid #eef2ee}'
             . '.tot{font-weight:800;margin-top:8px}.loc{color:#6E7D72;font-size:13px;margin-top:6px}'
+            . '.rider{display:flex;align-items:center;gap:12px;background:#F1F8F3;border:1px solid #CDEBD6;border-radius:13px;padding:11px 13px;margin:14px 0}'
+            . '.ravatar{width:46px;height:46px;border-radius:50%;object-fit:cover;flex:none;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.12)}'
+            . '.ravatar.rph{display:flex;align-items:center;justify-content:center;background:#15803D;color:#fff;font-weight:800;font-size:20px}'
+            . '.rlabel{font-size:11px;color:#6E7D72;font-weight:700;text-transform:uppercase;letter-spacing:.04em}'
+            . '.rname{font-size:16px;font-weight:800;margin-top:1px}'
             . '</style></head><body>' . $body . '</body></html>';
 
         return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
