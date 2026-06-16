@@ -1745,13 +1745,16 @@ function openEdit(row){
   $('modalBody').innerHTML=
     '<div class="mfield"><label>Price (UGX — base'+(discActive()?', before discount':'')+')</label><input id="mPrice" type="number" min="0" value="'+(p.basePrice!=null?p.basePrice:p.price)+'"><div class="note" id="mPriceHint" style="margin-top:4px"></div></div>'+
     '<div class="mfield"><label>'+stockLabel+'</label><input id="mStock" type="number" min="0" value="'+prodStock(p)+'"></div>'+stockNote+
+    '<button type="button" class="btn ghost" id="mOOS" style="margin:-4px 0 10px">'+((prodStock(p)<=0)?'\u2713 Out of stock \u2014 Save to apply':'Mark out of stock')+'</button>'+
     prodImgField(p.image)+
     '<button class="lbtn" id="mSave">Save changes</button>';
   $('modal').classList.remove('hide');
   bindProdImg();
   (function(){function mph(){var v=Number($('mPrice').value)||0;if($('mPriceHint'))$('mPriceHint').textContent=inUGX()?'':('\u2248 '+ugx(v)+' at current rate');}if($('mPrice'))$('mPrice').oninput=mph;mph();})();
+  if($('mOOS'))$('mOOS').onclick=toggleOOS;
   $('mSave').onclick=function(){saveProduct(row);};
 }
+function toggleOOS(){var sEl=$('mStock');if(!sEl)return;var z=(Number(sEl.value)||0)<=0;sEl.value=z?100:0;var b=$('mOOS');if(b)b.textContent=(Number(sEl.value)||0)<=0?'\u2713 Out of stock \u2014 Save to apply':'Mark out of stock';}
 async function saveProduct(row){
   var price=Number($('mPrice').value)||0,stock=Number($('mStock').value)||0,image=($('pImg')?$('pImg').value:'').trim();
   var branchMode=(INVENTORY_MODE==='branch'&&BRANCH_FILTER);
