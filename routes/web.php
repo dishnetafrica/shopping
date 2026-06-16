@@ -82,6 +82,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('chats/thread',       [PanelApiController::class, 'chatThread']);
         Route::post('chats/send',        [PanelApiController::class, 'chatSend']);
         Route::post('chats/takeover',    [PanelApiController::class, 'chatTakeover']);
+        Route::post('chats/mute',        [PanelApiController::class, 'chatMute']);
         Route::post('chats/bot-mode',    [PanelApiController::class, 'chatBotMode']);
         Route::post('chats/sync',        [PanelApiController::class, 'chatSync']);
         Route::get('chats/sync-debug',    [PanelApiController::class, 'chatSyncDebug']);

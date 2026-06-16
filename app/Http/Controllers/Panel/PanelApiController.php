@@ -519,7 +519,8 @@ class PanelApiController extends Controller
                 ->groupBy('customer_phone')->map(fn ($g) => $g->first()->customer_name);
         }
 
-        $list = $convos->map(function (Conversation $c) use ($lasts, $names) {
+        $mutedSet = array_flip($this->botMutedList($r->user()->tenant));
+        $list = $convos->map(function (Conversation $c) use ($lasts, $names, $mutedSet) {
             $m = $lasts->get($c->customer_phone);
             return [
                 'phone'        => (string) $c->customer_phone,
@@ -529,6 +530,7 @@ class PanelApiController extends Controller
                 'last_at'      => optional($c->last_message_at)->format('Y-m-d H:i:s') ?? '',
                 'unread'       => (int) $c->unread,
                 'agent_active' => (bool) $c->agent_active,
+                'muted'        => isset($mutedSet[preg_replace('/[^0-9]/', '', (string) $c->customer_phone)]),
             ];
         })->values();
 
@@ -562,7 +564,8 @@ class PanelApiController extends Controller
             $agent = (bool) $c->agent_active;
         }
 
-        return response()->json(['messages' => $msgs, 'agent_active' => $agent]);
+        $muted = in_array($phone, $this->botMutedList($r->user()->tenant), true);
+        return response()->json(['messages' => $msgs, 'agent_active' => $agent, 'muted' => $muted]);
     }
 
     public function chatSend(Request $r, WhatsAppManager $wa)
@@ -643,6 +646,34 @@ class PanelApiController extends Controller
             $c->save();
         }
         return response()->json(['ok' => true, 'agent_active' => $active]);
+    }
+
+    /** Numbers (digits) the bot must never auto-reply to — persistent per-tenant list. */
+    private function botMutedList($tenant): array
+    {
+        $list = $tenant->setting('bot_muted', []);
+        if (! is_array($list)) $list = [];
+        return array_values(array_unique(array_filter(array_map(
+            fn ($p) => preg_replace('/[^0-9]/', '', (string) $p), $list
+        ))));
+    }
+
+    /** Mute / unmute the bot for one number (persists across chats & restarts). */
+    public function chatMute(Request $r)
+    {
+        $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));
+        $muted = (bool) ((int) $r->input('muted', 1));
+        if ($phone === '') return response()->json(['ok' => false, 'error' => 'phone_required'], 422);
+
+        $t = $r->user()->tenant;
+        $list = $this->botMutedList($t);
+        if ($muted) {
+            if (! in_array($phone, $list, true)) $list[] = $phone;
+        } else {
+            $list = array_values(array_filter($list, fn ($p) => $p !== $phone));
+        }
+        $t->putSetting('bot_muted', $list);
+        return response()->json(['ok' => true, 'muted' => $muted, 'list' => $list]);
     }
 
     public function chatBotMode(Request $r)

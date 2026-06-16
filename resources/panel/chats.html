@@ -145,6 +145,7 @@
             <div class="ph" id="thPhone"></div>
           </div>
           <button class="pill" id="takeBtn" onclick="toggleTakeover()">Take over</button>
+          <button class="pill" id="muteBtn" onclick="toggleMute()">🔇 Mute bot</button>
         </div>
 
         <div class="msgs" id="msgs"></div>
@@ -193,7 +194,7 @@ function renderList(){
     var sel=CURRENT&&CURRENT.phone===c.phone?' sel':'';
     var who=c.last_sender==='customer'?'':(c.last_sender==='agent'?'You: ':(c.last_sender==='bot'?'Bot: ':(c.last_sender==='system'?'':'')));
     var badge=c.unread>0?'<span class="bdg">'+c.unread+'</span>':'';
-    var tag=c.agent_active?'<span class="tag">✓ you</span>':'';
+    var tag=(c.agent_active?'<span class="tag">✓ you</span>':'')+(c.muted?'<span class="tag">🔇</span>':'');
     return '<div class="ci'+sel+'" onclick="openChat(\''+esc(c.phone)+'\')">'+
       '<div class="av">'+esc(initials(c.name,c.phone))+'</div>'+
       '<div class="mid"><div class="nm">'+esc(c.name||('+'+c.phone))+'</div>'+
@@ -230,6 +231,7 @@ async function loadThread(full){
       if(full||atBottom)scrollBottom();
     }
     setTakeover(!!d.agent_active);
+    setMuted(!!d.muted);
   }catch(e){}
 }
 function bubble(m){
@@ -263,6 +265,12 @@ async function toggleTakeover(){
   if(!CURRENT)return;var next=!(CURRENT.agent);
   try{await fetch('/papi/chats/takeover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:CURRENT.phone,active:next?1:0})});
     setTakeover(next);toast(next?'You took over — bot paused here':'Handed back to the bot');loadChats();}catch(e){toast('Could not update');}
+}
+function setMuted(m){ if(CURRENT)CURRENT.muted=m; var b=$('muteBtn'); if(!b)return; if(m){b.textContent='🔔 Unmute bot';b.className='pill on';} else {b.textContent='🔇 Mute bot';b.className='pill';} }
+async function toggleMute(){
+  if(!CURRENT)return;var next=!(CURRENT.muted);
+  try{var r=await fetch('/papi/chats/mute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:CURRENT.phone,muted:next?1:0})});var d=await r.json();
+    if(d&&d.ok){setMuted(next);toast(next?'Bot muted for this number':'Bot un-muted for this number');loadChats();}else toast('Could not update');}catch(e){toast('Could not update');}
 }
 async function toggleBot(){
   var next=BOTMODE==='auto'?'off':'auto';

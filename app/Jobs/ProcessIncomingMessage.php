@@ -97,6 +97,12 @@ class ProcessIncomingMessage implements ShouldQueue
             BotTrace::log($this->tenantId, $trace, $from, 'skipped', 'bot is switched off');
             return;
         }
+        $muted = (array) $tenant->setting('bot_muted', []);
+        $mutedDigits = array_map(fn ($p) => preg_replace('/[^0-9]/', '', (string) $p), $muted);
+        if (in_array($from, $mutedDigits, true)) {
+            BotTrace::log($this->tenantId, $trace, $from, 'skipped', 'number is muted (no auto-reply)');
+            return;
+        }
 
         $text  = (string) $this->incoming['text'];
         $state = is_array($convo->state) ? $convo->state : [];
