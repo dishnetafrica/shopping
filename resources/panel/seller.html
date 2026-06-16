@@ -217,6 +217,24 @@
   .tabbtns{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
   .tabbtns button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:9px;padding:8px 16px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
   .tabbtns button.on{background:var(--green);color:#fff;border-color:var(--green)}
+/* First-login wizard */
+.wizwrap{position:fixed;inset:0;background:rgba(8,20,14,.55);backdrop-filter:blur(2px);z-index:9999;display:none;align-items:center;justify-content:center;padding:18px}
+.wizwrap.show{display:flex}
+.wizcard{background:#fff;width:100%;max-width:440px;border-radius:18px;padding:22px 20px 18px;box-shadow:0 18px 50px rgba(0,0,0,.25);max-height:92vh;overflow:auto}
+.wizdots{display:flex;gap:6px;justify-content:center;margin-bottom:14px}
+.wizdots i{width:8px;height:8px;border-radius:50%;background:#D7E3DA;display:inline-block}
+.wizdots i.on{background:var(--green,#0C831F);width:22px;border-radius:6px}
+.wizcard h2{font-size:19px;margin:2px 0 6px}
+.wizcard .wsub{color:#6E7D72;font-size:13.5px;line-height:1.5;margin-bottom:14px}
+.wizcard label{display:block;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#7A8A7E;margin:10px 0 4px}
+.wizcard input{width:100%;border:1.5px solid #E2E8E4;border-radius:11px;padding:12px;font-size:15px}
+.wizbtn{width:100%;border:0;background:var(--green,#0C831F);color:#fff;font-weight:800;font-size:15px;border-radius:12px;padding:13px;margin-top:14px;cursor:pointer}
+.wizbtn.alt{background:#fff;color:var(--green-d,#0A6E1A);border:1.5px solid #E2E8E4}
+.wizskip{display:block;text-align:center;margin-top:10px;color:#8a978d;font-size:13px;font-weight:700;cursor:pointer}
+.wizlink{display:flex;align-items:center;gap:8px;background:#F1F8F3;border:1px solid #CDEBD6;border-radius:11px;padding:11px 12px;font-weight:700;word-break:break-all;font-size:14px;margin-top:6px}
+.wizrow{display:flex;gap:9px;margin-top:12px}
+.wizrow .wizbtn{margin-top:0}
+.wizwa{display:flex;align-items:center;gap:10px;background:#F6FAF7;border:1px solid #E2EFE6;border-radius:12px;padding:12px;font-size:13.5px;color:#3a4a40;margin-top:4px}
 </style>
 <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
 <meta name="theme-color" content="#0B3D22">
@@ -502,7 +520,7 @@
             <input id="thNote" type="text" placeholder="Pure veg · menu changes daily" style="width:100%;max-width:520px;border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:16px">
             <div id="thDays" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px"></div>
             <input type="file" id="thPhotoFile" accept="image/*" style="display:none">
-            <div style="margin-top:18px"><button class="btn" id="thSaveBtn" onclick="saveThali()">Save thali menu</button></div>
+            <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="thSaveBtn" onclick="saveThali()">Save thali menu</button><button class="btn ghost" id="thDefBtn" onclick="thaliLoadDefault()">↻ Load default Kathiyawadi menu</button></div>
           </div>
         </div>
       </div>
@@ -717,6 +735,7 @@
           <button class="on" data-t="guide" onclick="helpTab('guide')">📖 User Guide</button>
           <button data-t="tech" onclick="helpTab('tech')">🛠 Technical</button>
         </div>
+        <div style="margin:10px 0"><button class="btn" onclick="wizOpen()">▶ Re-run the setup guide</button></div>
 
         <div id="helpGuide" class="card"><div class="body man">
           <h2>Welcome to Family Shopper</h2>
@@ -936,7 +955,7 @@ var BOT_CUR='auto', SHOW_SWITCHER=false;
 var token=localStorage.getItem('fs_token')||'', phone='', timer=null, filtersInit=false;
 var CATALOGUE=[], ORDERS=[], RIDERS=[], RETURNS=[], CREDIT={};
 var CUSTPROFILE={};
-var SETTINGS={storeName:'Family Shopper',storePhone:'+256 7xx xxx xxx',storeAddress:'Kampala, Uganda',storeEmail:'orders@familyshopper.ug',logo:'',slug:'',customDomain:''};
+var SETTINGS={storeName:'Family Shopper',storePhone:'+256 7xx xxx xxx',storeAddress:'Kampala, Uganda',storeEmail:'orders@familyshopper.ug',logo:'',slug:'',customDomain:'',onboarded:false};
 var BRANCHES=[], BRANCH_FILTER='', INVENTORY_MODE='shared', MY_BRANCH=localStorage.getItem('fs_branch')||'', MY_ROLE=localStorage.getItem('fs_role')||'owner';
 function branchOrders(){return BRANCH_FILTER?ORDERS.filter(function(o){return String(o.branch||'')===BRANCH_FILTER;}):ORDERS;}
 function branchName(id){var b=BRANCHES.find(function(x){return String(x.id)===String(id);});return b?b.name:id;}
@@ -1151,10 +1170,71 @@ function startApp(){
   show($('login'),false);$('app').classList.remove('hide');
   if(!filtersInit){initFilters();filtersInit=true;}
   initCurrency();loadBotConfig();
-  showPage('dash');loadData();loadRiders();loadReturns();loadSettings();loadBranches();
+  showPage('dash');loadData();loadRiders();loadReturns();loadSettings().then(wizMaybe);loadBranches();
   if(timer)clearInterval(timer);
   timer=setInterval(function(){if(!document.hidden)loadData(true);},20000);
 }
+var WIZ_STEP=1;
+function wizShopUrl(){
+  if(SETTINGS.customDomain)return 'https://'+SETTINGS.customDomain;
+  if(SETTINGS.slug)return 'https://mycloudbss.com/'+SETTINGS.slug;
+  return location.origin;
+}
+function wizMaybe(){
+  var done=false; try{done=localStorage.getItem('cb_wiz_done')==='1';}catch(e){}
+  if(SETTINGS.onboarded||done)return;
+  WIZ_STEP=1; wizRender(); $('wiz').classList.add('show');
+}
+function wizOpen(){WIZ_STEP=1;wizRender();$('wiz').classList.add('show');}
+function wizClose(){$('wiz').classList.remove('show');}
+function wizDots(){var d=$('wizDots'); if(!d)return; d.innerHTML=''; for(var i=1;i<=3;i++){d.innerHTML+='<i class="'+(i===WIZ_STEP?'on':'')+'"></i>';}}
+function wizGo(n){WIZ_STEP=n;wizRender();}
+function wizRender(){
+  wizDots();
+  var b=$('wizBody'); if(!b)return;
+  var name=esc(SETTINGS.storeName||'your shop');
+  if(WIZ_STEP===1){
+    b.innerHTML=
+      '<h2>Welcome \u{1F44B}</h2>'+
+      '<div class="wsub">Let\u2019s get <b>'+name+'</b> ready in 3 quick steps. First, confirm your shop details \u2014 customers see these.</div>'+
+      '<label>Shop name</label><input id="wizName" value="'+esc(SETTINGS.storeName||'')+'">'+
+      '<label>WhatsApp / phone</label><input id="wizPhone" inputmode="tel" value="'+esc(SETTINGS.storePhone||'')+'" placeholder="+256 7xx xxx xxx">'+
+      '<button class="wizbtn" onclick="wizSaveProfile()">Continue</button>';
+  } else if(WIZ_STEP===2){
+    b.innerHTML=
+      '<h2>Connect WhatsApp</h2>'+
+      '<div class="wsub">This is how customers chat and order. You\u2019ll scan a QR code with the phone that runs your shop\u2019s WhatsApp \u2014 takes about a minute.</div>'+
+      '<div class="wizwa">\u{1F4F1} Use the phone where your shop\u2019s WhatsApp number is logged in.</div>'+
+      '<button class="wizbtn" onclick="wizConnectWA()">Open WhatsApp setup</button>'+
+      '<span class="wizskip" onclick="wizGo(3)">I\u2019ll do this later \u2192</span>';
+  } else {
+    var url=wizShopUrl();
+    b.innerHTML=
+      '<h2>Your shop is ready \u{1F389}</h2>'+
+      '<div class="wsub">Share this link anywhere \u2014 WhatsApp status, bio, posters. Customers browse and order from it.</div>'+
+      '<label>Your shop link</label>'+
+      '<div class="wizlink"><span>\u{1F6D2}</span><span id="wizUrl">'+esc(url)+'</span></div>'+
+      '<div class="wizrow"><button class="wizbtn alt" onclick="wizCopy()">Copy link</button><button class="wizbtn" onclick="wizShare()">Share</button></div>'+
+      '<button class="wizbtn" onclick="wizFinish(true)">Add my products</button>'+
+      '<span class="wizskip" onclick="wizFinish(false)">Finish \u2014 I\u2019ll add products later</span>';
+  }
+}
+async function wizSaveProfile(){
+  var nm=($('wizName')?$('wizName').value:'').trim(), ph=($('wizPhone')?$('wizPhone').value:'').trim();
+  if(nm){SETTINGS.storeName=nm;} if(ph){SETTINGS.storePhone=ph;}
+  applyStoreIdentity();
+  try{await fetch(EP.settingsSave+'?token='+encodeURIComponent(token)+'&storeName='+encodeURIComponent(nm)+'&storePhone='+encodeURIComponent(ph),{cache:'no-store'});}catch(e){}
+  wizGo(2);
+}
+function wizConnectWA(){ wizMarkDone(false); window.location='/panel/setup'; }
+function wizCopy(){ var u=wizShopUrl(); try{navigator.clipboard.writeText(u);toast('Link copied');}catch(e){toast(u);} }
+function wizShare(){ var u=wizShopUrl(); var t='Order from '+(SETTINGS.storeName||'our shop')+' here: '+u; var w='https://wa.me/?text='+encodeURIComponent(t); window.open(w,'_blank'); }
+function wizMarkDone(server){
+  try{localStorage.setItem('cb_wiz_done','1');}catch(e){}
+  SETTINGS.onboarded=true;
+  if(server){try{fetch(EP.settingsSave+'?token='+encodeURIComponent(token)+'&onboarded=1',{cache:'no-store'});}catch(e){}}
+}
+function wizFinish(goProducts){ wizMarkDone(true); wizClose(); if(goProducts)showPage('products'); }
 function showLogin(){show($('login'),true);$('app').classList.add('hide');}
 function resetToLogin(){token='';localStorage.removeItem('fs_token');localStorage.removeItem('fs_branch');localStorage.removeItem('fs_role');if(timer)clearInterval(timer);location.href='/panel/logout';}
 async function sendCode(){
@@ -1747,7 +1827,8 @@ function renderThaliDays(){
     '</div>';
   }).join('');
 }
-function thInput(day){TH_MODEL.days[day]=($('thd_'+day).value||'').split('\n').map(function(x){return x.trim();}).filter(Boolean);}
+function thAutoEnable(){ if(!TH_MODEL)return; var has=TH_DAYS.some(function(dd){return (TH_MODEL.days[dd[0]]||[]).length||TH_MODEL.images[dd[0]];}); if(has&&!TH_MODEL.enabled){TH_MODEL.enabled=true; var c=$('thEnabled'); if(c)c.checked=true;} }
+function thInput(day){TH_MODEL.days[day]=($('thd_'+day).value||'').split('\n').map(function(x){return x.trim();}).filter(Boolean); thAutoEnable();}
 function thaliPhoto(day){_thPhotoDay=day;var f=$('thPhotoFile');if(f){f.value='';f.click();}}
 function thaliPhotoClear(day){TH_MODEL.images[day]='';$('thumb_'+day).innerHTML=thThumb(day);}
 function bindThaliPhoto(){
@@ -1757,10 +1838,33 @@ function bindThaliPhoto(){
     var data=await shrinkImage(file,1100,.8); if(!data){toast('Could not read image');return;}
     try{var up=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:(file.name||'flyer')+'.jpg',data:data})});
       var d=await up.json();
-      if(d&&d.ok&&d.url){TH_MODEL.images[_thPhotoDay]=d.url;$('thumb_'+_thPhotoDay).innerHTML=thThumb(_thPhotoDay);toast('Flyer photo set');}
+      if(d&&d.ok&&d.url){TH_MODEL.images[_thPhotoDay]=d.url;$('thumb_'+_thPhotoDay).innerHTML=thThumb(_thPhotoDay);thAutoEnable();toast('Flyer photo set');}
       else toast('Upload failed \u2014 try a smaller image');
     }catch(e){toast('Upload failed');}
   };
+}
+var THALI_DEFAULT={
+  mon:['Rajwadi Dhokli','Mag Sabji','5 Chappati','Daal Rice','Salad, Papad & Chaas'],
+  tue:['Chana Sabji','Ringan Bateta Mix','5 Chappati','Daal Rice','Salad & Papad'],
+  wed:['Rajma Sabji','Lasaniya Bateta','Kadhi Rice','5 Chappati','Salad & Papad'],
+  thu:['Bharelo Bhindo','Suki Chori ni Sabji','Pulav','Raita','5 Chappati'],
+  fri:['Chole Bhature','Parotha','Paneer Sabji','Dalfry & Jira Rice'],
+  sat:['Puri','Bateta Sabji','Gulab Jamun','Dal Rice'],
+  sun:[]
+};
+function thaliLoadDefault(){
+  if(!TH_MODEL)return;
+  var has=TH_DAYS.some(function(dd){return (TH_MODEL.days[dd[0]]||[]).length;});
+  if(has && !confirm('Replace the current day menus with the default Kathiyawadi menu? Your flyer photos and price stay.'))return;
+  TH_DAYS.forEach(function(dd){TH_MODEL.days[dd[0]]=(THALI_DEFAULT[dd[0]]||[]).slice();});
+  if(!TH_MODEL.price)TH_MODEL.price=15000;
+  if(!TH_MODEL.note)TH_MODEL.note='Pure veg \u00B7 menu changes daily';
+  TH_MODEL.enabled=true;
+  if($('thEnabled'))$('thEnabled').checked=true;
+  if($('thPrice'))$('thPrice').value=TH_MODEL.price;
+  if($('thNote'))$('thNote').value=TH_MODEL.note;
+  renderThaliDays();
+  toast('Default menu loaded \u2014 review & press Save');
 }
 async function saveThali(){
   if(!TH_MODEL)return;
@@ -2240,6 +2344,7 @@ function applySettings(s){
   if(s.storeEmail!=null)SETTINGS.storeEmail=s.storeEmail;
   if(s.slug!=null)SETTINGS.slug=s.slug;
   if(s.customDomain!=null)SETTINGS.customDomain=s.customDomain;
+  if(s.onboarded!=null)SETTINGS.onboarded=!!s.onboarded;
   if(s.logo!=null)SETTINGS.logo=s.logo;
   if(s.lat!=null&&s.lat!=='')STORE.lat=Number(s.lat)||STORE.lat;
   if(s.lng!=null&&s.lng!=='')STORE.lng=Number(s.lng)||STORE.lng;
@@ -2254,7 +2359,7 @@ function applySettings(s){
 async function loadSettings(){
   if(!token)return;
   try{var r=await fetch(EP.settings+'?token='+encodeURIComponent(token),{cache:'no-store'});var d=await r.json();
-    if(d&&d.settings)applySettings(d.settings);}catch(e){}
+    if(d&&d.ok)applySettings(d); else if(d&&d.settings)applySettings(d.settings);}catch(e){}
 }
 function settingsInit(){
   $('setName').value=SETTINGS.storeName||'';$('setPhone').value=SETTINGS.storePhone||'';
@@ -2602,5 +2707,11 @@ if(token){startApp();}else{showLogin();}
   <a onclick="openSide()"><span class="ti">☰</span>More</a>
 </nav>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){});});}</script>
+<div class="wizwrap" id="wiz">
+  <div class="wizcard">
+    <div class="wizdots" id="wizDots"><i></i><i></i><i></i></div>
+    <div id="wizBody"></div>
+  </div>
+</div>
 </body>
 </html>
