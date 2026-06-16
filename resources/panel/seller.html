@@ -314,6 +314,13 @@
       <!-- ============ DASHBOARD ============ -->
       <div id="pageDash">
         <div class="crumb">Home / <b>Dashboard</b></div>
+        <div id="botSwitch" class="card" style="margin-bottom:14px">
+          <div class="body" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div style="flex:1;min-width:190px"><div style="font-weight:800;font-size:15px">WhatsApp auto-reply</div>
+            <div class="note" id="botSwitchState" style="margin-top:2px">—</div></div>
+            <button class="btn" id="botSwitchBtn" onclick="toggleBotMode()">—</button>
+          </div>
+        </div>
         <div class="kgrid" id="kpis"></div>
         <div class="row2">
           <div class="card"><div class="head plain" id="mTitle">Orders — this month</div><div class="body chart" id="chartMonth"></div></div>
@@ -518,6 +525,15 @@
             </div>
             <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px">Note (optional, shown under the menu)</label>
             <input id="thNote" type="text" placeholder="Pure veg · menu changes daily" style="width:100%;max-width:520px;border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:16px">
+            <div style="margin:0 0 16px;padding:12px;border:1px solid var(--line);border-radius:11px;background:#fbfcff">
+              <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px"><input type="checkbox" id="thNightOn" onchange="thNightToggle()" style="width:18px;height:18px"> Serve a different dinner (night) menu</label>
+              <div id="thNightOpts" class="hide" style="flex-wrap:wrap;gap:14px;align-items:center;margin-top:10px;display:flex">
+                <label style="display:flex;align-items:center;gap:8px;font-size:14px">Dinner starts at <select id="thSwitch" style="border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-weight:700"></select></label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:14px">Dinner price <input id="thNightPrice" type="number" min="0" step="100" placeholder="same as day" style="width:130px;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-weight:700"></label>
+                <input id="thNightNote" type="text" placeholder="Dinner note (optional)" style="flex:1;min-width:200px;border:1px solid var(--line);border-radius:9px;padding:9px 11px">
+              </div>
+              <div class="note" style="margin-top:8px;color:#667085">Before this time the bot &amp; website show the day (lunch) menu; from this time they switch to dinner. Leave a day’s dinner box empty to keep using its lunch menu that day.</div>
+            </div>
             <div id="thDays" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px"></div>
             <input type="file" id="thPhotoFile" accept="image/*" style="display:none">
             <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="thSaveBtn" onclick="saveThali()">Save thali menu</button><button class="btn ghost" id="thDefBtn" onclick="thaliLoadDefault()">↻ Load default Kathiyawadi menu</button></div>
@@ -941,7 +957,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   catImages:'/papi/category-images',catImageSave:'/papi/category-image-save',
   thali:'/papi/thali',thaliSave:'/papi/thali-save',
   dispatch:'/papi/dispatch',
-  riders:'/papi/riders',riderSave:'/papi/rider-save',riderDel:'/papi/rider-delete',importContacts:'/papi/contacts-import',
+  riders:'/papi/riders',riderSave:'/papi/rider-save',riderDel:'/papi/rider-delete',importContacts:'/papi/contacts-import',botMode:'/papi/chats/bot-mode',
   ret:'/papi/return',returns:'/papi/returns',
   settings:'/papi/settings',settingsSave:'/papi/settings-save',
   branches:'/papi/branches',branchSave:'/papi/branch-save',branchDel:'/papi/branch-delete',
@@ -956,7 +972,7 @@ var BOT_CUR='auto', SHOW_SWITCHER=false;
 var token=localStorage.getItem('fs_token')||'', phone='', timer=null, filtersInit=false;
 var CATALOGUE=[], ORDERS=[], RIDERS=[], RETURNS=[], CREDIT={}, RM_PHOTO='';
 var CUSTPROFILE={};
-var SETTINGS={storeName:'Family Shopper',storePhone:'+256 7xx xxx xxx',storeAddress:'Kampala, Uganda',storeEmail:'orders@familyshopper.ug',logo:'',slug:'',customDomain:'',onboarded:false};
+var SETTINGS={storeName:'Family Shopper',storePhone:'+256 7xx xxx xxx',storeAddress:'Kampala, Uganda',storeEmail:'orders@familyshopper.ug',logo:'',slug:'',customDomain:'',onboarded:false,botMode:'auto'};
 var BRANCHES=[], BRANCH_FILTER='', INVENTORY_MODE='shared', MY_BRANCH=localStorage.getItem('fs_branch')||'', MY_ROLE=localStorage.getItem('fs_role')||'owner';
 function branchOrders(){return BRANCH_FILTER?ORDERS.filter(function(o){return String(o.branch||'')===BRANCH_FILTER;}):ORDERS;}
 function branchName(id){var b=BRANCHES.find(function(x){return String(x.id)===String(id);});return b?b.name:id;}
@@ -1375,6 +1391,7 @@ function helpTab(w){
 /* ---------------- DASHBOARD ---------------- */
 function countBy(st){return branchOrders().filter(function(o){return o.status.toLowerCase()===st;}).length;}
 function renderDash(){
+  renderBotSwitch();
   var O=branchOrders();
   var today=tISO(new Date()).slice(0,10);
   var kpis=[
@@ -1813,9 +1830,16 @@ var TH_MODEL=null,_thPhotoDay=null;
 async function thaliInit(){
   var cfg={enabled:false,price:0,note:'',days:{},images:{}};
   try{var r=await fetch(EP.thali+'?token='+encodeURIComponent(token));var d=await r.json();if(d&&d.ok&&d.thali)cfg=d.thali;}catch(e){}
-  TH_MODEL={enabled:!!cfg.enabled,price:cfg.price||0,note:cfg.note||'',days:{},images:{}};
-  TH_DAYS.forEach(function(dd){var it=(cfg.days&&cfg.days[dd[0]])||[];TH_MODEL.days[dd[0]]=Array.isArray(it)?it.slice():[];TH_MODEL.images[dd[0]]=(cfg.images&&cfg.images[dd[0]])||'';});
+  TH_MODEL={enabled:!!cfg.enabled,price:cfg.price||0,note:cfg.note||'',days:{},images:{},
+    nightEnabled:!!cfg.night_enabled,nightPrice:cfg.night_price||0,nightNote:cfg.night_note||'',switchHour:(cfg.switch_hour!=null?cfg.switch_hour:16),nightDays:{}};
+  TH_DAYS.forEach(function(dd){var it=(cfg.days&&cfg.days[dd[0]])||[];TH_MODEL.days[dd[0]]=Array.isArray(it)?it.slice():[];TH_MODEL.images[dd[0]]=(cfg.images&&cfg.images[dd[0]])||'';
+    var nit=(cfg.night_days&&cfg.night_days[dd[0]])||[];TH_MODEL.nightDays[dd[0]]=Array.isArray(nit)?nit.slice():[];});
   $('thEnabled').checked=TH_MODEL.enabled;$('thPrice').value=TH_MODEL.price||'';$('thNote').value=TH_MODEL.note||'';
+  var sw=$('thSwitch'); if(sw){sw.innerHTML='';for(var h=0;h<24;h++){var lbl=(h===0?'12 AM':h<12?h+' AM':h===12?'12 PM':(h-12)+' PM');var o=document.createElement('option');o.value=h;o.textContent=lbl+' ('+(h<10?'0'+h:h)+':00)';sw.appendChild(o);}sw.value=TH_MODEL.switchHour;}
+  if($('thNightOn'))$('thNightOn').checked=TH_MODEL.nightEnabled;
+  if($('thNightPrice'))$('thNightPrice').value=TH_MODEL.nightPrice||'';
+  if($('thNightNote'))$('thNightNote').value=TH_MODEL.nightNote||'';
+  if($('thNightOpts'))$('thNightOpts').classList.toggle('hide',!TH_MODEL.nightEnabled);
   renderThaliDays();bindThaliPhoto();
 }
 function thThumb(day){
@@ -1830,12 +1854,16 @@ function renderThaliDays(){
     return '<div style="border:1px solid var(--line);border-radius:11px;padding:12px;background:#fff">'+
       '<div style="font-weight:700;font-size:14px;margin-bottom:6px">'+dd[1]+'</div>'+
       '<div id="thumb_'+day+'">'+thThumb(day)+'</div>'+
+      (TH_MODEL.nightEnabled?'<div style="font-weight:700;font-size:12px;margin-top:8px;color:#C77B00">\u2600\uFE0F Lunch (day)</div>':'')+
       '<textarea id="thd_'+day+'" oninput="thInput(\''+day+'\')" rows="6" placeholder="One dish per line" style="width:100%;margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13px;resize:vertical;font-family:inherit">'+esc((TH_MODEL.days[day]||[]).join('\n'))+'</textarea>'+
+      (TH_MODEL.nightEnabled?('<div style="font-weight:700;font-size:12px;margin-top:10px;color:#3B5BA9">\uD83C\uDF19 Dinner (night)</div>'+'<textarea id="thn_'+day+'" oninput="thnInput(\''+day+'\')" rows="5" placeholder="Dinner dishes \u2014 empty = same as lunch" style="width:100%;margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13px;resize:vertical;font-family:inherit">'+esc((TH_MODEL.nightDays[day]||[]).join('\n'))+'</textarea>'):'')+
     '</div>';
   }).join('');
 }
 function thAutoEnable(){ if(!TH_MODEL)return; var has=TH_DAYS.some(function(dd){return (TH_MODEL.days[dd[0]]||[]).length||TH_MODEL.images[dd[0]];}); if(has&&!TH_MODEL.enabled){TH_MODEL.enabled=true; var c=$('thEnabled'); if(c)c.checked=true;} }
 function thInput(day){TH_MODEL.days[day]=($('thd_'+day).value||'').split('\n').map(function(x){return x.trim();}).filter(Boolean); thAutoEnable();}
+function thnInput(day){var el=$('thn_'+day);if(!el)return;TH_MODEL.nightDays[day]=(el.value||'').split('\n').map(function(x){return x.trim();}).filter(Boolean);}
+function thNightToggle(){if(!TH_MODEL)return;TH_MODEL.nightEnabled=$('thNightOn').checked;var o=$('thNightOpts');if(o)o.classList.toggle('hide',!TH_MODEL.nightEnabled);renderThaliDays();}
 function thaliPhoto(day){_thPhotoDay=day;var f=$('thPhotoFile');if(f){f.value='';f.click();}}
 function thaliPhotoClear(day){TH_MODEL.images[day]='';$('thumb_'+day).innerHTML=thThumb(day);}
 function bindThaliPhoto(){
@@ -1875,11 +1903,12 @@ function thaliLoadDefault(){
 }
 async function saveThali(){
   if(!TH_MODEL)return;
-  TH_DAYS.forEach(function(dd){thInput(dd[0]);});
+  TH_DAYS.forEach(function(dd){thInput(dd[0]); if(TH_MODEL.nightEnabled)thnInput(dd[0]);});
   TH_MODEL.enabled=$('thEnabled').checked;TH_MODEL.price=parseInt($('thPrice').value||'0',10)||0;TH_MODEL.note=($('thNote').value||'').trim();
+  TH_MODEL.nightEnabled=$('thNightOn')?$('thNightOn').checked:false;TH_MODEL.nightPrice=parseInt(($('thNightPrice')||{}).value||'0',10)||0;TH_MODEL.nightNote=(($('thNightNote')||{}).value||'').trim();TH_MODEL.switchHour=parseInt(($('thSwitch')||{}).value||'16',10);if(isNaN(TH_MODEL.switchHour))TH_MODEL.switchHour=16;
   var btn=$('thSaveBtn');if(btn){btn.disabled=true;btn.textContent='Saving\u2026';}
   try{
-    var r=await fetch(EP.thaliSave+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:TH_MODEL.enabled,price:TH_MODEL.price,note:TH_MODEL.note,days:TH_MODEL.days,images:TH_MODEL.images})});
+    var r=await fetch(EP.thaliSave+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:TH_MODEL.enabled,price:TH_MODEL.price,note:TH_MODEL.note,days:TH_MODEL.days,images:TH_MODEL.images,night_enabled:TH_MODEL.nightEnabled,night_price:TH_MODEL.nightPrice,night_note:TH_MODEL.nightNote,night_days:TH_MODEL.nightDays,switch_hour:TH_MODEL.switchHour})});
     var d=await r.json();toast(d&&d.ok?'Thali menu saved':'Could not save');
   }catch(e){toast('Could not save');}
   if(btn){btn.disabled=false;btn.textContent='Save thali menu';}
@@ -2366,6 +2395,21 @@ function rateNote(){
   var us=Number($('setUsdSsp')?$('setUsdSsp').value:RATES.usdSsp)||RATES.usdSsp;
   if($('setRateNote'))$('setRateNote').textContent='1 USD = '+uu.toLocaleString('en-US')+' UGX = '+us.toLocaleString('en-US')+' SSP   \u00b7   1,000 UGX \u2248 '+(uu>0?Math.round(1000*us/uu).toLocaleString('en-US'):'?')+' SSP';
 }
+function renderBotSwitch(){
+  var off=(SETTINGS.botMode==='off');var st=$('botSwitchState'),btn=$('botSwitchBtn'),wrap=$('botSwitch');
+  if(!st||!btn)return;
+  if(off){st.innerHTML='<b style="color:#B4232A">Paused</b> \u2014 the bot is NOT auto-replying to anyone. You and your team answer by hand.';
+    btn.textContent='\u25B6 Turn auto-reply back on';btn.style.background='#15803D';btn.style.color='#fff';btn.style.border='0';if(wrap)wrap.style.borderColor='#F0C9CB';}
+  else{st.innerHTML='<b style="color:#15803D">On</b> \u2014 the bot answers customers automatically.';
+    btn.textContent='\u23F8 Stop auto-reply (all chats)';btn.style.background='#fff';btn.style.color='#B4232A';btn.style.border='1.5px solid #F0C9CB';if(wrap)wrap.style.borderColor='';}
+}
+async function toggleBotMode(){
+  var turningOff=(SETTINGS.botMode!=='off');var mode=turningOff?'off':'auto';var btn=$('botSwitchBtn');if(btn)btn.disabled=true;
+  try{var r=await fetch(EP.botMode+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:mode})});var d=await r.json();
+    if(d&&d.ok){SETTINGS.botMode=d.bot_mode||mode;renderBotSwitch();toast(turningOff?'Auto-reply stopped for all chats':'Auto-reply turned back on');}else toast('Could not change');
+  }catch(e){toast('Network error');}
+  if(btn)btn.disabled=false;
+}
 function applySettings(s){
   if(!s)return;
   if(s.usdUgx!=null&&Number(s.usdUgx)>0)RATES.usdUgx=Number(s.usdUgx);
@@ -2386,7 +2430,8 @@ function applySettings(s){
   if(s.round!=null&&Number(s.round)>0)DELIV.round=Number(s.round);
   if(s.freeOver!=null&&s.freeOver!=='')DELIV.freeOver=Number(s.freeOver)||0;
   if(s.inventoryMode==='shared'||s.inventoryMode==='branch')INVENTORY_MODE=s.inventoryMode;
-  applyStoreIdentity();
+  if(s.bot_mode!=null)SETTINGS.botMode=s.bot_mode;
+  applyStoreIdentity();renderBotSwitch();
 }
 async function loadSettings(){
   if(!token)return;

@@ -122,18 +122,25 @@ class StorefrontController extends Controller
     {
         $cfg = (array) ($tenant->setting('thali', []) ?: []);
         if (! \App\Services\Bot\ThaliMenu::enabled($cfg)) return null;
-        $tz    = (string) $tenant->setting('timezone', 'Africa/Kampala');
-        $day   = \App\Services\Bot\ThaliMenu::todayKey($tz);
-        $items = $cfg['days'][$day] ?? [];
-        $items = is_array($items) ? array_values(array_filter(array_map('trim', $items))) : [];
+        $tz      = (string) $tenant->setting('timezone', 'Africa/Kampala');
+        $day     = \App\Services\Bot\ThaliMenu::todayKey($tz);
+        $session = \App\Services\Bot\ThaliMenu::session($cfg, $tz);
+        [$items, $price, $note, $label] = \App\Services\Bot\ThaliMenu::resolve($cfg, $day, $session);
+
+        // Picture: night uses its own flyer if set, else falls back to the day flyer.
         $imgs  = is_array($cfg['images'] ?? null) ? $cfg['images'] : [];
+        $nimgs = is_array($cfg['night_images'] ?? null) ? $cfg['night_images'] : [];
+        $imgRaw = ($session === 'night' && ($nimgs[$day] ?? '') !== '') ? (string) $nimgs[$day] : (string) ($imgs[$day] ?? '');
+
+        $hasNight = \App\Services\Bot\ThaliMenu::hasNight($cfg);
         return [
-            'price'    => (int) ($cfg['price'] ?? 0),
-            'note'     => (string) ($cfg['note'] ?? ''),
+            'price'    => $price,
+            'note'     => $note,
             'day'      => $day,
             'day_name' => \App\Services\Bot\ThaliMenu::dayName($day),
             'items'    => $items,
-            'image'    => ($imgs[$day] ?? '') !== '' ? $this->imageUrl((string) $imgs[$day]) : '',
+            'image'    => $imgRaw !== '' ? $this->imageUrl($imgRaw) : '',
+            'meal'     => $hasNight ? ($session === 'night' ? 'Dinner' : 'Lunch') : '',
         ];
     }
 

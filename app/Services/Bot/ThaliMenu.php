@@ -23,6 +23,75 @@ class ThaliMenu
         return ! empty($cfg) && (bool) ($cfg['enabled'] ?? false) && ! empty($cfg['days']);
     }
 
+    /** Does this shop run a separate night (dinner) menu? */
+    public static function hasNight(array $cfg): bool
+    {
+        return ! empty($cfg['night_enabled']) && ! empty($cfg['night_days']);
+    }
+
+    /** Normalise a day's dish list (trim, drop blanks). */
+    public static function cleanItems($items): array
+    {
+        return is_array($items)
+            ? array_values(array_filter(array_map(fn ($x) => trim((string) $x), $items), fn ($x) => $x !== ''))
+            : [];
+    }
+
+    /**
+     * Which session ('day' or 'night') applies now. Night only kicks in when the
+     * shop runs a night menu, the hour has passed the switch time, AND there are
+     * dinner dishes set for today (otherwise we stay on the lunch menu). A caller
+     * can force a session (e.g. the customer asked for "dinner").
+     */
+    public static function session(array $cfg, string $tz, ?string $force = null): string
+    {
+        if (! self::hasNight($cfg)) return 'day';
+        if ($force === 'day' || $force === 'night') return $force;
+        $sw = (int) ($cfg['switch_hour'] ?? 16);
+        try {
+            $h = (int) (new \DateTime('now', new \DateTimeZone($tz)))->format('G');
+        } catch (\Throwable $e) {
+            $h = (int) date('G');
+        }
+        $nightToday = self::cleanItems($cfg['night_days'][self::todayKey($tz)] ?? []);
+        return ($h >= $sw && $nightToday) ? 'night' : 'day';
+    }
+
+    /** Detect an explicit lunch/dinner mention in the customer's text. */
+    public static function sessionFromText(string $text): ?string
+    {
+        $lc = mb_strtolower($text);
+        if (preg_match('/\b(dinner|night|evening|supper|nite)\b/u', $lc)) return 'night';
+        if (preg_match('/\b(lunch|afternoon|noon|midday)\b/u', $lc)) return 'day';
+        return null;
+    }
+
+    /**
+     * Resolve the dishes/price/note/label for a given day + session, with sensible
+     * fallbacks: a dinner with no dishes for that day falls back to the lunch menu,
+     * and a missing night price/note inherits the day's.
+     * Returns [items[], price, note, label].
+     */
+    public static function resolve(array $cfg, string $dayKey, string $session = 'day'): array
+    {
+        $hasNight = self::hasNight($cfg);
+        $useNight = ($session === 'night' && $hasNight)
+            && self::cleanItems($cfg['night_days'][$dayKey] ?? []) !== [];
+
+        if ($useNight) {
+            $items = self::cleanItems($cfg['night_days'][$dayKey] ?? []);
+            $price = (int) ($cfg['night_price'] ?? 0); if ($price <= 0) $price = (int) ($cfg['price'] ?? 0);
+            $note  = trim((string) ($cfg['night_note'] ?? '')); if ($note === '') $note = trim((string) ($cfg['note'] ?? ''));
+            $label = self::dayName($dayKey) . ($hasNight ? ' Dinner' : '');
+        } else {
+            $items = self::cleanItems($cfg['days'][$dayKey] ?? []);
+            $price = (int) ($cfg['price'] ?? 0);
+            $note  = trim((string) ($cfg['note'] ?? ''));
+            $label = self::dayName($dayKey) . ($hasNight ? ' Lunch' : '');
+        }
+        return [$items, $price, $note, $label];
+    }
+
     /** Customer is ASKING about the thali menu (not ordering it). Bare "thali" is an order. */
     public static function isMenuQuery(string $text): bool
     {
@@ -75,22 +144,18 @@ class ThaliMenu
         return self::DAY_NAMES[$key] ?? ucfirst($key);
     }
 
-    /** Build the customer-facing menu reply for one day. */
-    public static function render(array $cfg, string $dayKey, string $cur): string
+    /** Build the customer-facing menu reply for one day (and optional session). */
+    public static function render(array $cfg, string $dayKey, string $cur, string $session = 'day'): string
     {
-        $price = (int) ($cfg['price'] ?? 0);
-        $note  = trim((string) ($cfg['note'] ?? ''));
-        $items = $cfg['days'][$dayKey] ?? [];
-        $items = is_array($items) ? array_values(array_filter(array_map('trim', $items))) : [];
-        $day   = self::dayName($dayKey);
+        [$items, $price, $note, $label] = self::resolve($cfg, $dayKey, $session);
 
         if (! $items) {
             return "\u{1F37D}\u{FE0F} Our *Kathiyawadi Thali* is served Monday\u{2013}Saturday"
                 . ($price ? " ({$cur} " . number_format($price) . ")" : "")
-                . ". There's no thali set for {$day} \u{2014} please check another day or ask us.";
+                . ". There's no thali set for {$label} \u{2014} please check another day or ask us.";
         }
 
-        $lines = "\u{1F37D}\u{FE0F} *{$day} Kathiyawadi Thali*"
+        $lines = "\u{1F37D}\u{FE0F} *{$label} Kathiyawadi Thali*"
             . ($price ? " \u{2014} {$cur} " . number_format($price) : "") . " (pure veg)\n";
         foreach ($items as $it) {
             $lines .= "\u{2022} {$it}\n";

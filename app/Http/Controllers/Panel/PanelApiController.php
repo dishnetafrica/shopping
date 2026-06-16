@@ -439,12 +439,16 @@ class PanelApiController extends Controller
         if (! is_array($cfg)) $cfg = [];
         $days = is_array($cfg['days'] ?? null) ? $cfg['days'] : [];
         $imgs = is_array($cfg['images'] ?? null) ? $cfg['images'] : [];
+        $ndays = is_array($cfg['night_days'] ?? null) ? $cfg['night_days'] : [];
         $out  = [];
         $outImg = [];
+        $outNight = [];
         foreach (['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as $d) {
             $items  = is_array($days[$d] ?? null) ? $days[$d] : [];
             $out[$d] = array_values(array_filter(array_map(fn ($x) => trim((string) $x), $items), fn ($x) => $x !== ''));
             $outImg[$d] = $this->imageUrl((string) ($imgs[$d] ?? ''));
+            $nitems = is_array($ndays[$d] ?? null) ? $ndays[$d] : [];
+            $outNight[$d] = array_values(array_filter(array_map(fn ($x) => trim((string) $x), $nitems), fn ($x) => $x !== ''));
         }
         return response()->json(['ok' => true, 'thali' => [
             'enabled' => (bool) ($cfg['enabled'] ?? false),
@@ -452,6 +456,11 @@ class PanelApiController extends Controller
             'note'    => (string) ($cfg['note'] ?? ''),
             'days'    => (object) $out,
             'images'  => (object) $outImg,
+            'night_enabled' => (bool) ($cfg['night_enabled'] ?? false),
+            'night_price'   => (int) ($cfg['night_price'] ?? 0),
+            'night_note'    => (string) ($cfg['night_note'] ?? ''),
+            'night_days'    => (object) $outNight,
+            'switch_hour'   => (int) ($cfg['switch_hour'] ?? 16),
         ]]);
     }
 
@@ -460,21 +469,35 @@ class PanelApiController extends Controller
         $t    = $r->user()->tenant;
         $days = (array) $r->input('days', []);
         $imgsIn = (array) $r->input('images', []);
+        $ndaysIn = (array) $r->input('night_days', []);
         $clean = [];
         $cleanImg = [];
+        $cleanNight = [];
         foreach (['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as $d) {
             $items = $days[$d] ?? [];
             if (is_string($items)) $items = preg_split('/\r\n|\r|\n/', $items);
             $items = array_map(fn ($x) => trim((string) $x), (array) $items);
             $clean[$d] = array_values(array_filter($items, fn ($x) => $x !== ''));
             $cleanImg[$d] = trim((string) ($imgsIn[$d] ?? ''));
+
+            $nitems = $ndaysIn[$d] ?? [];
+            if (is_string($nitems)) $nitems = preg_split('/\r\n|\r|\n/', $nitems);
+            $nitems = array_map(fn ($x) => trim((string) $x), (array) $nitems);
+            $cleanNight[$d] = array_values(array_filter($nitems, fn ($x) => $x !== ''));
         }
+        $sw = (int) $r->input('switch_hour', 16);
+        if ($sw < 0 || $sw > 23) $sw = 16;
         $t->putSetting('thali', [
             'enabled' => $r->boolean('enabled'),
             'price'   => max(0, (int) $r->input('price', 0)),
             'note'    => trim((string) $r->input('note', '')),
             'days'    => $clean,
             'images'  => $cleanImg,
+            'night_enabled' => $r->boolean('night_enabled'),
+            'night_price'   => max(0, (int) $r->input('night_price', 0)),
+            'night_note'    => trim((string) $r->input('night_note', '')),
+            'night_days'    => $cleanNight,
+            'switch_hour'   => $sw,
         ]);
         return response()->json(['ok' => true]);
     }

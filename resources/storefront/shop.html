@@ -117,7 +117,7 @@
 </head>
 <body>
 
-<a class="top" href="#" style="text-decoration:none">
+<a class="top" href="#" style="text-decoration:none" onclick="goHome();return false;">
   <div class="lg">SH</div>
   <div><b>Shop</b><span class="sub">Browse &amp; order on WhatsApp delivery</span></div>
 </a>
@@ -216,6 +216,7 @@ async function load(){
 }
 
 function setCat(c){CAT=c;Q='';if($('q'))$('q').value='';render();window.scrollTo(0,0);}
+function goHome(){CAT='all';Q='';if($('q'))$('q').value='';closeSheet();render();window.scrollTo(0,0);}
 
 /* ---------------- delivery location ---------------- */
 function haversineKm(la1,lo1,la2,lo2){var R=6371,t=Math.PI/180,dLa=(la2-la1)*t,dLo=(lo2-lo1)*t;
@@ -475,7 +476,7 @@ function thaliBanner(){
   var pchip=THALI.price?('<div style="text-align:center;background:#F2A93B;border-radius:12px;padding:6px 12px;line-height:1.1;flex:none"><div style="font-size:9px;font-weight:800;color:#7A1F1F;letter-spacing:.5px">ONLY</div><div style="font-size:17px;font-weight:900;color:#7A1F1F">'+priceNum+'</div><div style="font-size:8px;font-weight:800;color:#7A1F1F">'+CUR+'</div></div>'):'';
   // Header strip (always): PURE VEG · day · KATHIYAWADI THALI · price
   var header='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:14px 14px 12px;background:linear-gradient(135deg,#FBEFD9,#F7E0C0)">'+
-    '<div><div style="font-size:10px;font-weight:800;letter-spacing:.6px;color:#9A6A3A;margin-bottom:5px">\uD83C\uDF7D TODAY \u00B7 '+esc(THALI.day_name).toUpperCase()+'</div>'+
+    '<div><div style="font-size:10px;font-weight:800;letter-spacing:.6px;color:#9A6A3A;margin-bottom:5px">\uD83C\uDF7D TODAY \u00B7 '+esc(THALI.day_name).toUpperCase()+(THALI.meal?(' \u00B7 '+(THALI.meal==="Dinner"?"\uD83C\uDF19 ":"\u2600\uFE0F ")+THALI.meal.toUpperCase()):'')+'</div>'+
       '<span style="display:inline-block;background:#0C831F;color:#fff;font-size:10px;font-weight:800;letter-spacing:.5px;border-radius:999px;padding:3px 9px">PURE VEG</span>'+
       '<div style="font-weight:900;font-size:17px;color:#7A1F1F;margin-top:6px;line-height:1.1">Kathiyawadi Thali</div>'+
       (THALI.note?('<div style="font-size:11.5px;color:#9A6A3A;margin-top:3px">'+esc(THALI.note)+'</div>'):'')+
@@ -503,7 +504,7 @@ function render(){
   var q=Q.trim().toLowerCase();
   if(q){
     var res=PRODUCTS.filter(function(p){return (p.name+' '+p.brand+' '+p.category+' '+p.keywords).toLowerCase().indexOf(q)>=0;});
-    c.innerHTML='<div class="section-title">Results for “'+esc(Q)+'”</div>'+(res.length?gridG(res.slice(0,80)):'<div class="empty">No products match “'+esc(Q)+'”.</div>');
+    c.innerHTML='<div class="backbar"><button onclick="goHome()">‹ Home</button><b>Search</b></div><div class="section-title">Results for “'+esc(Q)+'”</div>'+(res.length?gridG(res.slice(0,80)):'<div class="empty">No products match “'+esc(Q)+'”.</div>');
     return;
   }
   if(CAT==='all'){
