@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.16-66  thali-day-night-menu';
+    public const VERSION = '2026.06.16-67  website-link-every-reply';
 
     public function __construct(
         protected ProductSearch $search,
@@ -30,6 +30,22 @@ class BotBrain
     ) {}
 
     public function respond(Tenant $tenant, Conversation $convo, string $text): string
+    {
+        return $this->appendWebsite($tenant, $this->respondInner($tenant, $convo, $text));
+    }
+
+    /** For custom-domain shops, append the website link to every reply (once). */
+    protected function appendWebsite(Tenant $tenant, string $reply): string
+    {
+        if (trim((string) $reply) === '') return (string) $reply;       // nothing being sent
+        $nudge = $this->websiteNudge($tenant);                          // '' unless custom domain + enabled
+        if ($nudge === '') return $reply;
+        $dom = trim((string) $tenant->custom_domain);
+        if ($dom !== '' && str_contains($reply, $dom)) return $reply;   // already linked (greeting/menu)
+        return $reply . $nudge;
+    }
+
+    protected function respondInner(Tenant $tenant, Conversation $convo, string $text): string
     {
         $text = trim($text);
         if ($text === '') return '';
