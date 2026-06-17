@@ -20,6 +20,17 @@ class CatalogueMatcher
         'anda'=>'eggs','ande'=>'eggs','sabu'=>'soap','sabun'=>'soap',
         'mirch'=>'chilli','mirchi'=>'chilli','haldi'=>'turmeric','jeera'=>'cumin','jiru'=>'cumin',
         'gud'=>'jaggery','toor'=>'dal','tuvar'=>'dal','daal'=>'dal','dal'=>'dal',
+        // Dry fruits (Gujarati/Hindi → English product term)
+        'kaju'=>'cashew','kajoo'=>'cashew','badam'=>'almond','baadam'=>'almond',
+        'akhrot'=>'walnut','akrot'=>'walnut','anjir'=>'fig','anjeer'=>'fig',
+        'khajur'=>'dates','khajoor'=>'dates','khaarek'=>'dates','kharek'=>'dates',
+        'draksh'=>'raisin','draksha'=>'raisin','kismis'=>'raisin','kishmish'=>'raisin','kismish'=>'raisin',
+        'pista'=>'pistachio','pista'=>'pistachio','khopra'=>'coconut','copra'=>'coconut','kopru'=>'coconut',
+        // More everyday Gujarati/Hindi grocery words
+        'limbu'=>'lemon','lasan'=>'garlic','dungri'=>'onion','kanda'=>'onion',
+        'bataka'=>'potato','batata'=>'potato','tameta'=>'tomato','tamatar'=>'tomato',
+        'kothmir'=>'coriander','dhania'=>'coriander','adu'=>'ginger','aadu'=>'ginger',
+        'elchi'=>'cardamom','elaichi'=>'cardamom','kesar'=>'saffron','singdana'=>'peanut',
     ];
 
     public const STOP = [
