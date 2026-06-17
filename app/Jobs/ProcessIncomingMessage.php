@@ -175,6 +175,34 @@ class ProcessIncomingMessage implements ShouldQueue
             return;
         }
 
+        // ---- Repeat guard: never send the same message twice in a row. ----
+        // If the brain has nothing new to say (e.g. it already escalated "the shop
+        // will reply"), staying silent is better than repeating + re-spamming the
+        // website link. After a couple of repeats, hand the chat to a human so the
+        // customer isn't left hanging.
+        if (! empty($state['lg_last_out']) && $this->norm($reply) === $state['lg_last_out']) {
+            $st = is_array($convo->state) ? $convo->state : [];
+            $rep = (int) ($st['lg_repeat'] ?? 0) + 1;
+            $st['lg_repeat'] = $rep;
+            if ($rep >= 2) {
+                $convo->agent_active = true;                 // hand to a human
+                $alerted = ! empty($st['lg_alerted']);
+                $st['lg_alerted'] = true;
+                $convo->state = $st;
+                $convo->save();
+                if (! $alerted) {
+                    NotifyOwner::dispatch($this->tenantId,
+                        "💬 +{$this->incoming['from']} keeps asking something the bot can't answer — auto-reply is paused for this chat. Open Chats to reply.");
+                }
+                BotTrace::log($this->tenantId, $trace, $from, 'paused', 'repeated reply ×' . $rep . ' — handed to human');
+            } else {
+                $convo->state = $st;
+                $convo->save();
+                BotTrace::log($this->tenantId, $trace, $from, 'skipped', 'suppressed duplicate reply');
+            }
+            return;
+        }
+
         $tSend = microtime(true);
         try {
             $gateway->sendText($tenant->whatsapp_instance, $this->incoming['from'], $reply);
@@ -194,6 +222,7 @@ class ProcessIncomingMessage implements ShouldQueue
         $st['lg_out_times']   = array_values(array_filter($outTimes, fn ($t) => ($now - (int) $t) <= 600));
         $st['lg_last_out']    = $this->norm($reply);
         $st['lg_last_out_at'] = $now;
+        $st['lg_repeat']      = 0;
         $convo->state = $st;
 
         // Timing: webhook-received → reply-sent (queue wait + AI + send).

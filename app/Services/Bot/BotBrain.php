@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.16-71  web-order-customer-ack-wording';
+    public const VERSION = '2026.06.16-73  no-repeat-reply-handoff';
 
     public function __construct(
         protected ProductSearch $search,
@@ -555,11 +555,23 @@ class BotBrain
     {
         $tz  = (string) $tenant->setting('timezone', 'Africa/Kampala');
         $cur = $this->currencyFor($tenant);
-        $day = \App\Services\Bot\ThaliMenu::dayFromText($lc) ?? \App\Services\Bot\ThaliMenu::todayKey($tz);
-        $session = \App\Services\Bot\ThaliMenu::sessionFromText($lc)
-            ?? \App\Services\Bot\ThaliMenu::session($cfg, $tz);
-        return \App\Services\Bot\ThaliMenu::render($cfg, $day, $cur, $session)
-            . $this->websiteThaliNudge($tenant, $cfg);
+        $explicitDay     = \App\Services\Bot\ThaliMenu::dayFromText($lc);
+        $explicitSession = \App\Services\Bot\ThaliMenu::sessionFromText($lc);
+        $rollover = false;
+        if ($explicitDay !== null) {
+            $day = $explicitDay; $session = $explicitSession ?? 'day';
+        } elseif ($explicitSession !== null) {
+            $day = \App\Services\Bot\ThaliMenu::todayKey($tz); $session = $explicitSession;
+        } else {
+            $ctx = \App\Services\Bot\ThaliMenu::effective($cfg, $tz);
+            $day = $ctx['day']; $session = $ctx['session']; $rollover = $ctx['rollover'];
+        }
+
+        $body = \App\Services\Bot\ThaliMenu::render($cfg, $day, $cur, $session);
+        if ($rollover) {
+            $body = "\u{1F319} Tonight's kitchen is closed \u{2014} here's *tomorrow's* lunch:\n\n" . $body;
+        }
+        return $body . $this->websiteThaliNudge($tenant, $cfg);
     }
 
     /**
