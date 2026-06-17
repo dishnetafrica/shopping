@@ -103,7 +103,13 @@ class EvolutionGateway implements WhatsAppGateway
 
         $remote = data_get($msg, 'key.remoteJid', '');
         $fromMe = (bool) data_get($msg, 'key.fromMe', false);
-        if ($fromMe || str_contains((string) $remote, '@g.us')) return null; // ignore self + groups
+        // Drop groups, broadcasts and status posts entirely. Keep 1:1 fromMe messages —
+        // they let us detect when the shop owner replied by hand (manual takeover).
+        if (str_contains((string) $remote, '@g.us')
+            || str_contains((string) $remote, '@broadcast')
+            || str_contains((string) $remote, 'status@broadcast')) {
+            return null;
+        }
 
         $text = data_get($msg, 'message.conversation')
             ?? data_get($msg, 'message.extendedTextMessage.text', '');
@@ -147,6 +153,7 @@ class EvolutionGateway implements WhatsAppGateway
             'loc_name'  => $locName !== null ? (string) $locName : null,
             'loc_address' => $locAddr !== null ? (string) $locAddr : null,
             'messageId' => (string) data_get($msg, 'key.id', ''),
+            'from_me'         => $fromMe,
             'is_status_reply' => $isStatusReply,
             'quoted_text'     => $quotedText,
             'raw'       => $payload,

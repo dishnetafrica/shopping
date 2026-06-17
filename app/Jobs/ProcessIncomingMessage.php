@@ -68,6 +68,28 @@ class ProcessIncomingMessage implements ShouldQueue
             return;
         }
 
+        // Owner replied by hand (fromMe). If it's just the bot's own message echoing back,
+        // ignore it. If it's something the owner typed, treat it as a manual takeover and
+        // soft-pause auto-replies for this chat for a while, so the bot doesn't talk over a
+        // live human conversation ("Good morning, I'll reach now" → "Ok let me come").
+        if (! empty($this->incoming['from_me'])) {
+            $txt   = trim((string) $this->incoming['text']);
+            $state = is_array($convo->state) ? $convo->state : [];
+            if ($txt !== '' && $this->norm($txt) !== ($state['lg_last_out'] ?? '')) {
+                $mins = (int) $tenant->setting('human_takeover_minutes', 60);
+                if ($mins > 0) {
+                    $state['human_until'] = time() + $mins * 60;
+                    $convo->state = $state;
+                }
+                $convo->last_message_at = now();
+                $convo->save();
+                MessageLog::record($this->tenantId, $this->incoming['from'], $this->incoming['instance'], 'out', 'human', $txt);
+                BotTrace::log($this->tenantId, (string) ($this->incoming['trace'] ?? $mid), (string) $this->incoming['from'],
+                    'manual_takeover', 'owner replied by hand — bot paused ' . ((int) $tenant->setting('human_takeover_minutes', 60)) . 'm');
+            }
+            return; // never auto-reply to our own number
+        }
+
         // Always log what the customer said — even if the bot is off or a human
         // has taken over. This is what powers the live web inbox.
         MessageLog::record(
@@ -91,6 +113,10 @@ class ProcessIncomingMessage implements ShouldQueue
         $convo->refresh();
         if ($convo->agent_active) {
             BotTrace::log($this->tenantId, $trace, $from, 'skipped', 'a person is handling this chat (Take over)');
+            return;
+        }
+        if ((int) (is_array($convo->state) ? ($convo->state['human_until'] ?? 0) : 0) > time()) {
+            BotTrace::log($this->tenantId, $trace, $from, 'skipped', 'owner is handling this chat (recent manual reply)');
             return;
         }
         if ($botMode !== 'auto') {

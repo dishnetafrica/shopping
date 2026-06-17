@@ -129,5 +129,42 @@ $e = ThaliMenu::effectiveForHour($A,'mon',9);  ok($e['day']==='mon'&&$e['session
 $e = ThaliMenu::effectiveForHour($A,'mon',18); ok($e['day']==='mon'&&$e['session']==='night'&&!$e['rollover'],'thali mon 18 dinner');
 $e = ThaliMenu::effectiveForHour($A,'mon',22); ok($e['day']==='tue'&&$e['session']==='day'&&$e['rollover'],'thali mon 22 -> tue lunch rollover');
 
+// ---- 10) social / coordination chit-chat (mirrors BotBrain::socialReply) ----
+function social(string $lc): string {
+    $lc=trim($lc);
+    if (preg_match('/\b(on my way|omw|i.?m coming|i am coming|coming now|let me come|i.?ll come|i will come|i.?m reaching|i am reaching|reaching|on the way|i.?ll be there|be there soon|coming over|just coming)\b/',$lc) || in_array($lc,['ok coming','ok i come','let me come','coming','i come'],true)) return 'coming';
+    if (preg_match('/\b(see you|see u|c u|catch you|talk later|bye|good night|goodnight)\b/',$lc)) return 'bye';
+    if (preg_match('/\b(good (morning|afternoon|evening)|gud (morning|mrng)|shubh|kem cho|kemcho|namaste|salaam|salam)\b/',$lc)) return 'greet';
+    if (preg_match('/\b(how are you|how r u|how are u|hw r u|kaise ho|kem cho|how is it going)\b/',$lc)) return 'howru';
+    return '';
+}
+foreach ([['ok let me come','coming'],['i am coming','coming'],['on my way','coming'],['omw','coming'],
+          ['see you','bye'],['good morning','greet'],['kem cho','greet'],['how are you','howru']] as [$q,$e2]) {
+    ok(social($q)===$e2, "social \"$q\" -> $e2 (got '".social($q)."')");
+}
+// real orders must NOT be treated as social
+foreach (['do you have rice','2 kaju','menu','i want sugar','dry fruits','cashew'] as $q) {
+    ok(social($q)==='', "not-social \"$q\"");
+}
+
+// ---- 11) Gujlish non-product intents (mirrors BotBrain::gujlishReply) ----
+function guj(string $lc): string {
+    if (preg_match('/\b(nathi|nthi|nai)\b[^.]*\b(levanu|levu|joiye|joitu|joi tu|lewu|joeye)\b/',$lc) || preg_match('/\b(aaje?|atyare|have|hamna|hamnaa)\s+(nahi|nathi|nai)\b/',$lc) || preg_match('/\b(pachi|paachi|baad ma|next time)\b/',$lc) || preg_match('/\bnathi joi/',$lc)) return 'decline';
+    if (preg_match('/\b(kem cho|kemcho|kem chho|kaa cho|jai shree krishna|jai shri krishna|jsk|namaste|namaskar|ram ram|jai mataji)\b/',$lc)) return 'greet';
+    if (preg_match('/\b(majama|maja ma|su chale|shu chale|kem chale|kem ave che)\b/',$lc)) return 'howru';
+    if (preg_match('/^\s*(ha+|haan|saru|saaru|barabar|barobar|theek che|thik che|theek|thik|chalse|ok che|bahu saru)\s*[!.]*$/',$lc)) return 'affirm';
+    if (preg_match('/\b(aabhar|abhar|dhanyavaad|dhanyavad|dhanyvad)\b/',$lc)) return 'thanks';
+    return '';
+}
+foreach ([['aaj vakhte nathi levanu next time','decline'],['nathi joiye','decline'],['aaje nahi','decline'],
+          ['pachi','decline'],['kem cho','greet'],['jsk','greet'],['majama','howru'],
+          ['ha','affirm'],['saru','affirm'],['barabar','affirm'],['aabhar','thanks'],['dhanyavaad','thanks']] as [$q,$e3]) {
+    ok(guj($q)===$e3, "gujlish \"$q\" -> $e3 (got '".guj($q)."')");
+}
+// Gujlish PRODUCT words must fall through (handled by synonyms), not caught as chit-chat
+foreach (['kaju joiye','mane badam joiye','2 kaju','khajur','dry fruits','menu'] as $q) {
+    ok(guj($q)==='', "gujlish-product falls through \"$q\"");
+}
+
 echo "\n==== Pal's stress test: PASS {$pass}  FAIL {$fail} ====\n";
 exit($fail>0?1:0);

@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.17-78  drinks-cat-fix-stress';
+    public const VERSION = '2026.06.17-80  gujlish-replies-greeting-cats';
 
     public function __construct(
         protected ProductSearch $search,
@@ -380,6 +380,19 @@ class BotBrain
             return "\u{1F44D} Great! Tell me what you'd like, say *cart* to review, or *checkout* when ready.";
         }
 
+        // Social / coordination chit-chat (pickup & delivery talk, time-of-day greetings) —
+        // reply briefly and warmly, never with the "tell me a product" pitch.
+        if (($social = $this->socialReply($lc)) !== null) {
+            return $social;
+        }
+
+        // Gujlish (romanised Gujarati) — most Pal's customers chat this way. Catch the common
+        // declines / affirmations / thanks / chit-chat and reply in Gujlish, instead of the
+        // robotic English intro ("Aaj vakhte nathi levanu" -> "Vandho nahi!").
+        if (($guj = $this->gujlishReply($lc, $tenant)) !== null) {
+            return $guj;
+        }
+
         // declines: "no", "cancel", "i don't want anything" etc. are NOT product
         // searches — never run them through the catalogue (that's what matched
         // "Dent"/"Donut"/"Dot" for "i dont want anything").
@@ -604,6 +617,84 @@ class BotBrain
     }
 
     /**
+     * Brief, warm replies for social / coordination chit-chat (pickup & delivery talk,
+     * "good morning", "how are you", "see you"). Returns null when it's not small talk,
+     * so the message continues to the normal shopping path.
+     */
+    /**
+     * Gujlish (romanised Gujarati) replies for the common non-product intents Pal's
+     * customers use — declines, affirmations, thanks, chit-chat. Product words (kaju,
+     * badam…) deliberately return null so they continue to the catalogue search.
+     */
+    protected function gujlishReply(string $lc, Tenant $tenant): ?string
+    {
+        $shop = trim((string) $tenant->name) !== '' ? $tenant->name : 'amari dukan';
+
+        // Decline / not now / next time  ("aaj vakhte nathi levanu", "have nathi", "pachi", "next time")
+        if (preg_match('/\b(nathi|nthi|nai)\b[^.]*\b(levanu|levu|joiye|joitu|joi tu|lewu|joeye)\b/', $lc)
+            || preg_match('/\b(aaje?|atyare|have|hamna|hamnaa)\s+(nahi|nathi|nai)\b/', $lc)
+            || preg_match('/\b(pachi|paachi|baad ma|next time)\b/', $lc)
+            || preg_match('/\bnathi joi/', $lc)) {
+            return "\u{1F642} Vandho nahi! Jyare joiye tyare kaho \u{2014} {$shop} hammesha taiyar che. Aabhar! \u{1F64F}";
+        }
+        // Greeting (also caught earlier as a greeting; kept as a safety net)
+        if (preg_match('/\b(kem cho|kemcho|kem chho|kaa cho|jai shree krishna|jai shri krishna|jsk|namaste|namaskar|ram ram|jai mataji)\b/', $lc)) {
+            return "\u{1F64F} Jai Shree Krishna! {$shop} ma swagat che. Aaje su joiye che? Menu jova mate *menu* lakho.";
+        }
+        // How are you / chit-chat
+        if (preg_match('/\b(majama|maja ma|su chale|shu chale|kem chale|kem ave che)\b/', $lc)) {
+            return "\u{1F60A} Majama! Tame kao, aaje su joiye che? Menu jova *menu* lakho.";
+        }
+        // Affirmation
+        if (preg_match('/^\s*(ha+|haan|saru|saaru|barabar|barobar|theek che|thik che|theek|thik|chalse|ok che|bahu saru)\s*[!.]*$/', $lc)) {
+            return "\u{1F44D} Saru! Su joiye che e kaho, athva *cart* jova mate lakho.";
+        }
+        // Thanks
+        if (preg_match('/\b(aabhar|abhar|dhanyavaad|dhanyavad|dhanyvad)\b/', $lc)) {
+            return "\u{1F64F} Aabhar! Phari malsho. Kai pan joiye to kaho.";
+        }
+        return null;
+    }
+
+    /** Up to N distinct category names from the shop's catalogue, joined for a greeting line. */
+    protected function shopCategories(Tenant $tenant, int $n = 3): string
+    {
+        $cats = [];
+        foreach ($this->tenantCatalogue($tenant) as $p) {
+            $c = trim((string) ($p['category'] ?? ''));
+            if ($c !== '' && ! in_array($c, $cats, true)) $cats[] = $c;
+            if (count($cats) >= $n) break;
+        }
+        if (! $cats) return '';
+        if (count($cats) === 1) return $cats[0];
+        $last = array_pop($cats);
+        return implode(', ', $cats) . ' & ' . $last;
+    }
+
+    protected function socialReply(string $lc): ?string
+    {
+        $lc = trim($lc);
+        // coordination: customer is coming / on the way / will reach
+        if (preg_match('/\b(on my way|omw|i.?m coming|i am coming|coming now|let me come|i.?ll come|i will come|i.?m reaching|i am reaching|reaching|on the way|i.?ll be there|be there soon|coming over|just coming)\b/', $lc)
+            || in_array($lc, ['ok coming','ok i come','let me come','coming','i come'], true)) {
+            return "\u{1F44D} Sure, see you soon! I'll have your order ready.";
+        }
+        // see you / bye-style sign off
+        if (preg_match('/\b(see you|see u|c u|catch you|talk later|bye|good night|goodnight)\b/', $lc)) {
+            return "\u{1F44B} See you! We're here whenever you need us.";
+        }
+        // time-of-day greetings (the plain "hi/hello" set is handled as GREETING elsewhere)
+        if (preg_match('/\b(good (morning|afternoon|evening)|gud (morning|mrng)|shubh|kem cho|kemcho|namaste|salaam|salam)\b/', $lc)) {
+            return "\u{1F31E} Hello! How can I help you today? Tell me a product or say *menu* to see what we have.";
+        }
+        // "how are you" style
+        if (preg_match('/\b(how are you|how r u|how are u|hw r u|kaise ho|kem cho|how is it going)\b/', $lc)) {
+            return "\u{1F60A} I'm doing well, thank you! What can I get for you today?";
+        }
+        return null;
+    }
+
+    /**
      * Detect talk about money / credit settlement ("I'll send money for last week",
      * "I paid", "my balance", "khata", "MoMo") — but NOT a "how do I pay?" question.
      * Such messages must skip the catalogue so the bot never says "we don't stock confirm".
@@ -736,6 +827,13 @@ class BotBrain
                     : "Hello \u{1F44B} Welcome to {$shop}! Tell me what you'd like and I'll add it up. "
                     . "Say *cart* to see your basket or *checkout* when ready.";
                 break;
+        }
+
+        $cats = $this->shopCategories($tenant);
+        if ($cats !== '') {
+            $msg .= ($d['lang'] === 'in')
+                ? "\n\nAmari pase *{$cats}* ane biju ghanu che \u{2014} *menu* lakho."
+                : "\n\nWe stock *{$cats}* and more \u{2014} say *menu* to see everything.";
         }
 
         return $msg . $this->websiteNudge($tenant);
