@@ -265,7 +265,7 @@ class CatalogueMatcher
             'snacks'=>'snack','snack'=>'snack','farsan'=>'farsan','namkeen'=>'namkeen','wafers'=>'wafer','wafer'=>'wafer',
             'spices'=>'spice','spice'=>'spice','masala'=>'masala','masale'=>'masala',
             'sweets'=>'sweet','sweet'=>'sweet','mithai'=>'sweet',
-            'beverages'=>'beverage','beverage'=>'beverage','drinks'=>'drink','drink'=>'drink',
+            'beverages'=>'beverage','beverage'=>'beverage','drinks'=>'beverage','drink'=>'beverage','colddrink'=>'beverage','colddrinks'=>'beverage','softdrink'=>'beverage','juice'=>'beverage',
         ];
         $canon = $CAT_SYN[$qn] ?? $qn;
 
