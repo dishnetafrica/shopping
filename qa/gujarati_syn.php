@@ -61,5 +61,35 @@ foreach ($cases as [$q, $exp]) {
 $tok = $m->tokens('kaju badam khajur draksh');
 ok($tok === ['cashew','almond','dates','raisin'], 'tokens expand: ' . implode(',', $tok));
 
+// ---- Direct category-name browse (categoryByName) ----
+function cat(CatalogueMatcher $m, array $c, string $q): string {
+    $r = $m->categoryByName($q, $c);
+    return $r ? $r['category'] : '(none)';
+}
+$cc = [
+    ['name'=>'Cashew 250g','category'=>'Dry Fruits'],
+    ['name'=>'Almond 250g','category'=>'Dry Fruits'],
+    ['name'=>'Dates 500g','category'=>'Dry Fruits'],
+    ['name'=>'Banana Wafer','category'=>'Snacks'],
+    ['name'=>'Sugar 1kg','category'=>'Grocery'],
+];
+foreach ([
+    ['do you have dry fruits?','Dry Fruits'],
+    ['dryfruits','Dry Fruits'],
+    ['dry fruit','Dry Fruits'],
+    ['u have dryfruits','Dry Fruits'],
+    ['mewa','Dry Fruits'],
+    ['nuts','Dry Fruits'],
+    ['snacks','Snacks'],
+    ['rice','(none)'],          // a product, not a category -> leave to product search
+    ['masala','(none)'],        // no such category here
+    ['cashew','(none)'],        // product name, not category
+] as [$q,$exp]) {
+    ok(cat($m, $cc, $q) === $exp, "category \"$q\" -> $exp (got " . cat($m,$cc,$q) . ')');
+}
+// dry-fruits category returns all 3 items
+$r = $m->categoryByName('dryfruits', $cc);
+ok($r && count($r['products']) === 3, 'dryfruits lists 3 items');
+
 echo "\n==== gujarati synonym test: PASS {$pass}  FAIL {$fail} ====\n";
 exit($fail > 0 ? 1 : 0);

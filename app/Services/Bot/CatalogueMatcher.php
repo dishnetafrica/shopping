@@ -244,6 +244,60 @@ class CatalogueMatcher
      *
      * @return array{category:string,products:array}|null
      */
+    /**
+     * Direct category-name match: the customer named a whole category
+     * ("dry fruits", "dryfruits", "snacks", "masala", Gujarati "mewa") rather than a
+     * single product. Returns that category's products so the bot can list them.
+     * Space/case-insensitive, with a few category synonyms. Returns null on no match.
+     */
+    public function categoryByName(string $query, array $products): ?array
+    {
+        $q = mb_strtolower(trim($query));
+        $q = preg_replace('/\b(do you (have|sell|stock)|have you got|got any|any|looking for|i (want|need|am looking for)|show me|gimme|give me|please|pls|kindly|whats|what\'?s|what|your|the|some|need|want|me|have|you|u|do)\b/u', ' ', $q);
+        $qn = preg_replace('/[^a-z0-9]+/', '', (string) $q);
+        if ($qn === '' || strlen($qn) < 3) return null;
+
+        // category synonyms -> a normalized fragment expected inside the category name
+        static $CAT_SYN = [
+            'dryfruit'=>'dryfruit','dryfruits'=>'dryfruit','dryfruts'=>'dryfruit','dryfrut'=>'dryfruit',
+            'drufruit'=>'dryfruit','mewa'=>'dryfruit','meva'=>'dryfruit','sukamewa'=>'dryfruit',
+            'sukomeva'=>'dryfruit','sukameva'=>'dryfruit','dryfruitsandnuts'=>'dryfruit','nuts'=>'dryfruit',
+            'snacks'=>'snack','snack'=>'snack','farsan'=>'farsan','namkeen'=>'namkeen','wafers'=>'wafer','wafer'=>'wafer',
+            'spices'=>'spice','spice'=>'spice','masala'=>'masala','masale'=>'masala',
+            'sweets'=>'sweet','sweet'=>'sweet','mithai'=>'sweet',
+            'beverages'=>'beverage','beverage'=>'beverage','drinks'=>'drink','drink'=>'drink',
+        ];
+        $canon = $CAT_SYN[$qn] ?? $qn;
+
+        // group products by normalized category name (preserve order)
+        $cats = [];
+        foreach ($products as $p) {
+            $raw = trim((string) ($p['category'] ?? ''));
+            if ($raw === '') continue;
+            $cn = preg_replace('/[^a-z0-9]+/', '', mb_strtolower($raw));
+            if ($cn === '') continue;
+            if (! isset($cats[$cn])) $cats[$cn] = ['label' => $raw, 'products' => []];
+            $cats[$cn]['products'][] = $p;
+        }
+        if (! $cats) return null;
+
+        // 1) exact normalized match ("dryfruits" == "dryfruits", "Dry Fruits" -> "dryfruits")
+        foreach ($cats as $cn => $info) {
+            if ($cn === $qn || $cn === $canon) {
+                return ['category' => $info['label'], 'products' => $info['products']];
+            }
+        }
+        // 2) synonym / contained match, min length 4 to avoid silly collisions
+        if (strlen($canon) >= 4) {
+            foreach ($cats as $cn => $info) {
+                if (str_contains($cn, $canon) || str_contains($canon, $cn)) {
+                    return ['category' => $info['label'], 'products' => $info['products']];
+                }
+            }
+        }
+        return null;
+    }
+
     public function categoryBrowse(string $query, array $products, int $limit = 20): ?array
     {
         $q = $this->tokens($query);

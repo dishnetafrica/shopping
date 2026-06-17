@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.17-75  status-reply-context';
+    public const VERSION = '2026.06.17-77  category-name-browse';
 
     public function __construct(
         protected ProductSearch $search,
@@ -396,10 +396,39 @@ class BotBrain
                 : "No problem \u{1F642} Whenever you're ready, just tell me a product you'd like and I'll help you shop.";
         }
 
+        // ---- Past payment / credit (khata) settlement ----
+        // Credit shops get a lot of "I'll send money for last week / please confirm" talk.
+        // The bot can't verify payments, so it must never run this through the catalogue
+        // (which produced "we don't stock confirm"). Acknowledge warmly and alert the shop
+        // to confirm the customer's account by hand.
+        $payState  = is_array($convo->state) ? $convo->state : [];
+        $payRecent = (time() - (int) ($payState['pay_alerted_at'] ?? 0)) < 1800;
+        if ($this->looksLikePayment($lc)
+            || ($payRecent && (bool) preg_match('/\b(confirm|confirmed|done|received|sent|paid|ok)\b/', $lc))) {
+            if ((time() - (int) ($payState['pay_alerted_at'] ?? 0)) > 1800) {
+                \App\Jobs\NotifyOwner::dispatch($tenant->id,
+                    "\u{1F4B0} +{$convo->customer_phone} is talking about a payment: \""
+                    . trim(mb_substr($text, 0, 120)) . "\". Open Chats to confirm their account.");
+            }
+            $payState['pay_alerted_at'] = time();
+            $convo->state = $payState;
+            $convo->save();
+            return "\u{1F64F} Thank you! I've let the shop know \u{2014} they'll check and confirm your payment shortly. "
+                 . "Is there anything else I can help you with?";
+        }
+
         // ---- Intent classification (runs BEFORE any catalogue search) ----
         // The bot is a shop assistant, not a search engine: conversational messages
         // (feedback / greeting / thanks / questions / gibberish) must never search.
         $catalogue = $this->tenantCatalogue($tenant);
+
+        // Direct category-name browse: "dry fruits", "snacks", "masala", "mewa" -> list that
+        // category's items. Runs before intent classification so a question framing
+        // ("do you have dry fruits?") still lists the category instead of escalating.
+        if (($catList = $this->tryCategoryName($tenant, $convo, $text, $catalogue)) !== null) {
+            return $catList;
+        }
+
         $intent = IntentClassifier::classify($text, IntentClassifier::tokenSetFromProducts($catalogue));
 
         switch ($intent) {
@@ -465,7 +494,7 @@ class BotBrain
         $want = trim(preg_replace('/\b(do you (have|sell|stock)|have you got|got any|any|looking for|i (want|need)|please|pls)\b/i', ' ', mb_strtolower($text)));
         $want = trim(preg_replace('/\s+/', ' ', $want));
         $wantWords = $want === '' ? [] : preg_split('/\s+/', $want, -1, PREG_SPLIT_NO_EMPTY);
-        $conversational = '/\b(hi|hii|hey|hello|helo|hiya|yo|hola|salaam|salam|will|would|can|could|are|is|am|was|were|you|your|u|when|what|why|how|who|tomorrow|today|tonight|now|later|soon|coming|come|reach|open|closed?|deliver|delivery|time|hours?|there|available|reply|call|phone|number|whatsapp|thanks|thank)\b/i';
+        $conversational = '/\b(hi|hii|hey|hello|helo|hiya|yo|hola|salaam|salam|will|would|can|could|are|is|am|was|were|you|your|u|when|what|why|how|who|tomorrow|today|tonight|now|later|soon|coming|come|reach|open|closed?|deliver|delivery|time|hours?|there|available|reply|call|phone|number|whatsapp|thanks|thank|confirm|confirmed|dish|dishes|plate|plates|paid|pay|payment|money|balance|sent|send|received|done|noted|please|ok|okay)\b/i';
         if ($want !== '' && count($wantWords) <= 4 && preg_match('/[a-z]/i', $want) && ! preg_match($conversational, $want)) {
             return "Sorry, we don't stock *{$want}* right now \u{1F642} Tell me another product, or say *menu* to see what we have.";
         }
@@ -572,6 +601,27 @@ class BotBrain
             $body = "\u{1F319} Tonight's kitchen is closed \u{2014} here's *tomorrow's* lunch:\n\n" . $body;
         }
         return $body . $this->websiteThaliNudge($tenant, $cfg);
+    }
+
+    /**
+     * Detect talk about money / credit settlement ("I'll send money for last week",
+     * "I paid", "my balance", "khata", "MoMo") — but NOT a "how do I pay?" question.
+     * Such messages must skip the catalogue so the bot never says "we don't stock confirm".
+     */
+    protected function looksLikePayment(string $lc): bool
+    {
+        // future intent — needs will / going to (so plain "how do i pay" is excluded)
+        if (preg_match('/\b(i ?\'?ll|i will|today i will|i am going to|i\'?m going to|gonna)\s+(pay|send|deposit|transfer)\b/', $lc)) return true;
+        // stated fact — paid / sent / paying / sending
+        if (preg_match('/\b(paid|sent the money|sent money|paying|sending money|transferred|deposited)\b/', $lc)) return true;
+        // money movement
+        if (preg_match('/\b(send|sending|sent|transfer(red|ring)?|deposit(ed|ing)?)\b[^.]*\b(money|cash|payment|amount|balance)\b/', $lc)) return true;
+        // account / credit words
+        if (preg_match('/\b(my )?(payment|balance|khata|khaata|udhaar|udhar|hisab|hisaab|baki|baaki|dues?|outstanding)\b/', $lc)) return true;
+        if (preg_match('/\bmoney for (last|the)\b/', $lc)) return true;
+        if (preg_match('/\blast (week|month)\b[^.]*\b(money|pay|paid|payment|bill|balance|due)\b/', $lc)) return true;
+        if (preg_match('/\b(momo|mobile money|airtel money|mtn money)\b/', $lc)) return true;
+        return false;
     }
 
     /**
@@ -804,6 +854,31 @@ class BotBrain
      * If the message is a confident single-category browse, present that category's products as a
      * clean numbered list (max 20, best/exact-brand first) and never unrelated categories.
      */
+    /** List a whole category's items when the customer names a category. */
+    protected function tryCategoryName(Tenant $tenant, Conversation $convo, string $text, array $catalogue): ?string
+    {
+        $res = (new \App\Services\Bot\CatalogueMatcher())->categoryByName($text, $catalogue);
+        if ($res === null || count($res['products']) === 0) return null;
+
+        $cur   = $this->currencyFor($tenant);
+        $label = $res['category'] !== '' ? $res['category'] : 'Options';
+        $built = $this->clarify->buildOptions(
+            [['label' => $label, 'qty' => 1, 'products' => array_slice($res['products'], 0, 20)]],
+            fn ($a) => $cur . ' ' . number_format((float) $a)
+        );
+
+        $st = is_array($convo->state) ? $convo->state : [];
+        $st['options']      = $built['flat'];
+        $st['last_query']   = $label;
+        $st['last_kind']    = 'search';
+        $st['last_activity'] = time();
+        $convo->state       = $st;
+        $convo->save();
+
+        return "Here are the *{$label}* we have:\n" . $built['text']
+             . "\n\nReply with the *number(s)* you want \u{2014} e.g. *3*, or *2 x 3* for two of item 3.";
+    }
+
     protected function tryCategoryBrowse(Tenant $tenant, Conversation $convo, string $text, array $catalogue): ?string
     {
         $res = (new \App\Services\Bot\CatalogueMatcher())->categoryBrowse($text, $catalogue, 20);
