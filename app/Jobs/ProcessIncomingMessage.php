@@ -108,6 +108,16 @@ class ProcessIncomingMessage implements ShouldQueue
         $state = is_array($convo->state) ? $convo->state : [];
         $now   = time();
 
+        // Status reply: the customer replied to our WhatsApp Status, so the bare text
+        // ("1 Dish") is meaningless on its own. Rebuild it with the status caption (e.g.
+        // "Today special lunch menu") so the bot routes it to the menu instead of doing
+        // a product search and saying "we don't stock 1 dish". No caption → show the menu.
+        if (! empty($this->incoming['is_status_reply'])) {
+            $q = trim((string) ($this->incoming['quoted_text'] ?? ''));
+            $text = $q !== '' ? trim($q . ' ' . $text) : 'menu';
+            BotTrace::log($this->tenantId, $trace, $from, 'status_reply', 'reading as: ' . $text);
+        }
+
         // ---- Loop guard: stop runaway bot-to-bot / echo conversations ----
         // 1) Echo: the incoming message is identical to what we just sent.
         if (! empty($state['lg_last_out']) && $this->norm($text) !== '' && $this->norm($text) === $state['lg_last_out']) {

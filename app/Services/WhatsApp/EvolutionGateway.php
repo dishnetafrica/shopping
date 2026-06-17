@@ -108,6 +108,21 @@ class EvolutionGateway implements WhatsAppGateway
         $text = data_get($msg, 'message.conversation')
             ?? data_get($msg, 'message.extendedTextMessage.text', '');
 
+        // Status-reply context: when a customer replies to the shop's WhatsApp Status,
+        // only the bare reply ("1 Dish") arrives as text — the status itself sits in
+        // contextInfo (remoteJid = status@broadcast). Capture both so the bot can make
+        // sense of it instead of treating "1 Dish" as a product.
+        $ctx = data_get($msg, 'message.extendedTextMessage.contextInfo');
+        $isStatusReply = is_array($ctx)
+            && str_contains((string) data_get($ctx, 'remoteJid', ''), 'status@broadcast');
+        $quotedText = is_array($ctx) ? (string) (
+            data_get($ctx, 'quotedMessage.conversation')
+            ?? data_get($ctx, 'quotedMessage.extendedTextMessage.text')
+            ?? data_get($ctx, 'quotedMessage.imageMessage.caption')
+            ?? data_get($ctx, 'quotedMessage.videoMessage.caption')
+            ?? ''
+        ) : '';
+
         // Location pin (static or live). Coordinates let the bot build a Google Maps link
         // and snap to a delivery zone; without this the message has no text and is dropped.
         $locMsg = data_get($msg, 'message.locationMessage')
@@ -132,6 +147,8 @@ class EvolutionGateway implements WhatsAppGateway
             'loc_name'  => $locName !== null ? (string) $locName : null,
             'loc_address' => $locAddr !== null ? (string) $locAddr : null,
             'messageId' => (string) data_get($msg, 'key.id', ''),
+            'is_status_reply' => $isStatusReply,
+            'quoted_text'     => $quotedText,
             'raw'       => $payload,
         ];
     }
