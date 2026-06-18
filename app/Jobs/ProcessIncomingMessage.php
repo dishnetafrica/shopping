@@ -187,17 +187,20 @@ class ProcessIncomingMessage implements ShouldQueue
         $tBrain = microtime(true);
 
         // ---- Image search: customer sent a product photo instead of typing ----
-        // Turn the photo into a catalogue query with vision, then let the normal
-        // product search + numbered pick-list + cart flow handle it. If we can't
-        // identify it, ask for the name rather than guessing.
+        // Vision turns the photo (+ any caption) into a catalogue query; we verify the
+        // query actually matches a product in THIS shop before replying (so a
+        // hallucinated brand never reaches the customer), then let the normal product
+        // search + numbered pick-list + cart flow handle it.
         $fromImage = false;
         if (! empty($this->incoming['has_image'] ?? false) && trim($text) === '' && ! $tenant->isMarketing()) {
+            BotTrace::log($this->tenantId, $trace, $from, 'photo_received');
+
             $featureOn = (bool) $tenant->setting('feature_image_search', true);
             if (! $featureOn || ! $finder->enabled()) {
                 $ask = "📷 Please type the product name (e.g. \"rice 5kg\") and I'll find it for you.";
                 $gateway->sendText($tenant->whatsapp_instance, $from, $ask);
                 MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $ask);
-                BotTrace::log($this->tenantId, $trace, $from, 'image_skipped', $featureOn ? 'no AI key' : 'feature off');
+                BotTrace::log($this->tenantId, $trace, $from, 'photo_unidentified', $featureOn ? 'no AI key' : 'feature off');
                 $convo->save();
                 return;
             }
@@ -207,19 +210,37 @@ class ProcessIncomingMessage implements ShouldQueue
                 $b64 = (string) ($gateway->getMediaBase64($tenant->whatsapp_instance, $this->incoming['media_key']) ?? '');
             }
 
-            $query = $b64 !== '' ? $finder->identify($b64, (string) ($this->incoming['image_caption'] ?? '')) : null;
-            if ($query === null || $query === '') {
+            $caption = (string) ($this->incoming['image_caption'] ?? '');
+            $res     = $b64 !== '' ? $finder->identify($b64, $caption) : null;
+            $minConf = (int) $tenant->setting('image_search_min_confidence', 50);
+            $query   = $res['query'] ?? '';
+            $conf    = (int) ($res['confidence'] ?? 0);
+
+            // Couldn't read it, or vision isn't confident enough → ask for the name.
+            if ($query === '' || $conf < $minConf) {
                 $miss = "📷 I couldn't make out the product in that photo. Please type the name (e.g. \"sugar 2kg\") and I'll find it.";
                 $gateway->sendText($tenant->whatsapp_instance, $from, $miss);
                 MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $miss);
-                BotTrace::log($this->tenantId, $trace, $from, 'image_unidentified', 'vision returned nothing');
+                BotTrace::log($this->tenantId, $trace, $from, 'photo_unidentified',
+                    $query === '' ? 'vision returned nothing' : "low confidence {$conf}<{$minConf}: {$query}");
                 $convo->save();
                 return;
             }
+            BotTrace::log($this->tenantId, $trace, $from, 'photo_identified', "{$query} ({$conf}%)");
+
+            // Hallucination guard: the query must match a real product in this shop.
+            if (empty($brain->searchCatalogue($tenant, $query))) {
+                $nf = "🙂 I couldn't find this in our store. Please type the product name and I'll check for you.";
+                $gateway->sendText($tenant->whatsapp_instance, $from, $nf);
+                MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $nf);
+                BotTrace::log($this->tenantId, $trace, $from, 'photo_search_miss', $query);
+                $convo->save();
+                return;
+            }
+            BotTrace::log($this->tenantId, $trace, $from, 'photo_search_hit', $query);
 
             $text = $query;
             $fromImage = true;
-            BotTrace::log($this->tenantId, $trace, $from, 'image_query', $query);
         }
 
         try {

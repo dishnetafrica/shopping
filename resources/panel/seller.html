@@ -322,6 +322,7 @@
           </div>
         </div>
         <div class="kgrid" id="kpis"></div>
+        <div id="imgStats" class="card hide" data-feature="image_search" style="margin-bottom:14px"></div>
         <div class="row2">
           <div class="card"><div class="head plain" id="mTitle">Orders — this month</div><div class="body chart" id="chartMonth"></div></div>
           <div class="card"><div class="head plain">Orders — 2026</div><div class="body chart" id="chartYear"></div></div>
@@ -961,6 +962,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   riders:'/papi/riders',riderSave:'/papi/rider-save',riderDel:'/papi/rider-delete',importContacts:'/papi/contacts-import',botMode:'/papi/chats/bot-mode',
   ret:'/papi/return',returns:'/papi/returns',
   settings:'/papi/settings',settingsSave:'/papi/settings-save',
+  imageStats:'/papi/image-stats',
   branches:'/papi/branches',branchSave:'/papi/branch-save',branchDel:'/papi/branch-delete',
   custProfiles:'/papi/customers',custSave:'/papi/customer-save',
   botcfg:'/papi/bot-config',botcfgSave:'/papi/bot-config-save',
@@ -1392,8 +1394,24 @@ function helpTab(w){
 
 /* ---------------- DASHBOARD ---------------- */
 function countBy(st){return branchOrders().filter(function(o){return o.status.toLowerCase()===st;}).length;}
+async function renderImageStats(){
+  var el=$('imgStats'); if(!el)return;
+  if(FEATURES&&FEATURES.image_search===false){el.classList.add('hide');return;}
+  try{
+    var r=await fetch(EP.imageStats+'?token='+encodeURIComponent(token),{cache:'no-store'});
+    var d=await r.json();
+    if(!d||!d.ok||!d.received){el.classList.add('hide');return;}
+    el.classList.remove('hide');
+    function box(n,l){return '<div style="min-width:90px"><div style="font-size:22px;font-weight:800;line-height:1">'+n+'</div><div class="note" style="margin-top:2px">'+l+'</div></div>';}
+    el.innerHTML='<div class="head plain">📸 Photo product search · last '+d.days+' days</div>'+
+      '<div class="body" style="display:flex;gap:22px;flex-wrap:wrap">'+
+      box(d.received,'Photos received')+box(d.matched,'Matched a product')+box(d.hit_rate+'%','Hit rate')+
+      '</div>';
+  }catch(e){el.classList.add('hide');}
+}
 function renderDash(){
   renderBotSwitch();
+  renderImageStats();
   var O=branchOrders();
   var today=tISO(new Date()).slice(0,10);
   var kpis=[

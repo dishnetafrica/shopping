@@ -72,6 +72,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('default-save',          [\App\Http\Controllers\Panel\PanelOwnerController::class, 'defaultSave']);
         Route::get('default-delete',        [\App\Http\Controllers\Panel\PanelOwnerController::class, 'defaultDelete']);
         Route::get('settings',   [PanelApiController::class, 'settings']);
+        Route::get('image-stats', [PanelApiController::class, 'imageStats']);
         Route::get('branches',   [PanelApiController::class, 'branches']);
         Route::get('customers',  [PanelApiController::class, 'customers']);
         Route::get('contacts-import', [PanelApiController::class, 'importContacts']);

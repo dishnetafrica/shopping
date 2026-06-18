@@ -215,6 +215,34 @@ class PanelApiController extends Controller
         ];
     }
 
+    /** Photo-search stats for the seller dashboard (last 30 days, from bot_events). */
+    public function imageStats(Request $r)
+    {
+        $t     = $r->user()->tenant;
+        $since = now()->subDays(30);
+
+        $rows = \Illuminate\Support\Facades\DB::table('bot_events')
+            ->where('tenant_id', $t->id)
+            ->where('created_at', '>=', $since)
+            ->whereIn('stage', ['photo_received', 'photo_search_hit', 'photo_search_miss', 'photo_unidentified'])
+            ->selectRaw('stage, count(*) as c')
+            ->groupBy('stage')
+            ->pluck('c', 'stage');
+
+        $received = (int) ($rows['photo_received'] ?? 0);
+        $matched  = (int) ($rows['photo_search_hit'] ?? 0);
+
+        return response()->json([
+            'ok'           => true,
+            'days'         => 30,
+            'received'     => $received,
+            'matched'      => $matched,
+            'miss'         => (int) ($rows['photo_search_miss'] ?? 0),
+            'unidentified' => (int) ($rows['photo_unidentified'] ?? 0),
+            'hit_rate'     => $received > 0 ? (int) round($matched / $received * 100) : 0,
+        ]);
+    }
+
     public function branches()
     {
         return response()->json(['branches' => $this->branchesList()]);

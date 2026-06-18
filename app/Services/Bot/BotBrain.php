@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.18-82  image-product-search';
+    public const VERSION = '2026.06.18-83  image-search-hardened';
 
     public function __construct(
         protected ProductSearch $search,
@@ -1640,6 +1640,19 @@ class BotBrain
             return implode("\n", $parts);
         }
         return implode("\n", $parts) . "\n\n" . $this->cartSummary($tenant, $res['cart']) . "\n\nAdd more, or say *checkout*.";
+    }
+
+    /**
+     * Public catalogue probe for image search: the products a query matches.
+     * Used to reject a vision result that doesn't exist in this shop before we
+     * reply, so a hallucinated brand never reaches the customer.
+     */
+    public function searchCatalogue(Tenant $tenant, string $query): array
+    {
+        $query = trim($query);
+        if ($query === '') return [];
+
+        return (new \App\Services\Bot\CatalogueMatcher())->search($query, $this->tenantCatalogue($tenant));
     }
 
     /** Tenant catalogue as plain rows (net prices applied) for the matcher. */
