@@ -105,7 +105,9 @@ class TenantResource extends Resource
                             'sales' => 'Sales', 'support' => 'Support', 'manager' => 'Manager',
                         ])->default('sales'),
                         Forms\Components\TextInput::make('name')->label('Name'),
-                    ])->columns(3)->default([])->addActionLabel('Add recipient'),
+                        Forms\Components\Toggle::make('enabled')->label('Active')->default(true)
+                            ->helperText('Turn off to skip this person in round-robin (e.g. on leave).'),
+                    ])->columns(4)->default([])->addActionLabel('Add recipient'),
             ])->columns(1),
         ]);
     }

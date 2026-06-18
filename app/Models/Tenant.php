@@ -168,8 +168,9 @@ class Tenant extends Model
         $out = [];
         if (is_array($raw)) {
             foreach ($raw as $r) {
+                if (array_key_exists('enabled', (array) $r) && ! (bool) $r['enabled']) continue; // skip disabled
                 $phone = preg_replace('/[^0-9]/', '', (string) ($r['phone'] ?? ''));
-                if ($phone === '') continue;
+                if ($phone === '') continue;   // skip missing phone → never assign a lead into a black hole
                 $out[] = [
                     'phone' => $phone,
                     'role'  => strtolower((string) ($r['role'] ?? 'sales')) ?: 'sales',

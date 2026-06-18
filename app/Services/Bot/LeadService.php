@@ -26,11 +26,12 @@ class LeadService
     /**
      * @return array{created:bool,reply:string}
      */
-    public function capture(Tenant $tenant, string $phone, ?string $name, string $message, string $intent = 'lead'): array
+    public function capture(Tenant $tenant, string $phone, ?string $name, string $message, string $intent = 'lead', string $source = 'whatsapp', ?int $conversationId = null): array
     {
         $phone = preg_replace('/[^0-9]/', '', $phone);
         $intent = $intent === 'ticket' ? 'ticket' : 'lead';
         $interest = $this->summarise($message);
+        $score = (new LeadScorer())->score($intent, $message);
 
         // Dedupe: an open lead for this customer in the last few hours → don't spam the team.
         $recent = Lead::query()
@@ -43,16 +44,18 @@ class LeadService
         }
 
         $lead = Lead::create([
-            'tenant_id'      => $tenant->id,
-            'customer_phone' => $phone,
-            'customer_name'  => $name ?: null,
-            'intent'         => $intent,
-            'interest'       => $interest,
-            'message'        => mb_substr($message, 0, 1000),
-            'source'         => 'whatsapp',
-            'status'         => 'new',
+            'tenant_id'       => $tenant->id,
+            'customer_phone'  => $phone,
+            'customer_name'   => $name ?: null,
+            'intent'          => $intent,
+            'interest'        => $interest,
+            'lead_score'      => $score,
+            'message'         => mb_substr($message, 0, 1000),
+            'source'          => $source ?: 'whatsapp',
+            'conversation_id' => $conversationId,
+            'status'          => 'new',
         ]);
-        $this->event($tenant->id, 'lead_created', $phone, "#{$lead->id} {$intent}: {$interest}");
+        $this->event($tenant->id, 'lead_created', $phone, "#{$lead->id} {$intent} [{$score}] via {$source}: {$interest}");
 
         $mode = (string) $tenant->setting('lead_assignment_mode', 'round_robin');
         $role = $intent === 'ticket' ? 'support' : 'sales';
@@ -152,7 +155,9 @@ class LeadService
     {
         $name = $lead->customer_name ?: '(unknown)';
         $kind = $lead->intent === 'ticket' ? 'Issue' : 'Interest';
+        $band = (new LeadScorer())->band((int) $lead->lead_score);
         return $head . "\n\n"
+            . "Priority: {$band} ({$lead->lead_score})\n"
             . "Name: {$name}\n"
             . "Phone: +{$lead->customer_phone}\n"
             . "{$kind}: " . ($lead->interest ?: '—') . "\n"

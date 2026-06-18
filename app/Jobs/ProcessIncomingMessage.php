@@ -294,7 +294,7 @@ class ProcessIncomingMessage implements ShouldQueue
             $intent = $router->classify($tenant, $text);
             if ($intent === 'lead' || $intent === 'ticket') {
                 $name = (string) (CustomerProfile::where('phone', $from)->value('name') ?? '');
-                $res  = $leads->capture($tenant, $from, $name ?: null, $text, $intent);
+                $res  = $leads->capture($tenant, $from, $name ?: null, $text, $intent, 'whatsapp', $convo->id);
                 $reply = $res['reply'];
                 $gateway->sendText($tenant->whatsapp_instance, $from, $reply);
                 MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $reply);
