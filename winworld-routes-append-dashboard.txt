@@ -1,0 +1,7 @@
+# Append to routes/web.php (self-contained).
+
+/* ===== WINWORLD DASHBOARD ROUTES ===== */
+Route::middleware(['web', 'auth', \App\Http\Middleware\SetTenantFromUser::class])->group(function () {
+    Route::get('/panel/dashboard',  [\App\Http\Controllers\Panel\WinworldDashboardController::class, 'dashboardPage']);
+    Route::get('papi/ww-dashboard', [\App\Http\Controllers\Panel\WinworldDashboardController::class, 'data']);
+});
