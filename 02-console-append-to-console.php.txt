@@ -1,0 +1,4 @@
+# Append to routes/console.php (drives delay-risk + sales SLA-breach sweeps).
+# Needs the scheduler process running (the same one shopbot:process-scheduled uses).
+
+Schedule::command('ww:scan')->everyThirtyMinutes()->withoutOverlapping();
