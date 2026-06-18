@@ -6,6 +6,9 @@ use App\Models\WwCustomer;
 use App\Models\WwSalesEvent;
 use App\Models\WwSalesOrder;
 use App\Services\Winworld\SalesFlow;
+use App\Services\Winworld\CustomerMessages;
+use App\Models\Tenant;
+use App\Jobs\NotifyOwner;
 use Illuminate\Http\Request;
 
 /**
@@ -120,6 +123,7 @@ class WinworldSalesController extends Controller
         $o->applyStage($next);
         $o->save();
         $this->log($o, 'advance', null, $r, 'Advanced to ' . SalesFlow::label($next));
+        if ($ev = CustomerMessages::eventForStage($next)) $this->notifyCustomer($o, $ev);
         return response()->json(['ok' => true]);
     }
 
@@ -143,9 +147,24 @@ class WinworldSalesController extends Controller
         $action = (string) $r->input('action');
         $map = ['won' => 'won', 'lost' => 'lost', 'hold' => 'on_hold', 'reopen' => 'open'];
         if (isset($map[$action])) { $o->status = $map[$action]; $o->save(); }
+        if ($action === 'won') $this->notifyCustomer($o, 'delivered');
         elseif ($action !== 'remark') return response()->json(['ok' => false, 'error' => 'Bad action'], 422);
         $this->log($o, $action, null, $r, (string) $r->input('note', ''));
         return response()->json(['ok' => true, 'status' => $o->status]);
+    }
+
+    /** Send a customer-facing WhatsApp for a milestone, if enabled and a contact exists. */
+    private function notifyCustomer(WwSalesOrder $o, string $event): void
+    {
+        $phone = trim((string) $o->contact);
+        if ($phone === '') return;
+        $t = $o->tenant ?? Tenant::find($o->tenant_id);
+        if (! $t || ! (bool) $t->setting('ww_customer_msgs_enabled', true) || ! $t->whatsapp_instance) return;
+        $tpl = $t->setting('ww_cust_' . $event);
+        $text = CustomerMessages::render($event, [
+            'order_no' => $o->order_no, 'customer' => $o->customer_name, 'product' => $o->product_name,
+        ], $tpl);
+        if ($text) NotifyOwner::dispatch($t->id, $text, $phone);
     }
 
     private function log(WwSalesOrder $o, string $action, ?string $role, Request $r, string $note = ''): void
