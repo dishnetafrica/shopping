@@ -188,7 +188,28 @@ class PanelApiController extends Controller
             'inventoryMode' => (string) ($s['inventoryMode'] ?? 'shared'),
             'usdUgx'        => (float) ($s['usdUgx'] ?? 3750),
             'usdSsp'        => (float) ($s['usdSsp'] ?? 7000),
+            'features'      => $this->tenantFeatures($t),
         ]);
+    }
+
+    /**
+     * Per-tenant feature flags. A feature shows in a seller's panel only when enabled for
+     * them, so seller-specific tools (e.g. Daily Thali for food shops) don't appear for
+     * unrelated sellers (e.g. a packaging wholesaler). An explicit settings.feature_<key>
+     * overrides; otherwise we derive a sensible default (thali: on only if it's configured).
+     */
+    protected function tenantFeatures(Tenant $t): array
+    {
+        $s        = $t->settings ?? [];
+        $thaliCfg = $s['thali'] ?? [];
+        $thaliConfigured = ! empty($thaliCfg['enabled']) || ! empty($thaliCfg['days']);
+        $thali = array_key_exists('feature_thali', $s)
+            ? (bool) $s['feature_thali']
+            : $thaliConfigured;
+
+        return [
+            'thali' => $thali,
+        ];
     }
 
     public function branches()
@@ -461,6 +482,8 @@ class PanelApiController extends Controller
             'night_note'    => (string) ($cfg['night_note'] ?? ''),
             'night_days'    => (object) $outNight,
             'switch_hour'   => (int) ($cfg['switch_hour'] ?? 16),
+            'nextday_enabled' => (bool) ($cfg['nextday_enabled'] ?? false),
+            'nextday_hour'    => (int) ($cfg['nextday_hour'] ?? 21),
         ]]);
     }
 
@@ -487,6 +510,8 @@ class PanelApiController extends Controller
         }
         $sw = (int) $r->input('switch_hour', 16);
         if ($sw < 0 || $sw > 23) $sw = 16;
+        $ndh = (int) $r->input('nextday_hour', 21);
+        if ($ndh < 0 || $ndh > 23) $ndh = 21;
         $t->putSetting('thali', [
             'enabled' => $r->boolean('enabled'),
             'price'   => max(0, (int) $r->input('price', 0)),
@@ -498,6 +523,8 @@ class PanelApiController extends Controller
             'night_note'    => trim((string) $r->input('night_note', '')),
             'night_days'    => $cleanNight,
             'switch_hour'   => $sw,
+            'nextday_enabled' => $r->boolean('nextday_enabled'),
+            'nextday_hour'    => $ndh,
         ]);
         return response()->json(['ok' => true]);
     }

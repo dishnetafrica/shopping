@@ -284,7 +284,7 @@
       <a class="nav" data-page="customers"><span class="i">👥</span> Customers</a>
       <a class="nav" data-page="pos"><span class="i">🧾</span> POS</a>
       <a class="nav" data-page="category"><span class="i">🗂</span> Category</a>
-      <a class="nav" data-page="thali"><span class="i">🍽</span> Daily Thali</a>
+      <a class="nav" id="navThali" data-feature="thali" data-page="thali"><span class="i">🍽</span> Daily Thali</a>
       <a class="nav" data-page="products"><span class="i">📦</span> Products</a>
       <a class="nav" data-page="reports"><span class="i">📊</span> Reports</a>
       <a class="nav" data-page="riders"><span class="i">🛵</span> Riders</a>
@@ -534,6 +534,7 @@
               </div>
               <div class="note" style="margin-top:8px;color:#667085">Before this time the bot &amp; website show the day (lunch) menu; from this time they switch to dinner. Leave a day’s dinner box empty to keep using its lunch menu that day.</div>
             </div>
+            <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;margin:0 0 16px;flex-wrap:wrap"><input type="checkbox" id="thNextOn" style="width:18px;height:18px"> After <select id="thNextHour" style="border:1px solid var(--line);border-radius:9px;padding:7px 10px;font-weight:700"></select> show <b>tomorrow’s lunch</b> <span class="note" style="color:#667085">(today’s service is over — customers order ahead)</span></label>
             <div id="thDays" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px"></div>
             <input type="file" id="thPhotoFile" accept="image/*" style="display:none">
             <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="thSaveBtn" onclick="saveThali()">Save thali menu</button><button class="btn ghost" id="thDefBtn" onclick="thaliLoadDefault()">↻ Load default Kathiyawadi menu</button></div>
@@ -973,6 +974,7 @@ var token=localStorage.getItem('fs_token')||'', phone='', timer=null, filtersIni
 var CATALOGUE=[], ORDERS=[], RIDERS=[], RETURNS=[], CREDIT={}, RM_PHOTO='';
 var CUSTPROFILE={};
 var SETTINGS={storeName:'Family Shopper',storePhone:'+256 7xx xxx xxx',storeAddress:'Kampala, Uganda',storeEmail:'orders@familyshopper.ug',logo:'',slug:'',customDomain:'',onboarded:false,botMode:'auto'};
+var FEATURES={};
 var BRANCHES=[], BRANCH_FILTER='', INVENTORY_MODE='shared', MY_BRANCH=localStorage.getItem('fs_branch')||'', MY_ROLE=localStorage.getItem('fs_role')||'owner';
 function branchOrders(){return BRANCH_FILTER?ORDERS.filter(function(o){return String(o.branch||'')===BRANCH_FILTER;}):ORDERS;}
 function branchName(id){var b=BRANCHES.find(function(x){return String(x.id)===String(id);});return b?b.name:id;}
@@ -1831,11 +1833,15 @@ async function thaliInit(){
   var cfg={enabled:false,price:0,note:'',days:{},images:{}};
   try{var r=await fetch(EP.thali+'?token='+encodeURIComponent(token));var d=await r.json();if(d&&d.ok&&d.thali)cfg=d.thali;}catch(e){}
   TH_MODEL={enabled:!!cfg.enabled,price:cfg.price||0,note:cfg.note||'',days:{},images:{},
-    nightEnabled:!!cfg.night_enabled,nightPrice:cfg.night_price||0,nightNote:cfg.night_note||'',switchHour:(cfg.switch_hour!=null?cfg.switch_hour:16),nightDays:{}};
+    nightEnabled:!!cfg.night_enabled,nightPrice:cfg.night_price||0,nightNote:cfg.night_note||'',switchHour:(cfg.switch_hour!=null?cfg.switch_hour:16),nightDays:{},
+    nextEnabled:!!cfg.nextday_enabled,nextHour:(cfg.nextday_hour!=null?cfg.nextday_hour:21)};
   TH_DAYS.forEach(function(dd){var it=(cfg.days&&cfg.days[dd[0]])||[];TH_MODEL.days[dd[0]]=Array.isArray(it)?it.slice():[];TH_MODEL.images[dd[0]]=(cfg.images&&cfg.images[dd[0]])||'';
     var nit=(cfg.night_days&&cfg.night_days[dd[0]])||[];TH_MODEL.nightDays[dd[0]]=Array.isArray(nit)?nit.slice():[];});
   $('thEnabled').checked=TH_MODEL.enabled;$('thPrice').value=TH_MODEL.price||'';$('thNote').value=TH_MODEL.note||'';
-  var sw=$('thSwitch'); if(sw){sw.innerHTML='';for(var h=0;h<24;h++){var lbl=(h===0?'12 AM':h<12?h+' AM':h===12?'12 PM':(h-12)+' PM');var o=document.createElement('option');o.value=h;o.textContent=lbl+' ('+(h<10?'0'+h:h)+':00)';sw.appendChild(o);}sw.value=TH_MODEL.switchHour;}
+  function fillHours(el){if(!el)return;el.innerHTML='';for(var h=0;h<24;h++){var lbl=(h===0?'12 AM':h<12?h+' AM':h===12?'12 PM':(h-12)+' PM');var o=document.createElement('option');o.value=h;o.textContent=lbl+' ('+(h<10?'0'+h:h)+':00)';el.appendChild(o);}}
+  var sw=$('thSwitch'); if(sw){fillHours(sw);sw.value=TH_MODEL.switchHour;}
+  var nh=$('thNextHour'); if(nh){fillHours(nh);nh.value=TH_MODEL.nextHour;}
+  if($('thNextOn'))$('thNextOn').checked=TH_MODEL.nextEnabled;
   if($('thNightOn'))$('thNightOn').checked=TH_MODEL.nightEnabled;
   if($('thNightPrice'))$('thNightPrice').value=TH_MODEL.nightPrice||'';
   if($('thNightNote'))$('thNightNote').value=TH_MODEL.nightNote||'';
@@ -1906,9 +1912,10 @@ async function saveThali(){
   TH_DAYS.forEach(function(dd){thInput(dd[0]); if(TH_MODEL.nightEnabled)thnInput(dd[0]);});
   TH_MODEL.enabled=$('thEnabled').checked;TH_MODEL.price=parseInt($('thPrice').value||'0',10)||0;TH_MODEL.note=($('thNote').value||'').trim();
   TH_MODEL.nightEnabled=$('thNightOn')?$('thNightOn').checked:false;TH_MODEL.nightPrice=parseInt(($('thNightPrice')||{}).value||'0',10)||0;TH_MODEL.nightNote=(($('thNightNote')||{}).value||'').trim();TH_MODEL.switchHour=parseInt(($('thSwitch')||{}).value||'16',10);if(isNaN(TH_MODEL.switchHour))TH_MODEL.switchHour=16;
+  TH_MODEL.nextEnabled=$('thNextOn')?$('thNextOn').checked:false;TH_MODEL.nextHour=parseInt(($('thNextHour')||{}).value||'21',10);if(isNaN(TH_MODEL.nextHour))TH_MODEL.nextHour=21;
   var btn=$('thSaveBtn');if(btn){btn.disabled=true;btn.textContent='Saving\u2026';}
   try{
-    var r=await fetch(EP.thaliSave+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:TH_MODEL.enabled,price:TH_MODEL.price,note:TH_MODEL.note,days:TH_MODEL.days,images:TH_MODEL.images,night_enabled:TH_MODEL.nightEnabled,night_price:TH_MODEL.nightPrice,night_note:TH_MODEL.nightNote,night_days:TH_MODEL.nightDays,switch_hour:TH_MODEL.switchHour})});
+    var r=await fetch(EP.thaliSave+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:TH_MODEL.enabled,price:TH_MODEL.price,note:TH_MODEL.note,days:TH_MODEL.days,images:TH_MODEL.images,night_enabled:TH_MODEL.nightEnabled,night_price:TH_MODEL.nightPrice,night_note:TH_MODEL.nightNote,night_days:TH_MODEL.nightDays,switch_hour:TH_MODEL.switchHour,nextday_enabled:TH_MODEL.nextEnabled,nextday_hour:TH_MODEL.nextHour})});
     var d=await r.json();toast(d&&d.ok?'Thali menu saved':'Could not save');
   }catch(e){toast('Could not save');}
   if(btn){btn.disabled=false;btn.textContent='Save thali menu';}
@@ -2431,7 +2438,18 @@ function applySettings(s){
   if(s.freeOver!=null&&s.freeOver!=='')DELIV.freeOver=Number(s.freeOver)||0;
   if(s.inventoryMode==='shared'||s.inventoryMode==='branch')INVENTORY_MODE=s.inventoryMode;
   if(s.bot_mode!=null)SETTINGS.botMode=s.bot_mode;
+  if(s.features&&typeof s.features==='object'){FEATURES=s.features;applyFeatureGates();}
   applyStoreIdentity();renderBotSwitch();
+}
+// Hide panel features this seller doesn't have (e.g. Daily Thali for non-food shops).
+function applyFeatureGates(){
+  document.querySelectorAll('[data-feature]').forEach(function(el){
+    var on=FEATURES[el.getAttribute('data-feature')]!==false;
+    el.style.display = on ? '' : 'none';
+  });
+  // if we're sitting on a now-hidden page, fall back to the dashboard
+  var cur=document.querySelector('.side a.nav.on');
+  if(cur&&cur.getAttribute('data-feature')&&FEATURES[cur.getAttribute('data-feature')]===false){showPage('dash');}
 }
 async function loadSettings(){
   if(!token)return;

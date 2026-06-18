@@ -68,6 +68,15 @@ class TenantResource extends Resource
                 Forms\Components\TextInput::make('settings.usd_ssp')->numeric()->label('1 USD = SSP'),
                 Forms\Components\TextInput::make('settings.discount_pct')->numeric()->label('Discount %'),
                 Forms\Components\TextInput::make('settings.discount_amt')->numeric()->label('Discount amount'),
+                Forms\Components\Toggle::make('settings.feature_thali')
+                    ->label('Daily Thali (set-meal) feature')
+                    ->helperText('Show the Daily Thali tool in this seller\'s panel. Turn on for food / restaurant sellers only.')
+                    ->afterStateHydrated(function ($component, $state, $record) {
+                        if ($state === null && $record) {
+                            $cfg = data_get($record->settings, 'thali', []);
+                            $component->state(! empty($cfg['enabled']) || ! empty($cfg['days']));
+                        }
+                    }),
             ])->columns(3),
         ]);
     }
