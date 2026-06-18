@@ -185,3 +185,4 @@ Route::middleware('web')->group(function () use ($shopSlug) {
     Route::post('/{shop}/account/orders',  [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'myOrders'])->where('shop', $shopSlug);
     Route::post('/{shop}/account/profile', [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'saveProfile'])->where('shop', $shopSlug);
 });
+require __DIR__.'/winworld.php';
