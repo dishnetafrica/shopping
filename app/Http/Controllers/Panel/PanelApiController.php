@@ -326,6 +326,177 @@ class PanelApiController extends Controller
         ]);
     }
 
+    /** CRM lead list (manual + WhatsApp), filterable. Tickets excluded — that's Build 87. */
+    public function leadsList(Request $r)
+    {
+        $t = $r->user()->tenant;
+        $q = \App\Models\Lead::query()->where('intent', 'lead');
+
+        if ($s = $r->query('status'))   $q->where('status', $s);
+        if ($src = $r->query('source')) $q->where('source', $src);
+        if ($term = trim((string) $r->query('q', ''))) {
+            $like = '%' . $term . '%';
+            $q->where(function ($w) use ($like) {
+                $w->where('customer_name', 'like', $like)
+                  ->orWhere('customer_phone', 'like', $like)
+                  ->orWhere('interest', 'like', $like)
+                  ->orWhere('company', 'like', $like);
+            });
+        }
+
+        $rows   = $q->latest('id')->limit(300)->get();
+        $names  = collect($t->leadRecipients())->pluck('name', 'phone');
+        $scorer = new \App\Services\Bot\LeadScorer();
+
+        $leads = $rows->map(function ($l) use ($names, $scorer) {
+            return [
+                'id'        => $l->id,
+                'created'   => optional($l->created_at)->toIso8601String(),
+                'name'      => $l->customer_name,
+                'phone'     => $l->customer_phone,
+                'company'   => $l->company,
+                'interest'  => $l->interest,
+                'source'    => $l->source,
+                'status'    => $l->status,
+                'assigned'  => $l->assigned_to ? (($names[$l->assigned_to] ?? '') ?: $l->assigned_to) : '',
+                'assigned_to' => $l->assigned_to,
+                'score'     => (int) $l->lead_score,
+                'band'      => $scorer->band((int) $l->lead_score),
+                'notes'     => $l->notes,
+                'conversation_id' => $l->conversation_id,
+            ];
+        });
+
+        return response()->json(['ok' => true, 'count' => $leads->count(), 'leads' => $leads]);
+    }
+
+    /** Dropdown data for the lead form. */
+    public function leadOptions(Request $r)
+    {
+        $t = $r->user()->tenant;
+        return response()->json([
+            'ok'         => true,
+            'recipients' => array_values($t->leadRecipients()),
+            'sources'    => ['whatsapp', 'website', 'facebook', 'instagram', 'referral', 'walk_in', 'phone_call', 'email', 'manual'],
+            'statuses'   => ['new', 'assigned', 'contacted', 'qualified', 'won', 'lost'],
+        ]);
+    }
+
+    /** Create or update a lead from the panel (query-string write, matching the panel convention). */
+    public function leadSave(Request $r)
+    {
+        $t       = $r->user()->tenant;
+        $id      = (int) $r->query('id', 0);
+        $name    = trim((string) $r->query('name', ''));
+        $phone   = preg_replace('/[^0-9]/', '', (string) $r->query('phone', ''));
+        if ($phone === '') return response()->json(['ok' => false, 'error' => 'Phone is required'], 422);
+
+        $company  = trim((string) $r->query('company', ''));
+        $interest = trim((string) $r->query('interest', ''));
+        $source   = strtolower(trim((string) $r->query('source', 'manual'))) ?: 'manual';
+        $assigned = preg_replace('/[^0-9]/', '', (string) $r->query('assigned_to', ''));
+        $notes    = trim((string) $r->query('notes', ''));
+        $status   = strtolower(trim((string) $r->query('status', '')));
+        $scoreRaw = $r->query('lead_score', null);
+        $hasScore = ($scoreRaw !== null && $scoreRaw !== '');
+
+        if ($id) {
+            $lead = \App\Models\Lead::find($id);
+            if (! $lead) return response()->json(['ok' => false, 'error' => 'Lead not found'], 404);
+
+            $prevAssigned = $lead->assigned_to;
+            $lead->customer_name  = $name ?: $lead->customer_name;
+            $lead->customer_phone = $phone;
+            $lead->company        = $company ?: null;
+            $lead->interest       = $interest ?: $lead->interest;
+            $lead->source         = $source ?: $lead->source;
+            $lead->notes          = $notes ?: null;
+            if ($status)   $lead->status = $status;
+            if ($hasScore) $lead->lead_score = max(0, min(100, (int) $scoreRaw));
+            if ($assigned !== '') {
+                $lead->assigned_to = $assigned;
+                if ($lead->status === 'new') $lead->status = 'assigned';
+                if (! $lead->claimed_at)     $lead->claimed_at = now();
+            }
+            $lead->save();
+
+            \App\Support\BotTrace::log($t->id, 'panel', $lead->customer_phone, 'lead_updated', '#' . $lead->id);
+            if ($assigned !== '' && $assigned !== $prevAssigned) $this->notifyAssignee($t, $lead);
+
+            return response()->json(['ok' => true, 'id' => $lead->id, 'updated' => true]);
+        }
+
+        $score = $hasScore
+            ? max(0, min(100, (int) $scoreRaw))
+            : (new \App\Services\Bot\LeadScorer())->score('lead', $interest ?: $name);
+
+        $lead = \App\Models\Lead::create([
+            'customer_phone' => $phone,
+            'customer_name'  => $name ?: null,
+            'company'        => $company ?: null,
+            'intent'         => 'lead',
+            'interest'       => $interest ?: '(manual lead)',
+            'dedupe_key'     => \App\Services\Bot\LeadDedupe::key($phone, 'lead', $interest),
+            'lead_score'     => $score,
+            'source'         => $source ?: 'manual',
+            'status'         => $assigned !== '' ? 'assigned' : 'new',
+            'assigned_to'    => $assigned ?: null,
+            'claimed_at'     => $assigned !== '' ? now() : null,
+            'notes'          => $notes ?: null,
+            'message'        => $notes ?: null,
+        ]);
+
+        \App\Support\BotTrace::log($t->id, 'panel', $phone, 'lead_created', 'manual #' . $lead->id);
+        if ($assigned !== '') $this->notifyAssignee($t, $lead);
+
+        return response()->json(['ok' => true, 'id' => $lead->id, 'created' => true]);
+    }
+
+    /** Quick row actions: won | lost | contacted | qualified | reopen | assign. */
+    public function leadAction(Request $r)
+    {
+        $t    = $r->user()->tenant;
+        $lead = \App\Models\Lead::find((int) $r->query('id', 0));
+        if (! $lead) return response()->json(['ok' => false, 'error' => 'Lead not found'], 404);
+
+        $a = strtolower((string) $r->query('action', ''));
+
+        if ($a === 'assign') {
+            $assigned = preg_replace('/[^0-9]/', '', (string) $r->query('assigned_to', ''));
+            if ($assigned === '') {
+                $lead->assigned_to = null;
+            } else {
+                $lead->assigned_to = $assigned;
+                if ($lead->status === 'new') $lead->status = 'assigned';
+                if (! $lead->claimed_at)     $lead->claimed_at = now();
+            }
+            $lead->save();
+            if ($assigned !== '') $this->notifyAssignee($t, $lead);
+            \App\Support\BotTrace::log($t->id, 'panel', $lead->customer_phone, 'lead_assigned', '#' . $lead->id);
+            return response()->json(['ok' => true]);
+        }
+
+        $map = ['won' => 'won', 'lost' => 'lost', 'contacted' => 'contacted', 'qualified' => 'qualified', 'reopen' => 'new'];
+        if (! isset($map[$a])) return response()->json(['ok' => false, 'error' => 'Unknown action'], 422);
+
+        $lead->status = $map[$a];
+        $lead->save();
+        \App\Support\BotTrace::log($t->id, 'panel', $lead->customer_phone, 'lead_' . $a, '#' . $lead->id);
+        return response()->json(['ok' => true]);
+    }
+
+    /** Notify the assigned recipient over WhatsApp that a lead is theirs. */
+    private function notifyAssignee($t, $lead): void
+    {
+        try {
+            $msg = "🎯 Lead assigned to you\n"
+                . ($lead->customer_name ?: 'Lead') . " · +" . $lead->customer_phone . "\n"
+                . ($lead->interest ? $lead->interest . "\n" : '')
+                . "Source: " . $lead->source;
+            \App\Jobs\NotifyOwner::dispatch($t->id, $msg, $lead->assigned_to);
+        } catch (\Throwable $e) { /* non-fatal */ }
+    }
+
     public function branches()
     {
         return response()->json(['branches' => $this->branchesList()]);

@@ -35,6 +35,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/scheduled', [SellerPanelController::class, 'scheduled']);
     Route::get('/panel/marketing', [SellerPanelController::class, 'marketing']);
     Route::get('/panel/diagnostics', [SellerPanelController::class, 'diagnostics']);
+    Route::get('/panel/leads', [SellerPanelController::class, 'leads']);
     Route::get('/panel/setup', [SellerPanelController::class, 'setup']);
     Route::get('/panel/billing', [\App\Http\Controllers\Billing\BillingController::class, 'page']);
 
@@ -75,6 +76,12 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('image-stats', [PanelApiController::class, 'imageStats']);
         Route::get('operations',  [PanelApiController::class, 'operations']);
         Route::get('health',       [PanelApiController::class, 'health']);
+
+        // CRM — manual lead management (Build 86.5)
+        Route::get('leads',        [PanelApiController::class, 'leadsList']);
+        Route::get('lead-options', [PanelApiController::class, 'leadOptions']);
+        Route::get('lead-save',    [PanelApiController::class, 'leadSave']);
+        Route::get('lead-action',  [PanelApiController::class, 'leadAction']);
         Route::get('branches',   [PanelApiController::class, 'branches']);
         Route::get('customers',  [PanelApiController::class, 'customers']);
         Route::get('contacts-import', [PanelApiController::class, 'importContacts']);

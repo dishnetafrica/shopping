@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leads · CRM</title>
+<style>
+  :root{ --ink:#1d2433; --mut:#667085; --line:#e6e9f0; --bg:#f6f7fb; --red:#B4232A; --green:#15803D; --amber:#C2700A; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  .top{display:flex;align-items:center;gap:12px;padding:14px 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  .top h1{font-size:18px;margin:0;font-weight:800;flex:1}
+  .bk{ text-decoration:none;color:var(--mut);font-size:22px;line-height:1 }
+  .btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 13px;font-weight:700;font-size:13px;cursor:pointer;color:var(--ink)}
+  .btn.pri{background:var(--red);border-color:var(--red);color:#fff}
+  .wrap{max-width:1180px;margin:0 auto;padding:18px}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--mut)}
+  .chip.on{background:var(--ink);border-color:var(--ink);color:#fff}
+  .search{flex:1;min-width:180px;border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:14px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#8a93a3;background:#fafbfd}
+  td.wrap2{white-space:normal;max-width:230px}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:800}
+  .s-new{background:#eef2ff;color:#3743a4}.s-assigned{background:#e7f0ff;color:#1d4ed8}.s-contacted{background:#fff7e6;color:#b45309}
+  .s-qualified{background:#ecfdf3;color:#067647}.s-won{background:#dcfce7;color:#15803D}.s-lost{background:#fee2e2;color:#b91c1c}
+  .band{font-weight:800}.b-Hot{color:var(--red)}.b-Warm{color:var(--amber)}.b-Cold{color:#8a93a3}
+  .mini{border:1px solid var(--line);border-radius:7px;padding:4px 6px;font-size:12px;background:#fff}
+  .ico{ text-decoration:none;font-size:15px;margin:0 3px;cursor:pointer }
+  .empty{padding:40px;text-align:center;color:var(--mut)}
+  .note{color:var(--mut);font-size:12px}
+  /* modal */
+  .ov{position:fixed;inset:0;background:rgba(20,24,33,.45);display:none;align-items:center;justify-content:center;z-index:30;padding:16px}
+  .ov.show{display:flex}
+  .modal{background:#fff;border-radius:16px;width:100%;max-width:520px;max-height:92vh;overflow:auto;padding:20px}
+  .modal h2{margin:0 0 14px;font-size:17px}
+  .fld{margin-bottom:11px}
+  .fld label{display:block;font-size:12px;font-weight:700;color:var(--mut);margin-bottom:4px}
+  .fld input,.fld select,.fld textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:14px;font-family:inherit}
+  .fld textarea{min-height:74px;resize:vertical}
+  .two{display:flex;gap:10px}.two>*{flex:1}
+  .modf{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+  .err{color:var(--red);font-size:12.5px;margin-right:auto;align-self:center}
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="bk" href="/panel">‹</a>
+  <h1>🎯 Leads</h1>
+  <button class="btn pri" onclick="openForm()">+ New lead</button>
+</div>
+
+<div class="wrap">
+  <div class="note" style="margin-bottom:12px">Manual + WhatsApp leads in one place — create from walk-ins, calls and referrals, assign to your team, and mark won/lost. Tickets &amp; activity timeline arrive in Build 87.</div>
+
+  <div class="bar">
+    <span class="chip on" data-st="" onclick="setStatus(this,'')">All</span>
+    <span class="chip" data-st="new" onclick="setStatus(this,'new')">New</span>
+    <span class="chip" data-st="assigned" onclick="setStatus(this,'assigned')">Assigned</span>
+    <span class="chip" data-st="contacted" onclick="setStatus(this,'contacted')">Contacted</span>
+    <span class="chip" data-st="qualified" onclick="setStatus(this,'qualified')">Qualified</span>
+    <span class="chip" data-st="won" onclick="setStatus(this,'won')">Won</span>
+    <span class="chip" data-st="lost" onclick="setStatus(this,'lost')">Lost</span>
+    <input class="search" id="q" placeholder="Search name, phone, company, interest…" oninput="debounced()">
+  </div>
+
+  <div class="card"><div id="list"><div class="empty">Loading…</div></div></div>
+</div>
+
+<div class="ov" id="ov">
+  <div class="modal">
+    <h2 id="mTitle">New lead</h2>
+    <input type="hidden" id="fId">
+    <div class="two">
+      <div class="fld"><label>Name</label><input id="fName" placeholder="John Doe"></div>
+      <div class="fld"><label>Phone *</label><input id="fPhone" placeholder="2119…"></div>
+    </div>
+    <div class="fld"><label>Company</label><input id="fCompany" placeholder="ABC Logistics"></div>
+    <div class="fld"><label>Interest</label><input id="fInterest" placeholder="Dedicated Internet 50 Mbps"></div>
+    <div class="two">
+      <div class="fld"><label>Source</label><select id="fSource"></select></div>
+      <div class="fld"><label>Assigned to</label><select id="fAssigned"></select></div>
+    </div>
+    <div class="two">
+      <div class="fld"><label>Status</label><select id="fStatus"></select></div>
+      <div class="fld"><label>Lead score (0–100)</label><input id="fScore" type="number" min="0" max="100" placeholder="auto"></div>
+    </div>
+    <div class="fld"><label>Notes</label><textarea id="fNotes" placeholder="Needs quotation by Friday. 50 users. Budget $500/mo."></textarea></div>
+    <div class="modf">
+      <span class="err" id="fErr"></span>
+      <button class="btn" onclick="closeForm()">Cancel</button>
+      <button class="btn pri" id="fSave" onclick="saveForm()">Save lead</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  var $=function(i){return document.getElementById(i);};
+  var OPT={recipients:[],sources:[],statuses:[]};
+  var FILTER='';
+  var SRCLABEL={whatsapp:'WhatsApp',website:'Website',facebook:'Facebook',instagram:'Instagram',referral:'Referral',walk_in:'Walk-in',phone_call:'Phone Call',email:'Email',manual:'Manual'};
+  function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
+  function srcLabel(s){return SRCLABEL[s]||(s||'—');}
+  function tdate(s){if(!s)return '';try{var d=new Date(s);return d.toLocaleDateString([], {day:'2-digit',month:'short'})+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
+
+  async function loadOptions(){
+    try{var r=await fetch('/papi/lead-options',{cache:'no-store'});var d=await r.json();if(d&&d.ok){OPT=d;}}catch(e){}
+  }
+  function setStatus(el,st){FILTER=st;document.querySelectorAll('.chip').forEach(function(c){c.classList.toggle('on',c.dataset.st===st);});load();}
+  var dt;function debounced(){clearTimeout(dt);dt=setTimeout(load,250);}
+
+  async function load(){
+    var l=$('list');
+    try{
+      var u='/papi/leads?status='+encodeURIComponent(FILTER)+'&q='+encodeURIComponent($('q').value||'');
+      var r=await fetch(u,{cache:'no-store'});var d=await r.json();
+      if(!d||!d.ok){l.innerHTML='<div class="empty">Could not load leads.</div>';return;}
+      if(!d.leads.length){l.innerHTML='<div class="empty">No leads'+(FILTER?(' · '+FILTER):'')+' yet. Click <b>+ New lead</b> to add one.</div>';return;}
+      var head='<table><thead><tr><th>#</th><th>Created</th><th>Name</th><th>Phone</th><th>Company</th><th>Interest</th><th>Source</th><th>Score</th><th>Status</th><th>Assigned</th><th>Actions</th></tr></thead><tbody>';
+      var body=d.leads.map(rowHtml).join('');
+      l.innerHTML=head+body+'</tbody></table>';
+    }catch(e){l.innerHTML='<div class="empty">Could not load leads.</div>';}
+  }
+
+  function statusSel(id,cur){
+    var opts=['new','contacted','qualified','won','lost'].map(function(s){
+      var label=s==='new'?'New':s.charAt(0).toUpperCase()+s.slice(1);
+      return '<option value="'+s+'"'+(s===cur?' selected':'')+'>'+label+'</option>';
+    }).join('');
+    return '<select class="mini" onchange="quickStatus('+id+',this.value)">'+opts+'</select>';
+  }
+  function assignSel(id,cur){
+    var opts='<option value="">— Unassigned —</option>'+OPT.recipients.map(function(rp){
+      var nm=rp.name?rp.name:('+'+rp.phone);
+      return '<option value="'+rp.phone+'"'+(rp.phone===cur?' selected':'')+'>'+esc(nm)+' ('+esc(rp.role)+')</option>';
+    }).join('');
+    return '<select class="mini" onchange="quickAssign('+id+',this.value)">'+opts+'</select>';
+  }
+  function rowHtml(L){
+    var stPill='<span class="pill s-'+esc(L.status)+'">'+esc(L.status)+'</span>';
+    return '<tr>'+
+      '<td>'+L.id+'</td>'+
+      '<td class="note">'+tdate(L.created)+'</td>'+
+      '<td><b>'+esc(L.name||'—')+'</b></td>'+
+      '<td>+'+esc(L.phone)+'</td>'+
+      '<td>'+esc(L.company||'—')+'</td>'+
+      '<td class="wrap2">'+esc(L.interest||'—')+(L.notes?'<div class="note" style="margin-top:2px">'+esc(L.notes)+'</div>':'')+'</td>'+
+      '<td>'+esc(srcLabel(L.source))+'</td>'+
+      '<td class="band b-'+esc(L.band)+'">'+L.score+'<div class="note" style="font-weight:600">'+esc(L.band)+'</div></td>'+
+      '<td>'+statusSel(L.id,L.status)+'<div style="margin-top:2px">'+stPill+'</div></td>'+
+      '<td>'+assignSel(L.id,L.assigned_to||'')+'</td>'+
+      '<td style="white-space:nowrap">'+
+        '<a class="ico" title="Edit" onclick=\'editLead('+JSON.stringify(L).replace(/'/g,"&#39;")+')\'>✎</a>'+
+        '<a class="ico" title="Call" href="tel:+'+esc(L.phone)+'">📞</a>'+
+        '<a class="ico" title="WhatsApp" target="_blank" href="https://wa.me/'+esc(L.phone)+'">💬</a>'+
+      '</td>'+
+    '</tr>';
+  }
+
+  async function quickStatus(id,val){ await fetch('/papi/lead-action?id='+id+'&action='+(val==='new'?'reopen':val),{cache:'no-store'}); load(); }
+  async function quickAssign(id,phone){ await fetch('/papi/lead-action?id='+id+'&action=assign&assigned_to='+encodeURIComponent(phone),{cache:'no-store'}); load(); }
+
+  function fillSelect(sel,vals,cur,labeler){
+    sel.innerHTML=vals.map(function(v){var lab=labeler?labeler(v):v;return '<option value="'+v+'"'+(v===cur?' selected':'')+'>'+esc(lab)+'</option>';}).join('');
+  }
+  function openForm(){
+    $('mTitle').textContent='New lead';$('fErr').textContent='';
+    $('fId').value='';$('fName').value='';$('fPhone').value='';$('fCompany').value='';$('fInterest').value='';
+    $('fScore').value='';$('fNotes').value='';
+    fillSelect($('fSource'),OPT.sources.length?OPT.sources:['manual'],'manual',srcLabel);
+    var aopts=[''].concat(OPT.recipients.map(function(r){return r.phone;}));
+    $('fAssigned').innerHTML='<option value="">— Unassigned —</option>'+OPT.recipients.map(function(r){return '<option value="'+r.phone+'">'+esc(r.name?r.name:('+'+r.phone))+' ('+esc(r.role)+')</option>';}).join('');
+    fillSelect($('fStatus'),OPT.statuses.length?OPT.statuses:['new'],'new');
+    $('ov').classList.add('show');
+  }
+  function editLead(L){
+    openForm();
+    $('mTitle').textContent='Lead #'+L.id;
+    $('fId').value=L.id;$('fName').value=L.name||'';$('fPhone').value=L.phone||'';$('fCompany').value=L.company||'';
+    $('fInterest').value=L.interest||'';$('fScore').value=L.score||'';$('fNotes').value=L.notes||'';
+    if(L.source)$('fSource').value=L.source;
+    if(L.assigned_to)$('fAssigned').value=L.assigned_to;
+    if(L.status)$('fStatus').value=L.status;
+  }
+  function closeForm(){$('ov').classList.remove('show');}
+
+  async function saveForm(){
+    var phone=($('fPhone').value||'').replace(/[^0-9]/g,'');
+    if(!phone){$('fErr').textContent='Phone is required';return;}
+    $('fErr').textContent='';$('fSave').disabled=true;
+    var p=new URLSearchParams();
+    if($('fId').value)p.set('id',$('fId').value);
+    p.set('name',$('fName').value||'');p.set('phone',phone);p.set('company',$('fCompany').value||'');
+    p.set('interest',$('fInterest').value||'');p.set('source',$('fSource').value||'manual');
+    p.set('assigned_to',$('fAssigned').value||'');p.set('status',$('fStatus').value||'');
+    if($('fScore').value!=='')p.set('lead_score',$('fScore').value);
+    p.set('notes',$('fNotes').value||'');
+    try{
+      var r=await fetch('/papi/lead-save?'+p.toString(),{cache:'no-store'});var d=await r.json();
+      if(!d||!d.ok){$('fErr').textContent=(d&&d.error)||'Could not save';$('fSave').disabled=false;return;}
+      closeForm();load();
+    }catch(e){$('fErr').textContent='Network error';}
+    $('fSave').disabled=false;
+  }
+
+  $('ov').addEventListener('click',function(e){if(e.target===this)closeForm();});
+  (async function(){await loadOptions();load();})();
+</script>
+</body>
+</html>
