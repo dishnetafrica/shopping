@@ -107,6 +107,9 @@ class WinworldApiController extends Controller
             ? (float) $planning->required_hours : (float) $entry->actual_hours;
         $oee = $entry->oee($plannedHours);
 
+        // fire loss-prevention alerts (downtime / QC reject / slow / delay risk)
+        try { app(\App\Services\Winworld\WinworldNotifier::class)->fromEntry($indent, $planning, $entry); } catch (\Throwable $e) {}
+
         return response()->json([
             'ok'    => true,
             'entry' => [

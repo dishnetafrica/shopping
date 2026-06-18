@@ -63,6 +63,7 @@
       <div class="fld"><label>Sales person</label><input id="sales_person"></div>
       <div class="fld"><label>Sample available</label><select id="sample_available"><option value="0">No</option><option value="1">Yes</option></select></div>
       <div class="fld"><label>Date</label><input id="date_of_indent" type="date"></div>
+      <div class="fld"><label>Required date</label><input id="required_date" type="date"></div>
     </div>
     <div class="fld" style="margin-top:10px"><label>SDH remarks</label><input id="sdh_remarks" placeholder="e.g. Same as last order"></div>
   </div>
@@ -201,7 +202,7 @@ function collectBlends(){
   }).filter(function(b){return b.material_name && (b.pct_a||b.pct_b||b.pct_c);});
 }
 function fill(d){
-  ["product_name","order_qty_pcs","mixing_qty","sales_person","sdh_remarks","pdh_remarks","date_of_indent",
+  ["product_name","order_qty_pcs","mixing_qty","sales_person","sdh_remarks","pdh_remarks","date_of_indent","required_date",
    "ext_width","ext_gusset","ext_gauge","ext_film_colour","ext_weight_per_roll","ext_type_of_roll",
    "prn_specification","prn_no_colours","prn_colours","prn_single_double","prn_direction","prn_gap_top","prn_gap_bottom",
    "cut_type","cut_bag_size","cut_sealing","cut_bottom_gusset","cut_handle_punch","cut_handle_position","cut_hole_punch","cut_hole_positions"]
@@ -239,7 +240,7 @@ function save(){
     customer_id:v("customer_id")||null,customer_name:(function(){var s=g("customer_id");return s.options[s.selectedIndex]?s.options[s.selectedIndex].text:"";})(),
     item_id:v("item_id")||null,product_name:v("product_name"),order_qty_pcs:v("order_qty_pcs"),mixing_qty:v("mixing_qty"),
     priority:v("priority"),sample_available:v("sample_available")==="1",sales_person:v("sales_person"),
-    sdh_remarks:v("sdh_remarks"),pdh_remarks:v("pdh_remarks"),date_of_indent:v("date_of_indent"),
+    sdh_remarks:v("sdh_remarks"),pdh_remarks:v("pdh_remarks"),date_of_indent:v("date_of_indent"),required_date:v("required_date"),
     needs_blending:chk("needs_blending"),needs_extrusion:chk("needs_extrusion"),needs_printing:chk("needs_printing"),needs_cutting:chk("needs_cutting"),
     blends:collectBlends()};
   ["ext_width","ext_gusset","ext_gauge","ext_film_colour","ext_weight_per_roll","ext_type_of_roll",

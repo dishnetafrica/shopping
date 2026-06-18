@@ -1,0 +1,4 @@
+# Append to routes/console.php to run the delay-risk sweep every 30 min
+# (needs the existing scheduler process — same one shopbot:process-scheduled uses):
+
+Schedule::command('ww:scan')->everyThirtyMinutes()->withoutOverlapping();

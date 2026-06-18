@@ -93,7 +93,7 @@ class WinworldIndentController extends Controller
             $indentNo = IndentBuilder::nextIndentNo((int)WwIndent::count() + 1, new \DateTimeImmutable($date));
         }
 
-        $fields = ['indent_no'=>$indentNo,'doc_ref'=>WwIndent::DOC_REF,'date_of_indent'=>$date,
+        $fields = ['indent_no'=>$indentNo,'doc_ref'=>WwIndent::DOC_REF,'date_of_indent'=>$date,'required_date'=>$in['required_date'] ?? null,
             'customer_id'=>$in['customer_id'] ?? null,'customer_name'=>$in['customer_name'] ?? '',
             'item_id'=>$in['item_id'] ?? null,'product_name'=>$in['product_name'] ?? '',
             'sales_person'=>$in['sales_person'] ?? null,'order_qty_pcs'=>$qty,

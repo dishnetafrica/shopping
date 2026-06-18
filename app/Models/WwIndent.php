@@ -15,7 +15,7 @@ class WwIndent extends Model
 
     protected $fillable = [
         'tenant_id','indent_no','doc_ref','customer_id','customer_name','item_id','product_name',
-        'sales_person','date_of_indent','order_qty_pcs','mixing_qty','priority','sample_available',
+        'sales_person','date_of_indent','required_date','delay_alerted_at','order_qty_pcs','mixing_qty','priority','sample_available',
         'sdh_remarks','pdh_remarks','status','order_kg','planned_completion','delay_days',
         'needs_blending','needs_extrusion','needs_printing','needs_cutting',
         'ext_width','ext_gusset','ext_gauge','ext_film_colour','ext_weight_per_roll','ext_type_of_roll','ext_sample',
@@ -24,7 +24,7 @@ class WwIndent extends Model
     ];
 
     protected $casts = [
-        'date_of_indent'=>'date','order_qty_pcs'=>'integer','mixing_qty'=>'decimal:3','order_kg'=>'decimal:3',
+        'date_of_indent'=>'date','required_date'=>'date','delay_alerted_at'=>'datetime','order_qty_pcs'=>'integer','mixing_qty'=>'decimal:3','order_kg'=>'decimal:3',
         'planned_completion'=>'datetime','delay_days'=>'integer','sample_available'=>'boolean',
         'needs_blending'=>'boolean','needs_extrusion'=>'boolean','needs_printing'=>'boolean','needs_cutting'=>'boolean',
         'ext_sample'=>'boolean','prn_sample'=>'boolean','cut_sample'=>'boolean',
