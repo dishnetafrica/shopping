@@ -40,7 +40,7 @@ Human
 | 86.3 | Operations dashboard | Today's Sales / Support / Shopping numbers on the seller dashboard. No new tables. |
 | 86.4 | Health diagnostics | System Health strip on `/panel/diagnostics`: WhatsApp, Redis, OpenAI, Queue, Last webhook, Last processed. |
 | 86.5 | Manual Lead CRM | `/panel/leads`: create/edit/list/assign/won-lost, selectable source, **5 pipeline KPI cards** (New · Assigned · Hot · ⚠ Overdue · Won-30d), **quick-view filters** (Unassigned / Overdue / Hot), **next follow-up + last contacted** (additive columns). Phone/referral/walk-in leads now visible alongside WhatsApp. |
-| 86.6 | Lead Import | Bulk import (CSV or pasted numbers) with **phone normalisation** (+cc / 00 / local-0 / bare national), **dedupe** (skip / update / create), **tags**, **source tracking**, **marketing_opt_in**, and a **dry-run preview**. Import only — sends nothing. Additive columns `tag`, `marketing_opt_in`. |
+| 86.6 | Lead Import | Bulk import (CSV or pasted numbers) with **phone normalisation** (+cc / 00 / local-0 / bare national), **dedupe** (skip / update / create), **tags**, **source tracking**, **marketing_opt_in**, **dry-run preview**, plus **Source / Tag / Opt-in filters** and an **audience-readiness line** (total · opt-in · tagged) on `/panel/leads`. Import only — sends nothing. Additive columns `tag`, `marketing_opt_in`. |
 
 ---
 
@@ -179,7 +179,10 @@ Build 87 → Ticket Engine     (shared Assignable services; P1/P2/P3 priority)
 Build 88 → Human Inbox        (Take Over / Release / Assign / Resolve / Mark Won inline; enables "My Leads")
 Build 89 → Voice Notes        (Whisper → Intent Router → Shopping/Lead/Ticket)
 Build 90 → Activities & Timeline (lead_activities table; logged calls/visits/quotes/meetings)
+Build 91 → Advanced CRM Reports (conversion by source/tag, response & resolution times, rep performance — read-only, freeze-safe candidate)
 Build 92 → WhatsApp Campaigns (audiences by tag/status, delivery tracking, unsubscribe — must message existing CRM leads only, no cold blasts)
 ```
+
+**Optional freeze-safe patch (build only if asked): 86.6.1 Import History** — a read-only audit table (date, imported by, rows, created, skipped, updated). No new workflow.
 
 The architecture is mature. The next improvements should be driven by what customers and sales agents actually do — not further design speculation.

@@ -86,6 +86,13 @@
     <input class="search" id="q" placeholder="Search name, phone, company, interest…" oninput="debounced()">
   </div>
 
+  <div class="bar" style="margin-top:-4px">
+    <select class="mini" id="fSource2" onchange="setSrc(this.value)" style="padding:7px 10px"><option value="">All sources</option></select>
+    <select class="mini" id="fTag2" onchange="setTag(this.value)" style="padding:7px 10px"><option value="">All tags</option></select>
+    <select class="mini" id="fOptin2" onchange="setOptin(this.value)" style="padding:7px 10px"><option value="">Opt-in: any</option><option value="1">Opt-in: yes</option><option value="0">Opt-in: no</option></select>
+    <span class="note" id="readiness" style="margin-left:auto;align-self:center"></span>
+  </div>
+
   <div class="card"><div id="list"><div class="empty">Loading…</div></div></div>
 </div>
 
@@ -165,6 +172,10 @@ John,+211934567890,Referral,Starlink"></textarea>
   var OPT={recipients:[],sources:[],statuses:[]};
   var FILTER='';  // status
   var VIEW='';    // unassigned | overdue | hot
+  var SRC='',TAG='',OPTIN='';
+  function setSrc(v){SRC=v;load();}
+  function setTag(v){TAG=v;load();}
+  function setOptin(v){OPTIN=v;load();}
   var SRCLABEL={whatsapp:'WhatsApp',website:'Website',facebook:'Facebook',instagram:'Instagram',referral:'Referral',walk_in:'Walk-in',phone_call:'Phone Call',email:'Email',manual:'Manual'};
   function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
   function srcLabel(s){return SRCLABEL[s]||(s||'—');}
@@ -172,6 +183,10 @@ John,+211934567890,Referral,Starlink"></textarea>
 
   async function loadOptions(){
     try{var r=await fetch('/papi/lead-options',{cache:'no-store'});var d=await r.json();if(d&&d.ok){OPT=d;}}catch(e){}
+  }
+  function fillFacet(sel,vals,cur,allLabel,labeler){
+    var cv=cur||'';
+    sel.innerHTML='<option value="">'+allLabel+'</option>'+vals.map(function(v){var lab=labeler?labeler(v):v;return '<option value="'+esc(v)+'"'+(v===cv?' selected':'')+'>'+esc(lab)+'</option>';}).join('');
   }
   function setView(view,status){
     VIEW=view||''; FILTER=status||'';
@@ -188,10 +203,13 @@ John,+211934567890,Referral,Starlink"></textarea>
   async function load(){
     var l=$('list');
     try{
-      var u='/papi/leads?status='+encodeURIComponent(FILTER)+'&view='+encodeURIComponent(VIEW)+'&q='+encodeURIComponent($('q').value||'');
+      var u='/papi/leads?status='+encodeURIComponent(FILTER)+'&view='+encodeURIComponent(VIEW)+'&source='+encodeURIComponent(SRC)+'&tag='+encodeURIComponent(TAG)+'&optin='+encodeURIComponent(OPTIN)+'&q='+encodeURIComponent($('q').value||'');
       var r=await fetch(u,{cache:'no-store'});var d=await r.json();
       if(!d||!d.ok){l.innerHTML='<div class="empty">Could not load leads.</div>';return;}
-      if(d.stats){ $('kNew').textContent=d.stats.new||0; $('kAssigned').textContent=d.stats.assigned||0; $('kHot').textContent=d.stats.hot||0; $('kOver').textContent=d.stats.overdue||0; $('kWon').textContent=d.stats.won||0; }
+      if(d.stats){ $('kNew').textContent=d.stats.new||0; $('kAssigned').textContent=d.stats.assigned||0; $('kHot').textContent=d.stats.hot||0; $('kOver').textContent=d.stats.overdue||0; $('kWon').textContent=d.stats.won||0;
+        $('readiness').innerHTML='Audience readiness · <b>'+(d.stats.total||0)+'</b> leads · <b>'+(d.stats.optin||0)+'</b> opt-in · <b>'+(d.stats.tagged||0)+'</b> tagged'; }
+      if(d.facets){ fillFacet($('fSource2'),d.facets.sources||[],SRC,'All sources',srcLabel); fillFacet($('fTag2'),d.facets.tags||[],TAG,'All tags',null); }
+      $('fOptin2').value=OPTIN;
       if(!d.leads.length){l.innerHTML='<div class="empty">No leads'+(FILTER?(' · '+FILTER):'')+' yet. Click <b>+ New lead</b> to add one.</div>';return;}
       var head='<table><thead><tr><th>#</th><th>Created</th><th>Name</th><th>Phone</th><th>Company</th><th>Interest</th><th>Source</th><th>Score</th><th>Status</th><th>Assigned</th><th>Follow-up</th><th>Actions</th></tr></thead><tbody>';
       var body=d.leads.map(rowHtml).join('');

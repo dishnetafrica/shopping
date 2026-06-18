@@ -334,6 +334,10 @@ class PanelApiController extends Controller
 
         if ($s = $r->query('status'))   $q->where('status', $s);
         if ($src = $r->query('source')) $q->where('source', $src);
+        if ($tag = $r->query('tag'))    $q->where('tag', $tag);
+        $optin = (string) $r->query('optin', '');
+        if ($optin === '1') $q->where('marketing_opt_in', true);
+        elseif ($optin === '0') $q->where('marketing_opt_in', false);
 
         $open = ['new', 'assigned', 'contacted', 'qualified'];
         switch (strtolower((string) $r->query('view', ''))) {
@@ -391,9 +395,18 @@ class PanelApiController extends Controller
             'hot'      => $L()->whereIn('status', $open)->where('lead_score', '>=', 70)->count(),
             'overdue'  => $L()->whereNotNull('next_followup_at')->where('next_followup_at', '<', now())->whereNotIn('status', ['won', 'lost'])->count(),
             'won'      => $L()->where('status', 'won')->where('updated_at', '>=', now()->subDays(30))->count(),
+            'total'    => $L()->count(),
+            'optin'    => $L()->where('marketing_opt_in', true)->count(),
+            'tagged'   => $L()->whereNotNull('tag')->where('tag', '<>', '')->count(),
         ];
 
-        return response()->json(['ok' => true, 'count' => $leads->count(), 'stats' => $stats, 'leads' => $leads]);
+        // Distinct values for the source/tag filter dropdowns (full list, ignores active filter).
+        $facets = [
+            'sources' => $L()->whereNotNull('source')->where('source', '<>', '')->distinct()->orderBy('source')->pluck('source')->values(),
+            'tags'    => $L()->whereNotNull('tag')->where('tag', '<>', '')->distinct()->orderBy('tag')->pluck('tag')->values(),
+        ];
+
+        return response()->json(['ok' => true, 'count' => $leads->count(), 'stats' => $stats, 'facets' => $facets, 'leads' => $leads]);
     }
 
     /** Dropdown data for the lead form. */
