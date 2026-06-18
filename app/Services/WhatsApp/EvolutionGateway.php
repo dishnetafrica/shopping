@@ -94,6 +94,28 @@ class EvolutionGateway implements WhatsAppGateway
         return $out;
     }
 
+    /**
+     * Download a media message (image/audio/…) as base64 via Evolution. Used when the
+     * webhook delivers an image without inline base64. Returns null on any failure so the
+     * caller can fall back to asking the customer to type the product name.
+     */
+    public function getMediaBase64(string $instance, array $key): ?string
+    {
+        try {
+            $resp = $this->http()->post("/chat/getBase64FromMediaMessage/{$instance}", [
+                'message'      => ['key' => $key],
+                'convertToMp4' => false,
+            ])->json();
+            $b64 = data_get($resp, 'base64')
+                ?? data_get($resp, 'media')
+                ?? data_get($resp, 'data.base64');
+
+            return is_string($b64) && $b64 !== '' ? $b64 : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
     public function parseIncoming(array $payload): ?array
     {
         // Evolution "messages.upsert" shape (defensive — varies by version).
@@ -144,6 +166,20 @@ class EvolutionGateway implements WhatsAppGateway
             }
         }
 
+        // Product photo: a customer sent an image, often instead of typing a name.
+        // Capture it so the bot can identify the product by vision and search the
+        // catalogue. Inline base64 is used when Evolution includes it; otherwise the
+        // job fetches it via getBase64FromMediaMessage() using the message key below.
+        $img          = data_get($msg, 'message.imageMessage');
+        $hasImage     = is_array($img);
+        $imageCaption = $hasImage ? (string) data_get($img, 'caption', '') : '';
+        $imageB64     = $hasImage ? (string) (
+            data_get($msg, 'message.base64')
+            ?? data_get($msg, 'base64')
+            ?? data_get($payload, 'data.base64')
+            ?? ''
+        ) : '';
+
         return [
             'instance'  => (string) $instance,
             'from'      => preg_replace('/[^0-9]/', '', explode('@', (string) $remote)[0]),
@@ -156,6 +192,14 @@ class EvolutionGateway implements WhatsAppGateway
             'from_me'         => $fromMe,
             'is_status_reply' => $isStatusReply,
             'quoted_text'     => $quotedText,
+            'has_image'       => $hasImage,
+            'image_caption'   => $imageCaption,
+            'image_b64'       => $imageB64,
+            'media_key'       => $hasImage ? [
+                'id'        => (string) data_get($msg, 'key.id', ''),
+                'remoteJid' => (string) $remote,
+                'fromMe'    => $fromMe,
+            ] : null,
             'raw'       => $payload,
         ];
     }

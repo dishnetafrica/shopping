@@ -77,6 +77,13 @@ class TenantResource extends Resource
                             $component->state(! empty($cfg['enabled']) || ! empty($cfg['days']));
                         }
                     }),
+                Forms\Components\Toggle::make('settings.feature_image_search')
+                    ->label('Photo product search')
+                    ->default(true)
+                    ->helperText('Let customers find products by sending a photo on WhatsApp (uses AI vision; needs an OpenAI key).')
+                    ->afterStateHydrated(function ($component, $state) {
+                        if ($state === null) $component->state(true);
+                    }),
             ])->columns(3),
         ]);
     }

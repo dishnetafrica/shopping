@@ -208,7 +208,10 @@ class PanelApiController extends Controller
             : $thaliConfigured;
 
         return [
-            'thali' => $thali,
+            'thali'        => $thali,
+            'image_search' => array_key_exists('feature_image_search', $s)
+                ? (bool) $s['feature_image_search']
+                : true,
         ];
     }
 

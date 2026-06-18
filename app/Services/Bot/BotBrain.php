@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.17-81  per-tenant-feature-flags';
+    public const VERSION = '2026.06.18-82  image-product-search';
 
     public function __construct(
         protected ProductSearch $search,

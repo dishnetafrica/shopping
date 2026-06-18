@@ -5,6 +5,7 @@ use App\Models\Conversation;
 use App\Models\Tenant;
 use App\Services\Bot\BotBrain;
 use App\Services\Bot\MarketingBrain;
+use App\Services\Bot\VisionProductFinder;
 use App\Services\WhatsApp\WhatsAppManager;
 use App\Support\MessageLog;
 use App\Support\BotTrace;
@@ -46,7 +47,7 @@ class ProcessIncomingMessage implements ShouldQueue
         return [(new WithoutOverlapping($key))->releaseAfter(3)->expireAfter(30)];
     }
 
-    public function handle(TenantContext $ctx, WhatsAppManager $wa, BotBrain $brain, MarketingBrain $marketing): void
+    public function handle(TenantContext $ctx, WhatsAppManager $wa, BotBrain $brain, MarketingBrain $marketing, VisionProductFinder $finder): void
     {
         $ctx->set($this->tenantId);                 // scope everything to this tenant
         $tStart = microtime(true);                  // when this job started processing
@@ -184,6 +185,43 @@ class ProcessIncomingMessage implements ShouldQueue
         }
 
         $tBrain = microtime(true);
+
+        // ---- Image search: customer sent a product photo instead of typing ----
+        // Turn the photo into a catalogue query with vision, then let the normal
+        // product search + numbered pick-list + cart flow handle it. If we can't
+        // identify it, ask for the name rather than guessing.
+        $fromImage = false;
+        if (! empty($this->incoming['has_image'] ?? false) && trim($text) === '' && ! $tenant->isMarketing()) {
+            $featureOn = (bool) $tenant->setting('feature_image_search', true);
+            if (! $featureOn || ! $finder->enabled()) {
+                $ask = "📷 Please type the product name (e.g. \"rice 5kg\") and I'll find it for you.";
+                $gateway->sendText($tenant->whatsapp_instance, $from, $ask);
+                MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $ask);
+                BotTrace::log($this->tenantId, $trace, $from, 'image_skipped', $featureOn ? 'no AI key' : 'feature off');
+                $convo->save();
+                return;
+            }
+
+            $b64 = (string) ($this->incoming['image_b64'] ?? '');
+            if ($b64 === '' && ! empty($this->incoming['media_key'] ?? null) && method_exists($gateway, 'getMediaBase64')) {
+                $b64 = (string) ($gateway->getMediaBase64($tenant->whatsapp_instance, $this->incoming['media_key']) ?? '');
+            }
+
+            $query = $b64 !== '' ? $finder->identify($b64, (string) ($this->incoming['image_caption'] ?? '')) : null;
+            if ($query === null || $query === '') {
+                $miss = "📷 I couldn't make out the product in that photo. Please type the name (e.g. \"sugar 2kg\") and I'll find it.";
+                $gateway->sendText($tenant->whatsapp_instance, $from, $miss);
+                MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $miss);
+                BotTrace::log($this->tenantId, $trace, $from, 'image_unidentified', 'vision returned nothing');
+                $convo->save();
+                return;
+            }
+
+            $text = $query;
+            $fromImage = true;
+            BotTrace::log($this->tenantId, $trace, $from, 'image_query', $query);
+        }
+
         try {
             $hasPin = isset($this->incoming['lat'], $this->incoming['lng'])
                 && $this->incoming['lat'] !== null && $this->incoming['lng'] !== null;
@@ -204,6 +242,11 @@ class ProcessIncomingMessage implements ShouldQueue
         }
         $brainMs = (microtime(true) - $tBrain) * 1000;
         $convo->last_message_at = now();
+
+        // Let the customer know the reply came from their photo.
+        if ($fromImage && $reply !== '') {
+            $reply = "📸 From your photo, here's what I found:\n\n".$reply;
+        }
 
         if ($reply === '') {
             BotTrace::log($this->tenantId, $trace, $from, 'empty', 'bot produced no reply');
