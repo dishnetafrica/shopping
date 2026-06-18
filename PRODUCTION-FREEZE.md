@@ -1,9 +1,13 @@
 # ShopBot / CloudBSS — Production Freeze
 
-**Release tag:** `2026.06.18-86.4`
+**Release tag:** `2026.06.18-86.5`
 **Status:** STAGING APPROVED → run checklist → PRODUCTION
 **Feature freeze:** ON
 **Freeze owner:** Bhavin
+
+> **Freeze philosophy.** The line is not "no changes" — it's **no new operational complexity**.
+> **Freeze violation ❌:** new workflow / engine / automation / AI capability / business process (Ticket Engine, Activities, Timeline, Voice Notes, Receipt OCR, CSV Import).
+> **Freeze-safe ✅:** administrative tooling, visibility, manual data entry, operational controls (Operations Dashboard 86.3, Health Diagnostics 86.4, Manual Lead CRM 86.5). These make *existing* workflows manageable.
 
 ---
 
@@ -35,6 +39,7 @@ Human
 | 86.2 | Content dedupe | Dedupe on `sha1(phone│intent│normalized_interest)` so distinct asks ("Starlink" vs "Fiber") are separate leads; repeats collapse. |
 | 86.3 | Operations dashboard | Today's Sales / Support / Shopping numbers on the seller dashboard. No new tables. |
 | 86.4 | Health diagnostics | System Health strip on `/panel/diagnostics`: WhatsApp, Redis, OpenAI, Queue, Last webhook, Last processed. |
+| 86.5 | Manual Lead CRM | `/panel/leads`: create/edit/list/filter/assign/won-lost, selectable source, **4 pipeline KPI cards**, **next follow-up + last contacted** (additive columns). Phone/referral/walk-in leads now visible alongside WhatsApp. |
 
 ---
 
@@ -50,10 +55,24 @@ Human
 | Content Dedupe | ✅ Ready |
 | Operations Dashboard | ✅ Ready |
 | Diagnostics Health Panel | ✅ Ready |
+| Manual Lead CRM (+ KPIs, follow-ups) | ✅ Ready |
 | Analytics Backbone (`bot_events`) | ✅ Ready |
 | Ticket Engine | ⏳ Build 87 |
 | Human Inbox | ⏳ Build 88 |
 | Voice Notes | ⏳ Build 89 |
+| Activities & Timeline | ⏳ Build 90 |
+| CSV Import | ⏳ Build 91 |
+
+### CRM menu — target shape (evolves with 87–91)
+
+```
+CRM
+├── Leads        (86.5 — live)
+├── Customers
+├── Activities   (Build 90)
+├── Inbox        (Build 88)
+└── Reports
+```
 
 ---
 
@@ -151,9 +170,11 @@ All derived from `bot_events` + `leads` — no new schema.
 Then, and only then:
 
 ```
-Build 87 → Ticket Engine   (shared Assignable services; P1/P2/P3 priority)
-Build 88 → Human Inbox     (Take Over / Release / Assign / Resolve / Mark Won inline)
-Build 89 → Voice Notes     (Whisper → Intent Router → Shopping/Lead/Ticket)
+Build 87 → Ticket Engine     (shared Assignable services; P1/P2/P3 priority)
+Build 88 → Human Inbox        (Take Over / Release / Assign / Resolve / Mark Won inline)
+Build 89 → Voice Notes        (Whisper → Intent Router → Shopping/Lead/Ticket)
+Build 90 → Activities & Timeline (lead_activities table; logged calls/visits/quotes/meetings)
+Build 91 → CSV Import         (bulk lead creation with validation + dedupe)
 ```
 
 The architecture is mature. The next improvements should be driven by what customers and sales agents actually do — not further design speculation.

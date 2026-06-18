@@ -363,11 +363,23 @@ class PanelApiController extends Controller
                 'score'     => (int) $l->lead_score,
                 'band'      => $scorer->band((int) $l->lead_score),
                 'notes'     => $l->notes,
-                'conversation_id' => $l->conversation_id,
+                'conversation_id'   => $l->conversation_id,
+                'next_followup_at'  => optional($l->next_followup_at)->toIso8601String(),
+                'last_contacted_at' => optional($l->last_contacted_at)->toIso8601String(),
             ];
         });
 
-        return response()->json(['ok' => true, 'count' => $leads->count(), 'leads' => $leads]);
+        // Pipeline KPIs — always over the whole table, independent of the active filter.
+        $L    = fn () => \App\Models\Lead::query()->where('intent', 'lead');
+        $open = ['new', 'assigned', 'contacted', 'qualified'];
+        $stats = [
+            'new'      => $L()->where('status', 'new')->count(),
+            'assigned' => $L()->where('status', 'assigned')->count(),
+            'hot'      => $L()->whereIn('status', $open)->where('lead_score', '>=', 70)->count(),
+            'won'      => $L()->where('status', 'won')->where('updated_at', '>=', now()->subDays(30))->count(),
+        ];
+
+        return response()->json(['ok' => true, 'count' => $leads->count(), 'stats' => $stats, 'leads' => $leads]);
     }
 
     /** Dropdown data for the lead form. */
@@ -413,6 +425,11 @@ class PanelApiController extends Controller
             $lead->notes          = $notes ?: null;
             if ($status)   $lead->status = $status;
             if ($hasScore) $lead->lead_score = max(0, min(100, (int) $scoreRaw));
+            if ($r->query('next_followup') !== null) {
+                $fu = trim((string) $r->query('next_followup'));
+                $lead->next_followup_at = $fu !== '' ? $this->parseDate($fu) : null;
+            }
+            if ($lead->status === 'contacted' && ! $lead->last_contacted_at) $lead->last_contacted_at = now();
             if ($assigned !== '') {
                 $lead->assigned_to = $assigned;
                 if ($lead->status === 'new') $lead->status = 'assigned';
@@ -439,11 +456,13 @@ class PanelApiController extends Controller
             'dedupe_key'     => \App\Services\Bot\LeadDedupe::key($phone, 'lead', $interest),
             'lead_score'     => $score,
             'source'         => $source ?: 'manual',
-            'status'         => $assigned !== '' ? 'assigned' : 'new',
+            'status'         => $status ?: ($assigned !== '' ? 'assigned' : 'new'),
             'assigned_to'    => $assigned ?: null,
             'claimed_at'     => $assigned !== '' ? now() : null,
             'notes'          => $notes ?: null,
             'message'        => $notes ?: null,
+            'next_followup_at'  => $this->parseDate(trim((string) $r->query('next_followup', ''))),
+            'last_contacted_at' => $status === 'contacted' ? now() : null,
         ]);
 
         \App\Support\BotTrace::log($t->id, 'panel', $phone, 'lead_created', 'manual #' . $lead->id);
@@ -480,9 +499,18 @@ class PanelApiController extends Controller
         if (! isset($map[$a])) return response()->json(['ok' => false, 'error' => 'Unknown action'], 422);
 
         $lead->status = $map[$a];
+        if ($a === 'contacted') $lead->last_contacted_at = now();
         $lead->save();
         \App\Support\BotTrace::log($t->id, 'panel', $lead->customer_phone, 'lead_' . $a, '#' . $lead->id);
         return response()->json(['ok' => true]);
+    }
+
+    /** Lenient date parse for the follow-up field; returns Carbon or null. */
+    private function parseDate(?string $s)
+    {
+        $s = trim((string) $s);
+        if ($s === '') return null;
+        try { return \Illuminate\Support\Carbon::parse($s); } catch (\Throwable $e) { return null; }
     }
 
     /** Notify the assigned recipient over WhatsApp that a lead is theirs. */
