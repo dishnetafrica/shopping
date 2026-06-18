@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Production Entry — Win World</title>
+<style>
+  :root{ --ink:#16202B; --steel:#5C6B7A; --line:#E2E7EC; --bg:#F4F6F8; --card:#fff;
+    --amber:#D9821E; --green:#2E7D55; --red:#B4232A; --blue:#3B5BA9; }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);
+    -webkit-font-smoothing:antialiased;padding-bottom:40px}
+  header{position:sticky;top:0;z-index:5;background:var(--ink);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  header .who{font-size:11px;color:#aab4bd}
+  .wrap{max-width:640px;margin:0 auto;padding:14px}
+  .label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--steel);margin:18px 0 8px}
+  .chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+  .chip{flex:0 0 auto;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:9px 14px;font-size:14px;cursor:pointer}
+  .chip.sel{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .chip .p{font-size:10px;color:var(--steel)}
+  .chip.sel .p{color:#aab4bd}
+  .job{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px;cursor:pointer}
+  .job.sel{border-color:var(--amber);box-shadow:0 0 0 2px rgba(217,130,30,.18)}
+  .job .t{font-weight:600;font-size:15px}
+  .job .s{font-size:12px;color:var(--steel);margin-top:3px}
+  .pill{display:inline-block;font-size:11px;border-radius:999px;padding:2px 9px;border:1px solid var(--line);color:var(--steel)}
+  .pill.proc{border-color:var(--amber);color:var(--amber)}
+  .form{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:6px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .fld{margin-bottom:12px}
+  .fld label{display:block;font-size:12px;color:var(--steel);margin-bottom:5px}
+  input,select{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;font-size:16px;background:#fff;color:var(--ink)}
+  .timebtn{display:flex;gap:8px}
+  .timebtn button{flex:0 0 auto;border:1px solid var(--ink);background:#fff;color:var(--ink);border-radius:10px;padding:0 12px;font-size:13px;cursor:pointer}
+  .qc{display:flex;gap:8px}
+  .qc button{flex:1;padding:12px;border-radius:10px;border:1px solid var(--line);background:#fff;font-size:14px;cursor:pointer}
+  .qc button.pass.on{background:var(--green);color:#fff;border-color:var(--green)}
+  .qc button.reject.on{background:var(--red);color:#fff;border-color:var(--red)}
+  .save{width:100%;padding:15px;border:0;border-radius:12px;background:var(--amber);color:#fff;font-size:16px;font-weight:600;margin-top:6px;cursor:pointer}
+  .save:disabled{opacity:.5}
+  .muted{color:var(--steel);font-size:13px;text-align:center;padding:18px}
+  .result{background:#eef7f1;border:1px solid #bfe0cd;border-radius:12px;padding:14px;margin-top:12px;font-size:14px}
+  .result b{font-size:18px}
+  .result .oee{display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--steel)}
+  .hide{display:none}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Production Entry</h1><div class="who">{{WW_TENANT}}</div></div>
+  <a href="/panel" style="color:#aab4bd;font-size:13px;text-decoration:none">‹ Panel</a>
+</header>
+<div class="wrap">
+  <div class="label">Machine</div>
+  <div class="chips" id="machines"><div class="muted">Loading…</div></div>
+
+  <div class="label">Open jobs</div>
+  <div id="jobs"><div class="muted">Pick a machine to see its jobs.</div></div>
+
+  <div id="entry" class="hide"></div>
+</div>
+
+<script>
+"use strict";
+var WW = { machineId: 0, machines: [], jobs: [], job: null, qc: "" };
+
+function api(path, params){
+  var qs = params ? ("?" + Object.keys(params).map(function(k){ return encodeURIComponent(k)+"="+encodeURIComponent(params[k]==null?"":params[k]); }).join("&")) : "";
+  return fetch("/papi/"+path+qs, { headers:{ "Accept":"application/json" }, credentials:"same-origin" })
+    .then(function(r){ return r.json(); });
+}
+function el(html){ var d=document.createElement("div"); d.innerHTML=html.trim(); return d.firstChild; }
+function nowLocal(){ var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16); }
+
+function loadMachines(){
+  api("ww-machines").then(function(res){
+    var box = document.getElementById("machines");
+    if(!res.ok || !res.machines.length){ box.innerHTML = '<div class="muted">No machines. Seed the masters first.</div>'; return; }
+    WW.machines = res.machines; box.innerHTML = "";
+    res.machines.forEach(function(m){
+      var c = el('<div class="chip"><div>'+m.machine+'</div><div class="p">'+m.process+'</div></div>');
+      c.onclick = function(){ selectMachine(m.id, c); };
+      box.appendChild(c);
+    });
+  });
+}
+function selectMachine(id, node){
+  WW.machineId = id;
+  Array.prototype.forEach.call(document.querySelectorAll("#machines .chip"), function(n){ n.classList.remove("sel"); });
+  if(node) node.classList.add("sel");
+  document.getElementById("entry").classList.add("hide");
+  loadJobs();
+}
+function loadJobs(){
+  var box = document.getElementById("jobs");
+  box.innerHTML = '<div class="muted">Loading jobs…</div>';
+  api("ww-jobs", { machine_id: WW.machineId }).then(function(res){
+    WW.jobs = (res && res.jobs) || [];
+    if(!WW.jobs.length){ box.innerHTML = '<div class="muted">No open jobs on this machine.</div>'; return; }
+    box.innerHTML = "";
+    WW.jobs.forEach(function(j){
+      var card = el(
+        '<div class="job">'+
+          '<div class="t">'+(j.product||"—")+'</div>'+
+          '<div class="s">'+(j.indent_no||"")+' · '+(j.customer||"")+'</div>'+
+          '<div style="margin-top:8px"><span class="pill proc">'+j.process+'</span> '+
+          '<span class="pill">'+(j.target_kg_hr!=null? j.target_kg_hr+" kg/hr target":"no target")+'</span> '+
+          '<span class="pill">'+(j.order_kg!=null? j.order_kg+" kg":"")+'</span></div>'+
+        '</div>');
+      card.onclick = function(){ selectJob(j, card); };
+      box.appendChild(card);
+    });
+  });
+}
+function selectJob(j, node){
+  WW.job = j; WW.qc = "";
+  Array.prototype.forEach.call(document.querySelectorAll("#jobs .job"), function(n){ n.classList.remove("sel"); });
+  if(node) node.classList.add("sel");
+  renderForm();
+}
+function renderForm(){
+  var e = document.getElementById("entry");
+  e.classList.remove("hide");
+  e.innerHTML =
+    '<div class="label">Record run — '+(WW.job.process)+'</div>'+
+    '<div class="form">'+
+      '<div class="fld"><label>Start time</label><div class="timebtn">'+
+        '<input type="datetime-local" id="start"><button type="button" id="startNow">Now</button></div></div>'+
+      '<div class="fld"><label>End time</label><div class="timebtn">'+
+        '<input type="datetime-local" id="end"><button type="button" id="endNow">Now</button></div></div>'+
+      '<div class="row">'+
+        '<div class="fld"><label>Produced pcs</label><input type="number" id="pcs" inputmode="numeric" value="0"></div>'+
+        '<div class="fld"><label>Produced kg</label><input type="number" id="kg" inputmode="decimal" value="0"></div>'+
+      '</div>'+
+      '<div class="row">'+
+        '<div class="fld"><label>Scrap kg</label><input type="number" id="scrap" inputmode="decimal" value="0"></div>'+
+        '<div class="fld"><label>Changeover min</label><input type="number" id="chg" inputmode="numeric" value="0"></div>'+
+      '</div>'+
+      '<div class="fld"><label>Shift</label><select id="shift">'+
+        '<option value="A 07:00-19:00">A 07:00-19:00</option><option value="B 19:00-07:00">B 19:00-07:00</option></select></div>'+
+      '<div class="fld"><label>Stop reason (if stopped)</label><select id="stop">'+
+        '<option value="">— none —</option><option>Machine Breakdown</option><option>Power Failure</option><option>Material Shortage</option></select></div>'+
+      '<div class="fld"><label>QC result</label><div class="qc">'+
+        '<button type="button" class="pass" id="qcPass">✓ Pass</button>'+
+        '<button type="button" class="reject" id="qcReject">✕ Reject</button></div></div>'+
+      '<div class="fld"><label>Remarks</label><input type="text" id="remarks" placeholder="optional"></div>'+
+      '<button class="save" id="save">Save entry</button>'+
+      '<div id="result"></div>'+
+    '</div>';
+
+  document.getElementById("startNow").onclick = function(){ document.getElementById("start").value = nowLocal(); };
+  document.getElementById("endNow").onclick   = function(){ document.getElementById("end").value = nowLocal(); };
+  document.getElementById("qcPass").onclick   = function(){ WW.qc="pass"; this.classList.add("on"); document.getElementById("qcReject").classList.remove("on"); };
+  document.getElementById("qcReject").onclick = function(){ WW.qc="reject"; this.classList.add("on"); document.getElementById("qcPass").classList.remove("on"); };
+  document.getElementById("save").onclick = saveEntry;
+}
+function val(id){ var n=document.getElementById(id); return n? n.value : ""; }
+function saveEntry(){
+  var btn = document.getElementById("save"); btn.disabled = true; btn.textContent = "Saving…";
+  api("ww-entry-save", {
+    planning_id: WW.job.planning_id,
+    start_time: val("start"), end_time: val("end"),
+    produced_qty_pcs: val("pcs"), produced_kg: val("kg"),
+    scrap_kg: val("scrap"), changeover_min: val("chg"),
+    shift: val("shift"), stop_reason: val("stop"),
+    qc_result: WW.qc, remarks: val("remarks"),
+    target_output_kg_hr: WW.job.target_kg_hr
+  }).then(function(res){
+    btn.disabled = false; btn.textContent = "Save entry";
+    var r = document.getElementById("result");
+    if(!res.ok){ r.innerHTML = '<div class="result" style="background:#fbecec;border-color:#e6b8b8">'+(res.error||"Could not save")+'</div>'; return; }
+    var e = res.entry, o = res.oee || {};
+    r.innerHTML = '<div class="result"><b>Saved · '+e.status+'</b>'+
+      '<div class="oee">'+
+      '<span>OEE '+Math.round((o.oee||0)*100)+'%</span>'+
+      '<span>Avail '+Math.round((o.availability||0)*100)+'%</span>'+
+      '<span>Perf '+Math.round((o.performance||0)*100)+'%</span>'+
+      '<span>Qual '+Math.round((o.quality||0)*100)+'%</span>'+
+      '<span>'+(e.actual_output_kg_hr||0)+' kg/hr · eff '+(e.efficiency_pct||0)+'%</span>'+
+      '</div></div>';
+    loadJobs();
+  });
+}
+loadMachines();
+</script>
+</body>
+</html>

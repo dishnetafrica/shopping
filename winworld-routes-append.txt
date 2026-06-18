@@ -1,0 +1,12 @@
+# Append this block to the END of routes/web.php (it is self-contained;
+# it does NOT edit your existing route group). Idempotent if you keep the marker.
+
+/* ===== WINWORLD MES ROUTES (Production Entry) ===== */
+Route::middleware(['web', 'auth', \App\Http\Middleware\SetTenantFromUser::class])->group(function () {
+    Route::get('/panel/production', [\App\Http\Controllers\Panel\WinworldPanelController::class, 'production']);
+    Route::prefix('papi')->group(function () {
+        Route::get('ww-machines',   [\App\Http\Controllers\Panel\WinworldApiController::class, 'machines']);
+        Route::get('ww-jobs',       [\App\Http\Controllers\Panel\WinworldApiController::class, 'jobs']);
+        Route::get('ww-entry-save', [\App\Http\Controllers\Panel\WinworldApiController::class, 'entrySave']);
+    });
+});
