@@ -31,6 +31,28 @@ class CatalogueMatcher
         'bataka'=>'potato','batata'=>'potato','tameta'=>'tomato','tamatar'=>'tomato',
         'kothmir'=>'coriander','dhania'=>'coriander','adu'=>'ginger','aadu'=>'ginger',
         'elchi'=>'cardamom','elaichi'=>'cardamom','kesar'=>'saffron','singdana'=>'peanut',
+        // --- Snacks / farsan / mithai (Pal's) — variant clusters → one canonical token.
+        //     Applied to BOTH query and product, so it matches whether a product is named
+        //     "Masala Peanuts" or "Masala Sing". Fuzzy (Damerau ≤2) already covers tiny typos. ---
+        'sing'=>'peanut','singh'=>'peanut','seng'=>'peanut','sengdana'=>'peanut','mungfali'=>'peanut','mamphali'=>'peanut','mungfari'=>'peanut','mumfari'=>'peanut',
+        'gathiya'=>'ganthiya','ghathiya'=>'ganthiya','gathia'=>'ganthiya','ganthia'=>'ganthiya','gathiyu'=>'ganthiya',
+        'shev'=>'sev',
+        'bundi'=>'boondi','bondi'=>'boondi',
+        'panipudi'=>'panipuri','paanipuri'=>'panipuri','golgappa'=>'panipuri','gupchup'=>'panipuri','puchka'=>'panipuri','puchko'=>'panipuri',
+        'kachauri'=>'kachori','kachodi'=>'kachori','kachory'=>'kachori',
+        'chakli'=>'chakri','chakari'=>'chakri','chakdi'=>'chakri',
+        'chevda'=>'chevdo','chiwda'=>'chevdo','chivda'=>'chevdo','cheora'=>'chevdo','chewda'=>'chevdo',
+        'fafdo'=>'fafda','faafda'=>'fafda',
+        'khakra'=>'khakhra','khakhara'=>'khakhra','khakhro'=>'khakhra',
+        'nankatai'=>'nankhatai','nankhatay'=>'nankhatai','nankhata'=>'nankhatai',
+        'mamara'=>'mamra','murmura'=>'mamra','mumra'=>'mamra','murmure'=>'mamra',
+        'mathiyu'=>'mathiya','mathia'=>'mathiya',
+        'wefers'=>'wafer','wafar'=>'wafer',
+        'penda'=>'peda','pendo'=>'peda',
+        'burfi'=>'barfi','barfee'=>'barfi',
+        'mohanthaal'=>'mohanthal',
+        'ghughra'=>'gughra','gughro'=>'gughra','ghughro'=>'gughra',
+        'khman'=>'khaman','dhokra'=>'dhokla',
     ];
 
     public const STOP = [
