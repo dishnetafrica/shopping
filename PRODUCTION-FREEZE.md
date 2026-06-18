@@ -39,7 +39,7 @@ Human
 | 86.2 | Content dedupe | Dedupe on `sha1(phone│intent│normalized_interest)` so distinct asks ("Starlink" vs "Fiber") are separate leads; repeats collapse. |
 | 86.3 | Operations dashboard | Today's Sales / Support / Shopping numbers on the seller dashboard. No new tables. |
 | 86.4 | Health diagnostics | System Health strip on `/panel/diagnostics`: WhatsApp, Redis, OpenAI, Queue, Last webhook, Last processed. |
-| 86.5 | Manual Lead CRM | `/panel/leads`: create/edit/list/filter/assign/won-lost, selectable source, **4 pipeline KPI cards**, **next follow-up + last contacted** (additive columns). Phone/referral/walk-in leads now visible alongside WhatsApp. |
+| 86.5 | Manual Lead CRM | `/panel/leads`: create/edit/list/assign/won-lost, selectable source, **5 pipeline KPI cards** (New · Assigned · Hot · ⚠ Overdue · Won-30d), **quick-view filters** (Unassigned / Overdue / Hot), **next follow-up + last contacted** (additive columns). Phone/referral/walk-in leads now visible alongside WhatsApp. |
 
 ---
 
@@ -129,6 +129,7 @@ All derived from `bot_events` + `leads` — no new schema.
 
 **Sales funnel** — `lead_created → lead_claimed → lead_won`
 - Track **claim rate** and **win rate** per salesperson (`assigned_to`).
+- Watch **⚠ Overdue follow-ups** (`status NOT IN (won,lost) AND next_followup_at < now`) — the single clearest "where attention is needed" signal. Visible as a KPI card and a one-click filter on `/panel/leads`.
 
 **Photo-search funnel** — `photo_received → photo_identified → photo_selected`
 - KPI: **selection rate = photo_selected / photo_received**. ≥60% = keep investing; <20% = investigate.

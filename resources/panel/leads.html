@@ -31,11 +31,12 @@
   .ico{ text-decoration:none;font-size:15px;margin:0 3px;cursor:pointer }
   .empty{padding:40px;text-align:center;color:var(--mut)}
   .note{color:var(--mut);font-size:12px}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
-  .kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;cursor:pointer}
   .kpi .n{font-size:26px;font-weight:800;line-height:1}
   .kpi .l{font-size:12.5px;color:var(--mut);margin-top:3px;font-weight:600}
   .kpi.hot .n{color:var(--red)}
+  .kpi.over .n{color:var(--amber)}
   @media(max-width:680px){.kpis{grid-template-columns:repeat(2,1fr)}}
   /* modal */
   .ov{position:fixed;inset:0;background:rgba(20,24,33,.45);display:none;align-items:center;justify-content:center;z-index:30;padding:16px}
@@ -62,20 +63,25 @@
   <div class="note" style="margin-bottom:12px">Manual + WhatsApp leads in one place — create from walk-ins, calls and referrals, assign to your team, set follow-ups, and mark won/lost. Tickets &amp; activity timeline arrive in Build 87.</div>
 
   <div class="kpis" id="kpis">
-    <div class="kpi"><div class="n" id="kNew">–</div><div class="l">🎯 New leads</div></div>
-    <div class="kpi"><div class="n" id="kAssigned">–</div><div class="l">📞 Assigned</div></div>
-    <div class="kpi hot"><div class="n" id="kHot">–</div><div class="l">🔥 Hot leads</div></div>
-    <div class="kpi"><div class="n" id="kWon">–</div><div class="l">🏆 Won · 30d</div></div>
+    <div class="kpi" onclick="setView('','new')"><div class="n" id="kNew">–</div><div class="l">🎯 New leads</div></div>
+    <div class="kpi" onclick="setView('','assigned')"><div class="n" id="kAssigned">–</div><div class="l">📞 Assigned</div></div>
+    <div class="kpi hot" onclick="setView('hot','')"><div class="n" id="kHot">–</div><div class="l">🔥 Hot leads</div></div>
+    <div class="kpi over" onclick="setView('overdue','')"><div class="n" id="kOver">–</div><div class="l">⚠ Overdue</div></div>
+    <div class="kpi" onclick="setView('','won')"><div class="n" id="kWon">–</div><div class="l">🏆 Won · 30d</div></div>
   </div>
 
   <div class="bar">
-    <span class="chip on" data-st="" onclick="setStatus(this,'')">All</span>
-    <span class="chip" data-st="new" onclick="setStatus(this,'new')">New</span>
-    <span class="chip" data-st="assigned" onclick="setStatus(this,'assigned')">Assigned</span>
-    <span class="chip" data-st="contacted" onclick="setStatus(this,'contacted')">Contacted</span>
-    <span class="chip" data-st="qualified" onclick="setStatus(this,'qualified')">Qualified</span>
-    <span class="chip" data-st="won" onclick="setStatus(this,'won')">Won</span>
-    <span class="chip" data-st="lost" onclick="setStatus(this,'lost')">Lost</span>
+    <span class="chip on" data-st="" data-view="" onclick="setView('','')">All</span>
+    <span class="chip" data-view="unassigned" onclick="setView('unassigned','')">Unassigned</span>
+    <span class="chip" data-view="overdue" onclick="setView('overdue','')">⚠ Overdue</span>
+    <span class="chip" data-view="hot" onclick="setView('hot','')">🔥 Hot</span>
+    <span style="width:1px;height:22px;background:var(--line);margin:0 2px"></span>
+    <span class="chip" data-st="new" onclick="setView('','new')">New</span>
+    <span class="chip" data-st="assigned" onclick="setView('','assigned')">Assigned</span>
+    <span class="chip" data-st="contacted" onclick="setView('','contacted')">Contacted</span>
+    <span class="chip" data-st="qualified" onclick="setView('','qualified')">Qualified</span>
+    <span class="chip" data-st="won" onclick="setView('','won')">Won</span>
+    <span class="chip" data-st="lost" onclick="setView('','lost')">Lost</span>
     <input class="search" id="q" placeholder="Search name, phone, company, interest…" oninput="debounced()">
   </div>
 
@@ -123,7 +129,8 @@
 <script>
   var $=function(i){return document.getElementById(i);};
   var OPT={recipients:[],sources:[],statuses:[]};
-  var FILTER='';
+  var FILTER='';  // status
+  var VIEW='';    // unassigned | overdue | hot
   var SRCLABEL={whatsapp:'WhatsApp',website:'Website',facebook:'Facebook',instagram:'Instagram',referral:'Referral',walk_in:'Walk-in',phone_call:'Phone Call',email:'Email',manual:'Manual'};
   function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
   function srcLabel(s){return SRCLABEL[s]||(s||'—');}
@@ -132,16 +139,25 @@
   async function loadOptions(){
     try{var r=await fetch('/papi/lead-options',{cache:'no-store'});var d=await r.json();if(d&&d.ok){OPT=d;}}catch(e){}
   }
-  function setStatus(el,st){FILTER=st;document.querySelectorAll('.chip').forEach(function(c){c.classList.toggle('on',c.dataset.st===st);});load();}
+  function setView(view,status){
+    VIEW=view||''; FILTER=status||'';
+    document.querySelectorAll('.chip').forEach(function(c){
+      var on;
+      if(VIEW){ on = c.dataset.view===VIEW; }
+      else { on = (c.dataset.st===FILTER) && (c.dataset.view===''||c.dataset.view===undefined); }
+      c.classList.toggle('on',!!on);
+    });
+    load();
+  }
   var dt;function debounced(){clearTimeout(dt);dt=setTimeout(load,250);}
 
   async function load(){
     var l=$('list');
     try{
-      var u='/papi/leads?status='+encodeURIComponent(FILTER)+'&q='+encodeURIComponent($('q').value||'');
+      var u='/papi/leads?status='+encodeURIComponent(FILTER)+'&view='+encodeURIComponent(VIEW)+'&q='+encodeURIComponent($('q').value||'');
       var r=await fetch(u,{cache:'no-store'});var d=await r.json();
       if(!d||!d.ok){l.innerHTML='<div class="empty">Could not load leads.</div>';return;}
-      if(d.stats){ $('kNew').textContent=d.stats.new||0; $('kAssigned').textContent=d.stats.assigned||0; $('kHot').textContent=d.stats.hot||0; $('kWon').textContent=d.stats.won||0; }
+      if(d.stats){ $('kNew').textContent=d.stats.new||0; $('kAssigned').textContent=d.stats.assigned||0; $('kHot').textContent=d.stats.hot||0; $('kOver').textContent=d.stats.overdue||0; $('kWon').textContent=d.stats.won||0; }
       if(!d.leads.length){l.innerHTML='<div class="empty">No leads'+(FILTER?(' · '+FILTER):'')+' yet. Click <b>+ New lead</b> to add one.</div>';return;}
       var head='<table><thead><tr><th>#</th><th>Created</th><th>Name</th><th>Phone</th><th>Company</th><th>Interest</th><th>Source</th><th>Score</th><th>Status</th><th>Assigned</th><th>Follow-up</th><th>Actions</th></tr></thead><tbody>';
       var body=d.leads.map(rowHtml).join('');

@@ -334,6 +334,19 @@ class PanelApiController extends Controller
 
         if ($s = $r->query('status'))   $q->where('status', $s);
         if ($src = $r->query('source')) $q->where('source', $src);
+
+        $open = ['new', 'assigned', 'contacted', 'qualified'];
+        switch (strtolower((string) $r->query('view', ''))) {
+            case 'unassigned':
+                $q->whereNull('assigned_to')->whereIn('status', $open);
+                break;
+            case 'overdue':
+                $q->whereNotNull('next_followup_at')->where('next_followup_at', '<', now())->whereNotIn('status', ['won', 'lost']);
+                break;
+            case 'hot':
+                $q->whereIn('status', $open)->where('lead_score', '>=', 70);
+                break;
+        }
         if ($term = trim((string) $r->query('q', ''))) {
             $like = '%' . $term . '%';
             $q->where(function ($w) use ($like) {
@@ -370,12 +383,12 @@ class PanelApiController extends Controller
         });
 
         // Pipeline KPIs — always over the whole table, independent of the active filter.
-        $L    = fn () => \App\Models\Lead::query()->where('intent', 'lead');
-        $open = ['new', 'assigned', 'contacted', 'qualified'];
+        $L = fn () => \App\Models\Lead::query()->where('intent', 'lead');
         $stats = [
             'new'      => $L()->where('status', 'new')->count(),
             'assigned' => $L()->where('status', 'assigned')->count(),
             'hot'      => $L()->whereIn('status', $open)->where('lead_score', '>=', 70)->count(),
+            'overdue'  => $L()->whereNotNull('next_followup_at')->where('next_followup_at', '<', now())->whereNotIn('status', ['won', 'lost'])->count(),
             'won'      => $L()->where('status', 'won')->where('updated_at', '>=', now()->subDays(30))->count(),
         ];
 
