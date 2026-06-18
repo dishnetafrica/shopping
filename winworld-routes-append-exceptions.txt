@@ -1,0 +1,14 @@
+# Append to routes/web.php (self-contained). papi/* is already CSRF-exempt.
+
+/* ===== WINWORLD EXCEPTIONS ROUTES ===== */
+Route::middleware(['web', 'auth', \App\Http\Middleware\SetTenantFromUser::class])->group(function () {
+    Route::get('/panel/exceptions',   [\App\Http\Controllers\Panel\WinworldExceptionController::class, 'exceptionsPage']);
+    Route::get('papi/ww-exc-options', [\App\Http\Controllers\Panel\WinworldExceptionController::class, 'options']);
+    Route::get('papi/ww-exceptions',  [\App\Http\Controllers\Panel\WinworldExceptionController::class, 'list']);
+    Route::post('papi/ww-exc-save',   [\App\Http\Controllers\Panel\WinworldExceptionController::class, 'save']);
+    Route::post('papi/ww-exc-approve',[\App\Http\Controllers\Panel\WinworldExceptionController::class, 'approve']);
+    Route::post('papi/ww-exc-resolve',[\App\Http\Controllers\Panel\WinworldExceptionController::class, 'resolve']);
+    Route::post('papi/ww-exc-action', [\App\Http\Controllers\Panel\WinworldExceptionController::class, 'action']);
+});
+
+# Note: the sales-SLA escalation rides the EXISTING ww:scan schedule (no new schedule line needed).

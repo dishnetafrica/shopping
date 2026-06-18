@@ -71,4 +71,17 @@ final class Alerts
         }
         return null;
     }
+
+    /**
+     * Sales/exception SLA breach. Escalates to SM when the breach is severe.
+     * $c keys: order_no, customer, stage_label, owner_role, minutes_over, escalate(bool)
+     */
+    public static function slaBreach(array $c): array
+    {
+        $esc  = ! empty($c['escalate']);
+        $role = $esc ? 'sm' : ($c['owner_role'] ?? 'sales');
+        $head = $esc ? '⏰ SLA BREACH (escalated)' : '⏰ SLA OVERDUE';
+        return self::mk('sla_breach', 'high', $role, 'SOP SLA',
+            "{$head} — {$c['order_no']} · {$c['customer']}\nStage: {$c['stage_label']} · overdue {$c['minutes_over']} min");
+    }
 }

@@ -11,8 +11,8 @@ class WwSalesOrder extends Model
     use BelongsToTenant;
     protected $table = 'ww_sales_orders';
     protected $fillable = ['tenant_id','order_no','customer_id','customer_name','contact','source','product_name',
-        'qty','value','stage','owner_role','stage_started_at','sla_due_at','status','overdue_days','evidence','assigned_to','indent_id'];
-    protected $casts = ['qty'=>'integer','value'=>'decimal:2','stage_started_at'=>'datetime','sla_due_at'=>'datetime','overdue_days'=>'integer'];
+        'qty','value','stage','owner_role','stage_started_at','sla_due_at','sla_alerted_at','status','overdue_days','evidence','assigned_to','indent_id'];
+    protected $casts = ['qty'=>'integer','value'=>'decimal:2','stage_started_at'=>'datetime','sla_due_at'=>'datetime','sla_alerted_at'=>'datetime','overdue_days'=>'integer'];
 
     public function customer() { return $this->belongsTo(WwCustomer::class, 'customer_id'); }
     public function events()   { return $this->hasMany(WwSalesEvent::class, 'sales_order_id')->orderByDesc('id'); }

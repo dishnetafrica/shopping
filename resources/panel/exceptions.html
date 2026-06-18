@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exceptions — Win World</title>
+<style>
+  :root{--ink:#16202B;--steel:#5C6B7A;--line:#E2E7EC;--bg:#F4F6F8;--card:#fff;--amber:#D9821E;--green:#2E7D55;--blue:#3B5BA9;--red:#B4232A}
+  *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{position:sticky;top:0;z-index:6;background:var(--ink);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  .bar button{background:var(--amber);color:#fff;border:0;border-radius:8px;padding:8px 13px;font-size:13px;font-weight:600;cursor:pointer}
+  .bar a{color:#aab4bd;font-size:13px;text-decoration:none;margin-left:8px}
+  .wrap{max-width:920px;margin:0 auto;padding:16px}
+  .capture{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px;display:none}
+  .capture.on{display:block}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .fld label{display:block;font-size:11px;color:var(--steel);margin-bottom:4px}
+  input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:#fff;color:var(--ink)}
+  .hint{font-size:11px;color:var(--steel);margin-top:4px}
+  .ex{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  .ex.ov{border-left:4px solid var(--red)} .ex.ds{border-left:4px solid var(--amber)}
+  .etop{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .etop .rf{font-weight:600;font-family:ui-monospace,monospace}
+  .sub{font-size:12px;color:var(--steel);margin-top:2px}
+  .badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .b{font-size:11px;border-radius:999px;padding:3px 10px;border:1px solid var(--line);color:var(--steel)}
+  .b.type{background:#eef1f4;color:var(--ink);border-color:#dbe1e7}
+  .b.ok{background:#eef7f1;color:var(--green);border-color:#bfe0cd}
+  .b.due_soon{background:#fdf3e6;color:var(--amber);border-color:#f0d6ad}
+  .b.overdue{background:#fbecec;color:var(--red);border-color:#e6b8b8}
+  .b.md{background:#fbecec;color:var(--red);border-color:#e6b8b8}
+  .actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px;border-top:1px dashed var(--line);padding-top:11px}
+  .actions button{font-size:12.5px;border-radius:8px;padding:7px 11px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink)}
+  .actions .ap{border-color:var(--blue);color:var(--blue)}
+  .actions .rs{background:var(--green);color:#fff;border-color:var(--green)}
+  .actions .rs[disabled]{opacity:.4;cursor:not-allowed}
+  .actions .rj{border-color:var(--red);color:var(--red)}
+  .res{font-size:12px;color:var(--steel);margin-top:7px;font-style:italic}
+  .muted{color:var(--steel);text-align:center;padding:24px}
+  .seg{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .seg button{font-size:12px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;cursor:pointer;color:var(--steel)}
+  .seg button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  @media(max-width:680px){.grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Exceptions <span class="sub" style="color:#aab4bd">· {{WW_TENANT}}</span></h1>
+  <div class="bar"><button id="newBtn">+ New</button><a href="/panel/sales">Sales ›</a></div>
+</header>
+<div class="wrap">
+  <div class="capture" id="capture">
+    <div class="grid">
+      <div class="fld"><label>Type</label><select id="type"></select></div>
+      <div class="fld"><label>Customer</label><select id="customer_id"><option value="">— pick —</option></select></div>
+      <div class="fld"><label>Customer name</label><input id="customer_name"></div>
+      <div class="fld"><label>Link sales order (optional)</label><select id="sales_order_id"><option value="">—</option></select></div>
+      <div class="fld" style="grid-column:span 2"><label>Subject</label><input id="subject" placeholder="What happened"></div>
+      <div class="fld"><label>Amount (returns / notes)</label><input id="amount" type="number" value="0"><div class="hint" id="amtHint"></div></div>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button id="saveBtn" style="background:var(--amber);color:#fff;border:0;border-radius:8px;padding:9px 14px;font-weight:600;cursor:pointer">Log exception</button>
+      <button id="cancelBtn" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 14px;cursor:pointer">Cancel</button>
+    </div>
+  </div>
+
+  <div class="seg" id="seg">
+    <button data-f="open" class="on">Open</button><button data-f="overdue">Overdue</button>
+    <button data-f="resolved">Resolved</button><button data-f="all">All</button>
+  </div>
+  <div id="list"><div class="muted">Loading…</div></div>
+</div>
+
+<script>
+"use strict";
+var OPT={types:[],customers:[],orders:[],return_md_limit:10000000}, ITEMS=[], FILTER="open";
+function api(p,q){var qs=q?"?"+Object.keys(q).map(function(k){return encodeURIComponent(k)+"="+encodeURIComponent(q[k]==null?"":q[k]);}).join("&"):"";
+  return fetch("/papi/"+p+qs,{headers:{Accept:"application/json"},credentials:"same-origin"}).then(function(r){return r.json();});}
+function post(p,b){return fetch("/papi/"+p,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},credentials:"same-origin",body:JSON.stringify(b)}).then(function(r){return r.json();});}
+function g(id){return document.getElementById(id);} function v(id){var n=g(id);return n?n.value:"";}
+function esc(s){return (s==null?"":String(s)).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];});}
+function money(n){return (Number(n)||0).toLocaleString();}
+
+function init(){
+  api("ww-exc-options").then(function(r){
+    OPT=r;
+    g("type").innerHTML=(r.types||[]).map(function(t){return '<option value="'+t.key+'">'+esc(t.label)+'</option>';}).join("");
+    g("customer_id").innerHTML='<option value="">— pick —</option>'+(r.customers||[]).map(function(c){return '<option value="'+c.id+'" data-name="'+esc(c.name)+'">'+esc(c.name)+'</option>';}).join("");
+    g("sales_order_id").innerHTML='<option value="">—</option>'+(r.orders||[]).map(function(o){return '<option value="'+o.id+'">'+esc(o.order_no)+' · '+esc(o.customer_name)+'</option>';}).join("");
+    amtHint();
+  });
+  load();
+  g("newBtn").onclick=function(){g("capture").classList.toggle("on");};
+  g("cancelBtn").onclick=function(){g("capture").classList.remove("on");};
+  g("saveBtn").onclick=save;
+  g("type").onchange=amtHint; g("amount").oninput=amtHint;
+  g("customer_id").onchange=function(){var o=this.options[this.selectedIndex];if(o.value)g("customer_name").value=o.getAttribute("data-name")||"";};
+  Array.prototype.forEach.call(g("seg").children,function(b){b.onclick=function(){FILTER=b.getAttribute("data-f");
+    Array.prototype.forEach.call(g("seg").children,function(x){x.classList.remove("on");});b.classList.add("on");render();};});
+}
+function amtHint(){
+  var t=v("type"),amt=parseFloat(v("amount"))||0,h=g("amtHint");
+  if(t==="goods_return"){h.textContent = amt>OPT.return_md_limit ? "Above "+money(OPT.return_md_limit)+" → needs SM + MD" : "≤ "+money(OPT.return_md_limit)+" → SM approval";}
+  else if(t==="credit_note"||t==="debit_note"){h.textContent="Needs SM + MD approval";}
+  else h.textContent="Handled by PD.M (no approval gate)";
+}
+function load(){ api("ww-exceptions").then(function(r){ ITEMS=(r&&r.exceptions)||[]; render(); }); }
+function save(){
+  var b=g("saveBtn");b.disabled=true;b.textContent="Saving…";
+  post("ww-exc-save",{type:v("type"),customer_id:v("customer_id")||null,customer_name:v("customer_name"),
+    sales_order_id:v("sales_order_id")||null,subject:v("subject"),amount:v("amount")})
+   .then(function(r){b.disabled=false;b.textContent="Log exception";
+     if(!r.ok){alert(r.error||"Could not save");return;}
+     g("subject").value="";g("amount").value="0";g("customer_name").value="";g("capture").classList.remove("on");load();});
+}
+function act(p,body){return post(p,body).then(function(r){if(!r.ok)alert(r.error||"Failed");load();return r;});}
+function render(){
+  var box=g("list");
+  var rows=ITEMS.filter(function(e){
+    if(FILTER==="all")return true; if(FILTER==="open")return e.status==="open"||e.status==="approved";
+    if(FILTER==="resolved")return e.status==="resolved"; if(FILTER==="overdue")return (e.status==="open"||e.status==="approved")&&e.sla_status==="overdue"; return true;});
+  if(!rows.length){box.innerHTML='<div class="muted">Nothing here.</div>';return;}
+  box.innerHTML=rows.map(card).join(""); wire();
+}
+function card(e){
+  var act=(e.status==="open"||e.status==="approved");
+  var cls=act?(e.sla_status==="overdue"?" ov":(e.sla_status==="due_soon"?" ds":"")):"";
+  var slaB=act?'<span class="b '+e.sla_status+'">'+(e.sla_status==="overdue"?"OVERDUE":e.sla_status==="due_soon"?"DUE SOON":"on time")+(e.sla_due_at?" · "+e.sla_due_at:"")+'</span>':'<span class="b">'+esc(e.status)+'</span>';
+  var approveBtns=(e.approvals_need||[]).map(function(role){return '<button class="ap" data-ap="'+e.id+'" data-role="'+role+'">Approve '+role.toUpperCase()+'</button>';}).join("");
+  var resolveBtn=act?'<button class="rs" data-rs="'+e.id+'"'+(e.can_resolve?'':' disabled title="needs approval"')+'>Resolve</button>':'';
+  var rejectBtn=act?'<button class="rj" data-rj="'+e.id+'">Reject</button>':(e.status!=="open"?'<button data-ro="'+e.id+'">Reopen</button>':'');
+  var amt=e.amount?(' · '+money(e.amount)):'';
+  return '<div class="ex'+cls+'">'+
+    '<div class="etop"><div><span class="rf">'+esc(e.ref)+'</span> '+esc(e.customer)+'<div class="sub">'+esc(e.subject)+amt+'</div></div></div>'+
+    '<div class="badges"><span class="b type">'+esc(e.type_label)+'</span>'+slaB+(e.owner_role?'<span class="b">'+esc(e.owner_role)+'</span>':'')+'</div>'+
+    (e.resolution?'<div class="res">“'+esc(e.resolution)+'”</div>':'')+
+    '<div class="actions">'+approveBtns+resolveBtn+rejectBtn+'</div>'+
+  '</div>';
+}
+function wire(){
+  Array.prototype.forEach.call(document.querySelectorAll("[data-ap]"),function(b){b.onclick=function(){act("ww-exc-approve",{id:b.getAttribute("data-ap"),role:b.getAttribute("data-role")});};});
+  Array.prototype.forEach.call(document.querySelectorAll("[data-rs]"),function(b){b.onclick=function(){if(b.hasAttribute("disabled"))return;var n=prompt("Resolution note:")||"";act("ww-exc-resolve",{id:b.getAttribute("data-rs"),resolution:n});};});
+  Array.prototype.forEach.call(document.querySelectorAll("[data-rj]"),function(b){b.onclick=function(){var n=prompt("Reason (optional):")||"";act("ww-exc-action",{id:b.getAttribute("data-rj"),action:"reject",note:n});};});
+  Array.prototype.forEach.call(document.querySelectorAll("[data-ro]"),function(b){b.onclick=function(){act("ww-exc-action",{id:b.getAttribute("data-ro"),action:"reopen"});};});
+}
+init();
+</script>
+</body>
+</html>
