@@ -192,6 +192,7 @@ class ProcessIncomingMessage implements ShouldQueue
         // hallucinated brand never reaches the customer), then let the normal product
         // search + numbered pick-list + cart flow handle it.
         $fromImage = false;
+        $imgHash = ''; $imgQuery = ''; $imgConf = 0; $imgCandIds = [];
         if (! empty($this->incoming['has_image'] ?? false) && trim($text) === '' && ! $tenant->isMarketing()) {
             BotTrace::log($this->tenantId, $trace, $from, 'photo_received');
 
@@ -229,7 +230,8 @@ class ProcessIncomingMessage implements ShouldQueue
             BotTrace::log($this->tenantId, $trace, $from, 'photo_identified', "{$query} ({$conf}%)");
 
             // Hallucination guard: the query must match a real product in this shop.
-            if (empty($brain->searchCatalogue($tenant, $query))) {
+            $cands = $brain->searchCatalogue($tenant, $query);
+            if (empty($cands)) {
                 $nf = "🙂 I couldn't find this in our store. Please type the product name and I'll check for you.";
                 $gateway->sendText($tenant->whatsapp_instance, $from, $nf);
                 MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $nf);
@@ -239,9 +241,20 @@ class ProcessIncomingMessage implements ShouldQueue
             }
             BotTrace::log($this->tenantId, $trace, $from, 'photo_search_hit', $query);
 
+            // Remember the photo's identity + candidate products so we can label the
+            // product the customer actually picks (feedback loop / future training data).
+            $imgCandIds = array_values(array_filter(array_map(
+                fn ($p) => (string) ($p['id'] ?? ''), array_slice($cands, 0, 8)
+            )));
+            $imgHash  = $b64 !== '' ? sha1($b64) : '';
+            $imgQuery = $query;
+            $imgConf  = $conf;
+
             $text = $query;
             $fromImage = true;
         }
+
+        $cartBefore = $this->cartProductIds($convo);
 
         try {
             $hasPin = isset($this->incoming['lat'], $this->incoming['lng'])
@@ -263,6 +276,36 @@ class ProcessIncomingMessage implements ShouldQueue
         }
         $brainMs = (microtime(true) - $tBrain) * 1000;
         $convo->last_message_at = now();
+
+        // ----- Image-search feedback loop -----
+        // Label the product the customer chose after a photo search. When a candidate
+        // from the photo lands in the cart — this message (single match) or a later one
+        // (they reply with a number) — store image_hash + query + product as training data.
+        $cartAfter = $this->cartProductIds($convo);
+        $addedId = null; $addedName = null;
+        foreach ($cartAfter as $pid => $nm) {
+            if (! array_key_exists($pid, $cartBefore)) { $addedId = $pid; $addedName = $nm; break; }
+        }
+        $st = is_array($convo->state) ? $convo->state : [];
+        if ($fromImage) {
+            if ($addedId !== null && in_array((string) $addedId, $imgCandIds, true)) {
+                $this->recordImageFeedback($tenant->id, $imgHash, $imgQuery, $addedId, $addedName, $imgConf);
+                BotTrace::log($this->tenantId, $trace, $from, 'photo_selected', $addedName);
+                unset($st['img_fb']);
+            } else {
+                // Options shown — remember so the pick on the NEXT message is labelled.
+                $st['img_fb'] = ['hash' => $imgHash, 'query' => $imgQuery, 'conf' => $imgConf, 'cands' => $imgCandIds, 'at' => time()];
+            }
+            $convo->state = $st;
+        } elseif ($addedId !== null && is_array($st['img_fb'] ?? null)) {
+            $fb = $st['img_fb'];
+            if ((time() - (int) ($fb['at'] ?? 0)) <= 900 && in_array((string) $addedId, (array) ($fb['cands'] ?? []), true)) {
+                $this->recordImageFeedback($tenant->id, (string) $fb['hash'], (string) $fb['query'], $addedId, $addedName, (int) ($fb['conf'] ?? 0));
+                BotTrace::log($this->tenantId, $trace, $from, 'photo_selected', $addedName);
+                unset($st['img_fb']);
+                $convo->state = $st;
+            }
+        }
 
         // Let the customer know the reply came from their photo.
         if ($fromImage && $reply !== '') {
@@ -345,5 +388,36 @@ class ProcessIncomingMessage implements ShouldQueue
     private function norm(string $s): string
     {
         return strtolower(trim(preg_replace('/\s+/', ' ', $s)));
+    }
+
+    /** Map of product_id => name currently in the conversation cart. */
+    private function cartProductIds(Conversation $convo): array
+    {
+        $out = [];
+        foreach ((is_array($convo->cart) ? $convo->cart : []) as $line) {
+            if (is_array($line) && isset($line['product_id'])) {
+                $out[(string) $line['product_id']] = (string) ($line['name'] ?? '');
+            }
+        }
+        return $out;
+    }
+
+    /** Store an image-search → chosen-product label (training data). Never throws. */
+    private function recordImageFeedback(int $tenantId, string $hash, string $query, $productId, ?string $name, int $conf): void
+    {
+        if ($hash === '' || $query === '') return;
+        try {
+            \Illuminate\Support\Facades\DB::table('image_search_feedback')->insert([
+                'tenant_id'    => $tenantId,
+                'image_hash'   => substr($hash, 0, 64),
+                'vision_query' => mb_substr($query, 0, 160),
+                'product_id'   => $productId ?: null,
+                'product_name' => ($name !== null && $name !== '') ? mb_substr($name, 0, 200) : null,
+                'confidence'   => $conf > 0 ? min(100, $conf) : null,
+                'created_at'   => now(),
+            ]);
+        } catch (\Throwable $e) {
+            // feedback logging must never break message handling
+        }
     }
 }

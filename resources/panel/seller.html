@@ -1405,7 +1405,7 @@ async function renderImageStats(){
     function box(n,l){return '<div style="min-width:90px"><div style="font-size:22px;font-weight:800;line-height:1">'+n+'</div><div class="note" style="margin-top:2px">'+l+'</div></div>';}
     el.innerHTML='<div class="head plain">📸 Photo product search · last '+d.days+' days</div>'+
       '<div class="body" style="display:flex;gap:22px;flex-wrap:wrap">'+
-      box(d.received,'Photos received')+box(d.matched,'Matched a product')+box(d.hit_rate+'%','Hit rate')+
+      box(d.received,'Photos received')+box(d.matched,'Matched a product')+box(d.selected||0,'Added to cart')+box(d.hit_rate+'%','Hit rate')+
       '</div>';
   }catch(e){el.classList.add('hide');}
 }

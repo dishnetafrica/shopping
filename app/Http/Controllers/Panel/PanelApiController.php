@@ -224,7 +224,7 @@ class PanelApiController extends Controller
         $rows = \Illuminate\Support\Facades\DB::table('bot_events')
             ->where('tenant_id', $t->id)
             ->where('created_at', '>=', $since)
-            ->whereIn('stage', ['photo_received', 'photo_search_hit', 'photo_search_miss', 'photo_unidentified'])
+            ->whereIn('stage', ['photo_received', 'photo_search_hit', 'photo_search_miss', 'photo_unidentified', 'photo_selected'])
             ->selectRaw('stage, count(*) as c')
             ->groupBy('stage')
             ->pluck('c', 'stage');
@@ -237,6 +237,7 @@ class PanelApiController extends Controller
             'days'         => 30,
             'received'     => $received,
             'matched'      => $matched,
+            'selected'     => (int) ($rows['photo_selected'] ?? 0),
             'miss'         => (int) ($rows['photo_search_miss'] ?? 0),
             'unidentified' => (int) ($rows['photo_unidentified'] ?? 0),
             'hit_rate'     => $received > 0 ? (int) round($matched / $received * 100) : 0,
