@@ -7,6 +7,7 @@ use App\Models\WwMachine;
 use App\Models\WwPlanning;
 use App\Models\WwProductionEntry;
 use App\Services\Winworld\Analytics;
+use App\Services\Winworld\MaterialYield;
 use Illuminate\Http\Request;
 
 /** Win World OEE dashboard: turns captured data into the efficiency picture. */
@@ -23,6 +24,17 @@ class WinworldDashboardController extends Controller
         return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8')->header('Cache-Control', 'no-store');
     }
 
+    public function scoreboardPage(Request $r)
+    {
+        $u = $r->user();
+        if (! $u || ! $u->tenant_id) return redirect('/app/login');
+        $path = resource_path('panel/scoreboard.html');
+        if (! is_file($path)) abort(500, 'Scoreboard asset missing.');
+        $name = (string) ($u->tenant->name ?? 'Win World');
+        $html = str_replace('{{WW_TENANT}}', htmlspecialchars($name, ENT_QUOTES), file_get_contents($path));
+        return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8')->header('Cache-Control', 'no-store');
+    }
+
     public function data(Request $r)
     {
         $days = max(0, (int) $r->query('days', 30));
@@ -33,7 +45,7 @@ class WinworldDashboardController extends Controller
             $q->whereNull('start_time')->orWhere('start_time', '>=', $since);
         });
         $entries = $entryQ->get([
-            'machine_id','stop_reason','actual_hours','produced_kg','scrap_kg','target_output_kg_hr','efficiency_pct','status','start_time',
+            'machine_id','stop_reason','actual_hours','produced_kg','scrap_kg','target_output_kg_hr','efficiency_pct','status','start_time','changeover_min','input_kg','regrind_kg',
         ])->map(fn($e) => $e->toArray())->all();
 
         $indents   = WwIndent::get(['id','status','order_kg'])->map(fn($x) => $x->toArray())->all();
@@ -70,6 +82,7 @@ class WinworldDashboardController extends Controller
             'ok'           => true,
             'days'         => $days,
             'summary'      => Analytics::summary($indents, $entries),
+            'yield'        => MaterialYield::rollup($entries),
             'per_machine'  => $perMachine,
             'downtime'     => Analytics::downtimePareto($entries),
             'machine_board'=> Analytics::machineBoard($plannings, now()),

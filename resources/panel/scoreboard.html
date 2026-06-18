@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Floor Scoreboard — Win World</title>
+<style>
+  :root{--bg:#0d141c;--card:#16202b;--line:#26323f;--ink:#eaf0f6;--steel:#8a99a8;--green:#37c285;--amber:#e8a13a;--red:#e0564f}
+  *{box-sizing:border-box}html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+  .top{display:flex;justify-content:space-between;align-items:center;padding:18px 28px;border-bottom:1px solid var(--line)}
+  .top h1{margin:0;font-size:26px;font-weight:700;letter-spacing:.01em}
+  .top h1 b{color:var(--amber)}
+  .top .clock{font-size:20px;color:var(--steel);font-variant-numeric:tabular-nums}
+  .wrap{padding:20px 28px;height:calc(100% - 78px);display:flex;flex-direction:column;gap:18px}
+  .head{display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:16px}
+  .big{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 22px}
+  .big .l{font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:var(--steel)}
+  .big .n{font-size:60px;font-weight:800;line-height:1.05;margin-top:6px;font-variant-numeric:tabular-nums}
+  .big .sub{font-size:14px;color:var(--steel);margin-top:4px}
+  .machines{flex:1;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:8px 0;overflow:hidden}
+  .mrow{display:flex;align-items:center;gap:18px;padding:13px 24px;border-bottom:1px solid var(--line)}
+  .mrow:last-child{border-bottom:0}
+  .mrow .mc{width:120px;font-size:22px;font-weight:700}
+  .mrow .mc .p{font-size:12px;color:var(--steel);font-weight:400;letter-spacing:.06em;text-transform:uppercase}
+  .mrow .oee{width:120px;font-size:40px;font-weight:800;text-align:right;font-variant-numeric:tabular-nums}
+  .bars{flex:1;display:flex;gap:20px}
+  .bars .b{flex:1}
+  .bars .b .t{font-size:12px;color:var(--steel);display:flex;justify-content:space-between;letter-spacing:.05em;text-transform:uppercase}
+  .track{height:12px;background:#0d141c;border-radius:6px;overflow:hidden;margin-top:5px}
+  .track i{display:block;height:100%;border-radius:6px}
+  .mrow .out{width:160px;text-align:right;font-size:15px;color:var(--steel)}
+  .muted{color:var(--steel);text-align:center;padding:60px;font-size:20px}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>Win<b>World</b> · Floor Scoreboard <span style="color:var(--steel);font-weight:400;font-size:16px">— {{WW_TENANT}}</span></h1>
+  <div class="clock" id="clock"></div>
+</div>
+<div class="wrap" id="wrap"><div class="muted">Loading…</div></div>
+
+<script>
+"use strict";
+function api(p,q){var qs=q?"?"+Object.keys(q).map(function(k){return encodeURIComponent(k)+"="+encodeURIComponent(q[k]==null?"":q[k]);}).join("&"):"";
+  return fetch("/papi/"+p+qs,{headers:{Accept:"application/json"},credentials:"same-origin"}).then(function(r){return r.json();});}
+function esc(s){return (s==null?"":String(s)).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];});}
+function pct(x){return Math.round((x||0)*100);}
+function colorFor(o){return o>=0.85?"var(--green)":o>=0.6?"var(--amber)":"var(--red)";}
+function tickClock(){var d=new Date();document.getElementById("clock").textContent=d.toLocaleTimeString();}
+setInterval(tickClock,1000); tickClock();
+
+function bar(label,val){
+  return '<div class="b"><div class="t"><span>'+label+'</span><span>'+pct(val)+'%</span></div>'+
+    '<div class="track"><i style="width:'+pct(val)+'%;background:'+colorFor(val)+'"></i></div></div>';
+}
+function render(d){
+  var w=document.getElementById("wrap");
+  var s=d.summary, y=d.yield||{};
+  var avg = d.per_machine.length ? d.per_machine.reduce(function(a,m){return a+m.oee;},0)/d.per_machine.length : 0;
+  var topDown = (d.downtime&&d.downtime[0]) ? (d.downtime[0].reason+' ('+d.downtime[0].hours+'h)') : 'None 👍';
+  var head='<div class="head">'+
+    '<div class="big"><div class="l">Avg OEE · today</div><div class="n" style="color:'+colorFor(avg)+'">'+pct(avg)+'%</div><div class="sub">'+d.per_machine.length+' machines running</div></div>'+
+    '<div class="big"><div class="l">Material yield</div><div class="n" style="color:'+colorFor((y.yield_pct||0)/100)+'">'+(y.yield_pct||0)+'%</div><div class="sub">'+(y.regrind_kg||0)+' kg regrind</div></div>'+
+    '<div class="big"><div class="l">First-pass yield</div><div class="n">'+(s.first_pass_yield||0)+'%</div><div class="sub">'+(s.scrap_kg||0)+' kg scrap</div></div>'+
+    '<div class="big"><div class="l">Top downtime</div><div class="n" style="font-size:30px;color:var(--red)">'+esc(topDown)+'</div><div class="sub">'+(s.changeover_hours||0)+' h changeover</div></div>'+
+  '</div>';
+  var rows = d.per_machine.length ? d.per_machine.map(function(m){
+    return '<div class="mrow">'+
+      '<div class="mc">'+esc(m.machine)+'<div class="p">'+esc(m.process)+'</div></div>'+
+      '<div class="oee" style="color:'+colorFor(m.oee)+'">'+pct(m.oee)+'%</div>'+
+      '<div class="bars">'+bar("Avail",m.availability)+bar("Speed",m.performance)+bar("Qual",m.quality)+'</div>'+
+      '<div class="out">'+m.produced_kg+' kg · '+m.run_hours+' h</div>'+
+    '</div>';
+  }).join("") : '<div class="muted">No production recorded today.</div>';
+  w.innerHTML=head+'<div class="machines">'+rows+'</div>';
+}
+function load(){ api("ww-dashboard",{days:1}).then(function(r){ if(r&&r.ok) render(r); }); }
+load(); setInterval(load, 30000); // refresh every 30s
+</script>
+</body>
+</html>

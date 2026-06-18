@@ -12,7 +12,7 @@
   .bar button{background:#26323f;color:#cfd6dd;border:1px solid #3a4855;border-radius:8px;padding:6px 11px;font-size:12px;cursor:pointer}
   .bar button.on{background:var(--amber);color:#fff;border-color:var(--amber)}
   .wrap{max-width:980px;margin:0 auto;padding:16px}
-  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px}
   .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
   .kpi .n{font-size:24px;font-weight:700}
   .kpi .l{font-size:11px;color:var(--steel);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
@@ -76,6 +76,7 @@ function render(d){
     '<div class="kpi"><div class="n" style="color:'+colorFor(avgOee)+'">'+pct(avgOee)+'%</div><div class="l">Avg OEE</div><div class="sub">'+d.per_machine.length+' machines run</div></div>'+
     '<div class="kpi"><div class="n">'+s.produced_kg+'</div><div class="l">Produced kg</div><div class="sub">of '+s.order_kg+' kg ordered</div></div>'+
     '<div class="kpi"><div class="n">'+s.first_pass_yield+'%</div><div class="l">First-pass yield</div><div class="sub">'+s.scrap_kg+' kg scrap</div></div>'+
+    '<div class="kpi"><div class="n" style="color:'+colorFor((d.yield&&d.yield.yield_pct/100)||0)+'">'+((d.yield&&d.yield.yield_pct)||0)+'%</div><div class="l">Material yield</div><div class="sub">'+((d.yield&&d.yield.regrind_kg)||0)+' kg regrind · '+(s.changeover_hours||0)+' h changeover</div></div>'+
     '<div class="kpi"><div class="n">'+s.avg_efficiency_pct+'%</div><div class="l">Avg efficiency</div><div class="sub">actual ÷ target</div></div>'+
     '<div class="kpi"><div class="n">'+(s.by_status["In Process"]+s.by_status["Planned"])+'</div><div class="l">Active orders</div>'+
       '<div class="sub">'+s.by_status["Completed"]+' done · '+s.by_status["Open"]+' open</div></div>'+

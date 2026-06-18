@@ -135,6 +135,10 @@ function renderForm(){
         '<div class="fld"><label>Produced kg</label><input type="number" id="kg" inputmode="decimal" value="0"></div>'+
       '</div>'+
       '<div class="row">'+
+        '<div class="fld"><label>Resin in kg <span style="color:#9aa7b4;font-weight:400">(optional)</span></label><input type="number" id="inkg" inputmode="decimal" value="0"></div>'+
+        '<div class="fld"><label>Regrind kg <span style="color:#9aa7b4;font-weight:400">(reused scrap)</span></label><input type="number" id="rgkg" inputmode="decimal" value="0"></div>'+
+      '</div>'+
+      '<div class="row">'+
         '<div class="fld"><label>Scrap kg</label><input type="number" id="scrap" inputmode="decimal" value="0"></div>'+
         '<div class="fld"><label>Changeover min</label><input type="number" id="chg" inputmode="numeric" value="0"></div>'+
       '</div>'+
@@ -164,6 +168,7 @@ function saveEntry(){
     start_time: val("start"), end_time: val("end"),
     produced_qty_pcs: val("pcs"), produced_kg: val("kg"),
     scrap_kg: val("scrap"), changeover_min: val("chg"),
+    input_kg: val("inkg"), regrind_kg: val("rgkg"),
     shift: val("shift"), stop_reason: val("stop"),
     qc_result: WW.qc, remarks: val("remarks"),
     target_output_kg_hr: WW.job.target_kg_hr

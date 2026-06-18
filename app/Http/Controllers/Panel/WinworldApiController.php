@@ -84,6 +84,8 @@ class WinworldApiController extends Controller
             'produced_qty_pcs'    => (int) $request->query('produced_qty_pcs', 0),
             'produced_kg'         => (float) $request->query('produced_kg', 0),
             'scrap_kg'            => (float) $request->query('scrap_kg', 0),
+            'input_kg'            => (float) $request->query('input_kg', 0) ?: null,
+            'regrind_kg'          => (float) $request->query('regrind_kg', 0) ?: null,
             'changeover_min'      => (int) $request->query('changeover_min', 0),
             'target_output_kg_hr' => $target,
             'qc_result'           => $request->query('qc_result') ?: null,

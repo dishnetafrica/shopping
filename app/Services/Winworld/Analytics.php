@@ -93,10 +93,11 @@ final class Analytics
             if (isset($byStatus[$s])) $byStatus[$s]++;
             $orderKg += (float) ($i['order_kg'] ?? 0);
         }
-        $prod = 0.0; $scrap = 0.0; $effSum = 0.0; $effN = 0;
+        $prod = 0.0; $scrap = 0.0; $effSum = 0.0; $effN = 0; $chg = 0.0;
         foreach ($entries as $e) {
             $prod  += (float) ($e['produced_kg'] ?? 0);
             $scrap += (float) ($e['scrap_kg'] ?? 0);
+            $chg   += (float) ($e['changeover_min'] ?? 0);
             if (($e['efficiency_pct'] ?? null) !== null && $e['efficiency_pct'] !== '') {
                 $effSum += (float) $e['efficiency_pct']; $effN++;
             }
@@ -108,6 +109,7 @@ final class Analytics
             'scrap_kg'           => round($scrap, 1),
             'avg_efficiency_pct' => $effN ? round($effSum / $effN, 1) : 0.0,
             'first_pass_yield'   => $prod > 0 ? round(($prod - $scrap) / $prod * 100, 1) : 0.0,
+            'changeover_hours'   => round($chg / 60, 1),
         ];
     }
 }

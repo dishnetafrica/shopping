@@ -10,7 +10,7 @@ class WwProductionEntry extends Model
 {
     use BelongsToTenant;
     protected $table = 'ww_production_entries';
-    protected $fillable = ['tenant_id','indent_id','planning_id','process','machine_id','shift','start_time','end_time','produced_qty_pcs','produced_kg','scrap_kg','changeover_min','actual_hours','actual_output_kg_hr','target_output_kg_hr','efficiency_pct','qc_result','status','stop_reason','remarks'];
+    protected $fillable = ['tenant_id','indent_id','planning_id','process','machine_id','shift','start_time','end_time','produced_qty_pcs','produced_kg','input_kg','scrap_kg','regrind_kg','changeover_min','actual_hours','actual_output_kg_hr','target_output_kg_hr','efficiency_pct','qc_result','status','stop_reason','remarks'];
     protected $casts = [
         'start_time'=>'datetime','end_time'=>'datetime','produced_qty_pcs'=>'integer',
         'produced_kg'=>'decimal:3','scrap_kg'=>'decimal:3','changeover_min'=>'integer',
