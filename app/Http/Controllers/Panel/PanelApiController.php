@@ -245,6 +245,45 @@ class PanelApiController extends Controller
         ]);
     }
 
+    /** Small operations overview for the dashboard (today): leads, tickets, shopping. No new tables. */
+    public function operations(Request $r)
+    {
+        $t    = $r->user()->tenant;
+        $day  = now()->startOfDay();
+        $open = ['new', 'assigned', 'contacted', 'qualified'];
+        $L    = fn () => \Illuminate\Support\Facades\DB::table('leads')->where('tenant_id', $t->id);
+
+        $sales = ['created' => 0, 'claimed' => 0, 'hot' => 0, 'won' => 0];
+        $support = ['created' => 0, 'unassigned' => 0];
+        try {
+            $sales = [
+                'created' => $L()->where('intent', 'lead')->where('created_at', '>=', $day)->count(),
+                'claimed' => $L()->whereNotNull('claimed_at')->where('claimed_at', '>=', $day)->count(),
+                'hot'     => $L()->where('intent', 'lead')->whereIn('status', $open)->where('lead_score', '>=', 70)->count(),
+                'won'     => $L()->where('status', 'won')->where('updated_at', '>=', $day)->count(),
+            ];
+            $support = [
+                'created'    => $L()->where('intent', 'ticket')->where('created_at', '>=', $day)->count(),
+                'unassigned' => $L()->where('intent', 'ticket')->whereIn('status', $open)->whereNull('assigned_to')->count(),
+            ];
+        } catch (\Throwable $e) { /* leads table not migrated yet → zeros */ }
+
+        $orders = 0;
+        try {
+            $orders = \Illuminate\Support\Facades\DB::table('orders')->where('tenant_id', $t->id)->where('created_at', '>=', $day)->count();
+        } catch (\Throwable $e) { /* ignore */ }
+
+        $ev = fn ($stage) => \Illuminate\Support\Facades\DB::table('bot_events')
+            ->where('tenant_id', $t->id)->where('stage', $stage)->where('created_at', '>=', $day)->count();
+
+        return response()->json([
+            'ok'       => true,
+            'sales'    => $sales,
+            'support'  => $support,
+            'shopping' => ['orders' => $orders, 'photos' => $ev('photo_received'), 'known' => $ev('photo_known')],
+        ]);
+    }
+
     public function branches()
     {
         return response()->json(['branches' => $this->branchesList()]);

@@ -322,6 +322,7 @@
           </div>
         </div>
         <div class="kgrid" id="kpis"></div>
+        <div id="opsCard" class="card hide" style="margin-bottom:14px"></div>
         <div id="imgStats" class="card hide" data-feature="image_search" style="margin-bottom:14px"></div>
         <div class="row2">
           <div class="card"><div class="head plain" id="mTitle">Orders — this month</div><div class="body chart" id="chartMonth"></div></div>
@@ -963,6 +964,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   ret:'/papi/return',returns:'/papi/returns',
   settings:'/papi/settings',settingsSave:'/papi/settings-save',
   imageStats:'/papi/image-stats',
+  operations:'/papi/operations',
   branches:'/papi/branches',branchSave:'/papi/branch-save',branchDel:'/papi/branch-delete',
   custProfiles:'/papi/customers',custSave:'/papi/customer-save',
   botcfg:'/papi/bot-config',botcfgSave:'/papi/bot-config-save',
@@ -1410,8 +1412,27 @@ async function renderImageStats(){
       '</div>';
   }catch(e){el.classList.add('hide');}
 }
+async function renderOperations(){
+  var el=$('opsCard'); if(!el)return;
+  try{
+    var r=await fetch(EP.operations+'?token='+encodeURIComponent(token),{cache:'no-store'});
+    var d=await r.json();
+    if(!d||!d.ok){el.classList.add('hide');return;}
+    el.classList.remove('hide');
+    function box(n,l,hot){return '<div style="min-width:84px"><div style="font-size:21px;font-weight:800;line-height:1'+(hot&&n>0?';color:#B4232A':'')+'">'+n+'</div><div class="note" style="margin-top:2px">'+l+'</div></div>';}
+    function grp(title,inner){return '<div style="flex:1;min-width:230px"><div style="font-weight:800;font-size:13px;color:#475467;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">'+title+'</div><div style="display:flex;gap:18px;flex-wrap:wrap">'+inner+'</div></div>';}
+    var s=d.sales||{},t=d.support||{},sh=d.shopping||{};
+    el.innerHTML='<div class="head plain">📊 Operations · today</div>'+
+      '<div class="body" style="display:flex;gap:26px;flex-wrap:wrap">'+
+      grp('Sales', box(s.created||0,'Leads')+box(s.claimed||0,'Claimed')+box(s.hot||0,'Hot',true)+box(s.won||0,'Won'))+
+      grp('Support', box(t.created||0,'Tickets')+box(t.unassigned||0,'Unassigned',true))+
+      grp('Shopping', box(sh.orders||0,'Orders')+box(sh.photos||0,'Photo searches')+box(sh.known||0,'Instant · no AI'))+
+      '</div>';
+  }catch(e){el.classList.add('hide');}
+}
 function renderDash(){
   renderBotSwitch();
+  renderOperations();
   renderImageStats();
   var O=branchOrders();
   var today=tISO(new Date()).slice(0,10);
