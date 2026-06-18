@@ -1,0 +1,12 @@
+# Append to routes/web.php (self-contained). papi/* is already CSRF-exempt.
+
+/* ===== WINWORLD SALES (CRM workflow) ROUTES ===== */
+Route::middleware(['web', 'auth', \App\Http\Middleware\SetTenantFromUser::class])->group(function () {
+    Route::get('/panel/sales',          [\App\Http\Controllers\Panel\WinworldSalesController::class, 'salesPage']);
+    Route::get('papi/ww-sales-options', [\App\Http\Controllers\Panel\WinworldSalesController::class, 'options']);
+    Route::get('papi/ww-sales',         [\App\Http\Controllers\Panel\WinworldSalesController::class, 'list']);
+    Route::post('papi/ww-sales-save',   [\App\Http\Controllers\Panel\WinworldSalesController::class, 'save']);
+    Route::post('papi/ww-sales-advance',[\App\Http\Controllers\Panel\WinworldSalesController::class, 'advance']);
+    Route::post('papi/ww-sales-approve',[\App\Http\Controllers\Panel\WinworldSalesController::class, 'approve']);
+    Route::post('papi/ww-sales-action', [\App\Http\Controllers\Panel\WinworldSalesController::class, 'action']);
+});

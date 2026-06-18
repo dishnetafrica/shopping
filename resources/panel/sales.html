@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sales Orders — Win World</title>
+<style>
+  :root{--ink:#16202B;--steel:#5C6B7A;--line:#E2E7EC;--bg:#F4F6F8;--card:#fff;--amber:#D9821E;--green:#2E7D55;--blue:#3B5BA9;--red:#B4232A}
+  *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{position:sticky;top:0;z-index:6;background:var(--ink);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  .bar button{background:var(--amber);color:#fff;border:0;border-radius:8px;padding:8px 13px;font-size:13px;font-weight:600;cursor:pointer}
+  .bar a{color:#aab4bd;font-size:13px;text-decoration:none;margin-left:8px}
+  .wrap{max-width:920px;margin:0 auto;padding:16px}
+  .capture{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px;display:none}
+  .capture.on{display:block}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .fld label{display:block;font-size:11px;color:var(--steel);margin-bottom:4px}
+  input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:#fff;color:var(--ink)}
+  textarea{min-height:42px}
+  .order{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  .order.ov{border-left:4px solid var(--red)} .order.ds{border-left:4px solid var(--amber)}
+  .otop{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .otop .on{font-weight:600} .pn{font-family:ui-monospace,monospace}
+  .sub{font-size:12px;color:var(--steel);margin-top:2px}
+  .badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .b{font-size:11px;border-radius:999px;padding:3px 10px;border:1px solid var(--line);color:var(--steel)}
+  .b.stage{background:#eef1f4;color:var(--ink);border-color:#dbe1e7}
+  .b.ok{background:#eef7f1;color:var(--green);border-color:#bfe0cd}
+  .b.due_soon{background:#fdf3e6;color:var(--amber);border-color:#f0d6ad}
+  .b.overdue{background:#fbecec;color:var(--red);border-color:#e6b8b8}
+  .b.role{background:#fff}
+  .actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px;border-top:1px dashed var(--line);padding-top:11px}
+  .actions button,.actions a{font-size:12.5px;border-radius:8px;padding:7px 11px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);text-decoration:none;display:inline-block}
+  .actions .adv{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .actions .adv[disabled]{opacity:.4;cursor:not-allowed}
+  .actions .ap{border-color:var(--blue);color:var(--blue)}
+  .actions .won{border-color:var(--green);color:var(--green)} .actions .lost{border-color:var(--red);color:var(--red)}
+  .actions .bridge{border-color:var(--amber);color:var(--amber)}
+  .ev{font-size:12px;color:var(--steel);margin-top:7px;font-style:italic}
+  .muted{color:var(--steel);text-align:center;padding:24px}
+  .seg{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .seg button{font-size:12px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;cursor:pointer;color:var(--steel)}
+  .seg button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  @media(max-width:680px){.grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Sales Orders <span class="sub" style="color:#aab4bd">· {{WW_TENANT}}</span></h1>
+  <div class="bar"><button id="newBtn">+ New order</button><a href="/panel/dashboard">Dashboard ›</a></div>
+</header>
+<div class="wrap">
+  <div class="capture" id="capture">
+    <div class="grid">
+      <div class="fld"><label>Customer</label><select id="customer_id"><option value="">— new / pick —</option></select></div>
+      <div class="fld"><label>Customer name</label><input id="customer_name"></div>
+      <div class="fld"><label>Contact</label><input id="contact"></div>
+      <div class="fld"><label>Source</label><select id="source"><option value="">—</option><option>visit</option><option>whatsapp</option><option>email</option><option>call</option></select></div>
+      <div class="fld"><label>Product</label><input id="product_name"></div>
+      <div class="fld"><label>Qty</label><input id="qty" type="number" value="0"></div>
+      <div class="fld"><label>Value</label><input id="value" type="number" value="0"></div>
+      <div class="fld" style="grid-column:span 2"><label>Evidence (note / screenshot link / call note)</label><input id="evidence"></div>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px"><button id="saveBtn" style="background:var(--amber);color:#fff;border:0;border-radius:8px;padding:9px 14px;font-weight:600;cursor:pointer">Capture order</button>
+      <button id="cancelBtn" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 14px;cursor:pointer">Cancel</button></div>
+  </div>
+
+  <div class="seg" id="seg">
+    <button data-f="open" class="on">Open</button><button data-f="overdue">Overdue</button>
+    <button data-f="won">Won</button><button data-f="all">All</button>
+  </div>
+  <div id="list"><div class="muted">Loading…</div></div>
+</div>
+
+<script>
+"use strict";
+var OPT={customers:[]}, ORDERS=[], FILTER="open";
+function api(p,q){var qs=q?"?"+Object.keys(q).map(function(k){return encodeURIComponent(k)+"="+encodeURIComponent(q[k]==null?"":q[k]);}).join("&"):"";
+  return fetch("/papi/"+p+qs,{headers:{Accept:"application/json"},credentials:"same-origin"}).then(function(r){return r.json();});}
+function post(p,b){return fetch("/papi/"+p,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},credentials:"same-origin",body:JSON.stringify(b)}).then(function(r){return r.json();});}
+function g(id){return document.getElementById(id);} function v(id){var n=g(id);return n?n.value:"";}
+function esc(s){return (s==null?"":String(s)).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];});}
+
+function init(){
+  api("ww-sales-options").then(function(r){
+    OPT=r;
+    g("customer_id").innerHTML='<option value="">— new / pick —</option>'+(r.customers||[]).map(function(c){return '<option value="'+c.id+'" data-name="'+esc(c.name)+'" data-contact="'+esc(c.contact||"")+'">'+esc(c.name)+'</option>';}).join("");
+  });
+  load();
+  g("newBtn").onclick=function(){ g("capture").classList.toggle("on"); };
+  g("cancelBtn").onclick=function(){ g("capture").classList.remove("on"); };
+  g("saveBtn").onclick=capture;
+  g("customer_id").onchange=function(){var o=this.options[this.selectedIndex]; if(o.value){g("customer_name").value=o.getAttribute("data-name")||"";g("contact").value=o.getAttribute("data-contact")||"";}};
+  Array.prototype.forEach.call(g("seg").children,function(b){b.onclick=function(){FILTER=b.getAttribute("data-f");
+    Array.prototype.forEach.call(g("seg").children,function(x){x.classList.remove("on");});b.classList.add("on");render();};});
+}
+function load(){ api("ww-sales").then(function(r){ ORDERS=(r&&r.orders)||[]; render(); }); }
+function capture(){
+  var b=g("saveBtn");b.disabled=true;b.textContent="Saving…";
+  post("ww-sales-save",{customer_id:v("customer_id")||null,customer_name:v("customer_name"),contact:v("contact"),
+    source:v("source"),product_name:v("product_name"),qty:v("qty"),value:v("value"),evidence:v("evidence")})
+   .then(function(r){ b.disabled=false;b.textContent="Capture order";
+     if(!r.ok){alert(r.error||"Could not save");return;}
+     ["customer_name","contact","product_name","evidence"].forEach(function(k){g(k).value="";}); g("qty").value="0";g("value").value="0";
+     g("capture").classList.remove("on"); load(); });
+}
+function act(p,body){ return post(p,body).then(function(r){ if(!r.ok){alert(r.error||"Action failed");} load(); return r; }); }
+function render(){
+  var box=g("list");
+  var rows=ORDERS.filter(function(o){
+    if(FILTER==="all")return true; if(FILTER==="open")return o.status==="open";
+    if(FILTER==="won")return o.status==="won"; if(FILTER==="overdue")return o.status==="open"&&o.sla_status==="overdue"; return true;});
+  if(!rows.length){box.innerHTML='<div class="muted">No orders here.</div>';return;}
+  box.innerHTML=rows.map(card).join("");
+  wire();
+}
+function card(o){
+  var cls=o.status==="open"?(o.sla_status==="overdue"?" ov":(o.sla_status==="due_soon"?" ds":"")):"";
+  var slaB=o.status==="open"?'<span class="b '+o.sla_status+'">'+(o.sla_status==="overdue"?"OVERDUE":o.sla_status==="due_soon"?"DUE SOON":"on time")+(o.sla_due_at?" · "+o.sla_due_at:"")+'</span>':'<span class="b">'+esc(o.status)+'</span>';
+  var ovB=o.overdue_days>30?'<span class="b overdue">customer '+o.overdue_days+'d overdue · MD</span>':'';
+  var approveBtns=(o.approvals_need||[]).map(function(role){return '<button class="ap" data-ap="'+o.id+'" data-role="'+role+'">Approve '+role.toUpperCase()+'</button>';}).join("");
+  var bridge=o.stage==="order_indent"?'<a class="bridge" href="/panel/indents" target="_blank">Open indent ›</a>':'';
+  var advLabel=o.next_label?("Advance → "+o.next_label):"";
+  var advBtn=o.next_label?'<button class="adv" data-adv="'+o.id+'"'+(o.can_advance?'':' disabled title="needs approval"')+'>'+advLabel+'</button>':'';
+  var statusBtns=o.status==="open"?
+     '<button class="won" data-act="won" data-id="'+o.id+'">Won</button><button class="lost" data-act="lost" data-id="'+o.id+'">Lost</button><button data-act="hold" data-id="'+o.id+'">Hold</button>'
+     :(o.status!=="won"?'<button data-act="reopen" data-id="'+o.id+'">Reopen</button>':'');
+  return '<div class="order'+cls+'">'+
+    '<div class="otop"><div><span class="on pn">'+esc(o.order_no)+'</span> '+esc(o.customer)+'<div class="sub">'+esc(o.product||"")+(o.qty?(" · "+o.qty+" pcs"):"")+(o.value?(" · "+o.value):"")+(o.source?(" · "+o.source):"")+'</div></div></div>'+
+    '<div class="badges"><span class="b stage">'+esc(o.stage_label)+'</span>'+slaB+(o.owner_role?'<span class="b role">'+esc(o.owner_role)+'</span>':'')+ovB+'</div>'+
+    (o.evidence?'<div class="ev">“'+esc(o.evidence)+'”</div>':'')+
+    '<div class="actions">'+approveBtns+advBtn+bridge+statusBtns+'</div>'+
+  '</div>';
+}
+function wire(){
+  Array.prototype.forEach.call(document.querySelectorAll("[data-adv]"),function(b){b.onclick=function(){if(b.hasAttribute("disabled"))return;act("ww-sales-advance",{id:b.getAttribute("data-adv")});};});
+  Array.prototype.forEach.call(document.querySelectorAll("[data-ap]"),function(b){b.onclick=function(){act("ww-sales-approve",{id:b.getAttribute("data-ap"),role:b.getAttribute("data-role")});};});
+  Array.prototype.forEach.call(document.querySelectorAll("[data-act]"),function(b){b.onclick=function(){
+    var a=b.getAttribute("data-act"); var note=""; if(a==="lost"||a==="hold"){note=prompt("Note (optional):")||"";}
+    act("ww-sales-action",{id:b.getAttribute("data-id"),action:a,note:note});};});
+}
+init();
+</script>
+</body>
+</html>
