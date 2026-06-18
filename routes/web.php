@@ -74,6 +74,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('settings',   [PanelApiController::class, 'settings']);
         Route::get('image-stats', [PanelApiController::class, 'imageStats']);
         Route::get('operations',  [PanelApiController::class, 'operations']);
+        Route::get('health',       [PanelApiController::class, 'health']);
         Route::get('branches',   [PanelApiController::class, 'branches']);
         Route::get('customers',  [PanelApiController::class, 'customers']);
         Route::get('contacts-import', [PanelApiController::class, 'importContacts']);

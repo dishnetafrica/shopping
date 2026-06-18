@@ -284,6 +284,48 @@ class PanelApiController extends Controller
         ]);
     }
 
+    /** System health for the diagnostics page: queue, redis, WhatsApp, OpenAI, last activity. */
+    public function health(Request $r)
+    {
+        $t = $r->user()->tenant;
+
+        $openai = (bool) (config('openai.api_key') ?: env('OPENAI_API_KEY'));
+
+        $redis = false;
+        try {
+            \Illuminate\Support\Facades\Cache::put('health:ping', 1, 5);
+            $redis = ((int) \Illuminate\Support\Facades\Cache::get('health:ping') === 1);
+        } catch (\Throwable $e) { /* redis down */ }
+
+        $failedJobs = null;
+        try { $failedJobs = (int) \Illuminate\Support\Facades\DB::table('failed_jobs')->count(); } catch (\Throwable $e) {}
+
+        $lastWebhook = $lastProcessed = null;
+        try {
+            $lastWebhook   = \Illuminate\Support\Facades\DB::table('bot_events')->where('tenant_id', $t->id)->where('stage', 'started')->max('created_at');
+            $lastProcessed = \Illuminate\Support\Facades\DB::table('bot_events')->where('tenant_id', $t->id)->where('stage', 'replied')->max('created_at');
+        } catch (\Throwable $e) {}
+
+        $wa = ['instance' => (string) ($t->whatsapp_instance ?? ''), 'state' => 'unknown'];
+        try {
+            $g = app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($t);
+            if ($t->whatsapp_instance && method_exists($g, 'connectionState')) {
+                $wa['state'] = $g->connectionState($t->whatsapp_instance) ?: 'unknown';
+            }
+        } catch (\Throwable $e) {}
+
+        return response()->json([
+            'ok'                => true,
+            'now'               => now()->toIso8601String(),
+            'openai_configured' => $openai,
+            'redis'             => $redis,
+            'queue'             => ['driver' => (string) config('queue.default'), 'failed_jobs' => $failedJobs],
+            'whatsapp'          => $wa,
+            'last_webhook_at'   => $lastWebhook,
+            'last_processed_at' => $lastProcessed,
+        ]);
+    }
+
     public function branches()
     {
         return response()->json(['branches' => $this->branchesList()]);

@@ -94,6 +94,18 @@ class EvolutionGateway implements WhatsAppGateway
         return $out;
     }
 
+    /** Evolution instance connection state: 'open' (connected), 'connecting', 'close', or null. */
+    public function connectionState(string $instance): ?string
+    {
+        try {
+            $resp = $this->http()->get("/instance/connectionState/{$instance}")->json();
+            $state = data_get($resp, 'instance.state') ?? data_get($resp, 'state');
+            return is_string($state) ? $state : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
     /**
      * Download a media message (image/audio/…) as base64 via Evolution. Used when the
      * webhook delivers an image without inline base64. Returns null on any failure so the

@@ -39,6 +39,7 @@
 
 <div class="wrap">
   <div class="intro">Every customer message and what the bot did with it — newest first, refreshing automatically. Use this to see <b>where a message stopped</b>.</div>
+  <div id="health" style="display:flex;gap:10px;flex-wrap:wrap;margin:0 0 16px"></div>
   <div class="legend">
     <span class="stage s-queued">queued</span><span class="stage s-started">started</span>
     <span class="stage s-replied">replied</span><span class="stage s-skipped">skipped</span>
@@ -52,6 +53,25 @@
   var $=function(i){return document.getElementById(i);};
   function esc(s){return (s||'').replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
   function tm(s){try{return new Date(s.replace(' ','T')+'Z').toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '';}}
+
+  function ago(s){ if(!s)return 'never'; try{var d=new Date(s.replace(' ','T')+(s.indexOf('Z')<0&&s.indexOf('+')<0?'Z':'')); var sec=Math.max(0,Math.floor((Date.now()-d.getTime())/1000)); if(sec<60)return sec+'s ago'; if(sec<3600)return Math.floor(sec/60)+'m ago'; if(sec<86400)return Math.floor(sec/3600)+'h ago'; return Math.floor(sec/86400)+'d ago'; }catch(e){return '';} }
+  function pill(label,val,state){ var c=state==='ok'?'#15803D':(state==='warn'?'#C2700A':(state==='bad'?'#B4232A':'#667085')); return '<div style="border:1px solid #e5e8ee;border-radius:10px;padding:8px 12px;min-width:130px"><div style="font-size:11px;color:#8a93a3;text-transform:uppercase;letter-spacing:.04em">'+label+'</div><div style="font-weight:800;font-size:14px;color:'+c+';margin-top:2px">'+val+'</div></div>'; }
+  async function renderHealth(){
+    var el=$('health'); if(!el)return;
+    try{
+      var r=await fetch('/papi/health',{cache:'no-store'}); var d=await r.json(); if(!d||!d.ok){el.innerHTML='';return;}
+      var waOk=d.whatsapp&&d.whatsapp.state==='open';
+      var waState=d.whatsapp?d.whatsapp.state:'unknown';
+      var fj=(d.queue&&d.queue.failed_jobs!=null)?d.queue.failed_jobs:'—';
+      el.innerHTML=
+        pill('WhatsApp', waState, waOk?'ok':(waState==='connecting'?'warn':'bad'))+
+        pill('Redis', d.redis?'connected':'down', d.redis?'ok':'bad')+
+        pill('OpenAI', d.openai_configured?'configured':'missing', d.openai_configured?'ok':'warn')+
+        pill('Queue ('+((d.queue&&d.queue.driver)||'?')+')', 'failed: '+fj, (fj==='—'||fj===0)?'ok':'warn')+
+        pill('Last webhook', ago(d.last_webhook_at), d.last_webhook_at?'ok':'warn')+
+        pill('Last processed', ago(d.last_processed_at), d.last_processed_at?'ok':'warn');
+    }catch(e){ el.innerHTML=''; }
+  }
 
   async function load(){
     try{
@@ -71,7 +91,9 @@
     }catch(e){}
   }
   load();
+  renderHealth();
   setInterval(load,4000);
+  setInterval(renderHealth,10000);
 </script>
 </body>
 </html>
