@@ -195,13 +195,12 @@ class ProcessIncomingMessage implements ShouldQueue
         $imgHash = ''; $imgQuery = ''; $imgConf = 0; $imgCandIds = [];
         if (! empty($this->incoming['has_image'] ?? false) && trim($text) === '' && ! $tenant->isMarketing()) {
             BotTrace::log($this->tenantId, $trace, $from, 'photo_received');
+            $askName = "📷 Please type the product name (e.g. \"rice 5kg\") and I'll find it for you.";
 
-            $featureOn = (bool) $tenant->setting('feature_image_search', true);
-            if (! $featureOn || ! $finder->enabled()) {
-                $ask = "📷 Please type the product name (e.g. \"rice 5kg\") and I'll find it for you.";
-                $gateway->sendText($tenant->whatsapp_instance, $from, $ask);
-                MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $ask);
-                BotTrace::log($this->tenantId, $trace, $from, 'photo_unidentified', $featureOn ? 'no AI key' : 'feature off');
+            if (! (bool) $tenant->setting('feature_image_search', true)) {
+                $gateway->sendText($tenant->whatsapp_instance, $from, $askName);
+                MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $askName);
+                BotTrace::log($this->tenantId, $trace, $from, 'photo_unidentified', 'feature off');
                 $convo->save();
                 return;
             }
@@ -210,48 +209,67 @@ class ProcessIncomingMessage implements ShouldQueue
             if ($b64 === '' && ! empty($this->incoming['media_key'] ?? null) && method_exists($gateway, 'getMediaBase64')) {
                 $b64 = (string) ($gateway->getMediaBase64($tenant->whatsapp_instance, $this->incoming['media_key']) ?? '');
             }
+            $imgHash = $b64 !== '' ? sha1($b64) : '';
 
-            $caption = (string) ($this->incoming['image_caption'] ?? '');
-            $res     = $b64 !== '' ? $finder->identify($b64, $caption) : null;
-            $minConf = (int) $tenant->setting('image_search_min_confidence', 50);
-            $query   = $res['query'] ?? '';
-            $conf    = (int) ($res['confidence'] ?? 0);
+            // Known-image shortcut: if customers have repeatedly chosen the same product
+            // for THIS exact photo, skip OpenAI entirely and go straight to it. Works even
+            // with no AI key. Self-correcting — a genuine new pick still gets recorded.
+            $known = $imgHash !== '' ? $this->knownImageProduct($tenant, $imgHash) : null;
 
-            // Couldn't read it, or vision isn't confident enough → ask for the name.
-            if ($query === '' || $conf < $minConf) {
-                $miss = "📷 I couldn't make out the product in that photo. Please type the name (e.g. \"sugar 2kg\") and I'll find it.";
-                $gateway->sendText($tenant->whatsapp_instance, $from, $miss);
-                MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $miss);
-                BotTrace::log($this->tenantId, $trace, $from, 'photo_unidentified',
-                    $query === '' ? 'vision returned nothing' : "low confidence {$conf}<{$minConf}: {$query}");
+            if ($known) {
+                $imgQuery   = $known['name'];
+                $imgConf    = 100;
+                $imgCandIds = [(string) $known['product_id']];
+                $text       = $known['name'];
+                $fromImage  = true;
+                BotTrace::log($this->tenantId, $trace, $from, 'photo_known', "{$known['name']} ({$known['votes']}/{$known['total']})");
+            } elseif (! $finder->enabled()) {
+                $gateway->sendText($tenant->whatsapp_instance, $from, $askName);
+                MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $askName);
+                BotTrace::log($this->tenantId, $trace, $from, 'photo_unidentified', 'no AI key');
                 $convo->save();
                 return;
+            } else {
+                $caption = (string) ($this->incoming['image_caption'] ?? '');
+                $res     = $b64 !== '' ? $finder->identify($b64, $caption) : null;
+                $minConf = (int) $tenant->setting('image_search_min_confidence', 50);
+                $query   = $res['query'] ?? '';
+                $conf    = (int) ($res['confidence'] ?? 0);
+
+                // Couldn't read it, or vision isn't confident enough → ask for the name.
+                if ($query === '' || $conf < $minConf) {
+                    $miss = "📷 I couldn't make out the product in that photo. Please type the name (e.g. \"sugar 2kg\") and I'll find it.";
+                    $gateway->sendText($tenant->whatsapp_instance, $from, $miss);
+                    MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $miss);
+                    BotTrace::log($this->tenantId, $trace, $from, 'photo_unidentified',
+                        $query === '' ? 'vision returned nothing' : "low confidence {$conf}<{$minConf}: {$query}");
+                    $convo->save();
+                    return;
+                }
+                BotTrace::log($this->tenantId, $trace, $from, 'photo_identified', "{$query} ({$conf}%)");
+
+                // Hallucination guard: the query must match a real product in this shop.
+                $cands = $brain->searchCatalogue($tenant, $query);
+                if (empty($cands)) {
+                    $nf = "🙂 I couldn't find this in our store. Please type the product name and I'll check for you.";
+                    $gateway->sendText($tenant->whatsapp_instance, $from, $nf);
+                    MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $nf);
+                    BotTrace::log($this->tenantId, $trace, $from, 'photo_search_miss', $query);
+                    $convo->save();
+                    return;
+                }
+                BotTrace::log($this->tenantId, $trace, $from, 'photo_search_hit', $query);
+
+                // Remember the photo's identity + candidate products so we can label the
+                // product the customer actually picks (feedback loop / training data).
+                $imgCandIds = array_values(array_filter(array_map(
+                    fn ($p) => (string) ($p['id'] ?? ''), array_slice($cands, 0, 8)
+                )));
+                $imgQuery = $query;
+                $imgConf  = $conf;
+                $text     = $query;
+                $fromImage = true;
             }
-            BotTrace::log($this->tenantId, $trace, $from, 'photo_identified', "{$query} ({$conf}%)");
-
-            // Hallucination guard: the query must match a real product in this shop.
-            $cands = $brain->searchCatalogue($tenant, $query);
-            if (empty($cands)) {
-                $nf = "🙂 I couldn't find this in our store. Please type the product name and I'll check for you.";
-                $gateway->sendText($tenant->whatsapp_instance, $from, $nf);
-                MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $nf);
-                BotTrace::log($this->tenantId, $trace, $from, 'photo_search_miss', $query);
-                $convo->save();
-                return;
-            }
-            BotTrace::log($this->tenantId, $trace, $from, 'photo_search_hit', $query);
-
-            // Remember the photo's identity + candidate products so we can label the
-            // product the customer actually picks (feedback loop / future training data).
-            $imgCandIds = array_values(array_filter(array_map(
-                fn ($p) => (string) ($p['id'] ?? ''), array_slice($cands, 0, 8)
-            )));
-            $imgHash  = $b64 !== '' ? sha1($b64) : '';
-            $imgQuery = $query;
-            $imgConf  = $conf;
-
-            $text = $query;
-            $fromImage = true;
         }
 
         $cartBefore = $this->cartProductIds($convo);
@@ -388,6 +406,46 @@ class ProcessIncomingMessage implements ShouldQueue
     private function norm(string $s): string
     {
         return strtolower(trim(preg_replace('/\s+/', ' ', $s)));
+    }
+
+    /**
+     * Known-image shortcut: if customers have repeatedly chosen the same product for
+     * this exact photo, return it so we can skip the vision call. Needs enough votes
+     * and a clear winner (both configurable per tenant). Never throws.
+     *
+     * @return array{product_id:mixed,name:string,votes:int,total:int}|null
+     */
+    private function knownImageProduct(Tenant $tenant, string $hash): ?array
+    {
+        if ($hash === '') return null;
+        $minVotes = max(2, (int) $tenant->setting('image_shortcut_min_votes', 3));
+        $minShare = (float) $tenant->setting('image_shortcut_min_share', 0.8);
+
+        try {
+            $rows = \Illuminate\Support\Facades\DB::table('image_search_feedback')
+                ->where('tenant_id', $tenant->id)
+                ->where('image_hash', $hash)
+                ->whereNotNull('product_id')
+                ->selectRaw('product_id, MAX(product_name) as name, count(*) as votes')
+                ->groupBy('product_id')
+                ->orderByDesc('votes')
+                ->get();
+        } catch (\Throwable $e) {
+            return null;
+        }
+        if ($rows->isEmpty()) return null;
+
+        $total = (int) $rows->sum('votes');
+        $top   = $rows->first();
+        if ($total >= $minVotes && $total > 0 && ((int) $top->votes / $total) > $minShare) {
+            return [
+                'product_id' => $top->product_id,
+                'name'       => (string) $top->name,
+                'votes'      => (int) $top->votes,
+                'total'      => $total,
+            ];
+        }
+        return null;
     }
 
     /** Map of product_id => name currently in the conversation cart. */
