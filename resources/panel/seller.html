@@ -492,7 +492,7 @@
       <div id="pageProducts" class="hide">
         <div class="crumb">Home / <b>Products</b></div>
         <div class="card">
-          <div class="head" style="flex-wrap:wrap;gap:8px">Products <input id="pmScan" inputmode="numeric" placeholder="⌨ Scan to edit + Enter" style="border:none;border-radius:8px;padding:7px 10px;font-size:13px;min-width:160px"><button id="pmScanCam" class="btn ghost" style="padding:7px 11px">📷 Scan</button><button class="btn" id="addProdBtn" style="margin-left:auto">+ Add product</button></div>
+          <div class="head" style="flex-wrap:wrap;gap:8px">Products <input id="pmScan" inputmode="numeric" placeholder="⌨ Scan to edit + Enter" style="border:none;border-radius:8px;padding:7px 10px;font-size:13px;min-width:160px"><button id="pmScanCam" class="btn ghost" style="padding:7px 11px">📷 Scan</button><button class="btn" id="addProdBtn" style="margin-left:auto">+ Add product</button><button class="btn" id="pmExport" style="margin-left:8px">⤓ Export CSV</button></div>
           <div class="body">
             <div class="filters">
               <div class="fg search"><label>Search</label><input id="pmSearch" placeholder="name, brand, keyword…"></div>
@@ -1743,6 +1743,7 @@ function pmInit(){
   $('pmSearch').oninput=function(){pmQuery=this.value.toLowerCase();renderPM();};
   $('pmCat').onchange=function(){pmCatFilter=this.value;renderPM();};
   $('addProdBtn').onclick=openAdd;
+  if($('pmExport'))$('pmExport').onclick=exportProductsCSV;
   $('pmSearch').value=pmQuery; renderPM();
 }
 function pmFiltered(){
@@ -1763,6 +1764,23 @@ function renderPM(){
   }).join(''):'<div class="empty">No matching products</div>';
 }
 function findProd(row){return CATALOGUE.find(function(p){return p._row===row;});}
+async function exportProductsCSV(){
+  try{
+    toast('Exporting…');
+    var r=await fetch(EP.products+'?token='+encodeURIComponent(token),{cache:'no-store'});
+    var d=await r.json();var rows=Array.isArray(d.products)?d.products:[];
+    if(!rows.length){toast('No products to export');return;}
+    var head=['Product Name','Category','Price','Base Price','Stock','Keywords','SKU','Barcode','Image','Active'];
+    function q(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';}
+    var lines=[head.map(q).join(',')];
+    rows.forEach(function(p){
+      lines.push([p['Product Name'],p['Category'],p['Price'],p['Base Price'],p['Stock'],p['Keywords'],p['Item_Code'],p['Barcode'],p['Image'],(p['Active']===false?'no':'yes')].map(q).join(','));
+    });
+    var b=new Blob([lines.join('\n')],{type:'text/csv'}),u=URL.createObjectURL(b),a=document.createElement('a');
+    a.href=u;a.download='products.csv';a.click();URL.revokeObjectURL(u);
+    toast('Exported '+rows.length+' products');
+  }catch(e){toast('Export failed');}
+}
 function closeModal(){$('modal').classList.add('hide');}
 function prodImgField(url){
   return '<div class="mfield"><label>Photo</label>'+
