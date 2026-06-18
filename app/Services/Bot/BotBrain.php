@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.18-86.6  lead-import-filters';
+    public const VERSION = '2026.06.18-86.7  bulk-order';
 
     public function __construct(
         protected ProductSearch $search,
@@ -70,6 +70,13 @@ class BotBrain
             return $ack;
         }
 
+        // A multi-line shopping list ("Jsk / 2 packet panipuri / 2 packet kachori / …") is a
+        // direct order, not a greeting. Parse it deterministically and build the cart BEFORE the
+        // NLU, so a leading "Jsk"/"hi" can't get the whole message classified as a greeting.
+        if (($bulk = $this->tryBulkOrder($tenant, $convo, $text)) !== null) {
+            return $bulk;
+        }
+
         // Try the LLM first; fall back to keywords.
         $action = $this->nlu->parse($tenant, $convo, $text);
         if ($action) {
@@ -79,6 +86,46 @@ class BotBrain
     }
 
     // ---------------- shared executor ----------------
+
+    /**
+     * Deterministic multi-line bulk order. Returns a cart reply when the message is a
+     * quantity-led shopping list with ≥2 lines that match real products; otherwise null so
+     * the normal NLU/keyword flow handles it. Never runs when a clarification / pending-order /
+     * checkout step is active (those replies must reach their own handlers).
+     */
+    protected function tryBulkOrder(Tenant $tenant, Conversation $convo, string $text): ?string
+    {
+        $st = is_array($convo->state) ? $convo->state : [];
+        if (! empty($st['options']) || ! empty($st['pending_order']) || ! empty($st['pending_resolved'])
+            || (($st['step'] ?? null) === 'awaiting_location') || (($st['step'] ?? null) === 'awaiting_confirm')) {
+            return null;
+        }
+
+        if (! \App\Services\Bot\BulkOrderParser::looksLikeBulkOrder($text)) return null;
+        $lines = \App\Services\Bot\BulkOrderParser::parseAll($text);
+        if (count($lines) < 2) return null;
+
+        $cart = is_array($convo->cart) ? $convo->cart : [];
+        $added = []; $missed = [];
+        foreach ($lines as $ln) {
+            $p = $this->search->find($ln['query'])->first();
+            if (! $p) { $missed[] = $ln['query']; continue; }
+            $net  = Pricing::net($tenant, (float) $p->price);
+            $cart = $this->addToCart($cart, $p->id, $p->name, $net, $ln['qty']);
+            $added[] = "{$ln['qty']} x {$p->name}";
+        }
+
+        // Need at least 2 confident matches to treat this as a bulk order; otherwise fall through.
+        if (count($added) < 2) return null;
+
+        $convo->cart = $cart;
+        $convo->save();
+        \App\Support\BotTrace::log($tenant->id, 'bulk', (string) $convo->customer_phone, 'bulk_order', count($added) . ' items' . ($missed ? ' /' . count($missed) . ' missed' : ''));
+
+        $head = "Added *" . implode('*, *', $added) . "*.";
+        if ($missed) $head .= "\n(I couldn't find: " . implode(', ', $missed) . ". Tell me the name and I'll add it.)";
+        return $head . "\n\n" . $this->cartSummary($tenant, $cart) . "\n\nAdd more, or say *checkout* to place the order.";
+    }
 
     protected function tryWebsiteOrderAck(Tenant $tenant, Conversation $convo, string $text): ?string
     {
