@@ -1,0 +1,7 @@
+# Append to routes/web.php (self-contained).
+
+/* ===== WINWORLD HUB ROUTES (one-click workspace) ===== */
+Route::middleware(['web', 'auth', \App\Http\Middleware\SetTenantFromUser::class])->group(function () {
+    Route::get('/panel/winworld', [\App\Http\Controllers\Panel\WinworldHubController::class, 'hub']);
+    Route::get('/panel/training', [\App\Http\Controllers\Panel\WinworldHubController::class, 'training']);
+});

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Win World — Workspace</title>
+<style>
+  :root{--ink:#16202B;--steel:#5C6B7A;--line:#E2E7EC;--bg:#F4F6F8;--amber:#D9821E;--green:#2E7D55}
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  header{background:var(--ink);color:#fff;padding:11px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0}
+  header .brand{font-weight:700;font-size:15px;letter-spacing:.01em}
+  header .brand b{color:var(--amber)}
+  header .who{font-size:12px;color:#aab4bd}
+  .body{flex:1;display:flex;min-height:0}
+  nav{width:208px;background:#1d2937;flex-shrink:0;overflow-y:auto;padding:8px 0}
+  nav .grp{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6c7b8a;padding:12px 18px 6px}
+  nav button{width:100%;text-align:left;background:none;border:0;color:#cfd6dd;padding:11px 18px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:11px;border-left:3px solid transparent}
+  nav button .ic{width:20px;text-align:center;font-size:15px}
+  nav button:hover{background:#26323f}
+  nav button.on{background:#26323f;color:#fff;border-left-color:var(--amber)}
+  nav button .ext{margin-left:auto;font-size:11px;color:#6c7b8a}
+  main{flex:1;min-width:0;position:relative;background:#fff}
+  iframe{width:100%;height:100%;border:0;display:none}
+  iframe.on{display:block}
+  /* home */
+  #home{position:absolute;inset:0;overflow-y:auto;padding:28px;display:none}
+  #home.on{display:block}
+  #home h1{font-size:22px;margin:0 0 4px}
+  #home p.lede{color:var(--steel);margin:0 0 22px;max-width:64ch}
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:26px}
+  .flow .step{background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 13px;font-size:13px;cursor:pointer}
+  .flow .step:hover{border-color:var(--amber)}
+  .flow .step b{display:block;font-size:11px;color:var(--steel);font-weight:500}
+  .flow .arr{color:var(--steel)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+  .tile{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;cursor:pointer;transition:.12s}
+  .tile:hover{border-color:var(--amber);transform:translateY(-1px)}
+  .tile .ic{font-size:22px}
+  .tile h3{margin:8px 0 3px;font-size:15px}
+  .tile p{margin:0;font-size:12.5px;color:var(--steel)}
+  .menu-btn{display:none;background:#26323f;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-size:16px;cursor:pointer}
+  @media(max-width:760px){
+    nav{position:absolute;z-index:20;height:calc(100% - 0px);left:-220px;transition:left .2s;box-shadow:2px 0 18px rgba(0,0,0,.25)}
+    nav.open{left:0}
+    .menu-btn{display:inline-block}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div style="display:flex;align-items:center;gap:10px">
+    <button class="menu-btn" id="menuBtn">☰</button>
+    <span class="brand">Win<b>World</b> · Workspace</span>
+  </div>
+  <span class="who">{{WW_TENANT}}</span>
+</header>
+<div class="body">
+  <nav id="nav"></nav>
+  <main>
+    <div id="home"></div>
+    <iframe id="frame" title="Win World tool"></iframe>
+  </main>
+</div>
+
+<script>
+"use strict";
+var NAV=[
+  {grp:"Overview"},
+  {k:"home",   ic:"🏠", t:"Home"},
+  {grp:"Sell side"},
+  {k:"sales",  ic:"📝", t:"Sales orders", u:"/panel/sales"},
+  {k:"exceptions", ic:"⚠", t:"Exceptions", u:"/panel/exceptions"},
+  {grp:"Make side"},
+  {k:"indents",ic:"📄", t:"Order indents", u:"/panel/indents"},
+  {k:"planning",ic:"🗓️", t:"Planning", u:"/panel/planning"},
+  {k:"production",ic:"🏭", t:"Production (floor)", u:"/panel/production"},
+  {grp:"See"},
+  {k:"dashboard",ic:"📊", t:"OEE Dashboard", u:"/panel/dashboard"},
+  {grp:"Setup & people"},
+  {k:"masters",ic:"🗄️", t:"Masters", blank:"/app", ext:"opens app"},
+  {k:"training",ic:"🎓", t:"Staff training", u:"/panel/training"}
+];
+var TILES=[
+  {k:"sales",ic:"📝",t:"Sales orders",d:"Capture & move orders through the SLA pipeline"},
+  {k:"indents",ic:"📄",t:"Order indents",d:"Create the controlled indent (or clone last)"},
+  {k:"planning",ic:"🗓️",t:"Planning",d:"Allocate machine + speed; auto hours & finish"},
+  {k:"production",ic:"🏭",t:"Production floor",d:"Operators record each run (mobile)"},
+  {k:"dashboard",ic:"📊",t:"OEE Dashboard",d:"Worst machine first, downtime, machine board"},
+  {k:"exceptions",ic:"⚠",t:"Exceptions",d:"Complaints, returns, credit/debit notes"},
+  {k:"masters",ic:"🗄️",t:"Masters",d:"Items, machines, materials, customers"},
+  {k:"training",ic:"🎓",t:"Staff training",d:"Per-role how-to for every screen"}
+];
+var nav=document.getElementById("nav"),frame=document.getElementById("frame"),home=document.getElementById("home");
+function byKey(k){return NAV.filter(function(n){return n.k===k;})[0];}
+function select(k){
+  var item=byKey(k); if(!item) return;
+  if(item.blank){ window.open(item.blank,"_blank"); return; }
+  if(k==="home"){ home.classList.add("on"); frame.classList.remove("on"); }
+  else { frame.src=item.u; frame.classList.add("on"); home.classList.remove("on"); }
+  Array.prototype.forEach.call(nav.querySelectorAll("button"),function(b){b.classList.toggle("on",b.getAttribute("data-k")===k);});
+  if(history.replaceState) history.replaceState(null,"","#"+k);
+  nav.classList.remove("open");
+}
+// build sidebar
+NAV.forEach(function(n){
+  if(n.grp){var g=document.createElement("div");g.className="grp";g.textContent=n.grp;nav.appendChild(g);return;}
+  var b=document.createElement("button");b.setAttribute("data-k",n.k);
+  b.innerHTML='<span class="ic">'+n.ic+'</span>'+n.t+(n.ext?'<span class="ext">'+n.ext+'</span>':'');
+  b.onclick=function(){select(n.k);};
+  nav.appendChild(b);
+});
+// home content
+home.innerHTML='<h1>Win World Workspace</h1>'+
+  '<p class="lede">Everything in one place. Pick a tool on the left, or follow the order flow below — click any step to jump there.</p>'+
+  '<div class="flow">'+
+    '<div class="step" data-go="sales"><b>1 · Sell</b>Sales order</div><span class="arr">→</span>'+
+    '<div class="step" data-go="indents"><b>2 · Specify</b>Order indent</div><span class="arr">→</span>'+
+    '<div class="step" data-go="planning"><b>3 · Plan</b>Machine & time</div><span class="arr">→</span>'+
+    '<div class="step" data-go="production"><b>4 · Make</b>Floor entry</div><span class="arr">→</span>'+
+    '<div class="step" data-go="dashboard"><b>5 · Improve</b>OEE</div>'+
+  '</div>'+
+  '<div class="cards">'+TILES.map(function(t){return '<div class="tile" data-go="'+t.k+'"><div class="ic">'+t.ic+'</div><h3>'+t.t+'</h3><p>'+t.d+'</p></div>';}).join("")+'</div>';
+Array.prototype.forEach.call(home.querySelectorAll("[data-go]"),function(el){el.onclick=function(){select(el.getAttribute("data-go"));};});
+document.getElementById("menuBtn").onclick=function(){nav.classList.toggle("open");};
+// initial
+var start=(location.hash||"").replace("#","");
+select(byKey(start)?start:"home");
+</script>
+</body>
+</html>

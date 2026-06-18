@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Win World MES — Staff Training</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EAEDF1;--panel:#F7F8FA;--ink:#16202B;--steel:#5C6B7A;--hair:#D3D9E0;
+    --amber:#D9821E;--green:#2E7D55;--indigo:#3B5BA9;--red:#B4232A;
+    --disp:"Space Grotesk",system-ui,sans-serif;--body:"Inter",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(circle at 1px 1px, rgba(22,32,43,.05) 1px, transparent 0) 0 0/22px 22px, var(--paper);
+    color:var(--ink);font-family:var(--body);line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px;margin:0 auto;padding:34px 20px 80px}
+  .mast{border-bottom:2px solid var(--ink);padding-bottom:16px;margin-bottom:18px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--amber)}
+  h1{font-family:var(--disp);font-weight:700;font-size:clamp(24px,4vw,36px);margin:6px 0 0;letter-spacing:-.02em}
+  h1 span{color:var(--steel)}
+  .lede{color:var(--steel);max-width:62ch;margin-top:8px;font-size:14.5px}
+
+  .why{background:var(--ink);color:#e7ecf1;border-radius:14px;padding:16px 18px;margin:18px 0 6px}
+  .why b{color:#fff}
+  .why .mono{font-family:var(--mono);font-size:12px;color:#aeb8c2}
+
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:22px 0 18px;position:sticky;top:0;background:linear-gradient(var(--paper),var(--paper) 70%,transparent);padding:10px 0;z-index:5}
+  .tab{font-family:var(--mono);font-size:12px;border:1px solid var(--hair);background:var(--panel);border-radius:999px;padding:8px 13px;cursor:pointer;color:var(--steel);white-space:nowrap}
+  .tab .ic{margin-right:6px}
+  .tab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+  .module{display:none}
+  .module.on{display:block;animation:fade .2s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  .mhead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;border-left:4px solid var(--amber);padding-left:14px;margin-bottom:4px}
+  .mhead h2{font-family:var(--disp);font-weight:700;font-size:22px;margin:0;letter-spacing:-.01em}
+  .mhead .who{font-size:13px;color:var(--steel)}
+  .screen{font-family:var(--mono);font-size:12px;background:var(--panel);border:1px solid var(--hair);border-radius:8px;padding:3px 9px;color:var(--ink)}
+
+  .card{background:var(--panel);border:1px solid var(--hair);border-radius:13px;padding:16px 18px;margin:14px 0}
+  .card h3{font-family:var(--disp);font-weight:500;font-size:15px;margin:0 0 10px}
+  ol.steps{margin:0;padding-left:0;counter-reset:s;list-style:none}
+  ol.steps li{position:relative;padding:0 0 12px 38px;counter-increment:s}
+  ol.steps li:last-child{padding-bottom:0}
+  ol.steps li::before{content:counter(s);position:absolute;left:0;top:-1px;width:24px;height:24px;border-radius:50%;
+    background:var(--ink);color:#fff;font-family:var(--mono);font-size:12px;display:flex;align-items:center;justify-content:center}
+  ol.steps li b{font-weight:600}
+  .kbd{font-family:var(--mono);font-size:12px;background:#fff;border:1px solid var(--hair);border-radius:6px;padding:1px 7px}
+
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .do,.dont{border-radius:13px;padding:14px 16px}
+  .do{background:#eef7f1;border:1px solid #bfe0cd}
+  .dont{background:#fbecec;border:1px solid #e6b8b8}
+  .do h4,.dont h4{margin:0 0 8px;font-family:var(--disp);font-weight:500;font-size:14px}
+  .do ul,.dont ul{margin:0;padding-left:18px;font-size:13.5px}
+  .do li,.dont li{margin-bottom:5px}
+
+  .alertbox{display:flex;gap:10px;align-items:flex-start;background:#fff;border:1px solid var(--hair);border-left:3px solid var(--amber);border-radius:10px;padding:11px 13px;margin:8px 0;font-size:13.5px}
+  .alertbox .em{font-size:18px;line-height:1.2}
+
+  .note{font-size:13px;color:var(--steel)}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;border:1px solid var(--hair);border-radius:999px;padding:2px 9px;color:var(--steel)}
+  footer{margin-top:40px;border-top:1px solid var(--hair);padding-top:16px;font-family:var(--mono);font-size:11px;color:var(--steel);text-align:center}
+  .printlink{float:right;font-family:var(--mono);font-size:11px;color:var(--indigo);cursor:pointer;text-decoration:underline;background:none;border:0}
+
+  @media(max-width:680px){.split{grid-template-columns:1fr}.tabs{position:static}}
+  @media print{
+    .tabs,.printlink{display:none}
+    .module{display:block!important;page-break-after:always}
+    body{background:#fff}
+    .why{background:#fff;color:var(--ink);border:1px solid var(--hair)}
+    ol.steps li::before{background:#fff;color:var(--ink);border:1px solid var(--ink)}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="mast">
+    <button class="printlink" onclick="window.print()">Print all modules ⎙</button>
+    <div class="eyebrow">Winworld Impex · GalaxyPack</div>
+    <h1>MES Staff Training <span>— find your role, learn your screen</span></h1>
+    <p class="lede">Each person below has one or two screens to learn. Do your part well and the whole factory gets faster — that's the point of the system.</p>
+  </div>
+
+  <div class="why">
+    <b>Why this system exists:</b> to raise machine efficiency (OEE = Availability × Performance × Quality).
+    Every order is entered once and reused everywhere; the system plans the work, records what actually happened, and
+    alerts the right person the moment time is being lost. <span class="mono">SAP stays the book of record — this plans, times, records and alerts.</span>
+    <div class="mono" style="margin-top:8px">Log in once at <b style="color:#fff">/app</b> with your WhatsApp number (a one-time code arrives on WhatsApp — no password). Then open your screen below.</div>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+
+  <!-- ============ MODULES ============ -->
+  <div id="modules">
+
+    <!-- OPERATOR -->
+    <section class="module" data-role="operator">
+      <div class="mhead"><h2>Production Operator &amp; Supervisor</h2><span class="who">extrusion · printing · cutting · blending</span><span class="screen">/panel/production</span></div>
+      <p class="note">You record what actually happens on your machine. This is the most important data in the whole system — the efficiency numbers, the alerts, the daily report all come from what you enter here. Use a phone or tablet at the machine.</p>
+
+      <div class="card"><h3>Recording a run</h3>
+        <ol class="steps">
+          <li>Open <span class="kbd">/panel/production</span> on your phone.</li>
+          <li>Tap <b>your machine</b> in the top row.</li>
+          <li>Tap the <b>job</b> you are running (it shows the indent, product and target kg/hr).</li>
+          <li>When you start, tap <b>Now</b> next to Start time. When you finish, tap <b>Now</b> next to End time.</li>
+          <li>Enter <b>produced pcs</b> and <b>produced kg</b>, and <b>scrap kg</b> if any.</li>
+          <li>If the machine stopped, choose the <b>stop reason</b> (Breakdown / Power / Material).</li>
+          <li>Set <b>QC</b> — Pass or Reject — for the run.</li>
+          <li>Tap <b>Save entry</b>. You'll see the run's hours, output and OEE.</li>
+        </ol>
+      </div>
+
+      <div class="split">
+        <div class="do"><h4>Do</h4><ul>
+          <li>Log <b>as it happens</b> — start when you start, end when you stop.</li>
+          <li>Enter the <b>real</b> produced and scrap figures, even on a bad run.</li>
+          <li>Always pick a <b>stop reason</b> when the machine stops.</li>
+        </ul></div>
+        <div class="dont"><h4>Don't</h4><ul>
+          <li>Don't fill it all in at end of shift from memory — the numbers drift.</li>
+          <li>Don't hide scrap or a reject — that's exactly what we need to fix.</li>
+          <li>Don't guess kg — weigh it.</li>
+        </ul></div>
+      </div>
+      <p class="note"><span class="pill">why it matters</span> If a stop or reject isn't logged, the system can't alert anyone and the loss stays invisible. Honest, prompt entries are how the factory finds and fixes the biggest time-wasters.</p>
+    </section>
+
+    <!-- PRODUCTION MANAGER -->
+    <section class="module" data-role="pdm">
+      <div class="mhead"><h2>Production Manager (PD.M)</h2><span class="who">machine allocation · the daily efficiency review</span><span class="screen">/panel/planning · /panel/dashboard</span></div>
+      <p class="note">You decide which machine runs which job and when. The system then works out how long it will take and when it will finish — and the operators see the jobs you create.</p>
+
+      <div class="card"><h3>Planning a job</h3>
+        <ol class="steps">
+          <li>Open <span class="kbd">/panel/planning</span>. Each open indent is a card, with its processes listed.</li>
+          <li>For each process, pick the <b>machine</b>, enter the <b>running speed</b> and the <b>planned start</b>.</li>
+          <li>Enter the <b>output (kg/hr)</b> you expect — the system uses your figure as the source of truth.</li>
+          <li>Tap <b>Plan</b>. The system fills in <b>required hours</b> and the <b>planned end</b>, and marks the indent <i>Planned</i>.</li>
+          <li>Repeat for the other processes. The jobs now appear on the operators' screen.</li>
+        </ol>
+      </div>
+      <div class="card"><h3>The daily review (5 minutes)</h3>
+        <ol class="steps">
+          <li>Open <span class="kbd">/panel/dashboard</span>.</li>
+          <li>Look at <b>Machine OEE — worst first</b>. The machine at the top is losing the most.</li>
+          <li>Look at <b>Downtime by reason</b>. Attack the top bar — that's your biggest recurring loss.</li>
+          <li>Check the <b>Machine board</b> — any machine idle (low utilisation) or overbooked?</li>
+          <li>Pick <b>one</b> thing to fix today. Re-check tomorrow.</li>
+        </ol>
+      </div>
+      <p class="note"><span class="pill">tip</span> Don't try to fix everything. The system's job is to make the single biggest loss impossible to ignore — go after that one.</p>
+    </section>
+
+    <!-- SALES -->
+    <section class="module" data-role="sales">
+      <div class="mhead"><h2>Sales — SDH &amp; Sales Coordinator</h2><span class="who">create the order indent</span><span class="screen">/panel/indents</span></div>
+      <p class="note">You turn a confirmed order into an <b>indent</b> — the controlled document that tells the factory exactly what to make.</p>
+
+      <div class="card"><h3>Creating an indent</h3>
+        <ol class="steps">
+          <li>Open <span class="kbd">/panel/indents</span> → <b>New</b>.</li>
+          <li>Pick the <b>customer</b> and <b>item</b>; the product name fills in. Enter <b>order qty</b>, <b>mixing qty</b> and the <b>required date</b>.</li>
+          <li>Tick the <b>processes</b> the job needs (Blending / Extrusion / Printing / Cutting). Only the relevant spec sections appear.</li>
+          <li>Fill the <b>specs</b> for each process (width, gauge, colours, bag size, etc.).</li>
+          <li>Add the <b>blending materials</b> with their % per extruder — the kg are worked out for you. Watch for the ✓ (balanced) or ⚠ (percentages don't add to 100).</li>
+          <li>Tap <b>Save indent</b> — a controlled indent number is assigned (e.g. 003-090626).</li>
+        </ol>
+      </div>
+      <div class="card"><h3>Repeat order? Clone it.</h3>
+        <ol class="steps">
+          <li>Pick the previous indent from the <b>open indent</b> list at the top.</li>
+          <li>Tap <b>Clone</b> ("same as last order"). All specs and the recipe copy across.</li>
+          <li>Change only what's different (qty, required date), then <b>Save</b> — a new number is assigned.</li>
+        </ol>
+      </div>
+      <div class="split">
+        <div class="do"><h4>Do</h4><ul>
+          <li>Always set a <b>required date</b> — it drives the delay-risk alert.</li>
+          <li>Make the blend percentages add to <b>100%</b> per extruder (✓).</li>
+        </ul></div>
+        <div class="dont"><h4>Don't</h4><ul>
+          <li>Don't leave the product/specs vague — the floor builds exactly what you write.</li>
+          <li>Don't retype a repeat order — clone it.</li>
+        </ul></div>
+      </div>
+    </section>
+
+    <!-- ACCOUNTS / MASTERS -->
+    <section class="module" data-role="masters">
+      <div class="mhead"><h2>Accounts Clerk &amp; Admin</h2><span class="who">keep the masters correct</span><span class="screen">/app → "Win World" group</span></div>
+      <p class="note">The masters are the foundation. If an item's dimensions or a machine's details are wrong, every calculation built on them is wrong. You manage these in the business panel at <span class="kbd">/app</span>, under the <b>Win World</b> menu group.</p>
+
+      <div class="card"><h3>What you maintain</h3>
+        <ol class="steps">
+          <li><b>Items</b> — code, name, width, length, gauge. The <b>gram/pcs</b> is calculated for you (W × L × gauge ÷ 3300); just keep the dimensions right.</li>
+          <li><b>Machines</b> — the 22 machines with process and max speed. Mark a machine <b>inactive</b> when it's out of service so it can't be planned.</li>
+          <li><b>Materials</b> — the resins, masterbatch and additives used in blending.</li>
+          <li><b>Customers</b> — name, credit-limit days, and the <b>ageing / overdue days</b> (kept in step with SAP). Anything over <b>30 days overdue</b> shows red — that needs MD approval before the order proceeds.</li>
+        </ol>
+      </div>
+      <p class="note"><span class="pill">remember</span> SAP is still the book of record for items, prices and ageing. These masters are the planning copy — keep them in step with SAP.</p>
+    </section>
+
+    <!-- QC -->
+    <section class="module" data-role="qc">
+      <div class="mhead"><h2>Quality Control</h2><span class="who">Supervisor · QC · Section-Head QC</span><span class="screen">/panel/production</span></div>
+      <p class="note">Quality is one of the three parts of OEE. Every run gets a QC verdict, and a reject is flagged immediately so it can be fixed before more material is wasted.</p>
+      <div class="card"><h3>On each run</h3>
+        <ol class="steps">
+          <li>On the production entry for the run, set <b>QC</b> to <b>Pass</b> or <b>Reject</b>.</li>
+          <li>A <b>Reject</b> sends an instant WhatsApp alert to production so the issue is caught early.</li>
+          <li>Record the <b>scrap kg</b> so the quality figure on the dashboard is accurate.</li>
+        </ol>
+      </div>
+      <div class="alertbox"><span class="em">⚠</span><div><b>QC REJECT</b> alerts go to the <b>production</b> team the moment you mark a run rejected — the faster the catch, the less material wasted.</div></div>
+      <p class="note"><span class="pill">coming soon</span> A printed Order Indent Form (the familiar WIL/MKT/OIF/001 layout) with digital Supervisor / QC / Section-Head sign-offs per process.</p>
+    </section>
+
+    <!-- STORES & MAINTENANCE -->
+    <section class="module" data-role="stores">
+      <div class="mhead"><h2>Stores &amp; Maintenance</h2><span class="who">act on the alerts</span><span class="screen">WhatsApp</span></div>
+      <p class="note">You don't enter data — you respond. When a machine stops, the system messages you on WhatsApp within seconds so the machine isn't sitting idle waiting for someone to notice.</p>
+      <div class="alertbox"><span class="em">⛔</span><div><b>Material Shortage</b> stop → <b>Stores</b>. Get the material to the machine fast.</div></div>
+      <div class="alertbox"><span class="em">⛔</span><div><b>Machine Breakdown</b> stop → <b>Maintenance</b>. Respond and clear it.</div></div>
+      <p class="note"><span class="pill">to receive alerts</span> Your WhatsApp number must be added (by the admin) to the recipient list with your role — <span class="kbd">stores</span> or <span class="kbd">maintenance</span>. Every minute saved here is a minute the machine is running instead of waiting.</p>
+    </section>
+
+    <!-- MD / AUDITOR -->
+    <section class="module" data-role="md">
+      <div class="mhead"><h2>MD &amp; Auditor</h2><span class="who">read the efficiency picture</span><span class="screen">/panel/dashboard</span></div>
+      <p class="note">One screen tells you how the factory is performing and where it's losing time.</p>
+      <div class="card"><h3>What to read</h3>
+        <ol class="steps">
+          <li><b>Avg OEE</b> and produced-vs-ordered kg — the headline health.</li>
+          <li><b>First-pass yield</b> — how much came out good first time.</li>
+          <li><b>Machine OEE, worst first</b> — where the losses are concentrated.</li>
+          <li><b>Downtime by reason</b> — what keeps stopping the line.</li>
+          <li>Use the <b>7d / 30d / All</b> toggle to see the trend.</li>
+        </ol>
+      </div>
+      <div class="alertbox"><span class="em">📦</span><div>You and Sales also receive a <b>DELAY RISK</b> alert when a job's planned finish is past the customer's required date — early enough to do something about it.</div></div>
+      <p class="note"><span class="pill">use it in the daily meeting</span> Ask one question: "What is the worst machine / biggest downtime reason, and what are we doing about it?"</p>
+    </section>
+
+  </div>
+
+  <footer>
+    Winworld Impex Limited · MES staff training · v1 (covers the live screens) ·
+    SAP remains the book of record. Tap “Print all modules” to hand out paper copies.
+  </footer>
+</div>
+
+<script>
+"use strict";
+var ROLES=[
+  {k:"operator",ic:"🏭",t:"Operator / Supervisor"},
+  {k:"pdm",ic:"🗓️",t:"Production Manager"},
+  {k:"sales",ic:"📝",t:"Sales (SDH / Coordinator)"},
+  {k:"masters",ic:"🗄️",t:"Accounts / Admin"},
+  {k:"qc",ic:"✓",t:"Quality Control"},
+  {k:"stores",ic:"⛔",t:"Stores / Maintenance"},
+  {k:"md",ic:"📊",t:"MD / Auditor"}
+];
+var tabs=document.getElementById("tabs");
+function show(k){
+  Array.prototype.forEach.call(document.querySelectorAll(".module"),function(m){m.classList.toggle("on",m.getAttribute("data-role")===k);});
+  Array.prototype.forEach.call(tabs.children,function(b){b.classList.toggle("on",b.getAttribute("data-k")===k);});
+  if(history.replaceState) history.replaceState(null,"","#"+k);
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+ROLES.forEach(function(r){
+  var b=document.createElement("button");
+  b.className="tab";b.setAttribute("data-k",r.k);
+  b.innerHTML='<span class="ic">'+r.ic+'</span>'+r.t;
+  b.onclick=function(){show(r.k);};
+  tabs.appendChild(b);
+});
+var start=(location.hash||"").replace("#","");
+show(ROLES.some(function(r){return r.k===start;})?start:"operator");
+</script>
+</body>
+</html>
