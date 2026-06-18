@@ -56,6 +56,7 @@
 <div class="top">
   <a class="bk" href="/panel">‹</a>
   <h1>🎯 Leads</h1>
+  <button class="btn" onclick="openImport()">⇪ Import</button>
   <button class="btn pri" onclick="openForm()">+ New lead</button>
 </div>
 
@@ -98,6 +99,7 @@
     </div>
     <div class="fld"><label>Company</label><input id="fCompany" placeholder="ABC Logistics"></div>
     <div class="fld"><label>Interest</label><input id="fInterest" placeholder="Dedicated Internet 50 Mbps"></div>
+    <div class="fld"><label>Tag</label><input id="fTag" placeholder="Starlink / Fiber / Existing Customer"></div>
     <div class="two">
       <div class="fld"><label>Source</label><select id="fSource"></select></div>
       <div class="fld"><label>Assigned to</label><select id="fAssigned"></select></div>
@@ -122,6 +124,38 @@
       <span class="err" id="fErr"></span>
       <button class="btn" onclick="closeForm()">Cancel</button>
       <button class="btn pri" id="fSave" onclick="saveForm()">Save lead</button>
+    </div>
+  </div>
+</div>
+
+<div class="ov" id="ovImp">
+  <div class="modal" style="max-width:560px">
+    <h2>Import leads</h2>
+    <div class="note" style="margin-bottom:10px">Paste numbers or CSV. One per line, or <code>Name,Phone,Source,Tag</code>. Import only — this never sends any message.</div>
+    <div class="fld">
+      <textarea id="iText" style="min-height:150px;font-family:ui-monospace,Menlo,monospace;font-size:13px" placeholder="+211912345678
++211923456789
+John,+211934567890,Referral,Starlink"></textarea>
+    </div>
+    <div class="two">
+      <div class="fld"><label>Default country</label>
+        <select id="iCC"><option value="211">South Sudan (+211)</option><option value="256">Uganda (+256)</option><option value="254">Kenya (+254)</option><option value="255">Tanzania (+255)</option><option value="250">Rwanda (+250)</option><option value="243">DR Congo (+243)</option></select>
+      </div>
+      <div class="fld"><label>On duplicate</label>
+        <select id="iDedupe"><option value="skip">Skip existing</option><option value="update">Update existing</option><option value="create">Create duplicate</option></select>
+      </div>
+    </div>
+    <div class="two">
+      <div class="fld"><label>Source</label><input id="iSource" value="import" placeholder="import"></div>
+      <div class="fld"><label>Tag (applied to all)</label><input id="iTag" placeholder="Starlink"></div>
+    </div>
+    <div class="fld" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="iOptIn" checked style="width:auto"><label style="margin:0">Marketing opt-in (these contacts agreed to be messaged)</label></div>
+    <div id="iResult" class="note" style="margin:6px 0;min-height:18px"></div>
+    <div class="modf">
+      <span class="err" id="iErr"></span>
+      <button class="btn" onclick="closeImport()">Close</button>
+      <button class="btn" id="iPreview" onclick="runImport(true)">Preview</button>
+      <button class="btn pri" id="iGo" onclick="runImport(false)">Import</button>
     </div>
   </div>
 </div>
@@ -197,7 +231,7 @@
       '<td><b>'+esc(L.name||'—')+'</b></td>'+
       '<td>+'+esc(L.phone)+'</td>'+
       '<td>'+esc(L.company||'—')+'</td>'+
-      '<td class="wrap2">'+esc(L.interest||'—')+(L.notes?'<div class="note" style="margin-top:2px">'+esc(L.notes)+'</div>':'')+'</td>'+
+      '<td class="wrap2">'+esc(L.interest||'—')+(L.tag?' <span class="pill" style="background:#eef2ff;color:#3743a4">'+esc(L.tag)+'</span>':'')+(L.notes?'<div class="note" style="margin-top:2px">'+esc(L.notes)+'</div>':'')+'</td>'+
       '<td>'+esc(srcLabel(L.source))+'</td>'+
       '<td class="band b-'+esc(L.band)+'">'+L.score+'<div class="note" style="font-weight:600">'+esc(L.band)+'</div></td>'+
       '<td>'+statusSel(L.id,L.status)+'<div style="margin-top:2px">'+stPill+'</div></td>'+
@@ -218,9 +252,36 @@
     sel.innerHTML=vals.map(function(v){var lab=labeler?labeler(v):v;return '<option value="'+v+'"'+(v===cur?' selected':'')+'>'+esc(lab)+'</option>';}).join('');
   }
   function setFu(days){ var d=new Date(); d.setDate(d.getDate()+days); $('fFollow').value=d.toISOString().slice(0,10); }
+  function openImport(){
+    $('iErr').textContent='';$('iResult').textContent='';$('iText').value='';$('iTag').value='';
+    $('iSource').value='import';$('iDedupe').value='skip';$('iOptIn').checked=true;
+    $('ovImp').classList.add('show');
+  }
+  function closeImport(){$('ovImp').classList.remove('show');}
+  async function runImport(dry){
+    var text=$('iText').value||''; if(!text.trim()){$('iErr').textContent='Paste some numbers first';return;}
+    $('iErr').textContent='';$('iGo').disabled=true;$('iPreview').disabled=true;$('iResult').textContent=dry?'Previewing…':'Importing…';
+    try{
+      var r=await fetch('/papi/lead-import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        text:text, default_cc:$('iCC').value, source:$('iSource').value||'import', tag:$('iTag').value||'',
+        dedupe:$('iDedupe').value, opt_in:$('iOptIn').checked, dry_run:dry
+      })});
+      var d=await r.json();
+      if(!d||!d.ok){$('iErr').textContent=(d&&d.error)||'Import failed';$('iResult').textContent='';}
+      else if(dry){
+        var s=(d.sample||[]).slice(0,5).map(function(x){return '+'+esc(x.phone)+(x.name?(' · '+esc(x.name)):'')+(x.tag?(' · '+esc(x.tag)):'');}).join('<br>');
+        $('iResult').innerHTML='<b>'+d.total+'</b> valid rows · <b>'+d.invalid+'</b> invalid.'+(s?('<div style="margin-top:5px">'+s+'</div>'):'');
+      } else {
+        $('iResult').innerHTML='✅ Created <b>'+d.created+'</b> · Updated '+d.updated+' · Skipped '+d.skipped+' · Invalid '+d.invalid;
+        load();
+      }
+    }catch(e){$('iErr').textContent='Network error';$('iResult').textContent='';}
+    $('iGo').disabled=false;$('iPreview').disabled=false;
+  }
+
   function openForm(){
     $('mTitle').textContent='New lead';$('fErr').textContent='';
-    $('fId').value='';$('fName').value='';$('fPhone').value='';$('fCompany').value='';$('fInterest').value='';
+    $('fId').value='';$('fName').value='';$('fPhone').value='';$('fCompany').value='';$('fInterest').value='';$('fTag').value='';
     $('fScore').value='';$('fNotes').value='';$('fFollow').value='';$('fLastContacted').textContent='';
     fillSelect($('fSource'),OPT.sources.length?OPT.sources:['manual'],'manual',srcLabel);
     var aopts=[''].concat(OPT.recipients.map(function(r){return r.phone;}));
@@ -232,7 +293,7 @@
     openForm();
     $('mTitle').textContent='Lead #'+L.id;
     $('fId').value=L.id;$('fName').value=L.name||'';$('fPhone').value=L.phone||'';$('fCompany').value=L.company||'';
-    $('fInterest').value=L.interest||'';$('fScore').value=L.score||'';$('fNotes').value=L.notes||'';
+    $('fInterest').value=L.interest||'';$('fScore').value=L.score||'';$('fNotes').value=L.notes||'';$('fTag').value=L.tag||'';
     $('fFollow').value=L.next_followup_at?String(L.next_followup_at).slice(0,10):'';
     $('fLastContacted').textContent=L.last_contacted_at?('Last contacted: '+new Date(L.last_contacted_at).toLocaleDateString([], {day:'2-digit',month:'short',year:'numeric'})):'';
     if(L.source)$('fSource').value=L.source;
@@ -249,6 +310,7 @@
     if($('fId').value)p.set('id',$('fId').value);
     p.set('name',$('fName').value||'');p.set('phone',phone);p.set('company',$('fCompany').value||'');
     p.set('interest',$('fInterest').value||'');p.set('source',$('fSource').value||'manual');
+    p.set('tag',$('fTag').value||'');
     p.set('assigned_to',$('fAssigned').value||'');p.set('status',$('fStatus').value||'');
     if($('fScore').value!=='')p.set('lead_score',$('fScore').value);
     p.set('next_followup',$('fFollow').value||'');
@@ -262,6 +324,7 @@
   }
 
   $('ov').addEventListener('click',function(e){if(e.target===this)closeForm();});
+  $('ovImp').addEventListener('click',function(e){if(e.target===this)closeImport();});
   (async function(){await loadOptions();load();})();
 </script>
 </body>

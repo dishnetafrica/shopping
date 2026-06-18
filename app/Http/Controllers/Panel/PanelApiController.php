@@ -370,6 +370,7 @@ class PanelApiController extends Controller
                 'company'   => $l->company,
                 'interest'  => $l->interest,
                 'source'    => $l->source,
+                'tag'       => $l->tag,
                 'status'    => $l->status,
                 'assigned'  => $l->assigned_to ? (($names[$l->assigned_to] ?? '') ?: $l->assigned_to) : '',
                 'assigned_to' => $l->assigned_to,
@@ -435,6 +436,7 @@ class PanelApiController extends Controller
             $lead->company        = $company ?: null;
             $lead->interest       = $interest ?: $lead->interest;
             $lead->source         = $source ?: $lead->source;
+            if ($r->query('tag') !== null) $lead->tag = trim((string) $r->query('tag')) ?: null;
             $lead->notes          = $notes ?: null;
             if ($status)   $lead->status = $status;
             if ($hasScore) $lead->lead_score = max(0, min(100, (int) $scoreRaw));
@@ -469,6 +471,7 @@ class PanelApiController extends Controller
             'dedupe_key'     => \App\Services\Bot\LeadDedupe::key($phone, 'lead', $interest),
             'lead_score'     => $score,
             'source'         => $source ?: 'manual',
+            'tag'            => (trim((string) $r->query('tag', '')) ?: null),
             'status'         => $status ?: ($assigned !== '' ? 'assigned' : 'new'),
             'assigned_to'    => $assigned ?: null,
             'claimed_at'     => $assigned !== '' ? now() : null,
@@ -536,6 +539,87 @@ class PanelApiController extends Controller
                 . "Source: " . $lead->source;
             \App\Jobs\NotifyOwner::dispatch($t->id, $msg, $lead->assigned_to);
         } catch (\Throwable $e) { /* non-fatal */ }
+    }
+
+    /**
+     * Bulk import leads from pasted text / CSV. Import only — never sends a message.
+     * Body: { text, default_cc, source, tag, dedupe: skip|update|create, opt_in, dry_run }.
+     */
+    public function leadImport(Request $r)
+    {
+        $t       = $r->user()->tenant;
+        $text    = (string) $r->input('text', '');
+        $cc      = preg_replace('/\D+/', '', (string) $r->input('default_cc', '211')) ?: '211';
+        $gSource = strtolower(trim((string) $r->input('source', 'import'))) ?: 'import';
+        $gTag    = trim((string) $r->input('tag', ''));
+        $dedupe  = strtolower((string) $r->input('dedupe', 'skip'));
+        $optIn   = filter_var($r->input('opt_in', true), FILTER_VALIDATE_BOOLEAN);
+        $dry     = filter_var($r->input('dry_run', false), FILTER_VALIDATE_BOOLEAN);
+        if (! in_array($dedupe, ['skip', 'update', 'create'], true)) $dedupe = 'skip';
+
+        if (trim($text) === '') return response()->json(['ok' => false, 'error' => 'Nothing to import'], 422);
+
+        $rows = \App\Services\Bot\LeadImport::parseRows($text);
+        if (count($rows) > 5000) return response()->json(['ok' => false, 'error' => 'Too many rows (max 5000 per import)'], 422);
+
+        $created = $updated = $skipped = $invalid = 0;
+        $sample  = [];
+        $scorer  = new \App\Services\Bot\LeadScorer();
+
+        foreach ($rows as $row) {
+            $phone = \App\Services\Bot\LeadImport::normalizePhone((string) $row['phone'], $cc);
+            if (! $phone) { $invalid++; continue; }
+
+            $name   = trim((string) $row['name']);
+            $source = strtolower(trim((string) $row['source'])) ?: $gSource;
+            $tag    = trim((string) $row['tag']) ?: $gTag;
+            if (count($sample) < 8) $sample[] = ['name' => $name, 'phone' => $phone, 'source' => $source, 'tag' => $tag];
+
+            if ($dry) continue;
+
+            $existing = ($dedupe === 'create') ? null : \App\Models\Lead::where('customer_phone', $phone)->first();
+
+            if ($existing) {
+                if ($dedupe === 'skip') { $skipped++; continue; }
+                // update
+                if ($name && ! $existing->customer_name) $existing->customer_name = $name;
+                if ($tag)    $existing->tag = $tag;
+                if ($source) $existing->source = $source;
+                $existing->save();
+                $updated++;
+                continue;
+            }
+
+            $interest = $tag ?: '(imported)';
+            \App\Models\Lead::create([
+                'customer_phone'   => $phone,
+                'customer_name'    => $name ?: null,
+                'intent'           => 'lead',
+                'interest'         => $interest,
+                'dedupe_key'       => \App\Services\Bot\LeadDedupe::key($phone, 'lead', $interest),
+                'lead_score'       => $scorer->score('lead', $interest),
+                'source'           => $source,
+                'tag'              => $tag ?: null,
+                'marketing_opt_in' => $optIn,
+                'status'           => 'new',
+            ]);
+            $created++;
+        }
+
+        if (! $dry) {
+            \App\Support\BotTrace::log($t->id, 'panel', null, 'lead_imported', "c{$created} u{$updated} s{$skipped} x{$invalid}");
+        }
+
+        return response()->json([
+            'ok'      => true,
+            'dry_run' => $dry,
+            'total'   => count($rows),
+            'created' => $created,
+            'updated' => $updated,
+            'skipped' => $skipped,
+            'invalid' => $invalid,
+            'sample'  => $sample,
+        ]);
     }
 
     public function branches()

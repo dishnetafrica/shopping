@@ -1,6 +1,6 @@
 # ShopBot / CloudBSS — Production Freeze
 
-**Release tag:** `2026.06.18-86.5`
+**Release tag:** `2026.06.18-86.6`
 **Status:** STAGING APPROVED → run checklist → PRODUCTION
 **Feature freeze:** ON
 **Freeze owner:** Bhavin
@@ -40,6 +40,7 @@ Human
 | 86.3 | Operations dashboard | Today's Sales / Support / Shopping numbers on the seller dashboard. No new tables. |
 | 86.4 | Health diagnostics | System Health strip on `/panel/diagnostics`: WhatsApp, Redis, OpenAI, Queue, Last webhook, Last processed. |
 | 86.5 | Manual Lead CRM | `/panel/leads`: create/edit/list/assign/won-lost, selectable source, **5 pipeline KPI cards** (New · Assigned · Hot · ⚠ Overdue · Won-30d), **quick-view filters** (Unassigned / Overdue / Hot), **next follow-up + last contacted** (additive columns). Phone/referral/walk-in leads now visible alongside WhatsApp. |
+| 86.6 | Lead Import | Bulk import (CSV or pasted numbers) with **phone normalisation** (+cc / 00 / local-0 / bare national), **dedupe** (skip / update / create), **tags**, **source tracking**, **marketing_opt_in**, and a **dry-run preview**. Import only — sends nothing. Additive columns `tag`, `marketing_opt_in`. |
 
 ---
 
@@ -56,12 +57,15 @@ Human
 | Operations Dashboard | ✅ Ready |
 | Diagnostics Health Panel | ✅ Ready |
 | Manual Lead CRM (+ KPIs, follow-ups) | ✅ Ready |
+| Lead Import (CSV / paste, dedupe, tags) | ✅ Ready |
 | Analytics Backbone (`bot_events`) | ✅ Ready |
 | Ticket Engine | ⏳ Build 87 |
 | Human Inbox | ⏳ Build 88 |
 | Voice Notes | ⏳ Build 89 |
 | Activities & Timeline | ⏳ Build 90 |
-| CSV Import | ⏳ Build 91 |
+| WhatsApp Campaigns / Audiences | ⏳ Build 92 |
+
+> **Reclassification note (86.6).** "CSV Import" was previously listed as a freeze *violation* (old Build 91). On review, *import-only* — parse, normalise, dedupe, tag, create rows in the existing `leads` table — is bulk **manual data entry** (freeze-safe ✅), not a new workflow. What stays frozen is **bulk WhatsApp campaigns** (new outbound channel, blast automation, opt-out handling, abuse surface) → **Build 92**. The hard rule kept 86.6 honest: *nothing in the importer can send a message.*
 
 ### CRM menu — target shape (evolves with 87–91)
 
@@ -172,10 +176,10 @@ Then, and only then:
 
 ```
 Build 87 → Ticket Engine     (shared Assignable services; P1/P2/P3 priority)
-Build 88 → Human Inbox        (Take Over / Release / Assign / Resolve / Mark Won inline)
+Build 88 → Human Inbox        (Take Over / Release / Assign / Resolve / Mark Won inline; enables "My Leads")
 Build 89 → Voice Notes        (Whisper → Intent Router → Shopping/Lead/Ticket)
 Build 90 → Activities & Timeline (lead_activities table; logged calls/visits/quotes/meetings)
-Build 91 → CSV Import         (bulk lead creation with validation + dedupe)
+Build 92 → WhatsApp Campaigns (audiences by tag/status, delivery tracking, unsubscribe — must message existing CRM leads only, no cold blasts)
 ```
 
 The architecture is mature. The next improvements should be driven by what customers and sales agents actually do — not further design speculation.

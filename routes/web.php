@@ -82,6 +82,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('lead-options', [PanelApiController::class, 'leadOptions']);
         Route::get('lead-save',    [PanelApiController::class, 'leadSave']);
         Route::get('lead-action',  [PanelApiController::class, 'leadAction']);
+        Route::post('lead-import', [PanelApiController::class, 'leadImport']);
         Route::get('branches',   [PanelApiController::class, 'branches']);
         Route::get('customers',  [PanelApiController::class, 'customers']);
         Route::get('contacts-import', [PanelApiController::class, 'importContacts']);
