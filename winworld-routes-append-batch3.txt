@@ -1,0 +1,18 @@
+# Append to routes/web.php (self-contained; does not edit existing groups).
+
+/* ===== WINWORLD INDENT + PLANNING ROUTES ===== */
+Route::middleware(['web', 'auth', \App\Http\Middleware\SetTenantFromUser::class])->group(function () {
+    Route::get('/panel/indents',  [\App\Http\Controllers\Panel\WinworldIndentController::class, 'indentsPage']);
+    Route::get('/panel/planning', [\App\Http\Controllers\Panel\WinworldIndentController::class, 'planningPage']);
+    Route::prefix('papi')->group(function () {
+        Route::get('ww-options',       [\App\Http\Controllers\Panel\WinworldIndentController::class, 'options']);
+        Route::get('ww-indents',       [\App\Http\Controllers\Panel\WinworldIndentController::class, 'indentList']);
+        Route::get('ww-indent',        [\App\Http\Controllers\Panel\WinworldIndentController::class, 'indentGet']);
+        Route::get('ww-indent-clone',  [\App\Http\Controllers\Panel\WinworldIndentController::class, 'indentClone']);
+        Route::post('ww-indent-save',  [\App\Http\Controllers\Panel\WinworldIndentController::class, 'indentSave']);
+        Route::get('ww-plan-list',     [\App\Http\Controllers\Panel\WinworldIndentController::class, 'planList']);
+        Route::post('ww-plan-save',    [\App\Http\Controllers\Panel\WinworldIndentController::class, 'planSave']);
+    });
+});
+
+# Note: papi/* is already in the CSRF except list in bootstrap/app.php, so the POST routes work as-is.

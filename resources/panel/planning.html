@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planning — Win World</title>
+<style>
+  :root{--ink:#16202B;--steel:#5C6B7A;--line:#E2E7EC;--bg:#F4F6F8;--card:#fff;--amber:#D9821E;--green:#2E7D55;--blue:#3B5BA9}
+  *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{position:sticky;top:0;z-index:5;background:var(--ink);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  .wrap{max-width:880px;margin:0 auto;padding:16px}
+  .ind{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+  .ind .top{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px}
+  .ind .t{font-weight:600}
+  .ind .s{font-size:12px;color:var(--steel)}
+  .pn{font-family:ui-monospace,monospace}
+  .badge{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:2px 9px;color:var(--steel)}
+  .proc{border-top:1px dashed var(--line);margin-top:12px;padding-top:12px}
+  .proc h4{margin:0 0 8px;font-size:13px}
+  .proc h4 .tag{font-size:10px;border-radius:6px;padding:1px 7px;color:#fff;margin-left:6px}
+  .tag.Extrusion{background:var(--amber)}.tag.Printing{background:var(--blue)}.tag.Cutting{background:var(--green)}.tag.Blending{background:var(--steel)}
+  .row{display:grid;grid-template-columns:1.4fr 1fr 1.4fr 1fr auto;gap:8px;align-items:end}
+  .fld label{display:block;font-size:11px;color:var(--steel);margin-bottom:3px}
+  input,select{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fff}
+  button{cursor:pointer;border-radius:8px;border:1px solid var(--amber);background:var(--amber);color:#fff;padding:9px 13px;font-size:13px;font-weight:600}
+  .out{font-size:12px;color:var(--steel);margin-top:7px}
+  .out b{color:var(--ink)}
+  .out .done{color:var(--green)}
+  .muted{color:var(--steel);text-align:center;padding:24px}
+  @media(max-width:640px){.row{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Planning <span class="s" style="color:#aab4bd">· {{WW_TENANT}}</span></h1>
+  <a href="/panel/indents" style="color:#aab4bd;font-size:13px;text-decoration:none">‹ Indents</a>
+</header>
+<div class="wrap" id="list"><div class="muted">Loading…</div></div>
+
+<script>
+"use strict";
+var MACH={};
+function api(p,q){var qs=q?"?"+Object.keys(q).map(function(k){return encodeURIComponent(k)+"="+encodeURIComponent(q[k]==null?"":q[k]);}).join("&"):"";
+  return fetch("/papi/"+p+qs,{headers:{Accept:"application/json"},credentials:"same-origin"}).then(function(r){return r.json();});}
+function post(p,body){return fetch("/papi/"+p,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},credentials:"same-origin",body:JSON.stringify(body)}).then(function(r){return r.json();});}
+function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+function machOpts(process,sel){var arr=MACH[process]||[];return '<option value=""></option>'+arr.map(function(m){return '<option value="'+m.id+'"'+(String(m.id)===String(sel)?' selected':'')+'>'+esc(m.machine)+'</option>';}).join("");}
+
+function load(){
+  api("ww-machines").then(function(r){
+    MACH={};(r.machines||[]).forEach(function(m){(MACH[m.process]=MACH[m.process]||[]).push(m);});
+    return api("ww-plan-list");
+  }).then(function(r){
+    var box=document.getElementById("list");
+    var inds=(r&&r.indents)||[];
+    if(!inds.length){box.innerHTML='<div class="muted">No indents waiting to plan. Create one on the Indents page.</div>';return;}
+    box.innerHTML="";
+    inds.forEach(function(ix){ box.appendChild(card(ix)); });
+  });
+}
+function card(ix){
+  var d=document.createElement("div");d.className="ind";
+  var head='<div class="top"><div><span class="t pn">'+esc(ix.indent_no||"(draft)")+'</span> <span class="s">'+esc(ix.customer||"")+' · '+esc(ix.product||"")+'</span></div>'+
+    '<div><span class="badge">'+(ix.order_kg!=null?ix.order_kg+" kg":"—")+'</span> <span class="badge">'+esc(ix.status)+'</span></div></div>';
+  var procs=(ix.processes||[]).map(function(proc){
+    var existing=(ix.plannings||[]).filter(function(p){return p.process===proc;})[0];
+    return procBlock(ix,proc,existing);
+  }).join("");
+  d.innerHTML=head+procs;
+  // wire save buttons
+  (ix.processes||[]).forEach(function(proc){
+    var b=d.querySelector('[data-save="'+proc+'"]');
+    if(b) b.onclick=function(){ savePlan(ix,proc,d); };
+  });
+  return d;
+}
+function procBlock(ix,proc,ex){
+  ex=ex||{};
+  var out = ex.id ? '<div class="out"><b>'+ (ex.final_output_kg_hr||"?") +' kg/hr</b> → <b>'+(ex.required_hours||"?")+' h</b> · ends <b>'+(ex.planned_end||"—")+'</b> · <span class="'+(ex.status==="Completed"?"done":"")+'">'+esc(ex.status)+'</span></div>' : '';
+  return '<div class="proc"><h4>'+proc+'<span class="tag '+proc+'">'+proc+'</span></h4>'+
+    '<div class="row">'+
+      '<div class="fld"><label>Machine</label><select data-f="machine_id" data-p="'+proc+'">'+machOpts(proc,ex.machine_id)+'</select></div>'+
+      '<div class="fld"><label>Speed</label><input data-f="running_speed" data-p="'+proc+'" type="number" value="'+(ex.running_speed||"")+'"></div>'+
+      '<div class="fld"><label>Planned start</label><input data-f="planned_start" data-p="'+proc+'" type="datetime-local" value="'+(ex.planned_start?ex.planned_start.replace(" ","T"):"")+'"></div>'+
+      '<div class="fld"><label>Output kg/hr</label><input data-f="manual_output_kg_hr" data-p="'+proc+'" type="number" value="'+(ex.final_output_kg_hr||"")+'" placeholder="manual"></div>'+
+      '<div class="fld"><button data-save="'+proc+'">'+(ex.id?"Update":"Plan")+'</button></div>'+
+    '</div>'+out+
+    '<input type="hidden" data-f="plan_id" data-p="'+proc+'" value="'+(ex.id||"")+'"></div>';
+}
+function fieldVal(scope,proc,f){var n=scope.querySelector('[data-f="'+f+'"][data-p="'+proc+'"]');return n?n.value:"";}
+function savePlan(ix,proc,scope){
+  var btn=scope.querySelector('[data-save="'+proc+'"]');btn.disabled=true;btn.textContent="…";
+  post("ww-plan-save",{
+    id:fieldVal(scope,proc,"plan_id")||0,indent_id:ix.id,process:proc,
+    machine_id:fieldVal(scope,proc,"machine_id")||null,running_speed:fieldVal(scope,proc,"running_speed")||null,
+    planned_start:(fieldVal(scope,proc,"planned_start")||"").replace("T"," "),
+    manual_output_kg_hr:fieldVal(scope,proc,"manual_output_kg_hr")||null
+  }).then(function(r){
+    btn.disabled=false;btn.textContent="Update";
+    if(!r.ok){alert(r.error||"Could not save plan");return;}
+    load(); // refresh to show computed hours/end + status
+  });
+}
+load();
+</script>
+</body>
+</html>

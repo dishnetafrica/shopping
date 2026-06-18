@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order Indent — Win World</title>
+<style>
+  :root{--ink:#16202B;--steel:#5C6B7A;--line:#E2E7EC;--bg:#F4F6F8;--card:#fff;--amber:#D9821E;--green:#2E7D55;--blue:#3B5BA9;--red:#B4232A}
+  *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{position:sticky;top:0;z-index:5;background:var(--ink);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .bar select,.bar button{font-size:13px}
+  .wrap{max-width:880px;margin:0 auto;padding:16px}
+  .sec{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+  .sec h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--steel);margin:0 0 12px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .fld label{display:block;font-size:12px;color:var(--steel);margin-bottom:4px}
+  input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:#fff;color:var(--ink)}
+  textarea{min-height:46px;resize:vertical}
+  .toggles{display:flex;gap:14px;flex-wrap:wrap}
+  .toggles label{display:flex;gap:7px;align-items:center;font-size:14px;color:var(--ink)}
+  .toggles input{width:auto}
+  button{cursor:pointer;border-radius:9px;border:1px solid var(--line);background:#fff;padding:8px 13px;font-size:13px;color:var(--ink)}
+  button.primary{background:var(--amber);color:#fff;border-color:var(--amber);font-weight:600}
+  button.ghost{background:#fff}
+  .blend table{width:100%;border-collapse:collapse}
+  .blend th{font-size:11px;color:var(--steel);text-align:left;font-weight:500;padding:4px}
+  .blend td{padding:3px}
+  .blend input{padding:7px}
+  .blend .qty{font-family:ui-monospace,monospace;font-size:12px;color:var(--steel);text-align:right;padding-right:6px}
+  .totals{margin-top:8px;font-size:12px;color:var(--steel)}
+  .totals b{color:var(--ink)}
+  .hide{display:none}
+  .note{font-size:12px;color:var(--steel)}
+  .result{margin-top:6px;padding:12px;border-radius:10px;background:#eef7f1;border:1px solid #bfe0cd;font-size:14px}
+  .result.bad{background:#fbecec;border-color:#e6b8b8}
+  .pn{font-family:ui-monospace,monospace}
+</style>
+</head>
+<body>
+<header>
+  <h1>Order Indent <span class="note" style="color:#aab4bd">· {{WW_TENANT}}</span></h1>
+  <div class="bar">
+    <select id="loadSel"><option value="">— open indent —</option></select>
+    <button id="cloneBtn" class="ghost" title="Same as last order">Clone</button>
+    <button id="newBtn" class="ghost">New</button>
+    <a href="/panel/planning" style="color:#aab4bd;font-size:13px;text-decoration:none;align-self:center">Planning ›</a>
+  </div>
+</header>
+<div class="wrap">
+  <input type="hidden" id="id"><input type="hidden" id="indent_no_hidden">
+
+  <div class="sec">
+    <h2>Header <span class="pn" id="indentNoLbl" style="color:var(--amber)"></span></h2>
+    <div class="grid">
+      <div class="fld"><label>Customer</label><select id="customer_id"></select></div>
+      <div class="fld"><label>Item</label><select id="item_id"></select></div>
+      <div class="fld"><label>Product name</label><input id="product_name"></div>
+      <div class="fld"><label>Order qty (pcs)</label><input id="order_qty_pcs" type="number" value="0"></div>
+      <div class="fld"><label>Mixing qty (kg)</label><input id="mixing_qty" type="number" value="0"></div>
+      <div class="fld"><label>Priority</label><select id="priority"><option>Normal</option><option>Urgent</option><option>Critical</option></select></div>
+      <div class="fld"><label>Sales person</label><input id="sales_person"></div>
+      <div class="fld"><label>Sample available</label><select id="sample_available"><option value="0">No</option><option value="1">Yes</option></select></div>
+      <div class="fld"><label>Date</label><input id="date_of_indent" type="date"></div>
+    </div>
+    <div class="fld" style="margin-top:10px"><label>SDH remarks</label><input id="sdh_remarks" placeholder="e.g. Same as last order"></div>
+  </div>
+
+  <div class="sec">
+    <h2>Process routing</h2>
+    <div class="toggles">
+      <label><input type="checkbox" id="needs_blending" checked> Blending</label>
+      <label><input type="checkbox" id="needs_extrusion" checked> Extrusion</label>
+      <label><input type="checkbox" id="needs_printing"> Printing</label>
+      <label><input type="checkbox" id="needs_cutting"> Cutting</label>
+    </div>
+  </div>
+
+  <div class="sec blend" id="blendSec">
+    <h2>Blending recipe</h2>
+    <table><thead><tr><th>Material</th><th>% A</th><th class="qty">kg A</th><th>% B</th><th class="qty">kg B</th><th>% C</th><th class="qty">kg C</th><th></th></tr></thead>
+      <tbody id="blendRows"></tbody></table>
+    <button class="ghost" id="addLine" style="margin-top:8px">+ Add material</button>
+    <div class="totals" id="blendTotals"></div>
+  </div>
+
+  <div class="sec hide" id="extSec"><h2>Extruder spec</h2>
+    <div class="grid">
+      <div class="fld"><label>Width</label><input id="ext_width"></div>
+      <div class="fld"><label>Gusset</label><input id="ext_gusset"></div>
+      <div class="fld"><label>Gauge</label><input id="ext_gauge"></div>
+      <div class="fld"><label>Film colour</label><input id="ext_film_colour"></div>
+      <div class="fld"><label>Weight per roll</label><input id="ext_weight_per_roll"></div>
+      <div class="fld"><label>Type of roll</label><select id="ext_type_of_roll"><option value=""></option><option>Sheet</option><option>Tube</option><option>Roll</option></select></div>
+    </div>
+  </div>
+
+  <div class="sec hide" id="prnSec"><h2>Printing spec</h2>
+    <div class="grid">
+      <div class="fld"><label>Specification</label><input id="prn_specification"></div>
+      <div class="fld"><label>No. of colours</label><input id="prn_no_colours" placeholder="0+4"></div>
+      <div class="fld"><label>Colours</label><input id="prn_colours" placeholder="white,yellow,cyan,brown"></div>
+      <div class="fld"><label>Single / double</label><input id="prn_single_double"></div>
+      <div class="fld"><label>Direction</label><select id="prn_direction"><option value=""></option><option>Vertical</option><option>Horizontal</option></select></div>
+      <div class="fld"><label>Gap top</label><input id="prn_gap_top"></div>
+      <div class="fld"><label>Gap bottom</label><input id="prn_gap_bottom"></div>
+    </div>
+  </div>
+
+  <div class="sec hide" id="cutSec"><h2>Cutting spec</h2>
+    <div class="grid">
+      <div class="fld"><label>Cutting type</label><input id="cut_type" placeholder="Side Seal"></div>
+      <div class="fld"><label>Bag size</label><input id="cut_bag_size" placeholder='11"x18"x20.5"'></div>
+      <div class="fld"><label>Sealing type</label><input id="cut_sealing"></div>
+      <div class="fld"><label>Bottom gusset</label><input id="cut_bottom_gusset"></div>
+      <div class="fld"><label>Handle punch</label><input id="cut_handle_punch"></div>
+      <div class="fld"><label>Handle position</label><input id="cut_handle_position"></div>
+      <div class="fld"><label>Hole punch</label><input id="cut_hole_punch" placeholder="2 holes"></div>
+      <div class="fld"><label>Hole positions</label><input id="cut_hole_positions"></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="fld"><label>PDH remarks</label><textarea id="pdh_remarks"></textarea></div>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+      <button class="primary" id="saveBtn">Save indent</button>
+      <span class="note" id="status"></span>
+    </div>
+    <div id="result"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+var OPT={customers:[],items:[],materials:[]};
+function api(p,q){var qs=q?"?"+Object.keys(q).map(function(k){return encodeURIComponent(k)+"="+encodeURIComponent(q[k]==null?"":q[k]);}).join("&"):"";
+  return fetch("/papi/"+p+qs,{headers:{Accept:"application/json"},credentials:"same-origin"}).then(function(r){return r.json();});}
+function post(p,body){return fetch("/papi/"+p,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},credentials:"same-origin",body:JSON.stringify(body)}).then(function(r){return r.json();});}
+function g(id){return document.getElementById(id);}
+function v(id){var n=g(id);return n?n.value:"";}
+function chk(id){var n=g(id);return n?n.checked:false;}
+function opts(arr,val,txt,sel){return '<option value=""></option>'+arr.map(function(o){return '<option value="'+o[val]+'"'+(String(o[val])===String(sel)?' selected':'')+'>'+(o[txt]||"")+'</option>';}).join("");}
+
+function init(){
+  api("ww-options").then(function(r){
+    OPT=r;
+    g("customer_id").innerHTML=opts(r.customers,"id","name");
+    g("item_id").innerHTML=opts(r.items,"id","item_name");
+    addLine();
+    syncSpecs();
+  });
+  api("ww-indents").then(function(r){
+    g("loadSel").innerHTML='<option value="">— open indent —</option>'+(r.indents||[]).map(function(x){
+      return '<option value="'+x.id+'">'+(x.indent_no||"(draft)")+' · '+(x.customer_name||"")+' · '+(x.product_name||"")+'</option>';}).join("");
+  });
+  ["needs_blending","needs_extrusion","needs_printing","needs_cutting"].forEach(function(id){ g(id).onchange=syncSpecs; });
+  g("mixing_qty").oninput=recalcBlend;
+  g("addLine").onclick=function(){addLine();};
+  g("newBtn").onclick=newIndent;
+  g("saveBtn").onclick=save;
+  g("loadSel").onchange=function(){ if(this.value) loadIndent(this.value); };
+  g("cloneBtn").onclick=function(){ var id=g("loadSel").value; if(id) cloneIndent(id); else alert("Pick an indent to clone."); };
+  g("item_id").onchange=function(){ var it=OPT.items.find(function(i){return String(i.id)===this.value;}.bind(this)); if(it && !v("product_name")) g("product_name").value=it.item_name; };
+}
+function syncSpecs(){
+  g("blendSec").classList.toggle("hide",!chk("needs_blending"));
+  g("extSec").classList.toggle("hide",!chk("needs_extrusion"));
+  g("prnSec").classList.toggle("hide",!chk("needs_printing"));
+  g("cutSec").classList.toggle("hide",!chk("needs_cutting"));
+}
+function addLine(data){
+  data=data||{};
+  var tr=document.createElement("tr");
+  tr.innerHTML='<td><select class="bm">'+opts(OPT.materials,"id","material_name",data.material_id)+'</select></td>'+
+    '<td><input class="ba" type="number" style="width:60px" value="'+(data.pct_a||"")+'"></td><td class="qty qa">0</td>'+
+    '<td><input class="bb" type="number" style="width:60px" value="'+(data.pct_b||"")+'"></td><td class="qty qb">0</td>'+
+    '<td><input class="bc" type="number" style="width:60px" value="'+(data.pct_c||"")+'"></td><td class="qty qc">0</td>'+
+    '<td><button class="ghost rm" style="padding:5px 9px">✕</button></td>';
+  g("blendRows").appendChild(tr);
+  tr.querySelector(".rm").onclick=function(){tr.remove();recalcBlend();};
+  ["ba","bb","bc"].forEach(function(c){tr.querySelector("."+c).oninput=recalcBlend;});
+  recalcBlend();
+}
+function recalcBlend(){
+  var mix=parseFloat(v("mixing_qty"))||0,ta=0,tb=0,tc=0,pa=0,pb=0,pc=0;
+  Array.prototype.forEach.call(g("blendRows").children,function(tr){
+    var a=parseFloat(tr.querySelector(".ba").value)||0,b=parseFloat(tr.querySelector(".bb").value)||0,c=parseFloat(tr.querySelector(".bc").value)||0;
+    var qa=a/100*mix,qb=b/100*mix,qc=c/100*mix;
+    tr.querySelector(".qa").textContent=qa.toFixed(1);tr.querySelector(".qb").textContent=qb.toFixed(1);tr.querySelector(".qc").textContent=qc.toFixed(1);
+    ta+=qa;tb+=qb;tc+=qc;pa+=a;pb+=b;pc+=c;
+  });
+  function bal(p){return p===0?"":(Math.abs(p-100)<0.01?" ✓":" ⚠ "+p+"%");}
+  g("blendTotals").innerHTML="Totals — <b>A</b> "+ta.toFixed(1)+"kg"+bal(pa)+" · <b>B</b> "+tb.toFixed(1)+"kg"+bal(pb)+" · <b>C</b> "+tc.toFixed(1)+"kg"+bal(pc);
+}
+function collectBlends(){
+  return Array.prototype.map.call(g("blendRows").children,function(tr){
+    var sel=tr.querySelector(".bm");
+    return {material_id:sel.value||null,material_name:sel.options[sel.selectedIndex]?sel.options[sel.selectedIndex].text:"",
+      pct_a:parseFloat(tr.querySelector(".ba").value)||0,pct_b:parseFloat(tr.querySelector(".bb").value)||0,pct_c:parseFloat(tr.querySelector(".bc").value)||0};
+  }).filter(function(b){return b.material_name && (b.pct_a||b.pct_b||b.pct_c);});
+}
+function fill(d){
+  ["product_name","order_qty_pcs","mixing_qty","sales_person","sdh_remarks","pdh_remarks","date_of_indent",
+   "ext_width","ext_gusset","ext_gauge","ext_film_colour","ext_weight_per_roll","ext_type_of_roll",
+   "prn_specification","prn_no_colours","prn_colours","prn_single_double","prn_direction","prn_gap_top","prn_gap_bottom",
+   "cut_type","cut_bag_size","cut_sealing","cut_bottom_gusset","cut_handle_punch","cut_handle_position","cut_hole_punch","cut_hole_positions"]
+   .forEach(function(k){ if(g(k)) g(k).value=d[k]==null?"":d[k]; });
+  g("customer_id").value=d.customer_id||"";g("item_id").value=d.item_id||"";
+  g("priority").value=d.priority||"Normal";g("sample_available").value=d.sample_available?"1":"0";
+  ["needs_blending","needs_extrusion","needs_printing","needs_cutting"].forEach(function(k){ g(k).checked=!!d[k]; });
+  syncSpecs();
+}
+function loadIndent(id){
+  api("ww-indent",{id:id}).then(function(r){
+    if(!r.ok)return; var d=r.indent;
+    g("id").value=d.id; g("indent_no_hidden").value=d.indent_no||""; g("indentNoLbl").textContent=d.indent_no||"";
+    fill(d);
+    g("blendRows").innerHTML=""; (r.blends||[]).forEach(addLine); if(!(r.blends||[]).length) addLine();
+    recalcBlend(); g("status").textContent="Editing "+(d.indent_no||"");
+  });
+}
+function cloneIndent(id){
+  api("ww-indent-clone",{id:id}).then(function(r){
+    if(!r.ok)return; g("id").value=""; g("indent_no_hidden").value=""; g("indentNoLbl").textContent="(clone — new number on save)";
+    fill(r.indent); g("blendRows").innerHTML=""; (r.blends||[]).forEach(addLine); if(!(r.blends||[]).length) addLine();
+    recalcBlend(); g("status").textContent="Cloned — review and Save";
+  });
+}
+function newIndent(){
+  g("id").value="";g("indent_no_hidden").value="";g("indentNoLbl").textContent="";g("loadSel").value="";
+  ["product_name","sales_person","sdh_remarks","pdh_remarks"].forEach(function(k){g(k).value="";});
+  g("order_qty_pcs").value="0";g("mixing_qty").value="0";g("blendRows").innerHTML="";addLine();recalcBlend();
+  g("status").textContent="New indent";
+}
+function save(){
+  var btn=g("saveBtn");btn.disabled=true;btn.textContent="Saving…";
+  var p={id:g("id").value||0,indent_no:g("indent_no_hidden").value,
+    customer_id:v("customer_id")||null,customer_name:(function(){var s=g("customer_id");return s.options[s.selectedIndex]?s.options[s.selectedIndex].text:"";})(),
+    item_id:v("item_id")||null,product_name:v("product_name"),order_qty_pcs:v("order_qty_pcs"),mixing_qty:v("mixing_qty"),
+    priority:v("priority"),sample_available:v("sample_available")==="1",sales_person:v("sales_person"),
+    sdh_remarks:v("sdh_remarks"),pdh_remarks:v("pdh_remarks"),date_of_indent:v("date_of_indent"),
+    needs_blending:chk("needs_blending"),needs_extrusion:chk("needs_extrusion"),needs_printing:chk("needs_printing"),needs_cutting:chk("needs_cutting"),
+    blends:collectBlends()};
+  ["ext_width","ext_gusset","ext_gauge","ext_film_colour","ext_weight_per_roll","ext_type_of_roll",
+   "prn_specification","prn_no_colours","prn_colours","prn_single_double","prn_direction","prn_gap_top","prn_gap_bottom",
+   "cut_type","cut_bag_size","cut_sealing","cut_bottom_gusset","cut_handle_punch","cut_handle_position","cut_hole_punch","cut_hole_positions"]
+   .forEach(function(k){p[k]=v(k);});
+  post("ww-indent-save",p).then(function(r){
+    btn.disabled=false;btn.textContent="Save indent";var res=g("result");
+    if(!r.ok){res.innerHTML='<div class="result bad">'+(r.error||"Could not save")+'</div>';return;}
+    g("id").value=r.id;g("indent_no_hidden").value=r.indent_no;g("indentNoLbl").textContent=r.indent_no;
+    res.innerHTML='<div class="result">Saved <b class="pn">'+r.indent_no+'</b> · order '+r.order_kg+' kg · blend total '+r.blend_total_kgs+' kg'+(r.blend_ok?'':' ⚠ percentages off')+'</div>';
+  });
+}
+init();
+</script>
+</body>
+</html>
