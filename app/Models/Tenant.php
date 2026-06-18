@@ -154,4 +154,52 @@ class Tenant extends Model
         $nums = preg_split('/[,\s]+/', $raw, -1, PREG_SPLIT_NO_EMPTY) ?: [];
         return array_values(array_filter(array_map(fn ($n) => preg_replace('/[^0-9]/', '', $n), $nums)));
     }
+
+    /**
+     * Lead/ticket notification recipients with roles. Stored as settings.lead_recipients
+     * = [ ['phone'=>'2567..','role'=>'sales','name'=>'Asha'], ... ]. Falls back to the
+     * owner alert numbers (as 'sales') so leads are never dropped before it's configured.
+     *
+     * @return array<int,array{phone:string,role:string,name:string}>
+     */
+    public function leadRecipients(?string $role = null): array
+    {
+        $raw = $this->setting('lead_recipients', []);
+        $out = [];
+        if (is_array($raw)) {
+            foreach ($raw as $r) {
+                $phone = preg_replace('/[^0-9]/', '', (string) ($r['phone'] ?? ''));
+                if ($phone === '') continue;
+                $out[] = [
+                    'phone' => $phone,
+                    'role'  => strtolower((string) ($r['role'] ?? 'sales')) ?: 'sales',
+                    'name'  => (string) ($r['name'] ?? ''),
+                ];
+            }
+        }
+        if (! $out) {
+            foreach ($this->ownerAlertNumbers() as $n) {
+                $out[] = ['phone' => $n, 'role' => 'sales', 'name' => ''];
+            }
+        }
+        if ($role !== null) {
+            $role = strtolower($role);
+            $filtered = array_values(array_filter($out, fn ($r) => $r['role'] === $role));
+            // If nobody holds that role, fall back to everyone so nothing is dropped.
+            return $filtered ?: $out;
+        }
+        return $out;
+    }
+
+    /** Round-robin pick from a recipient list; advances and persists the pointer. */
+    public function nextRoundRobin(array $recipients): ?array
+    {
+        $recipients = array_values($recipients);
+        $n = count($recipients);
+        if ($n === 0) return null;
+        $i = (int) $this->setting('lead_rr_index', 0);
+        $pick = $recipients[$i % $n];
+        $this->putSetting('lead_rr_index', ($i + 1) % max(1, $n));
+        return $pick;
+    }
 }

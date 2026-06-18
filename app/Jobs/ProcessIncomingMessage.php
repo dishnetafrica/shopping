@@ -4,8 +4,11 @@ namespace App\Jobs;
 use App\Models\Conversation;
 use App\Models\Tenant;
 use App\Services\Bot\BotBrain;
+use App\Services\Bot\IntentRouter;
+use App\Services\Bot\LeadService;
 use App\Services\Bot\MarketingBrain;
 use App\Services\Bot\VisionProductFinder;
+use App\Models\CustomerProfile;
 use App\Services\WhatsApp\WhatsAppManager;
 use App\Support\MessageLog;
 use App\Support\BotTrace;
@@ -47,7 +50,7 @@ class ProcessIncomingMessage implements ShouldQueue
         return [(new WithoutOverlapping($key))->releaseAfter(3)->expireAfter(30)];
     }
 
-    public function handle(TenantContext $ctx, WhatsAppManager $wa, BotBrain $brain, MarketingBrain $marketing, VisionProductFinder $finder): void
+    public function handle(TenantContext $ctx, WhatsAppManager $wa, BotBrain $brain, MarketingBrain $marketing, VisionProductFinder $finder, IntentRouter $router, LeadService $leads): void
     {
         $ctx->set($this->tenantId);                 // scope everything to this tenant
         $tStart = microtime(true);                  // when this job started processing
@@ -109,6 +112,18 @@ class ProcessIncomingMessage implements ShouldQueue
         $trace = (string) ($this->incoming['trace'] ?? ($this->incoming['messageId'] ?: 'm_?'));
         $from  = (string) $this->incoming['from'];
         BotTrace::log($this->tenantId, $trace, $from, 'started');
+
+        // Staff lead claim: "CLAIM 1045" from a configured recipient → atomic first-wins.
+        // Handled before the auto-reply gates so it works even when the bot is off.
+        if (preg_match('/^\s*claim\s+#?(\d+)\b/i', (string) $this->incoming['text'], $cm)) {
+            $cr = $leads->claim($tenant, (int) $cm[1], $from);
+            if ($cr !== null) {
+                $gateway->sendText($tenant->whatsapp_instance, $from, $cr);
+                MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'system', $cr);
+                BotTrace::log($this->tenantId, $trace, $from, 'lead_claim_cmd', $cm[1]);
+                return;
+            }
+        }
 
         $botMode = (string) $tenant->setting('bot_mode', 'auto');
         $convo->refresh();
@@ -269,6 +284,28 @@ class ProcessIncomingMessage implements ShouldQueue
                 $imgConf  = $conf;
                 $text     = $query;
                 $fromImage = true;
+            }
+        }
+
+        // Intent routing: divert clear sales-interest / service-problem messages to the
+        // lead pipeline instead of the shopping brain. Image-derived product queries and
+        // marketing tenants are left alone.
+        if (! $fromImage && ! $tenant->isMarketing()) {
+            $intent = $router->classify($tenant, $text);
+            if ($intent === 'lead' || $intent === 'ticket') {
+                $name = (string) (CustomerProfile::where('phone', $from)->value('name') ?? '');
+                $res  = $leads->capture($tenant, $from, $name ?: null, $text, $intent);
+                $reply = $res['reply'];
+                $gateway->sendText($tenant->whatsapp_instance, $from, $reply);
+                MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $reply);
+                BotTrace::log($this->tenantId, $trace, $from, 'routed_' . $intent, mb_substr($text, 0, 80));
+                $st = is_array($convo->state) ? $convo->state : [];
+                $st['lg_last_out'] = $this->norm($reply);
+                $st['lg_last_out_at'] = time();
+                $convo->state = $st;
+                $convo->last_message_at = now();
+                $convo->save();
+                return;
             }
         }
 

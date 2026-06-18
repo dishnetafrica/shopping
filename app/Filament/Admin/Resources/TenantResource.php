@@ -85,6 +85,28 @@ class TenantResource extends Resource
                         if ($state === null) $component->state(true);
                     }),
             ])->columns(3),
+
+            Forms\Components\Section::make('Leads & assignment')->schema([
+                Forms\Components\Select::make('settings.lead_assignment_mode')
+                    ->label('Assignment mode')
+                    ->options([
+                        'round_robin' => 'Round-robin (auto, one owner each)',
+                        'claim'       => 'Claim (first to reply CLAIM wins)',
+                        'manual'      => 'Manual (manager assigns)',
+                    ])
+                    ->default('round_robin'),
+                Forms\Components\Repeater::make('settings.lead_recipients')
+                    ->label('Lead / ticket recipients')
+                    ->helperText('Who gets new-lead alerts. Sales handle leads; Support handle service issues; Manager receives manual-mode assignments.')
+                    ->schema([
+                        Forms\Components\TextInput::make('phone')->label('WhatsApp number')->tel()
+                            ->helperText('Intl format, e.g. 256772123456'),
+                        Forms\Components\Select::make('role')->options([
+                            'sales' => 'Sales', 'support' => 'Support', 'manager' => 'Manager',
+                        ])->default('sales'),
+                        Forms\Components\TextInput::make('name')->label('Name'),
+                    ])->columns(3)->default([])->addActionLabel('Add recipient'),
+            ])->columns(1),
         ]);
     }
 
