@@ -251,7 +251,7 @@ function save(){
     btn.disabled=false;btn.textContent="Save indent";var res=g("result");
     if(!r.ok){res.innerHTML='<div class="result bad">'+(r.error||"Could not save")+'</div>';return;}
     g("id").value=r.id;g("indent_no_hidden").value=r.indent_no;g("indentNoLbl").textContent=r.indent_no;
-    res.innerHTML='<div class="result">Saved <b class="pn">'+r.indent_no+'</b> · order '+r.order_kg+' kg · blend total '+r.blend_total_kgs+' kg'+(r.blend_ok?'':' ⚠ percentages off')+'</div>';
+    res.innerHTML='<div class="result">Saved <b class="pn">'+r.indent_no+'</b> · order '+r.order_kg+' kg · blend total '+r.blend_total_kgs+' kg'+(r.blend_ok?'':' ⚠ percentages off')+' · <a href="/panel/oif?id='+r.id+'" target="_blank">Open / print OIF ›</a></div>';
   });
 }
 init();

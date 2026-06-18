@@ -1,0 +1,8 @@
+# Append to routes/web.php (self-contained). papi/* is already CSRF-exempt.
+
+/* ===== WINWORLD OIF (Order Indent Form) ROUTES ===== */
+Route::middleware(['web', 'auth', \App\Http\Middleware\SetTenantFromUser::class])->group(function () {
+    Route::get('/panel/oif',      [\App\Http\Controllers\Panel\WinworldOifController::class, 'oifPage']);
+    Route::get('papi/ww-oif',     [\App\Http\Controllers\Panel\WinworldOifController::class, 'oifData']);
+    Route::post('papi/ww-qc-save',[\App\Http\Controllers\Panel\WinworldOifController::class, 'qcSign']);
+});

@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order Indent Form — Win World</title>
+<style>
+  :root{--ink:#111;--line:#222;--soft:#777;--bg:#e9ecef;--green:#2E7D55;--red:#B4232A;--amber:#D9821E}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Arial,Helvetica,sans-serif;font-size:13px}
+  .toolbar{position:sticky;top:0;background:#16202B;color:#fff;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .toolbar a{color:#aab4bd;text-decoration:none;font-size:13px}
+  .toolbar .right{display:flex;gap:10px;align-items:center}
+  .toolbar .badge{font-size:12px;background:#26323f;border:1px solid #3a4855;border-radius:999px;padding:3px 10px;color:#cfd6dd}
+  .toolbar button{background:var(--amber);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:bold;cursor:pointer}
+  .sheet{max-width:800px;margin:16px auto;background:#fff;padding:18px;border:1px solid #ccc}
+  table{width:100%;border-collapse:collapse}
+  td,th{border:1px solid var(--line);padding:4px 6px;vertical-align:top}
+  .nobd td{border:0}
+  .tt{text-align:center;font-weight:bold;letter-spacing:.04em;background:#f0f0f0}
+  .lbl{background:#fafafa;font-weight:bold;width:170px}
+  .hd1{font-weight:bold;font-size:15px}
+  .doc{font-size:11px}
+  .center{text-align:center}.right{text-align:right}.bold{font-weight:bold}
+  .sec-title{margin:14px 0 0;background:#e7e7e7;border:1px solid var(--line);border-bottom:0;padding:5px;text-align:center;font-weight:bold;letter-spacing:.05em}
+  .signs{font-size:11px}
+  .srow{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:3px 0;border-bottom:1px dotted #bbb}
+  .srow span.r{color:var(--soft);min-width:78px}
+  .srow b{flex:1;text-align:right}
+  .srow .t{color:var(--soft);min-width:96px;text-align:right;font-size:10px}
+  .srow button{background:#fff;border:1px solid var(--amber);color:var(--amber);border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer}
+  .resrow{display:flex;gap:6px;align-items:center;padding-top:5px}
+  .resrow button{border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;border:1px solid #ccc;background:#fff}
+  .resrow button.pass.on{background:var(--green);color:#fff;border-color:var(--green)}
+  .resrow button.reject.on{background:var(--red);color:#fff;border-color:var(--red)}
+  .tick{font-family:monospace}
+  .muted{color:var(--soft);text-align:center;padding:30px}
+  @media print{
+    .toolbar{display:none}
+    body{background:#fff;font-size:12px}
+    .sheet{margin:0;border:0;max-width:100%;padding:0}
+    .srow button,.resrow{display:none}
+    @page{size:A4 portrait;margin:12mm}
+  }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <a href="/panel/indents">‹ Indents</a>
+  <div class="right">
+    <span class="badge" id="signbadge">—</span>
+    <span class="badge" id="signer"></span>
+    <button onclick="window.print()">Print / Save PDF ⎙</button>
+  </div>
+</div>
+<div class="sheet" id="sheet"><div class="muted">Loading indent…</div></div>
+
+<script>
+"use strict";
+var ID=parseInt((location.search.match(/[?&]id=(\d+)/)||[])[1]||"0",10);
+var QC={}, SIGNER="", PROCS=[], DATA=null;
+function api(p,q){var qs=q?"?"+Object.keys(q).map(function(k){return encodeURIComponent(k)+"="+encodeURIComponent(q[k]==null?"":q[k]);}).join("&"):"";
+  return fetch("/papi/"+p+qs,{headers:{Accept:"application/json"},credentials:"same-origin"}).then(function(r){return r.json();});}
+function post(p,b){return fetch("/papi/"+p,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},credentials:"same-origin",body:JSON.stringify(b)}).then(function(r){return r.json();});}
+function esc(s){return (s==null?"":String(s)).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];});}
+function fmt(d){return d?String(d).replace("T"," ").slice(0,16):"";}
+function tick(b){return b?'☑':'☐';}
+var SIGN_PROCS=["Extrusion","Printing","Cutting"]; // form's sign-off processes
+
+function load(){
+  if(!ID){document.getElementById("sheet").innerHTML='<div class="muted">No indent id. Open this from the Indents page.</div>';return;}
+  api("ww-oif",{id:ID}).then(function(r){
+    if(!r.ok){document.getElementById("sheet").innerHTML='<div class="muted">Indent not found.</div>';return;}
+    DATA=r; QC=r.qc||{}; SIGNER=r.signer||""; PROCS=r.processes||[];
+    document.getElementById("signer").textContent="Signing as: "+(SIGNER||"—");
+    render(r);
+  });
+}
+function blendRows(blends){
+  var rows=(blends||[]).map(function(b){
+    return '<tr><td>'+esc(b.material_name)+'</td><td class="center">'+(b.pct_a||"")+'</td><td class="right">'+(b.qty_a||"")+'</td>'+
+      '<td class="center">'+(b.pct_b||"")+'</td><td class="right">'+(b.qty_b||"")+'</td>'+
+      '<td class="center">'+(b.pct_c||"")+'</td><td class="right">'+(b.qty_c||"")+'</td></tr>';
+  }).join("");
+  for(var i=(blends||[]).length;i<4;i++) rows+='<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+  // totals
+  var ta=0,tb=0,tc=0;(blends||[]).forEach(function(b){ta+=parseFloat(b.qty_a)||0;tb+=parseFloat(b.qty_b)||0;tc+=parseFloat(b.qty_c)||0;});
+  rows+='<tr><td class="bold">TOTAL</td><td></td><td class="right bold">'+ta.toFixed(1)+'</td><td></td><td class="right bold">'+tb.toFixed(1)+'</td><td></td><td class="right bold">'+tc.toFixed(1)+'</td></tr>';
+  rows+='<tr><td class="bold">TOTAL KGS</td><td colspan="6" class="right bold">'+(ta+tb+tc).toFixed(1)+' kg</td></tr>';
+  return rows;
+}
+function specRows(pairs){
+  return pairs.map(function(p){return '<tr><td class="lbl">'+p[0]+'</td><td>'+esc(p[1]||"")+'</td></tr>';}).join("");
+}
+function signBlock(proc){
+  var q=QC[proc]||{};
+  function row(role,label,sc,ac){
+    var nm=q[sc],at=q[ac];
+    if(nm) return '<div class="srow"><span class="r">'+label+'</span><b>'+esc(nm)+'</b><span class="t">'+fmt(at)+'</span></div>';
+    return '<div class="srow"><span class="r">'+label+'</span><b></b><button data-sign="'+proc+'" data-role="'+role+'">Sign</button></div>';
+  }
+  var res=(q.result||"").toLowerCase();
+  var resrow='<div class="resrow"><span class="r" style="color:#777">Result:</span>'+
+    '<button class="pass'+(res==="pass"?" on":"")+'" data-res="'+proc+'" data-v="pass">Pass</button>'+
+    '<button class="reject'+(res==="reject"?" on":"")+'" data-res="'+proc+'" data-v="reject">Reject</button></div>';
+  return '<div class="signs"><div class="srow"><span class="r">Production</span><b></b><span class="t">'+(q.production_at?fmt(q.production_at):"")+'</span></div>'+
+    row("supervisor","Supervisor","supervisor_sign","supervisor_at")+
+    row("qc","QC","qc_sign","qc_at")+
+    row("sec_head","Sec-Head QC","sec_head_sign","sec_head_at")+resrow+'</div>';
+}
+function processSection(title,proc,specPairs,sample){
+  var active=PROCS.indexOf(proc)>=0; if(!active) return "";
+  var sign=SIGN_PROCS.indexOf(proc)>=0;
+  return '<div class="sec-title">'+title+'</div>'+
+    '<table><tr>'+
+      '<td style="width:62%;padding:0"><table class="inner" style="height:100%">'+specRows(specPairs)+
+        '<tr><td class="lbl">Sample If Required</td><td>'+tick(sample)+' Yes &nbsp; '+tick(!sample)+' No</td></tr></table></td>'+
+      '<td style="width:38%">'+(sign?signBlock(proc):'<span style="color:#777">—</span>')+'</td>'+
+    '</tr></table>';
+}
+function render(r){
+  var d=r.indent;
+  var head=
+    '<table class="nobd"><tr>'+
+      '<td style="width:34%" class="hd1">WINWORLD IMPEX LIMITED</td>'+
+      '<td class="center hd1">ORDER INDENT FORM</td>'+
+      '<td style="width:30%" class="doc">Doc No. '+esc(r.issue.ref)+'<br>Issue Date: '+esc(r.issue.date)+'<br>Issue Number: '+esc(r.issue.no)+'</td>'+
+    '</tr></table>'+
+    '<table style="margin-top:8px"><tr>'+
+      '<td class="lbl">Customer Name</td><td>'+esc(d.customer_name)+'</td>'+
+      '<td class="lbl" style="width:120px">INDENT NO.</td><td class="bold">'+esc(d.indent_no)+'</td></tr>'+
+    '<tr><td class="lbl">Product Name</td><td>'+esc(d.product_name)+'</td>'+
+      '<td class="lbl">ORDER QTY.</td><td>'+esc(d.order_qty_pcs)+'</td></tr>'+
+    '<tr><td class="lbl">Date Of Indent</td><td>'+esc(fmt(d.date_of_indent))+'</td>'+
+      '<td class="lbl">Mixing Qty.</td><td>'+esc(d.mixing_qty||"")+'</td></tr>'+
+    '<tr><td class="lbl">Required Date</td><td>'+esc(fmt(d.required_date))+'</td>'+
+      '<td class="lbl">Sample Available</td><td>'+tick(d.sample_available)+' Yes &nbsp; '+tick(!d.sample_available)+' No</td></tr>'+
+    '<tr><td class="lbl">SDH Remarks</td><td colspan="3">'+esc(d.sdh_remarks||"")+'</td></tr></table>';
+
+  var blending = PROCS.indexOf("Blending")>=0 ?
+    '<div class="sec-title">BLENDING PROCESS</div>'+
+    '<table><thead><tr><th>Material Name</th><th>%-Ext-A</th><th>Qty-Ext-A</th><th>%-Ext-B</th><th>Qty-Ext-B</th><th>%-Ext-C</th><th>Qty-Ext-C</th></tr></thead>'+
+    '<tbody>'+blendRows(r.blends)+'</tbody></table>' : '';
+
+  var ext=processSection("EXTRUDER PROCESS","Extrusion",[
+     ["Width (inch/mm)",d.ext_width],["Gusset",d.ext_gusset],["Gauge",d.ext_gauge],
+     ["Film Color",d.ext_film_colour],["Weight Per Roll",d.ext_weight_per_roll],["Type of Roll",d.ext_type_of_roll]],d.ext_sample);
+  var prn=processSection("PRINTING PROCESS","Printing",[
+     ["Specification",d.prn_specification],["No. of Colors",d.prn_no_colours],["Colours",d.prn_colours],
+     ["Single or Double",d.prn_single_double],["Printing Direction",d.prn_direction],
+     ["Printing Gap (Top)",d.prn_gap_top],["Printing Gap (Bottom)",d.prn_gap_bottom]],d.prn_sample);
+  var cut=processSection("CUTTING PROCESS","Cutting",[
+     ["Cutting Type",d.cut_type],["Bag Size",d.cut_bag_size],["Sealing Type",d.cut_sealing],["Bottom Gusset",d.cut_bottom_gusset],
+     ["Type of Handle Punch",d.cut_handle_punch],["Handle Position",d.cut_handle_position],
+     ["Type of Hole Punch",d.cut_hole_punch],["Hole-Punch Positions",d.cut_hole_positions]],d.cut_sample);
+
+  var pdh='<div class="sec-title">PDH Remarks</div><table><tr><td style="height:46px">'+esc(d.pdh_remarks||"")+'</td></tr></table>';
+
+  document.getElementById("sheet").innerHTML=head+blending+ext+prn+cut+pdh;
+  wire();
+  // badge: signed count over active sign-processes
+  var act=PROCS.filter(function(p){return SIGN_PROCS.indexOf(p)>=0;});
+  var done=act.filter(function(p){var q=QC[p]||{};return q.supervisor_sign&&q.qc_sign&&q.sec_head_sign;}).length;
+  var bd=document.getElementById("signbadge"); bd.textContent="QC signed "+done+"/"+act.length;
+  bd.style.background = (act.length&&done===act.length)?"#1f5e3f":"#26323f";
+}
+function wire(){
+  Array.prototype.forEach.call(document.querySelectorAll("[data-sign]"),function(b){
+    b.onclick=function(){ post("ww-qc-save",{indent_id:ID,process:b.getAttribute("data-sign"),role:b.getAttribute("data-role"),name:SIGNER})
+      .then(function(r){ if(r.ok) load(); else alert(r.error||"Could not sign"); }); };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-res]"),function(b){
+    b.onclick=function(){ post("ww-qc-save",{indent_id:ID,process:b.getAttribute("data-res"),role:"",result:b.getAttribute("data-v")})
+      .then(function(r){ if(r.ok) load(); else alert(r.error||"Could not set result"); }); };
+  });
+}
+load();
+</script>
+</body>
+</html>
