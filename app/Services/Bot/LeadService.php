@@ -32,10 +32,14 @@ class LeadService
         $intent = $intent === 'ticket' ? 'ticket' : 'lead';
         $interest = $this->summarise($message);
         $score = (new LeadScorer())->score($intent, $message);
+        $dedupeKey = LeadDedupe::key($phone, $intent, $interest);
 
-        // Dedupe: an open lead for this customer in the last few hours → don't spam the team.
+        // Dedupe on CONTENT, not just customer+time: a literal repeat of the same request
+        // within the window collapses to one lead, but a different ask ("Starlink" vs
+        // "Fiber") from the same person is its own opportunity.
         $recent = Lead::query()
             ->where('customer_phone', $phone)
+            ->where('dedupe_key', $dedupeKey)
             ->whereIn('status', Lead::OPEN_STATUSES)
             ->where('created_at', '>=', now()->subHours(self::DEDUPE_HOURS))
             ->latest('id')->first();
@@ -49,6 +53,7 @@ class LeadService
             'customer_name'   => $name ?: null,
             'intent'          => $intent,
             'interest'        => $interest,
+            'dedupe_key'      => $dedupeKey,
             'lead_score'      => $score,
             'message'         => mb_substr($message, 0, 1000),
             'source'          => $source ?: 'whatsapp',
