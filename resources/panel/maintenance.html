@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maintenance — Win World</title>
+<style>
+  :root{--ink:#16202B;--steel:#5C6B7A;--line:#E2E7EC;--bg:#F4F6F8;--card:#fff;--amber:#D9821E;--green:#2E7D55;--blue:#3B5BA9;--red:#B4232A}
+  *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{position:sticky;top:0;z-index:6;background:var(--ink);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  .sub{font-size:12px;color:var(--steel);margin-top:2px}
+  .bar button{background:var(--amber);color:#fff;border:0;border-radius:8px;padding:8px 13px;font-size:13px;font-weight:600;cursor:pointer}
+  .bar a{color:#aab4bd;font-size:13px;text-decoration:none;margin-left:8px}
+  .wrap{max-width:960px;margin:0 auto;padding:16px}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .kpi .n{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums}
+  .kpi .l{font-size:12px;color:var(--steel);letter-spacing:.04em;text-transform:uppercase;margin-top:2px}
+  .kpi .s{font-size:11px;color:var(--steel);margin-top:3px}
+  .capture{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px;display:none}
+  .capture.on{display:block}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .fld label{display:block;font-size:11px;color:var(--steel);margin-bottom:4px}
+  input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:#fff;color:var(--ink)}
+  .save2{margin-top:12px;background:var(--green);color:#fff;border:0;border-radius:9px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer}
+  .board{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px 0;margin-bottom:16px}
+  .board h3{margin:8px 16px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--steel)}
+  .brow{display:flex;justify-content:space-between;align-items:center;padding:8px 16px;border-top:1px solid var(--line);font-size:14px}
+  .brow b{font-weight:700}
+  .wo{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 15px;margin-bottom:11px}
+  .wo.bd{border-left:4px solid var(--red)} .wo.pm{border-left:4px solid var(--blue)}
+  .wo.done{opacity:.7}
+  .wtop{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .wtop .rf{font-weight:700;font-family:ui-monospace,monospace}
+  .badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .b{font-size:11px;border-radius:999px;padding:3px 10px;border:1px solid var(--line);color:var(--steel)}
+  .b.bd{background:#fbecec;color:var(--red);border-color:#e6b8b8}
+  .b.pm{background:#eef1fb;color:var(--blue);border-color:#c4cdec}
+  .b.done{background:#eef7f1;color:var(--green);border-color:#bfe0cd}
+  .b.overdue{background:#fbecec;color:var(--red);border-color:#e6b8b8}
+  .actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px;border-top:1px dashed var(--line);padding-top:11px}
+  .actions button{font-size:12.5px;border-radius:8px;padding:7px 11px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink)}
+  .actions .go{border-color:var(--blue);color:var(--blue)}
+  .actions .ok{background:var(--green);color:#fff;border-color:var(--green)}
+  .seg{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .seg button{font-size:12px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;cursor:pointer;color:var(--steel)}
+  .seg button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .muted{color:var(--steel);text-align:center;padding:24px}
+  @media(max-width:680px){.kpis{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Maintenance <span class="sub" style="color:#aab4bd">· {{WW_TENANT}}</span></h1>
+  <div class="bar"><button id="newBd">+ Breakdown</button><button id="newPm" style="background:var(--blue)">+ Preventive</button><a href="/panel/dashboard">Dashboard ›</a></div>
+</header>
+<div class="wrap">
+  <div class="kpis" id="kpis"></div>
+
+  <div class="capture" id="capture">
+    <div class="grid">
+      <div class="fld"><label>Type</label><select id="type"><option value="breakdown">Breakdown (corrective)</option><option value="preventive">Preventive (scheduled)</option></select></div>
+      <div class="fld"><label>Machine</label><select id="machine_id"></select></div>
+      <div class="fld"><label>Priority</label><select id="priority"><option>Normal</option><option>High</option><option>Critical</option></select></div>
+      <div class="fld" style="grid-column:span 3"><label>Title / task</label><input id="title" placeholder="e.g. Screw motor overheating / Monthly gearbox grease"></div>
+      <div class="fld" id="dtField"><label>Downtime so far (min)</label><input id="downtime_min" type="number" value="0"></div>
+      <div class="fld" id="dueField" style="display:none"><label>Due date</label><input id="due_at" type="datetime-local"></div>
+      <div class="fld" style="grid-column:span 2"><label>Notes</label><input id="notes" placeholder="optional"></div>
+    </div>
+    <button class="save2" id="save">Save work order</button>
+    <div id="result" class="sub" style="margin-top:8px"></div>
+  </div>
+
+  <div class="board" id="board"></div>
+
+  <div class="seg" id="seg">
+    <button data-f="open" class="on">Open</button>
+    <button data-f="all">All</button>
+    <button data-f="breakdown">Breakdowns</button>
+    <button data-f="preventive">Preventive</button>
+  </div>
+  <div id="list"><div class="muted">Loading…</div></div>
+</div>
+
+<script>
+"use strict";
+var WW={orders:[],filter:"open"};
+function api(p,q){var qs=q?"?"+Object.keys(q).map(function(k){return encodeURIComponent(k)+"="+encodeURIComponent(q[k]==null?"":q[k]);}).join("&"):"";
+  return fetch("/papi/"+p+qs,{headers:{Accept:"application/json"},credentials:"same-origin"}).then(function(r){return r.json();});}
+function esc(s){return (s==null?"":String(s)).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];});}
+function el(id){return document.getElementById(id);}
+
+function kpis(s){
+  function tile(n,l,sub,col){return '<div class="kpi"><div class="n"'+(col?' style="color:'+col+'"':'')+'>'+n+'</div><div class="l">'+l+'</div><div class="s">'+(sub||'')+'</div></div>';}
+  var pm=s.pm||{}, mttr=s.mttr||{}, mtbf=s.mtbf||{};
+  var pmCol = pm.pct>=90?'var(--green)':pm.pct>=70?'var(--amber)':'var(--red)';
+  el("kpis").innerHTML =
+    tile((mttr.hours||0)+' h','MTTR','mean repair · '+(mttr.count||0)+' fixes')+
+    tile((mtbf.hours||0)+' h','MTBF',(mtbf.failures||0)+' failures · '+(mtbf.operating_hours||0)+' run h')+
+    tile((pm.pct||0)+'%','PM compliance',(pm.on_time||0)+'/'+(pm.due||0)+' on time',pmCol)+
+    tile((s.open||0),'Open work orders',(s.breakdowns||0)+' breakdowns · '+(s.downtime_hrs||0)+' h down');
+}
+function board(rows){
+  if(!rows||!rows.length){el("board").innerHTML='<h3>Worst machine by downtime</h3><div class="muted">No maintenance recorded.</div>';return;}
+  var html='<h3>Worst machine by downtime</h3>';
+  rows.slice(0,6).forEach(function(m){
+    html+='<div class="brow"><span><b>'+esc(m.machine)+'</b> · '+m.failures+' breakdowns'+(m.open?' · '+m.open+' open':'')+'</span><b>'+Math.round(m.downtime_min/60*10)/10+' h</b></div>';
+  });
+  el("board").innerHTML=html;
+}
+function woCard(o){
+  var cls='wo '+(o.type==='preventive'?'pm':'bd')+(o.status==='done'?' done':'');
+  var overdue = o.type==='preventive' && o.status!=='done' && o.due_at && (new Date(o.due_at) < new Date());
+  var badges='<span class="b '+(o.type==='preventive'?'pm':'bd')+'">'+(o.type==='preventive'?'Preventive':'Breakdown')+'</span>';
+  badges+='<span class="b">'+esc(o.machine)+'</span>';
+  if(o.status==='done') badges+='<span class="b done">Done</span>'; else badges+='<span class="b">'+esc(o.status)+'</span>';
+  if(overdue) badges+='<span class="b overdue">Overdue</span>';
+  if(o.downtime_min) badges+='<span class="b">'+o.downtime_min+' min down</span>';
+  var meta = o.type==='preventive' ? ('Due '+(o.due_at||'—')) : ('Reported '+(o.reported_at||'—'));
+  if(o.completed_at) meta += ' · Done '+o.completed_at;
+  var acts='';
+  if(o.status!=='done'){
+    if(o.status==='open') acts+='<button class="go" onclick="act('+o.id+',\'start\')">Start repair</button>';
+    acts+='<button class="ok" onclick="complete('+o.id+')">Complete</button>';
+  } else {
+    acts+='<button onclick="act('+o.id+',\'reopen\')">Reopen</button>';
+  }
+  return '<div class="'+cls+'"><div class="wtop"><span class="rf">'+esc(o.ref||'')+'</span><span class="sub">'+esc(meta)+'</span></div>'+
+    '<div style="margin-top:4px">'+esc(o.title||'(no title)')+'</div>'+
+    '<div class="badges">'+badges+'</div>'+
+    (o.notes?'<div class="sub" style="margin-top:6px;font-style:italic">'+esc(o.notes)+'</div>':'')+
+    '<div class="actions">'+acts+'</div></div>';
+}
+function renderList(){
+  var f=WW.filter, rows=WW.orders.filter(function(o){
+    if(f==='all')return true; if(f==='open')return o.status!=='done';
+    return o.type===f;
+  });
+  el("list").innerHTML = rows.length? rows.map(woCard).join("") : '<div class="muted">No work orders.</div>';
+}
+function load(){
+  api("ww-maint",{days:30}).then(function(r){
+    if(!r||!r.ok)return;
+    WW.orders=r.orders||[];
+    kpis(r.summary||{}); board(r.by_machine||[]); renderList();
+    var ms=el("machine_id"); ms.innerHTML=(r.machines||[]).map(function(m){return '<option value="'+m.id+'">'+esc(m.machine)+' · '+esc(m.process||'')+'</option>';}).join("");
+  });
+}
+window.act=function(id,a){ api("ww-maint-action",{id:id,action:a}).then(load); };
+window.complete=function(id){
+  var dt=prompt("Total downtime for this breakdown (minutes)?","");
+  if(dt===null)return;
+  api("ww-maint-action",{id:id,action:"complete",downtime_min:(dt||0)}).then(load);
+};
+el("type").onchange=function(){
+  var pm=this.value==='preventive';
+  el("dueField").style.display=pm?'':'none';
+  el("dtField").style.display=pm?'none':'';
+};
+el("newBd").onclick=function(){ el("type").value="breakdown"; el("type").onchange(); el("capture").classList.add("on"); };
+el("newPm").onclick=function(){ el("type").value="preventive"; el("type").onchange(); el("capture").classList.add("on"); };
+el("save").onclick=function(){
+  var b=el("save"); b.disabled=true; b.textContent="Saving…";
+  api("ww-maint-save",{
+    type:el("type").value, machine_id:el("machine_id").value, priority:el("priority").value,
+    title:el("title").value, downtime_min:el("downtime_min").value, due_at:el("due_at").value, notes:el("notes").value
+  }).then(function(res){
+    b.disabled=false; b.textContent="Save work order";
+    if(res&&res.ok){ el("result").textContent="Saved "+res.ref; el("title").value=""; el("notes").value=""; el("capture").classList.remove("on"); load(); }
+    else { el("result").textContent="Error: "+((res&&res.error)||"failed"); }
+  });
+};
+Array.prototype.forEach.call(document.querySelectorAll("#seg button"),function(btn){
+  btn.onclick=function(){ Array.prototype.forEach.call(document.querySelectorAll("#seg button"),function(b){b.classList.remove("on");}); btn.classList.add("on"); WW.filter=btn.getAttribute("data-f"); renderList(); };
+});
+load();
+</script>
+</body>
+</html>

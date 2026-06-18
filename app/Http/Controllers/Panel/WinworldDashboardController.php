@@ -8,6 +8,8 @@ use App\Models\WwPlanning;
 use App\Models\WwProductionEntry;
 use App\Services\Winworld\Analytics;
 use App\Services\Winworld\MaterialYield;
+use App\Services\Winworld\Maintenance;
+use App\Models\WwMaintOrder;
 use Illuminate\Http\Request;
 
 /** Win World OEE dashboard: turns captured data into the efficiency picture. */
@@ -78,11 +80,16 @@ class WinworldDashboardController extends Controller
         }
         usort($perMachine, fn($a, $b) => $a['oee'] <=> $b['oee']); // worst first = act here
 
+        $opHours = (float) array_sum(array_map(fn($e) => (float) ($e['actual_hours'] ?? 0), $entries));
+        $maintOrders = WwMaintOrder::orderByDesc('id')->limit(300)->get()
+            ->map(fn($o) => ['type'=>$o->type,'status'=>$o->status,'downtime_min'=>$o->downtime_min,'due_at'=>optional($o->due_at)->toDateTimeString(),'reported_at'=>optional($o->reported_at)->toDateTimeString(),'started_at'=>optional($o->started_at)->toDateTimeString(),'completed_at'=>optional($o->completed_at)->toDateTimeString()])->all();
+
         return response()->json([
             'ok'           => true,
             'days'         => $days,
             'summary'      => Analytics::summary($indents, $entries),
             'yield'        => MaterialYield::rollup($entries),
+            'maint'        => Maintenance::summary($maintOrders, $opHours, now()->toDateTimeString()),
             'per_machine'  => $perMachine,
             'downtime'     => Analytics::downtimePareto($entries),
             'machine_board'=> Analytics::machineBoard($plannings, now()),

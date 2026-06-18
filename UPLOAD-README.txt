@@ -1,44 +1,47 @@
-WIN WORLD — Material Yield + Floor Scoreboard + Changeover loss
+WIN WORLD — Maintenance / CMMS-lite (MTTR · MTBF · PM compliance)
 
 WHAT THIS ADDS
-  * Material yield  : resin-in vs good-kg-out, with regrind tracking (the converter money metric).
-                      New optional "Resin in kg" + "Regrind kg" fields on the Production (floor) screen.
-                      Shows as a new tile on the OEE Dashboard. If operators leave resin blank,
-                      yield falls back to produced/(produced+scrap) so it still shows a number.
-  * Floor scoreboard: a big, dark, auto-refreshing TV view at /panel/scoreboard — live OEE per machine
-                      (worst first), Availability/Speed/Quality bars, material yield, FPY, top downtime.
-                      Refreshes every 30s. New "Floor scoreboard" item in the Win World hub.
-  * Changeover loss : total changeover hours now shown on the dashboard + scoreboard.
+  * A Maintenance screen at /panel/maintenance: breakdown log + preventive (PM) work orders.
+    Report a breakdown, Start repair, Complete (logs downtime) -> the system computes:
+      - MTTR  (mean time to repair  = how fast you fix)
+      - MTBF  (mean time between failures = operating hours / breakdowns)
+      - PM compliance (preventive jobs done on/before due)
+    Plus a worst-machine-by-downtime board.
+  * A "Response" KPI strip now sits on the OEE Dashboard right under the OEE tiles — so the
+    diagnosis (OEE) and the response (MTTR/MTBF/PM) are on one screen, the way world-class plants run it.
+  * New "Maintenance" item in the Win World hub.
 
 FILES IN THIS UPLOAD (exact repo paths):
-  NEW      app/Services/Winworld/MaterialYield.php
-  NEW      resources/panel/scoreboard.html
-  NEW      database/migrations/2026_06_18_100008_add_yield_to_ww_production.php
-  NEW      qa/ww_material_yield.php                       (dev test, optional)
-  REPLACE  app/Services/Winworld/Analytics.php
+  NEW      app/Services/Winworld/Maintenance.php
+  NEW      app/Models/WwMaintOrder.php
+  NEW      app/Http/Controllers/Panel/WinworldMaintController.php
+  NEW      resources/panel/maintenance.html
+  NEW      database/migrations/2026_06_18_100009_create_ww_maint_orders.php
+  NEW      database/seeders/WinworldMaintDemoSeeder.php
+  NEW      qa/ww_maintenance.php                       (dev test, optional)
   REPLACE  app/Http/Controllers/Panel/WinworldDashboardController.php
-  REPLACE  app/Http/Controllers/Panel/WinworldApiController.php
-  REPLACE  app/Models/WwProductionEntry.php
   REPLACE  resources/panel/dashboard.html
-  REPLACE  resources/panel/production.html
   REPLACE  resources/panel/winworld-hub.html
 
 HOW TO UPLOAD ON GITHUB
   1. Unzip.
   2. Repo -> Add file -> Upload files.
-  3. Drag the "app", "database", "resources", and "qa" folders in (paths are preserved).
+  3. Drag the "app", "database", "resources", and "qa" folders in (paths preserved).
   4. Commit.
 
-ONE MANUAL EDIT (not in this zip, to avoid overwriting your core routes file):
-  In routes/web.php, find this line (around line 216):
-      Route::get('/panel/dashboard', [\App\Http\Controllers\Panel\WinworldDashboardController::class, 'dashboardPage']);
-  Add this line right AFTER it (same group):
-      Route::get('/panel/scoreboard', [\App\Http\Controllers\Panel\WinworldDashboardController::class, 'scoreboardPage']);
+ONE MANUAL EDIT (routes/web.php — not in this zip, to avoid overwriting your core routes file):
+  Find this line (in the WINWORLD DASHBOARD ROUTES group):
+      Route::get('papi/ww-dashboard', [\App\Http\Controllers\Panel\WinworldDashboardController::class, 'data']);
+  Add these 4 lines right AFTER it (inside the same group { ... }):
+      Route::get('/panel/maintenance', [\App\Http\Controllers\Panel\WinworldMaintController::class, 'maintPage']);
+      Route::get('papi/ww-maint', [\App\Http\Controllers\Panel\WinworldMaintController::class, 'data']);
+      Route::get('papi/ww-maint-save', [\App\Http\Controllers\Panel\WinworldMaintController::class, 'save']);
+      Route::get('papi/ww-maint-action', [\App\Http\Controllers\Panel\WinworldMaintController::class, 'action']);
 
 THEN
-  * EasyPanel -> Deploy. The new migration (input_kg / regrind_kg columns) runs automatically.
-  * Open the Win World hub -> "Floor scoreboard" (or go to /panel/scoreboard). Put it full-screen on a TV.
-  * The existing demo data already shows a material-yield number (fallback). It sharpens once operators
-    start entering "Resin in kg" on the floor screen.
+  * EasyPanel -> Deploy. The new migration (ww_maint_orders table) runs automatically.
+  * Load demo maintenance data (run once in the console; safe on your already-seeded tenant):
+        php artisan db:seed --class=WinworldMaintDemoSeeder
+  * Open the hub -> Maintenance. The Dashboard now shows the Response strip too.
 
-QA: php qa/ww_material_yield.php -> 11. Full module sweep: 221 assertions across 14 suites.
+QA: php qa/ww_maintenance.php -> 16. Full module sweep: 237 assertions across 15 suites.

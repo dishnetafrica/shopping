@@ -115,7 +115,17 @@ function render(d){
     (rows? '<table class="board"><thead><tr><th>Machine</th><th>Process</th><th>Next available</th><th>Booked 7d</th><th>Utilisation</th></tr></thead><tbody>'+rows+'</tbody></table>'
          : '<div class="muted">Nothing planned yet.</div>')+'</div>';
 
-  root.innerHTML=kpis+machSec+parSec+board;
+  // response KPIs (maintenance) — diagnosis next to response
+  var mt=(d.maint||{}); var mttr=mt.mttr||{}, mtbf=mt.mtbf||{}, pm=mt.pm||{};
+  var pmCol = pm.pct>=90?'var(--green)':(pm.pct>=70?'#D9821E':'#B4232A');
+  var respSec='<div class="sec"><h2>Response <span class="hint">— how fast you fix what OEE flags. <a href="/panel/maintenance" style="color:#3B5BA9;text-decoration:none">Maintenance log ›</a></span></h2>'+
+    '<div class="kpis" style="grid-template-columns:repeat(4,1fr)">'+
+    '<div class="kpi"><div class="n">'+(mttr.hours||0)+' h</div><div class="l">MTTR</div><div class="sub">'+(mttr.count||0)+' fixes</div></div>'+
+    '<div class="kpi"><div class="n">'+(mtbf.hours||0)+' h</div><div class="l">MTBF</div><div class="sub">'+(mtbf.failures||0)+' failures</div></div>'+
+    '<div class="kpi"><div class="n" style="color:'+pmCol+'">'+(pm.pct||0)+'%</div><div class="l">PM compliance</div><div class="sub">'+(pm.on_time||0)+'/'+(pm.due||0)+' on time</div></div>'+
+    '<div class="kpi"><div class="n">'+(mt.open||0)+'</div><div class="l">Open work orders</div><div class="sub">'+(mt.breakdowns||0)+' breakdowns</div></div>'+
+    '</div></div>';
+  root.innerHTML=kpis+respSec+machSec+parSec+board;
 }
 function load(){
   document.getElementById("root").innerHTML='<div class="muted">Loading…</div>';
