@@ -307,7 +307,7 @@ class ProcessIncomingMessage implements ShouldQueue
         $st = is_array($convo->state) ? $convo->state : [];
         if ($fromImage) {
             if ($addedId !== null && in_array((string) $addedId, $imgCandIds, true)) {
-                $this->recordImageFeedback($tenant->id, $imgHash, $imgQuery, $addedId, $addedName, $imgConf);
+                $this->recordImageFeedback($tenant->id, $imgHash, $imgQuery, $addedId, $addedName, $imgConf, $from);
                 BotTrace::log($this->tenantId, $trace, $from, 'photo_selected', $addedName);
                 unset($st['img_fb']);
             } else {
@@ -318,7 +318,7 @@ class ProcessIncomingMessage implements ShouldQueue
         } elseif ($addedId !== null && is_array($st['img_fb'] ?? null)) {
             $fb = $st['img_fb'];
             if ((time() - (int) ($fb['at'] ?? 0)) <= 900 && in_array((string) $addedId, (array) ($fb['cands'] ?? []), true)) {
-                $this->recordImageFeedback($tenant->id, (string) $fb['hash'], (string) $fb['query'], $addedId, $addedName, (int) ($fb['conf'] ?? 0));
+                $this->recordImageFeedback($tenant->id, (string) $fb['hash'], (string) $fb['query'], $addedId, $addedName, (int) ($fb['conf'] ?? 0), $from);
                 BotTrace::log($this->tenantId, $trace, $from, 'photo_selected', $addedName);
                 unset($st['img_fb']);
                 $convo->state = $st;
@@ -418,15 +418,16 @@ class ProcessIncomingMessage implements ShouldQueue
     private function knownImageProduct(Tenant $tenant, string $hash): ?array
     {
         if ($hash === '') return null;
-        $minVotes = max(2, (int) $tenant->setting('image_shortcut_min_votes', 3));
-        $minShare = (float) $tenant->setting('image_shortcut_min_share', 0.8);
+        $minVotes     = max(2, (int) $tenant->setting('image_shortcut_min_votes', 3));
+        $minShare     = (float) $tenant->setting('image_shortcut_min_share', 0.8);
+        $minCustomers = max(1, (int) $tenant->setting('image_shortcut_min_customers', 2));
 
         try {
             $rows = \Illuminate\Support\Facades\DB::table('image_search_feedback')
                 ->where('tenant_id', $tenant->id)
                 ->where('image_hash', $hash)
                 ->whereNotNull('product_id')
-                ->selectRaw('product_id, MAX(product_name) as name, count(*) as votes')
+                ->selectRaw('product_id, MAX(product_name) as name, count(*) as votes, count(distinct customer_phone) as uniq')
                 ->groupBy('product_id')
                 ->orderByDesc('votes')
                 ->get();
@@ -437,7 +438,10 @@ class ProcessIncomingMessage implements ShouldQueue
 
         $total = (int) $rows->sum('votes');
         $top   = $rows->first();
-        if ($total >= $minVotes && $total > 0 && ((int) $top->votes / $total) > $minShare) {
+        if ($total >= $minVotes
+            && $total > 0
+            && ((int) $top->votes / $total) > $minShare
+            && (int) $top->uniq >= $minCustomers) {
             return [
                 'product_id' => $top->product_id,
                 'name'       => (string) $top->name,
@@ -461,18 +465,19 @@ class ProcessIncomingMessage implements ShouldQueue
     }
 
     /** Store an image-search → chosen-product label (training data). Never throws. */
-    private function recordImageFeedback(int $tenantId, string $hash, string $query, $productId, ?string $name, int $conf): void
+    private function recordImageFeedback(int $tenantId, string $hash, string $query, $productId, ?string $name, int $conf, string $customerPhone = ''): void
     {
         if ($hash === '' || $query === '') return;
         try {
             \Illuminate\Support\Facades\DB::table('image_search_feedback')->insert([
-                'tenant_id'    => $tenantId,
-                'image_hash'   => substr($hash, 0, 64),
-                'vision_query' => mb_substr($query, 0, 160),
-                'product_id'   => $productId ?: null,
-                'product_name' => ($name !== null && $name !== '') ? mb_substr($name, 0, 200) : null,
-                'confidence'   => $conf > 0 ? min(100, $conf) : null,
-                'created_at'   => now(),
+                'tenant_id'      => $tenantId,
+                'customer_phone' => $customerPhone !== '' ? substr($customerPhone, 0, 32) : null,
+                'image_hash'     => substr($hash, 0, 64),
+                'vision_query'   => mb_substr($query, 0, 160),
+                'product_id'     => $productId ?: null,
+                'product_name'   => ($name !== null && $name !== '') ? mb_substr($name, 0, 200) : null,
+                'confidence'     => $conf > 0 ? min(100, $conf) : null,
+                'created_at'     => now(),
             ]);
         } catch (\Throwable $e) {
             // feedback logging must never break message handling
