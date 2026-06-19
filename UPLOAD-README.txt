@@ -1,38 +1,40 @@
-BOT LEARNING UPGRADE — miss-capture loop + Gujlish greeting patch
+BOT VOICE ORDERS — transcribe voice notes, then run the normal pipeline
 
 WHAT THIS DOES
-  1. MISS-CAPTURE LOOP (the durable upgrade):
-     Every time the bot fails to match a product ("we don't stock X" / "couldn't find X"),
-     it now logs the term to a new bot_misses table (per tenant, with a count + sample).
-     That builds a living, evidence-ranked list of exactly what real customers said that the
-     bot didn't understand — so improving it stops being guesswork.
-     Review it any time:
-        php artisan bot:misses                 # top unmatched terms, all shops
-        php artisan bot:misses --tenant=2      # just Pal's
-        php artisan bot:misses --limit=80
-     (The log write is wrapped so it can NEVER break a customer reply.)
+  When a customer sends a WhatsApp VOICE NOTE:
+    1. The webhook now captures the audioMessage (it was being ignored before).
+    2. The job fetches the audio and transcribes it with OpenAI (Whisper), auto-detecting
+       Gujarati / Hindi / English, biased toward the shop's product words.
+    3. The transcript is fed through the SAME flow as a typed message — so a spoken
+       "2 thali, sev 250gm, 7 vage" gets understood and ordered like normal text.
+    4. If transcription is off / no API key / fails / silence: the bot ACKNOWLEDGES the note
+       ("Got your voice note, the shop will reply shortly...") and alerts the owner, so the
+       customer is never silently ignored.
 
-  2. GUJLISH GREETING PATCH:
-     GreetingDictionary now recognises kem cho / majama / kaise ho / jai swaminarayan and
-     bare address openers (bhabhi / bhai / ben / kaka), incl. trailing ones ("hi bhabhi",
-     "jsk bhai"). These were being mis-searched as products before.
+  (Image/photo orders and text conversation were already handled — this closes the voice gap,
+   so the bot now handles all three input types end to end.)
 
 FILES (exact repo paths):
-  NEW      app/Models/BotMiss.php
-  NEW      app/Support/BotMiss.php
-  NEW      app/Console/Commands/BotMissesCommand.php
-  NEW      database/migrations/2026_06_19_100001_create_bot_misses.php
-  NEW      qa/bot_greeting_gu.php                  (dev test, optional)
-  REPLACE  app/Services/Bot/GreetingDictionary.php
-  REPLACE  app/Services/Bot/BotBrain.php
+  NEW      app/Services/Bot/VoiceTranscriber.php
+  REPLACE  app/Services/WhatsApp/EvolutionGateway.php
+  REPLACE  app/Jobs/ProcessIncomingMessage.php
+
+REQUIREMENTS
+  * OPENAI_API_KEY must be set (same key your image/vision search uses — already configured).
+  * Optional env: OPENAI_TRANSCRIBE_MODEL (default "whisper-1").
+  * Per-shop toggle: tenant setting feature_voice_orders (default ON). Set it false to disable
+    transcription for a shop (it then just acknowledges + routes voice notes to a human).
 
 UPLOAD ON GITHUB
-  Add file -> Upload files -> drag the "app", "database", "qa" folders -> Commit.
-  No routes or config to edit. EasyPanel -> Deploy. The bot_misses migration runs automatically.
+  Add file -> Upload files -> drag the "app" folder -> Commit -> EasyPanel Deploy.
+  No migration, routes or config files to edit.
 
-AFTER A FEW DAYS
-  Run  php artisan bot:misses --tenant=2  to see Pal's real vocabulary gaps, ranked by how
-  often they happened. Send me that list (or the product catalogue) and I'll turn the genuine
-  ones into CatalogueMatcher aliases.
+TEST IT
+  Send a voice note to the shop saying an order out loud. Watch BotTrace: you'll see
+  voice_received -> voice_transcribed (with the text) -> then the normal order flow.
 
-QA: php qa/bot_greeting_gu.php -> 13.
+KNOWN LIMITATION (v1)
+  Whisper returns Gujarati speech in Gujarati SCRIPT. English/Hindi/romanised voice orders
+  flow straight through; pure Gujarati-script transcripts may route to a human via the normal
+  fallback rather than auto-matching the romanised dictionaries. If that turns out common in
+  the logs, the next step is a one-line LLM romanise/normalise pass on the transcript.

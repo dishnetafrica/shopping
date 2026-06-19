@@ -192,6 +192,14 @@ class EvolutionGateway implements WhatsAppGateway
             ?? ''
         ) : '';
 
+        // Voice note: a customer spoke their order instead of typing. Capture it so the job
+        // can transcribe it (inline base64 if Evolution sent it, else fetched via media_key).
+        $aud      = data_get($msg, 'message.audioMessage');
+        $hasAudio = is_array($aud);
+        $audioB64 = $hasAudio ? (string) (
+            data_get($msg, 'message.base64') ?? data_get($msg, 'base64') ?? data_get($payload, 'data.base64') ?? ''
+        ) : '';
+
         return [
             'instance'  => (string) $instance,
             'from'      => preg_replace('/[^0-9]/', '', explode('@', (string) $remote)[0]),
@@ -207,7 +215,9 @@ class EvolutionGateway implements WhatsAppGateway
             'has_image'       => $hasImage,
             'image_caption'   => $imageCaption,
             'image_b64'       => $imageB64,
-            'media_key'       => $hasImage ? [
+            'has_audio'       => $hasAudio,
+            'audio_b64'       => $audioB64,
+            'media_key'       => ($hasImage || $hasAudio) ? [
                 'id'        => (string) data_get($msg, 'key.id', ''),
                 'remoteJid' => (string) $remote,
                 'fromMe'    => $fromMe,

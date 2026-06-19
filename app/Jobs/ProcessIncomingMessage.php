@@ -201,6 +201,37 @@ class ProcessIncomingMessage implements ShouldQueue
 
         $tBrain = microtime(true);
 
+        // ---- Voice notes: transcribe, then run the normal pipeline ----
+        // Many customers (especially older Gujarati ones) send a voice note instead of typing.
+        // Fetch + transcribe it and feed the transcript through the same flow as typed text.
+        // If transcription is off/unavailable/fails, never leave them hanging: acknowledge and
+        // hand the chat to the shop.
+        if (! empty($this->incoming['has_audio'] ?? false) && trim($text) === '' && ! $tenant->isMarketing()) {
+            BotTrace::log($this->tenantId, $trace, $from, 'voice_received');
+            $transcript = null;
+            if ((bool) $tenant->setting('feature_voice_orders', true)) {
+                $b64 = (string) ($this->incoming['audio_b64'] ?? '');
+                if ($b64 === '' && ! empty($this->incoming['media_key'] ?? null) && method_exists($gateway, 'getMediaBase64')) {
+                    $b64 = (string) ($gateway->getMediaBase64($tenant->whatsapp_instance, $this->incoming['media_key']) ?? '');
+                }
+                $vt = new \App\Services\Bot\VoiceTranscriber();
+                if ($vt->enabled() && $b64 !== '') $transcript = $vt->transcribe($b64);
+            }
+            if ($transcript !== null && trim($transcript) !== '') {
+                BotTrace::log($this->tenantId, $trace, $from, 'voice_transcribed', mb_substr($transcript, 0, 90));
+                $text = trim($transcript);
+                $this->incoming['text'] = $text;
+                // fall through to the normal text pipeline below
+            } else {
+                $ack = "\u{1F3A4} Got your voice note — the shop will reply here shortly. You can also type your order (e.g. \"2 thali, sev 250gm\") and I will take it right away.";
+                $gateway->sendText($tenant->whatsapp_instance, $from, $ack);
+                MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $ack);
+                NotifyOwner::dispatch($this->tenantId, "\u{1F3A4} +{$from} sent a voice note the bot could not read — open Chats to listen and reply.");
+                BotTrace::log($this->tenantId, $trace, $from, 'voice_unhandled');
+                return;
+            }
+        }
+
         // ---- Image search: customer sent a product photo instead of typing ----
         // Vision turns the photo (+ any caption) into a catalogue query; we verify the
         // query actually matches a product in THIS shop before replying (so a
