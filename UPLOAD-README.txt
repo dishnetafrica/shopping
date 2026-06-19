@@ -1,31 +1,19 @@
-BLINKIT-STYLE CATEGORIES — consolidate 43 messy categories into ~18-20 clean ones
+PANEL 500 FIX — missing Tenant import
 
-WHAT IT DOES
-  Re-maps every product into a small, clean, Blinkit-style category set, and SPLITS the
-  giant "Food" bucket into proper sub-categories (Snacks, Spices, Beverages, Rice & Flour,
-  Sauces, Sweets, Breakfast, etc.) using the product names. The new exercise books fold
-  into "Stationery & Office". It also rebuilds the category list in a nice order (food first)
-  and moves your existing category photos onto the matching new categories.
+THE BUG
+  PanelApiController::tenantFeatures(Tenant $t) used a bare "Tenant" type-hint, but the file
+  never imported App\Models\Tenant. PHP resolved it to App\Http\Controllers\Panel\Tenant
+  (which doesn't exist), so the /papi/settings endpoint threw a TypeError 500 and the whole
+  seller panel got stuck on "Connecting..." / "0 categories".
 
-  FULLY REVERSIBLE: the original category of every product is backed up the first time it runs.
+THE FIX
+  Added:  use App\Models\Tenant;
+  (Nothing else changed. This is unrelated to the category re-mapping, which is fine.)
 
 FILE
-  NEW  app/Console/Commands/CatalogueRecategorizeCommand.php
+  REPLACE  app/Http/Controllers/Panel/PanelApiController.php
 
 UPLOAD ON GITHUB
   Add file -> Upload files -> drag the "app" folder -> Commit -> EasyPanel Deploy.
-
-RUN (in the shopping console)
-  php artisan catalogue:recategorize --dry      # 1) PREVIEW: see the new categories + counts, no changes
-  php artisan catalogue:recategorize            # 2) apply it
-  php artisan cache:clear                        # 3) so the storefront/bot rebuild
-
-  (Defaults to Family Shoppers. For another shop: --tenant=<id>.)
-
-UNDO (if you don't like it)
-  php artisan catalogue:recategorize --restore
-  php artisan cache:clear
-
-NOTE
-  Always run the --dry preview first and eyeball the category list. If you want a grouping
-  changed (merge/rename/split), tell me and I'll adjust the rules before you apply.
+  After deploy, reload mycloudbss.com/panel (fresh tab) — the 500 is gone and your
+  21 categories show.

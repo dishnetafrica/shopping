@@ -10,6 +10,7 @@ use App\Models\LedgerEntry;
 use App\Models\Message;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Tenant;
 use App\Models\Campaign;
 use App\Jobs\SendCampaign;
 use App\Services\Marketing\AudienceResolver;
