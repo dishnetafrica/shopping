@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\Tenant;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -107,8 +108,9 @@ class CatalogueRecategorizeCommand extends Command
         $this->rebuildCategories($tid, array_keys($counts));
         $this->remapCategoryImages($tid);
 
+        Cache::forget("catalogue:{$tid}");
         $this->line('');
-        $this->warn('Now run:  php artisan cache:clear   (so the storefront rebuilds its feed)');
+        $this->info('Catalogue cache flushed — the storefront will show the new categories immediately.');
         return self::SUCCESS;
     }
 
@@ -226,8 +228,8 @@ class CatalogueRecategorizeCommand extends Command
             }
         }
         $this->rebuildCategories($tid, array_values(array_unique(array_values($orig))));
-        $this->info("Restored {$n} products to their original categories.");
-        $this->warn('Now run:  php artisan cache:clear');
+        Cache::forget("catalogue:{$tid}");
+        $this->info("Restored {$n} products to their original categories. Catalogue cache flushed.");
         return self::SUCCESS;
     }
 }

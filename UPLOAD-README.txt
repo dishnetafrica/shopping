@@ -1,19 +1,23 @@
-PANEL 500 FIX — missing Tenant import
+CATALOGUE FLUSH — refresh the shop cache WITHOUT logging anyone out
 
-THE BUG
-  PanelApiController::tenantFeatures(Tenant $t) used a bare "Tenant" type-hint, but the file
-  never imported App\Models\Tenant. PHP resolved it to App\Http\Controllers\Panel\Tenant
-  (which doesn't exist), so the /papi/settings endpoint threw a TypeError 500 and the whole
-  seller panel got stuck on "Connecting..." / "0 categories".
+WHY
+  `php artisan cache:clear` wipes the whole cache store, which on this setup includes your
+  panel SESSIONS — that's why it logged you out. This adds a targeted flush that clears only
+  the storefront catalogue cache and leaves sessions alone.
 
-THE FIX
-  Added:  use App\Models\Tenant;
-  (Nothing else changed. This is unrelated to the category re-mapping, which is fine.)
+WHAT'S IN HERE
+  NEW      app/Console/Commands/CatalogueFlushCommand.php
+  REPLACE  app/Console/Commands/CatalogueRecategorizeCommand.php   (now auto-flushes; no longer
+                                                                    tells you to run cache:clear)
 
-FILE
-  REPLACE  app/Http/Controllers/Panel/PanelApiController.php
+USE IT
+  After importing products / changing prices / stock / categories, run:
+      php artisan catalogue:flush              # all shops
+      php artisan catalogue:flush --tenant=1   # just Family Shoppers
+  You will NOT be logged out.
+
+  From now on, use  catalogue:flush  instead of  cache:clear  whenever you just need the
+  storefront to pick up catalogue changes. (catalogue:recategorize now flushes by itself.)
 
 UPLOAD ON GITHUB
   Add file -> Upload files -> drag the "app" folder -> Commit -> EasyPanel Deploy.
-  After deploy, reload mycloudbss.com/panel (fresh tab) — the 500 is gone and your
-  21 categories show.
