@@ -90,19 +90,26 @@ class StorefrontController extends Controller
     {
         $tenant = $this->tenant($shop);
 
-        $rows = Product::where('active', true)->orderBy('name')->get()->map(function (Product $p) {
-            return [
-                'Product Name' => (string) $p->name,
-                'Variant'      => '',
-                'Brand'        => '',
-                'Category'     => (string) ($p->category ?? 'Other'),
-                'Keywords'     => (string) ($p->keywords ?? ''),
-                'Price_UGX'    => (float) ($p->base_price ?? $p->price ?? 0),
-                'Stock'        => (int) ($p->stock ?? 0),
-                'Image'        => $this->imageUrl($p->image_url),
-                '_row'         => (int) $p->id,
-            ];
-        })->values();
+        // Cache the built feed for a few minutes so a large catalogue is not re-hydrated
+        // on every page load, and use toBase()+column select to avoid loading full models.
+        $rows = \Illuminate\Support\Facades\Cache::remember('catalogue:' . $tenant->id, now()->addMinutes(5), function () {
+            return Product::where('active', true)->orderBy('name')
+                ->toBase()
+                ->get(['id', 'name', 'category', 'keywords', 'base_price', 'price', 'stock', 'image_url'])
+                ->map(function ($p) {
+                    return [
+                        'Product Name' => (string) $p->name,
+                        'Variant'      => '',
+                        'Brand'        => '',
+                        'Category'     => (string) ($p->category ?? 'Other'),
+                        'Keywords'     => (string) ($p->keywords ?? ''),
+                        'Price_UGX'    => (float) ($p->base_price ?? $p->price ?? 0),
+                        'Stock'        => (int) ($p->stock ?? 0),
+                        'Image'        => $this->imageUrl($p->image_url),
+                        '_row'         => (int) $p->id,
+                    ];
+                })->values();
+        });
 
         return response()->json([
             'products' => $rows,
@@ -122,25 +129,45 @@ class StorefrontController extends Controller
     {
         $cfg = (array) ($tenant->setting('thali', []) ?: []);
         if (! \App\Services\Bot\ThaliMenu::enabled($cfg)) return null;
-        $tz      = (string) $tenant->setting('timezone', 'Africa/Kampala');
-        $day     = \App\Services\Bot\ThaliMenu::todayKey($tz);
-        $session = \App\Services\Bot\ThaliMenu::session($cfg, $tz);
-        [$items, $price, $note, $label] = \App\Services\Bot\ThaliMenu::resolve($cfg, $day, $session);
+        $tz       = (string) $tenant->setting('timezone', 'Africa/Kampala');
+        $ctx      = \App\Services\Bot\ThaliMenu::effective($cfg, $tz);
+        $day      = $ctx['day'];
+        $session  = $ctx['session'];
+        $rollover = $ctx['rollover'];
+        $both     = \App\Services\Bot\ThaliMenu::hasBoth($cfg, $day);
+        $hasNight = \App\Services\Bot\ThaliMenu::hasNight($cfg);
 
-        // Picture: night uses its own flyer if set, else falls back to the day flyer.
+        $active = $this->thaliSessionPayload($cfg, $day, $session);
+
+        return [
+            'price'      => $active['price'],
+            'note'       => $active['note'],
+            'day'        => $day,
+            'day_name'   => \App\Services\Bot\ThaliMenu::dayName($day),
+            'items'      => $active['items'],
+            'image'      => $active['image'],
+            'meal'       => $hasNight ? $active['label'] : '',
+            'toggle'     => $both,                                            // customer may switch lunch/dinner
+            'current'    => $session,                                         // default by time
+            'rollover'   => $rollover,                                        // showing tomorrow's lunch (after cutoff)
+            'day_menu'   => $both ? $this->thaliSessionPayload($cfg, $day, 'day') : null,
+            'night_menu' => $both ? $this->thaliSessionPayload($cfg, $day, 'night') : null,
+        ];
+    }
+
+    /** Items/price/note/label/image for one thali session on a given day. */
+    private function thaliSessionPayload(array $cfg, string $day, string $sess): array
+    {
+        [$items, $price, $note, $label] = \App\Services\Bot\ThaliMenu::resolve($cfg, $day, $sess);
         $imgs  = is_array($cfg['images'] ?? null) ? $cfg['images'] : [];
         $nimgs = is_array($cfg['night_images'] ?? null) ? $cfg['night_images'] : [];
-        $imgRaw = ($session === 'night' && ($nimgs[$day] ?? '') !== '') ? (string) $nimgs[$day] : (string) ($imgs[$day] ?? '');
-
-        $hasNight = \App\Services\Bot\ThaliMenu::hasNight($cfg);
+        $raw   = ($sess === 'night' && ($nimgs[$day] ?? '') !== '') ? (string) $nimgs[$day] : (string) ($imgs[$day] ?? '');
         return [
-            'price'    => $price,
-            'note'     => $note,
-            'day'      => $day,
-            'day_name' => \App\Services\Bot\ThaliMenu::dayName($day),
-            'items'    => $items,
-            'image'    => $imgRaw !== '' ? $this->imageUrl($imgRaw) : '',
-            'meal'     => $hasNight ? ($session === 'night' ? 'Dinner' : 'Lunch') : '',
+            'items' => $items,
+            'price' => $price,
+            'note'  => $note,
+            'label' => $sess === 'night' ? 'Dinner' : 'Lunch',
+            'image' => $raw !== '' ? $this->imageUrl($raw) : '',
         ];
     }
 
