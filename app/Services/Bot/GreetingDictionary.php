@@ -38,6 +38,12 @@ class GreetingDictionary
         // India (Gujarati / Hindi — for the shop's Indian customers)
         'in' => ['namaste', 'namaskar', 'jai shree krishna', 'jai shri krishna', 'jsk', 'ram ram', 'jai shri ram'],
 
+        // Gujarati / Hindi romanised (Pal's farsan customers — many open with these or just an address term)
+        'gu' => ['kem cho', 'kemcho', 'kem chho', 'kemchho', 'majama', 'maja ma', 'majama che', 'su che', 'su chhe',
+            'jai swaminarayan', 'jay swaminarayan', 'jai swami', 'jay swami',
+            'kaise ho', 'kaise hai', 'kaise hain', 'kaisi ho', 'kaisi hai', 'aap kaise ho',
+            'bhabhi', 'bhabi', 'bhai', 'bhaiya', 'bhaiyya', 'ben', 'kaka', 'didi'],
+
         // English / generic openers
         'en' => ['hi', 'hii', 'hiii', 'hey', 'heyy', 'heya', 'hello', 'helo', 'hullo', 'yo', 'hiya', 'hola',
             'start', 'greetings', 'good morning', 'good afternoon', 'good evening', 'good day',
@@ -50,7 +56,7 @@ class GreetingDictionary
 
     // honorifics / fillers stripped from the end before a second lookup
     private const TRAIL_FILLER = ['ssebo', 'sebo', 'nyabo', 'sir', 'madam', 'bwana', 'boss', 'there',
-        'friend', 'mukwano', 'please', 'po', 'oli', 'nno', 'nnyo', 'ko', 'man', 'bro', 'team', 'all'];
+        'friend', 'mukwano', 'please', 'po', 'oli', 'nno', 'nnyo', 'ko', 'man', 'bro', 'team', 'all', 'bhai', 'bhabhi', 'bhabi', 'ben', 'kaka', 'bhaiya', 'didi', 'ji'];
 
     public static function detect(string $text): ?array
     {

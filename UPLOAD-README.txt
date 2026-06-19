@@ -1,47 +1,38 @@
-WIN WORLD — Maintenance / CMMS-lite (MTTR · MTBF · PM compliance)
+BOT LEARNING UPGRADE — miss-capture loop + Gujlish greeting patch
 
-WHAT THIS ADDS
-  * A Maintenance screen at /panel/maintenance: breakdown log + preventive (PM) work orders.
-    Report a breakdown, Start repair, Complete (logs downtime) -> the system computes:
-      - MTTR  (mean time to repair  = how fast you fix)
-      - MTBF  (mean time between failures = operating hours / breakdowns)
-      - PM compliance (preventive jobs done on/before due)
-    Plus a worst-machine-by-downtime board.
-  * A "Response" KPI strip now sits on the OEE Dashboard right under the OEE tiles — so the
-    diagnosis (OEE) and the response (MTTR/MTBF/PM) are on one screen, the way world-class plants run it.
-  * New "Maintenance" item in the Win World hub.
+WHAT THIS DOES
+  1. MISS-CAPTURE LOOP (the durable upgrade):
+     Every time the bot fails to match a product ("we don't stock X" / "couldn't find X"),
+     it now logs the term to a new bot_misses table (per tenant, with a count + sample).
+     That builds a living, evidence-ranked list of exactly what real customers said that the
+     bot didn't understand — so improving it stops being guesswork.
+     Review it any time:
+        php artisan bot:misses                 # top unmatched terms, all shops
+        php artisan bot:misses --tenant=2      # just Pal's
+        php artisan bot:misses --limit=80
+     (The log write is wrapped so it can NEVER break a customer reply.)
 
-FILES IN THIS UPLOAD (exact repo paths):
-  NEW      app/Services/Winworld/Maintenance.php
-  NEW      app/Models/WwMaintOrder.php
-  NEW      app/Http/Controllers/Panel/WinworldMaintController.php
-  NEW      resources/panel/maintenance.html
-  NEW      database/migrations/2026_06_18_100009_create_ww_maint_orders.php
-  NEW      database/seeders/WinworldMaintDemoSeeder.php
-  NEW      qa/ww_maintenance.php                       (dev test, optional)
-  REPLACE  app/Http/Controllers/Panel/WinworldDashboardController.php
-  REPLACE  resources/panel/dashboard.html
-  REPLACE  resources/panel/winworld-hub.html
+  2. GUJLISH GREETING PATCH:
+     GreetingDictionary now recognises kem cho / majama / kaise ho / jai swaminarayan and
+     bare address openers (bhabhi / bhai / ben / kaka), incl. trailing ones ("hi bhabhi",
+     "jsk bhai"). These were being mis-searched as products before.
 
-HOW TO UPLOAD ON GITHUB
-  1. Unzip.
-  2. Repo -> Add file -> Upload files.
-  3. Drag the "app", "database", "resources", and "qa" folders in (paths preserved).
-  4. Commit.
+FILES (exact repo paths):
+  NEW      app/Models/BotMiss.php
+  NEW      app/Support/BotMiss.php
+  NEW      app/Console/Commands/BotMissesCommand.php
+  NEW      database/migrations/2026_06_19_100001_create_bot_misses.php
+  NEW      qa/bot_greeting_gu.php                  (dev test, optional)
+  REPLACE  app/Services/Bot/GreetingDictionary.php
+  REPLACE  app/Services/Bot/BotBrain.php
 
-ONE MANUAL EDIT (routes/web.php — not in this zip, to avoid overwriting your core routes file):
-  Find this line (in the WINWORLD DASHBOARD ROUTES group):
-      Route::get('papi/ww-dashboard', [\App\Http\Controllers\Panel\WinworldDashboardController::class, 'data']);
-  Add these 4 lines right AFTER it (inside the same group { ... }):
-      Route::get('/panel/maintenance', [\App\Http\Controllers\Panel\WinworldMaintController::class, 'maintPage']);
-      Route::get('papi/ww-maint', [\App\Http\Controllers\Panel\WinworldMaintController::class, 'data']);
-      Route::get('papi/ww-maint-save', [\App\Http\Controllers\Panel\WinworldMaintController::class, 'save']);
-      Route::get('papi/ww-maint-action', [\App\Http\Controllers\Panel\WinworldMaintController::class, 'action']);
+UPLOAD ON GITHUB
+  Add file -> Upload files -> drag the "app", "database", "qa" folders -> Commit.
+  No routes or config to edit. EasyPanel -> Deploy. The bot_misses migration runs automatically.
 
-THEN
-  * EasyPanel -> Deploy. The new migration (ww_maint_orders table) runs automatically.
-  * Load demo maintenance data (run once in the console; safe on your already-seeded tenant):
-        php artisan db:seed --class=WinworldMaintDemoSeeder
-  * Open the hub -> Maintenance. The Dashboard now shows the Response strip too.
+AFTER A FEW DAYS
+  Run  php artisan bot:misses --tenant=2  to see Pal's real vocabulary gaps, ranked by how
+  often they happened. Send me that list (or the product catalogue) and I'll turn the genuine
+  ones into CatalogueMatcher aliases.
 
-QA: php qa/ww_maintenance.php -> 16. Full module sweep: 237 assertions across 15 suites.
+QA: php qa/bot_greeting_gu.php -> 13.

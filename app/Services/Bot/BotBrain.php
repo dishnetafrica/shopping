@@ -556,6 +556,7 @@ class BotBrain
         $wantWords = $want === '' ? [] : preg_split('/\s+/', $want, -1, PREG_SPLIT_NO_EMPTY);
         $conversational = '/\b(hi|hii|hey|hello|helo|hiya|yo|hola|salaam|salam|will|would|can|could|are|is|am|was|were|you|your|u|when|what|why|how|who|tomorrow|today|tonight|now|later|soon|coming|come|reach|open|closed?|deliver|delivery|time|hours?|there|available|reply|call|phone|number|whatsapp|thanks|thank|confirm|confirmed|dish|dishes|plate|plates|paid|pay|payment|money|balance|sent|send|received|done|noted|please|ok|okay)\b/i';
         if ($want !== '' && count($wantWords) <= 4 && preg_match('/[a-z]/i', $want) && ! preg_match($conversational, $want)) {
+            \App\Support\BotMiss::record($tenant->id, $want, $text);
             return "Sorry, we don't stock *{$want}* right now \u{1F642} Tell me another product, or say *menu* to see what we have.";
         }
 
@@ -582,6 +583,7 @@ class BotBrain
         $cur   = $this->currencyFor($tenant);
 
         if (! $cands) {
+            \App\Support\BotMiss::record($tenant->id, $query, $query);
             return "Sorry, I couldn't find *{$query}* \u{1F642} We may not stock it. Tell me another product, or say *menu* to browse.";
         }
 
