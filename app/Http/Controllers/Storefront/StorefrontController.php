@@ -93,10 +93,35 @@ class StorefrontController extends Controller
         // Cache the built feed for a few minutes so a large catalogue is not re-hydrated
         // on every page load, and use toBase()+column select to avoid loading full models.
         $rows = \Illuminate\Support\Facades\Cache::remember('catalogue:' . $tenant->id, now()->addMinutes(5), function () {
+            // Modifier groups per product (restaurant customisation), keyed by product id.
+            $mods = [];
+            try {
+                $groups = \App\Models\ModifierGroup::where('active', true)
+                    ->with(['options' => fn ($q) => $q->where('active', true)->orderBy('sort')])
+                    ->orderBy('sort')->get()->keyBy('id');
+                if ($groups->isNotEmpty()) {
+                    $pivot = \Illuminate\Support\Facades\DB::table('product_modifier_group')
+                        ->whereIn('modifier_group_id', $groups->keys()->all())->orderBy('sort')->get();
+                    foreach ($pivot as $pv) {
+                        $g = $groups->get($pv->modifier_group_id);
+                        if (! $g) continue;
+                        $mods[$pv->product_id][] = [
+                            'id' => $g->id, 'name' => $g->name, 'required' => (bool) $g->required,
+                            'min' => (int) $g->min_select, 'max' => (int) $g->max_select,
+                            'options' => $g->options->map(fn ($o) => [
+                                'id' => $o->id, 'name' => $o->name, 'delta' => (float) $o->price_delta,
+                            ])->values()->all(),
+                        ];
+                    }
+                }
+            } catch (\Throwable $e) {
+                $mods = [];
+            }
+
             return Product::where('active', true)->orderBy('name')
                 ->toBase()
                 ->get(['id', 'name', 'category', 'keywords', 'base_price', 'price', 'stock', 'image_url'])
-                ->map(function ($p) {
+                ->map(function ($p) use ($mods) {
                     return [
                         'Product Name' => (string) $p->name,
                         'Variant'      => '',
@@ -106,6 +131,7 @@ class StorefrontController extends Controller
                         'Price_UGX'    => (float) ($p->base_price ?? $p->price ?? 0),
                         'Stock'        => $p->stock === null ? null : (int) $p->stock,
                         'Image'        => $this->imageUrl($p->image_url),
+                        'Modifiers'    => $mods[$p->id] ?? [],
                         '_row'         => (int) $p->id,
                     ];
                 })->values();
@@ -192,8 +218,18 @@ class StorefrontController extends Controller
             if ($pname === '') continue;
             $qty   = max(1, (int) ($it['qty'] ?? 1));
             $price = (float) ($it['price'] ?? 0);
-            $clean[] = ['name' => $pname, 'qty' => $qty, 'price' => $price];
-            $textParts[] = $qty . 'x ' . $pname;
+            $mods  = [];
+            if (! empty($it['modifiers']) && is_array($it['modifiers'])) {
+                foreach ($it['modifiers'] as $m) {
+                    $mn = trim((string) ($m['name'] ?? ''));
+                    if ($mn !== '') {
+                        $mods[] = ['group' => (string) ($m['group'] ?? ''), 'name' => $mn, 'price_delta' => (float) ($m['price_delta'] ?? 0)];
+                    }
+                }
+            }
+            $display = $pname . ($mods ? ' + ' . implode(', ', array_map(fn ($m) => $m['name'], $mods)) : '');
+            $clean[] = ['name' => $display, 'qty' => $qty, 'price' => $price, 'modifiers' => $mods];
+            $textParts[] = $qty . 'x ' . $display;
             $calcTotal += $qty * $price;
         }
         if (! count($clean)) {
@@ -237,10 +273,29 @@ class StorefrontController extends Controller
         $o->customer_phone = $phone;
         $o->items_json     = $clean;
         $o->items_text     = $itemsText;
+        if ($note !== '') $o->notes = $note;             // shows on the Kitchen Board ticket
         $o->total          = $r->filled('total') ? (float) $r->input('total') : $calcTotal;
         if ($pay = trim((string) $r->input('payment', ''))) $o->payment = $pay;
         if ($location !== '') $o->location = $location;
         $o->save(); // OrderObserver: assigns order_no + track_token, dispatches NotifyOwnerNewOrder
+
+        // Create line rows so the order shows its items on the Kitchen Board / panel — web orders
+        // previously stored only items_json, which left the KOT ticket empty. Best-effort product_id.
+        if ($o->wasRecentlyCreated) {
+            foreach ($clean as $cl) {
+                $base = preg_replace('/\s+\+\s+.*$/', '', (string) $cl['name']);
+                $pid  = Product::where('name', $base)->value('id');
+                \App\Models\OrderItem::create([
+                    'order_id'   => $o->id,
+                    'product_id' => $pid ?: null,
+                    'name'       => $cl['name'],
+                    'price'      => $cl['price'],
+                    'qty'        => $cl['qty'],
+                    'notes'      => null,
+                    'modifiers'  => ! empty($cl['modifiers']) ? $cl['modifiers'] : null,
+                ]);
+            }
+        }
 
         return response()->json([
             'ok'        => true,
