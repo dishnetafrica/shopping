@@ -17,6 +17,7 @@ class ShoppingParser
     {
         $raw = trim($text);
         $low = mb_strtolower($raw);
+        $low = self::preNormalize($low);   // repair glued tokens + fractions first
 
         // EDIT ops are Phase 2 — flag and defer (so we never wrongly add them)
         $edit = (bool) preg_match('/\b(remove|delete|change|make|set|swap|replace|instead|double|triple|halve|reduce|decrease|increase)\b/', $low)
@@ -96,6 +97,51 @@ class ShoppingParser
     }
 
     private const SIZE_UNIT = 'kgs|kg|gms|gm|grams|gram|mg|ml|cl|ltrs|ltr|lt|litres|litre|liters|liter|g|l';
+
+    /**
+     * Repair Gujlish/handwritten order text BEFORE parsing:
+     *   - un-glue tokens around fractions and units  ("pista1/2"->"pista 1/2",
+     *     "1/2kaju"->"1/2 kaju", "250gm"->"250 gm") — narrow rules so "7up" stays "7up".
+     *   - half / haf / paav  -> 1/2 , 1/4
+     *   - run-on split: a 2nd size token after a sized item starts a new item
+     *     ("250gm pista 1/2 kg khajoor" -> "250 gm pista , 1/2 kg khajoor").
+     *   - fractions of a kg -> whole grams ("1/2 kg"->"500 gm"); a bare fraction
+     *     before a product defaults to kg ("1/2 kaju"->"500 gm kaju").
+     * Pure string->string so it is unit-testable without the framework.
+     */
+    public static function preNormalize(string $s): string
+    {
+        $su = self::SIZE_UNIT;
+        $s = ' ' . mb_strtolower(trim($s)) . ' ';
+
+        // 1) narrow un-glue
+        $s = preg_replace('/(?<=[a-z])(?=\d+\/\d)/', ' ', $s);          // pista1/2 -> pista 1/2
+        $s = preg_replace('/(?<=\d\/\d)(?=[a-z])/', ' ', $s);          // 1/2kaju  -> 1/2 kaju
+        $s = preg_replace('/(?<=\d)(?=(?:' . $su . ')\b)/', ' ', $s);  // 250gm    -> 250 gm
+
+        // 2) fraction words -> symbolic fractions
+        $s = preg_replace('/\bhaf\b/', 'half', $s);
+        $s = preg_replace('/\b(half|aadho|aadha|adho|adhu)\b/', '1/2', $s);
+        $s = preg_replace('/\b(paav|pav|pao|quarter)\b/', '1/4', $s);
+
+        // 3) run-on split: <num><unit> <word> … <new size token>  -> comma before the new size
+        $s = preg_replace(
+            '/(\b\d+(?:\.\d+)?\s*(?:' . $su . ')\s+[a-z][a-z ]*?)\s+(?=(?:1\/2|1\/4|3\/4|\d+(?:\.\d+)?\s*(?:' . $su . ')))/',
+            '$1 , ',
+            $s
+        );
+
+        // 4) fractions of a kg -> whole grams  (decimals break the count regex, so avoid them)
+        $s = preg_replace('/\b1\/2\s*(?:kg|kgs)\b/i', '500 gm', $s);
+        $s = preg_replace('/\b1\/4\s*(?:kg|kgs)\b/i', '250 gm', $s);
+        $s = preg_replace('/\b3\/4\s*(?:kg|kgs)\b/i', '750 gm', $s);
+        // bare fraction directly before a product word (no unit) -> kg default, in grams
+        $s = preg_replace('/\b1\/2\s+(?!(?:' . $su . ')\b)(?=[a-z])/', '500 gm ', $s);
+        $s = preg_replace('/\b1\/4\s+(?!(?:' . $su . ')\b)(?=[a-z])/', '250 gm ', $s);
+        $s = preg_replace('/\b3\/4\s+(?!(?:' . $su . ')\b)(?=[a-z])/', '750 gm ', $s);
+
+        return trim(preg_replace('/\s+/', ' ', $s));
+    }
 
     private function parseItem(string $frag): array
     {

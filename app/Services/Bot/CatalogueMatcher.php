@@ -24,6 +24,7 @@ class CatalogueMatcher
         'kaju'=>'cashew','kajoo'=>'cashew','badam'=>'almond','baadam'=>'almond',
         'akhrot'=>'walnut','akrot'=>'walnut','anjir'=>'fig','anjeer'=>'fig',
         'khajur'=>'dates','khajoor'=>'dates','khaarek'=>'dates','kharek'=>'dates',
+        'khahoor'=>'dates','khjoor'=>'dates','khjur'=>'dates','khaajur'=>'dates',
         'draksh'=>'raisin','draksha'=>'raisin','kismis'=>'raisin','kishmish'=>'raisin','kismish'=>'raisin',
         'pista'=>'pistachio','pista'=>'pistachio','khopra'=>'coconut','copra'=>'coconut','kopru'=>'coconut',
         // More everyday Gujarati/Hindi grocery words
