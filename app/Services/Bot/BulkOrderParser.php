@@ -60,6 +60,7 @@ class BulkOrderParser
         'ok','okay','okk','okkk','yes','no','np','thanks','thank','thanx','tnx','sorry','welcome',
         'nice','hmm','ji','haan','ha','baraber','barabar','thik','sir','madam','bhai','bhabhi','bhaiya',
         'today','tomorrow','now','here','there','done','ready','for','party','then','please','pls','hi',
+        'not','half','quarter','only','extra','just','mean','less','more','no','nahi','nai',
     ];
 
     /** Words that mark a number as a clock time, not an order quantity. */
@@ -90,7 +91,7 @@ class BulkOrderParser
                 foreach (self::segmentByQty($part) as $seg) {
                     $seg = trim($seg);
                     if ($seg === '' || self::isGreetingOnly($seg)) continue;
-                    if ($p = self::parseLine($seg)) { $out[] = $p; continue; }
+                    if ($p = self::parseLine($seg)) { if (! self::isJunkQuery($p['query'])) $out[] = $p; continue; }
                     if ($allowBare && ($bare = self::bareProduct($seg)) !== null) $out[] = ['qty' => 1, 'query' => $bare];
                 }
             }
@@ -184,6 +185,13 @@ class BulkOrderParser
     }
 
     /** A bare product (no quantity): single product token only, never chit-chat. null otherwise. */
+    /** A parsed query that is a single negation/modifier token is not a product. */
+    private static function isJunkQuery(string $q): bool
+    {
+        $t = preg_split('/\s+/u', trim($q), -1, PREG_SPLIT_NO_EMPTY);
+        return count($t) === 1 && in_array($t[0], self::BARE_REJECT, true);
+    }
+
     private static function bareProduct(string $seg): ?string
     {
         $s = preg_replace('/[^\p{L}\s]+/u', ' ', mb_strtolower(trim($seg)));
