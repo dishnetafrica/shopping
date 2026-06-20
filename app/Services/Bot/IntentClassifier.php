@@ -478,15 +478,43 @@ final class IntentClassifier
     public static function looksLikeCheckout(string $lc): bool
     {
         $lc = trim($lc);
-        if (in_array($lc, ['checkout','check out','done','confirm','order','place order',
-            'place my order','order now','proceed to checkout','proceed','finish'], true)) {
-            return true;
-        }
+        if ($lc === '') return false;
+
+        // Whole-message phrases that mean "I'm done — place it". Exact match keeps these from
+        // firing inside an add (e.g. "send 2 kg almond" must NOT be checkout).
+        $exact = [
+            'checkout','check out','done','confirm','order','place order','place my order','order now',
+            'proceed to checkout','proceed','finish','finish order','complete order','complete my order',
+            'place the order','confirm order','confirm my order','process order','process my order',
+            "that's all",'thats all','that is all',"that's it",'thats it','that is it','that will be all',
+            "that's everything",'thats everything','nothing else','no more','no more items','no more thanks',
+            'send it','send it over','send order','send the order','send my order','send now',
+            'deliver','deliver it','deliver please','bring it','i want to pay','pay now',
+            'ready','im ready',"i'm ready",'i am ready','ok done','okay done','ok send','ok deliver',
+            // Gujlish / Hindi
+            'bas','bas itnu','bas atlu','bas etlu','etlu j','ho gayu','ho gaya','ho gya','hogaya',
+            'thai gayu','thai gyu','order karo','order kar do','order kardo','order kari do','order karo bhai',
+            'bhej do','bhejo','send karo','send kardo','send kar do','le aao','leke aao','ghar bhej do',
+            'ghar bhejo','pohcha do','pahuncha do',
+            // Swahili (Uganda)
+            'basi','nimemaliza','tuma','leta','nataka kulipa','niletee',
+        ];
+        if (in_array($lc, $exact, true)) return true;
+
+        // Anchored phrases that may carry a trailing politeness word ("that's all thanks").
+        if (preg_match('/^(that\'?s|thats|that is)\s+(all|it|everything)\b/', $lc)) return true;
+        if (preg_match('/^(bas|basi)\b/', $lc)) return true;                         // bas / bas itnu / basi
+        if (preg_match('/\b(ho|thai)\s*gay[au]\b/', $lc)) return true;               // ho gaya/gayu, thai gayu
         if (preg_match('/\b(check\s?out|place (my |an |the )?order|order now|proceed to (pay|checkout|payment)|complete (my )?order|finish(ed)? (placing |my )?order)\b/', $lc)) {
             return true;
         }
         // "done" meaning finished ("i'm done", "all done", "done order now", "done ordering")
-        if (preg_match('/\b(i\'?m|im|all)\s+done\b|\bdone\s+(order|ordering|now|please|checkout)\b/', $lc)) {
+        if (preg_match('/\b(i\'?m|im|all)\s+done\b|\bdone\s+(order|ordering|now|please|checkout|shopping)\b/', $lc)) {
+            return true;
+        }
+        // "send/bhej/deliver/tuma + it/order/karo/now…" — needs a completion object, so a real
+        // add like "send 2 kg almond" (object is a product, not these words) won't match.
+        if (preg_match('/\b(send|bhej|deliver|tuma|leta|pohcha|pahuncha)\s+(it|order|karo|kar\s?do|kardo|do|now|please|ghar)\b/', $lc)) {
             return true;
         }
         return false;

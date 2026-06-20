@@ -1,29 +1,23 @@
-BOT FIX — "2 kg" now means 2 packs, not an unavailable size
+BOT FIX — customers don't have to say "checkout" anymore
 
-THE PROBLEM (from a real Pal's chat)
-  Customer: "2 kg almond, 3 kg walnut"
-  Bot:      "2kg isn't available - we have 1kg, 500g, 250g"   <- treated 2kg as a PACK SIZE
-  ...and after the customer agreed to 1kg packs, it added only 1 of each (lost the 2 and 3).
+THE PROBLEM
+  The bot waited for the word "checkout". Real customers say "bas", "that's all", "ho gaya",
+  "send it", "order karo", "deliver", "basi" (Swahili) — or just the total — so orders stalled
+  in the cart.
 
 THE FIX
-  When a requested amount doesn't match a single pack, the bot now COMPOSES it from whole
-  packs, picking the largest pack that divides evenly:
-     2 kg  + a 1kg pack   -> 2 x 1kg
-     3 kg                 -> 3 x 1kg
-     1.5 kg               -> 3 x 500g
-     750 g                -> 3 x 250g
-     2 ltr + a 1ltr pack  -> 2 x 1ltr
-  If nothing divides evenly (e.g. 700g with 250/500/1000 packs) it falls back to the old
-  "here are the sizes we have" message. Weight vs volume never mix.
-
-  Now the customer's first message just works:
-     "2 kg almond, 3 kg walnut"
-     -> "2 x Almond 1 Kg - UGX 92,000, 3 x Walnut 1 Kg - UGX 180,000 ... say OK to confirm"
+  Widened the implicit-checkout detector to recognise the natural + Gujlish/Hindi/Swahili ways
+  people signal they're done, and route them straight into the normal checkout flow:
+     that's all / thats it / nothing else / no more / send it / deliver / bring it / ready
+     bas / bas itnu / ho gaya / ho gayu / thai gayu / order karo / bhej do / send karo / le aao
+     basi / nimemaliza / tuma   (Swahili)
+  Carefully guarded so a real ADD is never mistaken for checkout:
+     "send 2 kg almond", "rice 5kg", "send me the menu"  -> still treated as add/menu, NOT checkout.
 
 FILES
-  REPLACE  app/Services/Bot/ShoppingEngine.php
-  NEW      qa/shop_pack_compose.php   (dev test, 9 assertions; optional)
+  REPLACE  app/Services/Bot/IntentClassifier.php
+  NEW      qa/checkout_intent.php   (38 assertions; optional)
 
 UPLOAD ON GITHUB
-  Add file -> Upload files -> drag the "app" (and "qa") folder -> Commit -> Deploy.
-  No migration / routes / config. Applies to every shop's bot (Pal's, Family Shoppers, etc.).
+  Add file -> Upload files -> drag "app" (and "qa") -> Commit -> Deploy.
+  No migration / routes / config. Applies to every shop's bot.
