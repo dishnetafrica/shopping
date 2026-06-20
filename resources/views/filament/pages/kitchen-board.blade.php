@@ -63,6 +63,11 @@
                                     @foreach ($t['items'] as $it)
                                         <li>
                                             <span class="font-semibold">{{ $it['qty'] }}×</span> {{ $it['name'] }}
+                                            @if (!empty($it['mods']))
+                                                @foreach ($it['mods'] as $m)
+                                                    <span class="block pl-4 text-xs font-medium text-emerald-700 dark:text-emerald-400">↳ {{ $m }}</span>
+                                                @endforeach
+                                            @endif
                                             @if ($it['notes'])
                                                 <span class="block pl-4 text-xs font-medium text-amber-700 dark:text-amber-400">↳ {{ $it['notes'] }}</span>
                                             @endif

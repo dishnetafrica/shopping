@@ -46,7 +46,23 @@ class TrackController extends Controller
 
         $rows = '';
         foreach (($order->items_json ?? []) as $it) {
-            $rows .= '<tr><td>' . e($it['qty'] ?? 1) . '× ' . e($it['name'] ?? '') . '</td></tr>';
+            $nm   = (string) ($it['name'] ?? '');
+            $mods = [];
+            if (! empty($it['modifiers']) && is_array($it['modifiers'])) {
+                foreach ($it['modifiers'] as $m) {
+                    $mn = trim((string) ($m['name'] ?? ''));
+                    if ($mn !== '') $mods[] = $mn;
+                }
+            }
+            if ($mods) {                                          // un-fold any "+ Naan" stored on the name
+                $suffix = ' + ' . implode(', ', $mods);
+                if (str_ends_with($nm, $suffix)) $nm = substr($nm, 0, -strlen($suffix));
+            }
+            $cell = e(($it['qty'] ?? 1) . '× ' . $nm);
+            if ($mods) {
+                $cell .= '<div style="padding-left:14px;font-size:12px;color:#777">↳ ' . e(implode(', ', $mods)) . '</div>';
+            }
+            $rows .= '<tr><td>' . $cell . '</td></tr>';
         }
         if ($rows === '' && $order->items_text) {
             $rows = '<tr><td>' . e($order->items_text) . '</td></tr>';

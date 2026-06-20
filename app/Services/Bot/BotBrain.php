@@ -2078,13 +2078,24 @@ class BotBrain
         $total = 0; $lines = []; $i = 0;
         foreach ($cart as $l) {
             $sub = $l['price'] * $l['qty']; $total += $sub; $i++;
-            $lines[] = "{$i}. {$l['name']} x{$l['qty']} — " . Pricing::money($tenant, $sub);
+            $lines[] = "{$i}. " . $this->lineLabel($l) . " x{$l['qty']} — " . Pricing::money($tenant, $sub);
             $note = trim((string) ($l['note'] ?? ''));
             if ($note !== '' && stripos((string) $l['name'], 'note:') === false) {
                 $lines[] = "   \u{21B3} _note: {$note}_";
             }
         }
         return "\u{1F6D2} *Your basket*\n" . implode("\n", $lines) . "\n*Total: " . Pricing::money($tenant, $total) . "*";
+    }
+
+    /** Display label for a cart line, with any chosen accompaniment/add-ons folded in ("Butter Chicken + Naan"). */
+    protected function lineLabel(array $l): string
+    {
+        $name = (string) ($l['name'] ?? '');
+        if (! empty($l['modifiers']) && is_array($l['modifiers'])) {
+            $mods = array_values(array_filter(array_map(fn ($m) => trim((string) ($m['name'] ?? '')), $l['modifiers'])));
+            if ($mods) $name .= ' + ' . implode(', ', $mods);
+        }
+        return $name;
     }
 
     protected function placeOrder(Tenant $tenant, Conversation $convo, string $location, ?float $lat = null, ?float $lng = null, ?string $mapsLink = null): string
@@ -2118,7 +2129,7 @@ class BotBrain
         }
 
         $total = 0; foreach ($cart as $l) $total += $l['price'] * $l['qty'];
-        $itemsText = collect($cart)->map(fn ($l) => "{$l['qty']}x {$l['name']}")->implode(', ');
+        $itemsText = collect($cart)->map(fn ($l) => "{$l['qty']}x " . $this->lineLabel($l))->implode(', ');
 
         // D1 — server-authoritative delivery fee + ETA. Prefer the pin (lat/lng) when present;
         // otherwise canonicalise the location text. If the reply names no area but one was

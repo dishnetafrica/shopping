@@ -54,11 +54,24 @@ class KitchenBoard extends Page
                 'notes'     => trim((string) $o->notes),
                 'location'  => (string) $o->location,
                 'next'      => $o->nextKitchenStatus(),
-                'items'     => $o->items->map(fn ($i) => [
-                    'qty'   => $i->qty,
-                    'name'  => $i->name,
-                    'notes' => trim((string) $i->notes),
-                ])->all(),
+                'items'     => $o->items->map(function ($i) {
+                    $mods = is_array($i->modifiers)
+                        ? array_values(array_filter(array_map(fn ($m) => trim((string) ($m['name'] ?? '')), $i->modifiers)))
+                        : [];
+                    $name = (string) $i->name;
+                    if ($mods) {                                   // un-fold the "+ Naan" we stored on the name
+                        $suffix = ' + ' . implode(', ', $mods);
+                        if (str_ends_with($name, $suffix)) {
+                            $name = substr($name, 0, -strlen($suffix));
+                        }
+                    }
+                    return [
+                        'qty'   => $i->qty,
+                        'name'  => $name,
+                        'mods'  => $mods,
+                        'notes' => trim((string) $i->notes),
+                    ];
+                })->all(),
             ];
         }
         return $cols;
