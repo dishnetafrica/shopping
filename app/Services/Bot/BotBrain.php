@@ -222,6 +222,27 @@ class BotBrain
             return $this->maybeAskModifier($tenant, $convo) ?? $bulk;
         }
 
+        // PHASE 1 — Intent Router (deterministic). Multi-line bulk orders are handled above; now
+        // classify the message by INTENT before any single-item catalogue match. Non-product
+        // intents are answered here and NEVER reach "we don't stock"; product intents return null
+        // and fall through to the shopping engine (the only path that may say "we don't stock").
+        // Skipped mid-flow (clarification / pending order / checkout) so replies-to-prompts reach
+        // their own handlers below.
+        $stRoute = is_array($convo->state) ? $convo->state : [];
+        $routerBusy = ! empty($stRoute['options']) || ! empty($stRoute['pending_order'])
+            || ! empty($stRoute['pending_resolved'])
+            || (($stRoute['step'] ?? null) === 'awaiting_location')
+            || (($stRoute['step'] ?? null) === 'awaiting_confirm');
+        if (! $routerBusy) {
+            $routed = $this->routeIntent($tenant, $convo, $text);
+            if ($routed !== null) {
+                return $routed;
+            }
+            // Product-bearing fall-through (search / add / quantity): normalise multilingual
+            // aliases (aadu→ginger, panir→paneer …) so the catalogue matcher can resolve them.
+            $text = \App\Services\Bot\ProductAlias::normalize($text);
+        }
+
         // Try the LLM first; fall back to keywords.
         $action = $this->nlu->parse($tenant, $convo, $text);
         if ($action) {
@@ -801,6 +822,90 @@ class BotBrain
         }
         return "\u{1F642} Good question \u{2014} I've passed it to the shop and they'll reply here shortly. "
              . "Meanwhile you can keep adding items, or say *menu* to see what we have.";
+    }
+
+    /**
+     * PHASE 1 Intent Router dispatch (deterministic, no LLM). Classifies the message and answers
+     * non-product intents directly, so they NEVER reach "we don't stock". Returns null for
+     * product-bearing intents (search / add / quantity-with-item) so the shopping engine handles
+     * them; returns '' to stay silent (greet-once already spent). See OrderIntentRouter.
+     */
+    protected function routeIntent(Tenant $tenant, Conversation $convo, string $text): ?string
+    {
+        $r       = \App\Services\Bot\OrderIntentRouter::classify($text);
+        $product = $r['product'];
+
+        switch ($r['intent']) {
+            case \App\Services\Bot\OrderIntentRouter::HUMAN:
+            case \App\Services\Bot\OrderIntentRouter::DELIVERY:
+            case \App\Services\Bot\OrderIntentRouter::UNKNOWN:
+                // Logistics / escalation / genuinely unclear → hand to the shop (no fallback pitch).
+                return $this->forwardQuestionToShop($tenant, $convo, $text);
+
+            case \App\Services\Bot\OrderIntentRouter::CONFIRM:
+                return $this->execute($tenant, $convo, 'checkout', []);
+
+            case \App\Services\Bot\OrderIntentRouter::REMOVAL:
+                if ($product !== null) {
+                    return $this->execute($tenant, $convo, 'remove', [['query' => $product, 'qty' => 1]]);
+                }
+                $cart = is_array($convo->cart) ? $convo->cart : [];
+                if ($cart) {
+                    return "\u{1F44D} Okay \u{2014} which item should I remove? Say *remove <item>*, or *cart* to see your basket.\n\n"
+                         . $this->cartSummary($tenant, $cart);
+                }
+                return "\u{1F44D} No problem \u{2014} nothing's in your basket yet. Tell me what you'd like, or say *menu*.";
+
+            case \App\Services\Bot\OrderIntentRouter::ADDITION:
+                if ($product !== null) return null;            // fall through: engine adds the named item
+                return "\u{1F44D} Sure \u{2014} tell me the item and I'll add it (e.g. *2 x samosa*).";
+
+            case \App\Services\Bot\OrderIntentRouter::QUANTITY:
+                if ($product !== null) return null;            // "<qty> <product>" → engine handles it
+                return "Sure \u{2014} *how many of which item*? For example *2 x samosa* or *500g sev*.";
+
+            case \App\Services\Bot\OrderIntentRouter::PRICE:
+                if ($product !== null) return $this->priceResponse($tenant, $product);
+                $cart = is_array($convo->cart) ? $convo->cart : [];
+                if ($cart) return $this->cartSummary($tenant, $cart) . "\n\nSay *checkout* to place the order.";
+                return "Tell me a product and I'll share the price, or say *menu* to browse.";
+
+            case \App\Services\Bot\OrderIntentRouter::MENU:
+                return $this->menuReply($tenant, $convo, $text);
+
+            case \App\Services\Bot\OrderIntentRouter::GREETING:
+                return $this->greetOnceAllowed($convo) ? $this->greetingReply($tenant, $text) : '';
+
+            case \App\Services\Bot\OrderIntentRouter::SOCIAL:
+                if (! $this->greetOnceAllowed($convo)) return '';
+                return $this->socialReply(mb_strtolower($text)) ?? "\u{1F44D}";
+
+            case \App\Services\Bot\OrderIntentRouter::PRODUCT_SEARCH:
+            default:
+                return null;                                   // fall through to the engine / catalogue
+        }
+    }
+
+    /** Greet-once-per-24h gate, so general-comms numbers aren't spammed with greetings. */
+    protected function greetOnceAllowed(Conversation $convo): bool
+    {
+        $st = is_array($convo->state) ? $convo->state : [];
+        if (time() - (int) ($st['social_greeted_at'] ?? 0) < 86400) return false;
+        $st['social_greeted_at'] = time();
+        $convo->state = $st;
+        $convo->save();
+        return true;
+    }
+
+    /** Menu request: the day's thali for set-meal tenants, else a product nudge + website link. */
+    protected function menuReply(Tenant $tenant, Conversation $convo, string $text): string
+    {
+        $thaliCfg = (array) ($tenant->setting('thali', []) ?: []);
+        if (\App\Services\Bot\ThaliMenu::enabled($thaliCfg)) {
+            return $this->thaliMenuReply($tenant, $thaliCfg, mb_strtolower($text));
+        }
+        return "\u{1F6D2} Tell me a product like *sev* or *samosa* and I'll add it up \u{2014} or browse the full menu:"
+             . $this->websiteNudge($tenant);
     }
 
     /** True if the active cart already contains a thali line. */
