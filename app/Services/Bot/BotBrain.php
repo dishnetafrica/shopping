@@ -712,13 +712,10 @@ class BotBrain
         }
 
         // No catalogue match. Say "we don't stock X" ONLY when X really looks like a product
-        // term — never echo a greeting or a natural-language question back to the customer
-        // (no "we don't stock *hello will you be coming tomorrow*").
-        $want = trim(preg_replace('/\b(do you (have|sell|stock)|have you got|got any|any|looking for|i (want|need)|please|pls)\b/i', ' ', mb_strtolower($text)));
-        $want = trim(preg_replace('/\s+/', ' ', $want));
-        $wantWords = $want === '' ? [] : preg_split('/\s+/', $want, -1, PREG_SPLIT_NO_EMPTY);
-        $conversational = '/\b(hi|hii|hey|hello|helo|hiya|yo|hola|salaam|salam|will|would|can|could|are|is|am|was|were|you|your|u|when|what|why|how|who|tomorrow|today|tonight|now|later|soon|coming|come|reach|open|closed?|deliver|delivery|time|hours?|there|available|reply|call|phone|number|whatsapp|thanks|thank|confirm|confirmed|dish|dishes|plate|plates|paid|pay|payment|money|balance|sent|send|received|done|noted|please|ok|okay)\b/i';
-        if ($want !== '' && count($wantWords) <= 4 && preg_match('/[a-z]/i', $want) && ! preg_match($conversational, $want)) {
+        // term — never echo a greeting, an emoji, or a natural-language question back to the
+        // customer. ProductMiss is emoji/greeting/Gujlish-aware and unit-tested.
+        $want = \App\Services\Bot\ProductMiss::term($text);
+        if ($want !== null) {
             \App\Support\BotMiss::record($tenant->id, $want, $text);
             return "Sorry, we don't stock *{$want}* right now \u{1F642} Tell me another product, or say *menu* to see what we have.";
         }
@@ -731,6 +728,17 @@ class BotBrain
         if (preg_match('/\?|\b(will|would|can|could|do|does|are|is|when|what|how|why|provide|deliver|delivery|open|close|closed|available|price|cost|charge|free|refund|return|exchange)\b/i', $text)) {
             return $this->forwardQuestionToShop($tenant, $convo, $text);
         }
+        // General-comms friendliness: orient the customer ONCE, then stay quiet on further
+        // non-order chatter (greetings, congrats, forwarded photos) so a number also used for
+        // day-to-day conversation isn't spammed. Orders / products / menu / FAQ are handled
+        // above and always get a full reply. Returning '' makes the job send nothing.
+        $st = is_array($convo->state) ? $convo->state : [];
+        if (time() - (int) ($st['social_greeted_at'] ?? 0) < 86400) {
+            return '';
+        }
+        $st['social_greeted_at'] = time();
+        $convo->state = $st;
+        $convo->save();
         return "\u{1F44B} Hi! I'm {$tenant->name}'s ordering assistant. Tell me a product like *rice* or *sugar*, or say *menu* to see what we have \u{2014} and for anything else, the shop will reply here shortly.";
     }
 
