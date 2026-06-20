@@ -736,23 +736,51 @@ class PanelApiController extends Controller
                 'mins'     => $o->created_at ? (int) $o->created_at->diffInMinutes(now()) : 0,
                 'notes'    => trim((string) $o->notes),
                 'next'     => $o->nextKitchenStatus(),
-                'items'    => $o->items->map(function ($i) {
-                    $mods = is_array($i->modifiers)
-                        ? array_values(array_filter(array_map(fn ($m) => trim((string) ($m['name'] ?? '')), $i->modifiers)))
-                        : [];
-                    $name = (string) $i->name;
-                    if ($mods) {                                   // un-fold the "+ Naan" suffix off the name
-                        $suffix = ' + ' . implode(', ', $mods);
-                        if (str_ends_with($name, $suffix)) {
-                            $name = substr($name, 0, -strlen($suffix));
-                        }
-                    }
-                    return ['qty' => (int) $i->qty, 'name' => $name, 'mods' => $mods, 'notes' => trim((string) $i->notes)];
-                })->all(),
+                'items'    => $this->kitchenLines($o),
             ];
         }
 
         return response()->json(['ok' => true, 'board' => $board, 'cols' => $cols]);
+    }
+
+    /**
+     * Ticket line items. Prefers the order_items relation (WhatsApp/web orders); falls back
+     * to items_json when there are no rows (POS orders store the cart in items_json only).
+     * Modifiers are un-folded off the name in both paths so "Butter Chicken + Naan" shows
+     * the base dish with a "↳ Naan" sub-line.
+     */
+    protected function kitchenLines(Order $o): array
+    {
+        $unfold = function (string $name, array $mods): string {
+            if ($mods) {
+                $suffix = ' + ' . implode(', ', $mods);
+                if (str_ends_with($name, $suffix)) {
+                    $name = substr($name, 0, -strlen($suffix));
+                }
+            }
+            return $name;
+        };
+        $modNames = fn ($m) => is_array($m)
+            ? array_values(array_filter(array_map(fn ($x) => trim((string) ($x['name'] ?? '')), $m)))
+            : [];
+
+        if ($o->items->isNotEmpty()) {
+            return $o->items->map(function ($i) use ($unfold, $modNames) {
+                $mods = $modNames($i->modifiers);
+                return ['qty' => (int) $i->qty, 'name' => $unfold((string) $i->name, $mods), 'mods' => $mods, 'notes' => trim((string) $i->notes)];
+            })->all();
+        }
+
+        $json = is_array($o->items_json) ? $o->items_json : [];
+        return array_map(function ($it) use ($unfold, $modNames) {
+            $mods = $modNames($it['modifiers'] ?? null);
+            return [
+                'qty'   => (int) ($it['qty'] ?? 1),
+                'name'  => $unfold(trim((string) ($it['name'] ?? '')), $mods),
+                'mods'  => $mods,
+                'notes' => trim((string) ($it['notes'] ?? '')),
+            ];
+        }, $json);
     }
 
     /** Advance one ticket to the next kitchen stage. OrderObserver notifies the customer. */

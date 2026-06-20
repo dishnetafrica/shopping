@@ -60,27 +60,48 @@ class KitchenBoard extends Page
                 'notes'     => trim((string) $o->notes),
                 'location'  => (string) $o->location,
                 'next'      => $o->nextKitchenStatus(),
-                'items'     => $o->items->map(function ($i) {
-                    $mods = is_array($i->modifiers)
-                        ? array_values(array_filter(array_map(fn ($m) => trim((string) ($m['name'] ?? '')), $i->modifiers)))
-                        : [];
-                    $name = (string) $i->name;
-                    if ($mods) {                                   // un-fold the "+ Naan" we stored on the name
-                        $suffix = ' + ' . implode(', ', $mods);
-                        if (str_ends_with($name, $suffix)) {
-                            $name = substr($name, 0, -strlen($suffix));
-                        }
-                    }
-                    return [
-                        'qty'   => $i->qty,
-                        'name'  => $name,
-                        'mods'  => $mods,
-                        'notes' => trim((string) $i->notes),
-                    ];
-                })->all(),
+                'items'     => $this->ticketLines($o),
             ];
         }
         return $cols;
+    }
+
+    /**
+     * Ticket lines: order_items relation when present (WhatsApp/web), else items_json
+     * (POS orders carry no item rows). Modifiers un-folded off the name in both paths.
+     */
+    private function ticketLines(Order $o): array
+    {
+        $modNames = fn ($m) => is_array($m)
+            ? array_values(array_filter(array_map(fn ($x) => trim((string) ($x['name'] ?? '')), $m)))
+            : [];
+        $unfold = function (string $name, array $mods): string {
+            if ($mods) {
+                $suffix = ' + ' . implode(', ', $mods);
+                if (str_ends_with($name, $suffix)) {
+                    $name = substr($name, 0, -strlen($suffix));
+                }
+            }
+            return $name;
+        };
+
+        if ($o->items->isNotEmpty()) {
+            return $o->items->map(function ($i) use ($modNames, $unfold) {
+                $mods = $modNames($i->modifiers);
+                return ['qty' => $i->qty, 'name' => $unfold((string) $i->name, $mods), 'mods' => $mods, 'notes' => trim((string) $i->notes)];
+            })->all();
+        }
+
+        $json = is_array($o->items_json) ? $o->items_json : [];
+        return array_map(function ($it) use ($modNames, $unfold) {
+            $mods = $modNames($it['modifiers'] ?? null);
+            return [
+                'qty'   => (int) ($it['qty'] ?? 1),
+                'name'  => $unfold(trim((string) ($it['name'] ?? '')), $mods),
+                'mods'  => $mods,
+                'notes' => trim((string) ($it['notes'] ?? '')),
+            ];
+        }, $json);
     }
 
     /** Badge in the sidebar = number of brand-new tickets waiting to be accepted. */
