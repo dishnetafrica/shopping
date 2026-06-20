@@ -29,6 +29,9 @@ class BotBrain
         protected ClarificationFlow $clarify,
     ) {}
 
+    /** One-shot "with <accompaniment>" hint, set per message in respondInner, consumed by maybeAskModifier. */
+    protected string $modHint = '';
+
     public function respond(Tenant $tenant, Conversation $convo, string $text): string
     {
         return $this->appendWebsite($tenant, $this->respondInner($tenant, $convo, $text));
@@ -43,6 +46,129 @@ class BotBrain
         $dom = trim((string) $tenant->custom_domain);
         if ($dom !== '' && str_contains($reply, $dom)) return $reply;   // already linked (greeting/menu)
         return $reply . $nudge;
+    }
+
+    // ---------------- modifier (accompaniment) flow ----------------
+    // All paths are gated behind tenantHasModifiers() and wrapped in try/catch, so a tenant
+    // with no modifier groups (every grocery shop) gets byte-identical behaviour, and any
+    // modifier glitch degrades to "don't ask" rather than breaking the order.
+
+    /** Cheap gate: does this tenant use any modifier groups at all? */
+    protected function tenantHasModifiers(int $tenantId): bool
+    {
+        try {
+            return \App\Models\ModifierGroup::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)->where('active', true)->exists();
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /** Lowercased option names across the tenant's groups (for the "with naan" pre-strip). */
+    protected function modifierOptionNames(int $tenantId): array
+    {
+        try {
+            $gids = \App\Models\ModifierGroup::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)->where('active', true)->pluck('id');
+            if ($gids->isEmpty()) return [];
+            return \App\Models\ModifierOption::query()
+                ->whereIn('modifier_group_id', $gids)->where('active', true)->pluck('name')
+                ->map(fn ($n) => mb_strtolower((string) $n))->filter()->unique()->values()->all();
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /** Required groups (as ModifierFlow arrays) attached to a product. */
+    protected function productGroups(int $tenantId, int $productId): array
+    {
+        try {
+            return \App\Models\ModifierGroup::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)->where('active', true)
+                ->whereHas('products', fn ($q) => $q->where('products.id', $productId))
+                ->with(['options' => fn ($q) => $q->where('active', true)->orderBy('sort')])
+                ->orderBy('sort')->get()
+                ->map(fn ($g) => [
+                    'id' => $g->id, 'name' => $g->name, 'required' => (bool) $g->required,
+                    'min_select' => (int) $g->min_select, 'max_select' => (int) $g->max_select,
+                    'options' => $g->options->map(fn ($o) => [
+                        'id' => $o->id, 'name' => $o->name, 'price_delta' => (float) $o->price_delta,
+                    ])->values()->all(),
+                ])->values()->all();
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /**
+     * After the cart changed: if a line still needs a required choice, set the pending state and
+     * return the question. A one-shot "with <accompaniment>" hint attaches the choice silently.
+     * Returns null when nothing is pending (the normal reply then stands).
+     */
+    protected function maybeAskModifier(Tenant $tenant, Conversation $convo): ?string
+    {
+        if (! $tenant->id || ! $this->tenantHasModifiers((int) $tenant->id)) return null;
+        $cart = is_array($convo->cart) ? $convo->cart : [];
+        foreach ($cart as $i => $line) {
+            if (! is_array($line) || ! empty($line['modifiers'])) continue;
+            $pid = (int) ($line['product_id'] ?? 0);
+            if (! $pid) continue;
+            $groups = $this->productGroups((int) $tenant->id, $pid);
+            $need = \App\Support\ModifierFlow::nextRequired($groups, []);
+            if (! $need) continue;
+
+            if ($this->modHint !== '') {
+                $opt = \App\Support\ModifierFlow::resolve($this->modHint, $need);
+                if ($opt) {
+                    $cart[$i]['modifiers'] = [['group' => $need['name'], 'name' => $opt['name'], 'price_delta' => (float) $opt['price_delta']]];
+                    $cart[$i]['price'] = \App\Support\ModifierCalc::unitPrice((float) $cart[$i]['price'], $cart[$i]['modifiers']);
+                    $this->modHint = '';
+                    $convo->cart = $cart; $convo->save();
+                    continue; // satisfied; keep scanning for the next line
+                }
+            }
+
+            $st = is_array($convo->state) ? $convo->state : [];
+            $st['pending_modifier'] = ['i' => $i, 'group' => $need];
+            $convo->state = $st; $convo->save();
+            return \App\Support\ModifierFlow::prompt($need, (string) ($line['name'] ?? ''));
+        }
+        return null;
+    }
+
+    /** Top-of-flow guard: while awaiting a required choice, treat the reply as the pick. */
+    protected function resolvePendingModifier(Tenant $tenant, Conversation $convo, string $text): ?string
+    {
+        $st = is_array($convo->state) ? $convo->state : [];
+        $pm = $st['pending_modifier'] ?? null;
+        if (! $pm || ! is_array($pm) || ! is_array($pm['group'] ?? null)) return null;
+
+        $group = $pm['group'];
+        $i = (int) ($pm['i'] ?? -1);
+        $cart = is_array($convo->cart) ? $convo->cart : [];
+        if (! isset($cart[$i]) || ! is_array($cart[$i])) {
+            unset($st['pending_modifier']); $convo->state = $st; $convo->save();
+            return null; // stale; let the message flow normally
+        }
+
+        $opt = \App\Support\ModifierFlow::resolve($text, $group);
+        if (! $opt) {
+            if (preg_match('/\b(cancel|skip|nevermind|never mind|leave it|any|whatever)\b/i', $text)) {
+                $opt = $group['options'][0] ?? null;        // don't trap the customer
+            }
+            if (! $opt) {
+                return "Sorry, I didn't catch that.\n\n" . \App\Support\ModifierFlow::prompt($group, (string) ($cart[$i]['name'] ?? ''));
+            }
+        }
+
+        $cart[$i]['modifiers'] = [['group' => $group['name'], 'name' => $opt['name'], 'price_delta' => (float) $opt['price_delta']]];
+        $cart[$i]['price'] = \App\Support\ModifierCalc::unitPrice((float) $cart[$i]['price'], $cart[$i]['modifiers']);
+        unset($st['pending_modifier']);
+        $convo->cart = $cart; $convo->state = $st; $convo->save();
+
+        $line = "Added *{$cart[$i]['name']} + {$opt['name']}*.";
+        $next = $this->maybeAskModifier($tenant, $convo);
+        return $next !== null ? ($line . "\n\n" . $next) : ($line . "\n" . $this->cartSummary($tenant, $cart));
     }
 
     protected function respondInner(Tenant $tenant, Conversation $convo, string $text): string
@@ -63,6 +189,25 @@ class BotBrain
             }
         }
 
+        // Awaiting a required modifier choice (e.g. "choose your accompaniment"): the reply is the pick.
+        if (($pm = $this->resolvePendingModifier($tenant, $convo, $text)) !== null) {
+            return $pm;
+        }
+
+        // "...with naan/rice/chapati" → remember the included accompaniment and strip it, so it's
+        // read as the choice (not a separate bread line). One-shot, consumed by maybeAskModifier.
+        $this->modHint = '';
+        if ($tenant->id && $this->tenantHasModifiers((int) $tenant->id)) {
+            $names = $this->modifierOptionNames((int) $tenant->id);
+            if ($names) {
+                $alt = implode('|', array_map(fn ($n) => preg_quote($n, '/'), $names));
+                if (preg_match('/\bwith\s+(' . $alt . ')\b/i', $text, $mm)) {
+                    $this->modHint = $mm[1];
+                    $text = trim((string) preg_replace('/\bwith\s+' . preg_quote($mm[1], '/') . '\b/i', '', $text));
+                }
+            }
+        }
+
         // A customer tapping "Confirm on WhatsApp" after a website checkout sends a fixed
         // message ("I just placed order ORD-NN on the website. Please confirm..."). Acknowledge
         // it instead of funnelling it into cart/shopping logic (which replied "basket is empty").
@@ -74,15 +219,17 @@ class BotBrain
         // direct order, not a greeting. Parse it deterministically and build the cart BEFORE the
         // NLU, so a leading "Jsk"/"hi" can't get the whole message classified as a greeting.
         if (($bulk = $this->tryBulkOrder($tenant, $convo, $text)) !== null) {
-            return $bulk;
+            return $this->maybeAskModifier($tenant, $convo) ?? $bulk;
         }
 
         // Try the LLM first; fall back to keywords.
         $action = $this->nlu->parse($tenant, $convo, $text);
         if ($action) {
-            return $this->execute($tenant, $convo, $action['intent'], $action['items'] ?? [], $action['note'] ?? '');
+            $reply = $this->execute($tenant, $convo, $action['intent'], $action['items'] ?? [], $action['note'] ?? '');
+            return $this->maybeAskModifier($tenant, $convo) ?? $reply;
         }
-        return $this->keywordRespond($tenant, $convo, $text);
+        $reply = $this->keywordRespond($tenant, $convo, $text);
+        return $this->maybeAskModifier($tenant, $convo) ?? $reply;
     }
 
     // ---------------- shared executor ----------------
@@ -2030,10 +2177,15 @@ class BotBrain
 
         if ($order->wasRecentlyCreated) {
             foreach ($cart as $l) {
+                $mods = ! empty($l['modifiers']) && is_array($l['modifiers'])
+                    ? array_values(array_filter(array_map(fn ($m) => trim((string) ($m['name'] ?? '')), $l['modifiers'])))
+                    : [];
                 OrderItem::create([
                     'order_id' => $order->id, 'product_id' => $l['product_id'],
-                    'name' => $l['name'], 'price' => $l['price'], 'qty' => $l['qty'],
+                    'name' => $l['name'] . ($mods ? ' + ' . implode(', ', $mods) : ''),
+                    'price' => $l['price'], 'qty' => $l['qty'],
                     'notes' => trim((string) ($l['note'] ?? '')) ?: null,
+                    'modifiers' => $mods ? $l['modifiers'] : null,
                 ]);
             }
             // Roll any line notes + a general order note up onto the order, for the kitchen.
