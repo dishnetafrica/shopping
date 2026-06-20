@@ -193,6 +193,47 @@ class ThaliMenu
         ];
     }
 
+    /**
+     * The day + session that apply right now, with optional rollover. Returns
+     * ['day'=>key, 'session'=>'day'|'night', 'rollover'=>bool]. Built from the same
+     * primitives the rest of the class uses, so it matches session()/todayKey() exactly.
+     *
+     * Rollover (showing tomorrow's lunch once tonight's service has closed) only kicks in
+     * when the shop sets a 'close_hour'; without it, behaviour is identical to today.
+     */
+    public static function effective(array $cfg, string $tz): array
+    {
+        $day      = self::todayKey($tz);
+        $session  = self::session($cfg, $tz);
+        $rollover = false;
+
+        $close = (int) ($cfg['close_hour'] ?? 0);
+        if (self::hasNight($cfg) && $close > 0) {
+            try {
+                $h = (int) (new \DateTime('now', new \DateTimeZone($tz)))->format('G');
+            } catch (\Throwable $e) {
+                $h = (int) date('G');
+            }
+            if ($h >= $close) {
+                $idx     = array_search($day, self::DAYS, true);
+                $day     = self::DAYS[($idx === false ? 0 : $idx + 1) % 7];
+                $session = 'day';
+                $rollover = true;
+            }
+        }
+
+        return ['day' => $day, 'session' => $session, 'rollover' => $rollover];
+    }
+
+    /** Does this day have BOTH a lunch and a dinner menu set (so the customer can switch)? */
+    public static function hasBoth(array $cfg, string $day): bool
+    {
+        if (! self::hasNight($cfg)) return false;
+        $lunch  = self::cleanItems($cfg['days'][$day] ?? []);
+        $dinner = self::cleanItems($cfg['night_days'][$day] ?? []);
+        return $lunch !== [] && $dinner !== [];
+    }
+
     /** Flyer-seeded weekly menu (Mon–Sat) for Pal's — used to seed tenant settings. */
     public static function palsSeed(): array
     {
