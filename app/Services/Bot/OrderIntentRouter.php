@@ -31,6 +31,7 @@ class OrderIntentRouter
     public const MENU           = 'menu';
     public const GREETING       = 'greeting';
     public const SOCIAL         = 'social';
+    public const VISIT          = 'visit';
     public const PRODUCT_SEARCH = 'product_search';
     public const UNKNOWN        = 'unknown';
 
@@ -71,6 +72,17 @@ class OrderIntentRouter
         }
         if (preg_match('#https?://\S*(mycloudbss|palssnack)#i', $s)) {
             return self::pack(self::UNKNOWN);
+        }
+
+        // Gujlish Intent Dictionary V1 — consulted BEFORE regex lexicons and catalogue matching.
+        // Known phrases ("kale aavishu" -> visit, "ha barabar che" -> confirm) win here so they
+        // are never searched as product names.
+        $dict = GujlishDictionary::lookup($raw);
+        if ($dict !== null) {
+            if (in_array($dict, [self::REMOVAL, self::ADDITION, self::PRICE], true)) {
+                return self::pack($dict, self::product($s));
+            }
+            return self::pack($dict);
         }
 
         $greeted = (bool) preg_match(self::RE_LEAD_GREET, $s);

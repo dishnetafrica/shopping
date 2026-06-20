@@ -880,6 +880,10 @@ class BotBrain
                 if (! $this->greetOnceAllowed($convo)) return '';
                 return $this->socialReply(mb_strtolower($text)) ?? "\u{1F44D}";
 
+            case \App\Services\Bot\OrderIntentRouter::VISIT:
+                return "\u{1F44D} Thank you.\nWe'll be ready for you tomorrow.\n"
+                     . "If you'd like to place an order in advance, just send the items you need.";
+
             case \App\Services\Bot\OrderIntentRouter::PRODUCT_SEARCH:
             default:
                 return null;                                   // fall through to the engine / catalogue

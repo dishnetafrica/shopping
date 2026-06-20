@@ -2,6 +2,7 @@
 // Phase-1 regression: the Intent Router must keep every audit fallback example OUT of the
 // product-search path (the only "we don't stock" path) unless it is a genuine product.
 require __DIR__ . '/../app/Services/Bot/ProductAlias.php';
+require __DIR__ . '/../app/Services/Bot/GujlishDictionary.php';
 require __DIR__ . '/../app/Services/Bot/OrderIntentRouter.php';
 
 use App\Services\Bot\OrderIntentRouter as R;
