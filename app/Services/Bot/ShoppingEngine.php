@@ -41,9 +41,10 @@ class ShoppingEngine
         private string $currency = 'UGX',
         private array $defaults = [],        // term => product_id (tenant defaults)
         private string $strategy = 'explicit', // 'off' | 'explicit' | 'explicit_then_auto'
+        private bool $restaurant = false,      // restaurant menus: auto-add best match, never drop a line
     ) {}
 
-    private function money(float $a): string { return $this->currency . ' ' . number_format($a); }
+    private function money(float $a): string { return $this->currency . ' ' . number_format($a, \App\Services\Pricing::decimalsForCurrency($this->currency)); }
 
     /**
      * A tidy heading for a clarify list: the words the customer's query and the matched products
@@ -125,6 +126,15 @@ class ShoppingEngine
         $sizeHintVariants = []; $defaultUsed = false;
         foreach ($items as $item) {
             $res = $this->resolveItem($item, $products, $parsed['browse'], $addIntent);
+            // Restaurant mode: never silently drop a line to a clarify list. Resolve an
+            // ambiguous match to the best-ranked candidate (shown in the reply, correctable),
+            // unless the customer explicitly asked to browse.
+            if ($this->restaurant && ! $parsed['browse']
+                && ($res['status'] ?? '') === 'clarify' && ! empty($res['products'])) {
+                $res = ['status' => 'single', 'product' => $res['products'][0],
+                        'qty' => (int) ($item['count'] ?? $item['qty'] ?? 1),
+                        'via' => 'confident', 'confidence' => self::CONF_HIGH];
+            }
             if ($res['status'] === 'none') {
                 $plan[] = ['kind' => 'missing', 'query' => $item['query']];
                 continue;
@@ -142,7 +152,7 @@ class ShoppingEngine
             }
             // status === 'single'
             $via     = $res['via'] ?? '';
-            $autoAdd = $addIntent || in_array($via, ['default', 'size', 'auto', 'confident'], true);
+            $autoAdd = $addIntent || $this->restaurant || in_array($via, ['default', 'size', 'auto', 'confident'], true);
             if (! $autoAdd) {
                 // a bare search ("rice") with no add cue -> show it, don't add
                 $plan[] = ['kind' => 'choose', 'label' => $this->cleanLabel($item['query'], [$res['product']]),

@@ -11,9 +11,13 @@ php artisan migrate
 ```
 Adds: `orders.notes`, `orders.accepted_at`, `orders.ready_at`, `orders.rejected_reason`, `order_items.notes`, `products.description`. (All `hasColumn`-guarded — safe to re-run.)
 
-## 3. Set Spicey Herbs to USD
-Panel → **Settings** → Currency = `USD`. (Or tinker: `$t = Tenant::find(<id>); $t->putSetting('currency','USD'); $t->save();`)
-The bot and order confirmations already read this; the panel money columns now follow it too.
+## 3. Set Spicey Herbs to USD + restaurant mode
+Panel → **Settings** → Currency = `USD`.
+Then enable restaurant ordering (auto-add best match, never drop a line):
+```
+$t = Tenant::find(<id>); $t->putSetting('currency','USD'); $t->putSetting('restaurant_mode', true); $t->save();
+```
+USD now shows cents everywhere; `restaurant_mode` makes the bot add the best dish match immediately instead of asking the customer to pick a number (which is what was dropping items). Grocery tenants leave `restaurant_mode` off — their behaviour is unchanged.
 
 ## 4. Import the menu
 Panel → **Products** → **Import CSV** → upload `spicey-herbs-menu.csv`, **Replace** on.

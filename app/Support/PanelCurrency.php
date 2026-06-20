@@ -13,6 +13,11 @@ use App\Models\Tenant;
  */
 class PanelCurrency
 {
+    public static function decimals(): int
+    {
+        return \App\Services\Pricing::decimalsForCurrency(self::code());
+    }
+
     public static function code(): string
     {
         try {

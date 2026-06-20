@@ -16,7 +16,7 @@
                     <button type="button" wire:click="add({{ $r['id'] }})"
                         class="flex w-full items-center justify-between rounded-lg border border-gray-200 p-3 text-left hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/5">
                         <span class="text-sm font-medium text-gray-900 dark:text-white">{{ $r['name'] }}</span>
-                        <span class="text-sm font-semibold text-primary-600">{{ \App\Support\PanelCurrency::code() }} {{ number_format($r['price']) }}</span>
+                        <span class="text-sm font-semibold text-primary-600">{{ \App\Support\PanelCurrency::code() }} {{ number_format($r['price'], \App\Support\PanelCurrency::decimals()) }}</span>
                     </button>
                 @empty
                     <p class="text-sm text-gray-500">Type at least 2 characters to search the catalogue.</p>
@@ -32,7 +32,7 @@
                 <div class="flex items-center justify-between gap-2 border-b border-gray-100 py-2 dark:border-white/5">
                     <div class="min-w-0">
                         <div class="truncate text-sm font-medium text-gray-900 dark:text-white">{{ $l['name'] }}</div>
-                        <div class="text-xs text-gray-500">{{ \App\Support\PanelCurrency::code() }} {{ number_format($l['price']) }}</div>
+                        <div class="text-xs text-gray-500">{{ \App\Support\PanelCurrency::code() }} {{ number_format($l['price'], \App\Support\PanelCurrency::decimals()) }}</div>
                     </div>
                     <div class="flex items-center gap-1">
                         <x-filament::icon-button icon="heroicon-m-minus" wire:click="dec({{ $id }})" label="Decrease" size="sm" />
@@ -47,7 +47,7 @@
 
             <div class="mt-4 flex items-center justify-between text-xl font-bold text-gray-900 dark:text-white">
                 <span>Total</span>
-                <span>{{ \App\Support\PanelCurrency::code() }} {{ number_format($this->total()) }}</span>
+                <span>{{ \App\Support\PanelCurrency::code() }} {{ number_format($this->total(), \App\Support\PanelCurrency::decimals()) }}</span>
             </div>
 
             <div class="mt-4 space-y-2">

@@ -24,7 +24,7 @@ class OrdersStatsOverview extends BaseWidget
         $inKitchen = Order::whereIn('status', ['New', 'Accepted', 'Preparing'])->count();
 
         return [
-            Stat::make("Today's revenue", $cur . ' ' . number_format($revenueToday))->color('success'),
+            Stat::make("Today's revenue", $cur . ' ' . number_format($revenueToday, PanelCurrency::decimals()))->color('success'),
             Stat::make("Today's orders", Order::whereDate('created_at', today())->count())->color('primary'),
             Stat::make('In kitchen', $inKitchen)->color('warning')->description('New + Accepted + Preparing'),
             Stat::make('Ready', Order::where('status', 'Ready')->count())->color('success'),

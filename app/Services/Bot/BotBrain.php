@@ -608,14 +608,14 @@ class BotBrain
         if (count($prods) === 1) {
             $p = $prods[0];
             $desc = trim((string) ($p['description'] ?? ''));
-            $line = "*{$p['name']}* is {$cur} " . number_format((float) $p['price']) . '.';
+            $line = "*{$p['name']}* is {$cur} " . number_format((float) $p['price'], \App\Services\Pricing::decimalsForCurrency($cur)) . '.';
             if ($desc !== '') $line .= "\n_{$desc}_";
             return $line . "\n\nWant me to add it? Just say *add {$p['name']}* or tell me the quantity.";
         }
 
         $lines = [];
         foreach ($prods as $p) {
-            $lines[] = "• {$p['name']} — {$cur} " . number_format((float) $p['price']);
+            $lines[] = "• {$p['name']} — {$cur} " . number_format((float) $p['price'], \App\Services\Pricing::decimalsForCurrency($cur));
         }
         return "Here are the prices for *{$query}*:\n" . implode("\n", $lines)
              . "\n\nTell me which one you'd like, or the quantity.";
@@ -1099,7 +1099,7 @@ class BotBrain
         $label = $res['category'] !== '' ? $res['category'] : 'Options';
         $built = $this->clarify->buildOptions(
             [['label' => $label, 'qty' => 1, 'products' => array_slice($res['products'], 0, 20)]],
-            fn ($a) => $cur . ' ' . number_format((float) $a)
+            fn ($a) => $cur . ' ' . number_format((float) $a, \App\Services\Pricing::decimalsForCurrency($cur))
         );
 
         $st = is_array($convo->state) ? $convo->state : [];
@@ -1123,7 +1123,7 @@ class BotBrain
         $label = $res['category'] !== '' ? $res['category'] : 'Options';
         $built = $this->clarify->buildOptions(
             [['label' => $label, 'qty' => 1, 'products' => $res['products']]],
-            fn ($a) => $cur . ' ' . number_format((float) $a)
+            fn ($a) => $cur . ' ' . number_format((float) $a, \App\Services\Pricing::decimalsForCurrency($cur))
         );
 
         $st = is_array($convo->state) ? $convo->state : [];
@@ -1258,7 +1258,7 @@ class BotBrain
         $cur  = $this->currencyFor($tenant);
         $lines = [];
         foreach ($opts as $o) {
-            $lines[] = "  {$o['n']}. {$o['name']} — {$cur} " . number_format((float) ($o['price'] ?? 0));
+            $lines[] = "  {$o['n']}. {$o['name']} — {$cur} " . number_format((float) ($o['price'] ?? 0), \App\Services\Pricing::decimalsForCurrency($cur));
         }
         $head = $q !== '' ? "Yes \u{1F642} those are the *{$q}* options we currently have:" : "Yes \u{1F642} those are what we currently have:";
         return $head . "\n" . implode("\n", $lines) . "\n\nWould you like to add any of these? Reply with the *number*.";
@@ -1448,7 +1448,7 @@ class BotBrain
         $p    = $cands[0]['product'];
         $cur  = $this->currencyFor($tenant);
         $desc = trim((string) ($p['description'] ?? ''));
-        $out  = "*{$p['name']}* \u{2014} {$cur} " . number_format((float) $p['price']);
+        $out  = "*{$p['name']}* \u{2014} {$cur} " . number_format((float) $p['price'], \App\Services\Pricing::decimalsForCurrency($cur));
         if ($desc !== '') $out .= "\n{$desc}";
         return $out . "\n\nWant me to add it? Say *add {$p['name']}*.";
     }
@@ -1486,6 +1486,7 @@ class BotBrain
             $this->currencyFor($tenant),
             $this->tenantDefaults($tenant),
             $this->defaultStrategy($tenant),
+            (bool) $tenant->setting('restaurant_mode', false),
         );
         $cart  = is_array($convo->cart) ? $convo->cart : [];
         $state = is_array($convo->state) ? $convo->state : [];
@@ -1553,18 +1554,18 @@ class BotBrain
         $line = "\u{1F4CD} Got your location: {$link}";
         if ($zoneName) {
             $fee = (int) $quote['fee']; $eta = $quote['zone']['eta_minutes'] ?? 45;
-            $line .= "\nThat's in *{$zoneName}* — delivery " . ($fee > 0 ? "{$cur} " . number_format($fee) : 'free') . " (~{$eta} min).";
+            $line .= "\nThat's in *{$zoneName}* — delivery " . ($fee > 0 ? "{$cur} " . number_format($fee, \App\Services\Pricing::decimalsForCurrency($cur)) : 'free') . " (~{$eta} min).";
         }
         if ($cart) {
             $fee   = (int) ($quote['fee'] ?? 0);
-            $grand = (int) round($subtotal) + $fee;
+            $grand = round($subtotal, \App\Services\Pricing::decimalsForCurrency($cur)) + $fee;
             $st = is_array($convo->state) ? $convo->state : [];
             $st['step'] = 'awaiting_confirm';      // a plain "yes" now places the order
             $convo->state = $st;
             $convo->save();
             return $line
                 . "\n\n" . $this->cartSummary($tenant, $cart)
-                . "\n\u{1F4B0} *Total with delivery: {$cur} " . number_format($grand) . "*"
+                . "\n\u{1F4B0} *Total with delivery: {$cur} " . number_format($grand, \App\Services\Pricing::decimalsForCurrency($cur)) . "*"
                 . "\n\nReply *confirm* to place this order, or add more items.";
         }
         return $line . "\n\nSaved \u{1F642} Tell me what you'd like to order and I'll deliver here.";
@@ -1593,7 +1594,7 @@ class BotBrain
             $eta = $q['zone']['eta_minutes'] ?? 45;
             $cur = $this->currencyFor($tenant);
             $feeLine = $fee > 0
-                ? "Delivery is about *{$cur} " . number_format($fee) . "* (~{$eta} min)."
+                ? "Delivery is about *{$cur} " . number_format($fee, \App\Services\Pricing::decimalsForCurrency($cur)) . "* (~{$eta} min)."
                 : "Delivery ~{$eta} min.";
             return "\u{1F4CD} Got it — delivering to *{$where}*. {$feeLine}\n\nSay *checkout* to place your order, or add more items.";
         }
@@ -1657,7 +1658,7 @@ class BotBrain
         $cur = $this->currencyFor($tenant);
         $built = $this->clarify->buildOptions(
             [['label' => $def['name'], 'qty' => 1, 'products' => $matches]],
-            fn ($a) => $cur . ' ' . number_format((float) $a)
+            fn ($a) => $cur . ' ' . number_format((float) $a, \App\Services\Pricing::decimalsForCurrency($cur))
         );
         $st = is_array($convo->state) ? $convo->state : [];
         $st['options']    = $built['flat'];
@@ -1710,7 +1711,7 @@ class BotBrain
         $cur   = $this->currencyFor($tenant);
         $built = $this->clarify->buildOptions(
             [['label' => $q, 'qty' => 1, 'products' => $prods]],
-            fn ($a) => $cur . ' ' . number_format((float) $a)
+            fn ($a) => $cur . ' ' . number_format((float) $a, \App\Services\Pricing::decimalsForCurrency($cur))
         );
         $st['options']    = $built['flat'];
         $st['last_query'] = $q;
@@ -1762,7 +1763,7 @@ class BotBrain
                         $zn  = $q['zone']['name'] ?? ucfirst($area);
                         $fee = (int) $q['fee'];
                         $eta = $q['zone']['eta_minutes'] ?? 45;
-                        return "\u{1F6F5} Delivery to *{$zn}* is " . ($fee > 0 ? "*{$cur} " . number_format($fee) . "*" : '*free*')
+                        return "\u{1F6F5} Delivery to *{$zn}* is " . ($fee > 0 ? "*{$cur} " . number_format($fee, \App\Services\Pricing::decimalsForCurrency($cur)) . "*" : '*free*')
                              . " (~{$eta} min). Tell me what you'd like to order \u{1F642}";
                     }
                     return "\u{1F6F5} Yes, we deliver to *" . ucfirst($area) . "*! The exact fee depends on the spot — "
@@ -1813,7 +1814,7 @@ class BotBrain
         foreach ($cat as $p) {
             $nm = (string) ($p['name'] ?? '');
             if ($nm === '') continue;
-            $pr = isset($p['price']) ? ' — ' . $cur . ' ' . number_format((float) $p['price']) : '';
+            $pr = isset($p['price']) ? ' — ' . $cur . ' ' . number_format((float) $p['price'], \App\Services\Pricing::decimalsForCurrency($cur)) : '';
             $lines[] = '• ' . $nm . $pr;
             if (count($lines) >= 30) { $lines[] = '…and more — just ask for a product.'; break; }
         }
@@ -1988,7 +1989,7 @@ class BotBrain
         $zoneName    = $quote['zone']['name'] ?? null;
         $etaMins     = $quote['zone']['eta_minutes'] ?? 45;
         $etaAt       = now()->addMinutes((int) $etaMins);
-        $grand       = $subtotal + $deliveryFee;
+        $grand       = round($total, \App\Services\Pricing::decimalsForCurrency($this->currencyFor($tenant))) + $deliveryFee;
 
         // What we store + show as the delivery location: a tappable maps link when we have a pin
         // (so the shop and rider just click to navigate), with the area label alongside.
@@ -2050,15 +2051,15 @@ class BotBrain
 
         $cur = $this->currencyFor($tenant);
         $feeLine = $deliveryFee > 0
-            ? ($zoneName ? "\u{1F6F5} {$zoneName} · delivery {$cur} " . number_format($deliveryFee) . " · ETA ~{$etaMins} min"
-                         : "\u{1F6F5} Delivery {$cur} " . number_format($deliveryFee) . " · ETA ~{$etaMins} min")
+            ? ($zoneName ? "\u{1F6F5} {$zoneName} · delivery {$cur} " . number_format($deliveryFee, \App\Services\Pricing::decimalsForCurrency($cur)) . " · ETA ~{$etaMins} min"
+                         : "\u{1F6F5} Delivery {$cur} " . number_format($deliveryFee, \App\Services\Pricing::decimalsForCurrency($cur)) . " · ETA ~{$etaMins} min")
             : "\u{1F6F5} Free delivery · ETA ~{$etaMins} min";
 
         $deliverTo = $mapsLink ? ($zoneName ? "{$zoneName}\n{$mapsLink}" : $mapsLink) : $location;
 
         return "\u{2705} Order *{$order->order_no}* received!\n" . $this->cartSummary($tenant, $cart)
              . "\n\u{1F4CD} Deliver to: {$deliverTo}\n{$feeLine}"
-             . "\n\u{1F4B0} Total: {$cur} " . number_format($grand)
+             . "\n\u{1F4B0} Total: {$cur} " . number_format($grand, \App\Services\Pricing::decimalsForCurrency($cur))
              . "\n\nWe'll confirm and dispatch shortly. Thank you!";
     }
 }
