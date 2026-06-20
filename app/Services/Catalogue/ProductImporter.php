@@ -78,7 +78,7 @@ class ProductImporter
                 'category'   => $get('category') ?: null,
                 'price'      => $price,
                 'base_price' => $get('base_price') !== '' ? $this->num($get('base_price')) : $price,
-                'stock'      => (int) $this->num($get('stock') ?: '0'),
+                'stock'      => $get('stock') !== '' ? (int) $this->num($get('stock')) : null,
                 'barcode'    => $this->cleanBarcode($get('barcode')),
                 'keywords'   => $get('keywords') ?: null,
                 'image_url'  => $get('image_url') ?: null,

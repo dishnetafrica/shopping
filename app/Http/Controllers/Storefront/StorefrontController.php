@@ -104,7 +104,7 @@ class StorefrontController extends Controller
                         'Category'     => (string) ($p->category ?? 'Other'),
                         'Keywords'     => (string) ($p->keywords ?? ''),
                         'Price_UGX'    => (float) ($p->base_price ?? $p->price ?? 0),
-                        'Stock'        => (int) ($p->stock ?? 0),
+                        'Stock'        => $p->stock === null ? null : (int) $p->stock,
                         'Image'        => $this->imageUrl($p->image_url),
                         '_row'         => (int) $p->id,
                     ];
