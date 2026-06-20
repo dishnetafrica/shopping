@@ -1,8 +1,10 @@
 <?php
 use Illuminate\Support\Facades\Route;
 
-/* ===== WINWORLD MES ROUTES ===== */
-Route::middleware(['web', 'auth', \App\Http\Middleware\SetTenantFromUser::class])->group(function () {
+/* ===== WINWORLD MES ROUTES — RETIRED ===== */
+/* EnsureWinworldEnabled aborts every route below with 404. MES is killed platform-wide.
+   To restore for one tenant, edit that middleware (see its docblock). */
+Route::middleware(['web', 'auth', \App\Http\Middleware\EnsureWinworldEnabled::class, \App\Http\Middleware\SetTenantFromUser::class])->group(function () {
     Route::get('/panel/production', [\App\Http\Controllers\Panel\WinworldPanelController::class, 'production']);
     Route::get('/panel/indents',    [\App\Http\Controllers\Panel\WinworldIndentController::class, 'indentsPage']);
     Route::get('/panel/planning',   [\App\Http\Controllers\Panel\WinworldIndentController::class, 'planningPage']);
