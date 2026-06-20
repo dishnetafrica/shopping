@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Support\PanelCurrency;
+
 use App\Filament\Resources\DeliveryZoneResource\Pages;
 use App\Models\DeliveryZone;
 use App\Models\Rider;
@@ -66,7 +68,7 @@ class DeliveryZoneResource extends Resource
     {
         return $table->defaultSort('name')->columns([
             Tables\Columns\TextColumn::make('name')->searchable()->sortable(),
-            Tables\Columns\TextColumn::make('flat_fee')->money('UGX', divideBy: 1)->label('Flat fee'),
+            Tables\Columns\TextColumn::make('flat_fee')->money(PanelCurrency::code(), divideBy: 1)->label('Flat fee'),
             Tables\Columns\TextColumn::make('eta_minutes')->suffix(' min')->label('ETA'),
             Tables\Columns\TextColumn::make('match_keywords')->badge()->label('Areas')->limit(40),
             Tables\Columns\ToggleColumn::make('active'),

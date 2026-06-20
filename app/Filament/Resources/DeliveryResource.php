@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Support\PanelCurrency;
+
 use App\Filament\Resources\DeliveryResource\Pages;
 use App\Models\Delivery;
 use App\Models\Rider;
@@ -37,8 +39,8 @@ class DeliveryResource extends Resource
                 Tables\Columns\TextColumn::make('order.customer_name')->label('Customer')->searchable(),
                 Tables\Columns\TextColumn::make('order.location')->label('Drop')->limit(24),
                 Tables\Columns\TextColumn::make('zone.name')->label('Zone')->badge(),
-                Tables\Columns\TextColumn::make('fee')->label('Fee')->money('UGX', divideBy: 1),
-                Tables\Columns\TextColumn::make('cod_amount')->label('COD')->money('UGX', divideBy: 1),
+                Tables\Columns\TextColumn::make('fee')->label('Fee')->money(PanelCurrency::code(), divideBy: 1),
+                Tables\Columns\TextColumn::make('cod_amount')->label('COD')->money(PanelCurrency::code(), divideBy: 1),
                 Tables\Columns\TextColumn::make('eta_at')->label('ETA')->dateTime('H:i'),
                 Tables\Columns\TextColumn::make('rider.name')->label('Rider'),
                 Tables\Columns\TextColumn::make('status')->badge()->colors([

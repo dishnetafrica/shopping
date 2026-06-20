@@ -42,6 +42,15 @@ class OrderObserver
         } elseif (! $isDelivered && $wasDelivered) {
             $order->delivered_at = null;
         }
+
+        // Kitchen Board timing: stamp the first time the order is Accepted / Ready
+        // so we can show prep duration. Only set once (don't overwrite on re-entry).
+        if (strcasecmp((string) $order->status, 'Accepted') === 0 && empty($order->accepted_at)) {
+            $order->accepted_at = now();
+        }
+        if (strcasecmp((string) $order->status, 'Ready') === 0 && empty($order->ready_at)) {
+            $order->ready_at = now();
+        }
     }
 
     /** Alert the owner the moment a new order lands (bot or phone orders). */

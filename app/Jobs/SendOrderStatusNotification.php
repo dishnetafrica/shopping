@@ -29,10 +29,17 @@ class SendOrderStatusNotification implements ShouldQueue
         $name  = $tenant->name;
 
         $messages = [
+            // Restaurant kitchen flow
+            'Accepted'         => "\u{1F373} Hi {$first}! {$name} has accepted your order *{$order->order_no}*. The kitchen is starting on it now.",
+            'Preparing'        => "\u{1F468}\u{200D}\u{1F373} {$first}, your order *{$order->order_no}* is being prepared. It won't be long!",
+            'Ready'            => "\u{2705} {$first}, your order *{$order->order_no}* is ready! It will be dispatched shortly.",
+            'Dispatched'       => "\u{1F6F5} Your {$name} order *{$order->order_no}* is on the way! Our rider will reach you soon.",
+            'Rejected'         => "We're sorry {$first} \u{1F64F} — {$name} couldn't take order *{$order->order_no}* right now. Reply here and we'll help.",
+            // Legacy grocery flow (kept for existing tenants)
             'Confirmed'        => "Hi {$first}! \u{1F389} Your {$name} order *{$order->order_no}* is confirmed. We're preparing it now.",
             'Packed'           => "\u{1F4E6} {$first}, your order *{$order->order_no}* is packed and ready to go!",
             'Out for delivery' => "\u{1F6F5} Your {$name} order is on the way! Our rider will reach you shortly.",
-            'Delivered'        => "\u{2705} Your order *{$order->order_no}* has been delivered. Thank you for shopping with {$name}! \u{1F6D2}",
+            'Delivered'        => "\u{2705} Your order *{$order->order_no}* has been delivered. Thank you for choosing {$name}! \u{1F64F}",
             'Cancelled'        => "Your {$name} order *{$order->order_no}* has been cancelled. Reply here if you need help.",
         ];
         $text = $messages[$this->status] ?? null;

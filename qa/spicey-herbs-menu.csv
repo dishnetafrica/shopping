@@ -1,0 +1,127 @@
+category,name,price,description,active
+Breakfast/Snacks,Meat Samosa (2pcs),1.50,,TRUE
+Breakfast/Snacks,Veg Samosa (2pcs),1.50,,TRUE
+Breakfast/Snacks,Chicken Samosa (2pcs),1.50,,TRUE
+Breakfast/Snacks,Egg Roll,2.50,,TRUE
+Breakfast/Snacks,Omelet with Slice Bread,3.00,,TRUE
+Breakfast/Snacks,Scrambled Egg with Slice Bread,3.00,,TRUE
+Breakfast/Snacks,Poori Bhaji,4.50,,TRUE
+Breakfast/Snacks,Chana Bhatura,6.00,,TRUE
+Breakfast/Snacks,Pakora / Bhajia (Veg/Onion/Potato),5.50,,TRUE
+Breakfast/Snacks,Alu Paratha,2.50,,TRUE
+Breakfast/Snacks,Vada Pav (2pcs),2.50,,TRUE
+Sandwich/Wrap,Veg/Chicken/Beef Sandwich,5.00,"Cheese, lettuce, onion, bell pepper, cucumber served with crispy fries",TRUE
+Sandwich/Wrap,Club Sandwich,7.00,"Chicken, egg, lettuce, tomato, mozzarella served with crispy fries",TRUE
+Sandwich/Wrap,Paneer Shawarma,4.50,,TRUE
+Sandwich/Wrap,Chicken/Beef Shawarma,5.50,,TRUE
+Burgers,Veg Burger,3.50,A delicious all veggie patty grilled and served on a freshly baked bun with crispy fries,TRUE
+Burgers,Chicken Burger,5.50,"Minced chicken patty with onion, tomato, bread crumbs and herbs served with fries",TRUE
+Burgers,American Burger,5.00,"Grilled beef patty on bbq sauce with lettuce, avocado, cheese served with crispy fries",TRUE
+Pizza,Margarita Pizza,6.50,"Tomato slice, cheese, oregano, salt and pepper",TRUE
+Pizza,Vegetariana Pizza,7.00,"Tomato, bell pepper, mushroom, onion and cheese",TRUE
+Pizza,Chicken Pizza,8.00,"Grilled chicken in BBQ sauce, cheese, olives",TRUE
+Pizza,Hawaiian Pizza,8.50,"Tomato sauce, cheese, pineapple, chicken",TRUE
+Pizza,4 Seasons Pizza,8.00,"Chicken, vegetable, beef, margarita",TRUE
+Pizza,Chef's Special Pizza,8.50,"Garden fresh veg, chicken, lamb, tuna, olives and cheese",TRUE
+Pizza,Calzone Pizza,8.50,"Half folded pizza with sausage, chicken, olives, peppers, onion and mushroom",TRUE
+Soups,Manchow Soup (Veg),3.00,Finely chopped veggies simmered in a broth with garlic and ginger,TRUE
+Soups,Hot & Sour Soup (Veg),3.00,"A fiery creation with a medley of veggies, mushroom, chilly garlic sauce, soy sauce, ginger",TRUE
+Soups,Lentil Soup,3.00,"Heart healthy lentils with onion, carrot, garlic in lemon flavor",TRUE
+Soups,Cream of Mushroom / Chicken Soup,4.00,A warm bowl of soup so deliciously creamy with tender bites of mushroom pieces,TRUE
+Soups,Hot & Sour Soup (Non Veg),4.00,"Medley of veggies, mushroom, egg, chilly garlic sauce, soy sauce with chicken or fish or mutton",TRUE
+Soups,Manchow Soup (Non Veg),4.00,"Finely chopped veggies simmered in a broth with garlic, ginger with chicken or fish or mutton",TRUE
+Soups,Clear Soup (Mutton/Chicken/Fish),4.00,,TRUE
+Soups,Chef's Special Soup (Veg or Non Veg),4.00,A soup fully flavored with consistency texture and taste,TRUE
+Salad,Chef's Special Salad (Veg),3.00,Fresh salad fresh start,TRUE
+Salad,Chef's Special Salad (Non Veg),3.50,Fresh salad fresh start,TRUE
+Salad,Avocado Chicken Salad,3.50,"Avocado, chicken, tomato, lettuce, green pepper with vinaigrette dressing",TRUE
+Salad,Green Salad,2.00,,TRUE
+Salad,Som Tom Salad,3.00,"Raw papaya, carrot, peanut, sweet and spicy",TRUE
+Salad,Greek Salad,3.00,"Sliced cucumbers, tomatoes, green bell pepper, red onion, olives and feta cheese",TRUE
+Salad,Ceaser Salad,3.00,"Crisp lettuce and crunchy croutons in a creamy dressing of olive oil, lemon juice, garlic, mustard",TRUE
+Appetizers,French Fries,2.75,,TRUE
+Appetizers,Garlic Chips (Dry) / Masala Chips,3.50,,TRUE
+Appetizers,Paneer Chilly (Dry or Gravy),6.00,"Cottage cheese cubes deep fried and tossed with garlic, bell pepper",TRUE
+Appetizers,Veg or Gobi Manchurian (Dry or Gravy),5.50,Your choice tossed in a delicious manchurian sauce made with lots of garlic,TRUE
+Appetizers,Mushroom Pepper Fry,5.00,Easy and flavored South Indian starter with mushroom and black pepper,TRUE
+Appetizers,Black Garlic Chicken,6.50,Fried chicken tossed with garlic and soya sauce,TRUE
+Appetizers,Chicken Quesadillas,6.50,Tomato salsa,TRUE
+Appetizers,Chilly Chicken or Fish (Dry or Saucy),6.50,"Boneless deep-fried chicken or fish with bell pepper, onion, garlic in chilly and soy sauce",TRUE
+Appetizers,Chilly Mutton or Beef (Dry or Saucy),7.50,"Boneless deep-fried mutton or beef with bell pepper, onion, garlic in chili and soy sauce",TRUE
+Appetizers,Chicken Wings,6.50,Chicken wings ginger garlic tossed in soy sauce and honey,TRUE
+Appetizers,Chicken '65',7.00,"Chicken deep fried, sauteed with curry leaves, ginger, garlic, chilies and bell pepper",TRUE
+Appetizers,Chicken Lollipop,6.50,Deep fried chicken drumsticks tossed with garlic sauce,TRUE
+Tandoori,Paneer Tikka (Dry),7.00,Cottage cheese cubes in spiced yogurt char grilled in clay oven,TRUE
+Tandoori,Tandoori Stuffed Alu (Potato),6.00,"Barrel shaped potatoes stuffed with cottage cheese mixture, marinated in yogurt masala, grilled in clay oven",TRUE
+Tandoori,Tandoori Chicken (Half),8.50,Chicken breast/leg marinated with spices and lemon grilled to perfection,TRUE
+Tandoori,Tandoori Chicken (Full),15.00,Chicken breast/leg marinated with spices and lemon grilled to perfection,TRUE
+Tandoori,Chicken Garlic Tikka,8.00,Tender boneless pieces of chicken in yogurt paste grilled to perfection,TRUE
+Tandoori,Tangdi Kebab,8.00,Chicken drumstick marinated with Indian spices baked in tandoor served with green chutney and salad,TRUE
+Tandoori,Lamb Chops (Dry),10.00,"Lamb spare ribs in paprika, ginger garlic paste, soy sauce marinade chargrilled",TRUE
+Tandoori,Fish Tikka (Dry),8.00,Fresh fish cubes marinated with tandoori spices and herbs grilled in clay oven,TRUE
+Pasta,Spaghetti Bolognese,8.00,,TRUE
+Pasta,Penne Pasta,6.00,Red sauce or white sauce,TRUE
+Pasta,Spaghetti Pasta,6.00,Red sauce or white sauce,TRUE
+Pasta,Mac & Cheese,6.00,,TRUE
+Pasta,Pasta - With Chicken Add,1.00,Add chicken to any pasta,TRUE
+Charcoal & Fire,Grilled Chicken,7.00,Served with chips and mushroom sauce,TRUE
+Charcoal & Fire,Grilled Fish,7.00,"Served with potato wedges, tartar sauce",TRUE
+Charcoal & Fire,Beef Steak,7.00,Served with mashed potato or sauted vegetables,TRUE
+Charcoal & Fire,Nyama Choma,9.00,Served with kachumbari salad,TRUE
+Main Course,Bhindi Masala,6.00,"A health dish made of okra, spices, onion and tomato mildly spicy and full of flavors",TRUE
+Main Course,Paneer Saagwala,7.50,Indian cottage cheese in smooth creamy delicious spinach gravy,TRUE
+Main Course,Paneer Makhani,7.50,Slightly sweet creamy dish of fresh cottage cheese prepared with butter (makhan),TRUE
+Main Course,Paneer Tikka Masala,7.50,"Grilled cottage cheese chunks, bell pepper, onion in red gravy",TRUE
+Main Course,Kadai Paneer,7.50,"Cottage cheese cooked with tomato, onion, bell pepper and a blend of Indian spices in thick sauce",TRUE
+Main Course,Dal Makhani / Dal Tadka,6.00,"Whole black lentils in butter cream on low heat / yellow lentils with a tempering of spices",TRUE
+Main Course,Egg Masala,6.00,"Boiled egg slices cooked in an aromatic seasoned masala sauce, with cream for richness",TRUE
+Main Course,Chicken Handi,9.50,Boneless chicken cooked with spices onion-tomato masala in a creamy texture,TRUE
+Main Course,Chicken Kolhapuri,9.50,"Mumbai walas chicken gravy that is full of rich, varied, spicy and drool worthy Kolhapur flavors",TRUE
+Main Course,Chicken Bartha,9.50,Super smooth creamy chicken preparation loaded with shredded chicken and lot of flavors,TRUE
+Main Course,Chicken Tikka Masala (C.T.M),9.50,Aromatic golden chicken pieces swimming in an incredible curry sauce,TRUE
+Main Course,Butter Chicken,9.50,Buttery gravy with fresh cream gives the curry sauce a silky smooth rich texture,TRUE
+Main Course,Chicken Changezi,9.50,Creamy rich cashew based chicken gravy with mild flavors,TRUE
+Main Course,Chicken/Lamb/Fish Saagwala,9.50,Spinach with any of your choice in greenish gravy made creamy and super tasty,TRUE
+Main Course,Chicken Curry,9.50,"Chicken pieces cooked in an aromatic deliciously seasoned curry sauce, with cream for richness",TRUE
+Main Course,Local Chicken (Stew or Dry),10.50,Served with rice/naan/chapati,TRUE
+Main Course,Beef Stroganoff,9.50,Served with rice/naan/chapati,TRUE
+Main Course,Sizzler (Chicken/Beef/Fish),8.00,Served with fried rice or noodles,TRUE
+Main Course,Chicken/Beef/Fish/Lamb Stew (Half),8.00,"Any one of your choice with onion, green pepper, carrot in concasse sauce served with rice or chapati",TRUE
+Main Course,Chicken/Beef/Fish/Lamb Stew (Full),9.00,"Any one of your choice with onion, green pepper, carrot in concasse sauce served with rice or chapati",TRUE
+Main Course,Chicken and Chips,8.00,Deep fried chicken served with chips and salad,TRUE
+Main Course,Fish Curry,9.00,"Tremendously flavorful and tangy thanks to tamarind, coconut milk, garlic and ginger",TRUE
+Main Course,Whole Fish (Wet Fry or Dry Fry),9.00,"Fresh whole fish deep fried topped with mild sauce, served with fries, rice and coleslaw",TRUE
+Main Course,Mutton Rogan Josh,10.00,"Mutton braised with a gravy flavored with garlic, ginger and aromatic spices",TRUE
+Main Course,Mutton Kadai,10.00,"Prepared with cumin seeds, bell pepper, bay leaves, sauteed in ginger garlic paste",TRUE
+Main Course,Mutton Lamb Chops Masala,10.00,Lamb ribs in yogurt-based marinade packed with spices grilled and cooked with thick masala paste,TRUE
+Main Course,Fried Goat or Beef (Dry Fry),10.00,"Any one of your choices with onion, green pepper, coriander served with rice or chapati, salsa sauce and kachumbari",TRUE
+Breads,Roti,1.75,Strong ground whole wheat flat bread cooked in clay oven in a traditional way,TRUE
+Breads,Bhatura,1.75,Fluffy deep-fried leavened bread,TRUE
+Breads,Chapatti,1.50,Traditional whole wheat bread cooked on a griddle,TRUE
+Breads,Naan (Plain/Butter),1.50,White flour bread smeared with butter,TRUE
+Breads,Garlic / Methi / Chilli Naan,2.50,White flour bread smeared with garlic/methi/chilli and butter,TRUE
+Breads,Cheese Naan,4.50,White flour bread stuffed with cheesy mozzarella,TRUE
+Breads,Laccha Paratha (Plain/Butter),2.00,Multi layered whole wheat bread,TRUE
+Rice & Noodles,Steamed Rice,3.00,,TRUE
+Rice & Noodles,Jeera Rice,4.00,Rice with cumin tossed with butter that would add a refreshing flavor to your main dish,TRUE
+Rice & Noodles,Lemon Rice,4.00,Rice with flavor of fresh lemon juice along with the aroma of tempering spices,TRUE
+Rice & Noodles,Dal Khichdi,5.50,"The mixture of rice and lentils in clarified butter, cumin seeds and asafetida",TRUE
+Rice & Noodles,Vegetable Biryani,6.50,An aromatic rice dish prepared with mix veggies herbs and Biryani spices,TRUE
+Rice & Noodles,Vegetable Fried Rice,6.50,"Nutty flavor of brown rice with the fresh taste of bell pepper, green peas and other veggies",TRUE
+Rice & Noodles,Chicken Fried Rice,7.50,Moist and tender chicken egg with flavorful spices and long rice cooked together,TRUE
+Rice & Noodles,Chicken Biryani,8.50,Layering marinated chicken and then layered with parboiled rice herbs,TRUE
+Rice & Noodles,Chicken Tikka Biryani,9.50,Tandoori boneless chicken layered with parboiled rice,TRUE
+Rice & Noodles,Mutton Biryani with Bone,9.50,A classic dish made by layering rice over slow cooked mutton gravy with tender pcs of mutton with bone,TRUE
+Rice & Noodles,Mutton Biryani Boneless,10.00,A classic dish made by layering rice over slow cooked mutton gravy with boneless tender pcs of mutton,TRUE
+Rice & Noodles,Veg Noodles,4.50,Cooked noodles stir fried with lots of vegetables,TRUE
+Rice & Noodles,Chicken/Beef/Lamb Noodles,6.00,Delicious flavor packed stir-fried noodles with chicken or beef or mutton with vegetables and sauces,TRUE
+Desserts,Fruit Salad,5.00,,TRUE
+Desserts,Gulab Jamun (2pcs),2.50,,TRUE
+Desserts,Cheese Cake,3.00,"Lemon, strawberry, orange, chocolate",TRUE
+Desserts,Brownies,2.50,"Chocolate, walnut",TRUE
+Desserts,Sizzling Brownie,4.00,,TRUE
+Desserts,Muffins,2.00,"Banana, apple, chocolate",TRUE
+Beverages,Soft Drink (Coke/Sprite/Fanta),0.00,PLACEHOLDER - not on printed menu - set price before go-live,FALSE
+Beverages,Bottled Water,0.00,PLACEHOLDER - not on printed menu - set price before go-live,FALSE
+Beverages,Masala Chai,0.00,PLACEHOLDER - not on printed menu - set price before go-live,FALSE
+Beverages,Fresh Juice,0.00,PLACEHOLDER - not on printed menu - set price before go-live,FALSE

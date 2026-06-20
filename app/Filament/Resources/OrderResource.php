@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\OrderResource\Pages;
 use App\Models\Order;
 use App\Models\Rider;
+use App\Support\PanelCurrency;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -21,10 +22,7 @@ class OrderResource extends Resource
         return $form->schema([
             Forms\Components\Section::make('Status')->schema([
                 Forms\Components\Select::make('status')
-                    ->options(array_combine(
-                        ['New','Confirmed','Packed','Out for delivery','Delivered','Cancelled'],
-                        ['New','Confirmed','Packed','Out for delivery','Delivered','Cancelled']
-                    ))
+                    ->options(array_combine(Order::STATUSES, Order::STATUSES))
                     ->required()
                     ->helperText('Changing the status sends the customer a WhatsApp update automatically.'),
                 Forms\Components\Select::make('rider_id')
@@ -38,10 +36,12 @@ class OrderResource extends Resource
                 Forms\Components\TextInput::make('customer_phone'),
                 Forms\Components\TextInput::make('location')->columnSpanFull(),
                 Forms\Components\TextInput::make('payment'),
-                Forms\Components\TextInput::make('total')->numeric()->prefix('UGX')->disabled(),
+                Forms\Components\TextInput::make('total')->numeric()->prefix(PanelCurrency::code())->disabled(),
             ])->columns(2),
 
             Forms\Components\Textarea::make('items_text')->label('Items')->rows(3)->disabled()->columnSpanFull(),
+            Forms\Components\Textarea::make('notes')->label('Special instructions')->rows(2)->columnSpanFull()
+                ->helperText('Customer notes (e.g. "less spicy, no onion"). Visible to the kitchen.'),
         ]);
     }
 
@@ -55,17 +55,15 @@ class OrderResource extends Resource
                 Tables\Columns\TextColumn::make('items_text')->limit(40)->tooltip(fn ($record) => $record->items_text),
                 Tables\Columns\TextColumn::make('total')->money('UGX')->sortable(),
                 Tables\Columns\TextColumn::make('status')->badge()->color(fn (string $state) => match ($state) {
-                    'New' => 'gray', 'Confirmed' => 'info', 'Packed' => 'warning',
-                    'Out for delivery' => 'primary', 'Delivered' => 'success', 'Cancelled' => 'danger', default => 'gray',
+                    'New' => 'gray', 'Accepted' => 'info', 'Preparing' => 'warning', 'Ready' => 'success',
+                    'Dispatched' => 'primary', 'Delivered' => 'success', 'Cancelled' => 'danger', 'Rejected' => 'danger',
+                    'Confirmed' => 'info', 'Packed' => 'warning', 'Out for delivery' => 'primary', default => 'gray',
                 }),
                 Tables\Columns\TextColumn::make('channel')->badge()->toggleable(),
                 Tables\Columns\TextColumn::make('created_at')->dateTime('M j, H:i')->sortable(),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('status')->options(array_combine(
-                    ['New','Confirmed','Packed','Out for delivery','Delivered','Cancelled'],
-                    ['New','Confirmed','Packed','Out for delivery','Delivered','Cancelled']
-                )),
+                Tables\Filters\SelectFilter::make('status')->options(array_combine(Order::STATUSES, Order::STATUSES)),
             ])
             ->actions([Tables\Actions\EditAction::make()]);
     }

@@ -446,6 +446,16 @@ class BotBrain
             return $dd;
         }
 
+        // Standalone cooking instruction ("less spicy", "no onion", "make it mild").
+        if (($ir = $this->instructionReply($tenant, $convo, $lc)) !== null) {
+            return $ir;
+        }
+
+        // "What is X?" / "what's in X?" -> read back the menu description (restaurant).
+        if (($pi = $this->productInfoReply($tenant, $convo, $lc)) !== null) {
+            return $pi;
+        }
+
         // declines: "no", "cancel", "i don't want anything" etc. are NOT product
         // searches — never run them through the catalogue (that's what matched
         // "Dent"/"Donut"/"Dot" for "i dont want anything").
@@ -597,8 +607,10 @@ class BotBrain
 
         if (count($prods) === 1) {
             $p = $prods[0];
-            return "*{$p['name']}* is {$cur} " . number_format((float) $p['price'])
-                 . ".\n\nWant me to add it? Just say *add {$p['name']}* or tell me the quantity.";
+            $desc = trim((string) ($p['description'] ?? ''));
+            $line = "*{$p['name']}* is {$cur} " . number_format((float) $p['price']) . '.';
+            if ($desc !== '') $line .= "\n_{$desc}_";
+            return $line . "\n\nWant me to add it? Just say *add {$p['name']}* or tell me the quantity.";
         }
 
         $lines = [];
@@ -1411,6 +1423,62 @@ class BotBrain
         return $reply ?? "Sure \u{1F642} Tell me a bit more and I'll recommend the right one.";
     }
 
+    /**
+     * A standalone cooking instruction ("less spicy", "no onion", "make it mild") with no
+     * dish in it. Attach it to the most recent cart line; if the cart is empty, stash it as
+     * a general order note for checkout. Returns null when the message isn't a pure
+     * instruction, so real product messages fall through untouched.
+     */
+    /**
+     * Answer "what is X?" / "what's in X?" with the dish's menu description + price.
+     * Returns null when the question doesn't resolve to a product, so non-product
+     * "what is …" questions (hours, delivery) fall through to the FAQ/forward path.
+     */
+    protected function productInfoReply(Tenant $tenant, Conversation $convo, string $lc): ?string
+    {
+        if (! preg_match('/^\s*(?:what\x27?s in|what is in|whats in|what\x27?s|what is|whats|tell me about|describe)\s+(.+?)\??\s*$/i', $lc, $m)) {
+            return null;
+        }
+        $query = trim(preg_replace('/^(the|a|an|in|your)\s+/i', '', trim($m[1])));
+        if (mb_strlen($query) < 3) return null;
+
+        $cands = (new \App\Services\Bot\CatalogueMatcher())->search($query, $this->tenantCatalogue($tenant));
+        if (! $cands) return null;
+
+        $p    = $cands[0]['product'];
+        $cur  = $this->currencyFor($tenant);
+        $desc = trim((string) ($p['description'] ?? ''));
+        $out  = "*{$p['name']}* \u{2014} {$cur} " . number_format((float) $p['price']);
+        if ($desc !== '') $out .= "\n{$desc}";
+        return $out . "\n\nWant me to add it? Say *add {$p['name']}*.";
+    }
+
+
+    protected function instructionReply(Tenant $tenant, Conversation $convo, string $lc): ?string
+    {
+        if (! \App\Support\OrderInstructions::isInstructionOnly($lc)) return null;
+        $note = \App\Support\OrderInstructions::note($lc);
+        if ($note === '') return null;
+
+        $cart = is_array($convo->cart) ? $convo->cart : [];
+        if ($cart) {
+            $i = count($cart) - 1;
+            $prev = trim((string) ($cart[$i]['note'] ?? ''));
+            $cart[$i]['note'] = $prev !== '' ? ($prev . '; ' . $note) : $note;
+            $convo->cart = $cart;
+            $convo->save();
+            $name = (string) ($cart[$i]['name'] ?? 'your item');
+            return "\u{1F44C} Noted \u{2014} *{$note}* for {$name}. Add anything else, or say *checkout* to place the order.";
+        }
+
+        $st = is_array($convo->state) ? $convo->state : [];
+        $prev = trim((string) ($st['order_note'] ?? ''));
+        $st['order_note'] = $prev !== '' ? ($prev . '; ' . $note) : $note;
+        $convo->state = $st;
+        $convo->save();
+        return "\u{1F44C} Noted \u{2014} *{$note}*. Tell me what you'd like to order and I'll add it.";
+    }
+
     protected function runShoppingEngine(Tenant $tenant, Conversation $convo, string $text, array $catalogue): array
     {
         $engine = new ShoppingEngine(
@@ -1421,7 +1489,31 @@ class BotBrain
         );
         $cart  = is_array($convo->cart) ? $convo->cart : [];
         $state = is_array($convo->state) ? $convo->state : [];
-        return $engine->handle($text, $catalogue, $cart, $state);
+
+        // Peel a trailing cooking instruction off ("biryani extra spicy") so it doesn't
+        // pollute the product search, then re-attach it as a kitchen note on the line(s)
+        // this message adds. Conservative split — never truncates a real dish name.
+        [$dish, $note] = \App\Support\OrderInstructions::split($text);
+        $searchText = $dish !== '' ? $dish : $text;
+
+        $before = [];
+        foreach ($cart as $l) { $before[(int) ($l['product_id'] ?? 0)] = (int) ($l['qty'] ?? 0); }
+
+        $result = $engine->handle($searchText, $catalogue, $cart, $state);
+
+        if ($note !== '' && ! empty($result['handled']) && is_array($result['cart'] ?? null)) {
+            foreach ($result['cart'] as &$line) {
+                $pid = (int) ($line['product_id'] ?? 0);
+                $grew = ! array_key_exists($pid, $before) || (int) ($line['qty'] ?? 0) > $before[$pid];
+                if ($grew) {
+                    $prev = trim((string) ($line['note'] ?? ''));
+                    $line['note'] = $prev !== '' ? ($prev . '; ' . $note) : $note;
+                }
+            }
+            unset($line);
+        }
+
+        return $result;
     }
 
     /**
@@ -1940,8 +2032,18 @@ class BotBrain
                 OrderItem::create([
                     'order_id' => $order->id, 'product_id' => $l['product_id'],
                     'name' => $l['name'], 'price' => $l['price'], 'qty' => $l['qty'],
+                    'notes' => trim((string) ($l['note'] ?? '')) ?: null,
                 ]);
             }
+            // Roll any line notes + a general order note up onto the order, for the kitchen.
+            $noteBits = [];
+            $general  = trim((string) data_get($convo->state, 'order_note', ''));
+            if ($general !== '') $noteBits[] = $general;
+            foreach ($cart as $l) {
+                $ln = trim((string) ($l['note'] ?? ''));
+                if ($ln !== '') $noteBits[] = $l['name'] . ': ' . $ln;
+            }
+            if ($noteBits) { $order->notes = implode(' | ', $noteBits); $order->save(); }
         }
 
         $convo->cart = []; $convo->state = []; $convo->save();

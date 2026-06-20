@@ -1,0 +1,8 @@
+timestamp,conversation_id,direction,text
+2026-06-20 18:01,test-1,in,I want Butter Chicken
+2026-06-20 18:05,test-2,in,I want 2 Butter Chicken and 3 Garlic Naan
+2026-06-20 18:10,test-3,in,I want Chicken Biryani extra spicy
+2026-06-20 18:15,test-4,in,Add Veg Burger and Coke
+2026-06-20 18:16,test-4,in,Remove Burger
+2026-06-20 18:17,test-4,in,Checkout
+2026-06-20 18:18,test-4,in,I need delivery to Munuki

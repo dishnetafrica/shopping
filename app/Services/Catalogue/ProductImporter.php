@@ -19,7 +19,8 @@ class ProductImporter
 {
     /** canonical field => list of accepted header names (normalised) */
     private array $aliases = [
-        'name'       => ['name', 'product name', 'productname', 'item name', 'itemname', 'description'],
+        'name'       => ['name', 'product name', 'productname', 'item name', 'itemname'],
+        'description'=> ['description', 'desc', 'details', 'about', 'blurb'],
         'variant'    => ['variant', 'variation'],
         'price'      => ['price', 'price ugx', 'priceugx', 'sell price', 'sellprice', 'selling price', 'retail', 'mrp', 'rate'],
         'base_price' => ['base price', 'baseprice', 'cost', 'cost price', 'costprice', 'buying price'],
@@ -72,6 +73,7 @@ class ProductImporter
             $row = [
                 'tenant_id'  => $tenantId,
                 'name'       => mb_substr($name, 0, 255),
+                'description'=> $get('description') !== '' ? mb_substr($get('description'), 0, 1000) : null,
                 'sku'        => $get('sku') ?: null,
                 'category'   => $get('category') ?: null,
                 'price'      => $price,
