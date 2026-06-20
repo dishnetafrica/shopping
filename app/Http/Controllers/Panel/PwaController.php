@@ -54,15 +54,21 @@ class PwaController extends Controller
     public function sw()
     {
         $js = <<<'JS'
-const C='shopbot-shell-v1';
+const C='shopbot-shell-v2';
 const SHELL=['/icons/app-192.png','/icons/app-512.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',e=>{
-  if(e.request.method!=='GET')return;                 // never touch writes
+  if(e.request.method!=='GET')return;                 // never touch writes (orders POST)
   const u=new URL(e.request.url);
   if(u.pathname.startsWith('/papi/')||u.pathname.startsWith('/api/'))return; // always live data
-  e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));        // network-first, cache fallback
+  // network-first, cache fallback — but NEVER resolve to undefined (that throws
+  // "Failed to convert value to 'Response'" and breaks the request).
+  e.respondWith(
+    fetch(e.request).catch(()=>
+      caches.match(e.request).then(r=>r||new Response('',{status:504,statusText:'offline'}))
+    )
+  );
 });
 JS;
         return response($js, 200)
