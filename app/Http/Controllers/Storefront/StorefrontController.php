@@ -74,6 +74,7 @@ class StorefrontController extends Controller
             'panelUrl'     => url('/panel'),
             'branches'     => $this->branches($tenant),
             'delivery'     => (object) ($tenant->setting('delivery', []) ?: []),
+            'vertical'     => \App\Support\Vertical::of($tenant),
         ];
 
         $path = resource_path('storefront/shop.html');
@@ -146,6 +147,7 @@ class StorefrontController extends Controller
                 'delivery' => (object) ($tenant->setting('delivery', []) ?: []),
                 'category_images' => (object) ($tenant->setting('category_images', []) ?: []),
                 'thali' => $this->todayThali($tenant),
+                'vertical' => \App\Support\Vertical::of($tenant),
             ],
         ])->header('Cache-Control', 'no-store');
     }

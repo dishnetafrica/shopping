@@ -122,7 +122,7 @@
 
 <a class="top" href="#" style="text-decoration:none" onclick="goHome();return false;">
   <div class="lg">SH</div>
-  <div><b>Shop</b><span class="sub">Browse &amp; order on WhatsApp delivery</span></div>
+  <div><b>Shop</b><span class="sub" id="hdrSub">Browse &amp; order on WhatsApp delivery</span></div>
 </a>
 
 <div class="delv" id="delvBar" onclick="askLocation()"><span class="ico">📍</span><span class="txt">Set your location for delivery time</span><span class="chg">›</span></div>
@@ -149,6 +149,15 @@
 /* ====================== CONFIG (injected per shop by the server) ====================== */
 window.SHOP = __SHOP_CONFIG__;
 var SHOP = window.SHOP || {};
+/* Vertical-driven storefront mode. 'snacks' = advance-booking pickup (no delivery). */
+var VERTICAL  = SHOP.vertical || 'grocery';
+var IS_PICKUP = (VERTICAL === 'snacks');
+function applyVertical(){
+  if(!IS_PICKUP) return;                       // grocery/restaurant: unchanged
+  var bar=document.getElementById('delvBar'); if(bar) bar.style.display='none';
+  var sub=document.getElementById('hdrSub');   if(sub) sub.textContent='Order ahead \u00B7 collect on WhatsApp';
+}
+applyVertical();
 var CUR  = SHOP.currency || 'UGX';
 var CATALOGUE_URL = SHOP.catalogueUrl || (location.pathname.replace(/\/+$/,'') + '/catalogue');
 var SUBMIT_URL    = SHOP.orderUrl     || (location.pathname.replace(/\/+$/,'') + '/order');
@@ -201,7 +210,8 @@ async function load(){
     PRODUCTS=(Array.isArray(d.products)?d.products:[]).map(mapProduct).filter(function(p){return p.name && p.price>0;});
     if(d.settings){var ph=String(d.settings.waNumber||d.settings.storePhone||'').replace(/[^0-9]/g,'');if(ph)WA_NUMBER=ph;
       if(d.settings.currency)CUR=String(d.settings.currency);
-      if(d.settings.category_images)CAT_IMG=d.settings.category_images||{}; if(d.settings.thali)THALI=d.settings.thali;}
+      if(d.settings.category_images)CAT_IMG=d.settings.category_images||{}; if(d.settings.thali)THALI=d.settings.thali;
+      if(d.settings.vertical){VERTICAL=String(d.settings.vertical);IS_PICKUP=(VERTICAL==='snacks');applyVertical();}}
     if(Array.isArray(d.branches)&&d.branches.length){
       var bs=d.branches.map(function(b){return {name:String(b.name||b.title||'Branch'),lat:Number(b.lat),lng:Number(b.lng)};}).filter(function(b){return isFinite(b.lat)&&isFinite(b.lng);});
       if(bs.length)BRANCHES=bs;
@@ -559,17 +569,20 @@ function openCart(){
   $('sheet').classList.add('show');
 }
 function openCheckout(){
-  $('sheetTitle').textContent='Delivery details';
+  $('sheetTitle').textContent=IS_PICKUP?'Pickup details':'Delivery details';
   $('sheetBody').innerHTML=
     '<div class="field"><label>Your name</label><input id="coName" value="'+esc((CUST&&CUST.name)||qp('n'))+'" placeholder="Full name"></div>'+
     '<div class="field"><label>WhatsApp number</label><input id="coPhone" inputmode="numeric" value="'+esc((CUST&&CUST.phone)||qp('c'))+'" placeholder="2567…"></div>'+
-    '<div class="field"><label>Delivery address</label><textarea id="coAddr" rows="2" placeholder="Area, road, landmark">'+esc((CUST&&CUST.addr)||'')+'</textarea></div>'+
+    (IS_PICKUP
+      ? '<div class="field"><label>Pickup note <span style="color:#98a2b3;font-weight:400">(optional)</span></label><textarea id="coAddr" rows="2" placeholder="Anything we should know for collection">'+esc((CUST&&CUST.addr)||'')+'</textarea></div>'
+      : '<div class="field"><label>Delivery address</label><textarea id="coAddr" rows="2" placeholder="Area, road, landmark">'+esc((CUST&&CUST.addr)||'')+'</textarea></div>')+
     '<div class="field"><label>Special instructions <span style="color:#98a2b3;font-weight:400">(optional)</span></label><textarea id="coNote" rows="2" placeholder="e.g. in the thali remove dal &amp; add kadhi \u00B7 less spicy \u00B7 leave at gate"></textarea></div>'+
+    (IS_PICKUP ? '' :
     '<div class="field"><label>Delivery location (GPS pin)</label>'+
     '<button type="button" class="locbtn" id="locBtn" onclick="captureLoc()">📍 Share my current location</button>'+
-    '<div id="locMsg" class="locmsg">Optional — sends an exact map pin so the rider finds you fast.</div></div>'+
-    '<div class="field"><label>Payment</label><select id="coPay"><option>Cash on delivery</option><option>Mobile money</option></select></div>'+
-    '<div class="field"><label>Schedule for later <span style="color:#98a2b3;font-weight:400">(optional — leave blank to deliver now)</span></label><input id="coWhen" type="datetime-local"></div>'+
+    '<div id="locMsg" class="locmsg">Optional — sends an exact map pin so the rider finds you fast.</div></div>')+
+    '<div class="field"><label>Payment</label><select id="coPay"><option>'+(IS_PICKUP?'Cash on pickup':'Cash on delivery')+'</option><option>Mobile money</option></select></div>'+
+    '<div class="field"><label>Schedule for later <span style="color:#98a2b3;font-weight:400">(optional — leave blank to '+(IS_PICKUP?'collect now':'deliver now')+')</span></label><input id="coWhen" type="datetime-local"></div>'+
     '<div class="totrow g"><span>Total ('+cartCount()+' items)</span><span>'+ugx(cartTotal())+'</span></div>'+
     '<button class="place" id="placeBtn" onclick="placeOrder()">Place order</button>'+
     '<button class="place" style="background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="openCart()">← Back to cart</button>';
@@ -594,7 +607,7 @@ async function placeOrder(){
   var name=($('coName').value||'').trim(), phone=($('coPhone').value||'').replace(/[^0-9]/g,''), addr=($('coAddr').value||'').trim(), pay=$('coPay').value, note=(($('coNote')||{}).value||'').trim(), when=(($('coWhen')||{}).value||'').trim();
   if(!name){alert('Please enter your name');return;}
   if(phone.length<7){alert('Please enter your WhatsApp number');return;}
-  if(!addr && !GEO){alert('Please enter your delivery address or share your location');return;}
+  if(!IS_PICKUP && !addr && !GEO){alert('Please enter your delivery address or share your location');return;}
   var payload={name:name,phone:phone,location:addr,payment:pay,note:note,when:when,items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal(),channel:'web'};
   if(GEO){payload.geo=GEO.lat+','+GEO.lng;payload.maps_url=mapsUrl(GEO);}
   var btn=$('placeBtn');btn.disabled=true;btn.textContent='Placing…';

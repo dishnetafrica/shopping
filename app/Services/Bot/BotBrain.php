@@ -1633,7 +1633,10 @@ class BotBrain
             $this->currencyFor($tenant),
             $this->tenantDefaults($tenant),
             $this->defaultStrategy($tenant),
-            (bool) $tenant->setting('restaurant_mode', false),
+            // Restaurant ordering behaviour now follows the tenant's vertical. Vertical::of()
+            // infers 'restaurant' from a legacy restaurant_mode=true, so this is byte-compatible
+            // for existing tenants and grocery stays a no-op.
+            \App\Support\Vertical::of($tenant) === \App\Support\Vertical::RESTAURANT,
         );
         $cart  = is_array($convo->cart) ? $convo->cart : [];
         $state = is_array($convo->state) ? $convo->state : [];
