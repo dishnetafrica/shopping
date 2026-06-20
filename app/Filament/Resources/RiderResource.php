@@ -1,6 +1,7 @@
 <?php
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\VerticalGate;
 use App\Filament\Resources\RiderResource\Pages;
 use App\Models\Rider;
 use Filament\Forms;
@@ -11,6 +12,11 @@ use Filament\Tables\Table;
 
 class RiderResource extends Resource
 {
+    use VerticalGate;
+
+    /** Riders are a delivery concept — grocery & restaurant only, not snacks pickup. */
+    protected static string $verticalFeature = 'riders';
+
     protected static ?string $model = Rider::class;
     protected static ?string $navigationIcon = 'heroicon-o-truck';
     protected static ?int $navigationSort = 2;

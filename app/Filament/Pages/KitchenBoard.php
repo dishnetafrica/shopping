@@ -1,6 +1,7 @@
 <?php
 namespace App\Filament\Pages;
 
+use App\Filament\Concerns\VerticalGate;
 use App\Models\Order;
 use App\Models\Tenant;
 use App\Support\TenantContext;
@@ -18,6 +19,11 @@ use Filament\Pages\Page;
  */
 class KitchenBoard extends Page
 {
+    use VerticalGate;
+
+    /** Live KOT for restaurant kitchens only. Hidden for grocery & snacks tenants. */
+    protected static string $verticalFeature = 'kitchen_board';
+
     protected static ?string $navigationIcon = 'heroicon-o-fire';
     protected static ?int $navigationSort = 2;
     protected static ?string $title = 'Kitchen';

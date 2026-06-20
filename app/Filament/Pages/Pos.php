@@ -1,6 +1,7 @@
 <?php
 namespace App\Filament\Pages;
 
+use App\Filament\Concerns\VerticalGate;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
@@ -12,6 +13,11 @@ use Filament\Pages\Page;
 
 class Pos extends Page
 {
+    use VerticalGate;
+
+    /** Counter POS for grocery & restaurant; off for snacks unless feature_pos override. */
+    protected static string $verticalFeature = 'pos';
+
     protected static ?string $navigationIcon = 'heroicon-o-calculator';
     protected static ?int $navigationSort = 3;
     protected static ?string $title = 'POS';

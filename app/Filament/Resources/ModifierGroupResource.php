@@ -1,6 +1,7 @@
 <?php
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\VerticalGate;
 use App\Filament\Resources\ModifierGroupResource\Pages;
 use App\Models\ModifierGroup;
 use Filament\Forms;
@@ -13,26 +14,22 @@ use Filament\Tables\Table;
  * Item Options — lets a restaurant owner define choice groups (e.g. "Choice of
  * accompaniment: Rice / Naan / Chapati") and attach them to dishes. The bot and the
  * storefront read these to ask the customer before the dish is added. Hidden for grocery
- * tenants — only shows when the tenant has restaurant_mode on.
+ * tenants. Visibility is driven by the tenant's vertical (restaurant by default; snacks
+ * via a feature_item_options override). Legacy tenants with restaurant_mode=true are
+ * inferred as restaurant, so this stays byte-compatible for them.
  */
 class ModifierGroupResource extends Resource
 {
+    use VerticalGate;
+
+    protected static string $verticalFeature = 'item_options';
+
     protected static ?string $model = ModifierGroup::class;
     protected static ?string $navigationIcon = 'heroicon-o-adjustments-horizontal';
     protected static ?string $navigationLabel = 'Item Options';
     protected static ?string $modelLabel = 'option group';
     protected static ?string $pluralModelLabel = 'Item Options';
     protected static ?int $navigationSort = 5;
-
-    public static function shouldRegisterNavigation(): bool { return static::restaurantEnabled(); }
-    public static function canViewAny(): bool { return static::restaurantEnabled(); }
-    public static function canAccess(): bool { return static::restaurantEnabled(); }
-
-    protected static function restaurantEnabled(): bool
-    {
-        $t = auth()->user()?->tenant;
-        return $t ? (bool) $t->setting('restaurant_mode', false) : false;
-    }
 
     public static function form(Form $form): Form
     {

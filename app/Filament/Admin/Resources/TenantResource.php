@@ -28,6 +28,12 @@ class TenantResource extends Resource
                     ->unique(ignoreRecord: true),
                 Forms\Components\TextInput::make('order_prefix')->default('ORD')->maxLength(6),
                 Forms\Components\Select::make('status')->options(['active'=>'Active','suspended'=>'Suspended'])->default('active'),
+                Forms\Components\Select::make('settings.vertical')
+                    ->label('Business type')
+                    ->options(\App\Support\Vertical::LABELS)
+                    ->default(\App\Support\Vertical::GROCERY)
+                    ->native(false)
+                    ->helperText('Drives which panel tools show. Grocery = riders + POS; Restaurant = adds Item Options + Kitchen board; Snacks = advance booking (no riders/POS). Per-tool exceptions use the feature_* toggles.'),
             ])->columns(2),
 
             Forms\Components\Section::make('Owner login')
