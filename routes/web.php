@@ -48,6 +48,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
 
         // reads
         Route::get('orders',     [PanelApiController::class, 'orders']);
+        Route::get('kitchen',         [PanelApiController::class, 'kitchen']);
+        Route::get('kitchen-advance', [PanelApiController::class, 'kitchenAdvance']);
         Route::get('products',   [PanelApiController::class, 'products']);
         Route::get('riders',     [PanelApiController::class, 'riders']);
         Route::get('returns',    [PanelApiController::class, 'returns']);

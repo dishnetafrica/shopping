@@ -270,6 +270,7 @@
     <nav>
       <a class="nav on" data-page="dash"><span class="i">▦</span> Dashboard</a>
       <a class="nav" data-page="orders"><span class="i">🛒</span> Orders</a>
+      <a class="nav" data-feature="kitchen" data-page="kitchen"><span class="i">👨‍🍳</span> Kitchen</a>
       <a class="nav" href="/panel/chats"><span class="i">💬</span> Chats</a>
       <a class="nav" href="/panel/cashbook"><span class="i">💰</span> Cashbook</a>
       <a class="nav" href="/panel/staff"><span class="i">👤</span> Staff</a>
@@ -278,18 +279,17 @@
       <a class="nav" href="/panel/leads"><span class="i">🎯</span> Leads</a>
       <a class="nav" href="/panel/diagnostics"><span class="i">🩺</span> Diagnostics</a>
       <a class="nav" href="/panel/setup"><span class="i">🚀</span> Setup</a>
-      <a class="nav" href="/panel/winworld"><span class="i">🏭</span> Win World</a>
-      <a class="nav" data-page="dispatch"><span class="i">🚦</span> Dispatch</a>
-      <a class="nav sub" data-page="dispatch"><span class="i">└</span> Delivery Board</a>
-      <a class="nav sub" data-page="riders"><span class="i">└</span> Riders</a>
-      <a class="nav sub" data-page="deliveryZones"><span class="i">└</span> Delivery Zones</a>
+      <a class="nav" data-feature="dispatch" data-page="dispatch"><span class="i">🚦</span> Dispatch</a>
+      <a class="nav sub" data-feature="dispatch" data-page="dispatch"><span class="i">└</span> Delivery Board</a>
+      <a class="nav sub" data-feature="riders" data-page="riders"><span class="i">└</span> Riders</a>
+      <a class="nav sub" data-feature="dispatch" data-page="deliveryZones"><span class="i">└</span> Delivery Zones</a>
       <a class="nav" data-page="customers"><span class="i">👥</span> Customers</a>
-      <a class="nav" data-page="pos"><span class="i">🧾</span> POS</a>
+      <a class="nav" data-feature="pos" data-page="pos"><span class="i">🧾</span> POS</a>
       <a class="nav" data-page="category"><span class="i">🗂</span> Category</a>
       <a class="nav" id="navThali" data-feature="thali" data-page="thali"><span class="i">🍽</span> Daily Thali</a>
       <a class="nav" data-page="products"><span class="i">📦</span> Products</a>
       <a class="nav" data-page="reports"><span class="i">📊</span> Reports</a>
-      <a class="nav" data-page="riders"><span class="i">🛵</span> Riders</a>
+      <a class="nav" data-feature="riders" data-page="riders"><span class="i">🛵</span> Riders</a>
       <a class="nav" data-page="returns"><span class="i">↩</span> Returns</a>
       <a class="nav" data-page="settings"><span class="i">⚙</span> Settings</a>
       <a class="nav sub" data-page="profile"><span class="i">└</span> Profile</a>
@@ -567,6 +567,15 @@
         </div>
       </div>
       <!-- ============ DISPATCH BOARD ============ -->
+      <div id="pageKitchen" class="hide">
+        <div class="crumb">Home / <b>Kitchen</b></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 10px;gap:10px">
+          <div style="font-size:13px;color:var(--muted)">Live kitchen tickets — tap a ticket to send it to the next stage. The customer is notified automatically.</div>
+          <button class="btn" onclick="loadKitchen()">↻ Refresh</button>
+        </div>
+        <div id="kitchenBoard"></div>
+      </div>
+
       <div id="pageDispatch" class="hide">
         <div class="crumb">Home / <b>Dispatch</b></div>
         <div class="card">
@@ -956,6 +965,7 @@ try{localStorage.setItem('fs_token','session');}catch(e){}
 var BASE='';
 var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   orders:'/papi/orders',products:'/papi/products',
+  kitchen:'/papi/kitchen',kitchenAdv:'/papi/kitchen-advance',
   updStatus:'/papi/update-status',saveOrder:'/papi/save-order',
   updProduct:'/papi/update-product',addProduct:'/papi/add-product',
   uploadImage:'/papi/upload-image',
@@ -1362,6 +1372,7 @@ function toast(m){var t=document.createElement('div');t.className='toast';t.text
 function showPage(p){
   $('pageDash').classList.toggle('hide',p!=='dash');
   $('pageOrders').classList.toggle('hide',p!=='orders');
+  $('pageKitchen').classList.toggle('hide',p!=='kitchen');
   $('pageDispatch').classList.toggle('hide',p!=='dispatch');
   $('pageCustomers').classList.toggle('hide',p!=='customers');
   $('pagePOS').classList.toggle('hide',p!=='pos');
@@ -1381,9 +1392,10 @@ function showPage(p){
   $('pageSubscription').classList.toggle('hide',p!=='subscription');
   if(p==='orders'){$('detailView').classList.add('hide');$('listView').classList.remove('hide');}
   document.querySelectorAll('.side a.nav').forEach(function(a){a.classList.toggle('on',a.dataset.page===p);});
-  var T={dash:'Dashboard',pos:'POS',reports:'Reports',products:'Products',category:'Categories',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription'};
+  var T={dash:'Dashboard',pos:'POS',reports:'Reports',products:'Products',category:'Categories',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription'};
   $('pageTitle').textContent=T[p]||'Orders';
   if(p==='dash')renderDash(); else if(p==='pos')posInit(); else if(p==='reports')reportsInit();
+  else if(p==='kitchen')kitchenInit();
   else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else renderList();
   closeSide(); window.scrollTo(0,0);
 }
@@ -2681,6 +2693,46 @@ function logout(){
 /* ===================== OWNER CONSOLIDATION (Dispatch + Settings in-panel) ===================== */
 function dmoney(x){return (typeof CUR!=='undefined'&&CUR?CUR:'UGX')+' '+(Number(x)||0).toLocaleString();}
 function qtok(){return '?token='+encodeURIComponent(token);}
+
+/* ---- Kitchen board (restaurant KOT) — restaurant tenants only ---- */
+var KIT={}, KIT_BOARD=['New','Accepted','Preparing','Ready','Dispatched'], KIT_TIMER=null;
+function kitchenInit(){
+  loadKitchen();
+  if(KIT_TIMER)clearInterval(KIT_TIMER);
+  KIT_TIMER=setInterval(function(){ if(!$('pageKitchen').classList.contains('hide'))loadKitchen(); },15000);
+}
+async function loadKitchen(){
+  try{var r=await fetch(EP.kitchen+qtok(),{cache:'no-store'});var d=await r.json();
+    KIT=(d&&d.cols)?d.cols:{}; if(d&&d.board)KIT_BOARD=d.board;
+  }catch(e){KIT={};}
+  renderKitchen();
+}
+function kitLabel(s){return {New:'New',Accepted:'Accepted',Preparing:'Preparing',Ready:'Ready',Dispatched:'Out'}[s]||s;}
+function renderKitchen(){
+  var el=$('kitchenBoard'); if(!el)return;
+  var html=(KIT_BOARD||[]).map(function(s){
+    var items=KIT[s]||[];
+    var cards=items.map(function(o){
+      var lines=(o.items||[]).map(function(it){
+        var sub=(it.mods&&it.mods.length)?('<div style="font-size:11px;color:var(--muted);margin-left:12px">↳ '+esc(it.mods.join(', '))+'</div>'):'';
+        var nt=(it.notes)?('<div style="font-size:11px;color:#B45309;margin-left:12px">'+esc(it.notes)+'</div>'):'';
+        return '<div style="font-size:12px"><b>'+(+it.qty||1)+'×</b> '+esc(it.name)+'</div>'+sub+nt;
+      }).join('');
+      var note=(o.notes)?('<div style="font-size:11px;color:#B45309;margin-top:3px">📝 '+esc(o.notes)+'</div>'):'';
+      var adv=o.next?('<button class="btn" style="margin-top:6px;width:100%" onclick="kitchenAdvance('+o.id+')">→ '+kitLabel(o.next)+'</button>'):'';
+      return '<div class="card" style="margin:6px 0"><div class="body">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:700">'+esc(o.order_no||'')+'</div><div style="font-size:11px;color:var(--muted)">'+(+o.mins||0)+'m</div></div>'+
+        '<div style="font-size:12px;color:var(--muted)">'+esc(o.name||'')+(o.channel?(' · '+esc(o.channel)):'')+'</div>'+
+        '<div style="margin-top:5px">'+lines+'</div>'+note+adv+'</div></div>';
+    }).join('')||'<div class="empty">None</div>';
+    return '<div style="flex:1;min-width:200px"><div class="head">'+kitLabel(s)+' <span class="count">'+items.length+'</span></div>'+cards+'</div>';
+  }).join('');
+  el.innerHTML='<div style="display:flex;gap:10px;overflow-x:auto">'+html+'</div>';
+}
+async function kitchenAdvance(id){
+  try{await fetch(EP.kitchenAdv+qtok()+'&id='+id,{cache:'no-store'});}catch(e){}
+  loadKitchen();
+}
 
 /* ---- Delivery Board (deliveries lifecycle) ---- */
 var DELIV={};

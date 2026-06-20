@@ -216,6 +216,14 @@ class PanelApiController extends Controller
             'image_search' => array_key_exists('feature_image_search', $s)
                 ? (bool) $s['feature_image_search']
                 : true,
+            // Vertical-driven nav (safe: applyFeatureGates only hides on an explicit false).
+            // grocery: riders/pos/dispatch on, kitchen off. restaurant: + kitchen on.
+            // snacks: riders/pos/dispatch off (pickup/advance-booking), kitchen off.
+            'kitchen'      => \App\Support\Vertical::shows($t, 'kitchen_board'),
+            'riders'       => \App\Support\Vertical::shows($t, 'riders'),
+            'pos'          => \App\Support\Vertical::shows($t, 'pos'),
+            'dispatch'     => \App\Support\Vertical::shows($t, 'riders'),
+            'vertical'     => \App\Support\Vertical::of($t),
         ];
     }
 
@@ -699,6 +707,69 @@ class PanelApiController extends Controller
         $o->save(); // OrderObserver fires the WhatsApp status notification
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Live kitchen board (restaurant KOT) for the seller panel. Mirrors the Filament
+     * KitchenBoard exactly: tickets in the active flow, grouped by status, oldest first,
+     * with modifiers un-folded off the stored name. Tenant-scoped by the global scope.
+     */
+    public function kitchen(Request $r)
+    {
+        $board = ['New', 'Accepted', 'Preparing', 'Ready', 'Dispatched']; // = KitchenBoard::BOARD
+
+        $orders = Order::query()
+            ->whereIn('status', $board)
+            ->with(['items' => fn ($q) => $q->orderBy('id')])
+            ->orderBy('created_at')
+            ->limit(300)
+            ->get();
+
+        $cols = array_fill_keys($board, []);
+        foreach ($orders as $o) {
+            $cols[$o->status][] = [
+                'id'       => $o->id,
+                'order_no' => (string) $o->order_no,
+                'name'     => (string) $o->customer_name,
+                'phone'    => (string) $o->customer_phone,
+                'channel'  => (string) $o->channel,
+                'mins'     => $o->created_at ? (int) $o->created_at->diffInMinutes(now()) : 0,
+                'notes'    => trim((string) $o->notes),
+                'next'     => $o->nextKitchenStatus(),
+                'items'    => $o->items->map(function ($i) {
+                    $mods = is_array($i->modifiers)
+                        ? array_values(array_filter(array_map(fn ($m) => trim((string) ($m['name'] ?? '')), $i->modifiers)))
+                        : [];
+                    $name = (string) $i->name;
+                    if ($mods) {                                   // un-fold the "+ Naan" suffix off the name
+                        $suffix = ' + ' . implode(', ', $mods);
+                        if (str_ends_with($name, $suffix)) {
+                            $name = substr($name, 0, -strlen($suffix));
+                        }
+                    }
+                    return ['qty' => (int) $i->qty, 'name' => $name, 'mods' => $mods, 'notes' => trim((string) $i->notes)];
+                })->all(),
+            ];
+        }
+
+        return response()->json(['ok' => true, 'board' => $board, 'cols' => $cols]);
+    }
+
+    /** Advance one ticket to the next kitchen stage. OrderObserver notifies the customer. */
+    public function kitchenAdvance(Request $r)
+    {
+        $o = Order::find((int) $r->query('id'));
+        if (! $o) {
+            return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        }
+        $next = $o->nextKitchenStatus();
+        if (! $next) {
+            return response()->json(['ok' => false, 'error' => 'final_stage']);
+        }
+        $o->status = $next;
+        $o->save(); // OrderObserver stamps timing + fires the WhatsApp stage notification
+
+        return response()->json(['ok' => true, 'status' => $next]);
     }
 
     /**

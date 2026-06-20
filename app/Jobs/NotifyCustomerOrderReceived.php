@@ -48,8 +48,12 @@ class NotifyCustomerOrderReceived implements ShouldQueue
             ? ("\n\n\u{1F4CD} Track your order: " . url('/papi/track?o=' . $o->id . '&t=' . $o->track_token))
             : '';
 
-        $msg = "{$hi} \u{1F64F} We've received your order *{$o->order_no}*{$total}.\n"
-             . "Our team will call you shortly to confirm and arrange delivery. Reply here if you'd like to change anything.{$track}";
+        $pickup = \App\Support\Vertical::of($t) === \App\Support\Vertical::SNACKS;
+        $line2  = $pickup
+            ? "Our team will call you shortly to confirm, and we'll let you know when it's ready for pickup. Reply here if you'd like to change anything.{$track}"
+            : "Our team will call you shortly to confirm and arrange delivery. Reply here if you'd like to change anything.{$track}";
+
+        $msg = "{$hi} \u{1F64F} We've received your order *{$o->order_no}*{$total}.\n" . $line2;
 
         try {
             $res = $wa->forTenant($t)->sendText($t->whatsapp_instance, $o->customer_phone, $msg);

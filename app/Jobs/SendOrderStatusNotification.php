@@ -42,6 +42,18 @@ class SendOrderStatusNotification implements ShouldQueue
             'Delivered'        => "\u{2705} Your order *{$order->order_no}* has been delivered. Thank you for choosing {$name}! \u{1F64F}",
             'Cancelled'        => "Your {$name} order *{$order->order_no}* has been cancelled. Reply here if you need help.",
         ];
+
+        // Pickup tenants (snacks / advance-booking) don't deliver — reword the
+        // delivery-specific stages so the customer is told to collect, not wait for a rider.
+        if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::SNACKS) {
+            $messages = array_merge($messages, [
+                'Ready'            => "\u{2705} {$first}, your order *{$order->order_no}* is ready for collection! Come by {$name} when you're ready.",
+                'Dispatched'       => "\u{1F6CD} {$first}, your {$name} order *{$order->order_no}* is ready for pickup. See you soon!",
+                'Out for delivery' => "\u{1F6CD} {$first}, your {$name} order *{$order->order_no}* is ready for pickup. See you soon!",
+                'Delivered'        => "\u{2705} Thanks for collecting order *{$order->order_no}*, {$first}! Hope to see you again at {$name}. \u{1F64F}",
+            ]);
+        }
+
         $text = $messages[$this->status] ?? null;
         if (!$text) return;
 
