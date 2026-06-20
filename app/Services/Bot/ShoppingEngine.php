@@ -437,7 +437,13 @@ class ShoppingEngine
                 }
                 return ['status' => 'clarify', 'products' => array_map(fn ($c) => $c['product'], array_slice($sized, 0, 5))];
             }
-            // requested size matches NO SKU -> tell the customer which sizes ARE available
+            // requested size matches NO SKU exactly. FIRST: can we fulfil the requested WEIGHT
+            // with whole packs? Customers state a TOTAL amount ("2 kg"), so "2 kg" with a 1kg
+            // pack means 2 x 1kg — don't reject it just because there's no single 2kg pack.
+            $combo = $this->composeFromPacks($size, $cands, (int) ($count ?? 1));
+            if ($combo !== null) return $combo;
+
+            // otherwise tell the customer which sizes ARE available
             $avail = [];
             foreach ($cands as $c) {
                 $sz = CatalogueMatcher::skuSize($c['product']['name'] ?? '');
@@ -532,6 +538,53 @@ class ShoppingEngine
         // a clear, non-trivial leader (covers >=1 query token and no rival ties it)
         if ($best !== null && $bestCov >= 1 && ! $tie) return $best;
         return null;
+    }
+
+    /**
+     * Turn a requested total amount into whole packs, e.g. "2 kg" + a 1kg pack -> 2 x 1kg.
+     * Picks the LARGEST in-stock pack that divides the request evenly (fewest, most natural
+     * items). Returns a 'single' resolution (qty = pack count) or null if it can't be done
+     * exactly with one pack size.
+     */
+    private function composeFromPacks(string $reqSize, array $cands, int $mult): ?array
+    {
+        $want = $this->sizeBase($reqSize);
+        if (! $want || $want['mag'] <= 0) return null;
+
+        $best = null; $bestMag = 0.0; $bestQty = 0;
+        foreach ($cands as $c) {
+            if (($c['product']['stock'] ?? 1) <= 0) continue;
+            $pm = $this->sizeBase(CatalogueMatcher::skuSize($c['product']['name'] ?? ''));
+            if (! $pm || $pm['fam'] !== $want['fam'] || $pm['mag'] <= 0) continue;
+            $ratio = $want['mag'] / $pm['mag'];
+            $packs = (int) round($ratio);
+            // whole multiple, at least 2 packs (a single pack would already have matched exactly)
+            if ($packs >= 2 && $packs <= 50 && abs($ratio - $packs) < 0.001 && $pm['mag'] > $bestMag) {
+                $bestMag = $pm['mag']; $best = $c['product']; $bestQty = $packs;
+            }
+        }
+        if (! $best) return null;
+
+        return ['status' => 'single', 'product' => $best, 'qty' => $bestQty * max(1, $mult),
+                'via' => 'size', 'confidence' => self::CONF_HIGH];
+    }
+
+    /** Parse a size token ("2kg","500 gm","1.5kg","1ltr") to a base magnitude + unit family. */
+    private function sizeBase(?string $token): ?array
+    {
+        if ($token === null) return null;
+        $s = strtolower(str_replace(' ', '', $token));
+        if (! preg_match('/(\d+(?:\.\d+)?)(kg|gms|gm|g|mg|ltr|l|ml|cl)/', $s, $m)) return null;
+        $n = (float) $m[1];
+        return match ($m[2]) {
+            'kg'              => ['mag' => $n * 1000, 'fam' => 'g'],
+            'g', 'gm', 'gms'  => ['mag' => $n,        'fam' => 'g'],
+            'mg'              => ['mag' => $n / 1000,  'fam' => 'g'],
+            'l', 'ltr'        => ['mag' => $n * 1000, 'fam' => 'ml'],
+            'cl'              => ['mag' => $n * 10,    'fam' => 'ml'],
+            'ml'              => ['mag' => $n,         'fam' => 'ml'],
+            default           => null,
+        };
     }
 
     private function addToCart(array $cart, $id, string $name, float $price, int $qty): array
