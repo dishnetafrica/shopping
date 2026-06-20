@@ -440,6 +440,12 @@ class BotBrain
             return $guj;
         }
 
+        // Bare delivery time ("7 pm", "evening", "sanje") or a location reference ("this location",
+        // "deliver here") — capture as delivery info instead of product-searching it.
+        if (($dd = $this->deliveryDetailReply($tenant, $convo, $lc)) !== null) {
+            return $dd;
+        }
+
         // declines: "no", "cancel", "i don't want anything" etc. are NOT product
         // searches — never run them through the catalogue (that's what matched
         // "Dent"/"Donut"/"Dot" for "i dont want anything").
@@ -743,10 +749,48 @@ class BotBrain
         return implode(', ', $cats) . ' & ' . $last;
     }
 
+    protected function deliveryDetailReply(Tenant $tenant, Conversation $convo, string $lc): ?string
+    {
+        $lc = trim($lc);
+        $st = is_array($convo->state) ? $convo->state : [];
+        $hasCart = is_array($convo->cart) && count($convo->cart) > 0;
+
+        // --- bare delivery TIME: "7 pm", "7:30pm", "19:30", "after 6", "evening", "sanje" ---
+        $timeRe = '/^(?:'
+            . '(?:at|by|after|before|around|aaje|aaj)?\s*(?:1[0-2]|0?[1-9])(?::[0-5]\d)?\s*(?:am|pm)'
+            . '|(?:[01]?\d|2[0-3]):[0-5]\d'
+            . '|(?:at|by|after|before|around)\s+(?:1?\d)(?:\s*o.?clock)?'
+            . '|(?:morning|afternoon|evening|night|noon|midday|tonight)'
+            . '|(?:savare|sawre|bapore|sanje|saanje|raat|raate|ratre|aaje sanje|kale)'
+            . ')\s*(?:thi|sudhi|vagye|vage|baad|pachi|o.?clock|onwards?)?\s*[!.]*$/u';
+        if (preg_match($timeRe, $lc)) {
+            $when = trim(preg_replace('/[!.]+$/', '', $lc));
+            $convo->state = array_merge($st, ['delivery_time' => $when]);
+            $convo->save();
+            if ($hasCart) {
+                return "\u{1F552} Got it \u{2014} I'll note delivery around *{$when}*. Add anything else, or say *checkout* to place the order.";
+            }
+            return "\u{1F552} Noted \u{2014} *{$when}* for delivery. Tell me what you'd like to order \u{1F642}";
+        }
+
+        // --- LOCATION reference: "this location", "deliver here", "same address", "ahiya" ---
+        $locRefs = ['this location','on this location','on this','here','deliver here','deliver it here',
+            'deliver to this location','at this location','same location','same address','same place',
+            'my location','this place','this address','ahiya','ahi','aahiya','aa jagya','aa jagyae','ahin','ahija'];
+        if (in_array($lc, $locRefs, true)) {
+            if (! empty($st['delivery_lat']) && ! empty($st['delivery_lng'])) {
+                return "\u{1F4CD} Got it \u{2014} same pinned location. "
+                    . ($hasCart ? "Say *checkout* to place the order." : "Tell me your order and I'll deliver there.");
+            }
+            return "\u{1F4CD} Sure! Please share your location pin so we can deliver \u{2014} tap *+* (or the \u{1F4CE}) in WhatsApp \u{2192} *Location* \u{2192} *Send your current location*. Or just type your area name.";
+        }
+
+        return null;
+    }
+
     protected function socialReply(string $lc): ?string
     {
         $lc = trim($lc);
-        // "by mistake" / undo — guide them to remove instead of product-searching it.
         if (in_array($lc, ['by mistake','by mistek','mistake','wrong one','wrong item','galti se','galati se','bhul thi','bhulthi','bhul thai'], true)
             || preg_match('/\bby mistake\b/', $lc)) {
             return "\u{1F642} No problem! Tell me which item to remove \u{2014} say *remove <product>* \u{2014} or *cart* to see your basket.";
@@ -1859,6 +1903,12 @@ class BotBrain
         $locStored = $location;
         if ($mapsLink) {
             $locStored = ($zoneName ?: ($location !== '' ? $location : 'Pinned location')) . ' — ' . $mapsLink;
+        }
+        // Carry the customer's requested delivery time (captured earlier in chat) onto the order
+        // so the shop and rider can see it — no schema change, just appended to the location line.
+        $dtime = trim((string) data_get($convo->state, 'delivery_time', ''));
+        if ($dtime !== '') {
+            $locStored .= ' · Deliver ~' . $dtime;
         }
 
         // 2C — Order idempotency.
