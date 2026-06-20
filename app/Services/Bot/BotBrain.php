@@ -702,6 +702,29 @@ class BotBrain
         if (preg_match('/\b(aabhar|abhar|dhanyavaad|dhanyavad|dhanyvad)\b/', $lc)) {
             return "\u{1F64F} Aabhar! Phari malsho. Kai pan joiye to kaho.";
         }
+        // Positive buy intent with NO product named ("levanu che", "joiye che", "lena hai").
+        // Anchored to the whole message so "kaju levanu che" still goes to catalogue search,
+        // and guarded against negation so "nathi levanu" stays a decline.
+        if (! preg_match('/\b(nathi|nthi|nai|nahi)\b/', $lc)
+            && preg_match('/^(hu |me |mare |mane |mara |kaik |kainck |kainik |kuch |thodu |saman )*'
+                . '(levanu|levu|lewu|leva|joiye|joie|joitu|joeye|kharidvu|khareedvu|kharidva|lena|khareedna)'
+                . '( che| chhe| chee| hai| chu| joiye che)?\s*$/u', $lc)) {
+            return "\u{1F44D} Saru! Su joiye che e kaho \u{2014} product nu naam lakho, athva *menu* lakho.";
+        }
+        // "(this) is not on the bill" / billing mistake -> clarify, never product-search.
+        if (preg_match('/\bbill\s*(ma|may|me|mein)?\s*(nathi|nthi|nahi|nai)\b/', $lc)
+            || preg_match('/\b(bill|hisab|hisaab)\b[^.]*\b(khoto|khotu|wrong|galat|gadbad)\b/', $lc)) {
+            return "\u{1F9FE} Ek minute \u{2014} kaya item ni gadbad che e kaho. Tamaru basket jova mate *cart* lakho.";
+        }
+        // "ha bolo" / "bolo" -> go ahead, I'm listening.
+        if (preg_match('/^(ha+|haa|haan)?\s*(bolo|bol|kaho|kao)\s*[!.]*$/u', $lc)) {
+            return "\u{1F642} Ha kaho! Aaje su joiye che?";
+        }
+        // "I was out / busy" -> reassure, no product search ("hu bar hati", "kaam ma hato").
+        if (preg_match('/\b(bahar|baar|bar)\s+(hati|hato|hto|gayo|gaya|gayi|chu|chhu)\b/', $lc)
+            || preg_match('/\b(busy|kaam ma|kam ma)\b/', $lc)) {
+            return "\u{1F642} Vandho nahi! Jyare free hov tyare order kaho.";
+        }
         return null;
     }
 
@@ -723,6 +746,15 @@ class BotBrain
     protected function socialReply(string $lc): ?string
     {
         $lc = trim($lc);
+        // "by mistake" / undo — guide them to remove instead of product-searching it.
+        if (in_array($lc, ['by mistake','by mistek','mistake','wrong one','wrong item','galti se','galati se','bhul thi','bhulthi','bhul thai'], true)
+            || preg_match('/\bby mistake\b/', $lc)) {
+            return "\u{1F642} No problem! Tell me which item to remove \u{2014} say *remove <product>* \u{2014} or *cart* to see your basket.";
+        }
+        // "message me" / contact request — keep them shopping here, offer a person if needed.
+        if (in_array($lc, ['message me','mujhe message karna','message karna','msg me','text me','call me later'], true)) {
+            return "\u{1F642} Sure \u{2014} just tell me what you need here and I'll help. To talk to a person, say *agent*.";
+        }
         // coordination: customer is coming / on the way / will reach
         if (preg_match('/\b(on my way|omw|i.?m coming|i am coming|coming now|let me come|i.?ll come|i will come|i.?m reaching|i am reaching|reaching|on the way|i.?ll be there|be there soon|coming over|just coming)\b/', $lc)
             || in_array($lc, ['ok coming','ok i come','let me come','coming','i come'], true)) {
