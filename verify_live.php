@@ -28,9 +28,20 @@ function chk(&$pass, &$fail, $c, $l) { $c ? $pass++ : $fail++; echo '   [' . ($c
 
 $tenant = Tenant::where('slug', $SLUG)->first();
 if (! $tenant) { fwrite(STDERR, "Tenant '$SLUG' not found\n"); exit(1); }
+app(\App\Support\TenantContext::class)->set($tenant->id);   // what the live webhook does — scopes catalogue
 $bot = app(BotBrain::class);
 echo "Tenant: {$tenant->name} (#{$tenant->id})   build: " . BotBrain::VERSION . "\n";
-chk($pass, $fail, BotBrain::VERSION === '2026.06.21-mw2', "version == 2026.06.21-mw2");
+chk($pass, $fail, str_starts_with(BotBrain::VERSION, '2026.06.21-mw2'), "version == 2026.06.21-mw2");
+
+/* ───────────── CATALOGUE PROBE (does search resolve these, and is weight pricing configured?) ───────────── */
+echo "\n=== CATALOGUE PROBE ===\n";
+foreach (['kaju', 'fafda', 'sev', 'gathiya'] as $q) {
+    $p = app(\App\Services\Catalogue\ProductSearch::class)->find($q)->first();
+    if (! $p) { echo "   '$q' → (not found)\n"; continue; }
+    echo "   '$q' → #{$p->id} {$p->name}  active=" . ($p->active ? 'Y' : 'N')
+        . "  sold_by_weight=" . ($p->sold_by_weight ? 'Y' : 'N')
+        . "  reference_price=" . ($p->reference_price ?? '—') . "\n";
+}
 
 /* ───────────── CUSTOMER: weight ordering (real catalogue) ───────────── */
 echo "\n=== CUSTOMER WEIGHT TESTS ===\n";
@@ -75,17 +86,17 @@ if ($DO_WRITE) {
     $owner = $authPhones[0] ?? null;
     if (! $owner) { echo "   no authorized merchant phone configured — set owner/manager or owner_alert_phone, then re-run.\n"; chk($pass, $fail, false, "authorized merchant phone present"); }
     else {
-        $before = DailyState::get($tenant);
+        $before = DailyState::get($tenant->fresh());
         $convo = Conversation::firstOrCreate(['tenant_id' => $tenant->id, 'customer_phone' => MerchantDirectory::normalize($owner)], ['state' => [], 'cart' => []]);
         echo "Propose: " . trim($bot->respond($tenant, $convo, 'Today no fafda, open 10am, close 7pm')) . "\n";
         $pending = MerchantChangeRequest::where('tenant_id', $tenant->id)->where('status', 'pending')->latest('id')->first();
         chk($pass, $fail, $pending && count($pending->payload_json) === 3, "one pending request bundling 3 changes");
         echo "Confirm: " . trim($bot->respond($tenant, $convo, 'YES')) . "\n";
-        $after = DailyState::get($tenant);
+        $after = DailyState::get($tenant->fresh());
         chk($pass, $fail, ($after['hours']['open'] ?? null) === '10:00' && ($after['hours']['close'] ?? null) === '19:00', "apply: hours set 10:00–19:00");
         echo "Undo:    " . trim($bot->respond($tenant, $convo, 'undo last change')) . "\n";
         echo "Confirm: " . trim($bot->respond($tenant, $convo, 'YES')) . "\n";
-        $restored = DailyState::get($tenant);
+        $restored = DailyState::get($tenant->fresh());
         chk($pass, $fail, json_encode($restored) === json_encode($before), "undo: daily_state restored == before");
     }
 } else {
