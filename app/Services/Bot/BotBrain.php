@@ -590,6 +590,19 @@ class BotBrain
         if (in_array($lc, ['clear','empty','reset','clear cart','empty cart'], true))           return $this->execute($tenant, $convo, 'clear', []);
         if (\App\Services\Bot\IntentClassifier::looksLikeCheckout($lc)) return $this->execute($tenant, $convo, 'checkout', []);
 
+        // ---- Status Intelligence: the owner's live poster/status is the source of truth ----
+        // A menu / thali / special / "what's today" question is served from Active Daily Offers
+        // first, then Fresh Today products; only if neither exists does it fall through to the
+        // static thali config and the catalogue below.
+        if (($oq = \App\Services\Bot\Offers\OfferQueryMatcher::detect($lc)) !== null) {
+            try {
+                $served = app(\App\Services\Bot\Offers\DailyOfferService::class)->serveCustomer($tenant, $oq['kind']);
+                if ($served !== null && trim($served) !== '') return $served;
+            } catch (\Throwable $e) {
+                \App\Support\BotTrace::log($tenant->id, 'offers', (string) $convo->customer_phone, 'offer_serve_error', $e->getMessage());
+            }
+        }
+
         // ---- Daily set-meal (thali) ----
         $thaliCfg = (array) ($tenant->setting('thali', []) ?: []);
         if (\App\Services\Bot\ThaliMenu::enabled($thaliCfg)) {

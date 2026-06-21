@@ -232,6 +232,36 @@ class ProcessIncomingMessage implements ShouldQueue
             }
         }
 
+        // ---- Status Intelligence: an owner's menu poster / status image is the source of truth ----
+        // An authorized owner sending an image is publishing today's offer, not searching the
+        // catalogue. OCR + AI extract it and store it as the Active Daily Offer; customers asking
+        // for the menu/thali/special then get it automatically. If it can't be read as an offer,
+        // fall through to normal handling.
+        if (! empty($this->incoming['has_image'] ?? false)
+            && \App\Services\Bot\Merchant\MerchantDirectory::isAuthorized($tenant, $from)) {
+            $ob64 = (string) ($this->incoming['image_b64'] ?? '');
+            if ($ob64 === '' && ! empty($this->incoming['media_key'] ?? null) && method_exists($gateway, 'getMediaBase64')) {
+                $ob64 = (string) ($gateway->getMediaBase64($tenant->whatsapp_instance, $this->incoming['media_key']) ?? '');
+            }
+            $ocap = (string) ($this->incoming['image_caption'] ?? '');
+            $offer = null;
+            try {
+                $offer = app(\App\Services\Bot\Offers\DailyOfferService::class)
+                    ->ingestImage($tenant, $ob64, $ocap, '', 'image');
+            } catch (\Throwable $e) {
+                BotTrace::log($this->tenantId, $trace, $from, 'offer_ingest_error', $e->getMessage());
+            }
+            if ($offer) {
+                $cur   = (string) $tenant->setting('currency', 'UGX');
+                $reply = \App\Services\Bot\Offers\OfferFormatter::ownerConfirm($offer, $cur);
+                $gateway->sendText($tenant->whatsapp_instance, $from, $reply);
+                MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'system', $reply);
+                BotTrace::log($this->tenantId, $trace, $from, 'offer_captured', ($offer['type'] ?? '') . ': ' . ($offer['title'] ?? ''));
+                $convo->save();
+                return;
+            }
+        }
+
         // ---- Image search: customer sent a product photo instead of typing ----
         // Vision turns the photo (+ any caption) into a catalogue query; we verify the
         // query actually matches a product in THIS shop before replying (so a
