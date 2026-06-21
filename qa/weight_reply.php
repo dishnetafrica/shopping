@@ -15,13 +15,12 @@ $NAME    = ['jalebi', '1', 'kg'];          // tokens of "Jalebi 1 Kg"
 $pass = 0; $fail = 0;
 function t($label, $got, $want) {
     global $pass, $fail;
-    $ok = $got === $want;
-    if ($ok) { $pass++; }
+    if ($got === $want) { $pass++; }
     else { $fail++; echo "  FAIL  $label  got=" . var_export($got, true) . " want=" . var_export($want, true) . "\n"; }
 }
 function g($text, $offered, $name) { return WeightReply::grams($text, $offered, $name); }
 
-// --- bare number matching an offered size -> grams ---
+// --- bare number matching an offered size ---
 t('bare 250',            g('250', $OFFERED, $NAME), 250);
 t('bare 500',            g('500', $OFFERED, $NAME), 500);
 t('bare 1000',           g('1000', $OFFERED, $NAME), 1000);
@@ -31,7 +30,7 @@ t('index 1 -> null',     g('1', $OFFERED, $NAME), null);
 t('index 2 -> null',     g('2', $OFFERED, $NAME), null);
 t('index 3 -> null',     g('3', $OFFERED, $NAME), null);
 
-// --- arbitrary bare number not on the card -> null (don't guess grams) ---
+// --- arbitrary bare number not on the card -> null ---
 t('bare 750 -> null',    g('750', $OFFERED, $NAME), null);
 t('bare 99 -> null',     g('99', $OFFERED, $NAME), null);
 
@@ -44,32 +43,57 @@ t('500 grams',           g('500 grams', $OFFERED, $NAME), 500);
 t('1kg',                 g('1kg', $OFFERED, $NAME), 1000);
 t('1 kg',                g('1 kg', $OFFERED, $NAME), 1000);
 t('0.5kg',               g('0.5kg', $OFFERED, $NAME), 500);
-t('0.25 kg',             g('0.25 kg', $OFFERED, $NAME), 250);
-t('explicit 300g (off-card, priceable)', g('300g', $OFFERED, $NAME), 300);
+t('0.5 kg',              g('0.5 kg', $OFFERED, $NAME), 500);
+t('1.5 kg',              g('1.5 kg', $OFFERED, $NAME), 1500);
+t('off-card 300g',       g('300g', $OFFERED, $NAME), 300);
 t('explicit 750g',       g('750g', $OFFERED, $NAME), 750);
 
-// --- size + focal product name still counts as a size reply for this item ---
-t('250 gram jalebi',     g('250 gram jalebi', $OFFERED, $NAME), 250);
-t('jalebi 500g',         g('jalebi 500g', $OFFERED, $NAME), 500);
-t('add 250g please',     g('add 250g please', $OFFERED, $NAME), 250);
-t('i want 1kg',          g('i want 1kg', $OFFERED, $NAME), 1000);
+// --- fraction of a kg (absolute) ---
+t('half kg',             g('half kg', $OFFERED, $NAME), 500);
+t('half kilo',           g('half kilo', $OFFERED, $NAME), 500);
+t('half a kg',           g('half a kg', $OFFERED, $NAME), 500);
+t('1/2 kg',              g('1/2 kg', $OFFERED, $NAME), 500);
+t('quarter kg',          g('quarter kg', $OFFERED, $NAME), 250);
+t('quarter kilo',        g('quarter kilo', $OFFERED, $NAME), 250);
+t('1/4 kg',              g('1/4 kg', $OFFERED, $NAME), 250);
+t('three quarter kg',    g('three quarter kg', $OFFERED, $NAME), 750);
+t('3/4 kg',              g('3/4 kg', $OFFERED, $NAME), 750);
+t('full kg',             g('full kg', $OFFERED, $NAME), 1000);
+t('one kg (word)',       g('one kg', $OFFERED, $NAME), 1000);
+t('two kg (word)',       g('two kg', $OFFERED, $NAME), 2000);
 
-// --- a DIFFERENT product named -> not a size reply for this item ---
+// --- fraction + focal product name still counts ---
+t('half kg jalebi',      g('half kg jalebi', $OFFERED, $NAME), 500);
+t('quarter kg jalebi',   g('quarter kg jalebi', $OFFERED, $NAME), 250);
+t('i want half kg',      g('i want half kg', $OFFERED, $NAME), 500);
+
+// --- bare relative words vs largest offered (1kg ladder) ---
+t('bare half',           g('half', $OFFERED, $NAME), 500);
+t('bare quarter',        g('quarter', $OFFERED, $NAME), 250);
+t('bare full',           g('full', $OFFERED, $NAME), 1000);
+t('bare whole',          g('whole', $OFFERED, $NAME), 1000);
+t('bare three quarter',  g('three quarter', $OFFERED, $NAME), 750);
+
+// --- size + DIFFERENT product -> null ---
 t('250g rice -> null',   g('250g rice', $OFFERED, $NAME), null);
-t('500g sugar -> null',  g('500g sugar', $OFFERED, $NAME), null);
+t('half kg rice -> null', g('half kg rice', $OFFERED, $NAME), null);
+t('half rice -> null',   g('half rice', $OFFERED, $NAME), null);
 
-// --- no weight at all -> null (normal flow) ---
+// --- no weight at all -> null ---
 t('jalebi -> null',      g('jalebi', $OFFERED, $NAME), null);
 t('hi -> null',          g('hi', $OFFERED, $NAME), null);
 t('checkout -> null',    g('checkout', $OFFERED, $NAME), null);
 t('empty -> null',       g('', $OFFERED, $NAME), null);
-t('whitespace -> null',  g('   ', $OFFERED, $NAME), null);
+t('three (bare) -> null', g('three', $OFFERED, $NAME), null);
 
-// --- a product with REAL variants (e.g. 100/200/500) gates the bare-number rule to those ---
+// --- a product with REAL variants gates bare numbers + anchors relatives to its max ---
 $VAR = [100, 200, 500]; $N2 = ['kaju', 'katli'];
 t('variant bare 200',    g('200', $VAR, $N2), 200);
-t('variant bare 250 -> null (not offered)', g('250', $VAR, $N2), null);
+t('variant bare 250 -> null', g('250', $VAR, $N2), null);
 t('variant 100g',        g('100g', $VAR, $N2), 100);
+t('variant bare full=500', g('full', $VAR, $N2), 500);
+t('variant bare half=250', g('half', $VAR, $N2), 250);
+t('variant half kg (abs)=500', g('half kg', $VAR, $N2), 500);
 
 echo "\n=== weight_reply: {$pass} passed, {$fail} failed ===\n";
 exit($fail === 0 ? 0 : 1);
