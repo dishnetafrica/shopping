@@ -22,7 +22,11 @@ class AutomationReadiness
         $score = 0.0;
         foreach (self::WEIGHTS as $section => $weight) {
             $conf = max(0, min(100, (int) ($sectionConfidence[$section] ?? 0)));
-            $score += $conf / 100 * $weight;
+            if ($conf <= 0) continue;                       // section not discovered → no credit
+            // A discovered section earns half its weight for presence and half for confidence,
+            // so a business with strong coverage but conservative per-section confidence still
+            // reaches the operational-readiness band (calibrated against real-business validation).
+            $score += $weight * (0.5 + 0.5 * $conf / 100);
         }
         return (int) round($score);
     }
