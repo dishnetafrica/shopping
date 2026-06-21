@@ -244,6 +244,7 @@ class BotBrain
         $stRoute = is_array($convo->state) ? $convo->state : [];
         $routerBusy = ! empty($stRoute['options']) || ! empty($stRoute['pending_order'])
             || ! empty($stRoute['pending_resolved'])
+            || ! empty($stRoute['awaiting_cart_choice'])
             || (($stRoute['step'] ?? null) === 'awaiting_location')
             || (($stRoute['step'] ?? null) === 'awaiting_confirm');
         if (! $routerBusy) {
@@ -847,8 +848,17 @@ class BotBrain
         switch ($r['intent']) {
             case \App\Services\Bot\OrderIntentRouter::HUMAN:
             case \App\Services\Bot\OrderIntentRouter::DELIVERY:
+                // Logistics / explicit agent request → hand to the shop (no fallback pitch).
+                return $this->forwardQuestionToShop($tenant, $convo, $text);
+
             case \App\Services\Bot\OrderIntentRouter::UNKNOWN:
-                // Logistics / escalation / genuinely unclear → hand to the shop (no fallback pitch).
+                // A bare number / number-list ("1", "2", "1 2 3") with no pending list is a stale
+                // selection — the option list expired or was never set (e.g. a thali menu). It is
+                // NEVER a question, so re-orient instead of escalating it to a human.
+                if (preg_match('/^\s*\d+(?:[\s,]+\d+)*\s*$/', $text)) {
+                    return "\u{1F642} I'm not sure which option that refers to \u{2014} say *menu* to see what we have, or tell me a product name.";
+                }
+                // Genuinely unclear text → hand to the shop.
                 return $this->forwardQuestionToShop($tenant, $convo, $text);
 
             case \App\Services\Bot\OrderIntentRouter::CONFIRM:
