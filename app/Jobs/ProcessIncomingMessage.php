@@ -372,6 +372,23 @@ class ProcessIncomingMessage implements ShouldQueue
         foreach ($cartAfter as $pid => $nm) {
             if (! array_key_exists($pid, $cartBefore)) { $addedId = $pid; $addedName = $nm; break; }
         }
+
+        // ---- Combo conversion: did the customer add a product we recently recommended? ----
+        try {
+            if ($addedId !== null && (bool) $tenant->setting('combo_recommendations', true)) {
+                $shownPrev = (array) (($convo->state['combo_shown'] ?? []));
+                $hit = $shownPrev[(string) $addedId] ?? null;
+                if (is_array($hit) && (time() - (int) ($hit['ts'] ?? 0)) <= 3600) {
+                    app(\App\Services\Bot\ComboAnalytics::class)
+                        ->recordConversion($tenant->id, ((int) ($hit['src'] ?? 0)) ?: null, (int) $addedId);
+                    unset($shownPrev[(string) $addedId]);
+                    $stc = is_array($convo->state) ? $convo->state : [];
+                    $stc['combo_shown'] = $shownPrev;
+                    $convo->state = $stc;
+                }
+            }
+        } catch (\Throwable $e) {}
+
         $st = is_array($convo->state) ? $convo->state : [];
         if ($fromImage) {
             if ($addedId !== null && in_array((string) $addedId, $imgCandIds, true)) {
@@ -440,7 +457,14 @@ class ProcessIncomingMessage implements ShouldQueue
                 $comboCk = app(\App\Services\Bot\ComboEngine::class)
                     ->recommendForCart($tenant->id, array_map('intval', array_keys($cartAfter)), 3);
                 $blockCk = $this->comboBlock($comboCk, $curCk, "🍽️ Add before you finish?");
-                if ($blockCk !== '') $reply .= "\n\n" . $blockCk . "\nReply with a name to add, or *confirm* to place the order.";
+                if ($blockCk !== '') {
+                    $reply .= "\n\n" . $blockCk . "\nReply with a name to add, or *confirm* to place the order.";
+                    $cartIds = array_map('intval', array_keys($cartAfter));
+                    $srcCk   = $cartIds[0] ?? null;
+                    $recCk   = array_map(fn ($c) => (int) $c['id'], $comboCk);
+                    app(\App\Services\Bot\ComboAnalytics::class)->recordImpressions($tenant->id, $srcCk, $recCk, 'checkout');
+                    $this->stashCombosShown($convo, $srcCk, $recCk);
+                }
             }
         } catch (\Throwable $e) {}
 
@@ -474,9 +498,11 @@ class ProcessIncomingMessage implements ShouldQueue
         );
         // ---- Combo follow-up: after a product ask or an add-to-cart, suggest pairings. ----
         try {
+            $focalThisTurn = (int) ($convo->state['combo_focal'] ?? 0);
             if ((bool) $tenant->setting('combo_recommendations', true)
                 && (($convo->state['step'] ?? null) !== 'awaiting_confirm')) {
-                $focal = (int) ($addedId ?: (int) ($convo->state['last_image_product'] ?? 0));
+                $focal   = (int) ($addedId ?: $focalThisTurn);
+                $context = $addedId ? 'after_add' : 'single_product';
                 if ($focal > 0) {
                     $curFu  = (string) $tenant->setting('currency', 'UGX');
                     $comboFu = app(\App\Services\Bot\ComboEngine::class)
@@ -486,12 +512,20 @@ class ProcessIncomingMessage implements ShouldQueue
                         $blockFu = $this->comboBlock($comboFu, $curFu, "🍽️ Often bought together:");
                         if ($blockFu !== '') {
                             $gateway->sendText($tenant->whatsapp_instance, $this->incoming['from'], $blockFu . "\nReply with a name to add.");
+                            $recFu = array_map(fn ($c) => (int) $c['id'], $comboFu);
+                            app(\App\Services\Bot\ComboAnalytics::class)->recordImpressions($tenant->id, $focal, $recFu, $context);
+                            $this->stashCombosShown($convo, $focal, $recFu);
                             $stc = is_array($convo->state) ? $convo->state : [];
                             $stc['last_combo_key'] = $keyFu;
                             $convo->state = $stc;
                         }
                     }
                 }
+            }
+            if ($focalThisTurn) {   // per-turn focal consumed — never leak into a later turn
+                $stf = is_array($convo->state) ? $convo->state : [];
+                unset($stf['combo_focal']);
+                $convo->state = $stf;
             }
         } catch (\Throwable $e) {}
 
@@ -594,6 +628,21 @@ class ProcessIncomingMessage implements ShouldQueue
             $lines[] = '• ' . $nm . ($pr > 0 ? ' — ' . $cur . ' ' . number_format($pr) : '');
         }
         return count($lines) > 1 ? implode("\n", $lines) : '';
+    }
+
+    /** Remember which products we just recommended (rec_id => {src,ts}) for conversion attribution. */
+    private function stashCombosShown(Conversation $convo, ?int $src, array $recIds): void
+    {
+        $st    = is_array($convo->state) ? $convo->state : [];
+        $shown = (array) ($st['combo_shown'] ?? []);
+        $now   = time();
+        foreach ($recIds as $rid) {
+            $rid = (int) $rid;
+            if ($rid > 0) $shown[(string) $rid] = ['src' => (int) $src, 'ts' => $now];
+        }
+        if (count($shown) > 20) $shown = array_slice($shown, -20, 20, true);
+        $st['combo_shown'] = $shown;
+        $convo->state = $st;
     }
 
     /** Store an image-search → chosen-product label (training data). Never throws. */
