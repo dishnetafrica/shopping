@@ -136,6 +136,7 @@ class ProductImageResponder
         if (! $convo || $productId <= 0) return;
         $st = is_array($convo->state) ? $convo->state : [];
         $st['last_image_product'] = $productId;   // for "more photos"
+        $st['last_image_at']      = time();        // freshness gate for a size reply
         $st['combo_focal']        = $productId;   // per-turn focal for the combo follow-up (job clears it)
         $convo->state = $st;
     }

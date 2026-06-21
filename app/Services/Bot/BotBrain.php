@@ -200,6 +200,13 @@ class BotBrain
             return $pm;
         }
 
+        // A size reply to a sold-by-weight product just shown on an image card: a bare "250" /
+        // "250g" / "250 gram jalebi" adds that weight at the card's pro-rata price, instead of
+        // a bare number being bounced by the numbered-list selector.
+        if (($wr = $this->tryWeightReply($tenant, $convo, $text)) !== null) {
+            return $wr;
+        }
+
         // "...with naan/rice/chapati" → remember the included accompaniment and strip it, so it's
         // read as the choice (not a separate bread line). One-shot, consumed by maybeAskModifier.
         $this->modHint = '';
@@ -2199,6 +2206,57 @@ class BotBrain
     {
         $cart[] = ['product_id' => $id, 'name' => $name, 'price' => $price, 'qty' => 1, 'weight_grams' => $grams];
         return $cart;
+    }
+
+    /**
+     * A size reply ("250g" / "250" / "250 gram jalebi") right after a single sold-by-weight
+     * product was shown on an image card -> add that weight at the card's pro-rata price, using
+     * the existing weight-pricing path. Returns the reply when it fires, else null so the normal
+     * flow (number-select, search, greet) runs unchanged.
+     */
+    protected function tryWeightReply(Tenant $tenant, Conversation $convo, string $text): ?string
+    {
+        $st = is_array($convo->state) ? $convo->state : [];
+        $focalId = (int) ($st['last_image_product'] ?? 0);
+        if ($focalId <= 0) return null;
+
+        // Only honour a size reply for a short window after the card was shown, so an old
+        // focal product can't capture an unrelated bare number later in the conversation.
+        if (time() - (int) ($st['last_image_at'] ?? 0) > 1200) return null;   // 20 min
+
+        try {
+            $p = Product::with('weightVariants')->find($focalId);
+        } catch (\Throwable $e) {
+            return null;
+        }
+        if (! $p || empty($p->sold_by_weight)) return null;
+
+        // Sizes the card advertised: real variants, else the synthesized 250g/500g/1kg.
+        $offered = [];
+        foreach ($p->weightVariants as $v) { $g = (int) $v->weight_grams; if ($g > 0) $offered[] = $g; }
+        if (! $offered && (float) ($p->reference_price ?? 0) > 0) { $offered = [250, 500, 1000]; }
+
+        $nameTokens = preg_match_all('/[a-z0-9]+/u', mb_strtolower((string) $p->name), $m) ? $m[0] : [];
+        $grams = \App\Services\Bot\Pricing\WeightReply::grams($text, $offered, $nameTokens);
+        if ($grams === null) return null;
+
+        // Must be priceable (within variant range / valid reference) — else defer to normal flow.
+        if (! $this->weightPriceFor($p, $grams)) return null;
+
+        $cart  = is_array($convo->cart) ? $convo->cart : [];
+        $added = [];
+        $cart  = $this->addResolvedLine($tenant, $cart, $p, ['weight_grams' => $grams], $added);
+
+        unset($st['options'], $st['pending_resolved'], $st['pending_order']);
+        $convo->cart  = $cart;
+        $convo->state = $st;
+        $convo->save();
+
+        \App\Support\BotTrace::log($tenant->id, 'weight', (string) $convo->customer_phone, 'weight_reply',
+            \App\Services\Bot\Pricing\WeightParser::label($grams) . ' ' . $p->name);
+
+        return 'Added *' . implode('*, *', $added) . "*.\n\n" . $this->cartSummary($tenant, $cart)
+            . "\n\nAdd more, or say *checkout* to place the order.";
     }
 
     /** Price a weight for a sold-by-weight product via WeightPricer; null if not priceable. */
