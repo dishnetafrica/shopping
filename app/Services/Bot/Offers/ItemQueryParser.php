@@ -34,7 +34,7 @@ class ItemQueryParser
     /** an item that is only one of these is a whole-menu / chit-chat word, not a dish */
     private const STOP_ITEM = ['su', 'shu', 'kai', 'kaai', 'kya', 'what', 'whats', 'menu', 'thali',
         'special', 'lunch', 'dinner', 'food', 'aaj', 'aaje', 'today', 'tiffin', 'kuch', 'something',
-        'anything', 'it', 'jaman', 'jamvanu'];
+        'anything', 'it', 'jaman', 'jamvanu', 'ni', 'nu', 'na', 'no'];
 
     public static function detect(string $text): ?array
     {

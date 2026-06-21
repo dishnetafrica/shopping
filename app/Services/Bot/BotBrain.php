@@ -43,6 +43,27 @@ class BotBrain
         return $this->appendWebsite($tenant, $this->respondInner($tenant, $convo, $text));
     }
 
+    /** The offer pinned to this conversation, if still fresh (within 30 min of inactivity). */
+    protected function freshPinnedOfferId(Conversation $convo): ?int
+    {
+        $st = is_array($convo->state) ? $convo->state : [];
+        $id = (int) ($st['last_active_offer_id'] ?? 0);
+        $at = (int) ($st['last_offer_at'] ?? 0);
+        if ($id <= 0) return null;
+        if (time() - $at > 1800) return null;          // 30-minute context expiry
+        return $id;
+    }
+
+    /** Remember the offer this conversation is talking about (refreshes the 30-min window). */
+    protected function pinOffer(Conversation $convo, int $offerId): void
+    {
+        if ($offerId <= 0) return;
+        $st = is_array($convo->state) ? $convo->state : [];
+        $st['last_active_offer_id'] = $offerId;
+        $st['last_offer_at']        = time();
+        $convo->state = $st;
+    }
+
     /** For custom-domain shops, append the website link to every reply (once). */
     protected function appendWebsite(Tenant $tenant, string $reply): string
     {
@@ -593,27 +614,41 @@ class BotBrain
         // ---- Status Intelligence: the owner's live poster/status is the source of truth ----
         // A menu / thali / special / "what's today" question is served from Active Daily Offers
         // first, then Fresh Today products; only if neither exists does it fall through to the
-        // static thali config and the catalogue below.
+        // static thali config and the catalogue below. When an offer is served we PIN it on the
+        // conversation so follow-ups ("ketla ni che?", "chaas che?") need not repeat its name.
+        $svcOffer = app(\App\Services\Bot\Offers\DailyOfferService::class);
         if (($oq = \App\Services\Bot\Offers\OfferQueryMatcher::detect($lc)) !== null) {
             try {
-                $served = app(\App\Services\Bot\Offers\DailyOfferService::class)->serveCustomer($tenant, $oq['kind']);
-                if ($served !== null && trim($served) !== '') return $served;
+                $served = $svcOffer->serveCustomer($tenant, $oq['kind']);
+                if ($served !== null && trim($served) !== '') {
+                    $top = $svcOffer->resolveContextOffer($tenant, null);   // the primary served offer
+                    if ($top) $this->pinOffer($convo, (int) ($top['id'] ?? 0));
+                    return $served;
+                }
             } catch (\Throwable $e) {
                 \App\Support\BotTrace::log($tenant->id, 'offers', (string) $convo->customer_phone, 'offer_serve_error', $e->getMessage());
             }
         }
 
-        // ---- Menu awareness: "Chaas che?", "Tameta sev che?", "Chapati ketli?" ----
-        // Answer about a single item from today's offer's extracted items (priority 2). Returns
-        // null when no item-bearing offer is active, or the phrase isn't a food, so greetings and
-        // catalogue queries fall through untouched.
-        if (($iq = \App\Services\Bot\Offers\ItemQueryParser::detect($lc)) !== null) {
-            try {
-                $ans = app(\App\Services\Bot\Offers\DailyOfferService::class)->answerItem($tenant, $iq);
-                if ($ans !== null && trim($ans) !== '') return $ans;
-            } catch (\Throwable $e) {
-                \App\Support\BotTrace::log($tenant->id, 'offers', (string) $convo->customer_phone, 'offer_item_error', $e->getMessage());
+        // ---- Offer conversation memory: item / count / price follow-ups ----
+        // Resolve the offer in context (priority 1: the pinned offer if still active within 30 min;
+        // priority 2: the top active offer). Then answer "is X in it?", "how many X?" and "how much?"
+        // questions against it. Anything else (no active offer, greeting, off-menu) falls through.
+        try {
+            $ctx = $svcOffer->resolveContextOffer($tenant, $this->freshPinnedOfferId($convo));
+            if ($ctx) {
+                if (($iq = \App\Services\Bot\Offers\ItemQueryParser::detect($lc)) !== null) {
+                    $ans = $svcOffer->answerItemFrom($ctx, $iq);
+                    if ($ans !== null && trim($ans) !== '') { $this->pinOffer($convo, (int) ($ctx['id'] ?? 0)); return $ans; }
+                }
+                if (\App\Services\Bot\Offers\PriceQueryParser::detect($lc)) {
+                    $cur = (string) $tenant->setting('currency', 'UGX');
+                    $ans = $svcOffer->answerPriceFrom($ctx, $cur);
+                    if ($ans !== null && trim($ans) !== '') { $this->pinOffer($convo, (int) ($ctx['id'] ?? 0)); return $ans; }
+                }
             }
+        } catch (\Throwable $e) {
+            \App\Support\BotTrace::log($tenant->id, 'offers', (string) $convo->customer_phone, 'offer_item_error', $e->getMessage());
         }
 
         // ---- Daily set-meal (thali) ----

@@ -9,10 +9,15 @@ $base = __DIR__ . '/../app/Services/Bot/Offers/';
 require $base . 'ItemAliases.php';
 require $base . 'ItemQueryParser.php';
 require $base . 'OfferItemMatcher.php';
+require $base . 'PriceQueryParser.php';
+require $base . 'OfferTypeClassifier.php';
+require $base . 'OfferRules.php';
 
 use App\Services\Bot\Offers\ItemAliases as A;
 use App\Services\Bot\Offers\ItemQueryParser as P;
 use App\Services\Bot\Offers\OfferItemMatcher as M;
+use App\Services\Bot\Offers\PriceQueryParser as PR;
+use App\Services\Bot\Offers\OfferRules as R;
 
 $pass = 0; $fail = 0;
 function ok(string $label, bool $cond): void {
@@ -83,6 +88,32 @@ ok('dal chawal matches Dal Rice',        $mDc !== null && $mDc['display'] === 'D
 ok('tameta sev NOT in menu',             M::find('tameta sev', $items) === null);
 ok('jalebi NOT in menu',                 M::find('jalebi', $items) === null);
 ok('paneer NOT in menu',                 M::find('paneer', $items) === null);
+
+/* --------------------------------------------- v13: price query detection */
+ok('ketla ni che -> price',              PR::detect('Ketla ni che?'));
+ok('ketla na -> price',                  PR::detect('ketla na?'));
+ok('kitla nu -> price',                  PR::detect('kitla nu'));
+ok('how much -> price',                  PR::detect('how much?'));
+ok('price -> price',                     PR::detect('price?'));
+ok('bhav -> price',                      PR::detect('su bhav che'));
+ok('rate -> price',                      PR::detect('rate ketlo'));
+ok('chaas che NOT price',                ! PR::detect('chaas che?'));
+ok('chapati ketli NOT price',            ! PR::detect('chapati ketli?'));   // how-MANY, handled as item
+ok('plain hi NOT price',                 ! PR::detect('hello'));
+
+// "ketla ni che" must NOT parse as an item (so it cleanly reaches the price path)
+ok('ketla ni che -> not an item',        p('ketla ni che?') === null);
+ok('ketla na -> not an item',            p('ketla na?') === null);
+
+/* ----------------------------------------- v13: conversation context pick */
+$o7  = ['id' => 7, 'title' => 'Kathiyawadi Thali'];
+$o9  = ['id' => 9, 'title' => 'Weekend Special'];
+$set = [$o7, $o9];
+eq('pin 9 active -> picks 9',            R::pickContext($set, 9)['id'], 9);
+eq('pin 7 -> picks 7',                   R::pickContext($set, 7)['id'], 7);
+eq('pin stale/absent -> top active',     R::pickContext($set, 999)['id'], 7);
+eq('no pin -> top active',               R::pickContext($set, null)['id'], 7);
+ok('empty set -> null',                  R::pickContext([], 7) === null);
 
 echo "\n=== item_query: {$pass} passed, {$fail} failed ===\n";
 exit($fail === 0 ? 0 : 1);

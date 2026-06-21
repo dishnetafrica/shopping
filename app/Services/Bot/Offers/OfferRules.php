@@ -99,4 +99,22 @@ class OfferRules
             default                       => [$now, $endOfDay],
         };
     }
+
+    /**
+     * Pick the offer a conversation is talking about. Priority: the pinned offer if it is still
+     * in the active set (conversation context), otherwise the top-ranked active offer.
+     *
+     * @param array<int,array> $offers  already active+ranked (from activeSorted)
+     */
+    public static function pickContext(array $offers, ?int $pinnedId): ?array
+    {
+        if (! $offers) return null;
+
+        if ($pinnedId) {
+            foreach ($offers as $o) {
+                if ((int) ($o['id'] ?? 0) === (int) $pinnedId) return $o;
+            }
+        }
+        return $offers[0];
+    }
 }

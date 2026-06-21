@@ -107,44 +107,66 @@ class DailyOfferService
     }
 
     /**
-     * Answer a "is X in today's menu?" question from the active offer's extracted items.
-     * Priority 2 (Offer Items): runs only when an active offer that HAS items exists; otherwise
-     * returns null so the question falls through to Fresh Today / catalogue search.
+     * Resolve the offer a conversation is talking about. Priority 1: the pinned offer if it's
+     * still active (conversation context). Priority 2: the top active offer. Null if none active.
+     */
+    public function resolveContextOffer(Tenant $tenant, ?int $pinnedId = null): ?array
+    {
+        return OfferRules::pickContext($this->activeFor($tenant), $pinnedId);
+    }
+
+    /**
+     * Answer a "is X in today's menu?" question from a resolved context offer's items.
+     * Returns null (fall through) when the offer has no items, the item isn't named, or the
+     * phrase isn't a recognised food (so greetings like "kem che" are not answered as menus).
      *
+     * @param array $ctx  a canonical offer array from resolveContextOffer()
      * @param array{type:string,item:string} $iq  from ItemQueryParser::detect()
      */
-    public function answerItem(Tenant $tenant, array $iq): ?string
+    public function answerItemFrom(array $ctx, array $iq): ?string
     {
-        $offers = array_values(array_filter(
-            $this->activeFor($tenant),
-            fn ($o) => ! empty($o['items'])
-        ));
-        if (! $offers) return null;            // no item-bearing offer -> fall through
+        $items = (array) ($ctx['items'] ?? []);
+        if (! $items) return null;
 
         $item = (string) ($iq['item'] ?? '');
         if ($item === '') return null;
 
-        // Yes — the item is in one of today's offers.
-        foreach ($offers as $o) {
-            $m = OfferItemMatcher::find($item, $o['items']);
-            if ($m !== null) {
-                $title = trim((string) ($o['title'] ?? '')) ?: 'today’s offer';
-                if (($iq['type'] ?? '') === 'count' && $m['count'] !== null) {
-                    return "Yes — today's *{$title}* includes *{$m['display']}* ({$m['count']}).";
-                }
-                return "Yes, today's *{$title}* includes *{$m['display']}*.";
+        $title = trim((string) ($ctx['title'] ?? '')) ?: 'today’s offer';
+
+        $m = OfferItemMatcher::find($item, $items);
+        if ($m !== null) {
+            if (($iq['type'] ?? '') === 'count' && $m['count'] !== null) {
+                return "Yes — today's *{$title}* includes *{$m['display']}* ({$m['count']}).";
             }
+            return "Yes, today's *{$title}* includes *{$m['display']}*.";
         }
 
-        // No — but only answer if the query actually names a food (so "kem che" greetings
-        // fall through to the normal conversational flow instead of getting a menu list).
         if (! ItemAliases::isKnownFood($item)) return null;
 
-        $primary = $offers[0];
-        $title   = trim((string) ($primary['title'] ?? '')) ?: 'today’s thali';
-        $list    = implode("\n", array_map(fn ($i) => '• ' . trim((string) $i), $primary['items']));
-
+        $list = implode("\n", array_map(fn ($i) => '• ' . trim((string) $i), $items));
         return "No, today's *{$title}* contains:\n{$list}\n\n(Want it added separately? Just tell me.)";
+    }
+
+    /** Answer a whole-offer price question from a resolved context offer. Null if no price set. */
+    public function answerPriceFrom(array $ctx, string $currency): ?string
+    {
+        $price = $ctx['price'] ?? null;
+        if ($price === null || (int) $price <= 0) return null;     // no price -> fall through
+
+        $title = trim((string) ($ctx['title'] ?? '')) ?: 'today’s offer';
+        return "Today's *{$title}* is *{$currency} " . number_format((int) $price) . "*.";
+    }
+
+    /**
+     * Answer a "is X in today's menu?" question. Convenience wrapper resolving the context offer
+     * (pinned-then-active) then delegating to answerItemFrom().
+     *
+     * @param array{type:string,item:string} $iq
+     */
+    public function answerItem(Tenant $tenant, array $iq, ?int $pinnedId = null): ?string
+    {
+        $ctx = $this->resolveContextOffer($tenant, $pinnedId);
+        return $ctx ? $this->answerItemFrom($ctx, $iq) : null;
     }
 
     private function toCanonical(DailyOffer $o): array
