@@ -161,6 +161,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('rider-delete', [PanelApiController::class, 'riderDel']);
         Route::get('return',          [PanelApiController::class, 'returnSave']);
         Route::get('settings-save',   [PanelApiController::class, 'settingsSave']);
+        Route::get('bot-toggle',      [PanelApiController::class, 'botToggle']);
         Route::get('bot-config-save', [PanelApiController::class, 'botConfigSave']);
         Route::get('branch-save',     [PanelApiController::class, 'branchSave']);
         Route::get('branch-delete',   [PanelApiController::class, 'branchDel']);

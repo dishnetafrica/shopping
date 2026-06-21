@@ -767,6 +767,18 @@
           </div>
         </div>
         <div class="card">
+          <div class="head">WhatsApp bot replies</div>
+          <div class="body">
+            <div class="mfield"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="setSendImg" style="width:auto"> Send product photos</label>
+              <div class="note">When a customer asks about an item, the bot replies with its photo and a price card. Turn off to send text only.</div>
+            </div>
+            <div class="mfield"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="setComboRec" style="width:auto"> Suggest items often bought together</label>
+              <div class="note">Adds a &ldquo;Goes well with&hellip;&rdquo; line and an &ldquo;Often bought together&rdquo; follow-up, learned automatically from past orders. Turn off to stop all suggestions.</div>
+            </div>
+            <div class="note">Changes apply to the bot instantly &mdash; no need to press Save.</div>
+          </div>
+        </div>
+        <div class="card">
           <div class="head">Branches &amp; inventory</div>
           <div class="body">
             <div class="mfield"><label>Inventory mode</label>
@@ -1000,7 +1012,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   dispatch:'/papi/dispatch',
   riders:'/papi/riders',riderSave:'/papi/rider-save',riderDel:'/papi/rider-delete',importContacts:'/papi/contacts-import',botMode:'/papi/chats/bot-mode',
   ret:'/papi/return',returns:'/papi/returns',
-  settings:'/papi/settings',settingsSave:'/papi/settings-save',
+  settings:'/papi/settings',settingsSave:'/papi/settings-save',botToggle:'/papi/bot-toggle',
   imageStats:'/papi/image-stats',
   operations:'/papi/operations',
   branches:'/papi/branches',branchSave:'/papi/branch-save',branchDel:'/papi/branch-delete',
@@ -2725,6 +2737,8 @@ function applySettings(s){
   if(s.round!=null&&Number(s.round)>0)DELIV.round=Number(s.round);
   if(s.freeOver!=null&&s.freeOver!=='')DELIV.freeOver=Number(s.freeOver)||0;
   if(s.inventoryMode==='shared'||s.inventoryMode==='branch')INVENTORY_MODE=s.inventoryMode;
+  if(s.comboRecommendations!=null)SETTINGS.comboRec=!!s.comboRecommendations;
+  if(s.sendProductImages!=null)SETTINGS.sendImg=!!s.sendProductImages;
   if(s.bot_mode!=null)SETTINGS.botMode=s.bot_mode;
   if(s.features&&typeof s.features==='object'){FEATURES=s.features;applyFeatureGates();}
   applyStoreIdentity();renderBotSwitch();
@@ -2744,6 +2758,12 @@ async function loadSettings(){
   try{var r=await fetch(EP.settings+'?token='+encodeURIComponent(token),{cache:'no-store'});var d=await r.json();
     if(d&&d.ok)applySettings(d); else if(d&&d.settings)applySettings(d.settings);}catch(e){}
 }
+async function botToggle(key,on,label){
+  try{var r=await fetch(EP.botToggle+'?token='+encodeURIComponent(token)+'&key='+encodeURIComponent(key)+'&on='+(on?'1':'0'),{cache:'no-store'});
+    var d=await r.json();
+    if(d&&d.ok){toast(label+(on?' \u2014 ON':' \u2014 OFF'));}else{toast('Could not update');}
+  }catch(e){toast('Could not update');}
+}
 function settingsInit(){
   $('setName').value=SETTINGS.storeName||'';$('setPhone').value=SETTINGS.storePhone||'';
   $('setAddr').value=SETTINGS.storeAddress||'';$('setEmail').value=SETTINGS.storeEmail||'';
@@ -2760,6 +2780,8 @@ function settingsInit(){
   if($('setUsdUgx'))$('setUsdUgx').value=RATES.usdUgx;
   if($('setBotCur'))$('setBotCur').value=BOT_CUR;
   if($('setShowCur'))$('setShowCur').checked=SHOW_SWITCHER;
+  if($('setComboRec')){$('setComboRec').checked=SETTINGS.comboRec!==false;$('setComboRec').onchange=function(){botToggle('combo_recommendations',this.checked,'Item suggestions');};}
+  if($('setSendImg')){$('setSendImg').checked=SETTINGS.sendImg!==false;$('setSendImg').onchange=function(){botToggle('send_product_images',this.checked,'Product photos');};}
   if($('setDiscPct'))$('setDiscPct').value=DISC.pct||'';
   if($('setDiscAmt'))$('setDiscAmt').value=DISC.amt||'';
   (function(){function dn(){var pct=Number($('setDiscPct').value)||0,amt=Number($('setDiscAmt').value)||0;var n=$('setDiscNote');if(!n)return;if(pct<=0&&amt<=0){n.textContent='No discount \u2014 customers pay list price.';return;}var ex=Math.round(5000*(1-pct/100)-amt);if(ex<0)ex=0;n.textContent='Applies to bot + panel. Example: a UGX 5,000 item \u2192 UGX '+ex.toLocaleString('en-US')+'.';}if($('setDiscPct')){$('setDiscPct').oninput=dn;$('setDiscAmt').oninput=dn;dn();}})();

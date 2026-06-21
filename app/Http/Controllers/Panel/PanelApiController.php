@@ -196,6 +196,8 @@ class PanelApiController extends Controller
             'inventoryMode' => (string) ($s['inventoryMode'] ?? 'shared'),
             'usdUgx'        => (float) ($s['usdUgx'] ?? 3750),
             'usdSsp'        => (float) ($s['usdSsp'] ?? 7000),
+            'comboRecommendations' => (bool) ($s['combo_recommendations'] ?? true),
+            'sendProductImages'    => (bool) ($s['send_product_images'] ?? true),
             'features'      => $this->tenantFeatures($t),
         ]);
     }
@@ -2477,6 +2479,25 @@ class PanelApiController extends Controller
             'slug'         => (string) $t->slug,
             'customDomain' => (string) ($t->custom_domain ?? ''),
         ]);
+    }
+
+    /**
+     * Instant on/off toggle for a whitelisted bot behaviour setting. Saved immediately
+     * (no "Save settings" needed) and takes effect on the customer's next message.
+     *   combo_recommendations  → "Goes well with" caption + "Often bought together" + checkout combos
+     *   send_product_images    → product photos sent by the bot
+     */
+    public function botToggle(Request $r)
+    {
+        $t   = $r->user()->tenant;
+        $key = (string) $r->query('key', '');
+        if (! in_array($key, ['combo_recommendations', 'send_product_images'], true)) {
+            return response()->json(['ok' => false, 'error' => 'bad_key'], 422);
+        }
+        $on = in_array((string) $r->query('on', '1'), ['1', 'true', 'on', 'yes'], true);
+        $t->putSetting($key, $on);
+
+        return response()->json(['ok' => true, 'key' => $key, 'on' => $on]);
     }
 
     public function botConfigSave(Request $r)
