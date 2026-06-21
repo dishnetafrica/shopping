@@ -289,6 +289,7 @@
       <a class="nav" id="navThali" data-feature="thali" data-page="thali"><span class="i">🍽</span> Daily Thali</a>
       <a class="nav" data-page="products"><span class="i">📦</span> Products</a>
       <a class="nav" data-page="reports"><span class="i">📊</span> Reports</a>
+      <a class="nav" data-page="analytics"><span class="i">📈</span> Analytics</a>
       <a class="nav" data-feature="riders" data-page="riders"><span class="i">🛵</span> Riders</a>
       <a class="nav" data-page="returns"><span class="i">↩</span> Returns</a>
       <a class="nav" data-page="settings"><span class="i">⚙</span> Settings</a>
@@ -506,6 +507,28 @@
         </div>
       </div>
       <!-- ============ CATEGORY ============ -->
+      <div id="pageAnalytics" class="hide">
+        <div class="crumb">Home / <b>Analytics</b></div>
+        <div class="card" style="margin-bottom:14px"><div class="body" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:160px;font-weight:800">Sales &amp; conversion <span class="note" id="anWhen" style="font-weight:400"></span></div>
+          <button class="btn ghost" id="anRefresh" onclick="analyticsInit(true)">↻ Refresh</button>
+        </div></div>
+        <div class="kgrid" id="anCards"></div>
+        <div class="row2">
+          <div class="card"><div class="head plain">Orders by day (30d)</div><div class="body chart" id="anOrdersChart"></div></div>
+          <div class="card"><div class="head plain">Revenue by day (30d)</div><div class="body chart" id="anRevChart"></div></div>
+        </div>
+        <div class="row2">
+          <div class="card"><div class="head plain">Top products</div><div class="body" id="anTopProd"></div></div>
+          <div class="card"><div class="head plain">Top categories</div><div class="body" id="anTopCat"></div></div>
+        </div>
+        <div class="card" style="margin-bottom:14px"><div class="head plain">Checkout funnel (30d)</div><div class="body" id="anFunnel"></div></div>
+        <div class="card" style="margin-bottom:14px"><div class="head">Most ordered <a href="#" class="anCsv" data-r="most_ordered" style="margin-left:auto;font-size:12px;font-weight:700;color:var(--green,#0C831F)">⤓ CSV</a></div><div class="body" id="anMostOrdered" style="overflow-x:auto"></div></div>
+        <div class="card" style="margin-bottom:14px"><div class="head">Most viewed <a href="#" class="anCsv" data-r="most_viewed" style="margin-left:auto;font-size:12px;font-weight:700;color:var(--green,#0C831F)">⤓ CSV</a></div><div class="body" id="anMostViewed" style="overflow-x:auto"></div></div>
+        <div class="card" style="margin-bottom:14px"><div class="head">Most successful combos <a href="#" class="anCsv" data-r="combos" style="margin-left:auto;font-size:12px;font-weight:700;color:var(--green,#0C831F)">⤓ CSV</a></div><div class="body" id="anCombos" style="overflow-x:auto"></div></div>
+        <div class="card" style="margin-bottom:14px"><div class="head">Gallery usage <a href="#" class="anCsv" data-r="gallery_usage" style="margin-left:auto;font-size:12px;font-weight:700;color:var(--green,#0C831F)">⤓ CSV</a></div><div class="body" id="anGallery" style="overflow-x:auto"></div></div>
+        <div class="card" style="margin-bottom:14px"><div class="head">Fresh product performance <a href="#" class="anCsv" data-r="fresh" style="margin-left:auto;font-size:12px;font-weight:700;color:var(--green,#0C831F)">⤓ CSV</a></div><div class="body" id="anFresh" style="overflow-x:auto"></div></div>
+      </div>
       <div id="pageCategory" class="hide">
         <div class="crumb">Home / <b>Categories</b></div>
         <div class="card">
@@ -972,6 +995,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   catImages:'/papi/category-images',catImageSave:'/papi/category-image-save',
   catCreate:'/papi/category-create',catRename:'/papi/category-rename',catDelete:'/papi/category-delete',catReorder:'/papi/category-reorder',
   prodOrder:'/papi/product-order',
+  analytics:'/papi/analytics',analyticsCsv:'/papi/analytics-csv',
   thali:'/papi/thali',thaliSave:'/papi/thali-save',
   dispatch:'/papi/dispatch',
   riders:'/papi/riders',riderSave:'/papi/rider-save',riderDel:'/papi/rider-delete',importContacts:'/papi/contacts-import',botMode:'/papi/chats/bot-mode',
@@ -1379,6 +1403,7 @@ function showPage(p){
   $('pageCustomers').classList.toggle('hide',p!=='customers');
   $('pagePOS').classList.toggle('hide',p!=='pos');
   $('pageReports').classList.toggle('hide',p!=='reports');
+  $('pageAnalytics').classList.toggle('hide',p!=='analytics');
   $('pageProducts').classList.toggle('hide',p!=='products');
   $('pageCategory').classList.toggle('hide',p!=='category');
   $('pageThali').classList.toggle('hide',p!=='thali');
@@ -1394,9 +1419,9 @@ function showPage(p){
   $('pageSubscription').classList.toggle('hide',p!=='subscription');
   if(p==='orders'){$('detailView').classList.add('hide');$('listView').classList.remove('hide');}
   document.querySelectorAll('.side a.nav').forEach(function(a){a.classList.toggle('on',a.dataset.page===p);});
-  var T={dash:'Dashboard',pos:'POS',reports:'Reports',products:'Products',category:'Categories',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription'};
+  var T={dash:'Dashboard',pos:'POS',reports:'Reports',analytics:'Analytics',products:'Products',category:'Categories',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription'};
   $('pageTitle').textContent=T[p]||'Orders';
-  if(p==='dash')renderDash(); else if(p==='pos')posInit(); else if(p==='reports')reportsInit();
+  if(p==='dash')renderDash(); else if(p==='pos')posInit(); else if(p==='reports')reportsInit(); else if(p==='analytics')analyticsInit();
   else if(p==='kitchen')kitchenInit();
   else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else renderList();
   closeSide(); window.scrollTo(0,0);
@@ -1515,6 +1540,63 @@ function areaChart(labels,vals,opts){
   return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">'+
     '<defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#15803D" stop-opacity="0.28"/><stop offset="100%" stop-color="#15803D" stop-opacity="0.02"/></linearGradient></defs>'+
     grid+ylab+'<path d="'+area+'" fill="url(#g1)"/><path d="'+line+'" fill="none" stroke="#15803D" stroke-width="2.4" stroke-linejoin="round"/>'+dots+xlab+'</svg>';
+}
+
+/* ---------------- ANALYTICS ---------------- */
+function anNum(n){return (Math.round(Number(n)||0)).toLocaleString();}
+function anMoney(n){return 'UGX '+anNum(n);}
+function anBars(items){
+  if(!items||!items.length)return '<div class="empty">No data yet</div>';
+  var max=Math.max.apply(null,items.map(function(x){return Number(x.value)||0;}).concat([1]));
+  return items.map(function(x){var w=Math.round((Number(x.value)||0)/max*100);
+    return '<div style="margin:7px 0"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span>'+esc(x.label)+'</span><span style="color:#6b7280">'+anNum(x.value)+'</span></div>'+
+      '<div style="background:#EEF2EE;border-radius:6px;height:10px"><div style="width:'+w+'%;height:10px;border-radius:6px;background:#15803D"></div></div></div>';
+  }).join('');
+}
+function anFunnelHtml(f){
+  var stages=[['Product viewed',f.viewed],['Added to cart',f.added],['Checkout started',f.checkout_started],['Order confirmed',f.confirmed]];
+  var max=Math.max.apply(null,stages.map(function(s){return Number(s[1])||0;}).concat([1]));
+  return stages.map(function(s){var w=Math.round((Number(s[1])||0)/max*100);
+    return '<div style="margin:8px 0"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:3px"><span>'+s[0]+'</span><span>'+anNum(s[1])+'</span></div>'+
+      '<div style="background:#EEF2EE;border-radius:6px;height:14px"><div style="width:'+w+'%;height:14px;border-radius:6px;background:#15803D"></div></div></div>';
+  }).join('');
+}
+function anTable(headers,rows,cells){
+  if(!rows||!rows.length)return '<div class="empty">No data yet</div>';
+  var h='<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:380px"><thead><tr>'+
+    headers.map(function(x){return '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line,#e5e7eb);color:#6b7280;font-size:11px;text-transform:uppercase">'+esc(x)+'</th>';}).join('')+'</tr></thead><tbody>';
+  rows.forEach(function(r){h+='<tr>'+cells(r).map(function(c){return '<td style="padding:6px 8px;border-bottom:1px solid #F1F3F7">'+c+'</td>';}).join('')+'</tr>';});
+  return h+'</tbody></table>';
+}
+async function analyticsInit(force){
+  var ids=['anCards','anOrdersChart','anRevChart','anTopProd','anTopCat','anFunnel','anMostOrdered','anMostViewed','anCombos','anGallery','anFresh'];
+  ids.forEach(function(id){var e=$(id);if(e&&(force||!e.innerHTML))e.innerHTML='<div class="note">Loading…</div>';});
+  try{
+    var r=await fetch(EP.analytics+'?token='+encodeURIComponent(token)+(force?'&refresh=1':''),{cache:'no-store'});
+    var j=await r.json(); if(!j||!j.ok||!j.data){ids.forEach(function(id){var e=$(id);if(e)e.innerHTML='<div class="empty">No data</div>';});return;}
+    var d=j.data,c=d.cards||{};
+    function card(label,val,sub){return '<div class="card"><div class="body"><div style="font-size:12px;color:#6b7280;font-weight:700">'+label+'</div><div style="font-size:22px;font-weight:800;margin-top:2px">'+val+'</div>'+(sub?'<div style="font-size:11px;color:#9aa3b2;margin-top:3px">'+sub+'</div>':'')+'</div></div>';}
+    $('anCards').innerHTML=
+      card('Orders today',anNum(c.orders_today),anNum(c.orders_7d)+' in 7d · '+anNum(c.orders_30d)+' in 30d')+
+      card('Confirmed (30d)',anNum(c.orders_confirmed),'of '+anNum(c.orders_30d)+' created')+
+      card('Checkout conv.',(c.checkout_conv||0)+'%','confirmed / created')+
+      card('Avg order value',anMoney(c.aov),'last 30 days')+
+      card('Revenue (30d)',anMoney(c.revenue),'')+
+      card('Combo conv.',(c.combo_conv||0)+'%','accepted / shown');
+    var ob=d.orders_by_day||[],rb=d.revenue_by_day||[];
+    $('anOrdersChart').innerHTML=areaChart(ob.map(function(x){return x.label;}),ob.map(function(x){return x.value;}),{every:Math.ceil(Math.max(1,ob.length)/8)});
+    $('anRevChart').innerHTML=areaChart(rb.map(function(x){return x.label;}),rb.map(function(x){return x.value;}),{every:Math.ceil(Math.max(1,rb.length)/8)});
+    $('anTopProd').innerHTML=anBars(d.top_products);
+    $('anTopCat').innerHTML=anBars(d.top_categories);
+    $('anFunnel').innerHTML=anFunnelHtml(d.funnel||{});
+    $('anMostOrdered').innerHTML=anTable(['Product','Qty sold','Revenue'],d.most_ordered,function(r){return [esc(r.product),anNum(r.qty),anMoney(r.revenue)];});
+    $('anMostViewed').innerHTML=anTable(['Product','Views','Orders','Conv %'],d.most_viewed,function(r){return [esc(r.product),anNum(r.views),anNum(r.orders),r.conv_pct+'%'];});
+    $('anCombos').innerHTML=anTable(['Source','Recommended','Shown','Accepted','Conv %'],d.combos,function(r){return [esc(r.source),esc(r.recommended),anNum(r.shown),anNum(r.accepted),r.conv_pct+'%'];});
+    $('anGallery').innerHTML=anTable(['Product','Gallery opens','More photos'],d.gallery_usage,function(r){return [esc(r.product),anNum(r.opens),anNum(r.more_photos)];});
+    $('anFresh').innerHTML=anTable(['Product','Fresh today','Orders','Revenue'],d.fresh,function(r){return [esc(r.product),(r.fresh?'🔥 yes':'no'),anNum(r.orders),anMoney(r.revenue)];});
+    if($('anWhen'))$('anWhen').textContent=d.generated_at?('· updated '+d.generated_at):'';
+    document.querySelectorAll('#pageAnalytics .anCsv').forEach(function(a){a.onclick=function(e){e.preventDefault();window.open(EP.analyticsCsv+'?report='+encodeURIComponent(a.dataset.r)+'&token='+encodeURIComponent(token),'_blank');};});
+  }catch(e){ids.forEach(function(id){var el=$(id);if(el)el.innerHTML='<div class="empty">Could not load</div>';});}
 }
 
 /* ---------------- ORDERS list ---------------- */

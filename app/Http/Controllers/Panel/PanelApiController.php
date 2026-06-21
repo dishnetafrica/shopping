@@ -1088,6 +1088,33 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true, 'updated' => $n]);
     }
 
+    /** Merchant analytics dashboard payload (cards, charts, tables). */
+    public function analytics(Request $r)
+    {
+        $tid = (int) ($r->user()->tenant->id ?? 0);
+        $data = app(\App\Services\Analytics\DashboardAnalytics::class)->payload($tid, $r->boolean('refresh'));
+        return response()->json(['ok' => true, 'data' => $data]);
+    }
+
+    /** CSV export for one dashboard table (?report=most_ordered|most_viewed|combos|...). */
+    public function analyticsCsv(Request $r)
+    {
+        $tid    = (int) ($r->user()->tenant->id ?? 0);
+        $report = preg_replace('/[^a-z_]/', '', (string) $r->query('report', 'cards'));
+        $rows   = app(\App\Services\Analytics\DashboardAnalytics::class)->csvRows($tid, $report);
+
+        $fh = fopen('php://temp', 'r+');
+        foreach ($rows as $row) fputcsv($fh, $row);
+        rewind($fh);
+        $csv = stream_get_contents($fh);
+        fclose($fh);
+
+        return response($csv, 200, [
+            'Content-Type'        => 'text/csv; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="' . $report . '.csv"',
+        ]);
+    }
+
     /** True if a category name is already in use (by a product or as an empty extra). */
     private function catExists($t, string $name): bool
     {

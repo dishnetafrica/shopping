@@ -48,7 +48,9 @@ class ProductImageResponder
             if ($lastId <= 0) return [];
             $p = Product::find($lastId);
             if (! $p) return [];
-            return $this->galleryFor($tenant, $p);     // [] when the product has no gallery images
+            $g = $this->galleryFor($tenant, $p);
+            if ($g) \App\Support\ProductEvents::log((int) $tenant->id, (int) $p->id, 'gallery');
+            return $g;                                 // [] when the product has no gallery images
         }
 
         // ---- CATEGORY browse: "show sweets" / a bare category name -> up to 5 short cards.
@@ -59,13 +61,16 @@ class ProductImageResponder
                 ->whereNotNull('image_url')->where('image_url', '<>', '')
                 ->orderByDesc('display_order')->orderBy('name')
                 ->limit(5)->get();
-            $out = []; $i = 0;
+            $out = []; $i = 0; $viewed = [];
             foreach ($rows as $p) {
                 $url = $this->absUrl($tenant, (string) $p->image_url);
                 if ($url === '') continue;
                 $i++;
                 $out[] = ['media' => $url, 'caption' => $i . '. ' . $this->card($p, $cur, true)];
+                $viewed[] = (int) $p->id;
+                if ($i >= 5) break;
             }
+            \App\Support\ProductEvents::logMany((int) $tenant->id, $viewed, 'view');
             return array_slice($out, 0, 5);
         }
 
@@ -92,6 +97,7 @@ class ProductImageResponder
         if ($url === '') return [];
 
         $this->remember($convo, (int) $p->id);     // so a follow-up "more photos" works
+        \App\Support\ProductEvents::log((int) $tenant->id, (int) $p->id, 'view');
 
         $caption = $this->card($p, $cur, false);
         if ($this->combos && (bool) $tenant->setting('combo_recommendations', true)) {

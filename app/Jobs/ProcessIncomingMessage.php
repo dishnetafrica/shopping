@@ -341,6 +341,7 @@ class ProcessIncomingMessage implements ShouldQueue
         }
 
         $cartBefore = $this->cartProductIds($convo);
+        $stepBefore = is_array($convo->state) ? ($convo->state['step'] ?? null) : null;
 
         try {
             $hasPin = isset($this->incoming['lat'], $this->incoming['lng'])
@@ -386,6 +387,15 @@ class ProcessIncomingMessage implements ShouldQueue
                     $stc['combo_shown'] = $shownPrev;
                     $convo->state = $stc;
                 }
+            }
+        } catch (\Throwable $e) {}
+
+        // ---- Analytics: product add + checkout-start events. ----
+        try {
+            if ($addedId !== null) \App\Support\ProductEvents::log((int) $tenant->id, (int) $addedId, 'add');
+            $stepNow = is_array($convo->state) ? ($convo->state['step'] ?? null) : null;
+            if ($stepNow === 'awaiting_confirm' && $stepBefore !== 'awaiting_confirm') {
+                \App\Support\ProductEvents::log((int) $tenant->id, null, 'checkout');
             }
         } catch (\Throwable $e) {}
 

@@ -150,6 +150,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('category-delete',    [PanelApiController::class, 'categoryDelete']);
         Route::post('category-reorder',   [PanelApiController::class, 'categoryReorder']);
         Route::post('product-order',       [PanelApiController::class, 'productOrder']);
+        Route::get('analytics',            [PanelApiController::class, 'analytics']);
+        Route::get('analytics-csv',        [PanelApiController::class, 'analyticsCsv']);
         Route::get('thali',               [PanelApiController::class, 'thaliGet']);
         Route::post('thali-save',         [PanelApiController::class, 'thaliSave']);
 
