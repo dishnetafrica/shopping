@@ -75,6 +75,7 @@ class ValidationService
             'faq_discovery_pct'      => $metrics['faqs']['recall'],
             'can_go_live'            => $coverage >= 70,
             'metrics'                => $metrics,
+            'sections'               => $report['sections'],
             'scan_ms'                => (int) round((microtime(true) - $t0) * 1000),
         ];
 
