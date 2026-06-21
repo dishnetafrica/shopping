@@ -634,10 +634,33 @@ class BotBrain
         // Resolve the offer in context (priority 1: the pinned offer if still active within 30 min;
         // priority 2: the top active offer). Then answer "is X in it?", "how many X?" and "how much?"
         // questions against it. Anything else (no active offer, greeting, off-menu) falls through.
+        $svcUpd = app(\App\Services\Bot\Offers\OfferUpdateService::class);
+
+        // ---- Owner intent state: "lunch ready?" / "thali baki che?" from latest owner updates ----
         try {
+            if (($sq = \App\Services\Bot\Offers\StateQueryParser::detect($lc)) !== null) {
+                $ans = $sq['kind'] === 'remaining'
+                    ? $svcUpd->answerRemaining($tenant, (string) $sq['item'])
+                    : $svcUpd->answerReady($tenant, (string) $sq['item']);
+                if ($ans !== null && trim($ans) !== '') return $ans;
+            }
+        } catch (\Throwable $e) {
+            \App\Support\BotTrace::log($tenant->id, 'offers', (string) $convo->customer_phone, 'offer_state_error', $e->getMessage());
+        }
+
+        try {
+            $iq = \App\Services\Bot\Offers\ItemQueryParser::detect($lc);
+
+            // Latest owner event for the item ("Fafda sold out", "Fresh jalebi") overrides the menu,
+            // even when no offer is active.
+            if ($iq !== null) {
+                $stateAns = $svcUpd->answerItemState($tenant, (string) $iq['item']);
+                if ($stateAns !== null && trim($stateAns) !== '') return $stateAns;
+            }
+
             $ctx = $svcOffer->resolveContextOffer($tenant, $this->freshPinnedOfferId($convo));
             if ($ctx) {
-                if (($iq = \App\Services\Bot\Offers\ItemQueryParser::detect($lc)) !== null) {
+                if ($iq !== null) {
                     $ans = $svcOffer->answerItemFrom($ctx, $iq);
                     if ($ans !== null && trim($ans) !== '') { $this->pinOffer($convo, (int) ($ctx['id'] ?? 0)); return $ans; }
                 }

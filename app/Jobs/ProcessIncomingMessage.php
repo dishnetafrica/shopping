@@ -270,6 +270,28 @@ class ProcessIncomingMessage implements ShouldQueue
             return;
         }
 
+        // ---- Owner intent: a short owner TEXT updates live business state ----
+        // "Fafda sold out", "Only 5 thali left", "Lunch ready", "Fresh jalebi ready" become
+        // offer_events the bot answers customers from. Conservative parser; non-updates fall
+        // through so the owner can also use the bot normally.
+        if (empty($this->incoming['has_image'] ?? false)
+            && trim((string) ($this->incoming['text'] ?? '')) !== ''
+            && \App\Services\Bot\Merchant\MerchantDirectory::isAuthorized($tenant, $from)) {
+            try {
+                $upd = app(\App\Services\Bot\Offers\OfferUpdateService::class)
+                    ->applyOwnerText($tenant, (string) $this->incoming['text']);
+                if ($upd !== null && trim($upd) !== '') {
+                    $gateway->sendText($tenant->whatsapp_instance, $from, $upd);
+                    MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'system', $upd);
+                    BotTrace::log($this->tenantId, $trace, $from, 'owner_update', mb_substr((string) $this->incoming['text'], 0, 60));
+                    $convo->save();
+                    return;
+                }
+            } catch (\Throwable $e) {
+                BotTrace::log($this->tenantId, $trace, $from, 'owner_update_error', $e->getMessage());
+            }
+        }
+
         // ---- Image search: customer sent a product photo instead of typing ----
         // Vision turns the photo (+ any caption) into a catalogue query; we verify the
         // query actually matches a product in THIS shop before replying (so a
