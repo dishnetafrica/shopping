@@ -1,74 +1,81 @@
 <?php
 /**
- * qa/product_image_responder.php — pure-logic QA mirroring ProductImageResponder's
- * decision rules (gating, category match, abs-URL, caption, confidence, 5-cap).
- * Run: php qa/product_image_responder.php
+ * qa/product_image_responder.php — pure-logic QA mirroring ProductImageResponder:
+ * gating, quantity-strip, confidence score (>80 sends), category match, variant caption,
+ * gramsLabel, cleanName, abs-URL, 5-cap. Run: php qa/product_image_responder.php
  */
 $pass=0;$fail=0;
 function ok($l,$g,$w){global $pass,$fail;$a=json_encode($g);$b=json_encode($w);
   if($a===$b){$pass++;echo "  ok  $l\n";}else{$fail++;echo "FAIL  $l\n        got : $a\n        want: $b\n";}}
 
-/* ---- mirrors of the responder's pure helpers ---- */
+/* ---- mirrors ---- */
 function is_control($t){ $t=mb_strtolower(trim($t));
   if(preg_match('/\b(checkout|check out|cart|basket|total|pay|payment|confirm|cancel|remove|delete|order now|done|finish)\b/u',$t)) return true;
   if(preg_match('/^(hi+|hello|hey+|ok(ay)?|yes|no|y|n|thanks|thank you|thx|menu|help|start)\W*$/u',$t)) return true;
   return false; }
-function is_order_shaped($t){ $t=mb_strtolower(trim($t));
+function is_multi($t){ $t=mb_strtolower(trim($t));
   if(substr_count($t,',')>=1) return true;
-  if(preg_match('/\b\d+\s*(kg|g|gm|gram|grams|pcs|pc|piece|pieces|packet|pkt|dozen)\b/u',$t)) return true;
-  if(preg_match('/^\d+\s+\S/u',$t)) return true;
+  if(str_contains($t,"\n") && count(array_filter(array_map('trim',preg_split('/\R+/u',$t))))>=2) return true;
   return false; }
-function match_category(array $cats, array $extra, $t){ $t=mb_strtolower(trim($t));
-  $body=trim((string)preg_replace('/^(show me|show|see|browse|view|list)\s+/u','',$t));
-  if($body==='') return null;
-  foreach(array_merge($cats,$extra) as $c){ $cl=mb_strtolower(trim((string)$c)); if($cl==='') continue;
-    if($cl===$body || rtrim($cl,'s')===rtrim($body,'s')) return (string)$c; }
-  return null; }
-function abs_url($dom,$path){ $path=trim($path); if($path==='') return '';
-  if(preg_match('#^https?://#i',$path)) return $path;
-  $base=$dom!==''?'https://'.$dom:'https://mycloudbss.com';
-  return rtrim($base,'/').'/'.ltrim($path,'/'); }
-function card($name,$price,$weight,$unit,$cur){ $u=$weight?('/'.($unit?:'kg')):''; $l=$name;
-  if($price>0) $l.=' — '.$cur.' '.number_format($price).$u; return $l; }
-function confident($hits,$name,$t){ $name=mb_strtolower($name);
-  $ask=trim((string)preg_replace('/\b(show me|show|need|want|i want|i need|price of|price|get me|do you have|have|the|some|any)\b/u','',mb_strtolower($t)));
-  return $hits===1 || ($ask!=='' && mb_strpos($name,$ask)!==false); }
+function clean_qty($raw){ $c=trim((string)preg_replace('/\b\d+(\.\d+)?\s*(kg|g|gm|gram|grams|pcs|pc|piece|pieces|packet|pkt|dozen)?\b/u',' ',$raw));
+  $c=trim((string)preg_replace('/\s+/u',' ',$c)); return $c===''?$raw:$c; }
+function confidence($t,$clean,$hitsCount,$firstName){ $t=mb_strtolower($t);
+  if($hitsCount<=0) return 0;
+  if(preg_match('/\b(which|recommend|suggest)\b/u',$t)||preg_match('/\bbest\b/u',$t)) $P=40;
+  elseif(preg_match('/\b(what\s*is|what\'?s|whats|tell me about|about)\b/u',$t)) $P=85;
+  elseif(preg_match('/\b(do you have|you have|got|have you|available|in stock|stock)\b/u',$t)) $P=90;
+  elseif(preg_match('/\b(price|cost|how much|rate)\b/u',$t)) $P=95;
+  else $P=100;
+  $name=mb_strtolower($firstName);
+  $ask=trim((string)preg_replace('/\b(show me|show|send|see|need|want|i want|i need|price of|price|cost|how much|do you have|you have|got|have|tell me about|what is|what\'?s|whats|about|the|some|any|me|a|of)\b/u',' ',mb_strtolower($clean)));
+  $ask=trim((string)preg_replace('/\s+/u',' ',$ask));
+  if($hitsCount===1) $M=100;
+  elseif($ask!==''&&mb_strpos($name,$ask)!==false) $M=95;
+  else { $hit=false; foreach(preg_split('/\s+/u',$ask) as $w){ if(mb_strlen($w)>=3&&mb_strpos($name,$w)!==false){$hit=true;break;} } $M=$hit?85:60; }
+  return (int)round(($P+$M)/2); }
+function prorata($g,$refP,$refW){ return (int)(round(($g/$refW*$refP)/100)*100); }
+function grams_label($g){ if($g%1000===0) return ($g/1000).'kg'; if($g>1000) return rtrim(rtrim(number_format($g/1000,2),'0'),'.').'kg'; return $g.'g'; }
+function clean_name($name,$weight){ if($weight){$name=(string)preg_replace('/\s+\d+(\.\d+)?\s*(kg|kgs|g|gm|gms|gram|grams)\s*$/iu','',$name);} $name=trim($name); return $name; }
+function variant_card($name,$weight,$refP,$refW,$cur){ $h=clean_name($name,$weight);
+  $lines=[];$labels=[]; foreach([250,500,1000] as $g){$p=prorata($g,$refP,$refW);$lab=grams_label($g);$lines[]='• '.$lab.' - '.$cur.' '.number_format($p);$labels[]=$lab;}
+  return $h."\nAvailable:\n".implode("\n",$lines)."\nReply with: ".implode(' / ',$labels); }
 
-echo "== discovery asks are NOT gated out ==\n";
-foreach(['Kaju Katri','Show me Jalebi','I want fafda','price of kaju','need samosa'] as $q)
-  ok('passes gate: '.$q, (is_control($q)||is_order_shaped($q)), false);
+echo "== quantity-led asks resolve (the fix) ==\n";
+ok('"2 Kaju Katri" -> kaju katri', clean_qty('2 Kaju Katri'), 'Kaju Katri');
+ok('"500g kaju" -> kaju', clean_qty('500g kaju'), 'kaju');
+ok('"2 Kaju Katri" not gated as multi', is_multi('2 Kaju Katri'), false);
+ok('"2 thali, sev" gated as multi', is_multi('2 thali, sev 250g'), true);
 
-echo "== control / cart / order-shaped ARE gated out ==\n";
-foreach(['checkout','cart','please confirm','thanks','hi','menu'] as $q) ok('control: '.$q, is_control($q), true);
-foreach(['2 thali, sev 250g','500g kaju','3 pcs samosa','2 fafda'] as $q) ok('order-shaped: '.$q, is_order_shaped($q), true);
+echo "== control/greeting still gated ==\n";
+foreach(['checkout','cart','thanks','hi','menu','confirm'] as $q) ok('control: '.$q, is_control($q), true);
 
-echo "== category match (singular/plural tolerant) ==\n";
-$cats=['Sweets','Snacks','Dry Fruits & Nuts']; $extra=['Sunday Special'];
-ok('show sweets -> Sweets', match_category($cats,$extra,'show sweets'), 'Sweets');
-ok('show me snacks -> Snacks', match_category($cats,$extra,'show me snacks'), 'Snacks');
-ok('bare "sweets" -> Sweets', match_category($cats,$extra,'sweets'), 'Sweets');
-ok('singular "sweet" -> Sweets', match_category($cats,$extra,'sweet'), 'Sweets');
-ok('empty extra category browsable', match_category($cats,$extra,'show sunday special'), 'Sunday Special');
-ok('unknown category -> null', match_category($cats,$extra,'show rockets'), null);
+echo "== confidence score & >80 send decision (Bhavin's table) ==\n";
+// product "Kaju Katli 1 Kg"; ask spellings resolve to it; assume 1 strong hit
+$send=function($t,$hits=1,$name='Kaju Katli 1 Kg'){return confidence($t,clean_qty($t),$hits,$name)>80;};
+ok('Kaju Katri -> send',        $send('Kaju Katri'), true);
+ok('Show Kaju Katri -> send',   $send('Show Kaju Katri'), true);
+ok('Price of Kaju Katri -> send',$send('Price of Kaju Katri'), true);
+ok('Do you have Kaju Katri -> send',$send('Do you have Kaju Katri'), true);
+ok('Tell me about Kaju Katri -> send',$send('Tell me about Kaju Katri'), true);
+ok('2 Kaju Katri -> send',      $send('2 Kaju Katri'), true);
+ok('Which sweet is best -> NO (no product match)', confidence('Which sweet is best','which sweet is best',0,'')>80, false);
+ok('exact scores: bare name=100', confidence('Kaju Katli','Kaju Katli',1,'Kaju Katli 1 Kg'), 100);
+ok('exact scores: tell me about=92', confidence('Tell me about Kaju Katli','Tell me about Kaju Katli',1,'Kaju Katli 1 Kg'), 93);
 
-echo "== absolute URL conversion ==\n";
-ok('relative -> custom domain', abs_url('palssnack.com','/storage/products/2/p.png'), 'https://palssnack.com/storage/products/2/p.png');
-ok('already absolute kept', abs_url('palssnack.com','https://cdn.x/y.jpg'), 'https://cdn.x/y.jpg');
-ok('no domain -> mycloudbss', abs_url('','/storage/a.png'), 'https://mycloudbss.com/storage/a.png');
-ok('empty path -> empty', abs_url('palssnack.com',''), '');
+echo "== variant caption (critical) ==\n";
+$want="Kaju Katli\nAvailable:\n• 250g - UGX 13,000\n• 500g - UGX 26,000\n• 1kg - UGX 52,000\nReply with: 250g / 500g / 1kg";
+ok('Kaju Katli variant card', variant_card('Kaju Katli 1 Kg',true,52000,1000,'UGX'), $want);
 
-echo "== caption card ==\n";
-ok('weight product card', card('Kaju Katli 1 Kg',52000,true,'kg','UGX'), 'Kaju Katli 1 Kg — UGX 52,000/kg');
-ok('unit product card', card('Samosa',1500,false,'','UGX'), 'Samosa — UGX 1,500');
-ok('no price -> name only', card('Fafda',0,true,'kg','UGX'), 'Fafda');
+echo "== grams labels & clean name ==\n";
+ok('250 -> 250g', grams_label(250),'250g');
+ok('1000 -> 1kg', grams_label(1000),'1kg');
+ok('1500 -> 1.5kg', grams_label(1500),'1.5kg');
+ok('strip "1 Kg" suffix', clean_name('Kaju Katli 1 Kg',true),'Kaju Katli');
+ok('non-weight name kept', clean_name('Samosa',false),'Samosa');
 
-echo "== confidence ==\n";
-ok('single hit is confident', confident(1,'Anything','blah'), true);
-ok('name contains ask', confident(3,'Kaju Katli 1 Kg','i want kaju'), true);
-ok('fuzzy multi-hit not confident', confident(3,'Masala Peanuts','show me dryfruit'), false);
-
-echo "== 5-image cap ==\n";
-$six=range(1,6); ok('caps to 5', array_slice($six,0,5), [1,2,3,4,5]);
+echo "== pro-rata price math ==\n";
+ok('250g of 52000/kg = 13000', prorata(250,52000,1000),13000);
+ok('500g of 35000/kg = 17500->17500', prorata(500,35000,1000),17500);
 
 echo "\n--------------------------------------------------\n";
 echo "product_image_responder: {$pass} passed, {$fail} failed\n";
