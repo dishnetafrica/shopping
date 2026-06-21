@@ -674,6 +674,18 @@ class BotBrain
             \App\Support\BotTrace::log($tenant->id, 'offers', (string) $convo->customer_phone, 'offer_item_error', $e->getMessage());
         }
 
+        // ---- Supermarket scale: narrow broad searches before dumping a long list ----
+        // Only active when the tenant opts in (supermarket_search). For everyone else this is a
+        // no-op and the normal shopping engine handles search exactly as before.
+        if ((bool) $tenant->setting('supermarket_search', false)) {
+            try {
+                $narrowReply = $this->supermarketNarrow($tenant, $convo, $lc);
+                if ($narrowReply !== null && trim($narrowReply) !== '') return $narrowReply;
+            } catch (\Throwable $e) {
+                \App\Support\BotTrace::log($tenant->id, 'search', (string) $convo->customer_phone, 'narrow_error', $e->getMessage());
+            }
+        }
+
         // ---- Daily set-meal (thali) ----
         $thaliCfg = (array) ($tenant->setting('thali', []) ?: []);
         if (\App\Services\Bot\ThaliMenu::enabled($thaliCfg)) {
@@ -2241,6 +2253,51 @@ class BotBrain
         if ($query === '') return [];
 
         return (new \App\Services\Bot\CatalogueMatcher())->search($query, $this->tenantCatalogue($tenant));
+    }
+
+    /**
+     * Supermarket scale (Phase 2): for a broad product search that returns >20 in-stock matches,
+     * ask one narrowing question instead of dumping a list. Returns null when the message isn't a
+     * plain product search or the result set is already small — so the normal engine handles it.
+     */
+    protected function supermarketNarrow(Tenant $tenant, Conversation $convo, string $lc): ?string
+    {
+        $q = $this->extractSearchTerm($lc);
+        if ($q === null) return null;
+
+        $res    = app(\App\Services\Bot\Search\ProductSearchService::class)->search($tenant, $q, []);
+        $narrow = $res['narrow'] ?? null;
+        if (! $narrow || empty($narrow['options'])) return null;
+
+        $st = is_array($convo->state) ? $convo->state : [];
+        $st['last_query'] = $q;
+        $st['last_kind']  = 'search';
+        $convo->state = $st;
+
+        $opts  = array_slice($narrow['options'], 0, 6);
+        $lines = implode("\n", array_map(fn ($o) => '• ' . $o, $opts));
+        $count = count($res['rows']);
+
+        return "We've got *{$count}* options for *{$q}*. {$narrow['question']}\n{$lines}\n\nReply with one to narrow it down.";
+    }
+
+    /** Pull a product term from a broad request, or null if it isn't a plain product search. */
+    protected function extractSearchTerm(string $lc): ?string
+    {
+        $s = trim($lc);
+        if ($s === '' || mb_strlen($s) > 40) return null;
+
+        $s = preg_replace('/^(i\s+)?(need|want|looking for|get me|give me|do you have|got any|have|any|some|buy|order|search for|search)\s+/i', '', $s);
+        $s = trim(preg_replace('/\b(please|pls|bro|sir|madam)\b/i', '', (string) $s));
+        if ($s === '' || mb_strlen($s) < 3) return null;
+        if (preg_match('/^\d/', $s)) return null;
+        if (str_word_count($s) > 4) return null;
+
+        $stop = ['menu', 'cart', 'checkout', 'order', 'help', 'hi', 'hello', 'hey', 'thanks', 'thank you',
+            'price', 'total', 'delivery', 'yes', 'no', 'ok', 'okay', 'start', 'back'];
+        if (in_array($s, $stop, true)) return null;
+
+        return $s;
     }
 
     /** Tenant catalogue as plain rows (net prices applied) for the matcher. */
