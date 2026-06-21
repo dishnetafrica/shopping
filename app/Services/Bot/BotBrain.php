@@ -603,6 +603,19 @@ class BotBrain
             }
         }
 
+        // ---- Menu awareness: "Chaas che?", "Tameta sev che?", "Chapati ketli?" ----
+        // Answer about a single item from today's offer's extracted items (priority 2). Returns
+        // null when no item-bearing offer is active, or the phrase isn't a food, so greetings and
+        // catalogue queries fall through untouched.
+        if (($iq = \App\Services\Bot\Offers\ItemQueryParser::detect($lc)) !== null) {
+            try {
+                $ans = app(\App\Services\Bot\Offers\DailyOfferService::class)->answerItem($tenant, $iq);
+                if ($ans !== null && trim($ans) !== '') return $ans;
+            } catch (\Throwable $e) {
+                \App\Support\BotTrace::log($tenant->id, 'offers', (string) $convo->customer_phone, 'offer_item_error', $e->getMessage());
+            }
+        }
+
         // ---- Daily set-meal (thali) ----
         $thaliCfg = (array) ($tenant->setting('thali', []) ?: []);
         if (\App\Services\Bot\ThaliMenu::enabled($thaliCfg)) {

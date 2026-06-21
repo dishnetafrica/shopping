@@ -106,6 +106,47 @@ class DailyOfferService
         return null;   // Priority 3 — catalogue / static thali handled downstream
     }
 
+    /**
+     * Answer a "is X in today's menu?" question from the active offer's extracted items.
+     * Priority 2 (Offer Items): runs only when an active offer that HAS items exists; otherwise
+     * returns null so the question falls through to Fresh Today / catalogue search.
+     *
+     * @param array{type:string,item:string} $iq  from ItemQueryParser::detect()
+     */
+    public function answerItem(Tenant $tenant, array $iq): ?string
+    {
+        $offers = array_values(array_filter(
+            $this->activeFor($tenant),
+            fn ($o) => ! empty($o['items'])
+        ));
+        if (! $offers) return null;            // no item-bearing offer -> fall through
+
+        $item = (string) ($iq['item'] ?? '');
+        if ($item === '') return null;
+
+        // Yes — the item is in one of today's offers.
+        foreach ($offers as $o) {
+            $m = OfferItemMatcher::find($item, $o['items']);
+            if ($m !== null) {
+                $title = trim((string) ($o['title'] ?? '')) ?: 'today’s offer';
+                if (($iq['type'] ?? '') === 'count' && $m['count'] !== null) {
+                    return "Yes — today's *{$title}* includes *{$m['display']}* ({$m['count']}).";
+                }
+                return "Yes, today's *{$title}* includes *{$m['display']}*.";
+            }
+        }
+
+        // No — but only answer if the query actually names a food (so "kem che" greetings
+        // fall through to the normal conversational flow instead of getting a menu list).
+        if (! ItemAliases::isKnownFood($item)) return null;
+
+        $primary = $offers[0];
+        $title   = trim((string) ($primary['title'] ?? '')) ?: 'today’s thali';
+        $list    = implode("\n", array_map(fn ($i) => '• ' . trim((string) $i), $primary['items']));
+
+        return "No, today's *{$title}* contains:\n{$list}\n\n(Want it added separately? Just tell me.)";
+    }
+
     private function toCanonical(DailyOffer $o): array
     {
         $sd = is_array($o->structured_data) ? $o->structured_data : [];
