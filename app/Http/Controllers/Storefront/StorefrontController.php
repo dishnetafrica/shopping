@@ -41,6 +41,23 @@ class StorefrontController extends Controller
     }
 
     /** Make a stored image path into an absolute URL the browser can load. */
+    /**
+     * Category tile images: the uploaded per-tenant map wins; any category without an
+     * uploaded image falls back to the first product image in that category — so tiles
+     * never go blank, even if the uploaded map is ever empty or lost.
+     */
+    private function categoryImages($tenant, $rows): array
+    {
+        $explicit = (array) ($tenant->setting('category_images', []) ?: []);
+        $fallback = [];
+        foreach ($rows as $row) {
+            $cat = (string) ($row['Category'] ?? 'Other');
+            $img = (string) ($row['Image'] ?? '');
+            if ($img !== '' && ! isset($fallback[$cat])) $fallback[$cat] = $img;
+        }
+        return $explicit + $fallback;   // uploaded keys take priority; fallback fills the gaps
+    }
+
     private function imageUrl(?string $value): string
     {
         if (! $value) return '';
@@ -145,7 +162,7 @@ class StorefrontController extends Controller
                 'waNumber' => preg_replace('/[^0-9]/', '', (string) ($tenant->whatsapp_number ?? '')),
                 'currency' => $this->currency($tenant),
                 'delivery' => (object) ($tenant->setting('delivery', []) ?: []),
-                'category_images' => (object) ($tenant->setting('category_images', []) ?: []),
+                'category_images' => (object) $this->categoryImages($tenant, $rows),
                 'thali' => $this->todayThali($tenant),
                 'vertical' => \App\Support\Vertical::of($tenant),
             ],
