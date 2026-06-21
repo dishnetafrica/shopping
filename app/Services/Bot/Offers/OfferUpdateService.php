@@ -36,7 +36,16 @@ class OfferUpdateService
         $u = OwnerUpdateParser::parse($text);
         if ($u === null) return null;
 
-        $event   = $u['event'];
+        return $this->applyParsed($tenant, $u, $text);
+    }
+
+    /**
+     * Record a parsed/scored event ([event,item,qty,price,display]) + side effects; return the
+     * owner confirmation line. Shared by the structured parser and the activity scorer.
+     */
+    public function applyParsed(Tenant $tenant, array $u, string $raw = ''): string
+    {
+        $event   = (string) ($u['event'] ?? '');
         $item    = (string) ($u['item'] ?? '');
         $display = (string) ($u['display'] ?? ucwords($item));
         $qty     = $u['qty']   ?? null;
@@ -54,7 +63,7 @@ class OfferUpdateService
                 'price'    => $price,
                 'currency' => $cur,
                 'display'  => $display,
-                'raw'      => mb_substr(trim($text), 0, 160),
+                'raw'      => mb_substr(trim($raw !== '' ? $raw : $display), 0, 160),
             ], fn ($v) => $v !== null && $v !== ''),
             'created_at' => Carbon::now($this->tz($tenant)),
         ]);

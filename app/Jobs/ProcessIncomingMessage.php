@@ -271,18 +271,21 @@ class ProcessIncomingMessage implements ShouldQueue
         }
 
         // ---- Owner intent: a short owner TEXT updates live business state ----
-        // "Fafda sold out", "Only 5 thali left", "Lunch ready", "Fresh jalebi ready" become
-        // offer_events the bot answers customers from. Conservative parser; non-updates fall
-        // through so the owner can also use the bot normally.
+        // The activity learner scores the message and either auto-applies, asks the owner to
+        // confirm, or ignores it (letting the owner keep using the bot normally). Handles both
+        // structured phrases and natural ones ("Fresh jalebi 😍", "Lunch started").
         if (empty($this->incoming['has_image'] ?? false)
             && trim((string) ($this->incoming['text'] ?? '')) !== ''
             && \App\Services\Bot\Merchant\MerchantDirectory::isAuthorized($tenant, $from)) {
             try {
-                $upd = app(\App\Services\Bot\Offers\OfferUpdateService::class)
-                    ->applyOwnerText($tenant, (string) $this->incoming['text']);
-                if ($upd !== null && trim($upd) !== '') {
-                    $gateway->sendText($tenant->whatsapp_instance, $from, $upd);
-                    MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'system', $upd);
+                $res = app(\App\Services\Bot\Offers\OwnerActivityService::class)
+                    ->process($tenant, $convo, (string) $this->incoming['text']);
+                if (! empty($res['consume'])) {
+                    $reply = (string) ($res['reply'] ?? '');
+                    if ($reply !== '') {
+                        $gateway->sendText($tenant->whatsapp_instance, $from, $reply);
+                        MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'system', $reply);
+                    }
                     BotTrace::log($this->tenantId, $trace, $from, 'owner_update', mb_substr((string) $this->incoming['text'], 0, 60));
                     $convo->save();
                     return;
