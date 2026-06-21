@@ -1564,9 +1564,21 @@ function bbRevealStep(i,step){
   var ico=$('wizIco'+i); if(ico){ico.style.borderColor='#2e9e5b';ico.style.background='#2e9e5b';ico.style.color='#fff';ico.textContent='✓';}
   var res=$('wizRes'+i); if(res){res.textContent=step.is_pct?(step.count+'% ready'):(step.count+' '+step.noun);}
 }
+function bbQa(label,onclick,color){
+  return '<button class="btn" style="background:'+(color||'#eef2f8')+';color:'+(color?'#fff':'#334')+';font-size:13px;padding:8px 14px" onclick="'+onclick+'">'+label+'</button>';
+}
+function bbPrettyFact(f){return {delivery_fee:'Delivery charge',free_delivery_threshold:'Free delivery threshold'}[f]||f.replace(/_/g,' ');}
 function renderBrainOverview(){
-  var d=brainState.data||{}, rd=d.readiness, dna=d.dna||{}, pf=d.performance||{}, rv=d.reviews||{count:0,items:[]};
+  var d=brainState.data||{}, rd=d.readiness, dna=d.dna||{}, pf=d.performance||{}, rv=d.reviews||{count:0,items:[]}, team=d.team, conflicts=d.conflicts||[];
   var cats=(rd&&rd.categories)||{};
+  // Quick Actions
+  var qa='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'
+    +bbQa('✅ Approve Reviews'+(rv.count?' ('+rv.count+')':''),"showPage('activity')",rv.count?'#c9a227':'')
+    +bbQa('🧬 View DNA Report',"brainTab('dna')")
+    +bbQa('📊 View Readiness',"brainTab('ready')")
+    +bbQa('🔄 Run Discovery Again',"brainRunDiscovery()")
+    +'</div>';
+  // tiles
   var tiles='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
     +bbTile('Automation Readiness',(rd?rd.overall:0)+'%','',bbColor(rd?rd.overall:0))
     +bbTile('AI Conversations',(pf.conversations||0),'yesterday')
@@ -1575,11 +1587,22 @@ function renderBrainOverview(){
     +bbTile('Products Discovered',(d.discovered&&d.discovered.products)||0,'')
     +bbTile('FAQs Discovered',(d.discovered&&d.discovered.faqs)||0,'')
     +'</div>';
-  // readiness card
+  // conflicts (high-signal, only if any)
+  var confH='';
+  if(conflicts.length){
+    confH='<div class="card" style="border:1px solid #f0d28a;background:#fffdf5;margin-bottom:14px"><div class="head" style="color:#9a7b15">⚠ Employee Disagreements ('+conflicts.length+')</div><div class="body">';
+    conflicts.forEach(function(c){
+      confH+='<div style="padding:7px 0;border-bottom:1px solid #f3eccf">'
+        +'<b>'+esc(bbPrettyFact(c.fact||''))+'</b> — using <b style="color:#2e9e5b">'+esc(c.resolved||'')+'</b>'
+        +'<div style="font-size:13px;color:#886">Conflict: '+((c.values||[]).map(esc).join(' · '))+'</div></div>';
+    });
+    confH+='</div></div>';
+  }
+  // readiness card (5 categories)
   var rc='<div class="card" style="flex:1;min-width:260px"><div class="head">Automation Readiness</div><div class="body">'
     +(rd?('<div style="font-size:38px;font-weight:800;color:'+bbColor(rd.overall)+'">'+rd.overall+'%</div>'
       +'<div style="color:#667;margin-bottom:8px">Mode: <b>'+esc(rd.mode||'')+'</b></div>'
-      +bbBar('Products',cats.products||0)+bbBar('FAQs',cats.faqs||0)+bbBar('Offers',cats.offers||0)+bbBar('Delivery',cats.delivery||0)
+      +bbBar('Products',cats.products||0)+bbBar('FAQs',cats.faqs||0)+bbBar('Offers',cats.offers||0)+bbBar('Delivery',cats.delivery||0)+bbBar('Languages',cats.language||0)
       +'<button class="btn" style="margin-top:10px;background:#eef2f8" onclick="brainTab(\'ready\')">View Report</button>')
       :'<div style="color:#889">No readiness report yet.</div>')
     +'</div></div>';
@@ -1602,11 +1625,25 @@ function renderBrainOverview(){
     +'<div style="display:flex;justify-content:space-between;margin:6px 0;border-top:1px solid #eee;padding-top:6px"><span>Success</span><b style="color:'+bbColor(pf.success||0)+'">'+(pf.success||0)+'%</b></div>'
     +'</div></div>';
   var row='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'+rc+dc+ac+'</div>';
-  // review + activity preview
   var rev=brainReviewCardHtml(rv);
   var act=brainActivityCardHtml(d.activity||[]);
-  var row2='<div style="display:flex;gap:12px;flex-wrap:wrap">'+rev+act+'</div>';
-  $('brainBody').innerHTML=tiles+row+row2;
+  var row2='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'+rev+act+'</div>';
+  var teamH=team?('<div style="display:flex;gap:12px;flex-wrap:wrap">'+brainTeamCardHtml(team)+'</div>'):'';
+  $('brainBody').innerHTML=qa+tiles+confH+row+row2+teamH;
+}
+function brainTeamCardHtml(team){
+  var langs=(team.languages||[]).map(function(l){return bbBar(l.lang,l.pct);}).join('')||'<div style="color:#aab">—</div>';
+  var styles=(team.styles||[]).map(function(s){
+    return '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:14px"><span><b>'+esc(s.employee)+'</b></span>'
+      +'<span style="color:#667;text-transform:capitalize">'+esc(s.tone)+' · upsell '+esc(s.upsell)+'</span></div>';
+  }).join('')||'<div style="color:#aab">—</div>';
+  var topics=(team.common_topics||[]).map(function(t){return '<span style="display:inline-block;background:#eef2f8;border-radius:12px;padding:2px 10px;margin:2px;font-size:13px">'+esc(t)+'</span>';}).join('')||'<span style="color:#aab">—</span>';
+  return '<div class="card" style="flex:1;min-width:300px"><div class="head">Team Insights <span class="count" style="margin-left:auto">'+(team.employee_count||0)+' staff</span></div><div class="body">'
+    +'<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:#667">Messages analyzed</span><b>'+(team.messages_analyzed||0).toLocaleString()+'</b></div>'
+    +'<div style="font-size:12px;color:#778;text-transform:uppercase">Languages</div>'+langs
+    +'<div style="font-size:12px;color:#778;text-transform:uppercase;margin-top:8px">Communication style</div>'+styles
+    +'<div style="font-size:12px;color:#778;text-transform:uppercase;margin-top:8px">Common topics</div><div style="margin-top:4px">'+topics+'</div>'
+    +'</div></div>';
 }
 function brainReviewCardHtml(rv){
   var h='<div class="card" style="flex:1;min-width:280px"><div class="head">Needs Review <span class="count" style="margin-left:auto">'+(rv.count||0)+' items</span></div><div class="body">';
