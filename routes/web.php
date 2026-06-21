@@ -145,6 +145,10 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('upload-image',  [PanelApiController::class, 'uploadImage']);
         Route::get('category-images',     [PanelApiController::class, 'categoryImages']);
         Route::post('category-image-save',[PanelApiController::class, 'categoryImageSave']);
+        Route::post('category-create',    [PanelApiController::class, 'categoryCreate']);
+        Route::post('category-rename',    [PanelApiController::class, 'categoryRename']);
+        Route::post('category-delete',    [PanelApiController::class, 'categoryDelete']);
+        Route::post('category-reorder',   [PanelApiController::class, 'categoryReorder']);
         Route::get('thali',               [PanelApiController::class, 'thaliGet']);
         Route::post('thali-save',         [PanelApiController::class, 'thaliSave']);
 

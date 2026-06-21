@@ -947,9 +947,15 @@ class PanelApiController extends Controller
     /** Category tile photos: a { "Category Name": "image url" } map in tenant settings. */
     public function categoryImages(Request $r)
     {
-        $map = $r->user()->tenant->setting('category_images', []);
+        $t   = $r->user()->tenant;
+        $map = $t->setting('category_images', []);
         if (! is_array($map)) $map = [];
-        return response()->json(['ok' => true, 'images' => (object) $map]);
+        return response()->json([
+            'ok'     => true,
+            'images' => (object) $map,
+            'extra'  => $this->catExtra($t),   // empty categories (no products yet)
+            'order'  => $this->catOrder($t),   // saved display order
+        ]);
     }
 
     public function categoryImageSave(Request $r)
@@ -966,6 +972,104 @@ class PanelApiController extends Controller
 
         return response()->json(['ok' => true]);
     }
+
+    /** Create an (initially empty) category so it shows as a tile before any product uses it. */
+    public function categoryCreate(Request $r)
+    {
+        $t    = $r->user()->tenant;
+        $name = trim((string) $r->input('name', ''));
+        if ($name === '')                          return response()->json(['ok' => false, 'error' => 'no_name'], 422);
+        if (mb_strlen($name) > 60)                 return response()->json(['ok' => false, 'error' => 'too_long'], 422);
+        if (strcasecmp($name, 'Uncategorised') === 0) return response()->json(['ok' => false, 'error' => 'reserved'], 422);
+
+        if ($this->catExists($t, $name)) return response()->json(['ok' => false, 'error' => 'exists'], 409);
+
+        $extra   = $this->catExtra($t);
+        $extra[] = $name;
+        $t->putSetting('category_extra', array_values($extra));
+        $this->catFlush($t);
+        return response()->json(['ok' => true]);
+    }
+
+    /** Rename a category everywhere: products + Category row + photo key + extra + order. */
+    public function categoryRename(Request $r)
+    {
+        $t   = $r->user()->tenant;
+        $old = trim((string) $r->input('old', ''));
+        $new = trim((string) $r->input('new', ''));
+        if ($old === '' || $new === '')  return response()->json(['ok' => false, 'error' => 'missing'], 422);
+        if (mb_strlen($new) > 60)        return response()->json(['ok' => false, 'error' => 'too_long'], 422);
+        if (strcasecmp($new, 'Uncategorised') === 0) return response()->json(['ok' => false, 'error' => 'reserved'], 422);
+        if (strcasecmp($old, $new) === 0) return response()->json(['ok' => true, 'moved' => 0]);
+
+        // new name must not collide with a different existing category
+        if ($this->catExists($t, $new)) return response()->json(['ok' => false, 'error' => 'exists'], 409);
+
+        $moved = Product::where('category', $old)->update(['category' => $new]);
+
+        try { \App\Models\Category::where('name', $old)->update(['name' => $new]); } catch (\Throwable $e) {}
+
+        $img = $t->setting('category_images', []); if (! is_array($img)) $img = [];
+        if (isset($img[$old])) { $img[$new] = $img[$old]; unset($img[$old]); $t->putSetting('category_images', $img); }
+
+        $extra = array_map(fn ($e) => strcasecmp($e, $old) === 0 ? $new : $e, $this->catExtra($t));
+        $t->putSetting('category_extra', array_values(array_unique($extra)));
+
+        $order = array_map(fn ($e) => strcasecmp($e, $old) === 0 ? $new : $e, $this->catOrder($t));
+        $t->putSetting('category_order', array_values($order));
+
+        $this->catFlush($t);
+        return response()->json(['ok' => true, 'moved' => (int) $moved]);
+    }
+
+    /** Delete a category — only when empty. Products must be moved away first. */
+    public function categoryDelete(Request $r)
+    {
+        $t    = $r->user()->tenant;
+        $name = trim((string) $r->input('name', ''));
+        if ($name === '') return response()->json(['ok' => false, 'error' => 'no_name'], 422);
+
+        $count = Product::where('category', $name)->count();
+        if ($count > 0) return response()->json(['ok' => false, 'error' => 'has_products', 'count' => (int) $count], 409);
+
+        $t->putSetting('category_extra', array_values(array_filter(
+            $this->catExtra($t), fn ($e) => strcasecmp($e, $name) !== 0
+        )));
+
+        $img = $t->setting('category_images', []); if (! is_array($img)) $img = [];
+        if (isset($img[$name])) { unset($img[$name]); $t->putSetting('category_images', $img); }
+
+        $t->putSetting('category_order', array_values(array_filter(
+            $this->catOrder($t), fn ($e) => strcasecmp($e, $name) !== 0
+        )));
+
+        $this->catFlush($t);
+        return response()->json(['ok' => true]);
+    }
+
+    /** Persist the display order of categories. */
+    public function categoryReorder(Request $r)
+    {
+        $t     = $r->user()->tenant;
+        $order = $r->input('order', []);
+        if (! is_array($order)) $order = [];
+        $order = array_values(array_filter(array_map(fn ($x) => trim((string) $x), $order), fn ($x) => $x !== ''));
+        $t->putSetting('category_order', $order);
+        $this->catFlush($t);
+        return response()->json(['ok' => true]);
+    }
+
+    /** True if a category name is already in use (by a product or as an empty extra). */
+    private function catExists($t, string $name): bool
+    {
+        if (Product::whereRaw('LOWER(TRIM(category)) = ?', [mb_strtolower(trim($name))])->exists()) return true;
+        foreach ($this->catExtra($t) as $e) if (strcasecmp($e, $name) === 0) return true;
+        return false;
+    }
+
+    private function catExtra($t): array { $x = $t->setting('category_extra', []); return is_array($x) ? array_values($x) : []; }
+    private function catOrder($t): array { $x = $t->setting('category_order', []); return is_array($x) ? array_values($x) : []; }
+    private function catFlush($t): void { try { \Illuminate\Support\Facades\Cache::forget('catalogue:' . $t->id); } catch (\Throwable $e) {} }
 
     /** Daily set-meal (thali) config for the editor. */
     /** Resolve a stored image path to a usable URL (mirrors StorefrontController). */

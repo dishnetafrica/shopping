@@ -509,7 +509,7 @@
       <div id="pageCategory" class="hide">
         <div class="crumb">Home / <b>Categories</b></div>
         <div class="card">
-          <div class="head">Categories <span class="count" id="catCount" style="margin-left:auto"></span></div>
+          <div class="head">Categories <button type="button" class="btn" onclick="catAdd()" style="margin-left:12px;padding:5px 12px;font-size:13px">+ Add category</button> <span class="count" id="catCount" style="margin-left:auto"></span></div>
           <div class="body"><div class="pgrid" id="catGrid"></div>
           <input type="file" id="catPhotoFile" accept="image/*" style="display:none"></div>
         </div>
@@ -970,6 +970,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   updProduct:'/papi/update-product',addProduct:'/papi/add-product',
   uploadImage:'/papi/upload-image',
   catImages:'/papi/category-images',catImageSave:'/papi/category-image-save',
+  catCreate:'/papi/category-create',catRename:'/papi/category-rename',catDelete:'/papi/category-delete',catReorder:'/papi/category-reorder',
   thali:'/papi/thali',thaliSave:'/papi/thali-save',
   dispatch:'/papi/dispatch',
   riders:'/papi/riders',riderSave:'/papi/rider-save',riderDel:'/papi/rider-delete',importContacts:'/papi/contacts-import',botMode:'/papi/chats/bot-mode',
@@ -1894,9 +1895,9 @@ async function saveNewProduct(){
   $('aSave').disabled=false;$('aSave').textContent='Add product';
 }
 /* ---------------- CATEGORIES ---------------- */
-var CAT_IMG={}, _catPhotoTarget='';
+var CAT_IMG={}, _catPhotoTarget='', CAT_EXTRA=[], CAT_ORDER=[];
 async function loadCatImages(){
-  try{var r=await fetch(EP.catImages+'?token='+encodeURIComponent(token),{cache:'no-store'});var d=await r.json();CAT_IMG=(d&&d.images)?d.images:{};}catch(e){CAT_IMG={};}
+  try{var r=await fetch(EP.catImages+'?token='+encodeURIComponent(token),{cache:'no-store'});var d=await r.json();CAT_IMG=(d&&d.images)?d.images:{};CAT_EXTRA=(d&&d.extra)?d.extra:[];CAT_ORDER=(d&&d.order)?d.order:[];}catch(e){CAT_IMG={};CAT_EXTRA=[];CAT_ORDER=[];}
 }
 /* ---------------- DAILY THALI ---------------- */
 var TH_DAYS=[['mon','Monday'],['tue','Tuesday'],['wed','Wednesday'],['thu','Thursday'],['fri','Friday'],['sat','Saturday'],['sun','Sunday']];
@@ -1996,21 +1997,36 @@ async function saveThali(){
 function renderCategories(){
   bindCatPhoto();
   var m={};CATALOGUE.forEach(function(p){var c=(p.category||'').trim()||'Uncategorised';m[c]=(m[c]||0)+1;});
-  _cats=Object.keys(m).sort();
+  (CAT_EXTRA||[]).forEach(function(c){c=(c||'').trim();if(c&&!(c in m))m[c]=0;});
+  var names=Object.keys(m);
+  var ord=(CAT_ORDER||[]).filter(function(c){return (c in m);});
+  var rest=names.filter(function(c){return ord.indexOf(c)<0;}).sort();
+  _cats=ord.concat(rest);
   $('catCount').textContent=_cats.length+' categories';
   $('catGrid').innerHTML=_cats.length?_cats.map(function(c,i){
-    var img=CAT_IMG[c];
+    var img=CAT_IMG[c];var n=m[c];var isUnc=(c==='Uncategorised');
     var thumb=img
       ? '<div onclick="openCat('+i+')" style="height:84px;border-radius:10px;margin-bottom:6px;background-size:cover;background-position:center;cursor:pointer;background-image:url(\''+esc(img)+'\')"></div>'
       : '<div onclick="openCat('+i+')" style="height:84px;border-radius:10px;margin-bottom:6px;background:#F1F3F7;display:grid;place-items:center;font-size:26px;cursor:pointer">\uD83D\uDDC2</div>';
+    var arrows='<span style="margin-left:auto;display:inline-flex;gap:8px">'+
+      (i>0?'<a href="#" title="Move left" onclick="event.preventDefault();catMove('+i+',-1)" style="font-size:14px;font-weight:800;color:#6b7280;text-decoration:none">\u2190</a>':'')+
+      (i<_cats.length-1?'<a href="#" title="Move right" onclick="event.preventDefault();catMove('+i+',1)" style="font-size:14px;font-weight:800;color:#6b7280;text-decoration:none">\u2192</a>':'')+
+      '</span>';
+    var manage=isUnc
+      ? '<div style="margin-top:4px;display:flex;gap:10px;align-items:center">'+arrows+'</div>'
+      : '<div style="margin-top:4px;display:flex;gap:10px;align-items:center">'+
+          '<a href="#" onclick="event.preventDefault();catRenameUI('+i+')" style="font-size:12px;font-weight:700;color:#2563eb">Rename</a>'+
+          (n===0?'<a href="#" onclick="event.preventDefault();catDeleteUI('+i+')" style="font-size:12px;font-weight:700;color:#B4232A">Delete</a>':'')+
+          arrows+
+        '</div>';
     return '<div class="pcard">'+thumb+
       '<div class="nm" onclick="openCat('+i+')" style="cursor:pointer">'+esc(c)+'</div>'+
-      '<div class="pr">'+m[c]+'</div><div class="st">products</div>'+
+      '<div class="pr">'+n+'</div><div class="st">products</div>'+
       '<div style="margin-top:6px;display:flex;gap:10px">'+
         '<a href="#" onclick="event.preventDefault();catPhoto('+i+')" style="font-size:12px;font-weight:700;color:var(--green,#0C831F)">'+(img?'Change photo':'Add photo')+'</a>'+
         (img?'<a href="#" onclick="event.preventDefault();catPhotoClear('+i+')" style="font-size:12px;font-weight:700;color:#B4232A">Remove</a>':'')+
-      '</div></div>';
-  }).join(''):'<div class="empty">No categories</div>';
+      '</div>'+manage+'</div>';
+  }).join(''):'<div class="empty">No categories yet \u2014 use <b>+ Add category</b> above.</div>';
 }
 function catPhoto(i){_catPhotoTarget=_cats[i];var f=$('catPhotoFile');if(f){f.value='';f.click();}}
 function catPhotoClear(i){var c=_cats[i];if(!confirm('Remove the photo for "'+c+'"?'))return;saveCatImage(c,'');}
@@ -2058,6 +2074,67 @@ function bindCatPhoto(){
   };
 }
 function openCat(i){var c=_cats[i];pmCatFilter=(c==='Uncategorised'?'':c);pmQuery='';showPage('products');}
+function catAdd(){
+  $('modalTitle').textContent='Add category';
+  $('modalBody').innerHTML=
+    '<div class="mfield"><label>Category name</label><input id="catNewName" placeholder="e.g. Sunday Special" maxlength="60" autocomplete="off">'+
+    '<div class="note" style="margin-top:4px">Creates an empty category. Add products to it from the Products page, and a photo here.</div></div>'+
+    '<button class="btn" id="catNewSave" type="button" style="width:100%;margin-top:8px">Create category</button>';
+  $('modal').classList.remove('hide');
+  var inp=$('catNewName');if(inp)setTimeout(function(){inp.focus();},50);
+  $('catNewSave').onclick=async function(){
+    var name=(($('catNewName')||{}).value||'').trim();
+    if(!name){toast('Enter a name');return;}
+    try{
+      var r=await fetch(EP.catCreate+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name})});
+      var d=await r.json();
+      if(d&&d.ok){CAT_EXTRA.push(name);closeModal();renderCategories();toast('Category created');}
+      else toast(d&&d.error==='exists'?'That category already exists':(d&&d.error==='reserved'?'Reserved name':'Could not create'));
+    }catch(e){toast('Could not create');}
+  };
+}
+function catRenameUI(i){
+  var old=_cats[i];if(!old||old==='Uncategorised')return;
+  $('modalTitle').textContent='Rename \u00b7 '+old;
+  $('modalBody').innerHTML=
+    '<div class="mfield"><label>New name</label><input id="catRenName" value="'+esc(old)+'" maxlength="60" autocomplete="off">'+
+    '<div class="note" style="margin-top:4px">Moves every product in this category to the new name and keeps the photo.</div></div>'+
+    '<button class="btn" id="catRenSave" type="button" style="width:100%;margin-top:8px">Save new name</button>';
+  $('modal').classList.remove('hide');
+  var inp=$('catRenName');if(inp)setTimeout(function(){inp.focus();inp.select();},50);
+  $('catRenSave').onclick=async function(){
+    var nn=(($('catRenName')||{}).value||'').trim();
+    if(!nn){toast('Enter a name');return;}
+    if(nn===old){closeModal();return;}
+    try{
+      var r=await fetch(EP.catRename+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({old:old,'new':nn})});
+      var d=await r.json();
+      if(d&&d.ok){
+        CATALOGUE.forEach(function(p){if((p.category||'').trim()===old)p.category=nn;});
+        if(CAT_IMG[old]){CAT_IMG[nn]=CAT_IMG[old];delete CAT_IMG[old];}
+        CAT_EXTRA=CAT_EXTRA.map(function(c){return c===old?nn:c;});
+        CAT_ORDER=CAT_ORDER.map(function(c){return c===old?nn:c;});
+        closeModal();renderCategories();toast('Renamed'+(d.moved?(' \u00b7 '+d.moved+' products moved'):''));
+      } else toast(d&&d.error==='exists'?'That name is already used':'Could not rename');
+    }catch(e){toast('Could not rename');}
+  };
+}
+function catDeleteUI(i){
+  var c=_cats[i];if(!c||c==='Uncategorised')return;
+  if(!confirm('Delete the empty category "'+c+'"?'))return;
+  fetch(EP.catDelete+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:c})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d&&d.ok){CAT_EXTRA=CAT_EXTRA.filter(function(x){return x!==c;});delete CAT_IMG[c];CAT_ORDER=CAT_ORDER.filter(function(x){return x!==c;});renderCategories();toast('Category deleted');}
+      else if(d&&d.error==='has_products')toast('Move its '+(d.count||'')+' products first');
+      else toast('Could not delete');
+    }).catch(function(){toast('Could not delete');});
+}
+function catMove(i,dir){
+  var j=i+dir;if(j<0||j>=_cats.length)return;
+  var a=_cats.slice();var tmp=a[i];a[i]=a[j];a[j]=tmp;
+  CAT_ORDER=a.slice();renderCategories();
+  fetch(EP.catReorder+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order:a})}).catch(function(){});
+}
 /* ---------------- RIDER / DISPATCH ---------------- */
 function recentRiders(){var seen={},out=[];ORDERS.forEach(function(o){if(o.rider){var k=o.rider+'|'+o.riderPhone;if(!seen[k]){seen[k]=1;out.push({name:o.rider,phone:o.riderPhone});}}});return out;}
 function trackUrlFor(o){return '/papi/track?o='+o.id+'&t='+encodeURIComponent(o.trackToken||'');}
