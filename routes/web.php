@@ -162,6 +162,12 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('return',          [PanelApiController::class, 'returnSave']);
         Route::get('settings-save',   [PanelApiController::class, 'settingsSave']);
         Route::get('bot-toggle',      [PanelApiController::class, 'botToggle']);
+
+        // Status Intelligence — Activity Review Inbox (v17)
+        Route::get('activity-inbox',   [PanelApiController::class, 'activityInbox']);
+        Route::get('activity-approve', [PanelApiController::class, 'activityApprove']);
+        Route::get('activity-reject',  [PanelApiController::class, 'activityReject']);
+        Route::get('activity-edit',    [PanelApiController::class, 'activityEdit']);
         Route::get('bot-config-save', [PanelApiController::class, 'botConfigSave']);
         Route::get('branch-save',     [PanelApiController::class, 'branchSave']);
         Route::get('branch-delete',   [PanelApiController::class, 'branchDel']);

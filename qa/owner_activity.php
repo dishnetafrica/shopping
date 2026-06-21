@@ -1,10 +1,9 @@
 <?php
 /**
- * Framework-free QA for Status Intelligence v15 — owner activity scorer.
+ * Framework-free QA for Status Intelligence v15-v17 — owner activity scorer + bands.
  * Run: php qa/owner_activity.php
  *
- * Principle: a clear state change (stock word, number+left/price, or an availability verb with a
- * concrete subject) -> auto (>=90). Caption-like freshness messages -> confirm (60-89) or ignore.
+ * v17 bands: >=95 auto, 70-94 review, <70 feed.
  */
 error_reporting(E_ALL & ~E_DEPRECATED);
 
@@ -13,43 +12,49 @@ require $base . 'ItemAliases.php';
 require $base . 'OfferItemMatcher.php';
 require $base . 'OwnerUpdateParser.php';
 require $base . 'OwnerActivityScorer.php';
+require $base . 'ActivityBand.php';
+
+use App\Services\Bot\Offers\OwnerActivityScorer as SC;
+use App\Services\Bot\Offers\ActivityBand as B;
 
 $pass = 0; $fail = 0;
 function ok(string $l, bool $c): void { global $pass, $fail; if ($c) $pass++; else { $fail++; echo "  FAIL: $l\n"; } }
-function band(int $c): string { return $c >= 90 ? 'auto' : ($c >= 60 ? 'confirm' : 'ignore'); }
 function sc(string $s) { return App\Services\Bot\Offers\OwnerActivityScorer::score($s); }
+function bandOf(string $s) { return App\Services\Bot\Offers\ActivityBand::of((int) App\Services\Bot\Offers\OwnerActivityScorer::score($s)['confidence']); }
 
-/* --- clear state changes -> auto --- */
-$r = sc('Fafda sold out');
-ok('fafda sold out -> sold_out/auto (' . $r['confidence'] . ')', $r['event'] === 'sold_out' && band($r['confidence']) === 'auto');
-$r = sc('Only 5 thali left');
-ok('only 5 thali left -> low_stock/auto/qty5 (' . $r['confidence'] . ')', $r['event'] === 'low_stock' && $r['qty'] === 5 && band($r['confidence']) === 'auto');
+/* --- band thresholds (pure) --- */
+ok('95 -> auto',   B::of(95) === B::AUTO);
+ok('94 -> review', B::of(94) === B::REVIEW);
+ok('70 -> review', B::of(70) === B::REVIEW);
+ok('69 -> feed',   B::of(69) === B::FEED);
+
+/* --- very high confidence -> auto --- */
 $r = sc('Hot Fafda available now');
-ok('hot fafda available now -> available/auto (' . $r['confidence'] . ')', $r['event'] === 'available' && $r['item'] === 'fafda' && band($r['confidence']) === 'auto');
+ok('hot fafda available now -> available/auto (' . $r['confidence'] . ')', $r['event'] === 'available' && bandOf('Hot Fafda available now') === B::AUTO);
 $r = sc('New Jalebi ready');
-ok('new jalebi ready -> available/auto (' . $r['confidence'] . ')', $r['event'] === 'available' && $r['item'] === 'jalebi' && band($r['confidence']) === 'auto');
+ok('new jalebi ready -> available/auto (' . $r['confidence'] . ')', $r['event'] === 'available' && bandOf('New Jalebi ready') === B::AUTO);
+ok('garam garam fafda ready -> auto', sc('garam garam fafda ready')['event'] === 'available' && bandOf('garam garam fafda ready') === B::AUTO);
+
+/* --- clear-but-moderate -> review (the safe default) --- */
+$r = sc('Fafda sold out');
+ok('fafda sold out -> sold_out/review (' . $r['confidence'] . ')', $r['event'] === 'sold_out' && bandOf('Fafda sold out') === B::REVIEW);
+$r = sc('Only 5 thali left');
+ok('only 5 thali left -> low_stock/review/qty5 (' . $r['confidence'] . ')', $r['event'] === 'low_stock' && $r['qty'] === 5 && bandOf('Only 5 thali left') === B::REVIEW);
 $r = sc('Lunch started');
-ok('lunch started -> ready/auto (' . $r['confidence'] . ')', $r['event'] === 'ready' && band($r['confidence']) === 'auto');
+ok('lunch started -> ready/review (' . $r['confidence'] . ')', $r['event'] === 'ready' && bandOf('Lunch started') === B::REVIEW);
 $r = sc('Lunch ready');
-ok('lunch ready -> ready/auto (' . $r['confidence'] . ')', $r['event'] === 'ready' && band($r['confidence']) === 'auto');
-$r = sc('garam garam fafda ready');
-ok('garam garam fafda ready -> available/auto (' . $r['confidence'] . ')', $r['event'] === 'available' && $r['item'] === 'fafda' && band($r['confidence']) === 'auto');
+ok('lunch ready -> ready/review (' . $r['confidence'] . ')', $r['event'] === 'ready' && bandOf('Lunch ready') === B::REVIEW);
 $r = sc('Thali price 15000');
-ok('thali price 15000 -> price_change/auto (' . $r['confidence'] . ')', $r['event'] === 'price_change' && $r['price'] === 15000 && band($r['confidence']) === 'auto');
-
-/* --- ambiguous / caption-like -> NOT auto --- */
+ok('thali price 15000 -> price_change/review (' . $r['confidence'] . ')', $r['event'] === 'price_change' && $r['price'] === 15000 && bandOf('Thali price 15000') === B::REVIEW);
 $r = sc("Today's batch ready");
-ok('todays batch ready -> ready/confirm (' . $r['confidence'] . ')', $r['event'] === 'ready' && band($r['confidence']) === 'confirm');
-$r = sc('Fresh Jalebi ' . "\xF0\x9F\x98\x8D");
-ok('fresh jalebi emoji -> available/not-auto (' . $r['confidence'] . ')', $r['event'] === 'available' && $r['confidence'] < 90);
-$r = sc('Fresh out of kitchen');
-ok('fresh out of kitchen -> ignore (' . $r['confidence'] . ')', band($r['confidence']) === 'ignore');
+ok('todays batch ready -> ready/review (' . $r['confidence'] . ')', $r['event'] === 'ready' && bandOf("Today's batch ready") === B::REVIEW);
 
-/* --- question dampener: clear msg with ? -> not auto --- */
-$r = sc('is fresh jalebi available now?');
-ok('question dampened below auto (' . $r['confidence'] . ')', $r['confidence'] < 90);
+/* --- caption-like / vague -> feed only --- */
+ok('fresh jalebi emoji -> feed', bandOf('Fresh Jalebi ' . "\xF0\x9F\x98\x8D") === B::FEED);
+ok('fresh out of kitchen -> feed', bandOf('Fresh out of kitchen') === B::FEED);
+ok('question dampened -> not auto', bandOf('is fresh jalebi available now?') !== B::AUTO);
 
-/* --- pure chatter -> no event --- */
+/* --- chatter -> no event --- */
 ok('greeting -> no event', sc('good morning bhai')['event'] === null);
 ok('thanks -> no event',   sc('thank you so much')['event'] === null);
 

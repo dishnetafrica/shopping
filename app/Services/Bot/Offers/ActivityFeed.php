@@ -14,10 +14,10 @@ use App\Models\Tenant;
  */
 class ActivityFeed
 {
-    public function record(Tenant $tenant, string $source, string $eventType, int $confidence, string $rawContent, array $payload = []): void
+    public function record(Tenant $tenant, string $source, string $eventType, int $confidence, string $rawContent, array $payload = []): ?ActivityFeedItem
     {
         try {
-            ActivityFeedItem::create([
+            return ActivityFeedItem::create([
                 'source'      => $source,
                 'event_type'  => $eventType,
                 'confidence'  => max(0, min(100, $confidence)),
@@ -27,6 +27,7 @@ class ActivityFeed
             ]);
         } catch (\Throwable $e) {
             // the feed is a convenience surface; never let it break ingestion
+            return null;
         }
     }
 

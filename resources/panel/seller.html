@@ -292,6 +292,7 @@
       <a class="nav" data-page="analytics"><span class="i">📈</span> Analytics</a>
       <a class="nav" data-feature="riders" data-page="riders"><span class="i">🛵</span> Riders</a>
       <a class="nav" data-page="returns"><span class="i">↩</span> Returns</a>
+      <a class="nav" data-page="activity"><span class="i">📥</span> Activity Inbox</a>
       <a class="nav" data-page="settings"><span class="i">⚙</span> Settings</a>
       <a class="nav sub" data-page="profile"><span class="i">└</span> Profile</a>
       <a class="nav sub" data-page="security"><span class="i">└</span> Security</a>
@@ -715,10 +716,21 @@
         </div>
       </div>
 
+      <!-- ============ ACTIVITY INBOX ============ -->
+      <div id="pageActivity" class="hide">
+        <div class="crumb">Home / <b>Activity Inbox</b></div>
+        <div class="card">
+          <div class="head">Detections to review <span class="count" id="actCount" style="margin-left:auto"></span></div>
+          <div class="body">
+            <div style="color:#667;font-size:13px;margin-bottom:10px">The bot learns from your messages, status posts and forwarded posters. High-confidence updates apply automatically; these need your OK.</div>
+            <div id="actList"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- ============ SETTINGS ============ -->
       <div id="pageSettings" class="hide">
-        <div class="crumb">Home / <b>Settings</b></div>
-        <div class="row2">
+        <div class="crumb">Home / <b>Settings</b></div>        <div class="row2">
           <div class="card">
             <div class="head">Store profile</div>
             <div class="body">
@@ -1013,6 +1025,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   riders:'/papi/riders',riderSave:'/papi/rider-save',riderDel:'/papi/rider-delete',importContacts:'/papi/contacts-import',botMode:'/papi/chats/bot-mode',
   ret:'/papi/return',returns:'/papi/returns',
   settings:'/papi/settings',settingsSave:'/papi/settings-save',botToggle:'/papi/bot-toggle',
+  actInbox:'/papi/activity-inbox',actApprove:'/papi/activity-approve',actReject:'/papi/activity-reject',actEdit:'/papi/activity-edit',
   imageStats:'/papi/image-stats',
   operations:'/papi/operations',
   branches:'/papi/branches',branchSave:'/papi/branch-save',branchDel:'/papi/branch-delete',
@@ -1407,6 +1420,61 @@ function fmtDate(s){return String(s||'').replace('T',' ');}
 function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(function(){t.remove();},2300);}
 
 /* ---------------- navigation ---------------- */
+/* ===== Activity Review Inbox (v17) ===== */
+var SRCLBL={owner_message:'💬 Message',owner_image:'🖼 Image',owner_status:'📲 Status',owner_forward:'↪ Forward'};
+async function activityInit(){
+  $('actList').innerHTML='<div style="color:#888;padding:14px">Loading…</div>';
+  try{
+    var r=await fetch(EP.actInbox+'?token='+encodeURIComponent(token),{cache:'no-store'});
+    var d=await r.json();
+    renderActivity((d&&d.items)||[]);
+  }catch(e){$('actList').innerHTML='<div style="color:#c33;padding:14px">Could not load inbox.</div>';}
+}
+function renderActivity(items){
+  $('actCount').textContent=items.length?items.length+' pending':'';
+  if(!items.length){$('actList').innerHTML='<div style="color:#888;padding:18px;text-align:center">Nothing to review right now. 🎉</div>';return;}
+  var h='';
+  items.forEach(function(it){
+    var conf=it.confidence||0, bar=conf>=90?'#2e9e5b':(conf>=80?'#c9a227':'#d08a2e');
+    h+='<div class="card" style="margin-bottom:10px" data-aid="'+it.id+'">'
+      +'<div class="body" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">'
+      +'<div style="flex:1;min-width:200px">'
+      +'<div style="font-size:12px;color:#778">'+esc(SRCLBL[it.source]||it.source||'')+' · '+esc(it.at||'')+'</div>'
+      +'<div style="font-weight:600;margin:2px 0">'+esc(it.message||'')+'</div>'
+      +'<div style="font-size:13px;color:#445">→ '+esc(it.suggested||it.event||'')
+        +' <span style="color:'+bar+';font-weight:700">'+conf+'%</span></div>'
+      +'</div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+      +'<button class="btn" style="background:#2e9e5b;color:#fff" onclick="actDo('+it.id+',\'approve\')">Approve</button>'
+      +'<button class="btn" style="background:#eee" onclick="actEditOpen('+it.id+')">Edit</button>'
+      +'<button class="btn" style="background:#f7e7e7;color:#b33" onclick="actDo('+it.id+',\'reject\')">Reject</button>'
+      +'</div></div>'
+      +'<div id="actEdit'+it.id+'" class="hide" style="padding:0 14px 12px">'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
+      +'<select id="actEv'+it.id+'" class="mfield">'
+        +['available','sold_out','low_stock','ready','price_change'].map(function(ev){return '<option value="'+ev+'"'+(ev===it.event?' selected':'')+'>'+ev+'</option>';}).join('')
+      +'</select>'
+      +'<input id="actItem'+it.id+'" class="mfield" placeholder="item" value="'+esc(it.item||'')+'" style="max-width:140px">'
+      +'<input id="actQty'+it.id+'" class="mfield" placeholder="qty" value="'+(it.qty!=null?it.qty:'')+'" style="max-width:70px">'
+      +'<button class="btn" style="background:#2e9e5b;color:#fff" onclick="actDo('+it.id+',\'edit\')">Save & apply</button>'
+      +'</div></div>'
+      +'</div>';
+  });
+  $('actList').innerHTML=h;
+}
+function actEditOpen(id){var e=$('actEdit'+id);if(e)e.classList.toggle('hide');}
+async function actDo(id,kind){
+  var qs='?token='+encodeURIComponent(token)+'&id='+id, url=EP.actApprove;
+  if(kind==='reject')url=EP.actReject;
+  if(kind==='edit'){url=EP.actEdit;
+    qs+='&event='+encodeURIComponent(($('actEv'+id)||{}).value||'')
+      +'&item='+encodeURIComponent(($('actItem'+id)||{}).value||'')
+      +'&qty='+encodeURIComponent(($('actQty'+id)||{}).value||'');
+  }
+  try{var r=await fetch(url+qs,{cache:'no-store'});var d=await r.json();
+    if(d&&d.ok){activityInit();}else{alert('Could not update.');}
+  }catch(e){alert('Network error.');}
+}
 function showPage(p){
   $('pageDash').classList.toggle('hide',p!=='dash');
   $('pageOrders').classList.toggle('hide',p!=='orders');
@@ -1421,6 +1489,7 @@ function showPage(p){
   $('pageThali').classList.toggle('hide',p!=='thali');
   $('pageRiders').classList.toggle('hide',p!=='riders');
   $('pageReturns').classList.toggle('hide',p!=='returns');
+  $('pageActivity').classList.toggle('hide',p!=='activity');
   $('pageSettings').classList.toggle('hide',p!=='settings');
   $('pageHelp').classList.toggle('hide',p!=='help');
   $('pageDeliveryZones').classList.toggle('hide',p!=='deliveryZones');
@@ -1431,11 +1500,11 @@ function showPage(p){
   $('pageSubscription').classList.toggle('hide',p!=='subscription');
   if(p==='orders'){$('detailView').classList.add('hide');$('listView').classList.remove('hide');}
   document.querySelectorAll('.side a.nav').forEach(function(a){a.classList.toggle('on',a.dataset.page===p);});
-  var T={dash:'Dashboard',pos:'POS',reports:'Reports',analytics:'Analytics',products:'Products',category:'Categories',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription'};
+  var T={dash:'Dashboard',pos:'POS',reports:'Reports',analytics:'Analytics',products:'Products',category:'Categories',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription',activity:'Activity Inbox'};
   $('pageTitle').textContent=T[p]||'Orders';
   if(p==='dash')renderDash(); else if(p==='pos')posInit(); else if(p==='reports')reportsInit(); else if(p==='analytics')analyticsInit();
   else if(p==='kitchen')kitchenInit();
-  else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else renderList();
+  else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='activity')activityInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else renderList();
   closeSide(); window.scrollTo(0,0);
 }
 function openSide(){$('side').classList.add('open');$('backdrop').classList.add('show');}

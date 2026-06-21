@@ -2500,6 +2500,41 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true, 'key' => $key, 'on' => $on]);
     }
 
+    /* ------------------------------------------ Activity Review Inbox (v17) */
+    public function activityInbox(Request $r)
+    {
+        $items = app(\App\Services\Bot\Offers\ReviewQueueService::class)->pending($r->user()->tenant, 100);
+        return response()->json(['ok' => true, 'items' => $items]);
+    }
+
+    public function activityApprove(Request $r)
+    {
+        $ok = app(\App\Services\Bot\Offers\ReviewQueueService::class)
+            ->approve($r->user()->tenant, (int) $r->query('id', 0), (string) ($r->user()->name ?? 'owner'));
+        return response()->json(['ok' => $ok]);
+    }
+
+    public function activityReject(Request $r)
+    {
+        $ok = app(\App\Services\Bot\Offers\ReviewQueueService::class)
+            ->reject($r->user()->tenant, (int) $r->query('id', 0), (string) ($r->user()->name ?? 'owner'));
+        return response()->json(['ok' => $ok]);
+    }
+
+    public function activityEdit(Request $r)
+    {
+        $edits = [];
+        foreach (['event', 'item'] as $k) {
+            if ($r->query($k, null) !== null) $edits[$k] = (string) $r->query($k);
+        }
+        foreach (['qty', 'price'] as $k) {
+            if ($r->query($k, null) !== null && $r->query($k) !== '') $edits[$k] = (int) $r->query($k);
+        }
+        $ok = app(\App\Services\Bot\Offers\ReviewQueueService::class)
+            ->edit($r->user()->tenant, (int) $r->query('id', 0), $edits, (string) ($r->user()->name ?? 'owner'));
+        return response()->json(['ok' => $ok]);
+    }
+
     public function botConfigSave(Request $r)
     {
         $t = $r->user()->tenant;

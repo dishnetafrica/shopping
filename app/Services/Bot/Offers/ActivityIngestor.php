@@ -19,6 +19,7 @@ class ActivityIngestor
         protected DailyOfferService $offers,
         protected OfferUpdateService $updates,
         protected ActivityFeed $feed,
+        protected ReviewQueueService $queue,
     ) {}
 
     /** Learn from an owner image. Returns a reply for the owner, or null if nothing was learned. */
@@ -42,15 +43,22 @@ class ActivityIngestor
 
         if ($text === '' && trim($caption) !== '') $text = trim($caption);
 
-        // 2) Business-state events read from the OCR text.
+        // 2) Business-state events read from the OCR text (v17 bands).
         if ($text !== '') {
             $sc = OwnerActivityScorer::score($text);
             if ($sc['event'] !== null) {
                 $conf = (int) $sc['confidence'];
-                if ($conf >= 60) {                                     // a posted image is deliberate
+                $payload = ['item' => $sc['item'] ?? null, 'qty' => $sc['qty'] ?? null, 'price' => $sc['price'] ?? null, 'display' => $sc['display'] ?? null];
+
+                if (ActivityBand::of($conf) === ActivityBand::AUTO) {
                     $replies[] = $this->updates->applyParsed($tenant, $sc, $text);
-                    $this->feed->record($tenant, $source, $sc['event'], $conf, $text,
-                        ['item' => $sc['item'] ?? null, 'qty' => $sc['qty'] ?? null, 'applied' => true]);
+                    $this->feed->record($tenant, $source, $sc['event'], $conf, $text, $payload + ['applied' => true]);
+                } elseif (ActivityBand::of($conf) === ActivityBand::REVIEW) {
+                    $f = $this->feed->record($tenant, $source, $sc['event'], $conf, $text, $payload + ['applied' => false]);
+                    if ($f) $this->queue->enqueue($tenant, (int) $f->id);
+                    $replies[] = "📋 Saved *" . trim((string) ($sc['display'] ?? $sc['event'])) . "* ({$conf}%) to your review inbox.";
+                } else {
+                    $this->feed->record($tenant, $source, $sc['event'], $conf, $text, $payload + ['applied' => false]);
                 }
             }
         }
