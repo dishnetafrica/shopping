@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Tenant;
 use App\Services\Bot\Discovery\DiscoveryDispatcher;
 use App\Services\Bot\Discovery\DiscoveryScanner;
+use App\Services\Bot\Readiness\ReadinessService;
 use App\Support\TenantContext;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -24,7 +25,7 @@ class RunBusinessDiscovery implements ShouldQueue
 
     public function __construct(public int $tenantId) {}
 
-    public function handle(TenantContext $ctx, DiscoveryScanner $scanner, DiscoveryDispatcher $dispatcher): void
+    public function handle(TenantContext $ctx, DiscoveryScanner $scanner, DiscoveryDispatcher $dispatcher, ReadinessService $readiness): void
     {
         $tenant = Tenant::find($this->tenantId);
         if (! $tenant) return;
@@ -35,6 +36,13 @@ class RunBusinessDiscovery implements ShouldQueue
             $discovery = $scanner->scan($tenant);
             $dispatcher->send($tenant, $discovery);
             Log::info("Business Discovery: tenant {$tenant->id} scan #{$discovery->id} readiness {$discovery->readiness}%.");
+
+            // Final step: a formal Go-Live Report (pending — AI stays off until the owner approves).
+            $report = $readiness->evaluate($tenant);
+            if ($report) {
+                $readiness->send($tenant, $report);
+                Log::info("Go-Live Report: tenant {$tenant->id} #{$report->id} {$report->overall_score}% → {$report->recommended_mode}.");
+            }
         } catch (\Throwable $e) {
             Log::error("Business Discovery failed for tenant {$tenant->id}: " . $e->getMessage());
         }
