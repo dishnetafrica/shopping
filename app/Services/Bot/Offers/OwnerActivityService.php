@@ -20,7 +20,7 @@ use App\Models\Tenant;
  */
 class OwnerActivityService
 {
-    public function __construct(protected OfferUpdateService $updates) {}
+    public function __construct(protected OfferUpdateService $updates, protected ActivityFeed $feed) {}
 
     public function process(Tenant $tenant, Conversation $convo, string $text): array
     {
@@ -33,6 +33,8 @@ class OwnerActivityService
             if ($this->isAffirmative($text)) {
                 $reply = $this->updates->applyParsed($tenant, $pend['parsed'], (string) ($pend['raw'] ?? ''));
                 $this->log($tenant, (string) ($pend['raw'] ?? $text), $pend['parsed']['event'] ?? null, (int) ($pend['confidence'] ?? 0), true);
+                $this->feed->record($tenant, ActivitySource::MESSAGE, (string) ($pend['parsed']['event'] ?? ''), (int) ($pend['confidence'] ?? 0),
+                    (string) ($pend['raw'] ?? $text), ['item' => $pend['parsed']['item'] ?? null, 'applied' => true, 'confirmed' => true]);
                 $this->clearPending($convo);
                 return ['reply' => $reply, 'consume' => true];
             }
@@ -61,6 +63,8 @@ class OwnerActivityService
         if ($conf >= 90) {
             $reply = $this->updates->applyParsed($tenant, $sc, $text);
             $this->log($tenant, $text, $event, $conf, true);
+            $this->feed->record($tenant, ActivitySource::MESSAGE, (string) $event, $conf, $text,
+                ['item' => $sc['item'] ?? null, 'qty' => $sc['qty'] ?? null, 'applied' => true]);
             return ['reply' => $reply, 'consume' => true];
         }
 

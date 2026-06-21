@@ -243,20 +243,23 @@ class ProcessIncomingMessage implements ShouldQueue
             if ($ob64 === '' && ! empty($this->incoming['media_key'] ?? null) && method_exists($gateway, 'getMediaBase64')) {
                 $ob64 = (string) ($gateway->getMediaBase64($tenant->whatsapp_instance, $this->incoming['media_key']) ?? '');
             }
-            $ocap = (string) ($this->incoming['image_caption'] ?? '');
-            $offer = null;
+            $ocap   = (string) ($this->incoming['image_caption'] ?? '');
+            $source = \App\Services\Bot\Offers\ActivitySource::classify(
+                ! empty($this->incoming['is_status_post'] ?? false),
+                ! empty($this->incoming['is_forwarded'] ?? false),
+                true
+            );
+            $reply = null;
             try {
-                $offer = app(\App\Services\Bot\Offers\DailyOfferService::class)
-                    ->ingestImage($tenant, $ob64, $ocap, '', 'image');
+                $reply = app(\App\Services\Bot\Offers\ActivityIngestor::class)
+                    ->ingestOwnerImage($tenant, $ob64, $ocap, $source);
             } catch (\Throwable $e) {
                 BotTrace::log($this->tenantId, $trace, $from, 'offer_ingest_error', $e->getMessage());
             }
-            if ($offer) {
-                $cur   = (string) $tenant->setting('currency', 'UGX');
-                $reply = \App\Services\Bot\Offers\OfferFormatter::ownerConfirm($offer, $cur);
+            if ($reply !== null && trim($reply) !== '') {
                 $gateway->sendText($tenant->whatsapp_instance, $from, $reply);
                 MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'system', $reply);
-                BotTrace::log($this->tenantId, $trace, $from, 'offer_captured', ($offer['type'] ?? '') . ': ' . ($offer['title'] ?? ''));
+                BotTrace::log($this->tenantId, $trace, $from, 'offer_captured', $source);
                 $convo->save();
                 return;
             }

@@ -139,6 +139,17 @@ class EvolutionGateway implements WhatsAppGateway
         $fromMe = (bool) data_get($msg, 'key.fromMe', false);
         $participant = (string) data_get($msg, 'key.participant', '');
 
+        // Forwarded marketing posters / broadcast images carry a forward marker in contextInfo.
+        $isForwarded = (bool) (
+            data_get($msg, 'message.imageMessage.contextInfo.isForwarded')
+            ?? data_get($msg, 'message.extendedTextMessage.contextInfo.isForwarded')
+            ?? false
+        ) || ((int) (
+            data_get($msg, 'message.imageMessage.contextInfo.forwardingScore')
+            ?? data_get($msg, 'message.extendedTextMessage.contextInfo.forwardingScore')
+            ?? 0
+        ) > 0);
+
         // A WhatsApp Status post that carries an IMAGE is an owner's published menu/offer poster.
         // Carve it out of the blanket status/broadcast drop so the job can verify the poster is an
         // authorized owner and ingest it. Everything else status/broadcast/group is still dropped.
@@ -223,6 +234,7 @@ class EvolutionGateway implements WhatsAppGateway
             'messageId' => (string) data_get($msg, 'key.id', ''),
             'from_me'         => $fromMe,
             'is_status_post'  => $statusOffer,
+            'is_forwarded'    => $isForwarded,
             'is_status_reply' => $isStatusReply,
             'quoted_text'     => $quotedText,
             'has_image'       => $hasImage,
