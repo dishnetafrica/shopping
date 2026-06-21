@@ -57,7 +57,25 @@ class MerchantConversationParser
     // ---- clause splitting ----
     private static function clauses(string $t): array
     {
-        return preg_split('/[.;\n\r!]+/u', trim($t)) ?: [];
+        $segs = preg_split('/[.;\n\r!]+/u', trim($t)) ?: [];
+        $out = [];
+        foreach ($segs as $s) {
+            $s = trim($s);
+            if ($s === '') continue;
+            if (self::isMenuSegment($s)) { $out[] = $s; continue; }   // keep "fafda, jalebi, patra" together
+            foreach (preg_split('/\s*,\s*/u', $s) as $part) {         // commas separate changes
+                $part = trim($part);
+                if ($part !== '') $out[] = $part;
+            }
+        }
+        return $out;
+    }
+
+    /** A menu segment owns its internal commas (it's a list), so we don't comma-split it. */
+    private static function isMenuSegment(string $s): bool
+    {
+        return (bool) preg_match('/\btoday(?:\'?s)?\b.*?\b(?:menu|we have|available|hava)\b/i', $s)
+            || (bool) preg_match('/^\s*menu\s*[:\-]/i', $s);
     }
 
     // ---- detectors (each returns a change array or null) ----
@@ -131,7 +149,13 @@ class MerchantConversationParser
 
     private static function special(string $c): ?array
     {
+        // product after keyword: "special: jalebi", "special jalebi", "promote X"
         if (preg_match('/\b(?:today\'?s\s+special|special|promote|feature)\b\s*[:\-]?\s*(.+)$/i', $c, $m)) {
+            $t = self::cleanTarget($m[1]);
+            if ($t !== '') return ['type' => 'special', 'target' => $t];
+        }
+        // product before keyword: "jalebi special"  (Gujlish / natural order)
+        if (preg_match('/^(.+?)\s+special\b/i', $c, $m)) {
             $t = self::cleanTarget($m[1]);
             if ($t !== '') return ['type' => 'special', 'target' => $t];
         }
@@ -140,8 +164,13 @@ class MerchantConversationParser
 
     private static function availability(string $c): ?array
     {
-        // unavailable
-        if (preg_match('/\b(?:out of stock|sold out|finished|khatam|nathi)\b\s*(.+)$/i', $c, $m)
+        // Gujlish postfix: "<product> nathi/khatam/khalas" → unavailable (product BEFORE the word)
+        if (preg_match('/^(.+?)\s+(?:nathi|nthi|khatam|khalaas|khalas)\b/i', $c, $m)) {
+            $t = self::cleanTarget($m[1]);
+            if ($t !== '') return ['type' => 'availability', 'target' => $t, 'available' => false];
+        }
+        // unavailable (English, keyword before product)
+        if (preg_match('/\b(?:out of stock|sold out|finished)\b\s*(.+)$/i', $c, $m)
             || preg_match('/\b(?:don\'?t|do not|not)\s+(?:sell|selling)\b\s+(.+)$/i', $c, $m)
             || preg_match('/\bno\s+([a-z\'].+)$/i', $c, $m)) {
             $t = self::cleanTarget($m[1]);
@@ -204,7 +233,7 @@ class MerchantConversationParser
     {
         $s = mb_strtolower(trim($s));
         $s = preg_replace('/[^\p{L}\s\']+/u', ' ', $s);
-        $s = preg_replace('/\b(today|please|pls|the|any|some|now)\b/i', ' ', $s);
+        $s = preg_replace('/\b(today|aaje|aje|please|pls|the|any|some|now)\b/i', ' ', $s);
         return trim(preg_replace('/\s+/', ' ', $s));
     }
 }
