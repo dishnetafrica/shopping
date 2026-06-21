@@ -136,9 +136,9 @@ class StorefrontController extends Controller
                 $mods = [];
             }
 
-            return Product::where('active', true)->orderBy('name')
+            return Product::where('active', true)->orderByDesc('display_order')->orderBy('name')
                 ->toBase()
-                ->get(['id', 'name', 'category', 'keywords', 'base_price', 'price', 'stock', 'image_url'])
+                ->get(['id', 'name', 'category', 'keywords', 'base_price', 'price', 'stock', 'image_url', 'display_order'])
                 ->map(function ($p) use ($mods) {
                     return [
                         'Product Name' => (string) $p->name,

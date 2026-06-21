@@ -971,6 +971,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   uploadImage:'/papi/upload-image',
   catImages:'/papi/category-images',catImageSave:'/papi/category-image-save',
   catCreate:'/papi/category-create',catRename:'/papi/category-rename',catDelete:'/papi/category-delete',catReorder:'/papi/category-reorder',
+  prodOrder:'/papi/product-order',
   thali:'/papi/thali',thaliSave:'/papi/thali-save',
   dispatch:'/papi/dispatch',
   riders:'/papi/riders',riderSave:'/papi/rider-save',riderDel:'/papi/rider-delete',importContacts:'/papi/contacts-import',botMode:'/papi/chats/bot-mode',
@@ -1098,7 +1099,7 @@ function mapProduct(row){
   var ic=String(row.Item_Code||row.item_code||row.ItemCode||'').replace(/[^0-9A-Za-z]/g,'');
   return {name:v?pn+' '+v:pn,baseName:pn,variant:v,brand:String(row.Brand||''),category:String(row.Category||''),
     keywords:kw,basePrice:numFrom(row.Price_UGX),price:netUgx(numFrom(row.Price_UGX)),stock:numFrom(row.Stock),stockByBranch:sbb,barcode:bc,itemCode:ic,
-    image:String(row.Image||row.Photo||row.Image_URL||row['Image URL']||''),_row:Number(row._row)};
+    image:String(row.Image||row.Photo||row.Image_URL||row['Image URL']||''),order:Number(row.Display_Order||row.display_order||0),_row:Number(row._row)};
 }
 /* ---------------- BARCODE / SCANNING ---------------- */
 var BARCODE_INDEX={};
@@ -1764,6 +1765,7 @@ function pmFiltered(){
   var list=CATALOGUE.slice();
   if(pmCatFilter)list=list.filter(function(p){return (p.category||'').trim()===pmCatFilter;});
   if(pmQuery)list=list.filter(function(p){return (p.name+' '+p.brand+' '+p.category+' '+p.keywords).toLowerCase().indexOf(pmQuery)>=0;});
+  list.sort(function(a,b){return (Number(b.order||0)-Number(a.order||0))||String(a.name||'').localeCompare(String(b.name||''));});
   return list;
 }
 function renderPM(){
@@ -1772,10 +1774,26 @@ function renderPM(){
   $('pmCount').textContent=list.length.toLocaleString()+' products'+(list.length>300?' · showing 300':'');
   $('pmGrid').innerHTML=capped.length?capped.map(function(p){var st=prodStock(p),out=st===0;
     var im=p.image?'<img class="pthumb" loading="lazy" src="'+esc(p.image)+'" onerror="this.style.display=\'none\'">':'';
+    var ordCtl='<div class="pmord" onclick="event.stopPropagation()" style="margin-top:6px;display:flex;gap:8px;font-size:11px;font-weight:700;align-items:center">'+
+      '<a href="#" title="Show first" onclick="event.preventDefault();event.stopPropagation();pmPin('+p._row+',1)" style="color:#0C831F;text-decoration:none">\u2B06 Top</a>'+
+      '<a href="#" title="Show last" onclick="event.preventDefault();event.stopPropagation();pmPin('+p._row+',-1)" style="color:#6b7280;text-decoration:none">\u2B07 Bottom</a>'+
+      (p.order?'<a href="#" title="Back to A\u2013Z" onclick="event.preventDefault();event.stopPropagation();pmPin('+p._row+',0)" style="color:#B4232A;text-decoration:none">Reset</a>':'')+
+      (p.order>0?'<span style="margin-left:auto;color:#0C831F">\uD83D\uDCCC top</span>':(p.order<0?'<span style="margin-left:auto;color:#9aa3b2">bottom</span>':''))+
+    '</div>';
     return '<div class="pcard" onclick="openEdit('+p._row+')">'+im+'<div class="nm">'+esc(p.name)+'</div>'+
       (p.brand||p.category?'<div class="st">'+esc(p.brand)+(p.category?' \u00b7 '+esc(p.category):'')+'</div>':'')+
-      '<div class="pr">'+ugx(p.price)+'</div><div class="st'+(out?' out':'')+'">'+(out?'OUT OF STOCK':'Stock: '+st)+'</div></div>';
+      '<div class="pr">'+ugx(p.price)+'</div><div class="st'+(out?' out':'')+'">'+(out?'OUT OF STOCK':'Stock: '+st)+'</div>'+ordCtl+'</div>';
   }).join(''):'<div class="empty">No matching products</div>';
+}
+function pmPin(row,mode){
+  var p=findProd(row);if(!p)return;
+  var val=0;
+  if(mode===1){var mx=0;CATALOGUE.forEach(function(x){var o=Number(x.order||0);if(o>mx)mx=o;});val=mx+1;}
+  else if(mode===-1){var mn=0;CATALOGUE.forEach(function(x){var o=Number(x.order||0);if(o<mn)mn=o;});val=mn-1;}
+  p.order=val;renderPM();
+  fetch(EP.prodOrder+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:[{row:row,order:val}]})})
+    .then(function(r){return r.json();}).then(function(d){if(d&&d.ok)toast(mode===1?'Pinned to top':(mode===-1?'Pushed to bottom':'Order reset'));else toast('Could not save order');})
+    .catch(function(){toast('Could not save order');});
 }
 function findProd(row){return CATALOGUE.find(function(p){return p._row===row;});}
 async function exportProductsCSV(){

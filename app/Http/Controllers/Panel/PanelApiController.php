@@ -87,7 +87,7 @@ class PanelApiController extends Controller
 
     public function products()
     {
-        $rows = Product::orderBy('name')->get()->map(function (Product $p) {
+        $rows = Product::orderByDesc('display_order')->orderBy('name')->get()->map(function (Product $p) {
             return [
                 'Product Name' => (string) $p->name,
                 'Variant'      => '',
@@ -103,6 +103,7 @@ class PanelApiController extends Controller
                 'Barcode'      => (string) ($p->barcode ?? ''),
                 'Item_Code'    => (string) ($p->sku ?? ''),
                 'Image'        => (string) ($p->image_url ?? ''),
+                'Display_Order'=> (int) ($p->display_order ?? 0),
                 '_row'         => (int) $p->id,
             ];
         });
@@ -1057,6 +1058,28 @@ class PanelApiController extends Controller
         $t->putSetting('category_order', $order);
         $this->catFlush($t);
         return response()->json(['ok' => true]);
+    }
+
+    /** Set display order for one or more products (pin to top / push to bottom / reset). */
+    public function productOrder(Request $r)
+    {
+        $items = $r->input('items', []);
+        if (! is_array($items) || ! $items) return response()->json(['ok' => false, 'error' => 'no_items'], 422);
+
+        $n = 0;
+        foreach ($items as $it) {
+            if (! is_array($it)) continue;
+            $id = (int) ($it['row'] ?? $it['id'] ?? 0);
+            if ($id <= 0) continue;
+            $p = Product::find($id);              // tenant-scoped by the global scope
+            if (! $p) continue;
+            $p->display_order = (int) ($it['order'] ?? 0);
+            $p->save();
+            $n++;
+        }
+
+        $this->catFlush($r->user()->tenant);
+        return response()->json(['ok' => true, 'updated' => $n]);
     }
 
     /** True if a category name is already in use (by a product or as an empty extra). */
