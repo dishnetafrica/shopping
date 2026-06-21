@@ -1,14 +1,12 @@
 <?php
 /**
- * LIVE pre-production verification — run INSIDE the container against real data:
- *     php verify_live.php                 (read-only: real prices + parse/auth checks)
- *     php verify_live.php --write          (also runs the merchant apply→undo round-trip)
+ * PAL'S SNACKS PILOT — live verification (build 2026.06.21-mw2). Run INSIDE the container:
+ *     php verify_live.php           read-only: customer cart prices + merchant ChangeSets
+ *     php verify_live.php --write    also runs the apply → undo round-trip (self-restoring)
  *
- * Part A pushes the six weight orders through the REAL bot (BotBrain::respond) on a scratch
- * conversation and reads back the stored cart — proving weight_grams is stored, qty stays 1,
- * and price comes from the real catalogue. The scratch conversation is deleted afterward.
- * Part B verifies merchant ChangeSet composition, self-check, and unauthorized rejection.
- * Part C (only with --write) applies "Today no fafda…", confirms, undoes, and restores state.
+ * Matches the approved verification matrix exactly:
+ *   Customer: 750g kaju · 500g kaju · 250g kaju · 1.5kg fafda
+ *   Merchant: 4 ChangeSet messages + apply/undo round-trip on message 1.
  */
 require __DIR__ . '/vendor/autoload.php';
 $app = require_once __DIR__ . '/bootstrap/app.php';
@@ -23,77 +21,76 @@ use App\Services\Bot\Merchant\MerchantConversationParser;
 use App\Services\Bot\Merchant\MerchantDirectory;
 use App\Services\Bot\Merchant\DailyState;
 
-$SLUG    = getenv('VERIFY_SLUG') ?: 'palssnack';     // Pal's Snacks
+$SLUG     = getenv('VERIFY_SLUG') ?: 'palssnack';
 $DO_WRITE = in_array('--write', $argv, true);
+$pass = 0; $fail = 0;
+function chk(&$pass, &$fail, $c, $l) { $c ? $pass++ : $fail++; echo '   [' . ($c ? 'PASS' : 'FAIL') . "] $l\n"; }
 
 $tenant = Tenant::where('slug', $SLUG)->first();
 if (! $tenant) { fwrite(STDERR, "Tenant '$SLUG' not found\n"); exit(1); }
 $bot = app(BotBrain::class);
 echo "Tenant: {$tenant->name} (#{$tenant->id})   build: " . BotBrain::VERSION . "\n";
+chk($pass, $fail, BotBrain::VERSION === '2026.06.21-mw2', "version == 2026.06.21-mw2");
 
-/* ───────────────────────── PART A — weight ordering (REAL catalogue) ───────────────────────── */
-echo "\n=== PART A: customer weight ordering ===\n";
-$msg = "750g Kaju, 500g Kaju, 250g Kaju, 1.5kg Fafda, 300g Sev, 200 grams Vanela Gathiya";
-echo "Parser output per fragment:\n";
-foreach (BulkOrderParser::parseAll($msg) as $ln) echo "  " . json_encode($ln) . "\n";
+/* ───────────── CUSTOMER: weight ordering (real catalogue) ───────────── */
+echo "\n=== CUSTOMER WEIGHT TESTS ===\n";
+$msg = '750g kaju, 500g kaju, 250g kaju, 1.5kg fafda';
+echo "Message: \"$msg\"\nParser:\n";
+foreach (BulkOrderParser::parseAll($msg) as $ln) echo "   " . json_encode($ln) . "\n";
 
-$scratch = Conversation::create([
-    'tenant_id' => $tenant->id, 'customer_phone' => 'verify_' . uniqid(),
-    'state' => [], 'cart' => [],
-]);
+$scratch = Conversation::create(['tenant_id' => $tenant->id, 'customer_phone' => 'verify_' . uniqid(), 'state' => [], 'cart' => []]);
 $bot->respond($tenant, $scratch, $msg);
 $scratch->refresh();
-echo "\nStored cart lines (real prices):\n";
-$qtyMisuse = false;
+echo "Stored cart (real prices):\n";
+$weightLines = 0; $qtyMisuse = false;
 foreach ((array) $scratch->cart as $l) {
     $sub = (float) $l['price'] * (int) $l['qty'];
-    $w   = $l['weight_grams'] ?? '—';
-    echo "  " . str_pad((string) $l['name'], 18) . " weight_grams=" . str_pad((string) $w, 6)
-        . " qty={$l['qty']}  price=" . number_format((float) $l['price'])
-        . "  line_total=" . number_format($sub) . "\n";
-    if (! empty($l['weight_grams']) && (int) $l['qty'] !== 1) $qtyMisuse = true;
+    echo "   " . str_pad((string) $l['name'], 16) . " weight_grams=" . str_pad((string) ($l['weight_grams'] ?? '—'), 6)
+        . " qty={$l['qty']}  price=" . number_format((float) $l['price']) . "  total=" . number_format($sub) . "\n";
+    if (! empty($l['weight_grams'])) { $weightLines++; if ((int) $l['qty'] !== 1) $qtyMisuse = true; }
 }
-echo $qtyMisuse ? "  ✗ qty used as multiplier on a weight line!\n" : "  ✓ every weight line has qty=1 (weight_grams carries the amount)\n";
 $scratch->delete();
+chk($pass, $fail, $weightLines >= 1, "weight lines created from real catalogue");
+chk($pass, $fail, ! $qtyMisuse, "every weight line qty=1 (weight_grams carries amount)");
 
-/* ───────────────────────── PART B — merchant mode (parse/auth, read-only) ──────────────────── */
-echo "\n=== PART B: merchant mode (read-only checks) ===\n";
-$r = MerchantConversationParser::extract('Today no fafda. Open at 10. Close at 7.');
-echo "ChangeSet from 'Today no fafda. Open at 10. Close at 7.' → " . count($r['changes']) . " changes (→ ONE pending request):\n";
-foreach ($r['changes'] as $c) echo "  " . json_encode($c) . "\n";
+/* ───────────── MERCHANT: ChangeSet creation (read-only) ───────────── */
+echo "\n=== MERCHANT CHANGESET TESTS ===\n";
+$mtests = [
+    'Today no fafda, open 10am, close 7pm',
+    'Fafda nathi aaje, Jalebi special',
+    'Delivery after 5pm today, Only cash',
+    'Kaju 1kg 55000, Fafda 1kg 25000',
+];
+foreach ($mtests as $i => $t) {
+    $r = MerchantConversationParser::extract($t);
+    echo ($i + 1) . ". \"$t\" → " . count($r['changes']) . " changes, " . count($r['unparsed']) . " unparsed\n";
+    foreach ($r['changes'] as $c) echo "      " . json_encode($c) . "\n";
+    chk($pass, $fail, count($r['changes']) >= 2 && ! $r['unparsed'], "  msg " . ($i + 1) . ": multiple changes, zero unparsed (one ChangeSet)");
+}
 
-$sc = MerchantConversationParser::extract("What is today's menu?");
-echo "Self-check 'What is today's menu?' → selfcheck=" . json_encode($sc['selfcheck']) . ", changes=" . count($sc['changes']) . "\n";
-
-$authPhones = MerchantDirectory::authorizedPhones($tenant);
-echo "Authorized merchant phones on file: " . (count($authPhones) ? implode(', ', $authPhones) : '(none — set owner_alert_phone or owner/manager users)') . "\n";
-echo "  unauthorized 256700111222 → " . (MerchantDirectory::isAuthorized($tenant, '256700111222') ? 'AUTHORIZED (unexpected!)' : 'rejected → customer flow ✓') . "\n";
-
-/* ───────────────────────── PART C — apply → undo round-trip (only with --write) ─────────────── */
+/* ───────────── APPLY → UNDO round-trip (only with --write) ───────────── */
 if ($DO_WRITE) {
-    echo "\n=== PART C: merchant apply → undo round-trip (writes, self-restoring) ===\n";
+    echo "\n=== APPLY → UNDO ROUND-TRIP ===\n";
+    $authPhones = MerchantDirectory::authorizedPhones($tenant);
     $owner = $authPhones[0] ?? null;
-    if (! $owner) { echo "  no authorized phone configured — skipping round-trip.\n"; }
+    if (! $owner) { echo "   no authorized merchant phone configured — set owner/manager or owner_alert_phone, then re-run.\n"; chk($pass, $fail, false, "authorized merchant phone present"); }
     else {
         $before = DailyState::get($tenant);
-        $convo = Conversation::firstOrCreate(
-            ['tenant_id' => $tenant->id, 'customer_phone' => MerchantDirectory::normalize($owner)],
-            ['state' => [], 'cart' => []]
-        );
-        echo "Propose: " . trim($bot->respond($tenant, $convo, 'Today no fafda. Open at 10. Close at 7.')) . "\n";
+        $convo = Conversation::firstOrCreate(['tenant_id' => $tenant->id, 'customer_phone' => MerchantDirectory::normalize($owner)], ['state' => [], 'cart' => []]);
+        echo "Propose: " . trim($bot->respond($tenant, $convo, 'Today no fafda, open 10am, close 7pm')) . "\n";
         $pending = MerchantChangeRequest::where('tenant_id', $tenant->id)->where('status', 'pending')->latest('id')->first();
-        echo "  pending request id=" . ($pending->id ?? 'NONE') . "  changes=" . ($pending ? count($pending->payload_json) : 0) . "  (expect 1 request)\n";
+        chk($pass, $fail, $pending && count($pending->payload_json) === 3, "one pending request bundling 3 changes");
         echo "Confirm: " . trim($bot->respond($tenant, $convo, 'YES')) . "\n";
         $after = DailyState::get($tenant);
-        echo "  daily_state.hours now: " . json_encode($after['hours']) . "  unavailable: " . json_encode($after['unavailable']) . "\n";
+        chk($pass, $fail, ($after['hours']['open'] ?? null) === '10:00' && ($after['hours']['close'] ?? null) === '19:00', "apply: hours set 10:00–19:00");
         echo "Undo:    " . trim($bot->respond($tenant, $convo, 'undo last change')) . "\n";
         echo "Confirm: " . trim($bot->respond($tenant, $convo, 'YES')) . "\n";
         $restored = DailyState::get($tenant);
-        echo "  daily_state restored == before? " . (json_encode($restored) === json_encode($before) ? 'YES ✓' : 'NO ✗') . "\n";
-        echo "Self-check live: " . trim($bot->respond($tenant, $convo, "What is today's menu?")) . "\n";
+        chk($pass, $fail, json_encode($restored) === json_encode($before), "undo: daily_state restored == before");
     }
 } else {
-    echo "\n(Part C apply→undo round-trip skipped — re-run with --write to exercise it.)\n";
+    echo "\n(apply→undo round-trip skipped — re-run with --write)\n";
 }
 
-echo "\nDone.\n";
+echo "\n──────── RESULT ────────\n" . ($fail === 0 ? "✅ ALL PASS — $pass/$pass\n" : "❌ $pass passed, $fail FAILED\n");
+exit($fail ? 1 : 0);
