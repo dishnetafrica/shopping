@@ -235,6 +235,7 @@
 .wizrow{display:flex;gap:9px;margin-top:12px}
 .wizrow .wizbtn{margin-top:0}
 .wizwa{display:flex;align-items:center;gap:10px;background:#F6FAF7;border:1px solid #E2EFE6;border-radius:12px;padding:12px;font-size:13.5px;color:#3a4a40;margin-top:4px}
+.bbtab{background:#eef2f8;color:#445} .bbtab.on{background:#3a7bd5;color:#fff}
 </style>
 <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
 <meta name="theme-color" content="#0B3D22">
@@ -293,6 +294,7 @@
       <a class="nav" data-feature="riders" data-page="riders"><span class="i">🛵</span> Riders</a>
       <a class="nav" data-page="returns"><span class="i">↩</span> Returns</a>
       <a class="nav" data-page="activity"><span class="i">📥</span> Activity Inbox</a>
+      <a class="nav" data-page="brain"><span class="i">🧠</span> Business Brain <span style="color:#c9a227">⭐</span></a>
       <a class="nav" data-page="settings"><span class="i">⚙</span> Settings</a>
       <a class="nav sub" data-page="profile"><span class="i">└</span> Profile</a>
       <a class="nav sub" data-page="security"><span class="i">└</span> Security</a>
@@ -728,6 +730,18 @@
         </div>
       </div>
 
+      <!-- ============ BUSINESS BRAIN ============ -->
+      <div id="pageBrain" class="hide">
+        <div class="crumb">Home / <b>Business Brain</b></div>
+        <div id="brainTabs" class="hide" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+          <button class="btn bbtab on" data-tab="overview" onclick="brainTab('overview')">Overview</button>
+          <button class="btn bbtab" data-tab="dna" onclick="brainTab('dna')">Business DNA</button>
+          <button class="btn bbtab" data-tab="ready" onclick="brainTab('ready')">Readiness</button>
+          <button class="btn bbtab" data-tab="activity" onclick="brainTab('activity')">Activity &amp; Reviews</button>
+        </div>
+        <div id="brainBody"><div style="color:#888;padding:18px">Loading your Business Brain…</div></div>
+      </div>
+
       <!-- ============ SETTINGS ============ -->
       <div id="pageSettings" class="hide">
         <div class="crumb">Home / <b>Settings</b></div>        <div class="row2">
@@ -1026,6 +1040,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   ret:'/papi/return',returns:'/papi/returns',
   settings:'/papi/settings',settingsSave:'/papi/settings-save',botToggle:'/papi/bot-toggle',
   actInbox:'/papi/activity-inbox',actApprove:'/papi/activity-approve',actReject:'/papi/activity-reject',actEdit:'/papi/activity-edit',
+  brain:'/papi/brain',brainDiscover:'/papi/brain-discover',
   imageStats:'/papi/image-stats',
   operations:'/papi/operations',
   branches:'/papi/branches',branchSave:'/papi/branch-save',branchDel:'/papi/branch-delete',
@@ -1475,6 +1490,198 @@ async function actDo(id,kind){
     if(d&&d.ok){activityInit();}else{alert('Could not update.');}
   }catch(e){alert('Network error.');}
 }
+
+/* ============ BUSINESS BRAIN ============ */
+var brainState={tab:'overview',data:null,scanning:false};
+var BSRC={owner_status:'Status Image',owner_forward:'Forwarded',owner_image:'Image',owner_message:'Owner Message',broadcast:'Broadcast',status:'Status'};
+function bbColor(p){return p>=90?'#2e9e5b':(p>=75?'#3a7bd5':(p>=50?'#c9a227':'#d0533d'));}
+function bbTile(label,val,sub,color){
+  return '<div class="card" style="flex:1;min-width:150px;margin:0"><div class="body" style="padding:14px">'
+    +'<div style="font-size:12px;color:#778;text-transform:uppercase;letter-spacing:.04em">'+esc(label)+'</div>'
+    +'<div style="font-size:26px;font-weight:800;margin:3px 0;color:'+(color||'#222')+'">'+val+'</div>'
+    +'<div style="font-size:12px;color:#889">'+(sub||'')+'</div></div></div>';
+}
+function bbBar(label,pct){
+  var c=bbColor(pct);
+  return '<div style="display:flex;align-items:center;gap:8px;margin:5px 0">'
+    +'<span style="width:74px;font-size:13px;color:#667">'+esc(label)+'</span>'
+    +'<span style="flex:1;height:9px;background:#eef0f3;border-radius:5px;overflow:hidden"><span style="display:block;height:100%;width:'+(pct||0)+'%;background:'+c+'"></span></span>'
+    +'<span style="width:40px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600">'+(pct||0)+'%</span></div>';
+}
+async function brainInit(){
+  if(brainState.scanning)return;
+  $('brainTabs').classList.add('hide');
+  $('brainBody').innerHTML='<div style="color:#888;padding:18px">Loading your Business Brain…</div>';
+  try{
+    var r=await fetch(EP.brain+'?token='+encodeURIComponent(token),{cache:'no-store'});
+    var d=await r.json(); brainState.data=d;
+    if(!d.has_discovery){renderBrainEmpty();return;}
+    $('brainTabs').classList.remove('hide');
+    brainTab(brainState.tab||'overview');
+  }catch(e){$('brainBody').innerHTML='<div style="color:#c33;padding:18px">Could not load Business Brain.</div>';}
+}
+function brainTab(t){
+  brainState.tab=t;
+  document.querySelectorAll('.bbtab').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t);});
+  if(t==='overview')renderBrainOverview();
+  else if(t==='dna')renderBrainDna();
+  else if(t==='ready')renderBrainReady();
+  else if(t==='activity')renderBrainActivity();
+}
+function renderBrainEmpty(){
+  $('brainTabs').classList.add('hide');
+  $('brainBody').innerHTML='<div class="card"><div class="body" style="padding:26px;text-align:center">'
+    +'<div style="font-size:40px">🧠</div>'
+    +'<div style="font-size:20px;font-weight:700;margin:8px 0">Let\'s discover your business</div>'
+    +'<div style="color:#667;max-width:440px;margin:0 auto 16px">We\'ll read your WhatsApp history and learn your products, FAQs, delivery rules, languages and offers — so the AI can represent your shop. Nothing goes live without your approval.</div>'
+    +'<button class="btn" style="background:#3a7bd5;color:#fff;font-size:15px;padding:10px 22px" onclick="brainRunDiscovery()">Run Discovery ✨</button>'
+    +'</div></div>';
+}
+async function brainRunDiscovery(){
+  brainState.scanning=true; $('brainTabs').classList.add('hide');
+  var steps=[['Analyzing Products','products'],['Analyzing FAQs','FAQs'],['Analyzing Delivery Rules','delivery rules'],['Analyzing Offers','offers'],['Detecting Languages','languages'],['Scoring Readiness','% ready']];
+  var h='<div class="card"><div class="body" style="padding:22px"><div style="font-weight:700;font-size:17px;margin-bottom:14px">Discovering your business…</div><div id="wizSteps">';
+  steps.forEach(function(s,i){
+    h+='<div id="wizStep'+i+'" style="display:flex;align-items:center;gap:10px;padding:9px 0;opacity:.35;transition:opacity .3s">'
+      +'<span id="wizIco'+i+'" style="width:22px;height:22px;border-radius:50%;border:2px solid #cdd3da;display:inline-flex;align-items:center;justify-content:center;font-size:13px"></span>'
+      +'<span style="flex:1"><span style="font-size:12px;color:#889">Step '+(i+1)+'/6</span><br><b>'+s[0]+'</b></span>'
+      +'<span id="wizRes'+i+'" style="color:#2e9e5b;font-weight:700"></span></div>';
+  });
+  h+='</div></div></div>';
+  $('brainBody').innerHTML=h;
+  try{
+    var r=await fetch(EP.brainDiscover+'?token='+encodeURIComponent(token),{cache:'no-store'});
+    var d=await r.json();
+    if(!d.ok){$('brainBody').innerHTML='<div class="card"><div class="body" style="padding:20px;color:#c33">Discovery failed. Please try again.</div></div>';brainState.scanning=false;return;}
+    for(var i=0;i<d.steps.length;i++){await bbSleep(520);bbRevealStep(i,d.steps[i]);}
+    await bbSleep(700);
+    brainState.scanning=false; brainInit();
+  }catch(e){brainState.scanning=false;$('brainBody').innerHTML='<div class="card"><div class="body" style="padding:20px;color:#c33">Network error during discovery.</div></div>';}
+}
+function bbSleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+function bbRevealStep(i,step){
+  var el=$('wizStep'+i); if(el)el.style.opacity='1';
+  var ico=$('wizIco'+i); if(ico){ico.style.borderColor='#2e9e5b';ico.style.background='#2e9e5b';ico.style.color='#fff';ico.textContent='✓';}
+  var res=$('wizRes'+i); if(res){res.textContent=step.is_pct?(step.count+'% ready'):(step.count+' '+step.noun);}
+}
+function renderBrainOverview(){
+  var d=brainState.data||{}, rd=d.readiness, dna=d.dna||{}, pf=d.performance||{}, rv=d.reviews||{count:0,items:[]};
+  var cats=(rd&&rd.categories)||{};
+  var tiles='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
+    +bbTile('Automation Readiness',(rd?rd.overall:0)+'%','',bbColor(rd?rd.overall:0))
+    +bbTile('AI Conversations',(pf.conversations||0),'yesterday')
+    +bbTile('AI Success Rate',(pf.success||0)+'%',(pf.solved||0)+' solved',bbColor(pf.success||0))
+    +bbTile('Pending Reviews',(rv.count||0),'need your OK',rv.count?'#c9a227':'#2e9e5b')
+    +bbTile('Products Discovered',(d.discovered&&d.discovered.products)||0,'')
+    +bbTile('FAQs Discovered',(d.discovered&&d.discovered.faqs)||0,'')
+    +'</div>';
+  // readiness card
+  var rc='<div class="card" style="flex:1;min-width:260px"><div class="head">Automation Readiness</div><div class="body">'
+    +(rd?('<div style="font-size:38px;font-weight:800;color:'+bbColor(rd.overall)+'">'+rd.overall+'%</div>'
+      +'<div style="color:#667;margin-bottom:8px">Mode: <b>'+esc(rd.mode||'')+'</b></div>'
+      +bbBar('Products',cats.products||0)+bbBar('FAQs',cats.faqs||0)+bbBar('Offers',cats.offers||0)+bbBar('Delivery',cats.delivery||0)
+      +'<button class="btn" style="margin-top:10px;background:#eef2f8" onclick="brainTab(\'ready\')">View Report</button>')
+      :'<div style="color:#889">No readiness report yet.</div>')
+    +'</div></div>';
+  // DNA card
+  var langs=(dna.languages||[]).map(function(l){return bbBar(l.lang,l.pct);}).join('');
+  var prods=(dna.products||[]).slice(0,3).map(function(p,i){return '<div>'+(i+1)+'. '+esc(p)+'</div>';}).join('');
+  var faqs=(dna.faqs||[]).slice(0,3).map(function(f){return '<div style="color:#556">'+esc(f)+'</div>';}).join('');
+  var dc='<div class="card" style="flex:1;min-width:260px"><div class="head">Business DNA</div><div class="body">'
+    +'<div style="font-size:12px;color:#778;text-transform:uppercase">Languages</div>'+(langs||'<div style="color:#aab">—</div>')
+    +'<div style="font-size:12px;color:#778;text-transform:uppercase;margin-top:8px">Top Products</div>'+(prods||'<div style="color:#aab">—</div>')
+    +'<div style="font-size:12px;color:#778;text-transform:uppercase;margin-top:8px">Top Questions</div>'+(faqs||'<div style="color:#aab">—</div>')
+    +'<button class="btn" style="margin-top:10px;background:#eef2f8" onclick="brainTab(\'dna\')">View Details</button>'
+    +'</div></div>';
+  // AI performance card
+  var ac='<div class="card" style="flex:1;min-width:230px"><div class="head">AI Performance</div><div class="body">'
+    +'<div style="color:#667;font-size:13px">Yesterday</div>'
+    +'<div style="display:flex;justify-content:space-between;margin:6px 0"><span>Conversations</span><b>'+(pf.conversations||0)+'</b></div>'
+    +'<div style="display:flex;justify-content:space-between;margin:6px 0"><span>Solved by AI</span><b style="color:#2e9e5b">'+(pf.solved||0)+'</b></div>'
+    +'<div style="display:flex;justify-content:space-between;margin:6px 0"><span>Escalated</span><b style="color:#d0533d">'+(pf.escalated||0)+'</b></div>'
+    +'<div style="display:flex;justify-content:space-between;margin:6px 0;border-top:1px solid #eee;padding-top:6px"><span>Success</span><b style="color:'+bbColor(pf.success||0)+'">'+(pf.success||0)+'%</b></div>'
+    +'</div></div>';
+  var row='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'+rc+dc+ac+'</div>';
+  // review + activity preview
+  var rev=brainReviewCardHtml(rv);
+  var act=brainActivityCardHtml(d.activity||[]);
+  var row2='<div style="display:flex;gap:12px;flex-wrap:wrap">'+rev+act+'</div>';
+  $('brainBody').innerHTML=tiles+row+row2;
+}
+function brainReviewCardHtml(rv){
+  var h='<div class="card" style="flex:1;min-width:280px"><div class="head">Needs Review <span class="count" style="margin-left:auto">'+(rv.count||0)+' items</span></div><div class="body">';
+  if(!rv.items||!rv.items.length){h+='<div style="color:#2e9e5b">All caught up 🎉</div>';}
+  else{rv.items.forEach(function(it){var conf=it.confidence||0;
+    h+='<div style="border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px">'
+      +'<div style="font-weight:600">'+esc(it.suggested||it.message||it.event||'')+'</div>'
+      +'<div style="font-size:12px;color:'+bbColor(conf)+';font-weight:700;margin:2px 0">'+conf+'% confidence</div>'
+      +'<div style="display:flex;gap:6px;margin-top:6px">'
+      +'<button class="btn" style="background:#2e9e5b;color:#fff;padding:4px 12px" onclick="brainReview('+it.id+',\'approve\')">Approve</button>'
+      +'<button class="btn" style="background:#f7e7e7;color:#b33;padding:4px 12px" onclick="brainReview('+it.id+',\'reject\')">Reject</button>'
+      +'</div></div>';
+  });
+    if(rv.count>rv.items.length){h+='<button class="btn" style="background:#eef2f8" onclick="showPage(\'activity\')">View all '+rv.count+' →</button>';}
+  }
+  return h+'</div></div>';
+}
+function brainActivityCardHtml(items){
+  var h='<div class="card" style="flex:1;min-width:280px"><div class="head">Today\'s Activity</div><div class="body">';
+  if(!items.length){h+='<div style="color:#889">No activity logged yet.</div>';}
+  else{items.forEach(function(a){
+    h+='<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid #f2f3f5">'
+      +'<span style="width:8px;height:8px;border-radius:50%;background:#3a7bd5;margin-top:6px;flex:none"></span>'
+      +'<div style="flex:1"><div style="font-weight:600;font-size:14px">'+esc(a.content||a.event||'')+'</div>'
+      +'<div style="font-size:12px;color:#889">'+esc(BSRC[a.source]||a.source||'')+' · '+esc(a.at||'')+'</div></div></div>';
+  });}
+  return h+'</div></div>';
+}
+async function brainReview(id,kind){
+  var url=kind==='reject'?EP.actReject:EP.actApprove;
+  try{var r=await fetch(url+'?token='+encodeURIComponent(token)+'&id='+id,{cache:'no-store'});var d=await r.json();
+    if(d&&d.ok){brainInit();}else{alert('Could not update.');}
+  }catch(e){alert('Network error.');}
+}
+function renderBrainDna(){
+  var dna=(brainState.data||{}).dna||{};
+  var langs=(dna.languages||[]).map(function(l){return bbBar(l.lang,l.pct);}).join('')||'<div style="color:#aab">—</div>';
+  var prods=(dna.products||[]).map(function(p,i){return '<div style="padding:3px 0">'+(i+1)+'. '+esc(p)+'</div>';}).join('')||'<div style="color:#aab">—</div>';
+  var faqs=(dna.faqs||[]).map(function(f){return '<div style="padding:3px 0;color:#556">• '+esc(f)+'</div>';}).join('')||'<div style="color:#aab">—</div>';
+  var del=dna.delivery||{}; var delBits=[];
+  if(del.fee)delBits.push('Fee: '+esc(String(del.fee)));
+  if(del.free_threshold)delBits.push('Free above: '+esc(String(del.free_threshold)));
+  if(del.areas&&del.areas.length)delBits.push('Areas: '+del.areas.map(esc).join(', '));
+  var delH=delBits.length?delBits.map(function(b){return '<div style="padding:3px 0">'+b+'</div>';}).join(''):'<div style="color:#aab">—</div>';
+  function box(title,inner){return '<div class="card" style="flex:1;min-width:240px"><div class="head">'+title+'</div><div class="body">'+inner+'</div></div>';}
+  $('brainBody').innerHTML='<div style="color:#667;font-size:13px;margin-bottom:10px">Learned from '+((dna.scanned_messages)||0)+' messages. Nothing is live until you approve it.</div>'
+    +'<div style="display:flex;gap:12px;flex-wrap:wrap">'
+    +box('Languages',langs)+box('Top Products',prods)+box('Common Questions',faqs)
+    +'</div><div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">'
+    +box('Delivery Rules',delH)
+    +box('Opening Hours',dna.hours?('<div style="font-size:16px">'+esc(dna.hours)+'</div>'):'<div style="color:#aab">—</div>')
+    +box('Communication Style',dna.style?('<div style="font-size:16px;text-transform:capitalize">'+esc(dna.style)+'</div>'):'<div style="color:#aab">—</div>')
+    +'</div>';
+}
+function renderBrainReady(){
+  var rd=(brainState.data||{}).readiness;
+  if(!rd){$('brainBody').innerHTML='<div class="card"><div class="body" style="padding:18px;color:#889">No readiness report yet. Run discovery first.</div></div>';return;}
+  var c=rd.categories||{};
+  var bars=['products','faqs','delivery','offers','language'].map(function(k){return bbBar(k.charAt(0).toUpperCase()+k.slice(1),c[k]||0);}).join('');
+  $('brainBody').innerHTML='<div class="card"><div class="body" style="padding:20px">'
+    +'<div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">'
+    +'<div style="font-size:46px;font-weight:800;color:'+bbColor(rd.overall)+'">'+rd.overall+'%</div>'
+    +'<div><div style="font-size:13px;color:#778">RECOMMENDED MODE</div><div style="font-size:20px;font-weight:700">'+esc(rd.mode||'')+'</div>'
+    +'<div style="font-size:13px;color:#889">'+esc(rd.classification||'')+'</div></div></div>'
+    +'<div style="margin:16px 0">'+bars+'</div>'
+    +'<div style="background:#fff8e6;border:1px solid #f0e0a8;border-radius:8px;padding:10px 12px;color:#7a6515;font-size:13px">⭐ AI stays in your chosen mode until you change it. It never switches modes on its own.</div>'
+    +'</div></div>';
+}
+function renderBrainActivity(){
+  var d=brainState.data||{};
+  $('brainBody').innerHTML=brainReviewCardHtml(d.reviews||{count:0,items:[]})
+    .replace('flex:1;min-width:280px','min-width:0;margin-bottom:12px')
+    +brainActivityCardHtml(d.activity||[]).replace('flex:1;min-width:280px','min-width:0')
+    +'<div style="margin-top:10px"><button class="btn" style="background:#eef2f8" onclick="showPage(\'activity\')">Open full Review Inbox →</button></div>';
+}
 function showPage(p){
   $('pageDash').classList.toggle('hide',p!=='dash');
   $('pageOrders').classList.toggle('hide',p!=='orders');
@@ -1490,6 +1697,7 @@ function showPage(p){
   $('pageRiders').classList.toggle('hide',p!=='riders');
   $('pageReturns').classList.toggle('hide',p!=='returns');
   $('pageActivity').classList.toggle('hide',p!=='activity');
+  $('pageBrain').classList.toggle('hide',p!=='brain');
   $('pageSettings').classList.toggle('hide',p!=='settings');
   $('pageHelp').classList.toggle('hide',p!=='help');
   $('pageDeliveryZones').classList.toggle('hide',p!=='deliveryZones');
@@ -1500,11 +1708,11 @@ function showPage(p){
   $('pageSubscription').classList.toggle('hide',p!=='subscription');
   if(p==='orders'){$('detailView').classList.add('hide');$('listView').classList.remove('hide');}
   document.querySelectorAll('.side a.nav').forEach(function(a){a.classList.toggle('on',a.dataset.page===p);});
-  var T={dash:'Dashboard',pos:'POS',reports:'Reports',analytics:'Analytics',products:'Products',category:'Categories',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription',activity:'Activity Inbox'};
+  var T={dash:'Dashboard',pos:'POS',reports:'Reports',analytics:'Analytics',products:'Products',category:'Categories',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription',activity:'Activity Inbox',brain:'Business Brain'};
   $('pageTitle').textContent=T[p]||'Orders';
   if(p==='dash')renderDash(); else if(p==='pos')posInit(); else if(p==='reports')reportsInit(); else if(p==='analytics')analyticsInit();
   else if(p==='kitchen')kitchenInit();
-  else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='activity')activityInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else renderList();
+  else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='activity')activityInit(); else if(p==='brain')brainInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else renderList();
   closeSide(); window.scrollTo(0,0);
 }
 function openSide(){$('side').classList.add('open');$('backdrop').classList.add('show');}

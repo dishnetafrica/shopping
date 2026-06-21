@@ -168,6 +168,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('activity-approve', [PanelApiController::class, 'activityApprove']);
         Route::get('activity-reject',  [PanelApiController::class, 'activityReject']);
         Route::get('activity-edit',    [PanelApiController::class, 'activityEdit']);
+        Route::get('brain',            [PanelApiController::class, 'brainData']);
+        Route::get('brain-discover',   [PanelApiController::class, 'brainDiscover']);
         Route::get('bot-config-save', [PanelApiController::class, 'botConfigSave']);
         Route::get('branch-save',     [PanelApiController::class, 'branchSave']);
         Route::get('branch-delete',   [PanelApiController::class, 'branchDel']);
