@@ -262,6 +262,14 @@ class ProcessIncomingMessage implements ShouldQueue
             }
         }
 
+        // A status post that wasn't ingested as an owner offer (non-owner author, or an owner
+        // status that isn't a readable menu) is dropped here — a status is never product-searched
+        // or answered like a 1:1 customer message.
+        if (! empty($this->incoming['is_status_post'] ?? false)) {
+            BotTrace::log($this->tenantId, $trace, $from, 'status_ignored', 'not an owner offer');
+            return;
+        }
+
         // ---- Image search: customer sent a product photo instead of typing ----
         // Vision turns the photo (+ any caption) into a catalogue query; we verify the
         // query actually matches a product in THIS shop before replying (so a

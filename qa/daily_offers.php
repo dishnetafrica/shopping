@@ -10,12 +10,14 @@ require $base . 'OfferQueryMatcher.php';
 require $base . 'OfferRules.php';
 require $base . 'OfferExtractor.php';
 require $base . 'OfferFormatter.php';
+require $base . 'StatusIngestGate.php';
 
 use App\Services\Bot\Offers\OfferTypeClassifier as TC;
 use App\Services\Bot\Offers\OfferQueryMatcher as QM;
 use App\Services\Bot\Offers\OfferRules as R;
 use App\Services\Bot\Offers\OfferExtractor as EX;
 use App\Services\Bot\Offers\OfferFormatter as FMT;
+use App\Services\Bot\Offers\StatusIngestGate as SG;
 
 $pass = 0; $fail = 0;
 function t($label, $got, $want) {
@@ -115,6 +117,14 @@ $reply = FMT::customerReply([$v + ['type' => TC::DAILY_THALI]], 'UGX');
 ok('customer reply has thali intro', str_contains($reply, "today's thali") && str_contains($reply, 'menu'));
 $conf = FMT::ownerConfirm($v + ['type' => TC::DAILY_THALI], 'UGX');
 ok('owner confirm saved msg', str_contains($conf, 'Saved') && str_contains($conf, 'replace it'));
+
+/* ----------------------------------------------------------- status gate */
+ok('status+image passes',        SG::isStatusImage('status@broadcast', true));
+ok('status+text dropped',        ! SG::isStatusImage('status@broadcast', false));
+ok('normal+image not status',    ! SG::isStatusImage('256770000000@s.whatsapp.net', true));
+ok('group dropped',              ! SG::isStatusImage('123-456@g.us', true));
+t('status sender = participant', SG::senderNumber('status@broadcast', '256771234567@s.whatsapp.net'), '256771234567');
+t('normal sender = remote',      SG::senderNumber('256770000000@s.whatsapp.net', ''), '256770000000');
 
 echo "\n=== daily_offers: {$pass} passed, {$fail} failed ===\n";
 exit($fail === 0 ? 0 : 1);

@@ -137,11 +137,23 @@ class EvolutionGateway implements WhatsAppGateway
 
         $remote = data_get($msg, 'key.remoteJid', '');
         $fromMe = (bool) data_get($msg, 'key.fromMe', false);
-        // Drop groups, broadcasts and status posts entirely. Keep 1:1 fromMe messages —
+        $participant = (string) data_get($msg, 'key.participant', '');
+
+        // A WhatsApp Status post that carries an IMAGE is an owner's published menu/offer poster.
+        // Carve it out of the blanket status/broadcast drop so the job can verify the poster is an
+        // authorized owner and ingest it. Everything else status/broadcast/group is still dropped.
+        $statusOffer = \App\Services\Bot\Offers\StatusIngestGate::isStatusImage(
+            (string) $remote,
+            is_array(data_get($msg, 'message.imageMessage'))
+        );
+
+        // Drop groups, broadcasts and (non-image) status posts entirely. Keep 1:1 fromMe messages —
         // they let us detect when the shop owner replied by hand (manual takeover).
-        if (str_contains((string) $remote, '@g.us')
+        if (! $statusOffer && (
+            str_contains((string) $remote, '@g.us')
             || str_contains((string) $remote, '@broadcast')
-            || str_contains((string) $remote, 'status@broadcast')) {
+            || str_contains((string) $remote, 'status@broadcast')
+        )) {
             return null;
         }
 
@@ -202,7 +214,7 @@ class EvolutionGateway implements WhatsAppGateway
 
         return [
             'instance'  => (string) $instance,
-            'from'      => preg_replace('/[^0-9]/', '', explode('@', (string) $remote)[0]),
+            'from'      => \App\Services\Bot\Offers\StatusIngestGate::senderNumber((string) $remote, $participant),
             'text'      => (string) $text,
             'lat'       => $lat !== null ? (float) $lat : null,
             'lng'       => $lng !== null ? (float) $lng : null,
@@ -210,6 +222,7 @@ class EvolutionGateway implements WhatsAppGateway
             'loc_address' => $locAddr !== null ? (string) $locAddr : null,
             'messageId' => (string) data_get($msg, 'key.id', ''),
             'from_me'         => $fromMe,
+            'is_status_post'  => $statusOffer,
             'is_status_reply' => $isStatusReply,
             'quoted_text'     => $quotedText,
             'has_image'       => $hasImage,
@@ -218,9 +231,10 @@ class EvolutionGateway implements WhatsAppGateway
             'has_audio'       => $hasAudio,
             'audio_b64'       => $audioB64,
             'media_key'       => ($hasImage || $hasAudio) ? [
-                'id'        => (string) data_get($msg, 'key.id', ''),
-                'remoteJid' => (string) $remote,
-                'fromMe'    => $fromMe,
+                'id'          => (string) data_get($msg, 'key.id', ''),
+                'remoteJid'   => (string) $remote,
+                'participant' => $participant,
+                'fromMe'      => $fromMe,
             ] : null,
             'raw'       => $payload,
         ];
