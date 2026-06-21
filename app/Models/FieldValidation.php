@@ -15,6 +15,7 @@ class FieldValidation extends Model
         'messages_scanned', 'products_found', 'faq_found', 'delivery_rules_found',
         'readiness_score', 'actual_accuracy', 'owner_approved_accuracy',
         'owner_edits_required', 'owner_corrections_pct', 'time_to_go_live_min',
+        'products_accuracy', 'faq_accuracy', 'delivery_accuracy', 'offer_accuracy', 'language_accuracy',
         'detail', 'enrolled_at', 'imported_at', 'scanned_at', 'reviewed_at', 'went_live_at',
     ];
 
@@ -29,6 +30,11 @@ class FieldValidation extends Model
         'owner_edits_required'    => 'integer',
         'owner_corrections_pct'   => 'integer',
         'time_to_go_live_min'     => 'integer',
+        'products_accuracy'       => 'integer',
+        'faq_accuracy'            => 'integer',
+        'delivery_accuracy'       => 'integer',
+        'offer_accuracy'          => 'integer',
+        'language_accuracy'       => 'integer',
         'detail'                  => 'array',
         'enrolled_at'             => 'datetime',
         'imported_at'             => 'datetime',

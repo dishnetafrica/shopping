@@ -2535,6 +2535,130 @@ class PanelApiController extends Controller
         return response()->json(['ok' => $ok]);
     }
 
+    /**
+     * Business Brain — one payload powering the whole section: readiness, Business DNA,
+     * review queue, today's activity, and an AI-performance snapshot. Every block is guarded so a
+     * tenant that hasn't run discovery yet still gets a usable (mostly-null) response.
+     */
+    public function brainData(Request $r)
+    {
+        $t = $r->user()->tenant;
+        app(\App\Support\TenantContext::class)->set($t->id);
+
+        $readiness = null;
+        try {
+            $g = \App\Models\GoLiveReport::where('tenant_id', $t->id)->orderByDesc('id')->first();
+            if ($g) {
+                $readiness = [
+                    'overall' => (int) $g->overall_score,
+                    'mode'    => (string) $g->recommended_mode,
+                    'classification' => (string) $g->classification,
+                    'categories' => $g->category_scores ?? [],
+                ];
+            }
+        } catch (\Throwable $e) {}
+
+        $dna = null; $productsDiscovered = 0; $faqsDiscovered = 0;
+        try {
+            $d = \App\Models\BusinessDiscovery::where('tenant_id', $t->id)->orderByDesc('id')->first();
+            if ($d && is_array($d->report)) {
+                $sec = $d->report['sections'] ?? [];
+                $productsDiscovered = count($sec['top_products'] ?? []);
+                $faqsDiscovered = count($sec['faqs'] ?? []);
+                $dna = [
+                    'languages' => array_map(fn ($l) => ['lang' => $l['lang'] ?? '', 'pct' => $l['pct'] ?? 0], array_slice($sec['languages'] ?? [], 0, 5)),
+                    'products'  => array_map(fn ($p) => $p['name'] ?? '', array_slice($sec['top_products'] ?? [], 0, 6)),
+                    'faqs'      => array_map(fn ($f) => $f['label'] ?? ($f['topic'] ?? ''), array_slice($sec['faqs'] ?? [], 0, 6)),
+                    'delivery'  => $sec['delivery'] ?? [],
+                    'hours'     => $sec['hours']['text'] ?? null,
+                    'style'     => $sec['owner_style']['tone'] ?? null,
+                    'readiness_band' => $d->report['readiness_band'] ?? null,
+                    'scanned_messages' => (int) $d->sample_messages,
+                ];
+            }
+        } catch (\Throwable $e) {}
+
+        $reviews = ['count' => 0, 'items' => []];
+        try {
+            $items = app(\App\Services\Bot\Offers\ReviewQueueService::class)->pending($t, 100);
+            $reviews = ['count' => count($items), 'items' => array_slice($items, 0, 5)];
+        } catch (\Throwable $e) {}
+
+        $activity = [];
+        try {
+            $activity = \App\Models\ActivityFeedItem::where('tenant_id', $t->id)
+                ->orderByDesc('id')->limit(8)->get()
+                ->map(fn ($a) => [
+                    'source'  => (string) $a->source,
+                    'event'   => (string) $a->event_type,
+                    'content' => mb_substr((string) ($a->raw_content ?? ''), 0, 80),
+                    'at'      => optional($a->created_at)->diffForHumans(),
+                ])->all();
+        } catch (\Throwable $e) {}
+
+        // AI performance proxy from conversations active yesterday: escalated = handed to a human.
+        $perf = ['conversations' => 0, 'solved' => 0, 'escalated' => 0, 'success' => 0];
+        try {
+            $from = now()->subDay()->startOfDay();
+            $to   = now()->subDay()->endOfDay();
+            $q = \App\Models\Conversation::where('tenant_id', $t->id)
+                ->whereBetween('last_message_at', [$from, $to]);
+            $total = (clone $q)->count();
+            $esc   = (clone $q)->where('agent_active', true)->count();
+            $solved = max(0, $total - $esc);
+            $perf = [
+                'conversations' => $total,
+                'solved'        => $solved,
+                'escalated'     => $esc,
+                'success'       => $total > 0 ? (int) round($solved / $total * 100) : 0,
+            ];
+        } catch (\Throwable $e) {}
+
+        return response()->json([
+            'ok' => true,
+            'readiness' => $readiness,
+            'dna' => $dna,
+            'reviews' => $reviews,
+            'activity' => $activity,
+            'performance' => $perf,
+            'discovered' => ['products' => $productsDiscovered, 'faqs' => $faqsDiscovered],
+            'has_discovery' => $dna !== null,
+        ]);
+    }
+
+    /**
+     * Discovery Wizard — run a scan synchronously and return per-section counts so the panel can
+     * reveal "Step n/6 ✓ N discovered" with real numbers. Heavier than the async job; only fired
+     * when the owner taps "Run discovery".
+     */
+    public function brainDiscover(Request $r)
+    {
+        $t = $r->user()->tenant;
+        app(\App\Support\TenantContext::class)->set($t->id);
+        try {
+            $d = app(\App\Services\Bot\Discovery\DiscoveryScanner::class)->scan($t);
+            $sec = is_array($d->report) ? ($d->report['sections'] ?? []) : [];
+            $deliveryRules = count($sec['delivery']['areas'] ?? [])
+                + (! empty($sec['delivery']['fee']) ? 1 : 0)
+                + (! empty($sec['delivery']['free_threshold']) ? 1 : 0);
+            return response()->json([
+                'ok' => true,
+                'steps' => [
+                    ['label' => 'Analyzing Products',       'count' => count($sec['top_products'] ?? []), 'noun' => 'products'],
+                    ['label' => 'Analyzing FAQs',           'count' => count($sec['faqs'] ?? []),        'noun' => 'FAQs'],
+                    ['label' => 'Analyzing Delivery Rules', 'count' => $deliveryRules,                    'noun' => 'delivery rules'],
+                    ['label' => 'Analyzing Offers',         'count' => count($sec['promotions'] ?? []),  'noun' => 'offers'],
+                    ['label' => 'Detecting Languages',      'count' => count($sec['languages'] ?? []),   'noun' => 'languages'],
+                    ['label' => 'Scoring Readiness',        'count' => (int) $d->readiness,               'noun' => '% ready', 'is_pct' => true],
+                ],
+                'readiness' => (int) $d->readiness,
+                'messages'  => (int) $d->sample_messages,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => 'Discovery failed. Please try again.'], 200);
+        }
+    }
+
     public function botConfigSave(Request $r)
     {
         $t = $r->user()->tenant;

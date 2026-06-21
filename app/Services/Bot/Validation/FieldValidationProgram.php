@@ -79,6 +79,8 @@ class FieldValidationProgram
         $detail['corrected_truth']  = $correctedTruth;
         $detail['review_metrics']   = $metrics;
 
+        $cat = CampaignMetrics::categoryAccuracy($metrics);
+
         $record->update([
             'status'                  => $goLive ? 'live' : 'reviewed',
             'reviewed_at'             => $reviewedAt,
@@ -87,6 +89,11 @@ class FieldValidationProgram
             'owner_edits_required'    => $edits,
             'owner_corrections_pct'   => $corrPct,
             'time_to_go_live_min'     => $minutes,
+            'products_accuracy'       => $cat['products'],
+            'faq_accuracy'            => $cat['faqs'],
+            'delivery_accuracy'       => $cat['delivery'],
+            'offer_accuracy'          => $cat['offers'],
+            'language_accuracy'       => $cat['languages'],
             'detail'                  => $detail,
         ]);
 
