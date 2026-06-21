@@ -103,6 +103,9 @@ class PanelApiController extends Controller
                 'Barcode'      => (string) ($p->barcode ?? ''),
                 'Item_Code'    => (string) ($p->sku ?? ''),
                 'Image'        => (string) ($p->image_url ?? ''),
+                'Gallery_1'    => (string) ($p->gallery_1 ?? ''),
+                'Gallery_2'    => (string) ($p->gallery_2 ?? ''),
+                'Gallery_3'    => (string) ($p->gallery_3 ?? ''),
                 'Display_Order'=> (int) ($p->display_order ?? 0),
                 '_row'         => (int) $p->id,
             ];
@@ -891,6 +894,9 @@ class PanelApiController extends Controller
         $p->price      = $price;
         $p->stock      = (int) $r->query('stock', $p->stock);
         if ($r->has('image')) $p->image_url = trim((string) $r->query('image', ''));
+        foreach (['gallery_1', 'gallery_2', 'gallery_3'] as $g) {
+            if ($r->has($g)) $p->{$g} = (trim((string) $r->query($g, '')) ?: null);
+        }
         if ($r->filled('category')) $p->category = trim((string) $r->query('category', ''));
         $p->save();
 

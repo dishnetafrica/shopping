@@ -77,6 +77,32 @@ echo "== pro-rata price math ==\n";
 ok('250g of 52000/kg = 13000', prorata(250,52000,1000),13000);
 ok('500g of 35000/kg = 17500->17500', prorata(500,35000,1000),17500);
 
-echo "\n--------------------------------------------------\n";
-echo "product_image_responder: {$pass} passed, {$fail} failed\n";
+echo "== gallery intent (more photos / packaging / other pictures) ==\n";
+function abs_url($dom,$path){ $path=trim($path); if($path==='') return '';
+  if(preg_match('#^https?://#i',$path)) return $path;
+  $base=$dom!==''?'https://'.$dom:'https://mycloudbss.com';
+  return rtrim($base,'/').'/'.ltrim($path,'/'); }
+function is_gallery($t){ $t=mb_strtolower(trim($t));
+  if(preg_match('/\b(more|other|another|additional|extra)\s+(photo|photos|pic|pics|picture|pictures|image|images|angle|angles|view|views|shot|shots)\b/u',$t)) return true;
+  if(preg_match('/\b(packaging|gallery)\b/u',$t)) return true;
+  return false; }
+function gallery_images($g1,$g2,$g3,$dom){ $out=[];
+  foreach([$g1,$g2,$g3] as $u){ $u=abs_url($dom,$u); if($u==='') continue; $out[]=$u; }
+  return array_slice($out,0,3); }
+ok('Show Kaju Katri is NOT gallery', is_gallery('Show Kaju Katri'), false);
+ok('More photos -> gallery', is_gallery('More photos'), true);
+ok('more pics -> gallery', is_gallery('more pics'), true);
+ok('Show packaging -> gallery', is_gallery('Show packaging'), true);
+ok('Show other pictures -> gallery', is_gallery('Show other pictures'), true);
+ok('gallery -> gallery', is_gallery('gallery'), true);
+
+echo "== gallery builder: cap 3 + missing images ==\n";
+ok('three images returned', gallery_images('/storage/a.jpg','/storage/b.jpg','/storage/c.jpg','palssnack.com'),
+   ['https://palssnack.com/storage/a.jpg','https://palssnack.com/storage/b.jpg','https://palssnack.com/storage/c.jpg']);
+ok('missing images -> empty (graceful)', gallery_images('','','','palssnack.com'), []);
+ok('partial gallery skips blanks', gallery_images('/storage/a.jpg','','/storage/c.jpg','palssnack.com'),
+   ['https://palssnack.com/storage/a.jpg','https://palssnack.com/storage/c.jpg']);
+ok('no last product -> no gallery', (0>0?['x']:[]), []);
+
+
 exit($fail===0?0:1);

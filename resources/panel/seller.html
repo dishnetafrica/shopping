@@ -1099,7 +1099,7 @@ function mapProduct(row){
   var ic=String(row.Item_Code||row.item_code||row.ItemCode||'').replace(/[^0-9A-Za-z]/g,'');
   return {name:v?pn+' '+v:pn,baseName:pn,variant:v,brand:String(row.Brand||''),category:String(row.Category||''),
     keywords:kw,basePrice:numFrom(row.Price_UGX),price:netUgx(numFrom(row.Price_UGX)),stock:numFrom(row.Stock),stockByBranch:sbb,barcode:bc,itemCode:ic,
-    image:String(row.Image||row.Photo||row.Image_URL||row['Image URL']||''),order:Number(row.Display_Order||row.display_order||0),_row:Number(row._row)};
+    image:String(row.Image||row.Photo||row.Image_URL||row['Image URL']||''),g1:String(row.Gallery_1||''),g2:String(row.Gallery_2||''),g3:String(row.Gallery_3||''),order:Number(row.Display_Order||row.display_order||0),_row:Number(row._row)};
 }
 /* ---------------- BARCODE / SCANNING ---------------- */
 var BARCODE_INDEX={};
@@ -1847,6 +1847,42 @@ function bindProdImg(){
     };
   }
 }
+function prodGalleryField(p){
+  function slot(n,url){
+    return '<div class="gslot" style="border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:8px;margin-bottom:8px">'+
+      '<div style="display:flex;gap:10px;align-items:center">'+
+        '<img id="gPrev'+n+'" style="width:54px;height:54px;border-radius:8px;object-fit:cover;flex:none;'+(url?'':'display:none')+'"'+(url?(' src="'+esc(url)+'"'):'')+' onerror="this.style.display=\'none\'">'+
+        '<input id="gImg'+n+'" placeholder="Gallery photo '+n+' URL (or upload)" value="'+esc(url||'')+'" style="flex:1">'+
+      '</div>'+
+      '<div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">'+
+        '<button class="btn ghost" id="gUp'+n+'" type="button">\u2191 Upload</button>'+
+        '<button class="btn ghost" id="gMain'+n+'" type="button">\u2605 Make main</button>'+
+        '<button class="btn ghost" id="gRm'+n+'" type="button" style="color:#B4232A">Remove</button>'+
+      '</div>'+
+      '<input id="gFile'+n+'" type="file" accept="image/*" style="display:none">'+
+    '</div>';
+  }
+  return '<div class="mfield"><label>Gallery photos <span style="font-weight:400;color:#6b7280">(sent on \u201Cmore photos\u201D \u2014 up to 3)</span></label>'+
+    slot(1,p.g1)+slot(2,p.g2)+slot(3,p.g3)+'</div>';
+}
+function bindProdGallery(){
+  [1,2,3].forEach(function(n){
+    var t=$('gImg'+n),pv=$('gPrev'+n),up=$('gUp'+n),f=$('gFile'+n),rm=$('gRm'+n),mk=$('gMain'+n);
+    if(t)t.oninput=function(){if(pv){if(t.value){pv.src=t.value;pv.style.display='';}else pv.style.display='none';}};
+    if(rm)rm.onclick=function(){if(t)t.value='';if(pv)pv.style.display='none';toast('Gallery '+n+' removed \u2014 Save to apply');};
+    if(mk)mk.onclick=function(){var url=t?t.value.trim():'';if(!url){toast('Upload or paste an image first');return;}var hero=$('pImg'),hp=$('pImgPrev');if(hero)hero.value=url;if(hp){hp.src=url;hp.style.display='';}toast('Set as main photo \u2014 Save to apply');};
+    if(up&&f){
+      up.onclick=function(){f.click();};
+      f.onchange=function(){var file=f.files&&f.files[0];if(!file)return;var rd=new FileReader();
+        rd.onload=async function(){var b64=rd.result;if(pv){pv.src=b64;pv.style.display='';}up.disabled=true;up.textContent='Uploading\u2026';
+          try{var r=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:file.name,data:b64})});var d=await r.json();
+            if(d&&d.ok&&d.url){if(t)t.value=d.url;if(pv)pv.src=d.url;toast('Gallery '+n+' uploaded');}else toast('Upload not set up \u2014 paste a URL instead');
+          }catch(e){toast('Upload not set up \u2014 paste a URL instead');}
+          up.disabled=false;up.textContent='\u2191 Upload';
+        };rd.readAsDataURL(file);};
+    }
+  });
+}
 function openEdit(row){
   var p=findProd(row);if(!p)return;
   var cats=pmCats();
@@ -1860,9 +1896,11 @@ function openEdit(row){
     '<div class="mfield"><label>'+stockLabel+'</label><input id="mStock" type="number" min="0" value="'+prodStock(p)+'"></div>'+stockNote+
     '<button type="button" class="btn ghost" id="mOOS" style="margin:-4px 0 10px">'+((prodStock(p)<=0)?'\u2713 Out of stock \u2014 Save to apply':'Mark out of stock')+'</button>'+
     prodImgField(p.image)+
+    prodGalleryField(p)+
     '<button class="lbtn" id="mSave">Save changes</button>';
   $('modal').classList.remove('hide');
   bindProdImg();
+  bindProdGallery();
   (function(){function mph(){var v=Number($('mPrice').value)||0;if($('mPriceHint'))$('mPriceHint').textContent=inUGX()?'':('\u2248 '+ugx(v)+' at current rate');}if($('mPrice'))$('mPrice').oninput=mph;mph();})();
   if($('mOOS'))$('mOOS').onclick=toggleOOS;
   $('mSave').onclick=function(){saveProduct(row);};
@@ -1870,13 +1908,14 @@ function openEdit(row){
 function toggleOOS(){var sEl=$('mStock');if(!sEl)return;var z=(Number(sEl.value)||0)<=0;sEl.value=z?100:0;var b=$('mOOS');if(b)b.textContent=(Number(sEl.value)||0)<=0?'\u2713 Out of stock \u2014 Save to apply':'Mark out of stock';}
 async function saveProduct(row){
   var price=Number($('mPrice').value)||0,stock=Number($('mStock').value)||0,image=($('pImg')?$('pImg').value:'').trim();
+  var g1=($('gImg1')?$('gImg1').value:'').trim(),g2=($('gImg2')?$('gImg2').value:'').trim(),g3=($('gImg3')?$('gImg3').value:'').trim();
   var branchMode=(INVENTORY_MODE==='branch'&&BRANCH_FILTER);
   var cat=($('mCat')?$('mCat').value:'').trim();
-  var qs='?token='+encodeURIComponent(token)+'&row='+row+'&price='+price+'&stock='+stock+'&image='+encodeURIComponent(image)+(cat?'&category='+encodeURIComponent(cat):'')+'&mode='+INVENTORY_MODE+(branchMode?'&branch='+encodeURIComponent(BRANCH_FILTER):'');
+  var qs='?token='+encodeURIComponent(token)+'&row='+row+'&price='+price+'&stock='+stock+'&image='+encodeURIComponent(image)+'&gallery_1='+encodeURIComponent(g1)+'&gallery_2='+encodeURIComponent(g2)+'&gallery_3='+encodeURIComponent(g3)+(cat?'&category='+encodeURIComponent(cat):'')+'&mode='+INVENTORY_MODE+(branchMode?'&branch='+encodeURIComponent(BRANCH_FILTER):'');
   $('mSave').disabled=true;$('mSave').textContent='Saving…';
   try{var r=await fetch(EP.updProduct+qs,{cache:'no-store'});
     var d=await r.json();
-    if(d&&d.ok){var p=findProd(row);if(p){p.basePrice=price;p.price=netUgx(price);p.image=image;if(cat)p.category=cat;if(branchMode){p.stockByBranch=p.stockByBranch||{};p.stockByBranch[BRANCH_FILTER]=stock;}else p.stock=stock;}toast('Saved \u00b7 '+ugx(netUgx(price))+(discActive()?' (after discount)':'')+' \u00b7 stock '+stock);closeModal();renderPM();}
+    if(d&&d.ok){var p=findProd(row);if(p){p.basePrice=price;p.price=netUgx(price);p.image=image;p.g1=g1;p.g2=g2;p.g3=g3;if(cat)p.category=cat;if(branchMode){p.stockByBranch=p.stockByBranch||{};p.stockByBranch[BRANCH_FILTER]=stock;}else p.stock=stock;}toast('Saved \u00b7 '+ugx(netUgx(price))+(discActive()?' (after discount)':'')+' \u00b7 stock '+stock);closeModal();renderPM();}
     else toast('Could not save');
   }catch(e){toast('Network error');}
   $('mSave').disabled=false;$('mSave').textContent='Save changes';

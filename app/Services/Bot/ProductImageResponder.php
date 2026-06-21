@@ -7,7 +7,6 @@ use App\Models\Product;
 use App\Models\Tenant;
 use App\Services\Bot\Pricing\WeightPricer;
 use App\Services\Catalogue\ProductSearch;
-
 /**
  * Decides which product image(s) to send for a customer turn, and builds the caption
  * (variant sizes included). Pure of side effects: returns up to 5
@@ -24,7 +23,7 @@ class ProductImageResponder
     /** Send the image only when intent confidence clears this bar. */
     public const SCORE_THRESHOLD = 80;
 
-    public function __construct(private ProductSearch $search) {}
+    public function __construct(private ProductSearch $search, private ?ComboEngine $combos = null) {}
 
     /** @return array<int,array{media:string,caption:string}> */
     public function imagesFor(Tenant $tenant, ?Conversation $convo, string $text): array
@@ -41,6 +40,16 @@ class ProductImageResponder
         if (preg_match('/^(hi+|hello|hey+|ok(ay)?|yes|no|y|n|thanks|thank you|thx|menu|help|start)\W*$/u', $t)) return [];
 
         $cur = (string) $tenant->setting('currency', 'UGX');
+
+        // ---- "More photos" / "show packaging" / "other pictures": send the GALLERY of the
+        // last product we showed this customer, without them re-typing its name. Max 3.
+        if ($this->isGalleryIntent($t)) {
+            $lastId = $convo ? (int) (($convo->state['last_image_product'] ?? 0)) : 0;
+            if ($lastId <= 0) return [];
+            $p = Product::find($lastId);
+            if (! $p) return [];
+            return $this->galleryFor($tenant, $p);     // [] when the product has no gallery images
+        }
 
         // ---- CATEGORY browse: "show sweets" / a bare category name -> up to 5 short cards.
         $cat = $this->matchCategory($tenant, $t);
@@ -82,7 +91,46 @@ class ProductImageResponder
         $url = $this->absUrl($tenant, (string) $p->image_url);
         if ($url === '') return [];
 
-        return [['media' => $url, 'caption' => $this->card($p, $cur, false)]];
+        $this->remember($convo, (int) $p->id);     // so a follow-up "more photos" works
+
+        $caption = $this->card($p, $cur, false);
+        if ($this->combos && (bool) $tenant->setting('combo_recommendations', true)) {
+            $pair = $this->combos->recommendForProduct((int) $tenant->id, (int) $p->id, 2);
+            if ($pair) {
+                $names = array_values(array_filter(array_map(fn ($c) => (string) ($c['name'] ?? ''), $pair)));
+                if ($names) $caption .= "\nGoes well with: " . implode(', ', $names);
+            }
+        }
+        return [['media' => $url, 'caption' => $caption]];
+    }
+
+    /** Detect a "more photos / other pictures / packaging / gallery" follow-up. */
+    private function isGalleryIntent(string $t): bool
+    {
+        if (preg_match('/\b(more|other|another|additional|extra)\s+(photo|photos|pic|pics|picture|pictures|image|images|angle|angles|view|views|shot|shots)\b/u', $t)) return true;
+        if (preg_match('/\b(packaging|gallery)\b/u', $t)) return true;
+        return false;
+    }
+
+    /** Up to 3 gallery images for a product, as absolute URLs. */
+    private function galleryFor(Tenant $tenant, Product $p): array
+    {
+        $out = [];
+        foreach (['gallery_1', 'gallery_2', 'gallery_3'] as $col) {
+            $u = $this->absUrl($tenant, (string) ($p->{$col} ?? ''));
+            if ($u === '') continue;
+            $out[] = ['media' => $u, 'caption' => empty($out) ? ('More photos — ' . $this->cleanName($p)) : ''];
+        }
+        return array_slice($out, 0, 3);
+    }
+
+    /** Persist which product was last shown, for a name-free "more photos" follow-up. */
+    private function remember(?Conversation $convo, int $productId): void
+    {
+        if (! $convo || $productId <= 0) return;
+        $st = is_array($convo->state) ? $convo->state : [];
+        $st['last_image_product'] = $productId;
+        $convo->state = $st;
     }
 
     /**

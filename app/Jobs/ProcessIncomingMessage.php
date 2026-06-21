@@ -432,6 +432,18 @@ class ProcessIncomingMessage implements ShouldQueue
             return;
         }
 
+        // ---- Combo add-ons at checkout: append suggestions to the confirm message. ----
+        try {
+            if ((bool) $tenant->setting('combo_recommendations', true)
+                && (($convo->state['step'] ?? null) === 'awaiting_confirm') && $reply !== '') {
+                $curCk = (string) $tenant->setting('currency', 'UGX');
+                $comboCk = app(\App\Services\Bot\ComboEngine::class)
+                    ->recommendForCart($tenant->id, array_map('intval', array_keys($cartAfter)), 3);
+                $blockCk = $this->comboBlock($comboCk, $curCk, "🍽️ Add before you finish?");
+                if ($blockCk !== '') $reply .= "\n\n" . $blockCk . "\nReply with a name to add, or *confirm* to place the order.";
+            }
+        } catch (\Throwable $e) {}
+
         // ---- Product image response: send matching product image(s) BEFORE the text,
         // so a "Kaju Katli" / "show sweets" ask gets the photo first, then the card.
         // Never breaks the text reply; works for Evolution and Cloud via sendImage().
@@ -460,6 +472,29 @@ class ProcessIncomingMessage implements ShouldQueue
             $this->tenantId, $this->incoming['from'], $this->incoming['instance'],
             'out', 'bot', $reply
         );
+        // ---- Combo follow-up: after a product ask or an add-to-cart, suggest pairings. ----
+        try {
+            if ((bool) $tenant->setting('combo_recommendations', true)
+                && (($convo->state['step'] ?? null) !== 'awaiting_confirm')) {
+                $focal = (int) ($addedId ?: (int) ($convo->state['last_image_product'] ?? 0));
+                if ($focal > 0) {
+                    $curFu  = (string) $tenant->setting('currency', 'UGX');
+                    $comboFu = app(\App\Services\Bot\ComboEngine::class)
+                        ->recommendForProduct($tenant->id, $focal, 3, array_map('intval', array_keys($cartAfter)));
+                    $keyFu = $focal . ':' . implode(',', array_map(fn ($c) => $c['id'], $comboFu));
+                    if ($comboFu && (($convo->state['last_combo_key'] ?? '') !== $keyFu)) {
+                        $blockFu = $this->comboBlock($comboFu, $curFu, "🍽️ Often bought together:");
+                        if ($blockFu !== '') {
+                            $gateway->sendText($tenant->whatsapp_instance, $this->incoming['from'], $blockFu . "\nReply with a name to add.");
+                            $stc = is_array($convo->state) ? $convo->state : [];
+                            $stc['last_combo_key'] = $keyFu;
+                            $convo->state = $stc;
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+
         // Record this auto-reply for the loop guard (re-read state: the brain may have changed it).
         $st = is_array($convo->state) ? $convo->state : [];
         $outTimes[] = $now;
@@ -545,6 +580,20 @@ class ProcessIncomingMessage implements ShouldQueue
             }
         }
         return $out;
+    }
+
+    /** Format a combo suggestion block (header + up to 3 priced bullet lines). */
+    private function comboBlock(array $items, string $cur, string $header): string
+    {
+        if (! $items) return '';
+        $lines = [$header];
+        foreach ($items as $it) {
+            $nm = (string) ($it['name'] ?? '');
+            if ($nm === '') continue;
+            $pr = (float) ($it['price'] ?? 0);
+            $lines[] = '• ' . $nm . ($pr > 0 ? ' — ' . $cur . ' ' . number_format($pr) : '');
+        }
+        return count($lines) > 1 ? implode("\n", $lines) : '';
     }
 
     /** Store an image-search → chosen-product label (training data). Never throws. */
