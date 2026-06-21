@@ -111,7 +111,11 @@ class BulkOrderParser
             $first = preg_split('/\s+/u', trim(mb_strtolower($m[2])))[0] ?? '';
             if (! in_array($first, self::TIME, true)) {                 // "7 pm" is a time, not a qty
                 $q = self::cleanQuery($m[2]);
-                if ($q !== '') return ['qty' => self::clamp($m[1]), 'query' => $q];
+                if ($q !== '') {
+                    $r = ['qty' => self::clamp($m[1]), 'query' => $q];
+                    if ($g = self::gramsFor((int) $m[1], $first)) $r['weight_grams'] = $g;
+                    return $r;
+                }
             }
         }
         // C) trailing numeric qty (+ optional unit) — "kachori 2", "sev 1 kg", "panipuri 2 packet"
@@ -119,7 +123,11 @@ class BulkOrderParser
             $unit = mb_strtolower($m[3] ?? '');
             if ($unit === '' || in_array($unit, self::UNITS, true)) {
                 $q = self::cleanQuery($m[1]);
-                if ($q !== '') return ['qty' => self::clamp($m[2]), 'query' => $q];
+                if ($q !== '') {
+                    $r = ['qty' => self::clamp($m[2]), 'query' => $q];
+                    if ($g = self::gramsFor((int) $m[2], $unit)) $r['weight_grams'] = $g;
+                    return $r;
+                }
             }
         }
         // B) leading number word — "be packet kachori", "ek farsi puri"
@@ -138,7 +146,11 @@ class BulkOrderParser
             if ($unit === '' || in_array($unit, self::UNITS, true)) {
                 $rest = self::stripLeadingVerbs(trim(($m[1] ?? '') . ' ' . ($m[4] ?? '')));
                 $q = self::cleanQuery($rest);
-                if ($q !== '') return ['qty' => self::clamp($m[2]), 'query' => $q];
+                if ($q !== '') {
+                    $r = ['qty' => self::clamp($m[2]), 'query' => $q];
+                    if ($g = self::gramsFor((int) $m[2], $unit)) $r['weight_grams'] = $g;
+                    return $r;
+                }
             }
         }
         return null;
@@ -201,6 +213,7 @@ class BulkOrderParser
         $w = $toks[0];
         if (mb_strlen($w) < 2) return null;
         if (in_array($w, self::GREET, true) || in_array($w, self::UNITS, true)
+            || in_array($w, self::TIME, true)
             || isset(self::NUMWORDS[$w]) || in_array($w, self::BARE_REJECT, true)) return null;
         return $w;
     }
@@ -217,6 +230,17 @@ class BulkOrderParser
     private static function clamp($n): int
     {
         return max(1, min(999, (int) $n));
+    }
+
+    /** Grams for a number+unit pair when the unit is a weight unit; null otherwise. */
+    private const WEIGHT_KG = ['kg', 'kgs', 'kilo', 'kilos', 'kilogram', 'kilograms'];
+    private const WEIGHT_G  = ['g', 'gm', 'gms', 'gram', 'grams'];
+    private static function gramsFor(int $n, string $unit): ?int
+    {
+        $u = mb_strtolower(trim($unit));
+        if (in_array($u, self::WEIGHT_KG, true)) return $n * 1000;
+        if (in_array($u, self::WEIGHT_G, true))  return $n;
+        return null;
     }
 
     private static function cleanQuery(string $s): string
