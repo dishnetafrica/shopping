@@ -114,7 +114,7 @@ ok('low band',        RDY::band(10) !== '');
 
 /* full report */
 $report = REP::build($corpus, $orders, "Pal's Snacks");
-ok('report sections',   count($report['sections']) === 10);
+ok('report sections',   count($report['sections']) === 11);
 ok('report readiness',  $report['readiness_score'] >= 0 && $report['readiness_score'] <= 100);
 ok('report band',       ! empty($report['readiness_band']));
 $wa = REP::toWhatsApp($report);

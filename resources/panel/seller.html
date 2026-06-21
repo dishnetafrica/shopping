@@ -1514,11 +1514,12 @@ async function brainInit(){
   $('brainBody').innerHTML='<div style="color:#888;padding:18px">Loading your Business Brain…</div>';
   try{
     var r=await fetch(EP.brain+'?token='+encodeURIComponent(token),{cache:'no-store'});
-    var d=await r.json(); brainState.data=d;
-    if(!d.has_discovery){renderBrainEmpty();return;}
+    var d={}; try{d=await r.json();}catch(_e){}
+    brainState.data=d||{};
+    if(!d||d.has_discovery!==true){renderBrainEmpty(d&&d.error);return;}
     $('brainTabs').classList.remove('hide');
     brainTab(brainState.tab||'overview');
-  }catch(e){$('brainBody').innerHTML='<div style="color:#c33;padding:18px">Could not load Business Brain.</div>';}
+  }catch(e){renderBrainEmpty('network');}
 }
 function brainTab(t){
   brainState.tab=t;
@@ -1528,13 +1529,15 @@ function brainTab(t){
   else if(t==='ready')renderBrainReady();
   else if(t==='activity')renderBrainActivity();
 }
-function renderBrainEmpty(){
+function renderBrainEmpty(note){
   $('brainTabs').classList.add('hide');
+  var diag=note?('<div style="margin-top:14px;font-size:12px;color:#b08300;background:#fffaf0;border:1px solid #f0e0a8;border-radius:8px;padding:8px 10px;display:inline-block">Diagnostics: '+esc(String(note))+'</div>'):'';
   $('brainBody').innerHTML='<div class="card"><div class="body" style="padding:26px;text-align:center">'
     +'<div style="font-size:40px">🧠</div>'
     +'<div style="font-size:20px;font-weight:700;margin:8px 0">Let\'s discover your business</div>'
     +'<div style="color:#667;max-width:440px;margin:0 auto 16px">We\'ll read your WhatsApp history and learn your products, FAQs, delivery rules, languages and offers — so the AI can represent your shop. Nothing goes live without your approval.</div>'
     +'<button class="btn" style="background:#3a7bd5;color:#fff;font-size:15px;padding:10px 22px" onclick="brainRunDiscovery()">Run Discovery ✨</button>'
+    +diag
     +'</div></div>';
 }
 async function brainRunDiscovery(){
