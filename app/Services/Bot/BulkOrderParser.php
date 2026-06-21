@@ -106,6 +106,16 @@ class BulkOrderParser
         if ($line === '') return null;
         $toks = preg_split('/\s+/u', mb_strtolower($line));
 
+        // 0) decimal weight — "1.5kg fafda", "fafda 0.75 kg"  (integer weights handled additively below)
+        if (preg_match('/(\d+\.\d+)\s*([\p{L}]+)/u', $line, $m)) {
+            $g = self::gramsForFloat((float) $m[1], $m[2]);
+            if ($g !== null) {
+                $rest = self::stripLeadingVerbs(trim(str_replace($m[0], ' ', $line)));
+                $q = self::cleanQuery($rest);
+                if ($q !== '') return ['qty' => 1, 'query' => $q, 'weight_grams' => $g];
+            }
+        }
+
         // A) leading numeric qty — "2 packet panipuri", "1kg sev", "2-panipuri"
         if (preg_match('/^(\d{1,3})\s*(?:x|\*|-|\.)?\s*(.+)$/u', $line, $m)) {
             $first = preg_split('/\s+/u', trim(mb_strtolower($m[2])))[0] ?? '';
@@ -240,6 +250,15 @@ class BulkOrderParser
         $u = mb_strtolower(trim($unit));
         if (in_array($u, self::WEIGHT_KG, true)) return $n * 1000;
         if (in_array($u, self::WEIGHT_G, true))  return $n;
+        return null;
+    }
+
+    /** Decimal-aware grams ("1.5" + "kg" -> 1500). */
+    private static function gramsForFloat(float $n, string $unit): ?int
+    {
+        $u = mb_strtolower(trim($unit));
+        if (in_array($u, self::WEIGHT_KG, true)) return (int) round($n * 1000);
+        if (in_array($u, self::WEIGHT_G, true))  return (int) round($n);
         return null;
     }
 

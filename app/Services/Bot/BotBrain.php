@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class BotBrain
 {
     /** Bump on every deploy. Query it from WhatsApp by sending "version" to confirm what's live. */
-    public const VERSION = '2026.06.21-merchant-v1  merchant-mode + weight-pricing';
+    public const VERSION = '2026.06.21-mw1  merchant-mode + weight-ordering';
 
     public function __construct(
         protected ProductSearch $search,
@@ -284,9 +284,7 @@ class BotBrain
         foreach ($lines as $ln) {
             $p = $this->search->find($ln['query'])->first();
             if (! $p) { $missed[] = $ln['query']; continue; }
-            $net  = Pricing::net($tenant, (float) $p->price);
-            $cart = $this->addToCart($cart, $p->id, $p->name, $net, $ln['qty']);
-            $added[] = "{$ln['qty']} x {$p->name}";
+            $cart = $this->addResolvedLine($tenant, $cart, $p, $ln, $added);
         }
 
         // Need at least 2 confident matches to treat this as a bulk order; otherwise fall through.
@@ -407,9 +405,7 @@ class BotBrain
                 foreach ($items as $it) {
                     $p = $this->search->find($it['query'])->first();
                     if (! $p) { $missed[] = $it['query']; continue; }
-                    $net = Pricing::net($tenant, (float) $p->price);
-                    $cart = $this->addToCart($cart, $p->id, $p->name, $net, $it['qty']);
-                    $added[] = "{$it['qty']} x {$p->name}";
+                    $cart = $this->addResolvedLine($tenant, $cart, $p, $it, $added);
                 }
                 $convo->cart = $cart; $convo->save();
                 if (! $added && $missed) {
@@ -2192,9 +2188,48 @@ class BotBrain
     protected function addToCart(array $cart, int $id, string $name, float $price, int $qty): array
     {
         foreach ($cart as &$line) {
-            if ($line['product_id'] === $id) { $line['qty'] += $qty; return $cart; }
+            if (($line['product_id'] ?? null) === $id && empty($line['weight_grams'])) { $line['qty'] += $qty; return $cart; }
         }
         $cart[] = ['product_id' => $id, 'name' => $name, 'price' => $price, 'qty' => $qty];
+        return $cart;
+    }
+
+    /** Append a weight-priced line (qty stays 1; the weight carries the meaning). Not merged. */
+    protected function addWeightLine(array $cart, int $id, string $name, float $price, int $grams): array
+    {
+        $cart[] = ['product_id' => $id, 'name' => $name, 'price' => $price, 'qty' => 1, 'weight_grams' => $grams];
+        return $cart;
+    }
+
+    /** Price a weight for a sold-by-weight product via WeightPricer; null if not priceable. */
+    protected function weightPriceFor($p, int $grams): ?array
+    {
+        if (empty($p->sold_by_weight)) return null;
+        $variants = [];
+        foreach ($p->weightVariants as $v) { $variants[(int) $v->weight_grams] = (float) $v->price; }
+        $res = \App\Services\Bot\Pricing\WeightPricer::price($grams, [
+            'reference_price'        => $p->reference_price !== null ? (float) $p->reference_price : null,
+            'reference_weight_grams' => (int) ($p->reference_weight_grams ?: 1000),
+            'variants'               => $variants,
+        ]);
+        return ($res['ok'] ?? false) ? $res : null;
+    }
+
+    /**
+     * Add one resolved product line to the cart, weight-priced when the line carries a weight
+     * and the product is sold by weight; otherwise a normal count line. Pushes a label to $added.
+     */
+    protected function addResolvedLine(Tenant $tenant, array $cart, $p, array $ln, array &$added): array
+    {
+        $grams = (int) ($ln['weight_grams'] ?? 0);
+        if ($grams > 0 && ! empty($p->sold_by_weight) && ($res = $this->weightPriceFor($p, $grams))) {
+            $cart = $this->addWeightLine($cart, $p->id, $p->name, (float) $res['price'], $grams);
+            $added[] = \App\Services\Bot\Pricing\WeightParser::label($grams) . " {$p->name}";
+            return $cart;
+        }
+        $net  = Pricing::net($tenant, (float) $p->price);
+        $cart = $this->addToCart($cart, $p->id, $p->name, $net, (int) ($ln['qty'] ?? 1));
+        $added[] = ($ln['qty'] ?? 1) . " x {$p->name}";
         return $cart;
     }
 
@@ -2204,7 +2239,11 @@ class BotBrain
         $total = 0; $lines = []; $i = 0;
         foreach ($cart as $l) {
             $sub = $l['price'] * $l['qty']; $total += $sub; $i++;
-            $lines[] = "{$i}. " . $this->lineLabel($l) . " x{$l['qty']} — " . Pricing::money($tenant, $sub);
+            if (! empty($l['weight_grams'])) {
+                $lines[] = "{$i}. " . $this->lineLabel($l) . " (" . \App\Services\Bot\Pricing\WeightParser::label((int) $l['weight_grams']) . ") — " . Pricing::money($tenant, $sub);
+            } else {
+                $lines[] = "{$i}. " . $this->lineLabel($l) . " x{$l['qty']} — " . Pricing::money($tenant, $sub);
+            }
             $note = trim((string) ($l['note'] ?? ''));
             if ($note !== '' && stripos((string) $l['name'], 'note:') === false) {
                 $lines[] = "   \u{21B3} _note: {$note}_";

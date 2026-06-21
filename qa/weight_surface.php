@@ -23,6 +23,13 @@ foreach ($W as [$txt,$g,$q]) {
   ok($l && $l['query'] === $q, "$txt → query='$q'");
 }
 
+echo "=== decimal kg weights ===\n";
+foreach ([['1.5kg fafda',1500,'fafda'],['fafda 1.5kg',1500,'fafda'],['0.75kg sev',750,'sev'],['2.5 kg ghathiya',2500,'ghathiya']] as [$txt,$g,$q]) {
+  $l = B::parseLine($txt);
+  ok($l && ($l['weight_grams'] ?? null) === $g, "$txt → weight_grams=$g");
+  ok($l && $l['query'] === $q, "$txt → query='$q'");
+}
+
 echo "=== NON-weight units / bare numbers → NO weight_grams ===\n";
 foreach (['2 packet panipuri','kachori 2','300 fafda','2-panipuri','5 plate sev'] as $txt) {
   $l = B::parseLine($txt);
