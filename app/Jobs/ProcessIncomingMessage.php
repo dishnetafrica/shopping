@@ -432,6 +432,21 @@ class ProcessIncomingMessage implements ShouldQueue
             return;
         }
 
+        // ---- Product image response: send matching product image(s) BEFORE the text,
+        // so a "Kaju Katli" / "show sweets" ask gets the photo first, then the card.
+        // Never breaks the text reply; works for Evolution and Cloud via sendImage().
+        try {
+            $imgs = app(\App\Services\Bot\ProductImageResponder::class)
+                ->imagesFor($tenant, $convo, $text);
+            foreach (array_slice($imgs, 0, 5) as $im) {
+                if (! empty($im['media'])) {
+                    $gateway->sendImage($tenant->whatsapp_instance, $this->incoming['from'], $im['media'], (string) ($im['caption'] ?? ''));
+                }
+            }
+        } catch (\Throwable $e) {
+            BotTrace::log($this->tenantId, $trace, $from, 'img_skip', 'image send: ' . $e->getMessage());
+        }
+
         $tSend = microtime(true);
         try {
             $gateway->sendText($tenant->whatsapp_instance, $this->incoming['from'], $reply);
