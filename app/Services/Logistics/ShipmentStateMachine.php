@@ -53,7 +53,7 @@ class ShipmentStateMachine
         ],
         'depart' => [
             'from' => self::TRANSPORT_CONFIRMED, 'to' => self::IN_TRANSIT,
-            'event' => 'bus_departed', 'actor' => self::ACTOR_TRANSPORT, 'counts' => false,
+            'event' => 'bus_departed', 'actor' => self::ACTOR_TRANSPORT, 'counts' => true,
         ],
         'arrive' => [
             'from' => self::IN_TRANSIT, 'to' => self::ARRIVED,

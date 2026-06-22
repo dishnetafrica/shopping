@@ -22,7 +22,7 @@ check('confirm actor is transport', $r['actor'] === SM::ACTOR_TRANSPORT && $r['e
 
 $r = SM::apply(SM::TRANSPORT_CONFIRMED, 'depart');
 check('transport_confirmed→depart ok', $r['ok'] && $r['to'] === SM::IN_TRANSIT);
-check('depart carries NO count', $r['counts'] === false);
+check('depart can carry a count (custody point)', $r['counts'] === true);
 
 $r = SM::apply(SM::IN_TRANSIT, 'arrive');
 check('in_transit→arrive ok', $r['ok'] && $r['to'] === SM::ARRIVED);

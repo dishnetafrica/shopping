@@ -91,6 +91,7 @@ class ShipmentController extends Controller
             return response()->json(['ok' => true, 'shipment' => [
                 'id'        => $s->id,
                 'number'    => $s->shipment_number,
+                'token'     => $s->token,
                 'order_id'  => $s->order_id,
                 'order_no'  => $order->order_no ?? null,
                 'status'    => $s->status,

@@ -3588,6 +3588,16 @@ function shipRenderDetail(s){
     +openEx.map(function(x){return '<div style="padding:8px 0;border-bottom:1px solid #f3ddd6"><b>'+esc((x.type||'').replace(/_/g,' '))+'</b> — '+x.delta+' box(es), '+esc(x.from_stage||'?')+' → '+esc(x.to_stage||'?')
       +'<div style="font-size:12px;color:#886">expected '+x.expected+', got '+x.got+'</div>'
       +'<button class="btn" style="margin-top:6px;background:#eef2f8;font-size:12px;padding:4px 10px" onclick="shipResolveEx('+x.id+')">Mark resolved</button></div>';}).join('')+'</div></div>';}
+  var origin=window.location.origin;
+  var share=s.token?('<div class="card"><div class="head">Share links <span style="font-weight:500;font-size:12px;opacity:.85">— send to the transporter / agent</span></div><div class="body">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:13px;color:#667;width:130px">🚚 Transporter</span>'
+    +'<input readonly value="'+esc(origin+'/t/'+s.token)+'" style="flex:1;min-width:0;font-size:12px;border:1px solid #e5e7eb;border-radius:7px;padding:6px 8px" onclick="this.select()">'
+    +'<button class="btn" style="background:#eef2f8;font-size:12px;padding:5px 10px" onclick="shipCopy(\''+esc(origin+'/t/'+s.token)+'\')">Copy</button></div>'
+    +'<div style="display:flex;align-items:center;gap:8px"><span style="font-size:13px;color:#667;width:130px">📍 Dest. agent</span>'
+    +'<input readonly value="'+esc(origin+'/a/'+s.token)+'" style="flex:1;min-width:0;font-size:12px;border:1px solid #e5e7eb;border-radius:7px;padding:6px 8px" onclick="this.select()">'
+    +'<button class="btn" style="background:#eef2f8;font-size:12px;padding:5px 10px" onclick="shipCopy(\''+esc(origin+'/a/'+s.token)+'\')">Copy</button></div>'
+    +'<div class="note" style="margin-top:8px">No login needed — the link is the key. They confirm box count + photo at each handoff.</div>'
+    +'</div></div>'):'';
   var tl='<div class="card"><div class="head">Custody timeline</div><div class="body">';
   if(!(s.events||[]).length){tl+='<div style="color:#889">No events yet.</div>';}
   else{tl+=s.events.map(function(e){return '<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #f2f3f5"><span style="width:8px;height:8px;border-radius:50%;background:#3a7bd5;margin-top:6px;flex:none"></span>'
@@ -3595,8 +3605,9 @@ function shipRenderDetail(s){
     +'<div style="font-size:12px;color:#889">'+esc(e.actor||'')+(e.name?' ('+esc(e.name)+')':'')+' · '+esc(e.at||'')+'</div>'
     +(e.note?'<div style="font-size:12px;color:#667">'+esc(e.note)+'</div>':'')+'</div></div>';}).join('');}
   tl+='</div></div>';
-  $('shipDetail').innerHTML=hdr+exHtml+tl;
+  $('shipDetail').innerHTML=hdr+share+exHtml+tl;
 }
+function shipCopy(t){try{navigator.clipboard.writeText(t);toast('Link copied');}catch(e){toast(t);}}
 function shipBack(){$('shipDetail').classList.add('hide');$('shipList').classList.remove('hide');shipLoad();}
 async function shipDoAction(action){
   var s=shipState.cur;if(!s)return;

@@ -17,6 +17,12 @@ Route::get('/papi/track', [TrackController::class, 'show']);
 Route::get('/r/{token}',     [\App\Http\Controllers\Panel\RiderTrackController::class, 'show']);
 Route::post('/r/{token}/loc', [\App\Http\Controllers\Panel\RiderTrackController::class, 'loc']);
 
+// Public shipment custody pages (no login — the shipment token is the key).
+Route::get('/t/{token}',        [\App\Http\Controllers\Panel\ShipmentTrackController::class, 'transporter']);
+Route::post('/t/{token}/action',[\App\Http\Controllers\Panel\ShipmentTrackController::class, 'transporterAction']);
+Route::get('/a/{token}',        [\App\Http\Controllers\Panel\ShipmentTrackController::class, 'agent']);
+Route::post('/a/{token}/action',[\App\Http\Controllers\Panel\ShipmentTrackController::class, 'agentAction']);
+
 // PWA assets (public — a manifest / service worker / icon must load without a session).
 Route::get('/manifest.webmanifest', [PwaController::class, 'manifest']);
 Route::get('/sw.js',                [PwaController::class, 'sw']);
