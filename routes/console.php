@@ -8,6 +8,7 @@ Schedule::command('shopbot:process-scheduled')->everyMinute()->withoutOverlappin
 // Auto-learn tenants so discovery never has to be run by hand.
 //  - Daily: onboard any tenant that has chats but no discovery yet (new tenants learn within a day).
 //  - Weekly: full-history re-learn for every tenant so the Business Brain stays current.
-// Both queue per-tenant AutoLearnTenant jobs (needs a running queue worker).
-Schedule::command('discovery:auto --new-only')->dailyAt('02:30')->withoutOverlapping();
-Schedule::command('discovery:auto')->weeklyOn(0, '03:00')->withoutOverlapping();
+// Run inline (--sync) so a single `php artisan schedule:work` process handles everything — no
+// separate queue worker needed. onOneServer guards against double-runs if ever scaled out.
+Schedule::command('discovery:auto --new-only --sync')->dailyAt('02:30')->withoutOverlapping(60)->onOneServer();
+Schedule::command('discovery:auto --sync')->weeklyOn(0, '03:00')->withoutOverlapping(120)->onOneServer();
