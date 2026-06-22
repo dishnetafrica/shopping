@@ -11,13 +11,15 @@ namespace App\Services\Bot\Discovery;
  */
 class DiscoveryReport
 {
-    public static function build(MessageCorpus $corpus, array $orders, string $businessName = ''): array
+    public static function build(MessageCorpus $corpus, array $orders, string $businessName = '', array $catalogue = [], array $knownAreas = []): array
     {
-        $products = ProductMiner::mine($corpus, $orders);
+        $mined    = ProductMiner::analyze($corpus, $orders, $catalogue);
+        $products = $mined['products'];
         $faqs     = FaqMiner::mine($corpus);
-        $delivery = DeliveryMiner::delivery($corpus);
+        $delivery = DeliveryMiner::delivery($corpus, $knownAreas);
         $rules    = DeliveryMiner::rules($corpus);
         $hours    = PatternMiner::hours($corpus);
+        $sales    = SalesPatternMiner::mine($corpus);
         $promos   = PatternMiner::promotions($corpus);
         $menus    = PatternMiner::menuPatterns($corpus);
         $langs    = StyleProfiler::languages($corpus);
@@ -33,6 +35,7 @@ class DiscoveryReport
             'promotions'  => $promos ? min(80, count($promos) * 20) : 0,
             'menu'        => $menus ? min(80, count($menus) * 20) : 0,
             'rules'       => $rules ? min(85, count($rules) * 25) : 0,
+            'sales'       => (int) ($sales['confidence'] ?? 0),
         ];
 
         $readiness = AutomationReadiness::score($conf);
@@ -45,6 +48,7 @@ class DiscoveryReport
                 'overview'    => self::overview($businessName, $corpus, $orders, $products),
                 'languages'   => $langs,
                 'top_products'=> $products,
+                'unverified_products' => $mined['unverified'],
                 'faqs'        => $faqs,
                 'delivery'    => $delivery,
                 'hours'       => $hours,
@@ -52,6 +56,7 @@ class DiscoveryReport
                 'menu'        => $menus,
                 'rules'       => $rules,
                 'owner_style' => $style,
+                'sales_patterns' => $sales,
             ],
             'confidence'      => $conf,
             'readiness_score' => $readiness,

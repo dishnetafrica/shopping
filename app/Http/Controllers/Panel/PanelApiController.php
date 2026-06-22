@@ -2542,6 +2542,7 @@ class PanelApiController extends Controller
      */
     public function brainData(Request $r)
     {
+        try {
         $t = $r->user()->tenant;
         app(\App\Support\TenantContext::class)->set($t->id);
 
@@ -2572,6 +2573,12 @@ class PanelApiController extends Controller
                     'delivery'  => $sec['delivery'] ?? [],
                     'hours'     => $sec['hours']['text'] ?? null,
                     'style'     => $sec['owner_style']['tone'] ?? null,
+                    'sales'     => array_map(fn ($b) => [
+                        'label'   => $b['label'] ?? '',
+                        'count'   => $b['count'] ?? 0,
+                        'example' => $b['examples'][0]['response'] ?? '',
+                    ], array_values($sec['sales_patterns']['by_type'] ?? [])),
+                    'sales_questions' => $sec['sales_patterns']['questions'] ?? [],
                     'readiness_band' => $d->report['readiness_band'] ?? null,
                     'scanned_messages' => (int) $d->sample_messages,
                 ];
@@ -2614,6 +2621,23 @@ class PanelApiController extends Controller
             ];
         } catch (\Throwable $e) {}
 
+        $team = null; $conflicts = [];
+        try {
+            $cd = \App\Models\CompanyDna::where('tenant_id', $t->id)->orderByDesc('id')->first();
+            if ($cd && is_array($cd->snapshot)) {
+                $s = $cd->snapshot;
+                $team = [
+                    'employee_count'    => (int) $cd->employee_count,
+                    'employees'         => $s['employees'] ?? [],
+                    'messages_analyzed' => (int) $cd->messages_analyzed,
+                    'languages'         => $s['languages'] ?? [],
+                    'styles'            => $s['styles'] ?? [],
+                    'common_topics'     => $s['common_topics'] ?? [],
+                ];
+                $conflicts = $s['conflicts'] ?? [];
+            }
+        } catch (\Throwable $e) {}
+
         return response()->json([
             'ok' => true,
             'readiness' => $readiness,
@@ -2621,9 +2645,15 @@ class PanelApiController extends Controller
             'reviews' => $reviews,
             'activity' => $activity,
             'performance' => $perf,
+            'team' => $team,
+            'conflicts' => $conflicts,
             'discovered' => ['products' => $productsDiscovered, 'faqs' => $faqsDiscovered],
             'has_discovery' => $dna !== null,
         ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('brainData failed: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+            return response()->json(['ok' => false, 'has_discovery' => false, 'error' => $e->getMessage()]);
+        }
     }
 
     /**
@@ -2636,7 +2666,14 @@ class PanelApiController extends Controller
         $t = $r->user()->tenant;
         app(\App\Support\TenantContext::class)->set($t->id);
         try {
-            $d = app(\App\Services\Bot\Discovery\DiscoveryScanner::class)->scan($t);
+            // Phase 1 — fast 30-day onboarding scan (keeps the wizard quick).
+            $d = app(\App\Services\Bot\Discovery\DiscoveryScanner::class)->scan($t, 5000, 30);
+            // also refresh multi-employee consensus so Team Insights & Conflicts populate
+            try { app(\App\Services\Bot\Company\CompanyDiscoveryService::class)->discover($t, true); } catch (\Throwable $e) {}
+            // generate the Go-Live readiness report so the Overview shows a score immediately
+            try { app(\App\Services\Bot\Readiness\ReadinessService::class)->evaluate($t); } catch (\Throwable $e) {}
+            // Phase 2 — widen the window in the background (90/180/365), non-blocking.
+            try { \App\Jobs\ProgressiveDiscovery::dispatch($t->id, 0)->delay(now()->addMinutes(20)); } catch (\Throwable $e) {}
             $sec = is_array($d->report) ? ($d->report['sections'] ?? []) : [];
             $deliveryRules = count($sec['delivery']['areas'] ?? [])
                 + (! empty($sec['delivery']['fee']) ? 1 : 0)
@@ -2655,7 +2692,8 @@ class PanelApiController extends Controller
                 'messages'  => (int) $d->sample_messages,
             ]);
         } catch (\Throwable $e) {
-            return response()->json(['ok' => false, 'error' => 'Discovery failed. Please try again.'], 200);
+            \Illuminate\Support\Facades\Log::error('brainDiscover failed: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+            return response()->json(['ok' => false, 'error' => 'Discovery failed: ' . $e->getMessage()], 200);
         }
     }
 

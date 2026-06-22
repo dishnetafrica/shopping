@@ -24,18 +24,69 @@ class CompanyDiscoveryService
         $orders = $this->orders($tenant);
 
         $employees = [];
+        $allRows = [];
         foreach ($groups as $employee => $rows) {
             $corpus = MessageCorpus::fromRows($rows);
             if ($corpus->total() === 0) continue;
             $report = DiscoveryReport::build($corpus, $orders, (string) ($tenant->name ?? ''));
             $employees[] = ['employee' => $employee, 'report' => $report];
+            $allRows = array_merge($allRows, $rows);
         }
 
         $consensus = KnowledgeConsensusEngine::consensus($employees);
+        $consensus['snapshot'] = $this->buildSnapshot($consensus, $allRows);
 
-        if ($persist) $this->persist($tenant, $consensus);
+        if ($persist) {
+            $this->persist($tenant, $consensus);
+            $this->persistSnapshot($tenant, $consensus['snapshot']);
+        }
 
         return $consensus;
+    }
+
+    /** Compact, UI-ready view of the consensus for the Business Brain Team Insights / Conflicts. */
+    protected function buildSnapshot(array $consensus, array $allRows): array
+    {
+        $messages = count($allRows);
+        $languages = $allRows
+            ? \App\Services\Bot\Discovery\StyleProfiler::languages(MessageCorpus::fromRows($allRows))
+            : [];
+
+        $styles = [];
+        foreach ($consensus['employee_memory'] as $emp => $m) {
+            $styles[] = [
+                'employee'      => $emp,
+                'tone'          => $m['style']['tone'] ?? 'unknown',
+                'emoji_per_msg' => $m['style']['emoji_per_msg'] ?? 0,
+                'greeting_rate' => $m['style']['greeting_rate'] ?? 0,
+                'upsell'        => $m['upsell']['level'] ?? 'none',
+            ];
+        }
+
+        $topicLabels = ['hours' => 'Opening hours', 'delivery' => 'Delivery', 'price' => 'Pricing',
+            'payment' => 'Payment', 'availability' => 'Availability', 'location' => 'Location', 'minimum' => 'Minimum order'];
+        $topics = array_map(fn ($f) => $topicLabels[$f['value']] ?? ucfirst($f['value']), $consensus['company_memory']['faqs'] ?? []);
+
+        return [
+            'employees'         => $consensus['employees'],
+            'employee_count'    => $consensus['employee_count'],
+            'messages_analyzed' => $messages,
+            'languages'         => array_slice($languages, 0, 5),
+            'styles'            => $styles,
+            'common_topics'     => array_slice($topics, 0, 6),
+            'conflicts'         => $consensus['report']['conflicting_information'] ?? [],
+            'confidence'        => $consensus['confidence'] ?? [],
+        ];
+    }
+
+    protected function persistSnapshot(Tenant $tenant, array $snapshot): void
+    {
+        \App\Models\CompanyDna::where('tenant_id', $tenant->id)->delete();
+        \App\Models\CompanyDna::create([
+            'employee_count'    => $snapshot['employee_count'] ?? 0,
+            'messages_analyzed' => $snapshot['messages_analyzed'] ?? 0,
+            'snapshot'          => $snapshot,
+        ]);
     }
 
     /**

@@ -10,7 +10,7 @@ namespace App\Services\Bot\Discovery;
  */
 class DeliveryMiner
 {
-    public static function delivery(MessageCorpus $corpus): array
+    public static function delivery(MessageCorpus $corpus, array $knownAreas = []): array
     {
         $text = $corpus->ownerText();
         $out  = ['free_threshold' => null, 'fee' => null, 'window' => null, 'areas' => [], 'confidence' => 0];
@@ -28,12 +28,36 @@ class DeliveryMiner
         // "we deliver to X, Y and Z" / "delivery in AREA"
         if (preg_match('/(?:we deliver to|delivery (?:to|in|around))\s+([a-z0-9 ,&]+)/u', $text, $m)) {
             $areas = array_values(array_filter(array_map('trim', preg_split('/[,&]| and /', $m[1]))));
-            $out['areas'] = array_slice(array_filter($areas, fn ($a) => mb_strlen($a) >= 3 && mb_strlen($a) <= 24), 0, 6);
+            $areas = array_filter($areas, fn ($a) => self::isPlausibleArea($a, $knownAreas));
+            $out['areas'] = array_slice(array_values($areas), 0, 6);
             if ($out['areas']) $hits++;
         }
 
         $out['confidence'] = min(95, $hits * 28);
         return $out;
+    }
+
+    /** A served area must look like a place, not a time/meal/generic word — and, when a zone list
+     *  exists, must match one of those known zones. */
+    private static function isPlausibleArea(string $a, array $knownAreas): bool
+    {
+        $a = trim(mb_strtolower($a));
+        if (mb_strlen($a) < 3 || mb_strlen($a) > 24) return false;
+        if (! preg_match('/^[a-z][a-z\s]+$/', $a)) return false;          // letters only, real word
+        $reject = ['time','dinner','lunch','breakfast','morning','evening','afternoon','night',
+            'today','tomorrow','now','soon','anytime','area','areas','place','places','order',
+            'minutes','hour','hours','day','days','week'];
+        foreach (preg_split('/\s+/', $a) as $w) {
+            if (in_array($w, $reject, true)) return false;
+        }
+        if (! empty($knownAreas)) {
+            foreach ($knownAreas as $known) {
+                $k = trim(mb_strtolower((string) $known));
+                if ($k !== '' && (str_contains($a, $k) || str_contains($k, $a))) return true;
+            }
+            return false;   // zones known but no match → reject
+        }
+        return true;
     }
 
     public static function rules(MessageCorpus $corpus): array

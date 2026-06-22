@@ -78,11 +78,30 @@ class PatternMiner
         foreach ($corpus->all as $r) {
             if (! ($r['from_owner'] ?? false)) continue;
             $ts = (string) ($r['ts'] ?? '');
-            if (preg_match('/(\d{1,2}):(\d{2})/', $ts, $m)) $hours[] = (int) $m[1];
+            if (preg_match('/(\d{1,2}):(\d{2})/', $ts, $m)) {
+                $h = (int) $m[1];
+                if ($h >= 0 && $h <= 23) $hours[] = $h;
+            }
         }
-        if (count($hours) < 4) return null;
+        if (count($hours) < 8) return null;                 // too little signal to infer
         sort($hours);
-        return sprintf('%02d:00 – %02d:00', $hours[0], end($hours));
+        // Drop outliers with the 10th / 90th percentile rather than min / max, so a single
+        // late-night or pre-dawn message can't define opening hours.
+        $open  = self::percentile($hours, 0.10);
+        $close = self::percentile($hours, 0.90);
+        // Validate against plausible business-hour bounds; otherwise don't claim hours at all.
+        if ($close <= $open) return null;
+        if ($open < 4 || $open > 12) return null;
+        if ($close < 14 || $close > 23) return null;
+        return sprintf('%02d:00 – %02d:00', $open, $close);
+    }
+
+    private static function percentile(array $sorted, float $p): int
+    {
+        $n = count($sorted);
+        if ($n === 0) return 0;
+        $idx = (int) floor($p * ($n - 1));
+        return (int) $sorted[max(0, min($n - 1, $idx))];
     }
 
     private static function clip(string $s, int $n = 80): string
