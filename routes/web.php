@@ -20,8 +20,12 @@ Route::post('/r/{token}/loc', [\App\Http\Controllers\Panel\RiderTrackController:
 // Public shipment custody pages (no login — the shipment token is the key).
 Route::get('/t/{token}',        [\App\Http\Controllers\Panel\ShipmentTrackController::class, 'transporter']);
 Route::post('/t/{token}/action',[\App\Http\Controllers\Panel\ShipmentTrackController::class, 'transporterAction']);
+Route::post('/t/{token}/scan',  [\App\Http\Controllers\Panel\ShipmentTrackController::class, 'transporterScan']);
+Route::post('/t/{token}/scan-confirm',[\App\Http\Controllers\Panel\ShipmentTrackController::class, 'transporterScanConfirm']);
 Route::get('/a/{token}',        [\App\Http\Controllers\Panel\ShipmentTrackController::class, 'agent']);
 Route::post('/a/{token}/action',[\App\Http\Controllers\Panel\ShipmentTrackController::class, 'agentAction']);
+Route::post('/a/{token}/scan',  [\App\Http\Controllers\Panel\ShipmentTrackController::class, 'agentScan']);
+Route::post('/a/{token}/scan-confirm',[\App\Http\Controllers\Panel\ShipmentTrackController::class, 'agentScanConfirm']);
 
 // PWA assets (public — a manifest / service worker / icon must load without a session).
 Route::get('/manifest.webmanifest', [PwaController::class, 'manifest']);
@@ -188,6 +192,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('shipment-action',          [\App\Http\Controllers\Panel\ShipmentController::class, 'action']);
         Route::get('shipment-exception-resolve',[\App\Http\Controllers\Panel\ShipmentController::class, 'resolveException']);
         Route::get('order-shipment',           [\App\Http\Controllers\Panel\ShipmentController::class, 'forOrder']);
+        Route::get('shipment-handoff',         [\App\Http\Controllers\Panel\ShipmentController::class, 'handoff']);
+        Route::get('shipment-auto-toggle',     [\App\Http\Controllers\Panel\ShipmentController::class, 'autoToggle']);
+        Route::get('shipment-labels',          [\App\Http\Controllers\Panel\ShipmentController::class, 'labels']);
         Route::get('bot-config-save', [PanelApiController::class, 'botConfigSave']);
         Route::get('branch-save',     [PanelApiController::class, 'branchSave']);
         Route::get('branch-delete',   [PanelApiController::class, 'branchDel']);

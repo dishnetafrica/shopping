@@ -1057,7 +1057,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   actInbox:'/papi/activity-inbox',actApprove:'/papi/activity-approve',actReject:'/papi/activity-reject',actEdit:'/papi/activity-edit',
   brain:'/papi/brain',brainDiscover:'/papi/brain-discover',
   brainCandidates:'/papi/brain-candidates',brainCandApprove:'/papi/brain-candidate-approve',brainCandDismiss:'/papi/brain-candidate-dismiss',
-  shipments:'/papi/shipments',shipment:'/papi/shipment',shipCreate:'/papi/shipment-create',shipAction:'/papi/shipment-action',shipExResolve:'/papi/shipment-exception-resolve',orderShipment:'/papi/order-shipment',shipDash:'/papi/shipments-dashboard',
+  shipments:'/papi/shipments',shipment:'/papi/shipment',shipCreate:'/papi/shipment-create',shipAction:'/papi/shipment-action',shipExResolve:'/papi/shipment-exception-resolve',orderShipment:'/papi/order-shipment',shipDash:'/papi/shipments-dashboard',shipHandoff:'/papi/shipment-handoff',shipAutoToggle:'/papi/shipment-auto-toggle',shipLabels:'/papi/shipment-labels',
   imageStats:'/papi/image-stats',
   operations:'/papi/operations',
   branches:'/papi/branches',branchSave:'/papi/branch-save',branchDel:'/papi/branch-delete',
@@ -3375,11 +3375,11 @@ async function kitchenAdvance(id){
 /* ---- Delivery Board (deliveries lifecycle) ---- */
 var DELIV={};
 async function loadDeliveries(){try{var r=await fetch(EP.dboard+qtok(),{cache:'no-store'});var d=await r.json();DELIV=(d&&d.board)?d.board:{};}catch(e){DELIV={};}}
-function delivLabel(s){return {assigned:'Assigned',picked:'Picked up',out:'Out for delivery',delivered:'Delivered',failed:'Failed'}[s]||s;}
+function delivLabel(s){return {awaiting:'Awaiting rider',assigned:'Assigned',picked:'Picked up',out:'Out for delivery',delivered:'Delivered',failed:'Failed'}[s]||s;}
 function renderDeliveriesBoard(){
   var el=$('delivBoard'); if(!el)return;
-  var cols=['assigned','picked','out','delivered','failed'];
-  var next={assigned:['picked','out','failed'],picked:['out','failed'],out:['delivered','failed'],delivered:[],failed:[]};
+  var cols=['awaiting','assigned','picked','out','delivered','failed'];
+  var next={awaiting:[],assigned:['picked','out','failed'],picked:['out','failed'],out:['delivered','failed'],delivered:[],failed:[]};
   var html=cols.map(function(s){
     var items=DELIV[s]||[];
     var cards=items.map(function(d){
@@ -3387,7 +3387,7 @@ function renderDeliveriesBoard(){
       var assign='<button class="btn" onclick="assignRider('+d.id+')">'+(d.rider?('Rider: '+esc(d.rider)):'Assign rider')+'</button>';
       return '<div class="card" style="margin:6px 0"><div class="body">'+
         '<div style="font-weight:700">'+esc(d.order_no)+' · '+esc(d.customer)+'</div>'+
-        '<div style="font-size:12px;color:var(--muted)">'+esc(d.location||'')+(d.zone?(' · '+esc(d.zone)):'')+'</div>'+
+        '<div style="font-size:12px;color:var(--muted)">'+esc(d.location||'')+(d.zone?(' · '+esc(d.zone)):'')+'</div>'+        (d.shipment_number?'<div style="font-size:12px;color:#0a6ea0;margin-top:2px">\ud83d\udce6 '+esc(d.shipment_number)+(d.shipment_status?(' \u00b7 '+esc(d.shipment_status)):'')+'</div>':'')+
         '<div style="font-size:12px">Fee '+dmoney(d.fee)+' · COD '+dmoney(d.cod)+'</div>'+
         '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">'+assign+(adv?(' '+adv):'')+'</div></div></div>';
     }).join('')||'<div class="empty">None</div>';
@@ -3524,11 +3524,13 @@ async function defDelete(id){if(!confirm('Delete this default?'))return;try{awai
 
 /* ===== Shipments (Phase 2A) ===== */
 var shipState={view:'all',q:'',tcompany:'',origin:'',dest:'',facets:{transport:[],origin:[],destination:[]},cur:null};
-var SHIP_EV={packed:'Packed',sent_to_transport:'Sent to transporter',received_by_transport:'Received by transport',bus_departed:'Bus departed',arrived:'Arrived',collected_by_rider:'Collected by rider',delivered:'Delivered',cancelled:'Cancelled',damaged:'Damage reported'};
+var SHIP_EV={packed:'Packed',sent_to_transport:'Sent to transporter',received_by_transport:'Received by transport',bus_departed:'Bus departed',arrived:'Arrived',rider_assigned:'Rider assigned',collected_by_rider:'Collected by rider',out_for_delivery:'Out for delivery',delivered:'Delivered',delivery_failed:'Delivery failed',cancelled:'Cancelled',damaged:'Damage reported'};
+var DLV_ST={awaiting:['Awaiting rider','#c9a227'],assigned:['Rider assigned','#3a7bd5'],picked:['Collected','#7c5cd0'],out:['Out for delivery','#0EA5E9'],delivered:['Delivered','#2e9e5b'],failed:['Failed','#d0533d']};
 var SHIP_ST={packed:['Packed','#6b7280'],sent_to_transporter:['Sent to transporter','#c9a227'],transport_confirmed:['Transport confirmed','#3a7bd5'],in_transit:['In transit','#7c5cd0'],arrived:['Arrived','#2e9e5b'],cancelled:['Cancelled','#d0533d']};
 var SHIP_ACT={dispatch:'Dispatch to transporter',transport_confirm:'Confirm transport receipt',depart:'Mark bus departed',arrive:'Mark arrived'};
 var SHIP_VIEWS=[['all','All'],['awaiting_dispatch','Awaiting Dispatch'],['in_transit','In Transit'],['arrived','Arrived'],['delivered','Delivered'],['exception','⚠ Exception']];
 function shipBadge(st){var d=SHIP_ST[st]||[st,'#888'];return '<span style="display:inline-block;background:'+d[1]+';color:#fff;border-radius:11px;padding:2px 10px;font-size:12px;font-weight:700">'+esc(d[0])+'</span>';}
+function dlvBadge(st){var d=DLV_ST[st]||[st,'#888'];return '<span style="display:inline-block;background:'+d[1]+';color:#fff;border-radius:11px;padding:2px 10px;font-size:12px;font-weight:700">'+esc(d[0])+'</span>';}
 function shipmentsInit(){$('shipList').classList.remove('hide');$('shipDetail').classList.add('hide');shipRenderViews();shipRenderSearch();shipLoad();}
 function shipRenderViews(){$('shipFilters').innerHTML=SHIP_VIEWS.map(function(f){var on=shipState.view===f[0];return '<button class="btn" style="background:'+(on?'#3a7bd5':'#eef2f8')+';color:'+(on?'#fff':'#334')+';font-size:13px;padding:7px 14px" onclick="shipSetView(\''+f[0]+'\')">'+esc(f[1])+'</button>';}).join('');}
 function shipSetView(v){shipState.view=v;shipState.tcompany='';shipState.origin='';shipState.dest='';shipRenderViews();shipRenderSearch();shipLoad();}
@@ -3536,10 +3538,14 @@ function shipRenderSearch(){
   $('shipSearchRow').innerHTML='<input id="shipQ" placeholder="Search shipment #, order #, customer, phone" value="'+esc(shipState.q||'')+'" style="flex:1;min-width:220px;border:1px solid #d8dee8;border-radius:9px;padding:9px 12px;font-size:13px">';
   var q=$('shipQ');if(q)q.oninput=function(){shipState.q=this.value;clearTimeout(window._shipQT);window._shipQT=setTimeout(shipLoad,300);};
 }
-function shipRenderMetrics(m){m=m||{};
+function shipRenderMetrics(m,autoOn){m=m||{};
   var tiles=[['Active',m.active,'#3a7bd5'],['In transit',m.in_transit,'#7c5cd0'],['Delayed',m.delayed,'#d08a27'],['Exceptions',m.exceptions,'#d0533d'],['Completed today',m.completed_today,'#2e9e5b']];
-  $('shipMetrics').innerHTML=tiles.map(function(t){return '<div class="card" style="flex:1;min-width:115px;margin:0"><div class="body" style="padding:12px 14px"><div style="font-size:24px;font-weight:800;color:'+t[2]+'">'+(t[1]||0)+'</div><div style="font-size:12px;color:#778">'+t[0]+'</div></div></div>';}).join('');
+  var html=tiles.map(function(t){return '<div class="card" style="flex:1;min-width:115px;margin:0"><div class="body" style="padding:12px 14px"><div style="font-size:24px;font-weight:800;color:'+t[2]+'">'+(t[1]||0)+'</div><div style="font-size:12px;color:#778">'+t[0]+'</div></div></div>';}).join('');
+  var aOn=!!autoOn;
+  html+='<div class="card" style="min-width:165px;margin:0;cursor:pointer" onclick="shipToggleAuto('+(aOn?0:1)+')"><div class="body" style="padding:12px 14px"><div style="font-size:14px;font-weight:800;color:'+(aOn?'#2e9e5b':'#8a93a3')+'">'+(aOn?'● Auto hand-off':'○ Auto hand-off')+'</div><div style="font-size:11px;color:#778;margin-top:2px">'+(aOn?'on — delivery created on arrival':'off — hand off manually')+'</div></div></div>';
+  $('shipMetrics').innerHTML=html;
 }
+async function shipToggleAuto(on){try{await fetch(EP.shipAutoToggle+'?token='+encodeURIComponent(token)+'&on='+on,{cache:'no-store'});shipLoad();}catch(e){}}
 function shipSelOpts(opts,val,ph){opts=opts||[];return '<option value="">'+esc(ph)+'</option>'+opts.map(function(o){return '<option'+(o===val?' selected':'')+'>'+esc(o)+'</option>';}).join('');}
 function shipRenderBreakdown(d){
   if(shipState.view!=='exception'){$('shipExBreak').innerHTML='';return;}
@@ -3563,7 +3569,7 @@ async function shipLoad(){
   try{var r=await fetch(u,{cache:'no-store'});var d=await r.json();
     if(!d||!d.ok){$('shipCards').innerHTML='<div style="color:#c33;padding:18px">Could not load.</div>';return;}
     shipState.facets=d.facets||shipState.facets;
-    shipRenderMetrics(d.metrics);shipRenderBreakdown(d);shipRenderCards(d.items||[]);
+    shipRenderMetrics(d.metrics,d.auto_handoff);shipRenderBreakdown(d);shipRenderCards(d.items||[]);
   }catch(e){$('shipCards').innerHTML='<div style="color:#c33;padding:18px">Could not load shipments.</div>';}
 }
 function shipRenderCards(items){
@@ -3572,10 +3578,11 @@ function shipRenderCards(items){
     var ex=s.exceptions>0?'<span style="color:#d0533d;font-weight:700;margin-left:8px">⚠ '+s.exceptions+'</span>':'';
     var dly=s.delayed?'<span style="background:#fdf0d8;color:#a86a12;border-radius:9px;padding:1px 8px;font-size:11px;font-weight:700;margin-left:6px">Delayed</span>':'';
     var dvd=s.delivered?'<span style="background:#dff0e4;color:#2e7d46;border-radius:9px;padding:1px 8px;font-size:11px;font-weight:700;margin-left:6px">Delivered</span>':'';
+    var dst=(s.delivery_status&&!s.delivered)?('<span style="background:#e6f4fb;color:#0a6ea0;border-radius:9px;padding:1px 8px;font-size:11px;font-weight:700;margin-left:6px">🛵 '+esc((DLV_ST[s.delivery_status]||[s.delivery_status])[0])+'</span>'):'';
     var boxes=(s.boxes&&s.boxes.sent!=null)?(s.boxes.sent+(s.boxes.received!=null&&s.boxes.received!==s.boxes.sent?' → '+s.boxes.received:'')+' boxes'):'';
     var cust=s.customer?('<span style="color:#667;font-size:12px">'+esc(s.customer)+(s.phone?' · '+esc(s.phone):'')+'</span>'):'';
     return '<div class="card" style="margin-bottom:10px;cursor:pointer" onclick="openShipment('+s.id+')"><div class="body" style="padding:14px">'
-      +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="font-weight:800">'+esc(s.number)+'</div>'+shipBadge(s.status)+dly+dvd
+      +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="font-weight:800">'+esc(s.number)+'</div>'+shipBadge(s.status)+dly+dvd+dst
       +(s.order_no?'<span style="color:#667;font-size:13px">order '+esc(s.order_no)+'</span>':'')+ex
       +'<span style="margin-left:auto;color:#aab">›</span></div>'
       +'<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px">'
@@ -3643,7 +3650,35 @@ function shipRenderDetail(s){
     +'<div style="font-size:12px;color:#889">'+esc(e.actor||'')+(e.name?' ('+esc(e.name)+')':'')+' · '+esc(e.at||'')+'</div>'
     +(e.note?'<div style="font-size:12px;color:#667">'+esc(e.note)+'</div>':'')+'</div></div>';}).join('');}
   tl+='</div></div>';
-  $('shipDetail').innerHTML=hdr+share+exHtml+tl;
+  var lastMile='';
+  if(s.delivery){
+    var dv=s.delivery;var rlink=dv.token?(window.location.origin+'/r/'+dv.token):'';
+    lastMile='<div class="card"><div class="head">Last mile</div><div class="body">'
+      +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+dlvBadge(dv.status)
+      +(dv.rider?'<span style="color:#556;font-size:13px">🛵 '+esc(dv.rider)+(dv.rider_phone?' · '+esc(dv.rider_phone):'')+'</span>':'<span style="color:#889;font-size:13px">No rider assigned yet — assign from Dispatch</span>')+'</div>'
+      +(rlink?'<div style="display:flex;align-items:center;gap:8px;margin-top:10px"><span style="font-size:13px;color:#667;width:80px">Rider link</span><input readonly value="'+esc(rlink)+'" style="flex:1;min-width:0;font-size:12px;border:1px solid #e5e7eb;border-radius:7px;padding:6px 8px" onclick="this.select()"><button class="btn" style="background:#eef2f8;font-size:12px;padding:5px 10px" onclick="shipCopy(\''+esc(rlink)+'\')">Copy</button></div>':'')
+      +'<div class="note" style="margin-top:8px">The rider\'s collected → out → delivered steps continue on the timeline below — one chain.</div></div></div>';
+  } else if(s.can_handoff){
+    lastMile='<div class="card"><div class="body" style="padding:16px"><div style="font-weight:700;margin-bottom:4px">Ready for the last mile</div>'
+      +'<div style="color:#778;font-size:13px;margin-bottom:10px">Arrived at destination. Hand off to create an Awaiting-Rider task, then assign a rider from Dispatch.</div>'
+      +'<button class="btn" style="background:#0EA5E9;color:#fff" onclick="shipHandoff('+s.id+')">🛵 Hand off to delivery</button></div></div>';
+  }
+  var boxCard='';
+  if(s.boxes&&s.boxes.total){
+    var b=s.boxes,lurl=EP.shipLabels+'?token='+encodeURIComponent(token)+'&id='+s.id;
+    var stages=[['Transport','received_by_transport'],['Arrived','arrived'],['Rider','collected_by_rider'],['Delivered','delivered']];
+    var prog=stages.filter(function(r){return b.scanned[r[1]]>0;}).map(function(r){var miss=b.scanned[r[1]]<b.total;return '<span style="background:'+(miss?'#fdf0d8':'#e7f6ec')+';color:'+(miss?'#a86a12':'#15803D')+';border-radius:9px;padding:3px 10px;font-size:12px;font-weight:700">'+r[0]+' '+b.scanned[r[1]]+'/'+b.total+'</span>';}).join('');
+    boxCard='<div class="card"><div class="head">Boxes ('+b.total+')</div><div class="body">'
+      +'<a class="btn" style="background:#0B3D22;color:#fff;text-decoration:none;display:inline-block" href="'+esc(lurl)+'" target="_blank">🏷 Print box labels</a>'
+      +(prog?'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'+prog+'</div>':'<div class="note" style="margin-top:8px">Each box has a QR label. Transporter / agent scan them — counts post here automatically.</div>')
+      +'</div></div>';
+  }
+  $('shipDetail').innerHTML=hdr+boxCard+lastMile+share+exHtml+tl;
+}
+async function shipHandoff(id){
+  try{var r=await fetch(EP.shipHandoff+'?token='+encodeURIComponent(token)+'&id='+id,{cache:'no-store'});var d=await r.json();
+    if(d&&d.ok){toast(d.linked_existing?'Linked to existing delivery':'Handed off — Awaiting rider');openShipment(id);}else{toast((d&&d.error)?d.error:'Could not hand off');}
+  }catch(e){toast('Network error');}
 }
 function shipCopy(t){try{navigator.clipboard.writeText(t);toast('Link copied');}catch(e){toast(t);}}
 function shipBack(){$('shipDetail').classList.add('hide');$('shipList').classList.remove('hide');shipLoad();}

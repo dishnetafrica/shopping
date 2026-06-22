@@ -63,6 +63,11 @@ class ShipmentService
             'note'       => $data['note'] ?? null,
         ]);
 
+        if ($boxes !== null && $boxes > 0) {
+            try { app(\App\Services\Logistics\BoxCustodyService::class)->syncBoxes($shipment); }
+            catch (\Throwable $e) { \Illuminate\Support\Facades\Log::warning('box sync failed: ' . $e->getMessage()); }
+        }
+
         return $shipment;
     }
 
@@ -106,6 +111,22 @@ class ShipmentService
         ]);
 
         $exceptions = $this->reconcile($shipment);
+
+        // Box-level custody (v6): once dispatched with a box count, generate the per-box records.
+        if ($action === 'dispatch' && (int) $shipment->boxes_sent > 0) {
+            try { app(\App\Services\Logistics\BoxCustodyService::class)->syncBoxes($shipment); }
+            catch (\Throwable $e) { \Illuminate\Support\Facades\Log::warning('box sync failed: ' . $e->getMessage()); }
+        }
+        if ($shipment->status === ShipmentStateMachine::ARRIVED) {
+            try {
+                $tenant = $shipment->tenant;
+                if ($tenant && $tenant->setting('logistics_auto_handoff', false)) {
+                    app(\App\Services\Logistics\LastMileBridge::class)->handoff($shipment);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('auto handoff failed: ' . $e->getMessage());
+            }
+        }
 
         return ['ok' => true, 'status' => $shipment->status, 'exceptions' => $exceptions];
     }

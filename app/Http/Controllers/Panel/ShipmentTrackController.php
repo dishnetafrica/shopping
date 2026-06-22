@@ -56,6 +56,45 @@ class ShipmentTrackController extends Controller
         return $this->doAction($this->resolve($token), 'destination_agent', $r);
     }
 
+    /* ---------------------------------------------------------- box scanning (v6) */
+
+    public function transporterScan(string $token, Request $r)  { return $this->doScan($this->resolve($token), 'transport', $r); }
+    public function agentScan(string $token, Request $r)        { return $this->doScan($this->resolve($token), 'destination_agent', $r); }
+    public function transporterScanConfirm(string $token, Request $r) { return $this->doScanConfirm($this->resolve($token), 'transport', $r); }
+    public function agentScanConfirm(string $token, Request $r)       { return $this->doScanConfirm($this->resolve($token), 'destination_agent', $r); }
+
+    /** The scannable custody stage for this role at the shipment's current status (or null). */
+    private function scanStage(Shipment $s, string $role): ?string
+    {
+        if ($role === 'transport' && $s->status === 'sent_to_transporter') return 'received_by_transport';
+        if ($role === 'destination_agent' && $s->status === 'in_transit')  return 'arrived';
+        return null;
+    }
+
+    private function boxes(): \App\Services\Logistics\BoxCustodyService
+    {
+        return app(\App\Services\Logistics\BoxCustodyService::class);
+    }
+
+    private function doScan(Shipment $s, string $role, Request $r)
+    {
+        $stage = $this->scanStage($s, $role);
+        if (! $stage) return response()->json(['ok' => false, 'error' => 'Not ready to scan at this step.'], 409);
+        $this->boxes()->syncBoxes($s);
+        $actorName = $role === 'transport' ? ($s->transport_company ?: 'Transporter') : ($s->destination_agent_name ?: 'Destination agent');
+        return response()->json($this->boxes()->scan($s, (string) $r->input('code', ''), $stage, $role, $actorName));
+    }
+
+    private function doScanConfirm(Shipment $s, string $role, Request $r)
+    {
+        $stage = $this->scanStage($s, $role);
+        if (! $stage) return response()->json(['ok' => false, 'error' => 'Nothing to confirm at this step.'], 409);
+        $actorName = $role === 'transport' ? ($s->transport_company ?: 'Transporter') : ($s->destination_agent_name ?: 'Destination agent');
+        $photoUrl = $this->storePhoto($s, (string) $r->input('photo', ''));
+        $res = $this->boxes()->finalize($s, $stage, $role, $actorName, $photoUrl ? ['photo_url' => $photoUrl] : []);
+        return response()->json($res);
+    }
+
     /* --------------------------------------------------------------- helpers */
 
     private function resolve(string $token): Shipment
@@ -157,7 +196,24 @@ class ShipmentTrackController extends Controller
 
         // action card or a read-only waiting message
         $av = $this->availableAction($s, $role);
-        if ($av) {
+        $scanStage = $this->scanStage($s, $role);
+        $boxTotal = $this->boxes()->total($s);
+
+        if ($av && $scanStage && $boxTotal > 0) {
+            // box-level scan card (v6) — no manual count; the scans ARE the count
+            $scanned = $this->boxes()->scannedCount($s, $scanStage);
+            $card = '<div class="action" data-stage="' . e($scanStage) . '" data-total="' . $boxTotal . '">'
+                . '<div class="alabel">' . e($av['label']) . '</div>'
+                . '<div class="muted" style="margin:2px 0 10px">Scan each box\'s QR label. ' . $boxTotal . ' to scan.</div>'
+                . '<div id="scanprog" class="scanprog">' . $scanned . ' / ' . $boxTotal . ' boxes scanned</div>'
+                . '<div id="scanchips" class="scanchips"></div>'
+                . '<video id="cam" playsinline style="display:none"></video>'
+                . '<button id="cambtn" class="btn ghost2" type="button">📷 Scan with camera</button>'
+                . '<div class="manrow"><input id="mancode" placeholder="…or type a box code (e.g. ' . e($s->shipment_number) . '-B1)"><button id="manadd" class="btn ghost2" type="button">Add</button></div>'
+                . '<button id="go" class="btn big" data-action="' . e($av['action']) . '">' . e($av['label']) . '</button>'
+                . '<div id="msg" class="muted" style="margin-top:8px"></div>'
+                . '</div>';
+        } elseif ($av) {
             $card = '<div class="action">'
                 . '<div class="alabel">' . e($av['label']) . '</div>'
                 . '<div class="muted" style="margin:2px 0 12px">' . e($av['hint']) . '</div>'
@@ -210,22 +266,85 @@ class ShipmentTrackController extends Controller
             . '.tl{border-top:1px solid #eef2ee;margin-top:16px;padding-top:12px}.tlh{font-weight:800;font-size:13px;color:#46554B;margin-bottom:8px}'
             . '.ev{display:flex;gap:10px;padding:7px 0}.dot{width:9px;height:9px;border-radius:50%;background:#15803D;margin-top:5px;flex:none}'
             . '.thumb{max-width:120px;border-radius:8px;margin-top:6px;display:block}'
+            . '.scanprog{font-weight:800;font-size:17px;margin:6px 0 8px}'
+            . '.scanchips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}'
+            . '.scanchips .c{background:#e7f6ec;color:#15803D;border-radius:9px;padding:3px 9px;font-size:12px;font-weight:700}'
+            . '.btn.ghost2{background:#eef2f8;color:#1f3a5f;width:100%;margin-top:6px}'
+            . '.manrow{display:flex;gap:8px;margin-top:8px}.manrow input{flex:1}.manrow .btn{padding:11px 14px;width:auto}'
+            . '#cam{width:100%;border-radius:12px;margin-top:8px;background:#000;max-height:280px;object-fit:cover}'
             . '</style></head><body>' . $body
-            . '<script>(function(){'
-            . 'var box=document.getElementById("box"),ph=document.getElementById("photo"),go=document.getElementById("go"),msg=document.getElementById("msg"),pv=document.getElementById("pv"),data="";'
-            . 'if(!go)return;'
-            . 'ph.onchange=function(){var f=ph.files&&ph.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(){data=rd.result;pv.innerHTML="<img src=\\""+data+"\\">";};rd.readAsDataURL(f);};'
-            . 'go.onclick=function(){'
-            . 'if(box.value===""||Number(box.value)<0){msg.textContent="Enter the number of boxes.";return;}'
-            . 'if(!data){msg.textContent="Add a photo first.";return;}'
-            . 'go.disabled=true;msg.textContent="Submitting…";'
-            . 'fetch("' . $post . '",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:go.dataset.action,box_count:box.value,photo:data})})'
-            . '.then(function(r){return r.json();}).then(function(d){'
-            . 'if(d&&d.ok){msg.textContent="✓ Saved"+((d.exceptions&&d.exceptions.length)?" — note: box count differs from before":"")+". Refreshing…";setTimeout(function(){location.reload();},900);}'
-            . 'else{go.disabled=false;msg.textContent=(d&&d.error)?d.error:"Could not save.";}'
-            . '}).catch(function(){go.disabled=false;msg.textContent="Network error.";});};'
-            . '})();</script></body></html>';
+            . '<script>' . $this->pageJs($role, $token) . '</script></body></html>';
 
         return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
+    }
+
+    /** Page script: box-scan mode when a scan card is present, else the manual count/photo form. */
+    private function pageJs(string $role, string $token): string
+    {
+        $base = '/' . ($role === 'transport' ? 't' : 'a') . '/' . $token;
+        $js = <<<'JS'
+(function(){
+  var base="__BASE__";
+  var go=document.getElementById("go"), msg=document.getElementById("msg");
+  var act=document.querySelector(".action[data-stage]");
+
+  if(act && go){ /* ---- BOX SCAN MODE (v6) ---- */
+    var total=parseInt(act.getAttribute("data-total"),10)||0;
+    var prog=document.getElementById("scanprog"), chips=document.getElementById("scanchips");
+    var cam=document.getElementById("cam"), cambtn=document.getElementById("cambtn");
+    var mancode=document.getElementById("mancode"), manadd=document.getElementById("manadd");
+    var nums=[], lastCode="", lastT=0, stream=null, detector=null, timer=null;
+    function setProg(n){prog.textContent=n+" / "+total+" boxes scanned";}
+    function chip(n){ if(nums.indexOf(n)<0){nums.push(n);nums.sort(function(a,b){return a-b;});chips.innerHTML=nums.map(function(x){return '<span class="c">B'+x+'</span>';}).join("");} }
+    function send(code){
+      code=(code||"").trim(); if(!code)return;
+      var now=Date.now(); if(code===lastCode && now-lastT<2500)return; lastCode=code; lastT=now;
+      fetch(base+"/scan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:code})})
+        .then(function(r){return r.json();}).then(function(d){
+          if(d&&d.ok){ if(d.box_number)chip(d.box_number); setProg(d.scanned); if(navigator.vibrate)navigator.vibrate(40);
+            msg.textContent="\u2713 Box "+d.box_number+(d.already?" (already scanned)":" scanned"); }
+          else { msg.textContent=(d&&d.error)?d.error:"Scan failed"; }
+        }).catch(function(){msg.textContent="Network error";});
+    }
+    if(manadd)manadd.onclick=function(){send(mancode.value);mancode.value="";};
+    if(mancode)mancode.addEventListener("keydown",function(e){if(e.key==="Enter"){e.preventDefault();send(mancode.value);mancode.value="";}});
+    function stopCam(){ if(timer)clearTimeout(timer); if(stream){stream.getTracks().forEach(function(t){t.stop();});} stream=null; cam.style.display="none"; cambtn.textContent="\ud83d\udcf7 Scan with camera"; }
+    function loop(){ if(!stream)return; detector.detect(cam).then(function(cs){ if(cs&&cs.length)cs.forEach(function(c){send(c.rawValue);}); }).catch(function(){}); timer=setTimeout(loop,500); }
+    cambtn.onclick=function(){
+      if(stream){stopCam();return;}
+      if(!("BarcodeDetector" in window)){ msg.textContent="Camera scanning isn't supported here \u2014 type each box code instead."; return; }
+      navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}}).then(function(s){
+        stream=s; cam.srcObject=s; cam.style.display="block"; cam.play();
+        cambtn.textContent="\u25a0 Stop camera"; detector=new BarcodeDetector({formats:["qr_code"]}); loop();
+      }).catch(function(){msg.textContent="Could not open the camera. Type each box code instead.";});
+    };
+    go.onclick=function(){
+      go.disabled=true; msg.textContent="Confirming\u2026"; stopCam();
+      fetch(base+"/scan-confirm",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})})
+        .then(function(r){return r.json();}).then(function(d){
+          if(d&&d.ok){ var short=(d.total-d.scanned); msg.textContent="\u2713 Confirmed "+d.scanned+"/"+d.total+(short>0?" \u2014 \u26a0 "+short+" box(es) not scanned, flagged":"")+". Refreshing\u2026"; setTimeout(function(){location.reload();},1100); }
+          else { go.disabled=false; msg.textContent=(d&&d.error)?d.error:"Could not confirm."; }
+        }).catch(function(){go.disabled=false;msg.textContent="Network error";});
+    };
+    return;
+  }
+
+  /* ---- MANUAL COUNT MODE (no boxes generated) ---- */
+  var box=document.getElementById("box"), ph=document.getElementById("photo"), pv=document.getElementById("pv"), data="";
+  if(!go||!box)return;
+  ph.onchange=function(){var f=ph.files&&ph.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(){data=rd.result;pv.innerHTML='<img src="'+data+'">';};rd.readAsDataURL(f);};
+  go.onclick=function(){
+    if(box.value===""||Number(box.value)<0){msg.textContent="Enter the number of boxes.";return;}
+    if(!data){msg.textContent="Add a photo first.";return;}
+    go.disabled=true; msg.textContent="Submitting\u2026";
+    fetch(base+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:go.dataset.action,box_count:box.value,photo:data})})
+      .then(function(r){return r.json();}).then(function(d){
+        if(d&&d.ok){msg.textContent="\u2713 Saved"+((d.exceptions&&d.exceptions.length)?" \u2014 note: box count differs from before":"")+". Refreshing\u2026";setTimeout(function(){location.reload();},900);}
+        else{go.disabled=false;msg.textContent=(d&&d.error)?d.error:"Could not save.";}
+      }).catch(function(){go.disabled=false;msg.textContent="Network error.";});
+  };
+})();
+JS;
+        return str_replace('__BASE__', $base, $js);
     }
 }

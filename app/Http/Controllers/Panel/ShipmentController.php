@@ -88,6 +88,36 @@ class ShipmentController extends Controller
 
             $action = SM::actionFrom($s->status);   // null when terminal
 
+            // last-mile delivery (Phase 3 bridge) — same screen, one chain
+            $delivery = null;
+            $dv = $s->delivery_id
+                ? \App\Models\Delivery::find($s->delivery_id)
+                : ($s->order_id ? \App\Models\Delivery::where('order_id', $s->order_id)->first() : null);
+            if ($dv) {
+                $delivery = [
+                    'id'     => $dv->id,
+                    'status' => $dv->status,
+                    'rider'  => optional($dv->rider)->name,
+                    'rider_phone' => optional($dv->rider)->phone,
+                    'token'  => $dv->rider_token,
+                    'delivered_at' => optional($dv->delivered_at)->toDateTimeString(),
+                ];
+            }
+            $canHandoff = $s->status === SM::ARRIVED && ! $dv;
+
+            // box-level custody (v6)
+            $boxSvc = app(\App\Services\Logistics\BoxCustodyService::class);
+            $boxTotal = $boxSvc->total($s);
+            $boxes = $boxTotal > 0 ? [
+                'total'   => $boxTotal,
+                'scanned' => [
+                    'received_by_transport' => $boxSvc->scannedCount($s, 'received_by_transport'),
+                    'arrived'               => $boxSvc->scannedCount($s, 'arrived'),
+                    'collected_by_rider'    => $boxSvc->scannedCount($s, 'collected_by_rider'),
+                    'delivered'             => $boxSvc->scannedCount($s, 'delivered'),
+                ],
+            ] : null;
+
             return response()->json(['ok' => true, 'shipment' => [
                 'id'        => $s->id,
                 'number'    => $s->shipment_number,
@@ -108,6 +138,9 @@ class ShipmentController extends Controller
                 'notes'       => $s->notes,
                 'events'      => $events,
                 'exceptions'  => $exceptions,
+                'delivery'    => $delivery,
+                'can_handoff' => $canHandoff,
+                'boxes'       => $boxes,
             ]]);
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('shipment show failed: ' . $e->getMessage());
@@ -201,6 +234,10 @@ class ShipmentController extends Controller
             $orders = Order::whereIn('id', $ships->pluck('order_id')->filter()->all())
                 ->get(['id', 'order_no', 'customer_name', 'customer_phone', 'status'])->keyBy('id');
 
+            // last-mile delivery status per order (Phase 3 — show both statuses together)
+            $deliveries = \App\Models\Delivery::whereIn('order_id', $ships->pluck('order_id')->filter()->all())
+                ->get(['id', 'order_id', 'status'])->keyBy('order_id');
+
             // open exceptions grouped by shipment
             $openEx = ShipmentException::where('resolved', false)->get();
             $exByShip = $openEx->groupBy('shipment_id');
@@ -209,12 +246,13 @@ class ShipmentController extends Controller
             $now = now();
 
             // enrich each shipment with derived flags
-            $rows = $ships->map(function (Shipment $s) use ($orders, $exByShip, $inTransit, $now, $delayHours) {
+            $rows = $ships->map(function (Shipment $s) use ($orders, $exByShip, $inTransit, $now, $delayHours, $deliveries) {
                 $o = $s->order_id ? ($orders[$s->order_id] ?? null) : null;
                 $delivered = $o && strcasecmp((string) $o->status, 'Delivered') === 0;
                 $exCount = isset($exByShip[$s->id]) ? $exByShip[$s->id]->count() : 0;
                 $delayed = in_array($s->status, $inTransit, true)
                     && $s->updated_at && $s->updated_at->diffInHours($now) >= $delayHours;
+                $dlv = $s->order_id ? ($deliveries[$s->order_id] ?? null) : null;
                 return [
                     'm'         => $s,
                     'id'        => $s->id,
@@ -231,6 +269,7 @@ class ShipmentController extends Controller
                     'exceptions'=> $exCount,
                     'delivered' => $delivered,
                     'delayed'   => $delayed,
+                    'delivery_status' => $dlv->status ?? null,
                     'updated'   => optional($s->updated_at)->toDateTimeString(),
                 ];
             });
@@ -298,11 +337,92 @@ class ShipmentController extends Controller
                 'breakdown' => $breakdown,
                 'items' => $out,
                 'delay_hours' => $delayHours,
+                'auto_handoff' => (bool) $r->user()->tenant->setting('logistics_auto_handoff', false),
             ]);
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('shipments dashboard failed: ' . $e->getMessage());
             return response()->json(['ok' => false, 'metrics' => [], 'items' => [], 'error' => $e->getMessage()]);
         }
+    }
+
+    /** Hand an arrived shipment to the last mile (create/link an Awaiting-Rider delivery). */
+    public function handoff(Request $r)
+    {
+        try {
+            $s = Shipment::find((int) $r->query('id'));
+            if (! $s) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+            $res = app(\App\Services\Logistics\LastMileBridge::class)->handoff($s);
+            return response()->json($res);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('shipment handoff failed: ' . $e->getMessage());
+            return response()->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /** Read/set the "auto hand off to the last mile on arrival" tenant toggle. */
+    public function autoToggle(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if ($r->has('on')) {
+            $t->putSetting('logistics_auto_handoff', $r->query('on') === '1');
+        }
+        return response()->json(['ok' => true, 'auto_handoff' => (bool) $t->setting('logistics_auto_handoff', false)]);
+    }
+
+    /** Printable QR label sheet — one label per box (DHL/FedEx style). Opens in a new tab to print. */
+    public function labels(Request $r)
+    {
+        $s = Shipment::find((int) $r->query('id'));
+        if (! $s) return response('Shipment not found', 404);
+
+        $boxes = app(\App\Services\Logistics\BoxCustodyService::class)->syncBoxes($s);
+        $order = $s->order_id ? Order::find($s->order_id) : null;
+        $total = $boxes->count();
+
+        $shop = $s->tenant ? (string) $s->tenant->name : 'Shipment';
+        $cust = $order ? (string) $order->customer_name : '';
+        $phone = $order ? (string) $order->customer_phone : '';
+        $route = trim((string) $s->origin_city . ' → ' . (string) $s->destination_city, ' →');
+
+        if ($total === 0) {
+            return response('<p style="font-family:sans-serif;padding:24px">No boxes yet. Dispatch the shipment with a box count first.</p>', 200)
+                ->header('Content-Type', 'text/html; charset=UTF-8');
+        }
+
+        $cards = '';
+        foreach ($boxes as $b) {
+            $cards .= '<div class="lbl">'
+                . '<div class="top"><div class="sh">' . e($s->shipment_number) . '</div>'
+                . '<div class="bx">BOX ' . (int) $b->box_number . ' / ' . $total . '</div></div>'
+                . '<div class="qr" data-code="' . e($b->code) . '"></div>'
+                . '<div class="code">' . e($b->code) . '</div>'
+                . '<div class="meta"><div><b>' . e($shop) . '</b></div>'
+                . ($route !== '' ? '<div>' . e($route) . '</div>' : '')
+                . ($cust !== '' ? '<div>' . e($cust) . ($phone !== '' ? ' · ' . e($phone) : '') . '</div>' : '')
+                . '</div></div>';
+        }
+
+        $html = '<!doctype html><html><head><meta charset="utf-8">'
+            . '<meta name="viewport" content="width=device-width, initial-scale=1"><title>Labels ' . e($s->shipment_number) . '</title>'
+            . '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script><style>'
+            . 'body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#eef2ee;color:#16231C;padding:14px}'
+            . '.bar{max-width:860px;margin:0 auto 12px;display:flex;align-items:center;gap:12px}'
+            . '.bar h1{font-size:17px;margin:0}.bar button{margin-left:auto;background:#15803D;color:#fff;border:0;border-radius:9px;padding:10px 18px;font-weight:800;font-size:14px;cursor:pointer}'
+            . '.sheet{max-width:860px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:12px}'
+            . '.lbl{background:#fff;border:1px solid #000;border-radius:8px;padding:12px;display:flex;flex-direction:column;align-items:center;break-inside:avoid}'
+            . '.top{width:100%;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:8px}'
+            . '.sh{font-weight:800;font-size:18px}.bx{font-weight:800;font-size:15px;background:#000;color:#fff;border-radius:6px;padding:3px 10px}'
+            . '.qr{margin:4px 0}.qr img,.qr canvas{display:block}'
+            . '.code{font-family:monospace;font-size:13px;margin-top:6px;letter-spacing:1px}'
+            . '.meta{width:100%;font-size:12px;color:#333;margin-top:8px;border-top:1px dashed #999;padding-top:6px;text-align:center;line-height:1.5}'
+            . '@media print{body{background:#fff;padding:0}.bar{display:none}.sheet{gap:0}.lbl{border-radius:0;margin:-0.5px}}'
+            . '</style></head><body>'
+            . '<div class="bar"><h1>🏷 ' . e($s->shipment_number) . ' — ' . $total . ' labels</h1><button onclick="window.print()">Print</button></div>'
+            . '<div class="sheet">' . $cards . '</div>'
+            . '<script>document.querySelectorAll(".qr").forEach(function(el){new QRCode(el,{text:el.getAttribute("data-code"),width:118,height:118,correctLevel:QRCode.CorrectLevel.M});});</script>'
+            . '</body></html>';
+
+        return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
     }
 
     /** Does this order already have a shipment? Powers the order-page button gating. */
