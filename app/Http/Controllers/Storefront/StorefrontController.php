@@ -49,13 +49,21 @@ class StorefrontController extends Controller
     private function categoryImages($tenant, $rows): array
     {
         $explicit = (array) ($tenant->setting('category_images', []) ?: []);
+        // 2) categories table image_url column (Day2Days category images): name => url
+        $fromTable = [];
+        foreach (\App\Models\Category::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)
+                ->whereNotNull('image_url')->where('image_url', '!=', '')
+                ->pluck('image_url', 'name') as $cname => $curl) {
+            $fromTable[(string) $cname] = $this->imageUrl((string) $curl);
+        }
         $fallback = [];
         foreach ($rows as $row) {
             $cat = (string) ($row['Category'] ?? 'Other');
             $img = (string) ($row['Image'] ?? '');
             if ($img !== '' && ! isset($fallback[$cat])) $fallback[$cat] = $img;
         }
-        return $explicit + $fallback;   // uploaded keys take priority; fallback fills the gaps
+        return $explicit + $fromTable + $fallback;   // priority: tenant setting > categories.image_url column > product image
     }
 
     private function imageUrl(?string $value): string
