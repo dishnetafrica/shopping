@@ -2547,7 +2547,7 @@ async function saveThali(){
 
 function renderCategories(){
   bindCatPhoto();
-  var m={};CATALOGUE.forEach(function(p){var c=(p.category||'').trim()||'Uncategorised';m[c]=(m[c]||0)+1;});
+  var m={},fimg={};CATALOGUE.forEach(function(p){var c=(p.category||'').trim()||'Uncategorised';m[c]=(m[c]||0)+1;if(p.image&&!fimg[c])fimg[c]=p.image;});
   (CAT_EXTRA||[]).forEach(function(c){c=(c||'').trim();if(c&&!(c in m))m[c]=0;});
   var names=Object.keys(m);
   var ord=(CAT_ORDER||[]).filter(function(c){return (c in m);});
@@ -2555,9 +2555,9 @@ function renderCategories(){
   _cats=ord.concat(rest);
   $('catCount').textContent=_cats.length+' categories';
   $('catGrid').innerHTML=_cats.length?_cats.map(function(c,i){
-    var img=CAT_IMG[c];var n=m[c];var isUnc=(c==='Uncategorised');
+    var explicit=CAT_IMG[c];var img=explicit||fimg[c];var n=m[c];var isUnc=(c==='Uncategorised');
     var thumb=img
-      ? '<div onclick="openCat('+i+')" style="height:84px;border-radius:10px;margin-bottom:6px;background-size:cover;background-position:center;cursor:pointer;background-image:url(\''+esc(img)+'\')"></div>'
+      ? '<div onclick="openCat('+i+')" style="position:relative;height:84px;border-radius:10px;margin-bottom:6px;background-size:cover;background-position:center;cursor:pointer;background-image:url(\''+esc(img)+'\')">'+(explicit?'':'<span style="position:absolute;bottom:5px;right:5px;background:rgba(0,0,0,.6);color:#fff;font-size:9px;font-weight:700;border-radius:6px;padding:1px 6px">auto</span>')+'</div>'
       : '<div onclick="openCat('+i+')" style="height:84px;border-radius:10px;margin-bottom:6px;background:#F1F3F7;display:grid;place-items:center;font-size:26px;cursor:pointer">\uD83D\uDDC2</div>';
     var arrows='<span style="margin-left:auto;display:inline-flex;gap:8px">'+
       (i>0?'<a href="#" title="Move left" onclick="event.preventDefault();catMove('+i+',-1)" style="font-size:14px;font-weight:800;color:#6b7280;text-decoration:none">\u2190</a>':'')+
@@ -2574,8 +2574,8 @@ function renderCategories(){
       '<div class="nm" onclick="openCat('+i+')" style="cursor:pointer">'+esc(c)+'</div>'+
       '<div class="pr">'+n+'</div><div class="st">products</div>'+
       '<div style="margin-top:6px;display:flex;gap:10px">'+
-        '<a href="#" onclick="event.preventDefault();catPhoto('+i+')" style="font-size:12px;font-weight:700;color:var(--green,#0C831F)">'+(img?'Change photo':'Add photo')+'</a>'+
-        (img?'<a href="#" onclick="event.preventDefault();catPhotoClear('+i+')" style="font-size:12px;font-weight:700;color:#B4232A">Remove</a>':'')+
+        '<a href="#" onclick="event.preventDefault();catPhoto('+i+')" style="font-size:12px;font-weight:700;color:var(--green,#0C831F)">'+(explicit?'Change photo':'Add photo')+'</a>'+
+        (explicit?'<a href="#" onclick="event.preventDefault();catPhotoClear('+i+')" style="font-size:12px;font-weight:700;color:#B4232A">Remove</a>':'')+
       '</div>'+manage+'</div>';
   }).join(''):'<div class="empty">No categories yet \u2014 use <b>+ Add category</b> above.</div>';
 }
