@@ -7,7 +7,7 @@ error_reporting(E_ALL & ~E_DEPRECATED);
 
 $base = __DIR__ . '/../app/Services/Bot/Discovery/';
 foreach (['WhatsAppExportParser','MessageCorpus','ProductMiner','FaqMiner','DeliveryMiner',
-          'PatternMiner','StyleProfiler','AutomationReadiness','DiscoveryReport'] as $c) {
+          'PatternMiner','StyleProfiler','SalesPatternMiner','AutomationReadiness','DiscoveryReport'] as $c) {
     require $base . $c . '.php';
 }
 
@@ -114,7 +114,7 @@ ok('low band',        RDY::band(10) !== '');
 
 /* full report */
 $report = REP::build($corpus, $orders, "Pal's Snacks");
-ok('report sections',   count($report['sections']) === 11);
+ok('report sections',   count($report['sections']) === 12);
 ok('report readiness',  $report['readiness_score'] >= 0 && $report['readiness_score'] <= 100);
 ok('report band',       ! empty($report['readiness_band']));
 $wa = REP::toWhatsApp($report);

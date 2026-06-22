@@ -8,7 +8,7 @@ error_reporting(E_ALL & ~E_DEPRECATED);
 $root = __DIR__ . '/../app/Services/Bot/';
 foreach ([
     'Discovery/WhatsAppExportParser','Discovery/MessageCorpus','Discovery/ProductMiner','Discovery/FaqMiner',
-    'Discovery/DeliveryMiner','Discovery/PatternMiner','Discovery/StyleProfiler','Discovery/AutomationReadiness',
+    'Discovery/DeliveryMiner','Discovery/PatternMiner','Discovery/StyleProfiler','Discovery/SalesPatternMiner','Discovery/AutomationReadiness',
     'Discovery/DiscoveryReport','Readiness/ReadinessModes','Readiness/BusinessReadinessEvaluator',
     'Validation/ValidationComparator','Validation/ValidationRunner','Validation/ValidationFixtures',
 ] as $c) require $root . $c . '.php';
