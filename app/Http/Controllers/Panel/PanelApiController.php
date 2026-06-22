@@ -2591,6 +2591,13 @@ class PanelApiController extends Controller
             $reviews = ['count' => count($items), 'items' => array_slice($items, 0, 5)];
         } catch (\Throwable $e) {}
 
+        // Mined-but-unmatched product candidates the owner can approve into the catalogue.
+        $candidates = ['count' => 0, 'items' => []];
+        try {
+            $c = app(\App\Services\Bot\Discovery\ProductCandidateService::class)->list($t, 20);
+            $candidates = ['count' => (int) $c['count'], 'items' => array_slice($c['items'], 0, 8)];
+        } catch (\Throwable $e) {}
+
         $activity = [];
         try {
             $activity = \App\Models\ActivityFeedItem::where('tenant_id', $t->id)
@@ -2643,6 +2650,7 @@ class PanelApiController extends Controller
             'readiness' => $readiness,
             'dna' => $dna,
             'reviews' => $reviews,
+            'candidates' => $candidates,
             'activity' => $activity,
             'performance' => $perf,
             'team' => $team,
@@ -2694,6 +2702,54 @@ class PanelApiController extends Controller
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('brainDiscover failed: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
             return response()->json(['ok' => false, 'error' => 'Discovery failed: ' . $e->getMessage()], 200);
+        }
+    }
+
+    /* ------------------------------------------ Business Brain — Product Candidates */
+
+    /** Mined-but-unmatched product terms the owner can approve into the catalogue. */
+    public function brainCandidates(Request $r)
+    {
+        try {
+            $t = $r->user()->tenant;
+            app(\App\Support\TenantContext::class)->set($t->id);
+            $c = app(\App\Services\Bot\Discovery\ProductCandidateService::class)->list($t, 20);
+            return response()->json(['ok' => true, 'count' => $c['count'], 'items' => $c['items']]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('brainCandidates failed: ' . $e->getMessage());
+            return response()->json(['ok' => false, 'count' => 0, 'items' => [], 'error' => $e->getMessage()]);
+        }
+    }
+
+    /** Approve a candidate → create a DRAFT product (owner sets a price to make it live). */
+    public function brainCandidateApprove(Request $r)
+    {
+        try {
+            $t = $r->user()->tenant;
+            app(\App\Support\TenantContext::class)->set($t->id);
+            $term = (string) $r->query('term', '');
+            $res = app(\App\Services\Bot\Discovery\ProductCandidateService::class)
+                ->approve($t, $term, (string) ($r->user()->name ?? 'owner'));
+            return response()->json($res);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('brainCandidateApprove failed: ' . $e->getMessage());
+            return response()->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /** Dismiss a candidate so it never re-surfaces. */
+    public function brainCandidateDismiss(Request $r)
+    {
+        try {
+            $t = $r->user()->tenant;
+            app(\App\Support\TenantContext::class)->set($t->id);
+            $term = (string) $r->query('term', '');
+            $res = app(\App\Services\Bot\Discovery\ProductCandidateService::class)
+                ->dismiss($t, $term, (string) ($r->user()->name ?? 'owner'));
+            return response()->json($res);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('brainCandidateDismiss failed: ' . $e->getMessage());
+            return response()->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
 
