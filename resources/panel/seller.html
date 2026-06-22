@@ -1041,6 +1041,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   settings:'/papi/settings',settingsSave:'/papi/settings-save',botToggle:'/papi/bot-toggle',
   actInbox:'/papi/activity-inbox',actApprove:'/papi/activity-approve',actReject:'/papi/activity-reject',actEdit:'/papi/activity-edit',
   brain:'/papi/brain',brainDiscover:'/papi/brain-discover',
+  brainCandidates:'/papi/brain-candidates',brainCandApprove:'/papi/brain-candidate-approve',brainCandDismiss:'/papi/brain-candidate-dismiss',
   imageStats:'/papi/image-stats',
   operations:'/papi/operations',
   branches:'/papi/branches',branchSave:'/papi/branch-save',branchDel:'/papi/branch-delete',
@@ -1573,10 +1574,12 @@ function bbQa(label,onclick,color){
 function bbPrettyFact(f){return {delivery_fee:'Delivery charge',free_delivery_threshold:'Free delivery threshold'}[f]||f.replace(/_/g,' ');}
 function renderBrainOverview(){
   var d=brainState.data||{}, rd=d.readiness, dna=d.dna||{}, pf=d.performance||{}, rv=d.reviews||{count:0,items:[]}, team=d.team, conflicts=d.conflicts||[];
+  var cand=d.candidates||{count:0,items:[]};
   var cats=(rd&&rd.categories)||{};
   // Quick Actions
   var qa='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'
     +bbQa('✅ Approve Reviews'+(rv.count?' ('+rv.count+')':''),"showPage('activity')",rv.count?'#c9a227':'')
+    +(cand.count?bbQa('🛒 Product Candidates ('+cand.count+')',"brainTab('activity')",'#3a7bd5'):'')
     +bbQa('🧬 View DNA Report',"brainTab('dna')")
     +bbQa('📊 View Readiness',"brainTab('ready')")
     +bbQa('🔄 Run Discovery Again',"brainRunDiscovery()")
@@ -1587,6 +1590,7 @@ function renderBrainOverview(){
     +bbTile('AI Conversations',(pf.conversations||0),'yesterday')
     +bbTile('AI Success Rate',(pf.success||0)+'%',(pf.solved||0)+' solved',bbColor(pf.success||0))
     +bbTile('Pending Reviews',(rv.count||0),'need your OK',rv.count?'#c9a227':'#2e9e5b')
+    +bbTile('Product Candidates',(cand.count||0),'to approve',cand.count?'#3a7bd5':'#2e9e5b')
     +bbTile('Products Discovered',(d.discovered&&d.discovered.products)||0,'')
     +bbTile('FAQs Discovered',(d.discovered&&d.discovered.faqs)||0,'')
     +'</div>';
@@ -1630,7 +1634,8 @@ function renderBrainOverview(){
   var row='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'+rc+dc+ac+'</div>';
   var rev=brainReviewCardHtml(rv);
   var act=brainActivityCardHtml(d.activity||[]);
-  var row2='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'+rev+act+'</div>';
+  var candCard=cand.count?brainCandidatesCardHtml(cand):'';
+  var row2='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'+rev+act+candCard+'</div>';
   var teamH=team?('<div style="display:flex;gap:12px;flex-wrap:wrap">'+brainTeamCardHtml(team)+'</div>'):'';
   $('brainBody').innerHTML=qa+tiles+confH+row+row2+teamH;
 }
@@ -1647,6 +1652,52 @@ function brainTeamCardHtml(team){
     +'<div style="font-size:12px;color:#778;text-transform:uppercase;margin-top:8px">Communication style</div>'+styles
     +'<div style="font-size:12px;color:#778;text-transform:uppercase;margin-top:8px">Common topics</div><div style="margin-top:4px">'+topics+'</div>'
     +'</div></div>';
+}
+function brainCandidatesCardHtml(c){
+  c=c||{count:0,items:[]};
+  var items=c.items||[];
+  var h='<div class="card" style="flex:1;min-width:280px"><div class="head">Product Candidates <span class="count" style="margin-left:auto">'+(c.count||0)+' found</span></div>'
+    +'<div class="body">';
+  if(!items.length){
+    h+='<div style="color:#889;font-size:13px">No new product candidates. These are words customers use a lot in chat that aren\'t in your catalogue yet — approve one to add it.</div>';
+  }else{
+    h+='<div style="color:#667;font-size:12px;margin-bottom:8px">Words customers mention a lot that aren\'t in your catalogue. Approve to add as a draft product, then set a price to go live.</div>';
+    items.forEach(function(it){
+      var term=esc(it.term||''), tj=(it.term||'').replace(/'/g,"\\'");
+      h+='<div data-cand="'+term+'" style="border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center">'
+        +'<div style="font-weight:600">'+term+'</div>'
+        +'<div style="font-size:12px;color:#889">'+(it.count||0)+' mentions</div></div>'
+        +'<div style="display:flex;gap:6px;margin-top:8px">'
+        +'<button class="btn" style="background:#2e9e5b;color:#fff;padding:4px 12px" onclick="brainCandidate(\''+tj+'\',\'approve\',this)">Add to catalogue</button>'
+        +'<button class="btn" style="background:#f1f1f3;color:#667;padding:4px 12px" onclick="brainCandidate(\''+tj+'\',\'dismiss\',this)">Dismiss</button>'
+        +'</div></div>';
+    });
+  }
+  return h+'</div></div>';
+}
+async function brainCandidate(term,kind,btn){
+  var url=kind==='approve'?EP.brainCandApprove:EP.brainCandDismiss;
+  var row=btn&&btn.closest?btn.closest('[data-cand]'):null;
+  if(row){row.style.opacity='.5';row.querySelectorAll('button').forEach(function(b){b.disabled=true;});}
+  try{
+    var r=await fetch(url+'?token='+encodeURIComponent(token)+'&term='+encodeURIComponent(term),{cache:'no-store'});
+    var d={}; try{d=await r.json();}catch(_e){}
+    if(d&&d.ok){
+      toast(kind==='approve'?(d.noop?'Already in your catalogue':'Added to Products as a draft — set a price to go live'):'Dismissed');
+      if(row)row.parentNode.removeChild(row);
+      if(brainState.data&&brainState.data.candidates){
+        brainState.data.candidates.count=Math.max(0,(brainState.data.candidates.count||1)-1);
+        brainState.data.candidates.items=(brainState.data.candidates.items||[]).filter(function(x){return x.term!==term;});
+      }
+    }else{
+      if(row){row.style.opacity='1';row.querySelectorAll('button').forEach(function(b){b.disabled=false;});}
+      toast('Could not update.');
+    }
+  }catch(e){
+    if(row){row.style.opacity='1';row.querySelectorAll('button').forEach(function(b){b.disabled=false;});}
+    toast('Network error.');
+  }
 }
 function brainReviewCardHtml(rv){
   var h='<div class="card" style="flex:1;min-width:280px"><div class="head">Needs Review <span class="count" style="margin-left:auto">'+(rv.count||0)+' items</span></div><div class="body">';
@@ -1730,7 +1781,8 @@ function renderBrainReady(){
 }
 function renderBrainActivity(){
   var d=brainState.data||{};
-  $('brainBody').innerHTML=brainReviewCardHtml(d.reviews||{count:0,items:[]})
+  $('brainBody').innerHTML=brainCandidatesCardHtml(d.candidates||{count:0,items:[]}).replace('flex:1;min-width:280px','min-width:0;margin-bottom:12px')
+    +brainReviewCardHtml(d.reviews||{count:0,items:[]})
     .replace('flex:1;min-width:280px','min-width:0;margin-bottom:12px')
     +brainActivityCardHtml(d.activity||[]).replace('flex:1;min-width:280px','min-width:0')
     +'<div style="margin-top:10px"><button class="btn" style="background:#eef2f8" onclick="showPage(\'activity\')">Open full Review Inbox →</button></div>';

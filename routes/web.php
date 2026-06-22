@@ -170,6 +170,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('activity-edit',    [PanelApiController::class, 'activityEdit']);
         Route::get('brain',            [PanelApiController::class, 'brainData']);
         Route::get('brain-discover',   [PanelApiController::class, 'brainDiscover']);
+        Route::get('brain-candidates',        [PanelApiController::class, 'brainCandidates']);
+        Route::get('brain-candidate-approve', [PanelApiController::class, 'brainCandidateApprove']);
+        Route::get('brain-candidate-dismiss', [PanelApiController::class, 'brainCandidateDismiss']);
         Route::get('bot-config-save', [PanelApiController::class, 'botConfigSave']);
         Route::get('branch-save',     [PanelApiController::class, 'branchSave']);
         Route::get('branch-delete',   [PanelApiController::class, 'branchDel']);
