@@ -182,6 +182,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
 
         // Shipment Platform v2A — seller-panel logistics (no token pages / notifications yet)
         Route::get('shipments',                [\App\Http\Controllers\Panel\ShipmentController::class, 'index']);
+        Route::get('shipments-dashboard',      [\App\Http\Controllers\Panel\ShipmentController::class, 'dashboard']);
         Route::get('shipment',                 [\App\Http\Controllers\Panel\ShipmentController::class, 'show']);
         Route::get('shipment-create',          [\App\Http\Controllers\Panel\ShipmentController::class, 'store']);
         Route::get('shipment-action',          [\App\Http\Controllers\Panel\ShipmentController::class, 'action']);

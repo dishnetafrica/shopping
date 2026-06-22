@@ -188,6 +188,123 @@ class ShipmentController extends Controller
         }
     }
 
+    /** Logistics dashboard: metrics + a filtered/searched view + facets for the exception filters. */
+    public function dashboard(Request $r)
+    {
+        try {
+            $view  = (string) $r->query('view', 'all');
+            $q     = trim((string) $r->query('q', ''));
+            $delayHours = 24;
+
+            $ships = Shipment::query()->orderByDesc('id')->limit(500)->get();
+
+            $orders = Order::whereIn('id', $ships->pluck('order_id')->filter()->all())
+                ->get(['id', 'order_no', 'customer_name', 'customer_phone', 'status'])->keyBy('id');
+
+            // open exceptions grouped by shipment
+            $openEx = ShipmentException::where('resolved', false)->get();
+            $exByShip = $openEx->groupBy('shipment_id');
+
+            $inTransit = ['sent_to_transporter', 'transport_confirmed', 'in_transit'];
+            $now = now();
+
+            // enrich each shipment with derived flags
+            $rows = $ships->map(function (Shipment $s) use ($orders, $exByShip, $inTransit, $now, $delayHours) {
+                $o = $s->order_id ? ($orders[$s->order_id] ?? null) : null;
+                $delivered = $o && strcasecmp((string) $o->status, 'Delivered') === 0;
+                $exCount = isset($exByShip[$s->id]) ? $exByShip[$s->id]->count() : 0;
+                $delayed = in_array($s->status, $inTransit, true)
+                    && $s->updated_at && $s->updated_at->diffInHours($now) >= $delayHours;
+                return [
+                    'm'         => $s,
+                    'id'        => $s->id,
+                    'number'    => $s->shipment_number,
+                    'order_no'  => $o->order_no ?? null,
+                    'customer'  => $o->customer_name ?? null,
+                    'phone'     => $o->customer_phone ?? null,
+                    'status'    => $s->status,
+                    'route'     => trim((string) $s->origin_city . ' → ' . (string) $s->destination_city, ' →'),
+                    'transport' => $s->transport_company,
+                    'origin'    => $s->origin_city,
+                    'destination' => $s->destination_city,
+                    'boxes'     => ['sent' => $s->boxes_sent, 'received' => $s->boxes_received],
+                    'exceptions'=> $exCount,
+                    'delivered' => $delivered,
+                    'delayed'   => $delayed,
+                    'updated'   => optional($s->updated_at)->toDateTimeString(),
+                ];
+            });
+
+            // metrics over the whole set (not the filtered view)
+            $metrics = [
+                'active'         => $rows->whereIn('status', array_merge(['packed'], $inTransit))->count(),
+                'in_transit'     => $rows->whereIn('status', $inTransit)->count(),
+                'delayed'        => $rows->where('delayed', true)->count(),
+                'exceptions'     => $rows->where('exceptions', '>', 0)->count(),
+                'completed_today'=> $ships->filter(fn ($s) => $s->arrived_at && $s->arrived_at->isToday())->count(),
+            ];
+
+            // facets for the exception filters
+            $facets = [
+                'transport' => $rows->pluck('transport')->filter()->unique()->values()->all(),
+                'origin'    => $rows->pluck('origin')->filter()->unique()->values()->all(),
+                'destination' => $rows->pluck('destination')->filter()->unique()->values()->all(),
+            ];
+
+            // apply the view
+            $items = $rows;
+            if ($view === 'awaiting_dispatch') {
+                $items = $items->where('status', 'packed');
+            } elseif ($view === 'in_transit') {
+                $items = $items->whereIn('status', $inTransit);
+            } elseif ($view === 'arrived') {
+                $items = $items->where('status', 'arrived')->where('delivered', false);
+            } elseif ($view === 'delivered') {
+                $items = $items->where('delivered', true);
+            } elseif ($view === 'exception') {
+                $items = $items->where('exceptions', '>', 0);
+                foreach (['transport' => 'transport', 'origin' => 'origin', 'destination' => 'destination'] as $param => $col) {
+                    $val = trim((string) $r->query($param, ''));
+                    if ($val !== '') $items = $items->where($col, $val);
+                }
+            }
+
+            // search
+            if ($q !== '') {
+                $needle = mb_strtolower($q);
+                $items = $items->filter(function ($it) use ($needle) {
+                    foreach (['number', 'order_no', 'customer', 'phone'] as $f) {
+                        if ($it[$f] !== null && mb_strpos(mb_strtolower((string) $it[$f]), $needle) !== false) return true;
+                    }
+                    return false;
+                });
+            }
+
+            // exception-type breakdown across the (filtered) exception set
+            $exShipIds = $items->where('exceptions', '>', 0)->pluck('id')->all();
+            $exRel = $openEx->whereIn('shipment_id', $exShipIds);
+            $breakdown = [
+                'missing_boxes' => $exRel->where('type', 'missing_boxes')->count(),
+                'extra_boxes'   => $exRel->where('type', 'extra_boxes')->count(),
+                'damaged_boxes' => $exRel->where('type', 'damaged_boxes')->count(),
+            ];
+
+            $out = $items->map(fn ($it) => collect($it)->except('m')->all())->values()->all();
+
+            return response()->json([
+                'ok' => true,
+                'metrics' => $metrics,
+                'facets' => $facets,
+                'breakdown' => $breakdown,
+                'items' => $out,
+                'delay_hours' => $delayHours,
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('shipments dashboard failed: ' . $e->getMessage());
+            return response()->json(['ok' => false, 'metrics' => [], 'items' => [], 'error' => $e->getMessage()]);
+        }
+    }
+
     /** Does this order already have a shipment? Powers the order-page button gating. */
     public function forOrder(Request $r)
     {

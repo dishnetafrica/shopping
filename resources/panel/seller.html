@@ -293,7 +293,7 @@
       <a class="nav" data-page="analytics"><span class="i">📈</span> Analytics</a>
       <a class="nav" data-feature="riders" data-page="riders"><span class="i">🛵</span> Riders</a>
       <a class="nav" data-page="returns"><span class="i">↩</span> Returns</a>
-      <a class="nav" data-page="shipments"><span class="i">🚚</span> Shipments</a>
+      <a class="nav" data-page="shipments"><span class="i">🚚</span> Logistics</a>
       <a class="nav" data-page="activity"><span class="i">📥</span> Activity Inbox</a>
       <a class="nav" data-page="brain"><span class="i">🧠</span> Business Brain <span style="color:#c9a227">⭐</span></a>
       <a class="nav" data-page="settings"><span class="i">⚙</span> Settings</a>
@@ -746,9 +746,12 @@
 
       <!-- ============ SHIPMENTS ============ -->
       <div id="pageShipments" class="hide">
-        <div class="crumb">Home / <b>Shipments</b></div>
+        <div class="crumb">Home / <b>Logistics</b></div>
         <div id="shipList">
-          <div id="shipFilters" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>
+          <div id="shipMetrics" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+          <div id="shipFilters" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
+          <div id="shipSearchRow" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+          <div id="shipExBreak"></div>
           <div id="shipCards"><div style="color:#888;padding:18px">Loading shipments…</div></div>
         </div>
         <div id="shipDetail" class="hide"></div>
@@ -1054,7 +1057,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   actInbox:'/papi/activity-inbox',actApprove:'/papi/activity-approve',actReject:'/papi/activity-reject',actEdit:'/papi/activity-edit',
   brain:'/papi/brain',brainDiscover:'/papi/brain-discover',
   brainCandidates:'/papi/brain-candidates',brainCandApprove:'/papi/brain-candidate-approve',brainCandDismiss:'/papi/brain-candidate-dismiss',
-  shipments:'/papi/shipments',shipment:'/papi/shipment',shipCreate:'/papi/shipment-create',shipAction:'/papi/shipment-action',shipExResolve:'/papi/shipment-exception-resolve',orderShipment:'/papi/order-shipment',
+  shipments:'/papi/shipments',shipment:'/papi/shipment',shipCreate:'/papi/shipment-create',shipAction:'/papi/shipment-action',shipExResolve:'/papi/shipment-exception-resolve',orderShipment:'/papi/order-shipment',shipDash:'/papi/shipments-dashboard',
   imageStats:'/papi/image-stats',
   operations:'/papi/operations',
   branches:'/papi/branches',branchSave:'/papi/branch-save',branchDel:'/papi/branch-delete',
@@ -1827,7 +1830,7 @@ function showPage(p){
   $('pageShipments').classList.toggle('hide',p!=='shipments');
   if(p==='orders'){$('detailView').classList.add('hide');$('listView').classList.remove('hide');}
   document.querySelectorAll('.side a.nav').forEach(function(a){a.classList.toggle('on',a.dataset.page===p);});
-  var T={dash:'Dashboard',pos:'POS',reports:'Reports',analytics:'Analytics',products:'Products',category:'Categories',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription',activity:'Activity Inbox',brain:'Business Brain',shipments:'Shipments'};
+  var T={dash:'Dashboard',pos:'POS',reports:'Reports',analytics:'Analytics',products:'Products',category:'Categories',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription',activity:'Activity Inbox',brain:'Business Brain',shipments:'Logistics'};
   $('pageTitle').textContent=T[p]||'Orders';
   if(p==='dash')renderDash(); else if(p==='pos')posInit(); else if(p==='reports')reportsInit(); else if(p==='analytics')analyticsInit();
   else if(p==='kitchen')kitchenInit();
@@ -3520,31 +3523,66 @@ async function defDelete(id){if(!confirm('Delete this default?'))return;try{awai
 /* ===================== END OWNER CONSOLIDATION ===================== */
 
 /* ===== Shipments (Phase 2A) ===== */
-var shipState={filter:'all',cur:null};
+var shipState={view:'all',q:'',tcompany:'',origin:'',dest:'',facets:{transport:[],origin:[],destination:[]},cur:null};
 var SHIP_EV={packed:'Packed',sent_to_transport:'Sent to transporter',received_by_transport:'Received by transport',bus_departed:'Bus departed',arrived:'Arrived',collected_by_rider:'Collected by rider',delivered:'Delivered',cancelled:'Cancelled',damaged:'Damage reported'};
 var SHIP_ST={packed:['Packed','#6b7280'],sent_to_transporter:['Sent to transporter','#c9a227'],transport_confirmed:['Transport confirmed','#3a7bd5'],in_transit:['In transit','#7c5cd0'],arrived:['Arrived','#2e9e5b'],cancelled:['Cancelled','#d0533d']};
 var SHIP_ACT={dispatch:'Dispatch to transporter',transport_confirm:'Confirm transport receipt',depart:'Mark bus departed',arrive:'Mark arrived'};
-var SHIP_FILTERS=[['all','All'],['packed','Packed'],['in_transit','In Transit'],['arrived','Arrived'],['exception','⚠ Exception']];
+var SHIP_VIEWS=[['all','All'],['awaiting_dispatch','Awaiting Dispatch'],['in_transit','In Transit'],['arrived','Arrived'],['delivered','Delivered'],['exception','⚠ Exception']];
 function shipBadge(st){var d=SHIP_ST[st]||[st,'#888'];return '<span style="display:inline-block;background:'+d[1]+';color:#fff;border-radius:11px;padding:2px 10px;font-size:12px;font-weight:700">'+esc(d[0])+'</span>';}
-function shipmentsInit(){$('shipList').classList.remove('hide');$('shipDetail').classList.add('hide');shipRenderFilters();shipLoad();}
-function shipRenderFilters(){$('shipFilters').innerHTML=SHIP_FILTERS.map(function(f){var on=shipState.filter===f[0];return '<button class="btn" style="background:'+(on?'#3a7bd5':'#eef2f8')+';color:'+(on?'#fff':'#334')+';font-size:13px;padding:7px 14px" onclick="shipSetFilter(\''+f[0]+'\')">'+esc(f[1])+'</button>';}).join('');}
-function shipSetFilter(f){shipState.filter=f;shipRenderFilters();shipLoad();}
+function shipmentsInit(){$('shipList').classList.remove('hide');$('shipDetail').classList.add('hide');shipRenderViews();shipRenderSearch();shipLoad();}
+function shipRenderViews(){$('shipFilters').innerHTML=SHIP_VIEWS.map(function(f){var on=shipState.view===f[0];return '<button class="btn" style="background:'+(on?'#3a7bd5':'#eef2f8')+';color:'+(on?'#fff':'#334')+';font-size:13px;padding:7px 14px" onclick="shipSetView(\''+f[0]+'\')">'+esc(f[1])+'</button>';}).join('');}
+function shipSetView(v){shipState.view=v;shipState.tcompany='';shipState.origin='';shipState.dest='';shipRenderViews();shipRenderSearch();shipLoad();}
+function shipRenderSearch(){
+  $('shipSearchRow').innerHTML='<input id="shipQ" placeholder="Search shipment #, order #, customer, phone" value="'+esc(shipState.q||'')+'" style="flex:1;min-width:220px;border:1px solid #d8dee8;border-radius:9px;padding:9px 12px;font-size:13px">';
+  var q=$('shipQ');if(q)q.oninput=function(){shipState.q=this.value;clearTimeout(window._shipQT);window._shipQT=setTimeout(shipLoad,300);};
+}
+function shipRenderMetrics(m){m=m||{};
+  var tiles=[['Active',m.active,'#3a7bd5'],['In transit',m.in_transit,'#7c5cd0'],['Delayed',m.delayed,'#d08a27'],['Exceptions',m.exceptions,'#d0533d'],['Completed today',m.completed_today,'#2e9e5b']];
+  $('shipMetrics').innerHTML=tiles.map(function(t){return '<div class="card" style="flex:1;min-width:115px;margin:0"><div class="body" style="padding:12px 14px"><div style="font-size:24px;font-weight:800;color:'+t[2]+'">'+(t[1]||0)+'</div><div style="font-size:12px;color:#778">'+t[0]+'</div></div></div>';}).join('');
+}
+function shipSelOpts(opts,val,ph){opts=opts||[];return '<option value="">'+esc(ph)+'</option>'+opts.map(function(o){return '<option'+(o===val?' selected':'')+'>'+esc(o)+'</option>';}).join('');}
+function shipRenderBreakdown(d){
+  if(shipState.view!=='exception'){$('shipExBreak').innerHTML='';return;}
+  var b=d.breakdown||{};var f=shipState.facets||{};
+  var pill=function(lbl,n,c){return '<span style="display:inline-block;background:'+c+';color:#fff;border-radius:11px;padding:3px 12px;font-size:13px;font-weight:700;margin-right:8px">'+lbl+': '+(n||0)+'</span>';};
+  $('shipExBreak').innerHTML='<div class="card" style="border:1px solid #f0c9c0;background:#fff7f5;margin-bottom:10px"><div class="body" style="padding:14px">'
+    +'<div style="margin-bottom:10px">'+pill('Missing',b.missing_boxes,'#d0533d')+pill('Extra',b.extra_boxes,'#d08a27')+pill('Damaged',b.damaged_boxes,'#9a3b8f')+'</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +'<select id="shipFTrans" style="border:1px solid #d8dee8;border-radius:9px;padding:8px 10px;font-size:13px">'+shipSelOpts(f.transport,shipState.tcompany,'All transporters')+'</select>'
+    +'<select id="shipFOrig" style="border:1px solid #d8dee8;border-radius:9px;padding:8px 10px;font-size:13px">'+shipSelOpts(f.origin,shipState.origin,'All origins')+'</select>'
+    +'<select id="shipFDest" style="border:1px solid #d8dee8;border-radius:9px;padding:8px 10px;font-size:13px">'+shipSelOpts(f.destination,shipState.dest,'All destinations')+'</select>'
+    +'</div></div></div>';
+  var ft=$('shipFTrans');if(ft)ft.onchange=function(){shipState.tcompany=this.value;shipLoad();};
+  var fo=$('shipFOrig');if(fo)fo.onchange=function(){shipState.origin=this.value;shipLoad();};
+  var fd=$('shipFDest');if(fd)fd.onchange=function(){shipState.dest=this.value;shipLoad();};
+}
 async function shipLoad(){
-  $('shipCards').innerHTML='<div style="color:#888;padding:18px">Loading shipments…</div>';
-  try{var r=await fetch(EP.shipments+'?token='+encodeURIComponent(token)+'&filter='+encodeURIComponent(shipState.filter),{cache:'no-store'});var d=await r.json();shipRenderCards((d&&d.items)||[]);}
-  catch(e){$('shipCards').innerHTML='<div style="color:#c33;padding:18px">Could not load shipments.</div>';}
+  $('shipCards').innerHTML='<div style="color:#888;padding:18px">Loading…</div>';
+  var u=EP.shipDash+'?token='+encodeURIComponent(token)+'&view='+encodeURIComponent(shipState.view)+'&q='+encodeURIComponent(shipState.q||'');
+  if(shipState.view==='exception'){u+='&transport='+encodeURIComponent(shipState.tcompany||'')+'&origin='+encodeURIComponent(shipState.origin||'')+'&destination='+encodeURIComponent(shipState.dest||'');}
+  try{var r=await fetch(u,{cache:'no-store'});var d=await r.json();
+    if(!d||!d.ok){$('shipCards').innerHTML='<div style="color:#c33;padding:18px">Could not load.</div>';return;}
+    shipState.facets=d.facets||shipState.facets;
+    shipRenderMetrics(d.metrics);shipRenderBreakdown(d);shipRenderCards(d.items||[]);
+  }catch(e){$('shipCards').innerHTML='<div style="color:#c33;padding:18px">Could not load shipments.</div>';}
 }
 function shipRenderCards(items){
-  if(!items.length){$('shipCards').innerHTML='<div style="color:#889;padding:18px">No shipments'+(shipState.filter!=='all'?' in this view':' yet — open a confirmed order and tap 🚚 Shipment to create one')+'.</div>';return;}
+  if(!items.length){$('shipCards').innerHTML='<div style="color:#889;padding:18px">No shipments'+((shipState.view!=='all'||shipState.q)?' in this view':' yet — open a confirmed order and tap 🚚 Shipment to create one')+'.</div>';return;}
   $('shipCards').innerHTML=items.map(function(s){
     var ex=s.exceptions>0?'<span style="color:#d0533d;font-weight:700;margin-left:8px">⚠ '+s.exceptions+'</span>':'';
+    var dly=s.delayed?'<span style="background:#fdf0d8;color:#a86a12;border-radius:9px;padding:1px 8px;font-size:11px;font-weight:700;margin-left:6px">Delayed</span>':'';
+    var dvd=s.delivered?'<span style="background:#dff0e4;color:#2e7d46;border-radius:9px;padding:1px 8px;font-size:11px;font-weight:700;margin-left:6px">Delivered</span>':'';
     var boxes=(s.boxes&&s.boxes.sent!=null)?(s.boxes.sent+(s.boxes.received!=null&&s.boxes.received!==s.boxes.sent?' → '+s.boxes.received:'')+' boxes'):'';
-    return '<div class="card" style="margin-bottom:10px;cursor:pointer" onclick="openShipment('+s.id+')"><div class="body" style="padding:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
-      +'<div style="font-weight:800">'+esc(s.number)+'</div>'+shipBadge(s.status)
-      +(s.order_no?'<span style="color:#667;font-size:13px">order '+esc(s.order_no)+'</span>':'')
+    var cust=s.customer?('<span style="color:#667;font-size:12px">'+esc(s.customer)+(s.phone?' · '+esc(s.phone):'')+'</span>'):'';
+    return '<div class="card" style="margin-bottom:10px;cursor:pointer" onclick="openShipment('+s.id+')"><div class="body" style="padding:14px">'
+      +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="font-weight:800">'+esc(s.number)+'</div>'+shipBadge(s.status)+dly+dvd
+      +(s.order_no?'<span style="color:#667;font-size:13px">order '+esc(s.order_no)+'</span>':'')+ex
+      +'<span style="margin-left:auto;color:#aab">›</span></div>'
+      +'<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px">'
       +(s.route?'<span style="color:#556;font-size:13px">'+esc(s.route)+'</span>':'')
-      +(boxes?'<span style="color:#889;font-size:12px">'+esc(boxes)+'</span>':'')+ex
-      +'<span style="margin-left:auto;color:#aab">›</span></div></div>';
+      +(s.transport?'<span style="color:#889;font-size:12px">'+esc(s.transport)+'</span>':'')
+      +(boxes?'<span style="color:#889;font-size:12px">'+esc(boxes)+'</span>':'')
+      +cust+'</div></div></div>';
   }).join('');
 }
 async function openShipment(id){
