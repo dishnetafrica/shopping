@@ -1057,7 +1057,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   actInbox:'/papi/activity-inbox',actApprove:'/papi/activity-approve',actReject:'/papi/activity-reject',actEdit:'/papi/activity-edit',
   brain:'/papi/brain',brainDiscover:'/papi/brain-discover',
   brainCandidates:'/papi/brain-candidates',brainCandApprove:'/papi/brain-candidate-approve',brainCandDismiss:'/papi/brain-candidate-dismiss',
-  shipments:'/papi/shipments',shipment:'/papi/shipment',shipCreate:'/papi/shipment-create',shipAction:'/papi/shipment-action',shipExResolve:'/papi/shipment-exception-resolve',orderShipment:'/papi/order-shipment',shipDash:'/papi/shipments-dashboard',shipHandoff:'/papi/shipment-handoff',shipAutoToggle:'/papi/shipment-auto-toggle',shipLabels:'/papi/shipment-labels',
+  shipments:'/papi/shipments',shipment:'/papi/shipment',shipCreate:'/papi/shipment-create',shipAction:'/papi/shipment-action',shipExResolve:'/papi/shipment-exception-resolve',orderShipment:'/papi/order-shipment',shipDash:'/papi/shipments-dashboard',shipHandoff:'/papi/shipment-handoff',shipAutoToggle:'/papi/shipment-auto-toggle',shipLabels:'/papi/shipment-labels',shipManifest:'/papi/shipment-manifest',
   imageStats:'/papi/image-stats',
   operations:'/papi/operations',
   branches:'/papi/branches',branchSave:'/papi/branch-save',branchDel:'/papi/branch-delete',
@@ -3665,12 +3665,21 @@ function shipRenderDetail(s){
   }
   var boxCard='';
   if(s.boxes&&s.boxes.total){
-    var b=s.boxes,lurl=EP.shipLabels+'?token='+encodeURIComponent(token)+'&id='+s.id;
+    var b=s.boxes,lurl=EP.shipLabels+'?token='+encodeURIComponent(token)+'&id='+s.id,murl=EP.shipManifest+'?token='+encodeURIComponent(token)+'&id='+s.id;
     var stages=[['Transport','received_by_transport'],['Arrived','arrived'],['Rider','collected_by_rider'],['Delivered','delivered']];
     var prog=stages.filter(function(r){return b.scanned[r[1]]>0;}).map(function(r){var miss=b.scanned[r[1]]<b.total;return '<span style="background:'+(miss?'#fdf0d8':'#e7f6ec')+';color:'+(miss?'#a86a12':'#15803D')+';border-radius:9px;padding:3px 10px;font-size:12px;font-weight:700">'+r[0]+' '+b.scanned[r[1]]+'/'+b.total+'</span>';}).join('');
+    var sumHtml='';
+    if(b.summary){
+      var u=b.summary;
+      function tile(v,l,cls){return '<div style="flex:1;background:'+(cls==='warn'?'#fdf6e9':(cls==='ok'?'#f1f8f3':'#f4f8f5'))+';border:1px solid '+(cls==='warn'?'#f2e2b8':'#e0eae3')+';border-radius:11px;padding:9px 4px;text-align:center"><div style="font-size:22px;font-weight:900;color:'+(cls==='warn'?'#a86a12':(cls==='ok'?'#15803D':'#16231C'))+'">'+v+'</div><div style="font-size:10px;font-weight:700;color:#6E7D72;text-transform:uppercase">'+l+'</div></div>';}
+      sumHtml='<div style="display:flex;gap:7px;margin-top:10px">'+tile(u.expected,'Expected','')+tile(u.scanned,'Scanned','ok')+tile(u.missing,'Missing','warn')+(u.extra>0?tile(u.extra,'Extra','warn'):'')+'</div>';
+      if(u.missing_codes&&u.missing_codes.length)sumHtml+='<div style="background:#fdf0d8;border:1px solid #f2d9a6;border-radius:11px;padding:9px 12px;font-size:13px;margin-top:8px;color:#7a5212">Missing: <b>'+u.missing_codes.map(esc).join(', ')+'</b></div>';
+    }
     boxCard='<div class="card"><div class="head">Boxes ('+b.total+')</div><div class="body">'
-      +'<a class="btn" style="background:#0B3D22;color:#fff;text-decoration:none;display:inline-block" href="'+esc(lurl)+'" target="_blank">🏷 Print box labels</a>'
-      +(prog?'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'+prog+'</div>':'<div class="note" style="margin-top:8px">Each box has a QR label. Transporter / agent scan them — counts post here automatically.</div>')
+      +'<a class="btn" style="background:#0B3D22;color:#fff;text-decoration:none;display:inline-block" href="'+esc(lurl)+'" target="_blank">🏷 Print box labels</a> '
+      +'<a class="btn" style="background:#eef2f8;color:#1f3a5f;text-decoration:none;display:inline-block" href="'+esc(murl)+'" target="_blank">📋 Print manifest</a>'
+      +sumHtml
+      +(prog?'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'+prog+'</div>':(b.summary?'':'<div class="note" style="margin-top:8px">Each box has a QR label. Transporter / agent scan them — counts post here automatically.</div>'))
       +'</div></div>';
   }
   $('shipDetail').innerHTML=hdr+boxCard+lastMile+share+exHtml+tl;

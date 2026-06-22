@@ -195,6 +195,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('shipment-handoff',         [\App\Http\Controllers\Panel\ShipmentController::class, 'handoff']);
         Route::get('shipment-auto-toggle',     [\App\Http\Controllers\Panel\ShipmentController::class, 'autoToggle']);
         Route::get('shipment-labels',          [\App\Http\Controllers\Panel\ShipmentController::class, 'labels']);
+        Route::get('shipment-manifest',        [\App\Http\Controllers\Panel\ShipmentController::class, 'manifest']);
         Route::get('bot-config-save', [PanelApiController::class, 'botConfigSave']);
         Route::get('branch-save',     [PanelApiController::class, 'branchSave']);
         Route::get('branch-delete',   [PanelApiController::class, 'branchDel']);

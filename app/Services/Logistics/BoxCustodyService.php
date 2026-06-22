@@ -67,6 +67,31 @@ class BoxCustodyService
             ->pluck('shipment_boxes.box_number')->all();
     }
 
+    /** Box rows NOT yet scanned at this stage (the actionable "go find these" list). */
+    public function missingBoxes(Shipment $shipment, string $stage): Collection
+    {
+        $scannedIds = ShipmentBoxScan::where('shipment_id', $shipment->id)->where('stage', $stage)->pluck('box_id')->all();
+        return ShipmentBox::where('shipment_id', $shipment->id)
+            ->when($scannedIds, fn ($q) => $q->whereNotIn('id', $scannedIds))
+            ->orderBy('box_number')->get();
+    }
+
+    /** Big-picture counts + the specific missing codes, for the batch-scan summary. */
+    public function summary(Shipment $shipment, string $stage): array
+    {
+        $expected = $this->total($shipment);
+        $scanned  = $this->scannedCount($shipment, $stage);
+        $missing  = $this->missingBoxes($shipment, $stage);
+        return [
+            'stage'         => $stage,
+            'expected'      => $expected,
+            'scanned'       => $scanned,
+            'missing'       => max(0, $expected - $scanned),
+            'extra'         => max(0, $scanned - $expected),
+            'missing_codes' => $missing->pluck('code')->all(),
+        ];
+    }
+
     /** Record one box scan at a stage. Idempotent per (box, stage). */
     public function scan(Shipment $shipment, string $code, string $stage, string $actor, ?string $actorName = null): array
     {

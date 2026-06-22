@@ -82,7 +82,9 @@ class ShipmentTrackController extends Controller
         if (! $stage) return response()->json(['ok' => false, 'error' => 'Not ready to scan at this step.'], 409);
         $this->boxes()->syncBoxes($s);
         $actorName = $role === 'transport' ? ($s->transport_company ?: 'Transporter') : ($s->destination_agent_name ?: 'Destination agent');
-        return response()->json($this->boxes()->scan($s, (string) $r->input('code', ''), $stage, $role, $actorName));
+        $res = $this->boxes()->scan($s, (string) $r->input('code', ''), $stage, $role, $actorName);
+        if (! empty($res['ok'])) $res = array_merge($res, $this->boxes()->summary($s, $stage));
+        return response()->json($res);
     }
 
     private function doScanConfirm(Shipment $s, string $role, Request $r)
@@ -90,9 +92,10 @@ class ShipmentTrackController extends Controller
         $stage = $this->scanStage($s, $role);
         if (! $stage) return response()->json(['ok' => false, 'error' => 'Nothing to confirm at this step.'], 409);
         $actorName = $role === 'transport' ? ($s->transport_company ?: 'Transporter') : ($s->destination_agent_name ?: 'Destination agent');
+        $summary = $this->boxes()->summary($s, $stage);
         $photoUrl = $this->storePhoto($s, (string) $r->input('photo', ''));
         $res = $this->boxes()->finalize($s, $stage, $role, $actorName, $photoUrl ? ['photo_url' => $photoUrl] : []);
-        return response()->json($res);
+        return response()->json(array_merge($res, $summary));
     }
 
     /* --------------------------------------------------------------- helpers */
@@ -200,12 +203,22 @@ class ShipmentTrackController extends Controller
         $boxTotal = $this->boxes()->total($s);
 
         if ($av && $scanStage && $boxTotal > 0) {
-            // box-level scan card (v6) — no manual count; the scans ARE the count
-            $scanned = $this->boxes()->scannedCount($s, $scanStage);
+            // box-level scan card (v6 / v6.1) — no manual count; the scans ARE the count
+            $sum = $this->boxes()->summary($s, $scanStage);
+            $pct = $boxTotal > 0 ? (int) round($sum['scanned'] / $boxTotal * 100) : 0;
+            $missCodes = implode(', ', $sum['missing_codes']);
             $card = '<div class="action" data-stage="' . e($scanStage) . '" data-total="' . $boxTotal . '">'
                 . '<div class="alabel">' . e($av['label']) . '</div>'
                 . '<div class="muted" style="margin:2px 0 10px">Scan each box\'s QR label. ' . $boxTotal . ' to scan.</div>'
-                . '<div id="scanprog" class="scanprog">' . $scanned . ' / ' . $boxTotal . ' boxes scanned</div>'
+                . '<div class="bigprog"><div class="bpnum"><span id="scnN">' . $sum['scanned'] . '</span> / ' . $boxTotal . '</div>'
+                . '<div class="bplab">Boxes scanned</div>'
+                . '<div class="bar"><div id="barfill" class="fill" style="width:' . $pct . '%"></div></div></div>'
+                . '<div class="tiles">'
+                . '<div class="tile"><div class="tv">' . $boxTotal . '</div><div class="tl">Expected</div></div>'
+                . '<div class="tile ok"><div class="tv" id="tScan">' . $sum['scanned'] . '</div><div class="tl">Scanned</div></div>'
+                . '<div class="tile warn"><div class="tv" id="tMiss">' . $sum['missing'] . '</div><div class="tl">Missing</div></div>'
+                . '</div>'
+                . '<div id="missbox" class="missbox"' . ($sum['missing'] > 0 ? '' : ' style="display:none"') . '>Still to scan: <b id="misscodes">' . e($missCodes) . '</b></div>'
                 . '<div id="scanchips" class="scanchips"></div>'
                 . '<video id="cam" playsinline style="display:none"></video>'
                 . '<button id="cambtn" class="btn ghost2" type="button">📷 Scan with camera</button>'
@@ -267,6 +280,16 @@ class ShipmentTrackController extends Controller
             . '.ev{display:flex;gap:10px;padding:7px 0}.dot{width:9px;height:9px;border-radius:50%;background:#15803D;margin-top:5px;flex:none}'
             . '.thumb{max-width:120px;border-radius:8px;margin-top:6px;display:block}'
             . '.scanprog{font-weight:800;font-size:17px;margin:6px 0 8px}'
+            . '.bigprog{text-align:center;margin:6px 0 12px}'
+            . '.bpnum{font-size:40px;font-weight:900;line-height:1;color:#0B3D22}'
+            . '.bplab{font-size:12px;font-weight:700;color:#6E7D72;text-transform:uppercase;letter-spacing:.05em;margin-top:3px}'
+            . '.bar{height:12px;background:#e7ece8;border-radius:8px;overflow:hidden;margin-top:10px}'
+            . '.bar .fill{height:100%;background:#15803D;border-radius:8px;transition:width .3s ease}'
+            . '.tiles{display:flex;gap:8px;margin:4px 0 10px}'
+            . '.tile{flex:1;background:#f4f8f5;border:1px solid #e0eae3;border-radius:12px;padding:10px 6px;text-align:center}'
+            . '.tile .tv{font-size:26px;font-weight:900;line-height:1}.tile .tl{font-size:11px;font-weight:700;color:#6E7D72;text-transform:uppercase;margin-top:3px}'
+            . '.tile.ok .tv{color:#15803D}.tile.warn{background:#fdf6e9;border-color:#f2e2b8}.tile.warn .tv{color:#a86a12}'
+            . '.missbox{background:#fdf0d8;border:1px solid #f2d9a6;border-radius:11px;padding:10px 12px;font-size:14px;margin-bottom:10px;color:#7a5212}'
             . '.scanchips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}'
             . '.scanchips .c{background:#e7f6ec;color:#15803D;border-radius:9px;padding:3px 9px;font-size:12px;font-weight:700}'
             . '.btn.ghost2{background:#eef2f8;color:#1f3a5f;width:100%;margin-top:6px}'
@@ -290,18 +313,26 @@ class ShipmentTrackController extends Controller
 
   if(act && go){ /* ---- BOX SCAN MODE (v6) ---- */
     var total=parseInt(act.getAttribute("data-total"),10)||0;
-    var prog=document.getElementById("scanprog"), chips=document.getElementById("scanchips");
+    var chips=document.getElementById("scanchips");
+    var scnN=document.getElementById("scnN"), bar=document.getElementById("barfill");
+    var tScan=document.getElementById("tScan"), tMiss=document.getElementById("tMiss");
+    var missbox=document.getElementById("missbox"), misscodes=document.getElementById("misscodes");
+    var nums=[], lastCode="", lastT=0, stream=null, detector=null, timer=null;
+    function chip(n){ if(nums.indexOf(n)<0){nums.push(n);nums.sort(function(a,b){return a-b;});chips.innerHTML=nums.map(function(x){return '<span class="c">B'+x+'</span>';}).join("");} }
+    function applySummary(d){
+      var exp=(d.expected!=null)?d.expected:total, sc=(d.scanned!=null)?d.scanned:0, miss=(d.missing!=null)?d.missing:Math.max(0,exp-sc);
+      if(scnN)scnN.textContent=sc; if(tScan)tScan.textContent=sc; if(tMiss)tMiss.textContent=miss;
+      if(bar)bar.style.width=(exp?Math.round(sc/exp*100):0)+"%";
+      if(missbox&&misscodes){ if(d.missing_codes&&d.missing_codes.length){misscodes.textContent=d.missing_codes.join(", ");missbox.style.display="";}else{missbox.style.display="none";} }
+    }
     var cam=document.getElementById("cam"), cambtn=document.getElementById("cambtn");
     var mancode=document.getElementById("mancode"), manadd=document.getElementById("manadd");
-    var nums=[], lastCode="", lastT=0, stream=null, detector=null, timer=null;
-    function setProg(n){prog.textContent=n+" / "+total+" boxes scanned";}
-    function chip(n){ if(nums.indexOf(n)<0){nums.push(n);nums.sort(function(a,b){return a-b;});chips.innerHTML=nums.map(function(x){return '<span class="c">B'+x+'</span>';}).join("");} }
     function send(code){
       code=(code||"").trim(); if(!code)return;
       var now=Date.now(); if(code===lastCode && now-lastT<2500)return; lastCode=code; lastT=now;
       fetch(base+"/scan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:code})})
         .then(function(r){return r.json();}).then(function(d){
-          if(d&&d.ok){ if(d.box_number)chip(d.box_number); setProg(d.scanned); if(navigator.vibrate)navigator.vibrate(40);
+          if(d&&d.ok){ if(d.box_number)chip(d.box_number); applySummary(d); if(navigator.vibrate)navigator.vibrate(40);
             msg.textContent="\u2713 Box "+d.box_number+(d.already?" (already scanned)":" scanned"); }
           else { msg.textContent=(d&&d.error)?d.error:"Scan failed"; }
         }).catch(function(){msg.textContent="Network error";});

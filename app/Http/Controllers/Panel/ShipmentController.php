@@ -117,6 +117,14 @@ class ShipmentController extends Controller
                     'delivered'             => $boxSvc->scannedCount($s, 'delivered'),
                 ],
             ] : null;
+            if ($boxes) {
+                // batch summary for the furthest stage that's seen a scan (the operationally relevant one)
+                $latest = null;
+                foreach (['delivered', 'collected_by_rider', 'arrived', 'received_by_transport'] as $st) {
+                    if ($boxes['scanned'][$st] > 0) { $latest = $st; break; }
+                }
+                $boxes['summary'] = $latest ? $boxSvc->summary($s, $latest) : null;
+            }
 
             return response()->json(['ok' => true, 'shipment' => [
                 'id'        => $s->id,
@@ -421,6 +429,65 @@ class ShipmentController extends Controller
             . '<div class="sheet">' . $cards . '</div>'
             . '<script>document.querySelectorAll(".qr").forEach(function(el){new QRCode(el,{text:el.getAttribute("data-code"),width:118,height:118,correctLevel:QRCode.CorrectLevel.M});});</script>'
             . '</body></html>';
+
+        return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
+    }
+
+    /** Printable manifest — a paper tick-sheet for loading/unloading (distinct from the QR labels). */
+    public function manifest(Request $r)
+    {
+        $s = Shipment::find((int) $r->query('id'));
+        if (! $s) return response('Shipment not found', 404);
+
+        $boxes = app(\App\Services\Logistics\BoxCustodyService::class)->syncBoxes($s);
+        $order = $s->order_id ? Order::find($s->order_id) : null;
+        $total = $boxes->count();
+        $shop  = $s->tenant ? (string) $s->tenant->name : 'Shipment';
+        $cust  = $order ? (string) $order->customer_name : '';
+        $phone = $order ? (string) $order->customer_phone : '';
+        $origin = (string) ($s->origin_city ?: '—');
+        $dest   = (string) ($s->destination_city ?: '—');
+
+        if ($total === 0) {
+            return response('<p style="font-family:sans-serif;padding:24px">No boxes yet. Dispatch the shipment with a box count first.</p>', 200)
+                ->header('Content-Type', 'text/html; charset=UTF-8');
+        }
+
+        $rows = '';
+        foreach ($boxes as $b) {
+            $rows .= '<tr><td class="ck"><span class="box"></span></td><td class="no">' . (int) $b->box_number . '</td><td class="cd">' . e($b->code) . '</td></tr>';
+        }
+
+        $html = '<!doctype html><html><head><meta charset="utf-8">'
+            . '<meta name="viewport" content="width=device-width, initial-scale=1"><title>Manifest ' . e($s->shipment_number) . '</title><style>'
+            . 'body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#111;background:#eef2ee;padding:16px}'
+            . '.sheet{max-width:720px;margin:0 auto;background:#fff;border-radius:10px;padding:26px}'
+            . '.bar{max-width:720px;margin:0 auto 12px;display:flex}.bar button{margin-left:auto;background:#15803D;color:#fff;border:0;border-radius:9px;padding:10px 18px;font-weight:800;cursor:pointer}'
+            . 'h1{font-size:22px;margin:0 0 2px}.sub{color:#555;font-size:13px;margin-bottom:14px}'
+            . '.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;font-size:14px;border:1px solid #000;border-radius:8px;padding:12px;margin-bottom:16px}'
+            . '.grid b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#666}'
+            . 'table{width:100%;border-collapse:collapse;font-size:15px}'
+            . 'th{text-align:left;border-bottom:2px solid #000;padding:6px 4px;font-size:12px;text-transform:uppercase}'
+            . 'td{padding:9px 4px;border-bottom:1px solid #ddd}td.ck{width:34px}td.no{width:42px;font-weight:800}td.cd{font-family:monospace}'
+            . '.box{display:inline-block;width:20px;height:20px;border:2px solid #000;border-radius:4px}'
+            . '.sign{display:flex;gap:30px;margin-top:26px;font-size:13px}.sign div{flex:1;border-top:1px solid #000;padding-top:6px;color:#555}'
+            . '.foot{margin-top:14px;font-size:13px;font-weight:700}'
+            . '@media print{body{background:#fff;padding:0}.bar{display:none}.sheet{border-radius:0;padding:18px}}'
+            . '</style></head><body>'
+            . '<div class="bar"><button onclick="window.print()">Print</button></div>'
+            . '<div class="sheet"><h1>📋 Shipment Manifest</h1><div class="sub">' . e($shop) . '</div>'
+            . '<div class="grid">'
+            . '<div><b>Shipment</b>' . e($s->shipment_number) . '</div>'
+            . '<div><b>Total boxes</b>' . $total . '</div>'
+            . '<div><b>Origin</b>' . e($origin) . '</div>'
+            . '<div><b>Destination</b>' . e($dest) . '</div>'
+            . '<div><b>Customer</b>' . e($cust !== '' ? $cust : '—') . '</div>'
+            . '<div><b>Phone</b>' . e($phone !== '' ? $phone : '—') . '</div>'
+            . '</div>'
+            . '<table><thead><tr><th>✓</th><th>#</th><th>Box code</th></tr></thead><tbody>' . $rows . '</tbody></table>'
+            . '<div class="foot">Boxes received: ______ / ' . $total . '</div>'
+            . '<div class="sign"><div>Loaded by (sign &amp; date)</div><div>Received by (sign &amp; date)</div></div>'
+            . '</div></body></html>';
 
         return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
     }
