@@ -28,6 +28,10 @@
   .search{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 13px;font-size:15px;background:#F4F4F6;color:var(--ink);outline:none}
   .search:focus{border-color:var(--green)}
   .section-title{font-size:15px;font-weight:800;padding:6px 14px 8px;color:var(--ink)}
+  .subchips{display:flex;gap:8px;overflow-x:auto;padding:4px 14px 8px;-webkit-overflow-scrolling:touch}
+  .subchips::-webkit-scrollbar{display:none}
+  .subchip{flex:none;border:1.5px solid #e6ece8;background:#fff;border-radius:20px;padding:7px 13px;font-size:12.5px;font-weight:700;color:#56655c;cursor:pointer;white-space:nowrap}
+  .subchip.on{border-color:#15803D;background:#f1f9f4;color:#15803D}
   .meta{padding:0 14px 8px;font-size:12px;color:var(--muted)}
   .backbar{display:flex;align-items:center;gap:10px;padding:8px 14px 4px}
   .backbar button{border:1px solid var(--line);background:#fff;border-radius:9px;padding:7px 12px;font-weight:700;font-size:13px}
@@ -178,7 +182,7 @@ var GEO  = null;                               // captured delivery GPS pin {lat
 /* ===================================================================================== */
 
 var $=function(id){return document.getElementById(id);};
-var PRODUCTS=[], CATS=[], CART={}, CAT='all', Q='', CAT_IMG={}, THALI=null, VSEL={}, GROUPS={};
+var PRODUCTS=[], CATS=[], CART={}, CAT='all', Q='', CAT_IMG={}, THALI=null, VSEL={}, GROUPS={}, CATGROUPS={};
 var TINTS=['#EEF2FB','#FDEEF3','#EAF6EF','#FFF4E6','#F1EEFB','#E9F5F9','#FCEEEA','#EEF7F0'];
 var STORE_KEY='cb_cart_'+(SHOP.slug||'shop'), DELV_KEY='cb_delv_'+(SHOP.slug||'shop');
 var CUST_KEY='cb_cust_'+(SHOP.slug||'shop'), LAST_KEY='cb_last_'+(SHOP.slug||'shop');
@@ -211,6 +215,7 @@ async function load(){
     if(d.settings){var ph=String(d.settings.waNumber||d.settings.storePhone||'').replace(/[^0-9]/g,'');if(ph)WA_NUMBER=ph;
       if(d.settings.currency)CUR=String(d.settings.currency);
       if(d.settings.category_images)CAT_IMG=d.settings.category_images||{}; if(d.settings.thali)THALI=d.settings.thali;
+      if(d.settings.category_groups)CATGROUPS=d.settings.category_groups||{};
       if(d.settings.vertical){VERTICAL=String(d.settings.vertical);IS_PICKUP=(VERTICAL==='snacks');applyVertical();}}
     if(Array.isArray(d.branches)&&d.branches.length){
       var bs=d.branches.map(function(b){return {name:String(b.name||b.title||'Branch'),lat:Number(b.lat),lng:Number(b.lng)};}).filter(function(b){return isFinite(b.lat)&&isFinite(b.lng);});
@@ -513,6 +518,41 @@ function thaliBanner(){
   return '<div style="border:1px solid #E9C79A;border-radius:16px;overflow:hidden;margin:0 0 16px;box-shadow:0 3px 12px rgba(122,31,31,.12)">'+header+imgblock+dishesHtml+footer+'</div>';
 }
 
+/* ---- Department layer (grocery only). Groups EXISTING product categories into
+        departments from the per-tenant `category_groups` config. Pure presentation:
+        products keep their category, no schema change. Stays inactive (flat layout)
+        unless a grocery tenant has real department groups configured — so restaurants,
+        snacks, and unconfigured grocery-vertical shops (electronics, pharmacy, hardware,
+        fashion) render exactly as before. ---- */
+function catIndex(name){for(var i=0;i<CATS.length;i++)if(CATS[i].name===name)return i;return -1;}
+function catExists(name){return catIndex(name)>=0;}
+function deptModel(){
+  var keys=Object.keys(CATGROUPS||{}); if(!keys.length)return [];
+  var used={},depts=[];
+  keys.forEach(function(dn){
+    var subs=(CATGROUPS[dn]||[]).filter(catExists);   // only sub-categories that actually have products
+    subs.forEach(function(s){used[s]=1;});
+    if(subs.length)depts.push({name:dn,subs:subs});
+  });
+  var more=CATS.filter(function(c){return !used[c.name];}).map(function(c){return c.name;}); // never drop a category
+  if(more.length)depts.push({name:'More',subs:more});
+  return depts;
+}
+function useDepartments(){ if(VERTICAL!=='grocery')return false; return deptModel().some(function(d){return d.name!=='More';}); }
+function deptOf(cat){var m=deptModel();for(var i=0;i<m.length;i++)if(m[i].subs.indexOf(cat)>=0)return m[i];return null;}
+function catTile(name,i){
+  var ci=CAT_IMG[name];
+  var inner=ci?('<div class="ci" style="background:#fff"><img src="'+esc(ci)+'" onerror="this.style.display=\'none\'"></div>')
+              :('<div class="ci" style="background:'+TINTS[(i<0?0:i)%TINTS.length]+'">'+catIcon(name)+'</div>');
+  return '<button class="cat" onclick="setCat('+jk(name)+')">'+inner+'<div class="nm">'+esc(name)+'</div></button>';
+}
+function groceryHome(){
+  return welcomeBanner()+thaliBanner()+deptModel().map(function(d){
+    return '<div class="section-title">'+esc(d.name)+'</div><div class="catgrid">'+
+      d.subs.map(function(s){return catTile(s,catIndex(s));}).join('')+'</div>';
+  }).join('');
+}
+
 function render(){
   var c=$('content');
   if(!PRODUCTS.length){c.innerHTML='<div class="empty">Loading products…</div>';return;}
@@ -523,17 +563,16 @@ function render(){
     return;
   }
   if(CAT==='all'){
-    c.innerHTML=welcomeBanner()+thaliBanner()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){
-      var ci=CAT_IMG[cat.name];
-      var inner=ci?('<div class="ci" style="background:#fff"><img src="'+esc(ci)+'" onerror="this.style.display=\'none\'"></div>')
-                  :('<div class="ci" style="background:'+TINTS[i%TINTS.length]+'">'+catIcon(cat.name)+'</div>');
-      return '<button class="cat" onclick="setCat('+jk(cat.name)+')">'+inner+'<div class="nm">'+esc(cat.name)+'</div></button>';
-    }).join('')+'</div>';
+    if(useDepartments()){c.innerHTML=groceryHome();return;}
+    c.innerHTML=welcomeBanner()+thaliBanner()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){return catTile(cat.name,i);}).join('')+'</div>';
     return;
   }
   var list=PRODUCTS.filter(function(p){return p.category===CAT;});
   var tb=(String(CAT).toLowerCase().indexOf('thali')>=0)?thaliBanner():'';
-  c.innerHTML=tb+'<div class="backbar"><button onclick="setCat(\'all\')">‹ Categories</button><b>'+esc(CAT)+'</b></div>'+
+  var dp=useDepartments()?deptOf(CAT):null;
+  var back=dp?('‹ '+esc(dp.name)):'‹ Categories';
+  var chips=dp?('<div class="subchips">'+dp.subs.map(function(s){return '<button class="subchip'+(s===CAT?' on':'')+'" onclick="setCat('+jk(s)+')">'+esc(s)+'</button>';}).join('')+'</div>'):'';
+  c.innerHTML=tb+'<div class="backbar"><button onclick="setCat(\'all\')">'+back+'</button><b>'+esc(CAT)+'</b></div>'+chips+
     '<div class="meta">'+groupProducts(list).length+' item'+(groupProducts(list).length===1?'':'s')+'</div>'+gridG(list.slice(0,150));
 }
 
