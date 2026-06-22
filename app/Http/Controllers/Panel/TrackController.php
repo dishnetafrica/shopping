@@ -33,6 +33,17 @@ class TrackController extends Controller
         $current = $order->status ?: 'New';
         $idx     = array_search($current, $steps, true);
         if ($idx === false) $idx = 0;
+        $routeLine = '';
+
+        // If this order travels through a transport leg, show the FULL journey off the unified
+        // custody chain (Phase 4) instead of just the order states. The customer sees one timeline:
+        // Packed → In transit → Arrived in {city} → Out for delivery → Delivered.
+        if ($journey = $this->shipmentJourney($order)) {
+            $steps     = $journey['steps'];
+            $idx       = $journey['idx'];
+            $current   = $journey['current'];
+            $routeLine = $journey['route'];
+        }
 
         // Brand the page with the order's OWN shop, not the default tenant.
         $tenant   = Tenant::find($order->tenant_id);
@@ -68,18 +79,37 @@ class TrackController extends Controller
             $rows = '<tr><td>' . e($order->items_text) . '</td></tr>';
         }
 
-        $timeline = '';
+        // last-mile delivery (fetched once; powers rider reveal, ETA and proof)
+        $delivery = \App\Models\Delivery::withoutGlobalScopes()->where('order_id', $order->id)->latest('id')->first();
+        $collected = ($delivery && in_array($delivery->status, ['picked', 'out', 'delivered'], true))
+            || in_array((string) $order->status, ['Out for delivery', 'Delivered'], true);
+        $deliveredDone = ($delivery && $delivery->status === 'delivered')
+            || strcasecmp((string) $order->status, 'Delivered') === 0;
+
+        // ✓ done / ● current / ○ upcoming, on a connected rail
+        $timeline = '<div class="tl">';
         foreach ($steps as $i => $s) {
-            $done = $i <= $idx;
-            $dot  = $done ? '#15803D' : '#cbd5cb';
-            $timeline .= '<div class="step"><span class="dot" style="background:' . $dot . '"></span>'
-                . '<span style="' . ($done ? 'font-weight:700' : 'color:#9aa7a0') . '">' . e($s) . '</span></div>';
+            $cls = $i < $idx ? 'done' : ($i === $idx ? 'cur' : 'todo');
+            $ic  = $i < $idx ? '&#10003;' : ($i === $idx ? '&#9679;' : '');
+            $timeline .= '<div class="step ' . $cls . '"><span class="ic">' . $ic . '</span><span class="lbl">' . e($s) . '</span></div>';
+        }
+        $timeline .= '</div>';
+
+        // Route (no transporter detail) + estimated delivery — only when the shop has set an ETA (never fabricated)
+        $routeBlock = $routeLine !== '' ? '<div class="route">🚌 ' . e($routeLine) . '</div>' : '';
+        $etaBlock = '';
+        if (! $deliveredDone) {
+            $eta = ($delivery && $delivery->eta_at) ? $delivery->eta_at : $order->eta_at;
+            if ($eta) {
+                $label = ($idx >= 2) ? 'Expected delivery' : 'Estimated arrival';
+                $etaBlock = '<div class="eta">🕒 ' . $label . ': <b>' . e($eta->format('D j M, g:i A')) . '</b></div>';
+            }
         }
 
-        // Delivery partner card — reassures the customer who is bringing the order.
+        // Delivery partner card — revealed only once the rider has collected (and before delivered).
         $riderBlock = '';
         $rider = $order->rider;
-        if ($rider) {
+        if ($rider && $collected && ! $deliveredDone) {
             $rp = trim((string) ($rider->photo ?? ''));
             if ($rp !== '' && ! str_starts_with($rp, 'http') && ! str_starts_with($rp, '/') && ! str_starts_with($rp, 'data:')) {
                 $rp = '/storage/' . $rp;
@@ -97,8 +127,6 @@ class TrackController extends Controller
                 . $callBtn . '</div>';
 
             // Live location: show distance/last-seen if the rider has pinged recently.
-            $delivery = \App\Models\Delivery::withoutGlobalScopes()
-                ->where('order_id', $order->id)->latest('id')->first();
             if ($delivery && $delivery->rider_lat && $delivery->rider_loc_at
                 && $delivery->rider_loc_at->gt(now()->subMinutes(20))) {
                 $rlat = (float) $delivery->rider_lat;
@@ -119,11 +147,28 @@ class TrackController extends Controller
             }
         }
 
+        // Delivery proof — shown once delivered (replaces the rider card).
+        $proofBlock = '';
+        if ($deliveredDone) {
+            $when  = ($delivery && $delivery->delivered_at) ? $delivery->delivered_at : $order->delivered_at;
+            $photo = $delivery ? trim((string) $delivery->proof_photo_url) : '';
+            if ($photo !== '' && ! str_starts_with($photo, 'http') && ! str_starts_with($photo, '/') && ! str_starts_with($photo, 'data:')) {
+                $photo = '/storage/' . $photo;
+            }
+            $proofBlock = '<div class="proof"><div class="pt">&#10003; Delivered successfully</div>'
+                . ($when ? '<div class="pw">' . e($when->format('D j M, g:i A')) . '</div>' : '')
+                . ($photo !== '' ? '<img src="' . e($photo) . '" alt="Delivery photo">' : '')
+                . '</div>';
+        }
+
         $body = '<div class="card">'
             . '<div class="hdr">' . $header . '</div>'
             . '<h1>Order ' . e($order->order_no ?: ('#' . $order->id)) . '</h1>'
             . '<div class="status">' . e($current) . '</div>'
-            . '<div class="timeline">' . $timeline . '</div>'
+            . $routeBlock
+            . $etaBlock
+            . $timeline
+            . $proofBlock
             . $riderBlock
             . ($rows ? '<table>' . $rows . '</table>' : '')
             . '<div class="tot">Total: ' . e($cur) . ' ' . number_format((float) $order->total) . '</div>'
@@ -131,6 +176,42 @@ class TrackController extends Controller
             . '</div>';
 
         return $this->page($body, $brand);
+    }
+
+    /**
+     * Build a customer-friendly journey from the unified custody chain (Phase 4). Returns null when
+     * the order has no transport leg (then the caller keeps the plain order timeline). Deliberately
+     * hides internal detail — box counts, exceptions, driver phones — the customer just sees stages.
+     */
+    private function shipmentJourney(\App\Models\Order $order): ?array
+    {
+        $ship = \App\Models\Shipment::withoutGlobalScopes()->where('order_id', $order->id)->latest('id')->first();
+        if (! $ship) return null;
+
+        $dest  = trim((string) $ship->destination_city);
+        $steps = ['Packed', 'In transit', $dest !== '' ? 'Arrived in ' . $dest : 'Arrived', 'Out for delivery', 'Delivered'];
+
+        $idx = 0;
+        if (in_array($ship->status, ['sent_to_transporter', 'transport_confirmed', 'in_transit'], true)) $idx = 1;
+        elseif ($ship->status === 'arrived') $idx = 2;
+
+        $dlv = \App\Models\Delivery::withoutGlobalScopes()->where('order_id', $order->id)->latest('id')->first();
+        if ($dlv) {
+            if (in_array($dlv->status, ['picked', 'out'], true)) $idx = max($idx, 3);
+            if ($dlv->status === 'delivered')                    $idx = 4;
+        }
+        if (strcasecmp((string) $order->status, 'Delivered') === 0) $idx = 4;
+
+        $cancelled = $ship->status === 'cancelled';
+        $current   = $cancelled ? 'Cancelled' : $steps[$idx];
+
+        $route = '';
+        $orig = trim((string) $ship->origin_city);
+        if ($orig !== '' || $dest !== '') {
+            $route = trim($orig . ($dest !== '' ? ' → ' . $dest : ''), ' →');
+        }
+
+        return ['steps' => $steps, 'idx' => $idx, 'current' => $current, 'route' => $route];
     }
 
     private function haversineKm(float $lat1, float $lng1, float $lat2, float $lng2): float
@@ -156,6 +237,23 @@ class TrackController extends Controller
             . '.timeline{display:flex;flex-direction:column;gap:9px;margin:12px 0}'
             . '.step{display:flex;align-items:center;gap:10px;font-size:14px}'
             . '.dot{width:11px;height:11px;border-radius:50%;display:inline-block}'
+            . '.route{background:#F4F8F5;border:1px solid #E0EAE3;border-radius:11px;padding:10px 13px;margin:0 0 11px;font-size:14px;font-weight:700}'
+            . '.eta{background:#FFF8E9;border:1px solid #F2E2B8;border-radius:11px;padding:10px 13px;margin:0 0 11px;font-size:13.5px}.eta b{font-weight:800}'
+            . '.tl{position:relative;margin:14px 0 4px}'
+            . '.tl .step{display:flex;align-items:flex-start;gap:11px;position:relative;padding-bottom:15px}'
+            . '.tl .step:last-child{padding-bottom:0}'
+            . '.tl .step .ic{width:22px;height:22px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;z-index:1;line-height:1}'
+            . '.tl .step.done .ic{background:#15803D;color:#fff}'
+            . '.tl .step.cur .ic{background:#15803D;color:#fff;box-shadow:0 0 0 4px rgba(21,128,61,.18)}'
+            . '.tl .step.todo .ic{background:#fff;border:2px solid #cdd6ce}'
+            . '.tl .step .lbl{font-size:14.5px;padding-top:2px}'
+            . '.tl .step.done .lbl,.tl .step.cur .lbl{font-weight:700}.tl .step.todo .lbl{color:#9aa7a0}'
+            . '.tl .step:not(:last-child)::before{content:"";position:absolute;left:10px;top:22px;height:calc(100% - 22px);width:2px;background:#dce5de}'
+            . '.tl .step.done:not(:last-child)::before{background:#15803D}'
+            . '.proof{background:#EAF6EE;border:1px solid #CDEBD6;border-radius:13px;padding:15px;margin:14px 0;text-align:center}'
+            . '.proof .pt{font-weight:800;color:#15803D;font-size:16px}'
+            . '.proof img{max-width:100%;border-radius:11px;margin-top:10px}'
+            . '.proof .pw{font-size:12px;color:#6E7D72;margin-top:5px}'
             . 'table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}'
             . 'td{padding:7px 0;border-bottom:1px solid #eef2ee}'
             . '.tot{font-weight:800;margin-top:8px}.loc{color:#6E7D72;font-size:13px;margin-top:6px}'
@@ -169,6 +267,7 @@ class TrackController extends Controller
             . '.live a{margin-left:auto;color:#0A6E1A;font-weight:800;text-decoration:none;white-space:nowrap}'
             . '.pulse{width:9px;height:9px;border-radius:50%;background:#15803D;flex:none;box-shadow:0 0 0 0 rgba(21,128,61,.5);animation:pl 1.6s infinite}'
             . '@keyframes pl{0%{box-shadow:0 0 0 0 rgba(21,128,61,.5)}70%{box-shadow:0 0 0 9px rgba(21,128,61,0)}100%{box-shadow:0 0 0 0 rgba(21,128,61,0)}}'
+            . '@media(max-width:480px){body{padding:10px}.card{padding:18px;margin:10px auto;border-radius:14px}h1{font-size:19px}.callbtn{padding:11px 14px}}'
             . '</style></head><body>' . $body . '</body></html>';
 
         return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
