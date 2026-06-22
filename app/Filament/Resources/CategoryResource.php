@@ -20,6 +20,18 @@ class CategoryResource extends Resource
     {
         return $form->schema([
             Forms\Components\TextInput::make('name')->required()->maxLength(255),
+            Forms\Components\TextInput::make('image_url')
+                ->label('Image URL')
+                ->url()
+                ->maxLength(500)
+                ->helperText('Product ni image URL (auto-fill thai, ya khud paste karo).')
+                ->columnSpanFull(),
+            Forms\Components\Placeholder::make('image_preview')
+                ->label('Preview')
+                ->content(fn ($record) => $record && $record->image_url
+                    ? new \Illuminate\Support\HtmlString("<img src='" . e($record->image_url) . "' style='height:90px;border-radius:8px;object-fit:contain;background:#f5f5f5;padding:4px'>")
+                    : '—')
+                ->columnSpanFull(),
             Forms\Components\TextInput::make('sort')->numeric()->default(0)->label('Sort order'),
             Forms\Components\Toggle::make('active')->default(true),
         ]);
@@ -30,6 +42,7 @@ class CategoryResource extends Resource
         return $table
             ->defaultSort('sort')
             ->columns([
+                Tables\Columns\ImageColumn::make('image_url')->label('Image')->square()->size(46),
                 Tables\Columns\TextColumn::make('name')->searchable()->sortable(),
                 Tables\Columns\TextColumn::make('products_count')->label('Products')
                     ->getStateUsing(fn ($record) => Product::where('category', $record->name)->count())
