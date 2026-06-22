@@ -293,6 +293,7 @@
       <a class="nav" data-page="analytics"><span class="i">📈</span> Analytics</a>
       <a class="nav" data-feature="riders" data-page="riders"><span class="i">🛵</span> Riders</a>
       <a class="nav" data-page="returns"><span class="i">↩</span> Returns</a>
+      <a class="nav" data-page="shipments"><span class="i">🚚</span> Shipments</a>
       <a class="nav" data-page="activity"><span class="i">📥</span> Activity Inbox</a>
       <a class="nav" data-page="brain"><span class="i">🧠</span> Business Brain <span style="color:#c9a227">⭐</span></a>
       <a class="nav" data-page="settings"><span class="i">⚙</span> Settings</a>
@@ -383,6 +384,7 @@
               <button class="btn" id="pdfBtn">⤓ Export Invoice (PDF)</button>
               <button class="btn red" id="delOrderBtn">🗑 Delete order</button>
               <button class="btn" id="returnBtn">↩ Return / refund</button>
+              <button class="btn" id="shipBtn" style="display:none">🚚 Shipment</button>
               <button class="btn" id="creditBtn" style="display:none">💳 Apply credit</button>
             </div>
             <div id="stageTracker" class="stagewrap"></div>
@@ -742,6 +744,16 @@
         <div id="brainBody"><div style="color:#888;padding:18px">Loading your Business Brain…</div></div>
       </div>
 
+      <!-- ============ SHIPMENTS ============ -->
+      <div id="pageShipments" class="hide">
+        <div class="crumb">Home / <b>Shipments</b></div>
+        <div id="shipList">
+          <div id="shipFilters" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>
+          <div id="shipCards"><div style="color:#888;padding:18px">Loading shipments…</div></div>
+        </div>
+        <div id="shipDetail" class="hide"></div>
+      </div>
+
       <!-- ============ SETTINGS ============ -->
       <div id="pageSettings" class="hide">
         <div class="crumb">Home / <b>Settings</b></div>        <div class="row2">
@@ -1042,6 +1054,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   actInbox:'/papi/activity-inbox',actApprove:'/papi/activity-approve',actReject:'/papi/activity-reject',actEdit:'/papi/activity-edit',
   brain:'/papi/brain',brainDiscover:'/papi/brain-discover',
   brainCandidates:'/papi/brain-candidates',brainCandApprove:'/papi/brain-candidate-approve',brainCandDismiss:'/papi/brain-candidate-dismiss',
+  shipments:'/papi/shipments',shipment:'/papi/shipment',shipCreate:'/papi/shipment-create',shipAction:'/papi/shipment-action',shipExResolve:'/papi/shipment-exception-resolve',orderShipment:'/papi/order-shipment',
   imageStats:'/papi/image-stats',
   operations:'/papi/operations',
   branches:'/papi/branches',branchSave:'/papi/branch-save',branchDel:'/papi/branch-delete',
@@ -1811,13 +1824,14 @@ function showPage(p){
   $('pageOrderNotifs').classList.toggle('hide',p!=='orderNotifs');
   $('pageSmartDefaults').classList.toggle('hide',p!=='smartDefaults');
   $('pageSubscription').classList.toggle('hide',p!=='subscription');
+  $('pageShipments').classList.toggle('hide',p!=='shipments');
   if(p==='orders'){$('detailView').classList.add('hide');$('listView').classList.remove('hide');}
   document.querySelectorAll('.side a.nav').forEach(function(a){a.classList.toggle('on',a.dataset.page===p);});
-  var T={dash:'Dashboard',pos:'POS',reports:'Reports',analytics:'Analytics',products:'Products',category:'Categories',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription',activity:'Activity Inbox',brain:'Business Brain'};
+  var T={dash:'Dashboard',pos:'POS',reports:'Reports',analytics:'Analytics',products:'Products',category:'Categories',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription',activity:'Activity Inbox',brain:'Business Brain',shipments:'Shipments'};
   $('pageTitle').textContent=T[p]||'Orders';
   if(p==='dash')renderDash(); else if(p==='pos')posInit(); else if(p==='reports')reportsInit(); else if(p==='analytics')analyticsInit();
   else if(p==='kitchen')kitchenInit();
-  else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='activity')activityInit(); else if(p==='brain')brainInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else renderList();
+  else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='activity')activityInit(); else if(p==='brain')brainInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else if(p==='shipments')shipmentsInit(); else renderList();
   closeSide(); window.scrollTo(0,0);
 }
 function openSide(){$('side').classList.add('open');$('backdrop').classList.add('show');}
@@ -2075,6 +2089,7 @@ function openOrder(id){
   $('pdfBtn').onclick=function(){window.print();};
   $('delOrderBtn').onclick=function(){cancelOrder(current.id);};
   $('returnBtn').onclick=openReturnModal;
+  setupShipBtn(current);
   (function(){var cb=$('creditBtn');if(cb){var cbal=CREDIT[String(current.phone||'').replace(/[^0-9]/g,'')]||0;
     if(cbal>0){cb.style.display='';cb.textContent='💳 Apply credit ('+ugx(cbal)+')';cb.onclick=applyCredit;}else{cb.style.display='none';}}})();
   setupDispatch();
@@ -3504,6 +3519,131 @@ async function defSave(){
 async function defDelete(id){if(!confirm('Delete this default?'))return;try{await fetch(EP.defDel+qtok()+'&id='+id,{cache:'no-store'});}catch(e){}await loadDefs();renderDefs();}
 /* ===================== END OWNER CONSOLIDATION ===================== */
 
+/* ===== Shipments (Phase 2A) ===== */
+var shipState={filter:'all',cur:null};
+var SHIP_EV={packed:'Packed',sent_to_transport:'Sent to transporter',received_by_transport:'Received by transport',bus_departed:'Bus departed',arrived:'Arrived',collected_by_rider:'Collected by rider',delivered:'Delivered',cancelled:'Cancelled',damaged:'Damage reported'};
+var SHIP_ST={packed:['Packed','#6b7280'],sent_to_transporter:['Sent to transporter','#c9a227'],transport_confirmed:['Transport confirmed','#3a7bd5'],in_transit:['In transit','#7c5cd0'],arrived:['Arrived','#2e9e5b'],cancelled:['Cancelled','#d0533d']};
+var SHIP_ACT={dispatch:'Dispatch to transporter',transport_confirm:'Confirm transport receipt',depart:'Mark bus departed',arrive:'Mark arrived'};
+var SHIP_FILTERS=[['all','All'],['packed','Packed'],['in_transit','In Transit'],['arrived','Arrived'],['exception','⚠ Exception']];
+function shipBadge(st){var d=SHIP_ST[st]||[st,'#888'];return '<span style="display:inline-block;background:'+d[1]+';color:#fff;border-radius:11px;padding:2px 10px;font-size:12px;font-weight:700">'+esc(d[0])+'</span>';}
+function shipmentsInit(){$('shipList').classList.remove('hide');$('shipDetail').classList.add('hide');shipRenderFilters();shipLoad();}
+function shipRenderFilters(){$('shipFilters').innerHTML=SHIP_FILTERS.map(function(f){var on=shipState.filter===f[0];return '<button class="btn" style="background:'+(on?'#3a7bd5':'#eef2f8')+';color:'+(on?'#fff':'#334')+';font-size:13px;padding:7px 14px" onclick="shipSetFilter(\''+f[0]+'\')">'+esc(f[1])+'</button>';}).join('');}
+function shipSetFilter(f){shipState.filter=f;shipRenderFilters();shipLoad();}
+async function shipLoad(){
+  $('shipCards').innerHTML='<div style="color:#888;padding:18px">Loading shipments…</div>';
+  try{var r=await fetch(EP.shipments+'?token='+encodeURIComponent(token)+'&filter='+encodeURIComponent(shipState.filter),{cache:'no-store'});var d=await r.json();shipRenderCards((d&&d.items)||[]);}
+  catch(e){$('shipCards').innerHTML='<div style="color:#c33;padding:18px">Could not load shipments.</div>';}
+}
+function shipRenderCards(items){
+  if(!items.length){$('shipCards').innerHTML='<div style="color:#889;padding:18px">No shipments'+(shipState.filter!=='all'?' in this view':' yet — open a confirmed order and tap 🚚 Shipment to create one')+'.</div>';return;}
+  $('shipCards').innerHTML=items.map(function(s){
+    var ex=s.exceptions>0?'<span style="color:#d0533d;font-weight:700;margin-left:8px">⚠ '+s.exceptions+'</span>':'';
+    var boxes=(s.boxes&&s.boxes.sent!=null)?(s.boxes.sent+(s.boxes.received!=null&&s.boxes.received!==s.boxes.sent?' → '+s.boxes.received:'')+' boxes'):'';
+    return '<div class="card" style="margin-bottom:10px;cursor:pointer" onclick="openShipment('+s.id+')"><div class="body" style="padding:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+      +'<div style="font-weight:800">'+esc(s.number)+'</div>'+shipBadge(s.status)
+      +(s.order_no?'<span style="color:#667;font-size:13px">order '+esc(s.order_no)+'</span>':'')
+      +(s.route?'<span style="color:#556;font-size:13px">'+esc(s.route)+'</span>':'')
+      +(boxes?'<span style="color:#889;font-size:12px">'+esc(boxes)+'</span>':'')+ex
+      +'<span style="margin-left:auto;color:#aab">›</span></div></div>';
+  }).join('');
+}
+async function openShipment(id){
+  $('shipList').classList.add('hide');$('shipDetail').classList.remove('hide');window.scrollTo(0,0);
+  $('shipDetail').innerHTML='<div style="color:#888;padding:18px">Loading…</div>';
+  try{var r=await fetch(EP.shipment+'?token='+encodeURIComponent(token)+'&id='+id,{cache:'no-store'});var d=await r.json();
+    if(!d||!d.ok){$('shipDetail').innerHTML='<div class="card"><div class="body" style="padding:18px;color:#c33">Could not load shipment.</div></div>';return;}
+    shipState.cur=d.shipment;shipRenderDetail(d.shipment);
+  }catch(e){$('shipDetail').innerHTML='<div class="card"><div class="body" style="padding:18px;color:#c33">Network error.</div></div>';}
+}
+function shipFlowBar(s){
+  var idx=s.flow.indexOf(s.status);
+  return '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:10px 0">'+s.flow.map(function(st){
+    var done=s.flow.indexOf(st)<=idx&&s.status!=='cancelled';var cur=st===s.status;
+    return '<span style="font-size:12px;padding:3px 10px;border-radius:11px;background:'+(cur?'#3a7bd5':(done?'#dff0e4':'#eef0f3'))+';color:'+(cur?'#fff':(done?'#2e7d46':'#889'))+'">'+esc((SHIP_ST[st]||[st])[0])+'</span>';
+  }).join('<span style="color:#ccc">→</span>')+'</div>';
+}
+function shipActionForm(s){
+  if(s.is_terminal)return '<div style="color:#889;font-size:13px;margin-top:10px">This shipment is '+esc(s.status)+'. No further transport actions.</div>';
+  var a=s.next_action;if(!a)return '';
+  var h='<div style="border-top:1px solid #eee;margin-top:12px;padding-top:12px"><div style="font-weight:700;margin-bottom:8px">Next: '+esc(SHIP_ACT[a]||a)+'</div>';
+  if(a==='dispatch'){h+='<div class="inrow" style="gap:8px;flex-wrap:wrap">'
+      +'<input id="shTC" placeholder="Transport company" value="'+esc(s.transport_company||'')+'" style="min-width:160px">'
+      +'<input id="shBus" placeholder="Bus number" value="'+esc(s.bus_number||'')+'">'
+      +'<input id="shDrv" placeholder="Driver phone" value="'+esc(s.driver_phone||'')+'">'
+      +'<input id="shBoxes" type="number" min="0" placeholder="Boxes sent" value="'+(s.boxes_sent!=null?s.boxes_sent:'')+'" style="width:110px"></div>';
+  }else if(a==='transport_confirm'||a==='arrive'){h+='<div class="inrow" style="gap:8px"><input id="shBoxes" type="number" min="0" placeholder="Boxes counted" value="'+(s.boxes_received!=null?s.boxes_received:(s.boxes_sent!=null?s.boxes_sent:''))+'" style="width:150px"></div>';}
+  h+='<div style="display:flex;gap:8px;margin-top:10px"><button class="btn" style="background:#2e9e5b;color:#fff" onclick="shipDoAction(\''+a+'\')">'+esc(SHIP_ACT[a]||a)+'</button>'
+    +'<button class="btn" style="background:#f7e7e7;color:#b33" onclick="shipDoAction(\'cancel\')">Cancel shipment</button></div></div>';
+  return h;
+}
+function shipRenderDetail(s){
+  var hdr='<div class="card"><div class="body" style="padding:16px"><button class="btn ghost" onclick="shipBack()">← All shipments</button>'
+    +'<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px"><div style="font-size:22px;font-weight:800">'+esc(s.number)+'</div>'+shipBadge(s.status)
+    +(s.order_no?'<span style="color:#667">order '+esc(s.order_no)+'</span>':'')+'</div>'+shipFlowBar(s)
+    +'<div style="color:#556;font-size:13px">'+esc((s.origin_city||'?')+' → '+(s.destination_city||'?'))+(s.transport_company?' · '+esc(s.transport_company):'')+(s.bus_number?' · bus '+esc(s.bus_number):'')+'</div>'
+    +'<div style="color:#889;font-size:13px;margin-top:4px">Boxes sent: <b>'+(s.boxes_sent!=null?s.boxes_sent:'—')+'</b>'+(s.boxes_received!=null?' · last counted: <b>'+s.boxes_received+'</b>':'')+'</div>'
+    +shipActionForm(s)+'</div></div>';
+  var exHtml='';var openEx=(s.exceptions||[]).filter(function(x){return !x.resolved;});
+  if(openEx.length){exHtml='<div class="card" style="border:1px solid #f0c9c0;background:#fff7f5"><div class="head" style="color:#b3402c">⚠ Box discrepancies ('+openEx.length+')</div><div class="body">'
+    +openEx.map(function(x){return '<div style="padding:8px 0;border-bottom:1px solid #f3ddd6"><b>'+esc((x.type||'').replace(/_/g,' '))+'</b> — '+x.delta+' box(es), '+esc(x.from_stage||'?')+' → '+esc(x.to_stage||'?')
+      +'<div style="font-size:12px;color:#886">expected '+x.expected+', got '+x.got+'</div>'
+      +'<button class="btn" style="margin-top:6px;background:#eef2f8;font-size:12px;padding:4px 10px" onclick="shipResolveEx('+x.id+')">Mark resolved</button></div>';}).join('')+'</div></div>';}
+  var tl='<div class="card"><div class="head">Custody timeline</div><div class="body">';
+  if(!(s.events||[]).length){tl+='<div style="color:#889">No events yet.</div>';}
+  else{tl+=s.events.map(function(e){return '<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #f2f3f5"><span style="width:8px;height:8px;border-radius:50%;background:#3a7bd5;margin-top:6px;flex:none"></span>'
+    +'<div style="flex:1"><div style="font-weight:600">'+esc(SHIP_EV[e.event]||e.event)+(e.boxes!=null?' · '+e.boxes+' boxes':'')+'</div>'
+    +'<div style="font-size:12px;color:#889">'+esc(e.actor||'')+(e.name?' ('+esc(e.name)+')':'')+' · '+esc(e.at||'')+'</div>'
+    +(e.note?'<div style="font-size:12px;color:#667">'+esc(e.note)+'</div>':'')+'</div></div>';}).join('');}
+  tl+='</div></div>';
+  $('shipDetail').innerHTML=hdr+exHtml+tl;
+}
+function shipBack(){$('shipDetail').classList.add('hide');$('shipList').classList.remove('hide');shipLoad();}
+async function shipDoAction(action){
+  var s=shipState.cur;if(!s)return;
+  if(action==='cancel'&&!confirm('Cancel this shipment? This cannot be undone.'))return;
+  var url=EP.shipAction+'?token='+encodeURIComponent(token)+'&id='+s.id+'&action='+encodeURIComponent(action);
+  var bx=$('shBoxes');if(bx&&bx.value!=='')url+='&box_count='+encodeURIComponent(bx.value);
+  if(action==='dispatch'){var tc=$('shTC'),bu=$('shBus'),dr=$('shDrv');
+    if(tc)url+='&transport_company='+encodeURIComponent(tc.value||'');
+    if(bu)url+='&bus_number='+encodeURIComponent(bu.value||'');
+    if(dr)url+='&driver_phone='+encodeURIComponent(dr.value||'');}
+  try{var r=await fetch(url,{cache:'no-store'});var d=await r.json();
+    if(d&&d.ok){toast('Updated'+((d.exceptions&&d.exceptions.length)?' — ⚠ box mismatch flagged':''));openShipment(s.id);}
+    else{toast((d&&d.error)?d.error:'Could not update');}
+  }catch(e){toast('Network error');}
+}
+async function shipResolveEx(exId){
+  try{var r=await fetch(EP.shipExResolve+'?token='+encodeURIComponent(token)+'&id='+exId,{cache:'no-store'});var d=await r.json();
+    if(d&&d.ok){toast('Marked resolved');openShipment(shipState.cur.id);}else{toast('Could not update');}}catch(e){toast('Network error');}
+}
+async function setupShipBtn(order){
+  var b=$('shipBtn');if(!b)return;b.style.display='none';
+  try{var r=await fetch(EP.orderShipment+'?token='+encodeURIComponent(token)+'&order_id='+order.id,{cache:'no-store'});var d=await r.json();var sh=d&&d.shipment;
+    if(sh){b.style.display='';b.textContent='🚚 '+sh.number;b.onclick=function(){showPage('shipments');openShipment(sh.id);};return;}
+    var st=(order.status||'').toLowerCase();var paid=/paid/i.test(order.payment||'');
+    var ok=['confirmed','accepted','preparing','ready','packed','dispatched','out for delivery'].indexOf(st)>=0||paid;
+    if(ok){b.style.display='';b.textContent='🚚 Create shipment';b.onclick=function(){shipOpenCreate(order);};}
+  }catch(e){}
+}
+function shipOpenCreate(order){
+  showPage('shipments');$('shipList').classList.add('hide');$('shipDetail').classList.remove('hide');window.scrollTo(0,0);
+  $('shipDetail').innerHTML='<div class="card"><div class="body" style="padding:16px"><button class="btn ghost" onclick="shipBack()">← Cancel</button>'
+    +'<div style="font-size:20px;font-weight:800;margin:10px 0">Create shipment for order '+esc(oNo(order))+'</div>'
+    +'<div class="inrow" style="gap:8px;flex-wrap:wrap"><input id="cTC" placeholder="Transport company" style="min-width:180px"><input id="cBus" placeholder="Bus number"><input id="cDrv" placeholder="Driver phone"></div>'
+    +'<div class="inrow" style="gap:8px;flex-wrap:wrap;margin-top:8px"><input id="cOrig" placeholder="Origin city" value="Kampala"><input id="cDest" placeholder="Destination city"><input id="cBoxes" type="number" min="0" placeholder="Boxes sent" value="1" style="width:120px"></div>'
+    +'<textarea id="cNotes" rows="2" placeholder="Notes (optional)" style="width:100%;margin-top:8px"></textarea>'
+    +'<div style="margin-top:10px"><button class="btn" style="background:#2e9e5b;color:#fff" onclick="shipSubmitCreate('+order.id+')">Create shipment</button></div>'
+    +'<div class="note" style="margin-top:8px">Creates the shipment in <b>Packed</b> status. You then dispatch it to the transporter from the shipment page.</div></div></div>';
+}
+async function shipSubmitCreate(orderId){
+  var g=function(id){var el=$(id);return el?(el.value||''):'';};
+  var q='?token='+encodeURIComponent(token)+'&order_id='+orderId
+    +'&transport_company='+encodeURIComponent(g('cTC'))+'&bus_number='+encodeURIComponent(g('cBus'))+'&driver_phone='+encodeURIComponent(g('cDrv'))
+    +'&origin_city='+encodeURIComponent(g('cOrig'))+'&destination_city='+encodeURIComponent(g('cDest'))
+    +'&boxes_sent='+encodeURIComponent(g('cBoxes'))+'&notes='+encodeURIComponent(g('cNotes'));
+  try{var r=await fetch(EP.shipCreate+q,{cache:'no-store'});var d=await r.json();
+    if(d&&d.ok){toast(d.noop?'Shipment already exists':'Shipment created');openShipment(d.id);}else{toast((d&&d.error)?d.error:'Could not create');}}catch(e){toast('Network error');}
+}
 document.querySelectorAll('.side a.nav').forEach(function(a){if(a.dataset.page)a.onclick=function(){showPage(a.dataset.page);};});
 var _lo=$('logoutBtn'); if(_lo)_lo.onclick=logout;
 var _nlo=$('navLogout'); if(_nlo)_nlo.onclick=logout;

@@ -173,6 +173,14 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('brain-candidates',        [PanelApiController::class, 'brainCandidates']);
         Route::get('brain-candidate-approve', [PanelApiController::class, 'brainCandidateApprove']);
         Route::get('brain-candidate-dismiss', [PanelApiController::class, 'brainCandidateDismiss']);
+
+        // Shipment Platform v2A — seller-panel logistics (no token pages / notifications yet)
+        Route::get('shipments',                [\App\Http\Controllers\Panel\ShipmentController::class, 'index']);
+        Route::get('shipment',                 [\App\Http\Controllers\Panel\ShipmentController::class, 'show']);
+        Route::get('shipment-create',          [\App\Http\Controllers\Panel\ShipmentController::class, 'store']);
+        Route::get('shipment-action',          [\App\Http\Controllers\Panel\ShipmentController::class, 'action']);
+        Route::get('shipment-exception-resolve',[\App\Http\Controllers\Panel\ShipmentController::class, 'resolveException']);
+        Route::get('order-shipment',           [\App\Http\Controllers\Panel\ShipmentController::class, 'forOrder']);
         Route::get('bot-config-save', [PanelApiController::class, 'botConfigSave']);
         Route::get('branch-save',     [PanelApiController::class, 'branchSave']);
         Route::get('branch-delete',   [PanelApiController::class, 'branchDel']);
