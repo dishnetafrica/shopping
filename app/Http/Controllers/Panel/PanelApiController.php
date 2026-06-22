@@ -332,6 +332,27 @@ class PanelApiController extends Controller
             }
         } catch (\Throwable $e) {}
 
+        // Which number is connected + can it actually send?  Number/profile come from Evolution;
+        // the send signal comes from our own messages.update capture (DELIVERY_ACK vs ERROR).
+        if ($t->whatsapp_instance) {
+            try {
+                $info = app(\App\Services\WhatsApp\EvolutionAdmin::class)->instanceInfo($t->whatsapp_instance);
+                $wa['number']       = $info['number'] ?? null;
+                $wa['profile_name'] = $info['profile_name'] ?? null;
+                if (($wa['state'] === 'unknown' || $wa['state'] === '') && ! empty($info['state'])) {
+                    $wa['state'] = $info['state'];
+                }
+            } catch (\Throwable $e) {}
+
+            $wa['send_ok_at']  = $t->setting('wa_send_ok_at');
+            $wa['send_err_at'] = $t->setting('wa_send_err_at');
+            try {
+                $wa['recent_send_fail'] = (int) \Illuminate\Support\Facades\DB::table('bot_events')
+                    ->where('tenant_id', $t->id)->where('stage', 'send_failed')
+                    ->where('created_at', '>=', now()->subHours(6))->count();
+            } catch (\Throwable $e) { $wa['recent_send_fail'] = null; }
+        }
+
         return response()->json([
             'ok'                => true,
             'now'               => now()->toIso8601String(),

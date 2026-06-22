@@ -29,6 +29,7 @@ class WebhookController
             // Not a customer message. Evolution also sends connection.update here —
             // use it to detect a dropped WhatsApp link and alert the shop owner.
             $this->maybeHandleConnection($request->all());
+            $this->maybeHandleSendStatus($request->all());
             return response()->json(['ok' => true]); // status / presence / group / fromMe — not a customer message
         }
 
@@ -90,5 +91,53 @@ class WebhookController
 
         // connecting / qr / other transient states — record without alerting.
         if ($prev !== 'manual_off') $t->putSetting('wa_conn_state', $state);
+    }
+
+    /**
+     * Evolution emits messages.update with the delivery status of an OUTBOUND message
+     * (SERVER_ACK → DELIVERY_ACK → READ, or ERROR when the send fails). We record this as
+     * our own signal — Evolution's findMessages doesn't reliably carry the status — so the
+     * panel can show whether the connected number is actually able to deliver. ERROR is the
+     * exact failure mode that made a "Connected" number look healthy while every send died.
+     */
+    private function maybeHandleSendStatus(array $payload): void
+    {
+        $event = strtolower((string) ($payload['event'] ?? data_get($payload, 'data.event', '')));
+        if (! str_contains($event, 'messages.update') && ! str_contains($event, 'messages_update')) return;
+
+        $instance = (string) ($payload['instance'] ?? data_get($payload, 'data.instance', ''));
+        if ($instance === '') return;
+
+        $t = Tenant::where('whatsapp_instance', $instance)->first();
+        if (! $t) return;
+
+        // data may be a single update object or a list of them
+        $data = data_get($payload, 'data', []);
+        $updates = (is_array($data) && (isset($data['status']) || isset($data['update']) || isset($data['keyId']) || isset($data['key'])))
+            ? [$data] : $data;
+        if (! is_array($updates)) return;
+
+        foreach ($updates as $u) {
+            if (! is_array($u)) continue;
+            $fromMe = data_get($u, 'fromMe', data_get($u, 'key.fromMe'));
+            if ($fromMe === false) continue;   // only our outbound messages
+
+            $status = strtoupper((string) (data_get($u, 'status', data_get($u, 'update.status', ''))));
+            if ($status === '') continue;
+
+            $to = preg_replace('/@.*/', '', (string) (data_get($u, 'remoteJid', data_get($u, 'key.remoteJid', ''))));
+            $id = (string) (data_get($u, 'keyId', data_get($u, 'key.id', ''))) ?: uniqid('s_');
+
+            if ($status === 'ERROR') {
+                \App\Support\BotTrace::log($t->id, $id, $to, 'send_failed', 'WhatsApp delivery status = ERROR');
+                $t->putSetting('wa_send_err_at', now()->toIso8601String());
+            } elseif (in_array($status, ['DELIVERY_ACK', 'READ', 'PLAYED'], true)) {
+                // throttle the "delivering ok" stamp so we don't rewrite settings on every ack
+                $last = (string) $t->setting('wa_send_ok_at', '');
+                if ($last === '' || now()->diffInSeconds(\Illuminate\Support\Carbon::parse($last)) >= 30) {
+                    $t->putSetting('wa_send_ok_at', now()->toIso8601String());
+                }
+            }
+        }
     }
 }

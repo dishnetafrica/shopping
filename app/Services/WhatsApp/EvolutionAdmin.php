@@ -145,6 +145,31 @@ class EvolutionAdmin
         }
     }
 
+    /** The connected number + profile for an instance, from Evolution's fetchInstances. */
+    public function instanceInfo(string $instance): array
+    {
+        try {
+            $d = $this->http()->get('/instance/fetchInstances', ['instanceName' => $instance])->json() ?? [];
+            $list = (is_array($d) && array_is_list($d)) ? $d : [$d];
+            foreach ($list as $row) {
+                $inst = $row['instance'] ?? $row;   // some versions wrap in .instance
+                $name = $inst['name'] ?? $inst['instanceName'] ?? null;
+                if (count($list) > 1 && $name !== $instance) continue;
+                $owner = (string) ($inst['ownerJid'] ?? $inst['owner'] ?? '');
+                return [
+                    'number'       => $owner !== '' ? preg_replace('/@.*/', '', $owner) : null,
+                    'profile_name' => $inst['profileName'] ?? $inst['profilename'] ?? null,
+                    'state'        => $inst['connectionStatus'] ?? $inst['state'] ?? null,
+                    'messages'     => (int) (data_get($inst, '_count.Message') ?? data_get($inst, '_count.messages') ?? 0),
+                    'contacts'     => (int) (data_get($inst, '_count.Contact') ?? data_get($inst, '_count.contacts') ?? 0),
+                ];
+            }
+            return [];
+        } catch (\Throwable $e) {
+            return ['error' => $e->getMessage()];
+        }
+    }
+
     /** Current webhook config for the instance (so we can see where events go). */
     public function getWebhook(string $instance): array
     {

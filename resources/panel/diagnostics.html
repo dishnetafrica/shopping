@@ -28,7 +28,7 @@
   .s-replied{background:#e7f6ec;color:var(--green-d)}
   .s-skipped,.s-empty,.s-ignored{background:#eef0f2;color:#555}
   .s-paused{background:#fff4d6;color:var(--amber)}
-  .s-error,.s-no_tenant{background:#fdecec;color:var(--red)}
+  .s-error,.s-no_tenant,.s-send_failed{background:#fdecec;color:var(--red)}
   .empty{color:var(--mute);font-size:14px;padding:20px 0;text-align:center}
   .legend{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
   .legend .stage{cursor:default}
@@ -62,9 +62,20 @@
       var r=await fetch('/papi/health',{cache:'no-store'}); var d=await r.json(); if(!d||!d.ok){el.innerHTML='';return;}
       var waOk=d.whatsapp&&d.whatsapp.state==='open';
       var waState=d.whatsapp?d.whatsapp.state:'unknown';
+      var num=d.whatsapp&&d.whatsapp.number?d.whatsapp.number:null;
+      var prof=d.whatsapp&&d.whatsapp.profile_name?d.whatsapp.profile_name:'';
+      var numVal=num?('+'+num+(prof?(' · '+prof):'')):'not linked';
+      var rf=d.whatsapp?d.whatsapp.recent_send_fail:null;
+      var okAt=d.whatsapp?d.whatsapp.send_ok_at:null;
+      var sendVal,sendState;
+      if(rf&&rf>0){sendVal='ERROR ×'+rf+' (6h)';sendState='bad';}
+      else if(okAt){sendVal='delivering · '+ago(okAt);sendState='ok';}
+      else{sendVal='no recent sends';sendState='warn';}
       var fj=(d.queue&&d.queue.failed_jobs!=null)?d.queue.failed_jobs:'—';
       el.innerHTML=
         pill('WhatsApp', waState, waOk?'ok':(waState==='connecting'?'warn':'bad'))+
+        pill('Number', numVal, num?(waOk?'ok':'warn'):'bad')+
+        pill('Sending', sendVal, sendState)+
         pill('Redis', d.redis?'connected':'down', d.redis?'ok':'bad')+
         pill('OpenAI', d.openai_configured?'configured':'missing', d.openai_configured?'ok':'warn')+
         pill('Queue ('+((d.queue&&d.queue.driver)||'?')+')', 'failed: '+fj, (fj==='—'||fj===0)?'ok':'warn')+
