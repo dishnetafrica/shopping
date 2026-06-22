@@ -115,30 +115,25 @@ class ProductMiner
         return ['products' => $out, 'unverified' => $unv];
     }
 
+    /**
+     * No catalogue available — trust ONLY real order history. Chat words are NEVER shown as
+     * products (that was the "Https / Tinyurl / More" bug). No catalogue and no orders ⇒ no
+     * products, which is the honest result until the owner connects a catalogue.
+     */
     private static function legacy(MessageCorpus $corpus, array $orders, int $top): array
     {
-        $counts = []; $source = [];
+        $counts = [];
         foreach ($orders as $o) {
             foreach (self::itemsOf($o) as $name) {
                 $k = self::norm($name);
                 if ($k === '') continue;
-                $counts[$k] = ($counts[$k] ?? 0) + 2;
-                $source[$k] = 'orders';
+                $counts[$k] = ($counts[$k] ?? 0) + 1;
             }
-        }
-        $tokenCounts = [];
-        foreach ($corpus->customer as $msg) foreach (self::tokens($msg) as $w) $tokenCounts[$w] = ($tokenCounts[$w] ?? 0) + 1;
-        foreach ($tokenCounts as $w => $c) {
-            if ($c < 3) continue;
-            if (! isset($counts[$w])) { $counts[$w] = $c; $source[$w] = 'chat'; }
-            else $counts[$w] += $c;
         }
         arsort($counts);
         $out = [];
         foreach (array_slice($counts, 0, $top, true) as $name => $c) {
-            $src  = $source[$name] ?? 'chat';
-            $conf = $src === 'orders' ? min(95, 60 + $c * 3) : min(70, 30 + $c * 4);
-            $out[] = ['name' => self::title($name), 'count' => $c, 'confidence' => $conf, 'source' => $src];
+            $out[] = ['name' => self::title($name), 'count' => $c, 'confidence' => min(95, 60 + $c * 8), 'source' => 'orders'];
         }
         return $out;
     }
