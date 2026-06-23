@@ -88,6 +88,21 @@ class TenantResource extends Resource
                 Forms\Components\Toggle::make('settings.n8n_soft_ack')
                     ->label('Soft-ack if n8n is unreachable')
                     ->helperText('Send a short "we\u2019ll get back to you" and flag staff if the smart bot times out. The inbound is never lost.'),
+                Forms\Components\Toggle::make('settings.watchdog_enabled')
+                    ->label('Unanswered-customer watchdog')->default(true)
+                    ->helperText('Alert dispatch/sales when a customer waits without a reply.'),
+                Forms\Components\TextInput::make('settings.watchdog_wait_min')
+                    ->label('Watchdog wait (min)')->numeric()->default(10),
+                Forms\Components\TextInput::make('settings.watchdog_hours')
+                    ->label('Business hours')->default('7-21')->helperText('Local, e.g. 7-21.'),
+                Forms\Components\Toggle::make('settings.digest_enabled')
+                    ->label('Daily digest')->default(true)
+                    ->helperText('Daily activity summary to management.'),
+                Forms\Components\TextInput::make('settings.digest_hour')
+                    ->label('Digest hour (0-23, local)')->numeric()->default(18),
+                Forms\Components\TextInput::make('settings.tz_offset')
+                    ->label('Timezone offset from UTC')->numeric()->default(3)
+                    ->helperText('EAT (Kampala/Juba) = 3.'),
             ])->columns(2),
 
             Forms\Components\Section::make('Settings')->schema([

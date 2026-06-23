@@ -73,6 +73,16 @@ class BotBridgeController extends Controller
         $recipients = array_values(array_unique(array_filter(array_map(fn ($p) => $this->digits((string) $p), $to))));
         if (! $recipients) return response()->json(['ok' => false, 'error' => 'no recipients'], 422);
 
+        // Fire-once: if n8n passes a dedupe_key, only the first call within the TTL actually sends.
+        // Cache::add is atomic, so concurrent duplicates collapse to one alert.
+        $dedupeKey = trim((string) $r->input('dedupe_key', ''));
+        if ($dedupeKey !== '') {
+            $ttl = max(30, (int) $r->input('dedupe_ttl', 3600));
+            if (! Cache::add("bot_alert_once:{$tenant->id}:{$dedupeKey}", 1, $ttl)) {
+                return response()->json(['ok' => true, 'sent' => 0, 'deduped' => true]);
+            }
+        }
+
         $sent = 0;
         try {
             $gw = app(WhatsAppManager::class)->forTenant($tenant);

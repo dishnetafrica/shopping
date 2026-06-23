@@ -5,6 +5,10 @@ use Illuminate\Support\Facades\Schedule;
 // Requires the `scheduler` process (php artisan schedule:run every minute) — see HOW-TO §8d.
 Schedule::command('shopbot:process-scheduled')->everyMinute()->withoutOverlapping();
 
+// Smart-bot (n8n) shared, tenant-keyed schedules
+Schedule::command('bot:watchdog')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
+Schedule::command('bot:digest')->hourly()->withoutOverlapping()->onOneServer();
+
 // Auto-learn tenants so discovery never has to be run by hand.
 //  - Daily: onboard any tenant that has chats but no discovery yet (new tenants learn within a day).
 //  - Weekly: full-history re-learn for every tenant so the Business Brain stays current.

@@ -762,6 +762,21 @@ class ProcessIncomingMessage implements ShouldQueue
      * to /api/bot/reply and /api/bot/alert. The inbound is already logged, so an n8n outage never
      * loses the message — at worst the customer gets a soft ack and staff are flagged.
      */
+    /** Last few turns for this customer so the n8n bot has conversation memory (oldest→newest). */
+    private function recentHistory(int $tenantId, string $phone, int $limit = 10): array
+    {
+        try {
+            return \App\Models\Message::where('tenant_id', $tenantId)
+                ->where('customer_phone', $phone)
+                ->latest('id')->take($limit)->get()
+                ->reverse()->values()
+                ->map(fn ($m) => ['dir' => $m->direction, 'sender' => $m->sender, 'text' => (string) $m->body])
+                ->all();
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
     /** alert_routing may be stored as role=>"256x, 256y" (admin KeyValue). Normalise to role=>[digits...]. */
     private function normalizeRouting(array $routing): array
     {
@@ -799,6 +814,7 @@ class ProcessIncomingMessage implements ShouldQueue
             ],
             'persona'       => (string) $tenant->setting('ai_persona', ''),
             'alert_routing' => $this->normalizeRouting((array) $tenant->setting('alert_routing', [])),
+            'history'       => $this->recentHistory($tenant->id, $from),
             'reply_url'     => url('/api/bot/reply'),
             'alert_url'     => url('/api/bot/alert'),
             'catalog_url'   => url('/api/tenant/' . $tenant->id . '/catalog'),
