@@ -20,8 +20,9 @@ class Vertical
     public const GROCERY    = 'grocery';
     public const RESTAURANT = 'restaurant';
     public const SNACKS     = 'snacks';
+    public const MANUFACTURER = 'manufacturer';
 
-    public const ALL = [self::GROCERY, self::RESTAURANT, self::SNACKS];
+    public const ALL = [self::GROCERY, self::RESTAURANT, self::SNACKS, self::MANUFACTURER];
 
     /**
      * feature key => list of verticals where it is shown BY DEFAULT.
@@ -33,15 +34,16 @@ class Vertical
         'item_options'  => [self::RESTAURANT],
         'kitchen_board' => [self::RESTAURANT],
         'daily_thali'   => [self::SNACKS],
-        'riders'        => [self::GROCERY, self::RESTAURANT],
-        'pos'           => [self::GROCERY, self::RESTAURANT],
+        'riders'        => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER],
+        'pos'           => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER],
     ];
 
     /** Pretty labels for the admin select. */
     public const LABELS = [
-        self::GROCERY    => 'Grocery',
-        self::RESTAURANT => 'Restaurant',
-        self::SNACKS     => 'Snacks / advance booking',
+        self::GROCERY      => 'Grocery',
+        self::RESTAURANT   => 'Restaurant',
+        self::SNACKS       => 'Snacks / advance booking',
+        self::MANUFACTURER => 'Manufacturer / wholesale brand',
     ];
 
     /**

@@ -104,6 +104,78 @@ class StorefrontController extends Controller
             ->header('Cache-Control', 'no-store');
     }
 
+    /**
+     * Tenant landing at /{shop}. Manufacturers get the brand site; everyone else gets the shop.
+     * The shop itself always lives at /{shop}/shop, so brand-site order links point there.
+     */
+    public function landing(string $shop)
+    {
+        $tenant = $this->tenant($shop);
+        return $this->brandSiteEnabled($tenant) ? $this->brand($shop, $tenant) : $this->show($shop);
+    }
+
+    private function brandSiteEnabled($tenant): bool
+    {
+        $flag = $tenant->setting('brand_site', null);
+        if ($flag !== null && $flag !== '') return filter_var($flag, FILTER_VALIDATE_BOOLEAN);
+        return \App\Support\Vertical::of($tenant) === \App\Support\Vertical::MANUFACTURER;
+    }
+
+    /** Manufacturer brand site — content from tenant settings with sensible defaults. */
+    public function brand(string $shop, $tenant = null)
+    {
+        $tenant = $tenant ?: $this->tenant($shop);
+        $theme  = $this->resolveTheme($tenant);
+
+        $defaultBrands = [
+            ['name' => 'EuroPearl', 'color' => $theme['accent'], 'tag' => 'Truly white & very soft — premium virgin tissue',
+             'items' => ['Toilet paper — 150 / 200 / 300 sheets, 2-ply', 'Copier paper — A4 80 GSM', 'Thermal & POS rolls'],
+             'chips' => ['2-Ply', '100% Virgin', 'Premium']],
+            ['name' => 'Angel Soft', 'color' => '#1C7A41', 'tag' => 'A piece of heaven — sophistication at the table',
+             'items' => ['Paper serviettes & napkins', 'Virgin, 100 sheets · 300×300mm', '60 packs / carton'],
+             'chips' => ['Virgin', 'Soft & Gentle', 'Carton']],
+            ['name' => 'Orchid', 'color' => '#9A6A20', 'tag' => 'Everyday value — built for bulk supply',
+             'items' => ['Blended economy toilet paper', 'Economy napkins', '100 rolls / carton'],
+             'chips' => ['Economy', 'Bulk', 'Carton']],
+        ];
+        $defaultStats = [
+            ['k' => '3 own brands', 'l' => 'EuroPearl · Angel Soft · Orchid'],
+            ['k' => '100% Virgin Pulp', 'l' => 'Premium tissue grade'],
+            ['k' => 'UNBS · ISO 9001', 'l' => 'Certified quality'],
+            ['k' => 'Kampala & Juba', 'l' => 'Wholesale delivery'],
+        ];
+
+        $cfg = [
+            'name'        => (string) $tenant->name,
+            'initials'    => $this->initials((string) $tenant->name),
+            'accent'      => $theme['accent'],
+            'accentDark'  => $theme['accentDark'],
+            'eyebrow'     => $theme['eyebrow'] ?: 'Made in Uganda',
+            'heroTitle'   => (string) $tenant->setting('hero_title', 'Paper & tissue,<br>manufactured in Uganda.'),
+            'heroText'    => (string) $tenant->setting('hero_text', 'We manufacture our own brands — virgin-pulp tissue, napkins and copier paper supplied to shops, offices and institutions across the region.'),
+            'trustLine'   => $theme['trustLine'] ?: 'Manufacturer · 100% Virgin Pulp · UNBS & ISO 9001 · Wholesale Trade Pricing',
+            'website'     => (string) $tenant->setting('website', ''),
+            'phone'       => (string) ($tenant->setting('public_phone', '') ?: $tenant->whatsapp_number),
+            'email'       => (string) $tenant->setting('public_email', ''),
+            'address'     => (string) $tenant->setting('address', ''),
+            'waNumber'    => preg_replace('/[^0-9]/', '', (string) ($tenant->whatsapp_number ?? '')),
+            'currency'    => $this->currency($tenant),
+            'shopUrl'     => url('/' . $tenant->slug . '/shop'),
+            'catalogueUrl'=> url('/' . $tenant->slug . '/catalogue'),
+            'panelUrl'    => url('/panel'),
+            'brands'      => $tenant->setting('brands', $defaultBrands),
+            'stats'       => $tenant->setting('brand_stats', $defaultStats),
+        ];
+
+        $path = resource_path('storefront/brand.html');
+        $html = is_file($path) ? file_get_contents($path) : '<h1>Site unavailable</h1>';
+        $html = str_replace('__BRAND_CONFIG__', json_encode($cfg, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $html);
+
+        return response($html, 200)
+            ->header('Content-Type', 'text/html; charset=utf-8')
+            ->header('Cache-Control', 'no-store');
+    }
+
     /** Public catalogue feed (same JSON shape the panel/products feed uses). */
     public function catalogue(string $shop)
     {

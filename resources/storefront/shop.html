@@ -264,12 +264,29 @@ async function load(){
     PRODUCTS.forEach(function(p){ var c=p.category||'Other'; if(!map[c])map[c]={name:c,img:'',count:0}; map[c].count++; if(!map[c].img&&p.image)map[c].img=p.image; });
     CATS=Object.keys(map).map(function(k){return map[k];}).sort(function(a,b){return b.count-a.count;});
     render();
+    applyQuickOrder();
   }catch(e){
     $('content').innerHTML='<div class="empty">Couldn’t load the catalogue.<br>Please try again shortly.</div>';
   }
 }
 
 function setCat(c){CAT=c;Q='';if($('q'))$('q').value='';render();window.scrollTo(0,0);}
+/* Deep-link from the brand site: ?add=<product> drops it in the cart (MOQ-aware) & opens checkout;
+   ?cat=<category> jumps straight to that aisle. URL is cleaned so a refresh won't re-add. */
+function applyQuickOrder(){
+  try{
+    var sp=new URLSearchParams(location.search||'');
+    var add=sp.get('add'), cat=sp.get('cat');
+    if(add){
+      var p=prod(add)||PRODUCTS.filter(function(x){return x.name.toLowerCase()===add.toLowerCase();})[0];
+      if(p){inc(p.name);openCart();}
+    }else if(cat){
+      var m=CATS.filter(function(c){return c.name.toLowerCase()===String(cat).toLowerCase();})[0];
+      setCat(m?m.name:cat);
+    }
+    if((add||cat)&&window.history&&history.replaceState)history.replaceState(null,'',location.pathname);
+  }catch(e){}
+}
 function goHome(){CAT='all';Q='';if($('q'))$('q').value='';closeSheet();render();window.scrollTo(0,0);}
 function navBack(){goHome();}
 

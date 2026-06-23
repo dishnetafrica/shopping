@@ -33,7 +33,7 @@ class TenantResource extends Resource
                     ->options(\App\Support\Vertical::LABELS)
                     ->default(\App\Support\Vertical::GROCERY)
                     ->native(false)
-                    ->helperText('Drives which panel tools show. Grocery = riders + POS; Restaurant = adds Item Options + Kitchen board; Snacks = advance booking (no riders/POS). Per-tool exceptions use the feature_* toggles.'),
+                    ->helperText('Drives which panel tools show + the storefront style. Grocery = riders + POS; Restaurant = adds Item Options + Kitchen board; Snacks = advance booking; Manufacturer = wholesale brand site + shop. Per-tool exceptions use the feature_* toggles.'),
             ])->columns(2),
 
             Forms\Components\Section::make('Owner login')
@@ -68,6 +68,10 @@ class TenantResource extends Resource
                 Forms\Components\TextInput::make('settings.owner_alert_phone')
                     ->label('Owner alert WhatsApp')
                     ->helperText('New-order alerts & payment receipts go here. Full intl format e.g. 256772123456. Comma-separate for several.')
+                    ->columnSpanFull(),
+                Forms\Components\TextInput::make('settings.website')
+                    ->label('Website URL')->url()
+                    ->helperText('If set, used as this business\'s official site link (shown on the storefront / brand site). e.g. https://europearlafrica.com')
                     ->columnSpanFull(),
                 Forms\Components\TextInput::make('settings.currency')->default('UGX'),
                 Forms\Components\TextInput::make('settings.usd_ugx')->numeric()->label('1 USD = UGX'),
