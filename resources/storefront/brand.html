@@ -1,5 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Brand site</title>
+<title>__SEO_TITLE__</title>
+__SEO_META__
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -87,6 +88,13 @@
   footer{background:var(--ink);color:#cdd6e2;padding:32px 0;font-size:13px}
   footer .wrap{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between}
   .reveal{opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease}.reveal.in{opacity:1;transform:none}
+  .faq{display:grid;gap:10px;max-width:840px}
+  .faq details{background:#fff;border:1px solid var(--line);border-radius:13px;padding:2px 18px}
+  .faq summary{font-family:'Hanken Grotesk';font-weight:700;font-size:15px;padding:15px 0;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:14px}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:'+';font-size:21px;color:var(--navy);font-weight:700;flex:none}
+  .faq details[open] summary::after{content:'\2212'}
+  .faq .a{padding:0 0 16px;color:#33414f;font-size:14.5px;line-height:1.6}
   @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}}
   @media(max-width:880px){.feat,.range{grid-template-columns:1fr 1fr}.brands{grid-template-columns:1fr}.split,.who,.cgrid{grid-template-columns:1fr}.split .ph{height:200px}}
 </style></head>
@@ -96,7 +104,7 @@
   <div class="bn" id="bn">Brand<small>Paper &amp; Tissue Manufacturer</small></div>
   <div class="links">
     <a href="#home">Home</a><a href="#order">Order</a><a href="#brands">Brands</a>
-    <a href="#factory">Our Factory</a><a href="#range">Products</a><a href="#wholesale">Wholesale</a><a href="#contact">Contact</a>
+    <a href="#factory">Our Factory</a><a href="#range">Products</a><a href="#wholesale">Wholesale</a><a href="#faq">FAQ</a><a href="#contact">Contact</a>
   </div>
   <a class="wa" id="navShop" href="#">Order on WhatsApp →</a>
 </div></nav>
@@ -166,6 +174,12 @@
   </div>
 </div></section>
 
+<section id="faq" style="background:var(--tintg)"><div class="wrap reveal">
+  <div class="sec-h"><h2 class="disp">How to order &amp; FAQ</h2><div class="ln"></div></div>
+  <p class="lead">Everything you need to know about ordering, minimums, delivery and becoming a distributor.</p>
+  <div class="faq" id="faqList"></div>
+</div></section>
+
 <section id="contact" style="background:var(--tint)"><div class="wrap reveal">
   <div class="sec-h"><h2 class="disp">Contact</h2><div class="ln"></div></div>
   <div class="cgrid" id="contactCards"></div>
@@ -217,6 +231,10 @@ function $(id){return document.getElementById(id);}
   $('contactCards').innerHTML=cc.join('');
   $('footL').textContent='© '+CFG.name+(CFG.address?(' · '+CFG.address):'')+' · Made in Uganda';
   $('footR').textContent=(CFG.brands||[]).map(function(b){return b.name;}).join(' · ');
+  // FAQ (also emitted as JSON-LD server-side for SEO)
+  $('faqList').innerHTML=(CFG.faq||[]).map(function(f){
+    return '<details><summary>'+esc(f.q)+'</summary><div class="a">'+esc(f.a)+'</div></details>';
+  }).join('');
   // distributor enquiry -> WhatsApp
   $('distSend').onclick=function(){
     if(!CFG.waNumber){alert('Add a WhatsApp number for this business to enable enquiries.');return;}

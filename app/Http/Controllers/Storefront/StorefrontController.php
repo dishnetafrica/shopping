@@ -145,6 +145,18 @@ class StorefrontController extends Controller
             ['k' => 'Kampala & Juba', 'l' => 'Wholesale delivery'],
         ];
 
+        $defaultFaq = [
+            ['q' => 'How do I place an order?', 'a' => 'Browse the shop, tap "Add to order" on the items you want, then check out on WhatsApp. We confirm stock and arrange delivery.'],
+            ['q' => 'What is the minimum order?', 'a' => 'Wholesale items sell by the carton with a minimum (often 3 cartons). Retail packs are available with no minimum.'],
+            ['q' => 'Do you sell small quantities or single packs?', 'a' => 'Yes — we offer retail packs (2 and 4-roll) alongside full cartons for wholesale buyers.'],
+            ['q' => 'Do you offer wholesale / trade pricing?', 'a' => 'Yes. Prices are per carton, direct from the factory — no middleman.'],
+            ['q' => 'Do you deliver, and where?', 'a' => 'We deliver across Kampala and Juba, and nationwide on request. Delivery time is confirmed when we take your order.'],
+            ['q' => 'How do I pay?', 'a' => 'Payment is arranged on WhatsApp when we confirm your order — for example Mobile Money or on delivery.'],
+            ['q' => 'Are your products certified?', 'a' => 'Yes — UNBS certified, ISO 9001:2015, made from 100% virgin pulp.'],
+            ['q' => 'Can I become a distributor or reseller?', 'a' => 'Yes. Use the "Become a distributor" form, or message us on WhatsApp with your area and the brands you want to carry.'],
+            ['q' => 'Do you supply offices and institutions?', 'a' => 'Yes — we supply shops, offices, schools and institutions with bulk carton pricing and reliable repeat supply.'],
+        ];
+
         $cfg = [
             'name'        => (string) $tenant->name,
             'initials'    => $this->initials((string) $tenant->name),
@@ -165,11 +177,58 @@ class StorefrontController extends Controller
             'panelUrl'    => url('/panel'),
             'brands'      => $tenant->setting('brands', $defaultBrands),
             'stats'       => $tenant->setting('brand_stats', $defaultStats),
+            'faq'         => $tenant->setting('faq', $defaultFaq),
         ];
+
+        // ---- SEO: server-rendered title, meta, Open Graph + JSON-LD (Organization + FAQPage) ----
+        $brandNames = array_values(array_filter(array_map(
+            fn ($b) => is_array($b) ? ($b['name'] ?? '') : '', (array) $cfg['brands']
+        )));
+        $title = $tenant->name . ' — Paper & Tissue Manufacturer';
+        $desc  = (string) ($tenant->setting('meta_description', '') ?: trim(
+            $tenant->name . ' manufactures ' . implode(', ', $brandNames)
+            . ' — virgin-pulp toilet paper, napkins and copier paper. Wholesale trade pricing, UNBS & ISO 9001 certified. Order on WhatsApp.'
+        ));
+        $url  = url('/' . $tenant->slug);
+        $logo = $tenant->setting('logo', '') ? $this->imageUrl((string) $tenant->setting('logo', '')) : '';
+
+        $org = array_filter([
+            '@context' => 'https://schema.org', '@type' => 'Organization',
+            'name' => $tenant->name, 'url' => $url, 'logo' => $logo ?: null,
+            'telephone' => $cfg['phone'] ?: null, 'email' => $cfg['email'] ?: null,
+            'address' => $cfg['address'] ? ['@type' => 'PostalAddress', 'streetAddress' => $cfg['address'], 'addressCountry' => 'UG'] : null,
+            'sameAs' => $cfg['website'] ? [$cfg['website']] : null,
+            'brand' => $brandNames ? array_map(fn ($n) => ['@type' => 'Brand', 'name' => $n], $brandNames) : null,
+        ]);
+        $faqLd = [
+            '@context' => 'https://schema.org', '@type' => 'FAQPage',
+            'mainEntity' => array_map(fn ($f) => [
+                '@type' => 'Question', 'name' => $f['q'],
+                'acceptedAnswer' => ['@type' => 'Answer', 'text' => $f['a']],
+            ], (array) $cfg['faq']),
+        ];
+
+        $jflags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
+        $meta = implode("\n", array_filter([
+            '<meta name="description" content="' . e($desc) . '">',
+            '<meta name="robots" content="index,follow">',
+            '<link rel="canonical" href="' . e($url) . '">',
+            '<meta property="og:type" content="website">',
+            '<meta property="og:site_name" content="' . e($tenant->name) . '">',
+            '<meta property="og:title" content="' . e($title) . '">',
+            '<meta property="og:description" content="' . e($desc) . '">',
+            '<meta property="og:url" content="' . e($url) . '">',
+            $logo ? '<meta property="og:image" content="' . e($logo) . '">' : '',
+            '<meta name="twitter:card" content="summary_large_image">',
+            '<script type="application/ld+json">' . json_encode($org, $jflags) . '</script>',
+            '<script type="application/ld+json">' . json_encode($faqLd, $jflags) . '</script>',
+        ]));
 
         $path = resource_path('storefront/brand.html');
         $html = is_file($path) ? file_get_contents($path) : '<h1>Site unavailable</h1>';
-        $html = str_replace('__BRAND_CONFIG__', json_encode($cfg, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $html);
+        $html = str_replace('__SEO_TITLE__', e($title), $html);
+        $html = str_replace('__SEO_META__', $meta, $html);
+        $html = str_replace('__BRAND_CONFIG__', json_encode($cfg, $jflags), $html);
 
         return response($html, 200)
             ->header('Content-Type', 'text/html; charset=utf-8')

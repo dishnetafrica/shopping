@@ -122,6 +122,13 @@
   .ok{padding:46px 22px;text-align:center}.ok .big{font-size:46px}.ok h2{margin:12px 0 4px;color:var(--green-d)}.ok p{color:var(--muted);font-size:14px}
   .ok .ono{display:inline-block;margin-top:10px;background:#EAF3EC;color:var(--green-d);font-weight:800;border-radius:10px;padding:9px 16px;font-size:18px}
   #footer{text-align:center;padding:26px 16px 12px;color:var(--muted);font-size:12px;line-height:1.7}
+  .faq{display:grid;gap:9px;text-align:left}
+  .faq details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:2px 15px}
+  .faq summary{font-weight:700;font-size:14px;padding:13px 0;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:'+';font-size:19px;color:var(--green);font-weight:700;flex:none}
+  .faq details[open] summary::after{content:'\2212'}
+  .faq .a{padding:0 0 14px;color:#444;font-size:13.5px;line-height:1.55}
   #footer a{color:var(--muted);text-decoration:underline}
   .cicon{display:block}
   .pc .img{position:relative}
@@ -151,7 +158,7 @@
 <div id="content"><div class="empty">Loading products…</div></div>
 
 <div id="footer"><span id="footName">Shop</span><br>
-<a id="staffLink" href="#">Staff login</a></div>
+<a href="#" onclick="event.preventDefault();showFaq()">How to order &amp; FAQ</a> · <a id="staffLink" href="#">Staff login</a></div>
 
 <div class="cartbar" id="cartbar">
   <div><div class="l" id="cartCount">0 items</div><div class="n" id="cartTotal">0</div></div>
@@ -251,6 +258,7 @@ async function load(){
       if(d.settings.currency)CUR=String(d.settings.currency);
       if(d.settings.category_images)CAT_IMG=d.settings.category_images||{}; if(d.settings.thali)THALI=d.settings.thali;
       if(d.settings.category_groups)CATGROUPS=d.settings.category_groups||{};
+      if(Array.isArray(d.settings.faq)&&d.settings.faq.length)FAQ_DATA=d.settings.faq;
       if(d.settings.vertical){VERTICAL=String(d.settings.vertical);IS_PICKUP=(VERTICAL==='snacks');applyVertical();}}
     if(Array.isArray(d.branches)&&d.branches.length){
       var bs=d.branches.map(function(b){return {name:String(b.name||b.title||'Branch'),lat:Number(b.lat),lng:Number(b.lng)};}).filter(function(b){return isFinite(b.lat)&&isFinite(b.lng);});
@@ -289,6 +297,21 @@ function applyQuickOrder(){
 }
 function goHome(){CAT='all';Q='';if($('q'))$('q').value='';closeSheet();render();window.scrollTo(0,0);}
 function navBack(){goHome();}
+
+/* ---------------- help / FAQ ---------------- */
+var FAQ_DATA=[
+  {q:'How do I place an order?',a:'Add items to your order, then tap the cart and check out on WhatsApp. We confirm stock and arrange delivery.'},
+  {q:'Is there a minimum order?',a:'Wholesale items have a carton minimum (shown on each product). Retail packs have no minimum.'},
+  {q:'Do you deliver, and where?',a:'We deliver across Kampala and Juba, and nationwide on request. Delivery time is confirmed when we take your order.'},
+  {q:'How do I pay?',a:'Payment is arranged on WhatsApp when we confirm your order — for example Mobile Money or on delivery.'},
+  {q:'How do I see my past orders?',a:'Tap "Log in / my orders" and sign in with your WhatsApp number to view your orders on any device.'},
+  {q:'Do you offer wholesale or distributor pricing?',a:'Yes — message us on WhatsApp about carton pricing and becoming a reseller.'}
+];
+function showFaq(){
+  $('sheetTitle').textContent='How to order \u00b7 FAQ';
+  $('sheetBody').innerHTML='<div class="faq">'+FAQ_DATA.map(function(f){return '<details><summary>'+esc(f.q)+'</summary><div class="a">'+esc(f.a)+'</div></details>';}).join('')+'</div>';
+  $('sheet').classList.add('show');
+}
 
 /* ---------------- delivery location ---------------- */
 function haversineKm(la1,lo1,la2,lo2){var R=6371,t=Math.PI/180,dLa=(la2-la1)*t,dLo=(lo2-lo1)*t;
