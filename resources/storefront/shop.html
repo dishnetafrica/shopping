@@ -13,6 +13,10 @@
   .top .lg{width:34px;height:34px;border-radius:9px;background:var(--green);color:#fff;display:grid;place-items:center;font-weight:800;flex:none}
   .top .hback{border:1px solid var(--line);background:#fff;border-radius:9px;width:34px;height:34px;font-size:24px;line-height:1;font-weight:700;color:var(--ink);flex:none;display:grid;place-items:center;cursor:pointer;padding:0 0 3px}
   .top .hback:active{background:#f0f2f5}
+  .eyebrow{display:block;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:var(--green);margin-top:2px}
+  .trust{background:var(--green);color:#fff;display:flex;flex-wrap:wrap;align-items:center;padding:7px 6px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+  .trust span{padding:0 12px;white-space:nowrap;opacity:.96}
+  .trust span+span{border-left:1px solid rgba(255,255,255,.25)}
   .top b{font-size:15px;line-height:1.1;display:block}.top .sub{font-size:11px;color:var(--muted)}
   .searchwrap{position:sticky;top:56px;z-index:25;background:var(--bg);padding:10px 12px 8px}
   .delv{display:flex;align-items:center;gap:8px;padding:9px 14px;background:#F1F8F3;border-bottom:1px solid var(--line);font-size:13px;color:var(--ink);cursor:pointer}
@@ -65,6 +69,10 @@
   .pc .unit{font-size:10.5px;color:var(--muted);font-weight:600;margin-top:-2px}
   .pc .packlbl{font-size:10.5px;color:#0B3D22;font-weight:700;background:#eef5ef;border-radius:6px;padding:1px 7px;display:inline-block;margin:2px 0 1px}
   .pc .moqlbl{font-size:10px;color:#a8632a;font-weight:700;margin-top:1px}
+  .ci.cifall{background:radial-gradient(120% 95% at 100% 0,#fff,var(--tile));position:relative;overflow:hidden}
+  .ci.cifall .mono{position:absolute;right:6px;bottom:-10px;font-size:58px;font-weight:800;line-height:1;color:var(--green);opacity:.16}
+  .pc .chips{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px}
+  .pc .chip{font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:800;color:var(--green);background:var(--tile);border-radius:5px;padding:2px 6px}
   .pc .opts{position:absolute;top:6px;left:6px;background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:999px;font-size:9.5px;font-weight:800;color:#7A1F1F;padding:2px 7px;z-index:2}
   .pc.pcoos{opacity:.72}
   .pc .img.oos img{filter:grayscale(.7);opacity:.55}
@@ -132,9 +140,10 @@
   <button class="hback" id="hback" onclick="navBack()" aria-label="Back" style="display:none">‹</button>
   <a class="topb" href="#" style="text-decoration:none;display:flex;align-items:center;gap:10px;flex:1;color:inherit" onclick="goHome();return false;">
     <div class="lg">SH</div>
-    <div><b>Shop</b><span class="sub" id="hdrSub">Browse &amp; order on WhatsApp delivery</span></div>
+    <div><b>Shop</b><span class="sub" id="hdrSub">Browse &amp; order on WhatsApp delivery</span><span class="eyebrow" id="hdrEyebrow" style="display:none"></span></div>
   </a>
 </div>
+<div class="trust" id="trustStrip" style="display:none"></div>
 
 <div class="delv" id="delvBar" onclick="askLocation()"><span class="ico">📍</span><span class="txt">Set your location for delivery time</span><span class="chg">›</span></div>
 
@@ -169,6 +178,22 @@ function applyVertical(){
   var sub=document.getElementById('hdrSub');   if(sub) sub.textContent='Order ahead \u00B7 collect on WhatsApp';
 }
 applyVertical();
+/* ---- per-tenant theme: accent colour, copy, eyebrow, trust strip (all optional) ---- */
+var THEME = SHOP.theme || {};
+function applyTheme(){
+  var root=document.documentElement.style;
+  if(THEME.accent)     root.setProperty('--green', THEME.accent);
+  if(THEME.accentDark) root.setProperty('--green-d', THEME.accentDark);
+  var q=document.getElementById('q');           if(q && THEME.searchHint) q.placeholder=THEME.searchHint;
+  var sub=document.getElementById('hdrSub');     if(sub && THEME.tagline) sub.textContent=THEME.tagline;
+  var eb=document.getElementById('hdrEyebrow');  if(eb && THEME.eyebrow){eb.textContent=THEME.eyebrow;eb.style.display='block';}
+  var ts=document.getElementById('trustStrip');
+  if(ts && THEME.trustLine){
+    ts.innerHTML=String(THEME.trustLine).split('·').map(function(s){return '<span>'+esc(s.trim())+'</span>';}).join('');
+    ts.style.display='flex';
+  }
+}
+applyTheme();
 var CUR  = SHOP.currency || 'UGX';
 var CATALOGUE_URL = SHOP.catalogueUrl || (location.pathname.replace(/\/+$/,'') + '/catalogue');
 var SUBMIT_URL    = SHOP.orderUrl     || (location.pathname.replace(/\/+$/,'') + '/order');
@@ -398,8 +423,23 @@ function prodCard(p){
   var ic=catIcon(p.category);
   var img='<div class="img">'+ic+(p.image?'<img src="'+esc(p.image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+'</div>';
   var hasMods=p.modifiers&&p.modifiers.length;
+  var chips=THEME.specChips?specChipsFor(p):[];
+  var chipsHtml=chips.length?('<div class="chips">'+chips.map(function(c){return '<span class="chip">'+esc(c)+'</span>';}).join('')+'</div>'):'';
   var ctrl=oosOf(p)?('<button class="add" disabled>Out of stock</button>'):(hasMods?('<button class="add" onclick="customize('+jk(key)+')">Add</button>'):(inCart?('<div class="stp"><button onclick="dec('+jk(key)+')">−</button><span>'+inCart.qty+'</span><button onclick="inc('+jk(key)+')">+</button></div>'):('<button class="add" onclick="inc('+jk(key)+')">Add</button>')));
-  return '<div class="pc">'+img+'<div class="bd"><div class="nm">'+esc(p.name)+'</div>'+packLine(p)+'<div class="pr">'+ugx(p.price)+'</div>'+perPiece(p)+moqLine(p)+ctrl+'</div></div>';
+  return '<div class="pc">'+img+'<div class="bd">'+chipsHtml+'<div class="nm">'+esc(p.name)+'</div>'+packLine(p)+'<div class="pr">'+ugx(p.price)+'</div>'+perPiece(p)+moqLine(p)+ctrl+'</div></div>';
+}
+/* derive up to 3 spec chips from the product name + keywords (paper/tissue vernacular) */
+function specChipsFor(p){
+  var s=((p.name||'')+' '+(p.keywords||'')).toLowerCase(),out=[];
+  var ply=s.match(/(\d)\s*-?\s*ply/);                  if(ply)out.push(ply[1]+'-Ply');
+  if(/\ba4\b/.test(s))out.push('A4');
+  var sh=s.match(/(\d{2,4})\s*sheets?/);               if(sh)out.push(sh[1]+' Sheets');
+  var gsm=s.match(/(\d{2,3})\s*gsm/);                   if(gsm)out.push(gsm[1]+' GSM');
+  if(/virgin/.test(s))out.push('100% Virgin');
+  if(/thermal/.test(s))out.push('Thermal');
+  var sz=s.match(/(\d{2,3})\s*[x×]\s*(\d{2,3})\s*mm/);  if(sz)out.push(sz[1]+'×'+sz[2]+'mm');
+  var seen={},res=[];out.forEach(function(c){if(!seen[c]&&res.length<3){seen[c]=1;res.push(c);}});
+  return res;
 }
 /* wholesale unit helpers — render nothing unless the product opts in */
 function packLine(p){ if(!p.unit && !p.packSize) return ''; var t=p.unit?cap(p.unit):'Pack'; if(p.packSize)t+=' · '+p.packSize+' pcs'; return '<div class="packlbl">'+esc(t)+'</div>'; }
@@ -560,8 +600,10 @@ function useDepartments(){ if(VERTICAL!=='grocery')return false; return deptMode
 function deptOf(cat){var m=deptModel();for(var i=0;i<m.length;i++)if(m[i].subs.indexOf(cat)>=0)return m[i];return null;}
 function catTile(name,i){
   var ci=CAT_IMG[name];
-  var inner=ci?('<div class="ci" style="background:#fff"><img src="'+esc(ci)+'" onerror="this.style.display=\'none\'"></div>')
-              :('<div class="ci" style="background:'+TINTS[(i<0?0:i)%TINTS.length]+'">'+catIcon(name)+'</div>');
+  var inner;
+  if(ci){inner='<div class="ci" style="background:#fff"><img src="'+esc(ci)+'" onerror="this.style.display=\'none\'"></div>';}
+  else if(THEME.premiumTiles){inner='<div class="ci cifall"><span class="mono">'+esc(String(name||'?').trim().charAt(0).toUpperCase())+'</span></div>';}
+  else{inner='<div class="ci" style="background:'+TINTS[(i<0?0:i)%TINTS.length]+'">'+catIcon(name)+'</div>';}
   return '<button class="cat" onclick="setCat('+jk(name)+')">'+inner+'<div class="nm">'+esc(name)+'</div></button>';
 }
 function groceryHome(){

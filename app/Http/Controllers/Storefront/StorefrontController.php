@@ -92,6 +92,7 @@ class StorefrontController extends Controller
             'branches'     => $this->branches($tenant),
             'delivery'     => (object) ($tenant->setting('delivery', []) ?: []),
             'vertical'     => \App\Support\Vertical::of($tenant),
+            'theme'        => $this->resolveTheme($tenant),
         ];
 
         $path = resource_path('storefront/shop.html');
@@ -325,6 +326,43 @@ class StorefrontController extends Controller
             'order_no'  => (string) $o->order_no,
             'track_url' => $o->track_token ? url('/papi/track?o=' . $o->id . '&t=' . $o->track_token) : null,
         ]);
+    }
+
+    private function resolveTheme($tenant): array
+    {
+        $presets = [
+            'default' => [
+                'accent' => '#0C831F', 'accentDark' => '#0A6E1A',
+                'tagline' => '', 'searchHint' => '',
+                'eyebrow' => '', 'trustLine' => '',
+                'premiumTiles' => false, 'specChips' => false,
+            ],
+            'wholesale' => [
+                'accent' => '#103A8C', 'accentDark' => '#0C2C6B',
+                'tagline' => '', 'searchHint' => 'Search products…',
+                'eyebrow' => '', 'trustLine' => '',
+                'premiumTiles' => true, 'specChips' => true,
+            ],
+        ];
+        $name = (string) $tenant->setting('theme', 'default');
+        $t = $presets[$name] ?? $presets['default'];
+
+        // text overrides — any non-empty tenant setting wins over the preset
+        $text = [
+            'accent' => 'theme_accent', 'accentDark' => 'theme_accent_dark',
+            'tagline' => 'tagline', 'searchHint' => 'search_hint',
+            'eyebrow' => 'eyebrow', 'trustLine' => 'trust_line',
+        ];
+        foreach ($text as $key => $setting) {
+            $v = $tenant->setting($setting, null);
+            if ($v !== null && $v !== '') $t[$key] = (string) $v;
+        }
+        // boolean feature overrides
+        foreach (['premiumTiles' => 'premium_tiles', 'specChips' => 'spec_chips'] as $key => $setting) {
+            $v = $tenant->setting($setting, null);
+            if ($v !== null && $v !== '') $t[$key] = filter_var($v, FILTER_VALIDATE_BOOLEAN);
+        }
+        return $t;
     }
 
     private function initials(string $name): string
