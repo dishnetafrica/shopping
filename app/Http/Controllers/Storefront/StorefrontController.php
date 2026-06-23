@@ -161,6 +161,7 @@ class StorefrontController extends Controller
             'name'        => (string) $tenant->name,
             'initials'    => $this->initials((string) $tenant->name),
             'logo'        => $tenant->setting('logo', '') ? $this->imageUrl((string) $tenant->setting('logo', '')) : '',
+            'heroImage'   => $tenant->setting('hero_image', '') ? $this->imageUrl((string) $tenant->setting('hero_image', '')) : '',
             'accent'      => $theme['accent'],
             'accentDark'  => $theme['accentDark'],
             'eyebrow'     => $theme['eyebrow'] ?: 'Made in Uganda',

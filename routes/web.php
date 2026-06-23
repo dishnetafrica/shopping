@@ -172,6 +172,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('rider-delete', [PanelApiController::class, 'riderDel']);
         Route::get('return',          [PanelApiController::class, 'returnSave']);
         Route::get('settings-save',   [PanelApiController::class, 'settingsSave']);
+        Route::post('branding-save',  [PanelApiController::class, 'brandingSave']);
         Route::get('bot-toggle',      [PanelApiController::class, 'botToggle']);
 
         // Status Intelligence — Activity Review Inbox (v17)

@@ -189,6 +189,18 @@ class PanelApiController extends Controller
             'storeAddress'  => (string) ($s['address'] ?? 'Kampala, Uganda'),
             'storeEmail'    => (string) ($s['email'] ?? ''),
             'logo'          => (string) ($s['logo'] ?? ''),
+            'heroImage'       => (string) ($s['hero_image'] ?? ''),
+            'themeAccent'     => (string) ($s['theme_accent'] ?? ''),
+            'themeAccentDark' => (string) ($s['theme_accent_dark'] ?? ''),
+            'eyebrow'         => (string) ($s['eyebrow'] ?? ''),
+            'trustLine'       => (string) ($s['trust_line'] ?? ''),
+            'website'         => (string) ($s['website'] ?? ''),
+            'tagline'         => (string) ($s['tagline'] ?? ''),
+            'heroTitle'       => (string) ($s['hero_title'] ?? ''),
+            'heroText'        => (string) ($s['hero_text'] ?? ''),
+            'metaDescription' => (string) ($s['meta_description'] ?? ''),
+            'faq'             => array_values($s['faq'] ?? []),
+            'brands'          => array_values($s['brands'] ?? []),
             'base'          => (float) ($s['base'] ?? 2000),
             'perKm'         => (float) ($s['perKm'] ?? 700),
             'min'           => (float) ($s['min'] ?? 2000),
@@ -2479,6 +2491,58 @@ class PanelApiController extends Controller
         $rider = Rider::find((int) $r->query('id', 0));
         if ($rider) $rider->delete();
         return response()->json(['ok' => true, 'riders' => $this->ridersList()]);
+    }
+
+    /**
+     * Save brand-site / branding settings from the seller panel. POST JSON (the FAQ + brand cards
+     * are too large/structured for a query string). Each field is optional; only provided keys change.
+     */
+    public function brandingSave(Request $r)
+    {
+        $t = $r->user()->tenant;
+        $s = $t->settings ?? [];
+
+        $hex = function ($v) {
+            $v = trim((string) $v);
+            return preg_match('/^#[0-9a-fA-F]{6}$/', $v) ? strtoupper($v) : null;
+        };
+        $darken = function ($hex, $f = 0.82) {
+            $r = hexdec(substr($hex, 1, 2)); $g = hexdec(substr($hex, 3, 2)); $b = hexdec(substr($hex, 5, 2));
+            return sprintf('#%02X%02X%02X', (int) round($r * $f), (int) round($g * $f), (int) round($b * $f));
+        };
+
+        if ($r->has('theme_accent')) {
+            $a = $hex($r->input('theme_accent'));
+            if ($a) { $s['theme_accent'] = $a; $s['theme_accent_dark'] = $hex($r->input('theme_accent_dark')) ?: $darken($a); }
+            elseif (trim((string) $r->input('theme_accent')) === '') { unset($s['theme_accent'], $s['theme_accent_dark']); }
+        }
+        foreach (['hero_image', 'eyebrow', 'trust_line', 'website', 'tagline', 'hero_title', 'hero_text', 'meta_description'] as $k) {
+            if ($r->has($k)) $s[$k] = trim((string) $r->input($k));
+        }
+        if ($r->has('faq')) {
+            $faq = $r->input('faq');
+            if (is_string($faq)) $faq = json_decode($faq, true);
+            $s['faq'] = collect(is_array($faq) ? $faq : [])->map(fn ($x) => [
+                'q' => trim((string) ($x['q'] ?? '')), 'a' => trim((string) ($x['a'] ?? '')),
+            ])->filter(fn ($x) => $x['q'] !== '' || $x['a'] !== '')->values()->all();
+        }
+        if ($r->has('brands')) {
+            $br = $r->input('brands');
+            if (is_string($br)) $br = json_decode($br, true);
+            $s['brands'] = collect(is_array($br) ? $br : [])->map(function ($b) use ($hex) {
+                return array_filter([
+                    'name'  => trim((string) ($b['name'] ?? '')),
+                    'tag'   => trim((string) ($b['tag'] ?? '')),
+                    'color' => $hex($b['color'] ?? '') ?: null,
+                    'items' => array_values(array_filter(array_map('trim', (array) ($b['items'] ?? [])))),
+                    'chips' => array_values(array_filter(array_map('trim', (array) ($b['chips'] ?? [])))),
+                ], fn ($v) => $v !== null && $v !== '' && $v !== []);
+            })->filter(fn ($b) => ! empty($b['name']))->values()->all();
+        }
+
+        $t->settings = $s;
+        $t->save();
+        return response()->json(['ok' => true, 'settings' => $s]);
     }
 
     /* -------------------------------------------------- settings / config (3b) */
