@@ -825,6 +825,7 @@ class ProcessIncomingMessage implements ShouldQueue
             ],
             'persona'         => (string) $tenant->setting('ai_persona', ''),
             'brand_knowledge' => (string) $tenant->setting('brand_knowledge', ''),
+            'web_search'      => (bool) $tenant->setting('bot_web_search', true),
             'faq'             => $this->brandFaq($tenant),
             'alert_routing'   => $this->normalizeRouting((array) $tenant->setting('alert_routing', [])),
             'history'         => $this->recentHistory($tenant->id, $from),

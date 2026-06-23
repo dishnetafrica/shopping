@@ -89,6 +89,9 @@ class TenantResource extends Resource
                     ->keyLabel('Role')->valueLabel('Numbers (comma-separated)')
                     ->columnSpanFull()
                     ->helperText('e.g. sales → 256772…, accounts → 256700…  Leads/payments/complaints are routed here before the AI runs.'),
+                Forms\Components\Toggle::make('settings.bot_web_search')
+                    ->label('Allow web search')->default(true)
+                    ->helperText('Lets the bot look up real-world facts it can\u2019t answer from your knowledge or catalogue. Never used for your prices.'),
                 Forms\Components\Toggle::make('settings.n8n_soft_ack')
                     ->label('Soft-ack if n8n is unreachable')
                     ->helperText('Send a short "we\u2019ll get back to you" and flag staff if the smart bot times out. The inbound is never lost.'),
