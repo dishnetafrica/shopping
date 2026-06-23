@@ -24,7 +24,7 @@ class BotWatchdogCommand extends Command
     {
         $now = now();
         foreach (Tenant::all() as $t) {
-            if ((string) $t->setting('bot_mode', '') !== 'n8n') continue;
+            if (! in_array((string) $t->setting('bot_mode', ''), ['n8n', 'ai'], true)) continue;
             if (! $t->setting('watchdog_enabled', true)) continue;
 
             // Business hours in the tenant's local time (default EAT, UTC+3).

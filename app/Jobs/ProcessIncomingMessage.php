@@ -135,6 +135,18 @@ class ProcessIncomingMessage implements ShouldQueue
             BotTrace::log($this->tenantId, $trace, $from, 'skipped', 'owner is handling this chat (recent manual reply)');
             return;
         }
+        // ---- Native AI brain (bot_mode = ai) — same behaviour as n8n, no external workflow ----
+        if ($botMode === 'ai') {
+            $mutedDigits = array_map(fn ($p) => preg_replace('/[^0-9]/', '', (string) $p), (array) $tenant->setting('bot_muted', []));
+            if (in_array($from, $mutedDigits, true)) {
+                BotTrace::log($this->tenantId, $trace, $from, 'skipped', 'number is muted (no auto-reply)');
+                return;
+            }
+            $ok = app(\App\Services\Bot\AiBrain::class)->handle($tenant, $convo, $from, (string) $this->incoming['text'], $gateway);
+            BotTrace::log($this->tenantId, $trace, $from, $ok ? 'ai_replied' : 'ai_no_reply');
+            return;
+        }
+
         // ---- Pluggable n8n brain ---------------------------------------------------
         // CloudBSS stays the only system that talks to WhatsApp. For an n8n tenant we hand
         // the message to the shared n8n workflow and stop; n8n posts its reply back to
@@ -825,7 +837,6 @@ class ProcessIncomingMessage implements ShouldQueue
             ],
             'persona'         => (string) $tenant->setting('ai_persona', ''),
             'brand_knowledge' => (string) $tenant->setting('brand_knowledge', ''),
-            'web_search'      => (bool) $tenant->setting('bot_web_search', true),
             'faq'             => $this->brandFaq($tenant),
             'alert_routing'   => $this->normalizeRouting((array) $tenant->setting('alert_routing', [])),
             'history'         => $this->recentHistory($tenant->id, $from),

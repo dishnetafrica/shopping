@@ -1452,9 +1452,10 @@ class PanelApiController extends Controller
         $mode = (string) $r->input('mode', 'auto');
         if (! in_array($mode, ['auto', 'off'], true)) $mode = 'auto';
         $t = $r->user()->tenant;
-        // Preserve an admin-configured smart bot: the owner's on/off switch flips n8n↔off,
+        // Preserve an admin-configured smart bot: the owner's on/off switch flips brain↔off,
         // it must not silently downgrade the tenant to the inbuilt cart bot.
-        if ((string) $t->setting('bot_mode', 'auto') === 'n8n' && $mode === 'auto') $mode = 'n8n';
+        $cur = (string) $t->setting('bot_mode', 'auto');
+        if (in_array($cur, ['n8n', 'ai'], true) && $mode === 'auto') $mode = $cur;
         $s = $t->settings ?? [];
         $s['bot_mode'] = $mode;
         $t->settings = $s;

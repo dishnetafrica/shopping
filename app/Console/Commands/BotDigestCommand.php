@@ -23,7 +23,7 @@ class BotDigestCommand extends Command
     {
         $now = now();
         foreach (Tenant::all() as $t) {
-            if ((string) $t->setting('bot_mode', '') !== 'n8n') continue;
+            if (! in_array((string) $t->setting('bot_mode', ''), ['n8n', 'ai'], true)) continue;
             if (! $t->setting('digest_enabled', true)) continue;
 
             $offset = (int) $t->setting('tz_offset', 3);
