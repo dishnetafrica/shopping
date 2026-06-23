@@ -151,6 +151,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('update-status',  [PanelApiController::class, 'updateStatus']);
         Route::get('save-order',     [PanelApiController::class, 'saveOrder']);
         Route::get('update-product', [PanelApiController::class, 'updateProduct']);
+        Route::get('delete-product', [PanelApiController::class, 'deleteProduct']);
         Route::get('add-product',    [PanelApiController::class, 'addProduct']);
         Route::post('upload-image',  [PanelApiController::class, 'uploadImage']);
         Route::get('category-images',     [PanelApiController::class, 'categoryImages']);

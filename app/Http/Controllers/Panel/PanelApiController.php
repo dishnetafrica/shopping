@@ -915,20 +915,31 @@ class PanelApiController extends Controller
         if (! $p) {
             return response()->json(['ok' => false, 'error' => 'not_found'], 404);
         }
-        $price = (float) $r->query('price', 0);
-        $p->base_price = $price;
-        $p->price      = $price;
-        $p->stock      = (int) $r->query('stock', $p->stock);
+        if ($r->has('price')) {
+            $price = (float) $r->query('price', 0);
+            $p->base_price = $price;
+            $p->price      = $price;
+        }
+        if ($r->has('stock')) $p->stock = (int) $r->query('stock', $p->stock);
         if ($r->has('image')) $p->image_url = trim((string) $r->query('image', ''));
         foreach (['gallery_1', 'gallery_2', 'gallery_3'] as $g) {
             if ($r->has($g)) $p->{$g} = (trim((string) $r->query($g, '')) ?: null);
         }
+        if ($r->filled('name')) $p->name = trim((string) $r->query('name'));
         if ($r->filled('category')) $p->category = trim((string) $r->query('category', ''));
         if ($r->has('moq'))        $p->moq        = $r->query('moq') !== '' ? max(1, (int) $r->query('moq')) : null;
         if ($r->has('pack_size'))  $p->pack_size  = $r->query('pack_size') !== '' ? max(1, (int) $r->query('pack_size')) : null;
         if ($r->has('unit_label')) $p->unit_label = trim((string) $r->query('unit_label', '')) ?: null;
         $p->save();
 
+        return response()->json(['ok' => true]);
+    }
+
+    public function deleteProduct(Request $r)
+    {
+        $p = Product::find((int) $r->query('row'));
+        if (! $p) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        $p->delete();
         return response()->json(['ok' => true]);
     }
 
