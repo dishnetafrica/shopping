@@ -80,6 +80,10 @@ class TenantResource extends Resource
                     ->label('AI persona / policies')
                     ->rows(4)->columnSpanFull()
                     ->helperText('Who the bot is, tone, what it may and may not promise. Passed to n8n per message.'),
+                Forms\Components\Textarea::make('settings.brand_knowledge')
+                    ->label('Brand knowledge (facts the bot answers from)')
+                    ->rows(8)->columnSpanFull()
+                    ->helperText('Company, products, services, certifications, delivery, policies. The bot uses this for facts; prices always come from the live catalogue. The saved FAQ is added automatically.'),
                 Forms\Components\KeyValue::make('settings.alert_routing')
                     ->label('Alert routing')
                     ->keyLabel('Role')->valueLabel('Numbers (comma-separated)')

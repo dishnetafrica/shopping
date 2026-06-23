@@ -762,6 +762,17 @@ class ProcessIncomingMessage implements ShouldQueue
      * to /api/bot/reply and /api/bot/alert. The inbound is already logged, so an n8n outage never
      * loses the message — at worst the customer gets a soft ack and staff are flagged.
      */
+    /** The FAQ the bot should answer from: the tenant's saved FAQ, else the manufacturer default. */
+    private function brandFaq(Tenant $tenant): array
+    {
+        $faq = $tenant->setting('faq', null);
+        if (is_array($faq) && $faq) return array_values($faq);
+        if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::MANUFACTURER) {
+            return \App\Support\BrandDefaults::faq();
+        }
+        return [];
+    }
+
     /** Last few turns for this customer so the n8n bot has conversation memory (oldest→newest). */
     private function recentHistory(int $tenantId, string $phone, int $limit = 10): array
     {
@@ -812,9 +823,11 @@ class ProcessIncomingMessage implements ShouldQueue
                 'type'      => (string) ($this->incoming['type'] ?? 'conversation'),
                 'messageId' => $this->incoming['messageId'] ?? null,
             ],
-            'persona'       => (string) $tenant->setting('ai_persona', ''),
-            'alert_routing' => $this->normalizeRouting((array) $tenant->setting('alert_routing', [])),
-            'history'       => $this->recentHistory($tenant->id, $from),
+            'persona'         => (string) $tenant->setting('ai_persona', ''),
+            'brand_knowledge' => (string) $tenant->setting('brand_knowledge', ''),
+            'faq'             => $this->brandFaq($tenant),
+            'alert_routing'   => $this->normalizeRouting((array) $tenant->setting('alert_routing', [])),
+            'history'         => $this->recentHistory($tenant->id, $from),
             'reply_url'     => url('/api/bot/reply'),
             'alert_url'     => url('/api/bot/alert'),
             'catalog_url'   => url('/api/tenant/' . $tenant->id . '/catalog'),
