@@ -94,8 +94,24 @@ class ProductImporter
             if ($mode === 'merge') {
                 $existing = Product::where('name', $row['name'])->first();
                 unset($row['tenant_id']);
-                if ($existing) { $existing->update($row); $updated++; }
-                else { Product::create($row); $created++; }
+                if ($existing) {
+                    // Only overwrite columns actually provided in the CSV — a blank cell keeps the
+                    // existing value, so re-importing never wipes photos, stock, cost, etc.
+                    $upd = ['name' => $row['name']];
+                    if ($get('price') !== '')      $upd['price']      = $price;
+                    if ($get('base_price') !== '') $upd['base_price'] = $this->num($get('base_price'));
+                    foreach (['description', 'sku', 'category', 'keywords', 'unit_label'] as $f) {
+                        if ($get($f) !== '') $upd[$f] = $row[$f];
+                    }
+                    if ($get('stock') !== '')     $upd['stock']     = $row['stock'];
+                    if ($get('barcode') !== '')   $upd['barcode']   = $row['barcode'];
+                    if ($get('image_url') !== '') $upd['image_url'] = $row['image_url'];
+                    if ($get('active') !== '')    $upd['active']    = $row['active'];
+                    if ($get('moq') !== '')       $upd['moq']       = $row['moq'];
+                    if ($get('pack_size') !== '') $upd['pack_size'] = $row['pack_size'];
+                    $existing->update($upd);
+                    $updated++;
+                } else { Product::create($row); $created++; }
             } else {
                 $row['created_at'] = $now; $row['updated_at'] = $now;
                 $batch[] = $row;
