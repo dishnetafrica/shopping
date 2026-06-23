@@ -849,6 +849,14 @@
               </div>
               <input type="file" id="setHeroFile" accept="image/*" style="display:none">
             </div>
+            <div class="mfield"><label>Factory image (Our Factory section)</label>
+              <div style="display:flex;align-items:center;gap:12px">
+                <div id="setFacPrev" style="width:104px;height:62px;border-radius:10px;background:#F1F3F7;display:grid;place-items:center;font-weight:700;color:#9aa3b2;overflow:hidden;flex:none">none</div>
+                <div><button type="button" class="btn" id="setFacBtn">Upload factory image</button> <a href="#" id="setFacClear" style="font-size:12px;font-weight:700;color:#B4232A;margin-left:8px">Remove</a>
+                  <div class="note">A production-line or building photo for the "Our Factory" section.</div></div>
+              </div>
+              <input type="file" id="setFacFile" accept="image/*" style="display:none">
+            </div>
             <div class="mfield"><label>Tagline (under the name)</label><input id="setTagline" placeholder="Wholesale paper &amp; tissue · order on WhatsApp"></div>
             <div class="mfield"><label>Eyebrow (small-caps line)</label><input id="setEyebrow" placeholder="EuroPearl · Orchid · Angel Soft — Our Brands"></div>
             <div class="mfield"><label>Trust strip (separate items with ·)</label><input id="setTrust" placeholder="Manufacturer · 100% Virgin Pulp · UNBS &amp; ISO 9001"></div>
@@ -3199,6 +3207,7 @@ function applySettings(s){
   if(s.onboarded!=null)SETTINGS.onboarded=!!s.onboarded;
   if(s.logo!=null)SETTINGS.logo=s.logo;
   if(s.heroImage!=null)SETTINGS.heroImage=s.heroImage;
+  if(s.factoryImage!=null)SETTINGS.factoryImage=s.factoryImage;
   if(s.themeAccent!=null)SETTINGS.themeAccent=s.themeAccent;
   if(s.themeAccentDark!=null)SETTINGS.themeAccentDark=s.themeAccentDark;
   if(s.eyebrow!=null)SETTINGS.eyebrow=s.eyebrow;
@@ -3384,6 +3393,12 @@ function brandingInit(){
   if($('setHeroBtn'))$('setHeroBtn').onclick=function(){var f=$('setHeroFile');if(f){f.value='';f.click();}};
   if($('setHeroClear'))$('setHeroClear').onclick=function(e){e.preventDefault();SETTINGS.heroImage='';heroPrev();toast('Hero removed \u2014 press Save website & branding');};
   var hf=$('setHeroFile');if(hf&&!hf._b){hf._b=true;hf.onchange=async function(){var file=hf.files&&hf.files[0];if(!file)return;toast('Uploading\u2026');var data=await shrinkImage(file,1400,.85);if(!data){toast('Could not read image');return;}try{var up=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'hero.jpg',data:data})});var d=await up.json();if(d&&d.ok&&d.url){SETTINGS.heroImage=d.url;heroPrev();toast('Hero set \u2014 press Save website & branding');}else toast('Upload failed');}catch(e){toast('Upload failed');}};}
+  // factory image
+  function facPrev(){var pv=$('setFacPrev');if(pv)pv.innerHTML=SETTINGS.factoryImage?('<img src="'+esc(SETTINGS.factoryImage)+'" style="width:100%;height:100%;object-fit:cover">'):'none';}
+  facPrev();
+  if($('setFacBtn'))$('setFacBtn').onclick=function(){var f=$('setFacFile');if(f){f.value='';f.click();}};
+  if($('setFacClear'))$('setFacClear').onclick=function(e){e.preventDefault();SETTINGS.factoryImage='';facPrev();toast('Factory image removed \u2014 press Save website & branding');};
+  var ff=$('setFacFile');if(ff&&!ff._b){ff._b=true;ff.onchange=async function(){var file=ff.files&&ff.files[0];if(!file)return;toast('Uploading\u2026');var data=await shrinkImage(file,1400,.85);if(!data){toast('Could not read image');return;}try{var up=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'factory.jpg',data:data})});var d=await up.json();if(d&&d.ok&&d.url){SETTINGS.factoryImage=d.url;facPrev();toast('Factory image set \u2014 press Save website & branding');}else toast('Upload failed');}catch(e){toast('Upload failed');}};}
   // editors
   renderFaqEditor(SETTINGS.faq||[]);
   renderBrandEditor(SETTINGS.brands||[]);
@@ -3422,7 +3437,7 @@ async function saveBranding(){
   var accent=($('setAccentHex').value||'').trim()||($('setAccent')?$('setAccent').value:'');
   var payload={
     theme_accent:accent, theme_accent_dark:darkenHex(accent),
-    hero_image:SETTINGS.heroImage||'',
+    hero_image:SETTINGS.heroImage||'', factory_image:SETTINGS.factoryImage||'',
     tagline:($('setTagline').value||'').trim(), eyebrow:($('setEyebrow').value||'').trim(),
     trust_line:($('setTrust').value||'').trim(), hero_title:($('setHeroTitle').value||'').trim(),
     hero_text:($('setHeroText').value||'').trim(), website:($('setWebsite').value||'').trim(),
@@ -3432,7 +3447,7 @@ async function saveBranding(){
   $('brandSave').disabled=true;if($('brandStatus'))$('brandStatus').textContent='Saving\u2026';
   try{var r=await fetch(EP.brandingSave+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     var d=await r.json();
-    if(d&&d.ok){var s=d.settings||{};SETTINGS.themeAccent=s.theme_accent||accent;SETTINGS.themeAccentDark=s.theme_accent_dark||'';SETTINGS.heroImage=s.hero_image||SETTINGS.heroImage;SETTINGS.eyebrow=s.eyebrow||'';SETTINGS.trustLine=s.trust_line||'';SETTINGS.website=s.website||'';SETTINGS.tagline=s.tagline||'';SETTINGS.heroTitle=s.hero_title||'';SETTINGS.heroText=s.hero_text||'';SETTINGS.metaDescription=s.meta_description||'';SETTINGS.faq=s.faq||[];SETTINGS.brands=s.brands||[];
+    if(d&&d.ok){var s=d.settings||{};SETTINGS.themeAccent=s.theme_accent||accent;SETTINGS.themeAccentDark=s.theme_accent_dark||'';SETTINGS.heroImage=s.hero_image||SETTINGS.heroImage;SETTINGS.factoryImage=s.factory_image||SETTINGS.factoryImage;SETTINGS.eyebrow=s.eyebrow||'';SETTINGS.trustLine=s.trust_line||'';SETTINGS.website=s.website||'';SETTINGS.tagline=s.tagline||'';SETTINGS.heroTitle=s.hero_title||'';SETTINGS.heroText=s.hero_text||'';SETTINGS.metaDescription=s.meta_description||'';SETTINGS.faq=s.faq||[];SETTINGS.brands=s.brands||[];
       if($('brandStatus'))$('brandStatus').textContent='Saved '+new Date().toLocaleTimeString();toast('Website & branding saved');}
     else{if($('brandStatus'))$('brandStatus').textContent=(d&&d.error)||'Could not save';toast((d&&d.error)||'Could not save');}
   }catch(e){if($('brandStatus'))$('brandStatus').textContent='Network error';toast('Could not save');}

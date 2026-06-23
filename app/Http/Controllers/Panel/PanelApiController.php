@@ -179,6 +179,8 @@ class PanelApiController extends Controller
     {
         $t = $r->user()->tenant;
         $s = $t->settings ?? [];
+        $isMfr = \App\Support\Vertical::of($t) === \App\Support\Vertical::MANUFACTURER;
+        $bd = \App\Support\BrandDefaults::text();
         return response()->json([
             'ok'            => true,
             'storeName'     => (string) ($t->name ?? 'Family Shopper'),
@@ -190,17 +192,18 @@ class PanelApiController extends Controller
             'storeEmail'    => (string) ($s['email'] ?? ''),
             'logo'          => (string) ($s['logo'] ?? ''),
             'heroImage'       => (string) ($s['hero_image'] ?? ''),
+            'factoryImage'    => (string) ($s['factory_image'] ?? ''),
             'themeAccent'     => (string) ($s['theme_accent'] ?? ''),
             'themeAccentDark' => (string) ($s['theme_accent_dark'] ?? ''),
-            'eyebrow'         => (string) ($s['eyebrow'] ?? ''),
-            'trustLine'       => (string) ($s['trust_line'] ?? ''),
+            'eyebrow'         => (string) ($s['eyebrow'] ?? ($isMfr ? $bd['eyebrow'] : '')),
+            'trustLine'       => (string) ($s['trust_line'] ?? ($isMfr ? $bd['trustLine'] : '')),
             'website'         => (string) ($s['website'] ?? ''),
-            'tagline'         => (string) ($s['tagline'] ?? ''),
-            'heroTitle'       => (string) ($s['hero_title'] ?? ''),
-            'heroText'        => (string) ($s['hero_text'] ?? ''),
+            'tagline'         => (string) ($s['tagline'] ?? ($isMfr ? $bd['tagline'] : '')),
+            'heroTitle'       => (string) ($s['hero_title'] ?? ($isMfr ? $bd['heroTitle'] : '')),
+            'heroText'        => (string) ($s['hero_text'] ?? ($isMfr ? $bd['heroText'] : '')),
             'metaDescription' => (string) ($s['meta_description'] ?? ''),
-            'faq'             => array_values($s['faq'] ?? []),
-            'brands'          => array_values($s['brands'] ?? []),
+            'faq'             => array_values($s['faq'] ?? ($isMfr ? \App\Support\BrandDefaults::faq() : [])),
+            'brands'          => array_values($s['brands'] ?? ($isMfr ? \App\Support\BrandDefaults::brands((string) ($s['theme_accent'] ?? '#103A8C')) : [])),
             'base'          => (float) ($s['base'] ?? 2000),
             'perKm'         => (float) ($s['perKm'] ?? 700),
             'min'           => (float) ($s['min'] ?? 2000),
@@ -2516,7 +2519,7 @@ class PanelApiController extends Controller
             if ($a) { $s['theme_accent'] = $a; $s['theme_accent_dark'] = $hex($r->input('theme_accent_dark')) ?: $darken($a); }
             elseif (trim((string) $r->input('theme_accent')) === '') { unset($s['theme_accent'], $s['theme_accent_dark']); }
         }
-        foreach (['hero_image', 'eyebrow', 'trust_line', 'website', 'tagline', 'hero_title', 'hero_text', 'meta_description'] as $k) {
+        foreach (['hero_image', 'factory_image', 'eyebrow', 'trust_line', 'website', 'tagline', 'hero_title', 'hero_text', 'meta_description'] as $k) {
             if ($r->has($k)) $s[$k] = trim((string) $r->input($k));
         }
         if ($r->has('faq')) {

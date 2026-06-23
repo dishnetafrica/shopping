@@ -138,7 +138,7 @@ __SEO_META__
 <section id="factory" style="background:var(--tintg)"><div class="wrap reveal">
   <div class="sec-h"><h2 class="disp">Our factory</h2><div class="ln"></div></div>
   <div class="split">
-    <div class="ph">factory / production line photo</div>
+    <div class="ph" id="factoryPh">factory / production line photo</div>
     <div>
       <p id="factoryText"></p>
       <p style="color:var(--green);font-weight:600">Proudly Buy Uganda, Build Uganda (BUBU).</p>
@@ -224,6 +224,7 @@ function $(id){return document.getElementById(id);}
       '<div><a class="brandcta" href="'+shopLink()+'">Order '+esc(b.name)+' →</a></div></div></div>';
   }).join('');
   // factory
+  if(CFG.factoryImage){var fp=$('factoryPh'); if(fp)fp.innerHTML='<img src="'+esc(CFG.factoryImage)+'" alt="'+esc(CFG.name)+' factory" style="width:100%;height:100%;object-fit:cover;border-radius:18px" onerror="this.parentNode.textContent=\'factory / production line photo\'">';}
   $('factoryText').textContent=CFG.address
     ? ('We manufacture at '+CFG.address+', converting 100% virgin pulp into premium tissue, napkins and office paper under our own brands.')
     : 'We manufacture our own brands, converting 100% virgin pulp into premium tissue, napkins and office paper — consistent quality, reliable volume, carton after carton.';
