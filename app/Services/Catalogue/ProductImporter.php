@@ -31,6 +31,9 @@ class ProductImporter
         'barcode'    => ['barcode', 'barcode 1', 'barcode1', 'barcode_1', 'ean', 'upc'],
         'image_url'  => ['image', 'image url', 'imageurl', 'image link', 'photo', 'picture'],
         'active'     => ['active', 'enabled', 'status'],
+        'moq'        => ['moq', 'min order', 'minimum order', 'min qty', 'minimum qty', 'min order qty'],
+        'pack_size'  => ['pack size', 'packsize', 'pack', 'units per pack', 'pcs per carton', 'pcs in ctn', 'pcs in carton', 'pieces per pack'],
+        'unit_label' => ['unit', 'selling unit', 'uom', 'pack unit', 'sold as'],
     ];
 
     public function importCsv(string $path, string $mode = 'replace'): array
@@ -83,6 +86,9 @@ class ProductImporter
                 'keywords'   => $get('keywords') ?: null,
                 'image_url'  => $get('image_url') ?: null,
                 'active'     => $get('active') === '' ? true : $this->bool($get('active')),
+                'moq'        => $get('moq') !== '' ? max(1, (int) $this->num($get('moq'))) : null,
+                'pack_size'  => $get('pack_size') !== '' ? max(1, (int) $this->num($get('pack_size'))) : null,
+                'unit_label' => $get('unit_label') ?: null,
             ];
 
             if ($mode === 'merge') {

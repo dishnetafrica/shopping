@@ -1180,7 +1180,8 @@ function mapProduct(row){
   var ic=String(row.Item_Code||row.item_code||row.ItemCode||'').replace(/[^0-9A-Za-z]/g,'');
   return {name:v?pn+' '+v:pn,baseName:pn,variant:v,brand:String(row.Brand||''),category:String(row.Category||''),
     keywords:kw,basePrice:numFrom(row.Price_UGX),price:netUgx(numFrom(row.Price_UGX)),stock:numFrom(row.Stock),stockByBranch:sbb,barcode:bc,itemCode:ic,
-    image:String(row.Image||row.Photo||row.Image_URL||row['Image URL']||''),g1:String(row.Gallery_1||''),g2:String(row.Gallery_2||''),g3:String(row.Gallery_3||''),order:Number(row.Display_Order||row.display_order||0),_row:Number(row._row)};
+    image:String(row.Image||row.Photo||row.Image_URL||row['Image URL']||''),g1:String(row.Gallery_1||''),g2:String(row.Gallery_2||''),g3:String(row.Gallery_3||''),order:Number(row.Display_Order||row.display_order||0),
+    moq:(row.MOQ===''||row.MOQ==null)?'':Number(row.MOQ),packSize:(row.PackSize===''||row.PackSize==null)?'':Number(row.PackSize),unit:String(row.Unit||''),_row:Number(row._row)};
 }
 /* ---------------- BARCODE / SCANNING ---------------- */
 var BARCODE_INDEX={};
@@ -2388,6 +2389,13 @@ function openEdit(row){
     '<div class="mfield"><label>Price (UGX — base'+(discActive()?', before discount':'')+')</label><input id="mPrice" type="number" min="0" value="'+(p.basePrice!=null?p.basePrice:p.price)+'"><div class="note" id="mPriceHint" style="margin-top:4px"></div></div>'+
     '<div class="mfield"><label>Category</label><input id="mCat" list="catListE" value="'+esc(p.category||'')+'"><datalist id="catListE">'+cats.map(function(c){return '<option value="'+esc(c)+'">';}).join('')+'</datalist><div class="note" style="margin-top:4px">Pick an existing category or type a new one.</div></div>'+
     '<div class="mfield"><label>'+stockLabel+'</label><input id="mStock" type="number" min="0" value="'+prodStock(p)+'"></div>'+stockNote+
+    '<div class="mfield"><label>Selling unit &amp; minimum order <span style="font-weight:400;color:#6b7280">(wholesale — leave blank for normal retail)</span></label>'+
+      '<div style="display:flex;gap:8px">'+
+        '<input id="mUnit" placeholder="unit e.g. carton" value="'+esc(p.unit||'')+'" style="flex:1.2">'+
+        '<input id="mPack" type="number" min="1" placeholder="pcs/unit" value="'+(p.packSize!==''&&p.packSize!=null?p.packSize:'')+'" style="flex:1">'+
+        '<input id="mMOQ" type="number" min="1" placeholder="min qty" value="'+(p.moq!==''&&p.moq!=null?p.moq:'')+'" style="flex:1">'+
+      '</div>'+
+      '<div class="note" style="margin-top:4px">e.g. <b>carton · 100 · 1</b> → shows "Carton · 100 pcs", a per-piece price, and a 1-carton minimum.</div></div>'+
     '<button type="button" class="btn ghost" id="mOOS" style="margin:-4px 0 10px">'+((prodStock(p)<=0)?'\u2713 Out of stock \u2014 Save to apply':'Mark out of stock')+'</button>'+
     prodImgField(p.image)+
     prodGalleryField(p)+
@@ -2405,11 +2413,14 @@ async function saveProduct(row){
   var g1=($('gImg1')?$('gImg1').value:'').trim(),g2=($('gImg2')?$('gImg2').value:'').trim(),g3=($('gImg3')?$('gImg3').value:'').trim();
   var branchMode=(INVENTORY_MODE==='branch'&&BRANCH_FILTER);
   var cat=($('mCat')?$('mCat').value:'').trim();
-  var qs='?token='+encodeURIComponent(token)+'&row='+row+'&price='+price+'&stock='+stock+'&image='+encodeURIComponent(image)+'&gallery_1='+encodeURIComponent(g1)+'&gallery_2='+encodeURIComponent(g2)+'&gallery_3='+encodeURIComponent(g3)+(cat?'&category='+encodeURIComponent(cat):'')+'&mode='+INVENTORY_MODE+(branchMode?'&branch='+encodeURIComponent(BRANCH_FILTER):'');
+  var unit=($('mUnit')?$('mUnit').value:'').trim();
+  var pack=($('mPack')?$('mPack').value:'').trim();
+  var moq=($('mMOQ')?$('mMOQ').value:'').trim();
+  var qs='?token='+encodeURIComponent(token)+'&row='+row+'&price='+price+'&stock='+stock+'&image='+encodeURIComponent(image)+'&gallery_1='+encodeURIComponent(g1)+'&gallery_2='+encodeURIComponent(g2)+'&gallery_3='+encodeURIComponent(g3)+(cat?'&category='+encodeURIComponent(cat):'')+'&unit_label='+encodeURIComponent(unit)+'&pack_size='+encodeURIComponent(pack)+'&moq='+encodeURIComponent(moq)+'&mode='+INVENTORY_MODE+(branchMode?'&branch='+encodeURIComponent(BRANCH_FILTER):'');
   $('mSave').disabled=true;$('mSave').textContent='Saving…';
   try{var r=await fetch(EP.updProduct+qs,{cache:'no-store'});
     var d=await r.json();
-    if(d&&d.ok){var p=findProd(row);if(p){p.basePrice=price;p.price=netUgx(price);p.image=image;p.g1=g1;p.g2=g2;p.g3=g3;if(cat)p.category=cat;if(branchMode){p.stockByBranch=p.stockByBranch||{};p.stockByBranch[BRANCH_FILTER]=stock;}else p.stock=stock;}toast('Saved \u00b7 '+ugx(netUgx(price))+(discActive()?' (after discount)':'')+' \u00b7 stock '+stock);closeModal();renderPM();}
+    if(d&&d.ok){var p=findProd(row);if(p){p.basePrice=price;p.price=netUgx(price);p.image=image;p.g1=g1;p.g2=g2;p.g3=g3;p.unit=unit;p.packSize=(pack===''?'':Number(pack));p.moq=(moq===''?'':Number(moq));if(cat)p.category=cat;if(branchMode){p.stockByBranch=p.stockByBranch||{};p.stockByBranch[BRANCH_FILTER]=stock;}else p.stock=stock;}toast('Saved \u00b7 '+ugx(netUgx(price))+(discActive()?' (after discount)':'')+' \u00b7 stock '+stock);closeModal();renderPM();}
     else toast('Could not save');
   }catch(e){toast('Network error');}
   $('mSave').disabled=false;$('mSave').textContent='Save changes';

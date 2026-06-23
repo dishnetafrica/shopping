@@ -107,6 +107,9 @@ class PanelApiController extends Controller
                 'Gallery_2'    => (string) ($p->gallery_2 ?? ''),
                 'Gallery_3'    => (string) ($p->gallery_3 ?? ''),
                 'Display_Order'=> (int) ($p->display_order ?? 0),
+                'MOQ'          => $p->moq === null ? '' : (int) $p->moq,
+                'PackSize'     => $p->pack_size === null ? '' : (int) $p->pack_size,
+                'Unit'         => (string) ($p->unit_label ?? ''),
                 '_row'         => (int) $p->id,
             ];
         });
@@ -921,6 +924,9 @@ class PanelApiController extends Controller
             if ($r->has($g)) $p->{$g} = (trim((string) $r->query($g, '')) ?: null);
         }
         if ($r->filled('category')) $p->category = trim((string) $r->query('category', ''));
+        if ($r->has('moq'))        $p->moq        = $r->query('moq') !== '' ? max(1, (int) $r->query('moq')) : null;
+        if ($r->has('pack_size'))  $p->pack_size  = $r->query('pack_size') !== '' ? max(1, (int) $r->query('pack_size')) : null;
+        if ($r->has('unit_label')) $p->unit_label = trim((string) $r->query('unit_label', '')) ?: null;
         $p->save();
 
         return response()->json(['ok' => true]);
@@ -944,6 +950,9 @@ class PanelApiController extends Controller
             'price'      => $price,
             'stock'      => (int) $r->query('stock', 0),
             'image_url'  => trim((string) $r->query('image', '')),
+            'moq'        => $r->filled('moq') ? max(1, (int) $r->query('moq')) : null,
+            'pack_size'  => $r->filled('pack_size') ? max(1, (int) $r->query('pack_size')) : null,
+            'unit_label' => trim((string) $r->query('unit_label', '')) ?: null,
             'active'     => true,
         ]);
 

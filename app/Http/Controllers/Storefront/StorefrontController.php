@@ -138,7 +138,7 @@ class StorefrontController extends Controller
 
             return Product::where('active', true)->orderByDesc('display_order')->orderBy('name')
                 ->toBase()
-                ->get(['id', 'name', 'category', 'keywords', 'base_price', 'price', 'stock', 'image_url', 'display_order'])
+                ->get(['id', 'name', 'category', 'keywords', 'base_price', 'price', 'stock', 'image_url', 'display_order', 'moq', 'pack_size', 'unit_label'])
                 ->map(function ($p) use ($mods) {
                     return [
                         'Product Name' => (string) $p->name,
@@ -150,6 +150,9 @@ class StorefrontController extends Controller
                         'Stock'        => $p->stock === null ? null : (int) $p->stock,
                         'Image'        => $this->imageUrl($p->image_url),
                         'Modifiers'    => $mods[$p->id] ?? [],
+                        'MOQ'          => $p->moq === null ? null : (int) $p->moq,
+                        'PackSize'     => $p->pack_size === null ? null : (int) $p->pack_size,
+                        'Unit'         => (string) ($p->unit_label ?? ''),
                         '_row'         => (int) $p->id,
                     ];
                 })->values();
