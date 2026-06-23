@@ -142,7 +142,35 @@ class ProcessIncomingMessage implements ShouldQueue
                 BotTrace::log($this->tenantId, $trace, $from, 'skipped', 'number is muted (no auto-reply)');
                 return;
             }
-            $ok = app(\App\Services\Bot\AiBrain::class)->handle($tenant, $convo, $from, (string) $this->incoming['text'], $gateway);
+            $aiText = (string) $this->incoming['text'];
+
+            // Voice note → transcribe, then treat as text.
+            if (trim($aiText) === '' && ! empty($this->incoming['has_audio'] ?? false)) {
+                $b64 = (string) ($this->incoming['audio_b64'] ?? '');
+                if ($b64 === '' && ! empty($this->incoming['media_key'] ?? null) && method_exists($gateway, 'getMediaBase64')) {
+                    $b64 = (string) ($gateway->getMediaBase64($tenant->whatsapp_instance, $this->incoming['media_key']) ?? '');
+                }
+                $vt = new \App\Services\Bot\VoiceTranscriber();
+                if ($vt->enabled() && $b64 !== '') {
+                    $tr = (string) $vt->transcribe($b64);
+                    if (trim($tr) !== '') { $aiText = trim($tr); $this->incoming['text'] = $aiText; BotTrace::log($this->tenantId, $trace, $from, 'voice_transcribed', mb_substr($aiText, 0, 90)); }
+                }
+            }
+
+            // Image → hand the bytes to the AI (vision).
+            $imageB64 = '';
+            if (! empty($this->incoming['has_image'] ?? false)) {
+                $imageB64 = (string) ($this->incoming['image_b64'] ?? '');
+                if ($imageB64 === '' && ! empty($this->incoming['media_key'] ?? null) && method_exists($gateway, 'getMediaBase64')) {
+                    $imageB64 = (string) ($gateway->getMediaBase64($tenant->whatsapp_instance, $this->incoming['media_key']) ?? '');
+                }
+                if (trim($aiText) === '') $aiText = (string) ($this->incoming['image_caption'] ?? '');
+            }
+
+            $ok = app(\App\Services\Bot\AiBrain::class)->handle(
+                $tenant, $convo, $from, $aiText, $gateway,
+                ['imageB64' => $imageB64, 'mime' => (string) ($this->incoming['media_mime'] ?? 'image/jpeg')]
+            );
             BotTrace::log($this->tenantId, $trace, $from, $ok ? 'ai_replied' : 'ai_no_reply');
             return;
         }
