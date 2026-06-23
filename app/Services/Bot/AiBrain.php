@@ -35,12 +35,26 @@ class AiBrain
         $this->fireAlerts($tenant, $from, $text, $convo, $gateway, $this->detectSignals($text));
 
         if (! $this->enabled()) {
-            Log::warning('AiBrain: no OPENAI_API_KEY — alerts fired, no AI reply.');
-            return false;
+            Log::warning('AiBrain: no OPENAI_API_KEY.');
+            return $this->fallback($tenant, $from, $gateway, 'ai_disabled');
         }
 
         $imageB64 = (string) ($media['imageB64'] ?? '');
         $mime     = (string) ($media['mime'] ?? 'image/jpeg');
+
+        // Nothing we can read (sticker / contact / empty) → ask politely instead of feeding junk to the AI.
+        if (trim($text) === '' && $imageB64 === '') {
+            $ask = (string) $tenant->setting('bot_unreadable_text', "Sorry, I couldn't read that 🙏 Please type your question and I'll help you right away.");
+            $this->say($tenant, $from, $gateway, $ask);
+            return true;
+        }
+
+        // Loop guard: ignore an exact echo of our own last message to this customer.
+        $lastOut = Message::where('tenant_id', $tenant->id)->where('customer_phone', $from)
+            ->where('direction', 'out')->latest('id')->value('body');
+        if ($lastOut !== null && trim($text) !== '' && trim($text) === trim((string) $lastOut)) {
+            return true;
+        }
 
         // 2. assemble the prompt + conversation. The current inbound is already logged, so it is the
         //    last user turn in history — drop it and append an explicit current turn (so we can attach
@@ -72,9 +86,9 @@ class AiBrain
             $reply = trim((string) ($resp->choices[0]->message->content ?? ''));
         } catch (\Throwable $e) {
             Log::warning('AiBrain reply failed: ' . $e->getMessage());
-            return false;
+            return $this->fallback($tenant, $from, $gateway, 'ai_error');
         }
-        if ($reply === '') return false;
+        if ($reply === '') return $this->fallback($tenant, $from, $gateway, 'empty_reply');
 
         // 3b. order total / PDF quotation — the model never does the arithmetic
         if ($this->wantsQuotation($text)) {
@@ -168,6 +182,41 @@ class AiBrain
         }
     }
 
+    /** Send + log one bot message. */
+    private function say(Tenant $tenant, string $from, WhatsAppGateway $gateway, string $text, array $meta = ['via' => 'ai']): void
+    {
+        try {
+            $gateway->sendText($tenant->whatsapp_instance, $from, $text);
+            MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $text, null, null, $meta);
+        } catch (\Throwable $e) {
+            Log::warning('AiBrain say failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Never leave a customer hanging. If the AI can't answer, send a polite holding message and flag
+     * staff (once per 10 min per customer) so a human picks it up. Always returns true (handled).
+     */
+    private function fallback(Tenant $tenant, string $from, WhatsAppGateway $gateway, string $reason): bool
+    {
+        $msg = (string) $tenant->setting('bot_fallback_text', "Thanks for your message 🙏 Our team will get right back to you shortly.");
+        $this->say($tenant, $from, $gateway, $msg, ['via' => 'ai', 'fallback' => $reason]);
+
+        $to = $this->pick($this->routing($tenant), ['sales', 'management', 'dispatch']);
+        if ($to && Cache::add("bot_alert_once:{$tenant->id}:fallback:{$from}", 1, 600)) {
+            $alert = "🆘 The bot couldn't answer +{$from} ({$reason}). Please reply in Chats.";
+            foreach ($to as $num) {
+                try {
+                    $gateway->sendText($tenant->whatsapp_instance, $num, $alert);
+                    MessageLog::record($tenant->id, $num, $tenant->whatsapp_instance, 'out', 'system', $alert, null, null, ['kind' => 'fallback', 'via' => 'ai']);
+                } catch (\Throwable $e) {
+                    // never break on the alert
+                }
+            }
+        }
+        return true;
+    }
+
     /* ---------------------------------------------------------------- Signal Engine */
 
     /** Deterministic signal detection — mirrors the n8n Brain. */
@@ -216,8 +265,11 @@ class AiBrain
     /** The "big prompt": persona + rules + company knowledge + FAQ + grounded catalogue. */
     private function systemPrompt(Tenant $tenant): string
     {
+        $isMfr   = Vertical::of($tenant) === Vertical::MANUFACTURER;
         $persona = (string) $tenant->setting('ai_persona', '');
-        $know    = (string) $tenant->setting('brand_knowledge', '');
+        if ($persona === '' && $isMfr) $persona = BrandDefaults::persona((string) $tenant->name);
+        $know = (string) $tenant->setting('brand_knowledge', '');
+        if ($know === '' && $isMfr) $know = BrandDefaults::knowledge();
         $faqTxt  = collect($this->brandFaq($tenant))
             ->map(fn ($f) => 'Q: ' . ($f['q'] ?? '') . "\nA: " . ($f['a'] ?? ''))
             ->implode("\n\n");

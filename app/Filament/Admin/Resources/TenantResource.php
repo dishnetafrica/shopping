@@ -89,6 +89,10 @@ class TenantResource extends Resource
                     ->keyLabel('Role')->valueLabel('Numbers (comma-separated)')
                     ->columnSpanFull()
                     ->helperText('e.g. sales → 256772…, accounts → 256700…  Leads/payments/complaints are routed here before the AI runs.'),
+                Forms\Components\TextInput::make('settings.bot_fallback_text')
+                    ->label('Fallback message (if the AI can\u2019t answer)')->columnSpanFull()
+                    ->placeholder('Thanks for your message 🙏 Our team will get right back to you shortly.')
+                    ->helperText('Sent so a customer is never left hanging; staff are alerted to take over.'),
                 Forms\Components\TextInput::make('settings.quote_validity_days')
                     ->label('Quotation validity (days)')->numeric()->default(14),
                 Forms\Components\Textarea::make('settings.quote_terms')
