@@ -135,7 +135,22 @@ class ProcessIncomingMessage implements ShouldQueue
             BotTrace::log($this->tenantId, $trace, $from, 'skipped', 'owner is handling this chat (recent manual reply)');
             return;
         }
-        if ($botMode !== 'auto') {
+        // ---- Pluggable n8n brain ---------------------------------------------------
+        // CloudBSS stays the only system that talks to WhatsApp. For an n8n tenant we hand
+        // the message to the shared n8n workflow and stop; n8n posts its reply back to
+        // /api/bot/reply, which sends + logs it exactly like an inbuilt reply.
+        if ($botMode === 'n8n') {
+            $mutedDigits = array_map(fn ($p) => preg_replace('/[^0-9]/', '', (string) $p), (array) $tenant->setting('bot_muted', []));
+            if (in_array($from, $mutedDigits, true)) {
+                BotTrace::log($this->tenantId, $trace, $from, 'skipped', 'number is muted (no auto-reply)');
+                return;
+            }
+            $this->forwardToN8n($tenant, $convo, $from, (string) $this->incoming['text'], $trace);
+            return;
+        }
+
+        // Inbuilt grocery/cart bot runs for 'auto' (legacy on) or 'inbuilt'; anything else = off.
+        if (! in_array($botMode, ['auto', 'inbuilt'], true)) {
             BotTrace::log($this->tenantId, $trace, $from, 'skipped', 'bot is switched off');
             return;
         }
@@ -738,6 +753,80 @@ class ProcessIncomingMessage implements ShouldQueue
             ]);
         } catch (\Throwable $e) {
             // feedback logging must never break message handling
+        }
+    }
+
+    /**
+     * Hand a message to the shared n8n smart-bot. Builds the CloudBSS→n8n contract and POSTs it
+     * with the per-tenant shared secret. n8n decides what to say + whom to alert, and posts back
+     * to /api/bot/reply and /api/bot/alert. The inbound is already logged, so an n8n outage never
+     * loses the message — at worst the customer gets a soft ack and staff are flagged.
+     */
+    /** alert_routing may be stored as role=>"256x, 256y" (admin KeyValue). Normalise to role=>[digits...]. */
+    private function normalizeRouting(array $routing): array
+    {
+        $out = [];
+        foreach ($routing as $role => $val) {
+            $list = is_array($val) ? $val : preg_split('/[,\s]+/', (string) $val);
+            $nums = array_values(array_filter(array_map(fn ($p) => preg_replace('/[^0-9]/', '', (string) $p), $list)));
+            if ($nums) $out[$role] = $nums;
+        }
+        return $out;
+    }
+
+    private function forwardToN8n(Tenant $tenant, Conversation $convo, string $from, string $text, string $trace): void
+    {
+        $url    = trim((string) $tenant->setting('n8n_webhook_url', ''));
+        $secret = (string) $tenant->setting('n8n_secret', '');
+        if ($url === '') {
+            BotTrace::log($this->tenantId, $trace, $from, 'n8n_skipped', 'no n8n_webhook_url configured');
+            return;
+        }
+
+        $payload = [
+            'tenant_id'     => $tenant->id,
+            'tenant_slug'   => (string) $tenant->slug,
+            'vertical'      => \App\Support\Vertical::of($tenant),
+            'customer'      => [
+                'phone' => $from,
+                'name'  => (string) ($convo->customer_name ?? ''),
+                'jid'   => $from . '@s.whatsapp.net',
+            ],
+            'message'       => [
+                'text'      => $text,
+                'type'      => (string) ($this->incoming['type'] ?? 'conversation'),
+                'messageId' => $this->incoming['messageId'] ?? null,
+            ],
+            'persona'       => (string) $tenant->setting('ai_persona', ''),
+            'alert_routing' => $this->normalizeRouting((array) $tenant->setting('alert_routing', [])),
+            'reply_url'     => url('/api/bot/reply'),
+            'alert_url'     => url('/api/bot/alert'),
+            'catalog_url'   => url('/api/tenant/' . $tenant->id . '/catalog'),
+        ];
+
+        try {
+            $res = \Illuminate\Support\Facades\Http::timeout(8)
+                ->withHeaders(['X-CloudBSS-Secret' => $secret])
+                ->post($url, $payload);
+            if ($res->successful()) {
+                BotTrace::log($this->tenantId, $trace, $from, 'n8n_dispatched', 'handed to smart bot');
+                return;
+            }
+            BotTrace::log($this->tenantId, $trace, $from, 'n8n_error', 'n8n returned ' . $res->status());
+        } catch (\Throwable $e) {
+            BotTrace::log($this->tenantId, $trace, $from, 'n8n_unreachable', $e->getMessage());
+        }
+
+        // n8n failed — the inbound is already logged. Optional soft ack so the customer isn't ignored.
+        if ($tenant->setting('n8n_soft_ack', false)) {
+            try {
+                $gw  = app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($tenant);
+                $ack = (string) $tenant->setting('n8n_soft_ack_text', 'Thanks for your message — we\'ll get right back to you.');
+                $gw->sendText($tenant->whatsapp_instance, $from, $ack);
+                MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'system', $ack);
+            } catch (\Throwable $e) {
+                // never break on the fallback
+            }
         }
     }
 }

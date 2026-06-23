@@ -64,6 +64,32 @@ class TenantResource extends Resource
                 Forms\Components\TextInput::make('whatsapp_number')->label('WhatsApp number'),
             ])->columns(3),
 
+            Forms\Components\Section::make('Smart bot (n8n)')->schema([
+                Forms\Components\Select::make('settings.bot_mode')
+                    ->label('Bot brain')
+                    ->options(['auto'=>'Inbuilt cart bot (default)', 'n8n'=>'n8n smart bot', 'off'=>'Off — staff only'])
+                    ->default('auto')
+                    ->helperText('Which brain answers WhatsApp for this tenant. CloudBSS always stays the only sender.'),
+                Forms\Components\TextInput::make('settings.n8n_webhook_url')
+                    ->label('n8n webhook URL')
+                    ->helperText('The shared n8n Webhook node URL. Same for every n8n tenant.'),
+                Forms\Components\TextInput::make('settings.n8n_secret')
+                    ->label('Shared secret')
+                    ->helperText('Sent as X-CloudBSS-Secret both directions. Rotate here.'),
+                Forms\Components\Textarea::make('settings.ai_persona')
+                    ->label('AI persona / policies')
+                    ->rows(4)->columnSpanFull()
+                    ->helperText('Who the bot is, tone, what it may and may not promise. Passed to n8n per message.'),
+                Forms\Components\KeyValue::make('settings.alert_routing')
+                    ->label('Alert routing')
+                    ->keyLabel('Role')->valueLabel('Numbers (comma-separated)')
+                    ->columnSpanFull()
+                    ->helperText('e.g. sales → 256772…, accounts → 256700…  Leads/payments/complaints are routed here before the AI runs.'),
+                Forms\Components\Toggle::make('settings.n8n_soft_ack')
+                    ->label('Soft-ack if n8n is unreachable')
+                    ->helperText('Send a short "we\u2019ll get back to you" and flag staff if the smart bot times out. The inbound is never lost.'),
+            ])->columns(2),
+
             Forms\Components\Section::make('Settings')->schema([
                 Forms\Components\TextInput::make('settings.owner_alert_phone')
                     ->label('Owner alert WhatsApp')
