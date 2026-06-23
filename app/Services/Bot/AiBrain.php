@@ -91,9 +91,10 @@ class AiBrain
         if ($reply === '') return $this->fallback($tenant, $from, $gateway, 'empty_reply');
 
         // 3b. order total / PDF quotation — the model never does the arithmetic
+        $quoteSent = false;
         if ($this->wantsQuotation($text)) {
-            $sent = $this->sendQuotation($tenant, $convo, $from, $text, $gateway);
-            if (! $sent) {
+            $quoteSent = $this->sendQuotation($tenant, $convo, $from, $text, $gateway);
+            if (! $quoteSent) {
                 $calc = $this->orderTotalBlock($tenant, $from, $text);
                 if ($calc !== '') $reply = trim($reply) . "\n\n" . $calc;
             }
@@ -105,6 +106,21 @@ class AiBrain
         // 4. send + log exactly like any other bot reply
         $gateway->sendText($tenant->whatsapp_instance, $from, $reply);
         MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $reply, null, null, ['via' => 'ai']);
+
+        // 4b. product photos — same behaviour as the inbuilt bot. Self-gating: the responder only
+        //     returns images for a confident product match, so greetings/general Qs send nothing.
+        if (! $quoteSent && $imageB64 === '' && $tenant->setting('send_product_images', true)) {
+            try {
+                $imgs = app(\App\Services\Bot\ProductImageResponder::class)->imagesFor($tenant, $convo, $text);
+                foreach (array_slice($imgs, 0, 3) as $im) {
+                    if (empty($im['media'])) continue;
+                    $gateway->sendImage($tenant->whatsapp_instance, $from, $im['media'], (string) ($im['caption'] ?? ''));
+                    MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', '[photo] ' . (string) ($im['caption'] ?? ''), null, null, ['via' => 'ai', 'kind' => 'product_image']);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('AiBrain product image failed: ' . $e->getMessage());
+            }
+        }
         return true;
     }
 
