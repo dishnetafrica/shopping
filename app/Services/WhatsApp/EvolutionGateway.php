@@ -51,6 +51,19 @@ class EvolutionGateway implements WhatsAppGateway
         $this->http()->post("/chat/markMessageAsRead/{$instance}", ['readMessages' => [['id' => $messageId]]]);
     }
 
+    /** Send a document (e.g. a PDF quotation). $media is a URL or raw base64. Not in the interface;
+     *  callers guard with method_exists() (same pattern as getMediaBase64). */
+    public function sendDocument(string $instance, string $to, string $media, string $fileName, string $caption = ''): array
+    {
+        return $this->http()->post("/message/sendMedia/{$instance}", [
+            'number'    => preg_replace('/[^0-9]/', '', $to),
+            'mediatype' => 'document',
+            'media'     => $media,
+            'fileName'  => $fileName,
+            'caption'   => $caption,
+        ])->json() ?? [];
+    }
+
     public function fetchContacts(string $instance): array
     {
         $rows = [];

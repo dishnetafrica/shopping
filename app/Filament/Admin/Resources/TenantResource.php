@@ -89,6 +89,11 @@ class TenantResource extends Resource
                     ->keyLabel('Role')->valueLabel('Numbers (comma-separated)')
                     ->columnSpanFull()
                     ->helperText('e.g. sales → 256772…, accounts → 256700…  Leads/payments/complaints are routed here before the AI runs.'),
+                Forms\Components\TextInput::make('settings.quote_validity_days')
+                    ->label('Quotation validity (days)')->numeric()->default(14),
+                Forms\Components\Textarea::make('settings.quote_terms')
+                    ->label('Quotation terms (printed on the PDF)')->rows(2)->columnSpanFull()
+                    ->helperText('Delivery / payment / validity wording shown at the bottom of each quotation.'),
                 Forms\Components\Toggle::make('settings.n8n_soft_ack')
                     ->label('Soft-ack if n8n is unreachable')
                     ->helperText('Send a short "we\u2019ll get back to you" and flag staff if the smart bot times out. The inbound is never lost.'),
