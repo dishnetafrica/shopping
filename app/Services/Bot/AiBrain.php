@@ -110,9 +110,13 @@ class AiBrain
         // 4b. menu files (restaurant) — send the food/drinks menu image or PDF on request.
         $menuSent = $this->maybeSendMenu($tenant, $from, $text, $gateway);
 
+        // 4b-ii. catalogue files (manufacturer/any) — send the product catalogue / price-list PDF
+        //        (or image) when the customer asks for it ("catalogue", "price list", "photos"…).
+        $catalogSent = $this->maybeSendCatalog($tenant, $from, $text, $gateway);
+
         // 4c. product photos — same behaviour as the inbuilt bot. Self-gating: the responder only
         //     returns images for a confident product match, so greetings/general Qs send nothing.
-        if (! $quoteSent && ! $menuSent && $imageB64 === '' && $tenant->setting('send_product_images', true)) {
+        if (! $quoteSent && ! $menuSent && ! $catalogSent && $imageB64 === '' && $tenant->setting('send_product_images', true)) {
             try {
                 $imgs = app(\App\Services\Bot\ProductImageResponder::class)->imagesFor($tenant, $convo, $text);
                 foreach (array_slice($imgs, 0, 3) as $im) {
@@ -242,6 +246,61 @@ class AiBrain
         return true;
     }
 
+    /**
+     * Send the tenant's product catalogue / price-list file(s) (PDF or image) when a customer asks
+     * for the catalogue, price list, product list, brochure or photos. Returns true if anything was
+     * sent. Reads settings.catalog_files = [{label, url}, ...]; url must be a public link the
+     * WhatsApp gateway can fetch. PDFs go as documents, everything else as images. Mirrors the menu
+     * sender so behaviour (logging, PDF vs image, never-throw) is identical.
+     */
+    private function maybeSendCatalog(Tenant $tenant, string $from, string $text, WhatsAppGateway $gateway): bool
+    {
+        $files = collect((array) $tenant->setting('catalog_files', []))
+            ->map(fn ($m) => ['label' => (string) ($m['label'] ?? ''), 'url' => (string) ($m['url'] ?? '')])
+            ->filter(fn ($m) => $m['url'] !== '')->values()->all();
+        if (! $files) return false; // nothing to send → never activates for tenants without a catalogue
+
+        $t = mb_strtolower($text);
+        $triggers = [
+            // English
+            'catalog', 'catalogue', 'price list', 'pricelist', 'rate list', 'ratelist',
+            'price sheet', 'product list', 'products list', 'all products', 'full list',
+            'product details', 'products details', 'details of products', 'list of products',
+            'brochure', 'send pdf', 'send the pdf', 'pdf',
+            'photo', 'photos', 'picture', 'pictures', 'image', 'images',
+            // Swahili
+            'orodha ya bidhaa', 'orodha ya bei', 'bei', 'picha',
+            // Luganda
+            'olukalala', 'ebintu', 'ekifaananyi',
+            // French
+            'catalogue des produits', 'liste de prix', 'liste des produits', 'photos des produits',
+            // Arabic
+            'الكتالوج', 'قائمة الأسعار', 'قائمة المنتجات', 'صور',
+        ];
+        $asks = false;
+        foreach ($triggers as $w) if (str_contains($t, $w)) { $asks = true; break; }
+        if (! $asks) return false;
+
+        foreach ($files as $f) {
+            $isPdf = (bool) preg_match('/\.pdf(\?|$)/i', $f['url']);
+            try {
+                if ($isPdf && method_exists($gateway, 'sendDocument')) {
+                    $gateway->sendDocument(
+                        $tenant->whatsapp_instance, $from, $f['url'],
+                        ($f['label'] ?: 'Catalogue') . '.pdf',
+                        $f['label'] ?: 'Our product catalogue 📄'
+                    );
+                } else {
+                    $gateway->sendImage($tenant->whatsapp_instance, $from, $f['url'], $f['label'] ?: 'Our catalogue');
+                }
+                MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', '[catalogue] ' . ($f['label'] ?: ''), null, null, ['via' => 'ai', 'kind' => 'catalog_file']);
+            } catch (\Throwable $e) {
+                Log::warning('AiBrain catalogue send failed: ' . $e->getMessage());
+            }
+        }
+        return true;
+    }
+
     /** Send + log one bot message. */
     private function say(Tenant $tenant, string $from, WhatsAppGateway $gateway, string $text, array $meta = ['via' => 'ai']): void
     {
@@ -364,6 +423,8 @@ class AiBrain
         if ($combos !== '') $p .= "COMBO OFFERS (proactively suggest a relevant one; prices are fixed, quote them as-is):\n{$combos}\n\n";
         if (count((array) $tenant->setting('menu_files', [])) > 0)
             $p .= "MENU: if the customer asks for the menu (food / drinks), acknowledge warmly — the system sends the menu file(s) automatically.\n\n";
+        if (count((array) $tenant->setting('catalog_files', [])) > 0)
+            $p .= "CATALOGUE: if the customer asks for the catalogue, price list, product list, brochure, or product photos/pictures, acknowledge warmly (e.g. \"Sure, sending our catalogue now 📄\") — the system sends the catalogue file automatically. NEVER say you can't send files, photos or PDFs; you can.\n\n";
         $p .= "PRODUCTS (prices = source of truth):\n" . ($lines !== '' ? $lines : '(catalogue unavailable right now — ask the customer to hold; staff have been alerted)') . "\n";
         return $p;
     }
