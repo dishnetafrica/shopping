@@ -127,7 +127,8 @@ class AiBrain
     private function wantsTotal(string $text): bool
     {
         $t = mb_strtolower($text);
-        foreach (['total', 'altogether', 'grand total', 'how much for', 'how much is', 'sum up', 'add up', 'final price'] as $w)
+        foreach (['total', 'altogether', 'grand total', 'how much for', 'how much is', 'sum up', 'add up', 'final price',
+                  'jumla', 'jumla ni', 'byonna', 'omuwendo', 'au total', 'combien en tout', 'المجموع', 'الإجمالي'] as $w)
             if (str_contains($t, $w)) return true;
         return false;
     }
@@ -135,7 +136,8 @@ class AiBrain
     private function wantsQuotation(string $text): bool
     {
         $t = mb_strtolower($text);
-        foreach (['quotation', 'quote', 'proforma', 'pro forma', 'pro-forma', 'formal offer', 'send pdf'] as $w)
+        foreach (['quotation', 'quote', 'proforma', 'pro forma', 'pro-forma', 'formal offer', 'send pdf',
+                  'nukuu', 'devis', 'cotation', 'عرض سعر', 'عرض أسعار'] as $w)
             if (str_contains($t, $w)) return true;
         return false;
     }
@@ -241,15 +243,24 @@ class AiBrain
         $t   = mb_strtolower($text);
         $has = fn (array $w) => (bool) array_filter($w, fn ($x) => str_contains($t, $x));
         $out = [];
-        if ($has(['price', 'how much', 'cost', 'rate', 'quote', 'quotation', 'per carton', 'wholesale', 'bulk', 'order', 'buy', 'supply', 'need', 'interested', 'send me', 'do you have', 'available', 'stock']))
+        if ($has(['price', 'how much', 'cost', 'rate', 'quote', 'quotation', 'per carton', 'wholesale', 'bulk', 'order', 'buy', 'supply', 'need', 'interested', 'send me', 'do you have', 'available', 'stock',
+                  'bei', 'gharama', 'nunua', 'agiza', 'nataka', 'nahitaji', 'oda',                 // Swahili
+                  'bbeeyi', 'meka', 'njagala', 'nneetaaga', 'guza',                                 // Luganda
+                  'prix', 'combien', 'coût', 'acheter', 'commander', 'je veux', 'besoin',           // French
+                  'سعر', 'بكم', 'كم', 'شراء', 'طلب', 'أريد', 'أحتاج']))                              // Arabic
             $out[] = ['key' => 'lead', 'role' => 'sales', 'label' => '🔥 Buying signal'];
-        if ($has(['distributor', 'reseller', 'dealer', 'agent', 'stockist', 'become a']))
+        if ($has(['distributor', 'reseller', 'dealer', 'agent', 'stockist', 'become a',
+                  'wakala', 'muuzaji', 'distributeur', 'revendeur', 'موزع', 'وكيل']))
             $out[] = ['key' => 'distributor', 'role' => 'sales', 'label' => '🤝 Distributor enquiry'];
-        if ($has(['paid', 'payment', 'sent money', 'mobile money', 'momo', 'deposit', 'transferred', 'receipt']))
+        if ($has(['paid', 'payment', 'sent money', 'mobile money', 'momo', 'deposit', 'transferred', 'receipt',
+                  'lipa', 'nimelipa', 'malipo', 'nsasudde', 'payé', 'paiement', 'دفعت', 'دفع', 'تحويل']))
             $out[] = ['key' => 'payment', 'role' => 'accounts', 'label' => '💰 Payment mention'];
-        if ($has(['complaint', 'problem', 'not working', 'damaged', 'wrong', 'refund', 'poor quality', 'defective', 'issue']))
+        if ($has(['complaint', 'problem', 'not working', 'damaged', 'wrong', 'refund', 'poor quality', 'defective', 'issue',
+                  'shida', 'tatizo', 'malalamiko', 'mbovu', 'rejesha', 'kizibu', 'obuzibu',
+                  'problème', 'plainte', 'remboursement', 'مشكلة', 'شكوى', 'تالف']))
             $out[] = ['key' => 'complaint', 'role' => 'quality', 'label' => '⚠️ Complaint'];
-        if ($has(['confirm', 'confirmed', 'go ahead', 'place the order', 'deliver to', 'delivery to']))
+        if ($has(['confirm', 'confirmed', 'go ahead', 'place the order', 'deliver to', 'delivery to',
+                  'thibitisha', 'leta', 'peleka', 'kakasa', 'confirmer', 'livrer', 'أكد', 'توصيل']))
             $out[] = ['key' => 'order', 'role' => 'dispatch', 'label' => '📦 Order / delivery intent'];
         return $out;
     }
@@ -293,6 +304,7 @@ class AiBrain
 
         $p  = ($persona !== '' ? $persona : 'You are a helpful WhatsApp sales & support assistant.') . "\n\n";
         $p .= "CORE RULES:\n";
+        $p .= "- Detect the customer's language and ALWAYS reply in that same language (English, Swahili, Luganda, French, Arabic, etc.). Mirror how they write.\n";
         $p .= "- Be concise and friendly — this is WhatsApp.\n";
         $p .= "- Use COMPANY KNOWLEDGE and FAQ for facts. You may use your general real-world knowledge to explain products (e.g. what GSM or ply means), but never contradict COMPANY KNOWLEDGE.\n";
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
