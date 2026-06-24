@@ -243,7 +243,7 @@ class AiBrain
         $t   = mb_strtolower($text);
         $has = fn (array $w) => (bool) array_filter($w, fn ($x) => str_contains($t, $x));
         $out = [];
-        if ($has(['price', 'how much', 'cost', 'rate', 'quote', 'quotation', 'per carton', 'wholesale', 'bulk', 'order', 'buy', 'supply', 'need', 'interested', 'send me', 'do you have', 'available', 'stock',
+        if ($has(['price', 'how much', 'cost', 'rate', 'quote', 'quotation', 'per carton', 'wholesale', 'bulk', 'order', 'buy', 'supply', 'need', 'interested', 'send me', 'do you have', 'available', 'stock', 'jumbo', 'parent reel', 'parent roll', 'on request',
                   'bei', 'gharama', 'nunua', 'agiza', 'nataka', 'nahitaji', 'oda',                 // Swahili
                   'bbeeyi', 'meka', 'njagala', 'nneetaaga', 'guza',                                 // Luganda
                   'prix', 'combien', 'coût', 'acheter', 'commander', 'je veux', 'besoin',           // French
@@ -308,6 +308,7 @@ class AiBrain
         $p .= "- Be concise and friendly — this is WhatsApp.\n";
         $p .= "- Use COMPANY KNOWLEDGE and FAQ for facts. You may use your general real-world knowledge to explain products (e.g. what GSM or ply means), but never contradict COMPANY KNOWLEDGE.\n";
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
+        $p .= "- Some items show \"price on request\" (e.g. jumbo parent reels) — these have no fixed price. Don't guess a figure: capture what they need (type, grade, GSM, quantity, origin) and tell them the team will send a quote.\n";
         $p .= "- Use the recent conversation for context; don't re-ask what the customer already told you.\n";
         $p .= "- Move the customer toward an order: capture quantity and delivery area. For big buyers push cartons; for small buyers offer retail packs.\n";
         $p .= "- Do NOT calculate multi-item order totals yourself. If the customer asks for a total, acknowledge it and let them know you're adding it up — the exact total is computed and appended by the system from the price list.\n";
@@ -333,7 +334,8 @@ class AiBrain
                     $unit = $p->unit_label ? ' per ' . $p->unit_label : '';
                     $pack = $p->pack_size ? ' (' . (int) $p->pack_size . '/unit)' : '';
                     $moq  = $p->moq ? ', MOQ ' . (int) $p->moq : '';
-                    return "• {$p->name}{$pack} — {$p->price}{$unit}{$moq}";
+                    $price = ((float) $p->price > 0) ? (string) $p->price : 'price on request';
+                    return "• {$p->name}{$pack} — {$price}{$unit}{$moq}";
                 })->all();
         });
         return implode("\n", $rows);

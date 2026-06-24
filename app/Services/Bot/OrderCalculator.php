@@ -35,6 +35,11 @@ class OrderCalculator
                 continue;
             }
             $price = (float) $p['price'];
+            if ($price <= 0) {
+                // price-on-request item (e.g. jumbo reels): never total a zero — flag for the team.
+                $lines[] = ['name' => ($p['name'] ?? $query), 'qty' => $qty, 'price' => null, 'sum' => null, 'matched' => false];
+                continue;
+            }
             $sum   = $price * $qty;
             $total += $sum;
             $lines[] = [

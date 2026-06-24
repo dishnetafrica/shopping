@@ -240,7 +240,7 @@ function qp(k){var m=location.search.match(new RegExp('[?&]'+k+'=([^&]*)'));retu
 function mapProduct(row){
   var pn=String(row['Product Name']||''), v=String(row.Variant||'').trim();
   return {name:v?pn+' '+v:pn, brand:String(row.Brand||''), category:String(row.Category||'Other'),
-    keywords:String(row.Keywords||''), price:num(row.Price_UGX),
+    keywords:String(row.Keywords||''), price:num(row.Price_UGX), poa:!(num(row.Price_UGX)>0),
     stock:(row.Stock===null||row.Stock===undefined||row.Stock==='')?null:num(row.Stock),
     modifiers:Array.isArray(row.Modifiers)?row.Modifiers:[],
     moq:(row.MOQ===null||row.MOQ===undefined||row.MOQ==='')?1:Math.max(1,parseInt(row.MOQ,10)||1),
@@ -253,7 +253,7 @@ async function load(){
   try{
     var r=await fetch(CATALOGUE_URL,{cache:'no-store'});
     var d=await r.json();
-    PRODUCTS=(Array.isArray(d.products)?d.products:[]).map(mapProduct).filter(function(p){return p.name && p.price>0;});
+    PRODUCTS=(Array.isArray(d.products)?d.products:[]).map(mapProduct).filter(function(p){return p.name && (p.price>0 || p.poa);});
     if(d.settings){var ph=String(d.settings.waNumber||d.settings.storePhone||'').replace(/[^0-9]/g,'');if(ph)WA_NUMBER=ph;
       if(d.settings.currency)CUR=String(d.settings.currency);
       if(d.settings.category_images)CAT_IMG=d.settings.category_images||{}; if(d.settings.thali)THALI=d.settings.thali;
@@ -418,8 +418,19 @@ function groupProducts(list){
     if(!g[key].image&&p.image)g[key].image=p.image;});
   return order.map(function(k){var grp=g[k];grp.variants.sort(function(a,b){return (a.grams||1e12)-(b.grams||1e12);});return grp;});
 }
+function poaCard(name,category,image,packHtml){
+  var msg=encodeURIComponent('Hi, I\u2019d like a price for: '+name+'.');
+  var wa=(SHOP.waNumber?('https://wa.me/'+SHOP.waNumber+'?text='+msg):'#');
+  var ic=catIcon(category);
+  var img='<div class="img">'+ic+(image?'<img src="'+esc(image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+'</div>';
+  return '<div class="pc">'+img+'<div class="bd"><div class="nm">'+esc(name)+'</div>'+(packHtml||'')
+    +'<div class="pr" style="color:var(--green);font-size:14px">Price on request</div>'
+    +'<a class="add" href="'+wa+'" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">Request a quote</a>'
+    +'</div></div>';
+}
 function variantCard(grp){
   if(grp.variants.length===1)return prodCard(grp.variants[0].product);
+  if(grp.variants[0].product.poa)return poaCard(grp.base,grp.category,grp.image,'');
   var key=grp.category+'|'+grp.base.toLowerCase();
   var inv=grp.variants.filter(function(v){return !oosOf(v.product);});
   var allOos=inv.length===0;
@@ -459,6 +470,7 @@ function gridG(list){var arr=groupProducts(list);arr.forEach(function(g){GROUPS[
 
 function oosOf(p){ return !!(p && p.stock!=null && p.stock<=0); }
 function prodCard(p){
+  if(p.poa)return poaCard(p.name,p.category,p.image,packLine(p));
   var key=p.name, inCart=CART[key];
   var ic=catIcon(p.category);
   var img='<div class="img">'+ic+(p.image?'<img src="'+esc(p.image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+'</div>';
