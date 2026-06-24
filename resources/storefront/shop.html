@@ -696,8 +696,9 @@ function deptModel(){
 }
 function useDepartments(){ if(VERTICAL!=='grocery')return false; return deptModel().some(function(d){return d.name!=='More';}); }
 function deptOf(cat){var m=deptModel();for(var i=0;i<m.length;i++)if(m[i].subs.indexOf(cat)>=0)return m[i];return null;}
+function catProductImg(name){for(var k=0;k<CATS.length;k++){if(CATS[k].name===name)return CATS[k].img||'';}return '';}
 function catTile(name,i){
-  var ci=CAT_IMG[name];
+  var ci=CAT_IMG[name]||catProductImg(name);
   var inner;
   if(ci){inner='<div class="ci" style="background:#fff"><img src="'+esc(ci)+'" onerror="this.style.display=\'none\'"></div>';}
   else if(THEME.premiumTiles){inner='<div class="ci cifall"><span class="mono">'+esc(String(name||'?').trim().charAt(0).toUpperCase())+'</span></div>';}
