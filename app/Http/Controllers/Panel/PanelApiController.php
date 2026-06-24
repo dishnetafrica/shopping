@@ -207,6 +207,7 @@ class PanelApiController extends Controller
             'combos'          => array_values($s['combos'] ?? []),
             'categoryGroups'  => (object) ($s['category_groups'] ?? []),
             'menuFiles'       => array_values($s['menu_files'] ?? []),
+            'catalogFiles'    => array_values($s['catalog_files'] ?? []),
             'base'          => (float) ($s['base'] ?? 2000),
             'perKm'         => (float) ($s['perKm'] ?? 700),
             'min'           => (float) ($s['min'] ?? 2000),
@@ -1007,6 +1008,39 @@ class PanelApiController extends Controller
         if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) $ext = 'jpg';
         $tenant = $r->user()->tenant_id ?: 0;
         $file = 'products/'.$tenant.'/'.uniqid('p_', true).'.'.$ext;
+        Storage::disk('public')->put($file, $bin);
+
+        return response()->json(['ok' => true, 'url' => Storage::url($file)]);
+    }
+
+    /**
+     * Upload a document (catalogue / price-list) the bot can send — PDF or image. Mirrors
+     * uploadImage but allows .pdf and stores under catalog/. Returns a public URL the WhatsApp
+     * gateway can fetch. 15 MB cap (WhatsApp document limit is well above this; keep it sane).
+     */
+    public function uploadDoc(Request $r)
+    {
+        $data = (string) $r->input('data', '');
+        $name = (string) $r->input('name', 'catalogue');
+        if ($data === '') {
+            return response()->json(['ok' => false, 'error' => 'no_data'], 422);
+        }
+        if (str_contains($data, ',')) {
+            $data = substr($data, strpos($data, ',') + 1);
+        }
+        $bin = base64_decode($data, true);
+        if ($bin === false) {
+            return response()->json(['ok' => false, 'error' => 'bad_base64'], 422);
+        }
+        if (strlen($bin) > 15 * 1024 * 1024) {
+            return response()->json(['ok' => false, 'error' => 'too_large'], 422);
+        }
+        $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION)) ?: 'pdf';
+        if (! in_array($ext, ['pdf', 'jpg', 'jpeg', 'png', 'webp'], true)) {
+            return response()->json(['ok' => false, 'error' => 'bad_type'], 422);
+        }
+        $tenant = $r->user()->tenant_id ?: 0;
+        $file = 'catalog/'.$tenant.'/'.uniqid('cat_', true).'.'.$ext;
         Storage::disk('public')->put($file, $bin);
 
         return response()->json(['ok' => true, 'url' => Storage::url($file)]);
@@ -2569,6 +2603,14 @@ class PanelApiController extends Controller
             $mf = $r->input('menu_files');
             if (is_string($mf)) $mf = json_decode($mf, true);
             $s['menu_files'] = collect(is_array($mf) ? $mf : [])->map(fn ($m) => [
+                'label' => trim((string) ($m['label'] ?? '')),
+                'url'   => trim((string) ($m['url'] ?? '')),
+            ])->filter(fn ($m) => $m['label'] !== '' && $m['url'] !== '')->values()->all();
+        }
+        if ($r->has('catalog_files')) {
+            $cf = $r->input('catalog_files');
+            if (is_string($cf)) $cf = json_decode($cf, true);
+            $s['catalog_files'] = collect(is_array($cf) ? $cf : [])->map(fn ($m) => [
                 'label' => trim((string) ($m['label'] ?? '')),
                 'url'   => trim((string) ($m['url'] ?? '')),
             ])->filter(fn ($m) => $m['label'] !== '' && $m['url'] !== '')->values()->all();

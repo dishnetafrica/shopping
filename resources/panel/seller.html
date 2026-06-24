@@ -874,6 +874,8 @@
             <div id="menuEditor"></div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px"><b style="font-size:13px">Menu files <span style="font-weight:400;color:var(--muted)">(image/PDF the bot sends)</span></b><button class="btn" id="addMenuFileBtn">+ Add menu file</button></div>
             <div id="menuFileEditor"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px"><b style="font-size:13px">Product catalogue <span style="font-weight:400;color:var(--muted)">(PDF/image the bot sends on "catalogue", "price list", "photos")</span></b><button class="btn" id="addCatalogFileBtn">+ Add catalogue file</button></div>
+            <div id="catalogFileEditor"></div>
             <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
               <button class="btn" id="brandSave">Save website &amp; branding</button>
               <span class="note" id="brandStatus" style="margin:0"></span>
@@ -1096,6 +1098,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   updStatus:'/papi/update-status',saveOrder:'/papi/save-order',
   updProduct:'/papi/update-product',addProduct:'/papi/add-product',delProduct:'/papi/delete-product',
   uploadImage:'/papi/upload-image',
+  uploadDoc:'/papi/upload-doc',
   catImages:'/papi/category-images',catImageSave:'/papi/category-image-save',
   catCreate:'/papi/category-create',catRename:'/papi/category-rename',catDelete:'/papi/category-delete',catReorder:'/papi/category-reorder',
   prodOrder:'/papi/product-order',
@@ -3225,7 +3228,7 @@ function applySettings(s){
   if(s.metaDescription!=null)SETTINGS.metaDescription=s.metaDescription;
   if(Array.isArray(s.faq))SETTINGS.faq=s.faq;
   if(Array.isArray(s.brands))SETTINGS.brands=s.brands;
-  if(Array.isArray(s.combos))SETTINGS.combos=s.combos;if(s.categoryGroups)SETTINGS.categoryGroups=s.categoryGroups;if(Array.isArray(s.menuFiles))SETTINGS.menuFiles=s.menuFiles;
+  if(Array.isArray(s.combos))SETTINGS.combos=s.combos;if(s.categoryGroups)SETTINGS.categoryGroups=s.categoryGroups;if(Array.isArray(s.menuFiles))SETTINGS.menuFiles=s.menuFiles;if(Array.isArray(s.catalogFiles))SETTINGS.catalogFiles=s.catalogFiles;
   if(s.lat!=null&&s.lat!=='')STORE.lat=Number(s.lat)||STORE.lat;
   if(s.lng!=null&&s.lng!=='')STORE.lng=Number(s.lng)||STORE.lng;
   if(s.base!=null&&s.base!=='')DELIV.base=Number(s.base)||0;
@@ -3412,6 +3415,8 @@ function brandingInit(){
   renderComboEditor(SETTINGS.combos||[]);
   renderMenuEditor(SETTINGS.categoryGroups||{});
   renderMenuFileEditor(SETTINGS.menuFiles||[]);
+  renderCatalogFileEditor(SETTINGS.catalogFiles||[]);
+  if($('addCatalogFileBtn'))$('addCatalogFileBtn').onclick=function(){addCatalogFileRow({});};
   if($('addFaqBtn'))$('addFaqBtn').onclick=function(){addFaqRow('','');};
   if($('addBrandBtn'))$('addBrandBtn').onclick=function(){addBrandRow({});};
   if($('addComboBtn'))$('addComboBtn').onclick=function(){addComboRow({});};
@@ -3493,6 +3498,19 @@ function addMenuFileRow(m){m=m||{};var box=$('menuFileEditor');if(!box)return;va
 function collectMenuFiles(){var out=[];Array.prototype.forEach.call($('menuFileEditor').querySelectorAll('.brow'),function(r){
   var label=(r.querySelector('.mf-label').value||'').trim();var url=(r.querySelector('.mf-url').value||'').trim();
   if(label&&url)out.push({label:label,url:url});});return out;}
+/* ---- Catalogue files: [{label,url}] — PDF or image the bot sends on "catalogue / price list / photos" ---- */
+function renderCatalogFileEditor(list){var box=$('catalogFileEditor');if(!box)return;box.innerHTML='';(list&&list.length?list:[]).forEach(function(m){addCatalogFileRow(m);});}
+function addCatalogFileRow(m){m=m||{};var box=$('catalogFileEditor');if(!box)return;var row=rowBox();
+  var lb=document.createElement('input');lb.className='cf-label';lb.placeholder='Label (e.g. Product Catalogue)';lb.value=m.label||'';lb.style.marginBottom='6px';
+  var url=document.createElement('input');url.className='cf-url';url.placeholder='PDF/Image URL (or upload \u2192)';url.value=m.url||'';url.style.cssText='margin-bottom:6px;width:calc(100% - 96px)';
+  var up=document.createElement('button');up.className='btn';up.textContent='Upload';up.type='button';up.style.cssText='margin-left:6px;vertical-align:top';
+  up.onclick=function(){var f=document.createElement('input');f.type='file';f.accept='application/pdf,image/*';f.onchange=function(){var file=f.files[0];if(!file)return;if(file.size>15*1024*1024){toast('File too big (max 15 MB)');return;}toast('Uploading\u2026');var rd=new FileReader();rd.onload=async function(){try{var b64=rd.result;var rr=await fetch(EP.uploadDoc+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:file.name,data:b64})});var d=await rr.json();if(d&&d.ok&&d.url){url.value=d.url;if(!lb.value)lb.value=(file.name||'Catalogue').replace(/\.[^.]+$/,'');toast('Catalogue uploaded \u2014 press Save website & branding');}else toast('Upload failed \u2014 paste a URL instead');}catch(e){toast('Upload failed \u2014 paste a URL instead');}};rd.readAsDataURL(file);};f.click();};
+  var foot=document.createElement('div');foot.style.cssText='display:flex;justify-content:flex-end;margin-top:2px';foot.appendChild(delLink(function(){box.removeChild(row);}));
+  var line=document.createElement('div');line.style.cssText='display:flex;align-items:flex-start';line.appendChild(url);line.appendChild(up);
+  row.appendChild(lb);row.appendChild(line);row.appendChild(foot);box.appendChild(row);}
+function collectCatalogFiles(){var out=[];Array.prototype.forEach.call($('catalogFileEditor').querySelectorAll('.brow'),function(r){
+  var label=(r.querySelector('.cf-label').value||'').trim();var url=(r.querySelector('.cf-url').value||'').trim();
+  if(label&&url)out.push({label:label,url:url});});return out;}
 async function saveBranding(){
   var accent=($('setAccentHex').value||'').trim()||($('setAccent')?$('setAccent').value:'');
   var payload={
@@ -3503,7 +3521,7 @@ async function saveBranding(){
     hero_text:($('setHeroText').value||'').trim(), website:($('setWebsite').value||'').trim(),
     meta_description:($('setMeta').value||'').trim(),
     faq:collectFaq(), brands:collectBrands(), combos:collectCombos(),
-    category_groups:collectMenus(), menu_files:collectMenuFiles()
+    category_groups:collectMenus(), menu_files:collectMenuFiles(), catalog_files:collectCatalogFiles()
   };
   $('brandSave').disabled=true;if($('brandStatus'))$('brandStatus').textContent='Saving\u2026';
   try{var r=await fetch(EP.brandingSave+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
