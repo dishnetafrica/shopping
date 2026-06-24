@@ -141,7 +141,8 @@ class AiBrain
     {
         $t = mb_strtolower($text);
         foreach (['total', 'altogether', 'grand total', 'how much for', 'how much is', 'sum up', 'add up', 'final price',
-                  'jumla', 'jumla ni', 'byonna', 'omuwendo', 'au total', 'combien en tout', 'المجموع', 'الإجمالي'] as $w)
+                  'jumla', 'jumla ni', 'byonna', 'omuwendo', 'au total', 'combien en tout', 'المجموع', 'الإجمالي',
+                  'kul kitna', 'kul keto', 'ketla thaya', 'kitna hua', 'total ketlo', 'badhu ketlu', 'kul total'] as $w)
             if (str_contains($t, $w)) return true;
         return false;
     }
@@ -150,7 +151,8 @@ class AiBrain
     {
         $t = mb_strtolower($text);
         foreach (['quotation', 'quote', 'proforma', 'pro forma', 'pro-forma', 'formal offer', 'send pdf',
-                  'nukuu', 'devis', 'cotation', 'عرض سعر', 'عرض أسعار'] as $w)
+                  'nukuu', 'devis', 'cotation', 'عرض سعر', 'عرض أسعار',
+                  'bhaav patrak', 'rate patrak', 'bhav lakhi aapo', 'quotation moklo', 'quote moklo'] as $w)
             if (str_contains($t, $w)) return true;
         return false;
     }
@@ -282,6 +284,9 @@ class AiBrain
             'catalogue des produits', 'liste de prix', 'liste des produits', 'photos des produits',
             // Arabic
             'الكتالوج', 'قائمة الأسعار', 'قائمة المنتجات', 'صور',
+            // Gujlish / Hinglish (romanised Gujarati / Hindi)
+            'bhaav patrak', 'rate patrak', 'list aapo', 'list moklo', 'list bhejo',
+            'tasveer', 'tasvir', 'photo joiye', 'photo moklo', 'phota moklo', 'bhaav moklo', 'catalogue moklo',
         ];
         $asks = false;
         foreach ($triggers as $w) if (str_contains($t, $w)) { $asks = true; break; }
@@ -437,20 +442,27 @@ class AiBrain
                   'bei', 'gharama', 'nunua', 'agiza', 'nataka', 'nahitaji', 'oda',                 // Swahili
                   'bbeeyi', 'meka', 'njagala', 'nneetaaga', 'guza',                                 // Luganda
                   'prix', 'combien', 'coût', 'acheter', 'commander', 'je veux', 'besoin',           // French
-                  'سعر', 'بكم', 'كم', 'شراء', 'طلب', 'أريد', 'أحتاج']))                              // Arabic
+                  'سعر', 'بكم', 'كم', 'شراء', 'طلب', 'أريد', 'أحتاج',                              // Arabic
+                  'bhaav', 'bhav', 'kimat', 'kimmat', 'daam', 'ketla', 'kitna', 'kitne', 'chahiye', // Gujlish/Hinglish
+                  'chaiye', 'joiye', 'joie', 'kharidvu', 'kharidna', 'kharido', 'mokalo', 'magavo', 'bhejo']))
             $out[] = ['key' => 'lead', 'role' => 'sales', 'label' => '🔥 Buying signal'];
         if ($has(['distributor', 'reseller', 'dealer', 'agent', 'stockist', 'become a',
-                  'wakala', 'muuzaji', 'distributeur', 'revendeur', 'موزع', 'وكيل']))
+                  'wakala', 'muuzaji', 'distributeur', 'revendeur', 'موزع', 'وكيل',
+                  'vepari', 'dealer banvu', 'agent banvu', 'distributor banvu', 'dealership joiye']))
             $out[] = ['key' => 'distributor', 'role' => 'sales', 'label' => '🤝 Distributor enquiry'];
         if ($has(['paid', 'payment', 'sent money', 'mobile money', 'momo', 'deposit', 'transferred', 'receipt',
-                  'lipa', 'nimelipa', 'malipo', 'nsasudde', 'payé', 'paiement', 'دفعت', 'دفع', 'تحويل']))
+                  'lipa', 'nimelipa', 'malipo', 'nsasudde', 'payé', 'paiement', 'دفعت', 'دفع', 'تحويل',
+                  'paisa moklya', 'paise bheje', 'transfer karyu', 'paisa mokli', 'payment karyu']))
             $out[] = ['key' => 'payment', 'role' => 'accounts', 'label' => '💰 Payment mention'];
         if ($has(['complaint', 'problem', 'not working', 'damaged', 'wrong', 'refund', 'poor quality', 'defective', 'issue',
                   'shida', 'tatizo', 'malalamiko', 'mbovu', 'rejesha', 'kizibu', 'obuzibu',
-                  'problème', 'plainte', 'remboursement', 'مشكلة', 'شكوى', 'تالف']))
+                  'problème', 'plainte', 'remboursement', 'مشكلة', 'شكوى', 'تالف',
+                  'kharab', 'kharab che', 'faryad', 'shikayat', 'bagad gayu', 'kaam nathi kartu', 'paisa pacha']))
             $out[] = ['key' => 'complaint', 'role' => 'quality', 'label' => '⚠️ Complaint'];
         if ($has(['confirm', 'confirmed', 'go ahead', 'place the order', 'deliver to', 'delivery to',
-                  'thibitisha', 'leta', 'peleka', 'kakasa', 'confirmer', 'livrer', 'أكد', 'توصيل']))
+                  'thibitisha', 'leta', 'peleka', 'kakasa', 'confirmer', 'livrer', 'أكد', 'توصيل',
+                  'haan bhejo', 'sahi che', 'theek che', 'thik che', 'theek hai', 'pakku karo', 'pakka karo',
+                  'nakki karo', 'order karo', 'pahonchado', 'mokli aapo', 'aage badho']))
             $out[] = ['key' => 'order', 'role' => 'dispatch', 'label' => '📦 Order / delivery intent'];
         return $out;
     }
@@ -494,7 +506,7 @@ class AiBrain
 
         $p  = ($persona !== '' ? $persona : 'You are a helpful WhatsApp sales & support assistant.') . "\n\n";
         $p .= "CORE RULES:\n";
-        $p .= "- Detect the customer's language and ALWAYS reply in that same language (English, Swahili, Luganda, French, Arabic, etc.). Mirror how they write.\n";
+        $p .= "- Detect the customer's language and ALWAYS reply in that same language (English, Swahili, Luganda, French, Arabic, Hindi, Gujarati, etc.). Mirror how they write. If they write in romanised Hindi/Gujarati (Gujlish/Hinglish, e.g. \"mare toilet paper joiye\"), reply the same way in romanised Latin script — do NOT switch to Devanagari/Gujarati script unless they did.\n";
         $p .= "- Be concise and friendly — this is WhatsApp.\n";
         $p .= "- Use COMPANY KNOWLEDGE and FAQ for facts. You may use your general real-world knowledge to explain products (e.g. what GSM or ply means), but never contradict COMPANY KNOWLEDGE.\n";
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
