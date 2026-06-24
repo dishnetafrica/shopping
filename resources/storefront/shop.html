@@ -492,6 +492,28 @@ function gridHtml(items){return '<div class="grid">'+items.map(prodCard).join(''
 
 function thaliProduct(){return PRODUCTS.find(function(p){return /thali/i.test(p.name)||/thali/i.test(p.category);});}
 function addThali(){var p=thaliProduct();if(p){inc(p.name);return;}if(THALI){var k='Kathiyawadi Thali';if(!CART[k])CART[k]={name:k,price:THALI.price||0,qty:0};CART[k].qty++;saveCart();render();bar();}}
+function comboStrip(){
+  var cb=(SHOP.combos||[]); if(!cb.length) return '';
+  var cur=(SHOP.currency||'UGX'), wn=(SHOP.waNumber||'');
+  function n(x){return Number(x||0).toLocaleString();}
+  var cards=cb.map(function(c){
+    var items=(c.items||[]).map(function(i){return '<li style="display:flex;gap:7px;font-size:13px;padding:2px 0;color:#2a3a30"><span style="color:var(--green);font-weight:800">✓</span>'+i.qty+'× '+esc(i.name)+'</li>';}).join('');
+    var ribbon=c.save?'<div style="position:absolute;top:10px;left:10px;background:#FCEFE6;color:#C6531E;font-weight:800;font-size:11px;padding:5px 9px;border-radius:999px;border:1px solid #f2d8c7">SAVE '+cur+' '+n(c.save)+'</div>':'';
+    var was=c.was?'<span style="text-decoration:line-through;color:#9aa3b2;font-size:13px;margin-right:8px">'+cur+' '+n(c.was)+'</span>':'';
+    var msg=encodeURIComponent('Hi, I want the "'+c.name+'" combo ('+cur+' '+n(c.price)+').');
+    var wa=wn?('https://wa.me/'+wn+'?text='+msg):'#';
+    return '<div style="position:relative;min-width:250px;max-width:280px;background:#fff;border:1px solid var(--line,#e7ece8);border-radius:16px;padding:16px;display:flex;flex-direction:column">'
+      +ribbon+'<div style="height:18px"></div>'
+      +'<div style="font-weight:800;font-size:16px;letter-spacing:-.2px">'+esc(c.name)+'</div>'
+      +(c.who?'<div style="color:#6b7b70;font-size:12px;margin-bottom:8px">For '+esc(c.who)+'</div>':'<div style="height:6px"></div>')
+      +'<ul style="list-style:none;padding:0;margin:0 0 12px;border-top:1px dashed var(--line,#e7ece8);padding-top:10px">'+items+'</ul>'
+      +'<div style="margin-top:auto">'+was+'<b style="font-size:20px;color:var(--green)">'+cur+' '+n(c.price)+'</b></div>'
+      +'<a href="'+wa+'" target="_blank" rel="noopener" style="margin-top:12px;display:block;text-align:center;background:var(--green);color:#fff;font-weight:800;font-size:14px;padding:12px;border-radius:11px;text-decoration:none">Order this combo on WhatsApp</a>'
+      +'</div>';
+  }).join('');
+  return '<div class="section-title">Bundle &amp; Save — Combo Offers</div>'
+    +'<div style="display:flex;gap:12px;overflow-x:auto;padding:2px 2px 10px;-webkit-overflow-scrolling:touch">'+cards+'</div>';
+}
 function welcomeBanner(){
   var name=(CUST&&CUST.name)||'';
   var strip='display:flex;align-items:center;gap:10px;background:#F1F8F3;border:1px solid #CDEBD6;border-radius:13px;padding:11px 13px;margin:0 0 14px';
@@ -665,7 +687,7 @@ function render(){
   }
   if(CAT==='all'){
     if(useDepartments()){c.innerHTML=groceryHome();return;}
-    c.innerHTML=welcomeBanner()+thaliBanner()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){return catTile(cat.name,i);}).join('')+'</div>';
+    c.innerHTML=welcomeBanner()+thaliBanner()+comboStrip()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){return catTile(cat.name,i);}).join('')+'</div>';
     return;
   }
   var list=PRODUCTS.filter(function(p){return p.category===CAT;});

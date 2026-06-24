@@ -92,6 +92,7 @@ class StorefrontController extends Controller
             'branches'     => $this->branches($tenant),
             'delivery'     => (object) ($tenant->setting('delivery', []) ?: []),
             'vertical'     => \App\Support\Vertical::of($tenant),
+            'combos'       => \App\Support\Combos::forTenant($tenant),
             'theme'        => $this->resolveTheme($tenant),
         ];
 

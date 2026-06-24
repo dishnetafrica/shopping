@@ -204,6 +204,7 @@ class PanelApiController extends Controller
             'metaDescription' => (string) ($s['meta_description'] ?? ''),
             'faq'             => array_values($s['faq'] ?? ($isMfr ? \App\Support\BrandDefaults::faq() : [])),
             'brands'          => array_values($s['brands'] ?? ($isMfr ? \App\Support\BrandDefaults::brands((string) ($s['theme_accent'] ?? '#103A8C')) : [])),
+            'combos'          => array_values($s['combos'] ?? []),
             'base'          => (float) ($s['base'] ?? 2000),
             'perKm'         => (float) ($s['perKm'] ?? 700),
             'min'           => (float) ($s['min'] ?? 2000),
@@ -2545,6 +2546,11 @@ class PanelApiController extends Controller
                     'chips' => array_values(array_filter(array_map('trim', (array) ($b['chips'] ?? [])))),
                 ], fn ($v) => $v !== null && $v !== '' && $v !== []);
             })->filter(fn ($b) => ! empty($b['name']))->values()->all();
+        }
+        if ($r->has('combos')) {
+            $cb = $r->input('combos');
+            if (is_string($cb)) $cb = json_decode($cb, true);
+            $s['combos'] = \App\Support\Combos::normalize(is_array($cb) ? $cb : []);
         }
 
         $t->settings = $s;

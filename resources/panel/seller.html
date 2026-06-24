@@ -868,6 +868,8 @@
             <div id="faqEditor"></div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px"><b style="font-size:13px">Brand cards <span style="font-weight:400;color:var(--muted)">(brand site)</span></b><button class="btn" id="addBrandBtn">+ Add brand</button></div>
             <div id="brandEditor"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px"><b style="font-size:13px">Combo offers <span style="font-weight:400;color:var(--muted)">(bundle &amp; save)</span></b><button class="btn" id="addComboBtn">+ Add combo</button></div>
+            <div id="comboEditor"></div>
             <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
               <button class="btn" id="brandSave">Save website &amp; branding</button>
               <span class="note" id="brandStatus" style="margin:0"></span>
@@ -3219,6 +3221,7 @@ function applySettings(s){
   if(s.metaDescription!=null)SETTINGS.metaDescription=s.metaDescription;
   if(Array.isArray(s.faq))SETTINGS.faq=s.faq;
   if(Array.isArray(s.brands))SETTINGS.brands=s.brands;
+  if(Array.isArray(s.combos))SETTINGS.combos=s.combos;
   if(s.lat!=null&&s.lat!=='')STORE.lat=Number(s.lat)||STORE.lat;
   if(s.lng!=null&&s.lng!=='')STORE.lng=Number(s.lng)||STORE.lng;
   if(s.base!=null&&s.base!=='')DELIV.base=Number(s.base)||0;
@@ -3402,8 +3405,10 @@ function brandingInit(){
   // editors
   renderFaqEditor(SETTINGS.faq||[]);
   renderBrandEditor(SETTINGS.brands||[]);
+  renderComboEditor(SETTINGS.combos||[]);
   if($('addFaqBtn'))$('addFaqBtn').onclick=function(){addFaqRow('','');};
   if($('addBrandBtn'))$('addBrandBtn').onclick=function(){addBrandRow({});};
+  if($('addComboBtn'))$('addComboBtn').onclick=function(){addComboRow({});};
   if($('brandSave'))$('brandSave').onclick=saveBranding;
 }
 function rowBox(){var d=document.createElement('div');d.className='brow';d.style.cssText='border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px';return d;}
@@ -3433,6 +3438,29 @@ function collectBrands(){var out=[];Array.prototype.forEach.call($('brandEditor'
     items:(r.querySelector('.b-items').value||'').split('\n').map(function(x){return x.trim();}).filter(Boolean),
     chips:(r.querySelector('.b-chips').value||'').split(',').map(function(x){return x.trim();}).filter(Boolean),
     color:r.querySelector('.b-color').value});});return out;}
+function renderComboEditor(list){var box=$('comboEditor');if(!box)return;box.innerHTML='';(list&&list.length?list:[]).forEach(function(c){addComboRow(c);});}
+function addComboRow(c){c=c||{};var box=$('comboEditor');if(!box)return;var row=rowBox();
+  var name=document.createElement('input');name.className='c-name';name.placeholder='Combo name (e.g. Shop Starter Combo)';name.value=c.name||'';name.style.marginBottom='6px';
+  var who=document.createElement('input');who.className='c-who';who.placeholder='Who it\u2019s for (e.g. small shops)';who.value=c.who||'';who.style.marginBottom='6px';
+  var items=document.createElement('textarea');items.className='c-items';items.rows=3;items.placeholder='Items — one per line, e.g.\n2 x EuroPearl Toilet Paper\n1 x Angel Soft Napkins';
+  items.value=(c.items||[]).map(function(i){return (i.qty||1)+' x '+(i.name||'');}).join('\n');items.style.marginBottom='6px';
+  var prices=document.createElement('div');prices.style.cssText='display:flex;gap:8px;margin-bottom:4px';
+  var price=document.createElement('input');price.className='c-price';price.type='number';price.placeholder='Combo price';price.value=c.price||'';price.style.flex='1';
+  var was=document.createElement('input');was.className='c-was';was.type='number';was.placeholder='Original price (optional)';was.value=c.was||'';was.style.flex='1';
+  prices.appendChild(price);prices.appendChild(was);
+  var foot=document.createElement('div');foot.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-top:4px';
+  var act=document.createElement('label');act.style.cssText='font-size:12px;color:var(--muted)';
+  var actCb=document.createElement('input');actCb.type='checkbox';actCb.className='c-active';actCb.checked=(c.active!==false);actCb.style.marginRight='5px';
+  act.appendChild(actCb);act.appendChild(document.createTextNode('Active'));
+  foot.appendChild(act);foot.appendChild(delLink(function(){box.removeChild(row);}));
+  row.appendChild(name);row.appendChild(who);row.appendChild(items);row.appendChild(prices);row.appendChild(foot);box.appendChild(row);}
+function collectCombos(){var out=[];Array.prototype.forEach.call($('comboEditor').querySelectorAll('.brow'),function(r){
+  var name=(r.querySelector('.c-name').value||'').trim();if(!name)return;
+  out.push({name:name,who:(r.querySelector('.c-who').value||'').trim(),
+    items:(r.querySelector('.c-items').value||'').split('\n').map(function(x){return x.trim();}).filter(Boolean),
+    price:Number(r.querySelector('.c-price').value||0),
+    was:r.querySelector('.c-was').value!==''?Number(r.querySelector('.c-was').value):null,
+    active:r.querySelector('.c-active').checked});});return out;}
 async function saveBranding(){
   var accent=($('setAccentHex').value||'').trim()||($('setAccent')?$('setAccent').value:'');
   var payload={
@@ -3442,12 +3470,12 @@ async function saveBranding(){
     trust_line:($('setTrust').value||'').trim(), hero_title:($('setHeroTitle').value||'').trim(),
     hero_text:($('setHeroText').value||'').trim(), website:($('setWebsite').value||'').trim(),
     meta_description:($('setMeta').value||'').trim(),
-    faq:collectFaq(), brands:collectBrands()
+    faq:collectFaq(), brands:collectBrands(), combos:collectCombos()
   };
   $('brandSave').disabled=true;if($('brandStatus'))$('brandStatus').textContent='Saving\u2026';
   try{var r=await fetch(EP.brandingSave+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     var d=await r.json();
-    if(d&&d.ok){var s=d.settings||{};SETTINGS.themeAccent=s.theme_accent||accent;SETTINGS.themeAccentDark=s.theme_accent_dark||'';SETTINGS.heroImage=s.hero_image||SETTINGS.heroImage;SETTINGS.factoryImage=s.factory_image||SETTINGS.factoryImage;SETTINGS.eyebrow=s.eyebrow||'';SETTINGS.trustLine=s.trust_line||'';SETTINGS.website=s.website||'';SETTINGS.tagline=s.tagline||'';SETTINGS.heroTitle=s.hero_title||'';SETTINGS.heroText=s.hero_text||'';SETTINGS.metaDescription=s.meta_description||'';SETTINGS.faq=s.faq||[];SETTINGS.brands=s.brands||[];
+    if(d&&d.ok){var s=d.settings||{};SETTINGS.themeAccent=s.theme_accent||accent;SETTINGS.themeAccentDark=s.theme_accent_dark||'';SETTINGS.heroImage=s.hero_image||SETTINGS.heroImage;SETTINGS.factoryImage=s.factory_image||SETTINGS.factoryImage;SETTINGS.eyebrow=s.eyebrow||'';SETTINGS.trustLine=s.trust_line||'';SETTINGS.website=s.website||'';SETTINGS.tagline=s.tagline||'';SETTINGS.heroTitle=s.hero_title||'';SETTINGS.heroText=s.hero_text||'';SETTINGS.metaDescription=s.meta_description||'';SETTINGS.faq=s.faq||[];SETTINGS.brands=s.brands||[];SETTINGS.combos=s.combos||[];
       if($('brandStatus'))$('brandStatus').textContent='Saved '+new Date().toLocaleTimeString();toast('Website & branding saved');}
     else{if($('brandStatus'))$('brandStatus').textContent=(d&&d.error)||'Could not save';toast((d&&d.error)||'Could not save');}
   }catch(e){if($('brandStatus'))$('brandStatus').textContent='Network error';toast('Could not save');}
