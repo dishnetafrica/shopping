@@ -90,6 +90,12 @@ class AiBrain
         }
         if ($reply === '') return $this->fallback($tenant, $from, $gateway, 'empty_reply');
 
+        // 3a. order capture — if the model confirmed an order it emits a hidden <<ORDER {json}>>
+        //     block. Create a real, trackable order (number + staff alert via OrderObserver),
+        //     price it from OUR catalogue (never the LLM), and append a clean confirmation.
+        //     The machine block is always stripped so the customer never sees it.
+        $reply = $this->captureOrder($tenant, $convo, $from, $reply);
+
         // 3b. order total / PDF quotation — the model never does the arithmetic
         $quoteSent = false;
         if ($this->wantsQuotation($text)) {
@@ -301,6 +307,89 @@ class AiBrain
         return true;
     }
 
+    /**
+     * Order capture. The system prompt tells the model to append a hidden machine block
+     *   <<ORDER {"items":[{"name","qty"}],"delivery":"...","note":"..."}>>
+     * the moment the customer confirms an order. We always strip that block (the customer must
+     * never see it), and when it parses we create a real Order: priced from OUR catalogue via
+     * OrderCalculator (never the LLM), with status "New" and channel "whatsapp". Saving fires
+     * OrderObserver → assigns <PREFIX>-<seq> order_no + track_token and dispatches the owner alert
+     * (NotifyOwnerNewOrder). We then append a clean, customer-facing confirmation with the number
+     * and a track link. On any failure we still return the cleaned reply so the chat never breaks.
+     */
+    private function captureOrder(Tenant $tenant, Conversation $convo, string $from, string $reply): string
+    {
+        if (! preg_match('/<<ORDER\s*(\{.*?\})\s*>>/s', $reply, $m)) {
+            return $reply; // no order block — nothing to do
+        }
+        // Strip the machine block no matter what happens below.
+        $clean = trim(preg_replace('/<<ORDER\s*\{.*?\}\s*>>/s', '', $reply));
+        if ($clean === '') $clean = 'Great — let me confirm that for you 👍';
+
+        try {
+            $data  = json_decode($m[1], true);
+            $items = (is_array($data) && is_array($data['items'] ?? null)) ? $data['items'] : [];
+            if (! $items) return $clean;
+
+            $calcItems = array_map(fn ($it) => [
+                'query' => (string) ($it['name'] ?? ''),
+                'qty'   => max(1, (int) ($it['qty'] ?? 1)),
+            ], $items);
+            $calcItems = array_values(array_filter($calcItems, fn ($i) => $i['query'] !== ''));
+            if (! $calcItems) return $clean;
+
+            $quote = app(\App\Services\Bot\OrderCalculator::class)->quote($tenant, $calcItems);
+
+            $parts = [];
+            foreach ($quote['lines'] as $l) $parts[] = $l['qty'] . ' x ' . $l['name'];
+            $itemsText = implode(', ', $parts);
+            $delivery  = trim((string) ($data['delivery'] ?? ''));
+            $note      = trim((string) ($data['note'] ?? ''));
+
+            // Dedupe: don't create a second identical order for the same customer within 10 min
+            // (the model can re-emit the block across turns).
+            $dupe = \App\Models\Order::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)
+                ->where('customer_phone', $from)
+                ->where('items_text', $itemsText)
+                ->where('created_at', '>=', now()->subMinutes(10))
+                ->first();
+            if ($dupe) {
+                $track = $dupe->track_token ? url('/papi/track?o=' . $dupe->id . '&t=' . $dupe->track_token) : '';
+                return $clean . "\n\n✅ This is already on order *" . $dupe->order_no . "*."
+                    . ($track !== '' ? "\nTrack it here: " . $track : '');
+            }
+
+            $order = new \App\Models\Order();
+            $order->tenant_id      = $tenant->id;
+            $order->customer_phone = $from;
+            $order->customer_name  = (string) ($convo->customer_name ?? '');
+            $order->items_text     = $itemsText;
+            $order->items_json     = $quote['lines'];
+            $order->total          = (float) ($quote['total'] ?? 0);
+            $order->location       = $delivery;
+            $order->notes          = $note;
+            $order->status         = 'New';
+            $order->channel        = 'whatsapp';
+            $order->save(); // OrderObserver: order_no + track_token + NotifyOwnerNewOrder (staff alert)
+
+            $cur   = (string) ($quote['currency'] ?? 'UGX');
+            $track = $order->track_token ? url('/papi/track?o=' . $order->id . '&t=' . $order->track_token) : '';
+
+            $conf  = "\n\n✅ *Order " . $order->order_no . " received*\n" . $itemsText;
+            if (($quote['total'] ?? 0) > 0) $conf .= "\nEstimated total: " . $cur . ' ' . number_format((float) $quote['total']);
+            if ($delivery !== '')           $conf .= "\nDeliver to: " . $delivery;
+            $conf .= "\nOur team will confirm the final total & delivery shortly. 🙏";
+            if ($track !== '')              $conf .= "\nTrack your order: " . $track;
+
+            \App\Support\BotTrace::log($tenant->id, 'ai-order', $from, 'order_captured', $order->order_no . ' — ' . $itemsText);
+            return $clean . $conf;
+        } catch (\Throwable $e) {
+            Log::warning('AiBrain order capture failed: ' . $e->getMessage());
+            return $clean;
+        }
+    }
+
     /** Send + log one bot message. */
     private function say(Tenant $tenant, string $from, WhatsAppGateway $gateway, string $text, array $meta = ['via' => 'ai']): void
     {
@@ -425,6 +514,9 @@ class AiBrain
             $p .= "MENU: if the customer asks for the menu (food / drinks), acknowledge warmly — the system sends the menu file(s) automatically.\n\n";
         if (count((array) $tenant->setting('catalog_files', [])) > 0)
             $p .= "CATALOGUE: if the customer asks for the catalogue, price list, product list, brochure, or product photos/pictures, acknowledge warmly (e.g. \"Sure, sending our catalogue now 📄\") — the system sends the catalogue file automatically. NEVER say you can't send files, photos or PDFs; you can.\n\n";
+        $p .= "PLACING AN ORDER: when the customer has clearly confirmed an order — they agreed to specific product(s) WITH quantities AND gave a delivery area/town AND said to go ahead — append a hidden machine line as the VERY LAST thing in your reply, on its own line, exactly in this format:\n";
+        $p .= "<<ORDER {\"items\":[{\"name\":\"EXACT product name from the list\",\"qty\":10}],\"delivery\":\"area or town\",\"note\":\"anything extra or empty\"}>>\n";
+        $p .= "Order-line rules: only add it when the order is truly confirmed (never while still discussing price/options); use the EXACT product names from the PRODUCTS list; qty is a whole number; do NOT put prices in it. The customer must NEVER see this line — the system removes it and replies with the official order number, so keep your own message short (e.g. \"Great, let me confirm that for you 👍\") when you add it. If the order is not yet confirmed, do NOT add the line.\n\n";
         $p .= "PRODUCTS (prices = source of truth):\n" . ($lines !== '' ? $lines : '(catalogue unavailable right now — ask the customer to hold; staff have been alerted)') . "\n";
         return $p;
     }
