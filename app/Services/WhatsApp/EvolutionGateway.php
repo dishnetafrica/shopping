@@ -3,6 +3,7 @@ namespace App\Services\WhatsApp;
 
 use App\Contracts\WhatsAppGateway;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class EvolutionGateway implements WhatsAppGateway
 {
@@ -126,19 +127,54 @@ class EvolutionGateway implements WhatsAppGateway
      */
     public function getMediaBase64(string $instance, array $key): ?string
     {
-        try {
-            $resp = $this->http()->post("/chat/getBase64FromMediaMessage/{$instance}", [
-                'message'      => ['key' => $key],
-                'convertToMp4' => false,
-            ])->json();
-            $b64 = data_get($resp, 'base64')
-                ?? data_get($resp, 'media')
-                ?? data_get($resp, 'data.base64');
-
-            return is_string($b64) && $b64 !== '' ? $b64 : null;
-        } catch (\Throwable $e) {
-            return null;
+        // Evolution's getBase64FromMediaMessage is version-finicky: an empty `participant` on a
+        // 1:1 chat, or a slightly-off body shape, makes it return media-not-found. Clean the key
+        // (drop empty participant), try the accepted shapes, and LOG the real error instead of
+        // swallowing it — otherwise voice/image fetch fails silently and looks like the bot
+        // ignoring the message. Best fix is still WEBHOOK_BASE64=true on the Evolution side so the
+        // bytes arrive inline and this callback is never needed.
+        $k = [
+            'id'        => (string) ($key['id'] ?? ''),
+            'remoteJid' => (string) ($key['remoteJid'] ?? ''),
+            'fromMe'    => (bool) ($key['fromMe'] ?? false),
+        ];
+        if (! empty($key['participant'])) {
+            $k['participant'] = (string) $key['participant'];
         }
+
+        $bodies = [
+            ['message' => ['key' => $k], 'convertToMp4' => false],
+            ['message' => ['key' => $k]], // some builds reject convertToMp4 on audio
+        ];
+
+        foreach ($bodies as $body) {
+            try {
+                $resp = $this->http()->post("/chat/getBase64FromMediaMessage/{$instance}", $body);
+                if (! $resp->successful()) {
+                    Log::warning('evolution.getBase64 http', [
+                        'instance' => $instance,
+                        'status'   => $resp->status(),
+                        'body'     => mb_substr($resp->body(), 0, 300),
+                    ]);
+                    continue;
+                }
+                $j   = $resp->json();
+                $b64 = data_get($j, 'base64')
+                    ?? data_get($j, 'media')
+                    ?? data_get($j, 'data.base64');
+                if (is_string($b64) && $b64 !== '') {
+                    return $b64;
+                }
+                Log::warning('evolution.getBase64 empty', [
+                    'instance'  => $instance,
+                    'resp_keys' => is_array($j) ? array_keys($j) : gettype($j),
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('evolution.getBase64 exception: ' . $e->getMessage());
+            }
+        }
+
+        return null;
     }
 
     public function parseIncoming(array $payload): ?array
