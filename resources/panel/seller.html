@@ -870,6 +870,10 @@
             <div id="brandEditor"></div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px"><b style="font-size:13px">Combo offers <span style="font-weight:400;color:var(--muted)">(bundle &amp; save)</span></b><button class="btn" id="addComboBtn">+ Add combo</button></div>
             <div id="comboEditor"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px"><b style="font-size:13px">Menus <span style="font-weight:400;color:var(--muted)">(group categories, e.g. Food / Beverages)</span></b><button class="btn" id="addMenuBtn">+ Add menu</button></div>
+            <div id="menuEditor"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px"><b style="font-size:13px">Menu files <span style="font-weight:400;color:var(--muted)">(image/PDF the bot sends)</span></b><button class="btn" id="addMenuFileBtn">+ Add menu file</button></div>
+            <div id="menuFileEditor"></div>
             <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
               <button class="btn" id="brandSave">Save website &amp; branding</button>
               <span class="note" id="brandStatus" style="margin:0"></span>
@@ -3221,7 +3225,7 @@ function applySettings(s){
   if(s.metaDescription!=null)SETTINGS.metaDescription=s.metaDescription;
   if(Array.isArray(s.faq))SETTINGS.faq=s.faq;
   if(Array.isArray(s.brands))SETTINGS.brands=s.brands;
-  if(Array.isArray(s.combos))SETTINGS.combos=s.combos;
+  if(Array.isArray(s.combos))SETTINGS.combos=s.combos;if(s.categoryGroups)SETTINGS.categoryGroups=s.categoryGroups;if(Array.isArray(s.menuFiles))SETTINGS.menuFiles=s.menuFiles;
   if(s.lat!=null&&s.lat!=='')STORE.lat=Number(s.lat)||STORE.lat;
   if(s.lng!=null&&s.lng!=='')STORE.lng=Number(s.lng)||STORE.lng;
   if(s.base!=null&&s.base!=='')DELIV.base=Number(s.base)||0;
@@ -3406,9 +3410,13 @@ function brandingInit(){
   renderFaqEditor(SETTINGS.faq||[]);
   renderBrandEditor(SETTINGS.brands||[]);
   renderComboEditor(SETTINGS.combos||[]);
+  renderMenuEditor(SETTINGS.categoryGroups||{});
+  renderMenuFileEditor(SETTINGS.menuFiles||[]);
   if($('addFaqBtn'))$('addFaqBtn').onclick=function(){addFaqRow('','');};
   if($('addBrandBtn'))$('addBrandBtn').onclick=function(){addBrandRow({});};
   if($('addComboBtn'))$('addComboBtn').onclick=function(){addComboRow({});};
+  if($('addMenuBtn'))$('addMenuBtn').onclick=function(){addMenuRow('',[]);};
+  if($('addMenuFileBtn'))$('addMenuFileBtn').onclick=function(){addMenuFileRow({});};
   if($('brandSave'))$('brandSave').onclick=saveBranding;
 }
 function rowBox(){var d=document.createElement('div');d.className='brow';d.style.cssText='border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px';return d;}
@@ -3461,6 +3469,30 @@ function collectCombos(){var out=[];Array.prototype.forEach.call($('comboEditor'
     price:Number(r.querySelector('.c-price').value||0),
     was:r.querySelector('.c-was').value!==''?Number(r.querySelector('.c-was').value):null,
     active:r.querySelector('.c-active').checked});});return out;}
+/* ---- Menus (category groups): { "Food Menu": ["Starters","Mains"], ... } ---- */
+function renderMenuEditor(groupsObj){var box=$('menuEditor');if(!box)return;box.innerHTML='';var g=groupsObj||{};var keys=Object.keys(g);if(!keys.length){return;}keys.forEach(function(k){addMenuRow(k,g[k]);});}
+function addMenuRow(name,cats){var box=$('menuEditor');if(!box)return;var row=rowBox();
+  var nm=document.createElement('input');nm.className='m-name';nm.placeholder='Menu name (e.g. Food Menu)';nm.value=name||'';nm.style.marginBottom='6px';
+  var ct=document.createElement('textarea');ct.className='m-cats';ct.rows=3;ct.placeholder='Categories in this menu — one per line (must match your product categories)';ct.value=(cats||[]).join('\n');ct.style.marginBottom='4px';
+  var foot=document.createElement('div');foot.style.cssText='display:flex;justify-content:flex-end;margin-top:2px';foot.appendChild(delLink(function(){box.removeChild(row);}));
+  row.appendChild(nm);row.appendChild(ct);row.appendChild(foot);box.appendChild(row);}
+function collectMenus(){var out={};Array.prototype.forEach.call($('menuEditor').querySelectorAll('.brow'),function(r){
+  var name=(r.querySelector('.m-name').value||'').trim();if(!name)return;
+  var cats=(r.querySelector('.m-cats').value||'').split('\n').map(function(x){return x.trim();}).filter(Boolean);
+  if(cats.length)out[name]=cats;});return out;}
+/* ---- Menu files: [{label,url}] ---- */
+function renderMenuFileEditor(list){var box=$('menuFileEditor');if(!box)return;box.innerHTML='';(list&&list.length?list:[]).forEach(function(m){addMenuFileRow(m);});}
+function addMenuFileRow(m){m=m||{};var box=$('menuFileEditor');if(!box)return;var row=rowBox();
+  var lb=document.createElement('input');lb.className='mf-label';lb.placeholder='Label (e.g. Food Menu)';lb.value=m.label||'';lb.style.marginBottom='6px';
+  var url=document.createElement('input');url.className='mf-url';url.placeholder='Image/PDF URL (or upload \u2192)';url.value=m.url||'';url.style.cssText='margin-bottom:6px;width:calc(100% - 96px)';
+  var up=document.createElement('button');up.className='btn';up.textContent='Upload';up.type='button';up.style.cssText='margin-left:6px;vertical-align:top';
+  up.onclick=function(){var f=document.createElement('input');f.type='file';f.accept='image/*';f.onchange=function(){var file=f.files[0];if(!file)return;var rd=new FileReader();rd.onload=async function(){try{var b64=rd.result;var rr=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:file.name,data:b64})});var d=await rr.json();if(d&&d.ok&&d.url){url.value=d.url;toast('Menu file uploaded');}else toast('Upload not set up \u2014 paste a URL instead');}catch(e){toast('Upload not set up \u2014 paste a URL instead');}};rd.readAsDataURL(file);};f.click();};
+  var foot=document.createElement('div');foot.style.cssText='display:flex;justify-content:flex-end;margin-top:2px';foot.appendChild(delLink(function(){box.removeChild(row);}));
+  var line=document.createElement('div');line.style.cssText='display:flex;align-items:flex-start';line.appendChild(url);line.appendChild(up);
+  row.appendChild(lb);row.appendChild(line);row.appendChild(foot);box.appendChild(row);}
+function collectMenuFiles(){var out=[];Array.prototype.forEach.call($('menuFileEditor').querySelectorAll('.brow'),function(r){
+  var label=(r.querySelector('.mf-label').value||'').trim();var url=(r.querySelector('.mf-url').value||'').trim();
+  if(label&&url)out.push({label:label,url:url});});return out;}
 async function saveBranding(){
   var accent=($('setAccentHex').value||'').trim()||($('setAccent')?$('setAccent').value:'');
   var payload={
@@ -3470,7 +3502,8 @@ async function saveBranding(){
     trust_line:($('setTrust').value||'').trim(), hero_title:($('setHeroTitle').value||'').trim(),
     hero_text:($('setHeroText').value||'').trim(), website:($('setWebsite').value||'').trim(),
     meta_description:($('setMeta').value||'').trim(),
-    faq:collectFaq(), brands:collectBrands(), combos:collectCombos()
+    faq:collectFaq(), brands:collectBrands(), combos:collectCombos(),
+    category_groups:collectMenus(), menu_files:collectMenuFiles()
   };
   $('brandSave').disabled=true;if($('brandStatus'))$('brandStatus').textContent='Saving\u2026';
   try{var r=await fetch(EP.brandingSave+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});

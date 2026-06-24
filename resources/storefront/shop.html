@@ -34,6 +34,9 @@
   .search{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 13px;font-size:15px;background:#F4F4F6;color:var(--ink);outline:none}
   .search:focus{border-color:var(--green)}
   .section-title{font-size:15px;font-weight:800;padding:6px 14px 8px;color:var(--ink)}
+  .menutabs{display:flex;gap:8px;padding:10px 12px 4px;position:sticky;top:0;background:var(--bg,#fff);z-index:3;overflow-x:auto}
+  .menutab{flex:none;border:1px solid var(--line);background:#fff;color:var(--ink);font-weight:800;font-size:14px;padding:10px 18px;border-radius:999px;cursor:pointer}
+  .menutab.on{background:var(--green);color:#fff;border-color:var(--green)}
   .subchips{display:flex;gap:8px;overflow-x:auto;padding:4px 14px 8px;-webkit-overflow-scrolling:touch}
   .subchips::-webkit-scrollbar{display:none}
   .subchip{flex:none;border:1.5px solid #e6ece8;background:#fff;border-radius:20px;padding:7px 13px;font-size:12.5px;font-weight:700;color:#56655c;cursor:pointer;white-space:nowrap}
@@ -221,7 +224,7 @@ var GEO  = null;                               // captured delivery GPS pin {lat
 /* ===================================================================================== */
 
 var $=function(id){return document.getElementById(id);};
-var PRODUCTS=[], CATS=[], CART={}, CAT='all', Q='', CAT_IMG={}, THALI=null, VSEL={}, GROUPS={}, CATGROUPS={};
+var PRODUCTS=[], CATS=[], CART={}, CAT='all', Q='', CAT_IMG={}, THALI=null, VSEL={}, GROUPS={}, CATGROUPS={}, MENUTAB='';
 var TINTS=['#EEF2FB','#FDEEF3','#EAF6EF','#FFF4E6','#F1EEFB','#E9F5F9','#FCEEEA','#EEF7F0'];
 var STORE_KEY='cb_cart_'+(SHOP.slug||'shop'), DELV_KEY='cb_delv_'+(SHOP.slug||'shop');
 var CUST_KEY='cb_cust_'+(SHOP.slug||'shop'), LAST_KEY='cb_last_'+(SHOP.slug||'shop');
@@ -504,6 +507,27 @@ function gridHtml(items){return '<div class="grid">'+items.map(prodCard).join(''
 
 function thaliProduct(){return PRODUCTS.find(function(p){return /thali/i.test(p.name)||/thali/i.test(p.category);});}
 function addThali(){var p=thaliProduct();if(p){inc(p.name);return;}if(THALI){var k='Kathiyawadi Thali';if(!CART[k])CART[k]={name:k,price:THALI.price||0,qty:0};CART[k].qty++;saveCart();render();bar();}}
+function restaurantMenuGroups(){
+  var keys=Object.keys(CATGROUPS||{}); if(!keys.length)return [];
+  return keys.map(function(k){return {name:k,cats:(CATGROUPS[k]||[]).filter(catExists)};})
+             .filter(function(g){return g.cats.length;});
+}
+function useRestaurantMenus(){ return VERTICAL==='restaurant' && restaurantMenuGroups().length>=1; }
+function setMenu(n){MENUTAB=n;render();try{window.scrollTo(0,0);}catch(e){}}
+function restaurantHome(){
+  var groups=restaurantMenuGroups();
+  if(!MENUTAB||!groups.some(function(g){return g.name===MENUTAB;}))MENUTAB=groups[0].name;
+  var tabs='<div class="menutabs">'+groups.map(function(g){
+    return '<button class="menutab'+(g.name===MENUTAB?' on':'')+'" onclick="setMenu('+jk(g.name)+')">'+esc(g.name)+'</button>';
+  }).join('')+'</div>';
+  var active=groups.filter(function(g){return g.name===MENUTAB;})[0]||groups[0];
+  var body=active.cats.map(function(cat){
+    var items=PRODUCTS.filter(function(p){return p.category===cat;});
+    if(!items.length)return '';
+    return '<div class="section-title">'+esc(cat)+'</div>'+gridG(items);
+  }).join('');
+  return tabs+(body||'<div class="empty">This menu is being updated.</div>');
+}
 function comboStrip(){
   var cb=(SHOP.combos||[]); if(!cb.length) return '';
   var cur=(SHOP.currency||'UGX'), wn=(SHOP.waNumber||'');
@@ -699,6 +723,7 @@ function render(){
   }
   if(CAT==='all'){
     if(useDepartments()){c.innerHTML=groceryHome();return;}
+    if(useRestaurantMenus()){c.innerHTML=welcomeBanner()+comboStrip()+restaurantHome();return;}
     c.innerHTML=welcomeBanner()+thaliBanner()+comboStrip()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){return catTile(cat.name,i);}).join('')+'</div>';
     return;
   }

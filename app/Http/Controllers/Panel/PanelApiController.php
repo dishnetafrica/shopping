@@ -205,6 +205,8 @@ class PanelApiController extends Controller
             'faq'             => array_values($s['faq'] ?? ($isMfr ? \App\Support\BrandDefaults::faq() : [])),
             'brands'          => array_values($s['brands'] ?? ($isMfr ? \App\Support\BrandDefaults::brands((string) ($s['theme_accent'] ?? '#103A8C')) : [])),
             'combos'          => array_values($s['combos'] ?? []),
+            'categoryGroups'  => (object) ($s['category_groups'] ?? []),
+            'menuFiles'       => array_values($s['menu_files'] ?? []),
             'base'          => (float) ($s['base'] ?? 2000),
             'perKm'         => (float) ($s['perKm'] ?? 700),
             'min'           => (float) ($s['min'] ?? 2000),
@@ -2551,6 +2553,25 @@ class PanelApiController extends Controller
             $cb = $r->input('combos');
             if (is_string($cb)) $cb = json_decode($cb, true);
             $s['combos'] = \App\Support\Combos::normalize(is_array($cb) ? $cb : []);
+        }
+        if ($r->has('category_groups')) {
+            $cg = $r->input('category_groups');
+            if (is_string($cg)) $cg = json_decode($cg, true);
+            $groups = [];
+            foreach ((array) (is_array($cg) ? $cg : []) as $name => $cats) {
+                $name = trim((string) $name);
+                $cats = array_values(array_filter(array_map('trim', (array) $cats)));
+                if ($name !== '' && $cats) $groups[$name] = $cats;
+            }
+            $s['category_groups'] = $groups;
+        }
+        if ($r->has('menu_files')) {
+            $mf = $r->input('menu_files');
+            if (is_string($mf)) $mf = json_decode($mf, true);
+            $s['menu_files'] = collect(is_array($mf) ? $mf : [])->map(fn ($m) => [
+                'label' => trim((string) ($m['label'] ?? '')),
+                'url'   => trim((string) ($m['url'] ?? '')),
+            ])->filter(fn ($m) => $m['label'] !== '' && $m['url'] !== '')->values()->all();
         }
 
         $t->settings = $s;

@@ -107,9 +107,12 @@ class AiBrain
         $gateway->sendText($tenant->whatsapp_instance, $from, $reply);
         MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $reply, null, null, ['via' => 'ai']);
 
-        // 4b. product photos — same behaviour as the inbuilt bot. Self-gating: the responder only
+        // 4b. menu files (restaurant) — send the food/drinks menu image or PDF on request.
+        $menuSent = $this->maybeSendMenu($tenant, $from, $text, $gateway);
+
+        // 4c. product photos — same behaviour as the inbuilt bot. Self-gating: the responder only
         //     returns images for a confident product match, so greetings/general Qs send nothing.
-        if (! $quoteSent && $imageB64 === '' && $tenant->setting('send_product_images', true)) {
+        if (! $quoteSent && ! $menuSent && $imageB64 === '' && $tenant->setting('send_product_images', true)) {
             try {
                 $imgs = app(\App\Services\Bot\ProductImageResponder::class)->imagesFor($tenant, $convo, $text);
                 foreach (array_slice($imgs, 0, 3) as $im) {
@@ -198,6 +201,45 @@ class AiBrain
             Log::warning('AiBrain quotation failed: ' . $e->getMessage());
             return false;
         }
+    }
+
+    /** Send the restaurant's menu file(s) when a customer asks for the menu. Returns true if sent. */
+    private function maybeSendMenu(Tenant $tenant, string $from, string $text, WhatsAppGateway $gateway): bool
+    {
+        $files = collect((array) $tenant->setting('menu_files', []))
+            ->map(fn ($m) => ['label' => (string) ($m['label'] ?? ''), 'url' => (string) ($m['url'] ?? '')])
+            ->filter(fn ($m) => $m['url'] !== '')->values()->all();
+        if (! $files) return false;
+
+        $t = mb_strtolower($text);
+        $asksMenu = false;
+        foreach (['menu', 'carte', 'orodha ya chakula', 'orodha'] as $w) if (str_contains($t, $w)) $asksMenu = true;
+        if (! $asksMenu) return false;
+
+        $food  = str_contains($t, 'food') || str_contains($t, 'eat') || str_contains($t, 'chakula');
+        $drink = str_contains($t, 'drink') || str_contains($t, 'beverage') || str_contains($t, 'bar') || str_contains($t, 'vinywaji');
+        $want  = [];
+        foreach ($files as $f) {
+            $lbl = mb_strtolower($f['label']);
+            if ($food && ! $drink && str_contains($lbl, 'food')) $want[] = $f;
+            elseif ($drink && ! $food && (str_contains($lbl, 'bever') || str_contains($lbl, 'drink'))) $want[] = $f;
+        }
+        if (! $want) $want = $files; // generic "menu" → send all
+
+        foreach ($want as $f) {
+            $isPdf = (bool) preg_match('/\.pdf(\?|$)/i', $f['url']);
+            try {
+                if ($isPdf && method_exists($gateway, 'sendDocument')) {
+                    $gateway->sendDocument($tenant->whatsapp_instance, $from, $f['url'], ($f['label'] ?: 'Menu') . '.pdf', $f['label']);
+                } else {
+                    $gateway->sendImage($tenant->whatsapp_instance, $from, $f['url'], $f['label']);
+                }
+                MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', '[menu] ' . $f['label'], null, null, ['via' => 'ai', 'kind' => 'menu_file']);
+            } catch (\Throwable $e) {
+                Log::warning('AiBrain menu send failed: ' . $e->getMessage());
+            }
+        }
+        return true;
     }
 
     /** Send + log one bot message. */
@@ -320,6 +362,8 @@ class AiBrain
         if ($faqTxt !== '') $p .= "FAQ (answer from these):\n{$faqTxt}\n\n";
         $combos = \App\Support\Combos::promptBlock($tenant);
         if ($combos !== '') $p .= "COMBO OFFERS (proactively suggest a relevant one; prices are fixed, quote them as-is):\n{$combos}\n\n";
+        if (count((array) $tenant->setting('menu_files', [])) > 0)
+            $p .= "MENU: if the customer asks for the menu (food / drinks), acknowledge warmly — the system sends the menu file(s) automatically.\n\n";
         $p .= "PRODUCTS (prices = source of truth):\n" . ($lines !== '' ? $lines : '(catalogue unavailable right now — ask the customer to hold; staff have been alerted)') . "\n";
         return $p;
     }
