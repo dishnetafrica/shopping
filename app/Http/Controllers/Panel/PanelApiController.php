@@ -1010,7 +1010,8 @@ class PanelApiController extends Controller
         $file = 'products/'.$tenant.'/'.uniqid('p_', true).'.'.$ext;
         Storage::disk('public')->put($file, $bin);
 
-        return response()->json(['ok' => true, 'url' => Storage::url($file)]);
+        // Absolute URL (WhatsApp/Evolution requires a full https URL, not a /storage path).
+        return response()->json(['ok' => true, 'url' => url(Storage::url($file))]);
     }
 
     /**
@@ -1043,7 +1044,8 @@ class PanelApiController extends Controller
         $file = 'catalog/'.$tenant.'/'.uniqid('cat_', true).'.'.$ext;
         Storage::disk('public')->put($file, $bin);
 
-        return response()->json(['ok' => true, 'url' => Storage::url($file)]);
+        // Absolute URL (WhatsApp/Evolution requires a full https URL, not a /storage path).
+        return response()->json(['ok' => true, 'url' => url(Storage::url($file))]);
     }
 
     /** Category tile photos: a { "Category Name": "image url" } map in tenant settings. */
