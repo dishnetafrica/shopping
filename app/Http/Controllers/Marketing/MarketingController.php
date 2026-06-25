@@ -22,15 +22,18 @@ class MarketingController extends Controller
         $host = preg_replace('/^www\./', '', $host);
         $tenant = \App\Models\Tenant::whereRaw('lower(custom_domain) = ?', [$host])->first();
         if ($tenant) {
-            // A shop can ship a bespoke landing page at public/landing/{slug}.html.
+            // A shop can ship a bespoke landing page (resources/storefront/landing-{slug}.html).
             // If present, it is served at the domain ROOT (e.g. thegreatindiandhabaa.com/),
             // while the ordering storefront stays at /{slug}. Slugs are validated on
             // creation, but we still constrain the charset to be safe against traversal.
             $slug = (string) $tenant->slug;
             if (preg_match('/^[A-Za-z0-9_-]+$/', $slug)) {
-                $landing = public_path('landing/' . $slug . '.html');
+                // Lives alongside shop.html / brand.html in resources/storefront — the same
+                // directory the app already reads at runtime, so it is always part of the
+                // deploy and can't be dropped by a build step or a public/ asset pipeline.
+                $landing = resource_path('storefront/landing-' . $slug . '.html');
                 if (is_file($landing)) {
-                    return response()->file($landing, ['Content-Type' => 'text/html; charset=UTF-8']);
+                    return response(file_get_contents($landing), 200, ['Content-Type' => 'text/html; charset=UTF-8']);
                 }
             }
             // No bespoke landing page: fall back to landing() — manufacturers/brand-site
