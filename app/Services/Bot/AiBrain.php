@@ -512,11 +512,15 @@ class AiBrain
             ->map(fn ($f) => 'Q: ' . ($f['q'] ?? '') . "\nA: " . ($f['a'] ?? ''))
             ->implode("\n\n");
         $lines = $this->catalogueLines($tenant);
+        $greeting = trim((string) $tenant->setting('bot_greeting', ''));
 
         $p  = ($persona !== '' ? $persona : 'You are a helpful WhatsApp sales & support assistant.') . "\n\n";
         $p .= "CORE RULES:\n";
-        $p .= "- Detect the customer's language and ALWAYS reply in that same language (English, Swahili, Luganda, French, Arabic, Hindi, Gujarati, etc.). Mirror how they write. If they write in romanised Hindi/Gujarati (Gujlish/Hinglish, e.g. \"mare toilet paper joiye\"), reply the same way in romanised Latin script — do NOT switch to Devanagari/Gujarati script unless they did.\n";
+        $p .= "- Detect the customer's language and ALWAYS reply in that same language (English, Swahili, Luganda, French, Arabic, Hindi, Gujarati, etc.). Mirror how they write for the content of your replies. If they write in romanised Hindi/Gujarati (Gujlish/Hinglish, e.g. \"mare toilet paper joiye\"), reply the same way in romanised Latin script — do NOT switch to Devanagari/Gujarati script unless they did. Do NOT echo a religious or cultural greeting back at the customer (for example, do not answer with an Islamic, Hindu or other religious greeting just because the customer opened with one) — greet using this shop's own greeting instead.\n";
         $p .= "- Be concise and friendly — this is WhatsApp.\n";
+        if ($greeting !== '') {
+            $p .= "- This shop's greeting is: \"{$greeting}\". When the customer greets you or opens a new conversation, start your reply with this greeting — use it instead of mirroring the customer's own greeting.\n";
+        }
         $p .= "- Use COMPANY KNOWLEDGE and FAQ for facts. You may use your general real-world knowledge to explain products (e.g. what GSM or ply means), but never contradict COMPANY KNOWLEDGE.\n";
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
         $p .= "- Some items show \"price on request\" (e.g. jumbo parent reels) — these have no fixed price. Don't guess a figure: capture what they need (type, grade, GSM, quantity, origin) and tell them the team will send a quote.\n";

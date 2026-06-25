@@ -1319,6 +1319,22 @@ class BotBrain
             return "\u{1F642} I'm here and ready! What can I get for you today at {$shop}?";
         }
 
+        // A shop's own configured greeting wins over the localised language defaults
+        // below — so a shop that greets as "Jai Shri Krishna" always opens that way no
+        // matter how the customer greeted, and the bot never echoes back a religious
+        // greeting the shop didn't choose. Only falls through to the defaults when unset.
+        $custom = trim((string) $tenant->setting('bot_greeting', ''));
+        if ($custom !== '') {
+            $cats = $this->shopCategories($tenant);
+            $tail = '';
+            if ($cats !== '') {
+                $tail = ($d['lang'] === 'in')
+                    ? "\n\nAmari pase *{$cats}* ane biju ghanu che \u{2014} *menu* lakho."
+                    : "\n\nWe stock *{$cats}* and more \u{2014} say *menu* to see everything.";
+            }
+            return $custom . $tail . $this->websiteNudge($tenant);
+        }
+
         switch ($d['lang']) {
             case 'sw':
                 $msg = "Habari \u{1F60A} Karibu {$shop}.\nWhat would you like today?";
