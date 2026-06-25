@@ -28,8 +28,28 @@ class OrderCalculator
             $qty   = max(1, (int) ($it['qty'] ?? 1));
             if ($query === '') continue;
 
+            // Trusted-price path (POS): the seller picked a real catalogue product, so the
+            // cart price is authoritative. Use it directly — matching is only used to enrich
+            // the product image, and can never block the quote ("nothing to quote").
+            $given = isset($it['price']) ? (float) $it['price'] : 0.0;
+            if ($given > 0) {
+                $name = $query; $img = ''; $unit = ''; $moq = null;
+                $hits = $this->matcher->search($query, $products);
+                $p    = $hits[0]['product'] ?? ($hits[0] ?? null);
+                if (is_array($p) && mb_strtolower(trim((string) ($p['name'] ?? ''))) === mb_strtolower(trim($query))) {
+                    $name = (string) $p['name'];
+                    $img  = (string) ($p['image'] ?? '');
+                    $unit = (string) ($p['unit_label'] ?? '');
+                    $moq  = isset($p['moq']) ? (int) $p['moq'] : null;
+                }
+                $sum    = $given * $qty;
+                $total += $sum;
+                $lines[] = ['name' => $name, 'qty' => $qty, 'price' => $given, 'sum' => $sum, 'unit' => $unit, 'moq' => $moq, 'image' => $img, 'matched' => true];
+                continue;
+            }
+
             $hits = $this->matcher->search($query, $products);
-            $p    = $hits[0] ?? null;
+            $p    = $hits[0]['product'] ?? null;
             if (! $p || ! isset($p['price'])) {
                 $lines[] = ['name' => $query, 'qty' => $qty, 'price' => null, 'sum' => null, 'matched' => false];
                 continue;

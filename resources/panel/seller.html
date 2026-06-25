@@ -2276,7 +2276,7 @@ async function posQuote(){
   if(!POS.cart.length){toast('Cart is empty — add items to quote');return;}
   var phone=$('posPhone').value.trim();
   if(!phone){toast('Enter the customer phone to send the quotation');try{$('posPhone').focus();}catch(e){}return;}
-  var items=POS.cart.map(function(c){return {name:c.name,qty:c.qty};});
+  var items=POS.cart.map(function(c){return {name:c.name,qty:c.qty,price:c.price};});
   var qs='?token='+encodeURIComponent(token)+'&items='+encodeURIComponent(JSON.stringify(items))+
     '&name='+encodeURIComponent($('posCust').value.trim())+'&phone='+encodeURIComponent(phone);
   var btn=$('posQuote'),old=btn.textContent;btn.disabled=true;btn.textContent='Sending…';

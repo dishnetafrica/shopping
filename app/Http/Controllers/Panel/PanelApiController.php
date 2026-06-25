@@ -949,7 +949,7 @@ class PanelApiController extends Controller
             foreach ($items as $it) {
                 $nm = trim((string) ($it['name'] ?? $it['query'] ?? ''));
                 if ($nm === '') continue;
-                $calc[] = ['query' => $nm, 'qty' => max(1, (int) ($it['qty'] ?? 1))];
+                $calc[] = ['query' => $nm, 'qty' => max(1, (int) ($it['qty'] ?? 1)), 'price' => (float) ($it['price'] ?? 0)];
             }
         }
         if (! $calc) return response()->json(['ok' => false, 'error' => 'no_items', 'message' => 'Add at least one item to the cart.']);
