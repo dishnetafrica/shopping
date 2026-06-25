@@ -249,12 +249,13 @@ class StorefrontController extends Controller
 
             return Product::where('active', true)->orderByDesc('display_order')->orderBy('name')
                 ->toBase()
-                ->get(['id', 'name', 'category', 'keywords', 'base_price', 'price', 'stock', 'image_url', 'display_order', 'moq', 'pack_size', 'unit_label'])
+                ->get(['id', 'name', 'description', 'category', 'keywords', 'base_price', 'price', 'stock', 'image_url', 'display_order', 'moq', 'pack_size', 'unit_label'])
                 ->map(function ($p) use ($mods) {
                     return [
                         'Product Name' => (string) $p->name,
                         'Variant'      => '',
                         'Brand'        => '',
+                        'Description'  => (string) ($p->description ?? ''),
                         'Category'     => (string) ($p->category ?? 'Other'),
                         'Keywords'     => (string) ($p->keywords ?? ''),
                         'Price_UGX'    => (float) ($p->base_price ?? $p->price ?? 0),
