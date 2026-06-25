@@ -992,6 +992,42 @@ class PanelApiController extends Controller
         ]);
     }
 
+    /** List quotations the bot or panel has sent (newest first) with a re-download link. */
+    public function quotations(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false, 'error' => 'no_tenant'], 403);
+        app(\App\Support\TenantContext::class)->set($t->id);
+
+        $rows = \App\Models\Message::where('tenant_id', $t->id)
+            ->where('meta->kind', 'quotation')
+            ->orderByDesc('id')->limit(100)->get();
+
+        $out = [];
+        foreach ($rows as $m) {
+            $no  = (string) data_get($m->meta, 'quote_no', '');
+            $url = '';
+            if ($no !== '') {
+                $path = "quotations/{$t->id}/Quotation-{$no}.pdf";
+                try {
+                    if (\Illuminate\Support\Facades\Storage::disk('public')->exists($path)) {
+                        $url = \Illuminate\Support\Facades\Storage::disk('public')->url($path);
+                    }
+                } catch (\Throwable $e) { /* file may be gone */ }
+            }
+            $out[] = [
+                'quote_no' => $no,
+                'phone'    => (string) $m->customer_phone,
+                'via'      => (string) data_get($m->meta, 'via', ''),
+                'caption'  => (string) $m->body,
+                'at'       => optional($m->created_at)->toIso8601String(),
+                'url'      => $url,
+            ];
+        }
+
+        return response()->json(['ok' => true, 'rows' => $out]);
+    }
+
     public function updateProduct(Request $r)
     {
         $p = Product::find((int) $r->query('row'));

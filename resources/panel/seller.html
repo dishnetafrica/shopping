@@ -285,6 +285,7 @@
       <a class="nav sub" data-feature="riders" data-page="riders"><span class="i">└</span> Riders</a>
       <a class="nav sub" data-feature="dispatch" data-page="deliveryZones"><span class="i">└</span> Delivery Zones</a>
       <a class="nav" data-page="customers"><span class="i">👥</span> Customers</a>
+      <a class="nav" data-page="quotations"><span class="i">📄</span> Quotations</a>
       <a class="nav" data-feature="pos" data-page="pos"><span class="i">🧾</span> POS</a>
       <a class="nav" data-page="category"><span class="i">🗂</span> Category</a>
       <a class="nav" id="navThali" data-feature="thali" data-page="thali"><span class="i">🍽</span> Daily Thali</a>
@@ -577,6 +578,17 @@
         </div>
       </div>
       <!-- ============ RIDERS ============ -->
+      <!-- ============ QUOTATIONS ============ -->
+      <div id="pageQuotations" class="hide">
+        <div class="crumb">Home / <b>Quotations</b></div>
+        <div class="card">
+          <div class="head">Sent quotations <span class="count" id="qCount" style="margin-left:auto"></span></div>
+          <div class="body">
+            <p style="color:var(--muted);font-size:13px;margin:0 0 12px">Every quotation the bot or POS has sent. Tap Download to re-open the PDF.</p>
+            <div class="tablewrap"><table><thead><tr><th>Date</th><th>Quote No</th><th>Customer</th><th>Details</th><th>Source</th><th></th></tr></thead><tbody id="qRows"></tbody></table></div>
+          </div>
+        </div>
+      </div>
       <!-- ============ CUSTOMERS ============ -->
       <div id="pageCustomers" class="hide">
         <div class="crumb">Home / <b>Customers</b></div>
@@ -1098,7 +1110,7 @@ var BASE='';
 var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   orders:'/papi/orders',products:'/papi/products',
   kitchen:'/papi/kitchen',kitchenAdv:'/papi/kitchen-advance',
-  updStatus:'/papi/update-status',saveOrder:'/papi/save-order',quoteSend:'/papi/quotation-send',
+  updStatus:'/papi/update-status',saveOrder:'/papi/save-order',quoteSend:'/papi/quotation-send',quotations:'/papi/quotations',
   updProduct:'/papi/update-product',addProduct:'/papi/add-product',delProduct:'/papi/delete-product',
   uploadImage:'/papi/upload-image',
   uploadDoc:'/papi/upload-doc',
@@ -1861,12 +1873,27 @@ function renderBrainActivity(){
     +brainActivityCardHtml(d.activity||[]).replace('flex:1;min-width:280px','min-width:0')
     +'<div style="margin-top:10px"><button class="btn" style="background:#eef2f8" onclick="showPage(\'activity\')">Open full Review Inbox →</button></div>';
 }
+async function quotesInit(){
+  var tb=$('qRows');if(!tb)return;
+  tb.innerHTML='<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--muted)">Loading…</td></tr>';
+  try{var r=await fetch(EP.quotations+'?token='+encodeURIComponent(token),{cache:'no-store'});var d=await r.json();
+    if(!d||!d.ok){tb.innerHTML='<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--muted)">Could not load</td></tr>';return;}
+    var rows=d.rows||[];if($('qCount'))$('qCount').textContent=rows.length;
+    if(!rows.length){tb.innerHTML='<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--muted)">No quotations sent yet</td></tr>';return;}
+    tb.innerHTML=rows.map(function(q){
+      var dt=q.at?new Date(q.at).toLocaleString():'';
+      var dl=q.url?'<a class="btn ghost" href="'+esc(q.url)+'" target="_blank" rel="noopener" style="padding:5px 10px">⤓ Download</a>':'<span style="color:var(--muted);font-size:12px">no file</span>';
+      return '<tr><td style="white-space:nowrap">'+esc(dt)+'</td><td><code>'+esc(q.quote_no||'')+'</code></td><td>'+esc(q.phone||'')+'</td><td style="max-width:320px;font-size:12px;color:var(--muted)">'+esc(q.caption||'')+'</td><td>'+esc(q.via||'')+'</td><td>'+dl+'</td></tr>';
+    }).join('');
+  }catch(e){tb.innerHTML='<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--red)">Network error</td></tr>';}
+}
 function showPage(p){
   $('pageDash').classList.toggle('hide',p!=='dash');
   $('pageOrders').classList.toggle('hide',p!=='orders');
   $('pageKitchen').classList.toggle('hide',p!=='kitchen');
   $('pageDispatch').classList.toggle('hide',p!=='dispatch');
   $('pageCustomers').classList.toggle('hide',p!=='customers');
+  $('pageQuotations').classList.toggle('hide',p!=='quotations');
   $('pagePOS').classList.toggle('hide',p!=='pos');
   $('pageReports').classList.toggle('hide',p!=='reports');
   $('pageAnalytics').classList.toggle('hide',p!=='analytics');
@@ -1888,11 +1915,11 @@ function showPage(p){
   $('pageShipments').classList.toggle('hide',p!=='shipments');
   if(p==='orders'){$('detailView').classList.add('hide');$('listView').classList.remove('hide');}
   document.querySelectorAll('.side a.nav').forEach(function(a){a.classList.toggle('on',a.dataset.page===p);});
-  var T={dash:'Dashboard',pos:'POS',reports:'Reports',analytics:'Analytics',products:'Products',category:'Categories',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription',activity:'Activity Inbox',brain:'Business Brain',shipments:'Logistics'};
+  var T={dash:'Dashboard',pos:'POS',reports:'Reports',analytics:'Analytics',products:'Products',category:'Categories',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription',activity:'Activity Inbox',brain:'Business Brain',shipments:'Logistics',quotations:'Quotations'};
   $('pageTitle').textContent=T[p]||'Orders';
   if(p==='dash')renderDash(); else if(p==='pos')posInit(); else if(p==='reports')reportsInit(); else if(p==='analytics')analyticsInit();
   else if(p==='kitchen')kitchenInit();
-  else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='activity')activityInit(); else if(p==='brain')brainInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else if(p==='shipments')shipmentsInit(); else renderList();
+  else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='activity')activityInit(); else if(p==='brain')brainInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else if(p==='shipments')shipmentsInit(); else if(p==='quotations')quotesInit(); else renderList();
   closeSide(); window.scrollTo(0,0);
 }
 function openSide(){$('side').classList.add('open');$('backdrop').classList.add('show');}
