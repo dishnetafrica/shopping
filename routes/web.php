@@ -152,6 +152,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('save-order',     [PanelApiController::class, 'saveOrder']);
         Route::match(['get', 'post'], 'quotation-send', [PanelApiController::class, 'quotationSend']);
         Route::get('quotations', [PanelApiController::class, 'quotations']);
+        Route::match(['get', 'post'], 'quotation-resend',  [PanelApiController::class, 'quotationResend']);
+        Route::match(['get', 'post'], 'quotation-status',  [PanelApiController::class, 'quotationStatus']);
+        Route::match(['get', 'post'], 'quotation-convert', [PanelApiController::class, 'quotationConvert']);
         Route::get('update-product', [PanelApiController::class, 'updateProduct']);
         Route::get('delete-product', [PanelApiController::class, 'deleteProduct']);
         Route::get('add-product',    [PanelApiController::class, 'addProduct']);

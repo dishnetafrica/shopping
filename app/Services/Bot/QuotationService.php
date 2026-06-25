@@ -55,6 +55,50 @@ class QuotationService
         ];
     }
 
+    /**
+     * Persist a sent quotation + its line items so it can be listed, resent, and
+     * converted into an order later. Best-effort: never throws into the send path.
+     */
+    public function persist(Tenant $tenant, string $phone, string $name, array $quote, array $doc, string $source): ?\App\Models\Quotation
+    {
+        try {
+            $valid = (int) ($tenant->setting('quote_validity_days', 14));
+            if ($valid <= 0) $valid = 14;
+            $q = \App\Models\Quotation::create([
+                'tenant_id'      => $tenant->id,
+                'quote_no'       => (string) ($doc['no'] ?? ''),
+                'customer_name'  => $name !== '' ? $name : null,
+                'customer_phone' => preg_replace('/[^0-9]/', '', $phone),
+                'currency'       => (string) ($quote['currency'] ?? $tenant->setting('currency', 'UGX')),
+                'total'          => (float) ($quote['total'] ?? 0),
+                'status'         => 'sent',
+                'source'         => $source,
+                'valid_until'    => now()->addDays($valid)->toDateString(),
+                'pdf_path'       => (string) ($doc['path'] ?? ''),
+                'send_count'     => 1,
+                'last_sent_at'   => now(),
+            ]);
+            foreach (($quote['lines'] ?? []) as $l) {
+                if (empty($l['matched'])) continue;
+                \App\Models\QuotationItem::create([
+                    'quotation_id' => $q->id,
+                    'tenant_id'    => $tenant->id,
+                    'name'         => (string) ($l['name'] ?? ''),
+                    'qty'          => (int) ($l['qty'] ?? 1),
+                    'unit_price'   => (float) ($l['price'] ?? 0),
+                    'line_total'   => (float) ($l['sum'] ?? 0),
+                    'unit_label'   => ((string) ($l['unit'] ?? '')) ?: null,
+                    'image_url'    => ((string) ($l['image'] ?? '')) ?: null,
+                    'matched'      => true,
+                ]);
+            }
+            return $q;
+        } catch (\Throwable $e) {
+            \Log::warning('Quotation persist failed: ' . $e->getMessage());
+            return null;
+        }
+    }
+
     private function quoteNo(Tenant $tenant): string
     {
         $prefix = (string) ($tenant->order_prefix ?: 'Q');

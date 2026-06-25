@@ -963,6 +963,8 @@ class PanelApiController extends Controller
         $doc   = $svc->generate($t, $phone, $name, $quote);
         if (! $doc) return response()->json(['ok' => false, 'error' => 'generate_failed', 'message' => 'None of the items matched a priced product, so there was nothing to quote.']);
 
+        $quoteRow = $svc->persist($t, $phone, $name, $quote, $doc, 'panel');
+
         $sent = false;
         $err  = null;
         try {
@@ -987,6 +989,7 @@ class PanelApiController extends Controller
             'total'    => $doc['total'],
             'currency' => $doc['currency'],
             'url'      => $doc['url'],
+            'quote_id' => $quoteRow?->id,
             'sent'     => $sent,
             'error'    => $err,
         ]);
@@ -999,33 +1002,178 @@ class PanelApiController extends Controller
         if (! $t) return response()->json(['ok' => false, 'error' => 'no_tenant'], 403);
         app(\App\Support\TenantContext::class)->set($t->id);
 
-        $rows = \App\Models\Message::where('tenant_id', $t->id)
-            ->where('meta->kind', 'quotation')
-            ->orderByDesc('id')->limit(100)->get();
+        $rows = \App\Models\Quotation::where('tenant_id', $t->id)
+            ->orderByDesc('id')->limit(200)->get();
 
         $out = [];
-        foreach ($rows as $m) {
-            $no  = (string) data_get($m->meta, 'quote_no', '');
+        foreach ($rows as $q) {
             $url = '';
-            if ($no !== '') {
-                $path = "quotations/{$t->id}/Quotation-{$no}.pdf";
+            if ($q->pdf_path) {
                 try {
-                    if (\Illuminate\Support\Facades\Storage::disk('public')->exists($path)) {
-                        $url = \Illuminate\Support\Facades\Storage::disk('public')->url($path);
+                    if (\Illuminate\Support\Facades\Storage::disk('public')->exists($q->pdf_path)) {
+                        $url = \Illuminate\Support\Facades\Storage::disk('public')->url($q->pdf_path);
                     }
                 } catch (\Throwable $e) { /* file may be gone */ }
             }
+            $orderNo = '';
+            if ($q->order_id) {
+                $ord = \App\Models\Order::withoutGlobalScopes()->find($q->order_id);
+                $orderNo = $ord ? (string) $ord->order_no : '';
+            }
             $out[] = [
-                'quote_no' => $no,
-                'phone'    => (string) $m->customer_phone,
-                'via'      => (string) data_get($m->meta, 'via', ''),
-                'caption'  => (string) $m->body,
-                'at'       => optional($m->created_at)->toIso8601String(),
-                'url'      => $url,
+                'id'          => (int) $q->id,
+                'quote_no'    => (string) $q->quote_no,
+                'name'        => (string) ($q->customer_name ?? ''),
+                'phone'       => (string) $q->customer_phone,
+                'currency'    => (string) $q->currency,
+                'total'       => (float) $q->total,
+                'status'      => (string) $q->status,
+                'source'      => (string) $q->source,
+                'valid_until' => optional($q->valid_until)->toDateString(),
+                'send_count'  => (int) $q->send_count,
+                'order_no'    => $orderNo,
+                'at'          => optional($q->created_at)->toIso8601String(),
+                'url'         => $url,
             ];
         }
 
         return response()->json(['ok' => true, 'rows' => $out]);
+    }
+
+    /** Resend an existing quotation's PDF to the customer (or an override phone). */
+    public function quotationResend(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false, 'error' => 'no_tenant'], 403);
+        app(\App\Support\TenantContext::class)->set($t->id);
+
+        $q = \App\Models\Quotation::where('tenant_id', $t->id)->find((int) $r->input('id'));
+        if (! $q) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', $q->customer_phone));
+        if ($phone === '') return response()->json(['ok' => false, 'error' => 'no_phone', 'message' => 'No phone to send to.']);
+
+        // Prefer the stored PDF; regenerate from stored items if the file is gone.
+        $b64 = ''; $url = '';
+        try {
+            if ($q->pdf_path && \Illuminate\Support\Facades\Storage::disk('public')->exists($q->pdf_path)) {
+                $b64 = base64_encode(\Illuminate\Support\Facades\Storage::disk('public')->get($q->pdf_path));
+                $url = \Illuminate\Support\Facades\Storage::disk('public')->url($q->pdf_path);
+            }
+        } catch (\Throwable $e) { /* fall through to regenerate */ }
+
+        $fileName = 'Quotation-' . $q->quote_no . '.pdf';
+        if ($b64 === '') {
+            $svc = app(\App\Services\Bot\QuotationService::class);
+            if (! $svc->available()) return response()->json(['ok' => false, 'error' => 'pdf_unavailable', 'message' => 'PDF engine not installed.']);
+            $quote = $this->quoteArrayFromQuotation($q);
+            $doc   = $svc->generate($t, $phone, (string) ($q->customer_name ?? ''), $quote);
+            if (! $doc) return response()->json(['ok' => false, 'error' => 'regen_failed', 'message' => 'Could not rebuild the PDF.']);
+            $b64 = $doc['b64']; $url = $doc['url']; $fileName = $doc['fileName'];
+            $q->pdf_path = $doc['path'];
+        }
+
+        $sent = false; $err = null;
+        try {
+            $gateway = app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($t);
+            if (method_exists($gateway, 'sendDocument') && $t->whatsapp_instance) {
+                $valid   = (int) $t->setting('quote_validity_days', 14); if ($valid <= 0) $valid = 14;
+                $caption = "📄 Quotation {$q->quote_no} — Total {$q->currency} " . number_format((float) $q->total)
+                         . ". Valid {$valid} days. Reply to confirm and we'll arrange delivery.";
+                $gateway->sendDocument($t->whatsapp_instance, $phone, $b64 !== '' ? $b64 : $url, $fileName, $caption);
+                $sent = true;
+                \App\Models\MessageLog::record($t->id, $phone, $t->whatsapp_instance, 'out', 'panel', "[quotation {$q->quote_no} resent] " . $caption, null, null, ['via' => 'panel', 'kind' => 'quotation', 'quote_no' => $q->quote_no]);
+            }
+        } catch (\Throwable $e) {
+            $err = $e->getMessage();
+            \Log::warning('quotation resend failed: ' . $e->getMessage());
+        }
+
+        $q->send_count   = (int) $q->send_count + 1;
+        $q->last_sent_at = now();
+        $q->save();
+
+        return response()->json(['ok' => true, 'sent' => $sent, 'url' => $url, 'send_count' => (int) $q->send_count, 'error' => $err]);
+    }
+
+    /** Mark a quotation accepted / declined / expired / sent. */
+    public function quotationStatus(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false, 'error' => 'no_tenant'], 403);
+        app(\App\Support\TenantContext::class)->set($t->id);
+
+        $q = \App\Models\Quotation::where('tenant_id', $t->id)->find((int) $r->input('id'));
+        if (! $q) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        $status  = (string) $r->input('status', '');
+        $allowed = ['sent', 'accepted', 'declined', 'expired'];
+        if (! in_array($status, $allowed, true)) return response()->json(['ok' => false, 'error' => 'bad_status'], 422);
+        if ($q->status === 'converted') return response()->json(['ok' => false, 'error' => 'already_converted', 'message' => 'This quotation is already an order.']);
+
+        $q->status = $status;
+        $q->save();
+        return response()->json(['ok' => true, 'status' => $q->status]);
+    }
+
+    /** Convert a quotation into a real order, reusing the order pipeline. */
+    public function quotationConvert(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false, 'error' => 'no_tenant'], 403);
+        app(\App\Support\TenantContext::class)->set($t->id);
+
+        $q = \App\Models\Quotation::with('items')->where('tenant_id', $t->id)->find((int) $r->input('id'));
+        if (! $q) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        if ($q->order_id) {
+            $ord = \App\Models\Order::withoutGlobalScopes()->find($q->order_id);
+            return response()->json(['ok' => true, 'already' => true, 'order_id' => (int) $q->order_id, 'order_no' => $ord ? (string) $ord->order_no : '']);
+        }
+
+        $items = []; $textParts = [];
+        foreach ($q->items as $it) {
+            if (! $it->matched) continue;
+            $items[]     = ['name' => (string) $it->name, 'qty' => (int) $it->qty, 'price' => (float) $it->unit_price];
+            $textParts[] = ((int) $it->qty) . 'x ' . $it->name;
+        }
+        if (! $items) return response()->json(['ok' => false, 'error' => 'no_items', 'message' => 'This quotation has no priced items to convert.']);
+
+        $o = new \App\Models\Order();
+        $o->tenant_id      = $t->id;
+        $o->status         = 'New';
+        $o->channel        = 'quote';
+        $o->customer_name  = (string) ($q->customer_name ?? '');
+        $o->customer_phone = (string) $q->customer_phone;
+        $o->items_json     = $items;
+        $o->items_text     = implode(', ', $textParts);
+        $o->total          = (float) $q->total;
+        $o->save();        // OrderObserver assigns order_no + track_token
+
+        $q->order_id = (int) $o->id;
+        $q->status   = 'converted';
+        $q->save();
+
+        return response()->json(['ok' => true, 'order_id' => (int) $o->id, 'order_no' => (string) $o->order_no]);
+    }
+
+    /** Rebuild an OrderCalculator-shaped quote array from a stored quotation (for PDF regen). */
+    private function quoteArrayFromQuotation(\App\Models\Quotation $q): array
+    {
+        $lines = [];
+        foreach ($q->items as $it) {
+            $lines[] = [
+                'name'    => (string) $it->name,
+                'qty'     => (int) $it->qty,
+                'price'   => (float) $it->unit_price,
+                'sum'     => (float) $it->line_total,
+                'unit'    => (string) ($it->unit_label ?? ''),
+                'moq'     => null,
+                'image'   => (string) ($it->image_url ?? ''),
+                'matched' => (bool) $it->matched,
+            ];
+        }
+        return ['lines' => $lines, 'total' => (float) $q->total, 'currency' => (string) $q->currency];
     }
 
     public function updateProduct(Request $r)

@@ -208,6 +208,7 @@ class AiBrain
             $media = $doc['b64'] !== '' ? $doc['b64'] : $doc['url'];
             $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], $caption);
             MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', "[quotation {$doc['no']}] " . $caption, null, null, ['via' => 'ai', 'kind' => 'quotation', 'quote_no' => $doc['no']]);
+            $svc->persist($tenant, $from, (string) ($convoRow->customer_name ?? ''), $quote, $doc, 'bot');
             return true;
         } catch (\Throwable $e) {
             Log::warning('AiBrain quotation failed: ' . $e->getMessage());

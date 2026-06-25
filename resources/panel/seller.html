@@ -584,8 +584,8 @@
         <div class="card">
           <div class="head">Sent quotations <span class="count" id="qCount" style="margin-left:auto"></span></div>
           <div class="body">
-            <p style="color:var(--muted);font-size:13px;margin:0 0 12px">Every quotation the bot or POS has sent. Tap Download to re-open the PDF.</p>
-            <div class="tablewrap"><table><thead><tr><th>Date</th><th>Quote No</th><th>Customer</th><th>Details</th><th>Source</th><th></th></tr></thead><tbody id="qRows"></tbody></table></div>
+            <p style="color:var(--muted);font-size:13px;margin:0 0 12px">Every quotation the bot or POS has sent. Resend the PDF, convert a confirmed quote into an order, or mark it accepted / declined.</p>
+            <div class="tablewrap"><table><thead><tr><th>Date</th><th>Quote No</th><th>Customer</th><th>Total</th><th>Status</th><th>Valid until</th><th>Source</th><th>Actions</th></tr></thead><tbody id="qRows"></tbody></table></div>
           </div>
         </div>
       </div>
@@ -1110,7 +1110,7 @@ var BASE='';
 var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   orders:'/papi/orders',products:'/papi/products',
   kitchen:'/papi/kitchen',kitchenAdv:'/papi/kitchen-advance',
-  updStatus:'/papi/update-status',saveOrder:'/papi/save-order',quoteSend:'/papi/quotation-send',quotations:'/papi/quotations',
+  updStatus:'/papi/update-status',saveOrder:'/papi/save-order',quoteSend:'/papi/quotation-send',quotations:'/papi/quotations',quoteResend:'/papi/quotation-resend',quoteStatus:'/papi/quotation-status',quoteConvert:'/papi/quotation-convert',
   updProduct:'/papi/update-product',addProduct:'/papi/add-product',delProduct:'/papi/delete-product',
   uploadImage:'/papi/upload-image',
   uploadDoc:'/papi/upload-doc',
@@ -1873,19 +1873,69 @@ function renderBrainActivity(){
     +brainActivityCardHtml(d.activity||[]).replace('flex:1;min-width:280px','min-width:0')
     +'<div style="margin-top:10px"><button class="btn" style="background:#eef2f8" onclick="showPage(\'activity\')">Open full Review Inbox →</button></div>';
 }
+function qStatusBadge(s){
+  var c={sent:'#2563eb',accepted:'#16a34a',declined:'#dc2626',converted:'#7c3aed',expired:'#6b7280'}[s]||'#6b7280';
+  return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;color:#fff;background:'+c+'">'+esc(s||'')+'</span>';
+}
 async function quotesInit(){
   var tb=$('qRows');if(!tb)return;
-  tb.innerHTML='<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--muted)">Loading…</td></tr>';
+  tb.innerHTML='<tr><td colspan="8" style="padding:14px;text-align:center;color:var(--muted)">Loading…</td></tr>';
   try{var r=await fetch(EP.quotations+'?token='+encodeURIComponent(token),{cache:'no-store'});var d=await r.json();
-    if(!d||!d.ok){tb.innerHTML='<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--muted)">Could not load</td></tr>';return;}
+    if(!d||!d.ok){tb.innerHTML='<tr><td colspan="8" style="padding:14px;text-align:center;color:var(--muted)">Could not load</td></tr>';return;}
     var rows=d.rows||[];if($('qCount'))$('qCount').textContent=rows.length;
-    if(!rows.length){tb.innerHTML='<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--muted)">No quotations sent yet</td></tr>';return;}
+    window.__quotes={};
+    if(!rows.length){tb.innerHTML='<tr><td colspan="8" style="padding:14px;text-align:center;color:var(--muted)">No quotations sent yet</td></tr>';return;}
     tb.innerHTML=rows.map(function(q){
+      window.__quotes[q.id]=q;
       var dt=q.at?new Date(q.at).toLocaleString():'';
-      var dl=q.url?'<a class="btn ghost" href="'+esc(q.url)+'" target="_blank" rel="noopener" style="padding:5px 10px">⤓ Download</a>':'<span style="color:var(--muted);font-size:12px">no file</span>';
-      return '<tr><td style="white-space:nowrap">'+esc(dt)+'</td><td><code>'+esc(q.quote_no||'')+'</code></td><td>'+esc(q.phone||'')+'</td><td style="max-width:320px;font-size:12px;color:var(--muted)">'+esc(q.caption||'')+'</td><td>'+esc(q.via||'')+'</td><td>'+dl+'</td></tr>';
+      var cust=esc(q.name||'')+(q.phone?'<br><span style="color:var(--muted);font-size:11px">'+esc(q.phone)+'</span>':'');
+      var total=esc(q.currency||'')+' '+Number(q.total||0).toLocaleString();
+      var vu=q.valid_until?esc(q.valid_until):'';
+      var dl=q.url?'<a class="btn ghost" href="'+esc(q.url)+'" target="_blank" rel="noopener" style="padding:4px 9px">⤓ PDF</a>':'';
+      var actions='';
+      if(q.status==='converted'){
+        actions=dl+' <span style="color:var(--muted);font-size:12px">→ '+esc(q.order_no||'order')+'</span>';
+      } else {
+        actions=dl
+          +' <button class="btn ghost" style="padding:4px 9px" onclick="qResend('+q.id+')">↻ Resend</button>'
+          +' <button class="btn" style="padding:4px 9px" onclick="qConvert('+q.id+')">✓ Convert</button>'
+          +' <select onchange="qStatus('+q.id+',this.value)" style="padding:4px 6px;border:1px solid var(--line);border-radius:7px;color:var(--ink);font-size:12px">'
+          +'<option value="">Mark…</option><option value="accepted">Accepted</option><option value="declined">Declined</option><option value="expired">Expired</option></select>';
+      }
+      return '<tr>'
+        +'<td style="white-space:nowrap">'+esc(dt)+'</td>'
+        +'<td><code>'+esc(q.quote_no||'')+'</code></td>'
+        +'<td>'+cust+'</td>'
+        +'<td style="white-space:nowrap">'+total+'</td>'
+        +'<td>'+qStatusBadge(q.status)+'</td>'
+        +'<td style="white-space:nowrap">'+vu+'</td>'
+        +'<td>'+esc(q.source||'')+'</td>'
+        +'<td style="white-space:nowrap">'+actions+'</td>'
+        +'</tr>';
     }).join('');
-  }catch(e){tb.innerHTML='<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--red)">Network error</td></tr>';}
+  }catch(e){tb.innerHTML='<tr><td colspan="8" style="padding:14px;text-align:center;color:var(--red)">Network error</td></tr>';}
+}
+async function qResend(id){
+  var q=(window.__quotes||{})[id]; if(q&&q.status==='converted'){toast('Already an order');return;}
+  if(!confirm('Resend this quotation on WhatsApp?'))return;
+  try{var r=await fetch(EP.quoteResend+'?token='+encodeURIComponent(token)+'&id='+id,{cache:'no-store'});var d=await r.json();
+    if(d&&d.ok){toast(d.sent?'Quotation resent ✓':'Could not send — WhatsApp not connected');}
+    else toast((d&&d.message)?d.message:'Resend failed');
+  }catch(e){toast('Network error');}
+}
+async function qConvert(id){
+  if(!confirm('Convert this quotation into an order?'))return;
+  try{var r=await fetch(EP.quoteConvert+'?token='+encodeURIComponent(token)+'&id='+id,{cache:'no-store'});var d=await r.json();
+    if(d&&d.ok){toast('Order '+(d.order_no||'')+' created ✓');quotesInit();}
+    else toast((d&&d.message)?d.message:'Convert failed');
+  }catch(e){toast('Network error');}
+}
+async function qStatus(id,status){
+  if(!status)return;
+  try{var r=await fetch(EP.quoteStatus+'?token='+encodeURIComponent(token)+'&id='+id+'&status='+encodeURIComponent(status),{cache:'no-store'});var d=await r.json();
+    if(d&&d.ok){toast('Marked '+status);quotesInit();}
+    else toast((d&&d.message)?d.message:'Update failed');
+  }catch(e){toast('Network error');}
 }
 function showPage(p){
   $('pageDash').classList.toggle('hide',p!=='dash');
