@@ -76,6 +76,7 @@ class QuotationService
         $cphone  = e((string) ($tenant->setting('public_phone', '') ?: $tenant->whatsapp_number));
         $web     = e((string) $tenant->setting('website', ''));
         $valid   = (int) ($tenant->setting('quote_validity_days', 14));
+        if ($valid <= 0) $valid = 14;
         $terms   = (string) ($tenant->setting('quote_terms', 'Prices are per the current list and may change. Delivery and payment terms confirmed on order. Wholesale items may have a minimum order.'));
         $logo    = (string) $tenant->setting('logo', '');
         $logoTag = '';
@@ -102,6 +103,11 @@ class QuotationService
         $until = now()->addDays($valid)->format('j M Y');
         $custLine = $name !== '' ? e($name) . ' · ' . e($phone) : e($phone);
 
+        // Contact line: only show parts that exist, joined by ' · ', so an empty
+        // phone/email/website never leaves a lone separator under the company name.
+        $contact  = implode(' · ', array_filter([$cphone, $email, $web], fn ($x) => trim((string) $x) !== ''));
+        $metaLine = trim($addr) !== '' ? ($addr . ($contact !== '' ? '<br>' . $contact : '')) : $contact;
+
         return <<<HTML
 <!doctype html><html><head><meta charset="utf-8"><style>
 * { font-family: DejaVu Sans, sans-serif; }
@@ -123,7 +129,7 @@ td { padding:7px 8px; border-bottom:1px solid #eee; }
   <div class="title"><h1>QUOTATION</h1><div class="muted">{$no}</div></div>
   {$logoTag}
   <div class="company">{$company}</div>
-  <div class="muted">{$addr}<br>{$cphone} · {$email} {$web}</div>
+  <div class="muted">{$metaLine}</div>
 </div>
 <table class="meta">
   <tr><td style="width:90px"><b>To</b></td><td>{$custLine}</td><td style="width:90px"><b>Date</b></td><td>{$date}</td></tr>
