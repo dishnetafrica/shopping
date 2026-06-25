@@ -88,12 +88,14 @@ class QuotationService
         $i = 0;
         foreach ($quote['lines'] as $l) {
             $i++;
+            $photo = $this->imgData((string) ($l['image'] ?? ''));
+            $pcell = '<td>' . ($photo !== '' ? '<img src="' . $photo . '" style="height:34px;width:34px;object-fit:cover;border-radius:4px">' : '') . '</td>';
             if (! $l['matched']) {
-                $rows .= '<tr><td>' . $i . '</td><td>' . e($l['name']) . ' <i style="color:#888">(to be confirmed)</i></td><td class="r">' . (int) $l['qty'] . '</td><td class="r">—</td><td class="r">—</td></tr>';
+                $rows .= '<tr><td>' . $i . '</td>' . $pcell . '<td>' . e($l['name']) . ' <i style="color:#888">(to be confirmed)</i></td><td class="r">' . (int) $l['qty'] . '</td><td class="r">—</td><td class="r">—</td></tr>';
                 continue;
             }
             $unit = $l['unit'] ? ' / ' . e($l['unit']) : '';
-            $rows .= '<tr><td>' . $i . '</td><td>' . e($l['name']) . '</td><td class="r">' . (int) $l['qty'] . '</td><td class="r">' . $cur . ' ' . number_format($l['price']) . $unit . '</td><td class="r">' . $cur . ' ' . number_format($l['sum']) . '</td></tr>';
+            $rows .= '<tr><td>' . $i . '</td>' . $pcell . '<td>' . e($l['name']) . '</td><td class="r">' . (int) $l['qty'] . '</td><td class="r">' . $cur . ' ' . number_format($l['price']) . $unit . '</td><td class="r">' . $cur . ' ' . number_format($l['sum']) . '</td></tr>';
         }
 
         $date  = now()->format('j M Y');
@@ -128,9 +130,9 @@ td { padding:7px 8px; border-bottom:1px solid #eee; }
   <tr><td><b>Valid until</b></td><td>{$until}</td><td><b>Currency</b></td><td>{$cur}</td></tr>
 </table>
 <table>
-  <tr><th style="width:30px">#</th><th>Item</th><th class="r" style="width:60px">Qty</th><th class="r" style="width:120px">Unit price</th><th class="r" style="width:120px">Amount</th></tr>
+  <tr><th style="width:26px">#</th><th style="width:46px">Photo</th><th>Item</th><th class="r" style="width:56px">Qty</th><th class="r" style="width:110px">Unit price</th><th class="r" style="width:110px">Amount</th></tr>
   {$rows}
-  <tr><td colspan="4" class="r total">Total</td><td class="r total">{$cur} {$this->fmt($quote['total'])}</td></tr>
+  <tr><td colspan="5" class="r total">Total</td><td class="r total">{$cur} {$this->fmt($quote['total'])}</td></tr>
 </table>
 <div class="terms"><b>Terms:</b> {$terms}<br>This quotation is valid until {$until}. To order, reply on WhatsApp.</div>
 </body></html>
@@ -140,5 +142,29 @@ HTML;
     private function fmt(float $n): string
     {
         return number_format($n);
+    }
+
+    /**
+     * Turn a product image_url into something dompdf can render. Local /storage images are
+     * embedded as a base64 data URI (most reliable, no network); a remote http(s) URL is
+     * returned as-is for dompdf to fetch (isRemoteEnabled is on). Returns '' if unavailable.
+     */
+    private function imgData(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') return '';
+
+        if (preg_match('#/storage/(.+)$#', $url, $m)) {
+            try {
+                $rel = $m[1];
+                if (Storage::disk('public')->exists($rel)) {
+                    $ext  = strtolower(pathinfo($rel, PATHINFO_EXTENSION));
+                    $mime = $ext === 'png' ? 'image/png' : ($ext === 'webp' ? 'image/webp' : 'image/jpeg');
+                    return 'data:' . $mime . ';base64,' . base64_encode(Storage::disk('public')->get($rel));
+                }
+            } catch (\Throwable $e) { /* fall through to URL */ }
+        }
+
+        return Str::startsWith($url, ['http://', 'https://']) ? $url : '';
     }
 }

@@ -49,6 +49,7 @@ class OrderCalculator
                 'sum'     => $sum,
                 'unit'    => (string) ($p['unit_label'] ?? ''),
                 'moq'     => isset($p['moq']) ? (int) $p['moq'] : null,
+                'image'   => (string) ($p['image'] ?? ''),
                 'matched' => true,
             ];
         }
@@ -87,6 +88,7 @@ class OrderCalculator
                     'id' => $p->id, 'name' => (string) $p->name, 'price' => (float) $p->price,
                     'category' => (string) ($p->category ?? ''), 'keywords' => (string) ($p->keywords ?? ''),
                     'unit_label' => (string) ($p->unit_label ?? ''), 'moq' => $p->moq ? (int) $p->moq : null,
+                    'image' => (string) ($p->image_url ?? ''),
                 ])->all();
         });
     }
