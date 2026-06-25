@@ -324,32 +324,41 @@ class AiBrain
      */
     private function captureOrder(Tenant $tenant, Conversation $convo, string $from, string $reply): string
     {
-        if (! preg_match('/<<ORDER\s*(\{.*?\})\s*>>/s', $reply, $m)) {
+        $pos = stripos($reply, '<<ORDER');
+        if ($pos === false) {
             return $reply; // no order block — nothing to do
         }
-        // Strip the machine block no matter what happens below.
-        $clean = trim(preg_replace('/<<ORDER\s*\{.*?\}\s*>>/s', '', $reply));
+
+        // The order block is ALWAYS the last thing in the reply. Strip from <<ORDER to the END of
+        // the message so a malformed or truncated block can NEVER leak to the customer (the model
+        // often closes with "}}" instead of "}>>", or drops the ">>" entirely).
+        $clean = trim(substr($reply, 0, $pos));
         if ($clean === '') $clean = 'Great — let me confirm that for you 👍';
 
         try {
-            $data  = json_decode($m[1], true);
-            $items = (is_array($data) && is_array($data['items'] ?? null)) ? $data['items'] : [];
-            if (! $items) return $clean;
+            $block = substr($reply, $pos);
 
-            $calcItems = array_map(fn ($it) => [
-                'query' => (string) ($it['name'] ?? ''),
-                'qty'   => max(1, (int) ($it['qty'] ?? 1)),
-            ], $items);
+            // Robust parse: pull every {"name":"..","qty":N} pair via regex instead of json_decode,
+            // so even a truncated or "}}"-malformed block still yields the items that came through.
+            $calcItems = [];
+            if (preg_match_all('/"name"\s*:\s*"([^"]+)"\s*,\s*"qty"\s*:\s*(\d+)/s', $block, $mm, PREG_SET_ORDER)) {
+                foreach ($mm as $it) {
+                    $calcItems[] = ['query' => trim($it[1]), 'qty' => max(1, (int) $it[2])];
+                }
+            }
             $calcItems = array_values(array_filter($calcItems, fn ($i) => $i['query'] !== ''));
-            if (! $calcItems) return $clean;
+            if (! $calcItems) return $clean; // nothing parseable — but the block is already stripped
+
+            $delivery = '';
+            if (preg_match('/"delivery"\s*:\s*"([^"]*)"/', $block, $dm)) $delivery = trim($dm[1]);
+            $note = '';
+            if (preg_match('/"note"\s*:\s*"([^"]*)"/', $block, $nm)) $note = trim($nm[1]);
 
             $quote = app(\App\Services\Bot\OrderCalculator::class)->quote($tenant, $calcItems);
 
             $parts = [];
             foreach ($quote['lines'] as $l) $parts[] = $l['qty'] . ' x ' . $l['name'];
             $itemsText = implode(', ', $parts);
-            $delivery  = trim((string) ($data['delivery'] ?? ''));
-            $note      = trim((string) ($data['note'] ?? ''));
 
             // Dedupe: don't create a second identical order for the same customer within 10 min
             // (the model can re-emit the block across turns).
@@ -528,7 +537,7 @@ class AiBrain
             $p .= "CATALOGUE: if the customer asks for the catalogue, price list, product list, brochure, or product photos/pictures, acknowledge warmly (e.g. \"Sure, sending our catalogue now 📄\") — the system sends the catalogue file automatically. NEVER say you can't send files, photos or PDFs; you can.\n\n";
         $p .= "PLACING AN ORDER: when the customer has clearly confirmed an order — they agreed to specific product(s) WITH quantities AND gave a delivery area/town AND said to go ahead — append a hidden machine line as the VERY LAST thing in your reply, on its own line, exactly in this format:\n";
         $p .= "<<ORDER {\"items\":[{\"name\":\"EXACT product name from the list\",\"qty\":10}],\"delivery\":\"area or town\",\"note\":\"anything extra or empty\"}>>\n";
-        $p .= "Order-line rules: only add it when the order is truly confirmed (never while still discussing price/options); use the EXACT product names from the PRODUCTS list; qty is a whole number; do NOT put prices in it. The customer must NEVER see this line — the system removes it and replies with the official order number, so keep your own message short (e.g. \"Great, let me confirm that for you 👍\") when you add it. If the order is not yet confirmed, do NOT add the line.\n\n";
+        $p .= "Order-line rules: only add it when the order is truly confirmed (never while still discussing price/options); use the EXACT product names from the PRODUCTS list; qty is a whole number; do NOT put prices in it. When you add the ORDER line, write only ONE short sentence above it (e.g. \"Great, confirming your order now 👍\") and do NOT repeat the item list yourself — the system removes the ORDER line and replies with the official order number and full summary. If the order is not yet confirmed, do NOT add the line.\n\n";
         $p .= "PRODUCTS (prices = source of truth):\n" . ($lines !== '' ? $lines : '(catalogue unavailable right now — ask the customer to hold; staff have been alerted)') . "\n";
         return $p;
     }
