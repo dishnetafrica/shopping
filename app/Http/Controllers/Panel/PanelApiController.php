@@ -970,7 +970,7 @@ class PanelApiController extends Controller
             if (method_exists($gateway, 'sendDocument') && $t->whatsapp_instance) {
                 $cur     = $doc['currency'];
                 $caption = "📄 Quotation {$doc['no']} — Total {$cur} " . number_format($doc['total'])
-                         . '. Valid ' . ((int) $t->setting('quote_validity_days', 14)) . ' days. Reply to confirm and we\'ll arrange delivery.';
+                         . '. Valid ' . (((int) $t->setting('quote_validity_days', 14)) ?: 14) . ' days. Reply to confirm and we\'ll arrange delivery.';
                 $media   = $doc['b64'] !== '' ? $doc['b64'] : $doc['url'];
                 $gateway->sendDocument($t->whatsapp_instance, $phone, $media, $doc['fileName'], $caption);
                 $sent = true;

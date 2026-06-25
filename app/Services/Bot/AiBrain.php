@@ -203,7 +203,7 @@ class AiBrain
 
             $cur     = $doc['currency'];
             $caption = "📄 Quotation {$doc['no']} — Total {$cur} " . number_format($doc['total']) . ". Valid "
-                     . (int) ($tenant->setting('quote_validity_days', 14)) . " days. Reply to confirm and we'll arrange delivery.";
+                     . (((int) $tenant->setting('quote_validity_days', 14)) ?: 14) . " days. Reply to confirm and we'll arrange delivery.";
 
             $media = $doc['b64'] !== '' ? $doc['b64'] : $doc['url'];
             $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], $caption);
