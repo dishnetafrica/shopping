@@ -15,14 +15,16 @@ class MarketingController extends Controller
 {
     public function home(\Illuminate\Http\Request $request)
     {
-        // If this request arrived on a shop's own domain, serve that shop's
-        // storefront at the root instead of the marketing page. The slug URL
-        // (mycloudbss.com/{slug}) keeps working independently.
+        // If this request arrived on a shop's own domain, serve that shop at the
+        // root instead of the marketing page. Use landing() (not show()) so the
+        // domain root matches mycloudbss.com/{slug}: manufacturers/brand-site shops
+        // get their brand site, everyone else gets the shop storefront.
+        // The slug URL (mycloudbss.com/{slug}) keeps working independently.
         $host = strtolower((string) $request->getHost());
         $host = preg_replace('/^www\./', '', $host);
         $tenant = \App\Models\Tenant::whereRaw('lower(custom_domain) = ?', [$host])->first();
         if ($tenant) {
-            return app(\App\Http\Controllers\Storefront\StorefrontController::class)->show($tenant->slug);
+            return app(\App\Http\Controllers\Storefront\StorefrontController::class)->landing($tenant->slug);
         }
 
         $path = resource_path('marketing/index.html');
