@@ -450,6 +450,7 @@
               <div class="held" id="heldTabs"></div>
               <div class="lbl">Customer</div>
               <div class="inrow"><input id="posCust" placeholder="Name (optional)"><input id="posPhone" placeholder="Phone"></div>
+              <div class="inrow"><select id="posZone" style="width:100%"><option value="">Zone: Uganda (UGX)</option><option value="USD">Zone: South Sudan · Juba (USD)</option></select></div>
               <div class="lbl">Items</div>
               <div id="posCart"><p style="color:var(--muted);font-size:13px">Cart is empty — tap a product.</p></div>
               <div class="lbl">Discount</div>
@@ -471,7 +472,6 @@
                 <button class="btn red" id="posClear">Clear</button>
               </div>
               <div style="margin-top:8px">
-                <select id="posQuoteZone" style="width:100%;margin-bottom:6px"><option value="">Quotation zone: Uganda (UGX)</option><option value="USD">South Sudan · Juba (USD, +markup)</option></select>
                 <button class="btn ghost" id="posQuote" style="width:100%">📄 Send quotation on WhatsApp</button>
               </div>
             </div>
@@ -2277,7 +2277,7 @@ window.addEventListener('beforeprint',function(){document.querySelectorAll('.edi
 window.addEventListener('afterprint',function(){document.querySelectorAll('.editcol').forEach(function(e){e.style.display='';});document.querySelectorAll('.editcol-inline').forEach(function(e){e.style.display='';});document.querySelectorAll('.printqty').forEach(function(e){e.style.display='none';});});
 
 /* ---------------- POS ---------------- */
-var POS={cart:[],charges:[],held:[],filter:''};
+var POS={cart:[],charges:[],held:[],filter:'',zone:''};
 function posGrid(){
   if(!CATALOGUE.length){$('posGrid').innerHTML='<div class="empty">No products loaded yet. Tap \u21bb Refresh, or check the products feed.</div>';return;}
   var f=POS.filter||'';
@@ -2286,31 +2286,38 @@ function posGrid(){
   var capped=list.slice(0,60);
   $('posGrid').innerHTML=capped.length?capped.map(function(o){var st=prodStock(o.p),out=st===0;
     var im=o.p.image?'<img class="pthumb" loading="lazy" src="'+esc(o.p.image)+'" onerror="this.style.display=\'none\'">':'';
-    return '<div class="pcard" onclick="posAdd('+o.i+')">'+im+'<div class="nm">'+esc(o.p.name)+'</div><div class="pr">'+ugx(o.p.price)+'</div><div class="st'+(out?' out':'')+'">'+(out?'OUT OF STOCK':'Stock: '+st)+'</div></div>';
+    return '<div class="pcard" onclick="posAdd('+o.i+')">'+im+'<div class="nm">'+esc(o.p.name)+'</div><div class="pr">'+posM(o.p.price)+'</div><div class="st'+(out?' out':'')+'">'+(out?'OUT OF STOCK':'Stock: '+st)+'</div></div>';
   }).join('')+(list.length>60?'<div class="empty" style="grid-column:1/-1">Showing first 60 of '+list.length+' \u2014 refine your search.</div>':''):'<div class="empty">No match for \u201c'+esc(f)+'\u201d</div>';
 }
 function posAdd(i){var p=CATALOGUE[i];if(prodStock(p)===0){toast('Out of stock'+(INVENTORY_MODE==='branch'&&BRANCH_FILTER?' at '+branchName(BRANCH_FILTER):''));return;}var ex=POS.cart.find(function(c){return c.i===i;});if(ex)ex.qty++;else POS.cart.push({i:i,name:p.name,price:p.price,qty:1});posRenderCart();}
 function posQty(k,d){POS.cart[k].qty+=d;if(POS.cart[k].qty<1)POS.cart.splice(k,1);posRenderCart();}
 function posRenderCart(){
   $('posCart').innerHTML=POS.cart.length?POS.cart.map(function(c,k){
-    return '<div class="ci"><div class="nm">'+esc(c.name)+'<div style="font-size:11px;color:var(--muted)">'+ugx(c.price)+' each</div></div>'+
+    return '<div class="ci"><div class="nm">'+esc(c.name)+'<div style="font-size:11px;color:var(--muted)">'+posM(c.price)+' each</div></div>'+
       '<div class="qc"><button onclick="posQty('+k+',-1)">−</button><b>'+c.qty+'</b><button onclick="posQty('+k+',1)">+</button></div>'+
-      '<div class="amt">'+ugx(c.price*c.qty)+'</div></div>';
+      '<div class="amt">'+posM(c.price*c.qty)+'</div></div>';
   }).join(''):'<p style="color:var(--muted);font-size:13px">Cart is empty — tap a product.</p>';
   posTotals();
 }
-function posChargesRender(){$('posCharges').innerHTML=POS.charges.map(function(c,k){return '<div class="ci"><div class="nm">'+esc(c.name)+'</div><div class="amt">'+ugx(c.amt)+'</div><button onclick="posDelCh('+k+')" style="border:none;background:none;color:var(--red);font-weight:800;font-size:16px;cursor:pointer">×</button></div>';}).join('');}
+function posChargesRender(){$('posCharges').innerHTML=POS.charges.map(function(c,k){return '<div class="ci"><div class="nm">'+esc(c.name)+'</div><div class="amt">'+posMFlat(c.amt)+'</div><button onclick="posDelCh('+k+')" style="border:none;background:none;color:var(--red);font-weight:800;font-size:16px;cursor:pointer">×</button></div>';}).join('');}
 function posDelCh(k){POS.charges.splice(k,1);posChargesRender();posTotals();}
-function posDiscVal(sub){var v=Number($('posDisc').value)||0;if(v<=0)return 0;return $('posDiscType').value==='pct'?Math.min(sub*v/100,sub):Math.min(convToUgx(v),sub);}
-function posTotals(){var sub=POS.cart.reduce(function(s,c){return s+c.price*c.qty;},0),disc=posDiscVal(sub),ch=POS.charges.reduce(function(s,c){return s+c.amt;},0);
-  $('posSub').textContent=ugx(sub);$('posDiscOut').textContent='- '+ugx(disc);$('posChOut').textContent=ugx(ch);$('posTot').textContent=ugx(sub-disc+ch);}
+function posRate(){var r=Number(RATES.usdUgx)||3750;return r>0?r:3750;}
+function posPct(){if(POS.zone!=='SS')return 0;var ph=((($('posPhone')&&$('posPhone').value)||'')+'').replace(/[^0-9]/g,'');if(ph&&CUSTPROFILE[ph]&&CUSTPROFILE[ph].ss_markup_pct!=null&&CUSTPROFILE[ph].ss_markup_pct!=='')return Number(CUSTPROFILE[ph].ss_markup_pct)||0;return Number(SETTINGS.ssMarkupPct)||0;}
+function posMK(){return POS.zone==='SS'?(1+posPct()/100):1;}
+function posUsd(u){return Math.round((u/posRate())*2)/2;}
+function posPriceUgx(raw){return POS.zone==='SS'?Math.round(raw*posMK()):raw;}
+function posM(rawUgx){if(POS.zone==='SS')return 'USD '+posUsd(rawUgx*posMK()).toFixed(2);return ugx(rawUgx);}
+function posMFlat(ugxAmt){if(POS.zone==='SS')return 'USD '+posUsd(ugxAmt).toFixed(2);return ugx(ugxAmt);}
+function posDiscVal(sub){var v=Number($('posDisc').value)||0;if(v<=0)return 0;if($('posDiscType').value==='pct')return Math.min(sub*v/100,sub);var flat=(POS.zone==='SS')?Math.round(v*posRate()):convToUgx(v);return Math.min(flat,sub);}
+function posTotals(){var raw=POS.cart.reduce(function(s,c){return s+c.price*c.qty;},0),sub=Math.round(raw*posMK()),disc=posDiscVal(sub),ch=POS.charges.reduce(function(s,c){return s+c.amt;},0);
+  $('posSub').textContent=posMFlat(sub);$('posDiscOut').textContent='- '+posMFlat(disc);$('posChOut').textContent=posMFlat(ch);$('posTot').textContent=posMFlat(sub-disc+ch);}
 async function posPlace(){
   if(!POS.cart.length){toast('Cart is empty');return;}
   var bId=MY_BRANCH||BRANCH_FILTER;
   if(INVENTORY_MODE==='branch'&&BRANCHES.length&&!bId){toast('Pick the branch in the top bar first');return;}
-  var sub=POS.cart.reduce(function(s,c){return s+c.price*c.qty;},0),disc=posDiscVal(sub),ch=POS.charges.reduce(function(s,c){return s+c.amt;},0);
+  var raw=POS.cart.reduce(function(s,c){return s+c.price*c.qty;},0),sub=Math.round(raw*posMK()),disc=posDiscVal(sub),ch=POS.charges.reduce(function(s,c){return s+c.amt;},0);
   var total=sub-disc+ch;
-  var items=POS.cart.map(function(c){return {name:c.name,qty:c.qty,price:c.price};});
+  var items=POS.cart.map(function(c){return {name:c.name,qty:c.qty,price:posPriceUgx(c.price)};});
   var qs='?token='+encodeURIComponent(token)+'&items='+encodeURIComponent(JSON.stringify(items))+'&total='+total+
     '&name='+encodeURIComponent($('posCust').value.trim()||'Walk-in customer')+
     '&phone='+encodeURIComponent($('posPhone').value.trim()||'')+
@@ -2318,7 +2325,7 @@ async function posPlace(){
     '&branch='+encodeURIComponent(bId||'')+'&status=New&channel=pos';
   $('posPlace').disabled=true;
   try{var r=await fetch(EP.saveOrder+qs,{cache:'no-store'});var d=await r.json();
-    if(d&&d.ok){toast('POS order placed · '+ugx(total));posClear();await loadData();
+    if(d&&d.ok){toast('POS order placed · '+posMFlat(total));posClear();await loadData();
       var newest=ORDERS.slice().sort(function(a,b){return b.id-a.id;})[0];
       if(newest){showPage('orders');openOrder(newest.id);}}
     else toast('Could not place order');
@@ -2330,7 +2337,7 @@ async function posQuote(){
   var phone=$('posPhone').value.trim();
   if(!phone){toast('Enter the customer phone to send the quotation');try{$('posPhone').focus();}catch(e){}return;}
   var items=POS.cart.map(function(c){return {name:c.name,qty:c.qty,price:c.price};});
-  var zone=($('posQuoteZone')&&$('posQuoteZone').value)||'';
+  var zone=(POS.zone==='SS')?'USD':'';
   var qs='?token='+encodeURIComponent(token)+'&items='+encodeURIComponent(JSON.stringify(items))+
     '&name='+encodeURIComponent($('posCust').value.trim())+'&phone='+encodeURIComponent(phone)+
     (zone==='USD'?'&currency=USD':'');
@@ -2354,10 +2361,12 @@ function posInit(){
   if($('posScanCam'))$('posScanCam').onclick=function(){openCameraScan(function(code,idx){posAdd(idx);});};
   if($('posScan'))setTimeout(function(){try{$('posScan').focus();}catch(e){}},80);
   $('posSearch').oninput=function(){POS.filter=this.value.toLowerCase();posGrid();};
-  $('posAddCh').onclick=function(){var n=$('posChName').value.trim(),a=Number($('posChAmt').value)||0;if(!n||a<=0){toast('Enter charge name + amount');return;}POS.charges.push({name:n,amt:convToUgx(a)});$('posChName').value='';$('posChAmt').value='';posChargesRender();posTotals();};
+  $('posAddCh').onclick=function(){var n=$('posChName').value.trim(),a=Number($('posChAmt').value)||0;if(!n||a<=0){toast('Enter charge name + amount');return;}POS.charges.push({name:n,amt:(POS.zone==='SS'?Math.round(a*posRate()):convToUgx(a))});$('posChName').value='';$('posChAmt').value='';posChargesRender();posTotals();};
   $('posDisc').oninput=posTotals;$('posDiscType').onchange=posTotals;
   $('posPlace').onclick=posPlace;$('posHold').onclick=posHold;
   if($('posQuote'))$('posQuote').onclick=posQuote;
+  if($('posZone')){$('posZone').value=POS.zone;$('posZone').onchange=function(){POS.zone=this.value;var dt=$('posDiscType');if(dt&&dt.options[0])dt.options[0].text=(POS.zone==='SS'?'USD flat':'UGX flat');posGrid();posRenderCart();posChargesRender();posTotals();};}
+  if($('posPhone'))$('posPhone').addEventListener('input',function(){if(POS.zone==='SS'){posRenderCart();posTotals();posGrid();}});
   $('posClear').onclick=function(){if(POS.cart.length&&!confirm('Clear cart?'))return;posClear();};
   posGrid();posRenderCart();posChargesRender();posHeld();
 }
