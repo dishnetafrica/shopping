@@ -218,6 +218,7 @@ class PanelApiController extends Controller
             'inventoryMode' => (string) ($s['inventoryMode'] ?? 'shared'),
             'usdUgx'        => (float) ($s['usdUgx'] ?? 3750),
             'usdSsp'        => (float) ($s['usdSsp'] ?? 7000),
+            'ssMarkupPct'   => (float) ($s['ssMarkupPct'] ?? 0),
             'comboRecommendations' => (bool) ($s['combo_recommendations'] ?? true),
             'sendProductImages'    => (bool) ($s['send_product_images'] ?? true),
             'features'      => $this->tenantFeatures($t),
@@ -725,6 +726,7 @@ class PanelApiController extends Controller
                 'notes'     => (string) ($c->notes ?? ''),
                 'lang'      => (string) ($c->lang ?? ''),
                 'greeting'  => (string) ($c->greeting ?? ''),
+                'ss_markup_pct' => ($c->ss_markup_pct === null ? '' : (string) (float) $c->ss_markup_pct),
             ];
         }
         return response()->json(['ok' => true, 'customers' => (object) $map]);
@@ -929,6 +931,22 @@ class PanelApiController extends Controller
     }
 
     /**
+     * Effective South Sudan markup percent for a customer: their per-client override
+     * (customer_profiles.ss_markup_pct) when set, otherwise the tenant default
+     * (settings.ssMarkupPct). Returns 0 when neither is set.
+     */
+    private function ssMarkupFor(Tenant $t, string $phone): float
+    {
+        $phone = preg_replace('/[^0-9]/', '', $phone);
+        if ($phone !== '') {
+            $c = \App\Models\CustomerProfile::where('tenant_id', $t->id)
+                ->where('phone', $phone)->first();
+            if ($c && $c->ss_markup_pct !== null) return (float) $c->ss_markup_pct;
+        }
+        return (float) $t->setting('ssMarkupPct', 0);
+    }
+
+    /**
      * Proactively build a PDF quotation (with product photos) from items entered in the
      * panel and send it to a customer's WhatsApp. Reuses the same OrderCalculator +
      * QuotationService the bot uses. Input: phone, name (optional), items (JSON [{name,qty}]).
@@ -960,10 +978,40 @@ class PanelApiController extends Controller
         }
 
         $quote = app(\App\Services\Bot\OrderCalculator::class)->quote($t, $calc);
+
+        // South Sudan / Juba pricing: one markup % (per-client override, else the
+        // tenant default settings.ssMarkupPct), auto-priced in USD and rounded to the
+        // nearest $0.50. The matched UGX base is converted at the tenant USD rate.
+        // The stored order is kept in marked-up UGX at convert time so Reports stay
+        // in one base currency — here we only change what the customer is quoted.
+        $usdMeta = null;
+        if (strtoupper(trim((string) $r->input('currency', ''))) === 'USD') {
+            $pct  = $this->ssMarkupFor($t, $phone);
+            $rate = (float) $t->setting('usdUgx', 3750);
+            if ($rate <= 0) $rate = 3750;
+            $factor = (1 + $pct / 100) / $rate;
+            $total  = 0.0;
+            foreach ($quote['lines'] as &$ln) {
+                if (empty($ln['matched'])) continue;
+                $unit        = round(((float) $ln['price']) * $factor * 2) / 2; // nearest $0.50
+                $ln['price'] = $unit;
+                $ln['sum']   = $unit * (int) $ln['qty'];
+                $total      += $ln['sum'];
+            }
+            unset($ln);
+            $quote['total']    = round($total, 2);
+            $quote['currency'] = 'USD';
+            $usdMeta = ['usd_rate' => $rate, 'markup_pct' => $pct];
+        }
+
         $doc   = $svc->generate($t, $phone, $name, $quote);
         if (! $doc) return response()->json(['ok' => false, 'error' => 'generate_failed', 'message' => 'None of the items matched a priced product, so there was nothing to quote.']);
 
         $quoteRow = $svc->persist($t, $phone, $name, $quote, $doc, 'panel');
+        if ($usdMeta && $quoteRow) {
+            $quoteRow->meta = $usdMeta;
+            $quoteRow->save();
+        }
 
         $sent = false;
         $err  = null;
@@ -971,7 +1019,8 @@ class PanelApiController extends Controller
             $gateway = app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($t);
             if (method_exists($gateway, 'sendDocument') && $t->whatsapp_instance) {
                 $cur     = $doc['currency'];
-                $caption = "📄 Quotation {$doc['no']} — Total {$cur} " . number_format($doc['total'])
+                $totTxt  = $cur === 'USD' ? number_format($doc['total'], 2) : number_format($doc['total']);
+                $caption = "📄 Quotation {$doc['no']} — Total {$cur} " . $totTxt
                          . '. Valid ' . (((int) $t->setting('quote_validity_days', 14)) ?: 14) . ' days. Reply to confirm and we\'ll arrange delivery.';
                 $media   = $doc['b64'] !== '' ? $doc['b64'] : $doc['url'];
                 $gateway->sendDocument($t->whatsapp_instance, $phone, $media, $doc['fileName'], $caption);
@@ -1131,10 +1180,17 @@ class PanelApiController extends Controller
             return response()->json(['ok' => true, 'already' => true, 'order_id' => (int) $q->order_id, 'order_no' => $ord ? (string) $ord->order_no : '']);
         }
 
+        // A USD (South Sudan) quotation is stored back as marked-up UGX so the order
+        // and Reports stay in one base currency. Convert at the rate captured on the quote.
+        $usd  = strtoupper((string) $q->currency) === 'USD';
+        $rate = $usd ? (float) (data_get($q->meta, 'usd_rate') ?: $t->setting('usdUgx', 3750)) : 1.0;
+        if ($usd && $rate <= 0) $rate = (float) $t->setting('usdUgx', 3750);
+
         $items = []; $textParts = [];
         foreach ($q->items as $it) {
             if (! $it->matched) continue;
-            $items[]     = ['name' => (string) $it->name, 'qty' => (int) $it->qty, 'price' => (float) $it->unit_price];
+            $unit        = $usd ? round(((float) $it->unit_price) * $rate) : (float) $it->unit_price;
+            $items[]     = ['name' => (string) $it->name, 'qty' => (int) $it->qty, 'price' => $unit];
             $textParts[] = ((int) $it->qty) . 'x ' . $it->name;
         }
         if (! $items) return response()->json(['ok' => false, 'error' => 'no_items', 'message' => 'This quotation has no priced items to convert.']);
@@ -1147,7 +1203,7 @@ class PanelApiController extends Controller
         $o->customer_phone = (string) $q->customer_phone;
         $o->items_json     = $items;
         $o->items_text     = implode(', ', $textParts);
-        $o->total          = (float) $q->total;
+        $o->total          = $usd ? round(((float) $q->total) * $rate) : (float) $q->total;
         $o->save();        // OrderObserver assigns order_no + track_token
 
         $q->order_id = (int) $o->id;
@@ -2879,7 +2935,7 @@ class PanelApiController extends Controller
     {
         $t = $r->user()->tenant;
         $s = $t->settings ?? [];
-        foreach (['storeName', 'storePhone', 'storeAddress', 'storeEmail', 'base', 'perKm', 'min', 'round', 'freeOver', 'lat', 'lng', 'inventoryMode', 'usdUgx', 'usdSsp', 'onboarded'] as $k) {
+        foreach (['storeName', 'storePhone', 'storeAddress', 'storeEmail', 'base', 'perKm', 'min', 'round', 'freeOver', 'lat', 'lng', 'inventoryMode', 'usdUgx', 'usdSsp', 'ssMarkupPct', 'onboarded'] as $k) {
             if ($r->has($k)) $s[$k] = $r->query($k);
         }
         if ($r->has('logo')) $s['logo'] = trim((string) $r->query('logo'));
@@ -3239,6 +3295,10 @@ class PanelApiController extends Controller
         $c->lang      = (string) $r->query('lang', '');
         $c->greeting  = (string) $r->query('greeting', '');
         $c->notes     = (string) $r->query('notes', '');
+        if ($r->has('ss_markup_pct')) {
+            $v = trim((string) $r->query('ss_markup_pct', ''));
+            $c->ss_markup_pct = ($v === '') ? null : (float) $v;
+        }
         $c->save();
         // The panel says editing the name updates it on their orders too.
         if (trim((string) $c->name) !== '') {

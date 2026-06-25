@@ -471,6 +471,7 @@
                 <button class="btn red" id="posClear">Clear</button>
               </div>
               <div style="margin-top:8px">
+                <select id="posQuoteZone" style="width:100%;margin-bottom:6px"><option value="">Quotation zone: Uganda (UGX)</option><option value="USD">South Sudan · Juba (USD, +markup)</option></select>
                 <button class="btn ghost" id="posQuote" style="width:100%">📄 Send quotation on WhatsApp</button>
               </div>
             </div>
@@ -804,6 +805,8 @@
           <div class="body">
             <div class="inrow"><div class="mfield" style="flex:1"><label>1 USD = ? UGX</label><input id="setUsdUgx" type="number" min="1" step="1"></div>
               <div class="mfield" style="flex:1"><label>1 USD = ? SSP</label><input id="setUsdSsp" type="number" min="1" step="1"></div></div>
+            <div class="inrow"><div class="mfield" style="flex:1"><label>South Sudan markup % (Juba)</label><input id="setSsMarkup" type="number" min="0" step="1" placeholder="e.g. 25"></div>
+              <div class="mfield" style="flex:1"><label>&nbsp;</label><div class="note" style="margin:0;font-size:12px">Juba quotations auto-price in USD: base &times; (1 + this %) &divide; the USD rate above. Set per-client in Customers to override.</div></div></div>
             <div class="note" id="setRateNote"></div>
             <div class="mfield" style="margin-top:12px"><label>Bot &amp; panel currency</label>
               <select id="setBotCur"><option value="auto">Auto — by customer number (+211 SSP, +256 UGX, USD on request)</option><option value="UGX">Always UGX</option><option value="SSP">Always SSP</option><option value="USD">Always USD</option></select>
@@ -2327,8 +2330,10 @@ async function posQuote(){
   var phone=$('posPhone').value.trim();
   if(!phone){toast('Enter the customer phone to send the quotation');try{$('posPhone').focus();}catch(e){}return;}
   var items=POS.cart.map(function(c){return {name:c.name,qty:c.qty,price:c.price};});
+  var zone=($('posQuoteZone')&&$('posQuoteZone').value)||'';
   var qs='?token='+encodeURIComponent(token)+'&items='+encodeURIComponent(JSON.stringify(items))+
-    '&name='+encodeURIComponent($('posCust').value.trim())+'&phone='+encodeURIComponent(phone);
+    '&name='+encodeURIComponent($('posCust').value.trim())+'&phone='+encodeURIComponent(phone)+
+    (zone==='USD'?'&currency=USD':'');
   var btn=$('posQuote'),old=btn.textContent;btn.disabled=true;btn.textContent='Sending…';
   try{var r=await fetch(EP.quoteSend+qs,{cache:'no-store'});var d=await r.json();
     if(d&&d.ok){
@@ -2967,7 +2972,7 @@ function buildCustomers(){
     c.returns=(RETURNS||[]).filter(function(r){return String(r.phone||'').replace(/[^0-9]/g,'')===k;}).length;
     c.dormant=custDaysSince(c.last)>45;
     c.seg=(c.count>=5)?'vip':(c.count>=2?'repeat':'new');
-    var p=CUSTPROFILE[k]; if(p){ if(p.name)c.name=p.name; c.alt_phone=p.alt_phone||''; c.email=p.email||''; c.caddr=p.address||''; c.cnote=p.notes||''; c.clang=p.lang||''; c.cgreet=p.greeting||''; }
+    var p=CUSTPROFILE[k]; if(p){ if(p.name)c.name=p.name; c.alt_phone=p.alt_phone||''; c.email=p.email||''; c.caddr=p.address||''; c.cnote=p.notes||''; c.clang=p.lang||''; c.cgreet=p.greeting||''; c.cssm=(p.ss_markup_pct!=null?p.ss_markup_pct:''); }
     return c;
   });
 }
@@ -3069,6 +3074,8 @@ function openCustomerEdit(ph){
     '<div class="inrow"><div class="mfield" style="flex:1"><label>Preferred language</label><select id="cmLang"><option value="">Auto-detect</option><option value="gu">Gujarati</option><option value="hi">Hindi</option><option value="en">English</option></select></div>'+
       '<div class="mfield" style="flex:1"><label>Greeting</label><select id="cmGreet"><option value="">Auto</option><option value="jsk">Jai Shree Krishna</option><option value="namaste">Namaste</option><option value="salaam">Salaam</option><option value="hello">Hello</option></select></div></div>'+
     '<div class="mfield"><label>Notes</label><input id="cmNote" value="'+esc(v('cnote'))+'" placeholder="e.g. prefers evening delivery, regular for atta"></div>'+
+    '<div class="mfield"><label>South Sudan markup % (Juba) \\u2014 optional</label><input id="cmSsMarkup" type="number" min="0" step="1" value="'+esc(v('cssm'))+'" placeholder="blank = use shop default"></div>'+
+    '<div class="note" style="margin:-4px 0 8px;font-size:12px">Overrides the shop default for this client\\u2019s USD (Juba) quotations only.</div>'+
     '<button class="lbtn" id="cmSave" style="margin-top:6px">Save customer</button>';
   if(c.clang)$('cmLang').value=c.clang;
   if(c.cgreet)$('cmGreet').value=c.cgreet;
@@ -3077,13 +3084,14 @@ function openCustomerEdit(ph){
 }
 async function saveCustomer(ph){
   function g(k){var e=$(k);return e?(''+e.value).trim():'';}
-  var name=g('cmName'),alt=g('cmAlt'),email=g('cmEmail'),addr=g('cmAddr'),lang=g('cmLang'),greet=g('cmGreet'),note=g('cmNote');
+  var name=g('cmName'),alt=g('cmAlt'),email=g('cmEmail'),addr=g('cmAddr'),lang=g('cmLang'),greet=g('cmGreet'),note=g('cmNote'),ssm=g('cmSsMarkup');
   var qs='?token='+encodeURIComponent(token)+'&phone='+encodeURIComponent(ph)+'&name='+encodeURIComponent(name)+
     '&alt_phone='+encodeURIComponent(alt)+'&email='+encodeURIComponent(email)+'&address='+encodeURIComponent(addr)+
-    '&lang='+encodeURIComponent(lang)+'&greeting='+encodeURIComponent(greet)+'&notes='+encodeURIComponent(note);
+    '&lang='+encodeURIComponent(lang)+'&greeting='+encodeURIComponent(greet)+'&notes='+encodeURIComponent(note)+
+    '&ss_markup_pct='+encodeURIComponent(ssm);
   $('cmSave').disabled=true;
   try{var r=await fetch(EP.custSave+qs,{cache:'no-store'});var d=await r.json();
-    if(d&&d.ok){ CUSTPROFILE[ph]={name:name,alt_phone:alt,email:email,address:addr,lang:lang,greeting:greet,notes:note};
+    if(d&&d.ok){ CUSTPROFILE[ph]={name:name,alt_phone:alt,email:email,address:addr,lang:lang,greeting:greet,notes:note,ss_markup_pct:ssm};
       toast('Customer saved'); closeModal(); renderCustomers(); loadCustProfiles().then(function(){loadData(true);renderCustomers();}); }
     else toast(d&&d.error?d.error:'Could not save');
   }catch(e){toast('Network error');}
@@ -3305,6 +3313,7 @@ function applySettings(s){
   if(!s)return;
   if(s.usdUgx!=null&&Number(s.usdUgx)>0)RATES.usdUgx=Number(s.usdUgx);
   if(s.usdSsp!=null&&Number(s.usdSsp)>0)RATES.usdSsp=Number(s.usdSsp);
+  if(s.ssMarkupPct!=null)SETTINGS.ssMarkupPct=Number(s.ssMarkupPct)||0;
   if(s.storeName!=null)SETTINGS.storeName=s.storeName;
   if(s.storePhone!=null)SETTINGS.storePhone=s.storePhone;
   if(s.storeAddress!=null)SETTINGS.storeAddress=s.storeAddress;
@@ -3384,6 +3393,7 @@ function settingsInit(){
   if($('setDiscAmt'))$('setDiscAmt').value=DISC.amt||'';
   (function(){function dn(){var pct=Number($('setDiscPct').value)||0,amt=Number($('setDiscAmt').value)||0;var n=$('setDiscNote');if(!n)return;if(pct<=0&&amt<=0){n.textContent='No discount \u2014 customers pay list price.';return;}var ex=Math.round(5000*(1-pct/100)-amt);if(ex<0)ex=0;n.textContent='Applies to bot + panel. Example: a UGX 5,000 item \u2192 UGX '+ex.toLocaleString('en-US')+'.';}if($('setDiscPct')){$('setDiscPct').oninput=dn;$('setDiscAmt').oninput=dn;dn();}})();
   if($('setUsdSsp'))$('setUsdSsp').value=RATES.usdSsp;
+  if($('setSsMarkup'))$('setSsMarkup').value=(SETTINGS.ssMarkupPct?SETTINGS.ssMarkupPct:'');
   ['setUsdUgx','setUsdSsp'].forEach(function(id){if($(id))$(id).oninput=rateNote;});
   rateNote();
   $('setSave').onclick=saveSettings;
@@ -3441,6 +3451,7 @@ async function saveSettings(){
     freeOver:Number($('setFree').value)||0,lat:Number($('setLat').value)||STORE.lat,lng:Number($('setLng').value)||STORE.lng,
     inventoryMode:($('setInvMode')?$('setInvMode').value:INVENTORY_MODE),
     usdUgx:Number($('setUsdUgx')?$('setUsdUgx').value:RATES.usdUgx)||RATES.usdUgx,
+    ssMarkupPct:Number($('setSsMarkup')?$('setSsMarkup').value:0)||0,
     usdSsp:Number($('setUsdSsp')?$('setUsdSsp').value:RATES.usdSsp)||RATES.usdSsp};
   var qs='?token='+encodeURIComponent(token);
   Object.keys(body).forEach(function(k){qs+='&'+k+'='+encodeURIComponent(body[k]);});

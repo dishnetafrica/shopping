@@ -113,6 +113,7 @@ class QuotationService
     private function html(Tenant $tenant, string $no, string $phone, string $name, array $quote): string
     {
         $cur     = $quote['currency'];
+        $dec     = ($cur === 'USD') ? 2 : 0;
         $accent  = (string) ($tenant->setting('theme_accent', '') ?: '#103A8C');
         $company = e((string) $tenant->name);
         $addr    = e((string) $tenant->setting('address', ''));
@@ -140,7 +141,7 @@ class QuotationService
                 continue;
             }
             $unit = $l['unit'] ? ' / ' . e($l['unit']) : '';
-            $rows .= '<tr><td>' . $i . '</td>' . $pcell . '<td>' . e($l['name']) . '</td><td class="r">' . (int) $l['qty'] . '</td><td class="r">' . $cur . ' ' . number_format($l['price']) . $unit . '</td><td class="r">' . $cur . ' ' . number_format($l['sum']) . '</td></tr>';
+            $rows .= '<tr><td>' . $i . '</td>' . $pcell . '<td>' . e($l['name']) . '</td><td class="r">' . (int) $l['qty'] . '</td><td class="r">' . $cur . ' ' . number_format($l['price'], $dec) . $unit . '</td><td class="r">' . $cur . ' ' . number_format($l['sum'], $dec) . '</td></tr>';
         }
 
         $date  = now()->format('j M Y');
@@ -182,16 +183,16 @@ td { padding:7px 8px; border-bottom:1px solid #eee; }
 <table>
   <tr><th style="width:26px">#</th><th style="width:46px">Photo</th><th>Item</th><th class="r" style="width:56px">Qty</th><th class="r" style="width:110px">Unit price</th><th class="r" style="width:110px">Amount</th></tr>
   {$rows}
-  <tr><td colspan="5" class="r total">Total</td><td class="r total">{$cur} {$this->fmt($quote['total'])}</td></tr>
+  <tr><td colspan="5" class="r total">Total</td><td class="r total">{$cur} {$this->fmt($quote['total'], $dec)}</td></tr>
 </table>
 <div class="terms"><b>Terms:</b> {$terms}<br>This quotation is valid until {$until}. To order, reply on WhatsApp.</div>
 </body></html>
 HTML;
     }
 
-    private function fmt(float $n): string
+    private function fmt(float $n, int $dec = 0): string
     {
-        return number_format($n);
+        return number_format($n, $dec);
     }
 
     /**
