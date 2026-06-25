@@ -85,7 +85,7 @@ class OrderCalculator
                 ->where('tenant_id', $tenant->id)->where('active', true)
                 ->get()
                 ->map(fn ($p) => [
-                    'id' => $p->id, 'name' => (string) $p->name, 'price' => (float) $p->price,
+                    'id' => $p->id, 'name' => (string) $p->name, 'price' => (float) ($p->base_price ?? $p->price ?? 0),
                     'category' => (string) ($p->category ?? ''), 'keywords' => (string) ($p->keywords ?? ''),
                     'unit_label' => (string) ($p->unit_label ?? ''), 'moq' => $p->moq ? (int) $p->moq : null,
                     'image' => (string) ($p->image_url ?? ''),
