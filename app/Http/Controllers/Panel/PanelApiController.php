@@ -2496,9 +2496,12 @@ class PanelApiController extends Controller
         $o->status = 'Out for delivery';   // OrderObserver -> WhatsApp "on the way" + logs it
         $o->save();
 
+        $tenant = \App\Models\Tenant::find($o->tenant_id);
         return response()->json([
             'ok'    => true,
-            'track' => url('/papi/track?o=' . $o->id . '&t=' . $o->track_token),
+            'track' => $tenant
+                ? $tenant->publicUrl('/papi/track?o=' . $o->id . '&t=' . $o->track_token)
+                : url('/papi/track?o=' . $o->id . '&t=' . $o->track_token),
         ]);
     }
 

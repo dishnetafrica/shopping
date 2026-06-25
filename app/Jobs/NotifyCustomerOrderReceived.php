@@ -45,7 +45,7 @@ class NotifyCustomerOrderReceived implements ShouldQueue
         $hi    = $first !== '' ? "Hi {$first}" : 'Hi';
         $total = $o->total ? (' (' . $cur . ' ' . number_format((float) $o->total) . ')') : '';
         $track = $o->track_token
-            ? ("\n\n\u{1F4CD} Track your order: " . url('/papi/track?o=' . $o->id . '&t=' . $o->track_token))
+            ? ("\n\n\u{1F4CD} Track your order: " . $t->publicUrl('/papi/track?o=' . $o->id . '&t=' . $o->track_token))
             : '';
 
         $pickup = \App\Support\Vertical::of($t) === \App\Support\Vertical::SNACKS;

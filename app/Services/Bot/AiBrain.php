@@ -369,7 +369,7 @@ class AiBrain
                 ->where('created_at', '>=', now()->subMinutes(10))
                 ->first();
             if ($dupe) {
-                $track = $dupe->track_token ? url('/papi/track?o=' . $dupe->id . '&t=' . $dupe->track_token) : '';
+                $track = $dupe->track_token ? $tenant->publicUrl('/papi/track?o=' . $dupe->id . '&t=' . $dupe->track_token) : '';
                 return $clean . "\n\n✅ This is already on order *" . $dupe->order_no . "*."
                     . ($track !== '' ? "\nTrack it here: " . $track : '');
             }
@@ -388,7 +388,7 @@ class AiBrain
             $order->save(); // OrderObserver: order_no + track_token + NotifyOwnerNewOrder (staff alert)
 
             $cur   = (string) ($quote['currency'] ?? 'UGX');
-            $track = $order->track_token ? url('/papi/track?o=' . $order->id . '&t=' . $order->track_token) : '';
+            $track = $order->track_token ? $tenant->publicUrl('/papi/track?o=' . $order->id . '&t=' . $order->track_token) : '';
 
             $conf  = "\n\n✅ *Order " . $order->order_no . " received*\n" . $itemsText;
             if (($quote['total'] ?? 0) > 0) $conf .= "\nEstimated total: " . $cur . ' ' . number_format((float) $quote['total']);

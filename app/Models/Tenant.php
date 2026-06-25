@@ -46,6 +46,24 @@ class Tenant extends Model
         $this->save();
     }
 
+    /**
+     * Build a public URL for this shop, rooted on its own custom domain when one is
+     * set, otherwise the platform URL (APP_URL). Use this for links sent in
+     * server-side messages — WhatsApp order acks, bot replies — where there is no
+     * browser request host to derive from, so the customer sees the shop's own
+     * domain instead of the platform domain. $path should be root-relative ('/...').
+     * The /papi/track (and other public) routes are host-agnostic, so they resolve
+     * correctly on the custom domain too.
+     */
+    public function publicUrl(string $path): string
+    {
+        $path = '/' . ltrim($path, '/');
+        $dom  = strtolower(trim((string) ($this->custom_domain ?? '')));
+        $dom  = preg_replace('#^https?://#', '', $dom);   // tolerate scheme if ever stored
+        $dom  = preg_replace('#/.*$#', '', $dom);          // tolerate trailing path
+        return $dom !== '' ? 'https://' . $dom . $path : url($path);
+    }
+
     /** Staff-login seat limit for the active plan. null = unlimited. */
     public function userCap(): ?int
     {
