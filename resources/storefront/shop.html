@@ -261,8 +261,10 @@ async function load(){
       if(d.settings.currency)CUR=String(d.settings.currency);
       if(d.settings.category_images)CAT_IMG=d.settings.category_images||{}; if(d.settings.thali)THALI=d.settings.thali;
       if(d.settings.category_groups)CATGROUPS=d.settings.category_groups||{};
-      if(Array.isArray(d.settings.faq)&&d.settings.faq.length)FAQ_DATA=d.settings.faq;
-      if(d.settings.vertical){VERTICAL=String(d.settings.vertical);IS_PICKUP=(VERTICAL==='snacks');applyVertical();}}
+      var faqCustom=(Array.isArray(d.settings.faq)&&d.settings.faq.length);
+      if(faqCustom)FAQ_DATA=d.settings.faq;
+      if(d.settings.vertical){VERTICAL=String(d.settings.vertical);IS_PICKUP=(VERTICAL==='snacks');applyVertical();}
+      if(!faqCustom&&VERTICAL==='restaurant')FAQ_DATA=FAQ_RESTAURANT;}
     if(Array.isArray(d.branches)&&d.branches.length){
       var bs=d.branches.map(function(b){return {name:String(b.name||b.title||'Branch'),lat:Number(b.lat),lng:Number(b.lng)};}).filter(function(b){return isFinite(b.lat)&&isFinite(b.lng);});
       if(bs.length)BRANCHES=bs;
@@ -309,6 +311,18 @@ var FAQ_DATA=[
   {q:'How do I pay?',a:'Payment is arranged on WhatsApp when we confirm your order — for example Mobile Money or on delivery.'},
   {q:'How do I see my past orders?',a:'Tap "Log in / my orders" and sign in with your WhatsApp number to view your orders on any device.'},
   {q:'Do you offer wholesale or distributor pricing?',a:'Yes — message us on WhatsApp about carton pricing and becoming a reseller.'}
+];
+/* Restaurant-flavoured default FAQ. Used only when the tenant is a restaurant AND has
+   not configured its own faq setting (a tenant faq override always wins — see load()).
+   Wording avoids hardcoded cities/prices/fees so it is safe for any restaurant tenant. */
+var FAQ_RESTAURANT=[
+  {q:'How do I place an order?',a:'Browse the menu by category, add the dishes you want to your order, then tap the cart and check out on WhatsApp. We confirm and start preparing right away.'},
+  {q:'Do you deliver, and how long does it take?',a:'Yes — we deliver within our service area. We confirm the delivery time and any delivery fee on WhatsApp when we take your order.'},
+  {q:'Can I order now for a later time?',a:'Yes. At checkout you can schedule your order for later in the day, and we will have it ready for that time.'},
+  {q:'Can I customise a dish — spice level, no onion or garlic, Jain?',a:'Yes. Pick the options shown on a dish, or add a note at checkout (for example: less spicy, no garlic, Jain). Your note goes straight to the kitchen.'},
+  {q:'How do I pay?',a:'Payment is arranged on WhatsApp when we confirm your order — for example Mobile Money, or cash on delivery.'},
+  {q:'Do you take party orders or catering?',a:'Yes — message us on WhatsApp for bulk thalis, party trays and catering, and we will plan it with you.'},
+  {q:'How do I see my past orders?',a:'Tap "Log in / my orders" and sign in with your WhatsApp number to view your orders on any device.'}
 ];
 function showFaq(){
   $('sheetTitle').textContent='How to order \u00b7 FAQ';
