@@ -16,14 +16,25 @@ class MarketingController extends Controller
     public function home(\Illuminate\Http\Request $request)
     {
         // If this request arrived on a shop's own domain, serve that shop at the
-        // root instead of the marketing page. Use landing() (not show()) so the
-        // domain root matches mycloudbss.com/{slug}: manufacturers/brand-site shops
-        // get their brand site, everyone else gets the shop storefront.
-        // The slug URL (mycloudbss.com/{slug}) keeps working independently.
+        // root instead of the marketing page. The slug URL (mycloudbss.com/{slug})
+        // keeps working independently as the ordering storefront.
         $host = strtolower((string) $request->getHost());
         $host = preg_replace('/^www\./', '', $host);
         $tenant = \App\Models\Tenant::whereRaw('lower(custom_domain) = ?', [$host])->first();
         if ($tenant) {
+            // A shop can ship a bespoke landing page at public/landing/{slug}.html.
+            // If present, it is served at the domain ROOT (e.g. thegreatindiandhabaa.com/),
+            // while the ordering storefront stays at /{slug}. Slugs are validated on
+            // creation, but we still constrain the charset to be safe against traversal.
+            $slug = (string) $tenant->slug;
+            if (preg_match('/^[A-Za-z0-9_-]+$/', $slug)) {
+                $landing = public_path('landing/' . $slug . '.html');
+                if (is_file($landing)) {
+                    return response()->file($landing, ['Content-Type' => 'text/html; charset=UTF-8']);
+                }
+            }
+            // No bespoke landing page: fall back to landing() — manufacturers/brand-site
+            // shops get their brand site, everyone else gets the shop storefront.
             return app(\App\Http\Controllers\Storefront\StorefrontController::class)->landing($tenant->slug);
         }
 
