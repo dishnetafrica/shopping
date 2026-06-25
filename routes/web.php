@@ -150,6 +150,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         // writes that persist
         Route::get('update-status',  [PanelApiController::class, 'updateStatus']);
         Route::get('save-order',     [PanelApiController::class, 'saveOrder']);
+        Route::match(['get', 'post'], 'quotation-send', [PanelApiController::class, 'quotationSend']);
         Route::get('update-product', [PanelApiController::class, 'updateProduct']);
         Route::get('delete-product', [PanelApiController::class, 'deleteProduct']);
         Route::get('add-product',    [PanelApiController::class, 'addProduct']);

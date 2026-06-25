@@ -469,6 +469,9 @@
                 <button class="btn dark" id="posHold">Hold</button>
                 <button class="btn red" id="posClear">Clear</button>
               </div>
+              <div style="margin-top:8px">
+                <button class="btn ghost" id="posQuote" style="width:100%">📄 Send quotation on WhatsApp</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1095,7 +1098,7 @@ var BASE='';
 var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   orders:'/papi/orders',products:'/papi/products',
   kitchen:'/papi/kitchen',kitchenAdv:'/papi/kitchen-advance',
-  updStatus:'/papi/update-status',saveOrder:'/papi/save-order',
+  updStatus:'/papi/update-status',saveOrder:'/papi/save-order',quoteSend:'/papi/quotation-send',
   updProduct:'/papi/update-product',addProduct:'/papi/add-product',delProduct:'/papi/delete-product',
   uploadImage:'/papi/upload-image',
   uploadDoc:'/papi/upload-doc',
@@ -2242,6 +2245,23 @@ async function posPlace(){
   }catch(e){toast('Network error');}
   $('posPlace').disabled=false;
 }
+async function posQuote(){
+  if(!POS.cart.length){toast('Cart is empty — add items to quote');return;}
+  var phone=$('posPhone').value.trim();
+  if(!phone){toast('Enter the customer phone to send the quotation');try{$('posPhone').focus();}catch(e){}return;}
+  var items=POS.cart.map(function(c){return {name:c.name,qty:c.qty};});
+  var qs='?token='+encodeURIComponent(token)+'&items='+encodeURIComponent(JSON.stringify(items))+
+    '&name='+encodeURIComponent($('posCust').value.trim())+'&phone='+encodeURIComponent(phone);
+  var btn=$('posQuote'),old=btn.textContent;btn.disabled=true;btn.textContent='Sending…';
+  try{var r=await fetch(EP.quoteSend+qs,{cache:'no-store'});var d=await r.json();
+    if(d&&d.ok){
+      if(d.sent)toast('Quotation '+d.quote_no+' sent to '+phone+' ✓');
+      else toast('Quotation '+d.quote_no+' created — WhatsApp not connected'+(d.url?'; link copied to console':''));
+      if(d.url&&!d.sent)try{console.log('Quotation PDF:',d.url);}catch(e){}
+    } else { toast((d&&d.message)?d.message:'Could not send quotation'); }
+  }catch(e){toast('Network error');}
+  btn.disabled=false;btn.textContent=old;
+}
 function posHold(){if(!POS.cart.length){toast('Cart is empty');return;}POS.held.push({cust:$('posCust').value,phone:$('posPhone').value,cart:POS.cart.slice(),charges:POS.charges.slice(),disc:$('posDisc').value,dt:$('posDiscType').value});posClear();posHeld();toast('Order held');}
 function posHeld(){$('heldTabs').innerHTML=POS.held.map(function(h,k){return '<span class="tab" onclick="posResume('+k+')">'+esc(h.cust||('Held '+(k+1)))+' <span class="x" onclick="event.stopPropagation();posDropHeld('+k+')">×</span></span>';}).join('');}
 function posResume(k){var h=POS.held[k];POS.cart=h.cart.slice();POS.charges=h.charges.slice();$('posCust').value=h.cust||'';$('posPhone').value=h.phone||'';$('posDisc').value=h.disc||'';$('posDiscType').value=h.dt||'flat';POS.held.splice(k,1);posHeld();posRenderCart();posChargesRender();}
@@ -2255,6 +2275,7 @@ function posInit(){
   $('posAddCh').onclick=function(){var n=$('posChName').value.trim(),a=Number($('posChAmt').value)||0;if(!n||a<=0){toast('Enter charge name + amount');return;}POS.charges.push({name:n,amt:convToUgx(a)});$('posChName').value='';$('posChAmt').value='';posChargesRender();posTotals();};
   $('posDisc').oninput=posTotals;$('posDiscType').onchange=posTotals;
   $('posPlace').onclick=posPlace;$('posHold').onclick=posHold;
+  if($('posQuote'))$('posQuote').onclick=posQuote;
   $('posClear').onclick=function(){if(POS.cart.length&&!confirm('Clear cart?'))return;posClear();};
   posGrid();posRenderCart();posChargesRender();posHeld();
 }

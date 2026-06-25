@@ -928,6 +928,70 @@ class PanelApiController extends Controller
         ]);
     }
 
+    /**
+     * Proactively build a PDF quotation (with product photos) from items entered in the
+     * panel and send it to a customer's WhatsApp. Reuses the same OrderCalculator +
+     * QuotationService the bot uses. Input: phone, name (optional), items (JSON [{name,qty}]).
+     */
+    public function quotationSend(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false, 'error' => 'no_tenant'], 403);
+        app(\App\Support\TenantContext::class)->set($t->id);
+
+        $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));
+        if ($phone === '') return response()->json(['ok' => false, 'error' => 'no_phone', 'message' => 'Enter the customer\'s WhatsApp number.']);
+
+        $name  = trim((string) $r->input('name', ''));
+        $items = json_decode((string) $r->input('items', '[]'), true);
+        $calc  = [];
+        if (is_array($items)) {
+            foreach ($items as $it) {
+                $nm = trim((string) ($it['name'] ?? $it['query'] ?? ''));
+                if ($nm === '') continue;
+                $calc[] = ['query' => $nm, 'qty' => max(1, (int) ($it['qty'] ?? 1))];
+            }
+        }
+        if (! $calc) return response()->json(['ok' => false, 'error' => 'no_items', 'message' => 'Add at least one item to the cart.']);
+
+        $svc = app(\App\Services\Bot\QuotationService::class);
+        if (! $svc->available()) {
+            return response()->json(['ok' => false, 'error' => 'pdf_unavailable', 'message' => 'PDF engine (dompdf) is not installed yet, so a PDF quotation can\'t be created. Install dompdf to enable this.']);
+        }
+
+        $quote = app(\App\Services\Bot\OrderCalculator::class)->quote($t, $calc);
+        $doc   = $svc->generate($t, $phone, $name, $quote);
+        if (! $doc) return response()->json(['ok' => false, 'error' => 'generate_failed', 'message' => 'None of the items matched a priced product, so there was nothing to quote.']);
+
+        $sent = false;
+        $err  = null;
+        try {
+            $gateway = app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($t);
+            if (method_exists($gateway, 'sendDocument') && $t->whatsapp_instance) {
+                $cur     = $doc['currency'];
+                $caption = "📄 Quotation {$doc['no']} — Total {$cur} " . number_format($doc['total'])
+                         . '. Valid ' . ((int) $t->setting('quote_validity_days', 14)) . ' days. Reply to confirm and we\'ll arrange delivery.';
+                $media   = $doc['b64'] !== '' ? $doc['b64'] : $doc['url'];
+                $gateway->sendDocument($t->whatsapp_instance, $phone, $media, $doc['fileName'], $caption);
+                $sent = true;
+                \App\Models\MessageLog::record($t->id, $phone, $t->whatsapp_instance, 'out', 'panel', "[quotation {$doc['no']}] " . $caption, null, null, ['via' => 'panel', 'kind' => 'quotation', 'quote_no' => $doc['no']]);
+            }
+        } catch (\Throwable $e) {
+            $err = $e->getMessage();
+            \Log::warning('panel quotation send failed: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'ok'       => true,
+            'quote_no' => $doc['no'],
+            'total'    => $doc['total'],
+            'currency' => $doc['currency'],
+            'url'      => $doc['url'],
+            'sent'     => $sent,
+            'error'    => $err,
+        ]);
+    }
+
     public function updateProduct(Request $r)
     {
         $p = Product::find((int) $r->query('row'));
