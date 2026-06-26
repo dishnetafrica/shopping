@@ -1307,15 +1307,9 @@ class PanelApiController extends Controller
         $csv = trim((string) $r->input('csv', ''));
         if ($csv === '') return response()->json(['ok' => false, 'error' => 'empty_csv'], 422);
 
-        $lines = preg_split('/\r\n|\r|\n/', $csv);
-        $header = array_map(fn ($h) => strtolower(trim($h)), str_getcsv((string) array_shift($lines)));
-        $iName  = array_search('name', $header, true);
-        $iCode  = array_search('code', $header, true);
-        $iStock = array_search('stock', $header, true);
-        if ($iName === false || $iStock === false) {
-            return response()->json(['ok' => false, 'error' => 'csv_needs_name_and_stock_columns'], 422);
-        }
-        if (count($lines) > 20000) return response()->json(['ok' => false, 'error' => 'too_many_rows'], 422);
+        $parsed = $this->parseStockRows($csv);
+        if (isset($parsed['error'])) return response()->json(['ok' => false, 'error' => $parsed['error']], 422);
+        $rows = $parsed['rows'];
 
         $apply = (int) $r->input('apply', 0) === 1;
 
@@ -1333,22 +1327,19 @@ class PanelApiController extends Controller
         $notFound = [];
         $ups = [];
 
-        foreach ($lines as $ln) {
-            if (trim($ln) === '') continue;
-            $c     = str_getcsv($ln);
-            $name  = trim((string) ($c[$iName] ?? ''));
-            $code  = ($iCode !== false) ? trim((string) ($c[$iCode] ?? '')) : '';
-            $stkRaw = trim((string) ($c[$iStock] ?? ''));
-            if ($stkRaw === '' || ! is_numeric($stkRaw)) continue; // blank/unmatched → leave unchanged
+        foreach ($rows as $row) {
+            $name  = (string) $row['name'];
+            $code  = (string) $row['code'];
+            $stock = (int) $row['stock'];
+            if ($name === '' && $code === '') continue;
 
             $p = ($code !== '' && isset($bySku[$code])) ? $bySku[$code]
                : (($code !== '' && isset($byBar[$code])) ? $byBar[$code]
                : ($byName[$this->normName($name)] ?? null));
 
-            if (! $p) { if (count($notFound) < 25) $notFound[] = $name; continue; }
+            if (! $p) { if (count($notFound) < 25) $notFound[] = ($name !== '' ? $name : $code); continue; }
 
             $matched++;
-            $stock  = (int) round((float) $stkRaw);
             $active = $stock > 0;
             if ($stock <= 0) $hidden++;
             if ($stock < 0)  $neg++;
@@ -1370,7 +1361,7 @@ class PanelApiController extends Controller
         return response()->json([
             'ok'                => true,
             'apply'             => $apply,
-            'rows'              => count($lines),
+            'rows'              => count($rows),
             'matched'           => $matched,
             'updated'           => $updated,
             'hidden_out_of_stock' => $hidden,
@@ -1379,6 +1370,96 @@ class PanelApiController extends Controller
             'not_found'         => count($notFound),
             'not_found_samples' => array_slice($notFound, 0, 15),
         ]);
+    }
+
+    /** Find a column index by exact then partial header name. */
+    private function colIndex(array $cols, array $names): ?int
+    {
+        foreach ($names as $n) { $i = array_search($n, $cols, true); if ($i !== false) return $i; }
+        foreach ($cols as $i => $c) { foreach ($names as $n) { if ($c !== '' && str_contains($c, $n)) return $i; } }
+        return null;
+    }
+
+    /**
+     * Parse an uploaded stock CSV into normalised rows [['name','code','stock'], ...].
+     * Accepts BOTH formats automatically:
+     *   (a) Clean:   header has "name" + "stock" (+ optional "code")  → one row per product.
+     *   (b) Raw POS: an "Item Wise Stock Summary" export with title rows above a header containing
+     *       "Item Name"/"Item Code"/"Unit"/"Quantity", where each item repeats per unit. We find the
+     *       header, aggregate per item code (PIECES preferred; else sum of its rows), and emit one
+     *       stock figure per item — so the owner can upload exactly what the POS gives them.
+     */
+    private function parseStockRows(string $csv): array
+    {
+        $lines = preg_split('/\r\n|\r|\n/', trim($csv));
+        if (! $lines) return ['error' => 'empty_csv'];
+        if (count($lines) > 60000) return ['error' => 'too_many_rows'];
+
+        // Locate the header row (scan the first 15 lines) and the format.
+        $headerIdx = -1; $cols = []; $mode = '';
+        foreach (array_slice($lines, 0, 15) as $idx => $ln) {
+            $cells = array_map(fn ($c) => strtolower(trim($c)), str_getcsv($ln));
+            if (in_array('name', $cells, true) && in_array('stock', $cells, true)) { $headerIdx = $idx; $cols = $cells; $mode = 'clean'; break; }
+            $joined = implode('|', $cells);
+            if (str_contains($joined, 'item name') || (str_contains($joined, 'item code') && (str_contains($joined, 'quantity') || str_contains($joined, 'qty')))) {
+                $headerIdx = $idx; $cols = $cells; $mode = 'raw'; break;
+            }
+        }
+        if ($headerIdx < 0) return ['error' => 'header_not_found'];
+
+        $data = array_slice($lines, $headerIdx + 1);
+
+        if ($mode === 'clean') {
+            $iName = array_search('name', $cols, true);
+            $iCode = array_search('code', $cols, true);
+            $iStock = array_search('stock', $cols, true);
+            $out = [];
+            foreach ($data as $ln) {
+                if (trim($ln) === '') continue;
+                $c = str_getcsv($ln);
+                $st = trim((string) ($c[$iStock] ?? ''));
+                if ($st === '' || ! is_numeric(str_replace(',', '', $st))) continue;
+                $out[] = [
+                    'name'  => trim((string) ($c[$iName] ?? '')),
+                    'code'  => $iCode !== false ? trim((string) ($c[$iCode] ?? '')) : '',
+                    'stock' => (int) round((float) str_replace(',', '', $st)),
+                ];
+            }
+            return ['rows' => $out];
+        }
+
+        // raw POS
+        $iCode = $this->colIndex($cols, ['item code', 'code']);
+        $iName = $this->colIndex($cols, ['item name', 'particulars', 'name']);
+        $iUnit = $this->colIndex($cols, ['unit', 'uom']);
+        $iQty  = $this->colIndex($cols, ['quantity', 'qty', 'closing', 'balance', 'stock']);
+        if ($iName === null || $iQty === null) return ['error' => 'raw_missing_columns'];
+
+        $pieceUnits = ['PIECES', 'PIECE', 'PCS', 'PC', 'NOS', 'NO', 'EACH', 'UNIT', 'UNITS'];
+        $agg = [];
+        foreach ($data as $ln) {
+            if (trim($ln) === '') continue;
+            $c = str_getcsv($ln);
+            $name = trim((string) ($c[$iName] ?? ''));
+            if ($name === '') continue;
+            $code = $iCode !== null ? trim((string) ($c[$iCode] ?? '')) : '';
+            $unit = $iUnit !== null ? strtoupper(trim((string) ($c[$iUnit] ?? ''))) : '';
+            $qRaw = str_replace(',', '', trim((string) ($c[$iQty] ?? '')));
+            if ($qRaw === '' || ! is_numeric($qRaw)) continue;
+            $q = (float) $qRaw;
+
+            $key = $code !== '' ? 'C:' . $code : 'N:' . $this->normName($name);
+            if (! isset($agg[$key])) $agg[$key] = ['name' => $name, 'code' => $code, 'pieces' => 0.0, 'hasPieces' => false, 'all' => 0.0];
+            $agg[$key]['all'] += $q;
+            if (in_array($unit, $pieceUnits, true)) { $agg[$key]['pieces'] += $q; $agg[$key]['hasPieces'] = true; }
+        }
+
+        $out = [];
+        foreach ($agg as $a) {
+            $stock = $a['hasPieces'] ? $a['pieces'] : $a['all'];
+            $out[] = ['name' => $a['name'], 'code' => $a['code'], 'stock' => (int) round($stock)];
+        }
+        return ['rows' => $out];
     }
 
     public function deleteProduct(Request $r)
