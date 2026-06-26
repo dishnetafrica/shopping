@@ -504,7 +504,7 @@
       <div id="pageProducts" class="hide">
         <div class="crumb">Home / <b>Products</b></div>
         <div class="card">
-          <div class="head" style="flex-wrap:wrap;gap:8px">Products <input id="pmScan" inputmode="numeric" placeholder="⌨ Scan to edit + Enter" style="border:none;border-radius:8px;padding:7px 10px;font-size:13px;min-width:160px"><button id="pmScanCam" class="btn ghost" style="padding:7px 11px">📷 Scan</button><button class="btn" id="addProdBtn" style="margin-left:auto">+ Add product</button><button class="btn" id="pmExport" style="margin-left:8px">⤓ Export CSV</button></div>
+          <div class="head" style="flex-wrap:wrap;gap:8px">Products <input id="pmScan" inputmode="numeric" placeholder="⌨ Scan to edit + Enter" style="border:none;border-radius:8px;padding:7px 10px;font-size:13px;min-width:160px"><button id="pmScanCam" class="btn ghost" style="padding:7px 11px">📷 Scan</button><button class="btn" id="addProdBtn" style="margin-left:auto">+ Add product</button><button class="btn" id="pmExport" style="margin-left:8px">⤓ Export CSV</button><button class="btn" id="pmBulkMeta" style="margin-left:8px">⚙ Unit/Pack</button></div>
           <div class="body">
             <div class="filters">
               <div class="fg search"><label>Search</label><input id="pmSearch" placeholder="name, brand, keyword…"></div>
@@ -1120,6 +1120,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   catImages:'/papi/category-images',catImageSave:'/papi/category-image-save',
   catCreate:'/papi/category-create',catRename:'/papi/category-rename',catDelete:'/papi/category-delete',catReorder:'/papi/category-reorder',
   prodOrder:'/papi/product-order',
+  prodBulkMeta:'/papi/product-bulk-meta',
   analytics:'/papi/analytics',analyticsCsv:'/papi/analytics-csv',
   thali:'/papi/thali',thaliSave:'/papi/thali-save',
   dispatch:'/papi/dispatch',
@@ -2420,7 +2421,41 @@ function pmInit(){
   $('pmCat').onchange=function(){pmCatFilter=this.value;renderPM();};
   $('addProdBtn').onclick=openAdd;
   if($('pmExport'))$('pmExport').onclick=exportProductsCSV;
+  if($('pmBulkMeta'))$('pmBulkMeta').onclick=openBulkMeta;
   $('pmSearch').value=pmQuery; renderPM();
+}
+function openBulkMeta(){
+  var list=pmFiltered();
+  if(!list.length){toast('No products in the current view');return;}
+  $('modalTitle').textContent='Bulk set unit / pack / MOQ';
+  $('modalBody').innerHTML=
+    '<div class="note" style="margin-bottom:10px">Applies to the <b>'+list.length+'</b> product'+(list.length>1?'s':'')+' currently shown'+(pmCatFilter?(' in <b>'+esc(pmCatFilter)+'</b>'):'')+(pmQuery?' matching your search':'')+'. Leave a field blank to keep it unchanged.</div>'+
+    '<div class="mfield"><label>Selling unit</label><input id="bmUnit" placeholder="e.g. carton"></div>'+
+    '<div class="mfield"><label>Pieces per unit (pack size)</label><input id="bmPack" type="number" min="1" placeholder="e.g. 48"></div>'+
+    '<div class="mfield"><label>Minimum order (MOQ)</label><input id="bmMOQ" type="number" min="1" placeholder="e.g. 1"></div>'+
+    '<button type="button" class="btn" id="bmApply" style="width:100%;margin-top:6px">Apply to '+list.length+' product'+(list.length>1?'s':'')+'</button>';
+  $('bmApply').onclick=function(){applyBulkMeta(list);};
+  $('modal').classList.remove('hide');
+}
+async function applyBulkMeta(list){
+  var unit=($('bmUnit')?$('bmUnit').value:'').trim();
+  var pack=($('bmPack')?$('bmPack').value:'').trim();
+  var moq=($('bmMOQ')?$('bmMOQ').value:'').trim();
+  if(unit===''&&pack===''&&moq===''){toast('Fill at least one field');return;}
+  var ids=list.map(function(p){return p._row;}).filter(function(x){return x!=null;});
+  var qs='?token='+encodeURIComponent(token)+'&ids='+encodeURIComponent(ids.join(','))+
+    (unit!==''?'&unit_label='+encodeURIComponent(unit):'')+
+    (pack!==''?'&pack_size='+encodeURIComponent(pack):'')+
+    (moq!==''?'&moq='+encodeURIComponent(moq):'');
+  var btn=$('bmApply');if(btn){btn.disabled=true;btn.textContent='Applying…';}
+  try{
+    var r=await fetch(EP.prodBulkMeta+qs,{cache:'no-store'});var d=await r.json();
+    if(d&&d.ok){
+      var idset={};ids.forEach(function(i){idset[i]=1;});
+      CATALOGUE.forEach(function(p){if(idset[p._row]){if(unit!=='')p.unit=unit;if(pack!=='')p.packSize=Number(pack);if(moq!=='')p.moq=Number(moq);}});
+      toast('Updated '+(d.updated!=null?d.updated:ids.length)+' products');closeModal();renderPM();
+    }else{toast('Failed: '+((d&&d.error)||'error'));if(btn){btn.disabled=false;btn.textContent='Apply';}}
+  }catch(e){toast('Network error');if(btn){btn.disabled=false;btn.textContent='Apply';}}
 }
 function pmFiltered(){
   var list=CATALOGUE.slice();

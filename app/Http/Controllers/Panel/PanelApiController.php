@@ -1258,6 +1258,30 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /**
+     * Bulk-set selling unit / pack size / MOQ across many products at once (for manufacturer-style
+     * tenants filling in carton/pack/MOQ so the generated price list reads cleanly). Tenant-scoped
+     * by id list. Only the fields supplied are written; blank fields are left untouched.
+     */
+    public function productBulkMeta(Request $r)
+    {
+        $t = $r->user()->tenant;
+        app(\App\Support\TenantContext::class)->set($t->id);
+
+        $updates = [];
+        if ($r->filled('unit_label')) $updates['unit_label'] = trim((string) $r->query('unit_label'));
+        if ($r->filled('pack_size'))  $updates['pack_size']  = max(1, (int) $r->query('pack_size'));
+        if ($r->filled('moq'))        $updates['moq']        = max(1, (int) $r->query('moq'));
+        if (! $updates) return response()->json(['ok' => false, 'error' => 'nothing_to_set'], 422);
+
+        $ids = array_values(array_filter(array_map('intval', explode(',', (string) $r->query('ids', '')))));
+        if (! $ids) return response()->json(['ok' => false, 'error' => 'no_ids'], 422);
+
+        $n = Product::where('tenant_id', $t->id)->whereIn('id', $ids)->update($updates);
+
+        return response()->json(['ok' => true, 'updated' => $n, 'set' => array_keys($updates)]);
+    }
+
     public function deleteProduct(Request $r)
     {
         $p = Product::find((int) $r->query('row'));
