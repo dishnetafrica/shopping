@@ -504,7 +504,7 @@
       <div id="pageProducts" class="hide">
         <div class="crumb">Home / <b>Products</b></div>
         <div class="card">
-          <div class="head" style="flex-wrap:wrap;gap:8px">Products <input id="pmScan" inputmode="numeric" placeholder="⌨ Scan to edit + Enter" style="border:none;border-radius:8px;padding:7px 10px;font-size:13px;min-width:160px"><button id="pmScanCam" class="btn ghost" style="padding:7px 11px">📷 Scan</button><button class="btn" id="addProdBtn" style="margin-left:auto">+ Add product</button><button class="btn" id="pmExport" style="margin-left:8px">⤓ Export CSV</button><button class="btn" id="pmBulkMeta" style="margin-left:8px">⚙ Unit/Pack</button></div>
+          <div class="head" style="flex-wrap:wrap;gap:8px">Products <input id="pmScan" inputmode="numeric" placeholder="⌨ Scan to edit + Enter" style="border:none;border-radius:8px;padding:7px 10px;font-size:13px;min-width:160px"><button id="pmScanCam" class="btn ghost" style="padding:7px 11px">📷 Scan</button><button class="btn" id="addProdBtn" style="margin-left:auto">+ Add product</button><button class="btn" id="pmExport" style="margin-left:8px">⤓ Export CSV</button><button class="btn" id="pmBulkMeta" style="margin-left:8px">⚙ Unit/Pack</button><button class="btn" id="pmStockSync" style="margin-left:8px">⬆ Update stock</button><input type="file" id="pmStockFile" accept=".csv" style="display:none"></div>
           <div class="body">
             <div class="filters">
               <div class="fg search"><label>Search</label><input id="pmSearch" placeholder="name, brand, keyword…"></div>
@@ -1124,6 +1124,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   catCreate:'/papi/category-create',catRename:'/papi/category-rename',catDelete:'/papi/category-delete',catReorder:'/papi/category-reorder',
   prodOrder:'/papi/product-order',
   prodBulkMeta:'/papi/product-bulk-meta',
+  stockSync:'/papi/stock-sync',
   analytics:'/papi/analytics',analyticsCsv:'/papi/analytics-csv',
   thali:'/papi/thali',thaliSave:'/papi/thali-save',
   dispatch:'/papi/dispatch',
@@ -2425,7 +2426,46 @@ function pmInit(){
   $('addProdBtn').onclick=openAdd;
   if($('pmExport'))$('pmExport').onclick=exportProductsCSV;
   if($('pmBulkMeta'))$('pmBulkMeta').onclick=openBulkMeta;
+  if($('pmStockSync'))$('pmStockSync').onclick=function(){$('pmStockFile').click();};
+  if($('pmStockFile'))$('pmStockFile').onchange=stockSyncPick;
   $('pmSearch').value=pmQuery; renderPM();
+}
+var STOCK_CSV='';
+function stockSyncPick(e){
+  var file=e.target.files&&e.target.files[0]; if(!file)return;
+  var rd=new FileReader();
+  rd.onload=function(){STOCK_CSV=String(rd.result||'');stockSyncRun(0);};
+  rd.readAsText(file);
+  e.target.value='';
+}
+async function stockSyncRun(apply){
+  if(!STOCK_CSV){toast('Choose a CSV first');return;}
+  $('modalTitle').textContent=apply?'Applying stock update…':'Stock update';
+  $('modalBody').innerHTML='<div class="note">Working…</div>';
+  $('modal').classList.remove('hide');
+  try{
+    var r=await fetch(EP.stockSync+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csv:STOCK_CSV,apply:apply})});
+    var d=await r.json();
+    if(!d||!d.ok){$('modalBody').innerHTML='<div class="note" style="color:var(--red)">Failed: '+((d&&d.error)||'error')+'</div>';return;}
+    var nf=(d.not_found_samples&&d.not_found_samples.length)?('<div style="margin-top:8px;font-size:12px;color:var(--muted)">Not matched ('+d.not_found+'): '+d.not_found_samples.map(esc).join(', ')+(d.not_found>15?'…':'')+'</div>'):'';
+    var rows='<table style="width:100%;font-size:14px;border-collapse:collapse">'+
+      '<tr><td>Products matched</td><td style="text-align:right"><b>'+d.matched+'</b></td></tr>'+
+      '<tr><td>Stock '+(apply?'updated':'to update')+'</td><td style="text-align:right"><b>'+d.updated+'</b></td></tr>'+
+      '<tr><td>Out of stock &rarr; hidden</td><td style="text-align:right"><b>'+d.hidden_out_of_stock+'</b></td></tr>'+
+      '<tr><td>Negative stock</td><td style="text-align:right">'+d.negative_stock+'</td></tr>'+
+      '<tr><td>Item codes saved to SKU</td><td style="text-align:right">'+d.sku_backfilled+'</td></tr>'+
+      '<tr><td>Rows not matched</td><td style="text-align:right">'+d.not_found+'</td></tr></table>'+nf;
+    if(apply){
+      $('modalTitle').textContent='Stock updated ✓';
+      $('modalBody').innerHTML=rows+'<div class="note" style="margin-top:10px;color:var(--green,#2e7d32)">Done — product images were not touched.</div>';
+      await loadData();renderPM();
+    }else{
+      $('modalTitle').textContent='Stock update — preview';
+      $('modalBody').innerHTML='<div class="note" style="margin-bottom:8px">Nothing changed yet. Only <b>stock</b> and <b>visibility</b> change — images, prices and names stay as they are.</div>'+rows+
+        '<button type="button" class="btn" id="stockApply" style="width:100%;margin-top:10px">Apply '+d.updated+' updates</button>';
+      if($('stockApply'))$('stockApply').onclick=function(){stockSyncRun(1);};
+    }
+  }catch(err){$('modalBody').innerHTML='<div class="note" style="color:var(--red)">Network error — try again</div>';}
 }
 function openBulkMeta(){
   var list=pmFiltered();

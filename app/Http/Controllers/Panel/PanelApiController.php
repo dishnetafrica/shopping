@@ -1284,6 +1284,103 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true, 'updated' => $n, 'set' => array_keys($updates)]);
     }
 
+    /** Normalise a product name for fuzzy matching (uppercase, strip punctuation, collapse spaces). */
+    private function normName(string $s): string
+    {
+        $s = strtoupper($s);
+        $s = preg_replace('/[^A-Z0-9 ]/', ' ', $s);
+        return trim((string) preg_replace('/\s+/', ' ', $s));
+    }
+
+    /**
+     * Sync stock from a supermarket report CSV (columns: name, code, stock). Matches each row to an
+     * existing product by sku → barcode → normalised name, then sets stock and active=(stock>0) so
+     * out-of-stock items stop showing. NEVER touches images, price, name or category. Backfills the
+     * POS item code into an empty sku so future syncs match exactly by code. Rows with blank stock
+     * are skipped (left unchanged). dry-run unless apply=1. Returns a full validation summary.
+     */
+    public function stockSync(Request $r)
+    {
+        $t = $r->user()->tenant;
+        app(\App\Support\TenantContext::class)->set($t->id);
+
+        $csv = trim((string) $r->input('csv', ''));
+        if ($csv === '') return response()->json(['ok' => false, 'error' => 'empty_csv'], 422);
+
+        $lines = preg_split('/\r\n|\r|\n/', $csv);
+        $header = array_map(fn ($h) => strtolower(trim($h)), str_getcsv((string) array_shift($lines)));
+        $iName  = array_search('name', $header, true);
+        $iCode  = array_search('code', $header, true);
+        $iStock = array_search('stock', $header, true);
+        if ($iName === false || $iStock === false) {
+            return response()->json(['ok' => false, 'error' => 'csv_needs_name_and_stock_columns'], 422);
+        }
+        if (count($lines) > 20000) return response()->json(['ok' => false, 'error' => 'too_many_rows'], 422);
+
+        $apply = (int) $r->input('apply', 0) === 1;
+
+        $products = \App\Models\Product::where('tenant_id', $t->id)->get(['id', 'name', 'sku', 'barcode', 'stock', 'active']);
+        $byName = [];
+        $bySku  = [];
+        $byBar  = [];
+        foreach ($products as $p) {
+            $byName[$this->normName((string) $p->name)] = $p;
+            if (trim((string) $p->sku) !== '')     $bySku[trim((string) $p->sku)] = $p;
+            if (trim((string) $p->barcode) !== '') $byBar[trim((string) $p->barcode)] = $p;
+        }
+
+        $matched = $updated = $hidden = $neg = $skuFilled = 0;
+        $notFound = [];
+        $ups = [];
+
+        foreach ($lines as $ln) {
+            if (trim($ln) === '') continue;
+            $c     = str_getcsv($ln);
+            $name  = trim((string) ($c[$iName] ?? ''));
+            $code  = ($iCode !== false) ? trim((string) ($c[$iCode] ?? '')) : '';
+            $stkRaw = trim((string) ($c[$iStock] ?? ''));
+            if ($stkRaw === '' || ! is_numeric($stkRaw)) continue; // blank/unmatched → leave unchanged
+
+            $p = ($code !== '' && isset($bySku[$code])) ? $bySku[$code]
+               : (($code !== '' && isset($byBar[$code])) ? $byBar[$code]
+               : ($byName[$this->normName($name)] ?? null));
+
+            if (! $p) { if (count($notFound) < 25) $notFound[] = $name; continue; }
+
+            $matched++;
+            $stock  = (int) round((float) $stkRaw);
+            $active = $stock > 0;
+            if ($stock <= 0) $hidden++;
+            if ($stock < 0)  $neg++;
+
+            $u = ['stock' => $stock, 'active' => $active];
+            if (trim((string) $p->sku) === '' && $code !== '') { $u['sku'] = $code; $skuFilled++; }
+            $ups[$p->id] = $u;
+            $updated++;
+        }
+
+        if ($apply && $ups) {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($ups) {
+                foreach ($ups as $id => $u) {
+                    \Illuminate\Support\Facades\DB::table('products')->where('id', $id)->update($u);
+                }
+            });
+        }
+
+        return response()->json([
+            'ok'                => true,
+            'apply'             => $apply,
+            'rows'              => count($lines),
+            'matched'           => $matched,
+            'updated'           => $updated,
+            'hidden_out_of_stock' => $hidden,
+            'negative_stock'    => $neg,
+            'sku_backfilled'    => $skuFilled,
+            'not_found'         => count($notFound),
+            'not_found_samples' => array_slice($notFound, 0, 15),
+        ]);
+    }
+
     public function deleteProduct(Request $r)
     {
         $p = Product::find((int) $r->query('row'));
