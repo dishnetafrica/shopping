@@ -158,6 +158,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('update-product', [PanelApiController::class, 'updateProduct']);
         Route::get('delete-product', [PanelApiController::class, 'deleteProduct']);
         Route::get('add-product',    [PanelApiController::class, 'addProduct']);
+        Route::post('ai-identify',   [PanelApiController::class, 'aiIdentify']);
+        Route::post('products-import', [PanelApiController::class, 'productsImport']);
+        Route::post('photos-import',   [PanelApiController::class, 'photosImport']);
         Route::get('product-bulk-meta', [PanelApiController::class, 'productBulkMeta']);
         Route::post('stock-sync', [PanelApiController::class, 'stockSync']);
         Route::post('images-borrow', [PanelApiController::class, 'imagesBorrow']);

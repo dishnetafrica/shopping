@@ -1564,6 +1564,172 @@ class PanelApiController extends Controller
         ]);
     }
 
+    /**
+     * One-click catalogue import. Upload a ZIP containing a CSV (Product Name, Brand, Category,
+     * Price UGX, Stock, Keywords, Image) plus the image files. Creates products with their photos,
+     * skips duplicates (same name), respects category scope. Products with no price are created
+     * INACTIVE (hidden) until the owner sets a price. dry-run unless apply=1.
+     */
+    public function productsImport(Request $r)
+    {
+        if (! $r->user()->canMenu('products')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        if (! class_exists('ZipArchive')) return response()->json(['ok' => false, 'error' => 'zip_unsupported'], 500);
+
+        $t = $r->user()->tenant;
+        app(\App\Support\TenantContext::class)->set($t->id);
+
+        $b64 = (string) $r->input('zip', '');
+        if (str_contains($b64, ',')) $b64 = substr($b64, strpos($b64, ',') + 1);
+        $bin = base64_decode($b64, true);
+        if ($bin === false || $bin === '') return response()->json(['ok' => false, 'error' => 'bad_zip'], 422);
+
+        $tmp = tempnam(sys_get_temp_dir(), 'imp');
+        file_put_contents($tmp, $bin);
+        $za = new \ZipArchive();
+        if ($za->open($tmp) !== true) { @unlink($tmp); return response()->json(['ok' => false, 'error' => 'bad_zip'], 422); }
+
+        $csv = ''; $imgIndex = [];
+        for ($i = 0; $i < $za->numFiles; $i++) {
+            $entry = $za->getNameIndex($i);
+            if ($entry === false) continue;
+            $bn = basename($entry);
+            if ($bn === '' || str_starts_with($bn, '.')) continue;
+            $ext = strtolower(pathinfo($bn, PATHINFO_EXTENSION));
+            if ($ext === 'csv' && $csv === '') $csv = (string) $za->getFromIndex($i);
+            elseif (in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) $imgIndex[strtolower($bn)] = $i;
+        }
+        if ($csv === '') { $za->close(); @unlink($tmp); return response()->json(['ok' => false, 'error' => 'no_csv'], 422); }
+
+        $apply = (int) $r->input('apply', 0) === 1;
+        $scope = $r->user()->categoryScope();
+
+        $lines  = preg_split('/\r\n|\r|\n/', trim($csv));
+        $header = array_map(fn ($h) => strtolower(trim($h)), str_getcsv((string) array_shift($lines)));
+        $col = function ($names) use ($header) { foreach ($names as $n) { $i = array_search($n, $header, true); if ($i !== false) return $i; } return null; };
+        $iName = $col(['product name', 'name']); $iCat = $col(['category']); $iPrice = $col(['price ugx', 'price']);
+        $iStock = $col(['stock']); $iKw = $col(['keywords']); $iImg = $col(['image', 'photo']);
+        if ($iName === null) { $za->close(); @unlink($tmp); return response()->json(['ok' => false, 'error' => 'csv_no_name'], 422); }
+
+        $created = $dup = $noImg = $forbidden = 0; $samples = [];
+        foreach ($lines as $ln) {
+            if (trim($ln) === '') continue;
+            $c = str_getcsv($ln);
+            $name = trim((string) ($c[$iName] ?? '')); if ($name === '') continue;
+            $cat  = $iCat !== null ? trim((string) ($c[$iCat] ?? '')) : '';
+            if (is_array($scope) && ! in_array($cat, $scope, true)) { $forbidden++; continue; }
+            if (Product::where('tenant_id', $t->id)->whereRaw('lower(name) = ?', [mb_strtolower($name)])->exists()) { $dup++; continue; }
+
+            $price = $iPrice !== null ? (float) preg_replace('/[^0-9.]/', '', (string) ($c[$iPrice] ?? '')) : 0;
+            $stock = $iStock !== null ? (int) preg_replace('/[^0-9-]/', '', (string) ($c[$iStock] ?? '')) : 0;
+            $kw    = $iKw !== null ? trim((string) ($c[$iKw] ?? '')) : '';
+            $imgName = $iImg !== null ? basename(strtolower(trim((string) ($c[$iImg] ?? '')))) : '';
+
+            $url = '';
+            if ($imgName !== '' && isset($imgIndex[$imgName])) {
+                if ($apply) {
+                    $bytes = $za->getFromIndex($imgIndex[$imgName]);
+                    if ($bytes !== false) {
+                        $ext  = strtolower(pathinfo($imgName, PATHINFO_EXTENSION)) ?: 'jpg';
+                        $path = 'products/' . $t->id . '/' . uniqid('imp_', true) . '.' . $ext;
+                        Storage::disk('public')->put($path, $bytes);
+                        $url = url(Storage::url($path));
+                    }
+                }
+            } else { $noImg++; }
+
+            if ($apply) {
+                Product::create([
+                    'tenant_id'  => $t->id, 'name' => $name, 'category' => $cat, 'keywords' => $kw,
+                    'base_price' => $price, 'price' => $price, 'stock' => $stock, 'image_url' => $url,
+                    'active'     => $price > 0,
+                ]);
+            }
+            $created++;
+            if (count($samples) < 8) $samples[] = $name;
+        }
+        $za->close(); @unlink($tmp);
+
+        return response()->json([
+            'ok' => true, 'apply' => $apply, 'created' => $created, 'duplicates' => $dup,
+            'missing_image' => $noImg, 'forbidden_category' => $forbidden, 'samples' => $samples,
+        ]);
+    }
+
+    /**
+     * Bulk update photos for EXISTING products. Upload a ZIP of images (multipart 'zip'); each image
+     * is matched to a product by SKU → barcode → normalised name taken from the FILENAME. Replaces the
+     * product's image. By default only products WITHOUT a photo are filled; pass override=1 to replace
+     * existing photos too. Respects category scope. dry-run unless apply=1.
+     */
+    public function photosImport(Request $r)
+    {
+        if (! $r->user()->canMenu('products')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        if (! class_exists('ZipArchive')) return response()->json(['ok' => false, 'error' => 'zip_unsupported'], 500);
+
+        $t = $r->user()->tenant;
+        app(\App\Support\TenantContext::class)->set($t->id);
+
+        $file = $r->file('zip');
+        if (! $file || ! $file->isValid()) return response()->json(['ok' => false, 'error' => 'no_file'], 422);
+        $za = new \ZipArchive();
+        if ($za->open($file->getRealPath()) !== true) return response()->json(['ok' => false, 'error' => 'bad_zip'], 422);
+
+        $apply    = (int) $r->input('apply', 0) === 1;
+        $override = (int) $r->input('override', 0) === 1;
+        $scope    = $r->user()->categoryScope();
+
+        $q = Product::query()->where('tenant_id', $t->id);
+        if (is_array($scope)) $q->whereIn('category', $scope);
+        $bySku = []; $byBar = []; $byName = [];
+        foreach ($q->get(['id', 'name', 'sku', 'barcode', 'image_url']) as $p) {
+            $byName[$this->normName((string) $p->name)] = $p;
+            if (trim((string) $p->sku) !== '')     $bySku[trim((string) $p->sku)] = $p;
+            if (trim((string) $p->barcode) !== '') $byBar[trim((string) $p->barcode)] = $p;
+        }
+
+        $images = $matched = $withPhoto = $withoutPhoto = $updated = $unmatched = 0;
+        $unmatchedSamples = []; $seen = [];
+        for ($i = 0; $i < $za->numFiles; $i++) {
+            $entry = $za->getNameIndex($i); if ($entry === false) continue;
+            $bn = basename($entry); if ($bn === '' || str_starts_with($bn, '.')) continue;
+            $ext = strtolower(pathinfo($bn, PATHINFO_EXTENSION));
+            if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) continue;
+            $images++;
+
+            $stem = preg_replace('/\.(jpg|jpeg|png|webp)$/i', '', $bn);
+            $stem = preg_replace('/^imgi_\d+_/', '', $stem);
+            $stem = preg_replace('/-\d+x\d+$/', '', $stem);
+            $raw  = trim($stem);
+            $p = $bySku[$raw] ?? $byBar[$raw] ?? ($byName[$this->normName($stem)] ?? null);
+            if (! $p) { $unmatched++; if (count($unmatchedSamples) < 12) $unmatchedSamples[] = $bn; continue; }
+            if (isset($seen[$p->id])) continue;
+            $seen[$p->id] = 1; $matched++;
+
+            $hasImg = trim((string) $p->image_url) !== '';
+            $hasImg ? $withPhoto++ : $withoutPhoto++;
+            $willUpdate = ! $hasImg || $override;
+            if (! $willUpdate) continue;
+
+            if ($apply) {
+                $bytes = $za->getFromIndex($i);
+                if ($bytes !== false) {
+                    $path = 'products/' . $t->id . '/' . uniqid('ph_', true) . '.' . ($ext === 'jpeg' ? 'jpg' : $ext);
+                    Storage::disk('public')->put($path, $bytes);
+                    Product::where('id', $p->id)->update(['image_url' => url(Storage::url($path))]);
+                    $updated++;
+                }
+            } else { $updated++; }
+        }
+        $za->close();
+
+        return response()->json([
+            'ok' => true, 'apply' => $apply, 'override' => $override,
+            'images_in_zip' => $images, 'matched' => $matched,
+            'with_photo' => $withPhoto, 'without_photo' => $withoutPhoto,
+            'updated' => $updated, 'unmatched' => $unmatched, 'unmatched_samples' => $unmatchedSamples,
+        ]);
+    }
+
     public function deleteProduct(Request $r)
     {
         $p = Product::find((int) $r->query('row'));
@@ -1574,17 +1740,23 @@ class PanelApiController extends Controller
 
     public function addProduct(Request $r)
     {
+        if (! $r->user()->canMenu('products')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
         $name = trim((string) $r->query('name', ''));
         $price = (float) $r->query('price', 0);
         if ($name === '' || $price <= 0) {
             return response()->json(['ok' => false, 'error' => 'name_and_price_required'], 422);
+        }
+        $category = (string) $r->query('category', '');
+        $scope = $r->user()->categoryScope();
+        if (is_array($scope) && ! in_array(trim($category), $scope, true)) {
+            return response()->json(['ok' => false, 'error' => 'forbidden_category', 'detail' => 'Pick one of your assigned categories.'], 403);
         }
         $variant = trim((string) $r->query('variant', ''));
         $full = $variant !== '' ? $name.' '.$variant : $name;
 
         Product::create([
             'name'       => $full,
-            'category'   => (string) $r->query('category', ''),
+            'category'   => $category,
             'keywords'   => (string) $r->query('keywords', ''),
             'base_price' => $price,
             'price'      => $price,
@@ -1597,6 +1769,63 @@ class PanelApiController extends Controller
         ]);
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * AI product recogniser. Given a product photo (uploaded URL or base64 data-URI), asks the
+     * vision model to draft the catalogue fields so staff just confirm. Reuses the same OpenAI key
+     * the bot uses. Returns drafted name/brand/category/pack/keywords/description.
+     */
+    public function aiIdentify(Request $r)
+    {
+        if (! $r->user()->canMenu('products')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+
+        $src = trim((string) $r->input('image', '')) ?: (string) $r->input('data', '');
+        if ($src === '') return response()->json(['ok' => false, 'error' => 'no_image'], 422);
+
+        $key = (string) (config('openai.api_key') ?: env('OPENAI_API_KEY'));
+        if ($key === '') return response()->json(['ok' => false, 'error' => 'ai_unavailable'], 503);
+        $model = (string) env('OPENAI_VISION_MODEL', env('OPENAI_MODEL', 'gpt-4o-mini'));
+
+        $prompt = 'You are cataloguing stock for an East-African grocery shop. Identify the product in the image. '
+            . 'Return ONLY a JSON object, no markdown, with keys: name (concise sellable name incl. size, e.g. "Coca-Cola 500ml"), '
+            . 'brand, category (one of: Beverages & Drinks, Snacks, Home & Cleaning, Baby Care, Personal Care, Groceries, Dairy, Bakery, Stationery, Other), '
+            . 'pack (e.g. "500ml PET bottle"), keywords (comma-separated search terms shoppers might type), description (one short sentence). Best guess if unsure.';
+
+        try {
+            $resp = \Illuminate\Support\Facades\Http::withToken($key)->timeout(30)->post('https://api.openai.com/v1/chat/completions', [
+                'model'       => $model,
+                'temperature' => 0,
+                'max_tokens'  => 400,
+                'messages'    => [[
+                    'role'    => 'user',
+                    'content' => [
+                        ['type' => 'text', 'text' => $prompt],
+                        ['type' => 'image_url', 'image_url' => ['url' => $src]],
+                    ],
+                ]],
+            ]);
+            if (! $resp->successful()) return response()->json(['ok' => false, 'error' => 'ai_failed'], 502);
+
+            $out = trim((string) $resp->json('choices.0.message.content'));
+            $out = trim(preg_replace('/```json|```/', '', $out));
+            $obj = json_decode($out, true);
+            if (! is_array($obj)) return response()->json(['ok' => false, 'error' => 'parse_failed'], 502);
+
+            $kw = $obj['keywords'] ?? '';
+            return response()->json([
+                'ok'          => true,
+                'name'        => (string) ($obj['name'] ?? ''),
+                'brand'       => (string) ($obj['brand'] ?? ''),
+                'category'    => (string) ($obj['category'] ?? ''),
+                'pack'        => (string) ($obj['pack'] ?? ''),
+                'keywords'    => is_array($kw) ? implode(', ', $kw) : (string) $kw,
+                'description' => (string) ($obj['description'] ?? ''),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('aiIdentify failed: ' . $e->getMessage());
+            return response()->json(['ok' => false, 'error' => 'ai_error'], 500);
+        }
     }
 
     public function uploadImage(Request $r)

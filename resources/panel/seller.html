@@ -505,7 +505,7 @@
       <div id="pageProducts" class="hide">
         <div class="crumb">Home / <b>Products</b></div>
         <div class="card">
-          <div class="head" style="flex-wrap:wrap;gap:8px">Products <input id="pmScan" inputmode="numeric" placeholder="⌨ Scan to edit + Enter" style="border:none;border-radius:8px;padding:7px 10px;font-size:13px;min-width:160px"><button id="pmScanCam" class="btn ghost" style="padding:7px 11px">📷 Scan</button><button class="btn" id="addProdBtn" style="margin-left:auto">+ Add product</button><button class="btn" id="pmExport" style="margin-left:8px">⤓ Export CSV</button><button class="btn" id="pmBulkMeta" style="margin-left:8px">⚙ Unit/Pack</button><button class="btn" id="pmStockSync" style="margin-left:8px">⬆ Update stock</button><button class="btn" id="pmCatalogImport" style="margin-left:8px">⬆ Import catalogue</button><button class="btn" id="pmFillImages" style="margin-left:8px;display:none">🖼 Fill images</button><input type="file" id="pmStockFile" accept=".csv" style="display:none"><input type="file" id="pmCatalogFile" accept=".zip" style="display:none"></div>
+          <div class="head" style="flex-wrap:wrap;gap:8px">Products <input id="pmScan" inputmode="numeric" placeholder="⌨ Scan to edit + Enter" style="border:none;border-radius:8px;padding:7px 10px;font-size:13px;min-width:160px"><button id="pmScanCam" class="btn ghost" style="padding:7px 11px">📷 Scan</button><button class="btn" id="addProdBtn" style="margin-left:auto">+ Add product</button><button class="btn" id="pmExport" style="margin-left:8px">⤓ Export CSV</button><button class="btn" id="pmBulkMeta" style="margin-left:8px">⚙ Unit/Pack</button><button class="btn" id="pmStockSync" style="margin-left:8px">⬆ Update stock</button><button class="btn" id="pmCatalogImport" style="margin-left:8px">⬆ Import catalogue</button><button class="btn" id="pmPhotoImport" style="margin-left:8px">🖼 Photos from ZIP</button><button class="btn" id="pmFillImages" style="margin-left:8px;display:none">🖼 Fill images</button><input type="file" id="pmStockFile" accept=".csv" style="display:none"><input type="file" id="pmCatalogFile" accept=".zip" style="display:none"><input type="file" id="pmPhotoFile" accept=".zip" style="display:none"></div>
           <div class="body">
             <div class="filters">
               <div class="fg search"><label>Search</label><input id="pmSearch" placeholder="name, brand, keyword…"></div>
@@ -1127,6 +1127,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   prodBulkMeta:'/papi/product-bulk-meta',
   stockSync:'/papi/stock-sync',
   productsImport:'/papi/products-import',
+  photosImport:'/papi/photos-import',
   imagesBorrow:'/papi/images-borrow',
   analytics:'/papi/analytics',analyticsCsv:'/papi/analytics-csv',
   thali:'/papi/thali',thaliSave:'/papi/thali-save',
@@ -2452,6 +2453,8 @@ function pmInit(){
   if($('pmStockFile'))$('pmStockFile').onchange=stockSyncPick;
   if($('pmCatalogImport'))$('pmCatalogImport').onclick=function(){$('pmCatalogFile').click();};
   if($('pmCatalogFile'))$('pmCatalogFile').onchange=catalogImportPick;
+  if($('pmPhotoImport'))$('pmPhotoImport').onclick=function(){$('pmPhotoFile').click();};
+  if($('pmPhotoFile'))$('pmPhotoFile').onchange=photoImportPick;
   if($('pmFillImages')){
     var srcs=(SETTINGS.imageSources&&SETTINGS.imageSources.length)?SETTINGS.imageSources:null;
     if(srcs){$('pmFillImages').style.display='';$('pmFillImages').onclick=function(){imagesBorrowRun(0);};}
@@ -2497,6 +2500,48 @@ async function stockSyncRun(apply){
   }catch(err){$('modalBody').innerHTML='<div class="note" style="color:var(--red)">Network error — try again</div>';}
 }
 var CATALOG_ZIP='';
+var PHOTO_ZIP=null;
+function photoImportPick(e){
+  var file=e.target.files&&e.target.files[0]; if(!file)return;
+  PHOTO_ZIP=file; e.target.value='';
+  photoImportRun(0,0);
+}
+async function photoImportRun(apply,override){
+  if(!PHOTO_ZIP){toast('Choose a photos .zip first');return;}
+  $('modalTitle').textContent=apply?'Updating photos…':'Update photos from ZIP';
+  $('modalBody').innerHTML='<div class="note">Working… matching photos to your products.</div>';
+  $('modal').classList.remove('hide');
+  try{
+    var fd=new FormData();fd.append('zip',PHOTO_ZIP);fd.append('apply',apply);fd.append('override',override);
+    var r=await fetch(EP.photosImport+'?token='+encodeURIComponent(token),{method:'POST',body:fd});
+    var d=await r.json();
+    if(!d||!d.ok){
+      var m={zip_unsupported:'Server can\u2019t read ZIP files (missing PHP zip).',bad_zip:'That file isn\u2019t a valid ZIP.',no_file:'No file received \u2014 try again.',forbidden:'You don\u2019t have access to this.'};
+      $('modalBody').innerHTML='<div class="note" style="color:var(--red)">'+((d&&m[d.error])||('Failed: '+((d&&d.error)||'error')))+'</div>';return;
+    }
+    var un=(d.unmatched_samples&&d.unmatched_samples.length)?('<div style="margin-top:8px;font-size:12px;color:var(--muted)">Not matched ('+d.unmatched+'): '+d.unmatched_samples.map(esc).join(', ')+(d.unmatched>d.unmatched_samples.length?'…':'')+'<br>Tip: name each photo like the product name, SKU or barcode.</div>'):'';
+    var rows='<table style="width:100%;font-size:14px;border-collapse:collapse">'+
+      '<tr><td>Photos in ZIP</td><td style="text-align:right">'+d.images_in_zip+'</td></tr>'+
+      '<tr><td>Matched to a product</td><td style="text-align:right"><b>'+d.matched+'</b></td></tr>'+
+      '<tr><td>&nbsp;&nbsp;of those, no photo yet</td><td style="text-align:right">'+d.without_photo+'</td></tr>'+
+      '<tr><td>&nbsp;&nbsp;of those, already have a photo</td><td style="text-align:right">'+d.with_photo+'</td></tr>'+
+      '<tr><td>Not matched</td><td style="text-align:right">'+d.unmatched+'</td></tr>'+
+      (apply?'<tr><td>Photos '+(d.override?'replaced/added':'added')+'</td><td style="text-align:right"><b>'+d.updated+'</b></td></tr>':'')+
+      '</table>'+un;
+    if(apply){
+      $('modalTitle').textContent='Photos updated \u2713';
+      $('modalBody').innerHTML=rows+'<div class="note" style="margin-top:10px;color:var(--green,#2e7d32)">Done \u2014 prices, names and stock were not touched.</div>';
+      await loadData();renderPM();
+    }else{
+      $('modalTitle').textContent='Update photos \u2014 preview';
+      var btns='<button type="button" class="btn" id="phAdd" style="width:100%;margin-top:10px">Add to the '+d.without_photo+' with no photo</button>';
+      if(d.with_photo>0) btns+='<button type="button" class="btn ghost" id="phAll" style="width:100%;margin-top:8px">Replace ALL '+d.matched+' matched (overwrite existing)</button>';
+      $('modalBody').innerHTML='<div class="note" style="margin-bottom:8px">Nothing changed yet. Photos match to products by filename (SKU, barcode or product name).</div>'+rows+btns;
+      if($('phAdd'))$('phAdd').onclick=function(){photoImportRun(1,0);};
+      if($('phAll'))$('phAll').onclick=function(){photoImportRun(1,1);};
+    }
+  }catch(err){$('modalBody').innerHTML='<div class="note" style="color:var(--red)">Network error \u2014 try a smaller ZIP</div>';}
+}
 function catalogImportPick(e){
   var file=e.target.files&&e.target.files[0]; if(!file)return;
   if(file.size>12*1024*1024){toast('That ZIP is too big (max 12MB)');e.target.value='';return;}
