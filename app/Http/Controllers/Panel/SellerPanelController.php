@@ -29,6 +29,18 @@ class SellerPanelController extends Controller
 
         $html = $this->brandize(file_get_contents($path), $user->tenant);
 
+        // Inject the current user's permissions so the SPA can hide menus it isn't allowed.
+        // (Server-side enforcement still gates the sensitive endpoints — this is UX only.)
+        $me = [
+            'role'       => (string) ($user->role ?: ''),
+            'isOwner'    => $user->isOwnerLike(),
+            'menus'      => $user->effectiveMenus(),
+            'categories' => $user->categoryScope(), // null = all
+            'name'       => (string) $user->name,
+        ];
+        $meJson = json_encode($me, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $html = preg_replace('#</head>#', '<script>window.ME=' . $meJson . ';</script></head>', $html, 1);
+
         return response($html, 200)
             ->header('Content-Type', 'text/html; charset=UTF-8')
             ->header('Cache-Control', 'no-store');

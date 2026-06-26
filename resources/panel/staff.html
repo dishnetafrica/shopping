@@ -65,8 +65,13 @@
     <h3>Add a staff login</h3>
     <div class="rowf">
       <div><label>Name</label><input id="sName" placeholder="e.g. Sarah"></div>
-      <div><label>Role (optional)</label><input id="sRole" placeholder="e.g. cashier"></div>
+      <div><label>Role</label><select id="sRole" onchange="roleCatsToggle('sRole','sCatWrap','sCats')">
+        <option value="product_staff">Product staff (products only)</option>
+        <option value="manager">Manager (all except Staff)</option>
+        <option value="owner">Owner (full access)</option>
+      </select></div>
     </div>
+    <div id="sCatWrap" style="margin-top:8px"><label>Allowed categories <span style="font-weight:400;color:#6b7280">— Product staff can only see &amp; edit these</span></label><div id="sCats" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:5px"></div></div>
     <label>Email</label>
     <input id="sEmail" type="email" placeholder="name@shop.com">
     <label>WhatsApp number (for easy login)</label>
@@ -90,8 +95,13 @@
     <input type="hidden" id="eId">
     <div class="mrow">
       <div><label>Name</label><input id="eName"></div>
-      <div><label>Role</label><input id="eRole" placeholder="e.g. cashier"></div>
+      <div><label>Role</label><select id="eRole" onchange="roleCatsToggle('eRole','eCatWrap','eCats')">
+        <option value="product_staff">Product staff (products only)</option>
+        <option value="manager">Manager (all except Staff)</option>
+        <option value="owner">Owner (full access)</option>
+      </select></div>
     </div>
+    <div id="eCatWrap" style="margin-top:8px"><label>Allowed categories</label><div id="eCats" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:5px"></div></div>
     <label>Email</label>
     <input id="eEmail" type="email">
     <label>WhatsApp number (for code login)</label>
@@ -134,10 +144,13 @@
       // list
       var l=$('list');
       window._staff=d.staff;
+      window._cats=d.categories||[];
+      roleCatsToggle('sRole','sCatWrap','sCats');
       l.innerHTML=d.staff.map(function(u){
+        var catHint=(u.role==='product_staff')?(' · '+((u.categories&&u.categories.length)?u.categories.length+' categories':'no categories yet')):'';
         return '<div class="u"><span class="av">'+initials(u.name)+'</span>'+
-          '<div><div class="nm">'+esc(u.name)+'</div><div class="em">'+esc(u.email)+(u.phone?(' · '+esc(u.phone)):'')+'</div></div>'+
-          '<span class="role">'+esc(u.role)+'</span>'+
+          '<div><div class="nm">'+esc(u.name)+'</div><div class="em">'+esc(u.email)+(u.phone?(' · '+esc(u.phone)):'')+catHint+'</div></div>'+
+          '<span class="role">'+esc(roleLabel(u.role))+'</span>'+
           '<button class="edit" onclick="openEdit('+u.id+')">Edit</button>'+
           (u.self?'<span class="me">you</span>':'<button class="del" title="Remove" onclick="delStaff('+u.id+",'"+esc(u.name)+"'"+')">\u00d7</button>')+
           '</div>';
@@ -146,18 +159,33 @@
   }
   function esc(s){return (s||'').replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
 
+  function roleLabel(r){return r==='owner'?'Owner':r==='manager'?'Manager':r==='product_staff'?'Product staff':(r||'Staff');}
+  function renderCats(holderId,selected){
+    selected=selected||[];var cats=window._cats||[];var h=$(holderId);if(!h)return;
+    if(!cats.length){h.innerHTML='<div class="note">No categories yet — add products first, then assign here.</div>';return;}
+    h.innerHTML=cats.map(function(c){var ck=selected.indexOf(c)>=0?' checked':'';
+      return '<label style="display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:13px;cursor:pointer"><input type="checkbox" value="'+esc(c)+'"'+ck+' style="width:auto"> '+esc(c)+'</label>';}).join('');
+  }
+  function collectCats(holderId){return Array.prototype.slice.call(document.querySelectorAll('#'+holderId+' input:checked')).map(function(i){return i.value;});}
+  function roleCatsToggle(roleSel,wrapId,holderId,selected){
+    var isPS=$(roleSel).value==='product_staff';$(wrapId).style.display=isPS?'':'none';
+    if(isPS)renderCats(holderId,selected||collectCats(holderId));
+  }
+
   async function addStaff(){
     var name=$('sName').value,email=$('sEmail').value,pass=$('sPass').value,role=$('sRole').value;
     var phone=($('sPhone').value||'').replace(/\D+/g,'');
+    var cats=role==='product_staff'?collectCats('sCats'):[];
     if(!name||!email||(!phone&&pass.length<6)){toast('Add a name, email, and a WhatsApp number (or a 6+ character password)');return;}
     var b=$('addBtn');b.disabled=true;b.innerHTML='<span class="spin"></span>Adding…';
     try{
-      var r=await fetch('/papi/staff/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,email:email,phone:phone,password:pass,role:role})});
+      var r=await fetch('/papi/staff/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,email:email,phone:phone,password:pass,role:role,categories:cats})});
       var d=await r.json();
-      if(d&&d.ok){toast('Staff login added');$('sName').value='';$('sEmail').value='';$('sPhone').value='';$('sPass').value='';$('sRole').value='';load();}
+      if(d&&d.ok){toast('Staff login added');$('sName').value='';$('sEmail').value='';$('sPhone').value='';$('sPass').value='';load();}
       else if(d&&d.error==='upgrade_required'){toast('Plan login limit reached — upgrade to add more');load();}
       else if(d&&d.error==='email_taken'){toast('That email is already in use');}
       else if(d&&d.error==='phone_taken'){toast('That WhatsApp number is already in use');}
+      else if(d&&d.error==='forbidden'){toast('Only the owner can manage staff');}
       else if(d&&d.error==='bad_input'){toast(d.detail||'Check the details');}
       else{toast('Could not add login');}
     }catch(e){toast('Network error');}
@@ -178,8 +206,10 @@
 
   function openEdit(id){
     var u=(window._staff||[]).filter(function(x){return x.id===id;})[0]; if(!u)return;
-    $('eId').value=u.id; $('eName').value=u.name||''; $('eRole').value=u.role||'';
+    $('eId').value=u.id; $('eName').value=u.name||''; $('eRole').value=(['owner','manager','product_staff'].indexOf(u.role)>=0?u.role:'product_staff');
     $('eEmail').value=u.email||''; $('ePhone').value=u.phone||''; $('ePass').value='';
+    renderCats('eCats',u.categories||[]);
+    roleCatsToggle('eRole','eCatWrap','eCats',u.categories||[]);
     $('editBg').classList.add('on');
   }
   function closeEdit(){ $('editBg').classList.remove('on'); }
@@ -188,14 +218,16 @@
   async function saveEdit(){
     var id=$('eId').value,name=$('eName').value,role=$('eRole').value,email=$('eEmail').value;
     var phone=($('ePhone').value||'').replace(/\D+/g,''),pass=$('ePass').value;
+    var cats=role==='product_staff'?collectCats('eCats'):[];
     if(!name||!email){toast('Name and email are required');return;}
     var b=$('eSave');b.disabled=true;b.innerHTML='<span class="spin"></span>Saving\u2026';
     try{
-      var r=await fetch('/papi/staff/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,name:name,email:email,phone:phone,role:role,password:pass})});
+      var r=await fetch('/papi/staff/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,name:name,email:email,phone:phone,role:role,password:pass,categories:cats})});
       var d=await r.json();
       if(d&&d.ok){toast('Saved');closeEdit();load();}
       else if(d&&d.error==='email_taken'){toast('That email is already in use');}
       else if(d&&d.error==='phone_taken'){toast('That WhatsApp number is already in use');}
+      else if(d&&d.error==='forbidden'){toast('Only the owner can manage staff');}
       else if(d&&d.error==='bad_input'){toast(d.detail||'Check the details');}
       else{toast('Could not save changes');}
     }catch(e){toast('Network error');}

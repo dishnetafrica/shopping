@@ -85,9 +85,12 @@ class PanelApiController extends Controller
         return response()->json(['orders' => $rows]);
     }
 
-    public function products()
+    public function products(Request $r)
     {
-        $rows = Product::orderByDesc('display_order')->orderBy('name')->get()->map(function (Product $p) {
+        $q = Product::orderByDesc('display_order')->orderBy('name');
+        $scope = $r->user()->categoryScope();
+        if (is_array($scope)) $q->whereIn('category', $scope); // [] → sees nothing until assigned
+        $rows = $q->get()->map(function (Product $p) {
             return [
                 'Product Name' => (string) $p->name,
                 'Variant'      => '',
@@ -1244,6 +1247,18 @@ class PanelApiController extends Controller
         $p = Product::find((int) $r->query('row'));
         if (! $p) {
             return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        }
+        // Category-scoped staff: may only touch products in their categories, and may not move a
+        // product into a category they don't have.
+        $scope = $r->user()->categoryScope();
+        if (is_array($scope)) {
+            $cur = (string) ($p->category ?? '');
+            if (! in_array($cur, $scope, true)) {
+                return response()->json(['ok' => false, 'error' => 'forbidden_category'], 403);
+            }
+            if ($r->filled('category') && ! in_array(trim((string) $r->query('category', '')), $scope, true)) {
+                return response()->json(['ok' => false, 'error' => 'forbidden_category'], 403);
+            }
         }
         if ($r->has('price')) {
             $price = (float) $r->query('price', 0);
@@ -2619,6 +2634,23 @@ class PanelApiController extends Controller
     // ---- Staff logins (seat-capped by plan) ----
 
     /** List this shop's staff logins + seat usage. */
+    private function normStaffRole(string $role): string
+    {
+        $role = trim($role) ?: 'staff';
+        return in_array($role, ['owner', 'manager', 'product_staff', 'staff'], true) ? $role : 'staff';
+    }
+
+    /** Parse the category list for a product_staff user (null for any other role). */
+    private function staffCats(Request $r, string $role): ?array
+    {
+        if ($role !== 'product_staff') return null;
+        $cats = $r->input('categories', null);
+        if (is_string($cats)) $cats = explode(',', $cats);
+        if (! is_array($cats)) return null;
+        $cats = array_values(array_filter(array_map(fn ($c) => trim((string) $c), $cats), fn ($c) => $c !== ''));
+        return $cats ?: null;
+    }
+
     public function staffList(Request $r)
     {
         $t   = $r->user()->tenant;
@@ -2632,12 +2664,18 @@ class PanelApiController extends Controller
                 'email' => (string) $u->email,
                 'phone' => (string) ($u->phone ?? ''),
                 'role'  => (string) ($u->role ?: 'staff'),
+                'categories' => is_array($u->allowed_categories) ? array_values($u->allowed_categories) : [],
                 'self'  => (int) $u->id === $me,
             ])->values();
+
+        $categories = Product::where('tenant_id', $t->id)
+            ->whereNotNull('category')->where('category', '!=', '')
+            ->distinct()->orderBy('category')->pluck('category')->all();
 
         return response()->json([
             'ok'        => true,
             'staff'     => $staff,
+            'categories' => $categories,
             'used'      => $staff->count(),
             'cap'       => $cap,                       // null = unlimited
             'unlimited' => $cap === null,
@@ -2649,12 +2687,13 @@ class PanelApiController extends Controller
     /** Add a staff login for this shop (blocked at the plan's seat limit). */
     public function staffAdd(Request $r)
     {
+        if (! $r->user()->isOwnerLike()) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
         $t     = $r->user()->tenant;
         $name  = trim((string) $r->input('name', ''));
         $email = strtolower(trim((string) $r->input('email', '')));
         $phone = preg_replace('/\D+/', '', (string) $r->input('phone', ''));
         $pass  = (string) $r->input('password', '');
-        $role  = trim((string) $r->input('role', 'staff')) ?: 'staff';
+        $role  = $this->normStaffRole((string) $r->input('role', 'staff'));
 
         if ($t->atUserLimit()) {
             return response()->json(['ok' => false, 'error' => 'upgrade_required', 'feature' => 'multi_user', 'cap' => $t->userCap()], 403);
@@ -2682,6 +2721,7 @@ class PanelApiController extends Controller
             'phone'     => $phone !== '' ? $phone : null,
             'password'  => $password,        // 'hashed' cast hashes on save
             'role'      => $role,
+            'allowed_categories' => $this->staffCats($r, $role),
         ]);
 
         return response()->json(['ok' => true]);
@@ -2690,6 +2730,7 @@ class PanelApiController extends Controller
     /** Remove a staff login (cannot remove yourself or the last login). */
     public function staffDelete(Request $r)
     {
+        if (! $r->user()->isOwnerLike()) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
         $t  = $r->user()->tenant;
         $id = (int) $r->input('id', 0);
         $me = (int) $r->user()->id;
@@ -2713,6 +2754,7 @@ class PanelApiController extends Controller
     /** Update an existing staff login (name/email/phone/role, optional new password). */
     public function staffUpdate(Request $r)
     {
+        if (! $r->user()->isOwnerLike()) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
         $t  = $r->user()->tenant;
         $id = (int) $r->input('id', 0);
         $u  = User::where('tenant_id', $t->id)->where('id', $id)->first();
@@ -2723,7 +2765,7 @@ class PanelApiController extends Controller
         $name  = trim((string) $r->input('name', (string) $u->name));
         $email = strtolower(trim((string) $r->input('email', (string) $u->email)));
         $phone = preg_replace('/\D+/', '', (string) $r->input('phone', (string) $u->phone));
-        $role  = trim((string) $r->input('role', (string) ($u->role ?: 'staff'))) ?: 'staff';
+        $role  = $this->normStaffRole((string) $r->input('role', (string) ($u->role ?: 'staff')));
         $pass  = (string) $r->input('password', '');
 
         if ($name === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -2747,6 +2789,7 @@ class PanelApiController extends Controller
         $u->email = $email;
         $u->phone = $phone !== '' ? $phone : null;
         $u->role  = $role;
+        $u->allowed_categories = $this->staffCats($r, $role);
         if (strlen($pass) >= 6) {
             $u->password = $pass;   // 'hashed' cast re-hashes on save
         }
@@ -3143,6 +3186,7 @@ class PanelApiController extends Controller
      */
     public function brandingSave(Request $r)
     {
+        if (! $r->user()->canMenu('settings')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
         $t = $r->user()->tenant;
         $s = $t->settings ?? [];
 
@@ -3224,6 +3268,7 @@ class PanelApiController extends Controller
     /* -------------------------------------------------- settings / config (3b) */
     public function settingsSave(Request $r)
     {
+        if (! $r->user()->canMenu('settings')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
         $t = $r->user()->tenant;
         $s = $t->settings ?? [];
         foreach (['storeName', 'storePhone', 'storeAddress', 'storeEmail', 'base', 'perKm', 'min', 'round', 'freeOver', 'lat', 'lng', 'inventoryMode', 'usdUgx', 'usdSsp', 'ssMarkupPct', 'onboarded'] as $k) {

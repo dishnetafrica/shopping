@@ -1366,7 +1366,7 @@ async function loadData(silent){
 function startApp(){
   show($('login'),false);$('app').classList.remove('hide');
   if(!filtersInit){initFilters();filtersInit=true;}
-  initCurrency();loadBotConfig();
+  initCurrency();loadBotConfig();applyPermissions();
   showPage('dash');loadData();loadRiders();loadReturns();loadSettings().then(wizMaybe);loadBranches();
   if(timer)clearInterval(timer);
   timer=setInterval(function(){if(!document.hidden)loadData(true);},20000);
@@ -1945,6 +1945,25 @@ async function qStatus(id,status){
     if(d&&d.ok){toast('Marked '+status);quotesInit();}
     else toast((d&&d.message)?d.message:'Update failed');
   }catch(e){toast('Network error');}
+}
+function applyPermissions(){
+  var ME=window.ME; if(!ME||ME.isOwner)return;
+  var menus=ME.menus||[];
+  // data-page → menu key
+  var pageMap={orders:'orders',kitchen:'orders',dispatch:'orders',deliveryZones:'orders',riders:'orders',pos:'orders',
+               customers:'customers',quotations:'quotations',category:'products',products:'products',dash:'dashboard'};
+  // href → menu key
+  var hrefMap={'/panel/chats':'whatsapp','/panel/cashbook':'finance','/panel/staff':'staff',
+               '/panel/scheduled':'marketing','/panel/marketing':'marketing','/panel/leads':'marketing',
+               '/panel/diagnostics':'settings','/panel/setup':'settings','/panel/billing':'settings'};
+  try{
+    document.querySelectorAll('.side a.nav').forEach(function(a){
+      var menu=null;
+      var dp=a.getAttribute('data-page'); if(dp&&pageMap[dp])menu=pageMap[dp];
+      var hr=a.getAttribute('href'); if(hr&&hrefMap[hr])menu=hrefMap[hr];
+      if(menu&&menus.indexOf(menu)<0)a.style.display='none';
+    });
+  }catch(e){}
 }
 function showPage(p){
   $('pageDash').classList.toggle('hide',p!=='dash');
