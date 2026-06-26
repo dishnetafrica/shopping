@@ -200,6 +200,11 @@ class PanelApiController extends Controller
             'website'         => (string) ($s['website'] ?? ''),
             'aiPersona'       => (string) ($s['ai_persona'] ?? ''),
             'brandKnowledge'  => (string) ($s['brand_knowledge'] ?? ''),
+            'imageSources'    => array_values(array_filter(array_map('intval', is_array($s['image_sources'] ?? []) ? ($s['image_sources'] ?? []) : explode(',', (string) ($s['image_sources'] ?? ''))))),
+            'imageSourceNames' => (function () use ($s) {
+                $ids = array_values(array_filter(array_map('intval', is_array($s['image_sources'] ?? []) ? ($s['image_sources'] ?? []) : explode(',', (string) ($s['image_sources'] ?? '')))));
+                return $ids ? \App\Models\Tenant::withoutGlobalScopes()->whereIn('id', $ids)->pluck('name')->all() : [];
+            })(),
             'tagline'         => (string) ($s['tagline'] ?? ($isMfr ? $bd['tagline'] : '')),
             'heroTitle'       => (string) ($s['hero_title'] ?? ($isMfr ? $bd['heroTitle'] : '')),
             'heroText'        => (string) ($s['hero_text'] ?? ($isMfr ? $bd['heroText'] : '')),
@@ -1460,6 +1465,88 @@ class PanelApiController extends Controller
             $out[] = ['name' => $a['name'], 'code' => $a['code'], 'stock' => (int) round($stock)];
         }
         return ['rows' => $out];
+    }
+
+    /**
+     * Self-service: fill THIS store's missing product images by borrowing from the source store(s)
+     * the platform operator designated in settings.image_sources. A tenant can ONLY borrow from its
+     * own configured sources (enforced here) — so third-party tenants stay isolated. Matches
+     * barcode → sku → name, fills empty images only (references the same public URL, no file copy),
+     * never overwrites. dry-run unless apply=1.
+     */
+    public function imagesBorrow(Request $r)
+    {
+        $t = $r->user()->tenant;
+        app(\App\Support\TenantContext::class)->set($t->id);
+
+        $raw = $t->setting('image_sources', []);
+        $sources = is_array($raw) ? $raw : explode(',', (string) $raw);
+        $sources = array_values(array_filter(array_map('intval', $sources), fn ($id) => $id > 0 && $id !== (int) $t->id));
+        if (! $sources) return response()->json(['ok' => false, 'error' => 'no_source_configured'], 422);
+
+        $apply   = (int) $r->input('apply', 0) === 1;
+        $gallery = (bool) $r->input('gallery', false);
+
+        $byBar = [];
+        $bySku = [];
+        $byName = [];
+        $src = \App\Models\Product::whereIn('tenant_id', $sources)
+            ->whereNotNull('image_url')->where('image_url', '!=', '')
+            ->get(['name', 'sku', 'barcode', 'image_url', 'gallery_1', 'gallery_2', 'gallery_3']);
+        foreach ($src as $sp) {
+            $rec = ['image_url' => $sp->image_url, 'g1' => $sp->gallery_1, 'g2' => $sp->gallery_2, 'g3' => $sp->gallery_3];
+            $bc = trim((string) $sp->barcode);
+            $sk = trim((string) $sp->sku);
+            $nm = $this->normName((string) $sp->name);
+            if ($bc !== '' && ! isset($byBar[$bc])) $byBar[$bc] = $rec;
+            if ($sk !== '' && ! isset($bySku[$sk])) $bySku[$sk] = $rec;
+            if ($nm !== '' && ! isset($byName[$nm])) $byName[$nm] = $rec;
+        }
+
+        $targets = \App\Models\Product::where('tenant_id', $t->id)
+            ->where(function ($w) { $w->whereNull('image_url')->orWhere('image_url', ''); })
+            ->get(['id', 'name', 'sku', 'barcode']);
+
+        $filled = $byB = $byS = $byN = $noMatch = 0;
+        $ups = [];
+        foreach ($targets as $tp) {
+            $bc = trim((string) $tp->barcode);
+            $sk = trim((string) $tp->sku);
+            $rec = null; $how = '';
+            if ($bc !== '' && isset($byBar[$bc]))      { $rec = $byBar[$bc]; $how = 'b'; }
+            elseif ($sk !== '' && isset($bySku[$sk]))  { $rec = $bySku[$sk]; $how = 's'; }
+            elseif (isset($byName[$this->normName((string) $tp->name)])) { $rec = $byName[$this->normName((string) $tp->name)]; $how = 'n'; }
+            if (! $rec) { $noMatch++; continue; }
+
+            $u = ['image_url' => $rec['image_url']];
+            if ($gallery) {
+                if (! empty($rec['g1'])) $u['gallery_1'] = $rec['g1'];
+                if (! empty($rec['g2'])) $u['gallery_2'] = $rec['g2'];
+                if (! empty($rec['g3'])) $u['gallery_3'] = $rec['g3'];
+            }
+            $ups[$tp->id] = $u;
+            $filled++;
+            if ($how === 'b') $byB++; elseif ($how === 's') $byS++; else $byN++;
+        }
+
+        if ($apply && $ups) {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($ups) {
+                foreach ($ups as $id => $u) {
+                    \Illuminate\Support\Facades\DB::table('products')->where('id', $id)->update($u);
+                }
+            });
+        }
+
+        return response()->json([
+            'ok'         => true,
+            'apply'      => $apply,
+            'imageless'  => count($targets),
+            'filled'     => $filled,
+            'by_barcode' => $byB,
+            'by_sku'     => $byS,
+            'by_name'    => $byN,
+            'no_match'   => $noMatch,
+        ]);
     }
 
     public function deleteProduct(Request $r)

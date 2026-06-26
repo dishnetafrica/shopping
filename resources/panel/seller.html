@@ -504,7 +504,7 @@
       <div id="pageProducts" class="hide">
         <div class="crumb">Home / <b>Products</b></div>
         <div class="card">
-          <div class="head" style="flex-wrap:wrap;gap:8px">Products <input id="pmScan" inputmode="numeric" placeholder="⌨ Scan to edit + Enter" style="border:none;border-radius:8px;padding:7px 10px;font-size:13px;min-width:160px"><button id="pmScanCam" class="btn ghost" style="padding:7px 11px">📷 Scan</button><button class="btn" id="addProdBtn" style="margin-left:auto">+ Add product</button><button class="btn" id="pmExport" style="margin-left:8px">⤓ Export CSV</button><button class="btn" id="pmBulkMeta" style="margin-left:8px">⚙ Unit/Pack</button><button class="btn" id="pmStockSync" style="margin-left:8px">⬆ Update stock</button><input type="file" id="pmStockFile" accept=".csv" style="display:none"></div>
+          <div class="head" style="flex-wrap:wrap;gap:8px">Products <input id="pmScan" inputmode="numeric" placeholder="⌨ Scan to edit + Enter" style="border:none;border-radius:8px;padding:7px 10px;font-size:13px;min-width:160px"><button id="pmScanCam" class="btn ghost" style="padding:7px 11px">📷 Scan</button><button class="btn" id="addProdBtn" style="margin-left:auto">+ Add product</button><button class="btn" id="pmExport" style="margin-left:8px">⤓ Export CSV</button><button class="btn" id="pmBulkMeta" style="margin-left:8px">⚙ Unit/Pack</button><button class="btn" id="pmStockSync" style="margin-left:8px">⬆ Update stock</button><button class="btn" id="pmFillImages" style="margin-left:8px;display:none">🖼 Fill images</button><input type="file" id="pmStockFile" accept=".csv" style="display:none"></div>
           <div class="body">
             <div class="filters">
               <div class="fg search"><label>Search</label><input id="pmSearch" placeholder="name, brand, keyword…"></div>
@@ -1125,6 +1125,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   prodOrder:'/papi/product-order',
   prodBulkMeta:'/papi/product-bulk-meta',
   stockSync:'/papi/stock-sync',
+  imagesBorrow:'/papi/images-borrow',
   analytics:'/papi/analytics',analyticsCsv:'/papi/analytics-csv',
   thali:'/papi/thali',thaliSave:'/papi/thali-save',
   dispatch:'/papi/dispatch',
@@ -2428,6 +2429,11 @@ function pmInit(){
   if($('pmBulkMeta'))$('pmBulkMeta').onclick=openBulkMeta;
   if($('pmStockSync'))$('pmStockSync').onclick=function(){$('pmStockFile').click();};
   if($('pmStockFile'))$('pmStockFile').onchange=stockSyncPick;
+  if($('pmFillImages')){
+    var srcs=(SETTINGS.imageSources&&SETTINGS.imageSources.length)?SETTINGS.imageSources:null;
+    if(srcs){$('pmFillImages').style.display='';$('pmFillImages').onclick=function(){imagesBorrowRun(0);};}
+    else{$('pmFillImages').style.display='none';}
+  }
   $('pmSearch').value=pmQuery; renderPM();
 }
 var STOCK_CSV='';
@@ -2464,6 +2470,33 @@ async function stockSyncRun(apply){
       $('modalBody').innerHTML='<div class="note" style="margin-bottom:8px">Nothing changed yet. Only <b>stock</b> and <b>visibility</b> change — images, prices and names stay as they are.</div>'+rows+
         '<button type="button" class="btn" id="stockApply" style="width:100%;margin-top:10px">Apply '+d.updated+' updates</button>';
       if($('stockApply'))$('stockApply').onclick=function(){stockSyncRun(1);};
+    }
+  }catch(err){$('modalBody').innerHTML='<div class="note" style="color:var(--red)">Network error — try again</div>';}
+}
+async function imagesBorrowRun(apply){
+  var names=(SETTINGS.imageSourceNames&&SETTINGS.imageSourceNames.length)?SETTINGS.imageSourceNames.join(', '):'the source store';
+  $('modalTitle').textContent='Fill missing images';
+  $('modalBody').innerHTML='<div class="note">Working…</div>';
+  $('modal').classList.remove('hide');
+  try{
+    var r=await fetch(EP.imagesBorrow+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({apply:apply})});
+    var d=await r.json();
+    if(!d||!d.ok){$('modalBody').innerHTML='<div class="note" style="color:var(--red)">'+((d&&d.error==='no_source_configured')?'No image source is set up for this store yet.':('Failed: '+((d&&d.error)||'error')))+'</div>';return;}
+    var rows='<table style="width:100%;font-size:14px;border-collapse:collapse">'+
+      '<tr><td>Products missing an image</td><td style="text-align:right"><b>'+d.imageless+'</b></td></tr>'+
+      '<tr><td>Images '+(apply?'filled':'to fill')+'</td><td style="text-align:right"><b>'+d.filled+'</b></td></tr>'+
+      '<tr><td>&nbsp;&nbsp;by barcode</td><td style="text-align:right">'+d.by_barcode+'</td></tr>'+
+      '<tr><td>&nbsp;&nbsp;by SKU</td><td style="text-align:right">'+d.by_sku+'</td></tr>'+
+      '<tr><td>&nbsp;&nbsp;by name</td><td style="text-align:right">'+d.by_name+'</td></tr>'+
+      '<tr><td>Still no match</td><td style="text-align:right">'+d.no_match+'</td></tr></table>';
+    if(apply){
+      $('modalTitle').textContent='Images filled ✓';
+      $('modalBody').innerHTML=rows+'<div class="note" style="margin-top:10px;color:var(--green,#2e7d32)">Done — only empty images were filled, from '+esc(names)+'.</div>';
+      await loadData();renderPM();
+    }else{
+      $('modalBody').innerHTML='<div class="note" style="margin-bottom:8px">Borrowing from <b>'+esc(names)+'</b>. Only products with <b>no image</b> are filled — existing photos are never changed.</div>'+rows+
+        '<button type="button" class="btn" id="imgApply" style="width:100%;margin-top:10px">Fill '+d.filled+' images</button>';
+      if($('imgApply'))$('imgApply').onclick=function(){imagesBorrowRun(1);};
     }
   }catch(err){$('modalBody').innerHTML='<div class="note" style="color:var(--red)">Network error — try again</div>';}
 }
@@ -2589,19 +2622,18 @@ function bindProdImg(){
   if(t)t.oninput=function(){if(pv){if(t.value){pv.src=t.value;pv.style.display='';}else pv.style.display='none';}};
   if(up&&f){
     up.onclick=function(){f.click();};
-    f.onchange=function(){var file=f.files&&f.files[0];if(!file)return;
-      var rd=new FileReader();
-      rd.onload=async function(){var b64=rd.result;
-        if(pv){pv.src=b64;pv.style.display='';}
-        up.disabled=true;up.textContent='Uploading\u2026';
-        try{var r=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:file.name,data:b64})});
-          var d=await r.json();
-          if(d&&d.ok&&d.url){t.value=d.url;if(pv)pv.src=d.url;toast('Photo uploaded');}
-          else toast('Upload not set up yet \u2014 paste an image URL instead');
-        }catch(e){toast('Upload not set up yet \u2014 paste an image URL instead');}
-        up.disabled=false;up.textContent='\u2191 Upload photo';
-      };
-      rd.readAsDataURL(file);
+    f.onchange=async function(){var file=f.files&&f.files[0];if(!file)return;
+      up.disabled=true;up.textContent='Compressing\u2026';
+      var b64=await shrinkImage(file,1000,0.82);
+      if(!b64){toast('Could not read image');up.disabled=false;up.textContent='\u2191 Upload photo';return;}
+      if(pv){pv.src=b64;pv.style.display='';}
+      up.textContent='Uploading\u2026';
+      try{var r=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:(file.name||'photo')+'.jpg',data:b64})});
+        var d=await r.json();
+        if(d&&d.ok&&d.url){t.value=d.url;if(pv)pv.src=d.url;toast('Photo uploaded \u2014 optimised for web');}
+        else toast('Upload not set up yet \u2014 paste an image URL instead');
+      }catch(e){toast('Upload not set up yet \u2014 paste an image URL instead');}
+      up.disabled=false;up.textContent='\u2191 Upload photo';
     };
   }
 }
@@ -2631,13 +2663,15 @@ function bindProdGallery(){
     if(mk)mk.onclick=function(){var url=t?t.value.trim():'';if(!url){toast('Upload or paste an image first');return;}var hero=$('pImg'),hp=$('pImgPrev');if(hero)hero.value=url;if(hp){hp.src=url;hp.style.display='';}toast('Set as main photo \u2014 Save to apply');};
     if(up&&f){
       up.onclick=function(){f.click();};
-      f.onchange=function(){var file=f.files&&f.files[0];if(!file)return;var rd=new FileReader();
-        rd.onload=async function(){var b64=rd.result;if(pv){pv.src=b64;pv.style.display='';}up.disabled=true;up.textContent='Uploading\u2026';
-          try{var r=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:file.name,data:b64})});var d=await r.json();
-            if(d&&d.ok&&d.url){if(t)t.value=d.url;if(pv)pv.src=d.url;toast('Gallery '+n+' uploaded');}else toast('Upload not set up \u2014 paste a URL instead');
+      f.onchange=async function(){var file=f.files&&f.files[0];if(!file)return;up.disabled=true;up.textContent='Compressing\u2026';
+        var b64=await shrinkImage(file,1000,0.82);
+        if(!b64){toast('Could not read image');up.disabled=false;up.textContent='\u2191 Upload';return;}
+        if(pv){pv.src=b64;pv.style.display='';}up.textContent='Uploading\u2026';
+        try{var r=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:(file.name||'photo')+'.jpg',data:b64})});var d=await r.json();
+            if(d&&d.ok&&d.url){if(t)t.value=d.url;if(pv)pv.src=d.url;toast('Gallery '+n+' uploaded \u2014 optimised');}else toast('Upload not set up \u2014 paste a URL instead');
           }catch(e){toast('Upload not set up \u2014 paste a URL instead');}
           up.disabled=false;up.textContent='\u2191 Upload';
-        };rd.readAsDataURL(file);};
+        };
     }
   });
 }
@@ -3418,6 +3452,8 @@ function applySettings(s){
   if(s.website!=null)SETTINGS.website=s.website;
   if(s.aiPersona!=null)SETTINGS.aiPersona=s.aiPersona;
   if(s.brandKnowledge!=null)SETTINGS.brandKnowledge=s.brandKnowledge;
+  if(s.imageSources!=null)SETTINGS.imageSources=s.imageSources;
+  if(s.imageSourceNames!=null)SETTINGS.imageSourceNames=s.imageSourceNames;
   if(s.tagline!=null)SETTINGS.tagline=s.tagline;
   if(s.heroTitle!=null)SETTINGS.heroTitle=s.heroTitle;
   if(s.heroText!=null)SETTINGS.heroText=s.heroText;
