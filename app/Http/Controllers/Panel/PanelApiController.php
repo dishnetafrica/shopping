@@ -198,6 +198,8 @@ class PanelApiController extends Controller
             'eyebrow'         => (string) ($s['eyebrow'] ?? ($isMfr ? $bd['eyebrow'] : '')),
             'trustLine'       => (string) ($s['trust_line'] ?? ($isMfr ? $bd['trustLine'] : '')),
             'website'         => (string) ($s['website'] ?? ''),
+            'aiPersona'       => (string) ($s['ai_persona'] ?? ''),
+            'brandKnowledge'  => (string) ($s['brand_knowledge'] ?? ''),
             'tagline'         => (string) ($s['tagline'] ?? ($isMfr ? $bd['tagline'] : '')),
             'heroTitle'       => (string) ($s['hero_title'] ?? ($isMfr ? $bd['heroTitle'] : '')),
             'heroText'        => (string) ($s['hero_text'] ?? ($isMfr ? $bd['heroText'] : '')),
@@ -2893,7 +2895,7 @@ class PanelApiController extends Controller
             if ($a) { $s['theme_accent'] = $a; $s['theme_accent_dark'] = $hex($r->input('theme_accent_dark')) ?: $darken($a); }
             elseif (trim((string) $r->input('theme_accent')) === '') { unset($s['theme_accent'], $s['theme_accent_dark']); }
         }
-        foreach (['hero_image', 'factory_image', 'eyebrow', 'trust_line', 'website', 'tagline', 'hero_title', 'hero_text', 'meta_description'] as $k) {
+        foreach (['hero_image', 'factory_image', 'eyebrow', 'trust_line', 'website', 'tagline', 'hero_title', 'hero_text', 'meta_description', 'ai_persona', 'brand_knowledge'] as $k) {
             if ($r->has($k)) $s[$k] = trim((string) $r->input($k));
         }
         if ($r->has('faq')) {

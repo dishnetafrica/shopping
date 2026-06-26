@@ -881,6 +881,9 @@
             <div class="mfield"><label>Hero title</label><input id="setHeroTitle" placeholder="Paper &amp; tissue, manufactured in Uganda."></div>
             <div class="mfield"><label>Hero text</label><textarea id="setHeroText" rows="2"></textarea></div>
             <div class="mfield"><label>Website URL</label><input id="setWebsite" placeholder="https://europearlafrica.com"></div>
+            <div style="margin:18px 0 8px;padding-top:12px;border-top:1px solid var(--line,#eee)"><b style="font-size:13px">🤖 AI bot instructions <span style="font-weight:400;color:var(--muted)">— what the bot knows & how it talks (like an n8n prompt)</span></b></div>
+            <div class="mfield"><label>AI persona <span style="font-weight:400;color:var(--muted)">(who the bot is, tone)</span></label><textarea id="setAiPersona" rows="3" placeholder="e.g. You are the friendly WhatsApp sales assistant for EuroPearl, a Uganda-based paper & tissue manufacturer. Be warm, concise and helpful, and always try to move the customer toward an order."></textarea></div>
+            <div class="mfield"><label>Business knowledge & instructions <span style="font-weight:400;color:var(--muted)">(delivery areas, discount rules, policies — the bot answers from this)</span></label><textarea id="setBrandKnowledge" rows="7" placeholder="e.g.&#10;- We deliver across Uganda and door-to-door to Juba, South Sudan.&#10;- Bulk discount: 50+ cartons 10% off, 100+ cartons 15% off — confirmed on a quotation.&#10;- Lead time: 2-3 days for stocked items; custom print 7-10 days.&#10;- Payment: 50% advance for large orders."></textarea><div class="note" style="margin-top:4px">Write in plain language. The bot uses this to answer customers — update it anytime, no developer needed. (Website above is shared automatically.)</div></div>
             <div class="mfield"><label>Google / SEO description</label><textarea id="setMeta" rows="2"></textarea><div class="note">Shown in Google results. Leave blank to auto-generate.</div></div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px"><b style="font-size:13px">FAQ</b><button class="btn" id="addFaqBtn">+ Add question</button></div>
             <div id="faqEditor"></div>
@@ -3373,6 +3376,8 @@ function applySettings(s){
   if(s.eyebrow!=null)SETTINGS.eyebrow=s.eyebrow;
   if(s.trustLine!=null)SETTINGS.trustLine=s.trustLine;
   if(s.website!=null)SETTINGS.website=s.website;
+  if(s.aiPersona!=null)SETTINGS.aiPersona=s.aiPersona;
+  if(s.brandKnowledge!=null)SETTINGS.brandKnowledge=s.brandKnowledge;
   if(s.tagline!=null)SETTINGS.tagline=s.tagline;
   if(s.heroTitle!=null)SETTINGS.heroTitle=s.heroTitle;
   if(s.heroText!=null)SETTINGS.heroText=s.heroText;
@@ -3549,6 +3554,8 @@ function brandingInit(){
   if($('setHeroTitle'))$('setHeroTitle').value=SETTINGS.heroTitle||'';
   if($('setHeroText'))$('setHeroText').value=SETTINGS.heroText||'';
   if($('setWebsite'))$('setWebsite').value=SETTINGS.website||'';
+  if($('setAiPersona'))$('setAiPersona').value=SETTINGS.aiPersona||'';
+  if($('setBrandKnowledge'))$('setBrandKnowledge').value=SETTINGS.brandKnowledge||'';
   if($('setMeta'))$('setMeta').value=SETTINGS.metaDescription||'';
   // hero image
   function heroPrev(){var pv=$('setHeroPrev');if(pv)pv.innerHTML=SETTINGS.heroImage?('<img src="'+esc(SETTINGS.heroImage)+'" style="width:100%;height:100%;object-fit:cover">'):'none';}
@@ -3672,6 +3679,8 @@ async function saveBranding(){
     tagline:($('setTagline').value||'').trim(), eyebrow:($('setEyebrow').value||'').trim(),
     trust_line:($('setTrust').value||'').trim(), hero_title:($('setHeroTitle').value||'').trim(),
     hero_text:($('setHeroText').value||'').trim(), website:($('setWebsite').value||'').trim(),
+    ai_persona:($('setAiPersona')?($('setAiPersona').value||'').trim():''),
+    brand_knowledge:($('setBrandKnowledge')?($('setBrandKnowledge').value||'').trim():''),
     meta_description:($('setMeta').value||'').trim(),
     faq:collectFaq(), brands:collectBrands(), combos:collectCombos(),
     category_groups:collectMenus(), menu_files:collectMenuFiles(), catalog_files:collectCatalogFiles()
@@ -3679,7 +3688,7 @@ async function saveBranding(){
   $('brandSave').disabled=true;if($('brandStatus'))$('brandStatus').textContent='Saving\u2026';
   try{var r=await fetch(EP.brandingSave+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     var d=await r.json();
-    if(d&&d.ok){var s=d.settings||{};SETTINGS.themeAccent=s.theme_accent||accent;SETTINGS.themeAccentDark=s.theme_accent_dark||'';SETTINGS.heroImage=s.hero_image||SETTINGS.heroImage;SETTINGS.factoryImage=s.factory_image||SETTINGS.factoryImage;SETTINGS.eyebrow=s.eyebrow||'';SETTINGS.trustLine=s.trust_line||'';SETTINGS.website=s.website||'';SETTINGS.tagline=s.tagline||'';SETTINGS.heroTitle=s.hero_title||'';SETTINGS.heroText=s.hero_text||'';SETTINGS.metaDescription=s.meta_description||'';SETTINGS.faq=s.faq||[];SETTINGS.brands=s.brands||[];SETTINGS.combos=s.combos||[];
+    if(d&&d.ok){var s=d.settings||{};SETTINGS.themeAccent=s.theme_accent||accent;SETTINGS.themeAccentDark=s.theme_accent_dark||'';SETTINGS.heroImage=s.hero_image||SETTINGS.heroImage;SETTINGS.factoryImage=s.factory_image||SETTINGS.factoryImage;SETTINGS.eyebrow=s.eyebrow||'';SETTINGS.trustLine=s.trust_line||'';SETTINGS.website=s.website||'';SETTINGS.aiPersona=s.ai_persona||'';SETTINGS.brandKnowledge=s.brand_knowledge||'';SETTINGS.tagline=s.tagline||'';SETTINGS.heroTitle=s.hero_title||'';SETTINGS.heroText=s.hero_text||'';SETTINGS.metaDescription=s.meta_description||'';SETTINGS.faq=s.faq||[];SETTINGS.brands=s.brands||[];SETTINGS.combos=s.combos||[];
       if($('brandStatus'))$('brandStatus').textContent='Saved '+new Date().toLocaleTimeString();toast('Website & branding saved');}
     else{if($('brandStatus'))$('brandStatus').textContent=(d&&d.error)||'Could not save';toast((d&&d.error)||'Could not save');}
   }catch(e){if($('brandStatus'))$('brandStatus').textContent='Network error';toast('Could not save');}
