@@ -116,13 +116,18 @@ class AiBrain
         // 4b. menu files (restaurant) — send the food/drinks menu image or PDF on request.
         $menuSent = $this->maybeSendMenu($tenant, $from, $text, $gateway);
 
-        // 4b-ii. catalogue files (manufacturer/any) — send the product catalogue / price-list PDF
-        //        (or image) when the customer asks for it ("catalogue", "price list", "photos"…).
-        $catalogSent = $this->maybeSendCatalog($tenant, $from, $text, $gateway);
+        // 4b-ii. price list (catalogue-style tenants) — when the customer asks about price/rates,
+        //        send a freshly generated price-list PDF from live products (never the price-less
+        //        brochure). Skipped if a quotation was already sent this turn.
+        $priceListSent = (! $quoteSent) ? $this->maybeSendPriceList($tenant, $from, $text, $gateway) : false;
+
+        // 4b-iii. catalogue/brochure files — product photos / brochure on request. Not for price
+        //         questions (the price-list step handles those); skip if a price list went out.
+        $catalogSent = $priceListSent ? false : $this->maybeSendCatalog($tenant, $from, $text, $gateway);
 
         // 4c. product photos — same behaviour as the inbuilt bot. Self-gating: the responder only
         //     returns images for a confident product match, so greetings/general Qs send nothing.
-        if (! $quoteSent && ! $menuSent && ! $catalogSent && $imageB64 === '' && $tenant->setting('send_product_images', true)) {
+        if (! $quoteSent && ! $menuSent && ! $catalogSent && ! $priceListSent && $imageB64 === '' && $tenant->setting('send_product_images', true)) {
             try {
                 $imgs = app(\App\Services\Bot\ProductImageResponder::class)->imagesFor($tenant, $convo, $text);
                 foreach (array_slice($imgs, 0, 3) as $im) {
@@ -256,6 +261,60 @@ class AiBrain
     }
 
     /**
+     * Send a freshly-generated PRICE LIST PDF (built from live, active, priced products) when a
+     * customer asks about price / rates. This is the source-of-truth answer for catalogue-style
+     * tenants — never the stale brochure. Opt-in: explicit settings.price_list_enabled wins;
+     * otherwise auto-on for modest catalogues (<=300 priced items) and off for large retail lists.
+     * Bulk/negotiated pricing is left to the quotation flow. Returns true if a list was sent.
+     */
+    private function maybeSendPriceList(Tenant $tenant, string $from, string $text, WhatsAppGateway $gateway): bool
+    {
+        $svc = app(\App\Services\Bot\PriceListService::class);
+        if (! $svc->available() || ! method_exists($gateway, 'sendDocument')) return false;
+
+        $flag = $tenant->setting('price_list_enabled', null);
+        if ($flag === null) {
+            $count = \App\Models\Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)->where('active', true)
+                ->where('price', '>', 0)->count();
+            if ($count < 1 || $count > 300) return false;
+        } elseif (! $flag) {
+            return false;
+        }
+
+        $t = mb_strtolower($text);
+        $triggers = [
+            'price list', 'pricelist', 'rate list', 'ratelist', 'price sheet', 'rate sheet',
+            'prices', 'price', 'rates', 'rate', 'pricing', 'cost', 'how much',
+            'what about price', 'what is the price', 'what are the prices', 'price of', 'rate of',
+            'bei', 'bei gani', 'orodha ya bei',
+            'liste de prix', 'prix', 'tarif',
+            'قائمة الأسعار', 'السعر', 'الأسعار', 'سعر',
+            'bhaav', 'bhav', 'bhaav patrak', 'bhav patrak', 'rate patrak', 'bhaav moklo',
+            'kitna', 'keemat', 'kimat', 'price aapo', 'price moklo',
+        ];
+        $asks = false;
+        foreach ($triggers as $w) if (str_contains($t, $w)) { $asks = true; break; }
+        if (! $asks) return false;
+
+        $doc = $svc->generate($tenant);
+        if (! $doc) return false; // no priced products → let the catalogue path handle it
+
+        $caption = (string) ($tenant->setting('price_list_caption', '')
+            ?: "Here's our current price list 📄 For bulk quantities, tell me the items and how many and I'll send you a quotation.");
+
+        $media = $doc['b64'] !== '' ? $doc['b64'] : $doc['url'];
+        try {
+            $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], $caption);
+            MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', '[price-list] ' . $doc['fileName'], null, null, ['via' => 'ai', 'kind' => 'price_list']);
+        } catch (\Throwable $e) {
+            Log::warning('AiBrain price-list send failed: ' . $e->getMessage());
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * Send the tenant's product catalogue / price-list file(s) (PDF or image) when a customer asks
      * for the catalogue, price list, product list, brochure or photos. Returns true if anything was
      * sent. Reads settings.catalog_files = [{label, url}, ...]; url must be a public link the
@@ -271,23 +330,22 @@ class AiBrain
 
         $t = mb_strtolower($text);
         $triggers = [
-            // English
-            'catalog', 'catalogue', 'price list', 'pricelist', 'rate list', 'ratelist',
-            'price sheet', 'product list', 'products list', 'all products', 'full list',
+            // English — brochure / photos / product list (NOT prices; price-list step owns those)
+            'catalog', 'catalogue', 'product list', 'products list', 'all products', 'full list',
             'product details', 'products details', 'details of products', 'list of products',
             'brochure', 'send pdf', 'send the pdf', 'pdf',
             'photo', 'photos', 'picture', 'pictures', 'image', 'images',
             // Swahili
-            'orodha ya bidhaa', 'orodha ya bei', 'bei', 'picha',
+            'orodha ya bidhaa', 'picha',
             // Luganda
             'olukalala', 'ebintu', 'ekifaananyi',
             // French
-            'catalogue des produits', 'liste de prix', 'liste des produits', 'photos des produits',
+            'catalogue des produits', 'liste des produits', 'photos des produits',
             // Arabic
-            'الكتالوج', 'قائمة الأسعار', 'قائمة المنتجات', 'صور',
+            'الكتالوج', 'قائمة المنتجات', 'صور',
             // Gujlish / Hinglish (romanised Gujarati / Hindi)
-            'bhaav patrak', 'rate patrak', 'list aapo', 'list moklo', 'list bhejo',
-            'tasveer', 'tasvir', 'photo joiye', 'photo moklo', 'phota moklo', 'bhaav moklo', 'catalogue moklo',
+            'list aapo', 'list moklo', 'list bhejo',
+            'tasveer', 'tasvir', 'photo joiye', 'photo moklo', 'phota moklo', 'catalogue moklo',
         ];
         $asks = false;
         foreach ($triggers as $w) if (str_contains($t, $w)) { $asks = true; break; }
@@ -539,10 +597,11 @@ class AiBrain
         if (count((array) $tenant->setting('menu_files', [])) > 0)
             $p .= "MENU: if the customer asks for the menu (food / drinks), acknowledge warmly — the system sends the menu file(s) automatically.\n\n";
         if (count((array) $tenant->setting('catalog_files', [])) > 0)
-            $p .= "CATALOGUE: if the customer asks for the catalogue, price list, product list, brochure, or product photos/pictures, acknowledge warmly (e.g. \"Sure, sending our catalogue now 📄\") — the system sends the catalogue file automatically. NEVER say you can't send files, photos or PDFs; you can.\n\n";
+            $p .= "CATALOGUE/BROCHURE: the brochure file is product photos only and has NO prices — never say prices are in it. If the customer asks for the catalogue, brochure, or product photos/pictures, acknowledge warmly (e.g. \"Sure, sending our catalogue now 📄\") — the system sends the brochure automatically. NEVER say you can't send files, photos or PDFs; you can.\n\n";
         $p .= "PLACING AN ORDER: when the customer has clearly confirmed an order — they agreed to specific product(s) WITH quantities AND gave a delivery area/town AND said to go ahead — append a hidden machine line as the VERY LAST thing in your reply, on its own line, exactly in this format:\n";
         $p .= "<<ORDER {\"items\":[{\"name\":\"EXACT product name from the list\",\"qty\":10}],\"delivery\":\"area or town\",\"note\":\"anything extra or empty\"}>>\n";
         $p .= "Order-line rules: only add it when the order is truly confirmed (never while still discussing price/options); use the EXACT product names from the PRODUCTS list; qty is a whole number; do NOT put prices in it. When you add the ORDER line, write only ONE short sentence above it (e.g. \"Great, confirming your order now 👍\") and do NOT repeat the item list yourself — the system removes the ORDER line and replies with the official order number and full summary. If the order is not yet confirmed, do NOT add the line.\n\n";
+        $p .= "PRICE QUESTIONS: always answer from the PRODUCTS list below — it is the source of truth. For a specific product, quote its price directly. If they ask for the full price list or rates, acknowledge warmly — the system sends a generated price-list PDF automatically. For bulk / wholesale / large quantities, ask which items and how many and tell them you'll send a quotation. NEVER claim prices are in the brochure, and NEVER dead-end with 'let me check with the team' — you have the prices.\n\n";
         $p .= "PRODUCTS (prices = source of truth):\n" . ($lines !== '' ? $lines : '(catalogue unavailable right now — ask the customer to hold; staff have been alerted)') . "\n";
         return $p;
     }
