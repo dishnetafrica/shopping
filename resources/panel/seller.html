@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
+  @keyframes sp{to{transform:rotate(360deg)}}
   :root{--green:#15803D;--green-d:#0B3D22;--amber:#C2700A;--red:#B4232A;--blue:#2563A8;--teal:#0F8A6B;
     --bg:#EEF2EE;--card:#FFF;--ink:#16231C;--muted:#6E7D72;--line:#E2E8E2;--side:#0B3D22;}
   *{box-sizing:border-box;margin:0;padding:0}
@@ -1117,7 +1118,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   orders:'/papi/orders',products:'/papi/products',
   kitchen:'/papi/kitchen',kitchenAdv:'/papi/kitchen-advance',
   updStatus:'/papi/update-status',saveOrder:'/papi/save-order',quoteSend:'/papi/quotation-send',quotations:'/papi/quotations',quoteResend:'/papi/quotation-resend',quoteStatus:'/papi/quotation-status',quoteConvert:'/papi/quotation-convert',
-  updProduct:'/papi/update-product',addProduct:'/papi/add-product',delProduct:'/papi/delete-product',
+  updProduct:'/papi/update-product',addProduct:'/papi/add-product',delProduct:'/papi/delete-product',aiIdentify:'/papi/ai-identify',
   uploadImage:'/papi/upload-image',
   uploadDoc:'/papi/upload-doc',
   catImages:'/papi/category-images',catImageSave:'/papi/category-image-save',
@@ -2755,10 +2756,33 @@ function openAdd(){
       '<div class="mfield" style="flex:1"><label>Stock</label><input id="aStock" type="number" min="0" value="100"></div></div>'+
     '<div class="mfield"><label>Keywords</label><input id="aKw" placeholder="comma separated"></div>'+
     prodImgField('')+
+    '<button type="button" class="lbtn" id="aIdentify" style="background:linear-gradient(135deg,#6d4ad6,#8a63ff);margin-bottom:10px">\u2728 Identify with AI</button>'+
+    '<div class="note" id="aIdHint" style="margin:-6px 0 10px">Upload a product photo above, then let AI fill the name, brand, category &amp; keywords.</div>'+
     '<button class="lbtn" id="aSave">Add product</button>';
   $('modal').classList.remove('hide');
   bindProdImg();
   $('aSave').onclick=saveNewProduct;
+  $('aIdentify').onclick=aiIdentifyFill;
+}
+async function aiIdentifyFill(){
+  var url=($('pImg')?$('pImg').value:'').trim();
+  if(!url){toast('Upload a product photo first');return;}
+  var b=$('aIdentify');b.disabled=true;b.innerHTML='<span class="spin" style="display:inline-block;width:15px;height:15px;border:2.5px solid #fff6;border-top-color:#fff;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px"></span> Reading the photo\u2026';
+  try{
+    var r=await fetch(EP.aiIdentify+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:url})});
+    var d=await r.json();
+    if(d&&d.ok){
+      if($('aName')&&d.name)$('aName').value=d.name;
+      if($('aBrand')&&d.brand)$('aBrand').value=d.brand;
+      if($('aCat')&&d.category)$('aCat').value=d.category;
+      if($('aKw')&&d.keywords)$('aKw').value=d.keywords;
+      if($('aIdHint'))$('aIdHint').innerHTML='\u2728 AI draft \u2014 check the details, set a price, then Add. '+(d.description?('<i>'+esc(d.description)+'</i>'):'');
+      toast('AI filled the details \u2014 check & set a price');
+    }else if(d&&d.error==='ai_unavailable'){toast('AI is not set up on the server yet');}
+    else if(d&&d.error==='forbidden'){toast('You don\u2019t have access to this');}
+    else{toast('Could not read the photo \u2014 type the details in');}
+  }catch(e){toast('Network error');}
+  b.disabled=false;b.innerHTML='\u2728 Identify with AI';
 }
 async function saveNewProduct(){
   var name=($('aName').value||'').trim(),price=Number($('aPrice').value)||0;
