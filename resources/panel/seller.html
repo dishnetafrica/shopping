@@ -2546,38 +2546,51 @@ function catalogImportPick(e){
   var file=e.target.files&&e.target.files[0]; if(!file)return;
   if(file.size>12*1024*1024){toast('That ZIP is too big (max 12MB)');e.target.value='';return;}
   var rd=new FileReader();
-  rd.onload=function(){CATALOG_ZIP=String(rd.result||'');catalogImportRun(0);};
+  rd.onload=function(){CATALOG_ZIP=String(rd.result||'');catalogImportRun(0,0,'');};
   rd.readAsDataURL(file);
   e.target.value='';
 }
-async function catalogImportRun(apply){
+async function catalogImportRun(apply,replace,confirm){
   if(!CATALOG_ZIP){toast('Choose a catalogue .zip first');return;}
-  $('modalTitle').textContent=apply?'Importing catalogue…':'Catalogue import';
+  $('modalTitle').textContent=apply?(replace?'Resetting & importing…':'Importing catalogue…'):'Catalogue import';
   $('modalBody').innerHTML='<div class="note">Working… reading the ZIP and photos.</div>';
   $('modal').classList.remove('hide');
   try{
-    var r=await fetch(EP.productsImport+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({zip:CATALOG_ZIP,apply:apply})});
+    var r=await fetch(EP.productsImport+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({zip:CATALOG_ZIP,apply:apply,replace:replace?1:0,confirm:confirm||''})});
     var d=await r.json();
     if(!d||!d.ok){
-      var m={zip_unsupported:'Server can\u2019t read ZIP files (missing PHP zip).',no_csv:'No .csv found inside the ZIP.',bad_zip:'That file isn\u2019t a valid ZIP.',csv_no_name:'CSV has no Product Name column.',forbidden:'You don\u2019t have access to this.'};
+      var m={zip_unsupported:'Server can\u2019t read ZIP files (missing PHP zip).',no_csv:'No .csv found inside the ZIP.',bad_zip:'That file isn\u2019t a valid ZIP.',csv_no_name:'CSV has no Product Name column.',forbidden:'You don\u2019t have access to this.',replace_forbidden:'Only the owner can wipe the catalogue.',confirm_required:'Type DELETE to confirm the reset.'};
       $('modalBody').innerHTML='<div class="note" style="color:var(--red)">'+((d&&m[d.error])||('Failed: '+((d&&d.error)||'error')))+'</div>';return;
     }
     var samp=(d.samples&&d.samples.length)?('<div style="margin-top:8px;font-size:12px;color:var(--muted)">e.g. '+d.samples.map(esc).join(', ')+(d.created>d.samples.length?'…':'')+'</div>'):'';
     var rows='<table style="width:100%;font-size:14px;border-collapse:collapse">'+
+      (d.replace?'<tr><td>Current products to delete</td><td style="text-align:right;color:var(--red)"><b>'+(apply?d.deleted:d.existing)+'</b></td></tr>':'')+
       '<tr><td>New products '+(apply?'created':'to create')+'</td><td style="text-align:right"><b>'+d.created+'</b></td></tr>'+
-      '<tr><td>Already in catalogue (skipped)</td><td style="text-align:right">'+d.duplicates+'</td></tr>'+
+      (!d.replace?'<tr><td>Already in catalogue (skipped)</td><td style="text-align:right">'+d.duplicates+'</td></tr>':'')+
       '<tr><td>Rows with no matching photo</td><td style="text-align:right">'+d.missing_image+'</td></tr>'+
       (d.forbidden_category?'<tr><td>Outside your categories (skipped)</td><td style="text-align:right">'+d.forbidden_category+'</td></tr>':'')+
       '</table>'+samp;
     if(apply){
-      $('modalTitle').textContent='Catalogue imported \u2713';
+      $('modalTitle').textContent=replace?'Catalogue reset \u2713':'Catalogue imported \u2713';
       $('modalBody').innerHTML=rows+'<div class="note" style="margin-top:10px;color:var(--green,#2e7d32)">Done. Products with no price came in <b>hidden</b> \u2014 set a price to make them live.</div>';
       await loadData();renderPM();
     }else{
       $('modalTitle').textContent='Catalogue import \u2014 preview';
       $('modalBody').innerHTML='<div class="note" style="margin-bottom:8px">Nothing added yet. Existing products with the same name are skipped. Items with no price import <b>hidden</b> until you set one.</div>'+rows+
-        '<button type="button" class="btn" id="catApply" style="width:100%;margin-top:10px">Import '+d.created+' products</button>';
-      if($('catApply'))$('catApply').onclick=function(){catalogImportRun(1);};
+        '<button type="button" class="btn" id="catApply" style="width:100%;margin-top:10px">Import '+d.created+' products</button>'+
+        '<div style="margin-top:14px;padding:10px;border:1px solid var(--red);border-radius:8px">'+
+          '<label style="display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer"><input type="checkbox" id="catWipe"> <b style="color:var(--red)">Restart:</b> delete ALL '+d.existing+' current products first</label>'+
+          '<div id="catWipeBox" style="display:none;margin-top:8px"><div class="note" style="color:var(--red);margin-bottom:6px">This permanently removes every current product. Orders keep their history. Type <b>DELETE</b> to confirm.</div>'+
+          '<input id="catConfirm" placeholder="DELETE" style="width:100%;padding:8px;border:1px solid var(--red);border-radius:6px;margin-bottom:8px">'+
+          '<button type="button" class="btn" id="catWipeBtn" style="width:100%;background:var(--red);border-color:var(--red)">Delete all &amp; import '+d.created+' Badshah products</button></div>'+
+        '</div>';
+      if($('catApply'))$('catApply').onclick=function(){catalogImportRun(1,0,'');};
+      if($('catWipe'))$('catWipe').onchange=function(){$('catWipeBox').style.display=this.checked?'block':'none';};
+      if($('catWipeBtn'))$('catWipeBtn').onclick=function(){
+        var c=($('catConfirm').value||'').trim();
+        if(c!=='DELETE'){toast('Type DELETE to confirm');return;}
+        catalogImportRun(1,1,'DELETE');
+      };
     }
   }catch(err){$('modalBody').innerHTML='<div class="note" style="color:var(--red)">Network error \u2014 try again</div>';}
 }

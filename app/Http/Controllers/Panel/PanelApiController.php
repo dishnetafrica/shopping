@@ -1601,6 +1601,16 @@ class PanelApiController extends Controller
         if ($csv === '') { $za->close(); @unlink($tmp); return response()->json(['ok' => false, 'error' => 'no_csv'], 422); }
 
         $apply = (int) $r->input('apply', 0) === 1;
+        $replace = (int) $r->input('replace', 0) === 1;
+        if ($replace) {
+            if (! $r->user()->isOwnerLike()) { $za->close(); @unlink($tmp); return response()->json(['ok' => false, 'error' => 'replace_forbidden'], 403); }
+            if ((string) $r->input('confirm', '') !== 'DELETE') { $za->close(); @unlink($tmp); return response()->json(['ok' => false, 'error' => 'confirm_required'], 422); }
+        }
+        $existing = Product::where('tenant_id', $t->id)->count();
+        $deleted = 0;
+        if ($apply && $replace) {
+            $deleted = Product::where('tenant_id', $t->id)->delete();
+        }
         $scope = $r->user()->categoryScope();
 
         $lines  = preg_split('/\r\n|\r|\n/', trim($csv));
@@ -1617,7 +1627,7 @@ class PanelApiController extends Controller
             $name = trim((string) ($c[$iName] ?? '')); if ($name === '') continue;
             $cat  = $iCat !== null ? trim((string) ($c[$iCat] ?? '')) : '';
             if (is_array($scope) && ! in_array($cat, $scope, true)) { $forbidden++; continue; }
-            if (Product::where('tenant_id', $t->id)->whereRaw('lower(name) = ?', [mb_strtolower($name)])->exists()) { $dup++; continue; }
+            if (! $replace && Product::where('tenant_id', $t->id)->whereRaw('lower(name) = ?', [mb_strtolower($name)])->exists()) { $dup++; continue; }
 
             $price = $iPrice !== null ? (float) preg_replace('/[^0-9.]/', '', (string) ($c[$iPrice] ?? '')) : 0;
             $stock = $iStock !== null ? (int) preg_replace('/[^0-9-]/', '', (string) ($c[$iStock] ?? '')) : 0;
@@ -1652,6 +1662,8 @@ class PanelApiController extends Controller
         return response()->json([
             'ok' => true, 'apply' => $apply, 'created' => $created, 'duplicates' => $dup,
             'missing_image' => $noImg, 'forbidden_category' => $forbidden, 'samples' => $samples,
+            'replace' => $replace, 'existing' => $existing,
+            'deleted' => ($apply && $replace) ? $deleted : ($replace ? $existing : 0),
         ]);
     }
 
