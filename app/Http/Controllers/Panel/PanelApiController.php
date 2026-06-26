@@ -87,7 +87,7 @@ class PanelApiController extends Controller
 
     public function products(Request $r)
     {
-        $q = Product::orderByDesc('display_order')->orderBy('name');
+        $q = Product::whereNull('archived_at')->orderByDesc('display_order')->orderBy('name');
         $scope = $r->user()->categoryScope();
         if (is_array($scope)) $q->whereIn('category', $scope); // [] → sees nothing until assigned
         $rows = $q->get()->map(function (Product $p) {
@@ -117,7 +117,7 @@ class PanelApiController extends Controller
             ];
         });
 
-        return response()->json(['products' => $rows]);
+        return response()->json(['products' => $rows, 'archived_count' => Product::whereNotNull('archived_at')->count()]);
     }
 
     public function riders()
@@ -1604,12 +1604,12 @@ class PanelApiController extends Controller
         $replace = (int) $r->input('replace', 0) === 1;
         if ($replace) {
             if (! $r->user()->isOwnerLike()) { $za->close(); @unlink($tmp); return response()->json(['ok' => false, 'error' => 'replace_forbidden'], 403); }
-            if ((string) $r->input('confirm', '') !== 'DELETE') { $za->close(); @unlink($tmp); return response()->json(['ok' => false, 'error' => 'confirm_required'], 422); }
+            if ((string) $r->input('confirm', '') !== 'RESTART') { $za->close(); @unlink($tmp); return response()->json(['ok' => false, 'error' => 'confirm_required'], 422); }
         }
-        $existing = Product::where('tenant_id', $t->id)->count();
-        $deleted = 0;
+        $existing = Product::where('tenant_id', $t->id)->whereNull('archived_at')->count();
+        $archived = 0;
         if ($apply && $replace) {
-            $deleted = Product::where('tenant_id', $t->id)->delete();
+            $archived = Product::where('tenant_id', $t->id)->whereNull('archived_at')->update(['active' => false, 'archived_at' => now()]);
         }
         $scope = $r->user()->categoryScope();
 
@@ -1627,7 +1627,7 @@ class PanelApiController extends Controller
             $name = trim((string) ($c[$iName] ?? '')); if ($name === '') continue;
             $cat  = $iCat !== null ? trim((string) ($c[$iCat] ?? '')) : '';
             if (is_array($scope) && ! in_array($cat, $scope, true)) { $forbidden++; continue; }
-            if (! $replace && Product::where('tenant_id', $t->id)->whereRaw('lower(name) = ?', [mb_strtolower($name)])->exists()) { $dup++; continue; }
+            if (! $replace && Product::where('tenant_id', $t->id)->whereNull('archived_at')->whereRaw('lower(name) = ?', [mb_strtolower($name)])->exists()) { $dup++; continue; }
 
             $price = $iPrice !== null ? (float) preg_replace('/[^0-9.]/', '', (string) ($c[$iPrice] ?? '')) : 0;
             $stock = $iStock !== null ? (int) preg_replace('/[^0-9-]/', '', (string) ($c[$iStock] ?? '')) : 0;
@@ -1663,8 +1663,18 @@ class PanelApiController extends Controller
             'ok' => true, 'apply' => $apply, 'created' => $created, 'duplicates' => $dup,
             'missing_image' => $noImg, 'forbidden_category' => $forbidden, 'samples' => $samples,
             'replace' => $replace, 'existing' => $existing,
-            'deleted' => ($apply && $replace) ? $deleted : ($replace ? $existing : 0),
+            'archived' => ($apply && $replace) ? $archived : ($replace ? $existing : 0),
         ]);
+    }
+
+    /** Bring back products hidden by a Restart. Owner-only. Clears archived_at and re-activates them. */
+    public function productsRestore(Request $r)
+    {
+        if (! $r->user()->isOwnerLike()) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        $t = $r->user()->tenant;
+        app(\App\Support\TenantContext::class)->set($t->id);
+        $restored = Product::where('tenant_id', $t->id)->whereNotNull('archived_at')->update(['archived_at' => null, 'active' => true]);
+        return response()->json(['ok' => true, 'restored' => $restored]);
     }
 
     /**
