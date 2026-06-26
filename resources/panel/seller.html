@@ -2585,6 +2585,7 @@ async function catalogImportRun(apply,replace,confirm){
     var rows='<table style="width:100%;font-size:14px;border-collapse:collapse">'+
       (d.replace?'<tr><td>Current products to archive (hide)</td><td style="text-align:right;color:var(--amber,#b8860b)"><b>'+(apply?d.archived:d.existing)+'</b></td></tr>':'')+
       '<tr><td>New products '+(apply?'created':'to create')+'</td><td style="text-align:right"><b>'+d.created+'</b></td></tr>'+
+      (d.categories?'<tr><td>Categories '+(apply?'created':'to create')+'</td><td style="text-align:right">'+d.categories+'</td></tr>':'')+
       (!d.replace?'<tr><td>Already in catalogue (skipped)</td><td style="text-align:right">'+d.duplicates+'</td></tr>':'')+
       '<tr><td>Rows with no matching photo</td><td style="text-align:right">'+d.missing_image+'</td></tr>'+
       (d.forbidden_category?'<tr><td>Outside your categories (skipped)</td><td style="text-align:right">'+d.forbidden_category+'</td></tr>':'')+

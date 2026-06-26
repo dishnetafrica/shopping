@@ -1620,7 +1620,7 @@ class PanelApiController extends Controller
         $iStock = $col(['stock']); $iKw = $col(['keywords']); $iImg = $col(['image', 'photo']);
         if ($iName === null) { $za->close(); @unlink($tmp); return response()->json(['ok' => false, 'error' => 'csv_no_name'], 422); }
 
-        $created = $dup = $noImg = $forbidden = 0; $samples = [];
+        $created = $dup = $noImg = $forbidden = 0; $samples = []; $catsSeen = [];
         foreach ($lines as $ln) {
             if (trim($ln) === '') continue;
             $c = str_getcsv($ln);
@@ -1632,10 +1632,38 @@ class PanelApiController extends Controller
             $price = $iPrice !== null ? (float) preg_replace('/[^0-9.]/', '', (string) ($c[$iPrice] ?? '')) : 0;
             $stock = $iStock !== null ? (int) preg_replace('/[^0-9-]/', '', (string) ($c[$iStock] ?? '')) : 0;
             $kw    = $iKw !== null ? trim((string) ($c[$iKw] ?? '')) : '';
-            $imgName = $iImg !== null ? basename(strtolower(trim((string) ($c[$iImg] ?? '')))) : '';
+            $imgRaw  = $iImg !== null ? trim((string) ($c[$iImg] ?? '')) : '';
+            $imgName = basename(strtolower($imgRaw));
+            $isUrl   = (bool) preg_match('#^https?://#i', $imgRaw);
 
             $url = '';
-            if ($imgName !== '' && isset($imgIndex[$imgName])) {
+            if ($isUrl) {
+                if ($apply) {
+                    try {
+                        $resp = \Illuminate\Support\Facades\Http::timeout(25)->withHeaders(['User-Agent' => 'Mozilla/5.0'])->get($imgRaw);
+                        if ($resp->successful()) {
+                            $ct = strtolower((string) $resp->header('Content-Type'));
+                            $body = $resp->body();
+                            if (str_contains($ct, 'html')) {
+                                // It's a product page — pull the og:image and fetch that.
+                                if (preg_match('/<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']/i', $body, $m)
+                                    || preg_match('/<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']/i', $body, $m)) {
+                                    $r2  = \Illuminate\Support\Facades\Http::timeout(25)->withHeaders(['User-Agent' => 'Mozilla/5.0'])->get(html_entity_decode($m[1]));
+                                    $ct2 = strtolower((string) $r2->header('Content-Type'));
+                                    if ($r2->successful() && str_contains($ct2, 'image')) { $ct = $ct2; $body = $r2->body(); } else { $body = ''; }
+                                } else { $body = ''; }
+                            }
+                            if ($body !== '' && str_contains($ct, 'image')) {
+                                $ext = str_contains($ct, 'png') ? 'png' : (str_contains($ct, 'webp') ? 'webp' : 'jpg');
+                                $path = 'products/' . $t->id . '/' . uniqid('imp_', true) . '.' . $ext;
+                                Storage::disk('public')->put($path, $body);
+                                $url = url(Storage::url($path));
+                            }
+                        }
+                    } catch (\Throwable $e) {}
+                    if ($url === '') $noImg++;
+                }
+            } elseif ($imgName !== '' && isset($imgIndex[$imgName])) {
                 if ($apply) {
                     $bytes = $za->getFromIndex($imgIndex[$imgName]);
                     if ($bytes !== false) {
@@ -1655,15 +1683,24 @@ class PanelApiController extends Controller
                 ]);
             }
             $created++;
+            if ($cat !== '') $catsSeen[$cat] = 1;
             if (count($samples) < 8) $samples[] = $name;
         }
         $za->close(); @unlink($tmp);
+
+        if ($apply && $catsSeen) {
+            $sort = (int) (\App\Models\Category::where('tenant_id', $t->id)->max('sort')) + 1;
+            foreach (array_keys($catsSeen) as $cn) {
+                try { \App\Models\Category::firstOrCreate(['tenant_id' => $t->id, 'name' => $cn], ['active' => true, 'sort' => $sort++]); } catch (\Throwable $e) {}
+            }
+        }
 
         return response()->json([
             'ok' => true, 'apply' => $apply, 'created' => $created, 'duplicates' => $dup,
             'missing_image' => $noImg, 'forbidden_category' => $forbidden, 'samples' => $samples,
             'replace' => $replace, 'existing' => $existing,
             'archived' => ($apply && $replace) ? $archived : ($replace ? $existing : 0),
+            'categories' => count($catsSeen),
         ]);
     }
 
