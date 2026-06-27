@@ -8,23 +8,26 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Storefront product-page recommendations for CloudBSS.
+ * Storefront product-page recommendations for CloudBSS (multi-tenant safe).
  *
- * SCHEMA ASSUMPTIONS (adjust the 4 constants below if your columns differ):
- *   products      : id, tenant_id, category (string), price, active (bool), archived_at (nullable), image_url, name
- *   order_items   : order_id, product_id, quantity
- * Everything is scoped per tenant and cached. No new packages required.
+ * Product uses the BelongsToTenant global scope. These run from a public route
+ * with no tenant context, so every Product query calls withoutGlobalScopes() and
+ * is then pinned to an explicit tenant_id via buyable(). No cross-tenant leak.
+ *
+ * SCHEMA (confirmed on this install):
+ *   products    : id, tenant_id, category (string), price, active, archived_at, image_url, name
+ *   order_items : order_id, product_id, qty
  */
 class ProductRecommendations
 {
     private const OI_TABLE   = 'order_items';
     private const OI_ORDER   = 'order_id';
     private const OI_PRODUCT = 'product_id';
-    private const OI_QTY     = 'quantity';
+    private const OI_QTY     = 'qty';   // confirmed: order_items.qty (not "quantity")
 
     private const TTL = 900; // seconds
 
-    /** Base "buyable" filter: same tenant, live, priced, not archived. */
+    /** Base "buyable" filter: explicit tenant, live, priced, not archived. */
     private static function buyable($query, int $tenantId)
     {
         return $query->where('products.tenant_id', $tenantId)
@@ -54,7 +57,7 @@ class ProductRecommendations
         return Cache::remember($key, self::TTL, function () use ($tenantId, $category, $limit, $excludeId) {
             $oi = self::OI_TABLE;
 
-            $q = Product::query()
+            $q = Product::query()->withoutGlobalScopes()
                 ->where('products.category', $category)
                 ->when($excludeId, fn ($q) => $q->where('products.id', '!=', $excludeId))
                 ->leftJoin($oi, "$oi." . self::OI_PRODUCT, '=', 'products.id')
@@ -70,8 +73,8 @@ class ProductRecommendations
 
     /**
      * "People also bought" — products that appear in the same orders as this one,
-     * ranked by how often they co-occur. Until enough order history exists it
-     * transparently fills up with category best-sellers (looks identical to the shopper).
+     * ranked by co-occurrence. Fills up with category best-sellers until enough
+     * order history exists (so the rail is never empty on day one).
      */
     public static function alsoBought(Product $product, int $limit = 12): Collection
     {
@@ -89,13 +92,14 @@ class ProductRecommendations
 
             $items = collect();
             if ($coIds->isNotEmpty()) {
-                $byId = self::buyable(Product::query()->whereIn('products.id', $coIds), $product->tenant_id)
-                    ->get()->keyBy('id');
-                // keep the co-occurrence ranking order
+                $byId = self::buyable(
+                    Product::query()->withoutGlobalScopes()->whereIn('products.id', $coIds),
+                    $product->tenant_id
+                )->get()->keyBy('id');
+
                 $items = $coIds->map(fn ($id) => $byId->get($id))->filter()->values();
             }
 
-            // fallback: pad with category best-sellers the shopper hasn't been shown yet
             if ($items->count() < $limit) {
                 $have = $items->pluck('id')->push($product->id)->all();
                 $fill = self::topInCategory($product->tenant_id, (string) $product->category, $limit + count($have), $product->id)
