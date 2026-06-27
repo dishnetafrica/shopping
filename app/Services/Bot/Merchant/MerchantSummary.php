@@ -37,6 +37,12 @@ class MerchantSummary
                     $lines[] = self::name($c) . "$w — UGX " . number_format((int) $c['price']) . $was;
                     if (! empty($c['warn'])) $lines[] = '⚠️ ' . $c['warn'];
                     break;
+                case 'create_product':
+                    $w = ! empty($c['weight_grams']) ? ' ' . \App\Services\Bot\Pricing\WeightParser::label((int) $c['weight_grams']) : '';
+                    $cat = ! empty($c['category']) ? ' · ' . ucwords((string) $c['category']) : '';
+                    $lines[] = '🆕 NEW: ' . self::name($c) . "$w — UGX " . number_format((int) $c['price']) . $cat;
+                    $lines[] = '   (new product — reply NO if it should update an existing item)';
+                    break;
                 case 'notice':
                     $lines[] = '📣 Notice (today): "' . trim($c['text'] ?? '') . '"';
                     break;

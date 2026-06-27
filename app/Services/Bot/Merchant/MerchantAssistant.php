@@ -13,7 +13,13 @@ use App\Services\Catalogue\ProductSearch;
  * normal customer shopping flow. Framework code — deploy-tested.
  *
  * Pure pieces it leans on (unit-tested): MerchantConversationParser, MerchantDirectory,
- * DailyState, MerchantSummary, PriceGuard.
+ * DailyState, MerchantSummary, PriceGuard, CategoryInferer, MerchantProductMatcher.
+ *
+ * Create-vs-update behaviour (when a price line names something not found exactly):
+ *   - close fuzzy match to an existing product  -> propose UPDATE that product (typo)
+ *   - no close match                            -> propose CREATE a new product
+ * Either way the owner sees it in the summary and confirms with YES. New products are
+ * stamped with an auto-inferred category (shown in the summary) and remembered in the DB.
  */
 class MerchantAssistant
 {
@@ -79,11 +85,15 @@ class MerchantAssistant
                     break;
                 case 'price':
                     if ($p = $this->find($c['target'])) {
+                        // exact-ish hit → UPDATE existing
                         $c['product_id'] = $p->id; $c['label'] = $p->name;
                         $c['old'] = $this->oldPrice($p, $c['weight_grams'] ?? null);
                         if ($w = PriceGuard::warn($c['old'], (int) $c['price'])) $c['warn'] = $w;
                         $resolved[] = $c;
-                    } else $notFound[] = $c['target'];
+                    } else {
+                        // no exact hit → typo of an existing product, or a genuinely new one
+                        $resolved[] = $this->resolvePriceMiss($tenant, $c);
+                    }
                     break;
                 case 'menu':
                     $ids = []; $labels = [];
@@ -115,6 +125,41 @@ class MerchantAssistant
         return MerchantSummary::render($resolved, $notFound);
     }
 
+    /**
+     * A price line whose product wasn't found exactly. Decide UPDATE-typo vs CREATE-new.
+     * Returns a resolved change array (either a 'price' on the matched product, or a
+     * 'create_product').
+     */
+    private function resolvePriceMiss(Tenant $tenant, array $c): array
+    {
+        $target = (string) ($c['target'] ?? '');
+        $match  = MerchantProductMatcher::closest($target, $this->existingNames($tenant));
+
+        if (MerchantProductMatcher::isTypo($match)) {
+            if ($p = $this->findByExactName($match['name'])) {
+                $c['product_id'] = $p->id; $c['label'] = $p->name;
+                $c['old'] = $this->oldPrice($p, $c['weight_grams'] ?? null);
+                $c['warn'] = "matched existing '" . ucwords($p->name) . "' (you wrote '" . trim($target) . "')";
+                if ($w = PriceGuard::warn($c['old'], (int) $c['price'])) $c['warn'] .= ' · ' . $w;
+                return $c;
+            }
+        }
+
+        // genuinely new product
+        $grams = $c['weight_grams'] ?? null;
+        return [
+            'type'           => 'create_product',
+            'name'           => $this->titleCase($target),
+            'label'          => $this->titleCase($target),
+            'weight_grams'   => $grams,
+            'price'          => (int) $c['price'],
+            'sold_by_weight' => (bool) $grams,
+            'category'       => CategoryInferer::infer($target, $this->knownCategories($tenant))
+                                  ?? $this->defaultCategory($tenant),
+            'near'           => $match['name'] ?? null,
+        ];
+    }
+
     // ---- confirm ----
     private function confirm(Conversation $convo, MerchantChangeRequest $req): string
     {
@@ -133,7 +178,9 @@ class MerchantAssistant
         $this->applier->apply($req);
         $this->clearPending($convo);
         $n = count($req->payload_json);
-        return "✅ Applied {$n} change" . ($n === 1 ? '' : 's') . '. (undo: "undo last change")';
+        $created = count(array_filter($req->payload_json, fn ($c) => ($c['type'] ?? '') === 'create_product'));
+        $extra = $created ? " ({$created} new product" . ($created === 1 ? '' : 's') . " added)" : '';
+        return "✅ Applied {$n} change" . ($n === 1 ? '' : 's') . $extra . '. (undo: "undo last change")';
     }
 
     // ---- undo proposal ----
@@ -187,6 +234,40 @@ class MerchantAssistant
     {
         $n = trim($name);
         return $n === '' ? null : $this->search->find($n)->first();
+    }
+
+    private function findByExactName(string $name): ?Product
+    {
+        return Product::where('active', true)->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($name))])->first();
+    }
+
+    /** Tenant's active product names (cached per request for the fuzzy matcher). */
+    private array $namesCache = [];
+    private function existingNames(Tenant $tenant): array
+    {
+        return $this->namesCache[$tenant->id]
+            ??= Product::where('active', true)->pluck('name')->filter()->map(fn ($n) => (string) $n)->all();
+    }
+
+    /** Tenant's distinct category names (for keeping inferred categories consistent). */
+    private array $catsCache = [];
+    private function knownCategories(Tenant $tenant): array
+    {
+        return $this->catsCache[$tenant->id]
+            ??= Product::query()->whereNotNull('category')->distinct()->pluck('category')->filter()->map(fn ($c) => (string) $c)->all();
+    }
+
+    /** Tenant's most common category, used as the last-resort fallback for new products. */
+    private function defaultCategory(Tenant $tenant): ?string
+    {
+        $top = Product::query()->whereNotNull('category')
+            ->selectRaw('category, COUNT(*) as n')->groupBy('category')->orderByDesc('n')->first();
+        return $top->category ?? null;
+    }
+
+    private function titleCase(string $s): string
+    {
+        return ucwords(trim(preg_replace('/\s+/', ' ', mb_strtolower($s)) ?? ''));
     }
 
     private function oldPrice(Product $p, ?int $grams): ?int

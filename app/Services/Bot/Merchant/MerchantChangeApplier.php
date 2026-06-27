@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
  *   {type:'special', product_id}
  *   {type:'hours', open?, close?, closed?}
  *   {type:'price', product_id, weight_grams|null, price}
+ *   {type:'create_product', name, weight_grams|null, price, sold_by_weight, category?}
  *   {type:'notice'|'note', text}
  */
 class MerchantChangeApplier
@@ -27,7 +28,7 @@ class MerchantChangeApplier
         DB::transaction(function () use ($req) {
             $tenant = Tenant::findOrFail($req->tenant_id);
             $ds = DailyState::get($tenant);
-            $prev = ['daily_state' => $ds, 'products' => [], 'variants' => []];
+            $prev = ['daily_state' => $ds, 'products' => [], 'variants' => [], 'created' => []];
 
             foreach ($req->payload_json as $c) {
                 switch ($c['type']) {
@@ -59,6 +60,9 @@ class MerchantChangeApplier
                         break;
                     case 'price':
                         $this->applyPrice($c, $prev);
+                        break;
+                    case 'create_product':
+                        $this->applyCreate($c, (int) $req->tenant_id, $prev);
                         break;
                 }
             }
@@ -96,6 +100,42 @@ class MerchantChangeApplier
         }
     }
 
+    /**
+     * Create a brand-new product the owner named over WhatsApp. tenant_id is set
+     * explicitly (BelongsToTenant also stamps it from context, but we don't rely on
+     * a bound context inside the webhook). The created id is snapshotted so undo
+     * deletes the row cleanly (it can't have orders yet — it was just born).
+     */
+    private function applyCreate(array $c, int $tenantId, array &$prev): void
+    {
+        $name = trim((string) ($c['name'] ?? ''));
+        if ($name === '') return;
+        $price = (int) ($c['price'] ?? 0);
+        $grams = $c['weight_grams'] ?? null;
+
+        $data = [
+            'tenant_id' => $tenantId,
+            'name'      => mb_substr($name, 0, 255),
+            'category'  => ($c['category'] ?? null) ?: null,
+            'price'     => $price,
+            'base_price'=> $price,
+            'active'    => true,
+            'keywords'  => mb_strtolower($name),
+        ];
+
+        if ($grams && ! empty($c['sold_by_weight'])) {
+            $data['sold_by_weight']        = true;
+            $data['weight_unit']           = 'kg';
+            $data['reference_weight_grams']= (int) $grams;
+            $data['reference_price']       = $price;
+        } else {
+            $data['sold_by_weight']        = false;
+        }
+
+        $p = Product::create($data);
+        $prev['created'][] = $p->id;
+    }
+
     /** Reverse a previously confirmed request from its snapshot. */
     public function undo(MerchantChangeRequest $req): void
     {
@@ -111,6 +151,13 @@ class MerchantChangeApplier
                 $q = ProductWeightVariant::where('product_id', $v['product_id'])->where('weight_grams', $v['weight_grams']);
                 if (! ($v['existed'] ?? false)) { $q->delete(); }
                 elseif ($v['old_price'] !== null) { $q->update(['price' => $v['old_price']]); }
+            }
+            // delete products that this change set created
+            foreach (($prev['created'] ?? []) as $pid) {
+                if ($p = Product::find((int) $pid)) {
+                    ProductWeightVariant::where('product_id', $p->id)->delete();
+                    $p->delete();
+                }
             }
             $req->forceFill(['status' => 'cancelled', 'cancelled_at' => now()])->save();
         });
