@@ -298,8 +298,10 @@ class PanelApiController extends Controller
 
     /** Small operations overview for the dashboard (today): leads, tickets, shopping. No new tables. */
     /**
-     * Today / Needs-attention home screen. Pure read over existing data — no new tables.
-     * Every card carries a reason (the "never show a number without a why" rule).
+     * Today — a prioritised task list, not a dashboard. Each task is one concrete entity
+     * (an order, a quote, a product, a customer) with a reason and a one-tap action.
+     * Pure read over existing data; no new tables. Confidence/basis is shown only where it is
+     * genuinely derivable (e.g. a reorder gap from the customer's own history) — never fabricated.
      */
     public function today(Request $r)
     {
@@ -307,98 +309,169 @@ class PanelApiController extends Controller
         $now      = now();
         $vertical = \App\Support\Vertical::of($t);
         $sla      = (array) ($t->setting('order_sla', []) ?: []);
+        $LIMIT    = 6;
 
-        // 1) Active orders past their stage SLA.
-        $attention = 0;
+        // Fix now: active orders past their stage SLA.
+        $fix = []; $fixMore = 0;
         \App\Models\Order::where('tenant_id', $t->id)
             ->whereIn('status', \App\Support\OrderSla::ACTIVE)
-            ->get(['status', 'status_changed_at', 'created_at'])
-            ->each(function ($o) use (&$attention, $vertical, $sla, $now) {
-                $raw = $o->status_changed_at ?: $o->created_at;
-                if (! $raw) return;
-                $since = \Illuminate\Support\Carbon::parse($raw);
-                if ($since->diffInMinutes($now) >= \App\Support\OrderSla::staleMinutes($vertical, $o->status, $sla)) {
-                    $attention++;
-                }
+            ->orderBy('status_changed_at')
+            ->get(['id', 'order_no', 'customer_name', 'status', 'status_changed_at', 'created_at'])
+            ->each(function ($o) use (&$fix, &$fixMore, $vertical, $sla, $now, $LIMIT) {
+                $since = \Illuminate\Support\Carbon::parse($o->status_changed_at ?: $o->created_at);
+                $mins  = $since->diffInMinutes($now);
+                if ($mins < \App\Support\OrderSla::staleMinutes($vertical, $o->status, $sla)) return;
+                if (count($fix) >= $LIMIT) { $fixMore++; return; }
+                $fix[] = [
+                    'label'  => $o->order_no ?: ('Order #' . $o->id),
+                    'detail' => trim(($o->customer_name ? $o->customer_name . ' · ' : '') . 'waiting ' . $this->humanMins($mins) . ' in ' . $o->status),
+                    'reason' => 'Past the response time for "' . $o->status . '"',
+                    'action' => ['label' => 'Open', 'href' => '/panel#orders'],
+                ];
             });
 
-        // 2) Delivered but the customer hasn't confirmed receipt.
-        $needConfirm = \App\Models\Order::where('tenant_id', $t->id)
+        // Confirm delivery: delivered, customer hasn't confirmed.
+        $confirm = [];
+        $confirmQ = \App\Models\Order::where('tenant_id', $t->id)
             ->whereNotNull('delivered_at')->whereNull('customer_confirmed_at')
-            ->whereNotIn('status', ['Cancelled', 'Rejected'])->count();
+            ->whereNotIn('status', ['Cancelled', 'Rejected'])
+            ->orderBy('delivered_at')->limit($LIMIT + 1)
+            ->get(['id', 'order_no', 'customer_name', 'delivered_at']);
+        $confirmMore = max(0, $confirmQ->count() - $LIMIT);
+        foreach ($confirmQ->take($LIMIT) as $o) {
+            $confirm[] = [
+                'label'  => $o->order_no ?: ('Order #' . $o->id),
+                'detail' => trim(($o->customer_name ? $o->customer_name . ' · ' : '') . 'delivered ' . $this->humanMins(\Illuminate\Support\Carbon::parse($o->delivered_at)->diffInMinutes($now)) . ' ago'),
+                'reason' => "Customer hasn't confirmed receipt",
+                'action' => ['label' => 'Open', 'href' => '/panel#orders'],
+            ];
+        }
 
-        // Positive stat: confirmed today.
-        $confirmedToday = \App\Models\Order::where('tenant_id', $t->id)
-            ->whereNotNull('customer_confirmed_at')
-            ->where('customer_confirmed_at', '>=', $now->copy()->startOfDay())->count();
+        // Reply to customer: quotations sent, awaiting a reply.
+        $quotes = [];
+        $quoteHrs = (int) $t->setting('quote_followup_hours', 24);
+        $qQ = \App\Models\Quotation::where('tenant_id', $t->id)->where('status', 'sent')
+            ->orderBy('created_at')->limit($LIMIT + 1)
+            ->get(['id', 'quote_no', 'customer_name', 'created_at']);
+        $quotesMore = max(0, $qQ->count() - $LIMIT);
+        foreach ($qQ->take($LIMIT) as $q) {
+            $age = \Illuminate\Support\Carbon::parse($q->created_at)->diffInHours($now);
+            $quotes[] = [
+                'label'  => ($q->quote_no ?: ('Quote #' . $q->id)) . ($q->customer_name ? ' · ' . $q->customer_name : ''),
+                'detail' => 'Sent ' . ($age < 1 ? 'under 1h' : $this->humanMins($age * 60)) . ' ago, no reply',
+                'reason' => $age >= $quoteHrs ? ('Awaiting reply over ' . $quoteHrs . 'h') : 'Sent, not yet accepted or declined',
+                'action' => ['label' => 'Resend', 'api' => 'quotation-resend', 'id' => $q->id],
+            ];
+        }
 
-        // 3) Quotations awaiting a reply (sent, not yet accepted/declined).
-        $quoteHrs      = (int) $t->setting('quote_followup_hours', 24);
-        $quotesWaiting = \App\Models\Quotation::where('tenant_id', $t->id)->where('status', 'sent')->count();
-        $quotesStale   = \App\Models\Quotation::where('tenant_id', $t->id)->where('status', 'sent')
-            ->where('created_at', '<', $now->copy()->subHours($quoteHrs))->count();
+        // Count stock: stale / unknown inventory.
+        $stock = [];
+        $sQ = \App\Models\InventorySnapshot::where('tenant_id', $t->id)
+            ->where(function ($q) use ($now) {
+                $q->where('confidence', \App\Services\Inventory\InventoryState::UNKNOWN)
+                  ->orWhere('observed_at', '<', $now->copy()->subHours(\App\Services\Inventory\InventoryState::ESTIMATED_HOURS));
+            })
+            ->orderBy('observed_at')->limit($LIMIT + 1)->get(['product_id', 'observed_at']);
+        $stockMore = max(0, $sQ->count() - $LIMIT);
+        $names = \App\Models\Product::withoutGlobalScopes()->where('tenant_id', $t->id)
+            ->whereIn('id', $sQ->pluck('product_id')->all())->pluck('name', 'id');
+        foreach ($sQ->take($LIMIT) as $s) {
+            $obs = $s->observed_at ? \Illuminate\Support\Carbon::parse($s->observed_at) : null;
+            $stock[] = [
+                'label'  => $names[$s->product_id] ?? ('Product #' . $s->product_id),
+                'detail' => $obs ? ('Last counted ' . $obs->diffForHumans()) : 'Never counted',
+                'reason' => 'Bot can\'t quote a number — it says "I\'ll confirm"',
+                'action' => ['label' => 'Count', 'href' => '/panel#products'],
+            ];
+        }
 
-        // 4) Customers likely to reorder: ordered before, nothing recent (simple heuristic).
+        // Win back: likely-to-reorder customers (honest gap from their own history, no fake %).
+        $reorder = []; $reorderMore = 0;
         $reorderDays = (int) $t->setting('reorder_days', 30);
-        $reorder = 0;
         try {
-            $reorder = \App\Models\Order::where('tenant_id', $t->id)
+            $cands = \App\Models\Order::where('tenant_id', $t->id)
                 ->whereNotIn('status', ['Cancelled', 'Rejected'])
                 ->whereNotNull('customer_phone')
                 ->groupBy('customer_phone')
                 ->havingRaw('COUNT(*) >= 2')
                 ->havingRaw('MAX(created_at) < ?', [$now->copy()->subDays($reorderDays)])
-                ->get(['customer_phone'])->count();
+                ->orderByRaw('MAX(created_at) asc')
+                ->limit($LIMIT + 1)
+                ->get([
+                    \Illuminate\Support\Facades\DB::raw('customer_phone'),
+                    \Illuminate\Support\Facades\DB::raw('MAX(customer_name) as customer_name'),
+                    \Illuminate\Support\Facades\DB::raw('MAX(created_at) as last_at'),
+                    \Illuminate\Support\Facades\DB::raw('COUNT(*) as n'),
+                ]);
+            $reorderMore = max(0, $cands->count() - $LIMIT);
+            foreach ($cands->take($LIMIT) as $c) {
+                $last = \Illuminate\Support\Carbon::parse($c->last_at);
+                $reorder[] = [
+                    'label'  => ($c->customer_name ?: $c->customer_phone),
+                    'detail' => 'Last order ' . $last->diffForHumans() . ' · ' . $c->n . ' orders',
+                    'reason' => 'Ordered before, nothing in ' . $reorderDays . '+ days',
+                    'action' => ['label' => 'Review', 'href' => '/panel#customers'],
+                ];
+            }
         } catch (\Throwable $e) {
-            $reorder = 0;
+            $reorderMore = 0;
         }
 
-        // 5) Inventory the bot can't speak to confidently (stale or unknown snapshots).
-        $inv = \App\Models\InventorySnapshot::where('tenant_id', $t->id)
-            ->where(function ($q) use ($now) {
-                $q->where('confidence', \App\Services\Inventory\InventoryState::UNKNOWN)
-                  ->orWhere('observed_at', '<', $now->copy()->subHours(\App\Services\Inventory\InventoryState::ESTIMATED_HOURS));
-            })->count();
-
-        // 6) Quote pipelines that failed today (from the observability traces).
-        $failed = \Illuminate\Support\Facades\DB::table('bot_events')
+        // Check failures: quote pipelines that failed today.
+        $failed = [];
+        $fQ = \Illuminate\Support\Facades\DB::table('bot_events')
             ->where('tenant_id', $t->id)->where('stage', 'quote_pipeline')
             ->where('detail', 'like', '%fail%')
-            ->where('created_at', '>=', $now->copy()->startOfDay())->count();
+            ->where('created_at', '>=', $now->copy()->startOfDay())
+            ->orderByDesc('created_at')->limit($LIMIT + 1)->get(['phone', 'detail', 'created_at']);
+        $failedMore = max(0, $fQ->count() - $LIMIT);
+        foreach ($fQ->take($LIMIT) as $f) {
+            $failed[] = [
+                'label'  => $f->phone ?: 'Unknown number',
+                'detail' => mb_substr((string) $f->detail, 0, 80),
+                'reason' => 'A quotation failed to build or send',
+                'action' => ['label' => 'Diagnose', 'href' => '/panel/diagnostics'],
+            ];
+        }
 
-        $cards = [
-            ['key' => 'orders_attention', 'icon' => '🔴', 'label' => 'Orders need attention', 'count' => $attention,
-             'tone' => $attention ? 'red' : 'green',
-             'reason' => $attention ? 'Past the response time for their stage' : 'All active orders are within time',
-             'href' => '/panel#orders'],
-            ['key' => 'need_confirm', 'icon' => '🟡', 'label' => 'Deliveries to confirm', 'count' => $needConfirm,
-             'tone' => $needConfirm ? 'amber' : 'green',
-             'reason' => $needConfirm ? "Marked delivered, customer hasn't confirmed receipt" : 'Nothing awaiting confirmation',
-             'href' => '/panel#orders'],
-            ['key' => 'quotes_waiting', 'icon' => '📄', 'label' => 'Quotations awaiting reply', 'count' => $quotesWaiting,
-             'tone' => $quotesStale ? 'amber' : 'blue',
-             'reason' => $quotesStale ? ($quotesStale . ' sent over ' . $quoteHrs . 'h ago, no reply') : 'Sent, not yet accepted or declined',
-             'href' => '/panel#quotations'],
-            ['key' => 'reorder', 'icon' => '🔵', 'label' => 'Likely to reorder', 'count' => $reorder,
-             'tone' => $reorder ? 'blue' : 'green',
-             'reason' => $reorder ? ('Ordered before, nothing in ' . $reorderDays . '+ days') : 'No customers due yet',
-             'href' => '/panel#customers'],
-            ['key' => 'inventory', 'icon' => '⚠️', 'label' => 'Inventory needs a count', 'count' => $inv,
-             'tone' => $inv ? 'amber' : 'green',
-             'reason' => $inv ? 'Stock stale/unknown — bot says "I\'ll confirm" instead of a number' : 'Counted stock is current',
-             'href' => '/panel#products'],
-            ['key' => 'failed_pipelines', 'icon' => '🛠️', 'label' => 'Failed quote pipelines today', 'count' => $failed,
-             'tone' => $failed ? 'red' : 'green',
-             'reason' => $failed ? 'A quotation failed to build or send — check diagnostics' : 'No quotation failures today',
-             'href' => '/panel/diagnostics'],
+        $groups = [
+            ['key'=>'fix','title'=>'Fix now','icon'=>'🔴','tone'=>'red','tasks'=>$fix,'more'=>$fixMore],
+            ['key'=>'reply','title'=>'Reply to customer','icon'=>'📄','tone'=>'amber','tasks'=>$quotes,'more'=>$quotesMore],
+            ['key'=>'confirm','title'=>'Confirm delivery','icon'=>'🟡','tone'=>'amber','tasks'=>$confirm,'more'=>$confirmMore],
+            ['key'=>'stock','title'=>'Count stock','icon'=>'⚠️','tone'=>'amber','tasks'=>$stock,'more'=>$stockMore],
+            ['key'=>'winback','title'=>'Win back','icon'=>'🔵','tone'=>'blue','tasks'=>$reorder,'more'=>$reorderMore],
+            ['key'=>'failures','title'=>'Check failures','icon'=>'🛠️','tone'=>'red','tasks'=>$failed,'more'=>$failedMore],
         ];
+        $groups = array_values(array_filter($groups, fn ($g) => count($g['tasks']) > 0));
+        $total  = array_sum(array_map(fn ($g) => count($g['tasks']) + $g['more'], $groups));
+
+        // Yesterday recap (honest, from orders).
+        $yStart = $now->copy()->subDay()->startOfDay();
+        $yEnd   = $now->copy()->startOfDay();
+        $yOrders    = \App\Models\Order::where('tenant_id', $t->id)->whereBetween('created_at', [$yStart, $yEnd])->count();
+        $yDelivered = \App\Models\Order::where('tenant_id', $t->id)->whereNotNull('delivered_at')->whereBetween('delivered_at', [$yStart, $yEnd])->count();
+        $ySales     = (float) \App\Models\Order::where('tenant_id', $t->id)->whereBetween('created_at', [$yStart, $yEnd])->whereNotIn('status', ['Cancelled', 'Rejected'])->sum('total');
+
+        $hour  = (int) $now->format('G');
+        $greet = $hour < 12 ? 'Good morning' : ($hour < 17 ? 'Good afternoon' : 'Good evening');
+        $name  = trim((string) ($r->user()->name ?? ''));
 
         return response()->json([
-            'ok'           => true,
-            'cards'        => $cards,
-            'positive'     => ['confirmed_today' => $confirmedToday],
-            'generated_at' => $now->toIso8601String(),
+            'ok'          => true,
+            'greeting'    => $greet . ($name ? ', ' . $name : ''),
+            'total_tasks' => $total,
+            'groups'      => $groups,
+            'yesterday'   => ['orders' => $yOrders, 'delivered' => $yDelivered, 'sales' => $ySales, 'currency' => $t->setting('currency', 'UGX')],
+            'generated_at'=> $now->toIso8601String(),
         ]);
+    }
+
+    private function humanMins(int $m): string
+    {
+        if ($m < 60) return $m . ' min';
+        $h = intdiv($m, 60); $mm = $m % 60;
+        if ($h < 24) return $h . 'h' . ($mm ? ' ' . $mm . 'm' : '');
+        return intdiv($h, 24) . 'd';
     }
 
     public function operations(Request $r)
@@ -1155,14 +1228,7 @@ class PanelApiController extends Controller
 
         $out = [];
         foreach ($rows as $q) {
-            $url = '';
-            if ($q->pdf_path) {
-                try {
-                    if (\Illuminate\Support\Facades\Storage::disk('public')->exists($q->pdf_path)) {
-                        $url = \Illuminate\Support\Facades\Storage::disk('public')->url($q->pdf_path);
-                    }
-                } catch (\Throwable $e) { /* file may be gone */ }
-            }
+            $url = $q->pdf_path ? ('/papi/quotation-pdf?id=' . $q->id) : '';
             $orderNo = '';
             if ($q->order_id) {
                 $ord = \App\Models\Order::withoutGlobalScopes()->find($q->order_id);
@@ -1206,7 +1272,7 @@ class PanelApiController extends Controller
         try {
             if ($q->pdf_path && \Illuminate\Support\Facades\Storage::disk('public')->exists($q->pdf_path)) {
                 $b64 = base64_encode(\Illuminate\Support\Facades\Storage::disk('public')->get($q->pdf_path));
-                $url = \Illuminate\Support\Facades\Storage::disk('public')->url($q->pdf_path);
+                $url = '/papi/quotation-pdf?id=' . $q->id;
             }
         } catch (\Throwable $e) { /* fall through to regenerate */ }
 
@@ -1313,6 +1379,41 @@ class PanelApiController extends Controller
     }
 
     /** Rebuild an OrderCalculator-shaped quote array from a stored quotation (for PDF regen). */
+    /**
+     * Stream a quotation PDF through the app (no public/storage symlink needed, always the right host).
+     * Tenant-scoped. Regenerates from the stored line items if the file was wiped (e.g. a redeploy).
+     */
+    public function quotationPdf(Request $r)
+    {
+        $t  = $r->user()->tenant;
+        $id = (int) $r->input('id');
+        $q  = \App\Models\Quotation::where('tenant_id', $t->id)->find($id);
+        if (! $q) abort(404);
+
+        $disk = \Illuminate\Support\Facades\Storage::disk('public');
+        $have = $q->pdf_path && $disk->exists($q->pdf_path);
+
+        if (! $have) {
+            try {
+                $svc   = app(\App\Services\Bot\QuotationService::class);
+                $quote = $this->quoteArrayFromQuotation($q);
+                $doc   = $svc->generate($t, (string) ($q->customer_phone ?? ''), (string) ($q->customer_name ?? ''), $quote, $q->quote_no);
+                if ($doc && ! empty($doc['path'])) {
+                    $q->pdf_path = $doc['path'];
+                    $q->save();
+                    $have = $disk->exists($q->pdf_path);
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('quotationPdf regenerate failed: ' . $e->getMessage());
+            }
+        }
+
+        if (! $have) abort(404, 'PDF unavailable');
+
+        return $disk->response($q->pdf_path, 'Quotation-' . ($q->quote_no ?: $q->id) . '.pdf',
+            ['Content-Type' => 'application/pdf'], 'inline');
+    }
+
     private function quoteArrayFromQuotation(\App\Models\Quotation $q): array
     {
         $lines = [];
@@ -1341,12 +1442,7 @@ class PanelApiController extends Controller
         $q = \App\Models\Quotation::with('items')->where('tenant_id', $t->id)->find((int) $r->input('id'));
         if (! $q) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
 
-        $url = '';
-        try {
-            if ($q->pdf_path && \Illuminate\Support\Facades\Storage::disk('public')->exists($q->pdf_path)) {
-                $url = \Illuminate\Support\Facades\Storage::disk('public')->url($q->pdf_path);
-            }
-        } catch (\Throwable $e) { /* file may be gone */ }
+        $url = $q->pdf_path ? ('/papi/quotation-pdf?id=' . $q->id) : '';
 
         $items = [];
         foreach ($q->items as $it) {

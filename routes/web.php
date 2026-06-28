@@ -67,6 +67,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('riders',     [PanelApiController::class, 'riders']);
         Route::get('returns',    [PanelApiController::class, 'returns']);
         Route::get('today',      [PanelApiController::class, 'today']);   // Today / Needs-attention home screen
+        Route::get('quotation-pdf', [PanelApiController::class, 'quotationPdf']); // stream PDF (no /storage symlink)
 
         // Delivery Management V2 (D1/D2)
         Route::get('delivery/quote',         [\App\Http\Controllers\Panel\DeliveryController::class, 'quote']);
