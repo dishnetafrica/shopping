@@ -2,15 +2,17 @@
 namespace App\Apps\Orders\Contracts;
 
 use App\Apps\Orders\Dto\CartLine;
+use App\Apps\Orders\Resolve\ProductResolution;
 
 /**
- * Resolves an extracted product line (name + weight + qty) to a concrete catalogue line —
- * product_id, variant_id and unit_price — by consulting OKE / the catalogue. This is the seam
- * where the Order Engine asks OKE "what does the business sell and at what price?". The weight-
- * aware price lookup here is what makes the old "everything is 1kg" bug structurally impossible.
- * Concrete implementation (over CatalogueMatcher + weight pricing) lands in the wiring drop.
+ * Resolves an extracted product line (name + weight) to a concrete catalogue line by ranking the
+ * real Product Master. report() returns the full ranked decision (auto | clarify | none) for the
+ * Order Engine to act on; resolve() is the convenience that returns the auto-resolved line.
  */
 interface ProductResolver
 {
+    /** @param array{category?:string,recent?:string[]} $context */
+    public function report(int $tenantId, CartLine $line, array $context = []): ProductResolution;
+
     public function resolve(int $tenantId, CartLine $line): CartLine;
 }
