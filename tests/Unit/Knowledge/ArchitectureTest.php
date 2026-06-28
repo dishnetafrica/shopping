@@ -95,6 +95,19 @@ class ArchitectureTest extends TestCase
         $this->assertSame([], $offenders, "Facts must only be written via BusinessMemory: " . implode(', ', $offenders));
     }
 
+
+    /** New capabilities must NEVER write to DailyState directly — only via OperationalStateStore. */
+    public function test_apps_do_not_touch_daily_state(): void
+    {
+        $dir = dirname(__DIR__, 3) . '/app/Apps';
+        if (! is_dir($dir)) { $this->markTestSkipped('no app/Apps yet'); }
+        $offenders = [];
+        foreach ($this->phpFiles($dir) as $file) {
+            if (str_contains(file_get_contents($file), 'DailyState')) $offenders[] = basename($file);
+        }
+        $this->assertSame([], $offenders, 'Apps must use OperationalStateStore, not DailyState: ' . implode(', ', $offenders));
+    }
+
     /** @return string[] */
     private function phpFiles(string $dir): array
     {

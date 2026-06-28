@@ -37,7 +37,8 @@ class EnginePipelineTest extends TestCase
             public function classify(string $text, array $profile = []): string { return $this->i; }
         };
 
-        return [new KnowledgeEngine($registry, $classifier, new BusinessMemory()), $tenant];
+        $coordinator = new \App\Services\Knowledge\ProjectionCoordinator($registry);
+        return [new KnowledgeEngine($registry, $classifier, new BusinessMemory(), $coordinator), $tenant];
     }
 
     public function test_event_captured_and_extracted(): void
