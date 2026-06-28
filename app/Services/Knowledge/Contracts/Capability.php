@@ -2,7 +2,7 @@
 namespace App\Services\Knowledge\Contracts;
 
 /**
- * A business capability registered by an application (Daily Menu, Hotel, Factory, …).
+ * A business capability registered by an application module.
  * The engine never knows domain specifics — it only asks the registry which capability
  * owns an intent, then delegates extraction and projection.
  */

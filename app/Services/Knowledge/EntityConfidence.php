@@ -1,7 +1,7 @@
 <?php
 namespace App\Services\Knowledge;
 
-/** Helpers for per-entity confidence (so Phase-3 AI can trust a price but question a meal tag). */
+/** Helpers for per-entity confidence (so a later AI can trust one entity while doubting another). */
 class EntityConfidence
 {
     public static function entity(string $field, $value, float $confidence): array
