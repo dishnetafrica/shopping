@@ -9,9 +9,10 @@ use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /**
- * Customer self-update fallback: when the seller never marks an order Delivered, the customer can
- * still confirm receipt on the tracking page — which closes the loop AND records the seller gap
- * (delivered_by = customer). Also covers the "not received yet" escalation.
+ * Customer self-update fallback. Seller delivery and customer confirmation are independent events:
+ * a customer confirming an un-delivered order records ONLY the customer event (delivered_by =
+ * customer) and never overwrites the seller's status — preserving the audit trail and seller
+ * response time. A two-tap "are you sure" guards against accidental confirmation.
  */
 class SelfUpdateConfirmationTest extends TestCase
 {
@@ -26,18 +27,31 @@ class SelfUpdateConfirmationTest extends TestCase
         ]);
     }
 
-    public function test_customer_can_self_confirm_when_seller_never_marked_delivered(): void
+    public function test_self_confirm_records_only_the_customer_event(): void
     {
         $t = Tenant::factory()->create();
-        $o = $this->order($t, 'Out for delivery');          // seller stopped updating here, never "Delivered"
+        $o = $this->order($t, 'Out for delivery');           // seller never marked Delivered
 
-        $this->get("/papi/track?o={$o->id}&t=tok123&do=received")->assertOk();
+        $this->get("/papi/track?o={$o->id}&t=tok123&do=received&c=1")->assertOk();
 
         $o->refresh();
         $this->assertNotNull($o->customer_confirmed_at);
-        $this->assertSame('customer', $o->delivered_by, 'self-update records the seller gap');
-        $this->assertNotNull($o->delivered_at, 'delivered_at is stamped so the loop + metrics are complete');
-        $this->assertSame('Delivered', $o->status);
+        $this->assertSame('customer', $o->delivered_by, 'records who closed it first');
+        $this->assertNull($o->delivered_at, 'seller delivered_at is NOT fabricated');
+        $this->assertSame('Out for delivery', $o->status, 'seller status is preserved (independent events)');
+        $this->assertTrue($o->isComplete());
+        $this->assertSame('customer', $o->completedBy());
+    }
+
+    public function test_first_tap_asks_are_you_sure_and_does_not_record(): void
+    {
+        $t = Tenant::factory()->create();
+        $o = $this->order($t, 'Delivered', now()->subMinutes(5)->toDateTimeString());
+
+        $this->get("/papi/track?o={$o->id}&t=tok123&do=received")     // no c=1
+            ->assertOk()
+            ->assertSee('Are you sure', false);
+        $this->assertNull($o->refresh()->customer_confirmed_at);
     }
 
     public function test_self_confirm_offered_on_an_in_progress_order(): void
@@ -59,11 +73,13 @@ class SelfUpdateConfirmationTest extends TestCase
         $this->assertNull($o->refresh()->customer_confirmed_at);
     }
 
-    public function test_seller_delivered_order_is_not_marked_customer_closed(): void
+    public function test_seller_delivered_order_is_not_tagged_customer(): void
     {
         $t = Tenant::factory()->create();
         $o = $this->order($t, 'Delivered', now()->subMinutes(5)->toDateTimeString());
-        $this->get("/papi/track?o={$o->id}&t=tok123&do=received")->assertOk();
-        $this->assertNull($o->refresh()->delivered_by, 'seller-delivered orders are not tagged customer');
+        $this->get("/papi/track?o={$o->id}&t=tok123&do=received&c=1")->assertOk();
+        $o->refresh();
+        $this->assertNull($o->delivered_by, 'seller-delivered orders are not tagged customer');
+        $this->assertSame('seller', $o->completedBy());
     }
 }

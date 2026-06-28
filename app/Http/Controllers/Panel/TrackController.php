@@ -191,17 +191,19 @@ class TrackController extends Controller
         if ($do === '') return;
         if (in_array((string) $order->status, ['Cancelled', 'Rejected'], true)) return;   // nothing to confirm
 
-        if ($do === 'received' && ! $order->customer_confirmed_at) {
+        if ($do === 'received' && (int) $request->query('c', 0) === 1 && ! $order->customer_confirmed_at) {
             $wasDelivered = strcasecmp((string) $order->status, 'Delivered') === 0 || $order->delivered_at !== null;
+            // Seller delivery and customer confirmation are INDEPENDENT events. Record only the
+            // customer event here — never overwrite the seller's status or delivered_at. If the
+            // seller hasn't delivered yet, tag who closed it first so the gap and the seller's
+            // response time (customer_confirmed_at → delivered_at) stay visible in the timeline.
             if (! $wasDelivered) {
-                // Seller never marked it delivered — the customer closes the loop, and we record the gap.
-                $order->status = 'Delivered';            // OrderObserver stamps delivered_at + status_changed_at
                 $order->delivered_by = 'customer';
             }
             $order->customer_confirmed_at = now();
             $order->confirmation_source = 'tracking_page';
             $order->save();
-            \App\Support\BotTrace::log($order->tenant_id, 'order', (string) $order->customer_phone, 'customer_confirmed', (string) $order->order_no . ($order->delivered_by === 'customer' ? ' (self-update)' : ''));
+            \App\Support\BotTrace::log($order->tenant_id, 'order', (string) $order->customer_phone, 'customer_confirmed', (string) $order->order_no . ($order->delivered_by === 'customer' ? ' (ahead of seller)' : ''));
         }
 
         if ($do === 'rate' && $order->customer_confirmed_at && ! $order->rating) {
@@ -245,6 +247,13 @@ class TrackController extends Controller
             ? '<div class="helped">&#10003; We\'ve let the shop know — they\'ll check on your order.</div>'
             : '';
         $helpLink = '<a class="hlink" href="' . e($q . '&do=help') . '">Not received yet? Tell the shop</a>';
+
+        // Accidental-click guard: the first tap asks for confirmation; only "Yes" (c=1) records.
+        if ($do === 'received') {
+            return '<div class="confirm">' . $help . '<div class="cq">Are you sure you\'ve received your complete order?</div>'
+                . '<a class="cbtn" href="' . e($q . '&do=received&c=1') . '">&#10003; Yes, I received it</a>'
+                . '<a class="hlink" href="' . e($q) . '">Cancel</a></div>';
+        }
 
         // Delivered → prominent confirm. Otherwise (still in progress) → a quieter self-update so the
         // customer can close the loop even if the seller never marked it delivered.

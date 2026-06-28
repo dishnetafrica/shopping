@@ -73,6 +73,42 @@ class OrderObservatoryReport
         ];
     }
 
+    /** Who completed orders — seller vs customer — the intuitive process-quality KPI. */
+    public function completionBreakdown(int $tenantId, ?string $date = null): array
+    {
+        $date ??= date('Y-m-d', strtotime('yesterday'));
+        $rows = \App\Models\Order::withoutGlobalScopes()->where('tenant_id', $tenantId)
+            ->where(fn ($q) => $q->whereDate('delivered_at', $date)->orWhereDate('customer_confirmed_at', $date))
+            ->get(['delivered_at', 'customer_confirmed_at']);
+
+        $seller = 0; $customer = 0;
+        foreach ($rows as $o) {
+            $by = $o->completedBy();
+            if ($by === 'seller') $seller++;
+            elseif ($by === 'customer') $customer++;
+        }
+        $total = $seller + $customer;
+        return [
+            'total' => $total, 'seller' => $seller, 'customer' => $customer,
+            'seller_pct' => $total ? round(100 * $seller / $total) : null,
+            'customer_pct' => $total ? round(100 * $customer / $total) : null,
+        ];
+    }
+
+    /** Avg minutes the seller took to mark Delivered AFTER the customer had already confirmed. */
+    public function sellerResponseTime(int $tenantId, ?string $date = null): ?float
+    {
+        $date ??= date('Y-m-d', strtotime('yesterday'));
+        $rows = \App\Models\Order::withoutGlobalScopes()->where('tenant_id', $tenantId)
+            ->whereNotNull('customer_confirmed_at')->whereNotNull('delivered_at')
+            ->whereColumn('customer_confirmed_at', '<', 'delivered_at')
+            ->whereDate('delivered_at', $date)
+            ->get(['customer_confirmed_at', 'delivered_at']);
+        if ($rows->isEmpty()) return null;
+        $mins = $rows->map(fn ($o) => max(0, $o->delivered_at->getTimestamp() - $o->customer_confirmed_at->getTimestamp()) / 60);
+        return round($mins->avg(), 1);
+    }
+
     /** Disagreement reasons over a day — tells you exactly where engineering time belongs. */
     public function reasonBreakdown(int $tenantId, ?string $date = null): array
     {
@@ -162,6 +198,8 @@ class OrderObservatoryReport
         $biz = $this->businessMetrics($tenantId, $date);
         $dc = $this->deliveryConfirmation($tenantId, $date);
         $sd = $this->sellerDiscipline($tenantId, $date);
+        $cb = $this->completionBreakdown($tenantId, $date);
+        $srt = $this->sellerResponseTime($tenantId, $date);
         $intents = implode(' · ', array_map(fn ($i, $n) => "$i $n", array_keys($k['by_intent']), $k['by_intent']));
         $reasonLine = $reasons ? implode(' · ', array_map(fn ($r, $n) => "$r $n", array_keys($reasons), $reasons)) : 'none';
         $stageLine = $ladder['by_stage'] ? implode(' · ', array_map(fn ($st, $n) => "$st $n", array_keys($ladder['by_stage']), $ladder['by_stage'])) : 'none';
@@ -181,6 +219,8 @@ class OrderObservatoryReport
             . " · confirm-latency " . ($dc['avg_confirm_latency_min'] ?? '—') . "min"
             . " · avg rating " . ($dc['avg_rating'] ?? '—') . " (" . $dc['ratings'] . ")\n"
             . "  seller discipline: stale-nudges {$sd['stale_nudges']} · self-closed {$sd['self_closed']} · stuck now {$sd['stuck_now']}\n"
+            . "  completed by: seller " . ($cb['seller_pct'] ?? '—') . "% · customer " . ($cb['customer_pct'] ?? '—') . "%"
+            . " · seller catch-up " . ($srt ?? '—') . "min\n"
             . "  intervention avoided: " . ($ia['pct'] ?? '—') . "% ({$ia['no_intervention']}/{$ia['orders']})";
     }
 }

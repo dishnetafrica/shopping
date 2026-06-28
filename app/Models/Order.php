@@ -62,4 +62,29 @@ class Order extends Model
         if ($paid <= 0) return 'unpaid';
         return $paid + 0.01 >= (float) $this->total ? 'paid' : 'partial';
     }
+
+    /** Operationally complete if EITHER side closed it (seller delivered OR customer confirmed). */
+    public function isComplete(): bool
+    {
+        return $this->delivered_at !== null || $this->customer_confirmed_at !== null;
+    }
+
+    /** Whichever happened first — the true moment the order was effectively complete. */
+    public function completedAt(): ?\Illuminate\Support\Carbon
+    {
+        $d = $this->delivered_at;
+        $c = $this->customer_confirmed_at;
+        if ($d && $c) return $d->lt($c) ? $d : $c;
+        return $d ?: $c;
+    }
+
+    /** Who closed the loop first: 'seller', 'customer', or null if still open. */
+    public function completedBy(): ?string
+    {
+        $d = $this->delivered_at;
+        $c = $this->customer_confirmed_at;
+        if (! $d && ! $c) return null;
+        if ($d && (! $c || $d->lte($c))) return 'seller';
+        return 'customer';
+    }
 }
