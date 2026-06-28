@@ -37,4 +37,25 @@ class DraftMergeTest extends TestCase
         [$draft] = $merge->apply($draft, $bundle);
         $this->assertCount(1, $draft->lines);
     }
+
+    public function test_records_provenance_per_field(): void
+    {
+        [$draft] = (new DraftMerge())->apply(new DraftOrder(),
+            new EntityBundle(paymentMethod: 'Cash', confidence: ['payment_method' => 0.96]), 'whatsapp', 48);
+        $prov = $draft->provenance['payment_method'];
+        $this->assertSame('whatsapp', $prov['source']);
+        $this->assertSame(48, $prov['message_id']);
+        $this->assertSame(0.96, $prov['confidence']);
+    }
+
+    public function test_locked_field_becomes_pending_not_silent_edit(): void
+    {
+        $merge = new DraftMerge();
+        [$draft] = $merge->apply(new DraftOrder(), new EntityBundle(deliveryTime: '08:00', confidence: ['delivery_time' => 0.97]));
+        $draft->lock('delivery_time');                                   // simulate post-confirmation lock
+        [$draft, $events] = $merge->apply($draft, new EntityBundle(deliveryTime: '11:00', confidence: ['delivery_time' => 0.97]));
+        $this->assertSame('08:00', $draft->deliveryTime);               // not silently changed
+        $this->assertCount(1, $draft->pendingModifications);
+        $this->assertSame('pending_modification', $events[0]['field']);
+    }
 }
