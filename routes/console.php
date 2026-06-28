@@ -30,4 +30,4 @@ Schedule::command('orders:observatory')->dailyAt('06:00')->withoutOverlapping()-
 Schedule::command('orders:delivery-reminders')->everyFifteenMinutes()->between('8:00', '21:00')->withoutOverlapping()->onOneServer();
 
 // Seller data-discipline watchdog — nudge on orders stuck in an active status past SLA.
-Schedule::command('orders:staleness-watchdog')->everyThirtyMinutes()->between('8:00', '21:00')->withoutOverlapping()->onOneServer();
+Schedule::command('orders:pending-digest')->everyThirtyMinutes()->between('8:00', '21:00')->withoutOverlapping()->onOneServer();
