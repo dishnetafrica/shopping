@@ -53,4 +53,26 @@ class OrderCalculatorWeightTest extends TestCase
         $q = app(OrderCalculator::class)->quote($t, [['query' => 'Fafda', 'qty' => 1]]);
         $this->assertSame(35000.0, (float) $q['lines'][0]['price']);
     }
+
+    public function test_mixed_order_prices_weight_and_pieces_independently(): void
+    {
+        $t = Tenant::factory()->create();
+        app(TenantContext::class)->set($t->id);
+        $this->fafda($t);
+        Product::create(['tenant_id' => $t->id, 'name' => 'Samosa', 'base_price' => 3500, 'price' => 3500,
+            'active' => true, 'sold_by_weight' => false]);
+
+        $q = app(OrderCalculator::class)->quote($t, [
+            ['query' => 'Fafda', 'qty' => 1, 'weight_grams' => 250],   // by weight
+            ['query' => 'Samosa', 'qty' => 4],                          // by piece — must NOT get a weight
+        ]);
+
+        $fafda = $q['lines'][0];
+        $samosa = $q['lines'][1];
+        $this->assertSame(12500.0, (float) $fafda['price']);
+        $this->assertSame(250, $fafda['weight_grams']);
+        $this->assertNull($samosa['weight_grams'], 'a by-piece item must never receive a weight');
+        $this->assertSame(4, $samosa['qty']);
+        $this->assertSame(14000.0, (float) $samosa['sum']);
+    }
 }

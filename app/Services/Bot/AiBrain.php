@@ -24,6 +24,9 @@ use OpenAI\Laravel\Facades\OpenAI;
  */
 class AiBrain
 {
+    /** Hidden order/quote protocol version emitted in the prompt; parser stays back-compatible. */
+    public const ORDER_PROTOCOL_VERSION = 2;
+
     public function enabled(): bool
     {
         return (bool) (config('openai.api_key') ?: env('OPENAI_API_KEY'));
@@ -397,20 +400,8 @@ class AiBrain
         try {
             $block = substr($reply, $pos);
 
-            // Robust parse: pull each item object {…} and read name/qty/optional grams, so even a
-            // truncated or "}}"-malformed block still yields the items, and weighted items (grams)
-            // are priced at the requested weight instead of collapsing to the default variant.
-            $calcItems = [];
-            if (preg_match_all('/\{[^{}]*\}/s', $block, $objs)) {
-                foreach ($objs[0] as $obj) {
-                    if (! preg_match('/"name"\s*:\s*"([^"]+)"/', $obj, $nm)) continue;
-                    $name = trim($nm[1]);
-                    if ($name === '') continue;
-                    $item = ['query' => $name, 'qty' => preg_match('/"qty"\s*:\s*(\d+)/', $obj, $qm) ? max(1, (int) $qm[1]) : 1];
-                    if (preg_match('/"grams"\s*:\s*(\d+)/', $obj, $gm) && (int) $gm[1] > 0) $item['weight_grams'] = (int) $gm[1];
-                    $calcItems[] = $item;
-                }
-            }
+            // Parse items (protocol v2 quantity{value,unit}, back-compatible with legacy qty/grams).
+            $calcItems = $this->extractOrderItems($block);
             $calcItems = array_values(array_filter($calcItems, fn ($i) => $i['query'] !== ''));
             if (! $calcItems) return $clean; // nothing parseable — but the block is already stripped
 
@@ -477,6 +468,62 @@ class AiBrain
      * model's own (clarifying) text go out. The quotation is recorded via QuotationService::persist.
      * Returns ['reply'=>cleaned text, 'sent'=>bool].
      */
+    /**
+     * Parse items from a hidden <<ORDER>>/<<QUOTE>> block into [['query','qty','weight_grams'?], …].
+     * JSON-first (the block is normally valid JSON); falls back to a tolerant regex if the model
+     * truncates or malforms it. Supports protocol v2 quantity{value,unit} and the legacy
+     * {qty[,grams]} shape, so older prompts and replay fixtures keep working.
+     */
+    private function extractOrderItems(string $block): array
+    {
+        $out = [];
+
+        // JSON path — robust to a trailing ">>" or "}}" by trimming to the outer object.
+        $a = strpos($block, '{');
+        $b = strrpos($block, '}');
+        if ($a !== false && $b !== false && $b > $a) {
+            $data = json_decode(substr($block, $a, $b - $a + 1), true);
+            if (is_array($data) && ! empty($data['items']) && is_array($data['items'])) {
+                foreach ($data['items'] as $it) {
+                    $name = trim((string) ($it['name'] ?? ''));
+                    if ($name === '') continue;
+                    if (isset($it['quantity']) && is_array($it['quantity'])) {
+                        $n = \App\Services\Bot\Pricing\QuantityNormalizer::normalize(
+                            (float) ($it['quantity']['value'] ?? 1), (string) ($it['quantity']['unit'] ?? ''));
+                    } else {
+                        $g = (isset($it['grams']) && (int) $it['grams'] > 0) ? (int) $it['grams'] : null;
+                        $n = ['qty' => max(1, (int) ($it['qty'] ?? 1)), 'weight_grams' => $g];
+                    }
+                    $row = ['query' => $name, 'qty' => $n['qty']];
+                    if (! empty($n['weight_grams'])) $row['weight_grams'] = $n['weight_grams'];
+                    $out[] = $row;
+                }
+                if ($out) return $out;
+            }
+        }
+
+        // Regex fallback — one level of nesting so quantity{…} stays inside its item object.
+        if (preg_match_all('/\{(?:[^{}]|\{[^{}]*\})*\}/s', $block, $objs)) {
+            foreach ($objs[0] as $obj) {
+                if (! preg_match('/"name"\s*:\s*"([^"]+)"/', $obj, $nm)) continue;
+                $name = trim($nm[1]);
+                if ($name === '') continue;
+                if (preg_match('/"value"\s*:\s*(\d+(?:\.\d+)?)/', $obj, $vm)) {
+                    $unit = preg_match('/"unit"\s*:\s*"([^"]*)"/', $obj, $um) ? $um[1] : '';
+                    $n = \App\Services\Bot\Pricing\QuantityNormalizer::normalize((float) $vm[1], $unit);
+                } else {
+                    $qty = preg_match('/"qty"\s*:\s*(\d+)/', $obj, $qm) ? max(1, (int) $qm[1]) : 1;
+                    $g = (preg_match('/"grams"\s*:\s*(\d+)/', $obj, $gm) && (int) $gm[1] > 0) ? (int) $gm[1] : null;
+                    $n = ['qty' => $qty, 'weight_grams' => $g];
+                }
+                $row = ['query' => $name, 'qty' => $n['qty']];
+                if (! empty($n['weight_grams'])) $row['weight_grams'] = $n['weight_grams'];
+                $out[] = $row;
+            }
+        }
+        return $out;
+    }
+
     private function captureQuote(Tenant $tenant, Conversation $convo, string $from, string $reply, WhatsAppGateway $gateway): array
     {
         $pos = stripos($reply, '<<QUOTE');
@@ -490,17 +537,7 @@ class AiBrain
             if (! $svc->available() || ! method_exists($gateway, 'sendDocument')) return ['reply' => $clean, 'sent' => false];
 
             $block = substr($reply, $pos);
-            $items = [];
-            if (preg_match_all('/\{[^{}]*\}/s', $block, $objs)) {
-                foreach ($objs[0] as $obj) {
-                    if (! preg_match('/"name"\s*:\s*"([^"]+)"/', $obj, $nm)) continue;
-                    $name = trim($nm[1]);
-                    if ($name === '') continue;
-                    $item = ['query' => $name, 'qty' => preg_match('/"qty"\s*:\s*(\d+)/', $obj, $qm) ? max(1, (int) $qm[1]) : 1];
-                    if (preg_match('/"grams"\s*:\s*(\d+)/', $obj, $gm) && (int) $gm[1] > 0) $item['weight_grams'] = (int) $gm[1];
-                    $items[] = $item;
-                }
-            }
+            $items = $this->extractOrderItems($block);
             $items = array_values(array_filter($items, fn ($i) => $i['query'] !== ''));
             if (! $items) return ['reply' => $clean, 'sent' => false];
 
@@ -675,10 +712,10 @@ class AiBrain
         if (count((array) $tenant->setting('catalog_files', [])) > 0)
             $p .= "CATALOGUE/BROCHURE: the brochure file is product photos only and has NO prices — never say prices are in it. If the customer asks for the catalogue, brochure, or product photos/pictures, acknowledge warmly (e.g. \"Sure, sending our catalogue now 📄\") — the system sends the brochure automatically. NEVER say you can't send files, photos or PDFs; you can.\n\n";
         $p .= "PLACING AN ORDER: when the customer has clearly confirmed an order — they agreed to specific product(s) WITH quantities AND gave a delivery area/town AND said to go ahead — append a hidden machine line as the VERY LAST thing in your reply, on its own line, exactly in this format:\n";
-        $p .= "<<ORDER {\"items\":[{\"name\":\"EXACT product name from the list\",\"qty\":10,\"grams\":250}],\"delivery\":\"area or town\",\"note\":\"anything extra or empty\"}>>\n";
-        $p .= "Order-line rules: only add it when the order is truly confirmed (never while still discussing price/options); use the EXACT product names from the PRODUCTS list; qty is a whole number; do NOT put prices in it. If the customer ordered an item BY WEIGHT (e.g. \"250 gms\", \"500g\", \"1 kg\"), include that weight in grams as a \"grams\" field on that item (250 gms → \"grams\":250, 1 kg → \"grams\":1000); OMIT \"grams\" for items sold by piece/packet (e.g. samosa, dozen). When you add the ORDER line, write only ONE short sentence above it (e.g. \"Great, confirming your order now 👍\") and do NOT repeat the item list yourself — the system removes the ORDER line and replies with the official order number and full summary. If the order is not yet confirmed, do NOT add the line.\n\n";
+        $p .= "<<ORDER {\"version\":2,\"items\":[{\"name\":\"EXACT product name from the list\",\"quantity\":{\"value\":250,\"unit\":\"g\"}}],\"delivery\":\"area or town\",\"note\":\"anything extra or empty\"}>>\n";
+        $p .= "Order-line rules: only add it when the order is truly confirmed (never while still discussing price/options); use the EXACT product names from the PRODUCTS list; do NOT put prices in it. Each item carries a quantity {value, unit}. Use unit g or kg for items sold BY WEIGHT, and pcs / pack / dozen for items sold by piece. Examples: 250 gms → {\"value\":250,\"unit\":\"g\"}; 1 kg → {\"value\":1,\"unit\":\"kg\"}; 4 samosa → {\"value\":4,\"unit\":\"pcs\"}; 1 dozen → {\"value\":1,\"unit\":\"dozen\"}. When you add the ORDER line, write only ONE short sentence above it (e.g. \"Great, confirming your order now 👍\") and do NOT repeat the item list yourself — the system removes the ORDER line and replies with the official order number and full summary. If the order is not yet confirmed, do NOT add the line.\n\n";
         $p .= "SENDING A QUOTATION (PDF): when the customer asks for a quotation / quote / proforma AND you know the specific product(s) and quantity(ies), append a hidden machine line as the VERY LAST thing in your reply, on its own line, exactly:\n";
-        $p .= "<<QUOTE {\"items\":[{\"name\":\"EXACT product name from the list\",\"qty\":10}]}>>\n";
+        $p .= "<<QUOTE {\"version\":2,\"items\":[{\"name\":\"EXACT product name from the list\",\"quantity\":{\"value\":10,\"unit\":\"pcs\"}}]}>>\n";
         $p .= "Quote rules: ONLY emit it when you actually know WHICH item(s) and HOW MANY. If the customer is vague (e.g. just \"send a quotation\" or \"give me a quote for 10 cartons\" without naming the product), ASK which products and quantities first and do NOT emit the line. Use the EXACT product names from the PRODUCTS list; qty is a whole number; never put prices in it. Write only ONE short sentence above it (e.g. \"Sure, preparing your quotation 📄\") — the system generates and sends the branded PDF with the exact totals. A quotation is NOT an order: it does not place an order. Only use the ORDER line when the customer has actually confirmed they want to buy.\n\n";
         $p .= "PRICE QUESTIONS: always answer from the PRODUCTS list below — it is the source of truth. For a specific product, quote its price directly. If they ask for the full price list or rates, acknowledge warmly — the system sends a generated price-list PDF automatically. For bulk / wholesale / large quantities, ask which items and how many and tell them you'll send a quotation. NEVER claim prices are in the brochure, and NEVER dead-end with 'let me check with the team' — you have the prices.\n\n";
         $p .= "PRODUCTS (prices = source of truth):\n" . ($lines !== '' ? $lines : '(catalogue unavailable right now — ask the customer to hold; staff have been alerted)') . "\n";
