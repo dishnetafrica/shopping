@@ -55,6 +55,23 @@ class OrderCalculator
                 continue;
             }
             $price = (float) $p['price'];
+            $name  = (string) $p['name'];
+            $grams = (int) ($it['weight_grams'] ?? 0);
+
+            // Weighted item (e.g. "Fafda 250g"): price the requested weight via the SAME pricer the
+            // deterministic path uses, instead of collapsing to the default (1 kg) variant.
+            if ($grams > 0 && ! empty($p['sold_by_weight'])) {
+                $res = \App\Services\Bot\Pricing\WeightPricer::price($grams, [
+                    'reference_price'        => $p['reference_price'] ?? null,
+                    'reference_weight_grams' => (int) ($p['reference_weight_grams'] ?? 1000),
+                    'variants'               => $p['variants'] ?? [],
+                ]);
+                if ($res['ok'] ?? false) {
+                    $price = (float) $res['price'];
+                    $name  = \App\Services\Bot\Pricing\WeightParser::label($grams) . ' ' . $p['name'];
+                }
+            }
+
             if ($price <= 0) {
                 // price-on-request item (e.g. jumbo reels): never total a zero — flag for the team.
                 $lines[] = ['name' => ($p['name'] ?? $query), 'qty' => $qty, 'price' => null, 'sum' => null, 'matched' => false];
@@ -63,14 +80,15 @@ class OrderCalculator
             $sum   = $price * $qty;
             $total += $sum;
             $lines[] = [
-                'name'    => (string) $p['name'],
-                'qty'     => $qty,
-                'price'   => $price,
-                'sum'     => $sum,
-                'unit'    => (string) ($p['unit_label'] ?? ''),
-                'moq'     => isset($p['moq']) ? (int) $p['moq'] : null,
-                'image'   => (string) ($p['image'] ?? ''),
-                'matched' => true,
+                'name'         => $name,
+                'qty'          => $qty,
+                'price'        => $price,
+                'sum'          => $sum,
+                'weight_grams' => $grams ?: null,
+                'unit'         => (string) ($p['unit_label'] ?? ''),
+                'moq'          => isset($p['moq']) ? (int) $p['moq'] : null,
+                'image'        => (string) ($p['image'] ?? ''),
+                'matched'      => true,
             ];
         }
 
@@ -101,7 +119,7 @@ class OrderCalculator
     private function catalogue(Tenant $tenant): array
     {
         return Cache::remember("ai_calc_catalogue:{$tenant->id}", 60, function () use ($tenant) {
-            return Product::withoutGlobalScopes()
+            return Product::withoutGlobalScopes()->with('weightVariants')
                 ->where('tenant_id', $tenant->id)->where('active', true)
                 ->get()
                 ->map(fn ($p) => [
@@ -109,6 +127,11 @@ class OrderCalculator
                     'category' => (string) ($p->category ?? ''), 'keywords' => (string) ($p->keywords ?? ''),
                     'unit_label' => (string) ($p->unit_label ?? ''), 'moq' => $p->moq ? (int) $p->moq : null,
                     'image' => (string) ($p->image_url ?? ''),
+                    'sold_by_weight' => (bool) ($p->sold_by_weight ?? false),
+                    'reference_price' => $p->reference_price !== null ? (float) $p->reference_price : null,
+                    'reference_weight_grams' => (int) ($p->reference_weight_grams ?: 1000),
+                    'variants' => $p->weightVariants
+                        ->mapWithKeys(fn ($v) => [(int) $v->weight_grams => (float) $v->price])->all(),
                 ])->all();
         });
     }

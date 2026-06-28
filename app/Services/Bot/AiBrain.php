@@ -397,12 +397,18 @@ class AiBrain
         try {
             $block = substr($reply, $pos);
 
-            // Robust parse: pull every {"name":"..","qty":N} pair via regex instead of json_decode,
-            // so even a truncated or "}}"-malformed block still yields the items that came through.
+            // Robust parse: pull each item object {…} and read name/qty/optional grams, so even a
+            // truncated or "}}"-malformed block still yields the items, and weighted items (grams)
+            // are priced at the requested weight instead of collapsing to the default variant.
             $calcItems = [];
-            if (preg_match_all('/"name"\s*:\s*"([^"]+)"\s*,\s*"qty"\s*:\s*(\d+)/s', $block, $mm, PREG_SET_ORDER)) {
-                foreach ($mm as $it) {
-                    $calcItems[] = ['query' => trim($it[1]), 'qty' => max(1, (int) $it[2])];
+            if (preg_match_all('/\{[^{}]*\}/s', $block, $objs)) {
+                foreach ($objs[0] as $obj) {
+                    if (! preg_match('/"name"\s*:\s*"([^"]+)"/', $obj, $nm)) continue;
+                    $name = trim($nm[1]);
+                    if ($name === '') continue;
+                    $item = ['query' => $name, 'qty' => preg_match('/"qty"\s*:\s*(\d+)/', $obj, $qm) ? max(1, (int) $qm[1]) : 1];
+                    if (preg_match('/"grams"\s*:\s*(\d+)/', $obj, $gm) && (int) $gm[1] > 0) $item['weight_grams'] = (int) $gm[1];
+                    $calcItems[] = $item;
                 }
             }
             $calcItems = array_values(array_filter($calcItems, fn ($i) => $i['query'] !== ''));
@@ -485,8 +491,15 @@ class AiBrain
 
             $block = substr($reply, $pos);
             $items = [];
-            if (preg_match_all('/"name"\s*:\s*"([^"]+)"\s*,\s*"qty"\s*:\s*(\d+)/s', $block, $mm, PREG_SET_ORDER)) {
-                foreach ($mm as $it) $items[] = ['query' => trim($it[1]), 'qty' => max(1, (int) $it[2])];
+            if (preg_match_all('/\{[^{}]*\}/s', $block, $objs)) {
+                foreach ($objs[0] as $obj) {
+                    if (! preg_match('/"name"\s*:\s*"([^"]+)"/', $obj, $nm)) continue;
+                    $name = trim($nm[1]);
+                    if ($name === '') continue;
+                    $item = ['query' => $name, 'qty' => preg_match('/"qty"\s*:\s*(\d+)/', $obj, $qm) ? max(1, (int) $qm[1]) : 1];
+                    if (preg_match('/"grams"\s*:\s*(\d+)/', $obj, $gm) && (int) $gm[1] > 0) $item['weight_grams'] = (int) $gm[1];
+                    $items[] = $item;
+                }
             }
             $items = array_values(array_filter($items, fn ($i) => $i['query'] !== ''));
             if (! $items) return ['reply' => $clean, 'sent' => false];
@@ -662,8 +675,8 @@ class AiBrain
         if (count((array) $tenant->setting('catalog_files', [])) > 0)
             $p .= "CATALOGUE/BROCHURE: the brochure file is product photos only and has NO prices — never say prices are in it. If the customer asks for the catalogue, brochure, or product photos/pictures, acknowledge warmly (e.g. \"Sure, sending our catalogue now 📄\") — the system sends the brochure automatically. NEVER say you can't send files, photos or PDFs; you can.\n\n";
         $p .= "PLACING AN ORDER: when the customer has clearly confirmed an order — they agreed to specific product(s) WITH quantities AND gave a delivery area/town AND said to go ahead — append a hidden machine line as the VERY LAST thing in your reply, on its own line, exactly in this format:\n";
-        $p .= "<<ORDER {\"items\":[{\"name\":\"EXACT product name from the list\",\"qty\":10}],\"delivery\":\"area or town\",\"note\":\"anything extra or empty\"}>>\n";
-        $p .= "Order-line rules: only add it when the order is truly confirmed (never while still discussing price/options); use the EXACT product names from the PRODUCTS list; qty is a whole number; do NOT put prices in it. When you add the ORDER line, write only ONE short sentence above it (e.g. \"Great, confirming your order now 👍\") and do NOT repeat the item list yourself — the system removes the ORDER line and replies with the official order number and full summary. If the order is not yet confirmed, do NOT add the line.\n\n";
+        $p .= "<<ORDER {\"items\":[{\"name\":\"EXACT product name from the list\",\"qty\":10,\"grams\":250}],\"delivery\":\"area or town\",\"note\":\"anything extra or empty\"}>>\n";
+        $p .= "Order-line rules: only add it when the order is truly confirmed (never while still discussing price/options); use the EXACT product names from the PRODUCTS list; qty is a whole number; do NOT put prices in it. If the customer ordered an item BY WEIGHT (e.g. \"250 gms\", \"500g\", \"1 kg\"), include that weight in grams as a \"grams\" field on that item (250 gms → \"grams\":250, 1 kg → \"grams\":1000); OMIT \"grams\" for items sold by piece/packet (e.g. samosa, dozen). When you add the ORDER line, write only ONE short sentence above it (e.g. \"Great, confirming your order now 👍\") and do NOT repeat the item list yourself — the system removes the ORDER line and replies with the official order number and full summary. If the order is not yet confirmed, do NOT add the line.\n\n";
         $p .= "SENDING A QUOTATION (PDF): when the customer asks for a quotation / quote / proforma AND you know the specific product(s) and quantity(ies), append a hidden machine line as the VERY LAST thing in your reply, on its own line, exactly:\n";
         $p .= "<<QUOTE {\"items\":[{\"name\":\"EXACT product name from the list\",\"qty\":10}]}>>\n";
         $p .= "Quote rules: ONLY emit it when you actually know WHICH item(s) and HOW MANY. If the customer is vague (e.g. just \"send a quotation\" or \"give me a quote for 10 cartons\" without naming the product), ASK which products and quantities first and do NOT emit the line. Use the EXACT product names from the PRODUCTS list; qty is a whole number; never put prices in it. Write only ONE short sentence above it (e.g. \"Sure, preparing your quotation 📄\") — the system generates and sends the branded PDF with the exact totals. A quotation is NOT an order: it does not place an order. Only use the ORDER line when the customer has actually confirmed they want to buy.\n\n";

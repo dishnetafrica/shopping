@@ -1,1 +1,17 @@
-[]
+[
+  {
+    "id": "prod-ORD-86",
+    "source": "production",
+    "note": "Pal's Snacks 28 Jun 2026 — weighted items collapsed to 1 Kg in the AI order path",
+    "messages": ["Fafda -250gms\nSev khamni -250gms\nSamosa -4pcs\nKhaman -250gms"],
+    "expected": {
+      "products": [
+        { "name": "Fafda", "weight_grams": 250 },
+        { "name": "Sev Khamni", "weight_grams": 250 },
+        { "name": "Samosa" },
+        { "name": "Khaman", "weight_grams": 250 }
+      ]
+    },
+    "reasons": "WEIGHT"
+  }
+]
