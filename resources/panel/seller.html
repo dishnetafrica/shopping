@@ -1117,7 +1117,7 @@ var BASE='';
 var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   orders:'/papi/orders',products:'/papi/products',
   kitchen:'/papi/kitchen',kitchenAdv:'/papi/kitchen-advance',
-  updStatus:'/papi/update-status',saveOrder:'/papi/save-order',quoteSend:'/papi/quotation-send',quotations:'/papi/quotations',quoteResend:'/papi/quotation-resend',quoteStatus:'/papi/quotation-status',quoteConvert:'/papi/quotation-convert',
+  updStatus:'/papi/update-status',saveOrder:'/papi/save-order',quoteSend:'/papi/quotation-send',quotations:'/papi/quotations',quoteResend:'/papi/quotation-resend',quoteStatus:'/papi/quotation-status',quoteConvert:'/papi/quotation-convert',quoteShow:'/papi/quotation-show',quoteUpdate:'/papi/quotation-update',quoteDelete:'/papi/quotation-delete',
   updProduct:'/papi/update-product',addProduct:'/papi/add-product',delProduct:'/papi/delete-product',aiIdentify:'/papi/ai-identify',
   uploadImage:'/papi/upload-image',
   uploadDoc:'/papi/upload-doc',
@@ -1907,9 +1907,9 @@ async function quotesInit(){
       var dl=q.url?'<a class="btn ghost" href="'+esc(q.url)+'" target="_blank" rel="noopener" style="padding:4px 9px">⤓ PDF</a>':'';
       var actions='';
       if(q.status==='converted'){
-        actions=dl+' <span style="color:var(--muted);font-size:12px">→ '+esc(q.order_no||'order')+'</span>';
+        actions='<button class="btn ghost" style="padding:4px 9px" onclick="qView('+q.id+')">👁 View</button> '+dl+' <span style="color:var(--muted);font-size:12px">→ '+esc(q.order_no||'order')+'</span>';
       } else {
-        actions=dl
+        actions='<button class="btn ghost" style="padding:4px 9px" onclick="qView('+q.id+')">👁 View</button> '+dl
           +' <button class="btn ghost" style="padding:4px 9px" onclick="qResend('+q.id+')">↻ Resend</button>'
           +' <button class="btn" style="padding:4px 9px" onclick="qConvert('+q.id+')">✓ Convert</button>'
           +' <select onchange="qStatus('+q.id+',this.value)" style="padding:4px 6px;border:1px solid var(--line);border-radius:7px;color:var(--ink);font-size:12px">'
@@ -1949,6 +1949,88 @@ async function qStatus(id,status){
     if(d&&d.ok){toast('Marked '+status);quotesInit();}
     else toast((d&&d.message)?d.message:'Update failed');
   }catch(e){toast('Network error');}
+}
+function qMoney(n){return Number(n||0).toLocaleString();}
+function qClose(){var m=$('modal');if(m)m.classList.add('hide');}
+async function qView(id){
+  $('modalTitle').textContent='Quotation';
+  $('modalBody').innerHTML='<div class="note">Loading…</div>';
+  $('modal').classList.remove('hide');
+  try{
+    var r=await fetch(EP.quoteShow+'?token='+encodeURIComponent(token)+'&id='+id,{cache:'no-store'});
+    var d=await r.json();
+    if(!d||!d.ok){$('modalBody').innerHTML='<div class="note" style="color:var(--red)">Could not load this quotation.</div>';return;}
+    qRenderDetail(d.quote);
+  }catch(e){$('modalBody').innerHTML='<div class="note" style="color:var(--red)">Network error</div>';}
+}
+function qRenderDetail(q){
+  window.__qId=q.id; window.__qCur=q.currency||'UGX';
+  window.__qLocked=(q.status==='converted'||q.status==='accepted');
+  window.__qItems=(q.items||[]).map(function(it){return {name:it.name,qty:Number(it.qty)||1,unit_price:Number(it.unit_price)||0};});
+  $('modalTitle').textContent='Quotation '+(q.quote_no||'');
+  var pdf=q.url?'<a class="btn ghost" href="'+esc(q.url)+'" target="_blank" rel="noopener" style="padding:4px 9px">⤓ PDF</a>':'';
+  var lockNote=window.__qLocked?'<div class="note" style="color:var(--muted);margin-bottom:8px">This quotation is <b>'+esc(q.status)+'</b> and is read-only. Use Resend or Convert; to change it, create a new one.</div>':'';
+  var curSel=window.__qLocked?('<b>'+esc(window.__qCur)+'</b>'):('<select id="qCurSel" onchange="window.__qCur=this.value;qRecalc()" style="padding:5px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink)"><option'+(window.__qCur==='UGX'?' selected':'')+'>UGX</option><option'+(window.__qCur==='USD'?' selected':'')+'>USD</option></select>');
+  var head='<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px">'
+    +'<div><b>'+esc(q.name||'—')+'</b>'+(q.phone?' <span style="color:var(--muted);font-size:12px">'+esc(q.phone)+'</span>':'')+'</div>'
+    +'<span style="margin-left:auto">'+qStatusBadge(q.status)+'</span>'+pdf+'</div>';
+  var addBtn=window.__qLocked?'':'<button class="btn ghost" style="margin-top:8px;padding:4px 9px" onclick="qAddLine()">+ Add line</button>';
+  var foot='<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">';
+  if(!window.__qLocked)foot+='<button class="btn" style="padding:6px 12px" onclick="qSave()">💾 Save changes</button>';
+  foot+='<button class="btn ghost" style="padding:6px 12px" onclick="qResend('+q.id+')">↻ Resend</button>';
+  if(q.status!=='converted')foot+='<button class="btn ghost" style="padding:6px 12px" onclick="qConvert('+q.id+')">✓ Convert to order</button>';
+  if(q.status!=='converted')foot+='<button class="btn ghost" style="padding:6px 12px;color:var(--red)" onclick="qArchive('+q.id+')">🗄 Archive</button>';
+  foot+='<button class="btn ghost" style="padding:6px 12px" onclick="qClose()">Close</button></div>';
+  $('modalBody').innerHTML=lockNote+head
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="color:var(--muted);font-size:12px">Currency</span>'+curSel+'</div>'
+    +'<div id="qItemsBox"></div>'+addBtn
+    +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;font-weight:700">Total:&nbsp;<span id="qTotalBox"></span></div>'
+    +foot;
+  qRenderItems();
+}
+function qRenderItems(){
+  var box=$('qItemsBox'); if(!box)return;
+  var items=window.__qItems||[],locked=window.__qLocked;
+  var body=items.map(function(it,i){
+    var lt=(Number(it.qty)||0)*(Number(it.unit_price)||0);
+    if(locked){
+      return '<tr><td style="padding:5px 6px">'+esc(it.name)+'</td>'
+        +'<td style="padding:5px 6px;text-align:right">'+qMoney(it.qty)+'</td>'
+        +'<td style="padding:5px 6px;text-align:right">'+qMoney(it.unit_price)+'</td>'
+        +'<td style="padding:5px 6px;text-align:right">'+qMoney(lt)+'</td></tr>';
+    }
+    var st='padding:5px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink)';
+    return '<tr>'
+      +'<td style="padding:3px 4px"><input value="'+esc(it.name)+'" oninput="qSet('+i+',\'name\',this.value)" style="width:100%;'+st+'"></td>'
+      +'<td style="padding:3px 4px"><input type="number" min="1" value="'+(Number(it.qty)||1)+'" oninput="qSet('+i+',\'qty\',this.value)" style="width:60px;text-align:right;'+st+'"></td>'
+      +'<td style="padding:3px 4px"><input type="number" min="0" step="0.5" value="'+(Number(it.unit_price)||0)+'" oninput="qSet('+i+',\'unit_price\',this.value)" style="width:92px;text-align:right;'+st+'"></td>'
+      +'<td style="padding:3px 4px;text-align:right;white-space:nowrap"><span id="qln'+i+'">'+qMoney(lt)+'</span> <button class="btn ghost" style="padding:1px 7px" onclick="qDelLine('+i+')">✕</button></td>'
+      +'</tr>';
+  }).join('');
+  box.innerHTML='<div class="tablewrap"><table style="width:100%"><thead><tr><th style="text-align:left">Item</th><th style="text-align:right">Qty</th><th style="text-align:right">Unit</th><th style="text-align:right">Line</th></tr></thead><tbody>'+(body||'<tr><td colspan="4" style="padding:10px;text-align:center;color:var(--muted)">No lines</td></tr>')+'</tbody></table></div>';
+  qRecalc();
+}
+function qSet(i,k,v){var it=(window.__qItems||[])[i];if(!it)return;it[k]=(k==='name')?v:Number(v);qRecalc();}
+function qRecalc(){var items=window.__qItems||[],total=0;items.forEach(function(it,i){var lt=(Number(it.qty)||0)*(Number(it.unit_price)||0);total+=lt;var c=$('qln'+i);if(c)c.textContent=qMoney(lt);});var t=$('qTotalBox');if(t)t.textContent=(window.__qCur||'')+' '+qMoney(total);}
+function qAddLine(){if(!window.__qItems)window.__qItems=[];window.__qItems.push({name:'',qty:1,unit_price:0});qRenderItems();}
+function qDelLine(i){(window.__qItems||[]).splice(i,1);qRenderItems();}
+async function qSave(){
+  var id=window.__qId;
+  var items=(window.__qItems||[]).filter(function(it){return (it.name||'').trim()!=='';})
+    .map(function(it){return {name:it.name,qty:Number(it.qty)||1,unit_price:Number(it.unit_price)||0};});
+  if(!items.length){toast('Add at least one line');return;}
+  var url=EP.quoteUpdate+'?token='+encodeURIComponent(token)+'&id='+id+'&currency='+encodeURIComponent(window.__qCur||'UGX')+'&items='+encodeURIComponent(JSON.stringify(items));
+  try{var r=await fetch(url,{cache:'no-store'});var d=await r.json();
+    if(d&&d.ok){toast('Saved ✓ — PDF rebuilt');qClose();quotesInit();}
+    else toast((d&&d.message)?d.message:'Save failed');
+  }catch(e){toast('Network error');}
+}
+function qArchive(id){
+  if(!confirm('Archive this quotation? It stays in your reports but leaves the active list.'))return;
+  fetch(EP.quoteDelete+'?token='+encodeURIComponent(token)+'&id='+id,{cache:'no-store'})
+    .then(function(r){return r.json();})
+    .then(function(d){if(d&&(d.archived||d.deleted)){toast('Archived');qClose();quotesInit();}else toast((d&&d.message)?d.message:'Could not archive');})
+    .catch(function(){toast('Network error');});
 }
 function applyPermissions(){
   var ME=window.ME; if(!ME||ME.isOwner)return;
