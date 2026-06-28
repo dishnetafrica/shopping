@@ -15,6 +15,12 @@ use App\Models\Product;
  *
  * The bot's certainty therefore tracks what we actually know, and it stops promising availability it
  * can't stand behind.
+ *
+ * Future (documented, not built): confidence is expected to weigh the OBSERVATION METHOD too — a
+ * manual count or warehouse scan is more trustworthy than an overnight ERP import or an AI estimate
+ * — and a snapshot may carry an explicit `expires_at` so the decay windows become tenant config
+ * rather than constants here. Consumers must depend only on the derived state(), never on how it is
+ * computed, so these can change without touching any capability.
  */
 class InventoryState
 {

@@ -25,6 +25,7 @@ event_type    string        dotted, past-tense: "order.delivered", "inventory.co
 entity_type   string        "order" | "product" | "customer" | "conversation" | ...
 entity_id     string        id of that entity within the tenant
 correlation_id string       chains every event of one workflow (e.g. an order's whole life)
+causation_id  string?       RESERVED (not yet emitted): the event_id that directly caused this one
 tenant_id     int           always tenant-scoped
 actor         string        who/what caused it: "customer" | "seller" | "rider" | "bot" |
                             "system:watchdog" | "system:observatory"
@@ -50,6 +51,15 @@ order.packed, rider.assigned, order.delivered, customer.confirmed_delivery all s
 `correlation_id = ORD-123`. This makes "show me everything that happened for this order" a single
 filter and makes cross-subsystem debugging dramatically easier — without any subsystem changing how
 it stores data.
+
+### Causation (reserved, not yet emitted)
+`correlation_id` says *which workflow* an event belongs to; `causation_id` says *which event caused
+this one*. They differ for automations: a `customer.confirmed_delivery` event may cause a
+`seller.notified` event and an `analytics.recorded` event — all three share
+`correlation_id = ORD-123`, but the latter two carry `causation_id = <the confirm event's id>`.
+That chain is what lets you later answer "why did this automation fire?" instead of only "what
+happened?". The field is reserved in the envelope now so emitters can populate it when automations
+are wired; nothing emits or reads it today.
 
 ### Actor vs source
 - **actor** answers *who* (customer / seller / rider / bot / a named system process).
@@ -80,6 +90,13 @@ yields the envelope. No source-of-truth moves.
   arrives, so they join the timeline for free.
 - Until then: **nothing is built.** This document is the only deliverable; it exists so the
   eventual unification is intentional rather than accidental.
+
+## Related note — confidence is multi-factor
+The Inventory Confidence primitive currently decays by **age** alone. It is expected to also weigh
+the **observation method** (manual count vs POS sale vs ERP sync vs warehouse scan vs AI estimate)
+and may carry an explicit `expires_at`. Those are documented future refinements of that primitive,
+not of this ADR; capabilities consuming inventory should depend only on its derived state, never on
+how confidence is computed.
 
 ## Non-goals
 No event bus, no broker, no central event table, no synchronous coupling between subsystems, no
