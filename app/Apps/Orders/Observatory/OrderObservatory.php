@@ -36,6 +36,7 @@ class OrderObservatory
             'has_time' => (bool) ($bundle?->deliveryTime), 'has_payment' => (bool) ($bundle?->paymentMethod),
             'clarification' => $clarified, 'outcome' => $this->outcome($liveReply),
             'sample' => mb_substr($this->mask($text), 0, 200),
+            'protocol_version' => \App\Services\Bot\AiBrain::ORDER_PROTOCOL_VERSION,
             'processing_ms' => (int) ((hrtime(true) - $t0) / 1e6), 'created_at' => now(),
         ]);
 
@@ -50,7 +51,8 @@ class OrderObservatory
                     'message' => mb_substr($this->mask($text), 0, 280),
                     'live_json' => $added, 'shadow_json' => array_map(fn ($p) => $p, $bundle->products),
                     'diff_json' => $diff['items'], 'reasons' => implode(',', $reasons),
-                    'regression' => $diff['regressions'], 'status' => 'new', 'created_at' => now(),
+                    'regression' => $diff['regressions'], 'status' => 'new',
+                    'protocol_version' => \App\Services\Bot\AiBrain::ORDER_PROTOCOL_VERSION, 'created_at' => now(),
                 ]);
             }
         }

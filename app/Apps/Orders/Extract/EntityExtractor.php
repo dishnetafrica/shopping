@@ -45,6 +45,7 @@ class EntityExtractor
         if ($area && ! $addr['address']) { $work = $this->strip($work, [$areaSpan]); $conf['delivery_area'] = 0.95; }
 
         $products = [];
+        $work = $this->stripNegations($work);                                                     // "no jalebi" must not become a line
         $work = preg_replace('/\b(send|deliver|bring|drop|kindly)\b/i', ' ', $work) ?? $work;  // order verbs aren't products
         $parsed = $this->parser->parse(trim($work));
         foreach (($parsed['items'] ?? []) as $it) {
@@ -72,6 +73,20 @@ class EntityExtractor
             phone: $phone['phone'],
             confidence: $conf,
         );
+    }
+
+    /**
+     * Remove explicitly excluded items so they never become product lines: "no jalebi",
+     * "without sev", "skip the samosa". Scoped to a single line (no newline in the trailing words)
+     * so it can't swallow the next item in a multi-line order.
+     */
+    private function stripNegations(string $work): string
+    {
+        return preg_replace(
+            '/\b(?:no|without|skip)[ \t]+(?:the[ \t]+)?[a-z]+(?:[ \t]+[a-z]+)?/i',
+            ' ',
+            $work
+        ) ?? $work;
     }
 
     private function strip(string $work, array $spans): string

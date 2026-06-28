@@ -13,5 +13,18 @@
       ]
     },
     "reasons": "WEIGHT"
+  },
+  {
+    "id": "prod-negation-jalebi",
+    "source": "production",
+    "note": "negation: 'No Jalebi' must be excluded; Fafda + Vanela remain (mixed weighted order)",
+    "messages": ["250g Fafda\n250g Vanela\nNo Jalebi"],
+    "expected": {
+      "products": [
+        { "name": "Fafda", "weight_grams": 250 },
+        { "name": "Vanela", "weight_grams": 250 }
+      ]
+    },
+    "reasons": "PRODUCT"
   }
 ]
