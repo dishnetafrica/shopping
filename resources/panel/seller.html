@@ -2086,6 +2086,8 @@ function showPage(p){
   else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='activity')activityInit(); else if(p==='brain')brainInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else if(p==='shipments')shipmentsInit(); else if(p==='quotations')quotesInit(); else renderList();
   closeSide(); window.scrollTo(0,0);
 }
+// Deep-link from the Today screen: /panel#orders opens that section on load (and on hash change).
+(function(){var ok={dash:1,orders:1,quotations:1,customers:1,products:1,settings:1};function hp(){try{var h=(location.hash||'').replace('#','');if(h&&ok[h]&&typeof showPage==='function')showPage(h);}catch(e){}}window.addEventListener('load',hp);window.addEventListener('hashchange',hp);})();
 function openSide(){$('side').classList.add('open');$('backdrop').classList.add('show');}
 function closeSide(){$('side').classList.remove('open');$('backdrop').classList.remove('show');}
 function helpTab(w){

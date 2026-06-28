@@ -48,6 +48,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/diagnostics', [SellerPanelController::class, 'diagnostics']);
     Route::get('/panel/leads', [SellerPanelController::class, 'leads']);
     Route::get('/panel/setup', [SellerPanelController::class, 'setup']);
+    Route::get('/panel/today', [SellerPanelController::class, 'today']);
+    Route::get('/panel/shared/{file}', [SellerPanelController::class, 'shared'])->where('file', '[a-z]+\.js');
     Route::get('/panel/billing', [\App\Http\Controllers\Billing\BillingController::class, 'page']);
 
     // JSON API the panel calls. GET for everything (the panel uses query-string
@@ -64,6 +66,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('products',   [PanelApiController::class, 'products']);
         Route::get('riders',     [PanelApiController::class, 'riders']);
         Route::get('returns',    [PanelApiController::class, 'returns']);
+        Route::get('today',      [PanelApiController::class, 'today']);   // Today / Needs-attention home screen
 
         // Delivery Management V2 (D1/D2)
         Route::get('delivery/quote',         [\App\Http\Controllers\Panel\DeliveryController::class, 'quote']);

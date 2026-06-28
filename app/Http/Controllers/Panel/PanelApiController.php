@@ -297,6 +297,110 @@ class PanelApiController extends Controller
     }
 
     /** Small operations overview for the dashboard (today): leads, tickets, shopping. No new tables. */
+    /**
+     * Today / Needs-attention home screen. Pure read over existing data — no new tables.
+     * Every card carries a reason (the "never show a number without a why" rule).
+     */
+    public function today(Request $r)
+    {
+        $t        = $r->user()->tenant;
+        $now      = now();
+        $vertical = \App\Support\Vertical::of($t);
+        $sla      = (array) ($t->setting('order_sla', []) ?: []);
+
+        // 1) Active orders past their stage SLA.
+        $attention = 0;
+        \App\Models\Order::where('tenant_id', $t->id)
+            ->whereIn('status', \App\Support\OrderSla::ACTIVE)
+            ->get(['status', 'status_changed_at', 'created_at'])
+            ->each(function ($o) use (&$attention, $vertical, $sla, $now) {
+                $raw = $o->status_changed_at ?: $o->created_at;
+                if (! $raw) return;
+                $since = \Illuminate\Support\Carbon::parse($raw);
+                if ($since->diffInMinutes($now) >= \App\Support\OrderSla::staleMinutes($vertical, $o->status, $sla)) {
+                    $attention++;
+                }
+            });
+
+        // 2) Delivered but the customer hasn't confirmed receipt.
+        $needConfirm = \App\Models\Order::where('tenant_id', $t->id)
+            ->whereNotNull('delivered_at')->whereNull('customer_confirmed_at')
+            ->whereNotIn('status', ['Cancelled', 'Rejected'])->count();
+
+        // Positive stat: confirmed today.
+        $confirmedToday = \App\Models\Order::where('tenant_id', $t->id)
+            ->whereNotNull('customer_confirmed_at')
+            ->where('customer_confirmed_at', '>=', $now->copy()->startOfDay())->count();
+
+        // 3) Quotations awaiting a reply (sent, not yet accepted/declined).
+        $quoteHrs      = (int) $t->setting('quote_followup_hours', 24);
+        $quotesWaiting = \App\Models\Quotation::where('tenant_id', $t->id)->where('status', 'sent')->count();
+        $quotesStale   = \App\Models\Quotation::where('tenant_id', $t->id)->where('status', 'sent')
+            ->where('created_at', '<', $now->copy()->subHours($quoteHrs))->count();
+
+        // 4) Customers likely to reorder: ordered before, nothing recent (simple heuristic).
+        $reorderDays = (int) $t->setting('reorder_days', 30);
+        $reorder = 0;
+        try {
+            $reorder = \App\Models\Order::where('tenant_id', $t->id)
+                ->whereNotIn('status', ['Cancelled', 'Rejected'])
+                ->whereNotNull('customer_phone')
+                ->groupBy('customer_phone')
+                ->havingRaw('COUNT(*) >= 2')
+                ->havingRaw('MAX(created_at) < ?', [$now->copy()->subDays($reorderDays)])
+                ->get(['customer_phone'])->count();
+        } catch (\Throwable $e) {
+            $reorder = 0;
+        }
+
+        // 5) Inventory the bot can't speak to confidently (stale or unknown snapshots).
+        $inv = \App\Models\InventorySnapshot::where('tenant_id', $t->id)
+            ->where(function ($q) use ($now) {
+                $q->where('confidence', \App\Services\Inventory\InventoryState::UNKNOWN)
+                  ->orWhere('observed_at', '<', $now->copy()->subHours(\App\Services\Inventory\InventoryState::ESTIMATED_HOURS));
+            })->count();
+
+        // 6) Quote pipelines that failed today (from the observability traces).
+        $failed = \Illuminate\Support\Facades\DB::table('bot_events')
+            ->where('tenant_id', $t->id)->where('stage', 'quote_pipeline')
+            ->where('detail', 'like', '%fail%')
+            ->where('created_at', '>=', $now->copy()->startOfDay())->count();
+
+        $cards = [
+            ['key' => 'orders_attention', 'icon' => '🔴', 'label' => 'Orders need attention', 'count' => $attention,
+             'tone' => $attention ? 'red' : 'green',
+             'reason' => $attention ? 'Past the response time for their stage' : 'All active orders are within time',
+             'href' => '/panel#orders'],
+            ['key' => 'need_confirm', 'icon' => '🟡', 'label' => 'Deliveries to confirm', 'count' => $needConfirm,
+             'tone' => $needConfirm ? 'amber' : 'green',
+             'reason' => $needConfirm ? "Marked delivered, customer hasn't confirmed receipt" : 'Nothing awaiting confirmation',
+             'href' => '/panel#orders'],
+            ['key' => 'quotes_waiting', 'icon' => '📄', 'label' => 'Quotations awaiting reply', 'count' => $quotesWaiting,
+             'tone' => $quotesStale ? 'amber' : 'blue',
+             'reason' => $quotesStale ? ($quotesStale . ' sent over ' . $quoteHrs . 'h ago, no reply') : 'Sent, not yet accepted or declined',
+             'href' => '/panel#quotations'],
+            ['key' => 'reorder', 'icon' => '🔵', 'label' => 'Likely to reorder', 'count' => $reorder,
+             'tone' => $reorder ? 'blue' : 'green',
+             'reason' => $reorder ? ('Ordered before, nothing in ' . $reorderDays . '+ days') : 'No customers due yet',
+             'href' => '/panel#customers'],
+            ['key' => 'inventory', 'icon' => '⚠️', 'label' => 'Inventory needs a count', 'count' => $inv,
+             'tone' => $inv ? 'amber' : 'green',
+             'reason' => $inv ? 'Stock stale/unknown — bot says "I\'ll confirm" instead of a number' : 'Counted stock is current',
+             'href' => '/panel#products'],
+            ['key' => 'failed_pipelines', 'icon' => '🛠️', 'label' => 'Failed quote pipelines today', 'count' => $failed,
+             'tone' => $failed ? 'red' : 'green',
+             'reason' => $failed ? 'A quotation failed to build or send — check diagnostics' : 'No quotation failures today',
+             'href' => '/panel/diagnostics'],
+        ];
+
+        return response()->json([
+            'ok'           => true,
+            'cards'        => $cards,
+            'positive'     => ['confirmed_today' => $confirmedToday],
+            'generated_at' => $now->toIso8601String(),
+        ]);
+    }
+
     public function operations(Request $r)
     {
         $t    = $r->user()->tenant;

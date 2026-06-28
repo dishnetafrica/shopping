@@ -196,6 +196,41 @@ HTML;
             ->header('Cache-Control', 'no-store');
     }
 
+    /** Today / Needs-attention home screen — the first page built on the shared JS layer. */
+    public function today(Request $request)
+    {
+        $user = $request->user();
+        if (! $user || ! $user->tenant_id) {
+            return redirect('/app/login');
+        }
+        $path = resource_path('panel/today.html');
+        if (! is_file($path)) {
+            abort(500, 'Today asset missing.');
+        }
+        return response($this->brandize(file_get_contents($path), $user->tenant), 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
+    }
+
+    /**
+     * Serve a shared front-end JS module (api.js / utils.js / modal.js). These live under resources/
+     * (not public/), so they need a route. Whitelisted filenames only — no brandize, raw JS.
+     */
+    public function shared(Request $request, string $file)
+    {
+        $allowed = ['api.js', 'utils.js', 'modal.js'];
+        if (! in_array($file, $allowed, true)) {
+            abort(404);
+        }
+        $path = resource_path('panel/shared/' . $file);
+        if (! is_file($path)) {
+            abort(404);
+        }
+        return response(file_get_contents($path), 200)
+            ->header('Content-Type', 'application/javascript; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
+    }
+
     /** The live Chats inbox (new screen the old panel never had). */
     public function chats(Request $request)
     {
