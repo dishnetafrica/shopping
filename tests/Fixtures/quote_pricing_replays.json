@@ -1,0 +1,11 @@
+[
+  {
+    "id": "prod-EUR-Q260628",
+    "source": "production",
+    "note": "EuroPearl 28 Jun 2026 — export quote to Juba. Bot had USD rate (3675) + SS markup configured but quoted plain UGX 14,000,000, applied no markup, invented a bulk discount, and issued the quote twice.",
+    "tenant_settings": { "usdUgx": 3675, "ssMarkupPct": 25 },
+    "line": { "name": "A4 Photocopier Paper", "qty": 200, "ugx_price": 70000 },
+    "customer_text": "Send quotation on ra enterprises, juba south sudan",
+    "expected": { "currency": "USD", "unit_usd": 24.0, "total_usd": 4800.0, "south_sudan": true }
+  }
+]

@@ -102,7 +102,7 @@ class AiBrain
         // 3b. PDF quotation — driven by an explicit <<QUOTE {json}>> line the model emits ONLY once
         //     it has the specific item(s) + quantity (mirrors the ORDER flow). This replaces the old
         //     heuristic that guessed items from recent messages and produced wrong quotations.
-        $cap       = $this->captureQuote($tenant, $convo, $from, $reply, $gateway);
+        $cap       = $this->captureQuote($tenant, $convo, $from, $text, $reply, $gateway);
         $reply     = $cap['reply'];
         $quoteSent = $cap['sent'];
 
@@ -112,9 +112,11 @@ class AiBrain
             if ($calc !== '') $reply = trim($reply) . "\n\n" . $calc;
         }
 
-        // 4. send + log exactly like any other bot reply
-        $gateway->sendText($tenant->whatsapp_instance, $from, $reply);
-        MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $reply, null, null, ['via' => 'ai']);
+        // 4. send + log exactly like any other bot reply (skip when a sub-step already sent it)
+        if (trim($reply) !== '') {
+            $gateway->sendText($tenant->whatsapp_instance, $from, $reply);
+            MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $reply, null, null, ['via' => 'ai']);
+        }
 
         // 4b. menu files (restaurant) — send the food/drinks menu image or PDF on request.
         $menuSent = $this->maybeSendMenu($tenant, $from, $text, $gateway);
@@ -275,6 +277,10 @@ class AiBrain
         $svc = app(\App\Services\Bot\PriceListService::class);
         if (! $svc->available() || ! method_exists($gateway, 'sendDocument')) return false;
 
+        // Anti-spam: don't re-send the price list if we already sent it to this customer recently.
+        $plKey = "pricelist_sent:{$tenant->id}:{$from}";
+        if (Cache::get($plKey)) return false;
+
         $flag = $tenant->setting('price_list_enabled', null);
         if ($flag === null) {
             $count = \App\Models\Product::withoutGlobalScopes()
@@ -310,6 +316,7 @@ class AiBrain
         try {
             $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], $caption);
             MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', '[price-list] ' . $doc['fileName'], null, null, ['via' => 'ai', 'kind' => 'price_list']);
+            Cache::put($plKey, 1, now()->addMinutes(10));
         } catch (\Throwable $e) {
             Log::warning('AiBrain price-list send failed: ' . $e->getMessage());
             return false;
@@ -524,7 +531,7 @@ class AiBrain
         return $out;
     }
 
-    private function captureQuote(Tenant $tenant, Conversation $convo, string $from, string $reply, WhatsAppGateway $gateway): array
+    private function captureQuote(Tenant $tenant, Conversation $convo, string $from, string $text, string $reply, WhatsAppGateway $gateway): array
     {
         $pos = stripos($reply, '<<QUOTE');
         if ($pos === false) return ['reply' => $reply, 'sent' => false];
@@ -549,19 +556,54 @@ class AiBrain
             $matched = array_filter($quote['lines'], fn ($l) => ! empty($l['matched']));
             if (! $matched) return ['reply' => $clean, 'sent' => false];
 
+            // Currency / export pricing — SAME formula as the panel (CurrencyPricer). Quote in USD when
+            // the customer asks for USD/export or ships to South Sudan; the SS markup (per-client or
+            // tenant default) is applied. The UGX base prices come from OUR catalogue, never the LLM.
+            $pricer = app(\App\Services\Bot\Pricing\CurrencyPricer::class);
+            $ss     = $pricer->isSouthSudan($tenant, $from, $text);
+            $meta   = null;
+            if ($pricer->shouldQuoteUsd($tenant, $from, $text)) {
+                $res   = $pricer->toUsd($tenant, $from, $quote);
+                $quote = $res['quote'];
+                $meta  = $res['meta'];
+            }
+
+            // De-duplicate: don't issue a second PDF for the exact same cart we just quoted this
+            // customer — adding an address or saying "confirm" must not spawn a new quote number.
+            $sig      = $pricer->signature($quote);
+            $cacheKey = "lastquote:{$tenant->id}:{$from}";
+            $last     = Cache::get($cacheKey);
+            if (is_array($last) && ($last['sig'] ?? '') === $sig) {
+                $no  = (string) ($last['no'] ?? '');
+                $msg = $clean . ($no !== '' ? "\n\nYour quotation {$no} for the same items is still valid — reply \"confirm\" to proceed." : '');
+                return ['reply' => $msg, 'sent' => true];
+            }
+
             $doc = $svc->generate($tenant, $from, (string) ($convoRow->customer_name ?? ''), $quote);
             if (! $doc) return ['reply' => $clean, 'sent' => false];
 
             $cur     = $doc['currency'];
-            $caption = "📄 Quotation {$doc['no']} — Total {$cur} " . number_format($doc['total']) . '. Valid '
-                     . (((int) $tenant->setting('quote_validity_days', 14)) ?: 14) . " days. Reply to confirm and we'll arrange delivery.";
+            $amt     = $cur === 'USD' ? number_format((float) $doc['total'], 2) : number_format((float) $doc['total']);
+            $days    = (((int) $tenant->setting('quote_validity_days', 14)) ?: 14);
+            $caption = "📄 Quotation {$doc['no']} — Total {$cur} {$amt}. Valid {$days} days. Reply to confirm"
+                     . (($ss && $cur === 'USD')
+                        ? " — price is ex-Kampala; South Sudan clearance & transport are confirmed after the order."
+                        : " and we'll arrange delivery.");
 
+            // Text first, THEN the document, so the conversation reads in the right order on WhatsApp.
+            if ($clean !== '') {
+                $gateway->sendText($tenant->whatsapp_instance, $from, $clean);
+                MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $clean, null, null, ['via' => 'ai']);
+            }
             $media = $doc['b64'] !== '' ? $doc['b64'] : $doc['url'];
             $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], $caption);
             MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', "[quotation {$doc['no']}] " . $caption, null, null, ['via' => 'ai', 'kind' => 'quotation', 'quote_no' => $doc['no']]);
-            $svc->persist($tenant, $from, (string) ($convoRow->customer_name ?? ''), $quote, $doc, 'bot');
 
-            return ['reply' => $clean, 'sent' => true];
+            $quoteRow = $svc->persist($tenant, $from, (string) ($convoRow->customer_name ?? ''), $quote, $doc, 'bot');
+            if ($meta && $quoteRow) { $quoteRow->meta = $meta; $quoteRow->save(); }
+            Cache::put($cacheKey, ['sig' => $sig, 'no' => $doc['no']], now()->addMinutes(30));
+
+            return ['reply' => '', 'sent' => true];
         } catch (\Throwable $e) {
             Log::warning('AiBrain captureQuote failed: ' . $e->getMessage());
             return ['reply' => $clean, 'sent' => false];
@@ -688,6 +730,14 @@ class AiBrain
         $p .= "- Use COMPANY KNOWLEDGE and FAQ for facts. You may use your general real-world knowledge to explain products (e.g. what GSM or ply means), but never contradict COMPANY KNOWLEDGE.\n";
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
         $p .= "- Each PRODUCT shows a stock tag in [brackets]. Reflect it honestly: \"in stock: N\" → you may say it's available (you can state N); \"usually available — confirm\" → say it's usually available but you'll confirm before placing the order; \"stock unknown — confirm before promising\" → do NOT promise availability, say you'll confirm with the team first; \"OUT OF STOCK\" → tell the customer it's currently unavailable and offer to note it. Never state a stock number that isn't shown as \"in stock: N\".\n";
+        $usdRate = (float) $tenant->setting('usdUgx', 0);
+        if ($usdRate > 0) {
+            $ssPct = (float) $tenant->setting('ssMarkupPct', 0);
+            $rateStr = rtrim(rtrim(number_format($usdRate, 2), '0'), '.');
+            $p .= "- PRICING & CURRENCY: base prices are UGX, and you DO know the exchange rate — 1 USD = {$rateStr} UGX. If the customer asks for a USD price, or mentions export or a South Sudan / Juba destination, you can quote in USD: emit the <<QUOTE>> line as usual and the system converts at this rate"
+                . ($ssPct > 0 ? " and applies the South Sudan markup" : "") . " and sends the PDF. For South Sudan, tell the customer the USD price is ex-Kampala and that clearance & transport are confirmed after the order (not included in the quote). NEVER say you don't have the exchange rate or that it needs confirming — you have it.\n";
+        }
+        $p .= "- Never invent, promise, or imply a discount, \"bulk price\" or \"special price\". Quote the listed prices. If the customer asks for a bulk discount and none is offered, say the price is as listed and offer a formal quotation — the team can review bulk pricing separately. Do not claim a discount exists unless it is actually shown here.\n";
         $p .= "- Some items show \"price on request\" (e.g. jumbo parent reels) — these have no fixed price. Don't guess a figure: capture what they need (type, grade, GSM, quantity, origin) and tell them the team will send a quote.\n";
         $p .= "- Use the recent conversation for context; don't re-ask what the customer already told you.\n";
         $p .= "- Move the customer toward an order: capture quantity and delivery area. For big buyers push cartons; for small buyers offer retail packs.\n";

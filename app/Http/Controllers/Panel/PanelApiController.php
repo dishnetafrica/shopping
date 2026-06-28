@@ -989,29 +989,13 @@ class PanelApiController extends Controller
 
         $quote = app(\App\Services\Bot\OrderCalculator::class)->quote($t, $calc);
 
-        // South Sudan / Juba pricing: one markup % (per-client override, else the
-        // tenant default settings.ssMarkupPct), auto-priced in USD and rounded to the
-        // nearest $0.50. The matched UGX base is converted at the tenant USD rate.
-        // The stored order is kept in marked-up UGX at convert time so Reports stay
-        // in one base currency — here we only change what the customer is quoted.
+        // South Sudan / Juba pricing now lives in one place (CurrencyPricer), shared with the bot so
+        // the two can never drift. Same formula: base × (1 + markup%) ÷ usdUgx, nearest $0.50.
         $usdMeta = null;
         if (strtoupper(trim((string) $r->input('currency', ''))) === 'USD') {
-            $pct  = $this->ssMarkupFor($t, $phone);
-            $rate = (float) $t->setting('usdUgx', 3750);
-            if ($rate <= 0) $rate = 3750;
-            $factor = (1 + $pct / 100) / $rate;
-            $total  = 0.0;
-            foreach ($quote['lines'] as &$ln) {
-                if (empty($ln['matched'])) continue;
-                $unit        = round(((float) $ln['price']) * $factor * 2) / 2; // nearest $0.50
-                $ln['price'] = $unit;
-                $ln['sum']   = $unit * (int) $ln['qty'];
-                $total      += $ln['sum'];
-            }
-            unset($ln);
-            $quote['total']    = round($total, 2);
-            $quote['currency'] = 'USD';
-            $usdMeta = ['usd_rate' => $rate, 'markup_pct' => $pct];
+            $res     = app(\App\Services\Bot\Pricing\CurrencyPricer::class)->toUsd($t, $phone, $quote);
+            $quote   = $res['quote'];
+            $usdMeta = $res['meta'];
         }
 
         $doc   = $svc->generate($t, $phone, $name, $quote);
