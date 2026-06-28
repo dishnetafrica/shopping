@@ -37,7 +37,7 @@
     </div>
     <div id="list"><div class="muted">Loading…</div></div>
     <p class="hint">A count stays “exact” for 12 hours, then fades to “usually available”, then “unknown” after 3 days — recount the fast movers.</p>
-    <p class="foot"><a id="full" href="/panel">← Full panel</a></p>
+    <p class="foot"><a id="full" href="/panel">← Full panel</a> &nbsp;·&nbsp; <a href="/panel/guide" id="guideLink">📖 How it works</a></p>
   </div>
 
   <script src="/panel/shared/api.js"></script>
@@ -45,7 +45,7 @@
   <script>
     var token=(function(){try{return (new URLSearchParams(location.search)).get('token')||'';}catch(e){return '';}})();
     CB.setToken(token);
-    if(token){var fl=document.getElementById('full');if(fl)fl.href='/panel?token='+encodeURIComponent(token);}
+    if(token){var fl=document.getElementById('full');if(fl)fl.href='/panel?token='+encodeURIComponent(token);var gl=document.getElementById('guideLink');if(gl)gl.href='/panel/guide?token='+encodeURIComponent(token);}
     var TONE={exact:'#16a34a',estimated:'#d97706',unknown:'#9ca3af'};
     var LABEL={exact:'Counted',estimated:'Estimated',unknown:'Unknown'};
     var TIMER=null;

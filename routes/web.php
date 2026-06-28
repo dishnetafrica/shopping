@@ -50,6 +50,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/setup', [SellerPanelController::class, 'setup']);
     Route::get('/panel/today', [SellerPanelController::class, 'today']);
     Route::get('/panel/inventory-count', [SellerPanelController::class, 'inventory']);
+    Route::get('/panel/guide', [SellerPanelController::class, 'guide']);
     Route::get('/panel/shared/{file}', [SellerPanelController::class, 'shared'])->where('file', '[a-z]+\.js');
     Route::get('/panel/billing', [\App\Http\Controllers\Billing\BillingController::class, 'page']);
 

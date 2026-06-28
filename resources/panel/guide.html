@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How it works — CloudBSS</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--ink:#15181d;--muted:#6b7280;--line:#e6e8ec;--accent:#0B3D22}
+  @media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#181b20;--ink:#eef0f3;--muted:#98a0ab;--line:#262a31;--accent:#3ba776}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:760px;margin:0 auto;padding:22px 16px 56px}
+  h1{font-size:24px;margin:0 0 4px}
+  .lead{color:var(--muted);font-size:14px;margin:0 0 16px}
+  #q{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink);margin-bottom:18px}
+  .sec{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 17px;margin-bottom:12px}
+  .sec h2{font-size:17px;margin:0 0 2px;display:flex;align-items:center;gap:9px}
+  .sec .ic{font-size:19px}
+  .sec .where{font-size:12px;color:var(--accent);font-weight:600;margin:0 0 8px}
+  .sec p{margin:6px 0;color:var(--ink)}
+  .sec .do{margin:8px 0 0;padding-left:18px}
+  .sec .do li{margin:3px 0;color:var(--ink)}
+  .sec .tip{font-size:13px;color:var(--muted);margin-top:8px;border-left:3px solid var(--line);padding-left:10px}
+  .none{color:var(--muted);padding:18px 2px;display:none}
+  .foot{margin-top:20px;font-size:13px}.foot a{color:var(--muted)}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>How your shop works</h1>
+    <p class="lead">A quick guide to what each part of the panel and the WhatsApp bot does. Search below, or scroll through.</p>
+    <input type="search" id="q" placeholder="Search — e.g. quote, stock, follow-up, delivery…">
+    <div id="list">
+
+      <div class="sec" data-kw="bot whatsapp salesperson ai assistant reply price catalogue answer">
+        <h2><span class="ic">🤖</span> Your WhatsApp salesperson</h2>
+        <p>The bot answers customers on WhatsApp for you — it shares your catalogue, quotes prices from your product list, takes orders, and sends quotations, around the clock.</p>
+        <ul class="do">
+          <li>It only quotes prices that exist in your products — it never invents a price or a discount.</li>
+          <li>If it isn't sure of stock, it says “I’ll confirm” instead of guessing (see Stock counts).</li>
+          <li>You can step in any time — when you reply by hand the bot steps back (see Taking over a chat).</li>
+        </ul>
+      </div>
+
+      <div class="sec" data-kw="today needs attention dashboard morning tasks priorities">
+        <h2><span class="ic">📋</span> Today — what needs you</h2>
+        <p class="where">Open: Today</p>
+        <p>Your first screen each morning. It lists the things that need action now — each with the reason and one button.</p>
+        <ul class="do">
+          <li>Orders past their response time, quotations awaiting a reply, deliveries to confirm.</li>
+          <li>Customers likely to reorder, products that need a stock count, and any failed quote sends.</li>
+          <li>Tap a card to jump straight to it. When nothing’s pending it shows “All clear”.</li>
+        </ul>
+      </div>
+
+      <div class="sec" data-kw="orders status new accepted preparing delivered cancel pipeline">
+        <h2><span class="ic">📦</span> Orders &amp; statuses</h2>
+        <p class="where">Open: Orders</p>
+        <p>Each order moves through statuses (New → Accepted → … → Delivered → Customer confirmed). Update the status as you work it; the customer is notified at the right steps.</p>
+        <p class="tip">Orders left too long in one status appear on Today so nothing slips.</p>
+      </div>
+
+      <div class="sec" data-kw="quotation quote pdf price edit resend convert archive">
+        <h2><span class="ic">📄</span> Quotations</h2>
+        <p class="where">Open: Quotations</p>
+        <p>The bot can send a customer a price quote as a PDF. In the panel, tap <b>View</b> on any quote to:</p>
+        <ul class="do">
+          <li>See the line items and totals; <b>edit</b> quantities or prices (this rebuilds the PDF, same quote number).</li>
+          <li><b>Resend</b> it, <b>Convert</b> it to an order, or <b>Archive</b> it.</li>
+          <li>Accepted/converted quotes are read-only — make a new quote to change them.</li>
+        </ul>
+      </div>
+
+      <div class="sec" data-kw="inventory stock count exact available confirm quantity recount">
+        <h2><span class="ic">📊</span> Stock counts</h2>
+        <p class="where">Open: Today → Count, or Stock count</p>
+        <p>Record how much you have of each product. A counted item tells customers a real number (“17 available”); an uncounted one makes the bot say “I’ll confirm”.</p>
+        <ul class="do">
+          <li>Type the quantity, press <b>Save</b> — that’s it.</li>
+          <li>A count stays exact for 12 hours, then “usually available”, then “unknown” after 3 days. Recount fast movers.</li>
+          <li>Use “Needs a count only” to see what’s gone stale.</li>
+        </ul>
+      </div>
+
+      <div class="sec" data-kw="lead follow up followup catalogue quiet reengage re-engage reminder">
+        <h2><span class="ic">🔁</span> Lead follow-up</h2>
+        <p class="where">Turn on: Settings → Lead follow-up</p>
+        <p>If a customer asks something then goes quiet, the bot can send your catalogue once after a few minutes to win them back.</p>
+        <ul class="do">
+          <li>Tick the box to enable; set how many minutes to wait and an optional catalogue link.</li>
+          <li>It follows up <b>once</b>, never while you’re handling the chat, and only with warm leads (unless you widen it).</li>
+        </ul>
+      </div>
+
+      <div class="sec" data-kw="customers profiles contacts notes pricing tier reorder">
+        <h2><span class="ic">👥</span> Customers</h2>
+        <p class="where">Open: Customers</p>
+        <p>Profiles for people who message you — name, notes, and pricing details. Used to personalise quotes and follow-ups, and to spot who’s due to reorder.</p>
+      </div>
+
+      <div class="sec" data-kw="products catalogue import csv add price photo keyword">
+        <h2><span class="ic">🛒</span> Products &amp; catalogue</h2>
+        <p class="where">Open: Products</p>
+        <p>Your product list powers everything — the bot’s answers, prices, and quotes.</p>
+        <ul class="do">
+          <li>Add products one by one, or import in bulk (Products → Import) using a CSV/ZIP.</li>
+          <li>Keep names clear and prices current — the bot quotes exactly what’s here.</li>
+        </ul>
+      </div>
+
+      <div class="sec" data-kw="delivery confirm tracking receipt rating reminder">
+        <h2><span class="ic">🚚</span> Delivery confirmation</h2>
+        <p>When an order is delivered, the customer gets a link to confirm receipt and rate it. If they don’t, the bot sends one polite reminder. Unconfirmed deliveries show on Today.</p>
+      </div>
+
+      <div class="sec" data-kw="takeover human handover reply by hand pause bot resume hi nudge">
+        <h2><span class="ic">✋</span> Taking over a chat</h2>
+        <p>When you reply to a customer by hand, the bot steps back so you don’t both answer.</p>
+        <ul class="do">
+          <li>A quick “hi” to wake a silent bot pauses it only briefly — it resumes for the next question.</li>
+          <li>A real reply hands the chat to you; the bot resumes automatically once you’re done.</li>
+        </ul>
+      </div>
+
+      <div class="sec" data-kw="settings shop details pricing currency delivery fee toggle photos suggestions">
+        <h2><span class="ic">⚙️</span> Settings</h2>
+        <p class="where">Open: Settings</p>
+        <p>Your shop details, pricing and currency, delivery fees, bot toggles (product photos, item suggestions), and Lead follow-up.</p>
+        <p class="tip">Bot toggles apply instantly; other fields need the Save button.</p>
+      </div>
+
+      <div class="sec" data-kw="help support contact account manager problem stuck">
+        <h2><span class="ic">💬</span> Need a hand?</h2>
+        <p>If something looks wrong or you’re unsure, contact your CloudBSS account manager — note the order or quote number and what you expected to happen.</p>
+      </div>
+
+    </div>
+    <p class="none" id="none">No section matches that. Try a simpler word like “quote”, “stock” or “delivery”.</p>
+    <p class="foot"><a id="full" href="/panel">← Back to panel</a></p>
+  </div>
+
+  <script>
+    (function(){
+      var token=''; try{token=(new URLSearchParams(location.search)).get('token')||'';}catch(e){}
+      if(token){var fl=document.getElementById('full');if(fl)fl.href='/panel?token='+encodeURIComponent(token);}
+      var secs=[].slice.call(document.querySelectorAll('.sec'));
+      var none=document.getElementById('none');
+      document.getElementById('q').addEventListener('input',function(){
+        var t=this.value.toLowerCase().trim(), shown=0;
+        secs.forEach(function(s){
+          var hay=(s.textContent+' '+(s.getAttribute('data-kw')||'')).toLowerCase();
+          var ok=!t||hay.indexOf(t)>=0; s.style.display=ok?'':'none'; if(ok)shown++;
+        });
+        none.style.display=shown?'none':'block';
+      });
+    })();
+  </script>
+</body>
+</html>

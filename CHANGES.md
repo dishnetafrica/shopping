@@ -1,30 +1,15 @@
 # CloudBSS — full session snapshot (GitHub-ready)
 
-Extract at the repo root (paths already match) and commit. This is the **current** state of every file
-touched this session — it supersedes the earlier `cloudbss-changes` bundle and is safe to extract over
-the repo whatever you've already pushed. PHP lint-clean; JS `node --check`-clean.
+Extract at the repo root and commit. Current state of every file touched this session; safe to extract
+over the repo whatever you've pushed. PHP lint-clean; JS node --check-clean. No migrations.
 
-## Features included
-- **Handover nudge** — short "hi" pauses the bot briefly, a real reply takes over fully.
-- **Quotation detail UI** + **PDF streaming fix** (no `/storage` symlink; regenerates if wiped).
-- **Today assistant** (task list) + **shared JS layer** (`resources/panel/shared/*`).
-- **Vertical nudge fix** — manufacturers no longer get restaurant prompts; staleness watchdog disabled.
-- **Lead follow-up** (`bot:lead-followup`) + its **Settings UI card** (enable/delay/link/warm-lead).
-- **Inventory count screen** (`/panel/inventory-count`) — record counts → bot gives real numbers.
+Includes: handover nudge · quotation detail UI + PDF streaming fix · Today assistant + shared JS layer ·
+vertical nudge fix (watchdog disabled) · lead follow-up + Settings card · inventory count screen ·
+**in-panel seller guide (`/panel/guide`)**, linked from Today and the stock screen.
 
-## Files
-- app/Support/AgentNudge.php
-- app/Jobs/ProcessIncomingMessage.php
-- app/Http/Controllers/Panel/PanelApiController.php
-- app/Http/Controllers/Panel/SellerPanelController.php
-- app/Console/Commands/{OkeNudgeCommand,OrderStalenessWatchdogCommand,LeadFollowUpCommand}.php
-- routes/web.php · routes/console.php
-- resources/panel/seller.html · today.html · inventory-count.html
-- resources/panel/shared/{api,utils,modal}.js
-- tests/Unit/Support/AgentNudgeTest.php
+Post-deploy: scheduler has `orders:pending-digest` + `bot:lead-followup`, NOT `orders:staleness-watchdog`;
+`php artisan storage:link` once if other /storage assets need it; lead follow-up stays OFF until a
+tenant's `reengage_followup.enabled = true` (Settings → Lead follow-up).
 
-## Post-deploy
-- No migrations added.
-- Scheduler should have `orders:pending-digest` + `bot:lead-followup`, NOT `orders:staleness-watchdog`.
-- `php artisan storage:link` once if other `/storage` assets need it (the quote PDF no longer does).
-- Lead follow-up stays OFF until a tenant's `reengage_followup.enabled = true` (Settings → Lead follow-up).
+New page route added: `/panel/guide`. Optional: add a "Guide" link in the main panel nav (not done here
+to avoid touching the big nav block — say the word and I'll add it).
