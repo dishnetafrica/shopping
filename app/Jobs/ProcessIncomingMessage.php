@@ -80,7 +80,14 @@ class ProcessIncomingMessage implements ShouldQueue
             $txt   = trim((string) $this->incoming['text']);
             $state = is_array($convo->state) ? $convo->state : [];
             if ($txt !== '' && $this->norm($txt) !== ($state['lg_last_out'] ?? '')) {
-                $mins = (int) $tenant->setting('human_takeover_minutes', 60);
+                $full  = (int) $tenant->setting('human_takeover_minutes', 60);
+                $nudge = (int) $tenant->setting('human_nudge_minutes', 3);
+                // A short greeting ("hi") is a nudge to wake a silent bot, not a real takeover: pause
+                // only briefly so the bot resumes for the customer's NEXT question. A substantive reply
+                // — or a human already engaged in this chat — keeps the full takeover window.
+                $alreadyEngaged = (int) ($state['human_until'] ?? 0) > time();
+                $isNudge = \App\Support\AgentNudge::is($txt) && ! $alreadyEngaged;
+                $mins = $isNudge ? $nudge : $full;
                 if ($mins > 0) {
                     $state['human_until'] = time() + $mins * 60;
                     $convo->state = $state;
@@ -89,7 +96,7 @@ class ProcessIncomingMessage implements ShouldQueue
                 $convo->save();
                 MessageLog::record($this->tenantId, $this->incoming['from'], $this->incoming['instance'], 'out', 'human', $txt);
                 BotTrace::log($this->tenantId, (string) ($this->incoming['trace'] ?? $mid), (string) $this->incoming['from'],
-                    'manual_takeover', 'owner replied by hand — bot paused ' . ((int) $tenant->setting('human_takeover_minutes', 60)) . 'm');
+                    'manual_takeover', ($isNudge ? 'nudge' : 'takeover') . ' — bot paused ' . $mins . 'm');
             }
             return; // never auto-reply to our own number
         }
