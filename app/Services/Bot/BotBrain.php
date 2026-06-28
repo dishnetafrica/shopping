@@ -37,11 +37,12 @@ class BotBrain
         // Merchant Conversation Mode: authorized owners/managers operate the shop from WhatsApp.
         // Returns a reply for admin/confirm/self-check messages, or null to fall through to the
         // normal customer flow (so merchants can still order, and customers never see this lane).
+        $cartBefore = is_array($convo->cart) ? $convo->cart : [];   // snapshot for the shadow experiment
         $merchant = app(\App\Services\Bot\Merchant\MerchantAssistant::class)->handle($tenant, $convo, $text);
         if ($merchant !== null) return $merchant;
 
         $reply = $this->appendWebsite($tenant, $this->respondInner($tenant, $convo, $text));
-        $this->orderShadow($tenant, $convo, $text, $reply);   // Order Engine shadow telemetry (no behavior change)
+        $this->orderShadow($tenant, $convo, $text, $reply, $cartBefore);   // Order Engine shadow (no behavior change)
         return $reply;
     }
 
@@ -50,11 +51,12 @@ class BotBrain
      * alongside the live reply, so we get production evidence before any cutover. Fully isolated —
      * never affects the customer's reply.
      */
-    private function orderShadow(Tenant $tenant, Conversation $convo, string $text, string $reply): void
+    private function orderShadow(Tenant $tenant, Conversation $convo, string $text, string $reply, array $cartBefore): void
     {
         try {
+            $cartAfter = is_array($convo->cart) ? $convo->cart : [];
             app(\App\Apps\Orders\Observatory\OrderObservatory::class)
-                ->record($tenant->id, $convo->id ?? null, $text, $reply);
+                ->record($tenant->id, $convo->id ?? null, $text, $reply, $cartBefore, $cartAfter);
         } catch (\Throwable $e) {
             // telemetry is non-critical; never break the customer flow
         }

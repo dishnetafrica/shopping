@@ -61,6 +61,7 @@ class OkeServiceProvider extends ServiceProvider
             new \App\Apps\Orders\Observatory\OrderObservatory(
                 $app->make(\App\Apps\Orders\MessageRouter::class),
                 $app->make(\App\Apps\Orders\Extract\EntityExtractor::class),
+                $app->make(\App\Apps\Orders\Experiment\DiffClassifier::class),
             ));
     }
 }
