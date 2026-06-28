@@ -49,6 +49,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/leads', [SellerPanelController::class, 'leads']);
     Route::get('/panel/setup', [SellerPanelController::class, 'setup']);
     Route::get('/panel/today', [SellerPanelController::class, 'today']);
+    Route::get('/panel/inventory-count', [SellerPanelController::class, 'inventory']);
     Route::get('/panel/shared/{file}', [SellerPanelController::class, 'shared'])->where('file', '[a-z]+\.js');
     Route::get('/panel/billing', [\App\Http\Controllers\Billing\BillingController::class, 'page']);
 
@@ -68,6 +69,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('returns',    [PanelApiController::class, 'returns']);
         Route::get('today',      [PanelApiController::class, 'today']);   // Today / Needs-attention home screen
         Route::get('quotation-pdf', [PanelApiController::class, 'quotationPdf']); // stream PDF (no /storage symlink)
+        Route::get('inventory-list',  [PanelApiController::class, 'inventoryList']);
+        Route::get('inventory-count', [PanelApiController::class, 'inventoryCount']);
 
         // Delivery Management V2 (D1/D2)
         Route::get('delivery/quote',         [\App\Http\Controllers\Panel\DeliveryController::class, 'quote']);
@@ -193,6 +196,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('rider-delete', [PanelApiController::class, 'riderDel']);
         Route::get('return',          [PanelApiController::class, 'returnSave']);
         Route::get('settings-save',   [PanelApiController::class, 'settingsSave']);
+        Route::get('reengage-save',   [PanelApiController::class, 'reengageSave']);
         Route::post('branding-save',  [PanelApiController::class, 'brandingSave']);
         Route::get('bot-toggle',      [PanelApiController::class, 'botToggle']);
 

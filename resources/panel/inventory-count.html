@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock count — CloudBSS</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--ink:#15181d;--muted:#6b7280;--line:#e6e8ec;--accent:#0B3D22}
+  @media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#181b20;--ink:#eef0f3;--muted:#98a0ab;--line:#262a31}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:720px;margin:0 auto;padding:20px 16px 48px}
+  h1{font-size:23px;margin:0 0 2px}
+  .lead{color:var(--muted);font-size:13px;margin:0 0 14px}
+  .bar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .bar input[type=search]{flex:1;min-width:160px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)}
+  .bar label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+  .row{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-left-width:4px;border-radius:12px;padding:11px 12px;margin-bottom:8px}
+  .row .body{flex:1;min-width:0}
+  .row .nm{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .meta{font-size:12px;color:var(--muted);margin-top:2px}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px}
+  .qin{width:74px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:right;background:var(--card);color:var(--ink)}
+  .save{border:0;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:650;color:#fff;background:var(--accent);cursor:pointer}
+  .muted{color:var(--muted);padding:22px 2px}.err{color:#dc2626;padding:18px 2px}
+  .foot{margin-top:18px;font-size:13px}.foot a{color:var(--muted)}
+  .hint{font-size:12px;color:var(--muted);margin:10px 2px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Stock count</h1>
+    <p class="lead" id="lead">Record what you have. A counted item shows a real number to customers; uncounted ones say “I’ll confirm”.</p>
+    <div class="bar">
+      <input type="search" id="q" placeholder="Search product or SKU…">
+      <label><input type="checkbox" id="needs"> Needs a count only</label>
+    </div>
+    <div id="list"><div class="muted">Loading…</div></div>
+    <p class="hint">A count stays “exact” for 12 hours, then fades to “usually available”, then “unknown” after 3 days — recount the fast movers.</p>
+    <p class="foot"><a id="full" href="/panel">← Full panel</a></p>
+  </div>
+
+  <script src="/panel/shared/api.js"></script>
+  <script src="/panel/shared/utils.js"></script>
+  <script>
+    var token=(function(){try{return (new URLSearchParams(location.search)).get('token')||'';}catch(e){return '';}})();
+    CB.setToken(token);
+    if(token){var fl=document.getElementById('full');if(fl)fl.href='/panel?token='+encodeURIComponent(token);}
+    var TONE={exact:'#16a34a',estimated:'#d97706',unknown:'#9ca3af'};
+    var LABEL={exact:'Counted',estimated:'Estimated',unknown:'Unknown'};
+    var TIMER=null;
+
+    function badge(c){var col=TONE[c]||'#9ca3af';return '<span class="badge" style="background:'+col+'22;color:'+col+'">'+ (LABEL[c]||c) +'</span>';}
+
+    function rowHtml(r){
+      var col=TONE[r.confidence]||'#9ca3af';
+      var qv=(r.qty==null?'':r.qty);
+      return '<div class="row" id="row'+r.id+'" style="border-left-color:'+col+'">'
+        +'<div class="body"><div class="nm">'+CB.esc(r.name)+'</div>'
+        +'<div class="meta" id="meta'+r.id+'">'+badge(r.confidence)+' '+CB.esc(r.line||'')+(r.last?(' · counted '+CB.esc(r.last)):'')+'</div></div>'
+        +'<input class="qin" id="q'+r.id+'" type="number" min="0" inputmode="numeric" value="'+qv+'" placeholder="qty">'
+        +'<button class="save" onclick="saveCount('+r.id+')">Save</button></div>';
+    }
+
+    async function saveCount(id){
+      var el=document.getElementById('q'+id); if(!el)return;
+      var v=el.value; if(v===''){CB.toast('Enter a quantity');return;}
+      var d=await CB.api('/papi/inventory-count',{id:id,qty:v});
+      if(d&&d.ok){
+        var meta=document.getElementById('meta'+id);
+        if(meta)meta.innerHTML=badge(d.confidence)+' '+CB.esc(d.line||'')+' · counted just now';
+        var row=document.getElementById('row'+id);
+        if(row)row.style.borderLeftColor=TONE[d.confidence]||'#9ca3af';
+        CB.toast('Saved ✓');
+      } else CB.toast((d&&d.error)||'Save failed');
+    }
+
+    function load(){
+      document.getElementById('list').innerHTML='<div class="muted">Loading…</div>';
+      var q=document.getElementById('q').value||'';
+      var needs=document.getElementById('needs').checked?'1':'';
+      CB.api('/papi/inventory-list',{q:q,needs:needs}).then(function(d){
+        var box=document.getElementById('list');
+        if(!d||!d.ok){box.innerHTML='<div class="err">Could not load.</div>';return;}
+        document.getElementById('lead').textContent=d.need_count
+          ? (d.need_count+' product'+(d.need_count===1?'':'s')+' need a count. Counted items show a real number to customers.')
+          : 'All shown products have a recent count.';
+        if(!d.rows.length){box.innerHTML='<div class="muted">No products'+(needs?' need a count right now.':' found.')+'</div>';return;}
+        box.innerHTML=d.rows.map(rowHtml).join('') + (d.limited?'<div class="hint">Showing the first 400 — use search to narrow.</div>':'');
+      });
+    }
+    document.getElementById('q').addEventListener('input',function(){clearTimeout(TIMER);TIMER=setTimeout(load,300);});
+    document.getElementById('needs').addEventListener('change',load);
+    load();
+  </script>
+</body>
+</html>

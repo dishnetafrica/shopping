@@ -215,6 +215,17 @@ class PanelApiController extends Controller
             'faq'             => array_values($s['faq'] ?? ($isMfr ? \App\Support\BrandDefaults::faq() : [])),
             'brands'          => array_values($s['brands'] ?? ($isMfr ? \App\Support\BrandDefaults::brands((string) ($s['theme_accent'] ?? '#103A8C')) : [])),
             'combos'          => array_values($s['combos'] ?? []),
+            'reengage'        => (function () use ($s) {
+                $c = (array) ($s['reengage_followup'] ?? []);
+                return [
+                    'enabled'      => (bool) ($c['enabled'] ?? false),
+                    'delay_min'    => (int) ($c['delay_min'] ?? 10),
+                    'max_min'      => (int) ($c['max_min'] ?? 180),
+                    'require_lead' => (bool) ($c['require_lead'] ?? true),
+                    'link'         => (string) ($c['link'] ?? ''),
+                    'message'      => (string) ($c['message'] ?? ''),
+                ];
+            })(),
             'categoryGroups'  => (object) ($s['category_groups'] ?? []),
             'menuFiles'       => array_values($s['menu_files'] ?? []),
             'catalogFiles'    => array_values($s['catalog_files'] ?? []),
@@ -381,7 +392,7 @@ class PanelApiController extends Controller
                 'label'  => $names[$s->product_id] ?? ('Product #' . $s->product_id),
                 'detail' => $obs ? ('Last counted ' . $obs->diffForHumans()) : 'Never counted',
                 'reason' => 'Bot can\'t quote a number — it says "I\'ll confirm"',
-                'action' => ['label' => 'Count', 'href' => '/panel#products'],
+                'action' => ['label' => 'Count', 'href' => '/panel/inventory-count'],
             ];
         }
 
@@ -472,6 +483,60 @@ class PanelApiController extends Controller
         $h = intdiv($m, 60); $mm = $m % 60;
         if ($h < 24) return $h . 'h' . ($mm ? ' ' . $mm . 'm' : '');
         return intdiv($h, 24) . 'd';
+    }
+
+    /** Products with their current stock confidence — for the count screen. */
+    public function inventoryList(Request $r)
+    {
+        $t     = $r->user()->tenant;
+        $q     = trim((string) $r->query('q', ''));
+        $needs = in_array((string) $r->query('needs', ''), ['1', 'true', 'on', 'yes'], true);
+
+        $query = \App\Models\Product::withoutGlobalScopes()
+            ->where('tenant_id', $t->id)->whereNull('archived_at')->where('active', true);
+        if ($q !== '') {
+            $query->where(function ($w) use ($q) {
+                $w->where('name', 'like', "%{$q}%")->orWhere('sku', 'like', "%{$q}%");
+            });
+        }
+        $products = $query->orderBy('display_order')->orderBy('name')->limit(400)->get();
+
+        $inv = new \App\Services\Inventory\InventoryState();
+        $inv->prime($products);
+
+        $rows = [];
+        $need = 0;
+        foreach ($products as $p) {
+            $st = $inv->state($p);
+            if ($st['state'] !== \App\Services\Inventory\InventoryState::EXACT) $need++;
+            if ($needs && $st['state'] === \App\Services\Inventory\InventoryState::EXACT) continue;
+            $rows[] = [
+                'id'         => $p->id,
+                'name'       => $p->name,
+                'sku'        => (string) ($p->sku ?? ''),
+                'unit'       => (string) ($p->unit_label ?? ''),
+                'confidence' => $st['state'],
+                'qty'        => $st['qty'],
+                'last'       => $st['observed_at'] ? $st['observed_at']->diffForHumans() : null,
+                'line'       => $st['line'],
+            ];
+        }
+        return response()->json(['ok' => true, 'rows' => $rows, 'need_count' => $need, 'shown' => count($rows), 'limited' => $products->count() >= 400]);
+    }
+
+    /** Record a physical count for one product → confidence becomes "exact". */
+    public function inventoryCount(Request $r)
+    {
+        $t  = $r->user()->tenant;
+        $id = (int) $r->query('id');
+        if ((string) $r->query('qty', '') === '') return response()->json(['ok' => false, 'error' => 'qty required'], 422);
+        $p = \App\Models\Product::withoutGlobalScopes()->where('tenant_id', $t->id)->find($id);
+        if (! $p) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        $inv = new \App\Services\Inventory\InventoryState();
+        $inv->recordCount($p, max(0, (int) $r->query('qty')), 'panel');
+        $st = $inv->state($p);
+        return response()->json(['ok' => true, 'id' => $p->id, 'qty' => $st['qty'], 'confidence' => $st['state'], 'line' => $st['line']]);
     }
 
     public function operations(Request $r)
@@ -3918,13 +3983,35 @@ class PanelApiController extends Controller
     {
         $t   = $r->user()->tenant;
         $key = (string) $r->query('key', '');
-        if (! in_array($key, ['combo_recommendations', 'send_product_images'], true)) {
+        if (! in_array($key, ['combo_recommendations', 'send_product_images', 'reengage_followup'], true)) {
             return response()->json(['ok' => false, 'error' => 'bad_key'], 422);
         }
         $on = in_array((string) $r->query('on', '1'), ['1', 'true', 'on', 'yes'], true);
-        $t->putSetting($key, $on);
+        if ($key === 'reengage_followup') {
+            $cfg = (array) $t->setting('reengage_followup', []);
+            $cfg['enabled'] = $on;
+            $t->putSetting('reengage_followup', $cfg);
+        } else {
+            $t->putSetting($key, $on);
+        }
 
         return response()->json(['ok' => true, 'key' => $key, 'on' => $on]);
+    }
+
+    /** Save the lead-follow-up config (delay / link / warm-lead). Enable/disable is via botToggle. */
+    public function reengageSave(Request $r)
+    {
+        if (! $r->user()->canMenu('settings')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        $t   = $r->user()->tenant;
+        $cfg = (array) $t->setting('reengage_followup', []);
+        if ($r->has('enabled'))      $cfg['enabled']      = in_array((string) $r->query('enabled'), ['1', 'true', 'on', 'yes'], true);
+        if ($r->has('delay_min'))    $cfg['delay_min']    = max(1, (int) $r->query('delay_min'));
+        if ($r->has('max_min'))      $cfg['max_min']      = max(2, (int) $r->query('max_min'));
+        if ($r->has('require_lead')) $cfg['require_lead'] = in_array((string) $r->query('require_lead'), ['1', 'true', 'on', 'yes'], true);
+        if ($r->has('link'))         $cfg['link']         = trim((string) $r->query('link'));
+        if ($r->has('message'))      $cfg['message']      = trim((string) $r->query('message'));
+        $t->putSetting('reengage_followup', $cfg);
+        return response()->json(['ok' => true, 'reengage' => $cfg]);
     }
 
     /* ------------------------------------------ Activity Review Inbox (v17) */

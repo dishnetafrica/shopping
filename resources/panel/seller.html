@@ -839,6 +839,20 @@
           </div>
         </div>
         <div class="card">
+          <div class="head">Lead follow-up</div>
+          <div class="body">
+            <div class="mfield"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="setReengage" style="width:auto"> Auto-send the catalogue to a quiet lead</label>
+              <div class="note">If a customer asks something then goes silent, the bot sends your catalogue once. Uses your catalogue files and/or the link below. Turning this on is instant.</div>
+            </div>
+            <div class="mfield"><label>Wait before sending (minutes)</label><input type="number" id="setReengageDelay" min="1" value="10"></div>
+            <div class="mfield"><label>Catalogue link (optional)</label><input type="text" id="setReengageLink" placeholder="https://europearlafrica.com/ep/shop"></div>
+            <div class="mfield"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="setReengageReqLead" style="width:auto"> Only follow up with warm leads</label>
+              <div class="note">On = only people the bot already logged as a lead. Off = anyone who messaged and went quiet.</div>
+            </div>
+            <button class="btn" id="setReengageSave" style="padding:6px 12px">Save follow-up settings</button>
+          </div>
+        </div>
+        <div class="card">
           <div class="head">Branches &amp; inventory</div>
           <div class="body">
             <div class="mfield"><label>Inventory mode</label>
@@ -1135,7 +1149,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   dispatch:'/papi/dispatch',
   riders:'/papi/riders',riderSave:'/papi/rider-save',riderDel:'/papi/rider-delete',importContacts:'/papi/contacts-import',botMode:'/papi/chats/bot-mode',
   ret:'/papi/return',returns:'/papi/returns',
-  settings:'/papi/settings',settingsSave:'/papi/settings-save',brandingSave:'/papi/branding-save',botToggle:'/papi/bot-toggle',
+  settings:'/papi/settings',settingsSave:'/papi/settings-save',brandingSave:'/papi/branding-save',botToggle:'/papi/bot-toggle',reengageSave:'/papi/reengage-save',
   actInbox:'/papi/activity-inbox',actApprove:'/papi/activity-approve',actReject:'/papi/activity-reject',actEdit:'/papi/activity-edit',
   brain:'/papi/brain',brainDiscover:'/papi/brain-discover',
   brainCandidates:'/papi/brain-candidates',brainCandApprove:'/papi/brain-candidate-approve',brainCandDismiss:'/papi/brain-candidate-dismiss',
@@ -3708,7 +3722,7 @@ function applySettings(s){
   if(s.metaDescription!=null)SETTINGS.metaDescription=s.metaDescription;
   if(Array.isArray(s.faq))SETTINGS.faq=s.faq;
   if(Array.isArray(s.brands))SETTINGS.brands=s.brands;
-  if(Array.isArray(s.combos))SETTINGS.combos=s.combos;if(s.categoryGroups)SETTINGS.categoryGroups=s.categoryGroups;if(Array.isArray(s.menuFiles))SETTINGS.menuFiles=s.menuFiles;if(Array.isArray(s.catalogFiles))SETTINGS.catalogFiles=s.catalogFiles;
+  if(Array.isArray(s.combos))SETTINGS.combos=s.combos;if(s.categoryGroups)SETTINGS.categoryGroups=s.categoryGroups;if(Array.isArray(s.menuFiles))SETTINGS.menuFiles=s.menuFiles;if(Array.isArray(s.catalogFiles))SETTINGS.catalogFiles=s.catalogFiles;if(s.reengage)SETTINGS.reengage=s.reengage;
   if(s.lat!=null&&s.lat!=='')STORE.lat=Number(s.lat)||STORE.lat;
   if(s.lng!=null&&s.lng!=='')STORE.lng=Number(s.lng)||STORE.lng;
   if(s.base!=null&&s.base!=='')DELIV.base=Number(s.base)||0;
@@ -3762,6 +3776,22 @@ function settingsInit(){
   if($('setShowCur'))$('setShowCur').checked=SHOW_SWITCHER;
   if($('setComboRec')){$('setComboRec').checked=SETTINGS.comboRec!==false;$('setComboRec').onchange=function(){botToggle('combo_recommendations',this.checked,'Item suggestions');};}
   if($('setSendImg')){$('setSendImg').checked=SETTINGS.sendImg!==false;$('setSendImg').onchange=function(){botToggle('send_product_images',this.checked,'Product photos');};}
+  if($('setReengage')){var RE=SETTINGS.reengage||{};
+    $('setReengage').checked=!!RE.enabled;
+    $('setReengage').onchange=function(){botToggle('reengage_followup',this.checked,'Lead follow-up');};
+    if($('setReengageDelay'))$('setReengageDelay').value=RE.delay_min||10;
+    if($('setReengageLink'))$('setReengageLink').value=RE.link||'';
+    if($('setReengageReqLead'))$('setReengageReqLead').checked=RE.require_lead!==false;
+    if($('setReengageSave'))$('setReengageSave').onclick=async function(){
+      try{var u=EP.reengageSave+'?token='+encodeURIComponent(token)
+        +'&delay_min='+encodeURIComponent($('setReengageDelay').value||10)
+        +'&link='+encodeURIComponent($('setReengageLink').value||'')
+        +'&require_lead='+($('setReengageReqLead').checked?'1':'0');
+        var r=await fetch(u,{cache:'no-store'});var d=await r.json();
+        if(d&&d.ok){SETTINGS.reengage=d.reengage;toast('Follow-up settings saved');}else toast((d&&d.error)||'Save failed');
+      }catch(e){toast('Network error');}
+    };
+  }
   if($('setDiscPct'))$('setDiscPct').value=DISC.pct||'';
   if($('setDiscAmt'))$('setDiscAmt').value=DISC.amt||'';
   (function(){function dn(){var pct=Number($('setDiscPct').value)||0,amt=Number($('setDiscAmt').value)||0;var n=$('setDiscNote');if(!n)return;if(pct<=0&&amt<=0){n.textContent='No discount \u2014 customers pay list price.';return;}var ex=Math.round(5000*(1-pct/100)-amt);if(ex<0)ex=0;n.textContent='Applies to bot + panel. Example: a UGX 5,000 item \u2192 UGX '+ex.toLocaleString('en-US')+'.';}if($('setDiscPct')){$('setDiscPct').oninput=dn;$('setDiscAmt').oninput=dn;dn();}})();
