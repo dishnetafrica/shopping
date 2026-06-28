@@ -1226,6 +1226,116 @@ class PanelApiController extends Controller
         return ['lines' => $lines, 'total' => (float) $q->total, 'currency' => (string) $q->currency];
     }
 
+    /** Read one quotation WITH its line items — so the panel can show what's inside it. */
+    public function quotationShow(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false, 'error' => 'no_tenant'], 403);
+        app(\App\Support\TenantContext::class)->set($t->id);
+
+        $q = \App\Models\Quotation::with('items')->where('tenant_id', $t->id)->find((int) $r->input('id'));
+        if (! $q) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        $url = '';
+        try {
+            if ($q->pdf_path && \Illuminate\Support\Facades\Storage::disk('public')->exists($q->pdf_path)) {
+                $url = \Illuminate\Support\Facades\Storage::disk('public')->url($q->pdf_path);
+            }
+        } catch (\Throwable $e) { /* file may be gone */ }
+
+        $items = [];
+        foreach ($q->items as $it) {
+            $items[] = ['id' => (int) $it->id, 'name' => (string) $it->name, 'qty' => (int) $it->qty,
+                'unit_price' => (float) $it->unit_price, 'line_total' => (float) $it->line_total,
+                'unit_label' => (string) ($it->unit_label ?? '')];
+        }
+
+        return response()->json(['ok' => true, 'quote' => [
+            'id' => (int) $q->id, 'quote_no' => (string) $q->quote_no, 'name' => (string) ($q->customer_name ?? ''),
+            'phone' => (string) $q->customer_phone, 'currency' => (string) $q->currency, 'total' => (float) $q->total,
+            'status' => (string) $q->status, 'source' => (string) $q->source,
+            'valid_until' => optional($q->valid_until)->toDateString(),
+            'order_id' => $q->order_id ? (int) $q->order_id : null, 'url' => $url, 'items' => $items,
+        ]]);
+    }
+
+    /** Edit a quotation's items / customer, recompute the total, and rebuild the PDF (same number). */
+    public function quotationUpdate(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false, 'error' => 'no_tenant'], 403);
+        app(\App\Support\TenantContext::class)->set($t->id);
+
+        $q = \App\Models\Quotation::with('items')->where('tenant_id', $t->id)->find((int) $r->input('id'));
+        if (! $q) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        if ($q->status === 'converted') return response()->json(['ok' => false, 'error' => 'already_converted', 'message' => 'This quotation is already an order and can\'t be edited.'], 422);
+
+        $items = json_decode((string) $r->input('items', '[]'), true);
+        if (! is_array($items) || ! $items) return response()->json(['ok' => false, 'error' => 'no_items', 'message' => 'Add at least one line.'], 422);
+
+        $currency = strtoupper(trim((string) $r->input('currency', $q->currency))) ?: 'UGX';
+        $lines = []; $total = 0.0;
+        foreach ($items as $it) {
+            $name = trim((string) ($it['name'] ?? ''));
+            if ($name === '') continue;
+            $qty  = max(1, (int) ($it['qty'] ?? 1));
+            $unit = max(0, (float) ($it['unit_price'] ?? $it['price'] ?? 0));
+            $sum  = $unit * $qty;
+            $total += $sum;
+            $lines[] = ['name' => $name, 'qty' => $qty, 'price' => $unit, 'sum' => $sum,
+                'unit' => (string) ($it['unit_label'] ?? ''), 'moq' => null, 'image' => '', 'matched' => true];
+        }
+        if (! $lines) return response()->json(['ok' => false, 'error' => 'no_items'], 422);
+
+        $name  = trim((string) $r->input('name', (string) ($q->customer_name ?? '')));
+        $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', (string) $q->customer_phone));
+        $quote = ['lines' => $lines, 'total' => round($total, $currency === 'USD' ? 2 : 0), 'currency' => $currency];
+
+        $url = '';
+        $svc = app(\App\Services\Bot\QuotationService::class);
+        if ($svc->available()) {
+            $doc = $svc->generate($t, $phone, $name, $quote, $q->quote_no);   // keep the same quote number
+            if ($doc) { $q->pdf_path = (string) ($doc['path'] ?? $q->pdf_path); $url = (string) ($doc['url'] ?? ''); }
+        }
+
+        \App\Models\QuotationItem::where('quotation_id', $q->id)->delete();
+        foreach ($lines as $l) {
+            \App\Models\QuotationItem::create(['quotation_id' => $q->id, 'tenant_id' => $t->id,
+                'name' => $l['name'], 'qty' => $l['qty'], 'unit_price' => $l['price'],
+                'line_total' => $l['sum'], 'unit_label' => $l['unit'] ?: null, 'matched' => true]);
+        }
+        $q->customer_name  = $name !== '' ? $name : null;
+        $q->customer_phone = $phone;
+        $q->currency       = $currency;
+        $q->total          = $quote['total'];
+        $q->save();
+
+        return response()->json(['ok' => true, 'total' => (float) $q->total, 'currency' => $currency, 'url' => $url]);
+    }
+
+    /** Delete a quotation and its items. Converted quotations are kept (they're orders now). */
+    public function quotationDelete(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false, 'error' => 'no_tenant'], 403);
+        app(\App\Support\TenantContext::class)->set($t->id);
+
+        $q = \App\Models\Quotation::where('tenant_id', $t->id)->find((int) $r->input('id'));
+        if (! $q) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        if ($q->status === 'converted') return response()->json(['ok' => false, 'error' => 'already_converted', 'message' => 'This quotation became an order; delete the order instead.'], 422);
+
+        try {
+            if ($q->pdf_path && \Illuminate\Support\Facades\Storage::disk('public')->exists($q->pdf_path)) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($q->pdf_path);
+            }
+        } catch (\Throwable $e) { /* best-effort */ }
+
+        \App\Models\QuotationItem::where('quotation_id', $q->id)->delete();
+        $q->delete();
+
+        return response()->json(['ok' => true, 'deleted' => true]);
+    }
+
     public function updateProduct(Request $r)
     {
         $p = Product::find((int) $r->query('row'));

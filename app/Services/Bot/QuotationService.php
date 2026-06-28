@@ -20,13 +20,13 @@ class QuotationService
     }
 
     /** @return array|null ['no'=>, 'b64'=>, 'path'=>, 'url'=>, 'fileName'=>, 'total'=>, 'currency'=>] */
-    public function generate(Tenant $tenant, string $customerPhone, string $customerName, array $quote): ?array
+    public function generate(Tenant $tenant, string $customerPhone, string $customerName, array $quote, ?string $quoteNo = null): ?array
     {
         if (! $this->available()) return null;
         $matched = array_filter($quote['lines'], fn ($l) => $l['matched']);
         if (! $matched) return null;
 
-        $no   = $this->quoteNo($tenant);
+        $no   = $quoteNo ?: $this->quoteNo($tenant);
         $html = $this->html($tenant, $no, $customerPhone, $customerName, $quote);
 
         try {
