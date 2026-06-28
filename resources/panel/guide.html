@@ -24,10 +24,15 @@
   .foot{margin-top:20px;font-size:13px}.foot a{color:var(--muted)}
 </style>
 </head>
-<body>
+<body data-vert="all">
   <div class="wrap">
     <h1>Your shop — quick guide</h1>
-    <p class="lead">What each part of your panel does, and how to use it. Search below, or just scroll.</p>
+    <p class="lead" data-intro="default">What each part of your panel does, and how to use it. Search below, or just scroll.</p>
+    <p class="lead" data-intro="manufacturer" style="display:none">Your assistant handles enquiries, prices, quotes and orders on WhatsApp — set up for selling to businesses. Here’s what each part does.</p>
+    <p class="lead" data-intro="grocery" style="display:none">Your assistant takes orders and answers customers on WhatsApp, alongside your online shop. Here’s what each part does.</p>
+    <p class="lead" data-intro="snacks" style="display:none">Your assistant takes orders and advance bookings on WhatsApp. Here’s what each part does.</p>
+    <p class="lead" data-intro="restaurant" style="display:none">Your assistant shares your menu and takes orders on WhatsApp. Here’s what each part does.</p>
+
     <input type="search" id="q" placeholder="Search — e.g. quote, stock, follow-up, delivery…">
     <div id="list">
 
@@ -47,6 +52,38 @@
         <h2><span class="ic">📦</span> Orders</h2>
         <p class="where">Open: Orders</p>
         <p>See every order and move it along as you work it — accept, prepare, dispatch, deliver. Your customer is kept informed automatically along the way.</p>
+      </div>
+
+      <!-- MANUFACTURER -->
+      <div class="sec" data-vert="manufacturer" data-kw="wholesale pricing tiers carton moq price list business quote bulk">
+        <h2><span class="ic">🏭</span> Wholesale pricing &amp; quotes</h2>
+        <p>Built for selling to businesses. Send buyers a clear price list and tailored quotations for bulk orders, and keep your different price levels in your products so every quote is right.</p>
+        <ul class="do">
+          <li>Share your price list or catalogue straight from a chat.</li>
+          <li>Prepare a quotation for a buyer, then turn it into an order when they accept.</li>
+        </ul>
+      </div>
+
+      <!-- GROCERY -->
+      <div class="sec" data-vert="grocery" data-kw="online shop storefront link delivery fee basket fresh">
+        <h2><span class="ic">🛍️</span> Your online shop &amp; delivery</h2>
+        <p>Customers can browse and order from your online shop as well as over WhatsApp. Set your delivery charges and area so orders arrive priced correctly.</p>
+        <ul class="do">
+          <li>Share your shop link in any chat so customers can browse the full range.</li>
+          <li>Set delivery fees and free-delivery thresholds in Settings.</li>
+        </ul>
+      </div>
+
+      <!-- SNACKS -->
+      <div class="sec" data-vert="snacks" data-kw="advance booking pickup delivery deposit order ahead">
+        <h2><span class="ic">🥡</span> Advance orders &amp; pickup</h2>
+        <p>Take bookings ahead of time with a pickup or delivery date, so you can prepare to order. Confirm the date and any deposit when you take the booking.</p>
+      </div>
+
+      <!-- RESTAURANT -->
+      <div class="sec" data-vert="restaurant" data-kw="menu daily special dishes thali">
+        <h2><span class="ic">🍽️</span> Your menu</h2>
+        <p>Share your menu and today’s specials over WhatsApp and take orders straight from the chat. Keep your dishes and prices current so customers always see what’s available.</p>
       </div>
 
       <div class="sec" data-kw="quotation quote pdf price edit resend convert archive">
@@ -72,7 +109,7 @@
       <div class="sec" data-kw="lead follow up followup catalogue quiet reminder">
         <h2><span class="ic">🔁</span> Lead follow-up</h2>
         <p class="where">Turn on: Settings → Lead follow-up</p>
-        <p>When a customer asks about something but doesn’t come back, your shop can send your catalogue to gently remind them — so warm leads don’t slip away.</p>
+        <p>When a customer asks about something but doesn’t come back, your shop can send your catalogue to gently remind them — so interested buyers don’t slip away.</p>
         <ul class="do">
           <li>Switch it on, choose how long to wait, and pick the catalogue to send.</li>
         </ul>
@@ -90,7 +127,7 @@
         <p>Your product list is the heart of your shop — names, prices, and photos. Add items one by one or import a list in bulk. Keep prices current so every quote is right.</p>
       </div>
 
-      <div class="sec" data-kw="delivery confirm tracking receipt rating">
+      <div class="sec" data-vert="grocery" data-kw="delivery confirm tracking receipt rating">
         <h2><span class="ic">🚚</span> Delivery confirmation</h2>
         <p>After an order is delivered, your customer gets a link to confirm they received it and leave a rating — giving you a clean record and useful feedback.</p>
       </div>
@@ -120,11 +157,27 @@
     (function(){
       var token=''; try{token=(new URLSearchParams(location.search)).get('token')||'';}catch(e){}
       if(token){var fl=document.getElementById('full');if(fl)fl.href='/panel?token='+encodeURIComponent(token);}
+
+      var V=document.body.getAttribute('data-vert')||'all';
+      // intro line for this business type (fall back to default)
+      var intros=[].slice.call(document.querySelectorAll('[data-intro]'));
+      intros.forEach(function(p){p.style.display='none';});
+      var pick=intros.filter(function(p){return p.getAttribute('data-intro')===V;});
+      if(!pick.length)pick=intros.filter(function(p){return p.getAttribute('data-intro')==='default';});
+      pick.forEach(function(p){p.style.display='';});
+
+      // hide sections meant for a different business type
       var secs=[].slice.call(document.querySelectorAll('.sec'));
+      secs.forEach(function(s){
+        var dv=s.getAttribute('data-vert');
+        if(dv && V!=='all' && dv!==V){s.setAttribute('data-x','1');s.style.display='none';}
+      });
+
       var none=document.getElementById('none');
       document.getElementById('q').addEventListener('input',function(){
         var t=this.value.toLowerCase().trim(), shown=0;
         secs.forEach(function(s){
+          if(s.getAttribute('data-x')==='1'){s.style.display='none';return;}
           var hay=(s.textContent+' '+(s.getAttribute('data-kw')||'')).toLowerCase();
           var ok=!t||hay.indexOf(t)>=0; s.style.display=ok?'':'none'; if(ok)shown++;
         });

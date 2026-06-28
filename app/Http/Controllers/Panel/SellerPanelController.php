@@ -239,7 +239,9 @@ HTML;
         if (! is_file($path)) {
             abort(500, 'Guide asset missing.');
         }
-        return response($this->brandize(file_get_contents($path), $user->tenant), 200)
+        $html = file_get_contents($path);
+        $html = str_replace('<body data-vert="all">', '<body data-vert="' . \App\Support\Vertical::of($user->tenant) . '">', $html);
+        return response($this->brandize($html, $user->tenant), 200)
             ->header('Content-Type', 'text/html; charset=UTF-8')
             ->header('Cache-Control', 'no-store');
     }
