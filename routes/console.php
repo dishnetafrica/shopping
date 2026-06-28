@@ -16,3 +16,9 @@ Schedule::command('bot:digest')->hourly()->withoutOverlapping()->onOneServer();
 // separate queue worker needed. onOneServer guards against double-runs if ever scaled out.
 Schedule::command('discovery:auto --new-only --sync')->dailyAt('02:30')->withoutOverlapping(60)->onOneServer();
 Schedule::command('discovery:auto --sync')->weeklyOn(0, '03:00')->withoutOverlapping(120)->onOneServer();
+
+// Owner Knowledge Engine (Phase 1, observe mode)
+//  - Conversational evening nudge: each tenant fires when its local nudge time passes (once/day).
+//  - Projection parity: nightly diagnostic that the Daily Menu projection matches the knowledge store.
+Schedule::command('oke:nudge')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
+Schedule::command('oke:parity')->dailyAt('02:00')->withoutOverlapping()->onOneServer();

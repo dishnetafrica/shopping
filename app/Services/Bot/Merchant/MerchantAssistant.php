@@ -35,6 +35,7 @@ class MerchantAssistant
         if (! MerchantDirectory::isAuthorized($tenant, (string) $convo->customer_phone)) {
             return null;                                            // not a merchant → customer flow
         }
+        $this->observe($tenant, (string) $convo->customer_phone, trim($text));   // OKE observe mode (capture + metrics)
         $t = trim($text);
         $low = mb_strtolower($t);
         $pendingId = data_get($convo->state, 'merchant_pending');
@@ -288,5 +289,20 @@ class MerchantAssistant
     private function clearPending(Conversation $convo): void
     {
         $s = $convo->state ?? []; unset($s['merchant_pending']); $convo->state = $s; $convo->save();
+    }
+
+    /**
+     * OKE observe mode: capture + classify + measure every owner message for the Behavior
+     * Observatory. Best-effort and fully isolated — it never changes or blocks the live merchant
+     * apply-path. The writer cutover (OKE actions driving live changes) is gated on this telemetry.
+     */
+    private function observe(Tenant $tenant, string $phone, string $text): void
+    {
+        try {
+            app(\App\Services\Knowledge\Observatory\ObservingEngine::class)
+                ->ingest($tenant->id, $text, \App\Services\Knowledge\Source::WHATSAPP, $phone);
+        } catch (\Throwable $e) {
+            // observation is non-critical; swallow so the merchant flow is never affected
+        }
     }
 }

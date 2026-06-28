@@ -40,5 +40,16 @@ class OkeServiceProvider extends ServiceProvider
             $app->make(BusinessMemory::class),
             $app->make(ProjectionCoordinator::class),
         ));
+
+        // Behavior Observatory — an OBSERVER of the engine (observe mode). Captures every owner
+        // message + metrics without touching the live apply-path.
+        $this->app->singleton(\App\Services\Knowledge\Observatory\BehaviorObservatory::class);
+        $this->app->singleton(\App\Services\Knowledge\Observatory\MetricsReport::class);
+        $this->app->singleton(\App\Apps\DailyMenu\MenuParity::class);
+        $this->app->singleton(\App\Services\Knowledge\Observatory\ObservingEngine::class, fn ($app) =>
+            new \App\Services\Knowledge\Observatory\ObservingEngine(
+                $app->make(KnowledgeEngine::class),
+                $app->make(\App\Services\Knowledge\Observatory\BehaviorObservatory::class),
+            ));
     }
 }
