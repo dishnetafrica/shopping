@@ -727,16 +727,17 @@ class AiBrain
     {
         $rows = Cache::remember("ai_catalogue:{$tenant->id}", 60, function () use ($tenant) {
             $inv = app(\App\Services\Inventory\InventoryState::class);
-            return Product::withoutGlobalScopes()
+            $products = Product::withoutGlobalScopes()
                 ->where('tenant_id', $tenant->id)->where('active', true)
-                ->orderBy('name')->limit(200)->get()
-                ->map(function ($p) use ($inv) {
-                    $unit = $p->unit_label ? ' per ' . $p->unit_label : '';
-                    $pack = $p->pack_size ? ' (' . (int) $p->pack_size . '/unit)' : '';
-                    $moq  = $p->moq ? ', MOQ ' . (int) $p->moq : '';
-                    $price = ((float) $p->price > 0) ? (string) $p->price : 'price on request';
-                    return "• {$p->name}{$pack} — {$price}{$unit}{$moq} [{$inv->botTag($p)}]";
-                })->all();
+                ->orderBy('name')->limit(200)->get();
+            $inv->prime($products);   // one query for all snapshots
+            return $products->map(function ($p) use ($inv) {
+                $unit = $p->unit_label ? ' per ' . $p->unit_label : '';
+                $pack = $p->pack_size ? ' (' . (int) $p->pack_size . '/unit)' : '';
+                $moq  = $p->moq ? ', MOQ ' . (int) $p->moq : '';
+                $price = ((float) $p->price > 0) ? (string) $p->price : 'price on request';
+                return "• {$p->name}{$pack} — {$price}{$unit}{$moq} [{$inv->botTag($p)}]";
+            })->all();
         });
         return implode("\n", $rows);
     }

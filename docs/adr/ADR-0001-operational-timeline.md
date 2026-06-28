@@ -24,6 +24,7 @@ event_type    string        dotted, past-tense: "order.delivered", "inventory.co
                             "customer.confirmed", "seller.nudged", "shadow.diff_recorded"
 entity_type   string        "order" | "product" | "customer" | "conversation" | ...
 entity_id     string        id of that entity within the tenant
+correlation_id string       chains every event of one workflow (e.g. an order's whole life)
 tenant_id     int           always tenant-scoped
 actor         string        who/what caused it: "customer" | "seller" | "rider" | "bot" |
                             "system:watchdog" | "system:observatory"
@@ -41,6 +42,14 @@ payload       json          small, event-specific facts (no PII beyond what the 
 ### Entity reference
 `(tenant_id, entity_type, entity_id)` is the join key. A timeline query is "give me all events for
 this entity, ordered by `occurred_at`."
+
+### Correlation
+`correlation_id` ties every event of a single workflow into one chain, even across subsystems and
+entities. For an order it is the order number: order.created, kitchen.started, picker.started,
+order.packed, rider.assigned, order.delivered, customer.confirmed_delivery all share
+`correlation_id = ORD-123`. This makes "show me everything that happened for this order" a single
+filter and makes cross-subsystem debugging dramatically easier — without any subsystem changing how
+it stores data.
 
 ### Actor vs source
 - **actor** answers *who* (customer / seller / rider / bot / a named system process).

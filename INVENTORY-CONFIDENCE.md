@@ -1,40 +1,54 @@
-# Inventory Confidence (primitive) + Operational Timeline (ADR)
+# Inventory Confidence (snapshot primitive) + Operational Timeline (ADR)
 
-Two deliverables from the "Blinkit primitives" discussion: one built (a correctness fix), one
-designed (a contract). Nothing speculative.
+Refined per review: confidence lives on an **Inventory Snapshot**, not on `Product`; it **decays**
+with age; the timeline ADR gains `correlation_id`.
 
-## Built — Inventory Confidence
-The bot used to assume availability (`'stock' => $p->stock ?? 1` — unknown became "1, available").
-That's certainty without evidence. Now stock carries **confidence + freshness + source**, and the
-bot's answer changes with what we actually know.
+## Built — Inventory Confidence over snapshots
+The bot used to assume availability (`'stock' => $p->stock ?? 1`). Now belief is an observation with
+three separate things kept apart — the **fact** (quantity), the **confidence**, and the
+**freshness** (observed_at).
 
-| State | When | Bot says |
-|---|---|---|
-| **exact** | counted/adjusted within the freshness window (24h) | "17 available" / "Out of stock" |
-| **estimated** | a known count gone stale, or owner says "usually" | "Usually available (last checked …)" |
-| **unknown** | never counted, or explicitly cleared | "I'll confirm before placing your order" |
+### Snapshot model, not a Product property
+`inventory_snapshots` holds one current row per **(product, location)** — so the same product can
+carry different confidence in the shop, a warehouse, a rider's bag, or a branch. `Product` is
+untouched. (`InventorySnapshot` model + migration `…000020`.)
 
-- Migration `…000020` adds `stock_confidence`, `stock_checked_at`, `stock_source` to `products`
-  (default confidence = **unknown** — honest by default).
-- `App\Services\Inventory\InventoryState` is the only writer: `recordCount()`, `markEstimated()`,
-  `markUnknown()`, `decrementOnSale()` (reduces a *known* count, leaves unknown stock unknown), plus
-  `state()` (derivation) and `botTag()` (catalogue annotation).
-- The AI catalogue now tags each product — `[in stock: 17]` / `[usually available — confirm]` /
-  `[stock unknown — confirm before promising]` / `[OUT OF STOCK]` — and a prompt rule makes the bot
-  reflect it (never state a number that isn't shown as "in stock: N").
-- `InventoryStateTest`: exact states the number; zero → out of stock; stale exact → estimated;
-  unknown → promise nothing; a sale decrements known stock but not unknown. Derivation verified
-  6/6 in-sandbox.
+### Confidence decays automatically
+No one has to "expire" anything — the bot grows cautious on its own as an observation ages:
 
-This is a **primitive**: substitutions, picking, and capacity (all evidence-gated) will consume it
-when their triggers arrive — they aren't built here.
+```
+exact  --(12h)-->  estimated  --(72h)-->  unknown
+```
 
-### Follow-up wiring (noted, not done)
-`BotBrain::searchCatalogue()` still defaults `stock` to 1 internally; that result isn't the
-customer-facing claim, but it should consult `InventoryState` when it next changes for a real reason.
+| State | Bot says |
+|---|---|
+| exact | "17 available" / "Out of stock" |
+| estimated | "Usually available (last checked …)" |
+| unknown | "I'll confirm before placing your order" |
 
-## Designed — Operational Timeline (ADR-0001)
-`docs/adr/ADR-0001-operational-timeline.md`. Defines the event envelope (event_id, event_type,
-entity_type, entity_id, tenant_id, actor, source, occurred_at, payload), identity/idempotency, and a
-mapping of every existing scattered event source into the timeline via read-only adapters. **No code,
-no migration, no bus** — a contract so the eventual unification is intentional and the freeze holds.
+Windows (`EXACT_HOURS`, `ESTIMATED_HOURS`) are parameters on `state()`.
+
+### Service & wiring
+`App\Services\Inventory\InventoryState` is the only writer: `recordCount`, `markEstimated`,
+`markUnknown`, `decrementOnSale` (reduces a *known* count, leaves unknown alone), all per location.
+`state()` derives with decay; `botTag()` annotates the catalogue; `prime()` bulk-loads snapshots so
+the 200-item catalogue costs one query. The AI catalogue shows `[in stock: 17]` /
+`[usually available — confirm]` / `[stock unknown — confirm before promising]` / `[OUT OF STOCK]`,
+and a prompt rule makes the bot reflect it.
+
+### Tests
+`InventoryStateTest`: exact states the number; zero → out of stock; **exact decays to estimated
+after 12h and to unknown after 72h**; never-counted → unknown; sale decrements known but not
+unknown; **locations are independent**. Decay logic verified 6/6 in-sandbox.
+
+## Designed — Operational Timeline (ADR-0001), now with `correlation_id`
+The envelope gains `correlation_id`, which chains every event of one workflow (an order's whole
+life: created → kitchen → picker → packed → rider → delivered → confirmed) under one id
+(`ORD-123`). "Show me everything that happened to this order" becomes a single filter, and
+cross-subsystem debugging gets far easier — still no code, no bus, no migration.
+
+## Documented next states (not built)
+- **Reserved** inventory state: "10 paneer · 7 reserved · 3 available" — prevents over-promising
+  when several customers order at once. Natural once order volume grows; arrives with its evidence.
+- **History**: snapshots are current-belief; the per-observation history is a timeline concern
+  (emit `inventory.counted` events) once the timeline is implemented.
