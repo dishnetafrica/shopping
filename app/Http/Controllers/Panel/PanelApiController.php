@@ -1046,6 +1046,7 @@ class PanelApiController extends Controller
         app(\App\Support\TenantContext::class)->set($t->id);
 
         $rows = \App\Models\Quotation::where('tenant_id', $t->id)
+            ->when((int) $r->input('include_archived', 0) !== 1, fn ($qq) => $qq->where('status', '!=', 'archived'))
             ->orderByDesc('id')->limit(200)->get();
 
         $out = [];
@@ -1268,7 +1269,7 @@ class PanelApiController extends Controller
 
         $q = \App\Models\Quotation::with('items')->where('tenant_id', $t->id)->find((int) $r->input('id'));
         if (! $q) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
-        if ($q->status === 'converted') return response()->json(['ok' => false, 'error' => 'already_converted', 'message' => 'This quotation is already an order and can\'t be edited.'], 422);
+        if (in_array($q->status, ['converted', 'accepted'], true)) return response()->json(['ok' => false, 'error' => 'locked', 'message' => 'An accepted or converted quotation is read-only. Duplicate it to make changes.'], 422);
 
         $items = json_decode((string) $r->input('items', '[]'), true);
         if (! is_array($items) || ! $items) return response()->json(['ok' => false, 'error' => 'no_items', 'message' => 'Add at least one line.'], 422);
@@ -1295,7 +1296,15 @@ class PanelApiController extends Controller
         $svc = app(\App\Services\Bot\QuotationService::class);
         if ($svc->available()) {
             $doc = $svc->generate($t, $phone, $name, $quote, $q->quote_no);   // keep the same quote number
-            if ($doc) { $q->pdf_path = (string) ($doc['path'] ?? $q->pdf_path); $url = (string) ($doc['url'] ?? ''); }
+            if ($doc) {
+                $q->pdf_path = (string) ($doc['path'] ?? $q->pdf_path);
+                $url = (string) ($doc['url'] ?? '');
+                \App\Support\QuotationPipeline::stage($t->id, $phone, 'pdf_generate', true, (string) $q->quote_no, 'edited in panel');
+            } else {
+                \App\Support\QuotationPipeline::stage($t->id, $phone, 'pdf_generate', false, (string) $q->quote_no, 'panel edit regenerate failed');
+            }
+        } else {
+            \App\Support\QuotationPipeline::stage($t->id, $phone, 'pdf_unavailable', false, (string) $q->quote_no);
         }
 
         \App\Models\QuotationItem::where('quotation_id', $q->id)->delete();
@@ -1313,7 +1322,10 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true, 'total' => (float) $q->total, 'currency' => $currency, 'url' => $url]);
     }
 
-    /** Delete a quotation and its items. Converted quotations are kept (they're orders now). */
+    /**
+     * Archive a quotation (default) — preserves reporting, like most CRMs. Hard delete only with
+     * force=1. Converted quotations are never removed (they're orders now).
+     */
     public function quotationDelete(Request $r)
     {
         $t = $r->user()->tenant;
@@ -1322,7 +1334,14 @@ class PanelApiController extends Controller
 
         $q = \App\Models\Quotation::where('tenant_id', $t->id)->find((int) $r->input('id'));
         if (! $q) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
-        if ($q->status === 'converted') return response()->json(['ok' => false, 'error' => 'already_converted', 'message' => 'This quotation became an order; delete the order instead.'], 422);
+        if ($q->status === 'converted') return response()->json(['ok' => false, 'error' => 'already_converted', 'message' => 'This quotation became an order; archive/delete the order instead.'], 422);
+
+        // Default: archive (keep the record + PDF for reporting). Hard delete is opt-in and rare.
+        if ((int) $r->input('force', 0) !== 1) {
+            $q->status = 'archived';
+            $q->save();
+            return response()->json(['ok' => true, 'archived' => true]);
+        }
 
         try {
             if ($q->pdf_path && \Illuminate\Support\Facades\Storage::disk('public')->exists($q->pdf_path)) {

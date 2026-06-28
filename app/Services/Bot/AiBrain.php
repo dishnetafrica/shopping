@@ -216,7 +216,13 @@ class AiBrain
                      . (((int) $tenant->setting('quote_validity_days', 14)) ?: 14) . " days. Reply to confirm and we'll arrange delivery.";
 
             $media = $doc['b64'] !== '' ? $doc['b64'] : $doc['url'];
-            $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], $caption);
+            try {
+                $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], $caption);
+                \App\Support\QuotationPipeline::stage($tenant->id, $from, 'wa_sent', true, (string) $doc['no']);
+            } catch (\Throwable $e) {
+                // The PDF exists and is persisted below — a send failure must not lose the quotation.
+                \App\Support\QuotationPipeline::stage($tenant->id, $from, 'wa_sent', false, (string) $doc['no'], $e->getMessage());
+            }
             MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', "[quotation {$doc['no']}] " . $caption, null, null, ['via' => 'ai', 'kind' => 'quotation', 'quote_no' => $doc['no']]);
             $svc->persist($tenant, $from, (string) ($convoRow->customer_name ?? ''), $quote, $doc, 'bot');
             return true;
@@ -534,19 +540,36 @@ class AiBrain
     private function captureQuote(Tenant $tenant, Conversation $convo, string $from, string $text, string $reply, WhatsAppGateway $gateway): array
     {
         $pos = stripos($reply, '<<QUOTE');
-        if ($pos === false) return ['reply' => $reply, 'sent' => false];
+        if ($pos === false) {
+            // Prime suspect for "said preparing, no PDF": the model promised a quote but never emitted
+            // the machine marker, so nothing was generated. Make that visible.
+            if (preg_match('/\b(quotation|quote|proforma)\b/i', $reply)) {
+                \App\Support\QuotationPipeline::stage($tenant->id, $from, 'marker_missing', false, '', 'reply mentioned a quote but emitted no <<QUOTE>> line');
+            }
+            return ['reply' => $reply, 'sent' => false];
+        }
 
         $clean = trim(substr($reply, 0, $pos));
         if ($clean === '') $clean = 'Sure — preparing your quotation 📄';
 
         try {
             $svc = app(QuotationService::class);
-            if (! $svc->available() || ! method_exists($gateway, 'sendDocument')) return ['reply' => $clean, 'sent' => false];
+            if (! $svc->available()) {
+                \App\Support\QuotationPipeline::stage($tenant->id, $from, 'pdf_unavailable', false, '', 'QuotationService::available() is false (PDF engine not installed?)');
+                return ['reply' => $clean, 'sent' => false];
+            }
+            if (! method_exists($gateway, 'sendDocument')) {
+                \App\Support\QuotationPipeline::stage($tenant->id, $from, 'gateway_no_send', false);
+                return ['reply' => $clean, 'sent' => false];
+            }
 
             $block = substr($reply, $pos);
             $items = $this->extractOrderItems($block);
             $items = array_values(array_filter($items, fn ($i) => $i['query'] !== ''));
-            if (! $items) return ['reply' => $clean, 'sent' => false];
+            if (! $items) {
+                \App\Support\QuotationPipeline::stage($tenant->id, $from, 'no_items_in_marker', false);
+                return ['reply' => $clean, 'sent' => false];
+            }
 
             $convoRow = Conversation::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('customer_phone', $from)->first() ?: $convo;
             $quote = app(OrderCalculator::class)->quote($tenant, $items);
@@ -554,7 +577,10 @@ class AiBrain
             // Guard: only send if at least one line actually matched a priced product. This is what
             // stops the old "wrong items / random products" quotations from going out.
             $matched = array_filter($quote['lines'], fn ($l) => ! empty($l['matched']));
-            if (! $matched) return ['reply' => $clean, 'sent' => false];
+            if (! $matched) {
+                \App\Support\QuotationPipeline::stage($tenant->id, $from, 'no_match', false, '', 'no requested item matched a priced product');
+                return ['reply' => $clean, 'sent' => false];
+            }
 
             // Currency / export pricing — SAME formula as the panel (CurrencyPricer). Quote in USD when
             // the customer asks for USD/export or ships to South Sudan; the SS markup (per-client or
@@ -575,12 +601,17 @@ class AiBrain
             $last     = Cache::get($cacheKey);
             if (is_array($last) && ($last['sig'] ?? '') === $sig) {
                 $no  = (string) ($last['no'] ?? '');
+                \App\Support\QuotationPipeline::stage($tenant->id, $from, 'dedup_skip', true, $no, 'same cart already quoted within 30 min');
                 $msg = $clean . ($no !== '' ? "\n\nYour quotation {$no} for the same items is still valid — reply \"confirm\" to proceed." : '');
                 return ['reply' => $msg, 'sent' => true];
             }
 
             $doc = $svc->generate($tenant, $from, (string) ($convoRow->customer_name ?? ''), $quote);
-            if (! $doc) return ['reply' => $clean, 'sent' => false];
+            if (! $doc) {
+                \App\Support\QuotationPipeline::stage($tenant->id, $from, 'pdf_generate', false, '', 'generate() returned null (render/store failed)');
+                return ['reply' => $clean, 'sent' => false];
+            }
+            \App\Support\QuotationPipeline::stage($tenant->id, $from, 'pdf_generate', true, (string) $doc['no']);
 
             $cur     = $doc['currency'];
             $amt     = $cur === 'USD' ? number_format((float) $doc['total'], 2) : number_format((float) $doc['total']);

@@ -55,12 +55,28 @@ class QuotationCrudTest extends TestCase
         $this->assertEqualsWithDelta(1900, (float) $q->fresh()->total, 0.001);
     }
 
-    public function test_delete_removes_quote_and_items(): void
+    public function test_delete_archives_by_default(): void
     {
         $q = $this->quote();
-        $this->post("/papi/quotation-delete", ['id' => $q->id])->assertOk()->assertJsonPath('deleted', true);
+        $this->post("/papi/quotation-delete", ['id' => $q->id])->assertOk()->assertJsonPath('archived', true);
+        $this->assertNotNull(Quotation::find($q->id), 'row is kept for reporting');
+        $this->assertSame('archived', $q->fresh()->status);
+        $this->assertSame(1, QuotationItem::where('quotation_id', $q->id)->count());
+    }
+
+    public function test_force_delete_removes_quote_and_items(): void
+    {
+        $q = $this->quote();
+        $this->post("/papi/quotation-delete", ['id' => $q->id, 'force' => 1])->assertOk()->assertJsonPath('deleted', true);
         $this->assertNull(Quotation::find($q->id));
         $this->assertSame(0, QuotationItem::where('quotation_id', $q->id)->count());
+    }
+
+    public function test_accepted_quote_is_read_only(): void
+    {
+        $q = $this->quote('accepted');
+        $items = json_encode([['name' => 'X', 'qty' => 1, 'unit_price' => 1]]);
+        $this->post("/papi/quotation-update", ['id' => $q->id, 'items' => $items])->assertStatus(422);
     }
 
     public function test_converted_quote_cannot_be_edited_or_deleted(): void
