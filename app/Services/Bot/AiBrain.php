@@ -687,6 +687,7 @@ class AiBrain
         }
         $p .= "- Use COMPANY KNOWLEDGE and FAQ for facts. You may use your general real-world knowledge to explain products (e.g. what GSM or ply means), but never contradict COMPANY KNOWLEDGE.\n";
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
+        $p .= "- Each PRODUCT shows a stock tag in [brackets]. Reflect it honestly: \"in stock: N\" → you may say it's available (you can state N); \"usually available — confirm\" → say it's usually available but you'll confirm before placing the order; \"stock unknown — confirm before promising\" → do NOT promise availability, say you'll confirm with the team first; \"OUT OF STOCK\" → tell the customer it's currently unavailable and offer to note it. Never state a stock number that isn't shown as \"in stock: N\".\n";
         $p .= "- Some items show \"price on request\" (e.g. jumbo parent reels) — these have no fixed price. Don't guess a figure: capture what they need (type, grade, GSM, quantity, origin) and tell them the team will send a quote.\n";
         $p .= "- Use the recent conversation for context; don't re-ask what the customer already told you.\n";
         $p .= "- Move the customer toward an order: capture quantity and delivery area. For big buyers push cartons; for small buyers offer retail packs.\n";
@@ -725,15 +726,16 @@ class AiBrain
     private function catalogueLines(Tenant $tenant): string
     {
         $rows = Cache::remember("ai_catalogue:{$tenant->id}", 60, function () use ($tenant) {
+            $inv = app(\App\Services\Inventory\InventoryState::class);
             return Product::withoutGlobalScopes()
                 ->where('tenant_id', $tenant->id)->where('active', true)
                 ->orderBy('name')->limit(200)->get()
-                ->map(function ($p) {
+                ->map(function ($p) use ($inv) {
                     $unit = $p->unit_label ? ' per ' . $p->unit_label : '';
                     $pack = $p->pack_size ? ' (' . (int) $p->pack_size . '/unit)' : '';
                     $moq  = $p->moq ? ', MOQ ' . (int) $p->moq : '';
                     $price = ((float) $p->price > 0) ? (string) $p->price : 'price on request';
-                    return "• {$p->name}{$pack} — {$price}{$unit}{$moq}";
+                    return "• {$p->name}{$pack} — {$price}{$unit}{$moq} [{$inv->botTag($p)}]";
                 })->all();
         });
         return implode("\n", $rows);
