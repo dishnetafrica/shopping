@@ -51,5 +51,16 @@ class OkeServiceProvider extends ServiceProvider
                 $app->make(KnowledgeEngine::class),
                 $app->make(\App\Services\Knowledge\Observatory\BehaviorObservatory::class),
             ));
+
+        // Order Engine (customer side): router-in-shadow telemetry + resolver wiring.
+        $this->app->singleton(\App\Apps\Orders\MessageRouter::class);
+        $this->app->singleton(\App\Apps\Orders\Extract\EntityExtractor::class);
+        $this->app->bind(\App\Apps\Orders\Contracts\ProductResolver::class, \App\Apps\Orders\Resolve\RankingProductResolver::class);
+        $this->app->singleton(\App\Apps\Orders\Observatory\OrderObservatoryReport::class);
+        $this->app->singleton(\App\Apps\Orders\Observatory\OrderObservatory::class, fn ($app) =>
+            new \App\Apps\Orders\Observatory\OrderObservatory(
+                $app->make(\App\Apps\Orders\MessageRouter::class),
+                $app->make(\App\Apps\Orders\Extract\EntityExtractor::class),
+            ));
     }
 }

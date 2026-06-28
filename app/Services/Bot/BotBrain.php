@@ -40,7 +40,24 @@ class BotBrain
         $merchant = app(\App\Services\Bot\Merchant\MerchantAssistant::class)->handle($tenant, $convo, $text);
         if ($merchant !== null) return $merchant;
 
-        return $this->appendWebsite($tenant, $this->respondInner($tenant, $convo, $text));
+        $reply = $this->appendWebsite($tenant, $this->respondInner($tenant, $convo, $text));
+        $this->orderShadow($tenant, $convo, $text, $reply);   // Order Engine shadow telemetry (no behavior change)
+        return $reply;
+    }
+
+    /**
+     * Shadow mode: record what the new Order Engine WOULD have done (router intent + draft parse)
+     * alongside the live reply, so we get production evidence before any cutover. Fully isolated —
+     * never affects the customer's reply.
+     */
+    private function orderShadow(Tenant $tenant, Conversation $convo, string $text, string $reply): void
+    {
+        try {
+            app(\App\Apps\Orders\Observatory\OrderObservatory::class)
+                ->record($tenant->id, $convo->id ?? null, $text, $reply);
+        } catch (\Throwable $e) {
+            // telemetry is non-critical; never break the customer flow
+        }
     }
 
     /** The offer pinned to this conversation, if still fresh (within 30 min of inactivity). */

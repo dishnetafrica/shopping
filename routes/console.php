@@ -22,3 +22,6 @@ Schedule::command('discovery:auto --sync')->weeklyOn(0, '03:00')->withoutOverlap
 //  - Projection parity: nightly diagnostic that the Daily Menu projection matches the knowledge store.
 Schedule::command('oke:nudge')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
 Schedule::command('oke:parity')->dailyAt('02:00')->withoutOverlapping()->onOneServer();
+
+// Order Engine — daily KPI line per tenant (shadow telemetry).
+Schedule::command('orders:observatory')->dailyAt('06:00')->withoutOverlapping()->onOneServer();
