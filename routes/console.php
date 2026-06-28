@@ -31,3 +31,4 @@ Schedule::command('orders:delivery-reminders')->everyFifteenMinutes()->between('
 
 // Seller data-discipline watchdog — nudge on orders stuck in an active status past SLA.
 Schedule::command('orders:pending-digest')->everyThirtyMinutes()->between('8:00', '21:00')->withoutOverlapping()->onOneServer();
+Schedule::command('bot:lead-followup')->everyFiveMinutes()->between('8:00', '20:00')->withoutOverlapping()->onOneServer();

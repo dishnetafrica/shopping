@@ -9,38 +9,38 @@
   @media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#181b20;--ink:#eef0f3;--muted:#98a0ab;--line:#262a31}}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-  .wrap{max-width:780px;margin:0 auto;padding:20px 16px 40px}
-  header{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
-  header h1{font-size:24px;margin:0}
-  header .date{color:var(--muted);font-size:13px}
-  header .refresh{margin-left:auto;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:6px 11px;font-size:13px;cursor:pointer}
-  .sub{color:var(--muted);font-size:13px;margin:2px 0 16px}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
-  .card{display:block;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--line);border-left-width:4px;border-radius:13px;padding:14px 15px;transition:transform .08s,box-shadow .12s}
-  .card:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(0,0,0,.08)}
-  .card.quiet{opacity:.62}
-  .card .top{display:flex;align-items:center;gap:8px}
-  .card .icon{font-size:18px}
-  .card .count{margin-left:auto;font-size:30px;font-weight:800;line-height:1}
-  .card .label{font-weight:650;margin-top:8px}
-  .card .reason{color:var(--muted);font-size:12.5px;margin-top:3px}
-  .pos{margin:18px 2px 0;color:#16a34a;font-weight:600;font-size:14px}
-  .foot{margin-top:22px;font-size:13px}
-  .foot a{color:var(--muted)}
-  .muted{color:var(--muted);padding:20px 2px}
-  .err{padding:18px 2px;color:#dc2626}
+  .wrap{max-width:680px;margin:0 auto;padding:22px 16px 48px}
+  h1{font-size:23px;margin:0 0 2px}
+  .lead{color:var(--muted);font-size:14px;margin:0 0 14px}
+  .lead b{color:var(--ink)}
+  .recap{display:flex;gap:14px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 14px;margin-bottom:18px;font-size:13px}
+  .recap .m{color:var(--muted)} .recap .v{font-weight:700}
+  .refresh{float:right;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:5px 10px;font-size:13px;cursor:pointer}
+  .group{margin:0 0 18px}
+  .ghead{display:flex;align-items:center;gap:8px;margin:0 2px 8px;font-weight:700}
+  .ghead .gi{font-size:16px}
+  .ghead .gc{margin-left:auto;color:var(--muted);font-size:12px;font-weight:600}
+  .task{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-left-width:4px;border-radius:12px;padding:12px 13px;margin-bottom:8px}
+  .task .body{min-width:0;flex:1}
+  .task .lab{font-weight:650}
+  .task .det{color:var(--muted);font-size:13px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .task .rs{font-size:12px;margin-top:3px;opacity:.95}
+  .task .act{flex:0 0 auto}
+  .task .act button{border:0;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:650;color:#fff;cursor:pointer}
+  .done{text-align:center;color:var(--muted);padding:34px 0}
+  .done .big{font-size:40px}
+  .more{color:var(--muted);font-size:12px;margin:2px 2px 0}
+  .foot{margin-top:20px;font-size:13px}.foot a{color:var(--muted)}
+  .muted{color:var(--muted);padding:22px 2px}.err{color:#dc2626;padding:18px 2px}
 </style>
 </head>
 <body>
   <div class="wrap">
-    <header>
-      <h1>Today</h1>
-      <span class="date" id="date"></span>
-      <button class="refresh" onclick="load()">↻ Refresh</button>
-    </header>
-    <p class="sub">What needs you right now — each card tells you why.</p>
-    <div class="grid" id="cards"><div class="muted">Loading…</div></div>
-    <p class="pos" id="positive"></p>
+    <button class="refresh" onclick="load()">↻</button>
+    <h1 id="greet">Today</h1>
+    <p class="lead" id="lead"></p>
+    <div class="recap" id="recap" style="display:none"></div>
+    <div id="list"><div class="muted">Loading…</div></div>
     <p class="foot"><a id="full" href="/panel">← Open full panel</a></p>
   </div>
 
@@ -49,42 +49,67 @@
   <script>
     var token = (function(){ try { return (new URLSearchParams(location.search)).get('token') || ''; } catch(e){ return ''; } })();
     CB.setToken(token);
-    if (token) { var fl = document.getElementById('full'); if (fl) fl.href = '/panel?token=' + encodeURIComponent(token); }
-    document.getElementById('date').textContent = new Date().toLocaleDateString(undefined, { weekday:'long', day:'numeric', month:'long' });
+    if (token) { var fl=document.getElementById('full'); if (fl) fl.href='/panel?token='+encodeURIComponent(token); }
+    var TONE={red:'#dc2626',amber:'#d97706',blue:'#2563eb',green:'#16a34a'};
+    window.__T=[];  // flat task store so action buttons can find their task
 
-    var TONE = { red:'#dc2626', amber:'#d97706', blue:'#2563eb', green:'#16a34a' };
-
-    function href(c){
-      var h = c.href || '#';
-      if (token && h.indexOf('/panel') === 0 && h.indexOf('?') < 0) {
-        var hash = ''; var i = h.indexOf('#');
-        if (i >= 0) { hash = h.slice(i); h = h.slice(0, i); }
-        h = h + '?token=' + encodeURIComponent(token) + hash;
-      }
-      return h;
+    function withTok(h){
+      if(!token || h.indexOf('/panel')!==0 || h.indexOf('?')>=0) return h;
+      var hash='',i=h.indexOf('#'); if(i>=0){hash=h.slice(i);h=h.slice(0,i);}
+      return h+'?token='+encodeURIComponent(token)+hash;
     }
+    function doAction(i){
+      var t=window.__T[i]; if(!t||!t.action) return;
+      var a=t.action;
+      if(a.href){ location.href=withTok(a.href); return; }
+      if(a.api==='quotation-resend'){
+        CB.api('/papi/quotation-resend',{id:a.id}).then(function(d){
+          if(d&&d.ok){ CB.toast(d.sent?'Reminder sent ✓':'WhatsApp not connected'); }
+          else CB.toast((d&&d.message)||'Could not send');
+          load();
+        });
+      }
+    }
+    function money(n,cur){ n=Number(n||0); var s=n>=1e6?(n/1e6).toFixed(1)+'M':(n>=1e3?Math.round(n/1e3)+'K':String(Math.round(n))); return (cur?cur+' ':'')+s; }
 
     function render(d){
-      var box = document.getElementById('cards');
-      if (!d || !d.ok) { box.innerHTML = '<div class="err">Could not load. <a href="/panel">Open the panel</a> instead.</div>'; return; }
-      var cards = d.cards || [];
-      box.innerHTML = cards.map(function(c){
-        var col = TONE[c.tone] || '#6b7280';
-        var quiet = (Number(c.count) || 0) === 0 ? ' quiet' : '';
-        return '<a class="card'+quiet+'" href="'+CB.esc(href(c))+'" style="border-left-color:'+col+'">'
-          + '<div class="top"><span class="icon">'+CB.esc(c.icon||'')+'</span>'
-          + '<span class="count" style="color:'+col+'">'+(Number(c.count)||0)+'</span></div>'
-          + '<div class="label">'+CB.esc(c.label||'')+'</div>'
-          + '<div class="reason">'+CB.esc(c.reason||'')+'</div></a>';
-      }).join('');
-      var pos = (d.positive && d.positive.confirmed_today) || 0;
-      document.getElementById('positive').textContent = pos ? ('🟢 '+pos+' '+(pos===1?'delivery':'deliveries')+' confirmed today') : '';
-    }
+      var list=document.getElementById('list');
+      if(!d||!d.ok){ list.innerHTML='<div class="err">Could not load. <a href="/panel">Open the panel</a> instead.</div>'; return; }
+      document.getElementById('greet').textContent=d.greeting||'Today';
+      var total=d.total_tasks||0;
+      document.getElementById('lead').innerHTML = total
+        ? ('You have <b>'+total+'</b> '+(total===1?'thing':'things')+' that need you.')
+        : 'Nothing needs you right now.';
+      // yesterday recap
+      var y=d.yesterday||{}, rc=document.getElementById('recap');
+      if(y.orders!=null){
+        rc.style.display='flex';
+        rc.innerHTML='<span><span class="m">Yesterday</span></span>'
+          +'<span><span class="v">'+(y.orders||0)+'</span> <span class="m">orders</span></span>'
+          +'<span><span class="v">'+(y.delivered||0)+'</span> <span class="m">delivered</span></span>'
+          +'<span><span class="v">'+money(y.sales,y.currency)+'</span> <span class="m">sales</span></span>';
+      } else rc.style.display='none';
 
-    function load(){
-      document.getElementById('cards').innerHTML = '<div class="muted">Loading…</div>';
-      CB.api('/papi/today').then(render);
+      window.__T=[];
+      var groups=d.groups||[];
+      if(!groups.length){ list.innerHTML='<div class="done"><div class="big">✅</div>All clear. Nothing needs you right now.</div>'; return; }
+      var html=groups.map(function(g){
+        var col=TONE[g.tone]||'#6b7280';
+        var rows=(g.tasks||[]).map(function(tk){
+          var idx=window.__T.push(tk)-1;
+          var btn=tk.action?('<div class="act"><button style="background:'+col+'" onclick="doAction('+idx+')">'+CB.esc(tk.action.label||'Open')+'</button></div>'):'';
+          return '<div class="task" style="border-left-color:'+col+'">'
+            +'<div class="body"><div class="lab">'+CB.esc(tk.label||'')+'</div>'
+            +'<div class="det">'+CB.esc(tk.detail||'')+'</div>'
+            +'<div class="rs" style="color:'+col+'">'+CB.esc(tk.reason||'')+'</div></div>'+btn+'</div>';
+        }).join('');
+        var more=g.more?('<div class="more">+ '+g.more+' more</div>'):'';
+        return '<div class="group"><div class="ghead"><span class="gi">'+CB.esc(g.icon||'')+'</span>'+CB.esc(g.title||'')
+          +'<span class="gc">'+((g.tasks||[]).length+(g.more||0))+'</span></div>'+rows+more+'</div>';
+      }).join('');
+      list.innerHTML=html;
     }
+    function load(){ document.getElementById('list').innerHTML='<div class="muted">Loading…</div>'; CB.api('/papi/today').then(render); }
     load();
   </script>
 </body>
