@@ -25,3 +25,9 @@ Schedule::command('oke:parity')->dailyAt('02:00')->withoutOverlapping()->onOneSe
 
 // Order Engine — daily KPI line per tenant (shadow telemetry).
 Schedule::command('orders:observatory')->dailyAt('06:00')->withoutOverlapping()->onOneServer();
+
+// Customer delivery-confirmation nudge — 60+ min after Delivered, once, daytime only.
+Schedule::command('orders:delivery-reminders')->everyFifteenMinutes()->between('8:00', '21:00')->withoutOverlapping()->onOneServer();
+
+// Seller data-discipline watchdog — nudge on orders stuck in an active status past SLA.
+Schedule::command('orders:staleness-watchdog')->everyThirtyMinutes()->between('8:00', '21:00')->withoutOverlapping()->onOneServer();

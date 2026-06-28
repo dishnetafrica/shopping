@@ -27,6 +27,52 @@ class OrderObservatoryReport
         ];
     }
 
+    /** Customer delivery-confirmation metrics (the pull-based receipt signal) for a day. */
+    public function deliveryConfirmation(int $tenantId, ?string $date = null): array
+    {
+        $date ??= date('Y-m-d', strtotime('yesterday'));
+        $base = \App\Models\Order::withoutGlobalScopes()->where('tenant_id', $tenantId)->whereDate('delivered_at', $date);
+
+        $delivered = (clone $base)->count();
+        $confirmed = (clone $base)->whereNotNull('customer_confirmed_at')->count();
+        $reminded  = (clone $base)->whereNotNull('confirm_reminder_at')->count();
+        $rated     = (clone $base)->whereNotNull('rating');
+
+        $latencies = (clone $base)->whereNotNull('customer_confirmed_at')->get(['delivered_at', 'customer_confirmed_at'])
+            ->map(fn ($o) => max(0, $o->customer_confirmed_at->getTimestamp() - $o->delivered_at->getTimestamp()))->all();
+        $avgMin = $latencies ? round(array_sum($latencies) / count($latencies) / 60, 1) : null;
+
+        return [
+            'delivered' => $delivered, 'confirmed' => $confirmed,
+            'confirmation_pct' => $delivered ? round(100 * $confirmed / $delivered) : null,
+            'avg_confirm_latency_min' => $avgMin,
+            'reminder_required' => $reminded,
+            'avg_rating' => (clone $rated)->avg('rating') ? round((float) (clone $rated)->avg('rating'), 2) : null,
+            'ratings' => (clone $rated)->count(),
+        ];
+    }
+
+    /** Orders delivered but never confirmed by the customer — a follow-up / service-quality signal. */
+    public function unconfirmedDeliveries(int $tenantId, int $olderThanHours = 24): int
+    {
+        return \App\Models\Order::withoutGlobalScopes()->where('tenant_id', $tenantId)
+            ->whereNotNull('delivered_at')->whereNull('customer_confirmed_at')
+            ->where('delivered_at', '<=', now()->subHours($olderThanHours))->count();
+    }
+
+    /** Seller data-discipline: how often staff had to be nudged, and how often the customer closed the loop. */
+    public function sellerDiscipline(int $tenantId, ?string $date = null): array
+    {
+        $date ??= date('Y-m-d', strtotime('yesterday'));
+        $base = \App\Models\Order::withoutGlobalScopes()->where('tenant_id', $tenantId);
+        return [
+            'stale_nudges' => (clone $base)->whereDate('stale_nudged_at', $date)->count(),
+            'self_closed'  => (clone $base)->whereDate('delivered_at', $date)->where('delivered_by', 'customer')->count(),
+            'stuck_now'    => (clone $base)->where('stale_level', '>', 0)
+                ->whereNotIn('status', ['Delivered', 'Customer confirmed', 'Cancelled', 'Rejected'])->count(),
+        ];
+    }
+
     /** Disagreement reasons over a day — tells you exactly where engineering time belongs. */
     public function reasonBreakdown(int $tenantId, ?string $date = null): array
     {
@@ -50,6 +96,53 @@ class OrderObservatoryReport
         return ['orders' => $orders, 'no_intervention' => $clean, 'pct' => $orders ? round(100 * $clean / $orders) : null];
     }
 
+
+    /** Confidence Ladder breakdown — your engineering Kanban (unexplained = observed+reproduced). */
+    public function ladderBreakdown(int $tenantId, ?string $date = null): array
+    {
+        $q = \App\Models\ShadowDiff::where('tenant_id', $tenantId);
+        if ($date) $q->whereDate('created_at', $date);
+        $counts = $q->select('stage', DB::raw('COUNT(*) as n'))->groupBy('stage')->pluck('n', 'stage')->all();
+        $unexplained = ($counts['observed'] ?? 0) + ($counts['reproduced'] ?? 0);
+        return ['by_stage' => $counts, 'unexplained' => $unexplained];
+    }
+
+    /** BUSINESS metrics (kept separate from engineering): completion, clarification turns, latency. */
+    public function businessMetrics(int $tenantId, ?string $date = null): array
+    {
+        $date ??= date('Y-m-d', strtotime('yesterday'));
+        $rows = OrderFlowMetric::where('tenant_id', $tenantId)->whereDate('created_at', $date)
+            ->whereNotNull('conversation_id')
+            ->orderBy('conversation_id')->orderBy('created_at')
+            ->get(['conversation_id', 'draft_parsed', 'clarification', 'outcome', 'created_at']);
+
+        $byConv = [];
+        foreach ($rows as $r) { $byConv[$r->conversation_id][] = $r; }
+
+        $orders = 0; $completed = 0; $clarTurns = []; $latencies = []; $interventions = 0;
+        foreach ($byConv as $msgs) {
+            $orderMsgs = array_values(array_filter($msgs, fn ($m) => $m->draft_parsed));
+            if (! $orderMsgs) continue;
+            $orders++;
+            $clar = count(array_filter($msgs, fn ($m) => $m->clarification));
+            $clarTurns[] = $clar;
+            if ($clar > 0) $interventions++;
+            $checkout = array_values(array_filter($msgs, fn ($m) => $m->outcome === 'checkout'));
+            if ($checkout) {
+                $completed++;
+                $start = $orderMsgs[0]->created_at; $end = end($checkout)->created_at;
+                if ($start && $end) $latencies[] = max(0, $end->getTimestamp() - $start->getTimestamp());
+            }
+        }
+        $avg = fn ($a) => $a ? round(array_sum($a) / count($a), 1) : null;
+        return [
+            'orders' => $orders, 'completed' => $completed, 'abandoned' => $orders - $completed,
+            'avg_clarification_turns' => $avg($clarTurns),
+            'avg_time_to_confirmation_s' => $avg($latencies),
+            'manual_interventions' => $interventions,
+        ];
+    }
+
     /** Query → clarification count (rate becomes available once the resolver logs all resolutions). */
     public function aliasCost(int $tenantId, int $limit = 20): array
     {
@@ -65,13 +158,29 @@ class OrderObservatoryReport
         $k = $this->kpi($tenantId, $date);
         $ia = $this->interventionAvoided($tenantId, $date);
         $reasons = $this->reasonBreakdown($tenantId, $date);
+        $ladder = $this->ladderBreakdown($tenantId, $date);
+        $biz = $this->businessMetrics($tenantId, $date);
+        $dc = $this->deliveryConfirmation($tenantId, $date);
+        $sd = $this->sellerDiscipline($tenantId, $date);
         $intents = implode(' · ', array_map(fn ($i, $n) => "$i $n", array_keys($k['by_intent']), $k['by_intent']));
         $reasonLine = $reasons ? implode(' · ', array_map(fn ($r, $n) => "$r $n", array_keys($reasons), $reasons)) : 'none';
+        $stageLine = $ladder['by_stage'] ? implode(' · ', array_map(fn ($st, $n) => "$st $n", array_keys($ladder['by_stage']), $ladder['by_stage'])) : 'none';
+
         return "OKE Order Observatory — {$k['date']} (tenant {$tenantId})\n"
-            . "  messages {$k['messages']} · orders {$k['orders']} · parser-success "
-            . ($k['parser_success_pct'] ?? '—') . "% · clarifications " . ($k['clarification_pct'] ?? '—') . "%\n"
-            . "  intervention avoided: " . ($ia['pct'] ?? '—') . "% ({$ia['no_intervention']}/{$ia['orders']} orders)\n"
+            . "ENGINEERING\n"
+            . "  messages {$k['messages']} · orders {$k['orders']} · parser-success " . ($k['parser_success_pct'] ?? '—') . "%\n"
             . "  intents: {$intents}\n"
-            . "  disagreement reasons: {$reasonLine}";
+            . "  disagreement reasons: {$reasonLine}\n"
+            . "  confidence ladder: {$stageLine}  (unexplained {$ladder['unexplained']})\n"
+            . "BUSINESS\n"
+            . "  orders completed {$biz['completed']}/{$biz['orders']} · abandoned {$biz['abandoned']}\n"
+            . "  clarification turns/order " . ($biz['avg_clarification_turns'] ?? '—')
+            . " · time-to-confirmation " . ($biz['avg_time_to_confirmation_s'] ?? '—') . "s"
+            . " · manual interventions {$biz['manual_interventions']}\n"
+            . "  delivery confirmed " . ($dc['confirmation_pct'] ?? '—') . "% ({$dc['confirmed']}/{$dc['delivered']})"
+            . " · confirm-latency " . ($dc['avg_confirm_latency_min'] ?? '—') . "min"
+            . " · avg rating " . ($dc['avg_rating'] ?? '—') . " (" . $dc['ratings'] . ")\n"
+            . "  seller discipline: stale-nudges {$sd['stale_nudges']} · self-closed {$sd['self_closed']} · stuck now {$sd['stuck_now']}\n"
+            . "  intervention avoided: " . ($ia['pct'] ?? '—') . "% ({$ia['no_intervention']}/{$ia['orders']})";
     }
 }

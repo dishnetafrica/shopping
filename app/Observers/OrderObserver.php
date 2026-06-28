@@ -21,6 +21,9 @@ class OrderObserver
         if (empty($order->track_token)) {
             $order->track_token = Str::lower(Str::random(12));
         }
+        if (empty($order->status_changed_at)) {
+            $order->status_changed_at = now();
+        }
     }
 
     /**
@@ -34,6 +37,9 @@ class OrderObserver
         if (! $order->isDirty('status')) {
             return;
         }
+        $order->status_changed_at = now();
+        $order->stale_nudged_at = null;
+        $order->stale_level = 0;
         $isDelivered   = strcasecmp((string) $order->status, 'Delivered') === 0;
         $wasDelivered  = strcasecmp((string) $order->getOriginal('status'), 'Delivered') === 0;
 

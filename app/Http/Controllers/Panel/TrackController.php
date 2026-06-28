@@ -29,6 +29,11 @@ class TrackController extends Controller
             return $this->page($body, $brand);
         }
 
+        // Customer actions (token is the credential, matching the rest of /papi). Confirmation is
+        // recorded as an EVENT (customer_confirmed_at) rather than overwriting status, so the
+        // kitchen flow, timeline and notifications that key off "Delivered" keep working.
+        $this->handleCustomerAction($order, $request);
+
         $steps   = ['New', 'Confirmed', 'Packed', 'Out for delivery', 'Delivered'];
         $current = $order->status ?: 'New';
         $idx     = array_search($current, $steps, true);
@@ -169,6 +174,7 @@ class TrackController extends Controller
             . $etaBlock
             . $timeline
             . $proofBlock
+            . $this->confirmBlock($order, $deliveredDone, $token, (string) $request->query('do', ''))
             . $riderBlock
             . ($rows ? '<table>' . $rows . '</table>' : '')
             . '<div class="tot">Total: ' . e($cur) . ' ' . number_format((float) $order->total) . '</div>'
@@ -176,6 +182,80 @@ class TrackController extends Controller
             . '</div>';
 
         return $this->page($body, $brand);
+    }
+
+    /** Apply a customer confirm/rate action (token already verified by the caller). */
+    private function handleCustomerAction(Order $order, Request $request): void
+    {
+        $do = (string) $request->query('do', '');
+        if ($do === '') return;
+        if (in_array((string) $order->status, ['Cancelled', 'Rejected'], true)) return;   // nothing to confirm
+
+        if ($do === 'received' && ! $order->customer_confirmed_at) {
+            $wasDelivered = strcasecmp((string) $order->status, 'Delivered') === 0 || $order->delivered_at !== null;
+            if (! $wasDelivered) {
+                // Seller never marked it delivered — the customer closes the loop, and we record the gap.
+                $order->status = 'Delivered';            // OrderObserver stamps delivered_at + status_changed_at
+                $order->delivered_by = 'customer';
+            }
+            $order->customer_confirmed_at = now();
+            $order->confirmation_source = 'tracking_page';
+            $order->save();
+            \App\Support\BotTrace::log($order->tenant_id, 'order', (string) $order->customer_phone, 'customer_confirmed', (string) $order->order_no . ($order->delivered_by === 'customer' ? ' (self-update)' : ''));
+        }
+
+        if ($do === 'rate' && $order->customer_confirmed_at && ! $order->rating) {
+            $r = (int) $request->query('r', 0);
+            if ($r >= 1 && $r <= 5) {
+                $order->rating = $r;
+                $order->rating_at = now();
+                $order->save();
+            }
+        }
+
+        if ($do === 'help') {
+            // Customer says it hasn't arrived — push the shop to act (and create a trail).
+            \App\Jobs\NotifyOwner::dispatch($order->tenant_id,
+                "\u{1F6A8} Customer for order {$order->order_no} reports they have NOT received it yet. Please check.");
+            \App\Support\BotTrace::log($order->tenant_id, 'order', (string) $order->customer_phone, 'customer_not_received', (string) $order->order_no);
+        }
+    }
+
+    /** Confirm button → rating prompt → thank-you, driven by the order's confirmation state. */
+    private function confirmBlock(Order $order, bool $deliveredDone, string $token, string $do = ''): string
+    {
+        if (in_array((string) $order->status, ['Cancelled', 'Rejected'], true)) return '';
+        $q = '?o=' . $order->id . '&t=' . urlencode($token);
+
+        // Already confirmed → rating prompt → thank-you.
+        if ($order->customer_confirmed_at) {
+            if (! $order->rating) {
+                $opts = [5 => '😊 Excellent', 4 => '🙂 Good', 3 => '😐 Average', 1 => '☹️ Poor'];
+                $btns = '';
+                foreach ($opts as $val => $label) {
+                    $btns .= '<a class="rbtn" href="' . e($q . '&do=rate&r=' . $val) . '">' . $label . '</a>';
+                }
+                return '<div class="rate"><div class="cq">&#11088; How was your experience?</div><div class="rbtns">' . $btns . '</div></div>';
+            }
+            $stars = str_repeat('&#11088;', (int) $order->rating);
+            return '<div class="thanks"><div class="tq">&#128591; Thank you!</div><div class="ts">' . $stars . '</div></div>';
+        }
+
+        $help = $do === 'help'
+            ? '<div class="helped">&#10003; We\'ve let the shop know — they\'ll check on your order.</div>'
+            : '';
+        $helpLink = '<a class="hlink" href="' . e($q . '&do=help') . '">Not received yet? Tell the shop</a>';
+
+        // Delivered → prominent confirm. Otherwise (still in progress) → a quieter self-update so the
+        // customer can close the loop even if the seller never marked it delivered.
+        if ($deliveredDone) {
+            return '<div class="confirm">' . $help . '<div class="cq">Did you receive your order?</div>'
+                . '<a class="cbtn" href="' . e($q . '&do=received') . '">&#10003; I Received My Order</a>'
+                . $helpLink . '</div>';
+        }
+        return '<div class="confirm">' . $help . '<div class="cq" style="font-size:13px;color:#6E7D72">Already received this order?</div>'
+            . '<a class="cbtn cself" href="' . e($q . '&do=received') . '">&#10003; Confirm I received it</a>'
+            . $helpLink . '</div>';
     }
 
     /**
@@ -254,6 +334,17 @@ class TrackController extends Controller
             . '.proof .pt{font-weight:800;color:#15803D;font-size:16px}'
             . '.proof img{max-width:100%;border-radius:11px;margin-top:10px}'
             . '.proof .pw{font-size:12px;color:#6E7D72;margin-top:5px}'
+            . '.confirm{text-align:center;margin:14px 0}'
+            . '.confirm .cq,.rate .cq{font-weight:700;font-size:15px;margin-bottom:10px}'
+            . '.cbtn{display:block;background:#15803D;color:#fff;font-weight:800;text-decoration:none;border-radius:12px;padding:14px;font-size:16px}'
+            . '.rate{text-align:center;margin:14px 0}'
+            . '.rbtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}'
+            . '.rbtn{background:#F1F8F3;border:1px solid #CDEBD6;color:#16231C;font-weight:700;text-decoration:none;border-radius:11px;padding:13px;font-size:15px}'
+            . '.thanks{text-align:center;background:#EAF6EE;border:1px solid #CDEBD6;border-radius:13px;padding:16px;margin:14px 0}'
+            . '.thanks .tq{font-weight:800;color:#15803D;font-size:16px}.thanks .ts{font-size:20px;margin-top:6px;letter-spacing:2px}'
+            . '.cself{background:#15803D}'
+            . '.hlink{display:inline-block;margin-top:11px;font-size:13px;color:#6E7D72;text-decoration:underline}'
+            . '.helped{background:#EAF6EE;border:1px solid #CDEBD6;border-radius:10px;padding:9px 11px;margin-bottom:10px;font-size:13px;color:#15803D;font-weight:700}'
             . 'table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}'
             . 'td{padding:7px 0;border-bottom:1px solid #eef2ee}'
             . '.tot{font-weight:800;margin-top:8px}.loc{color:#6E7D72;font-size:13px;margin-top:6px}'

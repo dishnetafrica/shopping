@@ -16,7 +16,7 @@ class Order extends Model
      */
     public const KITCHEN_FLOW = ['New', 'Accepted', 'Preparing', 'Ready', 'Dispatched', 'Delivered'];
     public const STATUSES = [
-        'New', 'Accepted', 'Preparing', 'Ready', 'Dispatched', 'Delivered', 'Cancelled', 'Rejected',
+        'New', 'Accepted', 'Preparing', 'Ready', 'Dispatched', 'Delivered', 'Customer confirmed', 'Cancelled', 'Rejected',
         // legacy grocery states (still valid, not surfaced on the Kitchen Board)
         'Confirmed', 'Packed', 'Out for delivery',
     ];
@@ -24,10 +24,14 @@ class Order extends Model
     protected $fillable = ['tenant_id','order_no','idempotency_key','customer_name','customer_phone','items_text',
         'items_json','total','amount_paid','location','notes','payment','status','channel','rider_id','branch_id',
         'track_token','delivered_at','accepted_at','ready_at','rejected_reason',
-        'scheduled_for','sched_stage','sched_reminders','delivery_fee','delivery_zone_id','eta_at'];
+        'scheduled_for','sched_stage','sched_reminders','delivery_fee','delivery_zone_id','eta_at',
+        'customer_confirmed_at','confirmation_source','rating','rating_comment','rating_at','confirm_reminder_at',
+        'status_changed_at','stale_nudged_at','stale_level','delivered_by'];
     protected $casts = ['items_json'=>'array','total'=>'decimal:2','amount_paid'=>'decimal:2',
         'delivered_at'=>'datetime','accepted_at'=>'datetime','ready_at'=>'datetime','eta_at'=>'datetime',
-        'scheduled_for'=>'datetime','sched_reminders'=>'array'];
+        'scheduled_for'=>'datetime','sched_reminders'=>'array',
+        'customer_confirmed_at'=>'datetime','rating_at'=>'datetime','confirm_reminder_at'=>'datetime','rating'=>'integer',
+        'status_changed_at'=>'datetime','stale_nudged_at'=>'datetime','stale_level'=>'integer'];
 
     public function items(): HasMany { return $this->hasMany(OrderItem::class); }
     public function rider() { return $this->belongsTo(Rider::class); }
