@@ -89,6 +89,33 @@ final class OpportunityTypes
     public const PRICE_BASIS_Q =
         "Just to be clear — is that your buying price from your supplier, or your selling price to your customers?";
 
+    /**
+     * Ways a customer opts OUT of an in-progress qualification. 'decline' = no longer
+     * a B2B prospect (close it); 'human' / 'cancel' = let the normal pipeline take over
+     * (human handoff, cancel, or plain shopping). Matched as whole tokens so "stop"
+     * never fires on "stopped working".
+     */
+    public const EXIT = [
+        'decline' => ['not interested', 'no thanks', 'no thank you', 'changed my mind', 'change my mind', 'forget it', 'leave it', 'not now', 'maybe later', 'just retail', 'retail price', 'just one carton', 'only one carton', 'single carton', 'one piece only'],
+        'human'   => ['talk to a human', 'speak to a human', 'human agent', 'real person', 'speak to a person', 'talk to a person', 'speak to someone', 'talk to someone', 'agent please', 'customer service', 'call the office'],
+        'cancel'  => ['cancel', 'stop', 'exit', 'never mind', 'nevermind', 'quit'],
+    ];
+
+    /** Returns the exit group ('decline'|'human'|'cancel') or null. Longest match wins. */
+    public static function detectExit(string $text): ?string
+    {
+        $hay = ' ' . mb_strtolower(preg_replace('/\s+/', ' ', trim($text))) . ' ';
+        $best = null; $len = 0;
+        foreach (self::EXIT as $group => $phrases) {
+            foreach ($phrases as $p) {
+                if ($p !== '' && str_contains($hay, ' ' . $p . ' ') && strlen($p) > $len) {
+                    $best = $group; $len = strlen($p);
+                }
+            }
+        }
+        return $best;
+    }
+
     public static function label(string $type): string
     {
         return self::LABELS[$type] ?? ucfirst($type);

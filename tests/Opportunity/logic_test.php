@@ -30,4 +30,11 @@ check('size strategic',$sc->sizeBand($p)==='strategic');
 check('first q business_name',nextSlot([])==='business_name');
 check('price after volume in script',array_search('buying_price',array_column(T::SCRIPT,'slot'))>array_search('monthly_volume',array_column(T::SCRIPT,'slot')));
 check('core gate ok',missingCore(['business_name'=>'U','area'=>'T','monthly_volume'=>300,'buying_price'=>8500])===[]);
+// exit / opt-out detection
+check('"not interested" -> decline', T::detectExit('actually not interested')==='decline');
+check('"just one carton" -> decline', T::detectExit('no just one carton please')==='decline');
+check('"talk to a person" -> human', T::detectExit('can i talk to a person')==='human');
+check('"cancel" -> cancel', T::detectExit('cancel')==='cancel');
+check('"stopped working" does NOT exit', T::detectExit('my internet stopped working')===null);
+check('plain qualification answer does NOT exit', T::detectExit('around 300 cartons monthly')===null);
 echo "\n==== $pass passed, $fail failed ====\n"; exit($fail?1:0);

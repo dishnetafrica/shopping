@@ -27,6 +27,12 @@ Reps log into /app by OTP (phone), so `assigned_to` == `User.phone`. Scoping:
 Per-opportunity tasks are managed from the Tasks tab on the opportunity edit screen.
 
 ## Enabling per tenant (settings JSON — no migration)
+```bash
+php artisan opportunity:enable 12 --types=distributor,wholesale,export
+php artisan opportunity:enable fs                 # all types
+php artisan opportunity:enable 12 --off           # disable
+```
+Or directly:
 ```php
 $tenant->putSetting('opportunity_mode', true);
 $tenant->putSetting('opportunity_types', ['distributor','wholesale','export']); // omit = all
@@ -49,6 +55,9 @@ next business morning) are created; the rep gets a full opportunity card on What
 4. Core gate to hand off: business_name + area + monthly_volume + (current_brand OR buying_price).
 5. After handoff the sticky pointer is released so normal shopping can resume; a later B2B
    message reattaches to the same open opportunity instead of duplicating it.
+6. Opt-out: on any continuation turn "not interested / just one carton" closes the
+   opportunity (lost); "talk to a person / cancel / stop" releases stickiness and lets the
+   normal pipeline take over. The customer is never trapped in qualification.
 
 ## Test
 `php tests/Opportunity/logic_test.php` — deterministic brain (detection, extraction,

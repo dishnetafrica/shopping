@@ -89,6 +89,24 @@ class BusinessOpportunityEngine
                 return $this->holdingReply($tenant, $opp);
             }
 
+            // On a continuation turn (not the message that opened the flow) the customer
+            // can opt out — so they are never trapped in qualification.
+            if ($detectedType === null) {
+                $exit = OpportunityTypes::detectExit($text);
+                if ($exit === 'decline') {
+                    $opp->update(['status' => 'lost', 'stage' => 'closed']);
+                    $this->release($convo);
+                    $this->trace($tenant->id, $phone, 'opportunity_declined', "#{$opp->id}");
+                    return "No problem — I won't take up more of your time on that. How can I help you today?";
+                }
+                if ($exit !== null) {
+                    // human | cancel → drop stickiness and let the normal pipeline handle it.
+                    $this->release($convo);
+                    $this->trace($tenant->id, $phone, 'opportunity_exit_' . $exit, "#{$opp->id}");
+                    return '';
+                }
+            }
+
             $profile   = (array) ($opp->profile ?? []);
             $expecting = $this->expecting($convo);
 
