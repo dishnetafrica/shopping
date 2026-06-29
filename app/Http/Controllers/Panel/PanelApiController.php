@@ -226,6 +226,7 @@ class PanelApiController extends Controller
                     'message'      => (string) ($c['message'] ?? ''),
                 ];
             })(),
+            'introCatalog'    => (bool) (((array) ($s['intro_catalog'] ?? []))['enabled'] ?? false),
             'categoryGroups'  => (object) ($s['category_groups'] ?? []),
             'menuFiles'       => array_values($s['menu_files'] ?? []),
             'catalogFiles'    => array_values($s['catalog_files'] ?? []),
@@ -3983,14 +3984,14 @@ class PanelApiController extends Controller
     {
         $t   = $r->user()->tenant;
         $key = (string) $r->query('key', '');
-        if (! in_array($key, ['combo_recommendations', 'send_product_images', 'reengage_followup'], true)) {
+        if (! in_array($key, ['combo_recommendations', 'send_product_images', 'reengage_followup', 'intro_catalog'], true)) {
             return response()->json(['ok' => false, 'error' => 'bad_key'], 422);
         }
         $on = in_array((string) $r->query('on', '1'), ['1', 'true', 'on', 'yes'], true);
-        if ($key === 'reengage_followup') {
-            $cfg = (array) $t->setting('reengage_followup', []);
+        if ($key === 'reengage_followup' || $key === 'intro_catalog') {
+            $cfg = (array) $t->setting($key, []);
             $cfg['enabled'] = $on;
-            $t->putSetting('reengage_followup', $cfg);
+            $t->putSetting($key, $cfg);
         } else {
             $t->putSetting($key, $on);
         }

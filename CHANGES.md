@@ -20,3 +20,11 @@ to avoid touching the big nav block — say the word and I'll add it).
   *how* they work — safe to show clients.
 - Added `docs/INTERNAL/PLATFORM-LOGIC.md` — the real engine logic for OUR team only. No route serves
   `docs/`, so clients cannot reach it. Do not link it from the panel.
+
+## Catalogue reach (this update)
+- **Lead follow-up** already covers quiet non-leads — just untick "Only follow up with warm leads".
+- New opt-in **"Also send the catalogue with the bot's first reply"** (Settings → Lead follow-up).
+  When a new customer first messages, the bot answers AND sends the catalogue once. Setting:
+  `intro_catalog.enabled` (default OFF). Reuses `catalog_files` + the follow-up link. Skips if the
+  customer already asked for the catalogue, if a human took over, or if already sent. Wrapped so it can
+  never affect the main reply.

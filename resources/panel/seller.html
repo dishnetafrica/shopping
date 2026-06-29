@@ -849,6 +849,9 @@
             <div class="mfield"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="setReengageReqLead" style="width:auto"> Only follow up with warm leads</label>
               <div class="note">On = only people the bot already logged as a lead. Off = anyone who messaged and went quiet.</div>
             </div>
+            <div class="mfield"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="setIntroCatalog" style="width:auto"> Also send the catalogue with the bot\'s first reply</label>
+              <div class="note">When a new customer first messages, the bot answers and also sends your catalogue (once). Instant — uses the catalogue files/link above.</div>
+            </div>
             <button class="btn" id="setReengageSave" style="padding:6px 12px">Save follow-up settings</button>
           </div>
         </div>
@@ -3722,7 +3725,7 @@ function applySettings(s){
   if(s.metaDescription!=null)SETTINGS.metaDescription=s.metaDescription;
   if(Array.isArray(s.faq))SETTINGS.faq=s.faq;
   if(Array.isArray(s.brands))SETTINGS.brands=s.brands;
-  if(Array.isArray(s.combos))SETTINGS.combos=s.combos;if(s.categoryGroups)SETTINGS.categoryGroups=s.categoryGroups;if(Array.isArray(s.menuFiles))SETTINGS.menuFiles=s.menuFiles;if(Array.isArray(s.catalogFiles))SETTINGS.catalogFiles=s.catalogFiles;if(s.reengage)SETTINGS.reengage=s.reengage;
+  if(Array.isArray(s.combos))SETTINGS.combos=s.combos;if(s.categoryGroups)SETTINGS.categoryGroups=s.categoryGroups;if(Array.isArray(s.menuFiles))SETTINGS.menuFiles=s.menuFiles;if(Array.isArray(s.catalogFiles))SETTINGS.catalogFiles=s.catalogFiles;if(s.reengage)SETTINGS.reengage=s.reengage;if('introCatalog' in s)SETTINGS.introCatalog=s.introCatalog;
   if(s.lat!=null&&s.lat!=='')STORE.lat=Number(s.lat)||STORE.lat;
   if(s.lng!=null&&s.lng!=='')STORE.lng=Number(s.lng)||STORE.lng;
   if(s.base!=null&&s.base!=='')DELIV.base=Number(s.base)||0;
@@ -3779,6 +3782,7 @@ function settingsInit(){
   if($('setReengage')){var RE=SETTINGS.reengage||{};
     $('setReengage').checked=!!RE.enabled;
     $('setReengage').onchange=function(){botToggle('reengage_followup',this.checked,'Lead follow-up');};
+    if($('setIntroCatalog')){$('setIntroCatalog').checked=!!SETTINGS.introCatalog;$('setIntroCatalog').onchange=function(){botToggle('intro_catalog',this.checked,'Catalogue on first message');};}
     if($('setReengageDelay'))$('setReengageDelay').value=RE.delay_min||10;
     if($('setReengageLink'))$('setReengageLink').value=RE.link||'';
     if($('setReengageReqLead'))$('setReengageReqLead').checked=RE.require_lead!==false;

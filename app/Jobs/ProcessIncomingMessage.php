@@ -634,6 +634,40 @@ class ProcessIncomingMessage implements ShouldQueue
             $this->tenantId, $this->incoming['from'], $this->incoming['instance'],
             'out', 'bot', $reply
         );
+
+        // ---- Intro catalogue: ride the bot's first substantive reply with the catalogue. ----
+        // Opt-in (settings.intro_catalog.enabled), ONCE per customer, never if they already asked for
+        // the catalogue (the brain sent it), and wrapped so it can never affect the main reply.
+        try {
+            $intro   = (array) $tenant->setting('intro_catalog', []);
+            $stIntro = is_array($convo->state) ? $convo->state : [];
+            $askedCatalog = (bool) preg_match('/catalog|brochure|price ?list|\bpdf\b|product list/i', $text);
+            if (($intro['enabled'] ?? false)
+                && empty($stIntro['intro_catalog_at'])
+                && empty($stIntro['do_not_contact'])
+                && (int) ($stIntro['human_until'] ?? 0) <= time()
+                && ! $askedCatalog) {
+                $link  = trim((string) (((array) $tenant->setting('reengage_followup', []))['link'] ?? ''));
+                $files = collect((array) $tenant->setting('catalog_files', []))
+                    ->map(fn ($m) => ['label' => (string) ($m['label'] ?? 'Catalogue'), 'url' => (string) ($m['url'] ?? '')])
+                    ->filter(fn ($m) => $m['url'] !== '')->values()->all();
+                if ($link !== '' || $files) {
+                    $cmsg = trim((string) ($intro['message'] ?? '')) ?: 'Here is our catalogue 👇';
+                    if ($link !== '') $cmsg .= "\n" . $link;
+                    $gateway->sendText($tenant->whatsapp_instance, $this->incoming['from'], $cmsg);
+                    MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $cmsg, null, null, ['via' => 'intro_catalog']);
+                    foreach (array_slice($files, 0, 2) as $f) {
+                        $gateway->sendDocument($tenant->whatsapp_instance, $this->incoming['from'], $f['url'], ($f['label'] ?: 'Catalogue') . '.pdf', $f['label']);
+                    }
+                    $stIntro['intro_catalog_at'] = now()->toIso8601String();
+                    $convo->state = $stIntro;
+                    BotTrace::log($this->tenantId, $trace, $from, 'intro_catalog', 'sent with first reply');
+                }
+            }
+        } catch (\Throwable $e) {
+            BotTrace::log($this->tenantId, $trace, $from, 'intro_skip', $e->getMessage());
+        }
+
         // ---- Combo follow-up: after a product ask or an add-to-cart, suggest pairings. ----
         try {
             $focalThisTurn = (int) ($convo->state['combo_focal'] ?? 0);
