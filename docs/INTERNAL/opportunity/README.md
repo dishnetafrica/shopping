@@ -14,9 +14,17 @@ qualifies -> values, **never negotiates price**, then hands a scored, sized lead
 - `app/Services/Bot/Opportunity/SlotExtractor.php`     — deterministic fact extraction
 - `app/Services/Bot/Opportunity/OpportunityScorer.php` — score breakdown + size band
 - `app/Services/Bot/BusinessOpportunityEngine.php`     — sticky orchestrator
-- `app/Filament/Resources/BusinessOpportunityResource.php` (+ Pages)
-- `app/Filament/Widgets/TodaysPrioritiesWidget.php`
+- `app/Filament/Resources/BusinessOpportunityResource.php` (+ Pages, + Tasks relation manager)
+- `app/Filament/Widgets/TodaysPrioritiesWidget.php`   — rep-scoped (managers see all)
+- `app/Filament/Widgets/MyOpportunitiesWidget.php`    — rep's open book / manager pipeline
 - Pipeline hook in `app/Jobs/ProcessIncomingMessage.php` (runs BEFORE one-shot lead capture)
+
+## Sales-rep surface
+Reps log into /app by OTP (phone), so `assigned_to` == `User.phone`. Scoping:
+- owner / admin / manager  -> see the whole pipeline + all tasks
+- any other role (sales rep) -> see only their assigned opportunities; Today's Priorities
+  shows their tasks plus any still-unassigned ones.
+Per-opportunity tasks are managed from the Tasks tab on the opportunity edit screen.
 
 ## Enabling per tenant (settings JSON — no migration)
 ```php

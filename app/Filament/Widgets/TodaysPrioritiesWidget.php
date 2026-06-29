@@ -26,11 +26,18 @@ class TodaysPrioritiesWidget extends BaseWidget
 
     public function table(Table $table): Table
     {
+        $u       = auth()->user();
+        $seeAll  = $u && ($u->isOwnerLike() || (string) $u->role === 'manager');
+        $myPhone = $u ? preg_replace('/[^0-9]/', '', (string) $u->phone) : '';
+
         return $table
             ->query(
                 OpportunityTask::query()
                     ->where('status', 'open')
                     ->where(fn (Builder $q) => $q->whereNull('due_at')->orWhere('due_at', '<=', now()->endOfDay()))
+                    ->when(! $seeAll && $myPhone !== '', fn (Builder $q) => $q->where(
+                        fn (Builder $w) => $w->where('assigned_to', $myPhone)->orWhereNull('assigned_to')
+                    ))
                     ->orderByDesc('priority')
                     ->orderBy('due_at')
             )

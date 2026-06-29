@@ -117,6 +117,13 @@ class BusinessOpportunityResource extends Resource
             ->bulkActions([]);
     }
 
+    public static function getRelations(): array
+    {
+        return [
+            BusinessOpportunityResource\RelationManagers\TasksRelationManager::class,
+        ];
+    }
+
     public static function getPages(): array
     {
         return [
