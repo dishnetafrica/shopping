@@ -450,6 +450,32 @@ class ProcessIncomingMessage implements ShouldQueue
         // lead pipeline instead of the shopping brain. Image-derived product queries and
         // marketing tenants are left alone.
         if (! $fromImage && ! $tenant->isMarketing()) {
+            // Business Opportunity Engine: a sticky B2B qualification flow that takes over
+            // from order-taking on distributor/wholesale/export/corporate/tender signals and
+            // stays in control until the lead is qualified and handed to sales. Runs BEFORE
+            // the one-shot lead capture so an in-progress opportunity never relapses into
+            // "how many cartons?".
+            $opp = app(\App\Services\Bot\BusinessOpportunityEngine::class);
+            if ($opp->enabled($tenant)) {
+                $oType = $opp->isActive($convo) ? null : $opp->detect($tenant, $text);
+                if ($opp->isActive($convo) || $oType !== null) {
+                    $oName  = (string) (CustomerProfile::where('phone', $from)->value('name') ?? '');
+                    $oReply = $opp->handle($tenant, $convo, $from, $text, $oName ?: null, $oType);
+                    if ($oReply !== '') {
+                        $gateway->sendText($tenant->whatsapp_instance, $from, $oReply);
+                        MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $oReply);
+                        BotTrace::log($this->tenantId, $trace, $from, 'routed_opportunity', mb_substr($text, 0, 80));
+                        $st = is_array($convo->state) ? $convo->state : [];
+                        $st['lg_last_out'] = $this->norm($oReply);
+                        $st['lg_last_out_at'] = time();
+                        $convo->state = $st;
+                        $convo->last_message_at = now();
+                        $convo->save();
+                        return;
+                    }
+                }
+            }
+
             $intent = $router->classify($tenant, $text);
             if ($intent === 'lead' || $intent === 'ticket') {
                 $name = (string) (CustomerProfile::where('phone', $from)->value('name') ?? '');
