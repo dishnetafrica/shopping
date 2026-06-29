@@ -46,6 +46,10 @@ class LeadFollowUpCommand extends Command
                 try {
                     $tenant = Tenant::find($c->tenant_id);
                     if (! $tenant) return;
+                    // CLI has no tenant context; set it so the conversation/message tenant scope
+                    // resolves to THIS tenant (otherwise MessageLog's firstOrCreate misses the existing
+                    // conversation and tries to insert a duplicate).
+                    app(\App\Support\TenantContext::class)->set($tenant->id);
 
                     $cfg = (array) $tenant->setting('reengage_followup', []);
                     if (! ($cfg['enabled'] ?? false)) return;                        // opt-in only
