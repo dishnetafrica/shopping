@@ -157,6 +157,15 @@ class TaskApiController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /** A quick note that becomes a timeline event — no completion required. */
+    public function comment(Request $r)
+    {
+        [$task, $err] = $this->guard($r);
+        if ($err) return $err;
+        $res = $this->engine->comment($r->user()->tenant, $task, $r->user(), (string) $r->input('text', ''));
+        return response()->json($res, $res['ok'] ? 200 : 422);
+    }
+
     /** Full timeline (audit trail) for one order. */
     public function timeline(Request $r)
     {

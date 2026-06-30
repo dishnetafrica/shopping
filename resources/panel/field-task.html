@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Task</title>
+<style>
+:root{--bg:#F6F7F5;--card:#fff;--ink:#1B211D;--muted:#6B726C;--line:#E4E8E2;--pine:#15775C;--pine-d:#0C4A39;--amber:#9A5A0E;--amber-f:#FBF1DB;--red:#A23725;--mint:#E6F3EC;}
+*{box-sizing:border-box}html,body{margin:0}body{font-family:Inter,system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;padding:18px;max-width:520px;margin:0 auto}
+.brand{font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 1px 3px rgba(20,30,24,.04)}
+.ono{font-size:13px;color:var(--pine-d);font-weight:600}
+.h{font-size:22px;font-weight:700;margin:6px 0 4px}
+.meta{font-size:13px;color:var(--muted)}
+.badge{display:inline-block;font-size:12px;font-weight:600;padding:4px 11px;border-radius:999px;margin-top:8px}
+.b-off{background:var(--amber-f);color:var(--amber)}.b-go{background:var(--mint);color:var(--pine-d)}.b-over{background:#F8E7E2;color:var(--red)}
+.ck{margin:18px 0 6px}
+.ck label{display:flex;align-items:center;gap:12px;font-size:16px;padding:11px 0;border-top:1px solid var(--line);cursor:pointer}
+.ck label:first-child{border-top:0}
+.ck input{width:22px;height:22px;accent-color:var(--pine);flex:none}
+.ck .done{color:#9AA09A;text-decoration:line-through}
+.up{margin:14px 0}
+.upbtn{display:block;width:100%;text-align:center;border:1.5px dashed var(--line);border-radius:12px;padding:16px;color:var(--muted);font-size:15px;font-weight:500;background:none;cursor:pointer}
+.upbtn.has{border-style:solid;border-color:var(--pine);color:var(--pine-d);background:var(--mint)}
+.btn{display:block;width:100%;border:0;border-radius:13px;padding:17px;font-size:17px;font-weight:700;cursor:pointer;margin-top:14px}
+.btn.go{background:var(--pine);color:#fff}.btn.go:active{background:var(--pine-d)}
+.btn.accept{background:var(--amber);color:#fff;font-size:19px;padding:20px}
+.btn:disabled{opacity:.5}
+.done-wrap{text-align:center;padding:26px 0}
+.done-ic{width:64px;height:64px;border-radius:50%;background:var(--mint);color:var(--pine);display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 14px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 18px;border-radius:11px;font-size:14px;opacity:0;transition:.2s;z-index:9}
+.toast.on{opacity:1}
+.foot{text-align:center;font-size:11px;color:#9AA09A;margin-top:16px}
+</style>
+</head>
+<body>
+<div class="brand" id="brand">Task</div>
+<div class="card" id="card"><div class="meta">Loading…</div></div>
+<div class="foot" id="foot"></div>
+<div class="toast" id="toast"></div>
+<script>
+var T=window.TASK||null, U=window.URLS||{};
+var $=function(s){return document.querySelector(s);};
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function toast(m){var t=$('#toast');t.textContent=m;t.classList.add('on');setTimeout(function(){t.classList.remove('on');},2400);}
+var PROOF=null; // {name, data}
+
+function render(){
+  if(!T){$('#card').innerHTML='<div class="meta">This task link is no longer valid.</div>';return;}
+  $('#brand').textContent=T.shop||'Task';
+  if(!T.active){ // completed / read-only
+    $('#card').innerHTML='<div class="done-wrap"><div class="done-ic">✓</div><div class="h" style="margin:0">Task complete</div>'
+      +'<div class="meta" style="margin-top:6px">'+esc(T.title)+' · '+esc(T.order_no)+'</div>'
+      +(T.attachment?'<div style="margin-top:10px"><a href="'+esc(T.attachment)+'" target="_blank">View attachment ↗</a></div>':'')+'</div>';
+    $('#foot').textContent='Nothing more to do here.';return;
+  }
+  var badge=T.offered?'<span class="badge b-off">Needs your acceptance</span>':(T.overdue?'<span class="badge b-over">Overdue</span>':'<span class="badge b-go">In progress</span>');
+  var head='<div class="ono">'+esc(T.order_no)+' · '+esc(T.stage)+'</div><div class="h">'+esc(T.title)+'</div>'
+    +(T.customer?'<div class="meta">'+esc(T.customer)+'</div>':'')
+    +'<div class="meta">'+(T.due?'Due '+esc(T.due):'')+'</div>'+badge;
+
+  if(T.offered){
+    if(T.expired){
+      $('#card').innerHTML=head+'<div class="meta" style="margin-top:16px">This offer has expired. Ask your manager to resend it.</div>';
+      $('#foot').textContent='';
+      return;
+    }
+    $('#card').innerHTML=head+'<button class="btn accept" id="doAccept">Accept this job</button>'+noteBox();
+    $('#doAccept').onclick=accept;
+    wireNote();
+    $('#foot').textContent='Once you accept, you can mark each step and finish.';
+    return;
+  }
+  // accepted -> work
+  var ck=(T.checklist||[]).map(function(c,i){return '<label><input type="checkbox" data-ci="'+i+'" '+(c.done?'checked':'')+' onchange="tick()"><span class="'+(c.done?'done':'')+'">'+esc(c.label)+'</span></label>';}).join('');
+  var up=T.requires_upload?'<div class="up"><button class="upbtn" id="upBtn">📷 Add photo / proof</button></div>':'';
+  $('#card').innerHTML=head+(ck?'<div class="ck">'+ck+'</div>':'')+up+noteBox()+'<button class="btn go" id="doDone">Complete delivery</button>';
+  if(T.requires_upload)$('#upBtn').onclick=pickFile;
+  wireNote();
+  $('#doDone').onclick=complete;
+  $('#foot').textContent='Tap each step as you go, then Complete.';
+}
+function noteBox(){return '<div class="up"><textarea id="noteTxt" rows="2" placeholder="Add a note (e.g. road closed, called customer)" style="width:100%;border:1.5px solid var(--line);border-radius:12px;padding:12px;font-size:15px;font-family:inherit"></textarea><button class="upbtn" id="noteBtn" style="margin-top:8px">Add note</button></div>';}
+function wireNote(){var b=document.getElementById('noteBtn');if(b)b.onclick=sendNote;}
+async function sendNote(){var el=document.getElementById('noteTxt');var txt=(el&&el.value||'').trim();if(!txt){toast('Write a note first');return;}
+  var b=document.getElementById('noteBtn');b.disabled=true;b.textContent='Sending…';
+  try{var r=await fetch(U.comment,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt})});var d=await r.json();
+    if(d&&d.ok){el.value='';toast('Note added');b.textContent='Add note';b.disabled=false;}
+    else{toast((d&&d.error)||'Failed');b.textContent='Add note';b.disabled=false;}
+  }catch(e){toast('Network error');b.textContent='Add note';b.disabled=false;}
+}
+function checklistState(){var out=[];document.querySelectorAll('input[data-ci]').forEach(function(c){out[+c.dataset.ci]={done:c.checked};});return out;}
+function tick(){document.querySelectorAll('input[data-ci]').forEach(function(c){c.nextElementSibling.classList.toggle('done',c.checked);});
+  fetch(U.checklist,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({checklist:JSON.stringify(checklistState())})}).catch(function(){});}
+async function accept(){
+  var b=$('#doAccept');b.disabled=true;b.textContent='Accepting…';
+  try{var r=await fetch(U.accept);var d=await r.json();
+    if(d&&d.ok){T.offered=false;T.status='in_progress';toast('Accepted — you’re on it');render();}
+    else{toast((d&&d.error)||'Could not accept');b.disabled=false;b.textContent='Accept this job';}
+  }catch(e){toast('Network error');b.disabled=false;b.textContent='Accept this job';}
+}
+function pickFile(){
+  var f=document.createElement('input');f.type='file';f.accept='image/*,application/pdf';f.capture='environment';
+  f.onchange=function(){var file=f.files[0];if(!file)return;if(file.size>15*1024*1024){toast('Max 15 MB');return;}
+    var rd=new FileReader();rd.onload=function(){PROOF={name:file.name,data:rd.result};var b=$('#upBtn');b.classList.add('has');b.textContent='✓ '+(file.name.length>24?file.name.slice(0,24)+'…':file.name);};rd.readAsDataURL(file);};
+  f.click();
+}
+async function complete(){
+  if(T.requires_upload&&!PROOF&&!T.attachment){toast('Add a photo first');return;}
+  var b=$('#doDone');b.disabled=true;b.textContent='Completing…';
+  var body={checklist:JSON.stringify(checklistState())};
+  if(PROOF){body.attachment_data=PROOF.data;body.attachment_name=PROOF.name;}
+  try{var r=await fetch(U.complete,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});var d=await r.json();
+    if(d&&d.ok){T.active=false;render();}
+    else{toast((d&&d.error)||'Could not complete');b.disabled=false;b.textContent='Complete delivery';}
+  }catch(e){toast('Network error');b.disabled=false;b.textContent='Complete delivery';}
+}
+render();
+</script>
+</body>
+</html>

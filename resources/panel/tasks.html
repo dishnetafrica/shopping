@@ -159,10 +159,11 @@ function taskCard(t){
   var ck=(t.checklist||[]).map(function(c,i){return '<label><input type="checkbox" data-tid="'+t.id+'" data-ci="'+i+'" '+(c.done?'checked':'')+' onchange="tickChecklist('+t.id+')"><span class="'+(c.done?'done':'')+'">'+esc(c.label)+'</span></label>';}).join('');
   var opts=Object.keys(t.exceptions||{}).map(function(k){return '<option value="'+k+'">'+esc(t.exceptions[k].label)+'</option>';}).join('');
   var paused = t.paused;
+  var note = '<button class="btn" onclick="addNote('+t.id+')">Note</button>';
   var acts = paused
-    ? '<button class="btn go" onclick="resume('+t.id+')">Resume</button>'
+    ? '<button class="btn go" onclick="resume('+t.id+')">Resume</button>'+note
     : '<button class="btn go" onclick="complete('+t.id+','+(t.requires_upload?'true':'false')+')">Complete my task</button>'
-      +'<button class="btn warn" onclick="toggleExc('+t.id+')">Pause / blocker</button>';
+      +'<button class="btn warn" onclick="toggleExc('+t.id+')">Pause / blocker</button>'+note;
   var pausedNote = (paused&&t.exception_reason)?'<div class="meta" style="margin-top:6px;color:var(--amber)">Paused: '+esc(t.exception_reason)+'</div>':'';
   var att = t.attachment?'<div class="meta" style="margin-top:6px"><a href="'+esc(t.attachment)+'" target="_blank">View attachment ↗</a></div>':'';
   return '<div class="card" id="task'+t.id+'">'
@@ -175,6 +176,12 @@ function taskCard(t){
     +'<select id="excWait'+t.id+'">'+Object.keys(t.waiting_options||{}).map(function(k){return '<option value="'+k+'">Waiting for: '+esc(t.waiting_options[k])+'</option>';}).join('')+'</select>'
     +'<textarea id="excReason'+t.id+'" rows="2" placeholder="What\'s blocking it? (recorded, pauses the clock)"></textarea><button class="btn warn" onclick="raiseExc('+t.id+')">Confirm pause</button></div>'
     +'</div>';
+}
+async function addNote(id){
+  var txt=prompt('Add a note (recorded on the timeline):');
+  if(txt===null)return;txt=txt.trim();if(!txt){return;}
+  var d=await api('comment?'+qs({id:id,text:txt}));
+  if(d&&d.ok)toast('Note added');else toast((d&&d.error)||'Failed');
 }
 function checklistState(tid){var out=[];document.querySelectorAll('input[data-tid="'+tid+'"]').forEach(function(c){out[+c.dataset.ci]={done:c.checked};});return out;}
 var ckTimer={};
@@ -230,7 +237,7 @@ async function loadActivity(){
   if(!d||!d.ok){$('#viewActivity').innerHTML='<div class="empty">'+((d&&d.error)==='forbidden'?'Managers only.':'Could not load.')+'</div>';return;}
   $('#hi').textContent='Activity';$('#sub').textContent='What happened today';
   if(!d.events.length){$('#viewActivity').innerHTML='<div class="empty">No activity yet today.</div>';return;}
-  var verb={created:'new task',completed:'completed',paused:'paused',resumed:'resumed',reassigned:'reassigned',escalated:'escalated'};
+  var verb={created:'new task',completed:'completed',paused:'paused',resumed:'resumed',reassigned:'reassigned',escalated:'escalated',accepted:'accepted',opened:'opened the link',comment:'left a note',reminded:'reminded'};
   $('#viewActivity').innerHTML='<div class="card" style="padding:4px 14px">'+d.events.map(function(e){
     var tm=e.at?new Date(e.at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'';
     return '<div class="arow"><div class="at">'+tm+'</div><div class="ad"><b>'+esc(e.actor)+'</b> '+esc(verb[e.event]||e.event)+(e.stage?' · '+esc(e.stage):'')+' <span class="ono" onclick="openTimeline('+e.order_id+',\''+esc(e.order_no)+'\')">'+esc(e.order_no)+'</span>'+(e.detail?'<div class="meta">'+esc(e.detail)+'</div>':'')+'</div></div>';

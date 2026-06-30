@@ -5,6 +5,7 @@ use App\Http\Controllers\Panel\PanelApiController;
 use App\Http\Controllers\Panel\PwaController;
 use App\Http\Controllers\Panel\SellerPanelController;
 use App\Http\Controllers\Panel\TaskApiController;
+use App\Http\Controllers\Panel\FieldTaskController;
 use App\Http\Controllers\Panel\TrackController;
 use App\Http\Middleware\SetTenantFromUser;
 use Illuminate\Support\Facades\Route;
@@ -18,6 +19,15 @@ Route::get('/papi/track', [TrackController::class, 'show']);
 Route::get('/papi/pending', [\App\Http\Controllers\Panel\PendingController::class, 'show']);
 Route::get('/r/{token}',     [\App\Http\Controllers\Panel\RiderTrackController::class, 'show']);
 Route::post('/r/{token}/loc', [\App\Http\Controllers\Panel\RiderTrackController::class, 'loc']);
+
+// Operations field channel — no-login, signed + expiring links (the link is the auth).
+Route::middleware('signed')->group(function () {
+    Route::get('/ops/t/{task}',                       [FieldTaskController::class, 'show'])->name('ops.field.show');
+    Route::get('/ops/t/{task}/accept',                [FieldTaskController::class, 'accept'])->name('ops.field.accept');
+    Route::match(['get','post'], '/ops/t/{task}/checklist', [FieldTaskController::class, 'checklist'])->name('ops.field.checklist');
+    Route::match(['get','post'], '/ops/t/{task}/complete',  [FieldTaskController::class, 'complete'])->name('ops.field.complete');
+    Route::match(['get','post'], '/ops/t/{task}/comment',   [FieldTaskController::class, 'comment'])->name('ops.field.comment');
+});
 
 // Public shipment custody pages (no login — the shipment token is the key).
 Route::get('/t/{token}',        [\App\Http\Controllers\Panel\ShipmentTrackController::class, 'transporter']);
@@ -68,6 +78,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
             Route::match(['get','post'], 'exception', [TaskApiController::class, 'exception']);
             Route::match(['get','post'], 'resume',    [TaskApiController::class, 'resume']);
             Route::match(['get','post'], 'checklist', [TaskApiController::class, 'checklist']);
+            Route::match(['get','post'], 'comment',   [TaskApiController::class, 'comment']);
             Route::get('timeline', [TaskApiController::class, 'timeline']);
             Route::get('activity', [TaskApiController::class, 'activity']);
             Route::get('roles',    [TaskApiController::class, 'roles']);

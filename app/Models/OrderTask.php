@@ -15,6 +15,8 @@ class OrderTask extends Model
         'sla_minutes', 'paused_minutes', 'assigned_at', 'started_at', 'due_at', 'paused_at',
         'completed_at', 'completed_by', 'exception_type', 'exception_reason',
         'requires_upload', 'attachment', 'note', 'escalated', 'checklist', 'priority', 'waiting_for',
+        'accepted_at', 'reminded_at',
+        'link_nonce', 'opened_at',
     ];
 
     protected $casts = [
@@ -23,11 +25,11 @@ class OrderTask extends Model
         'checklist' => 'array',
         'priority' => 'integer',
         'assigned_at' => 'datetime', 'started_at' => 'datetime', 'due_at' => 'datetime',
-        'paused_at' => 'datetime', 'completed_at' => 'datetime',
+        'paused_at' => 'datetime', 'completed_at' => 'datetime', 'accepted_at' => 'datetime', 'reminded_at' => 'datetime', 'opened_at' => 'datetime',
     ];
 
     /** A task is "active" while it still needs work (the order's single live task). */
-    public const ACTIVE = ['pending', 'in_progress', 'exception', 'paused'];
+    public const ACTIVE = ['offered', 'pending', 'in_progress', 'exception', 'paused'];
 
     public function order(): BelongsTo { return $this->belongsTo(Order::class); }
     public function owner(): BelongsTo { return $this->belongsTo(User::class, 'owner_user_id'); }

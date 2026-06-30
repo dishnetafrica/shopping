@@ -75,6 +75,14 @@ namespace {
     ok('priority label 2 = High', W::priorityLabel(2) === 'High');
     ok('5 waiting-for options', count(W::WAITING_FOR) === 5);
     ok('portal_down waits on government', W::EXCEPTION_WAITS['portal_down'] === 'government');
+    echo "field channel\n";
+    ok('delivery accept = required', W::acceptPolicy($tenant, 'delivery') === 'required');
+    ok('store accept = optional', W::acceptPolicy($tenant, 'store') === 'optional');
+    ok('sales accept = none', W::acceptPolicy($tenant, 'sales') === 'none');
+    ok('delivery is a field stage', W::isFieldStage($tenant, 'delivery') === true);
+    ok('office is not a field stage', W::isFieldStage($tenant, 'office') === false);
+    ok('offer TTL default 15 min', W::offerTtl($tenant) === 15);
+
 
 
 

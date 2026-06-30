@@ -28,10 +28,10 @@ final class WorkflowConfig
         ['key' => 'gov',      'title' => 'Government invoice',  'role' => 'invoice_officer','task' => 'Create Rwanda invoice',   'sla' => 240,  'upload' => true, 'priority' => 'high',
             'checklist' => ['Login to Rwanda portal', 'Generate invoice', 'Verify VAT', 'Upload PDF', 'Enter invoice number'],
             'exceptions' => ['portal_down', 'missing_doc', 'other']],
-        ['key' => 'store',    'title' => 'Store preparation',  'role' => 'store_manager',  'task' => 'Reserve & pack goods',    'sla' => 120,  'upload' => false,
+        ['key' => 'store',    'title' => 'Store preparation',  'role' => 'store_manager',  'task' => 'Reserve & pack goods',    'sla' => 120,  'upload' => false, 'accept' => 'optional',
             'checklist' => ['Reserve stock', 'Pack', 'Print invoice'],
             'exceptions' => ['out_of_stock', 'other']],
-        ['key' => 'delivery', 'title' => 'Delivery',           'role' => 'driver',         'task' => 'Deliver & collect proof', 'sla' => 1440, 'upload' => true,
+        ['key' => 'delivery', 'title' => 'Delivery',           'role' => 'driver',         'task' => 'Deliver & collect proof', 'sla' => 1440, 'upload' => true, 'accept' => 'required', 'field' => true,
             'checklist' => ['Load', 'Deliver', 'Collect signature', 'Upload photo']],
     ];
 
@@ -195,5 +195,25 @@ final class WorkflowConfig
     {
         $flip = array_flip(self::PRIORITY);
         return ucfirst($flip[$rank] ?? 'normal');
+    }
+
+    /** Accept policy for a stage: 'none' | 'optional' | 'required'. */
+    public static function acceptPolicy(Tenant $t, string $stageKey): string
+    {
+        $p = self::stage($t, $stageKey)['accept'] ?? 'none';
+        return in_array($p, ['none', 'optional', 'required'], true) ? $p : 'none';
+    }
+
+    /** Field stages are driven over WhatsApp links instead of the panel (drivers etc.). */
+    public static function isFieldStage(Tenant $t, string $stageKey): bool
+    {
+        return (bool) (self::stage($t, $stageKey)['field'] ?? false);
+    }
+
+    /** Minutes an unaccepted offer stays valid before it must be re-issued. */
+    public static function offerTtl(Tenant $t): int
+    {
+        $cfg = (array) ($t->setting('workflow', []) ?: []);
+        return max(1, (int) ($cfg['offer_ttl_min'] ?? 15));
     }
 }
