@@ -47,9 +47,9 @@ class StorefrontProductController extends Controller
         return $imgs;
     }
 
-    public function show(int $product): JsonResponse
+    public function show($product): JsonResponse
     {
-        $product = $this->resolve($product);
+        $product = $this->resolve((int) $product);
         $tenant  = Tenant::withoutGlobalScopes()->find($product->tenant_id);
         $images  = $this->gallery($product);
 
@@ -80,7 +80,7 @@ class StorefrontProductController extends Controller
             $payload['_error'] = $this->lastError;
         }
 
-        return response()->json($payload)->header('Cache-Control', 'no-store');
+        return response()->json($payload)->header('Cache-Control', 'no-store')->header('X-Cb-Detail', 'v2');
     }
 
     private ?string $lastError = null;
