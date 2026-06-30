@@ -4481,4 +4481,61 @@ class PanelApiController extends Controller
 
         return response()->json(['ok' => true]);
     }
+
+    /**
+     * In-app AI help assistant (POST /papi/help-ask). Answers "how do I use this system" questions,
+     * grounded in the CloudBSS how-to knowledge. Uses the GLOBAL CloudBSS OpenAI key (support is on
+     * us, not billed to the tenant). Degrades gracefully if the model is unavailable.
+     */
+    public function helpAsk(Request $r)
+    {
+        $user = $r->user();
+        if (! $user || ! $user->tenant_id) {
+            return response()->json(['ok' => false, 'error' => 'Not signed in.'], 401);
+        }
+
+        $data = $r->json()->all() ?: $r->all();
+        $msg  = trim((string) ($data['message'] ?? ''));
+        if ($msg === '') {
+            return response()->json(['ok' => false, 'error' => 'Empty question.'], 422);
+        }
+        $msg = mb_substr($msg, 0, 1000);
+
+        // last few turns only (cost + focus). Expect [{role:'user'|'assistant', content:'…'}, …]
+        $history = [];
+        foreach (array_slice((array) ($data['history'] ?? []), -6) as $h) {
+            $role = (($h['role'] ?? '') === 'assistant') ? 'assistant' : 'user';
+            $c    = trim((string) ($h['content'] ?? ''));
+            if ($c !== '') $history[] = ['role' => $role, 'content' => mb_substr($c, 0, 1000)];
+        }
+
+        $system   = \App\Support\HelpKnowledge::systemPrompt($user->tenant, (string) ($user->role ?? ''));
+        $messages = array_merge(
+            [['role' => 'system', 'content' => $system]],
+            $history,
+            [['role' => 'user', 'content' => $msg]]
+        );
+
+        try {
+            $model = (string) env('OPENAI_MODEL', 'gpt-4o-mini');
+            $resp  = OpenAI::getFacadeRoot()->chat()->create([
+                'model'       => $model,
+                'temperature' => 0.2,
+                'messages'    => $messages,
+            ]);
+            $reply = trim((string) ($resp->choices[0]->message->content ?? ''));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('helpAsk failed: ' . $e->getMessage());
+            return response()->json([
+                'ok'       => true,
+                'degraded' => true,
+                'reply'    => "I can't reach the help assistant right now. For most tasks: use the left menu — Products to add or import items, Orders to see orders, Chats for WhatsApp, and Settings for currency, bot and staff. If you're stuck, contact DishNet/CloudBSS support.",
+            ]);
+        }
+
+        if ($reply === '') {
+            $reply = "I'm not sure about that one — try rephrasing, or contact DishNet/CloudBSS support.";
+        }
+        return response()->json(['ok' => true, 'reply' => $reply]);
+    }
 }

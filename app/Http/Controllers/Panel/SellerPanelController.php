@@ -109,7 +109,80 @@ class SellerPanelController extends Controller
         $html = str_replace('content="Seller"', 'content="' . $name . '"', $html);
         $html = $this->injectPlan($html, $tenant);
         $html = \App\Support\PanelCurrency::inject($html, $tenant);
+        $html = $this->injectHelpWidget($html);
         return $html;
+    }
+
+    /** Floating "?" AI help assistant, available on every panel page. Self-contained + namespaced. */
+    protected function injectHelpWidget(string $html): string
+    {
+        if (! str_contains($html, '</body>')) return $html;
+        $w = <<<'HTML'
+<div id="cbhelp-root"></div>
+<style>
+#cbhelp-fab{position:fixed;right:16px;bottom:18px;width:52px;height:52px;border-radius:50%;background:#103A8C;color:#fff;border:none;box-shadow:0 6px 18px rgba(0,0,0,.22);font-size:24px;cursor:pointer;z-index:2147483000;display:flex;align-items:center;justify-content:center}
+#cbhelp-panel{position:fixed;right:16px;bottom:80px;width:min(380px,calc(100vw - 32px));height:min(560px,calc(100vh - 120px));background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.25);z-index:2147483000;display:none;flex-direction:column;overflow:hidden;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#16181d}
+#cbhelp-panel.open{display:flex}
+#cbhelp-hd{background:#103A8C;color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between}
+#cbhelp-hd b{font-size:14.5px}#cbhelp-hd small{opacity:.85;font-size:11.5px;display:block}
+#cbhelp-x{background:transparent;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1}
+#cbhelp-body{flex:1;overflow-y:auto;padding:12px;background:#f7f8fa}
+.cbh-msg{max-width:85%;padding:9px 12px;border-radius:14px;margin:6px 0;white-space:pre-wrap;word-wrap:break-word}
+.cbh-a{background:#fff;border:1px solid #e9ebf0;border-bottom-left-radius:4px}
+.cbh-u{background:#103A8C;color:#fff;margin-left:auto;border-bottom-right-radius:4px}
+.cbh-tip{display:inline-block;background:#fff;border:1px solid #d7dbe2;border-radius:999px;padding:6px 11px;margin:4px 4px 0 0;font-size:12.5px;cursor:pointer;color:#103A8C}
+#cbhelp-ft{border-top:1px solid #e5e7eb;padding:10px;display:flex;gap:8px;background:#fff}
+#cbhelp-in{flex:1;border:1px solid #e5e7eb;border-radius:10px;padding:10px;font-size:14px;resize:none;max-height:90px}
+#cbhelp-send{background:#103A8C;color:#fff;border:none;border-radius:10px;padding:0 14px;font-weight:600;cursor:pointer}
+#cbhelp-send:disabled{opacity:.5}
+.cbh-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#9aa3af;margin:0 1px;animation:cbh 1s infinite}
+.cbh-dot:nth-child(2){animation-delay:.2s}.cbh-dot:nth-child(3){animation-delay:.4s}
+@keyframes cbh{0%,100%{opacity:.3}50%{opacity:1}}
+</style>
+<script>
+(function(){
+  if(window.__cbhelp)return; window.__cbhelp=1;
+  var root=document.getElementById('cbhelp-root'); if(!root)return;
+  var fab=document.createElement('button'); fab.id='cbhelp-fab'; fab.title='Help'; fab.innerHTML='?'; root.appendChild(fab);
+  var p=document.createElement('div'); p.id='cbhelp-panel';
+  p.innerHTML='<div id="cbhelp-hd"><div><b>Help assistant</b><small>Ask how to use the system</small></div><button id="cbhelp-x">\u00d7</button></div>'+
+    '<div id="cbhelp-body"></div>'+
+    '<div id="cbhelp-ft"><textarea id="cbhelp-in" rows="1" placeholder="Ask a question\u2026"></textarea><button id="cbhelp-send">Send</button></div>';
+  root.appendChild(p);
+  var body=p.querySelector('#cbhelp-body'), input=p.querySelector('#cbhelp-in'), send=p.querySelector('#cbhelp-send');
+  var history=[], greeted=false;
+  function esc(s){return (s||'').replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
+  function add(role,text){var d=document.createElement('div');d.className='cbh-msg '+(role==='user'?'cbh-u':'cbh-a');d.innerHTML=esc(text);body.appendChild(d);body.scrollTop=body.scrollHeight;return d;}
+  function greet(){ if(greeted)return; greeted=true;
+    add('assistant',"Hi! I can show you how to use the system \u2014 adding products, importing a CSV, connecting WhatsApp, changing your currency, and more. What do you need?");
+    var tips=['How do I add a product?','How do I import products from a CSV?','How do I connect WhatsApp?','How do I change my currency?'];
+    var wrap=document.createElement('div'); tips.forEach(function(t){var c=document.createElement('span');c.className='cbh-tip';c.textContent=t;c.onclick=function(){input.value=t;ask();};wrap.appendChild(c);}); body.appendChild(wrap);
+  }
+  function open(){p.classList.add('open');greet();input.focus();}
+  function close(){p.classList.remove('open');}
+  fab.onclick=function(){p.classList.contains('open')?close():open();};
+  p.querySelector('#cbhelp-x').onclick=close;
+  function ask(){
+    var q=input.value.trim(); if(!q)return; input.value='';
+    add('user',q); history.push({role:'user',content:q});
+    send.disabled=true;
+    var t=add('assistant',''); t.innerHTML='<span class="cbh-dot"></span><span class="cbh-dot"></span><span class="cbh-dot"></span>';
+    fetch('/papi/help-ask',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({message:q,history:history.slice(0,-1)})})
+      .then(function(r){return r.json().catch(function(){return{ok:false};});})
+      .then(function(j){
+        var reply=(j&&j.reply)||"Sorry, I couldn't answer that. Please contact DishNet/CloudBSS support.";
+        t.textContent=reply; history.push({role:'assistant',content:reply});
+        if(history.length>12)history=history.slice(-12);
+      })
+      .catch(function(){t.textContent="Network error \u2014 please try again.";})
+      .finally(function(){send.disabled=false;body.scrollTop=body.scrollHeight;});
+  }
+  send.onclick=ask;
+  input.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask();}});
+})();
+</script>
+HTML;
+        return str_replace('</body>', $w . '</body>', $html);
     }
 
     /**

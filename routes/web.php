@@ -92,6 +92,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         // first-login setup wizard save
         Route::match(['get', 'post'], 'onboard-save', [PanelApiController::class, 'onboardSave']);
 
+        // in-app AI help assistant
+        Route::match(['get', 'post'], 'help-ask', [PanelApiController::class, 'helpAsk']);
+
         // reads
         Route::get('orders',     [PanelApiController::class, 'orders']);
         Route::get('kitchen',         [PanelApiController::class, 'kitchen']);
