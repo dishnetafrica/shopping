@@ -2512,7 +2512,8 @@ function posInit(){
   $('posDisc').oninput=posTotals;$('posDiscType').onchange=posTotals;
   $('posPlace').onclick=posPlace;$('posHold').onclick=posHold;
   if($('posQuote'))$('posQuote').onclick=posQuote;
-  if($('posZone')){$('posZone').value=POS.zone;$('posZone').onchange=function(){POS.zone=this.value;var dt=$('posDiscType');if(dt&&dt.options[0])dt.options[0].text=(POS.zone==='SS'?'USD flat':'UGX flat');posGrid();posRenderCart();posChargesRender();posTotals();};}
+  if($('posZone')){if(PLAIN){var _zr=$('posZone').closest('.inrow');if(_zr)_zr.style.display='none';POS.zone='';}$('posZone').value=POS.zone;$('posZone').onchange=function(){POS.zone=this.value;var dt=$('posDiscType');if(dt&&dt.options[0])dt.options[0].text=(POS.zone==='SS'?'USD':curMeta().code)+' flat';posGrid();posRenderCart();posChargesRender();posTotals();};}
+  updateCurLabels();
   if($('posPhone'))$('posPhone').addEventListener('input',function(){if(POS.zone==='SS'){posRenderCart();posTotals();posGrid();}});
   $('posClear').onclick=function(){if(POS.cart.length&&!confirm('Clear cart?'))return;posClear();};
   posGrid();posRenderCart();posChargesRender();posHeld();
