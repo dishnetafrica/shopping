@@ -26,12 +26,12 @@ class Order extends Model
         'track_token','delivered_at','accepted_at','ready_at','rejected_reason',
         'scheduled_for','sched_stage','sched_reminders','delivery_fee','delivery_zone_id','eta_at',
         'customer_confirmed_at','confirmation_source','rating','rating_comment','rating_at','confirm_reminder_at',
-        'status_changed_at','stale_nudged_at','stale_level','delivered_by'];
+        'status_changed_at','stale_nudged_at','stale_level','delivered_by','workflow_done_at'];
     protected $casts = ['items_json'=>'array','total'=>'decimal:2','amount_paid'=>'decimal:2',
         'delivered_at'=>'datetime','accepted_at'=>'datetime','ready_at'=>'datetime','eta_at'=>'datetime',
         'scheduled_for'=>'datetime','sched_reminders'=>'array',
         'customer_confirmed_at'=>'datetime','rating_at'=>'datetime','confirm_reminder_at'=>'datetime','rating'=>'integer',
-        'status_changed_at'=>'datetime','stale_nudged_at'=>'datetime','stale_level'=>'integer'];
+        'status_changed_at'=>'datetime','stale_nudged_at'=>'datetime','stale_level'=>'integer','workflow_done_at'=>'datetime'];
 
     public function items(): HasMany { return $this->hasMany(OrderItem::class); }
     public function rider() { return $this->belongsTo(Rider::class); }
