@@ -20,6 +20,7 @@ class OrderCalculator
     {
         $products = $this->catalogue($tenant);
         $currency = (string) ($tenant->setting('currency', 'UGX'));
+        $moqMode  = strtolower((string) ($tenant->setting('moq_mode', 'off'))); // off | roundup
         $lines = [];
         $total = 0.0;
 
@@ -77,6 +78,16 @@ class OrderCalculator
                 $lines[] = ['name' => ($p['name'] ?? $query), 'qty' => $qty, 'price' => null, 'sum' => null, 'matched' => false];
                 continue;
             }
+            $moq      = isset($p['moq']) ? (int) $p['moq'] : null;
+            $reqQty   = $qty;
+            $adjusted = false;
+            // MOQ enforcement — bot/customer quotes only (the POS trusted-price branch above is exempt,
+            // since the seller may legitimately sell below MOQ). 'roundup' raises a below-minimum
+            // quantity up to the MOQ and flags it so the customer is told plainly.
+            if ($moqMode === 'roundup' && $moq && $qty < $moq) {
+                $qty = $moq;
+                $adjusted = true;
+            }
             $sum   = $price * $qty;
             $total += $sum;
             $lines[] = [
@@ -86,7 +97,9 @@ class OrderCalculator
                 'sum'          => $sum,
                 'weight_grams' => $grams ?: null,
                 'unit'         => (string) ($p['unit_label'] ?? ''),
-                'moq'          => isset($p['moq']) ? (int) $p['moq'] : null,
+                'moq'          => $moq,
+                'req_qty'      => $reqQty,
+                'adjusted'     => $adjusted,
                 'image'        => (string) ($p['image'] ?? ''),
                 'matched'      => true,
             ];
@@ -109,7 +122,12 @@ class OrderCalculator
                 continue;
             }
             $unit = $l['unit'] ? " {$l['unit']}" : '';
-            $note = ($l['moq'] && $l['qty'] < $l['moq']) ? " (min order {$l['moq']})" : '';
+            $note = '';
+            if (! empty($l['adjusted'])) {
+                $note = " _(min order {$l['moq']} — set to {$l['qty']})_";
+            } elseif (! empty($l['moq']) && $l['qty'] < $l['moq']) {
+                $note = " (min order {$l['moq']})";
+            }
             $out[] = "• {$l['qty']} × {$l['name']}{$unit} = {$cur} " . number_format($l['sum']) . $note;
         }
         $out[] = "————\n*Total: {$cur} " . number_format($quote['total']) . "*";

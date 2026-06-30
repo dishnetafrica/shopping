@@ -124,6 +124,12 @@
     <label>Delivery areas <span class="opt">— comma separated</span></label>
     <textarea id="f_areas" placeholder="e.g. Juba Town, Munuki, Gudele, Hai Cinema"></textarea>
     <p class="hint">Leave blank if you confirm delivery per order.</p>
+    <label>Minimum order handling</label>
+    <select id="f_moq" style="width:100%">
+      <option value="off">Off — accept any quantity (just note the minimum)</option>
+      <option value="roundup">Round up — raise small orders to the product minimum &amp; tell the customer</option>
+    </select>
+    <p class="hint">Use “Round up” for wholesale/cartons. Leave “Off” for retail/grocery. Set per product via each product's MOQ.</p>
   </div>
 
   <!-- STEP 5 — Review -->
@@ -210,6 +216,7 @@
   if (O.currency){ fill($('f_cur'), CURRENCIES.indexOf(O.currency)<0 ? [O.currency].concat(CURRENCIES) : CURRENCIES, O.currency); renderCurName(); }
   if (O.languages && O.languages.length) setLangs(O.languages);
   if (O.delivery_areas && O.delivery_areas.length) $('f_areas').value = O.delivery_areas.join(', ');
+  if (O.moq_mode && $('f_moq')) $('f_moq').value = O.moq_mode;
   if (O.currency_basis === 'native' || O.currency_basis === 'converted'){
     basis = O.currency_basis;
     Array.prototype.forEach.call($('f_basis').children, function(e){ e.classList.toggle('on', e.getAttribute('data-basis')===basis); });
@@ -270,7 +277,8 @@
       currency: $('f_cur').value,
       currency_basis: basis,
       languages: langs,
-      delivery_areas: $('f_areas').value.split(',').map(function(s){return s.trim();}).filter(Boolean)
+      delivery_areas: $('f_areas').value.split(',').map(function(s){return s.trim();}).filter(Boolean),
+      moq_mode: ($('f_moq')&&$('f_moq').value)||'off'
     };
   }
   function validate(){
@@ -284,7 +292,8 @@
     var rows=[['Business',d.name||'—'],['Sells',$('f_kind').selectedOptions[0].text],['WhatsApp',d.whatsapp||'—'],
       ['Country',d.country],['City',d.city||'—'],['Timezone',d.timezone],
       ['Currency',d.currency+(d.currency_basis==='native'?' (native)':' (converted)')],
-      ['Languages',(d.languages.join(', ')||'—')],['Delivery',(d.delivery_areas.join(', ')||'Confirmed per order')]];
+      ['Languages',(d.languages.join(', ')||'—')],['Delivery',(d.delivery_areas.join(', ')||'Confirmed per order')],
+      ['Min order',(d.moq_mode==='roundup'?'Round up to minimum':'Off (any quantity)')]];
     rows.forEach(function(x){ var el=document.createElement('div'); el.className='rev'; el.innerHTML='<span>'+x[0]+'</span><b>'+(''+x[1]).replace(/</g,'&lt;')+'</b>'; r.appendChild(el); });
   }
 

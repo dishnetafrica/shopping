@@ -400,6 +400,7 @@ HTML;
             'currency_basis' => (string) $t->setting('currency_basis', ''),
             'languages'      => array_values((array) $langs),
             'delivery_areas' => array_values((array) $areas),
+            'moq_mode'       => (string) $t->setting('moq_mode', 'off'),
         ];
         $json = json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $html = preg_replace('#</head>#', '<script>window.ONBOARD=' . $json . ';</script></head>', $html, 1);

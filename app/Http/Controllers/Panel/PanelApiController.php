@@ -4474,6 +4474,10 @@ class PanelApiController extends Controller
             if (is_string($areas)) $areas = array_map('trim', explode(',', $areas));
             $areas = array_values(array_filter(array_map(fn ($a) => $clean($a, 60), (array) $areas)));
             if ($areas) $t->putSetting('delivery_areas', array_slice($areas, 0, 50));
+
+            $moqMode = strtolower($clean($data['moq_mode'] ?? '', 16));
+            $moqMode = in_array($moqMode, ['off', 'roundup'], true) ? $moqMode : 'off';
+            $t->putSetting('moq_mode', $moqMode);
         }
 
         $t->putSetting('onboarded', true);
