@@ -53,7 +53,9 @@ class StorefrontProductController extends Controller
         $tenant  = Tenant::withoutGlobalScopes()->find($product->tenant_id);
         $images  = $this->gallery($product);
 
-        return response()->json([
+        // Core payload always returns; trust points + rails degrade independently so a
+        // recommendation failure never blanks the whole page.
+        $payload = [
             'product' => [
                 'id'          => $product->id,
                 'name'        => $product->name,
@@ -69,12 +71,30 @@ class StorefrontProductController extends Controller
                 'moq'         => $product->moq !== null ? (int) $product->moq : null,
                 'stock'       => $product->stock === null ? null : (int) $product->stock,
             ],
-            'why_shop'        => $tenant ? $tenant->whyShop() : [],
-            'similar'         => ProductRecommendations::similar($product)->map([$this, 'recoCard'])->values(),
-            'top_in_category' => ProductRecommendations::topInCategory($product->tenant_id, (string) $product->category, 10, $product->id)
-                                    ->map([$this, 'recoCard'])->values(),
-            'also_bought'     => ProductRecommendations::alsoBought($product)->map([$this, 'recoCard'])->values(),
-        ])->header('Cache-Control', 'no-store');
+            'why_shop'        => $this->safe(fn () => $tenant ? $tenant->whyShop() : [], []),
+            'similar'         => $this->safe(fn () => ProductRecommendations::similar($product)->map([$this, 'recoCard'])->values(), []),
+            'top_in_category' => $this->safe(fn () => ProductRecommendations::topInCategory($product->tenant_id, (string) $product->category, 10, $product->id)->map([$this, 'recoCard'])->values(), []),
+            'also_bought'     => $this->safe(fn () => ProductRecommendations::alsoBought($product)->map([$this, 'recoCard'])->values(), []),
+        ];
+        if ($this->lastError && request()->boolean('debug')) {
+            $payload['_error'] = $this->lastError;
+        }
+
+        return response()->json($payload)->header('Cache-Control', 'no-store');
+    }
+
+    private ?string $lastError = null;
+
+    /** Run a producer; on any failure record the message and return the fallback. */
+    private function safe(callable $fn, $fallback)
+    {
+        try {
+            return $fn();
+        } catch (\Throwable $e) {
+            $this->lastError = $this->lastError ?: ($e->getMessage() . ' @ ' . basename($e->getFile()) . ':' . $e->getLine());
+            \Illuminate\Support\Facades\Log::warning('storefront.product_detail', ['err' => $e->getMessage()]);
+            return $fallback;
+        }
     }
 
     /** Reco card with a storefront-resolved image. */

@@ -57,13 +57,18 @@ class ProductRecommendations
         return Cache::remember($key, self::TTL, function () use ($tenantId, $category, $limit, $excludeId) {
             $oi = self::OI_TABLE;
 
+            // Units sold per product as a subquery, LEFT JOINed in — no outer GROUP BY,
+            // so this is valid on PostgreSQL (which rejects SELECT products.* with GROUP BY products.id).
+            $sub = DB::table($oi)
+                ->select(self::OI_PRODUCT . ' as pid', DB::raw('SUM(' . self::OI_QTY . ') as units'))
+                ->groupBy(self::OI_PRODUCT);
+
             $q = Product::query()->withoutGlobalScopes()
+                ->leftJoinSub($sub, 'oi', 'oi.pid', '=', 'products.id')
                 ->where('products.category', $category)
                 ->when($excludeId, fn ($q) => $q->where('products.id', '!=', $excludeId))
-                ->leftJoin($oi, "$oi." . self::OI_PRODUCT, '=', 'products.id')
-                ->select('products.*', DB::raw("COALESCE(SUM($oi." . self::OI_QTY . '),0) as units_sold'))
-                ->groupBy('products.id')
-                ->orderByDesc('units_sold')
+                ->select('products.*', DB::raw('COALESCE(oi.units, 0) as units_sold'))
+                ->orderByDesc(DB::raw('COALESCE(oi.units, 0)'))
                 ->orderByDesc('products.id')
                 ->limit($limit);
 
