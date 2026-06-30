@@ -50,9 +50,9 @@ class StorefrontProductController extends Controller
         return $imgs;
     }
 
-    public function show($product): JsonResponse
+    public function show(): JsonResponse
     {
-        $id      = (int) $product;
+        $id      = (int) request()->route('product');
         $product = $this->resolve($id);
         if (! $product) {
             if (request()->boolean('debug')) {
@@ -93,7 +93,7 @@ class StorefrontProductController extends Controller
             $payload['_error'] = $this->lastError;
         }
 
-        return response()->json($payload)->header('Cache-Control', 'no-store')->header('X-Cb-Detail', 'v3');
+        return response()->json($payload)->header('Cache-Control', 'no-store')->header('X-Cb-Detail', 'v4');
     }
 
     private ?string $lastError = null;
