@@ -127,6 +127,8 @@ class SellerPanelController extends Controller
 #cbhelp-hd{background:#103A8C;color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between}
 #cbhelp-hd b{font-size:14.5px}#cbhelp-hd small{opacity:.85;font-size:11.5px;display:block}
 #cbhelp-x{background:transparent;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1}
+#cbhelp-new{background:transparent;border:none;color:#fff;font-size:16px;cursor:pointer;margin-right:4px}
+#cbhelp-fab .cbh-badge{position:absolute;top:-1px;right:-1px;width:13px;height:13px;border-radius:50%;background:#e11d48;border:2px solid #fff}
 #cbhelp-body{flex:1;overflow-y:auto;padding:12px;background:#f7f8fa}
 .cbh-msg{max-width:85%;padding:9px 12px;border-radius:14px;margin:6px 0;white-space:pre-wrap;word-wrap:break-word}
 .cbh-a{background:#fff;border:1px solid #e9ebf0;border-bottom-left-radius:4px}
@@ -146,7 +148,7 @@ class SellerPanelController extends Controller
   var root=document.getElementById('cbhelp-root'); if(!root)return;
   var fab=document.createElement('button'); fab.id='cbhelp-fab'; fab.title='Help'; fab.innerHTML='?'; root.appendChild(fab);
   var p=document.createElement('div'); p.id='cbhelp-panel';
-  p.innerHTML='<div id="cbhelp-hd"><div><b>Help assistant</b><small>Ask how to use the system</small></div><button id="cbhelp-x">\u00d7</button></div>'+
+  p.innerHTML='<div id="cbhelp-hd"><div><b>Help assistant</b><small>Ask how to use the system</small></div><div><button id="cbhelp-new" title="What\u2019s new">\u2728</button><button id="cbhelp-x">\u00d7</button></div></div>'+
     '<div id="cbhelp-body"></div>'+
     '<div id="cbhelp-ft"><textarea id="cbhelp-in" rows="1" placeholder="Ask a question\u2026"></textarea><button id="cbhelp-send">Send</button></div>';
   root.appendChild(p);
@@ -184,6 +186,30 @@ class SellerPanelController extends Controller
   }
   send.onclick=ask;
   input.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask();}});
+
+  // What's new: badge on the FAB when there's an unseen release; a notes view inside the panel.
+  p.querySelector('#cbhelp-new').onclick=function(){ showNew(); };
+  function seenVer(){ try{ return localStorage.getItem('cbh_seen_ver')||''; }catch(e){ return ''; } }
+  function loadNew(){
+    fetch('/papi/whatsnew',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){
+      if(!j||!j.ok)return; window.__cbnews=j;
+      if(j.latest && j.latest!==seenVer() && !fab.querySelector('.cbh-badge')){ var dot=document.createElement('span'); dot.className='cbh-badge'; fab.appendChild(dot); }
+    }).catch(function(){});
+  }
+  function showNew(){
+    open();
+    var j=window.__cbnews;
+    if(j && j.entries){
+      (j.entries||[]).forEach(function(e){
+        var html='<b>'+esc(e.title)+'</b> <span style="color:#9aa3af;font-size:11.5px">'+esc(e.date||'')+'</span><br>'+(e.items||[]).map(function(i){return '\u2022 '+esc(i);}).join('<br>');
+        var d=document.createElement('div'); d.className='cbh-msg cbh-a'; d.innerHTML=html; body.appendChild(d);
+      });
+      body.scrollTop=body.scrollHeight;
+      try{ localStorage.setItem('cbh_seen_ver', j.latest||''); }catch(e){}
+      var b=fab.querySelector('.cbh-badge'); if(b)b.remove();
+    }
+  }
+  loadNew();
 })();
 </script>
 HTML;

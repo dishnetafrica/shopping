@@ -4712,4 +4712,14 @@ class PanelApiController extends Controller
 
         return response()->json(['ok' => true]);
     }
+
+    /** In-product release notes (GET /papi/whatsnew). */
+    public function whatsNew(Request $r)
+    {
+        return response()->json([
+            'ok'      => true,
+            'latest'  => \App\Support\Changelog::latestVersion(),
+            'entries' => \App\Support\Changelog::entries(),
+        ]);
+    }
 }
