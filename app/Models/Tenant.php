@@ -221,4 +221,28 @@ class Tenant extends Model
         $this->putSetting('lead_rr_index', ($i + 1) % max(1, $n));
         return $pick;
     }
+
+    /**
+     * "Why shop with us" trust points for the storefront product page.
+     * Override per-tenant via settings.why_shop = [["title"=>..,"text"=>..], ...].
+     */
+    public function whyShop(): array
+    {
+        $custom = $this->setting('why_shop', []);
+        if (is_array($custom) && $custom) {
+            $out = [];
+            foreach ($custom as $row) {
+                $title = trim((string) ($row['title'] ?? ''));
+                if ($title === '') continue;
+                $out[] = ['title' => $title, 'text' => (string) ($row['text'] ?? '')];
+            }
+            if ($out) return $out;
+        }
+        return [
+            ['title' => 'Fast local delivery', 'text' => 'Order here and get it delivered to your door.'],
+            ['title' => 'Best prices',          'text' => 'Fair, up-to-date prices on every item.'],
+            ['title' => 'Order on WhatsApp',     'text' => 'Add to cart and check out in seconds — no app needed.'],
+        ];
+    }
+
 }
