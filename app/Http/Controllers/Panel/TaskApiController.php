@@ -174,6 +174,33 @@ class TaskApiController extends Controller
         return response()->json(['ok' => true, 'events' => $events]);
     }
 
+    /** Manager "what happened today" feed across all orders, from the event log. */
+    public function activity(Request $r)
+    {
+        $u = $r->user(); $t = $u->tenant;
+        if (! $u->isOwnerLike() && $u->role !== 'manager') {
+            return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        }
+        $events = OrderTaskEvent::query()->where('tenant_id', $t->id)
+            ->whereDate('created_at', now()->toDateString())
+            ->orderByDesc('id')->limit(300)->get();
+        $orders = $this->orderNos($t, $events->pluck('order_id')->unique()->all());
+        $titles = [];
+        foreach (WorkflowConfig::stages($t) as $s) $titles[$s['key']] = $s['title'] ?? $s['key'];
+        return response()->json([
+            'ok'     => true,
+            'events' => $events->map(fn ($e) => [
+                'at'       => optional($e->created_at)->toIso8601String(),
+                'event'    => $e->event,
+                'actor'    => $e->actor_name ?: 'System',
+                'order_id' => $e->order_id,
+                'order_no' => $orders[$e->order_id] ?? ('#' . $e->order_id),
+                'stage'    => $titles[$e->to_stage ?? ''] ?? ($titles[$e->from_stage ?? ''] ?? ($e->to_stage ?: $e->from_stage)),
+                'detail'   => $e->detail,
+            ])->values(),
+        ]);
+    }
+
     /** Role -> user mapping + the tenant's people, for the assignment screen. */
     public function roles(Request $r)
     {

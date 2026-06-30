@@ -41,6 +41,7 @@ a{color:inherit}
 .exc{margin-top:10px;border-top:1px solid var(--line);padding-top:10px;display:none}
 .exc.on{display:block}
 .exc select,.exc input,.exc textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13px;margin-bottom:7px;font-family:inherit}
+.arow{display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--line)}.arow:first-child{border-top:0}.arow .at{font-size:12px;color:var(--faint);width:48px;flex:none;padding-top:1px}.arow .ad{font-size:13.5px;flex:1}
 .prog{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:9px}.prog>i{display:block;height:100%;background:var(--pine);border-radius:99px;transition:width .3s}
 .empty{text-align:center;color:var(--muted);padding:40px 0;font-size:14px}
 .qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
@@ -81,6 +82,7 @@ a{color:inherit}
   <div id="viewHome"></div>
   <div id="viewMine" class="hide"></div>
   <div id="viewQueue" class="hide"></div>
+  <div id="viewActivity" class="hide"></div>
   <div id="viewSetup" class="hide"></div>
 </div>
 
@@ -105,6 +107,7 @@ var canManage = ME.isOwner || ME.role==='manager';
 function buildTabs(){
   var tabs=[['home','Operations'],['mine','My tasks']];
   if(canManage)tabs.push(['queue','Work queue']);
+  if(canManage)tabs.push(['activity','Activity']);
   if(ME.isOwner)tabs.push(['setup','Setup']);
   $('#tabs').innerHTML=tabs.map(function(t,i){return '<button class="tab'+(i===0?' on':'')+'" data-v="'+t[0]+'" onclick="switchTab(\''+t[0]+'\')">'+t[1]+'</button>';}).join('');
 }
@@ -113,8 +116,9 @@ function switchTab(v){
   $('#viewHome').classList.toggle('hide',v!=='home');
   $('#viewMine').classList.toggle('hide',v!=='mine');
   $('#viewQueue').classList.toggle('hide',v!=='queue');
+  $('#viewActivity').classList.toggle('hide',v!=='activity');
   $('#viewSetup').classList.toggle('hide',v!=='setup');
-  if(v==='home')loadHome();if(v==='mine')loadMine();if(v==='queue')loadQueue();if(v==='setup')loadSetup();
+  if(v==='home')loadHome();if(v==='mine')loadMine();if(v==='queue')loadQueue();if(v==='activity')loadActivity();if(v==='setup')loadSetup();
 }
 async function loadHome(){
   var d=await api('summary');
@@ -218,6 +222,19 @@ async function loadQueue(){
     +'<div class="qcell'+(d.overdue>0?' over':'')+'"><div class="t">Overdue</div><div class="v">'+d.overdue+'</div><div class="x">past SLA</div></div>'
     +'<div class="qcell"><div class="t">Completed today</div><div class="v">'+d.completed_today+'</div><div class="x">orders done</div></div>'
     +'</div><div class="secthead">Blockers</div><div class="qgrid">'+excHtml+'</div>';
+}
+
+/* ---------------- Activity (manager) ---------------- */
+async function loadActivity(){
+  var d=await api('activity');
+  if(!d||!d.ok){$('#viewActivity').innerHTML='<div class="empty">'+((d&&d.error)==='forbidden'?'Managers only.':'Could not load.')+'</div>';return;}
+  $('#hi').textContent='Activity';$('#sub').textContent='What happened today';
+  if(!d.events.length){$('#viewActivity').innerHTML='<div class="empty">No activity yet today.</div>';return;}
+  var verb={created:'new task',completed:'completed',paused:'paused',resumed:'resumed',reassigned:'reassigned',escalated:'escalated'};
+  $('#viewActivity').innerHTML='<div class="card" style="padding:4px 14px">'+d.events.map(function(e){
+    var tm=e.at?new Date(e.at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'';
+    return '<div class="arow"><div class="at">'+tm+'</div><div class="ad"><b>'+esc(e.actor)+'</b> '+esc(verb[e.event]||e.event)+(e.stage?' · '+esc(e.stage):'')+' <span class="ono" onclick="openTimeline('+e.order_id+',\''+esc(e.order_no)+'\')">'+esc(e.order_no)+'</span>'+(e.detail?'<div class="meta">'+esc(e.detail)+'</div>':'')+'</div></div>';
+  }).join('')+'</div>';
 }
 
 /* ---------------- Setup (owner) ---------------- */

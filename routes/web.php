@@ -69,6 +69,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
             Route::match(['get','post'], 'resume',    [TaskApiController::class, 'resume']);
             Route::match(['get','post'], 'checklist', [TaskApiController::class, 'checklist']);
             Route::get('timeline', [TaskApiController::class, 'timeline']);
+            Route::get('activity', [TaskApiController::class, 'activity']);
             Route::get('roles',    [TaskApiController::class, 'roles']);
             Route::match(['get','post'], 'roles-save', [TaskApiController::class, 'rolesSave']);
         });
