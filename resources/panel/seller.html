@@ -1203,20 +1203,25 @@ var STORE={lat:0.3428795,lng:32.5825996};
 var DELIV={base:2000,perKm:700,min:2000,round:500,freeOver:0};
 /* ---- multi-currency: DISPLAY layer only. Base prices, price list & bot stay in UGX. ---- */
 var RATES={usdUgx:3750,usdSsp:7000};   // 1 USD = 3750 UGX = 7000 SSP — editable in Settings
+/* Tenant currency injected server-side (window.SHOP_CUR). PLAIN = a non-convertible
+   currency such as RWF: shown as-is, no UGX/SSP/USD conversion, no display switcher. */
+var PANEL_CUR=(window.SHOP_CUR&&SHOP_CUR.code)||'UGX';
+var PANEL_DEC=(window.SHOP_CUR&&typeof SHOP_CUR.dec==='number')?SHOP_CUR.dec:0;
+var PLAIN=!!(window.SHOP_CUR&&SHOP_CUR.plain);
 var CUR=localStorage.getItem('fs_cur')||'';
-function curDefault(){try{var tz=(Intl.DateTimeFormat().resolvedOptions().timeZone)||'';if(/Juba/i.test(tz))return 'SSP';}catch(e){}return 'UGX';}
-if(!CUR)CUR=curDefault();
-function inUGX(){return CUR==='UGX';}
-function curMeta(){return CUR==='SSP'?{code:'SSP',dec:0}:(CUR==='USD'?{code:'USD',dec:2}:{code:'UGX',dec:0});}
-function convFromUgx(u){u=Number(u)||0;if(RATES.usdUgx<=0)return u;if(CUR==='SSP'){var s=u*(RATES.usdSsp/RATES.usdUgx);return Math.round(s/100)*100;}if(CUR==='USD')return u/RATES.usdUgx;return u;}
-function convToUgx(v){v=Number(v)||0;if(RATES.usdUgx<=0)return v;if(CUR==='SSP')return RATES.usdSsp>0?v*(RATES.usdUgx/RATES.usdSsp):v;if(CUR==='USD')return v*RATES.usdUgx;return v;}
+function curDefault(){if(PLAIN)return PANEL_CUR;try{var tz=(Intl.DateTimeFormat().resolvedOptions().timeZone)||'';if(/Juba/i.test(tz))return 'SSP';}catch(e){}return 'UGX';}
+if(!CUR||PLAIN)CUR=curDefault();
+function inUGX(){return !PLAIN&&CUR==='UGX';}
+function curMeta(){if(PLAIN)return{code:PANEL_CUR,dec:PANEL_DEC};return CUR==='SSP'?{code:'SSP',dec:0}:(CUR==='USD'?{code:'USD',dec:2}:{code:'UGX',dec:0});}
+function convFromUgx(u){u=Number(u)||0;if(PLAIN||RATES.usdUgx<=0)return u;if(CUR==='SSP'){var s=u*(RATES.usdSsp/RATES.usdUgx);return Math.round(s/100)*100;}if(CUR==='USD')return u/RATES.usdUgx;return u;}
+function convToUgx(v){v=Number(v)||0;if(PLAIN||RATES.usdUgx<=0)return v;if(CUR==='SSP')return RATES.usdSsp>0?v*(RATES.usdUgx/RATES.usdSsp):v;if(CUR==='USD')return v*RATES.usdUgx;return v;}
 var DISC={pct:0,amt:0};
 function netUgx(b){b=Number(b)||0;if(b<=0||(DISC.pct<=0&&DISC.amt<=0))return b;var v=b*(1-DISC.pct/100)-DISC.amt;if(v<0)v=0;return Math.round(v);}
 function discActive(){return DISC.pct>0||DISC.amt>0;}
 function applyDiscount(){if(Array.isArray(CATALOGUE))CATALOGUE.forEach(function(p){if(p.basePrice!=null)p.price=netUgx(p.basePrice);});rerenderCurrent();}
 function updateCurLabels(){var dt=$('posDiscType');if(dt&&dt.options[0])dt.options[0].text=curMeta().code+' flat';}
 function setCurrency(c){CUR=c;try{localStorage.setItem('fs_cur',c);}catch(e){}var s=$('curSel');if(s)s.value=c;updateCurLabels();rerenderCurrent();if(typeof current!=='undefined'&&current&&$('detailView')&&!$('detailView').classList.contains('hide'))renderInvoice();}
-function initCurrency(){var s=$('curSel');if(s){s.value=CUR;s.onchange=function(){setCurrency(this.value);};s.classList.toggle('hide',!SHOW_SWITCHER);}updateCurLabels();}
+function initCurrency(){var s=$('curSel');if(s){s.value=CUR;s.onchange=function(){setCurrency(this.value);};s.classList.toggle('hide',!SHOW_SWITCHER||PLAIN);}updateCurLabels();}
 async function loadBotConfig(){
   try{var r=await fetch(EP.botcfg+'?token='+encodeURIComponent(token),{cache:'no-store'});var d=await r.json();
     var c=(d&&d.config)?d.config:null;
@@ -1226,7 +1231,7 @@ async function loadBotConfig(){
       if(['auto','UGX','SSP','USD'].indexOf(c.currency)>=0)BOT_CUR=c.currency;
       SHOW_SWITCHER=!!c.showSwitcher;
       DISC.pct=Number(c.discountPct)||0;DISC.amt=Number(c.discountAmt)||0;
-      if(BOT_CUR!=='auto'){CUR=BOT_CUR;try{localStorage.setItem('fs_cur',CUR);}catch(e){}}
+      if(BOT_CUR!=='auto'&&!PLAIN){CUR=BOT_CUR;try{localStorage.setItem('fs_cur',CUR);}catch(e){}}
     }
   }catch(e){}
   applyDiscount();

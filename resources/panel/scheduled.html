@@ -73,7 +73,7 @@
   var $=function(i){return document.getElementById(i);},QUEUE=[];
   function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2600);}
   function esc(s){return (s||'').replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
-  function ugx(n){return 'UGX '+Math.round(n||0).toLocaleString();}
+  function ugx(n){var c=(window.SHOP_CUR&&SHOP_CUR.plain)?SHOP_CUR.code:'UGX';return c+' '+Math.round(n||0).toLocaleString();}
 
   // when chips
   var whenMode='custom';

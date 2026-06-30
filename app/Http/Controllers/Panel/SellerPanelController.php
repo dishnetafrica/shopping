@@ -104,6 +104,7 @@ class SellerPanelController extends Controller
         $html = str_replace('<div class="lg">FS</div>', '<div class="lg">' . $initials . '</div>', $html);
         $html = str_replace('content="Seller"', 'content="' . $name . '"', $html);
         $html = $this->injectPlan($html, $tenant);
+        $html = \App\Support\PanelCurrency::inject($html, $tenant);
         return $html;
     }
 

@@ -78,7 +78,7 @@
 <script>
 var Q=null, PLAN=null, METHOD=null, NET='MTN', POLL=null;
 function $(id){return document.getElementById(id);}
-function ugx(n){return 'UGX '+Number(n||0).toLocaleString();}
+function ugx(n){var c=(window.SHOP_CUR&&SHOP_CUR.plain)?SHOP_CUR.code:'UGX';return c+' '+Number(n||0).toLocaleString();}
 function show(t,cls){var m=$('msg');m.className='msg show '+cls;m.innerHTML=t;}
 function hideMsg(){$('msg').className='msg';}
 

@@ -23,6 +23,7 @@ class BillingController extends Controller
 
         $name = preg_replace('/[<>"\']/', '', (string) ($user->tenant->name ?? 'Shop')) ?: 'Shop';
         $html = str_replace('Family Shopper', $name, file_get_contents($path));
+        $html = \App\Support\PanelCurrency::inject($html, $user->tenant);
 
         return response($html, 200)
             ->header('Content-Type', 'text/html; charset=UTF-8')

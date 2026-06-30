@@ -137,7 +137,7 @@
   var $=function(id){return document.getElementById(id);};
   var PERIOD='30', ENT_TYPE='in';
   function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2300);}
-  function ugx(n){return 'UGX '+Number(n||0).toLocaleString();}
+  function ugx(n){var c=(window.SHOP_CUR&&SHOP_CUR.plain)?SHOP_CUR.code:'UGX';return c+' '+Number(n||0).toLocaleString();}
   function catLabel(c){return ({order_payment:'Order payment',expense:'Expense',supplier:'Supplier',owner_draw:'Owner draw',other:'Other'})[c]||c;}
 
   async function load(){
