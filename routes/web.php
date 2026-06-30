@@ -61,6 +61,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/diagnostics', [SellerPanelController::class, 'diagnostics']);
     Route::get('/panel/leads', [SellerPanelController::class, 'leads']);
     Route::get('/panel/setup', [SellerPanelController::class, 'setup']);
+    Route::get('/panel/onboard', [SellerPanelController::class, 'onboard']);
     Route::get('/panel/today', [SellerPanelController::class, 'today']);
     Route::get('/panel/inventory-count', [SellerPanelController::class, 'inventory']);
     Route::get('/panel/guide', [SellerPanelController::class, 'guide']);
@@ -87,6 +88,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         // auth (no-op; session already established)
         Route::get('auth-request',  [PanelApiController::class, 'authRequest']);
         Route::get('auth-verify',   [PanelApiController::class, 'authVerify']);
+
+        // first-login setup wizard save
+        Route::match(['get', 'post'], 'onboard-save', [PanelApiController::class, 'onboardSave']);
 
         // reads
         Route::get('orders',     [PanelApiController::class, 'orders']);

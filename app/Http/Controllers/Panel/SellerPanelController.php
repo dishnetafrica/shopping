@@ -22,6 +22,10 @@ class SellerPanelController extends Controller
             return redirect('/app/login');
         }
 
+        if ($this->needsOnboarding($user)) {
+            return redirect('/panel/onboard');
+        }
+
         $path = resource_path('panel/seller.html');
         if (! is_file($path)) {
             abort(500, 'Seller panel asset missing.');
@@ -179,6 +183,34 @@ HTML;
             if (mb_strlen($i) >= 2) break;
         }
         return $i !== '' ? $i : mb_strtoupper(mb_substr($name, 0, 2));
+    }
+
+    /** First-login setup wizard: owner declares business, location, currency basis, language. */
+    public function onboard(Request $request)
+    {
+        $user = $request->user();
+        if (! $user || ! $user->tenant_id) {
+            return redirect('/app/login');
+        }
+        $path = resource_path('panel/onboard.html');
+        if (! is_file($path)) {
+            abort(500, 'Onboard asset missing.');
+        }
+        return response($this->brandize(file_get_contents($path), $user->tenant), 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
+    }
+
+    /** Owners see the setup wizard once, until they finish (or skip) it. Staff never do. */
+    protected function needsOnboarding($user): bool
+    {
+        try {
+            if (! $user || ! method_exists($user, 'isOwnerLike') || ! $user->isOwnerLike()) return false;
+            $t = $user->tenant;
+            return $t && ! $t->setting('onboarded', false);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     /** Self-serve onboarding: connect WhatsApp (QR) + generate the bot persona. */

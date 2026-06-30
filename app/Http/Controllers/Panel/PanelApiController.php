@@ -4401,4 +4401,84 @@ class PanelApiController extends Controller
     {
         return response()->json(['ok' => false, 'pending' => true]);
     }
+
+    /**
+     * First-login setup wizard save (POST /papi/onboard-save). Owner-only.
+     * Writes the business profile + locale into tenant settings and marks onboarding done.
+     */
+    public function onboardSave(Request $r)
+    {
+        $user = $r->user();
+        if (! $user || ! $user->tenant_id) {
+            return response()->json(['ok' => false, 'error' => 'Not signed in.'], 401);
+        }
+        if (method_exists($user, 'isOwnerLike') && ! $user->isOwnerLike()) {
+            return response()->json(['ok' => false, 'error' => 'Only the owner can run setup.'], 403);
+        }
+        $t = $user->tenant;
+        if (! $t) {
+            return response()->json(['ok' => false, 'error' => 'No business found.'], 404);
+        }
+
+        $data    = $r->json()->all() ?: $r->all();
+        $skipped = (bool) ($data['skipped'] ?? false);
+
+        $clean = function ($v, int $max = 120): string {
+            return trim(mb_substr(preg_replace('/[\x00-\x1F<>]/u', '', (string) $v), 0, $max));
+        };
+
+        if (! $skipped) {
+            $name = $clean($data['name'] ?? '');
+            if ($name !== '') {
+                $t->name = $name;
+            }
+            $wa = $clean($data['whatsapp'] ?? '', 32);
+            if ($wa !== '') {
+                $t->whatsapp_number = $wa;
+            }
+            $t->save();
+
+            $kind = $clean($data['bot_kind'] ?? '', 24);
+            if ($kind !== '') $t->putSetting('bot_kind', $kind);
+
+            $country = $clean($data['country'] ?? '');
+            if ($country !== '') $t->putSetting('country', $country);
+            $cc = strtoupper($clean($data['country_code'] ?? '', 2));
+            if ($cc !== '') $t->putSetting('country_code', $cc);
+
+            $city = $clean($data['city'] ?? '');
+            if ($city !== '') $t->putSetting('city', $city);
+
+            $tz = $clean($data['timezone'] ?? '', 48);
+            if ($tz !== '' && in_array($tz, timezone_identifiers_list(), true)) {
+                $t->putSetting('timezone', $tz);
+            }
+
+            $cur = strtoupper($clean($data['currency'] ?? '', 8));
+            if ($cur !== '') $t->putSetting('currency', $cur);
+
+            $basis = strtolower($clean($data['currency_basis'] ?? '', 16));
+            $basis = in_array($basis, ['native', 'converted'], true) ? $basis : 'native';
+            $t->putSetting('currency_basis', $basis);
+            // Native pricing must not trigger the UGX-base / ex-works USD conversion logic.
+            if ($basis === 'native') {
+                $t->putSetting('usdUgx', 0);
+            }
+
+            $langs = $data['languages'] ?? [];
+            if (is_string($langs)) $langs = array_map('trim', explode(',', $langs));
+            $langs = array_values(array_filter(array_map(fn ($l) => $clean($l, 32), (array) $langs)));
+            $t->putSetting('languages', array_slice($langs, 0, 8));
+
+            $areas = $data['delivery_areas'] ?? [];
+            if (is_string($areas)) $areas = array_map('trim', explode(',', $areas));
+            $areas = array_values(array_filter(array_map(fn ($a) => $clean($a, 60), (array) $areas)));
+            if ($areas) $t->putSetting('delivery_areas', array_slice($areas, 0, 50));
+        }
+
+        $t->putSetting('onboarded', true);
+        $t->putSetting('onboarded_at', now()->toIso8601String());
+
+        return response()->json(['ok' => true]);
+    }
 }

@@ -752,6 +752,33 @@ class AiBrain
         $greeting = trim((string) $tenant->setting('bot_greeting', ''));
 
         $p  = ($persona !== '' ? $persona : 'You are a helpful WhatsApp sales & support assistant.') . "\n\n";
+
+        // Explicit location & currency context — overrides any default assumption (e.g. Kampala)
+        // baked into a persona. Built from the tenant's own setup so the bot speaks to the right
+        // place and money.
+        $city    = trim((string) $tenant->setting('city', ''));
+        $country = trim((string) $tenant->setting('country', ''));
+        $cur     = strtoupper(trim((string) $tenant->setting('currency', 'UGX'))) ?: 'UGX';
+        $basis   = strtolower(trim((string) $tenant->setting('currency_basis', '')));
+        $langs   = $tenant->setting('languages', []);
+        if (is_string($langs)) $langs = array_filter(array_map('trim', explode(',', $langs)));
+        $where = trim($city . ($city && $country ? ', ' : '') . $country);
+        if ($where !== '' || $cur !== '') {
+            $p .= "BUSINESS CONTEXT:\n";
+            if ($where !== '') {
+                $p .= "- This shop is based in {$where}. Deliveries, examples and references are about {$where} — do NOT assume any other city (e.g. do not say Kampala/Uganda unless that is actually {$where}).\n";
+            }
+            if ($basis === 'native') {
+                $p .= "- Prices are in {$cur}, and {$cur} IS the price exactly as listed — there is no other base currency and no ex-works/Kampala conversion. Quote prices in {$cur} as shown. Never describe prices as 'ex-Kampala', 'UGX base', or converted.\n";
+            } else {
+                $p .= "- Currency is {$cur}.\n";
+            }
+            if (is_array($langs) && count($langs)) {
+                $p .= "- Customers mostly speak: " . implode(', ', $langs) . ". Still mirror whatever language each customer writes in.\n";
+            }
+            $p .= "\n";
+        }
+
         $p .= "CORE RULES:\n";
         $p .= "- Detect the customer's language and ALWAYS reply in that same language (English, Swahili, Luganda, French, Arabic, Hindi, Gujarati, etc.). Mirror how they write for the content of your replies. If they write in romanised Hindi/Gujarati (Gujlish/Hinglish, e.g. \"mare toilet paper joiye\"), reply the same way in romanised Latin script — do NOT switch to Devanagari/Gujarati script unless they did. Do NOT echo a religious or cultural greeting back at the customer (for example, do not answer with an Islamic, Hindu or other religious greeting just because the customer opened with one) — greet using this shop's own greeting instead.\n";
         $p .= "- Be concise and friendly — this is WhatsApp.\n";

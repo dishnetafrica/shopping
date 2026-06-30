@@ -42,7 +42,11 @@ class PanelCurrency
     {
         $raw = strtoupper(trim((string) $tenant->setting('currency', 'UGX')));
         if ($raw === '' || $raw === 'AUTO') $raw = 'UGX';
-        $plain = ! in_array($raw, self::CONVERTIBLE, true);
+        // A tenant can declare its prices are NATIVE (the currency IS the price, no UGX base / no
+        // ex-Kampala conversion). That forces "plain" rendering even for USD/SSP which would
+        // otherwise be treated as part of the Uganda<->South-Sudan conversion model.
+        $basis = strtolower(trim((string) $tenant->setting('currency_basis', '')));
+        $plain = ($basis === 'native') ? true : ! in_array($raw, self::CONVERTIBLE, true);
         return [
             'code'  => $raw,
             'dec'   => \App\Services\Pricing::decimalsForCurrency($raw),
