@@ -63,6 +63,13 @@ namespace {
     ok('user with no open tasks wins', W::pickOwner([10, 11], [10 => 3]) === 11);
     ok('empty role -> null', W::pickOwner([], [5 => 1]) === null);
     ok('role label', W::roleLabel('invoice_officer') === 'Invoice officer');
+    echo "checklist / exceptions config\n";
+    ok('gov checklist has 5 steps', count(W::checklistFor($tenant, 'gov')) === 5);
+    ok('checklist items start not done', W::checklistFor($tenant, 'gov')[0]['done'] === false);
+    ok('gov exceptions = portal_down,missing_doc,other', array_keys(W::exceptionsFor($tenant, 'gov')) === ['portal_down','missing_doc','other']);
+    ok('store out_of_stock reassigns to procurement', W::exceptionsFor($tenant, 'store')['out_of_stock']['reassign'] === 'procurement');
+    ok('sales (no override) gets all exception types', count(W::exceptionsFor($tenant, 'sales')) === 4);
+
 
     echo "\n$pass passed, $fail failed\n";
     exit($fail ? 1 : 0);

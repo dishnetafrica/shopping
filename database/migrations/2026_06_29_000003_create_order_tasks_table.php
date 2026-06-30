@@ -36,6 +36,7 @@ return new class extends Migration {
             $t->boolean('requires_upload')->default(false);
             $t->string('attachment')->nullable();
             $t->text('note')->nullable();
+            $t->json('checklist')->nullable();
             $t->boolean('escalated')->default(false);
             $t->timestamps();
 

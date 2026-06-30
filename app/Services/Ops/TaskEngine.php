@@ -160,6 +160,7 @@ class TaskEngine
             'assigned_at'     => now(),
             'due_at'          => WorkflowConfig::dueAt(now(), $sla, 0),
             'requires_upload' => (bool) ($stage['upload'] ?? false),
+            'checklist'       => WorkflowConfig::checklistFor($tenant, (string) $stage['key']),
         ]);
         $this->log($tenant, $task->order_id, $task->id, 'created', null, null, (string) $stage['key'],
             $task->title . ' assigned to ' . WorkflowConfig::roleLabel((string) $stage['role']));

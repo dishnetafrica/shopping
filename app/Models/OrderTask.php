@@ -14,12 +14,13 @@ class OrderTask extends Model
         'tenant_id', 'order_id', 'seq', 'stage', 'role', 'owner_user_id', 'title', 'status',
         'sla_minutes', 'paused_minutes', 'assigned_at', 'started_at', 'due_at', 'paused_at',
         'completed_at', 'completed_by', 'exception_type', 'exception_reason',
-        'requires_upload', 'attachment', 'note', 'escalated',
+        'requires_upload', 'attachment', 'note', 'escalated', 'checklist',
     ];
 
     protected $casts = [
         'seq' => 'integer', 'sla_minutes' => 'integer', 'paused_minutes' => 'integer',
         'requires_upload' => 'boolean', 'escalated' => 'boolean',
+        'checklist' => 'array',
         'assigned_at' => 'datetime', 'started_at' => 'datetime', 'due_at' => 'datetime',
         'paused_at' => 'datetime', 'completed_at' => 'datetime',
     ];

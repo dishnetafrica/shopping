@@ -17,13 +17,30 @@ use App\Models\Tenant;
  */
 final class WorkflowConfig
 {
-    /** Default flow (Keshwala Rwanda): ordered stages, each with role + SLA minutes. */
+    /** Default flow (Keshwala Rwanda): ordered stages, each with role + SLA minutes.
+     *  `checklist` holds optional sub-actions for the stage (the task-template hedge);
+     *  `exceptions` limits which blockers the UI offers (defaults to EXCEPTION_TYPES). */
     public const DEFAULT_STAGES = [
-        ['key' => 'sales',    'title' => 'Sales submitted',    'role' => 'salesperson',    'task' => 'Submit order',            'sla' => 30,   'upload' => false],
-        ['key' => 'office',   'title' => 'Office review',      'role' => 'office_manager', 'task' => 'Review & approve order',  'sla' => 120,  'upload' => false],
-        ['key' => 'gov',      'title' => 'Government invoice',  'role' => 'invoice_officer','task' => 'Create Rwanda invoice',   'sla' => 240,  'upload' => true],
-        ['key' => 'store',    'title' => 'Store preparation',  'role' => 'store_manager',  'task' => 'Reserve & pack goods',    'sla' => 120,  'upload' => false],
-        ['key' => 'delivery', 'title' => 'Delivery',           'role' => 'driver',         'task' => 'Deliver & collect proof', 'sla' => 1440, 'upload' => true],
+        ['key' => 'sales',    'title' => 'Sales submitted',    'role' => 'salesperson',    'task' => 'Submit order',            'sla' => 30,   'upload' => false,
+            'checklist' => ['Capture customer details', 'Add products & quantities', 'Confirm delivery need']],
+        ['key' => 'office',   'title' => 'Office review',      'role' => 'office_manager', 'task' => 'Review & approve order',  'sla' => 120,  'upload' => false,
+            'checklist' => ['Check order', 'Correct prices', 'Approve or flag missing docs']],
+        ['key' => 'gov',      'title' => 'Government invoice',  'role' => 'invoice_officer','task' => 'Create Rwanda invoice',   'sla' => 240,  'upload' => true,
+            'checklist' => ['Login to Rwanda portal', 'Generate invoice', 'Verify VAT', 'Upload PDF', 'Enter invoice number'],
+            'exceptions' => ['portal_down', 'missing_doc', 'other']],
+        ['key' => 'store',    'title' => 'Store preparation',  'role' => 'store_manager',  'task' => 'Reserve & pack goods',    'sla' => 120,  'upload' => false,
+            'checklist' => ['Reserve stock', 'Pack', 'Print invoice'],
+            'exceptions' => ['out_of_stock', 'other']],
+        ['key' => 'delivery', 'title' => 'Delivery',           'role' => 'driver',         'task' => 'Deliver & collect proof', 'sla' => 1440, 'upload' => true,
+            'checklist' => ['Load', 'Deliver', 'Collect signature', 'Upload photo']],
+    ];
+
+    /** Exception types the UI can raise. reassign-types carry a target role. */
+    public const EXCEPTION_TYPES = [
+        'out_of_stock' => ['label' => 'Out of stock',        'reassign' => 'procurement'],
+        'portal_down'  => ['label' => 'Government portal down','reassign' => null],
+        'missing_doc'  => ['label' => 'Missing document',     'reassign' => null],
+        'other'        => ['label' => 'Other blocker',        'reassign' => null],
     ];
 
     /** Roles a tenant assigns people to. Label per key for the UI. */
@@ -125,5 +142,24 @@ final class WorkflowConfig
     public static function roleLabel(string $key): string
     {
         return self::ROLE_LABELS[$key] ?? ucfirst(str_replace('_', ' ', $key));
+    }
+
+    /** Sub-actions for a stage as a fresh checklist snapshot: [['label'=>..,'done'=>false], ...]. */
+    public static function checklistFor(Tenant $t, string $stageKey): array
+    {
+        $stage = self::stage($t, $stageKey);
+        $items = is_array($stage['checklist'] ?? null) ? $stage['checklist'] : [];
+        return array_values(array_map(fn ($label) => ['label' => (string) $label, 'done' => false], $items));
+    }
+
+    /** Allowed exception options for a stage: type => [label, reassign]. */
+    public static function exceptionsFor(Tenant $t, string $stageKey): array
+    {
+        $stage = self::stage($t, $stageKey);
+        $keys  = is_array($stage['exceptions'] ?? null) && $stage['exceptions']
+            ? $stage['exceptions'] : array_keys(self::EXCEPTION_TYPES);
+        $out = [];
+        foreach ($keys as $k) if (isset(self::EXCEPTION_TYPES[$k])) $out[$k] = self::EXCEPTION_TYPES[$k];
+        return $out;
     }
 }
