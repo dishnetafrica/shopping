@@ -48,9 +48,11 @@ class CreditReminderCommand extends Command
         }
 
         foreach ($q->get() as $t) {
-            if (! $t->setting('credit_reminder_enabled', false)) continue;
-            $offsets = $this->offsets($t);
+            $cfg = (array) $t->setting('credit_reminder', []);
+            if (empty($cfg['enabled'])) continue;
+            $offsets = $this->offsets((string) ($cfg['days'] ?? ''));
             if (! $offsets) continue;
+            $template = (string) ($cfg['message'] ?? '');
 
             foreach ($offsets as $d) {
                 $orders = Order::withoutGlobalScopes()
@@ -77,7 +79,7 @@ class CreditReminderCommand extends Command
                     if (! OrderNotificationSend::claim($t->id, $o->id, 0, $event)) continue;
 
                     $ctx->set($t->id);
-                    $msg = $this->message($t, $o, $d);
+                    $msg = $this->message($t, $o, $d, $template);
                     try {
                         $res = $wa->forTenant($t)->sendText($t->whatsapp_instance, $o->customer_phone, $msg);
                         $mid = is_array($res) ? ($res['key']['id'] ?? ($res['id'] ?? null)) : null;
@@ -97,9 +99,8 @@ class CreditReminderCommand extends Command
     }
 
     /** Parse credit_reminder_days into a sorted unique list of day offsets (1..365). */
-    private function offsets(Tenant $t): array
+    private function offsets(string $raw): array
     {
-        $raw = (string) $t->setting('credit_reminder_days', '');
         $out = [];
         foreach (preg_split('/[,\s]+/', $raw, -1, PREG_SPLIT_NO_EMPTY) as $p) {
             $n = (int) $p;
@@ -110,14 +111,14 @@ class CreditReminderCommand extends Command
     }
 
     /** Reminder text — tenant template override, else a polite default. */
-    private function message(Tenant $t, Order $o, int $days): string
+    private function message(Tenant $t, Order $o, int $days, string $tpl = ""): string
     {
         $first   = trim((string) strtok((string) $o->customer_name, ' '));
         $hi      = $first !== '' ? "Hi {$first}" : 'Hello';
         $balance = Pricing::money($t, $o->balanceDue());
 
-        $tpl = trim((string) $t->setting('credit_reminder_text', ''));
-        if ($tpl !== '') {
+        $tpl = trim($tpl);
+        if ($tpl !== "") {
             return strtr($tpl, [
                 '{name}'    => $first !== '' ? $first : 'there',
                 '{order}'   => (string) $o->order_no,

@@ -856,6 +856,17 @@
           </div>
         </div>
         <div class="card">
+          <div class="head">Credit reminders</div>
+          <div class="body">
+            <div class="mfield"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="setCredit" style="width:auto"> Remind customers about unpaid invoices</label>
+              <div class="note">For sales on credit. The bot messages the customer their outstanding balance a set number of days after the invoice is created. Turning this on is instant.</div>
+            </div>
+            <div class="mfield"><label>Days after invoice</label><input type="text" id="setCreditDays" placeholder="e.g. 7  (or 3,7,14 for repeat nudges)"></div>
+            <div class="mfield"><label>Message (optional)</label><textarea id="setCreditMsg" rows="3" placeholder="Leave blank for the default. Use {name} {order} {balance} {days}."></textarea></div>
+            <button class="btn" id="setCreditSave" style="padding:6px 12px">Save reminder settings</button>
+          </div>
+        </div>
+        <div class="card">
           <div class="head">Branches &amp; inventory</div>
           <div class="body">
             <div class="mfield"><label>Inventory mode</label>
@@ -1152,7 +1163,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   dispatch:'/papi/dispatch',
   riders:'/papi/riders',riderSave:'/papi/rider-save',riderDel:'/papi/rider-delete',importContacts:'/papi/contacts-import',botMode:'/papi/chats/bot-mode',
   ret:'/papi/return',returns:'/papi/returns',
-  settings:'/papi/settings',settingsSave:'/papi/settings-save',brandingSave:'/papi/branding-save',botToggle:'/papi/bot-toggle',reengageSave:'/papi/reengage-save',
+  settings:'/papi/settings',settingsSave:'/papi/settings-save',brandingSave:'/papi/branding-save',botToggle:'/papi/bot-toggle',reengageSave:'/papi/reengage-save',creditReminderSave:'/papi/credit-reminder-save',
   actInbox:'/papi/activity-inbox',actApprove:'/papi/activity-approve',actReject:'/papi/activity-reject',actEdit:'/papi/activity-edit',
   brain:'/papi/brain',brainDiscover:'/papi/brain-discover',
   brainCandidates:'/papi/brain-candidates',brainCandApprove:'/papi/brain-candidate-approve',brainCandDismiss:'/papi/brain-candidate-dismiss',
@@ -3730,7 +3741,7 @@ function applySettings(s){
   if(s.metaDescription!=null)SETTINGS.metaDescription=s.metaDescription;
   if(Array.isArray(s.faq))SETTINGS.faq=s.faq;
   if(Array.isArray(s.brands))SETTINGS.brands=s.brands;
-  if(Array.isArray(s.combos))SETTINGS.combos=s.combos;if(s.categoryGroups)SETTINGS.categoryGroups=s.categoryGroups;if(Array.isArray(s.menuFiles))SETTINGS.menuFiles=s.menuFiles;if(Array.isArray(s.catalogFiles))SETTINGS.catalogFiles=s.catalogFiles;if(s.reengage)SETTINGS.reengage=s.reengage;if('introCatalog' in s)SETTINGS.introCatalog=s.introCatalog;
+  if(Array.isArray(s.combos))SETTINGS.combos=s.combos;if(s.categoryGroups)SETTINGS.categoryGroups=s.categoryGroups;if(Array.isArray(s.menuFiles))SETTINGS.menuFiles=s.menuFiles;if(Array.isArray(s.catalogFiles))SETTINGS.catalogFiles=s.catalogFiles;if(s.reengage)SETTINGS.reengage=s.reengage;if(s.creditReminder)SETTINGS.creditReminder=s.creditReminder;if('introCatalog' in s)SETTINGS.introCatalog=s.introCatalog;
   if(s.lat!=null&&s.lat!=='')STORE.lat=Number(s.lat)||STORE.lat;
   if(s.lng!=null&&s.lng!=='')STORE.lng=Number(s.lng)||STORE.lng;
   if(s.base!=null&&s.base!=='')DELIV.base=Number(s.base)||0;
@@ -3798,6 +3809,20 @@ function settingsInit(){
         +'&require_lead='+($('setReengageReqLead').checked?'1':'0');
         var r=await fetch(u,{cache:'no-store'});var d=await r.json();
         if(d&&d.ok){SETTINGS.reengage=d.reengage;toast('Follow-up settings saved');}else toast((d&&d.error)||'Save failed');
+      }catch(e){toast('Network error');}
+    };
+  }
+  if($('setCredit')){var CR=SETTINGS.creditReminder||{};
+    $('setCredit').checked=!!CR.enabled;
+    $('setCredit').onchange=function(){botToggle('credit_reminder',this.checked,'Credit reminders');};
+    if($('setCreditDays'))$('setCreditDays').value=CR.days||'';
+    if($('setCreditMsg'))$('setCreditMsg').value=CR.message||'';
+    if($('setCreditSave'))$('setCreditSave').onclick=async function(){
+      try{var u=EP.creditReminderSave+'?token='+encodeURIComponent(token)
+        +'&days='+encodeURIComponent($('setCreditDays').value||'')
+        +'&message='+encodeURIComponent($('setCreditMsg').value||'');
+        var r=await fetch(u,{cache:'no-store'});var d=await r.json();
+        if(d&&d.ok){SETTINGS.creditReminder=d.creditReminder;if($('setCreditDays'))$('setCreditDays').value=d.creditReminder.days||'';toast('Reminder settings saved');}else toast((d&&d.error)||'Save failed');
       }catch(e){toast('Network error');}
     };
   }

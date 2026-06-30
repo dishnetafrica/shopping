@@ -226,6 +226,14 @@ class PanelApiController extends Controller
                     'message'      => (string) ($c['message'] ?? ''),
                 ];
             })(),
+            'creditReminder'  => (function () use ($s) {
+                $c = (array) ($s['credit_reminder'] ?? []);
+                return [
+                    'enabled' => (bool) ($c['enabled'] ?? false),
+                    'days'    => (string) ($c['days'] ?? ''),
+                    'message' => (string) ($c['message'] ?? ''),
+                ];
+            })(),
             'introCatalog'    => (bool) (((array) ($s['intro_catalog'] ?? []))['enabled'] ?? false),
             'categoryGroups'  => (object) ($s['category_groups'] ?? []),
             'menuFiles'       => array_values($s['menu_files'] ?? []),
@@ -3984,11 +3992,11 @@ class PanelApiController extends Controller
     {
         $t   = $r->user()->tenant;
         $key = (string) $r->query('key', '');
-        if (! in_array($key, ['combo_recommendations', 'send_product_images', 'reengage_followup', 'intro_catalog'], true)) {
+        if (! in_array($key, ['combo_recommendations', 'send_product_images', 'reengage_followup', 'intro_catalog', 'credit_reminder'], true)) {
             return response()->json(['ok' => false, 'error' => 'bad_key'], 422);
         }
         $on = in_array((string) $r->query('on', '1'), ['1', 'true', 'on', 'yes'], true);
-        if ($key === 'reengage_followup' || $key === 'intro_catalog') {
+        if ($key === 'reengage_followup' || $key === 'intro_catalog' || $key === 'credit_reminder') {
             $cfg = (array) $t->setting($key, []);
             $cfg['enabled'] = $on;
             $t->putSetting($key, $cfg);
@@ -4013,6 +4021,32 @@ class PanelApiController extends Controller
         if ($r->has('message'))      $cfg['message']      = trim((string) $r->query('message'));
         $t->putSetting('reengage_followup', $cfg);
         return response()->json(['ok' => true, 'reengage' => $cfg]);
+    }
+
+    /** Save the credit-reminder config (days + message). Enable/disable is via botToggle. */
+    public function creditReminderSave(Request $r)
+    {
+        if (! $r->user()->canMenu('settings')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        $t   = $r->user()->tenant;
+        $cfg = (array) $t->setting('credit_reminder', []);
+        if ($r->has('enabled')) $cfg['enabled'] = in_array((string) $r->query('enabled'), ['1', 'true', 'on', 'yes'], true);
+        if ($r->has('days')) {
+            // Keep only sane day offsets (1..365), normalised to a clean comma list.
+            $days = [];
+            foreach (preg_split('/[,\s]+/', (string) $r->query('days'), -1, PREG_SPLIT_NO_EMPTY) as $p) {
+                $n = (int) $p;
+                if ($n >= 1 && $n <= 365) $days[$n] = $n;
+            }
+            ksort($days);
+            $cfg['days'] = implode(',', array_values($days));
+        }
+        if ($r->has('message')) $cfg['message'] = trim((string) $r->query('message'));
+        $t->putSetting('credit_reminder', $cfg);
+        return response()->json(['ok' => true, 'creditReminder' => [
+            'enabled' => (bool) ($cfg['enabled'] ?? false),
+            'days'    => (string) ($cfg['days'] ?? ''),
+            'message' => (string) ($cfg['message'] ?? ''),
+        ]]);
     }
 
     /* ------------------------------------------ Activity Review Inbox (v17) */
