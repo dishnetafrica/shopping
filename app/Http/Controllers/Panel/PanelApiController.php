@@ -4538,4 +4538,119 @@ class PanelApiController extends Controller
         }
         return response()->json(['ok' => true, 'reply' => $reply]);
     }
+
+    /* ============================ platform diagnostics (owner-only) ============================ */
+
+    private function ownerGate(Request $r)
+    {
+        $u = $r->user();
+        if (! $u || ! method_exists($u, 'isOwnerLike') || ! $u->isOwnerLike()) {
+            return response()->json(['ok' => false, 'error' => 'Owner access required.'], 403);
+        }
+        return null;
+    }
+
+    /**
+     * Platform diagnostics (GET /papi/diagnostics) — build id, opcache/deploy staleness,
+     * and core service checks. The opcache "any_stale" flag answers "is my deploy actually live?"
+     */
+    public function platformDiag(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+
+        $checks = [];
+
+        // DB
+        try { \Illuminate\Support\Facades\DB::select('select 1'); $checks['database'] = ['ok' => true]; }
+        catch (\Throwable $e) { $checks['database'] = ['ok' => false, 'error' => $e->getMessage()]; }
+
+        // Cache read/write
+        try {
+            \Illuminate\Support\Facades\Cache::put('diag:ping', 1, 5);
+            $checks['cache'] = ['ok' => ((int) \Illuminate\Support\Facades\Cache::get('diag:ping') === 1), 'driver' => (string) config('cache.default')];
+        } catch (\Throwable $e) { $checks['cache'] = ['ok' => false, 'error' => $e->getMessage()]; }
+
+        // Storage writable
+        try {
+            $p = storage_path('logs/.diag-write');
+            @file_put_contents($p, '1'); $w = is_file($p); @unlink($p);
+            $checks['storage_writable'] = ['ok' => $w];
+        } catch (\Throwable $e) { $checks['storage_writable'] = ['ok' => false, 'error' => $e->getMessage()]; }
+
+        // Laravel caches that commonly cause "works in CLI, not in web"
+        $checks['caches'] = [
+            'config_cached' => is_file(base_path('bootstrap/cache/config.php')),
+            'routes_cached' => (bool) glob(base_path('bootstrap/cache/routes-*.php')),
+        ];
+
+        return response()->json([
+            'ok'         => true,
+            'request_id' => (string) ($r->attributes->get('request_id') ?? ''),
+            'build'      => \App\Support\BuildInfo::light(),
+            'opcache'    => \App\Support\BuildInfo::opcache(),
+            'checks'     => $checks,
+            'queue'      => ['driver' => (string) config('queue.default')],
+        ]);
+    }
+
+    /**
+     * Recent application errors (GET /papi/diagnostics/errors) — read the tail of the log so you
+     * can see real production errors WITHOUT shell access. Owner-only; reads only the last chunk.
+     */
+    public function platformErrors(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+
+        $files = glob(storage_path('logs/laravel*.log')) ?: [];
+        if (! $files) return response()->json(['ok' => true, 'errors' => [], 'note' => 'No log file found.']);
+        usort($files, fn ($a, $b) => filemtime($b) <=> filemtime($a));
+        $path = $files[0];
+
+        // Read only the last ~256KB.
+        $max  = 256 * 1024;
+        $size = filesize($path);
+        $fh   = fopen($path, 'rb');
+        if ($size > $max) fseek($fh, $size - $max);
+        $blob = (string) stream_get_contents($fh);
+        fclose($fh);
+
+        $lines = preg_split('/\r?\n/', $blob);
+        $hits  = [];
+        foreach ($lines as $ln) {
+            if ($ln === '') continue;
+            if (preg_match('/\.(ERROR|CRITICAL|ALERT|EMERGENCY):|Exception|Stack trace/i', $ln)) {
+                $hits[] = mb_substr($ln, 0, 600);
+            }
+        }
+        $hits = array_slice(array_reverse($hits), 0, (int) min(80, max(10, $r->integer('n', 40))));
+
+        return response()->json([
+            'ok'        => true,
+            'log'       => basename($path),
+            'count'     => count($hits),
+            'errors'    => $hits,
+        ]);
+    }
+
+    /**
+     * Reset opcache from the web process (GET/POST /papi/diagnostics/opcache-reset). Owner-only.
+     * The escape hatch when validate_timestamps=Off pins old code after an in-place change.
+     */
+    public function opcacheReset(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+
+        $before = function_exists('opcache_get_status') ? (int) (@opcache_get_status(false)['opcache_statistics']['num_cached_scripts'] ?? 0) : null;
+        $reset  = function_exists('opcache_reset') ? (bool) @opcache_reset() : false;
+        try { \Illuminate\Support\Facades\Artisan::call('optimize:clear'); } catch (\Throwable $e) {}
+        $after  = function_exists('opcache_get_status') ? (int) (@opcache_get_status(false)['opcache_statistics']['num_cached_scripts'] ?? 0) : null;
+
+        return response()->json([
+            'ok'              => $reset,
+            'opcache_reset'   => $reset,
+            'scripts_before'  => $before,
+            'scripts_after'   => $after,
+            'note'            => $reset ? 'opcache cleared; the web process will recompile from disk.' : 'opcache not available in this SAPI.',
+        ]);
+    }
 }

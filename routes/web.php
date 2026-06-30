@@ -16,6 +16,7 @@ Route::get('/', [MarketingController::class, 'home']);
 
 // Public customer order-tracking page (no auth — order id + secret token are the key).
 Route::get('/papi/track', [TrackController::class, 'show']);
+Route::get('/healthz', fn () => response()->json(\App\Support\BuildInfo::light()));
 Route::get('/papi/pending', [\App\Http\Controllers\Panel\PendingController::class, 'show']);
 Route::get('/r/{token}',     [\App\Http\Controllers\Panel\RiderTrackController::class, 'show']);
 Route::post('/r/{token}/loc', [\App\Http\Controllers\Panel\RiderTrackController::class, 'loc']);
@@ -131,6 +132,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('image-stats', [PanelApiController::class, 'imageStats']);
         Route::get('operations',  [PanelApiController::class, 'operations']);
         Route::get('health',       [PanelApiController::class, 'health']);
+        Route::get('platform',                 [PanelApiController::class, 'platformDiag']);
+        Route::get('platform/errors',          [PanelApiController::class, 'platformErrors']);
+        Route::match(['get', 'post'], 'platform/opcache-reset', [PanelApiController::class, 'opcacheReset']);
 
         // CRM — manual lead management (Build 86.5)
         Route::get('leads',        [PanelApiController::class, 'leadsList']);

@@ -156,7 +156,9 @@ class SellerPanelController extends Controller
   function greet(){ if(greeted)return; greeted=true;
     add('assistant',"Hi! I can show you how to use the system \u2014 adding products, importing a CSV, connecting WhatsApp, changing your currency, and more. What do you need?");
     var tips=['How do I add a product?','How do I import products from a CSV?','How do I connect WhatsApp?','How do I change my currency?'];
-    var wrap=document.createElement('div'); tips.forEach(function(t){var c=document.createElement('span');c.className='cbh-tip';c.textContent=t;c.onclick=function(){input.value=t;ask();};wrap.appendChild(c);}); body.appendChild(wrap);
+    var wrap=document.createElement('div'); tips.forEach(function(t){var c=document.createElement('span');c.className='cbh-tip';c.textContent=t;c.onclick=function(){input.value=t;ask();};wrap.appendChild(c);});
+    try{ if(window.ME && window.ME.isOwner){ var s=document.createElement('span'); s.className='cbh-tip'; s.style.borderColor='#103A8C'; s.textContent='\u2699 Re-run shop setup'; s.onclick=function(){ location.href='/panel/onboard'; }; wrap.appendChild(s); } }catch(e){}
+    body.appendChild(wrap);
   }
   function open(){p.classList.add('open');greet();input.focus();}
   function close(){p.classList.remove('open');}
@@ -269,7 +271,32 @@ HTML;
         if (! is_file($path)) {
             abort(500, 'Onboard asset missing.');
         }
-        return response($this->brandize(file_get_contents($path), $user->tenant), 200)
+        $t    = $user->tenant;
+        $html = $this->brandize(file_get_contents($path), $t);
+
+        // Prefill with current values so re-running the wizard edits rather than wipes.
+        $langs = $t->setting('languages', []);
+        if (is_string($langs)) $langs = array_filter(array_map('trim', explode(',', $langs)));
+        $areas = $t->setting('delivery_areas', []);
+        if (is_string($areas)) $areas = array_filter(array_map('trim', explode(',', $areas)));
+        $cfg = [
+            'onboarded'      => (bool) $t->setting('onboarded', false),
+            'name'           => (string) ($t->name ?? ''),
+            'bot_kind'       => (string) $t->setting('bot_kind', ''),
+            'whatsapp'       => (string) ($t->whatsapp_number ?? ''),
+            'country'        => (string) $t->setting('country', ''),
+            'country_code'   => (string) $t->setting('country_code', ''),
+            'city'           => (string) $t->setting('city', ''),
+            'timezone'       => (string) $t->setting('timezone', ''),
+            'currency'       => (string) $t->setting('currency', ''),
+            'currency_basis' => (string) $t->setting('currency_basis', ''),
+            'languages'      => array_values((array) $langs),
+            'delivery_areas' => array_values((array) $areas),
+        ];
+        $json = json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $html = preg_replace('#</head>#', '<script>window.ONBOARD=' . $json . ';</script></head>', $html, 1);
+
+        return response($html, 200)
             ->header('Content-Type', 'text/html; charset=UTF-8')
             ->header('Cache-Control', 'no-store');
     }

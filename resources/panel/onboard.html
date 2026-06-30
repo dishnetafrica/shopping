@@ -198,6 +198,33 @@
   };
   csel.value='South Sudan'; csel.onchange();
 
+  // Prefill from current settings (re-run / edit mode). Country first (its onchange sets
+  // suggested currency/tz/langs), THEN override with the tenant's saved values.
+  var O = window.ONBOARD || {};
+  if (O.country){ csel.value = O.country; csel.onchange(); }
+  if (O.name) $('f_name').value = O.name;
+  if (O.bot_kind) $('f_kind').value = O.bot_kind;
+  if (O.whatsapp) $('f_wa').value = O.whatsapp;
+  if (O.city) $('f_city').value = O.city;
+  if (O.timezone){ fill($('f_tz'), TZS.indexOf(O.timezone)<0 ? [O.timezone].concat(TZS) : TZS, O.timezone); }
+  if (O.currency){ fill($('f_cur'), CURRENCIES.indexOf(O.currency)<0 ? [O.currency].concat(CURRENCIES) : CURRENCIES, O.currency); renderCurName(); }
+  if (O.languages && O.languages.length) setLangs(O.languages);
+  if (O.delivery_areas && O.delivery_areas.length) $('f_areas').value = O.delivery_areas.join(', ');
+  if (O.currency_basis === 'native' || O.currency_basis === 'converted'){
+    basis = O.currency_basis;
+    Array.prototype.forEach.call($('f_basis').children, function(e){ e.classList.toggle('on', e.getAttribute('data-basis')===basis); });
+  }
+  renderBasisHint();
+
+  // Edit-mode copy when the shop is already set up.
+  if (O.onboarded){
+    document.querySelector('.head h1').innerHTML = 'Shop settings' + (document.getElementById('hi').textContent || '');
+    document.querySelector('.head p').textContent = 'Update any of your shop details below.';
+    var sk = document.getElementById('skip');
+    sk.textContent = 'Cancel — keep current settings';
+    sk.setAttribute('data-cancel', '1');
+  }
+
   // price basis
   var basis='native';
   Array.prototype.forEach.call($('f_basis').children, function(el){
@@ -266,7 +293,10 @@
     if(step===4){ submit(); return; }
   };
   $('back').onclick=function(){ if(step>0){ step--; show(); } };
-  $('skip').onclick=function(){ if(confirm('Skip setup? You can finish it later from Settings. The assistant may use default location until then.')){ save(true); } };
+  $('skip').onclick=function(){
+    if(this.getAttribute('data-cancel')){ location.href='/panel/today'; return; }
+    if(confirm('Skip setup? You can finish it later from the Help \u2192 Re-run setup. The assistant may use default location until then.')){ save(true); }
+  };
 
   function submit(){ save(false); }
   function save(skipped){
