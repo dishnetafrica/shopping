@@ -72,6 +72,18 @@ class OrderObserver
         if ($order->tenant_id && $order->channel === 'web' && $order->customer_phone) {
             \App\Jobs\NotifyCustomerOrderReceived::dispatch($order->tenant_id, $order->id);
         }
+
+        // Operations layer: if this tenant runs the task workflow, open the first task.
+        if ($order->tenant_id) {
+            try {
+                $t = Tenant::find($order->tenant_id);
+                if ($t && \App\Support\WorkflowConfig::enabled($t)) {
+                    app(\App\Services\Ops\TaskEngine::class)->start($t, $order);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('task.start_failed', ['order' => $order->id, 'err' => $e->getMessage()]);
+            }
+        }
     }
 
     /** When status changes (in the panel or by the bot), notify the customer. */

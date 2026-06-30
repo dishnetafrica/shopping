@@ -25,7 +25,7 @@ final class WorkflowConfig
             'checklist' => ['Capture customer details', 'Add products & quantities', 'Confirm delivery need']],
         ['key' => 'office',   'title' => 'Office review',      'role' => 'office_manager', 'task' => 'Review & approve order',  'sla' => 120,  'upload' => false,
             'checklist' => ['Check order', 'Correct prices', 'Approve or flag missing docs']],
-        ['key' => 'gov',      'title' => 'Government invoice',  'role' => 'invoice_officer','task' => 'Create Rwanda invoice',   'sla' => 240,  'upload' => true,
+        ['key' => 'gov',      'title' => 'Government invoice',  'role' => 'invoice_officer','task' => 'Create Rwanda invoice',   'sla' => 240,  'upload' => true, 'priority' => 'high',
             'checklist' => ['Login to Rwanda portal', 'Generate invoice', 'Verify VAT', 'Upload PDF', 'Enter invoice number'],
             'exceptions' => ['portal_down', 'missing_doc', 'other']],
         ['key' => 'store',    'title' => 'Store preparation',  'role' => 'store_manager',  'task' => 'Reserve & pack goods',    'sla' => 120,  'upload' => false,
@@ -41,6 +41,26 @@ final class WorkflowConfig
         'portal_down'  => ['label' => 'Government portal down','reassign' => null],
         'missing_doc'  => ['label' => 'Missing document',     'reassign' => null],
         'other'        => ['label' => 'Other blocker',        'reassign' => null],
+    ];
+
+    /** Priority ranks (higher = more urgent); drives inbox sort. */
+    public const PRIORITY = ['low' => 0, 'normal' => 1, 'high' => 2, 'critical' => 3];
+
+    /** Who a paused task is waiting on — separates "waiting on ourselves" from external. */
+    public const WAITING_FOR = [
+        'customer'   => 'Customer',
+        'government' => 'Government',
+        'supplier'   => 'Supplier',
+        'internal'   => 'Internal',
+        'other'      => 'Other',
+    ];
+
+    /** Sensible default of who a blocker waits on, by exception type. */
+    public const EXCEPTION_WAITS = [
+        'out_of_stock' => 'supplier',
+        'portal_down'  => 'government',
+        'missing_doc'  => 'customer',
+        'other'        => 'other',
     ];
 
     /** Roles a tenant assigns people to. Label per key for the UI. */
@@ -161,5 +181,19 @@ final class WorkflowConfig
         $out = [];
         foreach ($keys as $k) if (isset(self::EXCEPTION_TYPES[$k])) $out[$k] = self::EXCEPTION_TYPES[$k];
         return $out;
+    }
+
+    /** Stage priority as an int rank (default normal=1). */
+    public static function priorityFor(Tenant $t, string $stageKey): int
+    {
+        $p = self::stage($t, $stageKey)['priority'] ?? 'normal';
+        if (is_int($p)) return max(0, min(3, $p));
+        return self::PRIORITY[strtolower((string) $p)] ?? 1;
+    }
+
+    public static function priorityLabel(int $rank): string
+    {
+        $flip = array_flip(self::PRIORITY);
+        return ucfirst($flip[$rank] ?? 'normal');
     }
 }

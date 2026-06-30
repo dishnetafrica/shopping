@@ -342,6 +342,21 @@ HTML;
             ->header('Cache-Control', 'no-store');
     }
 
+    public function tasks(Request $request)
+    {
+        $user = $request->user();
+        if (! $user || ! $user->tenant_id) {
+            return redirect('/app/login');
+        }
+        $path = resource_path('panel/tasks.html');
+        if (! is_file($path)) {
+            abort(500, 'Tasks asset missing.');
+        }
+        return response($this->brandize(file_get_contents($path), $user->tenant), 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
+    }
+
     public function leads(Request $request)
     {
         $user = $request->user();

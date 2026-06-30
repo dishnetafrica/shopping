@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Family Shopper — Operations</title>
+<style>
+:root{--bg:#F6F7F5;--card:#fff;--ink:#1B211D;--muted:#6B726C;--faint:#9AA09A;--line:#E9ECE8;
+--pine:#15775C;--pine-d:#0C4A39;--mint:#E6F3EC;--mint-l:#CADfd4;--amber:#9A5A0E;--amber-f:#FBF1DB;--amber-l:#ECDAB2;--red:#A23725;--red-f:#F8E7E2;}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.top{background:var(--card);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:5}
+.top .bk{font-size:13px;color:var(--muted);text-decoration:none}
+.top h1{font-size:16px;margin:0;font-weight:600}
+.wrap{max-width:760px;margin:0 auto;padding:16px}
+.hi{font-size:20px;font-weight:600;margin:2px 0 2px}
+.sub{font-size:13px;color:var(--muted)}
+.chips{display:flex;gap:10px;margin:14px 0}
+.chip{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;flex:1;text-align:center}
+.chip .n{font-size:22px;font-weight:700}.chip .l{font-size:11px;color:var(--muted);margin-top:2px}
+.chip.red .n{color:var(--red)}.chip.amber .n{color:var(--amber)}
+.tabs{display:flex;gap:6px;margin:6px 0 16px;border-bottom:1px solid var(--line)}
+.tab{padding:9px 14px;font-size:14px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:0;border-left:0;border-right:0}
+.tab.on{color:var(--pine);border-bottom-color:var(--pine)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.row{display:flex;align-items:flex-start;gap:10px}
+.ono{font-weight:600;font-size:14px;cursor:pointer;color:var(--pine-d)}
+.badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;display:inline-block}
+.b-stage{background:var(--mint);color:var(--pine-d)}.b-over{background:var(--red-f);color:var(--red)}.b-pause{background:var(--amber-f);color:var(--amber)}
+.ttl{font-weight:500;font-size:15px;margin:6px 0 2px}
+.meta{font-size:12px;color:var(--muted)}
+.ck{margin:11px 0 4px}
+.ck label{display:flex;align-items:center;gap:9px;font-size:13.5px;padding:4px 0;cursor:pointer}
+.ck input{width:16px;height:16px;accent-color:var(--pine)}
+.ck .done{color:var(--faint);text-decoration:line-through}
+.acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);font-weight:600;font-size:13px;border-radius:9px;padding:8px 14px;cursor:pointer}
+.btn.go{background:var(--pine);border-color:var(--pine);color:#fff}.btn.go:hover{background:var(--pine-d)}
+.btn.warn{color:var(--amber);border-color:var(--amber-l)}
+.btn:disabled{opacity:.5;cursor:default}
+.exc{margin-top:10px;border-top:1px solid var(--line);padding-top:10px;display:none}
+.exc.on{display:block}
+.exc select,.exc input,.exc textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13px;margin-bottom:7px;font-family:inherit}
+.prog{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:9px}.prog>i{display:block;height:100%;background:var(--pine);border-radius:99px;transition:width .3s}
+.empty{text-align:center;color:var(--muted);padding:40px 0;font-size:14px}
+.qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.qcell{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+.qcell .t{font-size:12px;color:var(--muted)}.qcell .v{font-size:20px;font-weight:700;margin-top:3px}
+.qcell .x{font-size:11px;color:var(--faint);margin-top:2px}
+.qcell.over{border-color:var(--red-f)}.qcell.over .v{color:var(--red)}
+.secthead{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:600;margin:18px 0 8px}
+.rrow{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.rrow:first-child{border-top:0}.rrow .rn{font-weight:500;font-size:14px;flex:1}
+.users{display:flex;flex-wrap:wrap;gap:6px}
+.upill{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:5px 10px;cursor:pointer}
+.upill.on{background:var(--pine);color:#fff;border-color:var(--pine)}
+.toggle{display:flex;align-items:center;gap:9px;font-size:14px;margin-bottom:6px}
+.drawer{position:fixed;inset:0;background:rgba(20,24,21,.4);display:none;z-index:20}
+.drawer.on{display:block}
+.dpanel{position:absolute;right:0;top:0;bottom:0;width:min(420px,90%);background:var(--card);padding:18px;overflow:y;overflow-y:auto;box-shadow:-10px 0 30px rgba(0,0,0,.15)}
+.tl{position:relative;padding-left:18px;margin-top:12px}
+.tl .e{position:relative;padding:0 0 14px 14px;border-left:2px solid var(--line)}
+.tl .e::before{content:"";position:absolute;left:-5px;top:2px;width:8px;height:8px;border-radius:50%;background:var(--pine)}
+.tl .ev{font-weight:600;font-size:13px}.tl .de{font-size:12.5px;color:var(--muted);margin-top:1px}.tl .ti{font-size:11px;color:var(--faint);margin-top:2px}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;transition:.2s;z-index:40}
+.toast.on{opacity:1}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="bk" href="/panel">← Panel</a>
+  <h1>Family Shopper · Operations</h1>
+</div>
+<div class="wrap">
+  <div class="hi" id="hi">Tasks</div>
+  <div class="sub" id="sub"></div>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div id="viewHome"></div>
+  <div id="viewMine" class="hide"></div>
+  <div id="viewQueue" class="hide"></div>
+  <div id="viewSetup" class="hide"></div>
+</div>
+
+<div class="drawer" id="drawer" onclick="if(event.target===this)closeDrawer()">
+  <div class="dpanel"><div style="display:flex;justify-content:space-between;align-items:center"><b id="dTitle">Timeline</b><button class="btn" onclick="closeDrawer()">Close</button></div><div class="tl" id="dTl"></div></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+var ME = window.ME || {role:'',isOwner:false,name:'there'};
+var $ = function(s){return document.querySelector(s);};
+function toast(m){var t=$('#toast');t.textContent=m;t.classList.add('on');setTimeout(function(){t.classList.remove('on');},2200);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+async function api(path,opts){var r=await fetch('/papi/task/'+path,Object.assign({cache:'no-store',headers:{'Accept':'application/json'}},opts||{}));return r.json();}
+function qs(o){return Object.keys(o).map(function(k){return encodeURIComponent(k)+'='+encodeURIComponent(o[k]);}).join('&');}
+
+function greet(){var h=new Date().getHours();return h<12?'Good morning':(h<17?'Good afternoon':'Good evening');}
+function rel(iso){if(!iso)return '';var d=new Date(iso),m=Math.round((Date.now()-d)/60000);var ago=m>=0;m=Math.abs(m);var s=m<60?m+'m':(m<1440?Math.round(m/60)+'h':Math.round(m/1440)+'d');return ago?s+' ago':'in '+s;}
+function due(iso){if(!iso)return '';var d=new Date(iso),m=Math.round((d-Date.now())/60000);if(m<0)return 'overdue';return 'due in '+(m<60?m+'m':(m<1440?Math.round(m/60)+'h':Math.round(m/1440)+'d'));}
+
+var canManage = ME.isOwner || ME.role==='manager';
+function buildTabs(){
+  var tabs=[['home','Operations'],['mine','My tasks']];
+  if(canManage)tabs.push(['queue','Work queue']);
+  if(ME.isOwner)tabs.push(['setup','Setup']);
+  $('#tabs').innerHTML=tabs.map(function(t,i){return '<button class="tab'+(i===0?' on':'')+'" data-v="'+t[0]+'" onclick="switchTab(\''+t[0]+'\')">'+t[1]+'</button>';}).join('');
+}
+function switchTab(v){
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.toggle('on',t.dataset.v===v);});
+  $('#viewHome').classList.toggle('hide',v!=='home');
+  $('#viewMine').classList.toggle('hide',v!=='mine');
+  $('#viewQueue').classList.toggle('hide',v!=='queue');
+  $('#viewSetup').classList.toggle('hide',v!=='setup');
+  if(v==='home')loadHome();if(v==='mine')loadMine();if(v==='queue')loadQueue();if(v==='setup')loadSetup();
+}
+async function loadHome(){
+  var d=await api('summary');
+  if(!d||!d.ok){$('#viewHome').innerHTML='<div class="empty">Could not load.</div>';return;}
+  $('#hi').textContent=greet()+', '+(d.me||ME.name);$('#sub').textContent="Here's your operations at a glance";
+  if(!d.enabled&&d.is_owner){$('#viewHome').innerHTML='<div class="card"><div class="ttl">Operations is off</div><div class="meta" style="margin-top:4px">Turn it on and assign roles in Setup, then new orders flow through automatically.</div><button class="btn go" style="margin-top:12px" onclick="switchTab(\'setup\')">Open setup</button></div>';return;}
+  var chips='<div class="chips"><div class="chip"><div class="n">'+d.my_tasks+'</div><div class="l">My tasks</div></div>'
+    +'<div class="chip red"><div class="n">'+d.my_overdue+'</div><div class="l">My overdue</div></div>'
+    +'<div class="chip amber"><div class="n">'+d.my_blocked+'</div><div class="l">My blocked</div></div></div>';
+  var mgr='';
+  if(d.can_manage){mgr='<div class="secthead">Today across the team</div><div class="qgrid">'
+    +'<div class="qcell"><div class="t">Orders today</div><div class="v">'+(d.orders_today||0)+'</div></div>'
+    +'<div class="qcell'+((d.overdue||0)>0?' over':'')+'"><div class="t">Overdue</div><div class="v">'+(d.overdue||0)+'</div></div>'
+    +'<div class="qcell"><div class="t">Blocked</div><div class="v">'+(d.blocked||0)+'</div></div>'
+    +'<div class="qcell"><div class="t">In progress</div><div class="v">'+(d.active_total||0)+'</div></div></div>';}
+  var actions='<div class="secthead">Go to</div><div class="acts">'
+    +'<button class="btn go" onclick="switchTab(\'mine\')">My tasks</button>'
+    +(d.can_manage?'<button class="btn" onclick="switchTab(\'queue\')">Work queue</button>':'')
+    +(d.is_owner?'<button class="btn" onclick="switchTab(\'setup\')">Setup</button>':'')+'</div>';
+  $('#viewHome').innerHTML=chips+mgr+actions;
+}
+
+/* ---------------- My tasks ---------------- */
+async function loadMine(){
+  var d=await api('mine');
+  if(!d||!d.ok){$('#viewMine').innerHTML='<div class="empty">Could not load tasks.</div>';return;}
+  $('#hi').textContent=greet()+', '+(d.me||ME.name);
+  $('#sub').textContent='Your daily work';
+  var chips='<div class="chips"><div class="chip"><div class="n">'+d.count+'</div><div class="l">My tasks</div></div>'
+    +'<div class="chip red"><div class="n">'+d.overdue+'</div><div class="l">Overdue</div></div></div>';
+  if(!d.tasks.length){$('#viewMine').innerHTML=chips+'<div class="empty">Nothing waiting on you. Inbox zero ✓</div>';return;}
+  $('#viewMine').innerHTML=chips+d.tasks.map(taskCard).join('');
+}
+function taskCard(t){
+  var badge = t.paused?'<span class="badge b-pause">Paused'+(t.waiting_for?' · '+esc(t.waiting_for):'')+'</span>':(t.overdue?'<span class="badge b-over">Overdue</span>':'<span class="badge b-stage">'+esc(t.stage_label)+'</span>');
+  var pri = t.priority>=3?'<span class="badge b-over">Critical</span>':(t.priority===2?'<span class="badge b-pause">High</span>':'');
+  var prog = (t.checklist&&t.checklist.length)?'<div class="prog"><i style="width:'+t.progress+'%"></i></div><div class="meta" style="margin-top:2px">'+t.progress+'% done</div>':'';
+  var ck=(t.checklist||[]).map(function(c,i){return '<label><input type="checkbox" data-tid="'+t.id+'" data-ci="'+i+'" '+(c.done?'checked':'')+' onchange="tickChecklist('+t.id+')"><span class="'+(c.done?'done':'')+'">'+esc(c.label)+'</span></label>';}).join('');
+  var opts=Object.keys(t.exceptions||{}).map(function(k){return '<option value="'+k+'">'+esc(t.exceptions[k].label)+'</option>';}).join('');
+  var paused = t.paused;
+  var acts = paused
+    ? '<button class="btn go" onclick="resume('+t.id+')">Resume</button>'
+    : '<button class="btn go" onclick="complete('+t.id+','+(t.requires_upload?'true':'false')+')">Complete my task</button>'
+      +'<button class="btn warn" onclick="toggleExc('+t.id+')">Pause / blocker</button>';
+  var pausedNote = (paused&&t.exception_reason)?'<div class="meta" style="margin-top:6px;color:var(--amber)">Paused: '+esc(t.exception_reason)+'</div>':'';
+  var att = t.attachment?'<div class="meta" style="margin-top:6px"><a href="'+esc(t.attachment)+'" target="_blank">View attachment ↗</a></div>':'';
+  return '<div class="card" id="task'+t.id+'">'
+    +'<div class="row"><div style="flex:1"><span class="ono" onclick="openTimeline('+t.order_id+',\''+esc(t.order_no)+'\')">'+esc(t.order_no)+'</span> '+badge
+    +'<div class="ttl">'+esc(t.title)+' '+pri+'</div>'+prog
+    +'<div class="meta">assigned '+rel(t.assigned_at)+' · '+esc(due(t.due_at))+(t.requires_upload?' · needs a file':'')+'</div></div></div>'
+    +(ck?'<div class="ck">'+ck+'</div>':'')+pausedNote+att
+    +'<div class="acts">'+acts+'</div>'
+    +'<div class="exc" id="exc'+t.id+'"><select id="excType'+t.id+'">'+opts+'</select>'
+    +'<select id="excWait'+t.id+'">'+Object.keys(t.waiting_options||{}).map(function(k){return '<option value="'+k+'">Waiting for: '+esc(t.waiting_options[k])+'</option>';}).join('')+'</select>'
+    +'<textarea id="excReason'+t.id+'" rows="2" placeholder="What\'s blocking it? (recorded, pauses the clock)"></textarea><button class="btn warn" onclick="raiseExc('+t.id+')">Confirm pause</button></div>'
+    +'</div>';
+}
+function checklistState(tid){var out=[];document.querySelectorAll('input[data-tid="'+tid+'"]').forEach(function(c){out[+c.dataset.ci]={done:c.checked};});return out;}
+var ckTimer={};
+function tickChecklist(tid){clearTimeout(ckTimer[tid]);ckTimer[tid]=setTimeout(async function(){await api('checklist?'+qs({id:tid,checklist:JSON.stringify(checklistState(tid))}));},500);
+  document.querySelectorAll('input[data-tid="'+tid+'"]').forEach(function(c){c.nextElementSibling.classList.toggle('done',c.checked);});}
+function toggleExc(id){$('#exc'+id).classList.toggle('on');}
+async function raiseExc(id){
+  var type=$('#excType'+id).value,reason=($('#excReason'+id).value||'').trim();
+  if(!reason){toast('Add a reason');return;}
+  var wait=$('#excWait'+id)?$('#excWait'+id).value:'';
+  var d=await api('exception?'+qs({id:id,type:type,reason:reason,waiting_for:wait}));
+  if(d&&d.ok){toast(d.mode==='reassigned'?'Reassigned':'Paused — clock stopped');loadMine();}else toast((d&&d.error)||'Failed');
+}
+async function resume(id){var d=await api('resume?'+qs({id:id}));if(d&&d.ok){toast('Resumed');loadMine();}else toast((d&&d.error)||'Failed');}
+async function complete(id,needFile){
+  await api('checklist?'+qs({id:id,checklist:JSON.stringify(checklistState(id))}));
+  if(needFile){
+    var f=document.createElement('input');f.type='file';f.accept='application/pdf,image/*';
+    f.onchange=function(){var file=f.files[0];if(!file)return;if(file.size>15*1024*1024){toast('Max 15 MB');return;}
+      toast('Uploading…');var rd=new FileReader();
+      rd.onload=async function(){
+        try{var up=await fetch('/papi/upload-doc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:file.name,data:rd.result})});var ud=await up.json();
+          if(!ud||!ud.ok||!ud.url){toast('Upload failed');return;}
+          var d=await api('complete?'+qs({id:id,attachment:ud.url}));finishComplete(d);
+        }catch(e){toast('Upload failed');}
+      };rd.readAsDataURL(file);};
+    f.click();
+  }else{var d=await api('complete?'+qs({id:id}));finishComplete(d);}
+}
+function finishComplete(d){if(d&&d.ok){toast(d.done?'Done — order complete ✓':'Done — passed to the next stage');loadMine();}else toast((d&&d.error)||'Could not complete');}
+
+/* ---------------- Work queue (manager) ---------------- */
+async function loadQueue(){
+  var d=await api('queue');
+  if(!d||!d.ok){$('#viewQueue').innerHTML='<div class="empty">'+((d&&d.error)==='forbidden'?'Managers only.':'Could not load.')+'</div>';return;}
+  $('#hi').textContent="Today's operations";$('#sub').textContent='Where work is sitting right now';
+  var cells=d.stages.map(function(s){
+    var oldest=s.oldest_min!=null?(s.oldest_min<60?s.oldest_min+'m':Math.round(s.oldest_min/60)+'h')+' oldest':'—';
+    return '<div class="qcell'+(s.overdue>0?' over':'')+'"><div class="t">'+esc(s.title)+'</div><div class="v">'+s.pending+'</div><div class="x">'+(s.overdue>0?s.overdue+' overdue · ':'')+oldest+'</div></div>';
+  }).join('');
+  var exc=Object.keys(d.exceptions||{});
+  var excHtml=exc.length?exc.map(function(k){return '<div class="qcell"><div class="t">'+esc(k.replace(/_/g,' '))+'</div><div class="v">'+d.exceptions[k]+'</div><div class="x">blocked</div></div>';}).join(''):'<div class="qcell"><div class="t">Blockers</div><div class="v">0</div><div class="x">none</div></div>';
+  $('#viewQueue').innerHTML='<div class="qgrid">'+cells+'</div>'
+    +'<div class="secthead">Attention</div><div class="qgrid">'
+    +'<div class="qcell'+(d.overdue>0?' over':'')+'"><div class="t">Overdue</div><div class="v">'+d.overdue+'</div><div class="x">past SLA</div></div>'
+    +'<div class="qcell"><div class="t">Completed today</div><div class="v">'+d.completed_today+'</div><div class="x">orders done</div></div>'
+    +'</div><div class="secthead">Blockers</div><div class="qgrid">'+excHtml+'</div>';
+}
+
+/* ---------------- Setup (owner) ---------------- */
+var SETUP={};
+async function loadSetup(){
+  var d=await api('roles');
+  if(!d||!d.ok){$('#viewSetup').innerHTML='<div class="empty">'+((d&&d.error)==='forbidden'?'Owner only.':'Could not load.')+'</div>';return;}
+  SETUP=d;$('#hi').textContent='Workflow setup';$('#sub').textContent='Assign people to roles';
+  var rows=Object.keys(d.roles).map(function(rk){
+    var sel=(d.map[rk]||[]);
+    var pills=d.users.map(function(u){return '<span class="upill'+(sel.indexOf(u.id)>=0?' on':'')+'" data-role="'+rk+'" data-uid="'+u.id+'" onclick="togglePill(this)">'+esc(u.name)+'</span>';}).join('');
+    return '<div class="rrow"><div class="rn">'+esc(d.roles[rk])+'</div><div class="users">'+(pills||'<span class="meta">no staff yet</span>')+'</div></div>';
+  }).join('');
+  $('#viewSetup').innerHTML='<div class="card"><label class="toggle"><input type="checkbox" id="wfEnabled" '+(d.enabled?'checked':'')+'> Run the task workflow for new orders</label>'
+    +'<div class="meta">When on, every new order opens a Sales task and moves through the stages automatically.</div></div>'
+    +'<div class="card"><div class="secthead" style="margin-top:0">Who fills each role</div>'+rows
+    +'<button class="btn go" style="margin-top:14px" onclick="saveSetup()">Save assignments</button></div>';
+}
+function togglePill(el){el.classList.toggle('on');}
+async function saveSetup(){
+  var map={};document.querySelectorAll('.upill.on').forEach(function(p){var r=p.dataset.role;(map[r]=map[r]||[]).push(+p.dataset.uid);});
+  var d=await api('roles-save?'+qs({enabled:$('#wfEnabled').checked?'1':'0',map:JSON.stringify(map)}));
+  if(d&&d.ok)toast('Saved');else toast((d&&d.error)||'Save failed');
+}
+
+/* ---------------- Timeline ---------------- */
+async function openTimeline(orderId,no){
+  $('#dTitle').textContent='Timeline · '+no;$('#dTl').innerHTML='<div class="meta">Loading…</div>';$('#drawer').classList.add('on');
+  var d=await api('timeline?'+qs({order:orderId}));
+  if(!d||!d.ok||!d.events.length){$('#dTl').innerHTML='<div class="meta">No history yet.</div>';return;}
+  $('#dTl').innerHTML=d.events.map(function(e){return '<div class="e"><div class="ev">'+esc(e.event)+(e.stage?' · '+esc(e.stage):'')+'</div><div class="de">'+esc(e.detail||'')+'</div><div class="ti">'+(e.actor?esc(e.actor)+' · ':'')+rel(e.at)+'</div></div>';}).join('');
+}
+function closeDrawer(){$('#drawer').classList.remove('on');}
+
+buildTabs();
+loadHome();
+</script>
+</body>
+</html>

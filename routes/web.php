@@ -4,6 +4,7 @@ use App\Http\Controllers\Marketing\MarketingController;
 use App\Http\Controllers\Panel\PanelApiController;
 use App\Http\Controllers\Panel\PwaController;
 use App\Http\Controllers\Panel\SellerPanelController;
+use App\Http\Controllers\Panel\TaskApiController;
 use App\Http\Controllers\Panel\TrackController;
 use App\Http\Middleware\SetTenantFromUser;
 use Illuminate\Support\Facades\Route;
@@ -45,6 +46,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/staff', [SellerPanelController::class, 'staff']);
     Route::get('/panel/scheduled', [SellerPanelController::class, 'scheduled']);
     Route::get('/panel/marketing', [SellerPanelController::class, 'marketing']);
+    Route::get('/panel/tasks', [SellerPanelController::class, 'tasks']);
+    Route::get('/panel/operations', [SellerPanelController::class, 'tasks']);
     Route::get('/panel/diagnostics', [SellerPanelController::class, 'diagnostics']);
     Route::get('/panel/leads', [SellerPanelController::class, 'leads']);
     Route::get('/panel/setup', [SellerPanelController::class, 'setup']);
@@ -57,6 +60,18 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     // JSON API the panel calls. GET for everything (the panel uses query-string
     // writes); upload-image is POST. Tenant scoping is automatic.
     Route::prefix('papi')->group(function () {
+        Route::prefix('task')->group(function () {
+            Route::get('summary', [TaskApiController::class, 'summary']);
+            Route::get('mine',  [TaskApiController::class, 'mine']);
+            Route::get('queue', [TaskApiController::class, 'queue']);
+            Route::match(['get','post'], 'complete',  [TaskApiController::class, 'complete']);
+            Route::match(['get','post'], 'exception', [TaskApiController::class, 'exception']);
+            Route::match(['get','post'], 'resume',    [TaskApiController::class, 'resume']);
+            Route::match(['get','post'], 'checklist', [TaskApiController::class, 'checklist']);
+            Route::get('timeline', [TaskApiController::class, 'timeline']);
+            Route::get('roles',    [TaskApiController::class, 'roles']);
+            Route::match(['get','post'], 'roles-save', [TaskApiController::class, 'rolesSave']);
+        });
         // auth (no-op; session already established)
         Route::get('auth-request',  [PanelApiController::class, 'authRequest']);
         Route::get('auth-verify',   [PanelApiController::class, 'authVerify']);

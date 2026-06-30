@@ -69,6 +69,13 @@ namespace {
     ok('gov exceptions = portal_down,missing_doc,other', array_keys(W::exceptionsFor($tenant, 'gov')) === ['portal_down','missing_doc','other']);
     ok('store out_of_stock reassigns to procurement', W::exceptionsFor($tenant, 'store')['out_of_stock']['reassign'] === 'procurement');
     ok('sales (no override) gets all exception types', count(W::exceptionsFor($tenant, 'sales')) === 4);
+    echo "priority / waiting-for\n";
+    ok('gov priority = high (2)', W::priorityFor($tenant, 'gov') === 2);
+    ok('sales priority = normal (1) default', W::priorityFor($tenant, 'sales') === 1);
+    ok('priority label 2 = High', W::priorityLabel(2) === 'High');
+    ok('5 waiting-for options', count(W::WAITING_FOR) === 5);
+    ok('portal_down waits on government', W::EXCEPTION_WAITS['portal_down'] === 'government');
+
 
 
     echo "\n$pass passed, $fail failed\n";

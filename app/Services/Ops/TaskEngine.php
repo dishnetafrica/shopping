@@ -77,12 +77,13 @@ class TaskEngine
      *                           stage, new role/owner, fresh clock.
      *   - otherwise          -> pause; SLA clock freezes until resume().
      */
-    public function raiseException(Tenant $tenant, OrderTask $task, string $type, string $reason, User $by, ?string $reassignRole = null): array
+    public function raiseException(Tenant $tenant, OrderTask $task, string $type, string $reason, User $by, ?string $reassignRole = null, ?string $waitingFor = null): array
     {
         if (! $task->isActive()) return ['ok' => false, 'error' => 'Task is not active.'];
 
         $task->exception_type   = $type;
         $task->exception_reason = $reason;
+        $task->waiting_for      = $waitingFor ?: (WorkflowConfig::EXCEPTION_WAITS[$type] ?? 'other');
 
         if ($reassignRole) {
             $owner = $this->ownerForRole($tenant, $reassignRole);
@@ -117,6 +118,7 @@ class TaskEngine
         $task->status         = 'in_progress';
         $task->due_at         = WorkflowConfig::dueAt($task->assigned_at ?? now(), (int) $task->sla_minutes, (int) $task->paused_minutes);
         $task->exception_type = null;
+        $task->waiting_for    = null;
         $task->save();
         $this->log($tenant, $task->order_id, $task->id, 'resumed', $by, $task->stage, null, "Resumed (+{$pausedMin}m paused, not counted)");
         return ['ok' => true];
@@ -131,13 +133,19 @@ class TaskEngine
             ->pluck('c', 'role')->all();
     }
 
-    /** A person's open work, soonest-due first. */
+    /** A person's open work: critical-overdue first, then priority, then oldest. */
     public function myTasks(Tenant $tenant, User $user)
     {
-        return OrderTask::query()->where('tenant_id', $tenant->id)
+        $tasks = OrderTask::query()->where('tenant_id', $tenant->id)
             ->where('owner_user_id', $user->id)
-            ->whereIn('status', OrderTask::ACTIVE)
-            ->orderByRaw('due_at is null, due_at asc')->get();
+            ->whereIn('status', OrderTask::ACTIVE)->get();
+
+        return $tasks->sortBy(function (OrderTask $t) {
+            $p          = (int) $t->priority;
+            $critOver   = ($p >= 3 && $t->isOverdue()) ? 0 : 1;       // critical + overdue floats to top
+            $assigned   = $t->assigned_at ? $t->assigned_at->timestamp : PHP_INT_MAX;
+            return sprintf('%d|%d|%020d', $critOver, 9 - $p, $assigned); // higher priority first, then oldest
+        })->values();
     }
 
     // ----------------------------------------------------------------- internals
@@ -161,6 +169,7 @@ class TaskEngine
             'due_at'          => WorkflowConfig::dueAt(now(), $sla, 0),
             'requires_upload' => (bool) ($stage['upload'] ?? false),
             'checklist'       => WorkflowConfig::checklistFor($tenant, (string) $stage['key']),
+            'priority'        => WorkflowConfig::priorityFor($tenant, (string) $stage['key']),
         ]);
         $this->log($tenant, $task->order_id, $task->id, 'created', null, null, (string) $stage['key'],
             $task->title . ' assigned to ' . WorkflowConfig::roleLabel((string) $stage['role']));
