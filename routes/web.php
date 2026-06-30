@@ -96,6 +96,10 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         // in-app AI help assistant
         Route::match(['get', 'post'], 'help-ask', [PanelApiController::class, 'helpAsk']);
 
+        // first-run activation checklist
+        Route::get('activation', [PanelApiController::class, 'activationState']);
+        Route::match(['get', 'post'], 'activation/mark', [PanelApiController::class, 'activationMark']);
+
         // reads
         Route::get('orders',     [PanelApiController::class, 'orders']);
         Route::get('kitchen',         [PanelApiController::class, 'kitchen']);

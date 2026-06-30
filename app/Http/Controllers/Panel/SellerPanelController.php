@@ -110,6 +110,7 @@ class SellerPanelController extends Controller
         $html = $this->injectPlan($html, $tenant);
         $html = \App\Support\PanelCurrency::inject($html, $tenant);
         $html = $this->injectHelpWidget($html);
+        $html = $this->injectActivation($html);
         return $html;
     }
 
@@ -157,7 +158,9 @@ class SellerPanelController extends Controller
     add('assistant',"Hi! I can show you how to use the system \u2014 adding products, importing a CSV, connecting WhatsApp, changing your currency, and more. What do you need?");
     var tips=['How do I add a product?','How do I import products from a CSV?','How do I connect WhatsApp?','How do I change my currency?'];
     var wrap=document.createElement('div'); tips.forEach(function(t){var c=document.createElement('span');c.className='cbh-tip';c.textContent=t;c.onclick=function(){input.value=t;ask();};wrap.appendChild(c);});
-    try{ if(window.ME && window.ME.isOwner){ var s=document.createElement('span'); s.className='cbh-tip'; s.style.borderColor='#103A8C'; s.textContent='\u2699 Re-run shop setup'; s.onclick=function(){ location.href='/panel/onboard'; }; wrap.appendChild(s); } }catch(e){}
+    try{ if(window.ME && window.ME.isOwner){ var s=document.createElement('span'); s.className='cbh-tip'; s.style.borderColor='#103A8C'; s.textContent='\u2699 Re-run shop setup'; s.onclick=function(){ location.href='/panel/onboard'; }; wrap.appendChild(s);
+      var s2=document.createElement('span'); s2.className='cbh-tip'; s2.style.borderColor='#0f7a41'; s2.textContent='\ud83d\udccb Show setup checklist'; s2.onclick=function(){ fetch('/papi/activation/mark',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action:'show'})}).then(function(){ try{sessionStorage.removeItem('cba_seen');}catch(e){} location.reload(); }); }; wrap.appendChild(s2);
+    } }catch(e){}
     body.appendChild(wrap);
   }
   function open(){p.classList.add('open');greet();input.focus();}
@@ -181,6 +184,84 @@ class SellerPanelController extends Controller
   }
   send.onclick=ask;
   input.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask();}});
+})();
+</script>
+HTML;
+        return str_replace('</body>', $w . '</body>', $html);
+    }
+
+    /** First-run activation checklist: a bottom-left launcher that opens a "Get your shop ready" panel.
+     *  Owner-only, auto-hides when complete or dismissed. Self-contained + namespaced (#cba-*). */
+    protected function injectActivation(string $html): string
+    {
+        if (! str_contains($html, '</body>')) return $html;
+        $w = <<<'HTML'
+<div id="cba-root"></div>
+<style>
+#cba-fab{position:fixed;left:16px;bottom:18px;background:#0f7a41;color:#fff;border:none;border-radius:999px;padding:10px 14px;box-shadow:0 6px 18px rgba(0,0,0,.22);font:600 13px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;cursor:pointer;z-index:2147482000;display:none;align-items:center;gap:8px}
+#cba-fab .cba-ring{width:18px;height:18px;border-radius:50%;background:conic-gradient(#fff var(--p,0%),rgba(255,255,255,.35) 0)}
+#cba-panel{position:fixed;left:16px;bottom:72px;width:min(360px,calc(100vw - 32px));max-height:min(70vh,560px);background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.25);z-index:2147482000;display:none;flex-direction:column;overflow:hidden;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#16181d}
+#cba-panel.open{display:flex}
+#cba-hd{background:#0f7a41;color:#fff;padding:13px 14px}
+#cba-hd b{font-size:15px}#cba-bar{height:6px;border-radius:4px;background:rgba(255,255,255,.3);margin-top:9px;overflow:hidden}#cba-bar i{display:block;height:100%;background:#fff;width:0;transition:.3s}
+#cba-hd small{opacity:.9;font-size:12px}
+#cba-list{padding:8px;overflow-y:auto}
+.cba-step{display:flex;gap:11px;padding:11px;border-radius:12px;align-items:flex-start}
+.cba-step+.cba-step{border-top:1px solid #f0f1f4}
+.cba-ck{width:24px;height:24px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;border:2px solid #d7dbe2;color:#9aa3af}
+.cba-step.done .cba-ck{background:#0f7a41;border-color:#0f7a41;color:#fff}
+.cba-tx{flex:1}.cba-tx b{font-size:14px}.cba-step.done .cba-tx b{color:#6b7280;text-decoration:line-through}
+.cba-tx p{margin:2px 0 0;color:#6b7280;font-size:12.5px}
+.cba-go{margin-top:7px;display:inline-block;background:#103A8C;color:#fff;border:none;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer}
+#cba-ft{border-top:1px solid #eee;padding:10px 14px;display:flex;justify-content:space-between;align-items:center}
+#cba-hide{background:none;border:none;color:#9aa3af;font-size:12.5px;cursor:pointer;text-decoration:underline}
+#cba-x{background:none;border:none;color:#fff;float:right;font-size:18px;cursor:pointer;line-height:1;margin-top:-2px}
+</style>
+<script>
+(function(){
+  if(window.__cba)return; window.__cba=1;
+  try{ if(!(window.ME&&window.ME.isOwner))return; }catch(e){ return; }
+  var root=document.getElementById('cba-root'); if(!root)return;
+  var state=null;
+  function render(){
+    if(!state||!state.ok||state.hidden||state.complete||!state.owner){ var f=document.getElementById('cba-fab'); if(f)f.style.display='none'; var p=document.getElementById('cba-panel'); if(p)p.classList.remove('open'); return; }
+    var pct=Math.round((state.done/state.total)*100);
+    var fab=document.getElementById('cba-fab');
+    if(!fab){ fab=document.createElement('button'); fab.id='cba-fab'; root.appendChild(fab); fab.onclick=function(){ var p=document.getElementById('cba-panel'); p.classList.toggle('open'); }; }
+    fab.style.display='flex'; fab.innerHTML='<span class="cba-ring" style="--p:'+pct+'%"></span> Setup '+state.done+'/'+state.total;
+    var panel=document.getElementById('cba-panel');
+    if(!panel){ panel=document.createElement('div'); panel.id='cba-panel'; root.appendChild(panel); }
+    var rows=state.steps.map(function(s){
+      var cta = (!s.done && s.cta) ? '<button class="cba-go" data-key="'+s.key+'" data-href="'+(s.href||'')+'">'+s.cta+'</button>' : '';
+      return '<div class="cba-step'+(s.done?' done':'')+'"><div class="cba-ck">'+(s.done?'\u2713':'')+'</div><div class="cba-tx"><b>'+s.title+'</b><p>'+s.desc+'</p>'+cta+'</div></div>';
+    }).join('');
+    panel.innerHTML='<div id="cba-hd"><button id="cba-x">\u00d7</button><b>Get your shop ready</b><br><small>'+state.done+' of '+state.total+' done</small><div id="cba-bar"><i style="width:'+pct+'%"></i></div></div>'+
+      '<div id="cba-list">'+rows+'</div><div id="cba-ft"><button id="cba-hide">Hide checklist</button><span style="font-size:11.5px;color:#9aa3af">You can re-show it from Help</span></div>';
+    panel.querySelector('#cba-x').onclick=function(){ panel.classList.remove('open'); };
+    panel.querySelector('#cba-hide').onclick=function(){ mark('hide'); panel.classList.remove('open'); state.hidden=true; render(); };
+    Array.prototype.forEach.call(panel.querySelectorAll('.cba-go'), function(b){ b.onclick=function(){ act(b.getAttribute('data-key'), b.getAttribute('data-href')); }; });
+  }
+  function act(key, href){
+    if(key==='share'){
+      var url=state.shop_url||'';
+      if(url){
+        try{ navigator.clipboard && navigator.clipboard.writeText(url); }catch(e){}
+        var msg=encodeURIComponent('Shop with us here: '+url);
+        window.open('https://wa.me/?text='+msg,'_blank');
+        mark('link').then(load);
+      }
+      return;
+    }
+    if(href){ location.href=href; }
+  }
+  function mark(action){ return fetch('/papi/activation/mark',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action:action})}).then(function(r){return r.json().catch(function(){return{};});}).catch(function(){return{};}); }
+  function load(){
+    fetch('/papi/activation',{credentials:'same-origin',cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
+      state=j; render();
+      try{ if(state&&state.ok&&!state.complete&&!state.hidden&&!sessionStorage.getItem('cba_seen')){ sessionStorage.setItem('cba_seen','1'); var p=document.getElementById('cba-panel'); if(p)p.classList.add('open'); } }catch(e){}
+    }).catch(function(){});
+  }
+  load();
 })();
 </script>
 HTML;

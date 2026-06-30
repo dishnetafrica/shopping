@@ -4653,4 +4653,63 @@ class PanelApiController extends Controller
             'note'            => $reset ? 'opcache cleared; the web process will recompile from disk.' : 'opcache not available in this SAPI.',
         ]);
     }
+
+    /* ============================ first-run activation checklist ============================ */
+
+    /** Activation state (GET /papi/activation) — the 5 first-run steps, computed from real data. */
+    public function activationState(Request $r)
+    {
+        $u = $r->user();
+        if (! $u || ! $u->tenant_id) {
+            return response()->json(['ok' => false, 'error' => 'Not signed in.'], 401);
+        }
+        $t = $u->tenant;
+
+        $isOwner = method_exists($u, 'isOwnerLike') && $u->isOwnerLike();
+
+        $products = 0; $orders = 0;
+        try { $products = (int) Product::where('tenant_id', $t->id)->whereNull('archived_at')->count(); } catch (\Throwable $e) {}
+        try { $orders   = (int) \App\Models\Order::where('tenant_id', $t->id)->count(); } catch (\Throwable $e) {}
+
+        $slug    = (string) ($t->slug ?? '');
+        $shopUrl = $slug !== '' ? url('/' . $slug) : '';
+        $waConnected = ! empty($t->whatsapp_instance);
+        $linkShared  = (bool) $t->setting('activation_link_shared_at', false);
+
+        $steps = [
+            ['key' => 'setup',    'title' => 'Set up your shop',       'desc' => 'Name, country, currency and language.',         'done' => (bool) $t->setting('onboarded', false), 'cta' => 'Open setup',        'href' => '/panel/onboard'],
+            ['key' => 'product',  'title' => 'Add your first product', 'desc' => 'One item is enough to open the shop.',          'done' => $products > 0,                          'cta' => 'Add a product',     'href' => '/app/products/create'],
+            ['key' => 'whatsapp', 'title' => 'Connect WhatsApp',       'desc' => 'Scan the QR so the assistant can chat & sell.', 'done' => $waConnected,                           'cta' => 'Connect WhatsApp',  'href' => '/panel/setup'],
+            ['key' => 'share',    'title' => 'Share your shop link',   'desc' => 'Send it to customers so they can browse & order.','done' => $linkShared,                            'cta' => 'Copy & share',      'href' => ''],
+            ['key' => 'order',    'title' => 'Get your first order',   'desc' => 'When a customer orders, it appears in Orders.',  'done' => $orders > 0,                            'cta' => '',                  'href' => '/panel/today'],
+        ];
+        $doneCount = count(array_filter($steps, fn ($s) => $s['done']));
+
+        return response()->json([
+            'ok'        => true,
+            'owner'     => $isOwner,
+            'hidden'    => (bool) $t->setting('activation_hidden', false),
+            'complete'  => $doneCount === count($steps),
+            'done'      => $doneCount,
+            'total'     => count($steps),
+            'shop_url'  => $shopUrl,
+            'steps'     => $steps,
+        ]);
+    }
+
+    /** Persist a checklist action (GET/POST /papi/activation/mark) — {action: 'link'|'hide'|'show'}. */
+    public function activationMark(Request $r)
+    {
+        $u = $r->user();
+        if (! $u || ! $u->tenant_id) {
+            return response()->json(['ok' => false, 'error' => 'Not signed in.'], 401);
+        }
+        $t = $u->tenant;
+        $action = (string) ($r->input('action', $r->query('action', '')));
+        if ($action === 'link')  $t->putSetting('activation_link_shared_at', now()->toIso8601String());
+        if ($action === 'hide')  $t->putSetting('activation_hidden', true);
+        if ($action === 'show')  $t->putSetting('activation_hidden', false);
+
+        return response()->json(['ok' => true]);
+    }
 }
