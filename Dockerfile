@@ -25,6 +25,9 @@ RUN composer require \
 # 3) optional dependency for Phase 2 NLU (don't fail the build if it can't resolve)
 RUN composer require openai-php/laravel \
         --no-interaction --no-scripts --prefer-dist --ignore-platform-reqs --with-all-dependencies || true
+# 3b) optional: error tracking. Inert unless SENTRY_LARAVEL_DSN is set in the env.
+RUN composer require sentry/sentry-laravel \
+        --no-interaction --no-scripts --prefer-dist --ignore-platform-reqs --with-all-dependencies || true
 # 4) overlay our application code (merges into the skeleton, keeps skeleton defaults)
 COPY app/        ./app/
 COPY config/     ./config/

@@ -26,6 +26,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: ['api/webhook/*', 'papi/*', '*/order', '*/auth/*', '*/account/*', 'r/*', 't/*', 'a/*', 'ops/*']);
     })
     ->withExceptions(function (Exceptions $exceptions) {
+        // Error tracking: capture exceptions to Sentry if the package is installed AND a DSN is set.
+        // Fully guarded — a no-op when Sentry isn't present, so it can ship before you create an account.
+        if (class_exists(\Sentry\Laravel\Integration::class)) {
+            \Sentry\Laravel\Integration::handles($exceptions);
+        }
+
         // For API-ish paths, return JSON with a request id instead of an HTML error page,
         // so the frontend and support get a real message + a traceable id (not "Not Found" HTML).
         $exceptions->render(function (\Throwable $e, $request) {

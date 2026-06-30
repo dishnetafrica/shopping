@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System health</title>
+<style>
+  :root{--bg:#f5f6f8;--card:#fff;--ink:#16181d;--mut:#6b7280;--line:#e5e7eb;--ok:#0f7a41;--bad:#e11d48;--warn:#b45309;--brand:#103A8C}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:760px;margin:0 auto;padding:16px 16px 60px}
+  .top{display:flex;align-items:center;justify-content:space-between;margin:6px 0 14px}
+  .top h1{font-size:19px;margin:0}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 13px;font-weight:600;font-size:13.5px;cursor:pointer}
+  .btn.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .btn.danger{background:#fff;color:var(--bad);border-color:#f6c9d2}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:0 0 10px}
+  .row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #f1f2f4;font-size:14px}
+  .row:last-child{border-bottom:0}.row b{text-align:right;font-weight:600}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:13px}
+  .dot{width:9px;height:9px;border-radius:50%}
+  .ok .dot{background:var(--ok)}.ok{color:var(--ok)}
+  .bad .dot{background:var(--bad)}.bad{color:var(--bad)}
+  .warn{color:var(--warn)}
+  .banner{border-radius:12px;padding:12px 14px;font-size:14px;margin-bottom:12px;display:none}
+  .banner.show{display:block}
+  .banner.green{background:#ecfdf3;border:1px solid #abefc6;color:#067647}
+  .banner.red{background:#fff1f3;border:1px solid #f6c9d2;color:#b42318}
+  .errs{font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;background:#0d1117;color:#e6edf3;border-radius:10px;padding:12px}
+  .muted{color:var(--mut);font-size:12.5px}
+  .err-empty{color:var(--ok);padding:10px 0}
+  a.back{color:var(--mut);text-decoration:none;font-size:13.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/panel/today">‹ Back</a>
+  <div class="top">
+    <h1>System health</h1>
+    <div>
+      <button class="btn" id="refresh">Refresh</button>
+    </div>
+  </div>
+
+  <div class="banner" id="stale"></div>
+
+  <div class="card">
+    <h2>Build</h2>
+    <div id="build"><div class="muted">Loading…</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Service checks</h2>
+    <div id="checks"><div class="muted">Loading…</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Opcache / deploy</h2>
+    <div id="opcache"><div class="muted">Loading…</div></div>
+    <div style="margin-top:10px"><button class="btn danger" id="reset">Reset opcache</button>
+      <span class="muted" id="resetMsg"></span></div>
+  </div>
+
+  <div class="card">
+    <h2>Recent errors</h2>
+    <div id="errwrap"><div class="muted">Loading…</div></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id);};
+  function pill(ok,txt){ return '<span class="pill '+(ok?'ok':'bad')+'"><span class="dot"></span>'+(txt||(ok?'OK':'FAIL'))+'</span>'; }
+  function row(k,v){ return '<div class="row"><span>'+k+'</span><b>'+v+'</b></div>'; }
+
+  function loadPlatform(){
+    fetch('/papi/platform',{credentials:'same-origin',cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
+      if(!j||!j.ok){ $('build').innerHTML='<span class="bad">Access denied or error.</span>'; return; }
+      var b=j.build||{};
+      $('build').innerHTML = row('Build', '<code>'+(b.build||'?')+'</code>') + row('Environment', b.env||'?') +
+        row('PHP', b.php||'?') + row('Laravel', b.laravel||'?') + row('Server time', b.time||'?');
+
+      var c=j.checks||{};
+      var html='';
+      html+=row('Database', pill(!!(c.database&&c.database.ok)));
+      html+=row('Cache ('+((c.cache&&c.cache.driver)||'?')+')', pill(!!(c.cache&&c.cache.ok)));
+      html+=row('Storage writable', pill(!!(c.storage_writable&&c.storage_writable.ok)));
+      if(c.caches){ html+=row('Config cached', c.caches.config_cached?'yes':'no'); html+=row('Routes cached', c.caches.routes_cached?'yes':'no'); }
+      $('checks').innerHTML=html;
+
+      var o=j.opcache||{};
+      var oh='';
+      oh+=row('Opcache enabled', o.available? (o.enabled?'yes':'no') : 'not available');
+      if(o.available){
+        oh+=row('validate_timestamps', (o.validate_timestamps? 'on' : '<span class="warn">off — needs restart/reset to pick up changes</span>'));
+        oh+=row('Cached scripts', (o.num_cached_scripts!=null?o.num_cached_scripts:'?'));
+        if(o.files){ Object.keys(o.files).forEach(function(k){ var f=o.files[k]; oh+=row(k, f.is_stale?'<span class="bad">STALE</span>':'fresh'); }); }
+      }
+      $('opcache').innerHTML=oh;
+
+      var st=$('stale');
+      if(o.any_stale){ st.className='banner red show'; st.innerHTML='<b>Deploy not fully live.</b> The running web process is serving older code than what is on disk. Tap <b>Reset opcache</b> below (or rebuild the container).'; }
+      else { st.className='banner green show'; st.innerHTML='<b>All good.</b> The running code matches what is deployed.'; }
+    }).catch(function(){ $('build').innerHTML='<span class="bad">Failed to load.</span>'; });
+  }
+
+  function loadErrors(){
+    fetch('/papi/platform/errors?n=60',{credentials:'same-origin',cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
+      if(!j||!j.ok){ $('errwrap').innerHTML='<span class="bad">Could not read logs.</span>'; return; }
+      if(!j.errors||!j.errors.length){ $('errwrap').innerHTML='<div class="err-empty">✓ No recent errors in '+(j.log||'the log')+'.</div>'; return; }
+      $('errwrap').innerHTML='<div class="muted" style="margin-bottom:8px">'+j.count+' recent · '+(j.log||'')+'</div><div class="errs">'+
+        j.errors.map(function(e){return (''+e).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}).join('\n')+'</div>';
+    }).catch(function(){ $('errwrap').innerHTML='<span class="bad">Failed to load.</span>'; });
+  }
+
+  $('reset').onclick=function(){
+    if(!confirm('Reset opcache now? The web process will recompile from disk.'))return;
+    $('resetMsg').textContent='Resetting…';
+    fetch('/papi/platform/opcache-reset',{method:'POST',credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){
+      $('resetMsg').textContent = (j&&j.ok)? 'Done.' : (j&&j.note? j.note : 'Not available.');
+      setTimeout(loadPlatform, 600);
+    }).catch(function(){ $('resetMsg').textContent='Failed.'; });
+  };
+  $('refresh').onclick=function(){ loadPlatform(); loadErrors(); };
+
+  loadPlatform(); loadErrors();
+})();
+</script>
+</body>
+</html>

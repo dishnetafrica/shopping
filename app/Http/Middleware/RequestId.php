@@ -28,6 +28,24 @@ class RequestId
         // Attach to every log line for the rest of this request.
         Log::shareContext(['request_id' => $rid]);
 
+        // If Sentry is installed, tag its scope with the same id so dashboard errors correlate.
+        if (function_exists('Sentry\\configureScope')) {
+            try {
+                \Sentry\configureScope(function ($scope) use ($rid, $request) {
+                    $scope->setTag('request_id', $rid);
+                    $u = $request->user();
+                    if ($u) {
+                        $scope->setUser([
+                            'id'        => $u->id ?? null,
+                            'tenant_id' => $u->tenant_id ?? null,
+                        ]);
+                    }
+                });
+            } catch (\Throwable $e) {
+                // never let observability break the request
+            }
+        }
+
         $response = $next($request);
 
         try {

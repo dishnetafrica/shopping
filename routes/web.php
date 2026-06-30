@@ -63,6 +63,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/leads', [SellerPanelController::class, 'leads']);
     Route::get('/panel/setup', [SellerPanelController::class, 'setup']);
     Route::get('/panel/onboard', [SellerPanelController::class, 'onboard']);
+    Route::get('/panel/system', [SellerPanelController::class, 'system']);
     Route::get('/panel/today', [SellerPanelController::class, 'today']);
     Route::get('/panel/inventory-count', [SellerPanelController::class, 'inventory']);
     Route::get('/panel/guide', [SellerPanelController::class, 'guide']);

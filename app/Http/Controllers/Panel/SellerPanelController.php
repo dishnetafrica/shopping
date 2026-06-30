@@ -162,6 +162,7 @@ class SellerPanelController extends Controller
     var wrap=document.createElement('div'); tips.forEach(function(t){var c=document.createElement('span');c.className='cbh-tip';c.textContent=t;c.onclick=function(){input.value=t;ask();};wrap.appendChild(c);});
     try{ if(window.ME && window.ME.isOwner){ var s=document.createElement('span'); s.className='cbh-tip'; s.style.borderColor='#103A8C'; s.textContent='\u2699 Re-run shop setup'; s.onclick=function(){ location.href='/panel/onboard'; }; wrap.appendChild(s);
       var s2=document.createElement('span'); s2.className='cbh-tip'; s2.style.borderColor='#0f7a41'; s2.textContent='\ud83d\udccb Show setup checklist'; s2.onclick=function(){ fetch('/papi/activation/mark',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action:'show'})}).then(function(){ try{sessionStorage.removeItem('cba_seen');}catch(e){} location.reload(); }); }; wrap.appendChild(s2);
+      var s3=document.createElement('span'); s3.className='cbh-tip'; s3.style.borderColor='#6b7280'; s3.textContent='\ud83e\ude7a System health'; s3.onclick=function(){ location.href='/panel/system'; }; wrap.appendChild(s3);
     } }catch(e){}
     body.appendChild(wrap);
   }
@@ -418,6 +419,25 @@ HTML;
         } catch (\Throwable $e) {
             return false;
         }
+    }
+
+    /** Owner-only system health cockpit (build, checks, opcache staleness, recent errors). */
+    public function system(Request $request)
+    {
+        $user = $request->user();
+        if (! $user || ! $user->tenant_id) {
+            return redirect('/app/login');
+        }
+        if (! method_exists($user, 'isOwnerLike') || ! $user->isOwnerLike()) {
+            abort(403);
+        }
+        $path = resource_path('panel/system.html');
+        if (! is_file($path)) {
+            abort(500, 'System asset missing.');
+        }
+        return response($this->brandize(file_get_contents($path), $user->tenant), 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
     }
 
     /** Self-serve onboarding: connect WhatsApp (QR) + generate the bot persona. */
