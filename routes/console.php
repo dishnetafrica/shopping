@@ -33,4 +33,6 @@ Schedule::command('orders:delivery-reminders')->everyFifteenMinutes()->between('
 Schedule::command('orders:pending-digest')->everyThirtyMinutes()->between('8:00', '21:00')->withoutOverlapping()->onOneServer();
 
 Schedule::command('credit:reminders')->dailyAt('09:00')->withoutOverlapping()->onOneServer();
+
+Schedule::command('tasks:escalate')->everyThirtyMinutes()->between('8:00', '20:00')->withoutOverlapping()->onOneServer();
 Schedule::command('bot:lead-followup')->everyFiveMinutes()->between('8:00', '20:00')->withoutOverlapping()->onOneServer();
