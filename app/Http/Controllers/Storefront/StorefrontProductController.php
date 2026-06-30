@@ -23,10 +23,13 @@ use Illuminate\Support\Str;
  */
 class StorefrontProductController extends Controller
 {
-    private function resolve(int $id): Product
+    /** Find a live product across all tenants. Returns null if missing or inactive.
+     *  Matches the catalogue, which lists active products (it doesn't exclude archived),
+     *  so anything visible in the grid will also open here. */
+    private function resolve(int $id): ?Product
     {
-        $product = Product::withoutGlobalScopes()->findOrFail($id);
-        abort_if($product->archived_at !== null || ! $product->active, 404);
+        $product = Product::withoutGlobalScopes()->find($id);
+        if (! $product || ! $product->active) return null;
         return $product;
     }
 
@@ -49,7 +52,17 @@ class StorefrontProductController extends Controller
 
     public function show($product): JsonResponse
     {
-        $product = $this->resolve((int) $product);
+        $id      = (int) $product;
+        $product = $this->resolve($id);
+        if (! $product) {
+            if (request()->boolean('debug')) {
+                $row = Product::withoutGlobalScopes()->find($id);
+                return response()->json(['ok' => false, '_error' => $row
+                    ? ('product ' . $id . ' is inactive (active=' . var_export((bool) $row->active, true) . ', archived=' . ($row->archived_at ?: 'null') . ')')
+                    : ('no product row for id ' . $id)], 404);
+            }
+            abort(404);
+        }
         $tenant  = Tenant::withoutGlobalScopes()->find($product->tenant_id);
         $images  = $this->gallery($product);
 
@@ -80,7 +93,7 @@ class StorefrontProductController extends Controller
             $payload['_error'] = $this->lastError;
         }
 
-        return response()->json($payload)->header('Cache-Control', 'no-store')->header('X-Cb-Detail', 'v2');
+        return response()->json($payload)->header('Cache-Control', 'no-store')->header('X-Cb-Detail', 'v3');
     }
 
     private ?string $lastError = null;
