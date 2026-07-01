@@ -115,6 +115,7 @@ class OrderCalculator
         if (! $matched) return '';
 
         $cur = $quote['currency'];
+        $dec = \App\Services\Pricing::decimalsForCurrency($cur);
         $out = ["🧮 Order total (from our price list — please confirm):"];
         foreach ($quote['lines'] as $l) {
             if (! $l['matched']) {
@@ -128,9 +129,9 @@ class OrderCalculator
             } elseif (! empty($l['moq']) && $l['qty'] < $l['moq']) {
                 $note = " (min order {$l['moq']})";
             }
-            $out[] = "• {$l['qty']} × {$l['name']}{$unit} = {$cur} " . number_format($l['sum']) . $note;
+            $out[] = "• {$l['qty']} × {$l['name']}{$unit} = {$cur} " . number_format($l['sum'], $dec) . $note;
         }
-        $out[] = "————\n*Total: {$cur} " . number_format($quote['total']) . "*";
+        $out[] = "————\n*Total: {$cur} " . number_format($quote['total'], $dec) . "*";
         return implode("\n", $out);
     }
 

@@ -23,6 +23,21 @@ class CurrencyPricer
         return $rate > 0 ? $rate : 3750.0;
     }
 
+    /**
+     * True when the tenant's prices ARE their currency (no UGX base, no Uganda↔South-Sudan
+     * conversion) — e.g. a South Sudan grocer whose catalogue is native USD, or a Rwanda shop in
+     * RWF. Mirrors PanelCurrency's "plain" flag so the bot and panel agree: native when the owner
+     * set currency_basis=native, or the currency isn't part of the convertible UGX/SSP/USD model.
+     * For such tenants we NEVER convert — dividing a native $33 price by the UGX rate would wreck it.
+     */
+    public function isNativeBasis(Tenant $t): bool
+    {
+        $raw = strtoupper(trim((string) $t->setting('currency', 'UGX')));
+        if ($raw === '' || $raw === 'AUTO') $raw = 'UGX';
+        if (strtolower(trim((string) $t->setting('currency_basis', ''))) === 'native') return true;
+        return ! in_array($raw, ['AUTO', 'UGX', 'SSP', 'USD'], true);
+    }
+
     /** Per-client SS markup % (customer override) else the tenant default; 0 when neither is set. */
     public function ssMarkupFor(Tenant $t, string $phone): float
     {
@@ -37,6 +52,10 @@ class CurrencyPricer
     /** Convert a UGX quote to USD in place (matched lines only). Returns ['quote'=>…, 'meta'=>…]. */
     public function toUsd(Tenant $t, string $phone, array $quote): array
     {
+        // Safety net: never convert a native-currency quote (prices already ARE the currency).
+        if ($this->isNativeBasis($t)) {
+            return ['quote' => $quote, 'meta' => ['native' => true]];
+        }
         $rate   = $this->usdRate($t);
         $pct    = $this->ssMarkupFor($t, $phone);
         $factor = (1 + $pct / 100) / $rate;
@@ -90,6 +109,9 @@ class CurrencyPricer
     /** Quote in USD when the rate exists and the customer wants USD / export, or ships to South Sudan. */
     public function shouldQuoteUsd(Tenant $t, string $phone, string $currentText): bool
     {
+        // Native-currency tenants (prices ARE the currency) are never converted — a native USD
+        // catalogue is already USD, and a native RWF one has no USD rate to convert with.
+        if ($this->isNativeBasis($t)) return false;
         if ($this->usdRate($t) <= 0) return false;
         $ctx = $this->context($t, $phone, $currentText);
         return $this->wantsUsd($ctx) || $this->mentionsSouthSudan($ctx)

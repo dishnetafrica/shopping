@@ -96,7 +96,7 @@ class PriceListService
                 $pack = '—';
             }
             $price = ((float) $p->price > 0)
-                ? $cur . ' ' . number_format((float) $p->price)
+                ? $cur . ' ' . number_format((float) $p->price, \App\Services\Pricing::decimalsForCurrency($cur))
                 : '<i style="color:#888">On request</i>';
             $moq = ((int) $p->moq > 0) ? (int) $p->moq . ' ' . e((string) ($p->unit_label ?: '')) : '—';
 

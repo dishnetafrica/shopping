@@ -460,7 +460,7 @@ class AiBrain
             $track = $order->track_token ? $tenant->publicUrl('/papi/track?o=' . $order->id . '&t=' . $order->track_token) : '';
 
             $conf  = "\n\n✅ *Order " . $order->order_no . " received*\n" . $itemsText;
-            if (($quote['total'] ?? 0) > 0) $conf .= "\nEstimated total: " . $cur . ' ' . number_format((float) $quote['total']);
+            if (($quote['total'] ?? 0) > 0) $conf .= "\nEstimated total: " . $cur . ' ' . number_format((float) $quote['total'], \App\Services\Pricing::decimalsForCurrency($cur));
             if ($delivery !== '')           $conf .= "\nDeliver to: " . $delivery;
             $conf .= "\nOur team will confirm the final total & delivery shortly. 🙏";
             if ($track !== '')              $conf .= "\nTrack your order: " . $track;
@@ -614,7 +614,7 @@ class AiBrain
             \App\Support\QuotationPipeline::stage($tenant->id, $from, 'pdf_generate', true, (string) $doc['no']);
 
             $cur     = $doc['currency'];
-            $amt     = $cur === 'USD' ? number_format((float) $doc['total'], 2) : number_format((float) $doc['total']);
+            $amt     = number_format((float) $doc['total'], \App\Services\Pricing::decimalsForCurrency($cur));
             $days    = (((int) $tenant->setting('quote_validity_days', 14)) ?: 14);
             $caption = "📄 Quotation {$doc['no']} — Total {$cur} {$amt}. Valid {$days} days. Reply to confirm"
                      . (($ss && $cur === 'USD')
@@ -789,7 +789,7 @@ class AiBrain
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
         $p .= "- Each PRODUCT shows a stock tag in [brackets]. Reflect it honestly: \"in stock: N\" → you may say it's available (you can state N); \"usually available — confirm\" → say it's usually available but you'll confirm before placing the order; \"stock unknown — confirm before promising\" → do NOT promise availability, say you'll confirm with the team first; \"OUT OF STOCK\" → tell the customer it's currently unavailable and offer to note it. Never state a stock number that isn't shown as \"in stock: N\".\n";
         $usdRate = (float) $tenant->setting('usdUgx', 0);
-        if ($usdRate > 0) {
+        if ($usdRate > 0 && $basis !== 'native') {
             $ssPct = (float) $tenant->setting('ssMarkupPct', 0);
             $rateStr = rtrim(rtrim(number_format($usdRate, 2), '0'), '.');
             $p .= "- PRICING & CURRENCY: base prices are UGX, and you DO know the exchange rate — 1 USD = {$rateStr} UGX. If the customer asks for a USD price, or mentions export or a South Sudan / Juba destination, you can quote in USD: emit the <<QUOTE>> line as usual and the system converts at this rate"

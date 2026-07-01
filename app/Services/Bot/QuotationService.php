@@ -113,7 +113,7 @@ class QuotationService
     private function html(Tenant $tenant, string $no, string $phone, string $name, array $quote): string
     {
         $cur     = $quote['currency'];
-        $dec     = ($cur === 'USD') ? 2 : 0;
+        $dec     = \App\Services\Pricing::decimalsForCurrency($cur);
         $accent  = (string) ($tenant->setting('theme_accent', '') ?: '#103A8C');
         $company = e((string) $tenant->name);
         $addr    = e((string) $tenant->setting('address', ''));
