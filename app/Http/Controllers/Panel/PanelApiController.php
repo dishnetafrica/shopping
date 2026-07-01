@@ -3107,16 +3107,31 @@ class PanelApiController extends Controller
         $rows = \App\Models\WhatsappChannel::where('tenant_id', $t->id)
             ->orderByDesc('is_primary')->orderBy('id')->get();
 
-        $out = $rows->map(function ($c) use ($evo) {
-            $state = ($c->driver === 'evolution' && $evo->configured()) ? $evo->state($c->instance) : 'n/a';
+        $out = $rows->map(function ($c) use ($evo, $t) {
+            $number = $c->number;
+            $state  = 'n/a';
+            if ($c->driver === 'evolution' && $evo->configured()) {
+                // Read the LIVE linked device. If the number changed (e.g. you swapped a South Sudan
+                // number for a Uganda one), self-heal the stored value so the panel matches reality.
+                $info = $evo->instanceInfo($c->instance);
+                $live = trim((string) ($info['number'] ?? ''));
+                $state = strtolower((string) ($info['state'] ?? '')) ?: $evo->state($c->instance);
+                if ($live !== '') {
+                    $number = $live;
+                    if ($live !== (string) $c->number) { $c->number = $live; $c->save(); }
+                    if ($c->is_primary && $live !== (string) $t->whatsapp_number) {
+                        $t->whatsapp_number = $live; $t->save();
+                    }
+                }
+            }
             return [
                 'id'         => $c->id,
                 'instance'   => $c->instance,
-                'number'     => $c->number,
+                'number'     => $number,
                 'label'      => $c->label,
                 'is_primary' => $c->is_primary,
                 'active'     => $c->active,
-                'state'      => $state,           // open | connecting | close | missing | n/a
+                'state'      => $state ?: 'missing',   // open | connecting | close | missing | n/a
             ];
         })->values();
 
