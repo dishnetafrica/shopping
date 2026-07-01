@@ -182,9 +182,12 @@
 .dsec{border-top:1px solid #eee;margin-top:22px;padding-top:16px}
 .dsech{font-size:15px;font-weight:700;margin-bottom:8px}
 .dtext{font-size:14px;color:#444;line-height:1.55}
-.dwrow{display:flex;flex-direction:column;padding:7px 0;border-top:1px solid #f1f1f1}
+.dwrow{display:flex;align-items:flex-start;gap:12px;padding:11px 0;border-top:1px solid #f1f1f1}
 .dwrow:first-of-type{border-top:0}
-.dwrow b{font-size:14px}.dwrow span{font-size:13px;color:var(--muted,#777)}
+.dwico{width:40px;height:40px;border-radius:50%;background:#eaf6ee;color:var(--green,#0f7a41);flex:none;display:grid;place-items:center}
+.dwico svg{width:20px;height:20px}
+.dwtx{display:flex;flex-direction:column;padding-top:1px}
+.dwrow b{font-size:14px}.dwrow span{font-size:13px;color:var(--muted,#777);margin-top:2px}
 .drail{margin-top:24px}
 .drailh{font-size:16px;font-weight:700;margin-bottom:12px}
 .rrow{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch}
@@ -824,6 +827,25 @@ var SHOP_BASE=(SHOP.base)||location.pathname.replace(/\/+$/,'').replace(/\/(shop
 var DETAIL_CACHE={}, CUR_DETAIL=null;
 function detailUrl(id){return SHOP_BASE+'/product/'+encodeURIComponent(id);}
 var USER_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.5 3.6-6 8-6s8 2.5 8 6"/></svg>';
+/* Circular icons for the "Why shop here?" rows (matches the quick-commerce storefront style).
+   Icon is chosen from the row's title keywords, so it works for custom why_shop entries too. */
+var WHY_IC={
+  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  tag:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12l-8 8-9-9V3h8z"/><circle cx="7.5" cy="7.5" r="1.4" fill="currentColor" stroke="none"/></svg>',
+  chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.5 7.2L3 21l1.8-6.5A8 8 0 1 1 21 12z"/></svg>',
+  grid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+  star:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19l1-5.8L3.5 9.2l5.9-.9z"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>'
+};
+function whyIcon(t){
+  t=(t||'').toLowerCase();
+  if(/deliver|door|fast|quick|minute|speed/.test(t)) return WHY_IC.clock;
+  if(/price|cheap|fair|offer|deal|save|value/.test(t)) return WHY_IC.tag;
+  if(/whatsapp|chat|order|checkout|message/.test(t)) return WHY_IC.chat;
+  if(/assort|range|wide|variety|choice|select/.test(t)) return WHY_IC.grid;
+  if(/fresh|quality|best|premium|genuine|trust|authentic/.test(t)) return WHY_IC.star;
+  return WHY_IC.check;
+}
 /* Sticky header shown INSIDE the product-detail overlay so search + account stay reachable
    even in detail mode (matches the quick-commerce storefronts). */
 function detailHeader(){
@@ -886,7 +908,7 @@ function renderDetail(d){
   var pack=bits.length?'<div class="dpack">'+bits.join(' \u00b7 ')+'</div>':'';
   var moq=(p.moq&&p.moq>1)?'<div class="dmoq">Min order: '+p.moq+'</div>':'';
   var desc=p.description?'<div class="dsec"><div class="dsech">Product details</div><div class="dtext">'+esc(p.description).replace(/\n/g,'<br>')+'</div></div>':'';
-  var why=(d.why_shop&&d.why_shop.length)?'<div class="dsec"><div class="dsech">Why shop here?</div>'+d.why_shop.map(function(w){return '<div class="dwrow"><b>'+esc(w.title)+'</b><span>'+esc(w.text||'')+'</span></div>';}).join('')+'</div>':'';
+  var why=(d.why_shop&&d.why_shop.length)?'<div class="dsec"><div class="dsech">Why shop here?</div>'+d.why_shop.map(function(w){return '<div class="dwrow"><div class="dwico">'+whyIcon(w.title)+'</div><div class="dwtx"><b>'+esc(w.title)+'</b><span>'+esc(w.text||'')+'</span></div></div>';}).join('')+'</div>':'';
   $('detail').innerHTML='<div class="dwrap">'
     +detailHeader()
     +'<div class="dtop"><div class="dgal">'+main+thumbs+'</div>'
