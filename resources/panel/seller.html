@@ -463,10 +463,10 @@
               <div class="lbl">Payment</div>
               <select id="posPay" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px;font-size:13px"><option>Cash</option><option>Mobile Money</option><option>Card</option><option>Bank transfer</option></select>
               <div class="sum" style="margin-top:12px">
-                <div class="r"><span>Subtotal</span><span id="posSub">UGX 0</span></div>
-                <div class="r"><span>Discount</span><span id="posDiscOut" style="color:var(--red)">- UGX 0</span></div>
-                <div class="r"><span>Extra charges</span><span id="posChOut">UGX 0</span></div>
-                <div class="r grand"><span>Total</span><span id="posTot">UGX 0</span></div>
+                <div class="r"><span>Subtotal</span><span id="posSub">0</span></div>
+                <div class="r"><span>Discount</span><span id="posDiscOut" style="color:var(--red)">0</span></div>
+                <div class="r"><span>Extra charges</span><span id="posChOut">0</span></div>
+                <div class="r grand"><span>Total</span><span id="posTot">0</span></div>
               </div>
               <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
                 <button class="btn" id="posPlace" style="flex:1">✓ Place order</button>
@@ -1233,7 +1233,7 @@ function discActive(){return DISC.pct>0||DISC.amt>0;}
 function applyDiscount(){if(Array.isArray(CATALOGUE))CATALOGUE.forEach(function(p){if(p.basePrice!=null)p.price=netUgx(p.basePrice);});rerenderCurrent();}
 function updateCurLabels(){var dt=$('posDiscType');if(dt&&dt.options[0])dt.options[0].text=curMeta().code+' flat';}
 function setCurrency(c){CUR=c;try{localStorage.setItem('fs_cur',c);}catch(e){}var s=$('curSel');if(s)s.value=c;updateCurLabels();rerenderCurrent();if(typeof current!=='undefined'&&current&&$('detailView')&&!$('detailView').classList.contains('hide'))renderInvoice();}
-function initCurrency(){var s=$('curSel');if(s){s.value=CUR;s.onchange=function(){setCurrency(this.value);};s.classList.toggle('hide',!SHOW_SWITCHER||PLAIN);}updateCurLabels();}
+function initCurrency(){var s=$('curSel');if(s){s.value=CUR;s.onchange=function(){setCurrency(this.value);};s.classList.toggle('hide',!SHOW_SWITCHER||PLAIN);}syncCurrencyLabels();updateCurLabels();}
 async function loadBotConfig(){
   try{var r=await fetch(EP.botcfg+'?token='+encodeURIComponent(token),{cache:'no-store'});var d=await r.json();
     var c=(d&&d.config)?d.config:null;
@@ -1564,6 +1564,30 @@ async function cancelOrder(id){
 var $=function(id){return document.getElementById(id);};
 var esc=function(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);});};
 function ugx(n){var m=curMeta(),v=convFromUgx(n);return m.code+' '+v.toLocaleString('en-US',{minimumFractionDigits:m.dec,maximumFractionDigits:m.dec});}
+/* Canonical currency-CODE helpers. baseCode() = the currency prices are STORED/ENTERED in
+   (UGX for convertible tenants, the native code for PLAIN tenants). Every place that used to
+   hardcode 'UGX' as a label for a base-currency amount now reads baseCode(), so a new native
+   currency never needs hunting through this file again. For convertible tenants baseCode()
+   returns 'UGX' exactly, so their behavior is unchanged. */
+function baseCode(){return PLAIN?PANEL_CUR:'UGX';}
+/* Relabel the base-currency settings fields (delivery fees, per-product discount) to the tenant's
+   real base currency, and hide the UGX/SSP/USD conversion inputs for native (PLAIN) tenants who
+   have no conversion. Guarded + idempotent; for convertible tenants baseCode()==='UGX' so nothing
+   visibly changes and nothing is hidden. Safe to call on any tab (missing elements are skipped). */
+function syncCurrencyLabels(){
+  var bc=baseCode();
+  var setLab=function(id,text){var el=$(id);if(!el)return;var lab=el.closest('.mfield');lab=lab?lab.querySelector('label'):null;if(lab)lab.textContent=text;};
+  setLab('setBase','Base fee ('+bc+')');
+  setLab('setPerKm','Per km ('+bc+')');
+  setLab('setMin','Minimum fee ('+bc+')');
+  setLab('setRound','Round to ('+bc+')');
+  setLab('setFree','Free delivery over ('+bc+') — 0 = off');
+  var da=$('setDiscAmt');if(da){var dn=da.parentNode.querySelector('.note');if(dn)dn.textContent=bc+' off each product';}
+  if(PLAIN){
+    ['setUsdUgx','setSsMarkup','setShowCur'].forEach(function(id){var e=$(id);if(!e)return;var row=e.closest('.inrow')||e.closest('.mfield');if(row)row.style.display='none';});
+    var bot=$('setBotCur');if(bot){var bm=bot.closest('.mfield');if(bm)bm.style.display='none';} // Auto UGX/SSP/USD routing is meaningless for a single native currency
+  }
+}
 function orderTotal(o){if(o.total!=null&&Number(o.total)>0)return Number(o.total);return o.items.reduce(function(s,it){return s+(Number(it.price)||0)*(Number(it.qty)||0);},0)+(Number(o.deliveryFee)||0);}
 function fmtDate(s){return String(s||'').replace('T',' ');}
 function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(function(){t.remove();},2300);}
@@ -1998,13 +2022,14 @@ async function qView(id){
   }catch(e){$('modalBody').innerHTML='<div class="note" style="color:var(--red)">Network error</div>';}
 }
 function qRenderDetail(q){
-  window.__qId=q.id; window.__qCur=q.currency||'UGX';
+  window.__qId=q.id; window.__qCur=q.currency||baseCode();
   window.__qLocked=(q.status==='converted'||q.status==='accepted');
   window.__qItems=(q.items||[]).map(function(it){return {name:it.name,qty:Number(it.qty)||1,unit_price:Number(it.unit_price)||0};});
   $('modalTitle').textContent='Quotation '+(q.quote_no||'');
   var pdf=q.url?'<a class="btn ghost" href="'+esc(q.url)+'" target="_blank" rel="noopener" style="padding:4px 9px">⤓ PDF</a>':'';
   var lockNote=window.__qLocked?'<div class="note" style="color:var(--muted);margin-bottom:8px">This quotation is <b>'+esc(q.status)+'</b> and is read-only. Use Resend or Convert; to change it, create a new one.</div>':'';
-  var curSel=window.__qLocked?('<b>'+esc(window.__qCur)+'</b>'):('<select id="qCurSel" onchange="window.__qCur=this.value;qRecalc()" style="padding:5px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink)"><option'+(window.__qCur==='UGX'?' selected':'')+'>UGX</option><option'+(window.__qCur==='USD'?' selected':'')+'>USD</option></select>');
+  var qcurs=PLAIN?[PANEL_CUR]:['UGX','USD'];
+  var curSel=window.__qLocked?('<b>'+esc(window.__qCur)+'</b>'):('<select id="qCurSel" onchange="window.__qCur=this.value;qRecalc()" style="padding:5px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink)">'+qcurs.map(function(c){return '<option'+(window.__qCur===c?' selected':'')+'>'+c+'</option>';}).join('')+'</select>');
   var head='<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px">'
     +'<div><b>'+esc(q.name||'—')+'</b>'+(q.phone?' <span style="color:var(--muted);font-size:12px">'+esc(q.phone)+'</span>':'')+'</div>'
     +'<span style="margin-left:auto">'+qStatusBadge(q.status)+'</span>'+pdf+'</div>';
@@ -2053,7 +2078,7 @@ async function qSave(){
   var items=(window.__qItems||[]).filter(function(it){return (it.name||'').trim()!=='';})
     .map(function(it){return {name:it.name,qty:Number(it.qty)||1,unit_price:Number(it.unit_price)||0};});
   if(!items.length){toast('Add at least one line');return;}
-  var url=EP.quoteUpdate+'?token='+encodeURIComponent(token)+'&id='+id+'&currency='+encodeURIComponent(window.__qCur||'UGX')+'&items='+encodeURIComponent(JSON.stringify(items));
+  var url=EP.quoteUpdate+'?token='+encodeURIComponent(token)+'&id='+id+'&currency='+encodeURIComponent(window.__qCur||baseCode())+'&items='+encodeURIComponent(JSON.stringify(items));
   try{var r=await fetch(url,{cache:'no-store'});var d=await r.json();
     if(d&&d.ok){toast('Saved ✓ — PDF rebuilt');qClose();quotesInit();}
     else toast((d&&d.message)?d.message:'Save failed');
@@ -2240,7 +2265,7 @@ function areaChart(labels,vals,opts){
 
 /* ---------------- ANALYTICS ---------------- */
 function anNum(n){return (Math.round(Number(n)||0)).toLocaleString();}
-function anMoney(n){return 'UGX '+anNum(n);}
+function anMoney(n){return baseCode()+' '+anNum(n);}
 function anBars(items){
   if(!items||!items.length)return '<div class="empty">No data yet</div>';
   var max=Math.max.apply(null,items.map(function(x){return Number(x.value)||0;}).concat([1]));
@@ -2342,7 +2367,7 @@ function renderList(){
 function goPage(p){page=p;renderList();}
 function exportCSV(){
   var list=filtered();
-  var head=['Order No','Order ID','Order Date','Delivery Date','Customer','Phone','Status','Items','Total UGX','Payment'];
+  var head=['Order No','Order ID','Order Date','Delivery Date','Customer','Phone','Status','Items','Total '+baseCode(),'Payment'];
   var rows=list.map(function(o){return [o.orderNo||'',o.id,o.oDate,o.dDate,o.customer,o.phone,o.status,o.items.map(function(i){return i.qty+'x '+i.name;}).join('; '),orderTotal(o),o.payment];});
   var csv=[head].concat(rows).map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
   var blob=new Blob([csv],{type:'text/csv'}),url=URL.createObjectURL(blob),a=document.createElement('a');
@@ -2533,7 +2558,7 @@ function renderReports(){
     $('rRows').innerHTML=rows.length?rows.map(function(r){return '<tr><td>'+esc(r.name)+'</td><td><b>'+r.qty+'</b></td><td class="amt">'+ugx(r.amt)+'</td></tr>';}).join('')
       +'<tr style="background:#F4F7F4"><td><b>Total</b></td><td><b>'+tq+'</b></td><td class="amt">'+ugx(ta)+'</td></tr>':'<tr><td colspan="3" class="empty">No sales in range</td></tr>';
     $('rCount').textContent=rows.length+' products · '+tq+' units · '+ugx(ta);
-    reportHead=['Product','Total Sold','Total Amount UGX'];reportRows=rows.map(function(r){return [r.name,r.qty,r.amt];});
+    reportHead=['Product','Total Sold','Total Amount '+baseCode()];reportRows=rows.map(function(r){return [r.name,r.qty,r.amt];});
   } else {
     var m={};os.forEach(function(o){var d=o.oDate.slice(0,10);if(!m[d])m[d]={n:0,rev:0};m[d].n++;m[d].rev+=orderTotal(o);});
     rows=Object.keys(m).sort().reverse().map(function(d){return {d:d,n:m[d].n,rev:m[d].rev};});
@@ -2543,7 +2568,7 @@ function renderReports(){
     $('rRows').innerHTML=rows.length?rows.map(function(r){return '<tr><td>'+esc(r.d)+'</td><td><b>'+r.n+'</b></td><td class="amt">'+ugx(r.rev)+'</td></tr>';}).join('')
       +'<tr style="background:#F4F7F4"><td><b>Total</b></td><td><b>'+tn+'</b></td><td class="amt">'+ugx(tr)+'</td></tr>':'<tr><td colspan="3" class="empty">No sales in range</td></tr>';
     $('rCount').textContent=rows.length+' days · '+tn+' orders · '+ugx(tr);
-    reportHead=['Date','Orders','Revenue UGX'];reportRows=rows.map(function(r){return [r.d,r.n,r.rev];});
+    reportHead=['Date','Orders','Revenue '+baseCode()];reportRows=rows.map(function(r){return [r.d,r.n,r.rev];});
   }
 }
 function reportsInit(){
@@ -2944,7 +2969,7 @@ function openEdit(row){
   $('modalTitle').textContent='Edit \u00b7 '+p.name;
   $('modalBody').innerHTML=
     '<div class="mfield"><label>Product name</label><input id="mName" value="'+esc(p.name||'')+'"><div class="note" style="margin-top:4px">Rename the product. Existing orders keep their old name.</div></div>'+
-    '<div class="mfield"><label>Price (UGX — base'+(discActive()?', before discount':'')+')</label><input id="mPrice" type="number" min="0" value="'+(p.basePrice!=null?p.basePrice:p.price)+'"><div class="note" id="mPriceHint" style="margin-top:4px"></div></div>'+
+    '<div class="mfield"><label>Price ('+baseCode()+' — base'+(discActive()?', before discount':'')+')</label><input id="mPrice" type="number" min="0" value="'+(p.basePrice!=null?p.basePrice:p.price)+'"><div class="note" id="mPriceHint" style="margin-top:4px"></div></div>'+
     '<div class="mfield"><label>Category</label><input id="mCat" list="catListE" value="'+esc(p.category||'')+'"><datalist id="catListE">'+cats.map(function(c){return '<option value="'+esc(c)+'">';}).join('')+'</datalist><div class="note" style="margin-top:4px">Pick an existing category or type a new one.</div></div>'+
     '<div class="mfield"><label>'+stockLabel+'</label><input id="mStock" type="number" min="0" value="'+prodStock(p)+'"></div>'+stockNote+
     '<div class="mfield"><label>Selling unit &amp; minimum order <span style="font-weight:400;color:#6b7280">(wholesale — leave blank for normal retail)</span></label>'+
@@ -2992,7 +3017,7 @@ function openAdd(){
     '<div class="inrow"><div class="mfield" style="flex:1"><label>Brand</label><input id="aBrand"></div>'+
       '<div class="mfield" style="flex:1"><label>Variant</label><input id="aVar"></div></div>'+
     '<div class="mfield"><label>Category</label><input id="aCat" list="catList"><datalist id="catList">'+cats.map(function(c){return '<option value="'+esc(c)+'">';}).join('')+'</datalist></div>'+
-    '<div class="inrow"><div class="mfield" style="flex:1"><label>Price (UGX) *</label><input id="aPrice" type="number" min="0"></div>'+
+    '<div class="inrow"><div class="mfield" style="flex:1"><label>Price ('+baseCode()+') *</label><input id="aPrice" type="number" min="0"></div>'+
       '<div class="mfield" style="flex:1"><label>Stock</label><input id="aStock" type="number" min="0" value="100"></div></div>'+
     '<div class="mfield"><label>Keywords</label><input id="aKw" placeholder="comma separated"></div>'+
     prodImgField('')+
@@ -3503,7 +3528,7 @@ async function saveCustomer(ph){
 }
 function custCSV(){
   var rows=CUST_VIEW&&CUST_VIEW.length?CUST_VIEW:buildCustomers();
-  var head=['Name','Phone','Orders','Spent_UGX','AOV_UGX','Delivered','Cancelled','Credit_UGX','Last_Order','Segment'];
+  var head=['Name','Phone','Orders','Spent_'+baseCode(),'AOV_'+baseCode(),'Delivered','Cancelled','Credit_'+baseCode(),'Last_Order','Segment'];
   var data=[head].concat(rows.map(function(c){return [c.name,c.phone,c.count,c.spent,c.aov,c.delivered,c.cancelled,c.credit,(c.last||'').slice(0,10),c.seg];}));
   var csv=data.map(function(r){return r.map(function(x){return '"'+String(x==null?'':x).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
   var b=new Blob([csv],{type:'text/csv'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='family_shopper_customers.csv';a.click();URL.revokeObjectURL(u);toast('Exported '+(rows.length)+' customers');
@@ -3557,8 +3582,8 @@ function openRiderModal(id){
     riderHdr('Pay structure')+
     '<div class="mfield"><label>Pay type</label><select id="rmPayType" onchange="riderPayToggle()"><option value="fixed"'+(comm?'':' selected')+'>Fixed / salaried</option><option value="commission"'+(comm?' selected':'')+'>Commission</option></select></div>'+
     '<div id="rmCommBox" style="'+(comm?'':'display:none')+'"><div class="inrow"><div class="mfield" style="flex:1"><label>Commission %</label><input id="rmCommPct" type="number" min="0" value="'+esc(v('comm_pct'))+'"></div>'+
-      '<div class="mfield" style="flex:1"><label>Min (UGX)</label><input id="rmCommMin" type="number" min="0" value="'+esc(v('comm_min'))+'"></div>'+
-      '<div class="mfield" style="flex:1"><label>Max (UGX)</label><input id="rmCommMax" type="number" min="0" value="'+esc(v('comm_max'))+'"></div></div></div>'+
+      '<div class="mfield" style="flex:1"><label>Min ('+baseCode()+')</label><input id="rmCommMin" type="number" min="0" value="'+esc(v('comm_min'))+'"></div>'+
+      '<div class="mfield" style="flex:1"><label>Max ('+baseCode()+')</label><input id="rmCommMax" type="number" min="0" value="'+esc(v('comm_max'))+'"></div></div></div>'+
     '<button class="lbtn" id="rmSave" style="margin-top:12px">Save rider</button>';
   $('modal').classList.remove('hide');
   $('rmSave').onclick=function(){saveRider(id);};
@@ -3621,8 +3646,8 @@ function calcReturn(){
   var res=$('retRes')?$('retRes').value:'adjust';
   var note='';
   if(res==='adjust') note='Order total drops from '+ugx(orderTotal(current))+' to '+ugx(Math.max(0,orderTotal(current)-amt))+'.';
-  else if(res==='credit') note='UGX '+amt.toLocaleString('en-US')+' credit added for '+esc(current.customer)+'\u2019s next order.';
-  else note='Record a UGX '+amt.toLocaleString('en-US')+' cash / MoMo refund.';
+  else if(res==='credit') note=baseCode()+' '+amt.toLocaleString('en-US')+' credit added for '+esc(current.customer)+'\u2019s next order.';
+  else note='Record a '+baseCode()+' '+amt.toLocaleString('en-US')+' cash / MoMo refund.';
   if($('retNote'))$('retNote').innerHTML=note;
 }
 function openReturnModal(){
@@ -3638,7 +3663,7 @@ function openReturnModal(){
     '<div style="max-height:34vh;overflow:auto;margin-bottom:10px">'+rows+'</div>'+
     '<div class="mfield"><label>Reason</label><select id="retReason"><option>Damaged</option><option>Wrong item</option><option>Missing item</option><option>Expired / quality</option><option>Changed mind</option><option>Other</option></select></div>'+
     '<div class="mfield"><label>Resolution</label><select id="retRes" onchange="calcReturn()"><option value="adjust">Adjust amount (reduce bill)</option><option value="credit">Store credit (next order)</option><option value="refund">Refund (cash / MoMo)</option></select></div>'+
-    '<div class="mfield"><label>Amount (UGX)</label><input id="retAmt" type="number" min="0" oninput="if($(\'retNote\')){}"></div>'+
+    '<div class="mfield"><label>Amount ('+baseCode()+')</label><input id="retAmt" type="number" min="0" oninput="if($(\'retNote\')){}"></div>'+
     '<div class="note" id="retNote" style="margin:0 0 10px"></div>'+
     '<button class="lbtn" id="retSave">Process return</button>';
   $('modal').classList.remove('hide');
@@ -3830,7 +3855,7 @@ function settingsInit(){
   }
   if($('setDiscPct'))$('setDiscPct').value=DISC.pct||'';
   if($('setDiscAmt'))$('setDiscAmt').value=DISC.amt||'';
-  (function(){function dn(){var pct=Number($('setDiscPct').value)||0,amt=Number($('setDiscAmt').value)||0;var n=$('setDiscNote');if(!n)return;if(pct<=0&&amt<=0){n.textContent='No discount \u2014 customers pay list price.';return;}var ex=Math.round(5000*(1-pct/100)-amt);if(ex<0)ex=0;n.textContent='Applies to bot + panel. Example: a UGX 5,000 item \u2192 UGX '+ex.toLocaleString('en-US')+'.';}if($('setDiscPct')){$('setDiscPct').oninput=dn;$('setDiscAmt').oninput=dn;dn();}})();
+  (function(){function dn(){var pct=Number($('setDiscPct').value)||0,amt=Number($('setDiscAmt').value)||0;var n=$('setDiscNote');if(!n)return;if(pct<=0&&amt<=0){n.textContent='No discount \u2014 customers pay list price.';return;}var ex=Math.round(5000*(1-pct/100)-amt);if(ex<0)ex=0;n.textContent='Applies to bot + panel. Example: a '+baseCode()+' 5,000 item \u2192 '+baseCode()+' '+ex.toLocaleString('en-US')+'.';}if($('setDiscPct')){$('setDiscPct').oninput=dn;$('setDiscAmt').oninput=dn;dn();}})();
   if($('setUsdSsp'))$('setUsdSsp').value=RATES.usdSsp;
   if($('setSsMarkup'))$('setSsMarkup').value=(SETTINGS.ssMarkupPct?SETTINGS.ssMarkupPct:'');
   ['setUsdUgx','setUsdSsp'].forEach(function(id){if($(id))$(id).oninput=rateNote;});
@@ -3909,7 +3934,7 @@ async function saveSettings(){
     '&usdUgx='+(Number($('setUsdUgx').value)||RATES.usdUgx)+'&usdSsp='+(Number($('setUsdSsp').value)||RATES.usdSsp)+
     '&sspRound=100&showSwitcher='+(SHOW_SWITCHER?'1':'0')+'&discountPct='+DISC.pct+'&discountAmt='+DISC.amt;
   try{var rb=await fetch(EP.botcfgSave+bcq,{cache:'no-store'});var db=await rb.json();
-    if(db&&db.ok)toast('Saved \u2014 bot quotes '+(BOT_CUR==='auto'?'each customer\u2019s currency':BOT_CUR)+(discActive()?', '+(DISC.pct?DISC.pct+'% ':'')+(DISC.amt?'\u2212UGX '+DISC.amt+' ':'')+'off':''));
+    if(db&&db.ok)toast('Saved \u2014 bot quotes '+(BOT_CUR==='auto'?'each customer\u2019s currency':BOT_CUR)+(discActive()?', '+(DISC.pct?DISC.pct+'% ':'')+(DISC.amt?'\u2212'+baseCode()+' '+DISC.amt+' ':'')+'off':''));
     else toast('Currency/discount saved locally only (config webhook not live yet)');
   }catch(e){toast('Currency/discount saved locally only (config webhook not reachable)');}
   if(BOT_CUR!=='auto')CUR=BOT_CUR; try{localStorage.setItem('fs_cur',CUR);}catch(e){}
