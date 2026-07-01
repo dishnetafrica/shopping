@@ -81,6 +81,14 @@
         pill('Queue ('+((d.queue&&d.queue.driver)||'?')+')', 'failed: '+fj, (fj==='—'||fj===0)?'ok':'warn')+
         pill('Last webhook', ago(d.last_webhook_at), d.last_webhook_at?'ok':'warn')+
         pill('Last processed', ago(d.last_processed_at), d.last_processed_at?'ok':'warn');
+
+      var fr=(d.queue&&d.queue.failed_recent)||[];
+      if(fr.length){
+        el.innerHTML += '<div style="grid-column:1/-1;margin-top:8px;padding:11px 13px;background:#fdf6e7;border:1px solid #f0e3c0;border-radius:12px;font-size:12.5px;color:#7a5b00">'
+          +'<b>Recent failed jobs</b> — these are past failures; if the trace below shows <b>ai_replied</b>, live messages are fine. Clear with <code>php artisan queue:flush</code>.'
+          +fr.map(function(f){return '<div style="margin-top:6px"><b>'+esc(f.job||'job')+'</b> · '+ago(f.failed_at)+'<br><span style="color:#8a6d1a">'+esc(f.error||'')+'</span></div>';}).join('')
+          +'</div>';
+      }
     }catch(e){ el.innerHTML=''; }
   }
 

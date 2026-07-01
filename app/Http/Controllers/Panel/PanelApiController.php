@@ -602,10 +602,29 @@ class PanelApiController extends Controller
         $failedJobs = null;
         try { $failedJobs = (int) \Illuminate\Support\Facades\DB::table('failed_jobs')->count(); } catch (\Throwable $e) {}
 
+        // Peek at the most recent failures with their job + first error line, so the owner can see
+        // WHY they failed (e.g. a transient deploy-window error) instead of just a scary count.
+        $failedRecent = [];
+        try {
+            foreach (\Illuminate\Support\Facades\DB::table('failed_jobs')->orderByDesc('id')->limit(5)->get() as $fj) {
+                $pl   = json_decode((string) ($fj->payload ?? '{}'), true) ?: [];
+                $job  = (string) ($pl['displayName'] ?? ($pl['job'] ?? 'job'));
+                $line = trim(strtok((string) ($fj->exception ?? ''), "\n"));
+                $failedRecent[] = [
+                    'job'       => class_basename($job) ?: $job,
+                    'failed_at' => $fj->failed_at ?? null,
+                    'error'     => mb_substr($line, 0, 180),
+                ];
+            }
+        } catch (\Throwable $e) {}
+
         $lastWebhook = $lastProcessed = null;
         try {
             $lastWebhook   = \Illuminate\Support\Facades\DB::table('bot_events')->where('tenant_id', $t->id)->where('stage', 'started')->max('created_at');
-            $lastProcessed = \Illuminate\Support\Facades\DB::table('bot_events')->where('tenant_id', $t->id)->where('stage', 'replied')->max('created_at');
+            // The AI brain logs 'ai_replied'; the inbuilt bot logs 'replied'. Count both, else an
+            // AI-mode shop always shows "never" even while it's replying perfectly.
+            $lastProcessed = \Illuminate\Support\Facades\DB::table('bot_events')->where('tenant_id', $t->id)
+                ->whereIn('stage', ['replied', 'ai_replied'])->max('created_at');
         } catch (\Throwable $e) {}
 
         $wa = ['instance' => (string) ($t->whatsapp_instance ?? ''), 'state' => 'unknown'];
@@ -642,7 +661,7 @@ class PanelApiController extends Controller
             'now'               => now()->toIso8601String(),
             'openai_configured' => $openai,
             'redis'             => $redis,
-            'queue'             => ['driver' => (string) config('queue.default'), 'failed_jobs' => $failedJobs],
+            'queue'             => ['driver' => (string) config('queue.default'), 'failed_jobs' => $failedJobs, 'failed_recent' => $failedRecent],
             'whatsapp'          => $wa,
             'last_webhook_at'   => $lastWebhook,
             'last_processed_at' => $lastProcessed,
