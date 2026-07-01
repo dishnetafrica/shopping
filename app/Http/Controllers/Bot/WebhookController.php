@@ -37,7 +37,7 @@ class WebhookController
         $incoming['trace'] = $trace;
 
         // Resolve tenant by the instance/number that RECEIVED the message.
-        $tenant = Tenant::where('whatsapp_instance', $incoming['instance'])->first();
+        $tenant = Tenant::byWhatsappInstance($incoming['instance']);
         if (!$tenant) {
             \App\Support\BotTrace::log(null, $trace, $incoming['from'], 'no_tenant', 'instance=' . $incoming['instance']);
             return response()->json(['ok' => true, 'note' => 'no tenant for instance']);
@@ -64,7 +64,7 @@ class WebhookController
         $state    = strtolower((string) (data_get($payload, 'data.state', data_get($payload, 'state', ''))));
         if ($instance === '' || $state === '') return;
 
-        $t = Tenant::where('whatsapp_instance', $instance)->first();
+        $t = Tenant::byWhatsappInstance($instance);
         if (! $t) return;
 
         $prev = (string) $t->setting('wa_conn_state', '');
@@ -108,7 +108,7 @@ class WebhookController
         $instance = (string) ($payload['instance'] ?? data_get($payload, 'data.instance', ''));
         if ($instance === '') return;
 
-        $t = Tenant::where('whatsapp_instance', $instance)->first();
+        $t = Tenant::byWhatsappInstance($instance);
         if (! $t) return;
 
         // data may be a single update object or a list of them

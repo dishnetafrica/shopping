@@ -80,6 +80,27 @@
       <div class="hint" id="waInstance"></div>
     </div>
 
+    <!-- ADDITIONAL WHATSAPP NUMBERS -->
+    <div class="card" id="numbersCard">
+      <div class="step">Optional</div>
+      <h2>More WhatsApp numbers</h2>
+      <p class="lead">Add extra numbers to the same shop — a branch, a support line, or a backup number for peace of mind. Every number shares this catalogue and orders, and the assistant always replies on the number the customer messaged.</p>
+
+      <div id="chList"><div class="hint">Loading…</div></div>
+
+      <div id="chQrBox" class="qrbox hide" style="margin-top:10px">
+        <div class="hint" id="chQrLabel" style="font-weight:700"></div>
+        <img id="chQrImg" alt="WhatsApp QR">
+        <div class="hint">Open WhatsApp on that phone → <b>Linked devices</b> → <b>Link a device</b> → scan. It links to this same shop.</div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <input id="chLabel" placeholder="Label (e.g. Support, Branch 2)" style="flex:1;min-width:0">
+        <button class="btn" id="chAddBtn" onclick="chAdd()">Add another number</button>
+      </div>
+      <div class="hint" id="chMsg"></div>
+    </div>
+
     <!-- OFFICIAL CLOUD API (Pro) -->
     <div class="card" id="cloudCard">
       <div class="step">Optional · Pro</div>
@@ -280,7 +301,64 @@ async function cloudUseEvolution(){
 
 waCheck();
 cloudInfo();
-</script>
+chLoad();
+
+/* ---- Additional WhatsApp numbers ---- */
+function chBadge(state){
+  var map={open:['b-open','Connected'],connecting:['b-wait','Connecting…'],close:['b-off','Disconnected'],missing:['b-off','Not linked'],'n/a':['b-wait','—']};
+  var m=map[state]||['b-wait',state||'—'];
+  return '<span class="badge '+m[0]+'"><span class="dot"></span>'+m[1]+'</span>';
+}
+async function chLoad(){
+  try{
+    var r=await fetch('/papi/wa/channels'); var d=await r.json();
+    if(!d||!d.ok){ $('chList').innerHTML='<div class="hint">Could not load numbers.</div>'; return; }
+    if(!d.channels.length){ $('chList').innerHTML='<div class="hint">No numbers yet.</div>'; return; }
+    $('chList').innerHTML=d.channels.map(function(c){
+      var right = c.is_primary
+        ? '<span class="hint" style="margin:0">Main number</span>'
+        : '<button class="btn danger" style="padding:6px 12px" onclick="chRemove('+JSON.stringify(c.instance)+')">Remove</button>'
+          +' <button class="btn" style="padding:6px 12px" onclick="chRepair('+JSON.stringify(c.instance)+','+JSON.stringify(c.label||'')+')">Re-link</button>';
+      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line)">'
+        +'<div><b>'+(c.label||'Number')+'</b>'+(c.number?' · '+c.number:'')+'<br>'+chBadge(c.state)+'</div>'
+        +'<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">'+right+'</div></div>';
+    }).join('');
+  }catch(e){ $('chList').innerHTML='<div class="hint">Could not load numbers.</div>'; }
+}
+async function chAdd(){
+  var b=$('chAddBtn'); b.disabled=true; b.textContent='Creating…'; $('chMsg').textContent='';
+  try{
+    var r=await fetch('/papi/wa/channels/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label:$('chLabel').value||''})});
+    var d=await r.json();
+    if(!d||!d.ok){ $('chMsg').textContent=(d&&d.detail)||'Could not add a number.'; b.disabled=false; b.textContent='Add another number'; return; }
+    $('chLabel').value='';
+    showChQr(d.instance, d.label, d.qr);
+    chLoad();
+  }catch(e){ $('chMsg').textContent='Network error.'; }
+  b.disabled=false; b.textContent='Add another number';
+}
+async function chRepair(instance,label){
+  try{ var r=await fetch('/papi/wa/channels/qr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instance:instance})}); var d=await r.json(); if(d&&d.ok) showChQr(instance,label,d.qr); }catch(e){}
+}
+function showChQr(instance,label,qr){
+  var box=$('chQrBox'); $('chQrLabel').textContent='Scan to link: '+(label||instance);
+  var img=(qr&&(qr.base64||qr.qr||qr.code))||'';
+  if(img && img.indexOf('data:')!==0 && /^[A-Za-z0-9+/=]+$/.test(img.slice(0,40))) img='data:image/png;base64,'+img;
+  if(img){ $('chQrImg').src=img; box.classList.remove('hide'); }
+  // poll state → hide QR + refresh list once linked
+  var tries=0; var iv=setInterval(async function(){
+    tries++; if(tries>40){clearInterval(iv);return;}
+    try{ var r=await fetch('/papi/wa/channels'); var d=await r.json();
+      var c=(d.channels||[]).find(function(x){return x.instance===instance;});
+      if(c && c.state==='open'){ clearInterval(iv); box.classList.add('hide'); toast('Number linked'); chLoad(); }
+    }catch(e){}
+  },3000);
+}
+async function chRemove(instance){
+  if(!confirm('Remove this number from the shop?'))return;
+  try{ var r=await fetch('/papi/wa/channels/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instance:instance})}); var d=await r.json();
+    if(d&&d.ok){ toast('Number removed'); chLoad(); } else { toast((d&&d.detail)||'Could not remove'); } }catch(e){ toast('Network error'); }
+}</script>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){});});}</script>
 </body>
 </html>

@@ -71,6 +71,23 @@ class WaWatchdogCommand extends Command
 
         $this->capacityCheck($liveInst);
 
+        // Additional (non-primary) numbers: check + nudge each, without touching the tenant-level
+        // banner (that reflects the PRIMARY number, since orders keep flowing there).
+        $extra = 0; $extraDown = 0;
+        foreach (\App\Models\WhatsappChannel::where('is_primary', false)->where('active', true)->get() as $c) {
+            if (($c->driver ?? 'evolution') !== 'evolution' || ! $c->instance) continue;
+            $extra++;
+            $st = $evo->state($c->instance);
+            if ($st === 'open' || $st === 'connecting') continue;
+            $extraDown++;
+            $throttle = "wa:reconnect:ch:{$c->id}";
+            if (Cache::add($throttle, 1, self::RECONNECT_EVERY_MIN * 60)) {
+                try { $evo->qr($c->instance); Log::info('wa.ch_reconnect_nudge', ['channel' => $c->id, 'tenant' => $c->tenant_id]); }
+                catch (\Throwable $e) { Log::warning('wa.ch_reconnect_failed', ['channel' => $c->id, 'err' => $e->getMessage()]); }
+            }
+        }
+        if ($extra) $this->info("wa:watchdog also checked {$extra} extra numbers, {$extraDown} down.");
+
         $this->info("wa:watchdog checked {$checked} instances, {$down} down.");
         return self::SUCCESS;
     }

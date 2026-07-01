@@ -3044,6 +3044,7 @@ class PanelApiController extends Controller
         }
         $evo->createIfMissing($instance);
         $evo->setWebhook($instance, url('/api/webhook/whatsapp/evolution'));
+        $t->syncPrimaryChannel();   // mirror the primary number into whatsapp_channels
 
         // Fresh connect attempt: clear any manual/alert flags so a future real drop alerts.
         $t->putSetting('wa_conn_state', 'connecting');
@@ -3072,6 +3073,113 @@ class PanelApiController extends Controller
         // Deliberate disconnect — suppress the "went offline" alert.
         $t->putSetting('wa_conn_state', 'manual_off');
         $t->putSetting('wa_down_alerted', false);
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Multiple WhatsApp numbers per shop. A shop keeps ONE catalogue/orders backend while attaching
+     * several numbers (branches, a support line, or a ban-safe backup). The primary is the QR-linked
+     * number above; these are additional Evolution instances that all route into the same tenant.
+     */
+    public function waChannels(Request $r, EvolutionAdmin $evo)
+    {
+        $t = $r->user()->tenant;
+        $t->syncPrimaryChannel();
+        $rows = \App\Models\WhatsappChannel::where('tenant_id', $t->id)
+            ->orderByDesc('is_primary')->orderBy('id')->get();
+
+        $out = $rows->map(function ($c) use ($evo) {
+            $state = ($c->driver === 'evolution' && $evo->configured()) ? $evo->state($c->instance) : 'n/a';
+            return [
+                'id'         => $c->id,
+                'instance'   => $c->instance,
+                'number'     => $c->number,
+                'label'      => $c->label,
+                'is_primary' => $c->is_primary,
+                'active'     => $c->active,
+                'state'      => $state,           // open | connecting | close | missing | n/a
+            ];
+        })->values();
+
+        return response()->json(['ok' => true, 'channels' => $out]);
+    }
+
+    /** Add another number: create a fresh Evolution instance for this shop and return its QR. */
+    public function waChannelAdd(Request $r, EvolutionAdmin $evo)
+    {
+        if (! $evo->configured()) {
+            return response()->json(['ok' => false, 'error' => 'evolution_not_configured'], 400);
+        }
+        $u = $r->user();
+        if (! method_exists($u, 'isOwnerLike') || ! $u->isOwnerLike()) {
+            return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        }
+        $t = $u->tenant;
+
+        // Plan gate: additional numbers are a paid capability (feature flag 'multi_number').
+        if (method_exists($t, 'hasFeature') && ! $t->hasFeature('multi_number') && ! $t->onTrial()) {
+            return response()->json(['ok' => false, 'error' => 'upgrade',
+                'detail' => 'Multiple WhatsApp numbers are available on the Pro plan.'], 402);
+        }
+
+        $label = trim((string) $r->input('label', ''));
+        $label = $label !== '' ? mb_substr($label, 0, 40) : 'Number ' . (\App\Models\WhatsappChannel::where('tenant_id', $t->id)->count() + 1);
+
+        // Unique instance name: shopbot_t{id}_2, _3, …
+        $n = 2;
+        do {
+            $instance = 'shopbot_t' . $t->id . '_' . $n;
+            $n++;
+        } while (\App\Models\WhatsappChannel::where('instance', $instance)->exists());
+
+        $evo->createIfMissing($instance);
+        $evo->setWebhook($instance, url('/api/webhook/whatsapp/evolution'));
+
+        \App\Models\WhatsappChannel::create([
+            'tenant_id'  => $t->id,
+            'instance'   => $instance,
+            'driver'     => 'evolution',
+            'label'      => $label,
+            'is_primary' => false,
+            'active'     => true,
+        ]);
+
+        return response()->json([
+            'ok'       => true,
+            'instance' => $instance,
+            'label'    => $label,
+            'state'    => $evo->state($instance),
+            'qr'       => $evo->qr($instance),
+        ]);
+    }
+
+    /** Get a fresh QR for an additional channel (re-pair). */
+    public function waChannelQr(Request $r, EvolutionAdmin $evo)
+    {
+        $t = $r->user()->tenant;
+        $instance = (string) $r->input('instance', '');
+        $c = \App\Models\WhatsappChannel::where('tenant_id', $t->id)->where('instance', $instance)->first();
+        if (! $c) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        return response()->json(['ok' => true, 'state' => $evo->state($instance), 'qr' => $evo->qr($instance)]);
+    }
+
+    /** Remove an additional number (the primary is removed via the main Disconnect button). */
+    public function waChannelRemove(Request $r, EvolutionAdmin $evo)
+    {
+        $u = $r->user();
+        if (! method_exists($u, 'isOwnerLike') || ! $u->isOwnerLike()) {
+            return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        }
+        $t = $u->tenant;
+        $instance = (string) $r->input('instance', '');
+        $c = \App\Models\WhatsappChannel::where('tenant_id', $t->id)->where('instance', $instance)->first();
+        if (! $c) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        if ($c->is_primary) {
+            return response()->json(['ok' => false, 'error' => 'is_primary',
+                'detail' => 'This is your main number — use Disconnect above to remove it.'], 409);
+        }
+        try { $evo->disconnect($instance); } catch (\Throwable $e) { /* best-effort */ }
+        $c->delete();
         return response()->json(['ok' => true]);
     }
 

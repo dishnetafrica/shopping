@@ -30,6 +30,39 @@ class Tenant extends Model
     public function products(): HasMany { return $this->hasMany(Product::class); }
     public function orders(): HasMany   { return $this->hasMany(Order::class); }
     public function riders(): HasMany   { return $this->hasMany(Rider::class); }
+    public function whatsappChannels(): HasMany { return $this->hasMany(\App\Models\WhatsappChannel::class); }
+
+    /**
+     * Resolve the tenant that owns an inbound WhatsApp instance. Checks the legacy primary field
+     * first (fast path, unchanged for single-number shops) then the channels table for additional
+     * numbers. Runs without tenant context, so it queries globally.
+     */
+    public static function byWhatsappInstance(string $instance): ?self
+    {
+        if ($instance === '') return null;
+        $t = static::query()->where('whatsapp_instance', $instance)->first();
+        if ($t) return $t;
+        $tid = \App\Models\WhatsappChannel::tenantIdForInstance($instance);
+        return $tid ? static::find($tid) : null;
+    }
+
+    /** Mirror this tenant's primary number into the channels table (idempotent). */
+    public function syncPrimaryChannel(): void
+    {
+        $instance = trim((string) $this->whatsapp_instance);
+        if ($instance === '') return;
+        \App\Models\WhatsappChannel::updateOrCreate(
+            ['instance' => $instance],
+            [
+                'tenant_id'  => $this->id,
+                'number'     => $this->whatsapp_number,
+                'driver'     => $this->whatsapp_driver ?: 'evolution',
+                'is_primary' => true,
+                'active'     => true,
+                'label'      => \App\Models\WhatsappChannel::where('instance', $instance)->value('label') ?: 'Primary',
+            ]
+        );
+    }
 
     public function setting(string $key, $default = null)
     {

@@ -55,6 +55,17 @@ class ProcessIncomingMessage implements ShouldQueue
         $ctx->set($this->tenantId);                 // scope everything to this tenant
         $tStart = microtime(true);                  // when this job started processing
         $tenant = Tenant::findOrFail($this->tenantId);
+
+        // Multi-number: reply on the SAME number the customer messaged. Every send/markRead/media
+        // call reads $tenant->whatsapp_instance, so pointing it at the inbound instance here (in
+        // memory only, never saved) routes the whole reply out the received number — no send-path
+        // changes needed. Guarded to a verified active channel of this shop; else keep the primary.
+        $inInst = (string) ($this->incoming['instance'] ?? '');
+        if ($inInst !== '' && $inInst !== $tenant->whatsapp_instance
+            && \App\Models\WhatsappChannel::isTenantInstance($tenant->id, $inInst)) {
+            $tenant->whatsapp_instance = $inInst;
+        }
+
         $gateway = $wa->forTenant($tenant);
 
         $convo = Conversation::firstOrCreate(

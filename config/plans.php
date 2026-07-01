@@ -28,6 +28,6 @@ return [
         'price_ugx' => 185000,
         'order_cap' => null,
         'user_cap'  => null,
-        'features'  => ['bot', 'orders', 'confirmations', 'pos', 'dispatch', 'tracking', 'reports', 'returns', 'branding', 'multi_user'],
+        'features'  => ['bot', 'orders', 'confirmations', 'pos', 'dispatch', 'tracking', 'reports', 'returns', 'branding', 'multi_user', 'multi_number'],
     ],
 ];

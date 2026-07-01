@@ -179,6 +179,10 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('wa/connect',    [PanelApiController::class, 'waConnect']);
         Route::get('wa/qr',          [PanelApiController::class, 'waQr']);
         Route::post('wa/disconnect', [PanelApiController::class, 'waDisconnect']);
+        Route::get('wa/channels',    [PanelApiController::class, 'waChannels']);
+        Route::post('wa/channels/add',    [PanelApiController::class, 'waChannelAdd']);
+        Route::post('wa/channels/qr',     [PanelApiController::class, 'waChannelQr']);
+        Route::post('wa/channels/remove', [PanelApiController::class, 'waChannelRemove']);
         Route::get('wa/cloud-info',    [PanelApiController::class, 'waCloudInfo']);
         Route::post('wa/cloud-save',   [PanelApiController::class, 'waCloudSave']);
         Route::post('wa/use-evolution',[PanelApiController::class, 'waUseEvolution']);
