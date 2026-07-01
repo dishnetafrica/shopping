@@ -304,13 +304,21 @@ HTML;
     if(!panel){ panel=document.createElement('div'); panel.id='cba-panel'; root.appendChild(panel); }
     var rows=state.steps.map(function(s){
       var cta = (!s.done && s.cta) ? '<button class="cba-go" data-key="'+s.key+'" data-href="'+(s.href||'')+'">'+s.cta+'</button>' : '';
-      return '<div class="cba-step'+(s.done?' done':'')+'"><div class="cba-ck">'+(s.done?'\u2713':'')+'</div><div class="cba-tx"><b>'+s.title+'</b><p>'+s.desc+'</p>'+cta+'</div></div>';
+      var alt = (!s.done && s.alt) ? ' <button class="cba-go" style="background:#0f7a41" data-action="'+s.alt.action+'">'+s.alt.cta+'</button>' : '';
+      return '<div class="cba-step'+(s.done?' done':'')+'"><div class="cba-ck">'+(s.done?'\u2713':'')+'</div><div class="cba-tx"><b>'+s.title+'</b><p>'+s.desc+'</p>'+cta+alt+'</div></div>';
     }).join('');
     panel.innerHTML='<div id="cba-hd"><button id="cba-x">\u00d7</button><b>Get your shop ready</b><br><small>'+state.done+' of '+state.total+' done</small><div id="cba-bar"><i style="width:'+pct+'%"></i></div></div>'+
       '<div id="cba-list">'+rows+'</div><div id="cba-ft"><button id="cba-hide">Hide checklist</button><span style="font-size:11.5px;color:#9aa3af">You can re-show it from Help</span></div>';
     panel.querySelector('#cba-x').onclick=function(){ panel.classList.remove('open'); };
     panel.querySelector('#cba-hide').onclick=function(){ mark('hide'); panel.classList.remove('open'); state.hidden=true; render(); };
-    Array.prototype.forEach.call(panel.querySelectorAll('.cba-go'), function(b){ b.onclick=function(){ act(b.getAttribute('data-key'), b.getAttribute('data-href')); }; });
+    Array.prototype.forEach.call(panel.querySelectorAll('.cba-go'), function(b){ b.onclick=function(){ var a=b.getAttribute('data-action'); if(a==='starter'){ seedStarter(b); } else { act(b.getAttribute('data-key'), b.getAttribute('data-href')); } }; });
+  }
+  function seedStarter(b){
+    if(b.__busy)return; b.__busy=1; var old=b.textContent; b.textContent='Adding sample products…';
+    fetch('/papi/starter-catalogue',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin'})
+      .then(function(r){return r.json().catch(function(){return{};});})
+      .then(function(j){ if(j&&j.ok){ location.reload(); } else { b.__busy=0; b.textContent=old; alert((j&&j.detail)||'Could not add sample products.'); } })
+      .catch(function(){ b.__busy=0; b.textContent=old; alert('Network error — please try again.'); });
   }
   function act(key, href){
     if(key==='share'){

@@ -4682,7 +4682,10 @@ class PanelApiController extends Controller
 
         $steps = [
             ['key' => 'setup',    'title' => 'Set up your shop',       'desc' => 'Name, country, currency and language.',         'done' => (bool) $t->setting('onboarded', false), 'cta' => 'Open setup',        'href' => '/panel/onboard'],
-            ['key' => 'product',  'title' => 'Add your first product', 'desc' => 'One item is enough to open the shop.',          'done' => $products > 0,                          'cta' => 'Add a product',     'href' => '/app/products/create'],
+            ['key' => 'product',  'title' => 'Add your first product', 'desc' => 'One item is enough to open the shop.',          'done' => $products > 0,                          'cta' => 'Add a product',     'href' => '/app/products/create',
+                'alt' => $products === 0 && $isOwner
+                    ? ['cta' => '✨ Add ' . \App\Support\StarterCatalogue::countFor($t) . ' sample products', 'action' => 'starter']
+                    : null],
             ['key' => 'whatsapp', 'title' => 'Connect WhatsApp',       'desc' => 'Scan the QR so the assistant can chat & sell.', 'done' => $waConnected,                           'cta' => 'Connect WhatsApp',  'href' => '/panel/setup'],
             ['key' => 'share',    'title' => 'Share your shop link',   'desc' => 'Send it to customers so they can browse & order.','done' => $linkShared,                            'cta' => 'Copy & share',      'href' => ''],
             ['key' => 'order',    'title' => 'Get your first order',   'desc' => 'When a customer orders, it appears in Orders.',  'done' => $orders > 0,                            'cta' => '',                  'href' => '/panel/today'],
@@ -4715,6 +4718,70 @@ class PanelApiController extends Controller
         if ($action === 'show')  $t->putSetting('activation_hidden', false);
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Starter catalogue — GET previews the sample set for the shop's business type; POST seeds it.
+     * Owner-only, idempotent: refuses to seed once the shop already has products, so it can never
+     * duplicate or clobber real catalogue work.
+     */
+    public function starterCatalogue(Request $r)
+    {
+        $u = $r->user();
+        if (! $u || ! $u->tenant_id) {
+            return response()->json(['ok' => false, 'error' => 'Not signed in.'], 401);
+        }
+        if (! method_exists($u, 'isOwnerLike') || ! $u->isOwnerLike()) {
+            return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        }
+        $t     = $u->tenant;
+        $items = \App\Support\StarterCatalogue::for($t);
+        $kind  = (string) $t->setting('bot_kind', 'other');
+
+        // Preview only.
+        if (strtoupper($r->method()) === 'GET') {
+            return response()->json([
+                'ok'    => true,
+                'kind'  => $kind,
+                'count' => count($items),
+                'names' => array_map(fn ($i) => $i['name'], $items),
+            ]);
+        }
+
+        // Seed — never on a shop that already has products.
+        $existing = Product::withoutGlobalScopes()
+            ->where('tenant_id', $t->id)->whereNull('archived_at')->count();
+        if ($existing > 0) {
+            return response()->json(['ok' => false, 'error' => 'has_products',
+                'detail' => 'Your shop already has products, so sample items were not added.'], 409);
+        }
+
+        $order = 0;
+        $added = 0;
+        foreach ($items as $it) {
+            try {
+                Product::create([
+                    'tenant_id'     => $t->id,
+                    'name'          => $it['name'],
+                    'category'      => $it['category'],
+                    'keywords'      => $it['keywords'] ?? '',
+                    'base_price'    => $it['price'],
+                    'price'         => $it['price'],
+                    'stock'         => 100,
+                    'moq'           => $it['moq'] ?? null,
+                    'pack_size'     => $it['pack_size'] ?? null,
+                    'unit_label'    => $it['unit_label'] ?? null,
+                    'display_order' => $order++,
+                    'active'        => true,
+                ]);
+                $added++;
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('starter.seed_item_failed', ['tenant' => $t->id, 'name' => $it['name'], 'err' => $e->getMessage()]);
+            }
+        }
+        $t->putSetting('starter_seeded_at', now()->toIso8601String());
+
+        return response()->json(['ok' => true, 'added' => $added, 'kind' => $kind]);
     }
 
     /** In-product release notes (GET /papi/whatsnew). */

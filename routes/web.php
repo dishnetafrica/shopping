@@ -107,6 +107,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         // first-run activation checklist
         Route::get('activation', [PanelApiController::class, 'activationState']);
         Route::match(['get', 'post'], 'activation/mark', [PanelApiController::class, 'activationMark']);
+        Route::match(['get', 'post'], 'starter-catalogue', [PanelApiController::class, 'starterCatalogue']);
 
         // in-product release notes
         Route::get('whatsnew', [PanelApiController::class, 'whatsNew']);

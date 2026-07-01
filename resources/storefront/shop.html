@@ -149,6 +149,14 @@
 .detail.show{display:block}
 .dwrap{max-width:1000px;margin:0 auto;padding:14px 16px 90px}
 .dback{border:0;background:none;font-size:16px;font-weight:600;color:var(--ink,#1b211d);padding:8px 0;cursor:pointer}
+.uacct{border:1px solid var(--line);background:#fff;border-radius:9px;width:34px;height:34px;flex:none;display:grid;place-items:center;cursor:pointer;color:var(--ink);padding:0}
+.uacct:active{background:#f0f2f5}
+.uacct svg{width:20px;height:20px}
+.dhdr{position:sticky;top:0;z-index:5;background:#fff;display:flex;align-items:center;gap:10px;padding:8px 0 12px;border-bottom:1px solid var(--line);margin-bottom:10px}
+.dhdr .dback{border:1px solid var(--line);border-radius:9px;width:38px;height:38px;font-size:24px;font-weight:700;padding:0 0 3px;display:grid;place-items:center;flex:none;color:var(--ink)}
+.dhdr .dback:active{background:#f0f2f5}
+.dsearch{flex:1;min-width:0;border:1px solid var(--line);border-radius:12px;padding:10px 13px;font-size:15px;background:#F4F4F6;color:var(--ink);outline:none}
+.dhdr .uacct{width:38px;height:38px}
 .dload{padding:60px 0;text-align:center;color:var(--muted,#777)}
 .dtop{display:flex;gap:22px;flex-wrap:wrap;margin-top:6px}
 .dgal{flex:1 1 320px;max-width:440px}
@@ -198,6 +206,7 @@
     <div class="lg">SH</div>
     <div><b>Shop</b><span class="sub" id="hdrSub">Browse &amp; order on WhatsApp delivery</span><span class="eyebrow" id="hdrEyebrow" style="display:none"></span></div>
   </a>
+  <button class="uacct" onclick="openLogin()" aria-label="Account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.5 3.6-6 8-6s8 2.5 8 6"/></svg></button>
 </div>
 <div class="trust" id="trustStrip" style="display:none"></div>
 
@@ -814,6 +823,23 @@ function prod(key){return PRODUCTS.find(function(p){return p.name===key;});}
 var SHOP_BASE=(SHOP.base)||location.pathname.replace(/\/+$/,'').replace(/\/(shop|product\/\d+)$/,'');
 var DETAIL_CACHE={}, CUR_DETAIL=null;
 function detailUrl(id){return SHOP_BASE+'/product/'+encodeURIComponent(id);}
+var USER_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.5 3.6-6 8-6s8 2.5 8 6"/></svg>';
+/* Sticky header shown INSIDE the product-detail overlay so search + account stay reachable
+   even in detail mode (matches the quick-commerce storefronts). */
+function detailHeader(){
+  return '<div class="dhdr">'
+    +'<button class="dback" onclick="closeDetail()" aria-label="Back">\u2039</button>'
+    +'<input id="dq" class="dsearch" placeholder="Search products\u2026" onkeydown="if(event.key===\'Enter\')detailSearch()">'
+    +'<button class="uacct" onclick="openLogin()" aria-label="Account">'+USER_SVG+'</button>'
+    +'</div>';
+}
+/* Search from within the detail overlay: close it and run the query against the grid. */
+function detailSearch(){
+  var v=($('dq')&&$('dq').value)||'';
+  closeDetailUI();
+  try{ if(/^#p\d+/.test(location.hash)) history.replaceState(null,'',location.pathname+location.search); }catch(e){}
+  var q=$('q'); if(q){ q.value=v; q.dispatchEvent(new Event('input',{bubbles:true})); try{ window.scrollTo(0,0); q.focus(); }catch(e){} }
+}
 function goDetail(id){ if(location.hash!=='#p'+id){ location.hash='p'+id; } else { openDetail(id); } }
 function closeDetail(){ if(/^#p\d+/.test(location.hash)) history.back(); else closeDetailUI(); }
 function closeDetailUI(){ var el=$('detail'); if(!el)return; el.classList.remove('show'); el.innerHTML=''; document.body.style.overflow=''; CUR_DETAIL=null; }
@@ -823,12 +849,12 @@ window.addEventListener('hashchange',handleHash);
 async function openDetail(id){
   id=String(id); var el=$('detail'); if(!el)return;
   el.classList.add('show'); document.body.style.overflow='hidden'; el.scrollTop=0;
-  el.innerHTML='<div class="dwrap"><button class="dback" onclick="closeDetail()">\u2039 Back</button><div class="dload">Loading\u2026</div></div>';
+  el.innerHTML='<div class="dwrap">'+detailHeader()+'<div class="dload">Loading\u2026</div></div>';
   try{
     var data=DETAIL_CACHE[id];
     if(!data){ var r=await fetch(detailUrl(id),{cache:'no-store'}); if(!r.ok)throw 0; data=await r.json(); DETAIL_CACHE[id]=data; }
     renderDetail(data);
-  }catch(e){ el.innerHTML='<div class="dwrap"><button class="dback" onclick="closeDetail()">\u2039 Back</button><div class="dload">Couldn\u2019t load this product.</div></div>'; }
+  }catch(e){ el.innerHTML='<div class="dwrap">'+detailHeader()+'<div class="dload">Couldn\u2019t load this product.</div></div>'; }
 }
 function oosDetail(p){ return p.stock!=null && p.stock<=0; }
 function detailStepper(p){
@@ -862,7 +888,7 @@ function renderDetail(d){
   var desc=p.description?'<div class="dsec"><div class="dsech">Product details</div><div class="dtext">'+esc(p.description).replace(/\n/g,'<br>')+'</div></div>':'';
   var why=(d.why_shop&&d.why_shop.length)?'<div class="dsec"><div class="dsech">Why shop here?</div>'+d.why_shop.map(function(w){return '<div class="dwrow"><b>'+esc(w.title)+'</b><span>'+esc(w.text||'')+'</span></div>';}).join('')+'</div>':'';
   $('detail').innerHTML='<div class="dwrap">'
-    +'<button class="dback" onclick="closeDetail()">\u2039 Back</button>'
+    +detailHeader()
     +'<div class="dtop"><div class="dgal">'+main+thumbs+'</div>'
       +'<div class="dinfo"><div class="dcat">'+esc(p.category||'')+'</div><div class="dname">'+esc(p.name)+'</div>'
       +pack+moq+'<div class="dprice">'+ugx(p.price)+' '+mrp+' '+off+'</div>'
