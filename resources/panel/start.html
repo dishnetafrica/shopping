@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Start your WhatsApp shop</title>
+<style>
+  :root{--bg:#f5f6f8;--card:#fff;--ink:#16181d;--mut:#6b7280;--line:#e5e7eb;--brand:#103A8C;--ok:#0f7a41;--bad:#e11d48}
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(160deg,#eef2fb 0%,#f5f6f8 55%);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100vh}
+  .wrap{max-width:460px;margin:0 auto;padding:28px 18px 60px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:800;color:var(--brand);font-size:17px;margin-bottom:20px}
+  .brand .dot{width:26px;height:26px;border-radius:8px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px}
+  h1{font-size:23px;line-height:1.25;margin:0 0 6px}
+  .sub{color:var(--mut);margin:0 0 20px;font-size:14.5px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 6px 24px rgba(16,58,140,.06)}
+  label{display:block;font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--mut);margin:14px 0 5px}
+  label:first-child{margin-top:0}
+  .opt{font-weight:600;text-transform:none;letter-spacing:0;color:var(--mut)}
+  input,select{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:11px;font-size:15px;background:#fff;color:var(--ink)}
+  input:focus,select:focus{outline:none;border-color:var(--brand)}
+  .btn{width:100%;margin-top:20px;padding:13px;border:0;border-radius:12px;background:var(--brand);color:#fff;font-weight:700;font-size:15.5px;cursor:pointer}
+  .btn:disabled{opacity:.6;cursor:default}
+  .err{display:none;margin-top:12px;background:#fff1f3;border:1px solid #f6c9d2;color:#b42318;border-radius:10px;padding:10px 12px;font-size:13.5px}
+  .err.show{display:block}
+  .err a{color:#b42318;font-weight:700}
+  .fine{color:var(--mut);font-size:12.5px;margin-top:14px;text-align:center}
+  .foot{color:var(--mut);font-size:13px;text-align:center;margin-top:18px}
+  .foot a{color:var(--brand);font-weight:600;text-decoration:none}
+  .perks{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 0;padding:0;list-style:none}
+  .perks li{color:var(--mut);font-size:12.5px;display:flex;align-items:center;gap:5px}
+  .perks li::before{content:"✓";color:var(--ok);font-weight:800}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><span class="dot">C</span> CloudBSS</div>
+  <h1>Your shop on WhatsApp — live in minutes.</h1>
+  <p class="sub">An AI assistant that answers customers, quotes prices and takes orders 24/7, in their language. Free 30-day trial, no card needed.</p>
+
+  <div class="card">
+    <label>Business name</label>
+    <input id="f_name" placeholder="e.g. Juba Fresh Mart" autocomplete="organization">
+
+    <label>What do you sell?</label>
+    <select id="f_kind">
+      <option value="grocery">Grocery / general store</option>
+      <option value="manufacturer">Manufacturer / wholesale</option>
+      <option value="restaurant">Restaurant / food</option>
+      <option value="pharmacy">Pharmacy / health</option>
+      <option value="electronics">Electronics / hardware</option>
+      <option value="other">Other</option>
+    </select>
+
+    <label>Your name</label>
+    <input id="f_owner" placeholder="e.g. Bhavin M." autocomplete="name">
+
+    <label>WhatsApp number <span class="opt">— with country code</span></label>
+    <input id="f_wa" placeholder="+211 9xx xxx xxx" inputmode="tel" autocomplete="tel">
+
+    <label>Email <span class="opt">— optional</span></label>
+    <input id="f_email" placeholder="you@business.com" inputmode="email" autocomplete="email">
+
+    <button class="btn" id="go">Create my shop →</button>
+    <div class="err" id="err"></div>
+
+    <ul class="perks">
+      <li>AI WhatsApp assistant</li>
+      <li>Catalogue & orders</li>
+      <li>No per-message fees</li>
+    </ul>
+  </div>
+
+  <p class="fine">By continuing you agree to our terms. We’ll only message this number about your shop.</p>
+  <p class="foot">Already have a shop? <a href="/app/login">Sign in</a></p>
+</div>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id);};
+  var btn=$('go'), err=$('err');
+  function showErr(html){ err.innerHTML=html; err.classList.add('show'); }
+  function clearErr(){ err.classList.remove('show'); err.textContent=''; }
+
+  btn.onclick=function(){
+    clearErr();
+    var payload={
+      name:  $('f_name').value.trim(),
+      kind:  $('f_kind').value,
+      owner_name: $('f_owner').value.trim(),
+      whatsapp:   $('f_wa').value.trim(),
+      email: $('f_email').value.trim()
+    };
+    if(payload.name.length<2){ showErr('Please enter your business name.'); $('f_name').focus(); return; }
+    if(!payload.owner_name){ showErr('Please enter your name.'); $('f_owner').focus(); return; }
+    if(payload.whatsapp.replace(/[^0-9]/g,'').length<8){ showErr('Enter a valid WhatsApp number with country code.'); $('f_wa').focus(); return; }
+
+    btn.disabled=true; btn.textContent='Creating your shop…';
+    fetch('/papi/start-provision',{
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify(payload)
+    }).then(function(r){ return r.json().then(function(j){ return {status:r.status, body:j}; }); })
+      .then(function(res){
+        var j=res.body||{};
+        if(j.ok && j.redirect){ window.location.href=j.redirect; return; }
+        btn.disabled=false; btn.textContent='Create my shop →';
+        if(j.error==='exists'){ showErr((j.detail||'You already have a shop.')+' <a href="'+(j.redirect||'/app/login')+'">Sign in →</a>'); return; }
+        showErr(j.detail||'Could not create your shop. Please try again.');
+      })
+      .catch(function(){
+        btn.disabled=false; btn.textContent='Create my shop →';
+        showErr('Network error — please check your connection and try again.');
+      });
+  };
+
+  // Enter key submits from any field.
+  ['f_name','f_owner','f_wa','f_email'].forEach(function(id){
+    $(id).addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); btn.click(); } });
+  });
+})();
+</script>
+</body>
+</html>

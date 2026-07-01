@@ -16,6 +16,13 @@ Route::get('/', [MarketingController::class, 'home']);
 
 // Public customer order-tracking page (no auth — order id + secret token are the key).
 Route::get('/papi/track', [TrackController::class, 'show']);
+
+// Public self-serve signup — provision a new shop with no human in the loop. Needs 'web' for the
+// session so the owner is logged straight in. papi/* is CSRF-exempt (see bootstrap/app.php).
+Route::middleware('web')->group(function () {
+    Route::get('/start',                 [\App\Http\Controllers\Panel\StartController::class, 'page']);
+    Route::post('/papi/start-provision', [\App\Http\Controllers\Panel\StartController::class, 'provision']);
+});
 Route::get('/healthz', fn () => response()->json(\App\Support\BuildInfo::light()));
 Route::get('/papi/pending', [\App\Http\Controllers\Panel\PendingController::class, 'show']);
 Route::get('/r/{token}',     [\App\Http\Controllers\Panel\RiderTrackController::class, 'show']);
@@ -293,7 +300,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
 | also excludes reserved single-segment paths via a negative lookahead, so
 | even if route order changed, /app & /admin would fall through to Filament.
 */
-$shopSlug = '(?!(app|admin|panel|papi|api|storage|livewire|build|vendor|up|login|logout|register)$)[a-z0-9][a-z0-9\-]*';
+$shopSlug = '(?!(app|admin|panel|papi|api|storage|livewire|build|vendor|up|login|logout|register|start)$)[a-z0-9][a-z0-9\-]*';
 
 Route::middleware('web')->group(function () use ($shopSlug) {
     Route::get('/{shop}/product/{product}', [\App\Http\Controllers\Storefront\StorefrontProductController::class, 'show'])->where('shop', $shopSlug)->where('product', '[0-9]+');
