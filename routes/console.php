@@ -9,6 +9,14 @@ Schedule::command('shopbot:process-scheduled')->everyMinute()->withoutOverlappin
 Schedule::command('bot:watchdog')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
 Schedule::command('bot:digest')->hourly()->withoutOverlapping()->onOneServer();
 
+// Reliability: catch dropped WhatsApp connections fast (a down number silently kills orders),
+// nudge a reconnect, and arm the in-panel banner. Also watches Evolution capacity for self-serve growth.
+Schedule::command('wa:watchdog')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
+
+// Trial + subscription lifecycle: reminders before a trial ends, expiry notice, lapsed-payment dunning.
+// Notifications only — feature enforcement is already automatic via Tenant::effectivePlan().
+Schedule::command('billing:lifecycle')->dailyAt('09:00')->withoutOverlapping()->onOneServer();
+
 // Auto-learn tenants so discovery never has to be run by hand.
 //  - Daily: onboard any tenant that has chats but no discovery yet (new tenants learn within a day).
 //  - Weekly: full-history re-learn for every tenant so the Business Brain stays current.

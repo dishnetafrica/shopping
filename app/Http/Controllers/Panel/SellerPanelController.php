@@ -111,7 +111,51 @@ class SellerPanelController extends Controller
         $html = \App\Support\PanelCurrency::inject($html, $tenant);
         $html = $this->injectHelpWidget($html);
         $html = $this->injectActivation($html);
+        $html = $this->injectStatusBanner($html, $tenant);
         return $html;
+    }
+
+    /**
+     * Slim top banner for two owner-critical states the watchdog/lifecycle jobs set on the tenant:
+     * a dropped WhatsApp connection (wa_status='down' — we can't message a dead number, so the panel
+     * IS the alert channel) and a billing/trial notice. Owner-only; WhatsApp-down wins if both apply.
+     */
+    protected function injectStatusBanner(string $html, $tenant): string
+    {
+        $waDown  = (string) $tenant->setting('wa_status', 'open') === 'down';
+        $notice  = trim((string) $tenant->setting('billing_notice', ''));
+        if (! $waDown && $notice === '') return $html;
+
+        $payload = json_encode([
+            'waDown' => $waDown,
+            'notice' => $notice !== '' ? $notice : null,
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        $script = <<<HTML
+<script>
+(function(){
+  try{ if(!(window.ME&&window.ME.isOwner)) return; }catch(e){ return; }
+  var S=$payload;
+  var bar=document.createElement('div');
+  bar.style.cssText='position:sticky;top:0;z-index:9999;font:600 13.5px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:9px 14px;text-align:center;display:flex;align-items:center;justify-content:center;gap:10px';
+  if(S.waDown){
+    bar.style.background='#fff1f3'; bar.style.color='#b42318'; bar.style.borderBottom='1px solid #f6c9d2';
+    bar.innerHTML='\u26a0\ufe0f Your WhatsApp is disconnected \u2014 orders are not coming in. '+
+      '<a href="/panel/setup" style="color:#b42318;text-decoration:underline">Reconnect now \u2192</a>';
+  } else {
+    bar.style.background='#fff7ed'; bar.style.color='#b45309'; bar.style.borderBottom='1px solid #fed7aa';
+    bar.innerHTML=(S.notice||'')+' <a href="/panel/billing" style="color:#b45309;text-decoration:underline">Billing \u2192</a>';
+  }
+  function mount(){ if(document.body){ document.body.insertBefore(bar, document.body.firstChild); } else { setTimeout(mount,50); } }
+  mount();
+})();
+</script>
+HTML;
+
+        if (str_contains($html, '</body>')) {
+            return preg_replace('#</body>#', $script . '</body>', $html, 1);
+        }
+        return $html . $script;
     }
 
     /** Floating "?" AI help assistant, available on every panel page. Self-contained + namespaced. */
