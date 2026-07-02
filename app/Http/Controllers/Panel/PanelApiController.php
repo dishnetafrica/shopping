@@ -656,6 +656,28 @@ class PanelApiController extends Controller
             } catch (\Throwable $e) { $wa['recent_send_fail'] = null; }
         }
 
+        // Every WhatsApp number on this shop with its live state — so a multi-number shop can see
+        // each one (primary + branch/support/backup) and confirm which are actually connected.
+        $channels = [];
+        try {
+            $evo = app(\App\Services\WhatsApp\EvolutionAdmin::class);
+            foreach (\App\Models\WhatsappChannel::where('tenant_id', $t->id)->orderByDesc('is_primary')->orderBy('id')->get() as $c) {
+                $st = 'n/a'; $num = $c->number;
+                if (($c->driver ?? 'evolution') === 'evolution' && $evo->configured()) {
+                    $info = $evo->instanceInfo($c->instance);
+                    $st   = strtolower((string) ($info['state'] ?? '')) ?: $evo->state($c->instance);
+                    if (! empty($info['number'])) $num = $info['number'];
+                }
+                $channels[] = [
+                    'instance'   => $c->instance,
+                    'number'     => $num,
+                    'label'      => $c->label,
+                    'is_primary' => (bool) $c->is_primary,
+                    'state'      => $st ?: 'missing',
+                ];
+            }
+        } catch (\Throwable $e) {}
+
         return response()->json([
             'ok'                => true,
             'now'               => now()->toIso8601String(),
@@ -663,6 +685,7 @@ class PanelApiController extends Controller
             'redis'             => $redis,
             'queue'             => ['driver' => (string) config('queue.default'), 'failed_jobs' => $failedJobs, 'failed_recent' => $failedRecent],
             'whatsapp'          => $wa,
+            'channels'          => $channels,
             'last_webhook_at'   => $lastWebhook,
             'last_processed_at' => $lastProcessed,
         ]);

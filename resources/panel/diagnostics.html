@@ -89,6 +89,21 @@
           +fr.map(function(f){return '<div style="margin-top:6px"><b>'+esc(f.job||'job')+'</b> · '+ago(f.failed_at)+'<br><span style="color:#8a6d1a">'+esc(f.error||'')+'</span></div>';}).join('')
           +'</div>';
       }
+
+      var ch=d.channels||[];
+      if(ch.length>1){
+        el.innerHTML += '<div style="grid-column:1/-1;margin-top:8px;padding:11px 13px;background:#f6f8f7;border:1px solid var(--line,#e5e9e7);border-radius:12px;font-size:12.5px">'
+          +'<b>WhatsApp numbers ('+ch.length+')</b> — a customer messaging any <b>connected</b> number is auto-replied on that same number.'
+          +ch.map(function(c){
+             var stOk=c.state==='open', stCon=c.state==='connecting';
+             var color=stOk?'#0f7a41':(stCon?'#b45309':'#b42318');
+             var word=stOk?'Connected':(stCon?'Connecting…':'Not linked');
+             return '<div style="margin-top:7px;display:flex;justify-content:space-between;gap:10px">'
+               +'<span><b>'+esc(c.label||(c.is_primary?'Primary':'Number'))+'</b>'+(c.number?' · '+esc(c.number):'')+(c.is_primary?' <span style="color:#888">(main)</span>':'')+'</span>'
+               +'<span style="color:'+color+';font-weight:700">● '+word+'</span></div>';
+           }).join('')
+          +'</div>';
+      }
     }catch(e){ el.innerHTML=''; }
   }
 
