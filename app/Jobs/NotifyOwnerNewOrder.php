@@ -56,6 +56,7 @@ class NotifyOwnerNewOrder implements ShouldQueue
         ], $cur, $tz);
 
         $gateway = $wa->forTenant($t);
+        $inst = $t->sendInstance();
 
         foreach ($recipients as $r) {
             // Claim first (durable ledger). Already-claimed -> someone handled it.
@@ -63,10 +64,10 @@ class NotifyOwnerNewOrder implements ShouldQueue
                 continue;
             }
             try {
-                $res = $gateway->sendText($t->whatsapp_instance, $r->phone, $msg);
+                $res = $gateway->sendText($inst, $r->phone, $msg);
                 $messageId = is_array($res) ? ($res['key']['id'] ?? ($res['id'] ?? null)) : null;
                 OrderNotificationSend::markSent($o->id, $r->id, self::EVENT, $messageId);
-                MessageLog::record($t->id, $r->phone, $t->whatsapp_instance, 'out', 'system', $msg);
+                MessageLog::record($t->id, $r->phone, $inst, 'out', 'system', $msg);
             } catch (\Throwable $e) {
                 // Release the claim so a retry can attempt again — no duplicate, never stuck.
                 OrderNotificationSend::releaseClaim($o->id, $r->id, self::EVENT);

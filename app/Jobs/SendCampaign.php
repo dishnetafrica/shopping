@@ -39,6 +39,7 @@ class SendCampaign implements ShouldQueue
         $phones  = $aud->phones($c->audience, $c->category);
         $caption = $this->compose($c);
         $gateway = $wa->forTenant($t);
+        $inst = $t->sendInstance();
 
         $stats = is_array($c->stats) ? $c->stats : [];
         $stats['targeted']   = count($phones);
@@ -55,11 +56,11 @@ class SendCampaign implements ShouldQueue
             }
             try {
                 if ($c->image_url) {
-                    $gateway->sendImage($t->whatsapp_instance, $to, $c->image_url, $caption);
+                    $gateway->sendImage($inst, $to, $c->image_url, $caption);
                 } else {
-                    $gateway->sendText($t->whatsapp_instance, $to, $caption);
+                    $gateway->sendText($inst, $to, $caption);
                 }
-                MessageLog::record($t->id, $to, $t->whatsapp_instance, 'out', 'system', '[campaign] ' . $caption);
+                MessageLog::record($t->id, $to, $inst, 'out', 'system', '[campaign] ' . $caption);
                 \App\Models\CampaignMessage::markSent($c->id, $recipient, null, 'sent');
                 $sent++;
             } catch (\Throwable $e) {

@@ -56,10 +56,11 @@ class NotifyCustomerOrderReceived implements ShouldQueue
         $msg = "{$hi} \u{1F64F} We've received your order *{$o->order_no}*{$total}.\n" . $line2;
 
         try {
-            $res = $wa->forTenant($t)->sendText($t->whatsapp_instance, $o->customer_phone, $msg);
+            $inst = $t->sendInstance();
+            $res = $wa->forTenant($t)->sendText($inst, $o->customer_phone, $msg);
             $messageId = is_array($res) ? ($res['key']['id'] ?? ($res['id'] ?? null)) : null;
             OrderNotificationSend::markSent($o->id, 0, self::EVENT, $messageId);
-            MessageLog::record($t->id, $o->customer_phone, $t->whatsapp_instance, 'out', 'system', $msg);
+            MessageLog::record($t->id, $o->customer_phone, $inst, 'out', 'system', $msg);
         } catch (\Throwable $e) {
             OrderNotificationSend::releaseClaim($o->id, 0, self::EVENT);
             Log::warning('order_customer_ack.send_failed', [

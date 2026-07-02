@@ -32,8 +32,9 @@ class NotifyOwner implements ShouldQueue
 
         foreach ($nums as $n) {
             try {
-                $wa->forTenant($t)->sendText($t->whatsapp_instance, $n, $this->text);
-                MessageLog::record($t->id, $n, $t->whatsapp_instance, 'out', 'system', $this->text);
+                $inst = $t->sendInstance();
+                $wa->forTenant($t)->sendText($inst, $n, $this->text);
+                MessageLog::record($t->id, $n, $inst, 'out', 'system', $this->text);
             } catch (\Throwable $e) { /* best-effort */ }
         }
     }

@@ -54,6 +54,17 @@ class WaWatchdogCommand extends Command
             $liveInst++;
             $state = $evo->state($instance);   // open | connecting | close | missing
 
+            // Failover: which number should PROACTIVE sends use? The primary when it's up; otherwise
+            // the first connected additional channel, so order acks / alerts keep flowing while the
+            // main number is down. Recorded on the tenant; Tenant::sendInstance() reads it.
+            $sendInstance = $instance;
+            if ($state !== 'open') {
+                foreach ($t->whatsappChannels()->where('active', true)->where('is_primary', false)->get() as $ch) {
+                    if ($ch->instance && $evo->state($ch->instance) === 'open') { $sendInstance = $ch->instance; break; }
+                }
+            }
+            $t->putSetting('wa_send_instance', $sendInstance !== $instance ? $sendInstance : '');
+
             if ($state === 'open') {
                 $this->onHealthy($t, $now);
                 continue;

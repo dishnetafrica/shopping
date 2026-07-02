@@ -46,6 +46,19 @@ class Tenant extends Model
         return $tid ? static::find($tid) : null;
     }
 
+    /**
+     * Which instance to send PROACTIVE (system-initiated) messages from — order confirmations,
+     * owner alerts, campaigns. Normally the primary; but if the watchdog finds the primary down and
+     * a secondary connected, it records that connected number in wa_send_instance so those messages
+     * keep going out during an outage (ban-resilience). Replies to inbound messages are unaffected —
+     * they always go out the exact number the customer messaged.
+     */
+    public function sendInstance(): string
+    {
+        $override = trim((string) $this->setting('wa_send_instance', ''));
+        return $override !== '' ? $override : (string) $this->whatsapp_instance;
+    }
+
     /** Mirror this tenant's primary number into the channels table (idempotent). */
     public function syncPrimaryChannel(): void
     {
