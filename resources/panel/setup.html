@@ -80,26 +80,9 @@
       <div class="hint" id="waInstance"></div>
     </div>
 
-    <!-- ADDITIONAL WHATSAPP NUMBERS -->
-    <div class="card" id="numbersCard">
-      <div class="step">Optional</div>
-      <h2>More WhatsApp numbers</h2>
-      <p class="lead">Add extra numbers to the same shop — a branch, a support line, or a backup number for peace of mind. Every number shares this catalogue and orders, and the assistant always replies on the number the customer messaged.</p>
-
-      <div id="chList"><div class="hint">Loading…</div></div>
-
-      <div id="chQrBox" class="qrbox hide" style="margin-top:10px">
-        <div class="hint" id="chQrLabel" style="font-weight:700"></div>
-        <img id="chQrImg" alt="WhatsApp QR">
-        <div class="hint">Open WhatsApp on that phone → <b>Linked devices</b> → <b>Link a device</b> → scan. It links to this same shop.</div>
-      </div>
-
-      <div class="row" style="margin-top:10px">
-        <input id="chLabel" placeholder="Label (e.g. Support, Branch 2)" style="flex:1;min-width:0">
-        <button class="btn" id="chAddBtn" onclick="chAdd()">Add another number</button>
-      </div>
-      <div class="hint" id="chMsg"></div>
-    </div>
+    <!-- Multi-number card intentionally disabled — single-number configuration.
+         Backend (channels, routing, failover) stays intact; re-add this card + the chLoad() init
+         call to turn the feature back on. -->
 
     <!-- OFFICIAL CLOUD API (Pro) -->
     <div class="card" id="cloudCard">
@@ -301,7 +284,6 @@ async function cloudUseEvolution(){
 
 waCheck();
 cloudInfo();
-chLoad();
 
 /* ---- Additional WhatsApp numbers ---- */
 function chAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
