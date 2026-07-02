@@ -69,7 +69,7 @@ class StorefrontController extends Controller
             app(TenantContext::class)->set($tenant->id);
             return $this->brandSiteEnabled($tenant) ? $this->brand('', $tenant, '') : $this->renderShop($tenant, '');
         }
-        return app(\App\Http\Controllers\Marketing\MarketingController::class)->home();
+        return app(\App\Http\Controllers\Marketing\MarketingController::class)->home(request());
     }
 
     /** Make a stored image path into an absolute URL the browser can load. */

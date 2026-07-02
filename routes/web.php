@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Route;
 
 // Public CloudBSS marketing landing page. Shop owners log in via /app/login,
 // operator via /admin/login (both linked from the page).
-Route::get('/', [\App\Http\Controllers\Storefront\StorefrontController::class, 'rootLanding']);
+Route::get('/', [MarketingController::class, 'home']);
 
 // Public customer order-tracking page (no auth — order id + secret token are the key).
 Route::get('/papi/track', [TrackController::class, 'show']);
