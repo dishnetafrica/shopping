@@ -304,6 +304,7 @@ cloudInfo();
 chLoad();
 
 /* ---- Additional WhatsApp numbers ---- */
+function chAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function chBadge(state){
   var map={open:['b-open','Connected'],connecting:['b-wait','Connecting…'],close:['b-off','Disconnected'],missing:['b-off','Not linked'],'n/a':['b-wait','—']};
   var m=map[state]||['b-wait',state||'—'];
@@ -317,12 +318,14 @@ async function chLoad(){
     $('chList').innerHTML=d.channels.map(function(c){
       var right = c.is_primary
         ? '<span class="hint" style="margin:0">Main number</span>'
-        : '<button class="btn danger" style="padding:6px 12px" onclick="chRemove('+JSON.stringify(c.instance)+')">Remove</button>'
-          +' <button class="btn" style="padding:6px 12px" onclick="chRepair('+JSON.stringify(c.instance)+','+JSON.stringify(c.label||'')+')">Re-link</button>';
+        : '<button class="btn danger" style="padding:6px 12px" data-rm="'+chAttr(c.instance)+'">Remove</button>'
+          +' <button class="btn" style="padding:6px 12px" data-rl="'+chAttr(c.instance)+'" data-lb="'+chAttr(c.label||'')+'">Re-link</button>';
       return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line)">'
-        +'<div><b>'+(c.label||'Number')+'</b>'+(c.number?' · '+c.number:'')+'<br>'+chBadge(c.state)+'</div>'
+        +'<div><b>'+chAttr(c.label||'Number')+'</b>'+(c.number?' · '+chAttr(c.number):'')+'<br>'+chBadge(c.state)+'</div>'
         +'<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">'+right+'</div></div>';
     }).join('');
+    Array.prototype.forEach.call($('chList').querySelectorAll('[data-rm]'),function(b){b.onclick=function(){chRemove(b.getAttribute('data-rm'));};});
+    Array.prototype.forEach.call($('chList').querySelectorAll('[data-rl]'),function(b){b.onclick=function(){chRepair(b.getAttribute('data-rl'),b.getAttribute('data-lb'));};});
   }catch(e){ $('chList').innerHTML='<div class="hint">Could not load numbers.</div>'; }
 }
 async function chAdd(){
