@@ -37,15 +37,26 @@ class CustomerAuthController extends Controller
         return $tenant;
     }
 
+    /** Resolve the shop from a slug (platform path) or the request Host (tenant's custom domain). */
+    private function resolveTenant(?string $shop): Tenant
+    {
+        if ($shop !== null && $shop !== '') return $this->tenant($shop);
+        $tenant = Tenant::byCustomDomain(request()->getHost());
+        abort_if(! $tenant, 404);
+        abort_if(($tenant->status ?? 'active') === 'suspended', 404);
+        app(TenantContext::class)->set($tenant->id);
+        return $tenant;
+    }
+
     private function normPhone(string $raw): string
     {
         return preg_replace('/[^0-9]/', '', $raw);
     }
 
     /** Send a login code to the customer's WhatsApp via the shop's instance. */
-    public function request(string $shop, Request $r, WhatsAppManager $wa)
+    public function request(Request $r, WhatsAppManager $wa, ?string $shop = null)
     {
-        $tenant = $this->tenant($shop);
+        $tenant = $this->resolveTenant($shop);
         $phone  = $this->normPhone((string) $r->input('phone', ''));
         if (strlen($phone) < 9) {
             return response()->json(['ok' => false, 'error' => 'Enter a valid WhatsApp number.'], 422);
@@ -80,9 +91,9 @@ class CustomerAuthController extends Controller
     }
 
     /** Verify the code; on success issue a short-lived token + return the saved profile. */
-    public function verify(string $shop, Request $r)
+    public function verify(Request $r, ?string $shop = null)
     {
-        $tenant = $this->tenant($shop);
+        $tenant = $this->resolveTenant($shop);
         $phone  = $this->normPhone((string) $r->input('phone', ''));
         $code   = preg_replace('/[^0-9]/', '', (string) $r->input('code', ''));
 
@@ -109,9 +120,9 @@ class CustomerAuthController extends Controller
     }
 
     /** Recent orders for the logged-in customer (token-gated), newest first. */
-    public function myOrders(string $shop, Request $r)
+    public function myOrders(Request $r, ?string $shop = null)
     {
-        $tenant = $this->tenant($shop);
+        $tenant = $this->resolveTenant($shop);
         $phone  = $this->phoneFromToken($tenant->id, (string) $r->input('token', ''));
         if ($phone === null) {
             return response()->json(['ok' => false, 'error' => 'unauthorized'], 401);
@@ -141,9 +152,9 @@ class CustomerAuthController extends Controller
     }
 
     /** Save / update the customer's own profile (token-gated). */
-    public function saveProfile(string $shop, Request $r)
+    public function saveProfile(Request $r, ?string $shop = null)
     {
-        $tenant = $this->tenant($shop);
+        $tenant = $this->resolveTenant($shop);
         $phone  = $this->phoneFromToken($tenant->id, (string) $r->input('token', ''));
         if ($phone === null) {
             return response()->json(['ok' => false, 'error' => 'unauthorized'], 401);

@@ -40,6 +40,38 @@ class StorefrontController extends Controller
         return $tenant;
     }
 
+    /**
+     * Resolve the shop from EITHER a slug (platform path /{slug}) OR the request Host (the tenant's
+     * own custom domain, served at the root). Returns [tenant, base] where base is the path prefix
+     * to build storefront URLs from: '/{slug}' on the platform, '' on a custom domain. Every URL the
+     * storefront uses is base-relative, so the shop works identically at mycloudbss.com/shree and at
+     * the tenant's own https://familyshoppers.net/.
+     *
+     * @return array{0:Tenant,1:string}
+     */
+    private function resolveShop(?string $shop): array
+    {
+        if ($shop !== null && $shop !== '') {
+            return [$this->tenant($shop), '/' . strtolower(trim($shop))];
+        }
+        $tenant = Tenant::byCustomDomain(request()->getHost());
+        abort_if(! $tenant, 404);
+        abort_if(($tenant->status ?? 'active') === 'suspended', 404);
+        app(TenantContext::class)->set($tenant->id);
+        return [$tenant, ''];
+    }
+
+    /** Root of a request. On a tenant's custom domain, that's their shop; otherwise the marketing site. */
+    public function rootLanding()
+    {
+        $tenant = Tenant::byCustomDomain(request()->getHost());
+        if ($tenant && ($tenant->status ?? 'active') !== 'suspended') {
+            app(TenantContext::class)->set($tenant->id);
+            return $this->brandSiteEnabled($tenant) ? $this->brand('', $tenant, '') : $this->renderShop($tenant, '');
+        }
+        return app(\App\Http\Controllers\Marketing\MarketingController::class)->home();
+    }
+
     /** Make a stored image path into an absolute URL the browser can load. */
     /**
      * Category tile images: the uploaded per-tenant map wins; any category without an
@@ -74,20 +106,27 @@ class StorefrontController extends Controller
     }
 
     /** The shop page itself. */
-    public function show(string $shop)
+    public function show(?string $shop = null)
     {
-        $tenant = $this->tenant($shop);
+        [$tenant, $base] = $this->resolveShop($shop);
+        return $this->renderShop($tenant, $base);
+    }
+
+    /** Render the shop HTML for a resolved tenant. $base is '' on a custom domain, '/{slug}' on the platform. */
+    private function renderShop(Tenant $tenant, string $base)
+    {
 
         $cfg = [
             'name'         => (string) $tenant->name,
             'slug'         => (string) $tenant->slug,
+            'base'         => $base,
             'initials'     => $this->initials((string) $tenant->name),
             'currency'     => $this->currency($tenant),
             'logo'         => $tenant->setting('logo', '') ? $this->imageUrl((string) $tenant->setting('logo', '')) : '',
             'waNumber'     => preg_replace('/[^0-9]/', '', (string) ($tenant->whatsapp_number ?? '')),
             'city'         => (string) $tenant->setting('city', ''),
-            'catalogueUrl' => url('/' . $tenant->slug . '/catalogue'),
-            'orderUrl'     => url('/' . $tenant->slug . '/order'),
+            'catalogueUrl' => $base . '/catalogue',
+            'orderUrl'     => $base . '/order',
             'panelUrl'     => url('/panel'),
             'branches'     => $this->branches($tenant),
             'delivery'     => (object) ($tenant->setting('delivery', []) ?: []),
@@ -109,10 +148,10 @@ class StorefrontController extends Controller
      * Tenant landing at /{shop}. Manufacturers get the brand site; everyone else gets the shop.
      * The shop itself always lives at /{shop}/shop, so brand-site order links point there.
      */
-    public function landing(string $shop)
+    public function landing(?string $shop = null)
     {
-        $tenant = $this->tenant($shop);
-        return $this->brandSiteEnabled($tenant) ? $this->brand($shop, $tenant) : $this->show($shop);
+        [$tenant, $base] = $this->resolveShop($shop);
+        return $this->brandSiteEnabled($tenant) ? $this->brand($shop, $tenant, $base) : $this->renderShop($tenant, $base);
     }
 
     private function brandSiteEnabled($tenant): bool
@@ -123,9 +162,10 @@ class StorefrontController extends Controller
     }
 
     /** Manufacturer brand site — content from tenant settings with sensible defaults. */
-    public function brand(string $shop, $tenant = null)
+    public function brand(?string $shop = null, $tenant = null, ?string $base = null)
     {
-        $tenant = $tenant ?: $this->tenant($shop);
+        if ($tenant === null) { [$tenant, $base] = $this->resolveShop($shop); }
+        if ($base === null)   { $base = '/' . (string) $tenant->slug; }
         $theme  = $this->resolveTheme($tenant);
 
         $defaultBrands = \App\Support\BrandDefaults::brands($theme['accent']);
@@ -151,8 +191,8 @@ class StorefrontController extends Controller
             'address'     => (string) $tenant->setting('address', ''),
             'waNumber'    => preg_replace('/[^0-9]/', '', (string) ($tenant->whatsapp_number ?? '')),
             'currency'    => $this->currency($tenant),
-            'shopUrl'     => url('/' . $tenant->slug . '/shop'),
-            'catalogueUrl'=> url('/' . $tenant->slug . '/catalogue'),
+            'shopUrl'     => $base . '/shop',
+            'catalogueUrl'=> $base . '/catalogue',
             'panelUrl'    => url('/panel'),
             'brands'      => $tenant->setting('brands', $defaultBrands),
             'stats'       => $tenant->setting('brand_stats', $defaultStats),
@@ -215,9 +255,9 @@ class StorefrontController extends Controller
     }
 
     /** Public catalogue feed (same JSON shape the panel/products feed uses). */
-    public function catalogue(string $shop)
+    public function catalogue(?string $shop = null)
     {
-        $tenant = $this->tenant($shop);
+        [$tenant] = $this->resolveShop($shop);
 
         // Cache the built feed for a few minutes so a large catalogue is not re-hydrated
         // on every page load, and use toBase()+column select to avoid loading full models.
@@ -333,9 +373,9 @@ class StorefrontController extends Controller
     }
 
     /** Create a real order from the web cart. */
-    public function placeOrder(string $shop, Request $r)
+    public function placeOrder(Request $r, ?string $shop = null)
     {
-        $tenant = $this->tenant($shop);
+        [$tenant] = $this->resolveShop($shop);
 
         $name  = trim((string) $r->input('name', ''));
         $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));

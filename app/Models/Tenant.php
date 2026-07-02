@@ -88,6 +88,28 @@ class Tenant extends Model
      * The /papi/track (and other public) routes are host-agnostic, so they resolve
      * correctly on the custom domain too.
      */
+    /**
+     * Resolve the tenant that owns a custom domain (its own website, e.g. familyshoppers.net).
+     * Tolerates a leading www. on either side so the shop resolves whether or not www is used.
+     */
+    public static function byCustomDomain(string $host): ?self
+    {
+        $host = strtolower(trim($host));
+        $host = preg_replace('#^https?://#', '', $host);
+        $host = preg_replace('#/.*$#', '', $host);
+        if ($host === '') return null;
+        $bare = preg_replace('#^www\.#', '', $host);
+        return static::query()
+            ->whereNotNull('custom_domain')
+            ->where('custom_domain', '!=', '')
+            ->where(function ($q) use ($host, $bare) {
+                $q->whereRaw('LOWER(custom_domain) = ?', [$host])
+                  ->orWhereRaw('LOWER(custom_domain) = ?', [$bare])
+                  ->orWhereRaw('LOWER(custom_domain) = ?', ['www.' . $bare]);
+            })
+            ->first();
+    }
+
     public function publicUrl(string $path): string
     {
         $path = '/' . ltrim($path, '/');

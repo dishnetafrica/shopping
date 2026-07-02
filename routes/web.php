@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Route;
 
 // Public CloudBSS marketing landing page. Shop owners log in via /app/login,
 // operator via /admin/login (both linked from the page).
-Route::get('/', [MarketingController::class, 'home']);
+Route::get('/', [\App\Http\Controllers\Storefront\StorefrontController::class, 'rootLanding']);
 
 // Public customer order-tracking page (no auth — order id + secret token are the key).
 Route::get('/papi/track', [TrackController::class, 'show']);
@@ -306,6 +306,21 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
 | even if route order changed, /app & /admin would fall through to Filament.
 */
 $shopSlug = '(?!(app|admin|panel|papi|api|storage|livewire|build|vendor|up|login|logout|register|start)$)[a-z0-9][a-z0-9\-]*';
+
+Route::middleware('web')->group(function () {
+    // Custom-domain storefront: the SAME shop served at the ROOT of the tenant's own domain
+    // (e.g. https://familyshoppers.net/), resolved by Host. shop=null → the controller resolves by
+    // custom_domain. Registered before the slug routes so single-segment paths bind here; on the
+    // platform host they 404 (no tenant claims the platform host), so they never shadow real pages.
+    Route::get('/product/{product}', [\App\Http\Controllers\Storefront\StorefrontProductController::class, 'show'])->where('product', '[0-9]+');
+    Route::get('/shop',            [\App\Http\Controllers\Storefront\StorefrontController::class, 'show']);
+    Route::get('/catalogue',       [\App\Http\Controllers\Storefront\StorefrontController::class, 'catalogue']);
+    Route::post('/order',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'placeOrder']);
+    Route::post('/auth/request',   [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'request']);
+    Route::post('/auth/verify',    [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'verify']);
+    Route::post('/account/orders', [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'myOrders']);
+    Route::post('/account/profile',[\App\Http\Controllers\Storefront\CustomerAuthController::class, 'saveProfile']);
+});
 
 Route::middleware('web')->group(function () use ($shopSlug) {
     Route::get('/{shop}/product/{product}', [\App\Http\Controllers\Storefront\StorefrontProductController::class, 'show'])->where('shop', $shopSlug)->where('product', '[0-9]+');
