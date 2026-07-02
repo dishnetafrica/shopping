@@ -56,14 +56,29 @@ class ProcessIncomingMessage implements ShouldQueue
         $tStart = microtime(true);                  // when this job started processing
         $tenant = Tenant::findOrFail($this->tenantId);
 
-        // Multi-number: reply on the SAME number the customer messaged. Every send/markRead/media
-        // call reads $tenant->whatsapp_instance, so pointing it at the inbound instance here (in
-        // memory only, never saved) routes the whole reply out the received number — no send-path
-        // changes needed. Guarded to a verified active channel of this shop; else keep the primary.
-        $inInst = (string) ($this->incoming['instance'] ?? '');
-        if ($inInst !== '' && $inInst !== $tenant->whatsapp_instance
+        // Which number should this REPLY go out on?
+        //  1. the number the customer messaged (so the thread stays on their number), else
+        //  2. if that's the primary and the watchdog has flagged the primary down (wa_send_instance
+        //     points at a connected channel), reply from that connected number so the customer still
+        //     gets answered during an outage.
+        // Every send/markRead/media read uses $tenant->whatsapp_instance, so setting it here (in
+        // memory only, never saved) routes the whole reply — no send-path changes needed.
+        $primary   = (string) $tenant->whatsapp_instance;
+        $inInst    = (string) ($this->incoming['instance'] ?? '');
+        $replyInst = $primary;
+        if ($inInst !== '' && $inInst !== $primary
             && \App\Models\WhatsappChannel::isTenantInstance($tenant->id, $inInst)) {
-            $tenant->whatsapp_instance = $inInst;
+            $replyInst = $inInst;
+        }
+        if ($replyInst === $primary) {
+            $fb = trim((string) $tenant->setting('wa_send_instance', ''));
+            if ($fb !== '' && $fb !== $primary
+                && \App\Models\WhatsappChannel::isTenantInstance($tenant->id, $fb)) {
+                $replyInst = $fb;
+            }
+        }
+        if ($replyInst !== $primary) {
+            $tenant->whatsapp_instance = $replyInst;
         }
 
         $gateway = $wa->forTenant($tenant);

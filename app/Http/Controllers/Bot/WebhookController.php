@@ -129,7 +129,9 @@ class WebhookController
             $id = (string) (data_get($u, 'keyId', data_get($u, 'key.id', ''))) ?: uniqid('s_');
 
             if ($status === 'ERROR') {
-                \App\Support\BotTrace::log($t->id, $id, $to, 'send_failed', 'WhatsApp delivery status = ERROR');
+                $num = optional(\App\Models\WhatsappChannel::where('instance', $instance)->first())->number;
+                $via = $num ? ($num . ' · ' . $instance) : $instance;
+                \App\Support\BotTrace::log($t->id, $id, $to, 'send_failed', 'Delivery ERROR — attempted from ' . $via);
                 $t->putSetting('wa_send_err_at', now()->toIso8601String());
             } elseif (in_array($status, ['DELIVERY_ACK', 'READ', 'PLAYED'], true)) {
                 // throttle the "delivering ok" stamp so we don't rewrite settings on every ack
