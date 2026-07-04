@@ -1461,16 +1461,25 @@ class PanelApiController extends Controller
             return response()->json(['ok' => true, 'already' => true, 'order_id' => (int) $q->order_id, 'order_no' => $ord ? (string) $ord->order_no : '']);
         }
 
-        // A USD (South Sudan) quotation is stored back as marked-up UGX so the order
-        // and Reports stay in one base currency. Convert at the rate captured on the quote.
-        $usd  = strtoupper((string) $q->currency) === 'USD';
-        $rate = $usd ? (float) (data_get($q->meta, 'usd_rate') ?: $t->setting('usdUgx', 3750)) : 1.0;
-        if ($usd && $rate <= 0) $rate = (float) $t->setting('usdUgx', 3750);
+        // Currency handling on convert:
+        //  • CONVERTED basis (catalogue priced in UGX, USD is only a display layer): the USD
+        //    quotation is stored back as marked-up UGX so orders + Reports share one base currency.
+        //    Convert at the rate captured on the quote.
+        //  • NATIVE basis (the shop's prices ARE in USD, e.g. South Sudan): the stored USD values
+        //    are the real prices. Multiplying them by the UGX rate would inflate every order (and
+        //    the earlier divide-to-USD is what floored small prices to 0.00) — so keep them as-is.
+        //    The quote records native=true in its meta at creation time (see CurrencyPricer::toUsd).
+        $usd     = strtoupper((string) $q->currency) === 'USD';
+        $native  = (bool) data_get($q->meta, 'native')
+                   || app(\App\Services\Bot\Pricing\CurrencyPricer::class)->isNativeBasis($t);
+        $convert = $usd && ! $native;   // only convert when USD is a display layer over a UGX base
+        $rate = $convert ? (float) (data_get($q->meta, 'usd_rate') ?: $t->setting('usdUgx', 3750)) : 1.0;
+        if ($convert && $rate <= 0) $rate = (float) $t->setting('usdUgx', 3750);
 
         $items = []; $textParts = [];
         foreach ($q->items as $it) {
             if (! $it->matched) continue;
-            $unit        = $usd ? round(((float) $it->unit_price) * $rate) : (float) $it->unit_price;
+            $unit        = $convert ? round(((float) $it->unit_price) * $rate) : (float) $it->unit_price;
             $items[]     = ['name' => (string) $it->name, 'qty' => (int) $it->qty, 'price' => $unit];
             $textParts[] = ((int) $it->qty) . 'x ' . $it->name;
         }
@@ -1484,7 +1493,7 @@ class PanelApiController extends Controller
         $o->customer_phone = (string) $q->customer_phone;
         $o->items_json     = $items;
         $o->items_text     = implode(', ', $textParts);
-        $o->total          = $usd ? round(((float) $q->total) * $rate) : (float) $q->total;
+        $o->total          = $convert ? round(((float) $q->total) * $rate) : (float) $q->total;
         $o->save();        // OrderObserver assigns order_no + track_token
 
         $q->order_id = (int) $o->id;
