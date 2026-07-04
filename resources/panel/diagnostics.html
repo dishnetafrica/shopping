@@ -18,17 +18,27 @@
   .intro{color:var(--mute);font-size:13px;margin-bottom:12px}
   .ev{display:flex;align-items:flex-start;gap:11px;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin-bottom:7px}
   .ev .tm{font-size:11.5px;color:var(--mute);min-width:62px;font-variant-numeric:tabular-nums;padding-top:2px}
+  .ev .tm .dl{font-size:10px;color:#aab4ae;margin-top:2px;font-weight:600}
   .ev .mid{flex:1;min-width:0}
   .ev .ph{font-weight:700;font-size:14px}
   .ev .dt{font-size:13px;color:var(--mute);margin-top:1px;word-break:break-word}
   .ev .tr{font-size:10.5px;color:#aab4ae;font-family:"Space Mono",monospace;margin-top:3px}
-  .stage{font-size:11px;font-weight:700;padding:4px 9px;border-radius:9px;white-space:nowrap;text-transform:capitalize}
+  /* Default pill: any stage without a specific rule still gets a neutral badge
+     instead of rendering as bare text. The pipeline emits ~50 stage names and
+     only a handful are semantically coloured below; the rest fall back here. */
+  .stage{font-size:11px;font-weight:700;padding:4px 9px;border-radius:9px;white-space:nowrap;text-transform:capitalize;background:#eef0f2;color:#555}
   .ms{font-size:11px;color:var(--mute);margin-left:6px}
   .s-queued,.s-started{background:#e1ecff;color:var(--blue)}
-  .s-replied{background:#e7f6ec;color:var(--green-d)}
-  .s-skipped,.s-empty,.s-ignored{background:#eef0f2;color:#555}
+  /* success family — replied AND ai_replied must both look "done/green" */
+  .s-replied,.s-ai_replied,.s-order_captured,.s-offer_captured,.s-customer_confirmed,
+  .s-lead_created,.s-lead_updated,.s-lead_imported,.s-lead_assigned{background:#e7f6ec;color:var(--green-d)}
+  .s-skipped,.s-empty,.s-ignored,.s-intro_skip,.s-img_skip,.s-status_ignored{background:#eef0f2;color:#555}
   .s-paused{background:#fff4d6;color:var(--amber)}
-  .s-error,.s-no_tenant,.s-send_failed{background:#fdecec;color:var(--red)}
+  /* failure family — includes the *_error stages and no-reply / not-received signals */
+  .s-error,.s-no_tenant,.s-send_failed,.s-ai_no_reply,.s-customer_not_received,
+  .s-photo_unidentified,.s-photo_search_miss,.s-voice_unhandled,.s-owner_update_error,
+  .s-opportunity_error,.s-offer_state_error,.s-offer_serve_error,.s-offer_item_error,
+  .s-offer_ingest_error,.s-narrow_error{background:#fdecec;color:var(--red)}
   .empty{color:var(--mute);font-size:14px;padding:20px 0;text-align:center}
   .legend{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
   .legend .stage{cursor:default}
@@ -42,9 +52,10 @@
   <div id="health" style="display:flex;gap:10px;flex-wrap:wrap;margin:0 0 16px"></div>
   <div class="legend">
     <span class="stage s-queued">queued</span><span class="stage s-started">started</span>
-    <span class="stage s-replied">replied</span><span class="stage s-skipped">skipped</span>
-    <span class="stage s-paused">paused</span><span class="stage s-empty">empty</span>
-    <span class="stage s-error">error</span>
+    <span class="stage s-replied">replied</span><span class="stage s-ai_replied">ai_replied</span>
+    <span class="stage s-skipped">skipped</span><span class="stage s-paused">paused</span>
+    <span class="stage s-empty">empty</span><span class="stage s-error">error</span>
+    <span class="stage s-send_failed">send_failed</span>
   </div>
   <div id="list"><div class="empty">Loading…</div></div>
 </div>
@@ -52,7 +63,21 @@
 <script>
   var $=function(i){return document.getElementById(i);};
   function esc(s){return (s||'').replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
-  function tm(s){try{return new Date(s.replace(' ','T')+'Z').toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '';}}
+
+  // Parse a naive server datetime as UTC (matches ago() below and the UTC storage assumption).
+  function evd(s){ try{ return new Date(String(s).replace(' ','T')+'Z'); }catch(e){ return null; } }
+  function tm(s){ var d=evd(s); if(!d||isNaN(d))return ''; return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+
+  // Date chip shown under the time ONLY when the event is not from today — so that a
+  // "newest first" list spanning more than one day never looks out of order.
+  function daylabel(s){
+    var d=evd(s); if(!d||isNaN(d))return '';
+    var n=new Date();
+    if(d.getFullYear()===n.getFullYear()&&d.getMonth()===n.getMonth()&&d.getDate()===n.getDate())return '';
+    var y=new Date(n.getFullYear(),n.getMonth(),n.getDate()-1);
+    if(d.getFullYear()===y.getFullYear()&&d.getMonth()===y.getMonth()&&d.getDate()===y.getDate())return 'Yesterday';
+    return d.toLocaleDateString([], {month:'short',day:'numeric'});
+  }
 
   function ago(s){ if(!s)return 'never'; try{var d=new Date(s.replace(' ','T')+(s.indexOf('Z')<0&&s.indexOf('+')<0?'Z':'')); var sec=Math.max(0,Math.floor((Date.now()-d.getTime())/1000)); if(sec<60)return sec+'s ago'; if(sec<3600)return Math.floor(sec/60)+'m ago'; if(sec<86400)return Math.floor(sec/3600)+'h ago'; return Math.floor(sec/86400)+'d ago'; }catch(e){return '';} }
   function pill(label,val,state){ var c=state==='ok'?'#15803D':(state==='warn'?'#C2700A':(state==='bad'?'#B4232A':'#667085')); return '<div style="border:1px solid #e5e8ee;border-radius:10px;padding:8px 12px;min-width:130px"><div style="font-size:11px;color:#8a93a3;text-transform:uppercase;letter-spacing:.04em">'+label+'</div><div style="font-weight:800;font-size:14px;color:'+c+';margin-top:2px">'+val+'</div></div>'; }
@@ -84,7 +109,7 @@
 
       var fr=(d.queue&&d.queue.failed_recent)||[];
       if(fr.length){
-        el.innerHTML += '<div style="grid-column:1/-1;margin-top:8px;padding:11px 13px;background:#fdf6e7;border:1px solid #f0e3c0;border-radius:12px;font-size:12.5px;color:#7a5b00">'
+        el.innerHTML += '<div style="width:100%;margin-top:8px;padding:11px 13px;background:#fdf6e7;border:1px solid #f0e3c0;border-radius:12px;font-size:12.5px;color:#7a5b00">'
           +'<b>Recent failed jobs</b> — these are past failures; if the trace below shows <b>ai_replied</b>, live messages are fine. Clear with <code>php artisan queue:flush</code>.'
           +fr.map(function(f){return '<div style="margin-top:6px"><b>'+esc(f.job||'job')+'</b> · '+ago(f.failed_at)+'<br><span style="color:#8a6d1a">'+esc(f.error||'')+'</span></div>';}).join('')
           +'</div>';
@@ -92,7 +117,7 @@
 
       var ch=d.channels||[];
       if(ch.length>1){
-        el.innerHTML += '<div style="grid-column:1/-1;margin-top:8px;padding:11px 13px;background:#f6f8f7;border:1px solid var(--line,#e5e9e7);border-radius:12px;font-size:12.5px">'
+        el.innerHTML += '<div style="width:100%;margin-top:8px;padding:11px 13px;background:#f6f8f7;border:1px solid var(--line,#e5e9e7);border-radius:12px;font-size:12.5px">'
           +'<b>WhatsApp numbers ('+ch.length+')</b> — a customer messaging any <b>connected</b> number is auto-replied on that same number.'
           +ch.map(function(c){
              var stOk=c.state==='open', stCon=c.state==='connecting';
@@ -114,10 +139,11 @@
       if(!d.events.length){l.innerHTML='<div class="empty">No bot activity yet. Send a WhatsApp message to your shop number and it will appear here.</div>';return;}
       l.innerHTML=d.events.map(function(e){
         var st=esc(e.stage);
+        var dl=daylabel(e.time);
         return '<div class="ev">'+
-          '<div class="tm">'+tm(e.time)+'</div>'+
+          '<div class="tm">'+tm(e.time)+(dl?('<div class="dl">'+dl+'</div>'):'')+'</div>'+
           '<div class="mid">'+
-            '<div class="ph">'+(e.phone?('+'+esc(e.phone)):'—')+'<span class="stage s-'+st+'" style="margin-left:8px">'+st+'</span>'+(e.ms?('<span class="ms">'+e.ms+' ms</span>'):'')+'</div>'+
+            '<div class="ph">'+(e.phone?('+'+esc(e.phone)):'—')+'<span class="stage s-'+st+'" style="margin-left:8px">'+st+'</span>'+(e.ms?('<span class="ms">'+esc(String(e.ms))+' ms</span>'):'')+'</div>'+
             (e.detail?'<div class="dt">'+esc(e.detail)+'</div>':'')+
             '<div class="tr">#'+esc(e.trace)+'</div>'+
           '</div></div>';
