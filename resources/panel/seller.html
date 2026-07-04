@@ -2410,8 +2410,10 @@ function openOrder(id){
 }
 function renderInvoice(){
   var o=current;
+  var _dm=curMeta();
   $('invRows').innerHTML=o.items.map(function(it,idx){
-    return '<tr><td>'+(idx+1)+'</td><td>'+esc(it.name)+'</td><td>'+ugx(it.price)+'</td>'+
+    return '<tr><td>'+(idx+1)+'</td><td>'+esc(it.name)+'</td>'+
+      '<td><input class="qtyin editcol-inline" type="number" min="0" step="'+(_dm.dec?'0.01':'1')+'" value="'+convFromUgx(it.price).toFixed(_dm.dec)+'" onchange="setPrice('+idx+',this.value)" title="Custom price — this order only; product price list is unchanged"><span class="printqty" style="display:none">'+ugx(it.price)+'</span></td>'+
       '<td><input class="qtyin editcol-inline" type="number" min="1" value="'+it.qty+'" onchange="setQty('+idx+',this.value)"><span class="printqty" style="display:none">'+it.qty+'</span></td>'+
       '<td class="amt">'+ugx(it.price*it.qty)+'</td>'+
       '<td class="editcol"><button class="delrow" onclick="delItem('+idx+')">×</button></td></tr>';
@@ -2438,6 +2440,7 @@ function renderAddOptions(q){
   $('addProd').innerHTML=list.length?list.map(function(o){return '<option value="'+o.i+'">'+esc(o.p.name)+' \u2014 '+ugx(o.p.price)+'</option>';}).join(''):'<option value="">No match</option>';
 }
 function setQty(idx,v){current.items[idx].qty=Math.max(1,Number(v)||1);renderInvoice();}
+function setPrice(idx,v){current.items[idx].price=Math.max(0,convToUgx(v));renderInvoice();}
 function delItem(idx){if(current.items.length<=1){toast('An order needs at least one item');return;}current.items.splice(idx,1);renderInvoice();toast('Item removed');}
 function deleteOrder(id){cancelOrder(id);}
 
@@ -2463,9 +2466,13 @@ function posGrid(){
 }
 function posAdd(i){var p=CATALOGUE[i];if(prodStock(p)===0){toast('Out of stock'+(INVENTORY_MODE==='branch'&&BRANCH_FILTER?' at '+branchName(BRANCH_FILTER):''));return;}var ex=POS.cart.find(function(c){return c.i===i;});if(ex)ex.qty++;else POS.cart.push({i:i,name:p.name,price:p.price,qty:1});posRenderCart();}
 function posQty(k,d){POS.cart[k].qty+=d;if(POS.cart[k].qty<1)POS.cart.splice(k,1);posRenderCart();}
+function posSetPrice(k,v){if(POS.cart[k])POS.cart[k].price=Math.max(0,convToUgx(v));posRenderCart();}
 function posRenderCart(){
+  var _dm=curMeta();
   $('posCart').innerHTML=POS.cart.length?POS.cart.map(function(c,k){
-    return '<div class="ci"><div class="nm">'+esc(c.name)+'<div style="font-size:11px;color:var(--muted)">'+posM(c.price)+' each</div></div>'+
+    return '<div class="ci"><div class="nm">'+esc(c.name)+
+        '<div style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;margin-top:2px">'+_dm.code+
+        ' <input type="number" min="0" step="'+(_dm.dec?'0.01':'1')+'" value="'+convFromUgx(c.price).toFixed(_dm.dec)+'" onchange="posSetPrice('+k+',this.value)" title="Custom price — this sale only; product price list is unchanged" style="width:80px;padding:3px 5px;border:1px solid var(--line);border-radius:6px;font-size:12px"> each</div></div>'+
       '<div class="qc"><button onclick="posQty('+k+',-1)">−</button><b>'+c.qty+'</b><button onclick="posQty('+k+',1)">+</button></div>'+
       '<div class="amt">'+posM(c.price*c.qty)+'</div></div>';
   }).join(''):'<p style="color:var(--muted);font-size:13px">Cart is empty — tap a product.</p>';
