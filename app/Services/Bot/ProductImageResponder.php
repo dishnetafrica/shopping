@@ -41,6 +41,13 @@ class ProductImageResponder
 
         $cur = (string) $tenant->setting('currency', 'UGX');
 
+        // ---- Special Order photo: the customer asked to "see" an off-catalogue item we just
+        // quoted. Send the pinned marketplace image(s) — host allow-listed so we never forward
+        // an arbitrary URL — and NEVER reveal the source. Max 3.
+        if (($so = $this->specialOrderPhotos($tenant, $convo, $t)) !== []) {
+            return $so;
+        }
+
         // ---- "More photos" / "show packaging" / "other pictures": send the GALLERY of the
         // last product we showed this customer, without them re-typing its name. Max 3.
         if ($this->isGalleryIntent($t)) {
@@ -108,6 +115,44 @@ class ProductImageResponder
             }
         }
         return [['media' => $url, 'caption' => $caption]];
+    }
+
+    /**
+     * Photos for a pending Special Order the customer asked to see. Reads the marketplace
+     * quote(s) pinned on the conversation by BotBrain, filters each image through the host
+     * allow-list, and returns up to 3 ['media','caption'] entries. Never reveals the source.
+     *
+     * @return array<int,array{media:string,caption:string}>
+     */
+    private function specialOrderPhotos(Tenant $tenant, ?Conversation $convo, string $t): array
+    {
+        if ($convo === null) return [];
+
+        // Only when the customer is actually asking to see it.
+        if (! preg_match('/\b(photo|photos|pic|pics|picture|pictures|image|images|see it|show( me)?|send.*(photo|pic|image))\b/u', $t)) {
+            return [];
+        }
+
+        $so = is_array($convo->state) ? ($convo->state['special_order'] ?? null) : null;
+        if (! is_array($so)) return [];
+        if (time() - (int) ($so['at'] ?? 0) > 1800) return [];        // stale after 30 min
+
+        $hosts = (array) config('marketplace.allowed_image_hosts', []);
+        $out = [];
+        foreach ((array) ($so['quotes'] ?? []) as $q) {
+            $img = trim((string) ($q['image_url'] ?? ''));
+            if ($img === '') continue;
+            if (! \App\Services\Marketplace\Support\ImageHostAllowList::allowed($img, $hosts)) continue;
+
+            $name = trim((string) ($q['name'] ?? ''));
+            $cur  = (string) ($q['currency'] ?? 'UGX');
+            $price = isset($q['sell_price'])
+                ? ' — ' . $cur . ' ' . number_format((float) $q['sell_price'], \App\Services\Pricing::decimalsForCurrency($cur))
+                : '';
+            $out[] = ['media' => $img, 'caption' => ($name !== '' ? ('Special Order: ' . $name . $price) : '')];
+            if (count($out) >= 3) break;
+        }
+        return $out;
     }
 
     /** Detect a "more photos / other pictures / packaging / gallery" follow-up. */

@@ -36,6 +36,12 @@ class Settings extends Page implements HasForms
             'discount_amt'      => $t->setting('discount_amt', 0),
             'whatsapp_number'   => $t->whatsapp_number,
             'whatsapp_instance' => $t->whatsapp_instance,
+            // Special Order (off-catalogue live pricing)
+            'special_order_enabled'  => (bool) $t->setting('special_order_enabled', false),
+            'special_order_provider' => $t->setting('special_order_provider', config('marketplace.default_provider', 'jumia')),
+            'special_order_margin'   => $t->setting('special_order_margin', config('marketplace.default_margin', 0.15)),
+            'special_order_ugx_rate' => $t->setting('special_order_ugx_rate', 0),
+            'special_order_terms'    => $t->setting('special_order_terms', config('marketplace.default_terms', '')),
         ]);
     }
 
@@ -53,6 +59,28 @@ class Settings extends Page implements HasForms
                 Forms\Components\TextInput::make('whatsapp_number')->label('Sending number'),
                 Forms\Components\TextInput::make('whatsapp_instance')->label('Evolution instance'),
             ])->columns(2),
+            Forms\Components\Section::make('Special Order')
+                ->description('When a customer asks for something you don\'t stock, quote a special-order price instead of dead-ending. Prices are marked up by your margin; the source is never shown to the customer.')
+                ->schema([
+                    Forms\Components\Toggle::make('special_order_enabled')
+                        ->label('Enable special orders')
+                        ->helperText('Off by default. Best for electronics/hardware shops; leave off for pure grocery.'),
+                    Forms\Components\Select::make('special_order_provider')
+                        ->label('Price source')
+                        ->options(collect(array_keys((array) config('marketplace.providers', [])))
+                            ->mapWithKeys(fn ($k) => [$k => ucfirst($k)])->all() ?: ['jumia' => 'Jumia'])
+                        ->default(config('marketplace.default_provider', 'jumia'))
+                        ->native(false),
+                    Forms\Components\TextInput::make('special_order_margin')
+                        ->label('Markup')->numeric()->step('0.01')
+                        ->helperText('Fraction: 0.15 = +15%.'),
+                    Forms\Components\TextInput::make('special_order_ugx_rate')
+                        ->label('UGX per 1 USD')->numeric()
+                        ->helperText('Set only if you quote special orders in USD. Leave 0 to quote in UGX.'),
+                    Forms\Components\Textarea::make('special_order_terms')
+                        ->label('Special-order terms shown to the customer')
+                        ->rows(2)->columnSpanFull(),
+                ])->columns(2),
         ])->statePath('data');
     }
 
@@ -63,6 +91,11 @@ class Settings extends Page implements HasForms
         $t->settings = array_merge($t->settings ?? [], [
             'currency' => $d['currency'], 'usd_ugx' => $d['usd_ugx'], 'usd_ssp' => $d['usd_ssp'],
             'discount_pct' => $d['discount_pct'], 'discount_amt' => $d['discount_amt'],
+            'special_order_enabled'  => (bool) ($d['special_order_enabled'] ?? false),
+            'special_order_provider' => $d['special_order_provider'] ?? config('marketplace.default_provider', 'jumia'),
+            'special_order_margin'   => (float) ($d['special_order_margin'] ?? config('marketplace.default_margin', 0.15)),
+            'special_order_ugx_rate' => (int) ($d['special_order_ugx_rate'] ?? 0),
+            'special_order_terms'    => (string) ($d['special_order_terms'] ?? ''),
         ]);
         $t->whatsapp_number = $d['whatsapp_number'];
         $t->whatsapp_instance = $d['whatsapp_instance'];

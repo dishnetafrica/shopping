@@ -18,6 +18,25 @@ class AppServiceProvider extends ServiceProvider
         if (! config('openai.api_key') && env('OPENAI_API_KEY')) {
             config(['openai.api_key' => env('OPENAI_API_KEY')]);
         }
+
+        // Marketplace (special-order) provider registry. Providers are declared in
+        // config/marketplace.php as key => class; the registry resolves them from
+        // the container on demand, so adding a marketplace never touches the bot.
+        $this->app->singleton(\App\Services\Marketplace\ProviderRegistry::class, function ($app) {
+            return new \App\Services\Marketplace\ProviderRegistry(
+                $app,
+                (array) config('marketplace.providers', []),
+            );
+        });
+
+        // The Jumia provider reads the existing Playwright price API credentials.
+        $this->app->bind(\App\Services\Marketplace\Providers\JumiaProvider::class, function () {
+            return new \App\Services\Marketplace\Providers\JumiaProvider(
+                (string) config('marketplace.jumia.url', ''),
+                (string) config('marketplace.jumia.key', ''),
+                (int) config('marketplace.jumia.timeout', 60),
+            );
+        });
     }
 
     public function boot(): void

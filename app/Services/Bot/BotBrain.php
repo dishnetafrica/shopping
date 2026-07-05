@@ -27,6 +27,7 @@ class BotBrain
         protected ShoppingParser $parser,
         protected CatalogueMatcher $matcher,
         protected ClarificationFlow $clarify,
+        protected \App\Services\Marketplace\MarketplaceSearch $marketplace,
     ) {}
 
     /** One-shot "with <accompaniment>" hint, set per message in respondInner, consumed by maybeAskModifier. */
@@ -233,6 +234,13 @@ class BotBrain
             if (($c = $this->handleOrderConfirm($tenant, $convo, $text)) !== null) {
                 return $c;
             }
+        }
+
+        // Awaiting a "Did you mean X?" answer for a special order. A fresh yes turns the
+        // stored candidate into a quote; a no clears it. Only fires when one is pending, and
+        // wrapped so it can never break the normal flow.
+        if (($soc = $this->resolveSpecialOrderConfirm($tenant, $convo, $text)) !== null) {
+            return $soc;
         }
 
         // Awaiting a required modifier choice (e.g. "choose your accompaniment"): the reply is the pick.
@@ -862,6 +870,16 @@ class BotBrain
         // customer. ProductMiss is emoji/greeting/Gujlish-aware and unit-tested.
         $want = \App\Services\Bot\ProductMiss::term($text);
         if ($want !== null) {
+            // Special Order: before dead-ending, try a live special-order quote (if the shop
+            // has opted in). Fully guarded — any failure falls straight through to the normal
+            // "we don't stock" miss, so this feature can never break ordering.
+            try {
+                if (($special = $this->trySpecialOrder($tenant, $convo, $want)) !== null) {
+                    return $special;
+                }
+            } catch (\Throwable $e) {
+                report($e);
+            }
             \App\Support\BotMiss::record($tenant->id, $want, $text);
             return "Sorry, we don't stock *{$want}* right now \u{1F642} Tell me another product, or say *menu* to see what we have.";
         }
@@ -920,6 +938,189 @@ class BotBrain
         }
         return "Here are the prices for *{$query}*:\n" . implode("\n", $lines)
              . "\n\nTell me which one you'd like, or the quantity.";
+    }
+
+    // ---------------- special order (off-catalogue) ----------------
+    // When the catalogue has no match, an opted-in shop can quote a "Special Order" price
+    // sourced live via App\Services\Marketplace\MarketplaceSearch. BotBrain only ever talks
+    // to MarketplaceSearch — it has no idea which marketplace (Jumia/etc.) is behind it, and
+    // the customer is NEVER told the source. Every path is guarded and degrades to today's
+    // behaviour on any failure.
+
+    /**
+     * Try to turn an off-catalogue miss into a Special Order.
+     * Returns a reply string, or null to fall through to the plain "we don't stock" line
+     * (feature off for this tenant).
+     */
+    protected function trySpecialOrder(Tenant $tenant, Conversation $convo, string $want): ?string
+    {
+        if (! $this->marketplace->enabledFor($tenant)) {
+            return null;                                   // shop hasn't opted in — plain dead-end
+        }
+
+        $outcome = $this->marketplace->quote($tenant, $want);
+
+        if ($outcome->isQuote()) {
+            $quotes = $outcome->quotes();
+            $this->pinSpecialOrder($convo, $want, $quotes);
+            $this->logSpecialOrderLead($tenant, $convo, $want, $quotes[0]->name ?? $want);
+            return $this->specialOrderReply($tenant, $want, $quotes);
+        }
+
+        if ($outcome->isConfirm()) {
+            $cand = $outcome->candidate();
+            $st = is_array($convo->state) ? $convo->state : [];
+            $st['special_order_confirm'] = [
+                'want'      => $want,
+                'at'        => time(),
+                'candidate' => $cand->toArray(),
+            ];
+            unset($st['special_order']);                   // a pending confirm supersedes any old pin
+            $convo->state = $st;
+            $convo->save();
+            return "I might be able to special-order *" . $this->titleish($cand->name) . "* for you \u{1F914}\n"
+                 . "Is that the one you mean? Reply *yes* and I'll get you a special-order price, or tell me the exact product.";
+        }
+
+        // Feature on, but nothing confident to quote (weak match, empty, or the price
+        // service was unreachable). Don't dead-end: treat it as a special-order request,
+        // alert the shop, and promise a manual confirm.
+        $this->logSpecialOrderLead($tenant, $convo, $want, $want);
+        return "Let me check on *" . $this->titleish($want) . "* for you \u{1F642} It's not in our regular stock, "
+             . "but the shop can often special-order items \u{2014} they'll confirm price and availability shortly.";
+    }
+
+    /**
+     * Handle a "yes/no" answer to a pending "Did you mean X?" special-order prompt.
+     * Returns a reply, or null when there's no fresh pending confirm (so normal flow runs).
+     */
+    protected function resolveSpecialOrderConfirm(Tenant $tenant, Conversation $convo, string $text): ?string
+    {
+        $st = is_array($convo->state) ? $convo->state : [];
+        $pending = $st['special_order_confirm'] ?? null;
+        if (! is_array($pending)) {
+            return null;
+        }
+        // Stale after 30 min of the conversation moving on.
+        if (time() - (int) ($pending['at'] ?? 0) > 1800) {
+            unset($st['special_order_confirm']);
+            $convo->state = $st;
+            $convo->save();
+            return null;
+        }
+
+        $lc = mb_strtolower(trim($text));
+        $yes = (bool) preg_match('/^(y|ya|yes|yep|yeah|yup|sure|ok(ay)?|correct|right|that\'?s? it|haan|ha|જી|હા|👍)\b/u', $lc);
+        $no  = (bool) preg_match('/^(n|no|nope|nah|not|wrong|different|na)\b/u', $lc);
+
+        if (! $yes && ! $no) {
+            return null;                                   // not an answer — let normal flow handle it
+        }
+
+        $want = (string) ($pending['want'] ?? '');
+        unset($st['special_order_confirm']);
+        $convo->state = $st;
+        $convo->save();
+
+        if ($no) {
+            return "No problem \u{1F642} Tell me the exact product name and I'll check a special order for you, or say *menu* to see what we stock.";
+        }
+
+        // Yes — promote the stored candidate to a full quote.
+        $cand   = \App\Services\Marketplace\Dto\MarketplaceQuote::fromArray((array) ($pending['candidate'] ?? []));
+        $quotes = [$cand];
+        $this->pinSpecialOrder($convo, $want, $quotes);
+        $this->logSpecialOrderLead($tenant, $convo, $want, $cand->name);
+        return $this->specialOrderReply($tenant, $want, $quotes);
+    }
+
+    /**
+     * Format a Special Order reply. Quotes ONLY the prices the marketplace returned, never
+     * mentions the source, and appends the shop's special-order terms.
+     *
+     * @param array<int,\App\Services\Marketplace\Dto\MarketplaceQuote> $quotes
+     */
+    protected function specialOrderReply(Tenant $tenant, string $want, array $quotes): string
+    {
+        $terms = trim((string) $tenant->setting('special_order_terms', ''));
+        if ($terms === '') {
+            $terms = (string) config('marketplace.default_terms', '');
+        }
+
+        $hasPhoto = false;
+        if (count($quotes) === 1) {
+            $q = $quotes[0];
+            $hasPhoto = $q->image !== '';
+            $price = $this->fmtMoney($q->currency, $q->sellPrice);
+            $body  = "\u{2728} *Special Order* \u{2014} I can bring in *" . $this->titleish($q->name) . "* for you.\n"
+                   . "Price: *{$price}*";
+        } else {
+            $lines = [];
+            foreach ($quotes as $q) {
+                if ($q->image !== '') $hasPhoto = true;
+                $lines[] = "\u{2022} " . $this->titleish($q->name) . " \u{2014} *" . $this->fmtMoney($q->currency, $q->sellPrice) . "*";
+            }
+            $body = "\u{2728} *Special Order* \u{2014} I can bring these in for you:\n" . implode("\n", $lines);
+        }
+
+        $body .= "\n\n_" . $terms . "_";
+        if ($hasPhoto) {
+            $body .= "\n\nWant to see a photo? Just say *send photo*.";
+        }
+        $body .= "\nShould I let the shop know you'd like to go ahead?";
+        return $body;
+    }
+
+    /** Store the current special-order options on the conversation for photo sends + follow-up. */
+    protected function pinSpecialOrder(Conversation $convo, string $want, array $quotes): void
+    {
+        $st = is_array($convo->state) ? $convo->state : [];
+        $st['special_order'] = [
+            'want'   => $want,
+            'at'     => time(),
+            'quotes' => array_map(fn ($q) => $q->toArray(), $quotes),
+        ];
+        unset($st['special_order_confirm']);
+        $convo->state = $st;
+        $convo->save();
+    }
+
+    /** Record a sales lead for a special-order interest. Never throws into the reply path. */
+    protected function logSpecialOrderLead(Tenant $tenant, Conversation $convo, string $want, string $matched): void
+    {
+        try {
+            app(\App\Services\Bot\LeadService::class)->capture(
+                $tenant,
+                (string) $convo->customer_phone,
+                $convo->customer_name ?? null,
+                "Special order request: {$want}" . ($matched && $matched !== $want ? " (matched: {$matched})" : ''),
+                'lead',
+                'special_order',
+                $convo->id ?? null,
+            );
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /** Currency-aware money formatting shared by the special-order replies. */
+    protected function fmtMoney(string $currency, int $amount): string
+    {
+        $dec = \App\Services\Pricing::decimalsForCurrency($currency);
+        return $currency . ' ' . number_format((float) $amount, $dec);
+    }
+
+    /** Light title-casing for a product name pulled from a marketplace (avoids ALL-CAPS shouting). */
+    protected function titleish(string $name): string
+    {
+        $name = trim($name);
+        if ($name === '') return $name;
+        // If it's mostly uppercase, gently title-case it; otherwise leave as-is.
+        $letters = preg_replace('/[^A-Za-z]/', '', $name);
+        if ($letters !== '' && $letters === mb_strtoupper($letters)) {
+            return mb_convert_case(mb_strtolower($name), MB_CASE_TITLE, 'UTF-8');
+        }
+        return $name;
     }
 
     /**
