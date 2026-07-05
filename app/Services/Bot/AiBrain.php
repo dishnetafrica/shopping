@@ -780,6 +780,7 @@ class AiBrain
             ->map(fn ($f) => 'Q: ' . ($f['q'] ?? '') . "\nA: " . ($f['a'] ?? ''))
             ->implode("\n\n");
         $lines = $this->catalogueLines($tenant);
+        $overview = $this->catalogueOverview($tenant);
         $greeting = trim((string) $tenant->setting('bot_greeting', ''));
 
         $p  = ($persona !== '' ? $persona : 'You are a helpful WhatsApp sales & support assistant.') . "\n\n";
@@ -817,6 +818,7 @@ class AiBrain
             $p .= "- This shop's greeting is: \"{$greeting}\". When the customer greets you or opens a new conversation, start your reply with this greeting — use it instead of mirroring the customer's own greeting.\n";
         }
         $p .= "- Use COMPANY KNOWLEDGE and FAQ for facts. You may use your general real-world knowledge to explain products (e.g. what GSM or ply means), but never contradict COMPANY KNOWLEDGE.\n";
+        $p .= "- You know this shop's FULL range — see CATALOGUE RANGE below for every category we stock and how many items are in each. NEVER tell a customer we only carry a few things or imply a narrow selection. If they describe what they need by specification, model/part number, or use-case, act like an experienced salesperson for this shop: help them find the right item, confirm the exact match from PRODUCTS, and suggest suitable alternatives we stock. If the exact item isn't in PRODUCTS, offer to confirm it or arrange a special order — don't dead-end. Never invent prices, specs or stock; quote only from PRODUCTS.\n";
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
         $p .= "- Each PRODUCT shows a stock tag in [brackets]. Reflect it honestly: \"in stock: N\" → you may say it's available (you can state N); \"usually available — confirm\" → say it's usually available but you'll confirm before placing the order; \"stock unknown — confirm before promising\" → do NOT promise availability, say you'll confirm with the team first; \"OUT OF STOCK\" → tell the customer it's currently unavailable and offer to note it. Never state a stock number that isn't shown as \"in stock: N\".\n";
         $usdRate = (float) $tenant->setting('usdUgx', 0);
@@ -864,7 +866,10 @@ class AiBrain
         $p .= "<<QUOTE {\"version\":2,\"items\":[{\"name\":\"EXACT product name from the list\",\"quantity\":{\"value\":10,\"unit\":\"pcs\"}}]}>>\n";
         $p .= "Quote rules: ONLY emit it when you actually know WHICH item(s) and HOW MANY. If the customer is vague (e.g. just \"send a quotation\" or \"give me a quote for 10 cartons\" without naming the product), ASK which products and quantities first and do NOT emit the line. Use the EXACT product names from the PRODUCTS list; qty is a whole number; never put prices in it. Write only ONE short sentence above it (e.g. \"Sure, preparing your quotation 📄\") — the system generates and sends the branded PDF with the exact totals. A quotation is NOT an order: it does not place an order. Only use the ORDER line when the customer has actually confirmed they want to buy.\n\n";
         $p .= "PRICE QUESTIONS: always answer from the PRODUCTS list below — it is the source of truth. For a specific product, quote its price directly. If they ask for the full price list or rates, acknowledge warmly — the system sends a generated price-list PDF automatically. For bulk / wholesale / large quantities, ask which items and how many and tell them you'll send a quotation. NEVER claim prices are in the brochure, and NEVER dead-end with 'let me check with the team' — you have the prices.\n\n";
-        $p .= "PRODUCTS (prices = source of truth):\n" . ($lines !== '' ? $lines : '(catalogue unavailable right now — ask the customer to hold; staff have been alerted)') . "\n";
+        if ($overview !== '') {
+            $p .= "CATALOGUE RANGE (the shop's full breadth — you stock ALL of this; use it to answer 'what do you sell', to reassure customers of the range, and to guide them to the right category. For exact names/prices use the PRODUCTS list below):\n" . $overview . "\n\n";
+        }
+        $p .= "PRODUCTS (a detailed sample with exact names + prices = source of truth for quoting; the full range is larger — see CATALOGUE RANGE. If a customer names an item not shown here, confirm it or offer a special order rather than denying we stock it):\n" . ($lines !== '' ? $lines : '(catalogue unavailable right now — ask the customer to hold; staff have been alerted)') . "\n";
         return $p;
     }
 
@@ -872,9 +877,12 @@ class AiBrain
     {
         $rows = Cache::remember("ai_catalogue:{$tenant->id}", 60, function () use ($tenant) {
             $inv = app(\App\Services\Inventory\InventoryState::class);
+            $lim = (int) $tenant->setting('ai_catalogue_limit', 200);
+            if ($lim < 1) $lim = 200;
+            if ($lim > 600) $lim = 600;   // guard prompt size / token cost
             $products = Product::withoutGlobalScopes()
                 ->where('tenant_id', $tenant->id)->where('active', true)
-                ->orderBy('name')->limit(200)->get();
+                ->orderBy('name')->limit($lim)->get();
             $inv->prime($products);   // one query for all snapshots
             return $products->map(function ($p) use ($inv) {
                 $unit = $p->unit_label ? ' per ' . $p->unit_label : '';
@@ -885,6 +893,37 @@ class AiBrain
             })->all();
         });
         return implode("\n", $rows);
+    }
+
+    /**
+     * A compact, whole-catalogue overview: every category with its item count and a few
+     * example product names. Lets the AI know the shop's FULL breadth (all SKUs across all
+     * categories) for a fraction of the tokens it would cost to ground every product line —
+     * so a 1000-SKU catalogue reads as "we stock the full range" instead of only the first
+     * few hundred alphabetically. Exact names/prices still come from catalogueLines().
+     */
+    private function catalogueOverview(Tenant $tenant): string
+    {
+        return Cache::remember("ai_catalogue_overview:{$tenant->id}", 300, function () use ($tenant) {
+            $products = Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)->where('active', true)
+                ->get(['name', 'category']);
+            $total = $products->count();
+            if ($total === 0) return '';
+
+            $byCat = $products->groupBy(fn ($p) => trim((string) ($p->category ?? '')) ?: 'Other');
+            $catCount = $byCat->count();
+
+            $rows = [];
+            foreach ($byCat->sortByDesc(fn ($g) => $g->count()) as $cat => $group) {
+                $examples = $group->take(3)->pluck('name')
+                    ->map(fn ($n) => \Illuminate\Support\Str::limit((string) $n, 46, ''))
+                    ->filter()->all();
+                $rows[] = '- ' . $cat . ' (' . $group->count() . '): ' . implode('; ', $examples);
+            }
+
+            return "This shop stocks {$total} products across {$catCount} categories:\n" . implode("\n", $rows);
+        });
     }
 
     private function historyMessages(int $tenantId, string $phone, int $limit): array
