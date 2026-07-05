@@ -665,6 +665,22 @@ class AiBrain
             if ($meta && $quoteRow) { $quoteRow->meta = $meta; $quoteRow->save(); }
             Cache::put($cacheKey, ['sig' => $sig, 'no' => $doc['no']], now()->addMinutes(30));
 
+            // High-value quotation alert: ping the sales/management team so a person closes a big
+            // deal (a 4o-mini bot should not be the only touch on a large order). Off by default;
+            // set settings.quote_alert_threshold (in the quote currency) to enable. Never breaks the send.
+            try {
+                $threshold = (float) $tenant->setting('quote_alert_threshold', 0);
+                if ($threshold > 0 && (float) $doc['total'] >= $threshold) {
+                    $to   = $this->pick($this->routing($tenant), ['sales', 'management']);
+                    $name = trim((string) ($convoRow->customer_name ?? '')) ?: $from;
+                    $body = "\u{1F4B0} High-value quotation {$doc['no']} — {$cur} {$amt}\nCustomer: {$name} ({$from})\nFollow up to close.";
+                    foreach ($to as $num) {
+                        $gateway->sendText($tenant->whatsapp_instance, $num, $body);
+                        MessageLog::record($tenant->id, $num, $tenant->whatsapp_instance, 'out', 'system', $body, null, null, ['kind' => 'alert', 'via' => 'ai']);
+                    }
+                }
+            } catch (\Throwable $e) { /* alert failure must never break the quote send */ }
+
             return ['reply' => '', 'sent' => true];
         } catch (\Throwable $e) {
             Log::warning('AiBrain captureQuote failed: ' . $e->getMessage());
@@ -822,6 +838,7 @@ class AiBrain
         $p .= "- MANY CUSTOMERS DESCRIBE A PROBLEM OR A NEED, NOT A PRODUCT NAME (e.g. \"power keeps tripping at home\", \"I have 10 fans\", \"which breaker for a 3hp motor\", \"my socket has no power\"). When they do, act as a knowledgeable advisor for this shop's domain: ask at most one or two SHORT clarifying questions only if essential, explain the likely cause or the correct choice/sizing using sound real-world knowledge, then RECOMMEND suitable product(s) from the catalogue and offer to quote. Ground every recommendation in a real catalogue item — never invent a spec, model, rating or price. If nothing suitable is stocked, offer a special order. Keep it WhatsApp-short and practical.\n";
         $p .= "- BROWSE BY CATEGORY: if a customer is just exploring, asks \"what do you have\", or says \"menu\"/\"categories\"/\"list\", show the CATALOGUE RANGE categories with their counts and invite them to pick one. When they pick a category, list a few example items and ask which rating/size/spec they need, then quote. Keep every list short.\n";
         $p .= "- PHOTOS: if the customer sends a PHOTO of a product, look carefully and READ any visible model / part number / rating printed on it (e.g. \"A9F74101\", \"LC1D32P7\", \"63A\", \"3P\") and match that to the catalogue — this is the reliable way to identify the exact item, so a customer can photograph a failed/old part and get the same one. If no number or label is legible, identify the product TYPE from the image and ask a short question for the rating/size/spec you need. NEVER guess an exact model, rating or price from shape or colour alone — read it or ask. Once identified, confirm the catalogue match and offer to quote; if it isn't stocked, offer a special order.\n";
+        $p .= "- ADVISORY SAFETY: any technical, sizing, compatibility or fault-diagnosis advice you give is INDICATIVE guidance to help the customer choose a product — it is not a professional design or an installation instruction. When you give such advice, briefly remind the customer that final selection and installation must be done by a qualified/licensed professional following local regulations, and never guarantee suitability, safety or compliance. Do not give step-by-step wiring/installation instructions for hazardous work; recommend the product and defer the install to a professional.\n";
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
         $p .= "- Each PRODUCT shows a stock tag in [brackets]. Reflect it honestly: \"in stock: N\" → you may say it's available (you can state N); \"usually available — confirm\" → say it's usually available but you'll confirm before placing the order; \"stock unknown — confirm before promising\" → do NOT promise availability, say you'll confirm with the team first; \"OUT OF STOCK\" → tell the customer it's currently unavailable and offer to note it. Never state a stock number that isn't shown as \"in stock: N\".\n";
         $usdRate = (float) $tenant->setting('usdUgx', 0);
