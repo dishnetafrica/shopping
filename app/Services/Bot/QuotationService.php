@@ -48,7 +48,8 @@ class QuotationService
         // Compute discount + VAT once so the PDF and the saved/returned total all agree.
         $discPct = (float) $tenant->setting('quote_discount_pct', 0);
         $vatPct  = (float) $tenant->setting('quote_vat_pct', 0);
-        $totals  = $this->priced($quote, $discPct, $vatPct);
+        $incVat  = (bool) $tenant->setting('prices_include_vat', false);
+        $totals  = $this->priced($quote, $discPct, $vatPct, $incVat);
 
         $html = $this->html($tenant, $no, $customerPhone, $customerName, $quote, $totals);
 
@@ -139,21 +140,30 @@ class QuotationService
      *
      * @return array{lines:array,subtotalBefore:float,discount:float,subTotal:float,vat:float,grand:float}
      */
-    private function priced(array $quote, float $discPct, float $vatPct): array
+    private function priced(array $quote, float $discPct, float $vatPct, bool $pricesIncludeVat = false): array
     {
         $subtotalBefore = 0.0;
         $subTotal       = 0.0;
         $lines          = [];
 
+        // When the catalogue price already INCLUDES VAT (e.g. a "prices inclusive of VAT"
+        // list / website), back the VAT out of each unit price so we never charge VAT twice.
+        // The ex-VAT figures feed the grid + subtotal; adding VAT back gives a grand total that
+        // equals the original VAT-inclusive price (after any discount) — so the quotation total
+        // matches what the customer sees on the website.
+        $rate  = $vatPct / 100;
+        $backOut = ($pricesIncludeVat && $rate > 0);
+
         foreach ($quote['lines'] as $l) {
             $qty   = (float) ($l['qty'] ?? 0);
             $price = (float) ($l['price'] ?? 0);
+            $unit  = $backOut ? ($price / (1 + $rate)) : $price;   // ex-VAT unit price
             $matched = ! empty($l['matched']);
             $disc  = isset($l['disc']) ? (float) $l['disc'] : $discPct;
             $disc  = max(0.0, min(100.0, $disc));
 
-            $gross = $qty * $price;
-            $after = $price * (1 - $disc / 100);
+            $gross = $qty * $unit;
+            $after = $unit * (1 - $disc / 100);
             $sub   = $qty * $after;
 
             if ($matched) {
@@ -161,6 +171,7 @@ class QuotationService
                 $subTotal       += $sub;
             }
 
+            $l['_unit']  = $unit;   // price shown in the grid (ex-VAT when inclusive mode)
             $l['_disc']  = $disc;
             $l['_after'] = $after;
             $l['_sub']   = $sub;
@@ -168,7 +179,7 @@ class QuotationService
         }
 
         $discount = $subtotalBefore - $subTotal;
-        $vat      = $subTotal * $vatPct / 100;
+        $vat      = $subTotal * $rate;
         $grand    = $subTotal + $vat;
 
         return [
@@ -178,6 +189,7 @@ class QuotationService
             'subTotal'       => $subTotal,
             'vat'            => $vat,
             'vatPct'         => $vatPct,
+            'inclusive'      => $backOut,
             'grand'          => $grand,
         ];
     }
@@ -247,7 +259,7 @@ class QuotationService
                 . '<td class="c">' . $i . '</td>'
                 . '<td>' . e($l['name']) . '</td>'
                 . '<td class="c">' . $qtyUnit . '</td>'
-                . '<td class="r">' . number_format((float) $l['price'], $m2) . '</td>'
+                . '<td class="r">' . number_format((float) $l['_unit'], $m2) . '</td>'
                 . '<td class="c">' . number_format((float) $l['_disc'], 2) . '</td>'
                 . '<td class="r">' . number_format((float) $l['_after'], $m2) . '</td>'
                 . '<td class="r">' . number_format((float) $l['_sub'], $m2) . '</td>'
@@ -270,6 +282,9 @@ class QuotationService
         $prepCell     = $prepBy !== '' ? '<span style="position:relative;top:-2px;">' . $prepBy . '</span>' : '';
         $vatRow       = $totals['vatPct'] > 0
             ? '<tr><td class="lbl">VAT-' . $vatP . '%</td><td class="r">' . $vat . '</td></tr>'
+            : '';
+        $incNote = ! empty($totals['inclusive'])
+            ? '<div style="font-size:9px;color:#555;margin-top:4px;">Listed prices are VAT-inclusive; unit prices above are shown net and ' . $vatP . '% VAT is broken out — the total equals the VAT-inclusive price.</div>'
             : '';
 
         return <<<HTML
@@ -359,6 +374,7 @@ table.tot tr.grand td { font-weight:bold; font-size:12px; }
       {$vatRow}
       <tr class="grand"><td>Total &nbsp; {$cur}</td><td class="r">{$grand}</td></tr>
     </table>
+    {$incNote}
   </td>
 </tr></table>
 
