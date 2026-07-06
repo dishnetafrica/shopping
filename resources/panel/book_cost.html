@@ -88,6 +88,13 @@
       <div class="stagebtn" data-s="funding">💵 Cash in</div>
     </div>
 
+    <label>Payment</label>
+    <div class="stagebtns" id="payStatus">
+      <div class="paychip stagebtn on" data-p="cash">💵 Paid now</div>
+      <div class="paychip stagebtn" data-p="credit">📝 On credit</div>
+    </div>
+    <div id="creditHint" style="display:none;font-size:12px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:8px 10px;margin-top:6px;font-weight:700">On credit — cash stays the same, we owe the supplier. Pick a supplier below.</div>
+
     <div class="row">
       <div><label>Currency</label>
         <select id="cur"><option>UGX</option><option>SSP</option><option>USD</option></select></div>
@@ -109,6 +116,7 @@
       <select id="supplierSel" style="flex:1"><option value="">— none —</option></select>
       <button type="button" id="supAdd" title="Add supplier" style="flex:0 0 auto;background:#0B3D22;color:#fff;border:none;border-radius:11px;padding:0 16px;font-weight:800;font-size:20px;cursor:pointer">+</button>
     </div>
+    <div style="margin-top:6px"><a href="/panel/supplier-debt" style="font-size:12px;font-weight:700;color:#B4232A;text-decoration:none">🧾 Suppliers we owe →</a></div>
 
     <label>Receipt (optional)</label>
     <label class="receipt" for="receipt">📷 Attach receipt photo <span id="rname" style="font-weight:500;color:#64748b"></span></label>
@@ -152,8 +160,11 @@ fetch('/papi/order-costs/orders',{headers:{'X-Requested-With':'XMLHttpRequest'}}
   setRate();
 });
 function save(){
+  var _pc=document.querySelector('#payStatus .paychip.on'); var _pay=_pc?_pc.dataset.p:'cash';
+  if(_pay==='credit' && !($('supplierSel')&&$('supplierSel').value)){ alert('Pick a supplier for a credit purchase (so we track what we owe).'); return; }
   const fd=new FormData();
   fd.append('order_id',$('order').value); fd.append('stage',stage);
+  fd.append('pay_status',_pay);
   fd.append('currency',$('cur').value);
   fd.append('native_amount',($('amt').value||'').replace(/,/g,''));
   fd.append('rate_to_usd',($('rate').value||'').replace(/,/g,''));
@@ -316,6 +327,8 @@ function save(){
     if(total<=0){ alert('Enter the total amount you paid.'); return; }
     if(rate<=0){ alert('Rate is missing.'); return; }
     if(method==='qty' && sel.some(function(s){return !(s.qty>0);})){ alert('Enter a quantity for every ticked order.'); return; }
+    var _pc=document.querySelector('#payStatus .paychip.on'); var payst=_pc?_pc.dataset.p:'cash';
+    if(payst==='credit' && !($('supplierSel')&&$('supplierSel').value)){ alert('Pick a supplier for a credit purchase.'); return; }
     var fd=new FormData();
     fd.append('stage', (document.querySelector('.stagebtn.on[data-s]')||{dataset:{s:'purchase'}}).dataset.s);
     fd.append('currency', ($('cur')||{}).value||'UGX');
@@ -323,6 +336,7 @@ function save(){
     fd.append('total_native', (($('amt')||{}).value||'').replace(/,/g,''));
     fd.append('method', method);
     fd.append('note', ($('note')||{}).value||'');
+    fd.append('pay_status', payst);
     var _sup=$('supplierSel'); if(_sup && _sup.value) fd.append('supplier_id',_sup.value);
     var hs=$('holderSel');
     if(hs && hs.style.display!=='none' && hs.value && hs.value!=='__other') fd.append('holder_user_id',hs.value);
@@ -360,6 +374,16 @@ function save(){
           else alert('Could not add supplier');
         }).catch(function(){alert('Failed');});
     };
+  })();
+
+  // pay-status toggle (Paid now / On credit)
+  (function(){
+    var row=document.getElementById('payStatus'); if(!row) return;
+    row.addEventListener('click',function(e){ var b=e.target.closest('.paychip'); if(!b) return;
+      row.querySelectorAll('.paychip').forEach(function(x){x.classList.remove('on');}); b.classList.add('on');
+      var credit=(b.dataset.p==='credit'); var h=document.getElementById('creditHint'); if(h) h.style.display=credit?'block':'none';
+      if(credit){ var s=document.getElementById('supplierSel'); if(s) s.focus(); }
+    });
   })();
 
   window.dnBulkSave=bulkSave;

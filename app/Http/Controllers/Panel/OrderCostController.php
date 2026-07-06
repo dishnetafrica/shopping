@@ -117,10 +117,14 @@ class OrderCostController extends Controller
         }
 
         [$supId,$supName] = $this->resolveSupplier($request, $t);
+        $stage = (string) $request->input('stage','purchase');
+        $payStatus = strtolower((string) $request->input('pay_status','cash')) === 'credit' ? 'credit' : 'cash';
+        if (in_array($stage, ['funding','cash_in'], true)) $payStatus = 'cash'; // cash movements are always paid
         $c = OrderCost::create([
             'tenant_id'=>$t->id, 'order_id'=>$order?->id, 'order_no'=>$order?->order_no,
             'supplier_id'=>$supId, 'supplier_name'=>$supName,
-            'stage'=>(string)$request->input('stage','purchase'),
+            'stage'=>$stage,
+            'pay_status'=>$payStatus, 'paid_native'=>($payStatus==='credit' ? 0 : $native),
             'currency'=>$cur, 'native_amount'=>$native, 'rate_to_usd'=>$rate,
             'usd_amount'=>OrderCost::toUsd($native,$rate),
             'holder'=>$holderName, 'holder_user_id'=>$holderUserId,
@@ -205,9 +209,10 @@ class OrderCostController extends Controller
         $status = ((bool) $t->setting('cost_approval', true)) ? 'pending' : 'approved';
         $group  = (string) \Illuminate\Support\Str::uuid();
         [$supId,$supName] = $this->resolveSupplier($request, $t);
+        $payStatus = strtolower((string) $request->input('pay_status','cash')) === 'credit' ? 'credit' : 'cash';
         $out = [];
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($rows,$shares,$t,$stage,$cur,$rate,$holderName,$holderUserId,$path,$note,$status,$group,$user,$supId,$supName,&$out) {
+        \Illuminate\Support\Facades\DB::transaction(function () use ($rows,$shares,$t,$stage,$cur,$rate,$holderName,$holderUserId,$path,$note,$status,$group,$user,$supId,$supName,$payStatus,&$out) {
             foreach ($rows as $i => $r) {
                 $o = $r['order']; $native = $shares[$i];
                 $c = OrderCost::create([
@@ -218,6 +223,7 @@ class OrderCostController extends Controller
                     'receipt_path'=>$path,'note'=>$note,'status'=>$status,
                     'purchase_group_id'=>$group,'created_by'=>$user->name ?? '',
                     'supplier_id'=>$supId,'supplier_name'=>$supName,
+                    'pay_status'=>$payStatus,'paid_native'=>($payStatus==='credit' ? 0 : $native),
                 ]);
                 $out[] = ['order_no'=>$o->order_no,'native'=>$native,'usd'=>(float)$c->usd_amount];
             }
@@ -277,7 +283,7 @@ class OrderCostController extends Controller
         $o = Order::where('tenant_id',$t->id)->find($id);
         if (! $o) return response()->json(['ok'=>false,'error'=>'not_found'],404);
         $costs = OrderCost::where('tenant_id',$t->id)->where('order_id',$id)
-            ->where('stage','!=','funding')->orderBy('id')->get();
+            ->whereNotIn('stage',['funding','supplier_payment'])->orderBy('id')->get();
         $landedUsd = 0.0; $lines = [];
         foreach ($costs as $c) {
             $landedUsd += (float)$c->usd_amount;

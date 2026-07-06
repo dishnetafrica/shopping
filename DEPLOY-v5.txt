@@ -1,0 +1,81 @@
+DEPLOY — Cash vs Credit + Supplier debt (v5)   [cumulative]
+===========================================================
+Jayesh doesn't always pay cash. Now a purchase can be "Paid now" or "On credit".
+Credit does NOT reduce anyone's cash; it becomes debt to the supplier, cleared
+later with a "Pay" action. Order margin is unchanged either way.
+
+Cumulative package (shell v2 + split v3 + buylist/suppliers v4 + this v5).
+NEW/changed for v5 marked [v5].
+
+FILES
+  [v5] database/migrations/2026_07_06_000800_add_pay_status_to_order_costs.php   (NEW)
+  [v5] resources/panel/supplier_debt.html                          (NEW)
+  [v5] app/Models/OrderCost.php               (pay_status/paid_native fillable + cast
+                                               + creating() hook: default paid_native)
+  [v5] app/Http/Controllers/Panel/OrderCostController.php
+         (store()+bulkStore() set pay_status/paid_native; orderDetail excludes payments)
+  [v5] app/Http/Controllers/Panel/SupplierController.php   (debt() + pay() + page())
+  [v5] app/Http/Controllers/Panel/CashPositionController.php  (sum paid_native, not native)
+  [v5] app/Http/Controllers/Panel/TradeCashbookController.php (balance sums paid_native)
+  [v5] resources/panel/book_cost.html         (Paid now / On credit toggle + we-owe link)
+  [v5] routes/web.php                         (+suppliers/debt, +suppliers/{id}/pay, +/panel/supplier-debt)
+  (earlier rounds' files unchanged)
+
+THE MODEL (fits the base+native+rate engine, no new accounting system)
+  order_costs gets pay_status (cash|credit) + paid_native (native actually paid).
+  - CASH so much as reflects money that LEFT hand -> Cash Position & Cashbook now sum
+    paid_native, NOT native_amount.
+  - cash purchase:  paid_native = amount   -> reduces cash now.
+  - credit purchase: paid_native = 0       -> cash unchanged; becomes supplier debt.
+  - "Pay supplier": a stage='supplier_payment' row (paid_native = amount) reduces the
+    payer's cash and clears the debt. Excluded from order margin.
+  Order margin still uses the full USD cost (usd_amount) -> unaffected by terms.
+
+  Debt(supplier,currency) = Σ credit-purchase native − Σ supplier_payment native.
+  Verified end-to-end: float +1,000,000; credit buy 400,000 -> cash STILL 1,000,000,
+  owe 400,000; cash buy 150,000 -> cash 850,000; pay 400,000 -> cash 450,000, owe 0.
+
+SAFETY — this touches the LIVE cash formula, so read this:
+  - Migration is additive (2 columns) and BACKFILLS paid_native = native_amount on
+    every existing row. Because old logic already treated all costs as paid, balances
+    DO NOT MOVE on deploy. Only NEW credit purchases behave differently.
+  - The model hook defaults paid_native = native for anything not explicitly credit, so
+    expenses / cashbook / funding writers needed no change and stay correct.
+  - Credit requires a supplier (enforced in the UI) so debt is always attributable.
+  - Gated to Shree (order_system_enabled). All additive.
+
+DEPLOY
+  git add database/migrations app/Models/OrderCost.php app/Http/Controllers/Panel/*.php \
+          routes/web.php resources/panel/book_cost.html resources/panel/supplier_debt.html
+  git commit -m "v5: cash vs credit purchases + supplier debt/pay"
+  git push
+  -> EasyPanel: Rebuild (NOT Restart)
+  -> php artisan migrate      (adds pay_status + paid_native, backfills paid=native)
+
+VERIFY (DRY-RUN — this is the money path, do it before real use)
+  0. BEFORE migrate note Cash Position numbers. AFTER migrate + rebuild they must be
+     IDENTICAL (backfill guarantees no movement). If they moved, stop and revert.
+  1. Book Purchase -> "On credit" -> supplier "Kikuubo" -> UGX 400,000 -> Book.
+     Cash Position: unchanged. /panel/supplier-debt: Kikuubo owes 400,000.
+  2. Book a normal "Paid now" cost -> Cash Position drops by it. Debt unchanged.
+  3. Supplier debt -> Pay Kikuubo 400,000 -> Cash drops 400,000, Kikuubo debt -> 0.
+  4. Open the credit order (Orders & Margin -> tap): margin includes the goods cost
+     (terms don't change margin).
+  Console:
+    fetch('/papi/suppliers/debt',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(console.log)
+
+ROLLBACK
+  git revert + Rebuild. To drop columns: php artisan migrate:rollback --step=1.
+  (Cash reverts to summing native_amount; credit rows would then reduce cash again —
+   only relevant if you had booked credit before rolling back.)
+
+NEXT SLICE (approved): wire the bot so Jayesh can do this over WhatsApp
+  ("bought 3 routers from Kikuubo on credit" / "what to buy today" / "paid Kikuubo 200k").
+  All the /papi endpoints it needs already exist: me/nav, order-costs(/bulk),
+  buy-list(/mark), suppliers(/debt,/{id}/pay). That's an n8n workflow, built next.
+
+KNOWN LIMITS
+  - Partial payment of a single purchase isn't modelled per-row; instead record a
+    smaller supplier payment — debt reduces by that amount (aggregate). Works fine.
+  - If cost_approval is ON, a supplier payment counts to cash after approval (same as
+    every other cost). Turn approvals off for purchasing staff if you want it instant.

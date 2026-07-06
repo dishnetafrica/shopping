@@ -45,7 +45,7 @@ class TradeCashbookController extends Controller
         $balQ = OrderCost::where('tenant_id',$t->id)->where('status','approved');
         if (! $isOwner) $balQ->where(fn($w)=>$w->where('holder_user_id',$u->id)->orWhere('holder',$u->name));
         $balRows = (clone $balQ)->select('currency','stage',
-                DB::raw('SUM(native_amount) as native'))->groupBy('currency','stage')->get();
+                DB::raw('SUM(paid_native) as native'))->groupBy('currency','stage')->get();
         $bal = ['USD'=>0,'UGX'=>0,'SSP'=>0];
         foreach ($balRows as $r) {
             $sign = in_array($r->stage,['funding','cash_in'],true) ? 1 : -1;   // in adds, everything else reduces

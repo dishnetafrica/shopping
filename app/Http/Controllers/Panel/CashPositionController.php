@@ -45,7 +45,7 @@ class CashPositionController extends Controller
             });
         }
         $rows = $q->select('currency','holder','holder_user_id','stage',
-                DB::raw('SUM(native_amount) as native'), DB::raw('SUM(usd_amount) as usd'))
+                DB::raw('SUM(paid_native) as native'), DB::raw('SUM(paid_native / NULLIF(rate_to_usd,0)) as usd'))
             ->groupBy('currency','holder','holder_user_id','stage')->get();
 
         $cur = [];   // currency => ['native'=>, 'usd'=>, 'holders'=>[holder=>native]]
