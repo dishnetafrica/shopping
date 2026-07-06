@@ -18,6 +18,7 @@ class CashPositionController extends Controller
     {
         $user = $request->user();
         if (! $user || ! $user->tenant_id) return redirect('/app/login');
+        if (! (bool) $user->tenant->setting('order_system_enabled', false)) abort(404);
         $path = resource_path('panel/cash_position.html');
         if (! is_file($path)) abort(500, 'Cash position asset missing.');
         return response(file_get_contents($path), 200)

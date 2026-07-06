@@ -13,6 +13,7 @@ class OrderCostController extends Controller
     {
         $user = $request->user();
         if (! $user || ! $user->tenant_id) return redirect('/app/login');
+        if (! (bool) $user->tenant->setting('order_system_enabled', false)) abort(404);
         $path = resource_path('panel/book_cost.html');
         if (! is_file($path)) abort(500, 'Book-cost asset missing.');
         return response(file_get_contents($path), 200)
@@ -23,6 +24,7 @@ class OrderCostController extends Controller
     {
         $user = $request->user();
         if (! $user || ! $user->tenant_id) return redirect('/app/login');
+        if (! (bool) $user->tenant->setting('order_system_enabled', false)) abort(404);
         $path = resource_path('panel/orders_costs.html');
         if (! is_file($path)) abort(500, 'Orders asset missing.');
         return response(file_get_contents($path), 200)
@@ -133,6 +135,7 @@ class OrderCostController extends Controller
     {
         $user = $request->user();
         if (! $user || ! $user->tenant_id) return redirect('/app/login');
+        if (! (bool) $user->tenant->setting('order_system_enabled', false)) abort(404);
         $path = resource_path('panel/cost_approvals.html');
         if (! is_file($path)) abort(500, 'Approvals asset missing.');
         return response(file_get_contents($path), 200)

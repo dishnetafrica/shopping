@@ -45,6 +45,13 @@ class SellerPanelController extends Controller
         $meJson = json_encode($me, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $html = preg_replace('#</head>#', '<script>window.ME=' . $meJson . ';</script></head>', $html, 1);
 
+        // Per-tenant feature flags (order-cost system is opt-in per shop, default OFF).
+        $features = [
+            'order_system' => (bool) $user->tenant->setting('order_system_enabled', false),
+        ];
+        $fJson = json_encode($features, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $html = preg_replace('#</head>#', '<script>window.SHOP_FEATURES=' . $fJson . ';</script></head>', $html, 1);
+
         return response($html, 200)
             ->header('Content-Type', 'text/html; charset=UTF-8')
             ->header('Cache-Control', 'no-store');
