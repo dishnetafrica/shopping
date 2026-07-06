@@ -17,12 +17,13 @@ final class PaymentLedger
     public function recordCustomerPayment(
         string $tenantId, string $entityId, string $paymentId,
         int $amountMinor, string $currency = 'UGX', ?\DateTimeImmutable $occurredAt = null,
+        ?string $party = null, ?string $appliesTo = null,   // settle this customer's open items
     ): bool {
+        $payload = ['amount' => $amountMinor, 'currency' => $currency];
+        if ($party !== null && $party !== '') { $payload['party'] = $party; $payload['applies_to'] = $appliesTo; }
         return $this->poster->post(
             $tenantId, $entityId, $paymentId, 'Payment', 'PaymentReceived',
-            "pmt_in_{$tenantId}_{$paymentId}",
-            ['amount' => $amountMinor, 'currency' => $currency],
-            $occurredAt,
+            "pmt_in_{$tenantId}_{$paymentId}", $payload, $occurredAt,
         );
     }
 
@@ -30,12 +31,13 @@ final class PaymentLedger
     public function recordSupplierPayment(
         string $tenantId, string $entityId, string $paymentId,
         int $amountMinor, string $currency = 'UGX', ?\DateTimeImmutable $occurredAt = null,
+        ?string $party = null, ?string $appliesTo = null,   // settle this supplier's open items
     ): bool {
+        $payload = ['amount' => $amountMinor, 'currency' => $currency];
+        if ($party !== null && $party !== '') { $payload['party'] = $party; $payload['applies_to'] = $appliesTo; }
         return $this->poster->post(
             $tenantId, $entityId, $paymentId, 'Payment', 'SupplierPaid',
-            "pmt_out_{$tenantId}_{$paymentId}",
-            ['amount' => $amountMinor, 'currency' => $currency],
-            $occurredAt,
+            "pmt_out_{$tenantId}_{$paymentId}", $payload, $occurredAt,
         );
     }
 

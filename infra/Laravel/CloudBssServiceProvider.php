@@ -21,8 +21,10 @@ use CloudBSS\App\UgandaVatSalesPolicy;
 use CloudBSS\Infra\LedgerPoster;
 use CloudBSS\Infra\Postgres\PostgresEventLog;
 use CloudBSS\Infra\Postgres\PostgresLedgerProjection;
+use CloudBSS\Infra\Postgres\PostgresSubledgerProjection;
 use CloudBSS\Infra\PaymentLedger;
 use CloudBSS\Infra\PurchaseLedger;
+use CloudBSS\Infra\Reporting\Aging;
 use CloudBSS\Infra\Reporting\TrialBalance;
 use CloudBSS\Infra\SalesLedger;
 use CloudBSS\Kernel\Ledger\RegistryAccountingPolicyResolver;
@@ -51,7 +53,8 @@ class CloudBssServiceProvider extends ServiceProvider
             // Register more tenants/entities here (DishNet, WinWorld, …) as you onboard them.
 
             return new LedgerPoster(
-                $pdo, new PostgresEventLog($pdo), new PostgresLedgerProjection($pdo), $clock, $ids, $resolver
+                $pdo, new PostgresEventLog($pdo), new PostgresLedgerProjection($pdo), $clock, $ids, $resolver,
+                new PostgresSubledgerProjection($pdo)   // per-party AR/AP aging
             );
         });
 
@@ -59,5 +62,6 @@ class CloudBssServiceProvider extends ServiceProvider
         $this->app->singleton(PurchaseLedger::class, fn ($app) => new PurchaseLedger($app->make(LedgerPoster::class)));
         $this->app->singleton(PaymentLedger::class,  fn ($app) => new PaymentLedger($app->make(LedgerPoster::class)));
         $this->app->singleton(TrialBalance::class,   fn () => new TrialBalance(DB::connection('pgsql')->getPdo()));
+        $this->app->singleton(Aging::class,          fn () => new Aging(DB::connection('pgsql')->getPdo()));
     }
 }

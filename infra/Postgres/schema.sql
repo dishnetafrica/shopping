@@ -46,3 +46,22 @@ CREATE TABLE IF NOT EXISTS cloudbss_projection_checkpoints (
     position    BIGINT NOT NULL DEFAULT 0,
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ---- subsidiary ledger: per-counterparty open items (reconciles to AR/AP control accounts) ----
+-- One row per (kind, ref) where kind = AR (customer owes us) | AP (we owe supplier), ref = the
+-- source invoice/bill id. outstanding = amount_minor - paid_minor. Aged by due_date.
+CREATE TABLE IF NOT EXISTS cloudbss_subledger (
+    tenant_id    TEXT   NOT NULL,
+    entity_id    TEXT   NOT NULL,
+    kind         TEXT   NOT NULL,               -- 'AR' | 'AP'
+    party        TEXT   NOT NULL,               -- customer/supplier id
+    party_name   TEXT   NOT NULL DEFAULT '',
+    ref          TEXT   NOT NULL,               -- invoice/bill id (the sale/purchase aggregate)
+    currency     TEXT   NOT NULL,
+    amount_minor BIGINT NOT NULL,               -- gross open amount when raised
+    paid_minor   BIGINT NOT NULL DEFAULT 0,     -- settled so far
+    due_date     DATE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, entity_id, kind, ref)
+);
+CREATE INDEX IF NOT EXISTS cloudbss_subledger_party_idx ON cloudbss_subledger (tenant_id, entity_id, kind, party);

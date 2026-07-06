@@ -28,12 +28,19 @@ final class SalesLedger
         int $costMinor,
         string $currency = 'UGX',
         ?\DateTimeImmutable $occurredAt = null,
+        ?string $party = null,       // customer id -> tracked in the AR subledger for aging
+        string $partyName = '',
+        ?string $dueDate = null,     // 'YYYY-MM-DD'
     ): bool {
+        $payload = ['revenue' => $revenueMinor, 'cost' => $costMinor, 'currency' => $currency];
+        if ($party !== null && $party !== '') {
+            $payload['party'] = $party;
+            $payload['party_name'] = $partyName;
+            $payload['due_date'] = $dueDate;
+        }
         return $this->poster->post(
             $tenantId, $entityId, $saleId, 'Sale', 'DeliveryCompleted',
-            "sale_{$tenantId}_{$saleId}",
-            ['revenue' => $revenueMinor, 'cost' => $costMinor, 'currency' => $currency],
-            $occurredAt,
+            "sale_{$tenantId}_{$saleId}", $payload, $occurredAt,
         );
     }
 

@@ -4,6 +4,7 @@ namespace CloudBSS\Infra;
 
 use CloudBSS\Infra\Postgres\PostgresEventLog;
 use CloudBSS\Infra\Postgres\PostgresLedgerProjection;
+use CloudBSS\Infra\Postgres\PostgresSubledgerProjection;
 use CloudBSS\Kernel\Event\{DomainEvent, EventBus, EventStore, RecordedEvent};
 use CloudBSS\Kernel\Kernel;
 use CloudBSS\Kernel\Ledger\{AccountingPolicyResolver, Posting};
@@ -29,6 +30,7 @@ final class LedgerPoster
         private Clock $clock,
         private IdGenerator $ids,
         private AccountingPolicyResolver $policies,
+        private ?PostgresSubledgerProjection $subledger = null,
     ) {}
 
     /**
@@ -60,6 +62,9 @@ final class LedgerPoster
             $bus   = new EventBus();
             $bus->subscribe(Posting::EVENT, [$this->ledger, 'on']);              // fold balances (durable)
             $bus->subscribeAll(fn (RecordedEvent $r) => $this->log->append($r)); // persist events (durable)
+            if ($this->subledger !== null) {
+                $bus->subscribeAll([$this->subledger, 'on']);                    // per-party open items
+            }
             $kernel = new Kernel($store, $bus, $this->clock, $this->ids, $this->policies);
 
             $kernel->recordEvent(new DomainEvent(

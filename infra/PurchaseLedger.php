@@ -25,12 +25,19 @@ final class PurchaseLedger
         int $amountMinor,
         string $currency = 'UGX',
         ?\DateTimeImmutable $occurredAt = null,
+        ?string $party = null,       // supplier id -> tracked in the AP subledger for aging
+        string $partyName = '',
+        ?string $dueDate = null,
     ): bool {
+        $payload = ['amount' => $amountMinor, 'currency' => $currency];
+        if ($party !== null && $party !== '') {
+            $payload['party'] = $party;
+            $payload['party_name'] = $partyName;
+            $payload['due_date'] = $dueDate;
+        }
         return $this->poster->post(
             $tenantId, $entityId, $purchaseId, 'Purchase', 'PurchaseReceived',
-            "purchase_{$tenantId}_{$purchaseId}",
-            ['amount' => $amountMinor, 'currency' => $currency],
-            $occurredAt,
+            "purchase_{$tenantId}_{$purchaseId}", $payload, $occurredAt,
         );
     }
 
