@@ -1,0 +1,59 @@
+DEPLOY — Shell v2: role-aware nav + anti-typo amount echo
+=========================================================
+Two fixes on top of the mobile shell:
+  #1 Bottom tabs now respect the user's role (effectiveMenus), not a flat list.
+  #2 Money Amount fields group thousands live + show a big currency echo.
+
+FILES CHANGED (upload all to matching paths in dishnetafrica/shopping):
+  routes/web.php                                     (+1 route line)
+  app/Http/Controllers/Panel/OrderCostController.php (+ nav() method, read-only)
+  resources/panel/orders_costs.html
+  resources/panel/book_cost.html
+  resources/panel/cash_position.html
+  resources/panel/cost_approvals.html
+  resources/panel/expenses.html
+  resources/panel/pnl.html
+  resources/panel/trade_cashbook.html
+
+BACKEND (tiny, read-only, no money path, no migration):
+  routes/web.php  -> inside the /papi group:
+      Route::get('me/nav', [\App\Http\Controllers\Panel\OrderCostController::class, 'nav']);
+  OrderCostController::nav()  -> returns { ok, is_owner, role, menus:[effectiveMenus] }
+      Only exposes the caller's OWN menu keys. Nothing writable.
+
+WHAT EACH ROLE NOW SEES IN THE BOTTOM BAR:
+  purchaser (Jayesh) : Orders · Buy · Cash        (no P&L, no Approvals pill)
+  field (Asish)      : Orders · Buy · Cash
+  sales              : Orders                       (no purchasing, no cash)
+  manager / owner    : Orders · Buy · Cash · Book · Spend · P&L  + Approvals pill
+  (if /papi/me/nav ever fails, it safely falls back to Orders · Buy · Cash only)
+
+Tab -> access rule (must match server intent):
+  Orders -> menu 'ordercosts'  |  Buy -> menu 'purchases'  |  Cash -> menu 'cash'
+  Book / Spend / P&L -> owner/manager only   |  Approvals pill -> menu 'approvals'
+
+#2 AMOUNT ECHO (book_cost, expenses, trade_cashbook = #amt ; orders = #total):
+  - types are grouped live: 4000000 -> 4,000,000
+  - a green box under the field echoes "UGX 4,000,000" so a stray zero is obvious
+  - SAFE: calc() and save() already strip commas before use (verified), so the
+    grouped display never reaches the API — the posted value is digits only.
+
+DEPLOY STEPS:
+  git add routes/web.php app/Http/Controllers/Panel/OrderCostController.php resources/panel/*.html
+  git commit -m "Shell v2: role-aware trade nav + thousands-grouped amount echo"
+  git push
+  -> EasyPanel: Rebuild (NOT Restart)
+
+VERIFY (Chrome console, logged in on any trade page):
+  fetch('/papi/me/nav',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(console.log)
+     // -> {ok:true, is_owner:.., role:'..', menus:[..]}
+  document.querySelectorAll('.dn-tabbar a').length
+     // owner -> 6 ; purchaser -> 3
+  On /panel/book-cost type 4000000 in Amount -> shows "4,000,000" + green echo "UGX 4,000,000".
+  Log in as the purchaser test user -> P&L tab and Approvals pill are GONE.
+
+ROLLBACK: git revert the commit + Rebuild. (nav endpoint is read-only; front-end
+otherwise. Zero data risk.)
+
+KNOWN MINOR: after a successful save the page clears the amount field directly; the
+echo re-syncs on the next keystroke (or ~1.5s after the button tap). Cosmetic only.
