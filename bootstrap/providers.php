@@ -5,4 +5,5 @@ return [
     App\Providers\Filament\AdminPanelProvider::class,
     App\Providers\Filament\AppPanelProvider::class,
     App\Providers\OkeServiceProvider::class,
+    App\Providers\LedgerServiceProvider::class,
 ];
