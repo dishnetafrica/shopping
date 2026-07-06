@@ -76,7 +76,10 @@
 <style>
 .rp{background:#E6F4EA;border:1px solid #BFE3CB;border-radius:13px;padding:12px 14px;margin-bottom:12px}
 .rph{font-size:13px;font-weight:800;color:#0B3D22;margin-bottom:6px}
-.rpi{font-size:13px;color:#16231C;padding:4px 0}
+.rpi{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;color:#16231C;padding:6px 0}
+.rpinfo{flex:1;min-width:0}
+.pk{flex:0 0 auto;background:#0B3D22;color:#fff;border:none;border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:800;cursor:pointer}
+.pk:active{background:#082a18}
 .rpt{font-size:11px;color:#0F8A6B;font-weight:700;margin-left:4px}
 .empty{text-align:center;color:#94a3b8;padding:40px 20px;font-size:14px;font-weight:600}
 .loading{text-align:center;color:#94a3b8;padding:24px}
@@ -142,7 +145,8 @@ function render(){
   var R=$('ready');
   if(ready.length){
     R.innerHTML='<div class="rp"><div class="rph">✅ Ready to pack ('+ready.length+')</div>'+
-      ready.map(function(o){return '<div class="rpi"><b>'+esc(o.order_no)+'</b> · '+esc(o.name||'')+' <span class="rpt">all bought → set Packed</span></div>';}).join('')+'</div>';
+      ready.map(function(o){return '<div class="rpi"><div class="rpinfo"><b>'+esc(o.order_no)+'</b> · '+esc(o.name||'')+'</div>'+
+        '<button class="pk" onclick="markPacked('+o.id+',this)" data-no="'+esc(o.order_no)+'" data-phone="'+esc(o.phone||'')+'" data-name="'+esc(o.name||'')+'">Mark Packed</button></div>';}).join('')+'</div>';
   } else { R.innerHTML=''; }
 
   var L=$('list');
@@ -175,6 +179,15 @@ function buyRecord(i){
       var ids=it.pairs.map(function(p){return p.order_id;}).filter(Boolean).join(',');
       location.href='/panel/book-cost?orders='+encodeURIComponent(ids)+'&note='+encodeURIComponent(it.name)+'&stage=purchase';
     }).catch(function(){ alert('Could not update. Try again.'); });
+}
+function markPacked(id,btn){
+  var no=btn.getAttribute('data-no'), phone=btn.getAttribute('data-phone')||'', name=btn.getAttribute('data-name')||'';
+  if(!confirm('Set '+no+' to Packed?')) return;
+  btn.disabled=true; btn.textContent='…';
+  fetch('/papi/update-status?token=session&row='+id+'&status=Packed&phone='+encodeURIComponent(phone)+'&name='+encodeURIComponent(name),
+        {credentials:'same-origin',headers:{'X-Requested-With':'XMLHttpRequest'}})
+    .then(function(r){return r.text();}).then(function(){ load(); })
+    .catch(function(){ btn.disabled=false; btn.textContent='Mark Packed'; alert('Could not update. Try again.'); });
 }
 load();
 </script>

@@ -1,0 +1,40 @@
+DEPLOY — One-tap "Mark Packed" on the Buy List (v10)
+====================================================
+When an order's items are all bought it shows under "Ready to pack" with a
+one-tap "Mark Packed" button. Tapping it sets that order to Packed by calling
+ShopBot's OWN status endpoint (the same one the Orders screen uses) — from the
+browser, using the logged-in session. No DB writes, no server changes.
+
+FILE CHANGED (just one)
+  resources/panel/buy_list.html
+
+HOW IT WORKS
+  - "Ready to pack" = a CONFIRMED order whose every item is marked bought.
+  - The button calls:
+      GET /papi/update-status?token=session&row=<orderId>&status=Packed
+          &phone=<phone>&name=<name>
+    exactly like the panel's status dropdown does (you captured this URL).
+  - It ONLY ever sends status=Packed, and only appears on Confirmed+all-bought
+    orders -> forward-only (Confirmed -> Packed). Never backward, never touches
+    Cancelled/Delivered.
+  - A confirm() dialog ("Set ORD-3 to Packed?") makes it deliberate.
+  - After it runs, the list reloads; the order moves to Packed and leaves the
+    "Ready to pack" section.
+
+DEPLOY
+  Upload to  resources/panel/buy_list.html  (into the resources/panel folder)
+  git commit -m "v10: one-tap Mark Packed on Buy List"  ->  Rebuild
+  (front-end only, no migration)
+
+VERIFY (safe to test on one order)
+  1. Confirm an order and mark all its items bought on the Buy List.
+  2. It appears under "Ready to pack" with a "Mark Packed" button.
+  3. Tap it -> confirm -> open that order in the Orders screen: status is now Packed.
+  If anything looks off, you simply set the status back in the Orders dropdown.
+
+NEXT (auto-pack, when you're ready)
+  You chose "flag OFF + one-tap first". Once you've watched the button do the
+  right thing, tell me and I'll add AUTO-pack: when the last item of an order is
+  bought it fires the same call automatically, behind a tenant flag
+  (auto_pack_enabled) that defaults OFF, with a dry-run. Same endpoint, same
+  forward-only rule.
