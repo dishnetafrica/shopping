@@ -22,7 +22,9 @@ use CloudBSS\Infra\Reporting\Aging;
 use CloudBSS\Infra\Reporting\Statement;
 use CloudBSS\Infra\Reporting\TrialBalance;
 use CloudBSS\Infra\SalesLedger;
-use CloudBSS\Kernel\Ledger\RegistryAccountingPolicyResolver;
+use CloudBSS\Kernel\Event\DomainEvent;
+use CloudBSS\Kernel\Ledger\AccountingPolicy;
+use CloudBSS\Kernel\Ledger\AccountingPolicyResolver;
 use CloudBSS\Kernel\Support\RandomIdGenerator;
 use CloudBSS\Kernel\Support\SystemClock;
 use Illuminate\Support\Facades\DB;
@@ -42,15 +44,19 @@ class LedgerServiceProvider extends ServiceProvider
             $clock = new SystemClock();
             $ids   = new RandomIdGenerator();
 
-            $resolver = new RegistryAccountingPolicyResolver();
-            // Patronics (kernel 't_ug' / 'e1'): sales + purchase VAT + cash settlement + overdue interest.
-            $resolver->register('t_ug', 'e1', new CompositeAccountingPolicy([
+            // Uganda accounting rules (sales+purchase VAT, cash settlement, overdue interest) applied to
+            // EVERY tenant/entity — books stay separated by the (tenant, entity) scope in the ledger,
+            // while the posting rules are shared. Different tax regimes = a different resolver branch.
+            $policy = new CompositeAccountingPolicy([
                 new UgandaVatSalesPolicy($clock, $ids),
                 new UgandaVatPurchasePolicy($clock, $ids),
                 new CashSettlementPolicy($clock, $ids),
                 new InterestPolicy($clock, $ids),
-            ]));
-            // Register more tenants/entities here as you onboard them.
+            ]);
+            $resolver = new class($policy) implements AccountingPolicyResolver {
+                public function __construct(private AccountingPolicy $p) {}
+                public function policyFor(DomainEvent $e): ?AccountingPolicy { return $this->p; }
+            };
 
             return new LedgerPoster(
                 $pdo, new PostgresEventLog($pdo), new PostgresLedgerProjection($pdo), $clock, $ids, $resolver,

@@ -42,6 +42,10 @@ class Settings extends Page implements HasForms
             'special_order_margin'   => $t->setting('special_order_margin', config('marketplace.default_margin', 0.15)),
             'special_order_ugx_rate' => $t->setting('special_order_ugx_rate', 0),
             'special_order_terms'    => $t->setting('special_order_terms', config('marketplace.default_terms', '')),
+            'ledger_enabled'     => (bool) $t->setting('ledger_enabled', false),
+            'prices_include_vat' => (bool) $t->setting('prices_include_vat', false),
+            'quote_vat_pct'      => $t->setting('quote_vat_pct', 0),
+            'credit_terms_days'  => $t->setting('credit_terms_days', 0),
         ]);
     }
 
@@ -81,6 +85,23 @@ class Settings extends Page implements HasForms
                         ->label('Special-order terms shown to the customer')
                         ->rows(2)->columnSpanFull(),
                 ])->columns(2),
+            Forms\Components\Section::make('Accounting / Ledger')
+                ->description('Keep automatic double-entry books — no commands needed.')
+                ->collapsed()
+                ->schema([
+                    Forms\Components\Toggle::make('ledger_enabled')
+                        ->label('Keep automatic books')
+                        ->helperText('When on, every delivered order and customer payment is recorded in the accounting ledger (receivables, VAT, cash) — giving you a trial balance, debtor aging and statements.'),
+                    Forms\Components\Toggle::make('prices_include_vat')
+                        ->label('My prices already include VAT')
+                        ->helperText('On for VAT-inclusive price lists. The books back the VAT out so totals match your website.'),
+                    Forms\Components\TextInput::make('quote_vat_pct')
+                        ->numeric()->suffix('%')->label('VAT rate')
+                        ->helperText('e.g. 18 for Uganda. 0 = no VAT.'),
+                    Forms\Components\TextInput::make('credit_terms_days')
+                        ->numeric()->suffix('days')->label('Payment terms')
+                        ->helperText('Days a customer has to pay after delivery (drives overdue aging). 0 = due immediately.'),
+                ])->columns(2),
         ])->statePath('data');
     }
 
@@ -96,6 +117,10 @@ class Settings extends Page implements HasForms
             'special_order_margin'   => (float) ($d['special_order_margin'] ?? config('marketplace.default_margin', 0.15)),
             'special_order_ugx_rate' => (int) ($d['special_order_ugx_rate'] ?? 0),
             'special_order_terms'    => (string) ($d['special_order_terms'] ?? ''),
+            'ledger_enabled'     => (bool) ($d['ledger_enabled'] ?? false),
+            'prices_include_vat' => (bool) ($d['prices_include_vat'] ?? false),
+            'quote_vat_pct'      => (float) ($d['quote_vat_pct'] ?? 0),
+            'credit_terms_days'  => (int) ($d['credit_terms_days'] ?? 0),
         ]);
         $t->whatsapp_number = $d['whatsapp_number'];
         $t->whatsapp_instance = $d['whatsapp_instance'];

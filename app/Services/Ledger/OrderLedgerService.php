@@ -51,7 +51,7 @@ class OrderLedgerService
             $costMinor    = (int) round($this->cogs($order) * $factor);
             if ($revenueMinor <= 0) return;                          // nothing to post
 
-            $ledgerTenant = (string) $tenant->setting('ledger_tenant', 't_ug');
+            $ledgerTenant = (string) $tenant->setting('ledger_tenant', 't_' . $tenant->id);
             $ledgerEntity = (string) $tenant->setting('ledger_entity', 'e1');
             $terms        = (int) $tenant->setting('credit_terms_days', 0);
             $delivered    = $order->delivered_at ?: now();
@@ -127,7 +127,7 @@ class OrderLedgerService
             $amountMinor = (int) round((float) $entry->amount * $factor);
             if ($amountMinor <= 0) return;
 
-            $ledgerTenant = (string) $tenant->setting('ledger_tenant', 't_ug');
+            $ledgerTenant = (string) $tenant->setting('ledger_tenant', 't_' . $tenant->id);
             $ledgerEntity = (string) $tenant->setting('ledger_entity', 'e1');
             $party        = (string) ($order?->customer_phone ?: ('order_' . $entry->order_id));
             $appliesTo    = $entry->order_id ? (string) $entry->order_id : null;
