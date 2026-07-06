@@ -1,0 +1,22 @@
+CHANGED / NEW FILES — CloudBSS ledger integration
+Extract at your ShopBot repo root; it overwrites the 3 modified files and adds the rest.
+
+MODIFIED (overwrites):
+  composer.json                        ← restored + CloudBSS autoload paths (DIFF THIS if you added deps since)
+  bootstrap/providers.php              ← added App\Providers\LedgerServiceProvider::class
+  app/Filament/Pages/Settings.php      ← added "Accounting / Ledger" section
+
+NEW:
+  cloudbss-kernel/                     ← the accounting engine (src/ app/ infra/)
+  app/Services/Ledger/OrderLedgerService.php
+  app/Services/Ledger/StatementMessenger.php
+  app/Observers/OrderLedgerObserver.php
+  app/Observers/LedgerEntryObserver.php
+  app/Providers/LedgerServiceProvider.php
+  app/Filament/Pages/Books.php
+  resources/views/filament/pages/books.blade.php
+  database/migrations/2026_07_06_000000_create_cloudbss_ledger.php
+
+After: git add -A && commit && push → EasyPanel Rebuild. Then in the container:
+  php artisan tinker --execute="var_dump(class_exists('CloudBSS\\Infra\\SalesLedger'));"   # bool(true)
+  php artisan migrate
