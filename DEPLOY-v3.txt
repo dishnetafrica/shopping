@@ -1,0 +1,74 @@
+DEPLOY — Bulk purchase split (v3)  [cumulative on top of shell v2]
+==================================================================
+Jayesh's real case: one market trip, one payment, goods for 3-4 orders.
+Now: he books ONE buy and splits it across the orders it served. Each order
+gets only its slice, cash drops by the full amount once, one receipt is shared.
+
+This package is CUMULATIVE — it contains the shell v2 changes AND v3.
+If you already pushed v2, the only NEW/changed files for v3 are marked [v3].
+
+FILES (upload to matching paths in dishnetafrica/shopping):
+  [v3] database/migrations/2026_07_06_000500_add_purchase_group_id_to_order_costs.php   (NEW)
+  [v3] app/Models/OrderCost.php                                    (+purchase_group_id fillable)
+  [v2+v3] app/Http/Controllers/Panel/OrderCostController.php       (nav() + bulkStore())
+  [v2+v3] routes/web.php                                           (me/nav + order-costs/bulk)
+  [v2+v3] resources/panel/book_cost.html                          (shell + split UI)
+  [v2] resources/panel/orders_costs.html cash_position.html cost_approvals.html
+       expenses.html pnl.html trade_cashbook.html                 (shell only — unchanged since v2)
+
+WHAT v3 ADDS
+  Migration: order_costs.purchase_group_id (nullable, indexed) — groups the split rows
+             from one buy. Additive, no existing column touched.
+  Endpoint : POST /papi/order-costs/bulk  (OrderCostController::bulkStore)
+             - inputs: currency, rate_to_usd, total_native, method(qty|value|even),
+               stage, note, receipt(file), holder rules (same as store()), orders JSON.
+             - writes N order_costs rows in ONE DB transaction, all sharing rate/holder/
+               receipt/purchase_group_id.
+             - SPLIT ALWAYS SUMS TO total_native to the cent (last row absorbs the
+               rounding remainder) -> cash never leaks, no order over/under-charged.
+             - method qty  = weights are the typed quantities
+               method value= weights are each order's USD revenue (currency-aware, server-side)
+               method even = equal shares
+             - status follows tenant 'cost_approval' (pending) just like single booking.
+  UI (book_cost.html): a "One order | Split across orders" toggle. Split reveals method
+             chips (By quantity default / By order value / Even), a tick-list of orders
+             with a qty box each, and a live green breakdown showing每 order's share +
+             USD, confirming it equals what was paid. One tap books all.
+             The single-order flow is UNCHANGED (added as a separate script; save() intact).
+
+MONEY-PATH SAFETY
+  - Gated to Shree via order_system_enabled (endpoint aborts 404 otherwise).
+  - Allocation verified to sum exactly for qty / value / even incl. odd rounding
+    (100/3 -> 33.33/33.33/33.34 ; 1000/7 sums to 1000).
+  - Amounts posted are digits only (commas stripped client-side, like the rest).
+  - DRY-RUN first: before real use, book a split for 2 test orders with a small
+    amount, then open each order (Orders & Margin -> tap) and confirm the shares +
+    that Cash Position dropped by the single total. Delete the test rows after.
+
+DEPLOY STEPS
+  git add database/migrations app/Models/OrderCost.php \
+          app/Http/Controllers/Panel/OrderCostController.php routes/web.php resources/panel/*.html
+  git commit -m "v3: bulk purchase split across orders (grouped, exact-sum) + shell v2"
+  git push
+  -> EasyPanel: Rebuild (NOT Restart)
+  -> php artisan migrate        (adds purchase_group_id; safe, additive)
+
+VERIFY (Chrome console / on phone, logged in on /panel/book-cost)
+  1. Tap "Split across orders" -> method chips + order tick-list appear.
+  2. Currency UGX, Total paid 400000, tick 3 orders, qty 20/15/15 ->
+     breakdown shows 160,000 / 120,000 / 120,000 and "= paid".
+  3. Tap Book split -> alert lists each order's share; Orders & Margin shows the
+     cost on each; Cash Position dropped by 400,000 once.
+  4. API check:
+     fetch('/papi/order-costs/bulk',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},
+       body:(()=>{var f=new FormData();f.append('currency','UGX');f.append('rate_to_usd','3700');
+       f.append('total_native','300');f.append('method','even');
+       f.append('orders',JSON.stringify([{order_id:REPLACE_ID}]));return f;})()})
+       .then(r=>r.json()).then(console.log)   // -> {ok:true, rows:[...], total_native:300}
+
+ROLLBACK
+  git revert the commit + Rebuild. The migration is additive; to fully undo the
+  column: php artisan migrate:rollback --step=1 (optional — leaving it is harmless).
+
+KNOWN MINOR (unchanged from v2): after save the amount field clears; the echo
+re-syncs on next keystroke. Cosmetic.

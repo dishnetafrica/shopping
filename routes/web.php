@@ -124,8 +124,10 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
 
         // Cash position + order costs (three-currency)
         Route::get('cash-position', [\App\Http\Controllers\Panel\CashPositionController::class, 'data']);
+        Route::get('me/nav', [\App\Http\Controllers\Panel\OrderCostController::class, 'nav']);
         Route::get('order-costs/orders', [\App\Http\Controllers\Panel\OrderCostController::class, 'orders']);
         Route::post('order-costs', [\App\Http\Controllers\Panel\OrderCostController::class, 'store']);
+        Route::post('order-costs/bulk', [\App\Http\Controllers\Panel\OrderCostController::class, 'bulkStore']);
         Route::post('orders/quick', [\App\Http\Controllers\Panel\OrderCostController::class, 'quickOrder']);
         Route::get('orders/{id}/costs', [\App\Http\Controllers\Panel\OrderCostController::class, 'orderDetail']);
         Route::get('order-costs/pending', [\App\Http\Controllers\Panel\OrderCostController::class, 'pending']);

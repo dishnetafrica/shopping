@@ -22,17 +22,16 @@
   .stagebtn{flex:1;min-width:90px;padding:10px;border:1.5px solid var(--border);border-radius:10px;background:#fff;font-size:12px;font-weight:700;color:#374151;cursor:pointer;text-align:center;}
   .stagebtn.on{border-color:var(--green);background:#ecfdf5;color:#065f46;}
 </style>
-<!-- ===== DishNet mobile app shell (injected) ===== -->
+<!-- ===== DishNet mobile app shell (injected v2) ===== -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style id="dn-shell">
   :root{--dn-g:#15803D;--dn-gd:#0B3D22;--dn-gl:#E6F4EA;--dn-line:#E2E8E2;}
   html{-webkit-text-size-adjust:100%;}
   body{font-family:'Outfit','Inter',system-ui,-apple-system,sans-serif;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased;}
-  /* keep side/top padding (app bar bleeds off it), extend bottom for tab bar */
   .wrap{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 92px)!important;}
 
-  /* ---- sticky app bar: reuse existing .top ---- */
+  /* sticky app bar (reuse existing .top) */
   .top{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:12px;
        justify-content:flex-start;margin:-14px -14px 14px -14px!important;
        padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 12px!important;
@@ -45,33 +44,34 @@
   .top a::before{content:"\2039";font-size:24px;font-weight:700;line-height:1;margin-top:-2px;}
   .dn-appbtn{margin-left:auto;flex-shrink:0;height:34px;padding:0 13px;border-radius:99px;
              background:rgba(255,255,255,.16);color:#fff;font-size:12.5px;font-weight:700;
-             display:inline-flex;align-items:center;gap:6px;text-decoration:none;border:none;}
+             display:inline-flex;align-items:center;gap:6px;text-decoration:none;}
   .dn-appbtn:active{background:rgba(255,255,255,.28);}
 
-  /* ---- unify theme accents to DishNet green ---- */
+  /* theme accents */
   .btn{background:var(--dn-gd)!important;border-radius:12px!important;padding:14px!important;font-weight:800!important;}
   .btn:active{background:#082a18!important;}
   input,select,textarea{font-size:16px!important;border-radius:11px!important;}
   input:focus,select:focus,textarea:focus{border-color:var(--dn-g)!important;}
   .card,.oitem,.item,.balcard,.hero{box-shadow:0 1px 2px rgba(16,35,28,.05),0 3px 12px -4px rgba(16,35,28,.06);}
 
-  /* ---- fixed bottom tab bar ---- */
-  .dn-tabbar{position:fixed;left:0;right:0;bottom:0;z-index:70;display:flex;
+  /* #2 amount echo (anti-typo) */
+  .dn-amt-echo{display:none;margin:9px 0 2px;padding:8px 12px;border-radius:10px;
+               background:var(--dn-gl);border:1px solid #BFE3CB;color:var(--dn-gd);
+               font-size:16px;font-weight:800;letter-spacing:.2px;}
+
+  /* fixed bottom tab bar */
+  .dn-tabbar{position:fixed;left:0;right:0;bottom:0;z-index:70;display:flex;min-height:58px;
              background:#fff;border-top:1px solid var(--dn-line);
              padding-bottom:env(safe-area-inset-bottom,0px);
              box-shadow:0 -2px 14px -6px rgba(16,35,28,.18);}
-  .dn-tabbar a{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;
-               padding:9px 2px 8px;text-decoration:none;color:#7C8A80;font-size:10.5px;font-weight:700;}
+  .dn-tabbar a{flex:1;min-width:0;position:relative;display:flex;flex-direction:column;align-items:center;
+               gap:3px;padding:9px 2px 8px;text-decoration:none;color:#7C8A80;font-size:10.5px;font-weight:700;}
   .dn-tabbar a .di{font-size:20px;line-height:1;filter:grayscale(35%);opacity:.85;}
   .dn-tabbar a .dl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
   .dn-tabbar a.on{color:var(--dn-gd);}
   .dn-tabbar a.on .di{filter:none;opacity:1;transform:translateY(-1px);}
-  .dn-tabbar a.on .dl{color:var(--dn-gd);}
   .dn-tabbar a.on::before{content:"";position:absolute;top:0;width:26px;height:3px;border-radius:0 0 3px 3px;background:var(--dn-g);}
-  .dn-tabbar a{position:relative;}
-  @media(min-width:721px){ /* on desktop keep it centered like the content */
-    .dn-tabbar{max-width:720px;margin:0 auto;border-left:1px solid var(--dn-line);border-right:1px solid var(--dn-line);}
-  }
+  @media(min-width:721px){.dn-tabbar{max-width:720px;margin:0 auto;border-left:1px solid var(--dn-line);border-right:1px solid var(--dn-line);}}
 </style>
 </head>
 <body><div class="wrap">
@@ -167,34 +167,244 @@ function save(){
     .catch(()=>{ b.disabled=false; b.textContent='Book purchase'; alert('Failed.'); });
 }
 </script>
-<!-- ===== DishNet bottom tab bar (injected) ===== -->
+<!-- ===== Bulk purchase: split one buy across several orders (injected v3) ===== -->
+<style>
+  .dn-mode{display:flex;gap:6px;margin:2px 0 6px}
+  .dn-ord{display:flex;align-items:center;gap:9px;padding:9px 11px;border:1.5px solid #e8e8e3;border-radius:10px;margin-bottom:7px;background:#fff}
+  .dn-ord.pick{border-color:#15803D;background:#E6F4EA}
+  .dn-ord input[type=checkbox]{width:19px;height:19px;flex:0 0 auto;accent-color:#15803D}
+  .dn-ord .oi{flex:1;min-width:0;font-size:13px;font-weight:700;color:#111;line-height:1.25}
+  .dn-ord .oi small{display:block;font-weight:600;color:#64748b;font-size:11px}
+  .dn-qty{width:74px;flex:0 0 auto;padding:8px!important;text-align:center;font-size:15px!important}
+  .dn-break{margin-top:10px;border:1px solid #BFE3CB;background:#E6F4EA;border-radius:11px;padding:11px 12px;display:none}
+  .dn-break .br{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:#0B3D22}
+  .dn-break .br b{font-weight:800}
+  .dn-break .tot{border-top:1px dashed #9ec9ad;margin-top:6px;padding-top:7px;font-weight:800}
+</style>
+<script>
+(function(){
+  var $=function(s){return document.getElementById(s);};
+  var ordSel=$('order'); if(!ordSel) return;
+  var ordLbl=ordSel.previousElementSibling;      // <label>For order</label>
+  var card=ordSel.closest('.card')||document.body;
+  var mainBtn=document.querySelector('.btn');
+  var hint=$('hint');
+  var ORD=[], mode='single', method='qty';
+  function r2(v){return Math.round(v*100)/100;}
+  function grp(v){v=(v==null?'':String(v)).replace(/[^\d.]/g,'');var p=v.split('.');p[0]=p[0].replace(/\B(?=(\d{3})+(?!\d))/g,',');return p.length>1?p[0]+'.'+p.slice(1).join(''):p[0];}
+  function num(el){return parseFloat((($(el)||{}).value||'').replace(/,/g,''))||0;}
+
+  // ---- build mode toggle + split panel ----
+  var modeRow=document.createElement('div'); modeRow.className='dn-mode';
+  modeRow.innerHTML='<div class="stagebtn on" id="dnSingle">\uD83E\uDDFE One order</div><div class="stagebtn" id="dnSplit">\uD83E\uDDE9 Split across orders</div>';
+  card.insertBefore(modeRow, ordLbl||ordSel);
+
+  var panel=document.createElement('div'); panel.id='dnSplitPanel'; panel.style.display='none';
+  panel.innerHTML=
+    '<label>Split method</label>'+
+    '<div class="stagebtns" id="dnMethods">'+
+      '<div class="stagebtn on" data-m="qty">By quantity</div>'+
+      '<div class="stagebtn" data-m="value">By order value</div>'+
+      '<div class="stagebtn" data-m="even">Even split</div>'+
+    '</div>'+
+    '<label>Which orders is this buy for? (tick all)</label>'+
+    '<div id="dnList"><div style="color:#94a3b8;font-size:13px;padding:6px 0">loading orders\u2026</div></div>'+
+    '<div class="dn-break" id="dnBreak"></div>';
+  // place split panel right after the single order <select>
+  if(ordSel.nextSibling) card.insertBefore(panel, ordSel.nextSibling); else card.appendChild(panel);
+
+  // ---- fetch orders for the checklist ----
+  fetch('/papi/order-costs/orders',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+    .then(function(r){return r.json();}).then(function(d){
+      ORD=(d&&d.orders)||[];
+      var L=$('dnList');
+      if(!ORD.length){L.innerHTML='<div style="color:#94a3b8;font-size:13px;padding:6px 0">No orders yet.</div>';return;}
+      L.innerHTML=ORD.map(function(o){
+        return '<div class="dn-ord" data-id="'+o.id+'">'+
+          '<input type="checkbox" value="'+o.id+'">'+
+          '<div class="oi">'+o.order_no+'<small>'+((o.customer_name||'\u2014'))+' \u00b7 $'+o.total+'</small></div>'+
+          '<input class="dn-qty inp" inputmode="decimal" placeholder="qty" style="display:none">'+
+        '</div>';
+      }).join('');
+      L.querySelectorAll('.dn-ord').forEach(function(row){
+        var cb=row.querySelector('input[type=checkbox]');
+        var qt=row.querySelector('.dn-qty');
+        cb.addEventListener('change',function(){ row.classList.toggle('pick',cb.checked); preview(); });
+        qt.addEventListener('input',function(){ qt.value=grp(qt.value); preview(); });
+        row.addEventListener('click',function(e){ if(e.target===row||e.target.classList.contains('oi')){ cb.checked=!cb.checked; row.classList.toggle('pick',cb.checked); preview(); } });
+      });
+      applyMethod();
+    }).catch(function(){ var L=$('dnList'); if(L) L.innerHTML='<div style="color:#b4232a;font-size:13px">Could not load orders.</div>'; });
+
+  // ---- method chips ----
+  $('dnMethods').addEventListener('click',function(e){
+    var b=e.target.closest('.stagebtn'); if(!b) return;
+    method=b.dataset.m;
+    $('dnMethods').querySelectorAll('.stagebtn').forEach(function(x){x.classList.remove('on');});
+    b.classList.add('on'); applyMethod(); preview();
+  });
+  function applyMethod(){
+    document.querySelectorAll('#dnList .dn-qty').forEach(function(q){ q.style.display=(method==='qty')?'block':'none'; });
+  }
+
+  function picked(){
+    return Array.prototype.map.call(document.querySelectorAll('#dnList .dn-ord'),function(row){
+      var cb=row.querySelector('input[type=checkbox]'); if(!cb.checked) return null;
+      var qt=row.querySelector('.dn-qty');
+      var o=ORD.filter(function(x){return String(x.id)===cb.value;})[0]||{};
+      return {id:parseInt(cb.value,10), qty:parseFloat((qt.value||'').replace(/,/g,''))||0, order_no:o.order_no, total:parseFloat(o.total)||0};
+    }).filter(Boolean);
+  }
+
+  function preview(){
+    var box=$('dnBreak'); var sel=picked();
+    var total=num('amt'), rate=num('rate'), cur=($('cur')||{}).value||'';
+    if(mode!=='split'||!sel.length||total<=0){ box.style.display='none'; return; }
+    // weights
+    var w=[];
+    if(method==='even') sel.forEach(function(){w.push(1);});
+    else if(method==='value') sel.forEach(function(s){w.push(Math.max(0,s.total));});
+    else sel.forEach(function(s){w.push(Math.max(0,s.qty));});
+    var sum=w.reduce(function(a,b){return a+b;},0);
+    var rows='';
+    if(sum>0){
+      var acc=0;
+      sel.forEach(function(s,i){
+        var share=(i===sel.length-1)? r2(total-acc) : r2(total*w[i]/sum);
+        if(i<sel.length-1) acc+=share;
+        var usd=rate>0? r2(share/rate):0;
+        rows+='<div class="br"><span>'+s.order_no+'</span><b>'+cur+' '+grp(String(share))+'  <span style="color:#15803D">($'+grp(String(usd))+')</span></b></div>';
+      });
+      var approx=(method==='value')?' \u2248':'';
+      rows+='<div class="br tot"><span>Total split'+approx+'</span><b>'+cur+' '+grp(String(total))+' = paid \u2713</b></div>';
+      if(method==='value') rows+='<div style="font-size:11px;color:#4b6b57;margin-top:5px">\u2248 by order value; exact amounts confirmed on Book.</div>';
+    } else {
+      rows='<div style="font-size:12px;color:#4b6b57">'+(method==='qty'?'Enter a quantity for each ticked order.':'Tick the orders.')+'</div>';
+    }
+    box.innerHTML=rows; box.style.display='block';
+  }
+  ['amt','rate','cur'].forEach(function(id){ var el=$(id); if(el){ el.addEventListener('input',preview); el.addEventListener('change',preview); } });
+
+  // ---- mode toggle ----
+  function setMode(m){
+    mode=m;
+    var single=(m==='single');
+    $('dnSingle').classList.toggle('on',single); $('dnSplit').classList.toggle('on',!single);
+    if(ordLbl) ordLbl.style.display=single?'':'none';
+    ordSel.style.display=single?'':'none';
+    panel.style.display=single?'none':'block';
+    if(single){ mainBtn.textContent='Book purchase'; mainBtn.onclick=window.save; if(hint) hint.textContent='reduces cash \u00b7 adds cost to the order'; }
+    else { mainBtn.onclick=bulkSave; if(hint) hint.textContent='one payment \u00b7 split into each order\u2019s cost'; updateBtn(); }
+    preview();
+  }
+  function updateBtn(){ if(mode==='split'){ var n=picked().length; mainBtn.textContent=n?('Book split \u00b7 '+n+' order'+(n>1?'s':'')):'Book split'; } }
+  $('dnSingle').addEventListener('click',function(){setMode('single');});
+  $('dnSplit').addEventListener('click',function(){setMode('split');});
+  document.addEventListener('change',function(e){ if(e.target&&e.target.matches&&e.target.matches('#dnList input[type=checkbox]')) updateBtn(); });
+
+  // ---- book the split ----
+  function bulkSave(){
+    var sel=picked(), total=num('amt'), rate=num('rate');
+    if(!sel.length){ alert('Tick at least one order.'); return; }
+    if(total<=0){ alert('Enter the total amount you paid.'); return; }
+    if(rate<=0){ alert('Rate is missing.'); return; }
+    if(method==='qty' && sel.some(function(s){return !(s.qty>0);})){ alert('Enter a quantity for every ticked order.'); return; }
+    var fd=new FormData();
+    fd.append('stage', (document.querySelector('.stagebtn.on[data-s]')||{dataset:{s:'purchase'}}).dataset.s);
+    fd.append('currency', ($('cur')||{}).value||'UGX');
+    fd.append('rate_to_usd', (($('rate')||{}).value||'').replace(/,/g,''));
+    fd.append('total_native', (($('amt')||{}).value||'').replace(/,/g,''));
+    fd.append('method', method);
+    fd.append('note', ($('note')||{}).value||'');
+    var hs=$('holderSel');
+    if(hs && hs.style.display!=='none' && hs.value && hs.value!=='__other') fd.append('holder_user_id',hs.value);
+    else if($('holder') && $('holder').style.display!=='none' && $('holder').value) fd.append('holder',$('holder').value);
+    if($('receipt') && $('receipt').files[0]) fd.append('receipt',$('receipt').files[0]);
+    fd.append('orders', JSON.stringify(sel.map(function(s){return {order_id:s.id, qty:s.qty};})));
+    mainBtn.disabled=true; var lbl=mainBtn.textContent; mainBtn.textContent='Saving\u2026';
+    fetch('/papi/order-costs/bulk',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',body:fd})
+      .then(function(r){return r.json();}).then(function(r){
+        mainBtn.disabled=false; mainBtn.textContent=lbl;
+        if(r&&r.ok){
+          var lines=(r.rows||[]).map(function(x){return x.order_no+': '+r.currency+' '+grp(String(x.native))+' ($'+grp(String(x.usd))+')';}).join('\n');
+          alert('Split booked \u2705  '+r.count+' orders \u00b7 total $'+r.total_usd+'\n\n'+lines);
+          if($('amt'))$('amt').value=''; if($('note'))$('note').value=''; if($('receipt'))$('receipt').value='';
+          var rn=$('rname'); if(rn)rn.textContent='';
+          document.querySelectorAll('#dnList input[type=checkbox]').forEach(function(cb){cb.checked=false;cb.closest('.dn-ord').classList.remove('pick');});
+          document.querySelectorAll('#dnList .dn-qty').forEach(function(q){q.value='';});
+          updateBtn(); preview();
+        } else { alert('Could not save: '+((r&&r.error)||'error')); }
+      }).catch(function(){ mainBtn.disabled=false; mainBtn.textContent=lbl; alert('Failed.'); });
+  }
+  window.dnBulkSave=bulkSave;
+})();
+</script>
+<!-- ===== DishNet role-aware tab bar + amount format (injected v2) ===== -->
 <nav class="dn-tabbar" id="dnTabbar"></nav>
 <script>
 (function(){
-  var TABS=[
-    {t:'Orders',i:'\uD83D\uDED2',u:'/panel/orders-costs'},
-    {t:'Buy',   i:'\uD83D\uDECD\uFE0F',u:'/panel/book-cost'},
-    {t:'Cash',  i:'\uD83D\uDCB0',u:'/panel/cash-position'},
-    {t:'Book',  i:'\uD83D\uDCD2',u:'/panel/trade-cashbook'},
-    {t:'Spend', i:'\uD83D\uDCB8',u:'/panel/expenses'},
-    {t:'P&L',   i:'\uD83D\uDCC8',u:'/panel/pnl'}
-  ];
   var here=location.pathname.replace(/\/+$/,'')||'/panel';
-  var bar=document.getElementById('dnTabbar');
-  if(bar){
-    bar.innerHTML=TABS.map(function(x){
-      var on=(here===x.u)?' on':'';
-      return '<a class="'+(on.trim())+'" href="'+x.u+'"><span class="di">'+x.i+'</span><span class="dl">'+x.t+'</span></a>';
+  // tab -> access rule. menu:X requires effectiveMenus contains X; owner requires is_owner.
+  var TABS=[
+    {t:'Orders',i:'\uD83D\uDED2',u:'/panel/orders-costs', need:'menu:ordercosts'},
+    {t:'Buy',   i:'\uD83D\uDECD\uFE0F',u:'/panel/book-cost',    need:'menu:purchases'},
+    {t:'Cash',  i:'\uD83D\uDCB0',u:'/panel/cash-position', need:'menu:cash'},
+    {t:'Book',  i:'\uD83D\uDCD2',u:'/panel/trade-cashbook',need:'owner'},
+    {t:'Spend', i:'\uD83D\uDCB8',u:'/panel/expenses',      need:'owner'},
+    {t:'P&L',   i:'\uD83D\uDCC8',u:'/panel/pnl',           need:'owner'}
+  ];
+  function allowed(rule, nav){
+    if(rule==='owner') return !!nav.is_owner;
+    if(rule.indexOf('menu:')===0){ var k=rule.slice(5); return (nav.menus||[]).indexOf(k)>=0; }
+    return false;
+  }
+  function render(nav){
+    var bar=document.getElementById('dnTabbar'); if(!bar) return;
+    var vis=TABS.filter(function(x){ return allowed(x.need,nav); });
+    bar.innerHTML=vis.map(function(x){
+      var on=(here===x.u)?'on':'';
+      return '<a class="'+on+'" href="'+x.u+'"><span class="di">'+x.i+'</span><span class="dl">'+x.t+'</span></a>';
     }).join('');
+    // Approvals pill: only if user actually has the approvals menu, and not already on it
+    var top=document.querySelector('.top');
+    if(top && here!=='/panel/approvals' && (nav.menus||[]).indexOf('approvals')>=0){
+      var a=document.createElement('a'); a.className='dn-appbtn'; a.href='/panel/approvals';
+      a.innerHTML='\u2713 Approvals'; top.appendChild(a);
+    }
   }
-  // Approvals action in the app bar (skip when already on approvals)
-  var top=document.querySelector('.top');
-  if(top && here!=='/panel/approvals'){
-    var a=document.createElement('a');
-    a.className='dn-appbtn'; a.href='/panel/approvals';
-    a.innerHTML='\u2713 Approvals';
-    top.appendChild(a);
+  // Safe fallback if the nav call fails: core three only, no owner tabs, no approvals.
+  var FALLBACK={is_owner:false, menus:['ordercosts','purchases','cash']};
+  fetch('/papi/me/nav',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+    .then(function(r){return r.json();})
+    .then(function(d){ render(d && d.ok ? d : FALLBACK); })
+    .catch(function(){ render(FALLBACK); });
+
+  // ---- #2 live thousands-grouping + currency echo (anti big-number typo) ----
+  function group(v){
+    v=(v==null?'':String(v)).replace(/[^\d.]/g,'');
+    var p=v.split('.'); p[0]=p[0].replace(/\B(?=(\d{3})+(?!\d))/g,',');
+    return p.length>1 ? p[0]+'.'+p.slice(1).join('') : p[0];
   }
+  function wire(id, curId){
+    var el=document.getElementById(id); if(!el) return;
+    var cur=curId?document.getElementById(curId):null;
+    var echo=document.createElement('div'); echo.className='dn-amt-echo';
+    var anchor=(el.closest && el.closest('.row'))||el;
+    if(anchor.parentNode) anchor.parentNode.insertBefore(echo, anchor.nextSibling);
+    function upd(){
+      var g=group(el.value); if(el.value!==g) el.value=g;
+      var n=parseFloat(g.replace(/,/g,''))||0;
+      if(n>0){ echo.textContent=(cur&&cur.value?cur.value+' ':'')+group(String(n)); echo.style.display='block'; }
+      else { echo.textContent=''; echo.style.display='none'; }
+    }
+    el.addEventListener('input',upd);
+    if(cur) cur.addEventListener('change',upd);
+    // pages clear the field on successful save (value set directly) -> re-sync after any button tap
+    document.querySelectorAll('.btn,button').forEach(function(b){ b.addEventListener('click',function(){ setTimeout(upd,1500); }); });
+    upd();
+  }
+  wire('amt','cur');       // book_cost, expenses, trade_cashbook
+  wire('total','sellcur'); // orders_costs
 })();
 </script>
 </body></html>

@@ -31,6 +31,19 @@ class OrderCostController extends Controller
             ->header('Content-Type','text/html; charset=UTF-8')->header('Cache-Control','no-store');
     }
 
+    /** GET /papi/me/nav — role-aware nav: which Order-Trading tabs this user may see. Read-only. */
+    public function nav(Request $request)
+    {
+        $u = $request->user();
+        if (! $u) return response()->json(['ok' => false], 401);
+        return response()->json([
+            'ok'       => true,
+            'is_owner' => method_exists($u, 'isOwnerLike') ? $u->isOwnerLike() : false,
+            'role'     => (string) $u->role,
+            'menus'    => method_exists($u, 'effectiveMenus') ? $u->effectiveMenus() : [],
+        ]);
+    }
+
     /** GET /papi/order-costs/orders — open orders to pick from. */
     public function orders(Request $request)
     {
@@ -99,6 +112,101 @@ class OrderCostController extends Controller
             'created_by'=>$user->name ?? '',
         ]);
         return response()->json(['ok'=>true,'id'=>$c->id,'usd'=>$c->usd_amount]);
+    }
+
+    /**
+     * POST /papi/order-costs/bulk — ONE physical purchase (paid once, one receipt) split
+     * across several orders. Writes N order_costs rows sharing rate/holder/receipt/group.
+     * The split ALWAYS sums to total_native to the cent (last row absorbs the remainder),
+     * so cash reduces by exactly what was paid and no order is over/under-charged.
+     * method: qty (weights = typed qty) | value (weights = each order's USD revenue) | even.
+     */
+    public function bulkStore(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok'=>false],401);
+        if (! (bool) $t->setting('order_system_enabled', false)) return response()->json(['ok'=>false,'error'=>'disabled'],404);
+
+        $cur    = strtoupper((string) $request->input('currency','UGX'));
+        $rate   = (float) $request->input('rate_to_usd', 0);
+        $total  = round((float) $request->input('total_native', 0), 2);
+        $method = (string) $request->input('method','qty');
+        $stage  = (string) $request->input('stage','purchase');
+        $note   = (string) $request->input('note','');
+
+        if ($rate  <= 0) return response()->json(['ok'=>false,'error'=>'bad_rate'],422);
+        if ($total <= 0) return response()->json(['ok'=>false,'error'=>'bad_total'],422);
+        if (! in_array($method, ['qty','value','even'], true)) $method = 'qty';
+
+        $raw   = $request->input('orders');
+        $items = is_array($raw) ? $raw : json_decode((string) $raw, true);
+        if (! is_array($items) || ! count($items)) return response()->json(['ok'=>false,'error'=>'no_orders'],422);
+
+        // Load + tenant-validate each order.
+        $rows = [];
+        foreach ($items as $it) {
+            $oid = (int) ($it['order_id'] ?? 0);
+            $o = Order::where('tenant_id',$t->id)->find($oid);
+            if (! $o) return response()->json(['ok'=>false,'error'=>'bad_order','order_id'=>$oid],422);
+            $rows[] = ['order'=>$o, 'qty'=>(float) ($it['qty'] ?? 0)];
+        }
+
+        // Weights per method.
+        $weights = [];
+        foreach ($rows as $r) {
+            if ($method === 'even') { $weights[] = 1.0; continue; }
+            if ($method === 'qty')  { $weights[] = max(0.0, $r['qty']); continue; }
+            $o  = $r['order'];
+            $sc = (strpos((string)$o->payment,'sell:')===0) ? substr($o->payment,5) : 'USD';
+            $or = $sc==='USD' ? 1.0 : (float) $t->setting('rate_'.strtolower($sc).'_per_usd', $sc==='UGX'?3700:5180);
+            $weights[] = $or > 0 ? max(0.0, (float)$o->total / $or) : 0.0;
+        }
+        $sumW = array_sum($weights);
+        if ($sumW <= 0) return response()->json(['ok'=>false,'error'=>'bad_weights'],422);
+
+        // Native share per row; remainder to last row so the sum is EXACT.
+        $n = count($rows); $shares = []; $acc = 0.0;
+        for ($i=0; $i<$n; $i++) {
+            if ($i === $n-1) { $shares[$i] = round($total - $acc, 2); }
+            else { $s = round($total * $weights[$i] / $sumW, 2); $shares[$i] = $s; $acc += $s; }
+        }
+
+        // One shared receipt.
+        $path = null;
+        if ($request->hasFile('receipt')) $path = $request->file('receipt')->store("receipts/t{$t->id}", 'public');
+
+        // Holder — identical rules to store().
+        $user = $request->user();
+        $holderUserId = $user->id; $holderName = (string) ($user->name ?? '');
+        if (($user->isOwnerLike() || in_array((string)$user->role,['manager'],true)) && $request->filled('holder_user_id')) {
+            $hu = \App\Models\User::where('tenant_id',$t->id)->find($request->input('holder_user_id'));
+            if ($hu) { $holderUserId = $hu->id; $holderName = (string)$hu->name; }
+        } elseif ($request->filled('holder')) {
+            $holderName = (string) $request->input('holder'); $holderUserId = null;
+        }
+
+        $status = ((bool) $t->setting('cost_approval', true)) ? 'pending' : 'approved';
+        $group  = (string) \Illuminate\Support\Str::uuid();
+        $out = [];
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($rows,$shares,$t,$stage,$cur,$rate,$holderName,$holderUserId,$path,$note,$status,$group,$user,&$out) {
+            foreach ($rows as $i => $r) {
+                $o = $r['order']; $native = $shares[$i];
+                $c = OrderCost::create([
+                    'tenant_id'=>$t->id,'order_id'=>$o->id,'order_no'=>$o->order_no,
+                    'stage'=>$stage,'currency'=>$cur,'native_amount'=>$native,'rate_to_usd'=>$rate,
+                    'usd_amount'=>OrderCost::toUsd($native,$rate),
+                    'holder'=>$holderName,'holder_user_id'=>$holderUserId,
+                    'receipt_path'=>$path,'note'=>$note,'status'=>$status,
+                    'purchase_group_id'=>$group,'created_by'=>$user->name ?? '',
+                ]);
+                $out[] = ['order_no'=>$o->order_no,'native'=>$native,'usd'=>(float)$c->usd_amount];
+            }
+        });
+
+        $totalUsd = round(array_sum(array_map(fn($x)=>$x['usd'],$out)),2);
+        return response()->json(['ok'=>true,'group_id'=>$group,'count'=>count($out),
+            'rows'=>$out,'total_native'=>$total,'total_usd'=>$totalUsd,'currency'=>$cur]);
     }
 
     /** POST /papi/orders/quick — create a Juba order with its customer-pays currency. */
