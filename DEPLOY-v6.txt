@@ -1,0 +1,54 @@
+DEPLOY — Mobile app home + iPhone install (v6)   [cumulative]
+=============================================================
+Adds the "tap here, tap here" app home Jayesh lands on, and makes the panel a
+full-screen home-screen app on iPhone. Jayesh signs in ONCE, then it's all taps.
+
+NEW / CHANGED for v6
+  NEW  resources/panel/app_home.html                       (the tap-tile launcher)
+  NEW  app/Http/Controllers/Panel/LauncherController.php    (serves /panel/app)
+  NEW  public/apple-touch-icon.png  public/icon-192.png  public/icon-512.png
+  NEW  public/site.webmanifest                              (start_url /panel/app)
+  CHG  routes/web.php                    (+ GET /panel/app)
+  CHG  app/Http/Controllers/Panel/OrderCostController.php   (me/nav now returns name)
+  CHG  resources/panel/*.html (9 pages)  (+ iOS app meta + manifest + viewport-fit)
+
+WEB-ROOT ASSETS — important
+  The 4 files under public/ must sit at the site web root so the icon + manifest
+  resolve at /apple-touch-icon.png, /icon-192.png, /icon-512.png, /site.webmanifest.
+  In Laravel that's the project's public/ folder (already web root). If your web
+  root is elsewhere (aaPanel/EasyPanel), drop them there.
+
+WHAT JAYESH GETS
+  /panel/app = a home screen of big tap tiles, filtered by his role:
+    purchaser (Jayesh): Buy List · Book Purchase · Orders & Margin · Cash · Suppliers We Owe
+    owner: all of the above + Cashbook · Expenses · P&L · Approvals
+  Greets "Hi <name>", one-tap "Sign out", every tile opens its screen. From any
+  screen the bottom tab bar keeps him moving — no typing except amounts.
+
+DEPLOY
+  git add public app routes/web.php resources/panel/*.html
+  git commit -m "v6: mobile app home launcher + iPhone home-screen app"
+  git push
+  -> EasyPanel: Rebuild (NOT Restart)     (no migration this round)
+  Confirm the 4 public/ files are reachable:
+     https://mycloudbss.com/apple-touch-icon.png   -> shows the green FS icon
+     https://mycloudbss.com/site.webmanifest        -> shows JSON
+
+SET UP JAYESH'S iPHONE 14 (one time, ~1 min)
+  1. Open  https://mycloudbss.com/panel/app  in SAFARI.
+  2. Sign in once -> tick "Keep me signed in" -> tap SAVE PASSWORD when asked.
+  3. Share button -> Add to Home Screen -> Add.
+  Now: tap the green FS icon -> full-screen app -> tap a tile. If it ever asks to
+  log in, tap the password field -> saved login -> Face ID -> Sign in.
+
+VERIFY (console, logged in)
+  fetch('/papi/me/nav',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(console.log)
+    // -> {ok:true, name:'...', role:'...', is_owner:.., menus:[..]}
+  Open /panel/app -> tiles match the role; Sign out works.
+
+STILL PENDING (needs the login page source you'll send)
+  The app-STYLED login (green branded screen + "Keep me signed in" wired) is the one
+  piece I can't finish blind. Run the form-inspector on /app/login and paste the
+  output, or send its view-source, and I'll hand you a drop-in login that matches.
+  Until then the existing login works fine — Keychain autofill already makes it
+  one-tap after the first sign-in.

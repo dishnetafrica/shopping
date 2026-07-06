@@ -38,6 +38,7 @@ class OrderCostController extends Controller
         if (! $u) return response()->json(['ok' => false], 401);
         return response()->json([
             'ok'       => true,
+            'name'     => (string) ($u->name ?? ''),
             'is_owner' => method_exists($u, 'isOwnerLike') ? $u->isOwnerLike() : false,
             'role'     => (string) $u->role,
             'menus'    => method_exists($u, 'effectiveMenus') ? $u->effectiveMenus() : [],
