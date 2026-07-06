@@ -1,60 +1,21 @@
-# CloudBSS Kernel — refactored spine (one write model, event-first)
+# CloudBSS Kernel v2 — Architecture Decision Records
 
-Framework-agnostic domain layer (PSR-4 `CloudBSS\Kernel\`), drops into Laravel unchanged. Run the
-golden tests with no dependencies:
+- **ADR-000** ERP Architecture Principles — the constitution EVERY future ADR must obey (rules, not
+  features). Read this first.
+- **ADR-001** Kernel v2: dual-currency ledger core (frozen kernel only — JournalAmount{foreign,base})
+- **ADR-002** Treasury bounded context (custodians, branches, transfers, cash counts, dashboard)
+- **ADR-003** Exchange Rate Service (rate table, providers, override/approval; metadata on the event)
+- **ADR-004** Reporting & FX (trial balance, foreign balances, realized/unrealized FX, revaluation)
+- **MILESTONES.md** M1–M5 with test gates and sequencing discipline
+- **ADR-TEMPLATE.md** the structure every new ADR (005+) follows
 
-```bash
-php tests/run.php      # 39 assertions, all green — includes replay/reconstruction proofs
-```
+Build order (reordered per review): **M1 Kernel → M2 Treasury (same-currency) → M3 Exchange Rates →
+M4 Settlement (unlocks cross-currency treasury) → M5 Reporting.** Treasury moves earlier because
+same-currency custody/transfers/counts need no FX and are usable immediately; cross-currency parts
+wait for M3+M4.
 
-## What the refactor changed (and what it preserved)
+Design boundary (ADR-000 §7): the KERNEL owns double-entry integrity, base balancing, immutability,
+currency correctness. TREASURY / RATES / REPORTING are bounded contexts that produce or read ledger
+entries through events — without expanding the kernel.
 
-**Preserved:** `Money`, `Decision`, `Participant` (Party | Digital), `Task`, the `*Policy`
-interfaces, the package layout, and public method names. Only the architectural spine changed.
-
-**One write model.** There is exactly one source of truth — the `EventStore`. The ledger no longer
-keeps its own entries; it is a **projection** of `JournalPosted` events:
-
-```
-command → Decision (the why) → Event → EventStore → EventBus → Projections
-business event → [resolved AccountingPolicy] → JournalPosted → LedgerProjection → balances
-```
-
-| Step (your roadmap) | Where |
-|---|---|
-| 1. One write model (events) | `EventStore` is the only write model; `Kernel::recordEvent()` the only entry |
-| 2. Ledger is a projection | `LedgerProjection` folds `JournalPosted`; `rebuildFrom()` replays the log |
-| 3. Event metadata | `DomainEvent` carries `schemaVersion`, `correlationId`, `causationId`; store assigns `aggregateSequence` + `globalPosition` with optimistic concurrency |
-| 4. Injected clock + ids | `Clock` / `IdGenerator` (System/Frozen, Random/Sequence) → deterministic replay |
-| 5. Kernel independent of Laravel + tenants | tenant/entity are event **metadata**; `AccountingPolicyResolver` (app-supplied) picks policy per event; no framework imports |
-| 6. Migrate one capability at a time | modules subscribe on the `EventBus`; the kernel never changes to admit a new consumer |
-
-## Event-sourced vs normal aggregates (your calibration)
-
-- **Event-sourced** (replay/audit critical): the Ledger (via `JournalPosted`), Decisions (via
-  `DecisionMade`), and `Task` (raise → apply → `fromHistory`).
-- **Normal aggregates**: `Party`, `DigitalParticipant`, and future Product/Supplier/Customer/
-  Settings — ordinary objects, not event-sourced.
-
-## Reconstructability — every audited object rebuilds from events alone
-
-Proven by tests:
-- **Ledger** → `LedgerProjection::rebuildFrom(log)` reproduces every balance.
-- **Task** → `Task::fromHistory(events)` reproduces status + owner.
-- **Decision** → the full why (policy **version** + parameters + structured inputs + evidence refs)
-  is in the `DecisionMade` event, explainable even after a policy changes.
-- **Money** → overflow now **throws** instead of silently becoming a float; the no-float guarantee
-  is真.
-- **Determinism** → `FrozenClock` + `SequenceIdGenerator` make replay bit-for-bit identical.
-
-## What this deliberately does NOT include yet
-
-Persistence (the event store + projections against Postgres), FX with realized gain/loss, the
-Conversation object, AI Workforce routing, and the first business module. Each new capability
-should pass the simulator's 14 scenarios as end-to-end tests before shipping.
-
-## C3 note (Money at extreme scale)
-
-Money uses overflow-**checked** 64-bit integers: safe to ~9.2×10¹⁸ minor units and throws beyond
-that rather than corrupting. If a currency/volume ever needs more, swap the internal primitive for
-bcmath/gmp — the public API does not change.
+Status: APPROVED for implementation. Prove production single-currency with real orders first (ADR-000 §12).
