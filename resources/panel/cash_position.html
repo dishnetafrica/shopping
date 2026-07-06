@@ -120,6 +120,7 @@ fetch('/papi/cash-position',{headers:{'X-Requested-With':'XMLHttpRequest'}}).the
   var TABS=[
     {t:'Orders',i:'\uD83D\uDED2',u:'/panel/orders-costs', need:'menu:ordercosts'},
     {t:'Buy',   i:'\uD83D\uDECD\uFE0F',u:'/panel/book-cost',    need:'menu:purchases'},
+    {t:'List',  i:'\uD83D\uDCCB',u:'/panel/buy-list',     need:'buylist'},
     {t:'Cash',  i:'\uD83D\uDCB0',u:'/panel/cash-position', need:'menu:cash'},
     {t:'Book',  i:'\uD83D\uDCD2',u:'/panel/trade-cashbook',need:'owner'},
     {t:'Spend', i:'\uD83D\uDCB8',u:'/panel/expenses',      need:'owner'},
@@ -127,6 +128,7 @@ fetch('/papi/cash-position',{headers:{'X-Requested-With':'XMLHttpRequest'}}).the
   ];
   function allowed(rule, nav){
     if(rule==='owner') return !!nav.is_owner;
+    if(rule==='buylist') return (nav.menus||[]).indexOf('purchases')>=0 && !nav.is_owner;
     if(rule.indexOf('menu:')===0){ var k=rule.slice(5); return (nav.menus||[]).indexOf(k)>=0; }
     return false;
   }

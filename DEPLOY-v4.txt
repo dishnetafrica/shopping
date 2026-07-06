@@ -1,0 +1,74 @@
+DEPLOY — Buy List (structured items) + Suppliers (v4)   [cumulative]
+====================================================================
+Answers Jayesh's two questions:
+  1. "What do I buy today?"  -> a Buy List that TOTALS items across every open order.
+  2. "Add a supplier?"       -> supplier per purchase + quick-add, separate from holder.
+
+Cumulative package (includes shell v2 + split v3 + this v4). If you already pushed
+earlier rounds, the NEW/changed files for v4 are marked [v4].
+
+FILES
+  [v4] database/migrations/2026_07_06_000600_create_trade_order_items_table.php     (NEW)
+  [v4] database/migrations/2026_07_06_000700_create_suppliers_and_supplier_on_costs.php (NEW)
+  [v4] app/Models/TradeOrderItem.php                                (NEW)
+  [v4] app/Models/Supplier.php                                      (NEW)
+  [v4] app/Http/Controllers/Panel/BuyListController.php             (NEW)
+  [v4] app/Http/Controllers/Panel/SupplierController.php            (NEW)
+  [v4] resources/panel/buy_list.html                               (NEW)
+  [v4] app/Models/OrderCost.php                (+supplier_id/name fillable)
+  [v4] app/Http/Controllers/Panel/OrderCostController.php
+        (quickOrder writes trade_order_items; resolveSupplier(); supplier on store()+bulkStore())
+  [v4] resources/panel/orders_costs.html       (line-item repeater + Buy List button)
+  [v4] resources/panel/book_cost.html          (supplier picker + quick-add)
+  [v2-v4] routes/web.php                        (+buy-list, +suppliers routes)
+  [v2] the other panel/*.html                   (shell + now the Buy List tab)
+
+BUY LIST
+  - Orders are now entered item-by-item (name + qty + unit) -> trade_order_items.
+    (Old free-text still accepted; legacy orders just won't appear in the list.)
+  - /panel/buy-list totals every still-unbought item across all orders, grouped by
+    name (case-insensitive), showing remaining qty + which orders + a "Bought" button.
+    Verified: "Router" 2 + "router" 1 merge to 3; fully-bought rows drop off; a
+    partly-bought line (Sugar 30, bought 10) shows remaining 20.
+  - Nav: a "List" tab appears for purchasing staff (has 'purchases' menu, not owner).
+    Owner/manager reach it via the "Today's buy list" button on Orders & Margin.
+
+SUPPLIERS
+  - suppliers table (unique per tenant) + supplier_id/supplier_name on order_costs.
+  - Book Purchase has a Supplier picker with a "+" quick-add (works for single AND split).
+    supplier_id rides along on every cost row -> per-supplier spend later.
+
+SAFETY
+  - All additive: 2 new tables + 2 nullable columns; no existing column touched.
+  - Gated to Shree via order_system_enabled.
+  - quickOrder stays backward compatible (JSON items -> structured; else free text).
+  - Single-order booking flow unchanged; supplier is optional everywhere.
+
+DEPLOY
+  git add database/migrations app/Models app/Http/Controllers/Panel routes/web.php resources/panel/*.html
+  git commit -m "v4: buy list (structured items) + suppliers"
+  git push
+  -> EasyPanel: Rebuild (NOT Restart)
+  -> php artisan migrate     (adds trade_order_items, suppliers, supplier cols — additive)
+
+VERIFY (dry-run first)
+  1. Orders & Margin -> add 2 line items (Router x2, Antenna x1) -> Create order.
+     Make a 2nd order (Router x1). Open /panel/buy-list -> "Router 3, Antenna 1".
+  2. Tap "Bought" on Router -> it drops off the list.
+  3. Book Purchase -> "+" add supplier "Kikuubo Traders" -> book a cost -> the cost row
+     carries supplier_name (check DB or a future supplier report).
+  4. Console:
+     fetch('/papi/buy-list',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(console.log)
+     fetch('/papi/suppliers',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(console.log)
+
+ROLLBACK
+  git revert + Rebuild. To drop the new tables/cols: php artisan migrate:rollback --step=3
+  (optional — leaving them is harmless).
+
+NOTES / NOT YET
+  - trade_order_items is a dedicated table (safe, isolated). If you later want it backed
+    by the platform's existing order_items, that's a follow-up.
+  - Buy List is a checklist; it doesn't yet auto-open Book Purchase for the bought item.
+    Wiring "Bought -> pre-filled purchase" is a natural next slice.
+  - "By order value" split preview still shows the exact amounts only after Book (needs
+    sell_currency in the orders payload — small follow-up).

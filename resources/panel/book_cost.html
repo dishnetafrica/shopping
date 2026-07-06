@@ -104,6 +104,12 @@
     <select id="holderSel" style="display:none"></select>
     <div id="holderMe" style="display:none;font-size:12px;color:#065f46;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:9px;padding:9px 11px;font-weight:700;">Booking to your cash</div>
 
+    <label>Supplier (optional)</label>
+    <div style="display:flex;gap:8px;align-items:stretch">
+      <select id="supplierSel" style="flex:1"><option value="">— none —</option></select>
+      <button type="button" id="supAdd" title="Add supplier" style="flex:0 0 auto;background:#0B3D22;color:#fff;border:none;border-radius:11px;padding:0 16px;font-weight:800;font-size:20px;cursor:pointer">+</button>
+    </div>
+
     <label>Receipt (optional)</label>
     <label class="receipt" for="receipt">📷 Attach receipt photo <span id="rname" style="font-weight:500;color:#64748b"></span></label>
     <input id="receipt" type="file" accept="image/*" style="display:none" onchange="document.getElementById('rname').textContent=this.files[0]?('· '+this.files[0].name):''">
@@ -158,6 +164,7 @@ function save(){
     fd.append('holder',$('holder').value);
   }
   fd.append('note',$('note').value);
+  var _sup=$('supplierSel'); if(_sup && _sup.value) fd.append('supplier_id',_sup.value);
   if($('receipt').files[0]) fd.append('receipt',$('receipt').files[0]);
   const b=document.querySelector('.btn'); b.disabled=true; b.textContent='Saving…';
   fetch('/papi/order-costs',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd})
@@ -316,6 +323,7 @@ function save(){
     fd.append('total_native', (($('amt')||{}).value||'').replace(/,/g,''));
     fd.append('method', method);
     fd.append('note', ($('note')||{}).value||'');
+    var _sup=$('supplierSel'); if(_sup && _sup.value) fd.append('supplier_id',_sup.value);
     var hs=$('holderSel');
     if(hs && hs.style.display!=='none' && hs.value && hs.value!=='__other') fd.append('holder_user_id',hs.value);
     else if($('holder') && $('holder').style.display!=='none' && $('holder').value) fd.append('holder',$('holder').value);
@@ -336,6 +344,24 @@ function save(){
         } else { alert('Could not save: '+((r&&r.error)||'error')); }
       }).catch(function(){ mainBtn.disabled=false; mainBtn.textContent=lbl; alert('Failed.'); });
   }
+  // suppliers: load list + quick-add (+ button)
+  (function(){
+    var sel=$('supplierSel'), add=$('supAdd'); if(!sel) return;
+    fetch('/papi/suppliers',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+      .then(function(r){return r.json();}).then(function(d){
+        ((d&&d.suppliers)||[]).forEach(function(s){ var o=document.createElement('option'); o.value=s.id; o.textContent=s.name; sel.appendChild(o); });
+      }).catch(function(){});
+    if(add) add.onclick=function(){
+      var name=prompt('Supplier name'); if(!name) return; name=name.trim(); if(!name) return;
+      var p=new URLSearchParams({name:name});
+      fetch('/papi/suppliers',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:p})
+        .then(function(r){return r.json();}).then(function(r){
+          if(r&&r.ok){ var o=document.createElement('option'); o.value=r.id; o.textContent=r.name; sel.appendChild(o); sel.value=r.id; }
+          else alert('Could not add supplier');
+        }).catch(function(){alert('Failed');});
+    };
+  })();
+
   window.dnBulkSave=bulkSave;
 })();
 </script>
@@ -348,6 +374,7 @@ function save(){
   var TABS=[
     {t:'Orders',i:'\uD83D\uDED2',u:'/panel/orders-costs', need:'menu:ordercosts'},
     {t:'Buy',   i:'\uD83D\uDECD\uFE0F',u:'/panel/book-cost',    need:'menu:purchases'},
+    {t:'List',  i:'\uD83D\uDCCB',u:'/panel/buy-list',     need:'buylist'},
     {t:'Cash',  i:'\uD83D\uDCB0',u:'/panel/cash-position', need:'menu:cash'},
     {t:'Book',  i:'\uD83D\uDCD2',u:'/panel/trade-cashbook',need:'owner'},
     {t:'Spend', i:'\uD83D\uDCB8',u:'/panel/expenses',      need:'owner'},
@@ -355,6 +382,7 @@ function save(){
   ];
   function allowed(rule, nav){
     if(rule==='owner') return !!nav.is_owner;
+    if(rule==='buylist') return (nav.menus||[]).indexOf('purchases')>=0 && !nav.is_owner;
     if(rule.indexOf('menu:')===0){ var k=rule.slice(5); return (nav.menus||[]).indexOf(k)>=0; }
     return false;
   }

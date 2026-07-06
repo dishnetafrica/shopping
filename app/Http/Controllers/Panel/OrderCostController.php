@@ -44,6 +44,21 @@ class OrderCostController extends Controller
         ]);
     }
 
+    /** Resolve a supplier from supplier_id (tenant-verified) or supplier_name (find-or-create). */
+    protected function resolveSupplier(Request $request, $t): array
+    {
+        if ($request->filled('supplier_id')) {
+            $s = \App\Models\Supplier::where('tenant_id',$t->id)->find($request->input('supplier_id'));
+            if ($s) return [$s->id, $s->name];
+        }
+        $name = trim((string) $request->input('supplier_name',''));
+        if ($name !== '') {
+            $s = \App\Models\Supplier::firstOrCreate(['tenant_id'=>$t->id,'name'=>$name]);
+            return [$s->id, $s->name];
+        }
+        return [null, null];
+    }
+
     /** GET /papi/order-costs/orders — open orders to pick from. */
     public function orders(Request $request)
     {
@@ -101,8 +116,10 @@ class OrderCostController extends Controller
             $holderUserId = null;
         }
 
+        [$supId,$supName] = $this->resolveSupplier($request, $t);
         $c = OrderCost::create([
             'tenant_id'=>$t->id, 'order_id'=>$order?->id, 'order_no'=>$order?->order_no,
+            'supplier_id'=>$supId, 'supplier_name'=>$supName,
             'stage'=>(string)$request->input('stage','purchase'),
             'currency'=>$cur, 'native_amount'=>$native, 'rate_to_usd'=>$rate,
             'usd_amount'=>OrderCost::toUsd($native,$rate),
@@ -187,9 +204,10 @@ class OrderCostController extends Controller
 
         $status = ((bool) $t->setting('cost_approval', true)) ? 'pending' : 'approved';
         $group  = (string) \Illuminate\Support\Str::uuid();
+        [$supId,$supName] = $this->resolveSupplier($request, $t);
         $out = [];
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($rows,$shares,$t,$stage,$cur,$rate,$holderName,$holderUserId,$path,$note,$status,$group,$user,&$out) {
+        \Illuminate\Support\Facades\DB::transaction(function () use ($rows,$shares,$t,$stage,$cur,$rate,$holderName,$holderUserId,$path,$note,$status,$group,$user,$supId,$supName,&$out) {
             foreach ($rows as $i => $r) {
                 $o = $r['order']; $native = $shares[$i];
                 $c = OrderCost::create([
@@ -199,6 +217,7 @@ class OrderCostController extends Controller
                     'holder'=>$holderName,'holder_user_id'=>$holderUserId,
                     'receipt_path'=>$path,'note'=>$note,'status'=>$status,
                     'purchase_group_id'=>$group,'created_by'=>$user->name ?? '',
+                    'supplier_id'=>$supId,'supplier_name'=>$supName,
                 ]);
                 $out[] = ['order_no'=>$o->order_no,'native'=>$native,'usd'=>(float)$c->usd_amount];
             }
@@ -222,8 +241,27 @@ class OrderCostController extends Controller
         $o->customer_phone= preg_replace('/[^0-9]/','',(string)$request->input('phone',''));
         $o->location      = (string)$request->input('location','Juba');
         $o->total         = (float)$request->input('total',0);      // revenue in the sell currency
-        $o->items_text    = (string)$request->input('items','');
         $o->save();   // OrderObserver assigns order_no
+        // Structured line items (name + qty) power the Buy List. Accept a JSON array in
+        // `items`; if it isn't a JSON array, treat `items` as legacy free text.
+        $raw  = $request->input('items');
+        $list = is_array($raw) ? $raw : json_decode((string)$raw, true);
+        if (is_array($list) && count($list)) {
+            $summary = [];
+            foreach ($list as $it) {
+                $nm = trim((string)($it['name'] ?? '')); if ($nm === '') continue;
+                $qy = (float)($it['qty'] ?? 1); if ($qy <= 0) $qy = 1;
+                $un = trim((string)($it['unit'] ?? '')) ?: null;
+                \App\Models\TradeOrderItem::create([
+                    'tenant_id'=>$t->id,'order_id'=>$o->id,'order_no'=>$o->order_no,
+                    'name'=>$nm,'qty'=>$qy,'unit'=>$un,
+                ]);
+                $summary[] = rtrim(rtrim(number_format($qy,2,'.',''),'0'),'.').'x '.$nm;
+            }
+            $o->items_text = implode(', ', $summary);
+        } else {
+            $o->items_text = (string) $raw;   // legacy free text
+        }
         // record the sell currency as an order note-setting (kept on the order's payment field)
         $sellCur = strtoupper((string)$request->input('sell_currency','USD'));
         $o->payment = 'sell:'.$sellCur;

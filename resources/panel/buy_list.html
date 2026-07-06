@@ -1,0 +1,176 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buy List</title>
+<style>
+  :root{--red:#D41C1C;--green:#059669;--amber:#d97706;--dark:#0f0f0f;--mute:#94a3b8;--bg:#f5f5f2;--border:#e8e8e3;--font:'Inter',-apple-system,'Segoe UI',sans-serif;}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:var(--font);color:#0f0f0f;}
+  .wrap{max-width:640px;margin:0 auto;padding:14px;}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+  .top h1{font-size:20px;margin:0;font-weight:900;}.top a{color:var(--green);text-decoration:none;font-weight:700;font-size:13px;}
+  .sub{font-size:12px;color:var(--mute);margin-bottom:12px;font-weight:600;}
+  .item{background:#fff;border:1px solid var(--border);border-radius:13px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+  .item .q{flex:0 0 auto;min-width:64px;height:56px;border-radius:11px;background:#E6F4EA;border:1px solid #BFE3CB;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#0B3D22;}
+  .item .q b{font-size:20px;font-weight:900;line-height:1;}
+  .item .q small{font-size:10px;font-weight:700;margin-top:2px;text-transform:uppercase;}
+  .item .mid{flex:1;min-width:0;}
+  .item .nm{font-size:15px;font-weight:800;}
+  .item .ords{margin-top:5px;display:flex;flex-wrap:wrap;gap:4px;}
+  .item .ord{font-size:10.5px;font-weight:700;color:#475569;background:#f1f5f9;border-radius:20px;padding:2px 8px;}
+  .item .buy{flex:0 0 auto;background:#0B3D22;color:#fff;border:none;border-radius:10px;padding:11px 14px;font-size:13px;font-weight:800;cursor:pointer;}
+  .item .buy:active{background:#082a18;}
+  .empty{text-align:center;color:var(--mute);padding:40px 20px;font-size:14px;font-weight:600;}
+  .loading{text-align:center;color:var(--mute);padding:24px;}
+</style>
+<!-- ===== DishNet mobile app shell (injected v2) ===== -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style id="dn-shell">
+  :root{--dn-g:#15803D;--dn-gd:#0B3D22;--dn-gl:#E6F4EA;--dn-line:#E2E8E2;}
+  html{-webkit-text-size-adjust:100%;}
+  body{font-family:'Outfit','Inter',system-ui,-apple-system,sans-serif;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased;}
+  .wrap{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 92px)!important;}
+  .top{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:12px;
+       justify-content:flex-start;margin:-14px -14px 14px -14px!important;
+       padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 12px!important;
+       background:var(--dn-gd);box-shadow:0 2px 10px -4px rgba(11,61,34,.5);}
+  .top h1{color:#fff!important;font-size:17px!important;font-weight:800!important;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .top a{order:-1;flex-shrink:0;width:34px;height:34px;border-radius:50%;
+         background:rgba(255,255,255,.16)!important;color:#fff!important;
+         display:grid;place-items:center;font-size:0!important;text-decoration:none;}
+  .top a::before{content:"\2039";font-size:24px;font-weight:700;line-height:1;margin-top:-2px;}
+  .dn-appbtn{margin-left:auto;flex-shrink:0;height:34px;padding:0 13px;border-radius:99px;
+             background:rgba(255,255,255,.16);color:#fff;font-size:12.5px;font-weight:700;
+             display:inline-flex;align-items:center;gap:6px;text-decoration:none;}
+  .dn-appbtn:active{background:rgba(255,255,255,.28);}
+  .btn{background:var(--dn-gd)!important;border-radius:12px!important;padding:14px!important;font-weight:800!important;}
+  .btn:active{background:#082a18!important;}
+  input,select,textarea{font-size:16px!important;border-radius:11px!important;}
+  input:focus,select:focus,textarea:focus{border-color:var(--dn-g)!important;}
+  .card,.oitem,.item,.balcard,.hero{box-shadow:0 1px 2px rgba(16,35,28,.05),0 3px 12px -4px rgba(16,35,28,.06);}
+  .dn-amt-echo{display:none;margin:9px 0 2px;padding:8px 12px;border-radius:10px;
+               background:var(--dn-gl);border:1px solid #BFE3CB;color:var(--dn-gd);
+               font-size:16px;font-weight:800;letter-spacing:.2px;}
+  .dn-tabbar{position:fixed;left:0;right:0;bottom:0;z-index:70;display:flex;min-height:58px;
+             background:#fff;border-top:1px solid var(--dn-line);
+             padding-bottom:env(safe-area-inset-bottom,0px);
+             box-shadow:0 -2px 14px -6px rgba(16,35,28,.18);}
+  .dn-tabbar a{flex:1;min-width:0;position:relative;display:flex;flex-direction:column;align-items:center;
+               gap:3px;padding:9px 2px 8px;text-decoration:none;color:#7C8A80;font-size:10.5px;font-weight:700;}
+  .dn-tabbar a .di{font-size:20px;line-height:1;filter:grayscale(35%);opacity:.85;}
+  .dn-tabbar a .dl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+  .dn-tabbar a.on{color:var(--dn-gd);}
+  .dn-tabbar a.on .di{filter:none;opacity:1;transform:translateY(-1px);}
+  .dn-tabbar a.on::before{content:"";position:absolute;top:0;width:26px;height:3px;border-radius:0 0 3px 3px;background:var(--dn-g);}
+  @media(min-width:721px){.dn-tabbar{max-width:720px;margin:0 auto;border-left:1px solid var(--dn-line);border-right:1px solid var(--dn-line);}}
+</style>
+</head>
+<body><div class="wrap">
+  <div class="top"><h1>🧺 Buy List</h1><a href="/panel">← Panel</a></div>
+  <div class="sub" id="sub">Everything still to buy across open orders</div>
+  <div id="list"><div class="loading">Loading…</div></div>
+</div>
+<script>
+const $=s=>document.getElementById(s);
+function nfmt(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
+function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function load(){
+  fetch('/papi/buy-list',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+    .then(r=>r.json()).then(d=>{
+      const L=$('list');
+      if(!d.ok){L.innerHTML='<div class="empty">Could not load.</div>';return;}
+      if(!d.items||!d.items.length){
+        $('sub').textContent='All caught up';
+        L.innerHTML='<div class="empty">✅ Nothing to buy right now.<br><span style="font-size:12px;color:#94a3b8">New orders with items will show here.</span></div>';return;
+      }
+      $('sub').textContent=d.count+' item'+(d.count>1?'s':'')+' to buy';
+      L.innerHTML=d.items.map(function(it){
+        var ords=(it.orders||[]).map(function(o){return '<span class="ord">'+esc(o)+'</span>';}).join('');
+        var ids=(it.ids||[]).join(',');
+        return '<div class="item" data-ids="'+ids+'">'+
+          '<div class="q"><b>'+nfmt(it.remaining)+'</b><small>'+esc(it.unit||'qty')+'</small></div>'+
+          '<div class="mid"><div class="nm">'+esc(it.name)+'</div><div class="ords">'+ords+'</div></div>'+
+          '<button class="buy" onclick="mark(this)">Bought</button>'+
+        '</div>';
+      }).join('');
+    }).catch(function(){$('list').innerHTML='<div class="empty">Failed to load.</div>';});
+}
+function mark(btn){
+  var row=btn.closest('.item'); var ids=(row.getAttribute('data-ids')||'').split(',').filter(Boolean);
+  if(!ids.length) return;
+  btn.disabled=true; btn.textContent='…';
+  var p=new URLSearchParams(); ids.forEach(function(i){p.append('ids[]',i);});
+  fetch('/papi/buy-list/mark',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:p})
+    .then(r=>r.json()).then(function(r){
+      if(r&&r.ok){ row.style.transition='.2s'; row.style.opacity='0'; setTimeout(load,220); }
+      else { btn.disabled=false; btn.textContent='Bought'; alert('Could not update'); }
+    }).catch(function(){btn.disabled=false;btn.textContent='Bought';alert('Failed');});
+}
+load();
+</script>
+<!-- ===== DishNet role-aware tab bar + amount format (injected v2) ===== -->
+<nav class="dn-tabbar" id="dnTabbar"></nav>
+<script>
+(function(){
+  var here=location.pathname.replace(/\/+$/,'')||'/panel';
+  var TABS=[
+    {t:'Orders',i:'\uD83D\uDED2',u:'/panel/orders-costs', need:'menu:ordercosts'},
+    {t:'Buy',   i:'\uD83D\uDECD\uFE0F',u:'/panel/book-cost',    need:'menu:purchases'},
+    {t:'List',  i:'\uD83D\uDCCB',u:'/panel/buy-list',     need:'buylist'},
+    {t:'Cash',  i:'\uD83D\uDCB0',u:'/panel/cash-position', need:'menu:cash'},
+    {t:'Book',  i:'\uD83D\uDCD2',u:'/panel/trade-cashbook',need:'owner'},
+    {t:'Spend', i:'\uD83D\uDCB8',u:'/panel/expenses',      need:'owner'},
+    {t:'P&L',   i:'\uD83D\uDCC8',u:'/panel/pnl',           need:'owner'}
+  ];
+  function allowed(rule, nav){
+    if(rule==='owner') return !!nav.is_owner;
+    if(rule==='buylist') return (nav.menus||[]).indexOf('purchases')>=0 && !nav.is_owner;
+    if(rule.indexOf('menu:')===0){ var k=rule.slice(5); return (nav.menus||[]).indexOf(k)>=0; }
+    return false;
+  }
+  function render(nav){
+    var bar=document.getElementById('dnTabbar'); if(!bar) return;
+    var vis=TABS.filter(function(x){ return allowed(x.need,nav); });
+    bar.innerHTML=vis.map(function(x){
+      var on=(here===x.u)?'on':'';
+      return '<a class="'+on+'" href="'+x.u+'"><span class="di">'+x.i+'</span><span class="dl">'+x.t+'</span></a>';
+    }).join('');
+    var top=document.querySelector('.top');
+    if(top && here!=='/panel/approvals' && (nav.menus||[]).indexOf('approvals')>=0){
+      var a=document.createElement('a'); a.className='dn-appbtn'; a.href='/panel/approvals';
+      a.innerHTML='\u2713 Approvals'; top.appendChild(a);
+    }
+  }
+  var FALLBACK={is_owner:false, menus:['ordercosts','purchases','cash']};
+  fetch('/papi/me/nav',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+    .then(function(r){return r.json();})
+    .then(function(d){ render(d && d.ok ? d : FALLBACK); })
+    .catch(function(){ render(FALLBACK); });
+
+  function group(v){
+    v=(v==null?'':String(v)).replace(/[^\d.]/g,'');
+    var p=v.split('.'); p[0]=p[0].replace(/\B(?=(\d{3})+(?!\d))/g,',');
+    return p.length>1 ? p[0]+'.'+p.slice(1).join('') : p[0];
+  }
+  function wire(id, curId){
+    var el=document.getElementById(id); if(!el) return;
+    var cur=curId?document.getElementById(curId):null;
+    var echo=document.createElement('div'); echo.className='dn-amt-echo';
+    var anchor=(el.closest && el.closest('.row'))||el;
+    if(anchor.parentNode) anchor.parentNode.insertBefore(echo, anchor.nextSibling);
+    function upd(){
+      var g=group(el.value); if(el.value!==g) el.value=g;
+      var n=parseFloat(g.replace(/,/g,''))||0;
+      if(n>0){ echo.textContent=(cur&&cur.value?cur.value+' ':'')+group(String(n)); echo.style.display='block'; }
+      else { echo.textContent=''; echo.style.display='none'; }
+    }
+    el.addEventListener('input',upd);
+    if(cur) cur.addEventListener('change',upd);
+    document.querySelectorAll('.btn,button').forEach(function(b){ b.addEventListener('click',function(){ setTimeout(upd,1500); }); });
+    upd();
+  }
+  wire('amt','cur');
+  wire('total','sellcur');
+})();
+</script>
+</body></html>

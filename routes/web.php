@@ -69,6 +69,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/expenses', [\App\Http\Controllers\Panel\ExpenseController::class, 'page']);
     Route::get('/panel/pnl', [\App\Http\Controllers\Panel\ExpenseController::class, 'pnlPage']);
     Route::get('/panel/trade-cashbook', [\App\Http\Controllers\Panel\TradeCashbookController::class, 'page']);
+    Route::get('/panel/buy-list', [\App\Http\Controllers\Panel\BuyListController::class, 'page']);
     Route::get('/panel/staff', [SellerPanelController::class, 'staff']);
     Route::get('/panel/scheduled', [SellerPanelController::class, 'scheduled']);
     Route::get('/panel/marketing', [SellerPanelController::class, 'marketing']);
@@ -128,6 +129,10 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('order-costs/orders', [\App\Http\Controllers\Panel\OrderCostController::class, 'orders']);
         Route::post('order-costs', [\App\Http\Controllers\Panel\OrderCostController::class, 'store']);
         Route::post('order-costs/bulk', [\App\Http\Controllers\Panel\OrderCostController::class, 'bulkStore']);
+        Route::get('buy-list', [\App\Http\Controllers\Panel\BuyListController::class, 'data']);
+        Route::post('buy-list/mark', [\App\Http\Controllers\Panel\BuyListController::class, 'mark']);
+        Route::get('suppliers', [\App\Http\Controllers\Panel\SupplierController::class, 'index']);
+        Route::post('suppliers', [\App\Http\Controllers\Panel\SupplierController::class, 'store']);
         Route::post('orders/quick', [\App\Http\Controllers\Panel\OrderCostController::class, 'quickOrder']);
         Route::get('orders/{id}/costs', [\App\Http\Controllers\Panel\OrderCostController::class, 'orderDetail']);
         Route::get('order-costs/pending', [\App\Http\Controllers\Panel\OrderCostController::class, 'pending']);
