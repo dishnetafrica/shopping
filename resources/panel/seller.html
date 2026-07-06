@@ -32,6 +32,8 @@
   .side a.nav{display:flex;align-items:center;gap:11px;padding:11px 18px;color:#bcd9c7;font-size:14px;font-weight:600;border-left:3px solid transparent;cursor:pointer}
   .side a.nav:hover{background:rgba(255,255,255,.06);color:#fff}
   .side a.nav.on{background:rgba(255,255,255,.10);color:#fff;border-left-color:#7CD6A1}
+  .side .navsec{padding:14px 18px 5px;font-size:9px;font-weight:800;letter-spacing:1.2px;color:rgba(255,255,255,.34);text-transform:uppercase}
+  .side .navsec.trade{color:#7CD6A1}
   .side a.nav .i{width:18px;text-align:center}
   .side a.nav.dis{opacity:.45;cursor:default}
   .main{flex:1;min-width:0;display:flex;flex-direction:column}
@@ -270,43 +272,55 @@
   <aside class="side" id="side">
     <div class="brand"><div class="lg" id="sideLogo">FS</div><b><span id="sideName">Family Shopper</span><br><span style="font-size:11px;font-weight:500;opacity:.75">Seller panel</span></b></div>
     <nav>
+      <div class="navsec">Main</div>
       <a class="nav on" data-page="dash"><span class="i">▦</span> Dashboard</a>
       <a class="nav" data-page="orders"><span class="i">🛒</span> Orders</a>
       <a class="nav" href="/panel/operations"><span class="i">✅</span> Operations</a>
       <a class="nav" data-feature="kitchen" data-page="kitchen"><span class="i">👨‍🍳</span> Kitchen</a>
       <a class="nav" href="/panel/chats"><span class="i">💬</span> Chats</a>
-      <a class="nav" href="/panel/cashbook"><span class="i">💰</span> Cashbook</a>
-      <a class="nav" href="/panel/books"><span class="i">📚</span> Books</a>
-      <div id="orderSysNav" style="display:none">
-      <a class="nav" href="/panel/cash-position"><span class="i">💰</span> Cash Position</a>
-      <a class="nav" href="/panel/book-cost"><span class="i">🛒</span> Book Purchase</a>
-      <a class="nav" href="/panel/orders-costs"><span class="i">🧾</span> Orders &amp; Margin</a>
-      <a class="nav" href="/panel/approvals"><span class="i">✅</span> Cost Approvals</a>
-      </div>
-      <script>try{if(window.SHOP_FEATURES&&window.SHOP_FEATURES.order_system){document.getElementById('orderSysNav').style.display='block';}}catch(e){}</script>
-      <a class="nav" href="/panel/staff"><span class="i">👤</span> Staff</a>
-      <a class="nav" href="/panel/scheduled"><span class="i">🗓️</span> Scheduled</a>
-      <a class="nav" href="/panel/marketing"><span class="i">📣</span> Marketing</a>
-      <a class="nav" href="/panel/leads"><span class="i">🎯</span> Leads</a>
-      <a class="nav" href="/panel/diagnostics"><span class="i">🩺</span> Diagnostics</a>
-      <a class="nav" href="/panel/setup"><span class="i">🚀</span> Setup</a>
       <a class="nav" data-feature="dispatch" data-page="dispatch"><span class="i">🚦</span> Dispatch</a>
       <a class="nav sub" data-feature="dispatch" data-page="dispatch"><span class="i">└</span> Delivery Board</a>
-      <a class="nav sub" data-feature="riders" data-page="riders"><span class="i">└</span> Riders</a>
       <a class="nav sub" data-feature="dispatch" data-page="deliveryZones"><span class="i">└</span> Delivery Zones</a>
-      <a class="nav" data-page="customers"><span class="i">👥</span> Customers</a>
+
+      <div id="orderSysNav" style="display:none">
+      <div class="navsec trade">🌍 Order Trading</div>
+      <a class="nav" href="/panel/orders-costs"><span class="i">🧾</span> Orders &amp; Margin</a>
+      <a class="nav" href="/panel/book-cost"><span class="i">🛒</span> Book Purchase</a>
+      <a class="nav" href="/panel/approvals"><span class="i">✅</span> Cost Approvals</a>
+      <a class="nav" href="/panel/cash-position"><span class="i">💰</span> Cash Position</a>
+      <a class="nav" href="/panel/expenses"><span class="i">💸</span> Expenses</a>
+      <a class="nav" href="/panel/pnl"><span class="i">📈</span> Profit &amp; Loss</a>
+      </div>
+      <script>try{if(window.SHOP_FEATURES&&window.SHOP_FEATURES.order_system){document.getElementById('orderSysNav').style.display='block';}}catch(e){}</script>
+
+      <div class="navsec">Catalog &amp; Sales</div>
+      <a class="nav" data-page="products"><span class="i">📦</span> Products</a>
+      <a class="nav" data-page="category"><span class="i">🗂</span> Category</a>
       <a class="nav" data-page="quotations"><span class="i">📄</span> Quotations</a>
       <a class="nav" data-feature="pos" data-page="pos"><span class="i">🧾</span> POS</a>
-      <a class="nav" data-page="category"><span class="i">🗂</span> Category</a>
+      <a class="nav" data-page="customers"><span class="i">👥</span> Customers</a>
       <a class="nav" id="navThali" data-feature="thali" data-page="thali"><span class="i">🍽</span> Daily Thali</a>
-      <a class="nav" data-page="products"><span class="i">📦</span> Products</a>
-      <a class="nav" data-page="reports"><span class="i">📊</span> Reports</a>
-      <a class="nav" data-page="analytics"><span class="i">📈</span> Analytics</a>
+
+      <div class="navsec">Money</div>
+      <a class="nav" href="/panel/cashbook"><span class="i">💰</span> Cashbook</a>
+      <a class="nav" href="/panel/books"><span class="i">📚</span> Books</a>
+
+      <div class="navsec">Logistics</div>
       <a class="nav" data-feature="riders" data-page="riders"><span class="i">🛵</span> Riders</a>
       <a class="nav" data-page="returns"><span class="i">↩</span> Returns</a>
       <a class="nav" data-page="shipments"><span class="i">🚚</span> Logistics</a>
+      <a class="nav" href="/panel/scheduled"><span class="i">🗓️</span> Scheduled</a>
+
+      <div class="navsec">Grow</div>
+      <a class="nav" href="/panel/leads"><span class="i">🎯</span> Leads</a>
+      <a class="nav" href="/panel/marketing"><span class="i">📣</span> Marketing</a>
+      <a class="nav" data-page="reports"><span class="i">📊</span> Reports</a>
+      <a class="nav" data-page="analytics"><span class="i">📈</span> Analytics</a>
       <a class="nav" data-page="activity"><span class="i">📥</span> Activity Inbox</a>
       <a class="nav" data-page="brain"><span class="i">🧠</span> Business Brain <span style="color:#c9a227">⭐</span></a>
+
+      <div class="navsec">Manage</div>
+      <a class="nav" href="/panel/staff"><span class="i">👤</span> Staff</a>
       <a class="nav" data-page="settings"><span class="i">⚙</span> Settings</a>
       <a class="nav sub" data-page="profile"><span class="i">└</span> Profile</a>
       <a class="nav sub" data-page="security"><span class="i">└</span> Security</a>
@@ -314,6 +328,8 @@
       <a class="nav sub" data-page="smartDefaults"><span class="i">└</span> Smart Defaults</a>
       <a class="nav sub" href="/panel/setup"><span class="i">└</span> WhatsApp Settings</a>
       <a class="nav sub" data-page="subscription"><span class="i">└</span> Subscription</a>
+      <a class="nav" href="/panel/setup"><span class="i">🚀</span> Setup</a>
+      <a class="nav" href="/panel/diagnostics"><span class="i">🩺</span> Diagnostics</a>
       <a class="nav" data-page="help"><span class="i">❓</span> Help</a>
       <a class="nav" data-page="profile"><span class="i">👤</span> Account</a>
       <a class="nav" id="navLogout"><span class="i">⏻</span> Logout</a>
@@ -2104,11 +2120,18 @@ function applyPermissions(){
   var menus=ME.menus||[];
   // data-page → menu key
   var pageMap={orders:'orders',kitchen:'orders',dispatch:'orders',deliveryZones:'orders',riders:'orders',pos:'orders',
-               customers:'customers',quotations:'quotations',category:'products',products:'products',dash:'dashboard'};
-  // href → menu key
-  var hrefMap={'/panel/chats':'whatsapp','/panel/cashbook':'finance','/panel/staff':'staff',
+               shipments:'orders',returns:'orders',customers:'customers',quotations:'quotations',
+               category:'products',products:'products',dash:'dashboard',
+               reports:'finance',analytics:'finance',activity:'orders',brain:'settings',
+               settings:'settings',profile:'settings',security:'settings',orderNotifs:'settings',
+               smartDefaults:'settings',subscription:'settings',help:'dashboard',thali:'products'};
+  // href → menu key  (order-trading links mapped to their role keys)
+  var hrefMap={'/panel/chats':'whatsapp','/panel/cashbook':'finance','/panel/books':'finance','/panel/staff':'staff',
                '/panel/scheduled':'marketing','/panel/marketing':'marketing','/panel/leads':'marketing',
-               '/panel/diagnostics':'settings','/panel/setup':'settings','/panel/billing':'settings'};
+               '/panel/diagnostics':'settings','/panel/setup':'settings','/panel/billing':'settings',
+               '/panel/operations':'orders',
+               '/panel/orders-costs':'ordercosts','/panel/book-cost':'purchases',
+               '/panel/approvals':'approvals','/panel/cash-position':'cash','/panel/expenses':'purchases','/panel/pnl':'cash'};
   try{
     document.querySelectorAll('.side a.nav').forEach(function(a){
       var menu=null;
@@ -2116,6 +2139,26 @@ function applyPermissions(){
       var hr=a.getAttribute('href'); if(hr&&hrefMap[hr])menu=hrefMap[hr];
       if(menu&&menus.indexOf(menu)<0)a.style.display='none';
     });
+    // Hide any section header that has no visible links under it (avoid empty "GROW" etc.)
+    var nav=document.querySelector('.side nav'); if(nav){
+      var kids=Array.prototype.slice.call(nav.children);
+      kids.forEach(function(el,i){
+        if(el.className&&el.className.indexOf('navsec')>=0){
+          var anyVisible=false;
+          for(var j=i+1;j<kids.length;j++){
+            var n=kids[j];
+            if(n.className&&n.className.indexOf('navsec')>=0)break; // next section
+            if(n.id==='orderSysNav'){ // gated group wrapper: check its inner links
+              var inner=n.querySelectorAll('a.nav');
+              for(var k=0;k<inner.length;k++){ if(inner[k].style.display!=='none' && n.style.display!=='none'){anyVisible=true;break;} }
+              continue;
+            }
+            if(n.tagName==='A'&&n.className.indexOf('nav')>=0&&n.style.display!=='none'){anyVisible=true;break;}
+          }
+          if(!anyVisible)el.style.display='none';
+        }
+      });
+    }
   }catch(e){}
 }
 function showPage(p){

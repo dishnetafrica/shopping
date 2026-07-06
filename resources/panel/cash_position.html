@@ -28,7 +28,7 @@
   .loading{text-align:center;color:var(--mute);padding:40px;}
 </style></head>
 <body><div class="wrap">
-  <div class="top"><h1>💰 Cash Position</h1><a href="/panel">← Panel</a></div>
+  <div class="top"><h1 id="cpTitle">💰 Cash Position</h1><a href="/panel">← Panel</a></div>
   <div class="sub" id="sub">Three-currency cash · exact per currency</div>
   <div id="app"><div class="loading">Loading…</div></div>
   <div class="note">Each currency is kept separate — combined USD is reference only.</div>
@@ -48,7 +48,8 @@ function hero(cur,d,cls,label,symbol,unit){
 }
 fetch('/papi/cash-position',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(d=>{
   if(!d.ok){$('#app').innerHTML='<div class="loading">Could not load.</div>';return;}
-  $('#sub').textContent='Three-currency cash · '+d.as_of;
+  $('#sub').textContent=(d.view==='mine'?('My cash · '+d.whoami+' · '):'All staff · ')+d.as_of;
+  var ct=document.getElementById('cpTitle'); if(ct) ct.textContent=(d.view==='mine'?'💰 My Cash':'💰 Cash Position — All Staff');
   const c=d.currencies;
   $('#app').innerHTML =
     hero('USD',c.USD,'usd','💵 USD Balance','$','') +

@@ -3489,6 +3489,20 @@ class PanelApiController extends Controller
         return in_array($role, ['owner', 'manager', 'product_staff', 'staff', 'purchaser', 'field', 'sales'], true) ? $role : 'staff';
     }
 
+    /** Parse per-user menu override. Returns null (use role default) or an array of valid keys. */
+    private function staffMenus(Request $r): ?array
+    {
+        if (! $r->has('allowed_menus')) return null;
+        $raw = $r->input('allowed_menus');
+        if ($raw === '' || $raw === null || $raw === 'default') return null;   // null = role default
+        if (is_string($raw)) $raw = array_filter(array_map('trim', explode(',', $raw)));
+        if (! is_array($raw)) return null;
+        $valid = \App\Models\User::allMenuKeys();
+        $out = array_values(array_intersect($valid, $raw));
+        if (! in_array('dashboard', $out, true)) $out[] = 'dashboard';        // always keep dashboard
+        return $out;
+    }
+
     /** Parse the category list for a product_staff user (null for any other role). */
     private function staffCats(Request $r, string $role): ?array
     {
@@ -3513,6 +3527,7 @@ class PanelApiController extends Controller
                 'email' => (string) $u->email,
                 'phone' => (string) ($u->phone ?? ''),
                 'role'  => (string) ($u->role ?: 'staff'),
+                'allowed_menus' => is_array($u->allowed_menus) ? $u->allowed_menus : null,
                 'categories' => is_array($u->allowed_categories) ? array_values($u->allowed_categories) : [],
                 'self'  => (int) $u->id === $me,
             ])->values();
@@ -3571,6 +3586,7 @@ class PanelApiController extends Controller
             'password'  => $password,        // 'hashed' cast hashes on save
             'role'      => $role,
             'allowed_categories' => $this->staffCats($r, $role),
+            'allowed_menus' => $this->staffMenus($r),
         ]);
 
         return response()->json(['ok' => true]);
@@ -3639,6 +3655,7 @@ class PanelApiController extends Controller
         $u->phone = $phone !== '' ? $phone : null;
         $u->role  = $role;
         $u->allowed_categories = $this->staffCats($r, $role);
+        if ($r->has('allowed_menus')) { $u->allowed_menus = $this->staffMenus($r); }
         if (strlen($pass) >= 6) {
             $u->password = $pass;   // 'hashed' cast re-hashes on save
         }

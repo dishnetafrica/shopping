@@ -39,7 +39,16 @@ class OrderCostController extends Controller
         $orders = Order::where('tenant_id',$t->id)
             ->orderByDesc('id')->limit(50)
             ->get(['id','order_no','customer_name','total','location']);
+        $me = $request->user();
+        $staff = [];
+        if ($me->isOwnerLike() || in_array((string)$me->role,['manager'],true)) {
+            $staff = \App\Models\User::where('tenant_id',$t->id)
+                ->whereIn('role',['owner','manager','purchaser','field','sales','staff'])
+                ->get(['id','name','role'])->map(fn($u)=>['id'=>$u->id,'name'=>$u->name,'role'=>$u->role]);
+        }
         return response()->json(['ok'=>true,'orders'=>$orders,
+            'me'=>['id'=>$me->id,'name'=>$me->name,'is_owner'=>$me->isOwnerLike()],
+            'staff'=>$staff,
             'default_rates'=>['UGX'=>(float)$t->setting('rate_ugx_per_usd',3700),
                               'SSP'=>(float)$t->setting('rate_ssp_per_usd',5180),'USD'=>1]]);
     }
@@ -62,15 +71,29 @@ class OrderCostController extends Controller
             $path = $request->file('receipt')->store("receipts/t{$t->id}", 'public');
         }
 
+        $user = $request->user();
+        // Holder defaults to the logged-in user (their own cashbook). Owner/manager may name
+        // a different holder by passing holder_user_id; otherwise it is the current user.
+        $holderUserId = $user->id;
+        $holderName   = (string) ($user->name ?? '');
+        if (($user->isOwnerLike() || in_array((string)$user->role,['manager'],true)) && $request->filled('holder_user_id')) {
+            $hu = \App\Models\User::where('tenant_id',$t->id)->find($request->input('holder_user_id'));
+            if ($hu) { $holderUserId = $hu->id; $holderName = (string)$hu->name; }
+        } elseif ($request->filled('holder')) {
+            // free-text holder still allowed (e.g. "office safe") — no user link
+            $holderName = (string)$request->input('holder');
+            $holderUserId = null;
+        }
+
         $c = OrderCost::create([
             'tenant_id'=>$t->id, 'order_id'=>$order?->id, 'order_no'=>$order?->order_no,
             'stage'=>(string)$request->input('stage','purchase'),
             'currency'=>$cur, 'native_amount'=>$native, 'rate_to_usd'=>$rate,
             'usd_amount'=>OrderCost::toUsd($native,$rate),
-            'holder'=>(string)$request->input('holder',''),
+            'holder'=>$holderName, 'holder_user_id'=>$holderUserId,
             'receipt_path'=>$path, 'note'=>(string)$request->input('note',''),
             'status'=>((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved',
-            'created_by'=>$request->user()->name ?? '',
+            'created_by'=>$user->name ?? '',
         ]);
         return response()->json(['ok'=>true,'id'=>$c->id,'usd'=>$c->usd_amount]);
     }

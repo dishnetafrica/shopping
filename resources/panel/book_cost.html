@@ -47,8 +47,10 @@
     <input id="rate" type="text" inputmode="decimal" oninput="calc()">
     <div class="conv" id="conv">≈ $0.00 USD</div>
 
-    <label>Who paid / holds it</label>
-    <input id="holder" type="text" placeholder="Jaeysh">
+    <label id="holderLbl">Who paid / holds it</label>
+    <input id="holder" type="text" placeholder="Jaeysh bhai">
+    <select id="holderSel" style="display:none"></select>
+    <div id="holderMe" style="display:none;font-size:12px;color:#065f46;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:9px;padding:9px 11px;font-weight:700;">Booking to your cash</div>
 
     <label>Receipt (optional)</label>
     <label class="receipt" for="receipt">📷 Attach receipt photo <span id="rname" style="font-weight:500;color:#64748b"></span></label>
@@ -72,11 +74,23 @@ function setRate(){ $('rate').value = rates[$('cur').value]||''; calc(); }
 $('cur').onchange=setRate;
 function calc(){ const a=parseFloat(($('amt').value||'').replace(/,/g,''))||0, r=parseFloat(($('rate').value||'').replace(/,/g,''))||0;
   $('conv').textContent = r>0 ? '≈ $'+(a/r).toLocaleString(undefined,{maximumFractionDigits:2})+' USD' : '≈ $0.00 USD'; }
+let ME=null, IS_OWNER=false;
 fetch('/papi/order-costs/orders',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(d=>{
   if(d.default_rates) rates=d.default_rates;
+  ME=d.me; IS_OWNER=d.me&&d.me.is_owner;
   const sel=$('order'); sel.innerHTML='<option value="">— no order (general) —</option>';
   (d.orders||[]).forEach(o=>{ const opt=document.createElement('option'); opt.value=o.id;
     opt.textContent=`${o.order_no} · ${o.customer_name||'—'} · $${o.total}`; sel.appendChild(opt); });
+  // Holder UI: owner picks staff from dropdown; staff auto-book to self
+  if(IS_OWNER && d.staff && d.staff.length){
+    $('holder').style.display='none';
+    const hs=$('holderSel'); hs.style.display='block';
+    hs.innerHTML='<option value="">— my own cash —</option>'+d.staff.map(u=>`<option value="${u.id}">${u.name} (${u.role})</option>`).join('')+'<option value="__other">Other (type name)…</option>';
+    hs.onchange=function(){ if(hs.value==='__other'){$('holder').style.display='block';$('holder').value='';} else {$('holder').style.display='none';} };
+  } else {
+    // staff: hide holder input, show "booking to your cash"
+    $('holderLbl').style.display='none'; $('holder').style.display='none'; $('holderMe').style.display='block';
+  }
   setRate();
 });
 function save(){
@@ -85,7 +99,13 @@ function save(){
   fd.append('currency',$('cur').value);
   fd.append('native_amount',($('amt').value||'').replace(/,/g,''));
   fd.append('rate_to_usd',($('rate').value||'').replace(/,/g,''));
-  fd.append('holder',$('holder').value); fd.append('note',$('note').value);
+  const hs=$('holderSel');
+  if(IS_OWNER && hs && hs.style.display!=='none' && hs.value && hs.value!=='__other'){
+    fd.append('holder_user_id',hs.value);
+  } else if($('holder').style.display!=='none' && $('holder').value){
+    fd.append('holder',$('holder').value);
+  }
+  fd.append('note',$('note').value);
   if($('receipt').files[0]) fd.append('receipt',$('receipt').files[0]);
   const b=document.querySelector('.btn'); b.disabled=true; b.textContent='Saving…';
   fetch('/papi/order-costs',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd})

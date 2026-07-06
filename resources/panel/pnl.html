@@ -1,0 +1,70 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Profit & Loss</title>
+<style>
+  :root{--red:#D41C1C;--green:#059669;--amber:#d97706;--dark:#0f0f0f;--mute:#94a3b8;--bg:#f5f5f2;--border:#e8e8e3;--font:'Inter',-apple-system,'Segoe UI',sans-serif;}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:var(--font);color:#0f0f0f;}
+  .wrap{max-width:640px;margin:0 auto;padding:14px;}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .top h1{font-size:20px;margin:0;font-weight:900;}.top a{color:var(--green);text-decoration:none;font-weight:700;font-size:13px;}
+  .periods{display:flex;gap:6px;margin-bottom:12px;}
+  .per{flex:1;padding:9px;border:1.5px solid var(--border);border-radius:10px;background:#fff;text-align:center;font-size:12px;font-weight:800;color:#374151;cursor:pointer;}
+  .per.on{border-color:var(--green);background:#ecfdf5;color:#065f46;}
+  .hero{border-radius:16px;padding:20px;margin-bottom:11px;position:relative;overflow:hidden;color:#fff;}
+  .hero .circ{position:absolute;top:-24px;right:-24px;width:130px;height:130px;background:rgba(255,255,255,.06);border-radius:50%;}
+  .hero .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.6);margin-bottom:6px;}
+  .hero .val{font-size:40px;font-weight:900;letter-spacing:-2px;line-height:1;}
+  .hero .meta{font-size:11px;color:rgba(255,255,255,.55);margin-top:6px;}
+  .net{background:var(--dark);} .net .val{color:#4ade80;}
+  .net.loss .val{color:#f87171;}
+  .card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;}
+  .line{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #f3f3f0;font-size:14px;}
+  .line.big{font-weight:900;font-size:16px;border:none;}
+  .line .g{color:#15803d;} .line .r{color:#dc2626;}
+  .sectlbl{font-size:11px;font-weight:800;letter-spacing:.6px;color:var(--mute);margin-bottom:8px;}
+  .catrow{display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid #f3f3f0;}
+  .disclaimer{font-size:11px;color:var(--mute);text-align:center;margin-top:10px;line-height:1.5;}
+  .loading{text-align:center;color:var(--mute);padding:30px;}
+</style></head>
+<body><div class="wrap">
+  <div class="top"><h1>📈 Profit &amp; Loss</h1><a href="/panel">← Panel</a></div>
+  <div class="periods">
+    <div class="per on" data-p="today" onclick="setPer(this)">Today</div>
+    <div class="per" data-p="7d" onclick="setPer(this)">7 days</div>
+    <div class="per" data-p="30d" onclick="setPer(this)">30 days</div>
+    <div class="per" data-p="all" onclick="setPer(this)">All</div>
+  </div>
+  <div id="app"><div class="loading">Loading…</div></div>
+  <div class="disclaimer">Running estimate from approved orders &amp; costs. For audited figures, reconcile against Books.</div>
+</div>
+<script>
+const $=s=>document.getElementById(s);let period='today';
+function fmt(n){return Number(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
+function setPer(el){document.querySelectorAll('.per').forEach(p=>p.classList.remove('on'));el.classList.add('on');period=el.dataset.p;load();}
+function load(){
+  $('app').innerHTML='<div class="loading">Loading…</div>';
+  fetch('/papi/pnl?period='+period,{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(d=>{
+    if(!d.ok){$('app').innerHTML='<div class="loading">Could not load.</div>';return;}
+    const loss=d.net_profit<0;
+    let cats=(d.expense_by_category||[]).map(c=>`<div class="catrow"><span>${c.expense_category||'Misc'}</span><span>$${fmt(c.usd)}</span></div>`).join('')||'<div class="catrow"><span>No expenses yet</span><span>$0.00</span></div>';
+    $('app').innerHTML=`
+      <div class="hero net ${loss?'loss':''}"><div class="circ"></div>
+        <div class="lbl">${loss?'Net Loss':'Net Profit'} · ${period==='today'?'Today':period==='7d'?'Last 7 days':period==='30d'?'Last 30 days':'All time'}</div>
+        <div class="val">$${fmt(Math.abs(d.net_profit))}</div>
+        <div class="meta">${d.orders} orders · ${d.margin_pct}% net margin</div>
+      </div>
+      <div class="card">
+        <div class="line"><span>Revenue</span><span class="g">$${fmt(d.revenue)}</span></div>
+        <div class="line"><span>Cost of goods (landed)</span><span class="r">-$${fmt(d.order_costs)}</span></div>
+        <div class="line big"><span>Gross profit</span><span class="${d.gross_profit>=0?'g':'r'}">$${fmt(d.gross_profit)}</span></div>
+        <div class="line"><span>Running expenses</span><span class="r">-$${fmt(d.expenses)}</span></div>
+        <div class="line big"><span>${loss?'Net loss':'Net profit'}</span><span class="${loss?'r':'g'}">$${fmt(d.net_profit)}</span></div>
+      </div>
+      <div class="card">
+        <div class="sectlbl">EXPENSES BY CATEGORY</div>
+        ${cats}
+      </div>`;
+  }).catch(()=>{$('app').innerHTML='<div class="loading">Failed.</div>';});
+}
+load();
+</script></body></html>

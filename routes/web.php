@@ -66,6 +66,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/book-cost', [\App\Http\Controllers\Panel\OrderCostController::class, 'page']);
     Route::get('/panel/orders-costs', [\App\Http\Controllers\Panel\OrderCostController::class, 'ordersPage']);
     Route::get('/panel/approvals', [\App\Http\Controllers\Panel\OrderCostController::class, 'approvalsPage']);
+    Route::get('/panel/expenses', [\App\Http\Controllers\Panel\ExpenseController::class, 'page']);
+    Route::get('/panel/pnl', [\App\Http\Controllers\Panel\ExpenseController::class, 'pnlPage']);
     Route::get('/panel/staff', [SellerPanelController::class, 'staff']);
     Route::get('/panel/scheduled', [SellerPanelController::class, 'scheduled']);
     Route::get('/panel/marketing', [SellerPanelController::class, 'marketing']);
@@ -127,6 +129,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('orders/{id}/costs', [\App\Http\Controllers\Panel\OrderCostController::class, 'orderDetail']);
         Route::get('order-costs/pending', [\App\Http\Controllers\Panel\OrderCostController::class, 'pending']);
         Route::post('order-costs/{id}/decide', [\App\Http\Controllers\Panel\OrderCostController::class, 'decide']);
+        Route::get('expenses/categories', [\App\Http\Controllers\Panel\ExpenseController::class, 'categories']);
+        Route::post('expenses', [\App\Http\Controllers\Panel\ExpenseController::class, 'store']);
+        Route::get('pnl', [\App\Http\Controllers\Panel\ExpenseController::class, 'pnl']);
 
         // in-product release notes
         Route::get('whatsnew', [PanelApiController::class, 'whatsNew']);

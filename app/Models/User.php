@@ -11,9 +11,9 @@ class User extends Authenticatable implements FilamentUser
 {
     use Notifiable;
 
-    protected $fillable = ['tenant_id','name','phone','email','password','role','is_super_admin','allowed_categories'];
+    protected $fillable = ['tenant_id','name','phone','email','password','role','is_super_admin','allowed_categories','allowed_menus'];
     protected $hidden   = ['password','remember_token'];
-    protected $casts    = ['is_super_admin' => 'boolean','password' => 'hashed','allowed_categories' => 'array'];
+    protected $casts    = ['is_super_admin' => 'boolean','password' => 'hashed','allowed_categories' => 'array','allowed_menus' => 'array'];
 
     public function tenant() { return $this->belongsTo(Tenant::class); }
 
@@ -27,18 +27,28 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /** Menu keys this user may open. Owner/legacy = everything. */
+    /** All menu keys that exist (the master list for the RBAC editor). */
+    public static function allMenuKeys(): array
+    {
+        return ['dashboard', 'products', 'orders', 'customers', 'quotations', 'whatsapp', 'finance', 'marketing', 'settings', 'staff', 'cash', 'purchases', 'ordercosts', 'approvals'];
+    }
+
     public function effectiveMenus(): array
     {
-        $all = ['dashboard', 'products', 'orders', 'customers', 'quotations', 'whatsapp', 'finance', 'marketing', 'settings', 'staff', 'cash', 'purchases', 'ordercosts'];
+        $all = self::allMenuKeys();
         if ($this->isOwnerLike()) return $all;
+        // Per-user override wins over the role default (owner sets it in the Staff editor).
+        if (is_array($this->allowed_menus)) {
+            return array_values(array_intersect($all, $this->allowed_menus));
+        }
         switch ((string) $this->role) {
             case 'manager':       return array_values(array_diff($all, ['staff']));
             case 'product_staff': return ['dashboard', 'products'];
-            // Jaeysh (Uganda buyer): book purchases against orders + see orders/cash
+            // Jaeysh (Uganda buyer): sees orders+margin, books purchases, sees cash. No approvals (can't approve own spend).
             case 'purchaser':     return ['dashboard', 'orders', 'ordercosts', 'purchases', 'cash'];
-            // Asish (South Sudan field): book delivery/local costs + see orders/cash
+            // Asish (South Sudan field): sees orders+margin, books delivery/local costs, sees cash. No approvals.
             case 'field':         return ['dashboard', 'orders', 'ordercosts', 'purchases', 'cash'];
-            // Salesperson: build quotations + orders + customers
+            // Salesperson: builds quotations + orders + customers, sees orders+margin. No purchasing, no cash, no approvals.
             case 'sales':         return ['dashboard', 'orders', 'quotations', 'customers', 'ordercosts'];
             default:              return $all; // legacy/unknown role = unrestricted (owner opts in to limit)
         }

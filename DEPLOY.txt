@@ -1,17 +1,70 @@
-SHOPBOT — Order-cost system, now GATED per-tenant (Shree only)
-Adds window.SHOP_FEATURES.order_system flag. Links hidden + routes 404 unless enabled.
+════════════════════════════════════════════════════════════════════
+SHOPBOT — SHREE ORDER-TRADING PLATFORM (COMPLETE, one deploy)
+All 6 build steps merged. Gated to Shree via order_system_enabled flag.
+════════════════════════════════════════════════════════════════════
 
-CHANGED vs previous drop — 3 gate files:
-  app/Http/Controllers/Panel/SellerPanelController.php   injects the feature flag
-  app/Http/Controllers/Panel/OrderCostController.php     page methods 404 if flag off
-  app/Http/Controllers/Panel/CashPositionController.php  page 404 if flag off
-  resources/panel/seller.html                            links wrapped, shown only when flag on
+WHAT THIS ADDS (all under 🌍 Order Trading in Shree's sidebar):
+  🧾 Orders & Margin    record Juba orders, tap for landed cost + margin (USD)
+  🛒 Book Purchase      book goods/bus/boda/cash-in vs an order, native currency + receipt
+  ✅ Cost Approvals     review receipts, approve/reject (imprest: cash counts once approved)
+  💰 Cash Position      per-person cash — each staff sees own; owner sees everyone (3 currencies)
+  💸 Expenses           22 preconfigured categories, per-person cash, approval flow
+  📈 Profit & Loss      live day/7d/30d/all: revenue − cost of goods − expenses = net profit
 
-DEPLOY: commit + push -> Deploy -> php artisan migrate -> php artisan storage:link
+PLUS:
+  • Grouped sidebar (7 sections) — MAIN / ORDER TRADING / CATALOG & SALES / MONEY / LOGISTICS / GROW / MANAGE
+  • Per-role menu hiding — Jaeysh/Asish/Sales see only their screens
+  • Per-user RBAC — owner ticks exact screen access per person on the Staff screen
+  • New roles: purchaser (Jaeysh), field (Asish), sales
 
-ENABLE FOR SHREE ONLY: run the Chrome script (below) OR tinker:
-  $t = \App\Models\Tenant::where('slug','shree')->first();   // or find(ID)
-  $t->putSetting('order_system_enabled', true);
-  // to also require approval (imprest): $t->putSetting('cost_approval', true);
+────────────────────────────────────────────────────────────────────
+DEPLOY — ONE TIME
+────────────────────────────────────────────────────────────────────
+1. Copy all 21 files into your repo (overwrite existing), commit + push
+2. EasyPanel → Deploy (Rebuild)
+3. Run migrations (creates 4 tables/columns):
+     php artisan migrate
+4. Link storage for receipt photos (if not already):
+     php artisan storage:link
 
-DISABLE for any tenant: putSetting('order_system_enabled', false)  -> links vanish, routes 404.
+That's it. Shree already has order_system_enabled=true, so everything appears
+in Shree's seller panel immediately. Other tenants see the same grouped menu
+but WITHOUT the Order Trading section (gate off).
+
+────────────────────────────────────────────────────────────────────
+MIGRATIONS THAT WILL RUN (in order)
+────────────────────────────────────────────────────────────────────
+  000100  order_costs table               (orders' costs, per currency)
+  000200  + holder_user_id                (links cash to the user account)
+  000300  + users.allowed_menus           (per-user RBAC override)
+  000400  expense_categories + column     (preconfigured expenses)
+
+All additive — no existing table altered or dropped.
+
+────────────────────────────────────────────────────────────────────
+AFTER DEPLOY — QUICK VERIFY (as Shree owner, bhavin@)
+────────────────────────────────────────────────────────────────────
+1. Reload panel → sidebar shows grouped sections + 🌍 Order Trading (6 links)
+2. Open Expenses → categories auto-seed (Rent, Salaries, Transport…)
+3. Orders & Margin → create a test order
+4. Book Purchase → book a UGX cost against it, attach receipt
+5. Cost Approvals → approve it
+6. Cash Position → your cash reflects it
+7. Profit & Loss → net profit updates
+8. Staff → edit a user → tick "Custom screen access" → choose screens → Save
+
+────────────────────────────────────────────────────────────────────
+FILES (21)
+────────────────────────────────────────────────────────────────────
+migrations (4), models (3: OrderCost, ExpenseCategory, User),
+controllers (5: CashPosition, OrderCost, Expense, SellerPanel, PanelApi),
+panel screens (7: cash_position, book_cost, orders_costs, cost_approvals,
+                  expenses, pnl, seller, staff), routes (web.php)
+
+SECURITY: 3-layer gate — sidebar links hidden unless flag on; page controllers
+404 when flag off; all data endpoints scoped to the caller's own tenant. A
+non-Shree tenant cannot see Shree data even by calling APIs directly.
+
+NOTE ON P&L: the Profit & Loss screen is a real-time ESTIMATE (revenue − costs −
+expenses), labelled "reconcile against Books" in the UI. For fully-audited
+double-entry accounts, the proven multi-currency kernel is a separate future phase.

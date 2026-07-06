@@ -25,19 +25,28 @@ class CashPositionController extends Controller
             ->header('Content-Type', 'text/html; charset=UTF-8')->header('Cache-Control','no-store');
     }
 
-    /** GET /papi/cash-position — per-currency balances + per-holder breakdown. */
+    /** GET /papi/cash-position — per-currency balances. Staff see ONLY their own cash;
+     *  owner/manager see everyone (with per-person breakdown). DishNet "My Cash" model. */
     public function data(Request $request)
     {
-        $t = $request->user()->tenant;
+        $user = $request->user();
+        $t = $user->tenant;
         if (! $t) return response()->json(['ok'=>false,'error'=>'no_tenant'],401);
         $tid = $t->id;
 
-        // Per currency: funding IN minus costs OUT (native), and USD-equivalent.
-        $rows = OrderCost::where('tenant_id',$tid)
-            ->where('status','approved')
-            ->select('currency','holder','stage',
+        $isOwnerView = $user->isOwnerLike() || in_array((string)$user->role,['manager'],true);
+
+        $q = OrderCost::where('tenant_id',$tid)->where('status','approved');
+        if (! $isOwnerView) {
+            // "My Cash": only rows held by this user (by account link, falling back to name)
+            $q->where(function($w) use ($user){
+                $w->where('holder_user_id',$user->id)
+                  ->orWhere(function($w2) use ($user){ $w2->whereNull('holder_user_id')->where('holder',$user->name); });
+            });
+        }
+        $rows = $q->select('currency','holder','holder_user_id','stage',
                 DB::raw('SUM(native_amount) as native'), DB::raw('SUM(usd_amount) as usd'))
-            ->groupBy('currency','holder','stage')->get();
+            ->groupBy('currency','holder','holder_user_id','stage')->get();
 
         $cur = [];   // currency => ['native'=>, 'usd'=>, 'holders'=>[holder=>native]]
         foreach ($rows as $r) {
@@ -64,6 +73,8 @@ class CashPositionController extends Controller
         return response()->json([
             'ok'=>true, 'base'=>'USD', 'combined_usd'=>$combinedUsd,
             'currencies'=>$out, 'as_of'=>date('d M Y · H:i'),
+            'view'=>$isOwnerView ? 'everyone' : 'mine',
+            'whoami'=>$user->name,
         ]);
     }
 }

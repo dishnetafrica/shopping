@@ -9,7 +9,7 @@ class OrderCost extends Model
 {
     protected $fillable = [
         'tenant_id','order_id','order_no','stage','currency','native_amount',
-        'rate_to_usd','usd_amount','holder','receipt_path','status','note','created_by',
+        'rate_to_usd','usd_amount','holder','holder_user_id','receipt_path','status','note','created_by',
     ];
     protected $casts = [
         'native_amount' => 'decimal:2', 'rate_to_usd' => 'decimal:6', 'usd_amount' => 'decimal:2',
