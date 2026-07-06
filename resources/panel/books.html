@@ -1,0 +1,83 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Books — {{SHOP_NAME}}</title>
+<style>
+  :root{--g:#1f7a5a;--bg:#f5f6f5;--card:#fff;--line:#e6e8e6;--muted:#6b7280;--red:#c0392b;--green:#1f7a5a}
+  *{box-sizing:border-box} body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:#111}
+  .wrap{max-width:1100px;margin:0 auto;padding:18px}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .top h1{font-size:22px;margin:0} .back{color:var(--g);text-decoration:none;font-weight:600}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .card .l{color:var(--muted);font-size:13px} .card .v{font-size:22px;font-weight:700;margin-top:4px}
+  .sec{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+  .sec h2{font-size:15px;margin:0 0 10px}
+  table{width:100%;border-collapse:collapse;font-size:14px} th,td{padding:8px 6px;text-align:right}
+  th:first-child,td:first-child{text-align:left} thead th{color:var(--muted);border-bottom:1px solid var(--line);font-weight:600}
+  tbody tr{border-bottom:1px solid #f0f1f0} .red{color:var(--red)} .green{color:var(--green)}
+  .btn{background:var(--g);color:#fff;border:0;border-radius:8px;padding:7px 12px;font-weight:600;cursor:pointer;font-size:13px}
+  .btn.sm{padding:5px 10px;font-size:12px} .btn.ghost{background:#eef4f1;color:var(--g)}
+  .muted{color:var(--muted)} .center{text-align:center;padding:30px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  input.f{border:1px solid var(--line);border-radius:8px;padding:8px;width:90px}
+  @media(max-width:700px){.cards{grid-template-columns:1fr}}
+</style></head>
+<body><div class="wrap">
+  <div class="top"><h1>📚 Books</h1><a class="back" href="/panel">← Back to panel</a></div>
+  <div id="app"><div class="center muted">Loading…</div></div>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+const api=(u,o)=>fetch(u,Object.assign({headers:{'X-Requested-With':'XMLHttpRequest'}},o||{})).then(r=>r.json());
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+function agingTable(title, rows, withBtn){
+  if(!rows||!rows.length) return `<div class="sec"><h2>${title}</h2><p class="muted">Nothing outstanding. 🎉</p></div>`;
+  let body=rows.map(d=>`<tr><td>${esc(d.name)}</td><td>${d.current}</td><td>${d.d1_30}</td><td>${d.d31_60}</td><td>${d.d61_90}</td><td class="red">${d.d90_plus}</td><td><b>${d.total}</b></td>${withBtn?`<td><button class="btn sm ghost" onclick="sendStatement('${esc(d.party)}',this)">Statement</button></td>`:''}</tr>`).join('');
+  return `<div class="sec"><h2>${title}</h2><div style="overflow-x:auto"><table>
+    <thead><tr><th>${withBtn?'Customer':'Supplier'}</th><th>Current</th><th>1–30</th><th>31–60</th><th>61–90</th><th>90+</th><th>Total</th>${withBtn?'<th></th>':''}</tr></thead>
+    <tbody>${body}</tbody></table></div></div>`;
+}
+
+function render(d){
+  if(!d.ok){ $('#app').innerHTML=`<div class="sec"><p class="red">Couldn't load the books: ${esc(d.error||'error')}</p></div>`; return; }
+  if(!d.enabled){
+    $('#app').innerHTML=`<div class="sec center">
+      <h2>Automatic books are off</h2>
+      <p class="muted">Turn it on to track receivables, VAT, cash — and get a trial balance, debtor aging and statements.</p>
+      <div class="row" style="justify-content:center;margin-top:10px">
+        <label class="muted">VAT % <input id="vat" class="f" type="number" value="18"></label>
+        <label class="muted">Terms (days) <input id="terms" class="f" type="number" value="30"></label>
+        <button class="btn" onclick="enableBooks()">Keep automatic books</button>
+      </div></div>`; return;
+  }
+  const cur=d.currency;
+  let trial=d.trial.map(r=>`<tr><td>${r.account} · ${esc(r.name)}</td><td class="muted">${r.type}</td><td>${r.debit}</td><td>${r.credit}</td></tr>`).join('');
+  $('#app').innerHTML=`
+    <div class="cards">
+      <div class="card"><div class="l">Net profit</div><div class="v ${d.net_raw<0?'red':'green'}">${cur} ${d.net_profit}</div><div class="muted" style="font-size:12px">income ${cur} ${d.income} − expense ${cur} ${d.expense}</div></div>
+      <div class="card"><div class="l">Owed to you</div><div class="v">${cur} ${d.receivables}</div><div class="muted" style="font-size:12px">you owe suppliers ${cur} ${d.payables}</div></div>
+      <div class="card"><div class="l">Books status</div><div class="v ${d.balanced?'green':'red'}">${d.balanced?'Balanced':'Out of balance'}</div><div class="muted" style="font-size:12px">Dr ${d.total_debit} = Cr ${d.total_credit}</div></div>
+    </div>
+    ${agingTable('Debtors — who owes you', d.debtors, true)}
+    ${agingTable('Creditors — who you owe', d.creditors, false)}
+    <div class="sec"><h2>Trial balance</h2><div style="overflow-x:auto"><table>
+      <thead><tr><th>Account</th><th>Type</th><th>Debit</th><th>Credit</th></tr></thead>
+      <tbody>${trial}<tr style="font-weight:700"><td>Totals</td><td></td><td>${d.total_debit}</td><td>${d.total_credit}</td></tr></tbody>
+    </table></div></div>`;
+}
+
+function load(){ api('/papi/books').then(render).catch(e=>{$('#app').innerHTML='<p class="red">Failed to load.</p>';}); }
+function enableBooks(){
+  const vat=$('#vat')?$('#vat').value:18, terms=$('#terms')?$('#terms').value:30;
+  api('/papi/books/enable?enabled=1&vat='+encodeURIComponent(vat)+'&terms='+encodeURIComponent(terms)).then(load);
+}
+function sendStatement(party,btn){
+  if(btn){btn.disabled=true;btn.textContent='Sending…';}
+  api('/papi/books/statement?party='+encodeURIComponent(party)).then(r=>{
+    if(btn){btn.disabled=false;btn.textContent='Statement';}
+    alert(r.ok?'Statement sent on WhatsApp ✅':('Could not send: '+(r.reason||'error')));
+  });
+}
+load();
+</script></body></html>

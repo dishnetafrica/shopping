@@ -1,0 +1,24 @@
+BOOKS FOR THE CUSTOM SELLER PANEL (not Filament)
+
+Your seller panel is a custom HTML+controller app, so the earlier Filament Books page never showed.
+These 4 files add Books the way your panel actually works (route → controller → HTML asset + papi JSON).
+
+NEW:
+  app/Http/Controllers/Panel/BooksController.php   page + JSON data + enable + statement
+  resources/panel/books.html                       the Books UI (fetches /papi/books)
+
+MODIFIED (overwrites):
+  routes/web.php               adds /panel/books + papi books endpoints (in the panel auth group)
+  resources/panel/seller.html  adds "📚 Books" link in the sidebar under Cashbook
+
+Deploy: commit → push to dishnetafrica/shopping main → EasyPanel Deploy.
+(The Dockerfile already copies app/, routes/, resources/ — no Dockerfile change needed this time.)
+
+After deploy:
+  1. Reload the panel — a "📚 Books" item appears under Cashbook.
+  2. Open it → "Automatic books are off" → set VAT 18, terms 30 → "Keep automatic books".
+  3. Deliver a test order → reopen Books → sale shows, status Balanced.
+  4. Take a payment → debtor total drops. Click "Statement" → sends WhatsApp (test your own number).
+
+The old Filament app/Filament/Pages/Books.php + Settings.php changes are now unused (harmless) — the
+real UI is books.html. You can leave them or delete Books.php later.

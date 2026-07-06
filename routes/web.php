@@ -61,6 +61,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/m', [SellerPanelController::class, 'mobile']);
     Route::get('/panel/chats', [SellerPanelController::class, 'chats']);
     Route::get('/panel/cashbook', [SellerPanelController::class, 'cashbook']);
+    Route::get('/panel/books', [\App\Http\Controllers\Panel\BooksController::class, 'page']);
     Route::get('/panel/staff', [SellerPanelController::class, 'staff']);
     Route::get('/panel/scheduled', [SellerPanelController::class, 'scheduled']);
     Route::get('/panel/marketing', [SellerPanelController::class, 'marketing']);
@@ -108,6 +109,11 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('activation', [PanelApiController::class, 'activationState']);
         Route::match(['get', 'post'], 'activation/mark', [PanelApiController::class, 'activationMark']);
         Route::match(['get', 'post'], 'starter-catalogue', [PanelApiController::class, 'starterCatalogue']);
+
+        // Books (accounting) — data + enable + statement
+        Route::get('books', [\App\Http\Controllers\Panel\BooksController::class, 'data']);
+        Route::match(['get','post'], 'books/enable', [\App\Http\Controllers\Panel\BooksController::class, 'enable']);
+        Route::match(['get','post'], 'books/statement', [\App\Http\Controllers\Panel\BooksController::class, 'statement']);
 
         // in-product release notes
         Route::get('whatsnew', [PanelApiController::class, 'whatsNew']);
