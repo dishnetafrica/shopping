@@ -1,0 +1,15 @@
+CHANGED FILES for dishnetafrica/shopping (branch: main)
+Single-currency Books panel — the customer-testable accounting screen.
+
+NEW:
+  app/Http/Controllers/Panel/BooksController.php   page + /papi/books (data, enable, statement)
+  resources/panel/books.html                       the Books UI (fetches /papi/books)
+
+MODIFIED (overwrite the repo versions):
+  routes/web.php               adds /panel/books + papi books endpoints (in the panel auth group)
+  resources/panel/seller.html  adds the "📚 Books" sidebar link under Cashbook
+
+DEPLOY: commit these 4 → push to main → EasyPanel Deploy. (Dockerfile already copies app/, routes/,
+resources/, so no Dockerfile change.) After deploy: /panel/books renders; enable per tenant.
+
+NOT INCLUDED: the multi-currency v2 kernel (separate branch, no UI yet — not production-ready).
