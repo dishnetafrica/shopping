@@ -1,0 +1,92 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orders &amp; Margin</title>
+<style>
+  :root{--red:#D41C1C;--green:#059669;--amber:#d97706;--blue:#1e40af;--dark:#0f0f0f;
+        --mute:#94a3b8;--bg:#f5f5f2;--border:#e8e8e3;--font:'Inter',-apple-system,'Segoe UI',sans-serif;}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);font-family:var(--font);color:#0f0f0f;}
+  .wrap{max-width:640px;margin:0 auto;padding:14px;}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .top h1{font-size:20px;margin:0;font-weight:900;} .top a{color:var(--green);text-decoration:none;font-weight:700;font-size:13px;}
+  .card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;}
+  label{font-size:12px;font-weight:700;color:#374151;display:block;margin:10px 0 5px;}
+  input,select{width:100%;padding:11px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;font-family:var(--font);background:#fff;outline:none;}
+  input:focus,select:focus{border-color:var(--green);}
+  .row{display:flex;gap:10px;}.row>div{flex:1;}
+  .btn{width:100%;margin-top:14px;background:var(--dark);color:#fff;border:none;border-radius:11px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;}
+  .oitem{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;cursor:pointer;}
+  .oitem:active{background:#fafaf8;}
+  .oitem-top{display:flex;justify-content:space-between;align-items:center;}
+  .oitem-no{font-weight:800;font-size:14px;} .oitem-cust{font-size:12px;color:#64748b;margin-top:2px;}
+  .margin{font-size:18px;font-weight:900;} .margin.pos{color:#15803d;} .margin.neg{color:#dc2626;}
+  .marginlbl{font-size:10px;color:var(--mute);text-align:right;font-weight:700;text-transform:uppercase;}
+  .breakdown{margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);display:none;}
+  .breakdown.on{display:block;}
+  .costrow{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid #f1f1ee;}
+  .costrow .l{color:#374151;} .costrow .r{font-weight:700;}
+  .stagetag{font-size:9px;background:#f1f5f9;color:#475569;padding:1px 6px;border-radius:8px;font-weight:800;margin-right:6px;}
+  .totrow{display:flex;justify-content:space-between;font-size:13px;padding:6px 0;font-weight:800;}
+  .sub{font-size:11px;color:var(--mute);font-weight:700;letter-spacing:.5px;margin:6px 0 8px;}
+  .loading{text-align:center;color:var(--mute);padding:20px;}
+</style></head>
+<body><div class="wrap">
+  <div class="top"><h1>🧾 Orders &amp; Margin</h1><a href="/panel">← Panel</a></div>
+
+  <div class="card">
+    <div class="sub">➕ RECORD A JUBA ORDER</div>
+    <div class="row">
+      <div style="flex:2"><label>Customer</label><input id="cust" placeholder="Embassy of Nordhavn"></div>
+      <div><label>Location</label><input id="loc" value="Juba"></div>
+    </div>
+    <label>What did they order</label>
+    <input id="items" placeholder="e.g. 2x router, 1x antenna">
+    <div class="row">
+      <div><label>Sell currency</label><select id="sellcur"><option>USD</option><option>SSP</option><option>UGX</option></select></div>
+      <div style="flex:2"><label>Price (they pay)</label><input id="total" inputmode="decimal" placeholder="200"></div>
+    </div>
+    <button class="btn" onclick="createOrder()">Create order</button>
+  </div>
+
+  <div class="sub">📋 ORDERS</div>
+  <div id="list"><div class="loading">Loading…</div></div>
+</div>
+<script>
+const $=s=>document.getElementById(s);
+function fmt(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
+function createOrder(){
+  const b=event.target; b.disabled=true; b.textContent='Saving…';
+  const p=new URLSearchParams({customer:$('cust').value,location:$('loc').value,items:$('items').value,
+    sell_currency:$('sellcur').value,total:($('total').value||'').replace(/,/g,'')});
+  fetch('/papi/orders/quick?'+p,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'}})
+    .then(r=>r.json()).then(r=>{ b.disabled=false; b.textContent='Create order';
+      if(r.ok){ $('cust').value='';$('items').value='';$('total').value='';
+        alert('Order '+r.order_no+' created ✅'); load(); } else alert('Failed'); });
+}
+function toggle(id){
+  const el=$('bd-'+id); if(el.classList.contains('on')){el.classList.remove('on');return;}
+  el.classList.add('on'); el.innerHTML='<div class="loading">…</div>';
+  fetch('/papi/orders/'+id+'/costs',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(d=>{
+    if(!d.ok){el.innerHTML='<div class="loading">no data</div>';return;}
+    let rows=d.costs.map(c=>`<div class="costrow"><span class="l"><span class="stagetag">${c.stage.replace('_',' ')}</span>${c.currency} ${fmt(c.native)} @${fmt(c.rate)}${c.holder?' · '+c.holder:''}</span><span class="r">$${fmt(c.usd)}</span></div>`).join('')||'<div class="costrow"><span class="l">No costs booked yet</span><span class="r">$0</span></div>';
+    el.innerHTML=rows+
+      `<div class="totrow"><span>Revenue (${d.order.sell_currency} ${fmt(d.order.total)})</span><span>$${fmt(d.order.revenue_usd)}</span></div>`+
+      `<div class="totrow"><span>Landed cost</span><span>-$${fmt(d.landed_usd)}</span></div>`+
+      `<div class="totrow" style="color:${d.margin_usd>=0?'#15803d':'#dc2626'}"><span>Margin (${d.margin_pct}%)</span><span>$${fmt(d.margin_usd)}</span></div>`;
+  });
+}
+function load(){
+  fetch('/papi/order-costs/orders',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(d=>{
+    const L=$('list');
+    if(!d.orders||!d.orders.length){L.innerHTML='<div class="loading">No orders yet — create one above.</div>';return;}
+    L.innerHTML=d.orders.map(o=>`
+      <div class="oitem" onclick="toggle(${o.id})">
+        <div class="oitem-top">
+          <div><div class="oitem-no">${o.order_no}</div><div class="oitem-cust">${o.customer_name||'—'} · ${o.location||''}</div></div>
+          <div><div class="marginlbl">tap for margin</div></div>
+        </div>
+        <div class="breakdown" id="bd-${o.id}"></div>
+      </div>`).join('');
+  });
+}
+load();
+</script></body></html>

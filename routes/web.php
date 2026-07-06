@@ -64,6 +64,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/books', [\App\Http\Controllers\Panel\BooksController::class, 'page']);
     Route::get('/panel/cash-position', [\App\Http\Controllers\Panel\CashPositionController::class, 'page']);
     Route::get('/panel/book-cost', [\App\Http\Controllers\Panel\OrderCostController::class, 'page']);
+    Route::get('/panel/orders-costs', [\App\Http\Controllers\Panel\OrderCostController::class, 'ordersPage']);
     Route::get('/panel/staff', [SellerPanelController::class, 'staff']);
     Route::get('/panel/scheduled', [SellerPanelController::class, 'scheduled']);
     Route::get('/panel/marketing', [SellerPanelController::class, 'marketing']);
@@ -121,6 +122,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('cash-position', [\App\Http\Controllers\Panel\CashPositionController::class, 'data']);
         Route::get('order-costs/orders', [\App\Http\Controllers\Panel\OrderCostController::class, 'orders']);
         Route::post('order-costs', [\App\Http\Controllers\Panel\OrderCostController::class, 'store']);
+        Route::post('orders/quick', [\App\Http\Controllers\Panel\OrderCostController::class, 'quickOrder']);
+        Route::get('orders/{id}/costs', [\App\Http\Controllers\Panel\OrderCostController::class, 'orderDetail']);
 
         // in-product release notes
         Route::get('whatsnew', [PanelApiController::class, 'whatsNew']);
