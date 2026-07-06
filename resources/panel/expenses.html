@@ -23,7 +23,59 @@
   .btn{width:100%;margin-top:14px;background:var(--red);color:#fff;border:none;border-radius:11px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;}
   .picked{font-size:13px;font-weight:800;color:#065f46;margin-top:6px;}
   .loading{text-align:center;color:var(--mute);padding:20px;}
-</style></head>
+</style>
+<!-- ===== DishNet mobile app shell (injected) ===== -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style id="dn-shell">
+  :root{--dn-g:#15803D;--dn-gd:#0B3D22;--dn-gl:#E6F4EA;--dn-line:#E2E8E2;}
+  html{-webkit-text-size-adjust:100%;}
+  body{font-family:'Outfit','Inter',system-ui,-apple-system,sans-serif;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased;}
+  /* keep side/top padding (app bar bleeds off it), extend bottom for tab bar */
+  .wrap{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 92px)!important;}
+
+  /* ---- sticky app bar: reuse existing .top ---- */
+  .top{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:12px;
+       justify-content:flex-start;margin:-14px -14px 14px -14px!important;
+       padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 12px!important;
+       background:var(--dn-gd);box-shadow:0 2px 10px -4px rgba(11,61,34,.5);}
+  .top h1{color:#fff!important;font-size:17px!important;font-weight:800!important;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .top a{order:-1;flex-shrink:0;width:34px;height:34px;border-radius:50%;
+         background:rgba(255,255,255,.16)!important;color:#fff!important;
+         display:grid;place-items:center;font-size:0!important;text-decoration:none;}
+  .top a::before{content:"\2039";font-size:24px;font-weight:700;line-height:1;margin-top:-2px;}
+  .dn-appbtn{margin-left:auto;flex-shrink:0;height:34px;padding:0 13px;border-radius:99px;
+             background:rgba(255,255,255,.16);color:#fff;font-size:12.5px;font-weight:700;
+             display:inline-flex;align-items:center;gap:6px;text-decoration:none;border:none;}
+  .dn-appbtn:active{background:rgba(255,255,255,.28);}
+
+  /* ---- unify theme accents to DishNet green ---- */
+  .btn{background:var(--dn-gd)!important;border-radius:12px!important;padding:14px!important;font-weight:800!important;}
+  .btn:active{background:#082a18!important;}
+  input,select,textarea{font-size:16px!important;border-radius:11px!important;}
+  input:focus,select:focus,textarea:focus{border-color:var(--dn-g)!important;}
+  .card,.oitem,.item,.balcard,.hero{box-shadow:0 1px 2px rgba(16,35,28,.05),0 3px 12px -4px rgba(16,35,28,.06);}
+
+  /* ---- fixed bottom tab bar ---- */
+  .dn-tabbar{position:fixed;left:0;right:0;bottom:0;z-index:70;display:flex;
+             background:#fff;border-top:1px solid var(--dn-line);
+             padding-bottom:env(safe-area-inset-bottom,0px);
+             box-shadow:0 -2px 14px -6px rgba(16,35,28,.18);}
+  .dn-tabbar a{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;
+               padding:9px 2px 8px;text-decoration:none;color:#7C8A80;font-size:10.5px;font-weight:700;}
+  .dn-tabbar a .di{font-size:20px;line-height:1;filter:grayscale(35%);opacity:.85;}
+  .dn-tabbar a .dl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+  .dn-tabbar a.on{color:var(--dn-gd);}
+  .dn-tabbar a.on .di{filter:none;opacity:1;transform:translateY(-1px);}
+  .dn-tabbar a.on .dl{color:var(--dn-gd);}
+  .dn-tabbar a.on::before{content:"";position:absolute;top:0;width:26px;height:3px;border-radius:0 0 3px 3px;background:var(--dn-g);}
+  .dn-tabbar a{position:relative;}
+  @media(min-width:721px){ /* on desktop keep it centered like the content */
+    .dn-tabbar{max-width:720px;margin:0 auto;border-left:1px solid var(--dn-line);border-right:1px solid var(--dn-line);}
+  }
+</style>
+</head>
 <body><div class="wrap">
   <div class="top"><h1>💸 Expenses</h1><a href="/panel">← Panel</a></div>
   <div class="card">
@@ -118,4 +170,35 @@ loadExp();
 // refresh list after a new expense is saved
 const _origSave=save;
 save=function(){ const b=document.querySelector('.btn'); _origSave(); setTimeout(loadExp,600); };
-</script></body></html>
+</script>
+<!-- ===== DishNet bottom tab bar (injected) ===== -->
+<nav class="dn-tabbar" id="dnTabbar"></nav>
+<script>
+(function(){
+  var TABS=[
+    {t:'Orders',i:'\uD83D\uDED2',u:'/panel/orders-costs'},
+    {t:'Buy',   i:'\uD83D\uDECD\uFE0F',u:'/panel/book-cost'},
+    {t:'Cash',  i:'\uD83D\uDCB0',u:'/panel/cash-position'},
+    {t:'Book',  i:'\uD83D\uDCD2',u:'/panel/trade-cashbook'},
+    {t:'Spend', i:'\uD83D\uDCB8',u:'/panel/expenses'},
+    {t:'P&L',   i:'\uD83D\uDCC8',u:'/panel/pnl'}
+  ];
+  var here=location.pathname.replace(/\/+$/,'')||'/panel';
+  var bar=document.getElementById('dnTabbar');
+  if(bar){
+    bar.innerHTML=TABS.map(function(x){
+      var on=(here===x.u)?' on':'';
+      return '<a class="'+(on.trim())+'" href="'+x.u+'"><span class="di">'+x.i+'</span><span class="dl">'+x.t+'</span></a>';
+    }).join('');
+  }
+  // Approvals action in the app bar (skip when already on approvals)
+  var top=document.querySelector('.top');
+  if(top && here!=='/panel/approvals'){
+    var a=document.createElement('a');
+    a.className='dn-appbtn'; a.href='/panel/approvals';
+    a.innerHTML='\u2713 Approvals';
+    top.appendChild(a);
+  }
+})();
+</script>
+</body></html>
