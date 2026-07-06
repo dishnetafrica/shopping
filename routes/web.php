@@ -129,9 +129,13 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('orders/{id}/costs', [\App\Http\Controllers\Panel\OrderCostController::class, 'orderDetail']);
         Route::get('order-costs/pending', [\App\Http\Controllers\Panel\OrderCostController::class, 'pending']);
         Route::post('order-costs/{id}/decide', [\App\Http\Controllers\Panel\OrderCostController::class, 'decide']);
+        Route::post('order-costs/{id}/delete', [\App\Http\Controllers\Panel\OrderCostController::class, 'deleteCost']);
+        Route::post('orders/{id}/delete', [\App\Http\Controllers\Panel\OrderCostController::class, 'deleteOrder']);
         Route::get('expenses/categories', [\App\Http\Controllers\Panel\ExpenseController::class, 'categories']);
         Route::post('expenses', [\App\Http\Controllers\Panel\ExpenseController::class, 'store']);
         Route::get('pnl', [\App\Http\Controllers\Panel\ExpenseController::class, 'pnl']);
+        Route::get('expenses/list', [\App\Http\Controllers\Panel\ExpenseController::class, 'list']);
+        Route::post('expenses/{id}/delete', [\App\Http\Controllers\Panel\ExpenseController::class, 'deleteExpense']);
 
         // in-product release notes
         Route::get('whatsnew', [PanelApiController::class, 'whatsNew']);

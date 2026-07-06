@@ -47,6 +47,9 @@
 
     <button class="btn" onclick="save()">Record expense</button>
   </div>
+  <div style="font-size:11px;font-weight:800;letter-spacing:.6px;color:var(--mute);margin:16px 0 8px">RECENT EXPENSES</div>
+  <div id="expList"><div class="loading">Loading…</div></div>
+  <div id="expPager" style="display:flex;justify-content:center;gap:8px;margin-top:12px"></div>
 </div>
 <script>
 const $=s=>document.getElementById(s);let rates={UGX:3700,SSP:5180,USD:1},cat=null;
@@ -81,4 +84,38 @@ function save(){
     else alert('Failed: '+(r.error||'error'));
   }).catch(()=>{b.disabled=false;b.textContent='Record expense';alert('Failed.');});
 }
+
+let EPAGE=1, EPAGES=1;
+function loadExp(){
+  fetch('/papi/expenses/list?page='+EPAGE+'&per=15',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(d=>{
+    const L=document.getElementById('expList');
+    if(!d.ok){L.innerHTML='<div class="loading">Could not load.</div>';return;}
+    EPAGES=d.pages||1;
+    if(!d.expenses.length){L.innerHTML='<div class="loading">No expenses yet.</div>';renderEPager();return;}
+    L.innerHTML=d.expenses.map(e=>`
+      <div style="background:#fff;border:1px solid var(--border);border-radius:11px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div style="min-width:0">
+          <div style="font-weight:800;font-size:14px">${e.category||'Misc'} <span style="font-size:12px;color:#64748b;font-weight:600">· ${e.currency} ${fmt(e.native)}</span></div>
+          <div style="font-size:12px;color:#64748b">$${fmt(e.usd)} · ${e.holder||'—'} · ${e.when||''} ${e.status!=='approved'?'· <span style="color:#d97706">'+e.status+'</span>':''}</div>
+        </div>
+        <button onclick="delExp(${e.id})" style="background:#fff;border:1.5px solid #fca5a5;color:#dc2626;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:800;cursor:pointer;flex-shrink:0">Delete</button>
+      </div>`).join('');
+    renderEPager();
+  });
+}
+function renderEPager(){
+  const p=document.getElementById('expPager'); if(EPAGES<=1){p.innerHTML='';return;}
+  p.innerHTML=`<button ${EPAGE<=1?'disabled':''} onclick="EPAGE--;loadExp()" style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-weight:700;cursor:pointer">‹ Prev</button>
+    <span style="padding:7px 4px;font-size:13px;color:#64748b">Page ${EPAGE} / ${EPAGES}</span>
+    <button ${EPAGE>=EPAGES?'disabled':''} onclick="EPAGE++;loadExp()" style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-weight:700;cursor:pointer">Next ›</button>`;
+}
+function delExp(id){
+  if(!confirm('Delete this expense?'))return;
+  fetch('/papi/expenses/'+id+'/delete',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'}})
+    .then(r=>r.json()).then(r=>{ if(r.ok)loadExp(); else alert(r.error==='not_allowed'?'Only owner/manager can delete':'Failed'); });
+}
+loadExp();
+// refresh list after a new expense is saved
+const _origSave=save;
+save=function(){ const b=document.querySelector('.btn'); _origSave(); setTimeout(loadExp,600); };
 </script></body></html>

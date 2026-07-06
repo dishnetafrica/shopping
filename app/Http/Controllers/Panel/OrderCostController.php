@@ -36,9 +36,11 @@ class OrderCostController extends Controller
     {
         $t = $request->user()->tenant;
         if (! $t) return response()->json(['ok'=>false],401);
-        $orders = Order::where('tenant_id',$t->id)
-            ->orderByDesc('id')->limit(50)
-            ->get(['id','order_no','customer_name','total','location']);
+        $per = min(50, max(5, (int)$request->query('per',25)));
+        $page = max(1, (int)$request->query('page',1));
+        $ordersQ = Order::where('tenant_id',$t->id)->orderByDesc('id');
+        $ordersTotal = (clone $ordersQ)->count();
+        $orders = $ordersQ->forPage($page,$per)->get(['id','order_no','customer_name','total','location']);
         $me = $request->user();
         $staff = [];
         if ($me->isOwnerLike() || in_array((string)$me->role,['manager'],true)) {
@@ -47,6 +49,7 @@ class OrderCostController extends Controller
                 ->get(['id','name','role'])->map(fn($u)=>['id'=>$u->id,'name'=>$u->name,'role'=>$u->role]);
         }
         return response()->json(['ok'=>true,'orders'=>$orders,
+            'orders_total'=>$ordersTotal ?? count($orders), 'page'=>$page ?? 1, 'per'=>$per ?? 25,
             'me'=>['id'=>$me->id,'name'=>$me->name,'is_owner'=>$me->isOwnerLike()],
             'staff'=>$staff,
             'default_rates'=>['UGX'=>(float)$t->setting('rate_ugx_per_usd',3700),
@@ -200,5 +203,37 @@ class OrderCostController extends Controller
         else return response()->json(['ok'=>false,'error'=>'bad_action']);
         $c->save();
         return response()->json(['ok'=>true,'status'=>$c->status]);
+    }
+
+    /** Only owner/manager may delete (destructive). */
+    private function canDelete($u): bool
+    {
+        return $u->isOwnerLike() || in_array((string)$u->role, ['manager'], true);
+    }
+
+    /** DELETE a single order cost. POST /papi/order-costs/{id}/delete */
+    public function deleteCost(Request $request, int $id)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok'=>false],401);
+        if (! $this->canDelete($request->user())) return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
+        $c = OrderCost::where('tenant_id',$t->id)->find($id);
+        if (! $c) return response()->json(['ok'=>false,'error'=>'not_found'],404);
+        if ($c->receipt_path) { try { \Storage::disk('public')->delete($c->receipt_path); } catch (\Throwable $e) {} }
+        $c->delete();
+        return response()->json(['ok'=>true]);
+    }
+
+    /** DELETE an order and all its costs. POST /papi/orders/{id}/delete */
+    public function deleteOrder(Request $request, int $id)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok'=>false],401);
+        if (! $this->canDelete($request->user())) return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
+        $o = Order::where('tenant_id',$t->id)->find($id);
+        if (! $o) return response()->json(['ok'=>false,'error'=>'not_found'],404);
+        OrderCost::where('tenant_id',$t->id)->where('order_id',$id)->delete();
+        $o->delete();
+        return response()->json(['ok'=>true]);
     }
 }

@@ -134,4 +134,45 @@ class ExpenseController extends Controller
             'note'=>'Running estimate from approved orders & costs — reconcile against Books.',
         ]);
     }
+
+    /** GET /papi/expenses/list — recent expenses (paginated). */
+    public function list(Request $request)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok'=>false],401);
+        $per = min(50, max(5, (int)$request->query('per',20)));
+        $page = max(1, (int)$request->query('page',1));
+
+        $q = OrderCost::where('tenant_id',$t->id)->where('stage','expense');
+        // staff see only their own expenses; owner/manager see all
+        if (! ($u->isOwnerLike() || in_array((string)$u->role,['manager'],true))) {
+            $q->where(function($w) use ($u){
+                $w->where('holder_user_id',$u->id)->orWhere('holder',$u->name);
+            });
+        }
+        $total = (clone $q)->count();
+        $rows = $q->orderByDesc('id')->forPage($page,$per)->get()->map(fn($c)=>[
+            'id'=>$c->id,'category'=>$c->expense_category,'currency'=>$c->currency,
+            'native'=>(float)$c->native_amount,'usd'=>(float)$c->usd_amount,
+            'holder'=>$c->holder,'status'=>$c->status,'note'=>$c->note,
+            'receipt'=>$c->receipt_path ? '/storage/'.$c->receipt_path : null,
+            'when'=>$c->created_at?->format('d M H:i'),
+        ]);
+        return response()->json(['ok'=>true,'expenses'=>$rows,'total'=>$total,
+            'page'=>$page,'per'=>$per,'pages'=>(int)ceil($total/$per)]);
+    }
+
+    /** POST /papi/expenses/{id}/delete — owner/manager only. */
+    public function deleteExpense(Request $request, int $id)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok'=>false],401);
+        if (! ($u->isOwnerLike() || in_array((string)$u->role,['manager'],true)))
+            return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
+        $c = OrderCost::where('tenant_id',$t->id)->where('stage','expense')->find($id);
+        if (! $c) return response()->json(['ok'=>false,'error'=>'not_found'],404);
+        if ($c->receipt_path) { try { \Storage::disk('public')->delete($c->receipt_path); } catch (\Throwable $e) {} }
+        $c->delete();
+        return response()->json(['ok'=>true]);
+    }
 }
