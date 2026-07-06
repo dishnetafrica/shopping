@@ -1,0 +1,29 @@
+DEPLOY — Photos on the Buy List (v9)
+====================================
+Each Buy List row now shows the product PHOTO with the qty as a badge on it, so
+Jayesh recognises items by sight. Uses your catalogue's own images.
+
+FILE CHANGED (just one)
+  resources/panel/buy_list.html
+
+HOW IT WORKS
+  - On load the page also fetches /papi/products and builds a map of
+    Product Name (lowercased) -> Image URL.
+  - Each item shows that photo (qty badge overlaid). If a name has no matching
+    product/photo, it falls back to the green qty box (no breakage).
+  - Images are your existing /storage/products/... URLs; no new assets needed.
+
+DEPLOY
+  git add resources/panel/buy_list.html
+  git commit -m "v9: product photos on the Buy List"
+  git push
+  -> EasyPanel: Rebuild        (no migration, front-end only)
+
+VERIFY
+  Open /panel/buy-list -> rows show the product photo with a small qty badge.
+  Any item whose name doesn't exactly match a product shows the green qty box.
+
+NOTE: matching is by exact Product Name (case-insensitive). If some items show the
+green box instead of a photo, their order item name differs slightly from the
+catalogue name -> tell me and I can add fuzzy matching (match ignoring punctuation
+/ pack-size text) as a small follow-up.
