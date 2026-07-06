@@ -1,46 +1,49 @@
-DEPLOY — Auto-landing (v7)   [supersedes v6; includes everything]
-=================================================================
-Now purchasing/field staff LAND on the tap-tile app home automatically after
-login — no URL to type, no Add-to-Home-Screen needed for it to work. Owner and
-sales keep the existing dashboard unchanged.
+DEPLOY — Auto-landing for BOTH /panel and /panel/m (v7)   [supersedes v6]
+========================================================================
+Purchasing/field staff (Jayesh, Asish) land on the tap-tile app home no matter
+which entry point the login uses. Owner/manager/sales are unchanged.
 
-Confirmed from your console: Jayesh = { role:'purchaser', is_owner:false } -> he
-will be redirected to /panel/app. (The SyntaxError you saw was just PHP pasted into
-the JS console — ignore it.)
+WHY v7 grew: on a real phone, ShopBot serves its own mobile ORDER panel (the
+green "Live / New / Done · Confirm order" screen). Mobile logins can land on
+/panel/m, not just /panel. v7 now guards BOTH routes, so Jayesh never lands on
+the customer-order triage screen (that's a sales/ops screen, not a purchaser's).
 
-NEW / CHANGED for v7 (on top of v6's app home)
-  NEW  app/Http/Controllers/Panel/LandingController.php   (routes /panel by role)
-  CHG  routes/web.php   ( GET /panel -> LandingController@panel )
-  (v6 files still included: app_home.html, LauncherController, public/ icons+manifest,
-   me/nav name, the 9 pages' iOS app tags)
+FILES (cumulative — includes the app home + icons from before)
+  app/Http/Controllers/Panel/LandingController.php   (panel() + mobile() guards)
+  app/Http/Controllers/Panel/LauncherController.php   (serves /panel/app)
+  resources/panel/app_home.html                       (the tap tiles)
+  public/apple-touch-icon.png icon-192.png icon-512.png site.webmanifest
+  app/Http/Controllers/Panel/OrderCostController.php  (me/nav returns name)
+  routes/web.php   ( /panel and /panel/m -> LandingController ; + /panel/app )
+  resources/panel/*.html (9 pages, iOS app meta)
 
-HOW IT WORKS (no need for your SellerPanelController source)
-  GET /panel now goes to LandingController@panel:
-    - purchaser/field  -> redirect('/panel/app')   (Jayesh's 5 tap tiles)
-    - everyone else    -> app(SellerPanelController::class)->show($request)
-                          i.e. the EXACT existing dashboard, untouched.
-  No loop risk: /panel/app is a different route; owners never redirect.
+ROUTING NOW
+  GET /panel    -> LandingController@panel    purchaser/field -> /panel/app ; else show()
+  GET /panel/m  -> LandingController@mobile    purchaser/field -> /panel/app ; else mobile()
+  GET /panel/app-> LauncherController@page     the FS tap tiles (role-filtered)
+  No loops: /panel/app is its own route and never redirects.
 
 DEPLOY
   git add public app routes/web.php resources/panel/*.html
-  git commit -m "v7: role-based landing + mobile app home"
+  git commit -m "v7: role landing on /panel and /panel/m + app home"
   git push
-  -> EasyPanel: Rebuild (NOT Restart)      (no migration)
-  Also confirm the 4 files in public/ are live at web root:
-     /apple-touch-icon.png  /icon-192.png  /icon-512.png  /site.webmanifest
+  -> EasyPanel: Rebuild (NOT Restart)     (no migration)
+  Confirm web-root assets: /apple-touch-icon.png and /site.webmanifest load.
 
-VERIFY
-  - Log in as Jayesh (purchaser) -> you land directly on the tile home (5 tiles),
-    NOT the dashboard.
-  - Log in as owner -> the normal dashboard, exactly as before.
-  - Then on Jayesh's iPhone: open in Safari, sign in once (Save Password), Share ->
-    Add to Home Screen. The FS icon opens the tiles full-screen.
+VERIFY (on the phone)
+  - Log in as Jayesh (purchaser) on the phone -> you should now land on the FS
+    TAP-TILE home (Buy List, Book Purchase, Orders & Margin, Cash, Suppliers),
+    NOT the green "Confirm order" panel.
+  - Log in as owner -> unchanged (dashboard / mobile order panel as before).
+
+IF JAYESH STILL SEES THE ORDER PANEL AFTER DEPLOY
+  Then the login redirect points at a THIRD url we haven't guarded. Tell me the
+  exact URL in the address bar when he lands there and I'll add that route too.
+  (Everything works via /panel and /panel/m now.)
 
 ROLLBACK
-  In routes/web.php change the /panel line back to
-    Route::get('/panel', [SellerPanelController::class, 'show']);
-  and Rebuild. (LandingController is additive; leaving it is harmless.)
+  Revert the two route lines to SellerPanelController show/mobile + Rebuild.
 
-STILL PENDING (optional polish): the app-STYLED login screen. Send /app/login's
-view-source or the form-inspector output and I'll hand you the branded login with
-"Keep me signed in" wired. Not required for any of the above to work.
+NOTE on Asish (field): he's also redirected to the tap tiles. If you WANT Asish to
+use the green order panel (he receives/delivers), say so and I'll add an "Orders
+panel" tile for the field role instead of redirecting him.

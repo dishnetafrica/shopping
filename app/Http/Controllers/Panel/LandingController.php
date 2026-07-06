@@ -24,4 +24,16 @@ class LandingController extends Controller
         // Unchanged for owner/manager/sales: run the real dashboard controller.
         return app(\App\Http\Controllers\Panel\SellerPanelController::class)->show($request);
     }
+
+    /** Same guard for the mobile order panel (/panel/m) — mobile logins often land here. */
+    public function mobile(Request $request)
+    {
+        $u = $request->user();
+        if ($u && $u->tenant_id
+            && (bool) $u->tenant->setting('order_system_enabled', false)
+            && in_array((string) $u->role, ['purchaser', 'field'], true)) {
+            return redirect('/panel/app');
+        }
+        return app(\App\Http\Controllers\Panel\SellerPanelController::class)->mobile($request);
+    }
 }

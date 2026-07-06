@@ -59,7 +59,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel', [\App\Http\Controllers\Panel\LandingController::class, 'panel']);
     Route::get('/panel/app', [\App\Http\Controllers\Panel\LauncherController::class, 'page']);
     Route::match(['get', 'post'], '/panel/logout', [SellerPanelController::class, 'logout']);
-    Route::get('/panel/m', [SellerPanelController::class, 'mobile']);
+    Route::get('/panel/m', [\App\Http\Controllers\Panel\LandingController::class, 'mobile']);
     Route::get('/panel/chats', [SellerPanelController::class, 'chats']);
     Route::get('/panel/cashbook', [SellerPanelController::class, 'cashbook']);
     Route::get('/panel/books', [\App\Http\Controllers\Panel\BooksController::class, 'page']);
