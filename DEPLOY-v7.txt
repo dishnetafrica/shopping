@@ -1,0 +1,46 @@
+DEPLOY — Auto-landing (v7)   [supersedes v6; includes everything]
+=================================================================
+Now purchasing/field staff LAND on the tap-tile app home automatically after
+login — no URL to type, no Add-to-Home-Screen needed for it to work. Owner and
+sales keep the existing dashboard unchanged.
+
+Confirmed from your console: Jayesh = { role:'purchaser', is_owner:false } -> he
+will be redirected to /panel/app. (The SyntaxError you saw was just PHP pasted into
+the JS console — ignore it.)
+
+NEW / CHANGED for v7 (on top of v6's app home)
+  NEW  app/Http/Controllers/Panel/LandingController.php   (routes /panel by role)
+  CHG  routes/web.php   ( GET /panel -> LandingController@panel )
+  (v6 files still included: app_home.html, LauncherController, public/ icons+manifest,
+   me/nav name, the 9 pages' iOS app tags)
+
+HOW IT WORKS (no need for your SellerPanelController source)
+  GET /panel now goes to LandingController@panel:
+    - purchaser/field  -> redirect('/panel/app')   (Jayesh's 5 tap tiles)
+    - everyone else    -> app(SellerPanelController::class)->show($request)
+                          i.e. the EXACT existing dashboard, untouched.
+  No loop risk: /panel/app is a different route; owners never redirect.
+
+DEPLOY
+  git add public app routes/web.php resources/panel/*.html
+  git commit -m "v7: role-based landing + mobile app home"
+  git push
+  -> EasyPanel: Rebuild (NOT Restart)      (no migration)
+  Also confirm the 4 files in public/ are live at web root:
+     /apple-touch-icon.png  /icon-192.png  /icon-512.png  /site.webmanifest
+
+VERIFY
+  - Log in as Jayesh (purchaser) -> you land directly on the tile home (5 tiles),
+    NOT the dashboard.
+  - Log in as owner -> the normal dashboard, exactly as before.
+  - Then on Jayesh's iPhone: open in Safari, sign in once (Save Password), Share ->
+    Add to Home Screen. The FS icon opens the tiles full-screen.
+
+ROLLBACK
+  In routes/web.php change the /panel line back to
+    Route::get('/panel', [SellerPanelController::class, 'show']);
+  and Rebuild. (LandingController is additive; leaving it is harmless.)
+
+STILL PENDING (optional polish): the app-STYLED login screen. Send /app/login's
+view-source or the form-inspector output and I'll hand you the branded login with
+"Keep me signed in" wired. Not required for any of the above to work.

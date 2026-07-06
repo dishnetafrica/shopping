@@ -56,7 +56,7 @@ Route::get('/icons/{name}',         [PwaController::class, 'icon']);
 // The customer's existing Family Shopper seller UI, served verbatim behind the
 // /app web session. (Filament business panel stays available at /app.)
 Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () {
-    Route::get('/panel', [SellerPanelController::class, 'show']);
+    Route::get('/panel', [\App\Http\Controllers\Panel\LandingController::class, 'panel']);
     Route::get('/panel/app', [\App\Http\Controllers\Panel\LauncherController::class, 'page']);
     Route::match(['get', 'post'], '/panel/logout', [SellerPanelController::class, 'logout']);
     Route::get('/panel/m', [SellerPanelController::class, 'mobile']);
