@@ -1,0 +1,30 @@
+SHOPBOT — Three-currency Cash Position + Order Costs (slice 1)
+Styled like the DishNet cashbook (green USD / blue SSP / amber UGX hero cards).
+
+NEW:
+  database/migrations/2026_07_06_000100_create_order_costs_table.php   the data layer
+  app/Models/OrderCost.php                                            native+rate+USD-base model
+  app/Http/Controllers/Panel/CashPositionController.php               "how much USD/UGX/SSP" screen
+  app/Http/Controllers/Panel/OrderCostController.php                  book a purchase against an order
+  resources/panel/cash_position.html                                 DishNet-style 3-currency hero cards
+  resources/panel/book_cost.html                                     Jaeysh's purchase screen (phone-first)
+
+MODIFIED (overwrite):
+  routes/web.php               adds /panel/cash-position, /panel/book-cost + papi endpoints
+  resources/panel/seller.html  adds "Cash Position" + "Book Purchase" sidebar links
+
+DEPLOY:
+  1. commit + push to dishnetafrica/shopping main
+  2. EasyPanel Deploy
+  3. run migration:  php artisan migrate     (creates order_costs)
+  4. storage link (for receipts) if not present: php artisan storage:link
+  5. open /panel/cash-position and /panel/book-cost
+
+HOW IT WORKS:
+  - Every cost booked in NATIVE currency + rate → stores USD base (DishNet's model).
+  - stage=funding ADDS cash to a holder; purchase/freight/delivery REDUCE it.
+  - Cash Position shows exact USD / UGX / SSP in hand, per holder (Jaeysh, Asish...).
+  - Rates default from tenant settings rate_ugx_per_usd / rate_ssp_per_usd (override per entry).
+
+NEXT SLICES (not in this drop): salesperson order-currency, per-order margin view,
+receipt-approval workflow (DishNet imprest style), Asish's SSP delivery role screen.

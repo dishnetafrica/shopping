@@ -1,0 +1,60 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cash Position</title>
+<style>
+  :root{--red:#D41C1C;--dark:#0f0f0f;--green:#059669;--amber:#d97706;--blue:#1e40af;
+        --mute:#94a3b8;--bg:#f5f5f2;--card:#fff;--border:#e8e8e3;
+        --font:'Inter',-apple-system,'Segoe UI',sans-serif;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:var(--font);color:#0f0f0f;}
+  .wrap{max-width:640px;margin:0 auto;padding:14px;}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .top h1{font-size:20px;margin:0;font-weight:900;}
+  .top a{color:var(--green);text-decoration:none;font-weight:700;font-size:13px;}
+  .sub{font-size:11px;font-weight:700;color:var(--mute);margin-bottom:10px;letter-spacing:.5px;}
+  .hero{border-radius:16px;padding:18px 20px;margin-bottom:10px;position:relative;overflow:hidden;}
+  .hero .circle{position:absolute;top:-20px;right:-20px;width:120px;height:120px;background:rgba(255,255,255,.06);border-radius:50%;}
+  .hero .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.55);margin-bottom:6px;}
+  .hero .val{font-size:40px;font-weight:900;color:#fff;letter-spacing:-2px;line-height:1;}
+  .hero .val .u{font-size:15px;font-weight:700;color:rgba(255,255,255,.45);}
+  .hero .meta{font-size:11px;color:rgba(255,255,255,.5);margin-top:6px;}
+  .hero .holders{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;}
+  .chip{display:inline-flex;align-items:center;gap:5px;background:rgba(0,0,0,.22);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:700;color:rgba(255,255,255,.85);}
+  .usd{background:#1a6b3a;} .ssp{background:#1a3a7a;} .ugx{background:#8a5a10;}
+  .combined{background:#0f0f0f;border-radius:16px;padding:18px 20px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
+  .combined .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.35);margin-bottom:6px;}
+  .combined .val{font-size:34px;font-weight:900;color:#4ade80;letter-spacing:-2px;line-height:1;}
+  .note{font-size:11px;color:var(--mute);text-align:center;margin-top:10px;}
+  .loading{text-align:center;color:var(--mute);padding:40px;}
+</style></head>
+<body><div class="wrap">
+  <div class="top"><h1>💰 Cash Position</h1><a href="/panel">← Panel</a></div>
+  <div class="sub" id="sub">Three-currency cash · exact per currency</div>
+  <div id="app"><div class="loading">Loading…</div></div>
+  <div class="note">Each currency is kept separate — combined USD is reference only.</div>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+function fmt(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
+function hero(cur,d,cls,label,symbol,unit){
+  const holders=(d.holders||[]).filter(h=>Math.abs(h.native)>0.005)
+    .map(h=>`<span class="chip">${h.holder}: ${fmt(h.native)}</span>`).join('');
+  const usdLine = cur!=='USD' && d.usd_equiv ? ` · ≈ $${fmt(d.usd_equiv)} USD` : '';
+  return `<div class="hero ${cls}"><div class="circle"></div>
+    <div class="lbl">${label}</div>
+    <div class="val">${symbol}${fmt(d.native)} ${unit?`<span class="u">${unit}</span>`:''}</div>
+    <div class="meta">In hand${usdLine}</div>
+    ${holders?`<div class="holders">${holders}</div>`:''}</div>`;
+}
+fetch('/papi/cash-position',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(d=>{
+  if(!d.ok){$('#app').innerHTML='<div class="loading">Could not load.</div>';return;}
+  $('#sub').textContent='Three-currency cash · '+d.as_of;
+  const c=d.currencies;
+  $('#app').innerHTML =
+    hero('USD',c.USD,'usd','💵 USD Balance','$','') +
+    hero('UGX',c.UGX,'ugx','🇺🇬 UGX Balance','','UGX') +
+    hero('SSP',c.SSP,'ssp','🇸🇸 SSP Balance','','SSP') +
+    `<div class="combined"><div><div class="lbl">Combined (USD equivalent)</div>
+       <div class="val">$${fmt(d.combined_usd)}</div></div></div>`;
+}).catch(()=>{$('#app').innerHTML='<div class="loading">Failed to load.</div>';});
+</script></body></html>
