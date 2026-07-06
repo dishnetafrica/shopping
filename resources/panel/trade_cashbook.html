@@ -1,0 +1,124 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cashbook</title>
+<style>
+  :root{--red:#D41C1C;--green:#059669;--amber:#d97706;--blue:#1e40af;--dark:#0f0f0f;--mute:#94a3b8;--bg:#f5f5f2;--border:#e8e8e3;--font:'Inter',-apple-system,'Segoe UI',sans-serif;}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:var(--font);color:#0f0f0f;}
+  .wrap{max-width:680px;margin:0 auto;padding:14px;}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+  .top h1{font-size:20px;margin:0;font-weight:900;}.top a{color:var(--green);text-decoration:none;font-weight:700;font-size:13px;}
+  .sub{font-size:12px;color:var(--mute);margin-bottom:12px;font-weight:600;}
+  .filters{display:flex;gap:6px;margin-bottom:12px;}
+  .filt{flex:1;padding:9px;border:1.5px solid var(--border);border-radius:10px;background:#fff;text-align:center;font-size:12px;font-weight:800;color:#374151;cursor:pointer;}
+  .filt.on{border-color:var(--green);background:#ecfdf5;color:#065f46;}
+  .balcard{border-radius:14px;padding:16px 18px;margin-bottom:11px;position:relative;overflow:hidden;color:#fff;}
+  .balcard .circ{position:absolute;top:-20px;right:-20px;width:110px;height:110px;background:rgba(255,255,255,.06);border-radius:50%;}
+  .balcard .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.3px;color:rgba(255,255,255,.6);margin-bottom:5px;}
+  .balcard .val{font-size:30px;font-weight:900;letter-spacing:-1.5px;line-height:1;}
+  .balcard .val .u{font-size:13px;font-weight:700;color:rgba(255,255,255,.45);}
+  .usd{background:#1a6b3a;}.ugx{background:#8a5a10;}.ssp{background:#1a3a7a;}
+  .card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;}
+  .sectlbl{font-size:11px;font-weight:800;letter-spacing:.6px;color:var(--mute);margin-bottom:10px;}
+  .dirbtns{display:flex;gap:8px;margin-bottom:4px;}
+  .dirbtn{flex:1;padding:11px;border:1.5px solid var(--border);border-radius:10px;background:#fff;font-size:13px;font-weight:800;cursor:pointer;text-align:center;color:#374151;}
+  .dirbtn.in.on{border-color:var(--green);background:#ecfdf5;color:#065f46;}
+  .dirbtn.out.on{border-color:var(--red);background:#fef2f2;color:#991b1b;}
+  label{font-size:12px;font-weight:700;color:#374151;display:block;margin:11px 0 5px;}
+  input,select{width:100%;padding:11px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;font-family:var(--font);background:#fff;outline:none;}
+  input:focus,select:focus{border-color:var(--green);}
+  .row{display:flex;gap:10px;}.row>div{flex:1;}
+  .conv{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:800;color:#475569;margin-top:10px;}
+  .btn{width:100%;margin-top:14px;color:#fff;border:none;border-radius:11px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;background:var(--dark);}
+  .entry{background:#fff;border:1px solid var(--border);border-radius:11px;padding:11px 13px;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center;gap:10px;}
+  .entry .l{min-width:0;}
+  .entry .amt{font-weight:800;font-size:14px;}
+  .entry .amt.in{color:#15803d;}.entry .amt.out{color:#dc2626;}
+  .entry .meta{font-size:11px;color:#64748b;margin-top:2px;}
+  .entry .del{background:#fff;border:1.5px solid #fca5a5;color:#dc2626;border-radius:8px;padding:4px 9px;font-size:11px;font-weight:800;cursor:pointer;flex-shrink:0;}
+  .pager{display:flex;justify-content:center;gap:8px;margin-top:12px;}
+  .pager button{padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-weight:700;cursor:pointer;}
+  .loading{text-align:center;color:var(--mute);padding:20px;}
+  .pill{font-size:9px;background:#f1f5f9;color:#475569;padding:2px 7px;border-radius:8px;font-weight:800;}
+</style></head>
+<body><div class="wrap">
+  <div class="top"><h1 id="title">💵 Cashbook</h1><a href="/panel">← Panel</a></div>
+  <div class="sub" id="sub">Currency-aware cash ledger</div>
+
+  <div class="filters">
+    <div class="filt on" data-c="ALL" onclick="setFilt(this)">All</div>
+    <div class="filt" data-c="USD" onclick="setFilt(this)">💵 USD</div>
+    <div class="filt" data-c="UGX" onclick="setFilt(this)">🇺🇬 UGX</div>
+    <div class="filt" data-c="SSP" onclick="setFilt(this)">🇸🇸 SSP</div>
+  </div>
+
+  <div id="balances"></div>
+
+  <div class="card">
+    <div class="sectlbl">➕ RECORD CASH MOVEMENT</div>
+    <div class="dirbtns">
+      <div class="dirbtn in on" data-d="in" onclick="setDir('in')">↓ Money in</div>
+      <div class="dirbtn out" data-d="out" onclick="setDir('out')">↑ Money out</div>
+    </div>
+    <div class="row">
+      <div><label>Currency</label><select id="cur" onchange="setRate()"><option>UGX</option><option>SSP</option><option>USD</option></select></div>
+      <div style="flex:1.5"><label>Amount</label><input id="amt" inputmode="decimal" placeholder="100000" oninput="calc()"></div>
+    </div>
+    <label>Rate (native per 1 USD)</label>
+    <input id="rate" inputmode="decimal" oninput="calc()">
+    <div class="conv" id="conv">≈ $0.00 USD</div>
+    <label>Note (optional)</label>
+    <input id="note" placeholder="e.g. float to Jaeysh, sold goods">
+    <button class="btn" id="saveBtn" onclick="save()">Record entry</button>
+  </div>
+
+  <div class="sectlbl" style="margin-bottom:8px">📒 ENTRIES</div>
+  <div id="list"><div class="loading">Loading…</div></div>
+  <div class="pager" id="pager"></div>
+</div>
+<script>
+const $=s=>document.getElementById(s);
+let FILT='ALL', DIR='in', PAGE=1, PAGES=1, rates={UGX:3700,SSP:5180,USD:1};
+function fmt(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
+function setFilt(el){document.querySelectorAll('.filt').forEach(f=>f.classList.remove('on'));el.classList.add('on');FILT=el.dataset.c;PAGE=1;load();}
+function setDir(d){DIR=d;document.querySelectorAll('.dirbtn').forEach(b=>b.classList.remove('on'));document.querySelector('.dirbtn.'+d).classList.add('on');$('saveBtn').style.background=d==='out'?'var(--red)':'var(--dark)';$('saveBtn').textContent=d==='out'?'Record money out':'Record money in';}
+function setRate(){$('rate').value=rates[$('cur').value]||'';calc();}
+function calc(){const a=parseFloat(($('amt').value||'').replace(/,/g,''))||0,r=parseFloat(($('rate').value||'').replace(/,/g,''))||0;$('conv').textContent='≈ $'+(r>0?fmt(a/r):'0.00')+' USD';}
+function balCard(cur,v){const cls={USD:'usd',UGX:'ugx',SSP:'ssp'}[cur];const sym=cur==='USD'?'$':'';const unit=cur==='USD'?'':cur;
+  return `<div class="balcard ${cls}"><div class="circ"></div><div class="lbl">${cur} balance</div><div class="val">${sym}${fmt(v)} <span class="u">${unit}</span></div></div>`;}
+function load(){
+  fetch('/papi/trade-cashbook?currency='+FILT+'&page='+PAGE+'&per=20',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(d=>{
+    if(!d.ok){$('list').innerHTML='<div class="loading">Could not load.</div>';return;}
+    if(d.default_rates)rates=d.default_rates;
+    $('title').textContent=d.view==='mine'?'💵 My Cashbook':'💵 Cashbook';
+    $('sub').textContent=(d.view==='mine'?('My cash · '+d.whoami):'All staff')+' · currency-aware ledger';
+    // balances
+    const b=d.balances;
+    $('balances').innerHTML = FILT==='ALL'
+      ? balCard('USD',b.USD)+balCard('UGX',b.UGX)+balCard('SSP',b.SSP)
+      : balCard(FILT,b[FILT]);
+    // entries
+    PAGES=d.pages||1;
+    if(!d.entries.length){$('list').innerHTML='<div class="loading">No entries.</div>';$('pager').innerHTML='';return;}
+    $('list').innerHTML=d.entries.map(e=>`
+      <div class="entry"><div class="l">
+        <div class="amt ${e.dir}">${e.dir==='in'?'+':'−'}${e.currency} ${fmt(e.native)} <span style="font-size:11px;color:#64748b;font-weight:600">· $${fmt(e.usd)}</span></div>
+        <div class="meta"><span class="pill">${e.stage.replace('_',' ')}</span> ${e.holder||''} ${e.note?'· '+e.note:''} ${e.status!=='approved'?'· <span style="color:#d97706">'+e.status+'</span>':''} · ${e.when||''}</div>
+      </div>${(e.stage==='cash_in'||e.stage==='cash_out')?`<button class="del" onclick="del(${e.id})">Delete</button>`:''}</div>`).join('');
+    // pager
+    $('pager').innerHTML = PAGES>1 ? `<button ${PAGE<=1?'disabled':''} onclick="PAGE--;load()">‹ Prev</button><span style="padding:7px 4px;font-size:13px;color:#64748b">Page ${PAGE}/${PAGES}</span><button ${PAGE>=PAGES?'disabled':''} onclick="PAGE++;load()">Next ›</button>` : '';
+  });
+}
+function save(){
+  const native=($('amt').value||'').replace(/,/g,''),rate=($('rate').value||'').replace(/,/g,'');
+  if(!(parseFloat(native)>0)){alert('Enter an amount');return;}
+  const p=new URLSearchParams({dir:DIR,currency:$('cur').value,native_amount:native,rate_to_usd:rate,note:$('note').value});
+  const b=$('saveBtn');b.disabled=true;
+  fetch('/papi/trade-cashbook?'+p,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(r=>{
+    b.disabled=false;setDir(DIR);
+    if(r.ok){$('amt').value='';$('note').value='';calc();PAGE=1;load();}else alert('Failed: '+(r.error||'error'));
+  }).catch(()=>{b.disabled=false;alert('Failed.');});
+}
+function del(id){if(!confirm('Delete this entry?'))return;
+  fetch('/papi/trade-cashbook/'+id+'/delete',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(r=>{if(r.ok)load();else alert(r.error==='not_allowed'?'Only owner/manager can delete':'Failed');});}
+setRate();load();
+</script></body></html>

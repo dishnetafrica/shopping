@@ -1,26 +1,25 @@
-SHOPBOT — CRUD + Pagination for Shree order-trading screens (Step 6)
-Adds delete (edit-via-delete) + list history + pagination. Gated to Shree.
+SHOPBOT — Shree-only currency-aware Cashbook (Option B)
+A transactional cash ledger with USD/SSP/UGX filtering. SEPARATE from the shared
+/panel/cashbook — this is /panel/trade-cashbook, gated to Shree. Other tenants untouched.
+
+NEW:
+  app/Http/Controllers/Panel/TradeCashbookController.php
+  resources/panel/trade_cashbook.html
 
 MODIFIED (overwrite):
-  app/Http/Controllers/Panel/OrderCostController.php
-    + deleteCost(), deleteOrder()  (owner/manager only, confirm on UI)
-    + orders list now paginated (page/per)
-  app/Http/Controllers/Panel/ExpenseController.php
-    + list() (recent expenses, paginated; staff see own, owner sees all)
-    + deleteExpense() (owner/manager only)
-  resources/panel/orders_costs.html   Delete button per order + Prev/Next pager
-  resources/panel/expenses.html       "Recent expenses" list + Delete + pager
-  routes/web.php                       delete + list routes
+  routes/web.php            trade-cashbook routes
+  resources/panel/seller.html   "Cashbook (multi-cur)" link in Order Trading group
 
-WHAT THIS SOLVES:
-  - You can now DELETE test orders/costs/expenses (clears inflated P&L data)
-  - Expenses screen now shows history (was add-only)
-  - Long lists paginate instead of capping at 50
+FEATURES:
+  - Currency filter tabs: All / USD / UGX / SSP (like DishNet)
+  - Per-currency running balance (colored hero cards)
+  - Record Money in / Money out, choose currency + rate, running USD conversion
+  - Paginated entries list (20/page), delete (owner/manager)
+  - Per-person: staff see their own cashbook; owner/manager see everyone
+  - Uses the SAME order_costs engine (stage=cash_in/cash_out) so entries flow into
+    Cash Position AND P&L automatically. No new table.
 
-SECURITY: delete is owner/manager only (403 otherwise); all scoped to Shree tenant.
+DEPLOY: commit + push -> EasyPanel Deploy. NO migration (reuses order_costs).
 
-NOT TOUCHED (deliberately): the shared /panel/cashbook screen. Adding multi-currency
-there affects ALL tenants — that's a separate decision (Option A: use Cash Position
-for multi-currency, leave shared cashbook single-currency; recommended).
-
-DEPLOY: commit + push -> EasyPanel Deploy. No migration.
+NOTE: This complements Cash Position (the summary). Cashbook is the transactional
+ledger. Both Shree-only. The shared single-currency /panel/cashbook is untouched.

@@ -288,6 +288,7 @@
       <a class="nav" href="/panel/book-cost"><span class="i">🛒</span> Book Purchase</a>
       <a class="nav" href="/panel/approvals"><span class="i">✅</span> Cost Approvals</a>
       <a class="nav" href="/panel/cash-position"><span class="i">💰</span> Cash Position</a>
+      <a class="nav" href="/panel/trade-cashbook"><span class="i">💵</span> Cashbook (multi-cur)</a>
       <a class="nav" href="/panel/expenses"><span class="i">💸</span> Expenses</a>
       <a class="nav" href="/panel/pnl"><span class="i">📈</span> Profit &amp; Loss</a>
       </div>
@@ -2131,7 +2132,7 @@ function applyPermissions(){
                '/panel/diagnostics':'settings','/panel/setup':'settings','/panel/billing':'settings',
                '/panel/operations':'orders',
                '/panel/orders-costs':'ordercosts','/panel/book-cost':'purchases',
-               '/panel/approvals':'approvals','/panel/cash-position':'cash','/panel/expenses':'purchases','/panel/pnl':'cash'};
+               '/panel/approvals':'approvals','/panel/cash-position':'cash','/panel/expenses':'purchases','/panel/pnl':'cash','/panel/trade-cashbook':'cash'};
   try{
     document.querySelectorAll('.side a.nav').forEach(function(a){
       var menu=null;
