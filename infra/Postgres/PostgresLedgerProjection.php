@@ -27,17 +27,20 @@ final class PostgresLedgerProjection
     {
         if ($rec->name() !== Posting::EVENT) return;
         $e = $rec->event;
-        $sql = 'INSERT INTO cloudbss_ledger_balances (tenant_id, entity_id, account, currency, net_minor)
-                VALUES (:t, :en, :acc, :cur, :delta)
+        $sql = 'INSERT INTO cloudbss_ledger_balances (tenant_id, entity_id, account, account_name, account_type, currency, net_minor)
+                VALUES (:t, :en, :acc, :nm, :ty, :cur, :delta)
                 ON CONFLICT (tenant_id, entity_id, account, currency)
                 DO UPDATE SET net_minor = cloudbss_ledger_balances.net_minor + EXCLUDED.net_minor,
+                              account_name = EXCLUDED.account_name,
+                              account_type = EXCLUDED.account_type,
                               updated_at = now()';
         $st = $this->pdo->prepare($sql);
         foreach ($e->payload['lines'] as $l) {
             $delta = $l['side'] === 'debit' ? $l['minor'] : -$l['minor'];
             $st->execute([
                 ':t' => $e->tenantId, ':en' => $e->entityId,
-                ':acc' => $l['code'], ':cur' => $l['currency'], ':delta' => $delta,
+                ':acc' => $l['code'], ':nm' => $l['name'] ?? '', ':ty' => $l['type'] ?? '',
+                ':cur' => $l['currency'], ':delta' => $delta,
             ]);
         }
     }

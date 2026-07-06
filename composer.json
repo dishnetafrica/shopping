@@ -1,6 +1,6 @@
 {
     "name": "cloudbss/kernel",
-    "description": "CloudBSS enterprise kernel — Money, Participants, Events, Decisions & Policies, Tasks, and an append-only double-entry Ledger. Framework-agnostic domain layer (drops into Laravel). Includes a Postgres persistence adapter + the first sales→ledger slice under infra/.",
+    "description": "CloudBSS enterprise kernel \u2014 event-sourced double-entry accounting/decision core. infra/ adds Postgres persistence, sales + purchase ledger slices (VAT both sides), and trial-balance/P&L reporting.",
     "type": "library",
     "license": "proprietary",
     "require": {
@@ -18,12 +18,16 @@
         }
     },
     "autoload-dev": {
-        "psr-4": { "CloudBSS\\Kernel\\Tests\\": "tests/" }
+        "psr-4": {
+            "CloudBSS\\Kernel\\Tests\\": "tests/"
+        }
     },
     "scripts": {
         "test": "php tests/run.php",
         "stress": "php tests/stress.php",
         "test-persistence": "php infra/tests/persistence_test.php",
-        "test-slice": "php infra/tests/sales_slice_test.php"
+        "test-slice": "php infra/tests/sales_slice_test.php",
+        "test-books": "php infra/tests/books_test.php",
+        "test-payments": "php infra/tests/payments_test.php"
     }
 }

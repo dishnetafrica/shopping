@@ -30,12 +30,14 @@ CREATE INDEX IF NOT EXISTS cloudbss_events_name_idx      ON cloudbss_events (nam
 -- One row per (tenant, entity, account, currency); net_minor is debit-positive / credit-negative.
 -- Folded incrementally from JournalPosted; always rebuildable from the events log.
 CREATE TABLE IF NOT EXISTS cloudbss_ledger_balances (
-    tenant_id   TEXT   NOT NULL,
-    entity_id   TEXT   NOT NULL,
-    account     TEXT   NOT NULL,
-    currency    TEXT   NOT NULL,
-    net_minor   BIGINT NOT NULL DEFAULT 0,      -- debit + , credit -
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    tenant_id     TEXT   NOT NULL,
+    entity_id     TEXT   NOT NULL,
+    account       TEXT   NOT NULL,
+    account_name  TEXT   NOT NULL DEFAULT '',
+    account_type  TEXT   NOT NULL DEFAULT '',      -- asset | liability | equity | income | expense
+    currency      TEXT   NOT NULL,
+    net_minor     BIGINT NOT NULL DEFAULT 0,       -- debit + , credit -
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, entity_id, account, currency)
 );
 

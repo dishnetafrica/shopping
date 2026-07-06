@@ -26,6 +26,7 @@ spl_autoload_register(function (string $class): void {
 
 use CloudBSS\App\UgandaVatSalesPolicy;
 use CloudBSS\Infra\SalesLedger;
+use CloudBSS\Infra\LedgerPoster;
 use CloudBSS\Infra\Postgres\{PostgresEventLog, PostgresLedgerProjection};
 use CloudBSS\Kernel\Ledger\RegistryAccountingPolicyResolver;
 use CloudBSS\Kernel\Support\{SystemClock, RandomIdGenerator};
@@ -43,13 +44,12 @@ $pdo->exec('TRUNCATE cloudbss_events RESTART IDENTITY; TRUNCATE cloudbss_ledger_
 
 // Each "web request" wires its own SalesLedger (fresh kernel collaborators, shared DB).
 $request = function () use ($pdo): SalesLedger {
-    $log    = new PostgresEventLog($pdo);
-    $ledger = new PostgresLedgerProjection($pdo);
     $clock  = new SystemClock();
     $ids    = new RandomIdGenerator();
     $resolver = new RegistryAccountingPolicyResolver();
     $resolver->register('t_ug', 'e1', new UgandaVatSalesPolicy($clock, $ids));  // Patronics policy
-    return new SalesLedger($pdo, $log, $ledger, $clock, $ids, $resolver);
+    $poster = new LedgerPoster($pdo, new PostgresEventLog($pdo), new PostgresLedgerProjection($pdo), $clock, $ids, $resolver);
+    return new SalesLedger($poster);
 };
 
 $B = fn(string $acc, string $cur = 'UGX') => (new PostgresLedgerProjection($pdo))
