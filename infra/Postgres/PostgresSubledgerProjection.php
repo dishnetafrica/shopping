@@ -31,12 +31,12 @@ final class PostgresSubledgerProjection
     {
         $e = $rec->event;
 
-        // 1) A sale/purchase names a party -> remember it until its JournalPosted arrives.
-        if ($e->name === 'DeliveryCompleted' || $e->name === 'PurchaseReceived') {
+        // 1) A sale/purchase/interest names a party -> remember it until its JournalPosted arrives.
+        if ($e->name === 'DeliveryCompleted' || $e->name === 'PurchaseReceived' || $e->name === 'InterestCharged') {
             $party = $e->payload['party'] ?? null;
             if ($party === null || $party === '') return;
             $this->pending[(string) $e->correlationId] = [
-                'kind'  => $e->name === 'DeliveryCompleted' ? 'AR' : 'AP',
+                'kind'  => $e->name === 'PurchaseReceived' ? 'AP' : 'AR',
                 'party' => (string) $party,
                 'name'  => (string) ($e->payload['party_name'] ?? ''),
                 'ref'   => $e->aggregateId,

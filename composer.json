@@ -29,6 +29,7 @@
         "test-slice": "php infra/tests/sales_slice_test.php",
         "test-books": "php infra/tests/books_test.php",
         "test-payments": "php infra/tests/payments_test.php",
-        "test-aging": "php infra/tests/aging_test.php"
+        "test-aging": "php infra/tests/aging_test.php",
+        "test-interest": "php infra/tests/interest_test.php"
     }
 }
