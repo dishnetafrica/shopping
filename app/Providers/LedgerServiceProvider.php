@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Models\Order;
+use App\Models\LedgerEntry;
+use App\Observers\LedgerEntryObserver;
 use App\Observers\OrderLedgerObserver;
 use CloudBSS\App\CashSettlementPolicy;
 use CloudBSS\App\CompositeAccountingPolicy;
@@ -67,7 +69,8 @@ class LedgerServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        // Auto-post delivered orders. Runs alongside the existing OrderObserver.
+        // Auto-post delivered orders + customer receipts. Runs alongside the existing observers.
         Order::observe(OrderLedgerObserver::class);
+        LedgerEntry::observe(LedgerEntryObserver::class);
     }
 }

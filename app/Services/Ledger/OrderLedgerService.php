@@ -4,6 +4,9 @@ namespace App\Services\Ledger;
 
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\LedgerEntry;
+use App\Models\Tenant;
+use CloudBSS\Infra\PaymentLedger;
 use CloudBSS\Infra\SalesLedger;
 use CloudBSS\Kernel\Money\Currency;
 use Illuminate\Support\Facades\Log;
@@ -76,8 +79,6 @@ class OrderLedgerService
     {
         return (bool) $tenant->setting('ledger_enabled', false);
     }
-
-    /** Revenue is recognized once the order is operationally complete (delivered or confirmed). */
     private function isComplete(Order $order): bool
     {
         return $order->delivered_at !== null || $order->customer_confirmed_at !== null;
@@ -99,6 +100,51 @@ class OrderLedgerService
             return $total;
         } catch (\Throwable $e) {
             return 0.0;
+        }
+    }
+
+    /**
+     * Post a customer payment (LedgerEntry, category 'order_payment') as a receipt: Dr Cash, Cr AR,
+     * settling that order's invoice. Idempotent on the ledger-entry id. Ensures the sale is posted
+     * first (idempotent) so the subledger has an open item to settle — robust to event ordering.
+     */
+    public function postReceipt(LedgerEntry $entry): void
+    {
+        try {
+            if ((string) $entry->category !== 'order_payment') return;
+
+            $order  = $entry->order_id ? Order::find($entry->order_id) : null;
+            $tenant = $order?->tenant ?? ($entry->tenant_id ? Tenant::find($entry->tenant_id) : null);
+            if (! $tenant || ! $this->enabled($tenant)) return;
+
+            // Make sure the invoice exists in the ledger before applying cash to it.
+            if ($order && $this->isComplete($order)) {
+                $this->postSale($order);
+            }
+
+            $cur    = (string) ($entry->currency ?: $tenant->setting('currency', 'UGX'));
+            $factor = Currency::of($cur)->subunit();
+            $amountMinor = (int) round((float) $entry->amount * $factor);
+            if ($amountMinor <= 0) return;
+
+            $ledgerTenant = (string) $tenant->setting('ledger_tenant', 't_ug');
+            $ledgerEntity = (string) $tenant->setting('ledger_entity', 'e1');
+            $party        = (string) ($order?->customer_phone ?: ('order_' . $entry->order_id));
+            $appliesTo    = $entry->order_id ? (string) $entry->order_id : null;
+
+            $payments = app(PaymentLedger::class);
+            $payments->recordCustomerPayment(
+                tenantId:     $ledgerTenant,
+                entityId:     $ledgerEntity,
+                paymentId:    'le_' . $entry->id,               // unique per payment -> idempotent
+                amountMinor:  $amountMinor,
+                currency:     $cur,
+                occurredAt:   ($entry->created_at ?: now())->toDateTimeImmutable(),
+                party:        $party,
+                appliesTo:    $appliesTo,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('OrderLedgerService.postReceipt failed for entry ' . ($entry->id ?? '?') . ': ' . $e->getMessage());
         }
     }
 }
