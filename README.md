@@ -1,40 +1,60 @@
-# Win World MES — Phase 1, Batch 1 (engines + schema + models)
+# CloudBSS Kernel — refactored spine (one write model, event-first)
 
-Drops into the CloudBSS app (`shopbot-saas`) at the repo root — paths are repo-relative.
+Framework-agnostic domain layer (PSR-4 `CloudBSS\Kernel\`), drops into Laravel unchanged. Run the
+golden tests with no dependencies:
 
-## What's in this batch
-**Engines (pure, framework-free, fully unit-tested):** `app/Services/Winworld/`
-- `Formula.php` — gram/pcs (W×L×gauge/3300), order kg, manual-wins output resolution, required hours, elapsed/actual output.
-- `ShiftCalendar.php` — 12-hour window (07:00–19:00) scheduling: planned_end spills to the next day, optional holidays/working-days.
-- `Blending.php` — BOM recipe across Ext-A/B/C from mixing qty × %, with per-column balance validation.
-- `Oee.php` — OEE = Availability × Performance × Quality (capped), plus uncapped efficiency %.
-
-**Schema:** `database/migrations/2026_06_18_1000xx_*` (idempotent, `ww_`-prefixed, tenant-scoped)
-- masters: `ww_items`, `ww_machines`, `ww_materials`, `ww_customers`
-- indent: `ww_indents` (full OIF header + specs), `ww_indent_blends`, `ww_indent_qc`
-- `ww_plannings`, `ww_production_entries`
-
-**Models:** `app/Models/Ww*.php` — `BelongsToTenant`, relations, thin helpers that call the engines
-(`recomputeGramPerPcs`, `recomputeOrderKg`, planning `recompute`, production `recompute`/`oee`).
-
-**Tests:** `qa/ww_*.php` — 65 assertions, all green:
-`ww_formula` 17 · `ww_shift` 10 · `ww_blending` 12 · `ww_oee` 17 · `ww_acceptance` 9.
-
-## Run the tests
-```
-php qa/ww_formula.php && php qa/ww_shift.php && php qa/ww_blending.php && php qa/ww_oee.php && php qa/ww_acceptance.php
+```bash
+php tests/run.php      # 39 assertions, all green — includes replay/reconstruction proofs
 ```
 
-## Assumptions baked in (correct me if wrong)
-- **A1** `final_output = manual` when set, else advisory auto. (Q2 — validate output rate vs a real daily report.)
-- **A2** processes optional per indent via flags; one Planning row per active process; cross-process sequencing deferred. (Q3)
-- **A3** no SAP dependency in Phase 1.
-- **A4** PHP 8.3 / Laravel 11 / Postgres; single 12-h shift (Q6).
+## What the refactor changed (and what it preserved)
 
-## NOT in this batch (next steps, in order)
-1. **Seeders** — the 22 machines + the sample Item/Material masters, so the panel opens with real data.
-2. **Filament resources** — Item/Machine/Material/Customer admin, the Indent screen (with clone-last + blending lines + QC), the Planning board, and the **mobile Production Entry** screen (the make-or-break UI).
-3. **OIF PDF** + digital QC sign-offs (Phase 2).
-4. **Machine Board / Target-vs-Actual / Daily Report / OEE Dashboard** + the WhatsApp notification engine (Phase 2).
+**Preserved:** `Money`, `Decision`, `Participant` (Party | Digital), `Task`, the `*Policy`
+interfaces, the package layout, and public method names. Only the architectural spine changed.
 
-Filament wiring needs one confirmation: these models use your existing `BelongsToTenant` trait, so they require the panel to run under `SetTenantFromUser` (same as your other tenant models) — confirmed against `app/Models/Concerns/BelongsToTenant.php`.
+**One write model.** There is exactly one source of truth — the `EventStore`. The ledger no longer
+keeps its own entries; it is a **projection** of `JournalPosted` events:
+
+```
+command → Decision (the why) → Event → EventStore → EventBus → Projections
+business event → [resolved AccountingPolicy] → JournalPosted → LedgerProjection → balances
+```
+
+| Step (your roadmap) | Where |
+|---|---|
+| 1. One write model (events) | `EventStore` is the only write model; `Kernel::recordEvent()` the only entry |
+| 2. Ledger is a projection | `LedgerProjection` folds `JournalPosted`; `rebuildFrom()` replays the log |
+| 3. Event metadata | `DomainEvent` carries `schemaVersion`, `correlationId`, `causationId`; store assigns `aggregateSequence` + `globalPosition` with optimistic concurrency |
+| 4. Injected clock + ids | `Clock` / `IdGenerator` (System/Frozen, Random/Sequence) → deterministic replay |
+| 5. Kernel independent of Laravel + tenants | tenant/entity are event **metadata**; `AccountingPolicyResolver` (app-supplied) picks policy per event; no framework imports |
+| 6. Migrate one capability at a time | modules subscribe on the `EventBus`; the kernel never changes to admit a new consumer |
+
+## Event-sourced vs normal aggregates (your calibration)
+
+- **Event-sourced** (replay/audit critical): the Ledger (via `JournalPosted`), Decisions (via
+  `DecisionMade`), and `Task` (raise → apply → `fromHistory`).
+- **Normal aggregates**: `Party`, `DigitalParticipant`, and future Product/Supplier/Customer/
+  Settings — ordinary objects, not event-sourced.
+
+## Reconstructability — every audited object rebuilds from events alone
+
+Proven by tests:
+- **Ledger** → `LedgerProjection::rebuildFrom(log)` reproduces every balance.
+- **Task** → `Task::fromHistory(events)` reproduces status + owner.
+- **Decision** → the full why (policy **version** + parameters + structured inputs + evidence refs)
+  is in the `DecisionMade` event, explainable even after a policy changes.
+- **Money** → overflow now **throws** instead of silently becoming a float; the no-float guarantee
+  is真.
+- **Determinism** → `FrozenClock` + `SequenceIdGenerator` make replay bit-for-bit identical.
+
+## What this deliberately does NOT include yet
+
+Persistence (the event store + projections against Postgres), FX with realized gain/loss, the
+Conversation object, AI Workforce routing, and the first business module. Each new capability
+should pass the simulator's 14 scenarios as end-to-end tests before shipping.
+
+## C3 note (Money at extreme scale)
+
+Money uses overflow-**checked** 64-bit integers: safe to ~9.2×10¹⁸ minor units and throws beyond
+that rather than corrupting. If a currency/volume ever needs more, swap the internal primitive for
+bcmath/gmp — the public API does not change.
