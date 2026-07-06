@@ -70,47 +70,98 @@
   .dn-tabbar a.on::before{content:"";position:absolute;top:0;width:26px;height:3px;border-radius:0 0 3px 3px;background:var(--dn-g);}
   @media(min-width:721px){.dn-tabbar{max-width:720px;margin:0 auto;border-left:1px solid var(--dn-line);border-right:1px solid var(--dn-line);}}
 </style>
+<style>
+.rp{background:#E6F4EA;border:1px solid #BFE3CB;border-radius:13px;padding:12px 14px;margin-bottom:12px}
+.rph{font-size:13px;font-weight:800;color:#0B3D22;margin-bottom:6px}
+.rpi{font-size:13px;color:#16231C;padding:4px 0}
+.rpt{font-size:11px;color:#0F8A6B;font-weight:700;margin-left:4px}
+.empty{text-align:center;color:#94a3b8;padding:40px 20px;font-size:14px;font-weight:600}
+.loading{text-align:center;color:#94a3b8;padding:24px}
+</style>
 </head>
 <body><div class="wrap">
   <div class="top"><h1>🧺 Buy List</h1><a href="/panel">← Panel</a></div>
-  <div class="sub" id="sub">Everything still to buy across open orders</div>
+  <div class="sub" id="sub">What to buy for confirmed orders</div>
+  <div id="ready"></div>
   <div id="list"><div class="loading">Loading…</div></div>
 </div>
 <script>
 const $=s=>document.getElementById(s);
-function nfmt(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
+function nf(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
 function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+var WINDOW=['Confirmed','Packed','Out for delivery'];
+var ORDERS=[], TICKS={};
+
+function tkey(on,nm){return on+'|'+nm;}
 function load(){
-  fetch('/papi/buy-list',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
-    .then(r=>r.json()).then(d=>{
-      const L=$('list');
-      if(!d.ok){L.innerHTML='<div class="empty">Could not load.</div>';return;}
-      if(!d.items||!d.items.length){
-        $('sub').textContent='All caught up';
-        L.innerHTML='<div class="empty">✅ Nothing to buy right now.<br><span style="font-size:12px;color:#94a3b8">New orders with items will show here.</span></div>';return;
-      }
-      $('sub').textContent=d.count+' item'+(d.count>1?'s':'')+' to buy';
-      L.innerHTML=d.items.map(function(it){
-        var ords=(it.orders||[]).map(function(o){return '<span class="ord">'+esc(o)+'</span>';}).join('');
-        var ids=(it.ids||[]).join(',');
-        return '<div class="item" data-ids="'+ids+'">'+
-          '<div class="q"><b>'+nfmt(it.remaining)+'</b><small>'+esc(it.unit||'qty')+'</small></div>'+
-          '<div class="mid"><div class="nm">'+esc(it.name)+'</div><div class="ords">'+ords+'</div></div>'+
-          '<button class="buy" onclick="mark(this)">Bought</button>'+
-        '</div>';
-      }).join('');
-    }).catch(function(){$('list').innerHTML='<div class="empty">Failed to load.</div>';});
+  Promise.all([
+    fetch('/papi/orders',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(function(r){return r.json();}),
+    fetch('/papi/buy-list',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(function(r){return r.json();})
+  ]).then(function(res){
+    var od=res[0]||{}, td=res[1]||{};
+    ORDERS=(od.orders||[]).filter(function(o){return WINDOW.indexOf(o.status)>=0;});
+    TICKS={};
+    ((td&&td.ticks)||[]).forEach(function(t){ TICKS[tkey(t.order_no,t.item_name)]=Number(t.qty)||0; });
+    render();
+  }).catch(function(){ $('list').innerHTML='<div class="empty">Could not load orders.</div>'; });
 }
-function mark(btn){
-  var row=btn.closest('.item'); var ids=(row.getAttribute('data-ids')||'').split(',').filter(Boolean);
-  if(!ids.length) return;
-  btn.disabled=true; btn.textContent='…';
-  var p=new URLSearchParams(); ids.forEach(function(i){p.append('ids[]',i);});
-  fetch('/papi/buy-list/mark',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:p})
-    .then(r=>r.json()).then(function(r){
-      if(r&&r.ok){ row.style.transition='.2s'; row.style.opacity='0'; setTimeout(load,220); }
-      else { btn.disabled=false; btn.textContent='Bought'; alert('Could not update'); }
-    }).catch(function(){btn.disabled=false;btn.textContent='Bought';alert('Failed');});
+
+function render(){
+  // aggregate remaining by item name; also track per-order remaining for ready-to-pack
+  var agg={};                 // name -> {name, remaining, unit, orders:{on:id}, pairs:[{order_no,order_id,name,qty}]}
+  var orderRemain={};          // order_no -> total remaining across its items
+  ORDERS.forEach(function(o){
+    var items=o.items_json||[];
+    items.forEach(function(it){
+      var nm=(it.name||'').trim(); if(!nm) return;
+      var qty=Number(it.qty)||0;
+      var bought=TICKS[tkey(o.order_no,nm)]||0;
+      var rem=Math.max(0, qty-bought);
+      orderRemain[o.order_no]=(orderRemain[o.order_no]||0)+rem;
+      if(rem<=0) return;
+      var k=nm.toLowerCase();
+      if(!agg[k]) agg[k]={name:nm, remaining:0, orders:{}, pairs:[]};
+      agg[k].remaining+=rem;
+      agg[k].orders[o.order_no]=1;
+      agg[k].pairs.push({order_no:o.order_no, order_id:o.id, name:nm, qty:rem});
+    });
+  });
+  var items=Object.keys(agg).map(function(k){return agg[k];}).sort(function(a,b){return b.remaining-a.remaining;});
+
+  // ready to pack = CONFIRMED orders whose every item is fully bought
+  var ready=ORDERS.filter(function(o){ return o.status==='Confirmed' && (orderRemain[o.order_no]||0)<=0 && (o.items_json||[]).length>0; });
+  var R=$('ready');
+  if(ready.length){
+    R.innerHTML='<div class="rp"><div class="rph">✅ Ready to pack ('+ready.length+')</div>'+
+      ready.map(function(o){return '<div class="rpi"><b>'+esc(o.order_no)+'</b> · '+esc(o.name||'')+' <span class="rpt">all bought → set Packed</span></div>';}).join('')+'</div>';
+  } else { R.innerHTML=''; }
+
+  var L=$('list');
+  if(!items.length){
+    $('sub').textContent = ready.length ? 'Nothing left to buy' : 'All caught up';
+    L.innerHTML='<div class="empty">✅ Nothing to buy right now.<br><span style="font-size:12px;color:#94a3b8">Confirm an order and its items appear here.</span></div>';
+    return;
+  }
+  $('sub').textContent=items.length+' item'+(items.length>1?'s':'')+' to buy';
+  L.innerHTML=items.map(function(it,i){
+    var ords=Object.keys(it.orders).map(function(o){return '<span class="ord">'+esc(o)+'</span>';}).join('');
+    return '<div class="item"><div class="q"><b>'+nf(it.remaining)+'</b><small>qty</small></div>'+
+      '<div class="mid"><div class="nm">'+esc(it.name)+'</div><div class="ords">'+ords+'</div></div>'+
+      '<button class="buy" onclick="buyRecord('+i+')">Buy &amp; record</button></div>';
+  }).join('');
+  window.__items=items;
+}
+
+function buyRecord(i){
+  var it=window.__items[i]; if(!it) return;
+  // 1) mark those order-items bought
+  fetch('/papi/buy-list/mark',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/json'},credentials:'same-origin',
+      body:JSON.stringify({items:it.pairs.map(function(p){return {order_no:p.order_no,item_name:p.name,qty:p.qty};})})})
+    .then(function(r){return r.json();}).then(function(){
+      // 2) open Book Purchase pre-filled: split across those orders, note = item
+      var ids=it.pairs.map(function(p){return p.order_id;}).filter(Boolean).join(',');
+      location.href='/panel/book-cost?orders='+encodeURIComponent(ids)+'&note='+encodeURIComponent(it.name)+'&stage=purchase';
+    }).catch(function(){ alert('Could not update. Try again.'); });
 }
 load();
 </script>

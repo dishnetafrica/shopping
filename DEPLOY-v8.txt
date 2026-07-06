@@ -1,0 +1,61 @@
+DEPLOY — Buy List wired to confirmed orders (v8)   [cumulative]
+===============================================================
+Now automatic: confirm an order -> its items appear on Today's Buy List. Buy ->
+"Buy & record" marks them bought AND opens a pre-filled Book Purchase (split across
+those orders). When ALL of an order's items are bought, it shows under "Ready to
+pack" (flag only for now; auto-set-Packed is the next slice).
+
+NEW / CHANGED for v8
+  NEW  database/migrations/2026_07_06_000900_create_trade_purchase_ticks_table.php
+  NEW  app/Models/TradePurchaseTick.php
+  CHG  app/Http/Controllers/Panel/BuyListController.php   (serves bought ticks; mark/undo)
+  CHG  resources/panel/buy_list.html   (reads LIVE /papi/orders + ticks; ready-to-pack)
+  CHG  resources/panel/book_cost.html  (prefills split + note from ?orders=..&note=..)
+  (routes /papi/buy-list + /papi/buy-list/mark already exist from earlier)
+
+HOW IT WORKS
+  - Buy List page reads /papi/orders (your native orders: items_json + status).
+  - "Needs buying" window = status in {Confirmed, Packed, Out for delivery}.
+  - It subtracts trade_purchase_ticks (what Jayesh marked bought) -> shows remaining,
+    aggregated by item across orders, with the order numbers.
+  - "Buy & record" on an item:
+      1) POST /papi/buy-list/mark  (marks those order-items bought)
+      2) opens /panel/book-cost?orders=<ids>&note=<item>  -> Book Purchase in SPLIT
+         mode with those orders pre-ticked; Jayesh sets amount + cash/credit + supplier.
+  - "Ready to pack" = CONFIRMED orders whose every item is bought (advisory flag).
+  - trade_purchase_ticks is a NEW isolated table. ShopBot's orders table is never
+    written to by any of this.
+
+  Verified logic: 2 confirmed orders (foil x2+x1, cling x2) -> Buy List shows Foil 3,
+  Cling 2. Mark ORD-11 fully bought -> its items leave, ORD-11 shows Ready to pack,
+  ORD-12 still needs Foil 1.
+
+DEPLOY
+  git add database/migrations app/Models/TradePurchaseTick.php \
+          app/Http/Controllers/Panel/BuyListController.php resources/panel/buy_list.html \
+          resources/panel/book_cost.html
+  git commit -m "v8: buy list driven by confirmed orders + ready-to-pack + prefill Book Purchase"
+  git push
+  -> EasyPanel: Rebuild
+  -> php artisan migrate     (adds trade_purchase_ticks; additive)
+
+VERIFY (on the phone / console)
+  1. Open an order -> set status to Confirmed (in the ShopBot Orders screen).
+  2. Open /panel/buy-list -> that order's items now show, grouped by item.
+  3. Tap "Buy & record" on one -> Book Purchase opens with those orders pre-ticked and
+     the item name in the note. Enter amount + Paid/Credit + supplier -> Book.
+  4. Back on Buy List -> that item is gone. When an order's items are all bought it
+     appears under "Ready to pack".
+  Console:
+    fetch('/papi/buy-list',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(console.log)
+
+NEXT SLICE (your pick "add auto-set once verified")
+  Auto-set the order to "Packed" when all its items are bought. That WRITES to
+  ShopBot's order status, so I need its status-update endpoint. When ready, on an
+  order page: DevTools -> Network -> change status in the dropdown -> send me the
+  request (URL + method + payload). Then I'll wire the auto-advance safely.
+
+NOTE: orders created via our own "Create order" form store items as text (not
+items_json), so they won't aggregate on the Buy List. Real WhatsApp/quote orders
+(the main flow) have items_json and work. If you want manual orders included too,
+that's a small follow-up once we confirm items_json is a writable column.

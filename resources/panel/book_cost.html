@@ -257,6 +257,23 @@ function save(){
         qt.addEventListener('input',function(){ qt.value=grp(qt.value); preview(); });
         row.addEventListener('click',function(e){ if(e.target===row||e.target.classList.contains('oi')){ cb.checked=!cb.checked; row.classList.toggle('pick',cb.checked); preview(); } });
       });
+      // Prefill from the Buy List "Buy & record": split mode + tick those orders + item note.
+      try{
+        var qp=new URLSearchParams(location.search);
+        var preOrders=qp.get('orders');
+        if(preOrders){
+          setMode('split');
+          var pids=preOrders.split(',').map(function(x){return x.trim();}).filter(Boolean);
+          L.querySelectorAll('.dn-ord').forEach(function(row){
+            if(pids.indexOf(String(row.getAttribute('data-id')))>=0){
+              var cb=row.querySelector('input[type=checkbox]'); if(cb){ cb.checked=true; row.classList.add('pick'); }
+            }
+          });
+          var pn=qp.get('note'); var noteEl=document.getElementById('note');
+          if(noteEl && pn) noteEl.value=pn;
+          updateBtn(); preview();
+        }
+      }catch(e){}
       applyMethod();
     }).catch(function(){ var L=$('dnList'); if(L) L.innerHTML='<div style="color:#b4232a;font-size:13px">Could not load orders.</div>'; });
 
