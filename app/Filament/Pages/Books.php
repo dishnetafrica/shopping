@@ -27,6 +27,30 @@ class Books extends Page
         return Tenant::findOrFail(app(TenantContext::class)->id());
     }
 
+    /** Livewire action: send a debtor their statement over WhatsApp (button on the Debtors table). */
+    public function sendStatement(string $party): void
+    {
+        try {
+            $res = app(\App\Services\Ledger\StatementMessenger::class)->send($this->tenant(), $party);
+        } catch (\Throwable $e) {
+            $res = ['ok' => false, 'reason' => 'error'];
+        }
+
+        if ($res['ok'] ?? false) {
+            \Filament\Notifications\Notification::make()
+                ->title('Statement sent on WhatsApp')->success()->send();
+            return;
+        }
+
+        $why = match ($res['reason'] ?? '') {
+            'nothing_owed' => 'That customer has nothing outstanding.',
+            'no_phone'     => 'No valid WhatsApp number for that customer.',
+            'send_failed'  => 'WhatsApp send failed — check the connection.',
+            default        => 'Could not send the statement.',
+        };
+        \Filament\Notifications\Notification::make()->title($why)->warning()->send();
+    }
+
     protected function getViewData(): array
     {
         $t   = $this->tenant();
@@ -62,6 +86,7 @@ class Books extends Page
             ], $trial['rows']);
 
             $mapAging = fn (array $list) => array_map(fn ($p) => [
+                'party'    => $p['party'],
                 'name'     => $p['name'] ?: $p['party'],
                 'current'  => $fmt($p['current']),
                 'd1_30'    => $fmt($p['d1_30']),

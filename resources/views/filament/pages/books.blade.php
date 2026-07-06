@@ -53,7 +53,8 @@
                                 <th class="py-2 px-2 text-right">31–60</th>
                                 <th class="py-2 px-2 text-right">61–90</th>
                                 <th class="py-2 px-2 text-right">90+</th>
-                                <th class="py-2 pl-2 text-right font-semibold">Total</th>
+                                <th class="py-2 px-2 text-right font-semibold">Total</th>
+                                <th class="py-2 pl-2"></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -65,7 +66,16 @@
                                     <td class="py-2 px-2 text-right">{{ $d['d31_60'] }}</td>
                                     <td class="py-2 px-2 text-right">{{ $d['d61_90'] }}</td>
                                     <td class="py-2 px-2 text-right text-danger-600">{{ $d['d90_plus'] }}</td>
-                                    <td class="py-2 pl-2 text-right font-semibold">{{ $d['total'] }}</td>
+                                    <td class="py-2 px-2 text-right font-semibold">{{ $d['total'] }}</td>
+                                    <td class="py-2 pl-2 text-right">
+                                        <x-filament::button
+                                            size="xs" color="gray" icon="heroicon-o-paper-airplane"
+                                            wire:click="sendStatement('{{ $d['party'] }}')"
+                                            wire:loading.attr="disabled"
+                                            wire:target="sendStatement('{{ $d['party'] }}')">
+                                            Statement
+                                        </x-filament::button>
+                                    </td>
                                 </tr>
                             @endforeach
                         </tbody>
