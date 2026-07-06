@@ -29,11 +29,17 @@ class User extends Authenticatable implements FilamentUser
     /** Menu keys this user may open. Owner/legacy = everything. */
     public function effectiveMenus(): array
     {
-        $all = ['dashboard', 'products', 'orders', 'customers', 'quotations', 'whatsapp', 'finance', 'marketing', 'settings', 'staff'];
+        $all = ['dashboard', 'products', 'orders', 'customers', 'quotations', 'whatsapp', 'finance', 'marketing', 'settings', 'staff', 'cash', 'purchases', 'ordercosts'];
         if ($this->isOwnerLike()) return $all;
         switch ((string) $this->role) {
             case 'manager':       return array_values(array_diff($all, ['staff']));
             case 'product_staff': return ['dashboard', 'products'];
+            // Jaeysh (Uganda buyer): book purchases against orders + see orders/cash
+            case 'purchaser':     return ['dashboard', 'orders', 'ordercosts', 'purchases', 'cash'];
+            // Asish (South Sudan field): book delivery/local costs + see orders/cash
+            case 'field':         return ['dashboard', 'orders', 'ordercosts', 'purchases', 'cash'];
+            // Salesperson: build quotations + orders + customers
+            case 'sales':         return ['dashboard', 'orders', 'quotations', 'customers', 'ordercosts'];
             default:              return $all; // legacy/unknown role = unrestricted (owner opts in to limit)
         }
     }

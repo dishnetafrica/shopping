@@ -1,0 +1,62 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cost Approvals</title>
+<style>
+  :root{--red:#D41C1C;--green:#059669;--amber:#d97706;--dark:#0f0f0f;--mute:#94a3b8;--bg:#f5f5f2;--border:#e8e8e3;--font:'Inter',-apple-system,'Segoe UI',sans-serif;}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);font-family:var(--font);color:#0f0f0f;}
+  .wrap{max-width:640px;margin:0 auto;padding:14px;}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .top h1{font-size:20px;margin:0;font-weight:900;} .top a{color:var(--green);text-decoration:none;font-weight:700;font-size:13px;}
+  .tabs{display:flex;gap:6px;margin-bottom:12px;}
+  .tab{flex:1;padding:9px;border:1.5px solid var(--border);border-radius:10px;background:#fff;text-align:center;font-size:12px;font-weight:700;color:#374151;cursor:pointer;}
+  .tab.on{border-color:var(--amber);background:#fffbeb;color:#92400e;}
+  .item{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;display:flex;gap:12px;}
+  .item .thumb{width:56px;height:56px;border-radius:9px;background:#f1f5f9;flex-shrink:0;object-fit:cover;border:1px solid var(--border);}
+  .item .thumb.none{display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:20px;}
+  .item .body{flex:1;min-width:0;}
+  .item .amt{font-size:16px;font-weight:900;} .item .sub{font-size:12px;color:#64748b;margin-top:2px;}
+  .stagetag{font-size:9px;background:#f1f5f9;color:#475569;padding:1px 6px;border-radius:8px;font-weight:800;margin-right:5px;}
+  .acts{display:flex;gap:8px;margin-top:10px;}
+  .ap{flex:1;background:#059669;color:#fff;border:none;border-radius:9px;padding:9px;font-weight:800;font-size:13px;cursor:pointer;}
+  .rj{flex:1;background:#fff;color:#dc2626;border:1.5px solid #fca5a5;border-radius:9px;padding:9px;font-weight:800;font-size:13px;cursor:pointer;}
+  .loading{text-align:center;color:var(--mute);padding:30px;}
+</style></head>
+<body><div class="wrap">
+  <div class="top"><h1>🧾 Cost Approvals</h1><a href="/panel">← Panel</a></div>
+  <div class="tabs">
+    <div class="tab on" data-s="pending" onclick="setTab(this)">⏳ Pending</div>
+    <div class="tab" data-s="approved" onclick="setTab(this)">✅ Approved</div>
+    <div class="tab" data-s="rejected" onclick="setTab(this)">❌ Rejected</div>
+  </div>
+  <div id="list"><div class="loading">Loading…</div></div>
+</div>
+<script>
+const $=s=>document.getElementById(s); let status='pending';
+function fmt(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
+function setTab(el){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));el.classList.add('on');status=el.dataset.s;load();}
+function decide(id,action,btn){
+  btn.disabled=true;btn.textContent='…';
+  fetch('/papi/order-costs/'+id+'/decide',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:'action='+action})
+   .then(r=>r.json()).then(r=>{ if(r.ok) load(); else {alert(r.error||'failed');btn.disabled=false;} });
+}
+function load(){
+  fetch('/papi/order-costs/pending?status='+status,{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(d=>{
+    const L=$('list');
+    if(!d.ok){L.innerHTML='<div class="loading">Could not load.</div>';return;}
+    if(!d.costs.length){L.innerHTML='<div class="loading">Nothing '+status+'.</div>';return;}
+    L.innerHTML=d.costs.map(c=>`
+      <div class="item">
+        ${c.receipt?`<img class="thumb" src="${c.receipt}" onclick="window.open('${c.receipt}')">`:'<div class="thumb none">📷</div>'}
+        <div class="body">
+          <div class="amt">${c.currency} ${fmt(c.native)} <span style="font-size:12px;color:#64748b;font-weight:600">· $${fmt(c.usd)}</span></div>
+          <div class="sub"><span class="stagetag">${c.stage.replace('_',' ')}</span>${c.order_no||'no order'} · ${c.holder||'—'}</div>
+          <div class="sub">${c.note||''} <span style="color:#94a3b8">· ${c.by||''} · ${c.when||''}</span></div>
+          ${status==='pending'?`<div class="acts">
+            <button class="ap" onclick="decide(${c.id},'approve',this)">Approve</button>
+            <button class="rj" onclick="decide(${c.id},'reject',this)">Reject</button></div>`:''}
+        </div>
+      </div>`).join('');
+  });
+}
+load();
+</script></body></html>

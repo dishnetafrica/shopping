@@ -67,6 +67,7 @@ class OrderCostController extends Controller
             'usd_amount'=>OrderCost::toUsd($native,$rate),
             'holder'=>(string)$request->input('holder',''),
             'receipt_path'=>$path, 'note'=>(string)$request->input('note',''),
+            'status'=>((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved',
             'created_by'=>$request->user()->name ?? '',
         ]);
         return response()->json(['ok'=>true,'id'=>$c->id,'usd'=>$c->usd_amount]);
@@ -125,5 +126,53 @@ class OrderCostController extends Controller
             'margin_usd'=>round($revenueUsd - $landedUsd,2),
             'margin_pct'=>$revenueUsd>0 ? round(($revenueUsd-$landedUsd)/$revenueUsd*100,1) : 0,
         ]);
+    }
+
+    /** GET /panel/approvals — the receipt-approval screen. */
+    public function approvalsPage(Request $request)
+    {
+        $user = $request->user();
+        if (! $user || ! $user->tenant_id) return redirect('/app/login');
+        $path = resource_path('panel/cost_approvals.html');
+        if (! is_file($path)) abort(500, 'Approvals asset missing.');
+        return response(file_get_contents($path), 200)
+            ->header('Content-Type','text/html; charset=UTF-8')->header('Cache-Control','no-store');
+    }
+
+    /** GET /papi/order-costs/pending — costs awaiting approval (with receipt). */
+    public function pending(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok'=>false],401);
+        $status = in_array($request->query('status'), ['pending','approved','rejected'], true) ? $request->query('status') : 'pending';
+        $rows = OrderCost::where('tenant_id',$t->id)->where('status',$status)
+            ->orderByDesc('id')->limit(200)->get()->map(function($c){
+                return ['id'=>$c->id,'order_no'=>$c->order_no,'stage'=>$c->stage,
+                    'currency'=>$c->currency,'native'=>(float)$c->native_amount,'usd'=>(float)$c->usd_amount,
+                    'holder'=>$c->holder,'note'=>$c->note,'by'=>$c->created_by,
+                    'receipt'=>$c->receipt_path ? '/storage/'.$c->receipt_path : null,
+                    'when'=>$c->created_at?->format('d M H:i')];
+            });
+        return response()->json(['ok'=>true,'status'=>$status,'costs'=>$rows]);
+    }
+
+    /** POST /papi/order-costs/{id}/decide  action=approve|reject */
+    public function decide(Request $request, int $id)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok'=>false],401);
+        // only owner-like or manager may approve
+        $u = $request->user();
+        if (! ($u->isOwnerLike() || in_array((string)$u->role, ['manager','accounts'], true))) {
+            return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
+        }
+        $c = OrderCost::where('tenant_id',$t->id)->find($id);
+        if (! $c) return response()->json(['ok'=>false,'error'=>'not_found'],404);
+        $action = $request->input('action');
+        if ($action==='approve') $c->status='approved';
+        elseif ($action==='reject') $c->status='rejected';
+        else return response()->json(['ok'=>false,'error'=>'bad_action']);
+        $c->save();
+        return response()->json(['ok'=>true,'status'=>$c->status]);
     }
 }

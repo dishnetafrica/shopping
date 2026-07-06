@@ -33,6 +33,7 @@ class CashPositionController extends Controller
 
         // Per currency: funding IN minus costs OUT (native), and USD-equivalent.
         $rows = OrderCost::where('tenant_id',$tid)
+            ->where('status','approved')
             ->select('currency','holder','stage',
                 DB::raw('SUM(native_amount) as native'), DB::raw('SUM(usd_amount) as usd'))
             ->groupBy('currency','holder','stage')->get();

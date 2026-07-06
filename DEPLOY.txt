@@ -1,32 +1,42 @@
-SHOPBOT — Three-currency Order Costs + Cash Position (slices 1+2)
-DishNet cashbook styling (green USD / blue SSP / amber UGX).
+SHOPBOT — Order cost system + Cash Position + Approvals + Roles (complete)
+DishNet cashbook styling. Phone-first.
 
-NEW FILES:
+═══ NEW FILES ═══
   database/migrations/2026_07_06_000100_create_order_costs_table.php
   app/Models/OrderCost.php
   app/Http/Controllers/Panel/CashPositionController.php
   app/Http/Controllers/Panel/OrderCostController.php
-  resources/panel/cash_position.html      3-currency cash-in-hand (per holder)
-  resources/panel/book_cost.html          book purchase/freight/boda/cash-in against an order
-  resources/panel/orders_costs.html       record a Juba order + tap for per-order margin
+  resources/panel/cash_position.html    exact USD/UGX/SSP in hand, per holder
+  resources/panel/book_cost.html        book purchase/freight/boda/cash-in vs an order (+receipt)
+  resources/panel/orders_costs.html     record a Juba order + per-order margin
+  resources/panel/cost_approvals.html   review receipts, approve/reject (imprest)
 
-MODIFIED (overwrite):
-  routes/web.php
-  resources/panel/seller.html             3 new sidebar links
+═══ MODIFIED (overwrite) ═══
+  app/Models/User.php                   + roles: purchaser (Jaeysh), field (Asish), sales; + cash menus
+  app/Http/Controllers/Panel/PanelApiController.php   staff role normalizer accepts new roles
+  routes/web.php                        new routes
+  resources/panel/seller.html           4 new sidebar links
 
-DEPLOY:
+═══ DEPLOY ═══
   1. commit + push -> EasyPanel Deploy
-  2. php artisan migrate           (creates order_costs)
-  3. php artisan storage:link      (for receipt photos)
+  2. php artisan migrate            (creates order_costs)
+  3. php artisan storage:link       (receipts)
 
-TO RECORD YOUR 3-4 EXISTING ORDERS:
-  a. Open "Orders & Margin" -> create each order (customer, sell currency USD, price)
-  b. Open "Book Purchase" -> for each order, book: goods (UGX), bus (UGX), boda (SSP)
-     - rate auto-fills, attach receipt, pick who paid (Jaeysh/Asish)
-  c. Open "Orders & Margin" -> tap an order -> see landed cost + margin in USD
-  d. Open "Cash Position" -> exact USD / UGX / SSP in hand, per person
+═══ CREATE YOUR USERS (use the existing Staff screen) ═══
+  Staff -> Add:
+    bhavin@familyshoppers.net   role: owner       (sees everything, approves costs)
+    jayesh@familyshoppers.net   role: purchaser   (Book Purchase + Orders + Cash)
+    asish@familyshoppers.net    role: field       (Book Purchase (SSP) + Orders + Cash)
+    <salesperson>@...           role: sales       (Quotations + Orders + Customers)
+  (Quotations already exist in ShopBot — sales role can build them from their login.)
 
-Three screens, DishNet look, phone-first. Sell currency stored on order.payment as "sell:USD".
+═══ THE IMPREST DISCIPLINE (why cash stays correct) ═══
+  - A booked cost starts as PENDING (tenant setting cost_approval, default on).
+  - Cash Position counts ONLY APPROVED costs — so system cash = physical cash.
+  - Owner/manager approves via Cost Approvals (sees the receipt photo).
+  - To skip approval: set tenant setting cost_approval=false (costs auto-approve).
 
-NOT YET (next slice): receipt-approval workflow (DishNet imprest, no double-count),
-Asish's dedicated SSP delivery screen, editable rate history per tenant.
+═══ DAILY FLOW ═══
+  Sales creates order (Orders & Margin) -> Jaeysh books purchase+bus UGX (Book Purchase, receipt)
+  -> Asish books boda SSP -> Bhavin approves (Cost Approvals) -> Cash Position shows exact per-currency
+  -> tap order for margin.
