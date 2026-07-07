@@ -60,7 +60,7 @@ class TradeCashbookController extends Controller
 
         // running balance per entry (per-currency, by cash actually moved), oldest->newest,
         // over the SAME set shown in the list so each row shows the balance after it.
-        $allRows = (clone $listQ)->orderBy('id')->get(['id','currency','stage','paid_native','rate_to_usd']);
+        $allRows = (clone $listQ)->orderBy('created_at')->orderBy('id')->get(['id','currency','stage','paid_native','rate_to_usd']);
         $runCur = ['USD'=>0.0,'UGX'=>0.0,'SSP'=>0.0]; $runUsd = 0.0; $runById = [];
         foreach ($allRows as $r) {
             $sign = in_array($r->stage,['funding','cash_in','customer_payment'],true) ? 1 : -1;
@@ -70,7 +70,7 @@ class TradeCashbookController extends Controller
             $runById[$r->id] = ['run'=>round($runCur[$r->currency] ?? 0, 2), 'run_usd'=>round($runUsd, 2)];
         }
 
-        $rows = $listQ->orderByDesc('id')->forPage($page,$per)->get()->map(function($c) use ($runById) {
+        $rows = $listQ->orderByDesc('created_at')->orderByDesc('id')->forPage($page,$per)->get()->map(function($c) use ($runById) {
             $isIn = in_array($c->stage,['funding','cash_in','customer_payment'],true);
             $stageLabels = ['cash_in'=>'Cash In','cash_out'=>'Cash Out','funding'=>'Funding','purchase'=>'Purchase',
                 'customer_payment'=>'Receipt','drawing'=>'Drawing','supplier_payment'=>'Supplier Pay'];

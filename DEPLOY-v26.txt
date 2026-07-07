@@ -1,0 +1,31 @@
+DEPLOY — Cashbook desktop width + chronological order (v26)
+===========================================================
+Two fixes on top of v25:
+  1. DESKTOP WIDTH: the mobile app-shell capped the page at 680px, so on desktop
+     the ledger's Balance column ran off the right. Now on wide screens (>=721px)
+     the page expands to ~1060px and the full table (incl. Balance) shows without
+     clipping. On phones it stays app-width and scrolls sideways as before.
+  2. CHRONOLOGICAL ORDER: the ledger + running balance now order by DATE/TIME (then
+     id), not insertion id. This matters because back-dated entries (e.g. a payment
+     recorded with an edited "Created date") had a lower id but a later time, which
+     made the running balance read out of order. Now newest-by-time is on top and
+     the balance flows correctly down the list, like DishNet.
+
+FILES CHANGED
+  app/Http/Controllers/Panel/TradeCashbookController.php   (order by created_at)
+  resources/panel/trade_cashbook.html                      (desktop width media query)
+
+DEPLOY
+  Upload both files -> commit -> Rebuild. (No migration; v25's category migration
+  must already be run.)
+
+VERIFY
+  Desktop: open Cashbook -> the whole table incl. the Balance column is visible.
+  The rows are newest-first by date/time; balance flows down correctly.
+
+ABOUT THE NEGATIVE UGX BALANCES YOU SAW
+  Those were real, not a display bug: some UGX PURCHASES (money out) were recorded
+  before any UGX cash-in existed, so UGX cash went negative at that point in time.
+  After the chronological re-order it will read in true time sequence. If you want,
+  I can add a per-currency "you can't go below zero" warning, or you can just make
+  sure a UGX cash-in / funding is recorded before UGX purchases.
