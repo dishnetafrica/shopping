@@ -73,6 +73,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/buy-list', [\App\Http\Controllers\Panel\BuyListController::class, 'page']);
     Route::get('/panel/supplier-debt', [\App\Http\Controllers\Panel\SupplierController::class, 'page']);
     Route::get('/panel/partners', [\App\Http\Controllers\Panel\PartnerController::class, 'page']);
+    Route::get('/panel/invoiced', [\App\Http\Controllers\Panel\InvoiceReportController::class, 'page']);
+    Route::get('/panel/payments', [\App\Http\Controllers\Panel\PaymentController::class, 'page']);
     Route::get('/panel/staff', [SellerPanelController::class, 'staff']);
     Route::get('/panel/scheduled', [SellerPanelController::class, 'scheduled']);
     Route::get('/panel/marketing', [SellerPanelController::class, 'marketing']);
@@ -143,6 +145,10 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('partners/{id}/pct', [\App\Http\Controllers\Panel\PartnerController::class, 'setPct']);
         Route::post('partners/{id}/capital', [\App\Http\Controllers\Panel\PartnerController::class, 'capital']);
         Route::post('partners/distribute', [\App\Http\Controllers\Panel\PartnerController::class, 'distribute']);
+        Route::get('payments', [\App\Http\Controllers\Panel\PaymentController::class, 'index']);
+        Route::post('payments', [\App\Http\Controllers\Panel\PaymentController::class, 'store']);
+        Route::get('payments/{id}', [\App\Http\Controllers\Panel\PaymentController::class, 'show']);
+        Route::post('payments/{id}/apply', [\App\Http\Controllers\Panel\PaymentController::class, 'apply']);
         Route::post('orders/quick', [\App\Http\Controllers\Panel\OrderCostController::class, 'quickOrder']);
         Route::get('orders/{id}/costs', [\App\Http\Controllers\Panel\OrderCostController::class, 'orderDetail']);
         Route::get('order-costs/pending', [\App\Http\Controllers\Panel\OrderCostController::class, 'pending']);

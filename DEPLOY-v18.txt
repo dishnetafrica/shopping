@@ -1,0 +1,56 @@
+DEPLOY — Payments Received: advances + receipts (v18)   [cumulative]
+====================================================================
+Handles customers paying in advance (or on delivery) with a customer-facing
+receipt (WhatsApp + printable PDF). New "Payments" menu. Anyone with the trading
+panel can use it.
+
+NEW / CHANGED
+  NEW  database/migrations/2026_07_06_001100_create_customer_payments.php
+  NEW  app/Models/CustomerPayment.php
+  NEW  app/Http/Controllers/Panel/PaymentController.php
+  NEW  resources/panel/payments.html
+  CHG  routes/web.php                              (+/panel/payments, +/papi/payments...)
+  CHG  resources/panel/app_home.html               (+Payments tile, everyone)
+  CHG  app/Http/Controllers/Panel/CashPositionController.php   (customer_payment = cash IN)
+  CHG  app/Http/Controllers/Panel/TradeCashbookController.php  (customer_payment = cash IN)
+
+THE MODEL (advance = liability, not revenue)
+  Recording a payment does THREE things atomically:
+    1. Cash on hand goes UP (mirrored order_costs stage 'customer_payment', money in).
+    2. A customer_payments record is kept (receipt, method, ref, optional photo).
+    3. If it's an ADVANCE it's UNEARNED -> shows in "Advances held", and does NOT
+       count as invoiced revenue (revenue still only at Delivered).
+  Tie a payment to an order (ORD-xx) OR leave it as account credit -- both allowed.
+  Verified: 2 advances ($100 + UGX 365,500@3655=$100) -> Advances held $200; cash +$250
+  incl. a $50 on-delivery payment; advances excluded from invoiced revenue.
+
+RECEIPTS
+  After saving, a receipt opens: business, receipt no. (RCP-xxxxx), date, customer,
+  amount (native + USD), method, what it's for. Two buttons:
+    - WhatsApp: opens WhatsApp to the customer's number with the receipt text
+      (or the contact picker if no number).
+    - Print / PDF: opens a clean printable receipt (Save as PDF on the print dialog).
+
+DEPLOY
+  git add database/migrations app/Models/CustomerPayment.php \
+          app/Http/Controllers/Panel/PaymentController.php resources/panel/payments.html \
+          routes/web.php resources/panel/app_home.html \
+          app/Http/Controllers/Panel/CashPositionController.php \
+          app/Http/Controllers/Panel/TradeCashbookController.php
+  git commit -m "v18: customer payments (advance/on-delivery) + receipts"
+  git push -> EasyPanel Rebuild
+  php artisan migrate      (adds customer_payments; additive)
+  NOTE: receipt PHOTO upload uses the 'public' disk. If photos 404, run once:
+        php artisan storage:link
+
+DRY-RUN (money path): record one small test advance -> confirm Cash Position rose by
+that amount and "Advances held" shows it. Delete the test rows if needed.
+
+VERIFY
+  App home -> Payments tile (or /panel/payments). Record a payment -> receipt opens
+  -> WhatsApp / Print work. Cash Position rises by the amount; advances show under
+  "Advances held".
+
+NEXT (optional): auto-apply an advance to its order when that order is Delivered
+(clears it from "Advances held" automatically). Currently there's a manual apply
+endpoint; say the word and I'll wire the auto-apply on delivery.

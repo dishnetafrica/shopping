@@ -1,0 +1,299 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Payments Received</title>
+<style>
+  :root{--gd:#0B3D22;--g:#15803D;--amber:#92400e;--mute:#94a3b8;--bg:#f5f5f2;--border:#e8e8e3;--font:'Inter',-apple-system,'Segoe UI',sans-serif;}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:var(--font);color:#0f0f0f;}
+  .wrap{max-width:640px;margin:0 auto;padding:14px;}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .top h1{font-size:20px;margin:0;font-weight:900;}.top a{color:var(--g);text-decoration:none;font-weight:700;font-size:13px;}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+  .cards>div{border-radius:14px;padding:14px;color:#fff;}
+  .held{background:linear-gradient(135deg,#d97706,#92400e);}.recv{background:linear-gradient(135deg,#15803D,#0B3D22);}
+  .cards .t{font-size:10.5px;opacity:.85;font-weight:700;text-transform:uppercase;}
+  .cards .n{font-size:20px;font-weight:900;margin-top:3px;}
+  .addp{width:100%;background:#0B3D22;color:#fff;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:14px;}
+  .sub{font-size:12px;color:var(--mute);font-weight:600;margin-bottom:8px;}
+  .row{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;}
+  .row .no{font-weight:800;font-size:14px;}
+  .row .meta{font-size:12px;color:#64748b;margin-top:2px;}
+  .row .amt{font-weight:900;font-size:15px;color:var(--gd);text-align:right;}
+  .badge{font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;margin-left:6px;}
+  .b-adv{background:#FFF7E6;color:#92400e;}.b-set{background:#E6F4EA;color:#0B3D22;}
+  .otag{font-size:10.5px;font-weight:700;color:#475569;background:#f1f5f9;border-radius:20px;padding:1px 8px;}
+  .empty{text-align:center;color:var(--mute);padding:36px 20px;font-size:14px;font-weight:600;}
+  .loading{text-align:center;color:var(--mute);padding:24px;}
+  /* sheet */
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:80;background:#fff;border-top:1px solid var(--border);border-radius:18px 18px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 18px);box-shadow:0 -8px 30px -10px rgba(0,0,0,.25);transform:translateY(110%);transition:.22s;max-height:88vh;overflow:auto;}
+  .sheet.on{transform:translateY(0);}
+  .sheet h3{margin:0 0 10px;font-size:16px;font-weight:800;}
+  .sheet label{display:block;font-size:12px;font-weight:700;color:#374151;margin:10px 0 5px;}
+  .sheet input,.sheet select{width:100%;padding:12px;border:1.5px solid var(--border);border-radius:11px;font-size:16px;}
+  .sheet .g2{display:flex;gap:10px;}.sheet .g2>*{flex:1;}
+  .chips{display:flex;gap:6px;}.chip{flex:1;padding:10px;border:1.5px solid var(--border);border-radius:10px;background:#fff;font-size:12.5px;font-weight:800;color:#374151;text-align:center;cursor:pointer;}
+  .chip.on{border-color:#15803D;background:#E6F4EA;color:#0B3D22;}
+  .save{width:100%;margin-top:14px;background:#0B3D22;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;}
+  .cancel{position:absolute;right:14px;top:14px;background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer;}
+  .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:79;display:none;}.backdrop.on{display:block;}
+  /* receipt */
+  .rc{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px;}
+  .rc .biz{font-size:17px;font-weight:900;}.rc .rno{font-size:12px;color:#64748b;font-weight:700;margin-top:2px;}
+  .rc .amt{font-size:26px;font-weight:900;color:var(--gd);margin:12px 0;}
+  .rc .line{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-top:1px dashed #e2e8e2;}
+  .rc .line span:first-child{color:#64748b;}
+  .rcbtns{display:flex;gap:8px;margin-top:14px;}
+  .rcbtns button{flex:1;border:none;border-radius:11px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;}
+  .wa{background:#25D366;color:#fff;}.pr{background:#0B3D22;color:#fff;}
+</style><!-- ===== DishNet mobile app shell (injected v2) ===== -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style id="dn-shell">
+  :root{--dn-g:#15803D;--dn-gd:#0B3D22;--dn-gl:#E6F4EA;--dn-line:#E2E8E2;}
+  html{-webkit-text-size-adjust:100%;}
+  body{font-family:'Outfit','Inter',system-ui,-apple-system,sans-serif;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased;}
+  .wrap{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 92px)!important;}
+  .top{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:12px;
+       justify-content:flex-start;margin:-14px -14px 14px -14px!important;
+       padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 12px!important;
+       background:var(--dn-gd);box-shadow:0 2px 10px -4px rgba(11,61,34,.5);}
+  .top h1{color:#fff!important;font-size:17px!important;font-weight:800!important;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .top a{order:-1;flex-shrink:0;width:34px;height:34px;border-radius:50%;
+         background:rgba(255,255,255,.16)!important;color:#fff!important;
+         display:grid;place-items:center;font-size:0!important;text-decoration:none;}
+  .top a::before{content:"\2039";font-size:24px;font-weight:700;line-height:1;margin-top:-2px;}
+  .dn-appbtn{margin-left:auto;flex-shrink:0;height:34px;padding:0 13px;border-radius:99px;
+             background:rgba(255,255,255,.16);color:#fff;font-size:12.5px;font-weight:700;
+             display:inline-flex;align-items:center;gap:6px;text-decoration:none;}
+  .dn-appbtn:active{background:rgba(255,255,255,.28);}
+  .btn{background:var(--dn-gd)!important;border-radius:12px!important;padding:14px!important;font-weight:800!important;}
+  .btn:active{background:#082a18!important;}
+  input,select,textarea{font-size:16px!important;border-radius:11px!important;}
+  input:focus,select:focus,textarea:focus{border-color:var(--dn-g)!important;}
+  .card,.oitem,.item,.balcard,.hero{box-shadow:0 1px 2px rgba(16,35,28,.05),0 3px 12px -4px rgba(16,35,28,.06);}
+  .dn-amt-echo{display:none;margin:9px 0 2px;padding:8px 12px;border-radius:10px;
+               background:var(--dn-gl);border:1px solid #BFE3CB;color:var(--dn-gd);
+               font-size:16px;font-weight:800;letter-spacing:.2px;}
+  .dn-tabbar{position:fixed;left:0;right:0;bottom:0;z-index:70;display:flex;min-height:58px;
+             background:#fff;border-top:1px solid var(--dn-line);
+             padding-bottom:env(safe-area-inset-bottom,0px);
+             box-shadow:0 -2px 14px -6px rgba(16,35,28,.18);}
+  .dn-tabbar a{flex:1;min-width:0;position:relative;display:flex;flex-direction:column;align-items:center;
+               gap:3px;padding:9px 2px 8px;text-decoration:none;color:#7C8A80;font-size:10.5px;font-weight:700;}
+  .dn-tabbar a .di{font-size:20px;line-height:1;filter:grayscale(35%);opacity:.85;}
+  .dn-tabbar a .dl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+  .dn-tabbar a.on{color:var(--dn-gd);}
+  .dn-tabbar a.on .di{filter:none;opacity:1;transform:translateY(-1px);}
+  .dn-tabbar a.on::before{content:"";position:absolute;top:0;width:26px;height:3px;border-radius:0 0 3px 3px;background:var(--dn-g);}
+  @media(min-width:721px){.dn-tabbar{max-width:720px;margin:0 auto;border-left:1px solid var(--dn-line);border-right:1px solid var(--dn-line);}}
+</style>
+</head>
+<body><div class="wrap">
+  <div class="top"><h1>💵 Payments Received</h1><a href="/panel">← Panel</a></div>
+  <div class="cards">
+    <div class="held"><div class="t">Advances held (unearned)</div><div class="n" id="held">$0</div></div>
+    <div class="recv"><div class="t">Total received</div><div class="n" id="recv">$0</div></div>
+  </div>
+  <button class="addp" onclick="openForm()">＋ Record a payment</button>
+  <div class="sub" id="sub">Payments</div>
+  <div id="list"><div class="loading">Loading…</div></div>
+</div>
+
+<div class="backdrop" id="backdrop" onclick="closeAll()"></div>
+
+<!-- record form -->
+<div class="sheet" id="payForm">
+  <button class="cancel" onclick="closeAll()">✕</button>
+  <h3>Record a payment</h3>
+  <label>Customer name</label><input id="fName" placeholder="e.g. Yohesh">
+  <div class="g2"><div><label>Phone (for receipt)</label><input id="fPhone" inputmode="tel" placeholder="2567..."></div>
+  <div><label>Order (optional)</label><input id="fOrder" placeholder="ORD-6 or blank"></div></div>
+  <label>Type</label>
+  <div class="chips" id="fKind"><div class="chip on" data-k="advance">🕓 Advance</div><div class="chip" data-k="settlement">✅ On delivery</div></div>
+  <div class="g2"><div style="max-width:120px"><label>Currency</label><select id="fCur"><option>USD</option><option>UGX</option><option>SSP</option></select></div>
+  <div><label>Amount</label><input id="fAmt" inputmode="decimal" placeholder="0"></div></div>
+  <label>Method</label>
+  <div class="chips" id="fMethod"><div class="chip on" data-m="cash">Cash</div><div class="chip" data-m="momo">MoMo</div><div class="chip" data-m="bank">Bank</div></div>
+  <label>Reference (optional)</label><input id="fRef" placeholder="txn / ref no.">
+  <label>Receipt photo (optional)</label><input id="fReceipt" type="file" accept="image/*" capture="environment">
+  <button class="save" id="fSave" onclick="savePay()">Save & make receipt</button>
+</div>
+
+<!-- receipt view -->
+<div class="sheet" id="rcSheet">
+  <button class="cancel" onclick="closeAll()">✕</button>
+  <div class="rc" id="rcBody"></div>
+  <div class="rcbtns"><button class="wa" onclick="waShare()">📲 WhatsApp</button><button class="pr" onclick="printRc()">🖨 Print / PDF</button></div>
+</div>
+
+<script>
+const $=s=>document.getElementById(s);
+function nf(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
+function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+var FKIND='advance', FMETHOD='cash', RC=null;
+
+function load(){
+  fetch('/papi/payments',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+    .then(r=>r.json()).then(function(d){
+      if(!d.ok){ $('list').innerHTML='<div class="empty">Not available.</div>'; return; }
+      $('held').textContent='$'+nf(d.advances_held); $('recv').textContent='$'+nf(d.total_received);
+      var L=$('list');
+      if(!d.payments.length){ $('sub').textContent='Payments'; L.innerHTML='<div class="empty">No payments yet. Tap “Record a payment”.</div>'; return; }
+      $('sub').textContent=d.payments.length+' payment'+(d.payments.length>1?'s':'');
+      L.innerHTML=d.payments.map(function(p){
+        var badge=p.kind==='advance'?'<span class="badge b-adv">ADVANCE</span>':'<span class="badge b-set">ON DELIVERY</span>';
+        var ord=p.order_no?' <span class="otag">'+esc(p.order_no)+'</span>':'';
+        return '<div class="row" onclick="openReceipt('+p.id+')"><div><div class="no">'+esc(p.customer)+badge+'</div>'+
+          '<div class="meta">'+esc(p.receipt_no)+' · '+esc(p.method)+ord+' · '+esc(p.date||'')+'</div></div>'+
+          '<div class="amt">'+esc(p.currency)+' '+nf(p.amount)+'<div style="font-size:11px;color:#94a3b8;font-weight:700">$'+nf(p.usd)+'</div></div></div>';
+      }).join('');
+    }).catch(function(){ $('list').innerHTML='<div class="empty">Could not load.</div>'; });
+}
+
+// form chips
+document.addEventListener('click',function(e){
+  var k=e.target.closest('#fKind .chip'); if(k){ FKIND=k.getAttribute('data-k'); k.parentNode.querySelectorAll('.chip').forEach(function(x){x.classList.remove('on');}); k.classList.add('on'); }
+  var m=e.target.closest('#fMethod .chip'); if(m){ FMETHOD=m.getAttribute('data-m'); m.parentNode.querySelectorAll('.chip').forEach(function(x){x.classList.remove('on');}); m.classList.add('on'); }
+});
+function openForm(){ ['fName','fPhone','fOrder','fAmt','fRef'].forEach(function(i){$(i).value='';}); $('fReceipt').value=''; FKIND='advance';FMETHOD='cash';
+  $('fKind').querySelectorAll('.chip').forEach(function(x,i){x.classList.toggle('on',i===0);});
+  $('fMethod').querySelectorAll('.chip').forEach(function(x,i){x.classList.toggle('on',i===0);});
+  $('backdrop').classList.add('on'); $('payForm').classList.add('on'); setTimeout(function(){$('fName').focus();},250); }
+function closeAll(){ $('backdrop').classList.remove('on'); $('payForm').classList.remove('on'); $('rcSheet').classList.remove('on'); }
+
+function savePay(){
+  var name=$('fName').value.trim(); if(!name){ alert('Customer name?'); return; }
+  var amt=parseFloat(($('fAmt').value||'').replace(/,/g,''))||0; if(amt<=0){ alert('Amount?'); return; }
+  var b=$('fSave'); b.disabled=true; b.textContent='Saving…';
+  var fd=new FormData();
+  fd.append('customer_name',name); fd.append('customer_phone',$('fPhone').value.trim());
+  fd.append('order_no',$('fOrder').value.trim()); fd.append('kind',FKIND);
+  fd.append('currency',$('fCur').value); fd.append('amount',amt); fd.append('method',FMETHOD);
+  fd.append('reference',$('fRef').value.trim());
+  if($('fReceipt').files[0]) fd.append('receipt',$('fReceipt').files[0]);
+  fetch('/papi/payments',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',body:fd})
+    .then(r=>r.json()).then(function(r){
+      b.disabled=false; b.textContent='Save & make receipt';
+      if(r&&r.ok){ closeAll(); load(); openReceipt(r.id); }
+      else alert('Could not save: '+((r&&r.error)||'error'));
+    }).catch(function(){ b.disabled=false; b.textContent='Save & make receipt'; alert('Failed'); });
+}
+
+function openReceipt(id){
+  fetch('/papi/payments/'+id,{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+    .then(r=>r.json()).then(function(d){
+      if(!d.ok){ alert('Receipt not found'); return; }
+      RC=d.payment;
+      var forLine=RC.order_no?('Order '+esc(RC.order_no)):'Account credit';
+      var kindTxt=RC.kind==='advance'?'Advance payment':'Payment on delivery';
+      $('rcBody').innerHTML='<div class="biz">'+esc(RC.business)+'</div><div class="rno">Receipt '+esc(RC.receipt_no)+' · '+esc(RC.date||'')+'</div>'+
+        '<div class="amt">'+esc(RC.currency)+' '+nf(RC.amount)+' <span style="font-size:13px;color:#64748b;font-weight:700">($'+nf(RC.usd)+')</span></div>'+
+        '<div class="line"><span>Received from</span><b>'+esc(RC.customer)+'</b></div>'+
+        '<div class="line"><span>For</span><b>'+forLine+'</b></div>'+
+        '<div class="line"><span>Type</span><b>'+kindTxt+'</b></div>'+
+        '<div class="line"><span>Method</span><b>'+esc((RC.method||'').toUpperCase())+'</b></div>'+
+        (RC.reference?'<div class="line"><span>Reference</span><b>'+esc(RC.reference)+'</b></div>':'')+
+        '<div style="text-align:center;font-size:12px;color:#94a3b8;margin-top:12px;font-weight:700">Thank you!</div>';
+      $('backdrop').classList.add('on'); $('rcSheet').classList.add('on');
+    }).catch(function(){ alert('Could not load receipt'); });
+}
+function receiptText(){
+  if(!RC) return '';
+  var forLine=RC.order_no?('Order '+RC.order_no):'Account credit';
+  return '*'+RC.business+'* — Payment Receipt\n'+
+    'Receipt: '+RC.receipt_no+'\nDate: '+(RC.date||'')+'\n'+
+    'Received from: '+RC.customer+'\n'+
+    'Amount: '+RC.currency+' '+nf(RC.amount)+' ($'+nf(RC.usd)+')\n'+
+    'Method: '+(RC.method||'').toUpperCase()+'\n'+
+    'For: '+forLine+' ('+(RC.kind==='advance'?'advance':'on delivery')+')'+
+    (RC.reference?('\nRef: '+RC.reference):'')+'\n\nThank you!';
+}
+function waShare(){
+  var txt=encodeURIComponent(receiptText());
+  var ph=(RC&&RC.phone?String(RC.phone).replace(/[^0-9]/g,''):'');
+  location.href = ph ? ('https://wa.me/'+ph+'?text='+txt) : ('https://wa.me/?text='+txt);
+}
+function printRc(){
+  var w=window.open('','_blank'); if(!w){ alert('Allow pop-ups to print'); return; }
+  w.document.write('<html><head><title>'+esc(RC.receipt_no)+'</title><meta name="viewport" content="width=device-width,initial-scale=1">'+
+    '<style>body{font-family:Inter,Arial,sans-serif;max-width:420px;margin:20px auto;color:#111;padding:0 16px}'+
+    'h1{font-size:20px;margin:0}.rno{color:#666;font-size:12px;margin:2px 0 14px}.amt{font-size:30px;font-weight:800;color:#0B3D22;margin:12px 0}'+
+    '.l{display:flex;justify-content:space-between;padding:6px 0;border-top:1px dashed #ccc;font-size:14px}.l span{color:#666}'+
+    '.ty{text-align:center;color:#999;margin-top:18px;font-size:13px}</style></head><body>'+
+    '<h1>'+esc(RC.business)+'</h1><div class="rno">Receipt '+esc(RC.receipt_no)+' · '+esc(RC.date||'')+'</div>'+
+    '<div class="amt">'+esc(RC.currency)+' '+nf(RC.amount)+' <span style="font-size:14px;color:#666">($'+nf(RC.usd)+')</span></div>'+
+    '<div class="l"><span>Received from</span><b>'+esc(RC.customer)+'</b></div>'+
+    '<div class="l"><span>For</span><b>'+(RC.order_no?('Order '+esc(RC.order_no)):'Account credit')+'</b></div>'+
+    '<div class="l"><span>Type</span><b>'+(RC.kind==='advance'?'Advance payment':'Payment on delivery')+'</b></div>'+
+    '<div class="l"><span>Method</span><b>'+esc((RC.method||'').toUpperCase())+'</b></div>'+
+    (RC.reference?('<div class="l"><span>Reference</span><b>'+esc(RC.reference)+'</b></div>'):'')+
+    '<div class="ty">Thank you!</div></body></html>');
+  w.document.close(); setTimeout(function(){ w.focus(); w.print(); },350);
+}
+load();
+</script><!-- ===== DishNet role-aware tab bar + amount format (injected v2) ===== -->
+<nav class="dn-tabbar" id="dnTabbar"></nav>
+<script>
+(function(){
+  var here=location.pathname.replace(/\/+$/,'')||'/panel';
+  var TABS=[
+    {t:'Orders',i:'\uD83D\uDED2',u:'/panel/orders-costs', need:'menu:ordercosts'},
+    {t:'Buy',   i:'\uD83D\uDECD\uFE0F',u:'/panel/book-cost',    need:'menu:purchases'},
+    {t:'List',  i:'\uD83D\uDCCB',u:'/panel/buy-list',     need:'buylist'},
+    {t:'Cash',  i:'\uD83D\uDCB0',u:'/panel/cash-position', need:'menu:cash'},
+    {t:'Book',  i:'\uD83D\uDCD2',u:'/panel/trade-cashbook',need:'owner'},
+    {t:'Spend', i:'\uD83D\uDCB8',u:'/panel/expenses',      need:'owner'},
+    {t:'P&L',   i:'\uD83D\uDCC8',u:'/panel/pnl',           need:'owner'}
+  ];
+  function allowed(rule, nav){
+    if(rule==='owner') return !!nav.is_owner;
+    if(rule==='buylist') return (nav.menus||[]).indexOf('purchases')>=0 && !nav.is_owner;
+    if(rule.indexOf('menu:')===0){ var k=rule.slice(5); return (nav.menus||[]).indexOf(k)>=0; }
+    return false;
+  }
+  function render(nav){
+    var bar=document.getElementById('dnTabbar'); if(!bar) return;
+    var vis=TABS.filter(function(x){ return allowed(x.need,nav); });
+    bar.innerHTML=vis.map(function(x){
+      var on=(here===x.u)?'on':'';
+      return '<a class="'+on+'" href="'+x.u+'"><span class="di">'+x.i+'</span><span class="dl">'+x.t+'</span></a>';
+    }).join('');
+    var top=document.querySelector('.top');
+    if(top && here!=='/panel/approvals' && (nav.menus||[]).indexOf('approvals')>=0){
+      var a=document.createElement('a'); a.className='dn-appbtn'; a.href='/panel/approvals';
+      a.innerHTML='\u2713 Approvals'; top.appendChild(a);
+    }
+  }
+  var FALLBACK={is_owner:false, menus:['ordercosts','purchases','cash']};
+  fetch('/papi/me/nav',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+    .then(function(r){return r.json();})
+    .then(function(d){ render(d && d.ok ? d : FALLBACK); })
+    .catch(function(){ render(FALLBACK); });
+
+  function group(v){
+    v=(v==null?'':String(v)).replace(/[^\d.]/g,'');
+    var p=v.split('.'); p[0]=p[0].replace(/\B(?=(\d{3})+(?!\d))/g,',');
+    return p.length>1 ? p[0]+'.'+p.slice(1).join('') : p[0];
+  }
+  function wire(id, curId){
+    var el=document.getElementById(id); if(!el) return;
+    var cur=curId?document.getElementById(curId):null;
+    var echo=document.createElement('div'); echo.className='dn-amt-echo';
+    var anchor=(el.closest && el.closest('.row'))||el;
+    if(anchor.parentNode) anchor.parentNode.insertBefore(echo, anchor.nextSibling);
+    function upd(){
+      var g=group(el.value); if(el.value!==g) el.value=g;
+      var n=parseFloat(g.replace(/,/g,''))||0;
+      if(n>0){ echo.textContent=(cur&&cur.value?cur.value+' ':'')+group(String(n)); echo.style.display='block'; }
+      else { echo.textContent=''; echo.style.display='none'; }
+    }
+    el.addEventListener('input',upd);
+    if(cur) cur.addEventListener('change',upd);
+    document.querySelectorAll('.btn,button').forEach(function(b){ b.addEventListener('click',function(){ setTimeout(upd,1500); }); });
+    upd();
+  }
+  wire('amt','cur');
+  wire('total','sellcur');
+})();
+</script>
+</body></html>

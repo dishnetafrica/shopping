@@ -48,7 +48,7 @@ class TradeCashbookController extends Controller
                 DB::raw('SUM(paid_native) as native'))->groupBy('currency','stage')->get();
         $bal = ['USD'=>0,'UGX'=>0,'SSP'=>0];
         foreach ($balRows as $r) {
-            $sign = in_array($r->stage,['funding','cash_in'],true) ? 1 : -1;   // in adds, everything else reduces
+            $sign = in_array($r->stage,['funding','cash_in','customer_payment'],true) ? 1 : -1;   // in adds, everything else reduces
             if (isset($bal[$r->currency])) $bal[$r->currency] += $sign * (float)$r->native;
         }
 
@@ -58,7 +58,7 @@ class TradeCashbookController extends Controller
         if ($cur !== 'ALL') $listQ->where('currency',$cur);
         $total = (clone $listQ)->count();
         $rows = $listQ->orderByDesc('id')->forPage($page,$per)->get()->map(function($c){
-            $isIn = in_array($c->stage,['funding','cash_in'],true);
+            $isIn = in_array($c->stage,['funding','cash_in','customer_payment'],true);
             return ['id'=>$c->id,'stage'=>$c->stage,'dir'=>$isIn?'in':'out',
                 'currency'=>$c->currency,'native'=>(float)$c->native_amount,'usd'=>(float)$c->usd_amount,
                 'holder'=>$c->holder,'note'=>$c->note ?: ($c->expense_category ?: ($c->order_no ?: '')),

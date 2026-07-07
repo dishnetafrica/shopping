@@ -50,7 +50,7 @@ class CashPositionController extends Controller
 
         $cur = [];   // currency => ['native'=>, 'usd'=>, 'holders'=>[holder=>native]]
         foreach ($rows as $r) {
-            $sign = $r->stage === 'funding' ? 1 : -1;   // costs reduce cash, funding adds
+            $sign = in_array($r->stage,['funding','customer_payment'],true) ? 1 : -1;   // costs reduce cash; funding + customer payments add
             $c = $r->currency;
             $cur[$c]['native'] = ($cur[$c]['native'] ?? 0) + $sign * (float)$r->native;
             $cur[$c]['usd']    = ($cur[$c]['usd'] ?? 0) + $sign * (float)$r->usd;

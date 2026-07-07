@@ -49,6 +49,7 @@
 <script>
 var TILES=[
   {t:'Buy List',        d:'What to buy today',        i:'\uD83E\uDDFA', u:'/panel/buy-list',      need:'purchases', bg:'#E1F5EE', fg:'#0F6E56'},
+  {t:'Payments',        d:'Advances & receipts',      i:'\uD83D\uDCB5', u:'/panel/payments',       need:'panel', bg:'#FAEEDA', fg:'#854F0B'},
   {t:'Book Purchase',   d:'Record a buy · cash/credit',i:'\uD83D\uDECD\uFE0F', u:'/panel/book-cost', need:'menu:purchases', bg:'#E6F4EA', fg:'#15803D'},
   {t:'Orders & Margin', d:'Juba orders + margin',     i:'\uD83E\uDDFE', u:'/panel/orders-costs',  need:'menu:ordercosts', bg:'#E6F1FB', fg:'#185FA5'},
   {t:'Cash',            d:'How much cash I have',     i:'\uD83D\uDCB0', u:'/panel/cash-position', need:'menu:cash', bg:'#FAEEDA', fg:'#854F0B'},
@@ -57,10 +58,12 @@ var TILES=[
   {t:'Expenses',        d:'Record an expense',        i:'\uD83D\uDCB8', u:'/panel/expenses',       need:'owner', bg:'#FBEAF0', fg:'#993556'},
   {t:'Profit & Loss',   d:'Live P&L',                 i:'\uD83D\uDCC8', u:'/panel/pnl',            need:'owner', bg:'#EAF3DE', fg:'#3B6D11'},
   {t:'Partners',        d:'Capital & ownership',      i:'\uD83E\uDD1D', u:'/panel/partners',       need:'owner', bg:'#E6F1FB', fg:'#185FA5'},
+  {t:'Invoiced',        d:'Monthly revenue',          i:'\uD83E\uDDFE', u:'/panel/invoiced',       need:'owner', bg:'#EAF3DE', fg:'#3B6D11'},
   {t:'Approvals',       d:'Review receipts',          i:'\u2705',       u:'/panel/approvals',      need:'menu:approvals', bg:'#F1EFE8', fg:'#444441'}
 ];
 function allowed(rule,nav){
   if(rule==='owner') return !!nav.is_owner;
+  if(rule==='panel') return true;
   if(rule==='purchases') return (nav.menus||[]).indexOf('purchases')>=0;
   if(rule.indexOf('menu:')===0){ var k=rule.slice(5); return (nav.menus||[]).indexOf(k)>=0; }
   return false;
