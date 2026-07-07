@@ -93,7 +93,7 @@
     <div class="cprc"><div class="t">Priced</div><div class="n" id="cPrc">0</div></div>
   </div>
   <button class="addp" onclick="openNew()">＋ New request (get me a price)</button>
-  <div class="sub" id="sub">Requests</div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="sub" id="sub" style="margin:0">Requests</div><button onclick="setPurchaser()" style="background:#eef2f7;border:none;border-radius:20px;padding:6px 12px;font-size:11.5px;font-weight:700;color:#475569;cursor:pointer" id="jbtn">⚙ Jayesh’s WhatsApp</button></div>
   <div id="list"><div class="loading">Loading…</div></div>
 </div>
 
@@ -128,6 +128,20 @@ const $=s=>document.getElementById(s);
 function nf(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
 function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 var NDEMAND='medium', PID=null, REQS=[];
+function purchaserNo(){ try{ return localStorage.getItem('src_purchaser_wa')||''; }catch(e){ return ''; } }
+function setPurchaser(){
+  var cur=purchaserNo();
+  var v=prompt('Jayesh\u2019s WhatsApp number (with country code, e.g. 2567XXXXXXXX)', cur);
+  if(v===null) return; v=(v||'').replace(/[^0-9]/g,'');
+  try{ localStorage.setItem('src_purchaser_wa', v); }catch(e){}
+  refreshJbtn();
+}
+function refreshJbtn(){ var n=purchaserNo(); var b=document.getElementById('jbtn'); if(b) b.textContent = n ? ('\u2699 Jayesh: '+n) : '\u2699 Set Jayesh\u2019s WhatsApp'; }
+function notifyJayesh(item,note,demand){
+  var n=purchaserNo(); if(!n) return false;
+  var txt='*New sourcing request*\nItem: '+item+'\nDemand: '+demand+(note?('\nNote: '+note):'')+'\n\nPlease find a price.';
+  location.href='https://wa.me/'+n+'?text='+encodeURIComponent(txt); return true;
+}
 
 function load(){
   fetch('/papi/sourcing',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
@@ -172,12 +186,15 @@ function closeAll(){ $('backdrop').classList.remove('on'); $('newForm').classLis
 
 function saveNew(){
   var item=$('nItem').value.trim(); if(!item){ alert('What item?'); return; }
+  var noteVal=$('nNote').value.trim(); var demandVal=NDEMAND;
   var b=$('nSave'); b.disabled=true; b.textContent='Sending…';
-  var fd=new FormData(); fd.append('item_name',item); fd.append('note',$('nNote').value.trim()); fd.append('demand',NDEMAND);
+  var fd=new FormData(); fd.append('item_name',item); fd.append('note',noteVal); fd.append('demand',demandVal);
   if($('nPhoto').files[0]) fd.append('photo',$('nPhoto').files[0]);
   fetch('/papi/sourcing',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',body:fd})
     .then(r=>r.json()).then(function(r){ b.disabled=false; b.textContent='Send request';
-      if(r&&r.ok){ closeAll(); load(); } else alert('Could not send'); })
+      if(r&&r.ok){ closeAll(); load();
+        notifyJayesh(item, noteVal, demandVal);
+      } else alert('Could not send'); })
     .catch(function(){ b.disabled=false; b.textContent='Send request'; alert('Failed'); });
 }
 
@@ -201,8 +218,9 @@ function waReq(id){
   var r=REQS.filter(function(x){return x.id===id;})[0]; if(!r) return;
   var txt='*Sourcing request*\nItem: '+r.item+'\nDemand: '+r.demand+(r.note?('\nNote: '+r.note):'');
   if(r.status!=='new' && r.quoted_price!=null) txt+='\nPrice found: '+(r.currency||'')+' '+nf(r.quoted_price)+(r.supplier?(' ('+r.supplier+')'):'');
-  location.href='https://wa.me/?text='+encodeURIComponent(txt);
+  var n=purchaserNo(); location.href='https://wa.me/'+(n||'')+'?text='+encodeURIComponent(txt);
 }
+refreshJbtn();
 load();
 </script><!-- ===== DishNet role-aware tab bar + amount format (injected v2) ===== -->
 <nav class="dn-tabbar" id="dnTabbar"></nav>

@@ -1,0 +1,33 @@
+DEPLOY — Notify Jayesh on WhatsApp when Asish posts (v20)
+========================================================
+When Asish sends a sourcing request, it now opens WhatsApp to Jayesh with the
+request text, so he's pinged immediately. Front-end only.
+
+FILE CHANGED (one)
+  resources/panel/sourcing.html
+
+HOW IT WORKS
+  - One-time: tap "Set Jayesh's WhatsApp" (top-right of the Requests list) and enter
+    Jayesh's number with country code (e.g. 2567XXXXXXXX). Stored on the device.
+  - After Asish saves a request, WhatsApp opens to Jayesh pre-filled with:
+        *New sourcing request*
+        Item: ...
+        Demand: ...
+        Note: ...
+        Please find a price.
+    Asish taps send, then returns to the app.
+  - If no number is set yet, it just saves (no WhatsApp) until you set the number.
+  - Each request's "WhatsApp" button also uses Jayesh's number when set.
+
+DEPLOY
+  Upload to resources/panel/sourcing.html -> commit -> Rebuild. No migration.
+
+VERIFY
+  Set Jayesh's number once -> post a request -> WhatsApp opens to Jayesh with the
+  details. (True server-side auto-send would need the WhatsApp send API wired; this
+  one-tap open needs nothing and works today.)
+
+STILL OPEN (needs a capture from you): turn a PRICED request into a real
+quotation/order in one tap. For that I need your order-create endpoint the same way
+we captured update-status: on the panel, create/save an order with DevTools Network
+open, and send me that request (URL + method + payload). Then I'll wire it.
