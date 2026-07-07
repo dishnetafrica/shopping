@@ -1,0 +1,43 @@
+DEPLOY — Customer 360 (v29)
+===========================
+Click a customer -> see everything: their orders, payments, balance owed, advances
+held, and an activity timeline. Reachable from a Customers list AND by tapping a
+customer's name on the Payments page.
+
+FILES CHANGED
+  NEW  app/Http/Controllers/Panel/CustomerController.php
+  NEW  resources/panel/customers360.html
+  CHG  routes/web.php                     (+/panel/customers360)
+  CHG  resources/panel/app_home.html      (+Customers tile, everyone)
+  CHG  resources/panel/payments.html      (customer name -> customer 360)
+
+WHAT IT SHOWS
+  Customers LIST: every customer (from orders + payments), searchable, sorted by who
+    owes the most; each row shows order count and outstanding (red = owes, green =
+    in credit). Tap a customer -> their 360.
+  Customer 360: header (name, phones, WhatsApp), four money cards -
+    - Invoiced (delivered)  = sum of their DELIVERED orders (USD)
+    - Payments received     = sum of their payments (USD)
+    - Outstanding           = Invoiced (delivered) - Payments received   (your rule)
+                              (negative shows as "in credit")
+    - Advances held         = their unapplied advance payments
+    then Orders (with status), Payments (with receipt), and an Activity timeline
+    merging orders placed / delivered / cancelled + payments.
+  Verified: Yohesh $100 delivered - $90 received = $10 owed, $30 advance held; a
+    fully-settled customer shows $0.
+
+  100% client-side (reads /papi/orders + /papi/payments); no new backend data, no
+  migration. Access = anyone with the trading panel.
+
+DEPLOY
+  git add app/Http/Controllers/Panel/CustomerController.php resources/panel/customers360.html \
+          routes/web.php resources/panel/app_home.html resources/panel/payments.html
+  git commit -m "v29: Customer 360 (orders + payments + balance + activity)"
+  git push -> EasyPanel Rebuild        (no migration)
+
+VERIFY
+  App home -> Customers tile (or /panel/customers360). Tap a customer -> full 360.
+  On Payments, tap a customer's name -> opens their 360.
+
+NEXT (optional): add the Customers link to the desktop sidebar (seller.html), and a
+per-customer notes/log. Say the word.

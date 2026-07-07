@@ -157,9 +157,9 @@ function load(){
       L.innerHTML=d.payments.map(function(p){
         var badge=p.kind==='advance'?'<span class="badge b-adv">ADVANCE</span>':'<span class="badge b-set">ON DELIVERY</span>';
         var ord=p.order_no?' <span class="otag">'+esc(p.order_no)+'</span>':'';
-        return '<div class="row" onclick="openReceipt('+p.id+')"><div><div class="no">'+esc(p.customer)+badge+'</div>'+
-          '<div class="meta">'+esc(p.receipt_no)+' &middot; '+esc(p.method)+ord+' &middot; '+esc(p.date||'')+'</div></div>'+
-          '<div class="amt">'+esc(p.currency)+' '+nf(p.amount)+'<div style="font-size:11px;color:#94a3b8;font-weight:700">$'+nf(p.usd)+'</div></div></div>';
+        return '<div class="row"><div><div class="no"><a href="/panel/customers360?'+(p.phone?('phone='+encodeURIComponent(p.phone)):('name='+encodeURIComponent(p.customer)))+'" style="color:#5B21B6;text-decoration:none" onclick="event.stopPropagation()">'+esc(p.customer)+'</a>'+badge+'</div>'+
+          '<div class="meta" onclick="openReceipt('+p.id+')" style="cursor:pointer">'+esc(p.receipt_no)+' &middot; '+esc(p.method)+ord+' &middot; '+esc(p.date||'')+'</div></div>'+
+          '<div class="amt" onclick="openReceipt('+p.id+')" style="cursor:pointer">'+esc(p.currency)+' '+nf(p.amount)+'<div style="font-size:11px;color:#94a3b8;font-weight:700">$'+nf(p.usd)+'</div></div></div>';
       }).join('');
     }).catch(function(){ $('list').innerHTML='<div class="empty">Could not load.</div>'; });
 }
