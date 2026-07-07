@@ -1,0 +1,41 @@
+DEPLOY — Staff Cash (slice 1: read-only view) v34
+=================================================
+The first slice of the Staff Cash system: see each person's "cash in hand" and their
+history, built from data you already record (every order_costs row has a holder).
+READ-ONLY — nothing new is written, so it can't affect your books. The recording
+actions (Give cash / He spent / He received / Settle) come in the next slices.
+
+NEW / CHANGED
+  NEW  app/Http/Controllers/Panel/StaffCashController.php
+  NEW  resources/panel/staff_cash.html
+  CHG  routes/web.php                     (+/panel/staff-cash, +/papi/staff-cash*)
+  CHG  resources/panel/app_home.html      (+Staff Cash tile)
+
+WHAT IT SHOWS
+  - Company total cash (all hands) at the top, split by person.
+  - People list: each person's cash in hand (per currency) + USD equivalent.
+  - Tap a person -> their ledger: running balance per currency, every entry marked
+    GIVEN / SPENT / RECEIVED, with the "-> also on ORD-xx" link where it ties to an
+    order or shows the expense category.
+  - "Send balance" button -> opens WhatsApp with their current balance (works now).
+  Balance rule (matches Cash Position): money IN = funding / cash_in / customer_payment;
+  everything else is money OUT; per currency, using cash actually moved (paid_native).
+  Verified: Jayesh +27,000 +2,000,000 -660,000 -527,000 = UGX 840,000 (~$230).
+
+ACCESS
+  Owner/manager see everyone; a staff member sees only their own cash (same rule as
+  Cash Position). Anyone with the trading panel can open the page.
+
+DEPLOY
+  git add app/Http/Controllers/Panel/StaffCashController.php resources/panel/staff_cash.html \
+          routes/web.php resources/panel/app_home.html
+  git commit -m "v34: Staff Cash slice 1 (read-only per-person cash in hand)"
+  git push -> EasyPanel Rebuild        (no migration)
+
+VERIFY
+  App home -> Staff Cash tile (or /panel/staff-cash). Total shows at top; tap a
+  person -> balance + history with running balance; Send balance opens WhatsApp.
+
+NEXT SLICES (say go):
+  2) Give cash + confirm  3) He spent (->order/expense) + He received (->customer)
+  4) Settle / count with shortage flow
