@@ -36,7 +36,9 @@ class SourcingController extends Controller
     {
         $u = $this->ok($request);
         if (! $u) return response()->json(['ok'=>false],403);
-        $rows = SourcingRequest::where('tenant_id',$u->tenant_id)->orderByRaw("FIELD(status,'new','priced','closed')")->orderByDesc('id')->limit(300)->get();
+        $rows = SourcingRequest::where('tenant_id',$u->tenant_id)
+            ->orderByRaw("CASE status WHEN 'new' THEN 0 WHEN 'priced' THEN 1 ELSE 2 END")
+            ->orderByDesc('id')->limit(300)->get();
         $list = $rows->map(function ($r) {
             return [
                 'id'=>$r->id,'item'=>$r->item_name,'note'=>$r->note,'demand'=>$r->demand,

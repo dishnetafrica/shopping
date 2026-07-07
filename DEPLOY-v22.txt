@@ -1,0 +1,19 @@
+DEPLOY — Fix /papi/sourcing 500 (v22)
+=====================================
+The Sourcing API returned 500 because the list sort used MySQL-only FIELD(). On
+PostgreSQL that function doesn't exist -> 500. Replaced with a portable CASE sort
+(works on Postgres and MySQL). Same order: new -> priced -> closed, newest first.
+
+FILE CHANGED (one)
+  app/Http/Controllers/Panel/SourcingController.php
+
+ALSO CHECK: if the error was actually "table sourcing_requests does not exist",
+then the v19 migration hasn't run yet -> run:  php artisan migrate
+
+DEPLOY
+  Upload app/Http/Controllers/Panel/SourcingController.php -> commit -> Rebuild.
+  (Run php artisan migrate if you haven't since v19.)
+
+VERIFY
+  fetch('/papi/sourcing',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(console.log)
+  -> {ok:true, requests:[...], counts:{...}}   (no 500)
