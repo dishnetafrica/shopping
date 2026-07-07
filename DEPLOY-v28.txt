@@ -1,0 +1,33 @@
+DEPLOY — CSV + PDF export on Invoiced, Payments, P&L (v28)
+=========================================================
+Adds "⬇ CSV" and "🖨 PDF" export to three more money screens. Front-end only,
+no backend or migration (each page already loads its own data).
+
+FILES CHANGED
+  resources/panel/invoiced.html   (export current month's delivered orders)
+  resources/panel/payments.html   (export all customer payments)
+  resources/panel/pnl.html        (export the P&L statement)
+
+WHAT EACH EXPORTS
+  INVOICED  -> CSV & PDF of the selected month's delivered orders (Order, Customer,
+               Delivery date, Amount USD) with a TOTAL row. Change the month first
+               with the ‹ › arrows to export a different month.
+  PAYMENTS  -> CSV & PDF of all recorded payments (Receipt, Date, Customer,
+               Order/Invoice, Type, Method, Currency, Amount, USD) + totals
+               (advances held / total received).
+  P&L       -> CSV & PDF of the statement for the selected period (Revenue, COGS,
+               Gross profit, Expenses, Net profit) + Expenses by category. Switch
+               the period (Today / 7d / 30d / All) before exporting.
+
+  CSV files have a UTF-8 BOM so Excel opens them cleanly. PDF opens a printable
+  view -> "Save as PDF" in the print dialog.
+
+DEPLOY
+  git add resources/panel/invoiced.html resources/panel/payments.html resources/panel/pnl.html
+  git commit -m "v28: CSV + PDF export on Invoiced, Payments, P&L"
+  git push -> EasyPanel Rebuild        (no migration)
+
+VERIFY
+  Open each page -> the CSV/PDF buttons sit by the list/statement. CSV downloads a
+  file; PDF opens the print dialog. For Invoiced use the month arrows and for P&L
+  the period tabs to scope the export.

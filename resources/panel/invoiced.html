@@ -75,7 +75,13 @@
   <div class="mnav"><button onclick="move(-1)">‹</button><div class="lbl" id="mlabel">…</div><button onclick="move(1)">›</button></div>
   <div id="hero"></div>
   <div id="breakdown"></div>
-  <div class="sub" id="sub">Delivered orders</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+    <div class="sub" id="sub" style="margin:0">Delivered orders</div>
+    <div style="display:flex;gap:6px">
+      <button onclick="expCsv()" style="background:#0B3D22;color:#fff;border:none;border-radius:9px;padding:7px 11px;font-size:12px;font-weight:800;cursor:pointer">⬇ CSV</button>
+      <button onclick="expPdf()" style="background:#eef2f7;color:#334155;border:none;border-radius:9px;padding:7px 11px;font-size:12px;font-weight:800;cursor:pointer">🖨 PDF</button>
+    </div>
+  </div>
   <div id="list"><div class="loading">Loading…</div></div>
   <div class="note">“Invoiced” = orders that reached <b>Delivered</b>, counted in the month of their <b>delivery date</b>. Orders not yet delivered are treated as quotations and excluded. UGX/SSP shown at 1 USD = 3,750 UGX = 7,000 SSP.</div>
 </div>
@@ -119,6 +125,7 @@ function render(){
     totUsd+=amt;                                  // USD-based catalogue
     out.push({no:o.order_no,name:o.name,amt:amt,date:String(orderDate(o)).slice(0,10)});
   });
+  window.__inv={label:MONTHS[sel.getMonth()]+' '+sel.getFullYear(),totUsd:totUsd,rows:out};
   $('hero').innerHTML='<div class="hero"><div class="t">Invoiced this month (USD)</div><div class="n">$'+nf(totUsd)+'</div><div class="c">'+rows.length+' delivered order'+(rows.length!==1?'s':'')+'</div></div>';
   $('breakdown').innerHTML='<div class="brek">'+
     '<div><div class="t">USD</div><div class="n">$'+nf(totUsd)+'</div></div>'+
@@ -133,6 +140,27 @@ function render(){
     return '<div class="row"><div class="l"><div class="no">'+esc(o.no||'')+'</div><div class="cu">'+esc(o.name||'')+' · '+esc(o.date)+'</div></div>'+
       '<div class="amt">$'+nf(o.amt)+'</div></div>';
   }).join('');
+}
+
+function csvCell(v){v=(v==null?'':String(v));return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function expCsv(){
+  var m=window.__inv; if(!m||!m.rows.length){alert('Nothing to export');return;}
+  var lines=[['Order','Customer','Delivery Date','Amount USD'].join(',')];
+  m.rows.forEach(function(r){lines.push([r.no,r.name,r.date,r.amt].map(csvCell).join(','));});
+  lines.push(['','','TOTAL USD',m.totUsd].map(csvCell).join(','));
+  var blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='invoiced-'+m.label.replace(' ','-')+'.csv';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+function expPdf(){
+  var m=window.__inv; if(!m||!m.rows.length){alert('Nothing to export');return;}
+  var w=window.open('','_blank'); if(!w){alert('Allow pop-ups');return;}
+  var rows=m.rows.map(function(r){return '<tr><td>'+esc(r.no)+'</td><td>'+esc(r.name||'')+'</td><td>'+esc(r.date)+'</td><td class=num>$'+nf(r.amt)+'</td></tr>';}).join('');
+  w.document.write('<html><head><title>Invoiced '+esc(m.label)+'</title><style>body{font-family:Arial,sans-serif;padding:16px;color:#111}h2{margin:0}.sub{color:#666;font-size:12px;margin:2px 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px solid #ddd;padding:7px 8px;text-align:left}.num{text-align:right}tfoot td{font-weight:800;border-top:2px solid #333}</style></head><body>'+
+    '<h2>Invoiced — '+esc(m.label)+'</h2><div class="sub">Family Shoppers · Delivered orders · '+m.rows.length+' orders</div>'+
+    '<table><thead><tr><th>Order</th><th>Customer</th><th>Delivery Date</th><th class=num>Amount USD</th></tr></thead><tbody>'+rows+
+    '</tbody><tfoot><tr><td colspan=3>TOTAL (USD)</td><td class=num>$'+nf(m.totUsd)+'</td></tr></tfoot></table></body></html>');
+  w.document.close();setTimeout(function(){w.focus();w.print();},400);
 }
 load();
 </script><!-- ===== DishNet role-aware tab bar + amount format (injected v2) ===== -->

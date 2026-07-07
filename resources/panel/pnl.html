@@ -92,6 +92,10 @@
     <div class="per" data-p="30d" onclick="setPer(this)">30 days</div>
     <div class="per" data-p="all" onclick="setPer(this)">All</div>
   </div>
+  <div style="display:flex;justify-content:flex-end;gap:6px;margin:2px 0 10px">
+    <button onclick="expCsv()" style="background:#0B3D22;color:#fff;border:none;border-radius:9px;padding:7px 11px;font-size:12px;font-weight:800;cursor:pointer">⬇ CSV</button>
+    <button onclick="expPdf()" style="background:#eef2f7;color:#334155;border:none;border-radius:9px;padding:7px 11px;font-size:12px;font-weight:800;cursor:pointer">🖨 PDF</button>
+  </div>
   <div id="app"><div class="loading">Loading…</div></div>
   <div class="disclaimer">Running estimate from approved orders &amp; costs. For audited figures, reconcile against Books.</div>
 </div>
@@ -103,6 +107,7 @@ function load(){
   $('app').innerHTML='<div class="loading">Loading…</div>';
   fetch('/papi/pnl?period='+period,{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(d=>{
     if(!d.ok){$('app').innerHTML='<div class="loading">Could not load.</div>';return;}
+    window.__pnl=d;
     const loss=d.net_profit<0;
     let cats=(d.expense_by_category||[]).map(c=>`<div class="catrow"><span>${c.expense_category||'Misc'}</span><span>$${fmt(c.usd)}</span></div>`).join('')||'<div class="catrow"><span>No expenses yet</span><span>$0.00</span></div>';
     $('app').innerHTML=`
@@ -123,6 +128,40 @@ function load(){
         ${cats}
       </div>`;
   }).catch(()=>{$('app').innerHTML='<div class="loading">Failed.</div>';});
+}
+
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function perLabel(){return period==='today'?'Today':period==='7d'?'Last 7 days':period==='30d'?'Last 30 days':'All time';}
+function csvCell(v){v=(v==null?'':String(v));return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function expCsv(){
+  var d=window.__pnl; if(!d){alert('Nothing to export');return;}
+  var L=[['Profit & Loss','Amount USD'].join(',')];
+  L.push(['Revenue',d.revenue].map(csvCell).join(','));
+  L.push(['Cost of goods (landed)',-d.order_costs].map(csvCell).join(','));
+  L.push(['Gross profit',d.gross_profit].map(csvCell).join(','));
+  L.push(['Running expenses',-d.expenses].map(csvCell).join(','));
+  L.push([(d.net_profit<0?'Net loss':'Net profit'),d.net_profit].map(csvCell).join(','));
+  L.push([]); L.push(['Expenses by category','']);
+  (d.expense_by_category||[]).forEach(function(c){L.push([(c.expense_category||'Misc'),c.usd].map(csvCell).join(','));});
+  var blob=new Blob(['\ufeff'+L.join('\n')],{type:'text/csv;charset=utf-8;'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='pnl-'+period+'-'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+function expPdf(){
+  var d=window.__pnl; if(!d){alert('Nothing to export');return;}
+  var w=window.open('','_blank'); if(!w){alert('Allow pop-ups');return;}
+  var cats=(d.expense_by_category||[]).map(function(c){return '<tr><td>'+esc(c.expense_category||'Misc')+'</td><td class=num>$'+fmt(c.usd)+'</td></tr>';}).join('')||'<tr><td>No expenses</td><td class=num>$0.00</td></tr>';
+  w.document.write('<html><head><title>P&L '+esc(perLabel())+'</title><style>body{font-family:Arial,sans-serif;padding:16px;color:#111;max-width:520px}h2{margin:0}.sub{color:#666;font-size:12px;margin:2px 0 14px}table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px}td{padding:7px 8px;border-bottom:1px solid #eee}.num{text-align:right;white-space:nowrap}.big td{font-weight:800;border-top:2px solid #333;border-bottom:none}.g{color:#15803d}.r{color:#dc2626}h3{font-size:11px;color:#666;text-transform:uppercase;margin:0 0 6px}</style></head><body>'+
+    '<h2>Profit &amp; Loss — '+esc(perLabel())+'</h2><div class="sub">Family Shoppers · '+d.orders+' orders · '+d.margin_pct+'% net margin</div>'+
+    '<table>'+
+      '<tr><td>Revenue</td><td class="num g">$'+fmt(d.revenue)+'</td></tr>'+
+      '<tr><td>Cost of goods (landed)</td><td class="num r">-$'+fmt(d.order_costs)+'</td></tr>'+
+      '<tr class=big><td>Gross profit</td><td class="num">$'+fmt(d.gross_profit)+'</td></tr>'+
+      '<tr><td>Running expenses</td><td class="num r">-$'+fmt(d.expenses)+'</td></tr>'+
+      '<tr class=big><td>'+(d.net_profit<0?'Net loss':'Net profit')+'</td><td class="num '+(d.net_profit<0?'r':'g')+'">$'+fmt(d.net_profit)+'</td></tr>'+
+    '</table>'+
+    '<h3>Expenses by category</h3><table>'+cats+'</table></body></html>');
+  w.document.close();setTimeout(function(){w.focus();w.print();},400);
 }
 load();
 </script>

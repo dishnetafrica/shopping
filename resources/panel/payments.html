@@ -95,7 +95,13 @@
     <div class="recv"><div class="t">Total received</div><div class="n" id="recv">$0</div></div>
   </div>
   <button class="addp" onclick="openForm()">+ Record a payment</button>
-  <div class="sub" id="sub">Payments</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+    <div class="sub" id="sub" style="margin:0">Payments</div>
+    <div style="display:flex;gap:6px">
+      <button onclick="expCsv()" style="background:#0B3D22;color:#fff;border:none;border-radius:9px;padding:7px 11px;font-size:12px;font-weight:800;cursor:pointer">⬇ CSV</button>
+      <button onclick="expPdf()" style="background:#eef2f7;color:#334155;border:none;border-radius:9px;padding:7px 11px;font-size:12px;font-weight:800;cursor:pointer">🖨 PDF</button>
+    </div>
+  </div>
   <div id="list"><div class="loading">Loading&hellip;</div></div>
 </div>
 
@@ -144,6 +150,7 @@ function load(){
     .then(r=>r.json()).then(function(d){
       if(!d.ok){ $('list').innerHTML='<div class="empty">Not available.</div>'; return; }
       $('held').textContent='$'+nf(d.advances_held); $('recv').textContent='$'+nf(d.total_received);
+      window.__pay={rows:d.payments||[],held:d.advances_held,recv:d.total_received};
       var L=$('list');
       if(!d.payments.length){ $('sub').textContent='Payments'; L.innerHTML='<div class="empty">No payments yet. Tap &ldquo;Record a payment&rdquo;.</div>'; return; }
       $('sub').textContent=d.payments.length+' payment'+(d.payments.length>1?'s':'');
@@ -248,6 +255,27 @@ function printRc(){
     '<div class="ty">Thank you!</div></body></html>';
   w.document.write(html);
   w.document.close(); setTimeout(function(){ w.focus(); w.print(); },350);
+}
+
+function csvCell(v){v=(v==null?'':String(v));return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function expCsv(){
+  var p=window.__pay; if(!p||!p.rows.length){alert('Nothing to export');return;}
+  var lines=[['Receipt','Date','Customer','Order/Invoice','Type','Method','Currency','Amount','USD'].join(',')];
+  p.rows.forEach(function(e){lines.push([e.receipt_no,e.date,e.customer,e.order_no||'',e.kind,e.method,e.currency,e.amount,e.usd].map(csvCell).join(','));});
+  lines.push(['','','','','','','','Total USD',p.recv].map(csvCell).join(','));
+  var blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='payments-'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+function expPdf(){
+  var p=window.__pay; if(!p||!p.rows.length){alert('Nothing to export');return;}
+  var w=window.open('','_blank'); if(!w){alert('Allow pop-ups');return;}
+  var rows=p.rows.map(function(e){return '<tr><td>'+esc(e.receipt_no)+'</td><td>'+esc(e.date||'')+'</td><td>'+esc(e.customer)+(e.order_no?' <span class=n>('+esc(e.order_no)+')</span>':'')+'</td><td>'+esc(e.kind)+'</td><td>'+esc(e.method)+'</td><td class=num>'+esc(e.currency)+' '+nf(e.amount)+'</td><td class=num>$'+nf(e.usd)+'</td></tr>';}).join('');
+  w.document.write('<html><head><title>Payments</title><style>body{font-family:Arial,sans-serif;padding:16px;color:#111}h2{margin:0}.sub{color:#666;font-size:12px;margin:2px 0 12px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border-bottom:1px solid #ddd;padding:6px 7px;text-align:left}.num{text-align:right;white-space:nowrap}.n{color:#888}tfoot td{font-weight:800;border-top:2px solid #333}</style></head><body>'+
+    '<h2>Payments Received</h2><div class="sub">Family Shoppers · '+p.rows.length+' payments · Advances held $'+nf(p.held)+' · Total received $'+nf(p.recv)+'</div>'+
+    '<table><thead><tr><th>Receipt</th><th>Date</th><th>Customer</th><th>Type</th><th>Method</th><th class=num>Amount</th><th class=num>USD</th></tr></thead><tbody>'+rows+
+    '</tbody><tfoot><tr><td colspan=6>Total received (USD)</td><td class=num>$'+nf(p.recv)+'</td></tr></tfoot></table></body></html>');
+  w.document.close();setTimeout(function(){w.focus();w.print();},400);
 }
 load();
 </script><!-- ===== DishNet role-aware tab bar + amount format (injected v2) ===== -->
