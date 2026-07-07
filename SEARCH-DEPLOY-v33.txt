@@ -1,0 +1,27 @@
+DEPLOY — Family Shoppers: top menu search + polish (v33)
+========================================================
+Adds a search box at the top of the sidebar (filters the menu as you type), on top
+of the v32 polish + badges. Green theme kept, flat sidebar kept (NO collapse). Only
+navigation UX + styling; no page logic, links, gating or feature flags changed.
+
+FILE
+  seller.html  ->  upload to the SAME repo path (file with id="orderSysNav").
+
+WHAT'S NEW vs v32
+  - SEARCH MENU: a search box under the brand. Type "cashbook", "payments", "leads"…
+    and only matching links stay visible (across all sections); section headers hide
+    while searching; clear with the × to restore. Role-hidden links stay hidden.
+  (v32 already included: green polish, cleaner active state, real count badges on
+   Orders / Sourcing / Products, and cleaner cards/tables.)
+
+SAFE / REVERSIBLE
+  All additions are: the search <div class="navsearch"> under the brand, a bit of CSS
+  in <style id="fs-polish">, and one <script> before </body>. Remove those to revert.
+  The sidebar link list is unchanged (flat, same order).
+
+DEPLOY
+  Replace seller.html -> commit -> EasyPanel Rebuild -> reload /panel.
+
+VERIFY
+  Type in the sidebar search -> menu filters live; × clears it. Badges show on
+  Orders/Sourcing/Products. All pages open exactly as before.

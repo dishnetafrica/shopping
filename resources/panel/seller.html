@@ -271,6 +271,7 @@
 <div class="app hide" id="app">
   <aside class="side" id="side">
     <div class="brand"><div class="lg" id="sideLogo">FS</div><b><span id="sideName">Family Shopper</span><br><span style="font-size:11px;font-weight:500;opacity:.75">Seller panel</span></b></div>
+    <div class="navsearch"><span class="nsi">⌕</span><input id="navSearch" placeholder="Search menu…" autocomplete="off" spellcheck="false"><span class="nsx" id="navSearchX">×</span></div>
     <nav>
       <div class="navsec">Main</div>
       <a class="nav on" data-page="dash"><span class="i">▦</span> Dashboard</a>
@@ -4682,5 +4683,105 @@ if(token){startApp();}else{showLogin();}
   </div>
 </div>
 
+
+<style id="fs-polish">
+  /* ===== Family Shoppers polish (styling only; layout unchanged) ===== */
+  /* sidebar: keep the flat green look, just refine spacing + hover + active + badges */
+  .side{background:linear-gradient(180deg,#0C4527 0%,#0A3A21 100%)!important;}
+  .side nav{padding:8px 8px 22px!important;}
+  .side .navsec{margin:6px 8px 2px;padding:9px 10px 4px!important;font-size:9.5px!important;letter-spacing:1.2px!important;color:rgba(255,255,255,.40)!important;}
+  .side .navsec.trade{color:#8FE0B4!important;}
+  .side a.nav{margin:1px 4px;padding:9px 12px!important;border-radius:9px!important;border-left:3px solid transparent!important;gap:11px!important;transition:.12s;}
+  .side a.nav:hover{background:rgba(255,255,255,.07)!important;color:#fff!important;}
+  .side a.nav.on{background:rgba(124,214,161,.15)!important;color:#fff!important;border-left-color:#7CD6A1!important;}
+  .side a.nav.sub{margin-left:16px!important;}
+  .side a.nav .i{width:20px!important;}
+  /* count badges */
+  .side a.nav .navbadge{margin-left:auto;font-size:10px;font-weight:800;padding:1px 7px;border-radius:20px;background:rgba(255,255,255,.16);color:#fff;line-height:1.5;}
+  .side a.nav .navbadge.red{background:#C0392B;}
+  .side a.nav .navbadge.amber{background:#D97706;}
+  .side a.nav .navbadge.green{background:#16A34A;}
+  .side a.nav.on .navbadge{background:rgba(255,255,255,.25);}
+
+  /* content: gentle DishNet-clean polish (cards, tables, buttons, spacing) */
+  .main .card{border-radius:14px!important;border:1px solid var(--line)!important;box-shadow:0 1px 2px rgba(16,40,25,.03),0 4px 16px -12px rgba(16,40,25,.18)!important;}
+  .main table th{background:#FAFBFA!important;font-size:10.5px!important;letter-spacing:.4px;text-transform:uppercase;color:#6E7D72!important;padding-top:11px!important;padding-bottom:11px!important;}
+  .main table td{padding-top:11px!important;padding-bottom:11px!important;}
+  .main table tbody tr:hover td{background:#FCFDFC!important;}
+  .btn,.iconbtn{border-radius:10px!important;}
+  /* softer stat cards where the dashboard uses them */
+  .main .cstat,.main .stat,.main .kpi{border-radius:14px!important;}
+  /* top menu search */
+  .navsearch{position:relative;padding:10px 12px 6px;}
+  .navsearch input{width:100%;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.13);border-radius:10px;color:#eaf4ee;font-size:13px;font-weight:500;padding:9px 30px 9px 30px;outline:none;font-family:inherit;transition:.15s;}
+  .navsearch input::placeholder{color:rgba(255,255,255,.5);}
+  .navsearch input:focus{background:rgba(255,255,255,.14);border-color:rgba(124,214,161,.6);}
+  .navsearch .nsi{position:absolute;left:23px;top:calc(50% + 2px);transform:translateY(-50%);color:rgba(255,255,255,.55);font-size:15px;pointer-events:none;}
+  .navsearch .nsx{position:absolute;right:22px;top:calc(50% + 2px);transform:translateY(-50%);color:rgba(255,255,255,.55);font-size:17px;cursor:pointer;display:none;line-height:1;}
+  .navsearch .nsx.show{display:block;}
+  .side a.nav.search-hidden{display:none!important;}
+</style>
+<script>
+(function(){
+  // add REAL count badges to sidebar items; skip silently if data unavailable
+  function badge(sel,text,cls){
+    var a=document.querySelector(sel); if(!a) return;
+    var old=a.querySelector('.navbadge'); if(old) old.remove();
+    if(text==null||text===''||text===0||text==='0') return;
+    var b=document.createElement('span'); b.className='navbadge'+(cls?(' '+cls):''); b.textContent=text; a.appendChild(b);
+  }
+  function j(u){return fetch(u,{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;});}
+  function run(){
+    // Orders: number of NEW orders (actionable)
+    j('/papi/orders').then(function(d){
+      if(!d||!d.orders) return;
+      var n=d.orders.filter(function(o){return (o.status||'')==='New';}).length;
+      badge('.side a.nav[data-page="orders"]', n>0?n:'', 'red');
+    });
+    // Sourcing: requests needing a price
+    j('/papi/sourcing').then(function(d){
+      if(!d||!d.counts) return;
+      badge('.side a.nav[href="/panel/sourcing"]', d.counts.new>0?d.counts.new:'', 'amber');
+    });
+    // Products: total in catalogue
+    j('/papi/products').then(function(d){
+      if(!d) return; var arr=d.products||d; var n=Array.isArray(arr)?arr.length:null;
+      if(n!=null) badge('.side a.nav[data-page="products"]', n, '');
+    });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){setTimeout(run,600);});
+  else setTimeout(run,600);
+})();
+</script>
+
+<script>
+(function(){
+  function initSearch(){
+    var box=document.getElementById('navSearch'), x=document.getElementById('navSearchX');
+    if(!box) return;
+    var secs=[].slice.call(document.querySelectorAll('.side .navsec'));
+    var secOrig=secs.map(function(sn){return sn.style.display;});
+    function filter(){
+      var q=(box.value||'').toLowerCase().trim();
+      x.classList.toggle('show',!!q);
+      var links=document.querySelectorAll('.side a.nav');
+      if(!q){
+        links.forEach(function(l){ l.classList.remove('search-hidden'); });
+        secs.forEach(function(sn,i){ sn.style.display=secOrig[i]||''; });
+        return;
+      }
+      secs.forEach(function(sn){ sn.style.display='none'; });
+      links.forEach(function(l){
+        var t=(l.textContent||'').toLowerCase();
+        l.classList.toggle('search-hidden', t.indexOf(q)<0);
+      });
+    }
+    box.addEventListener('input',filter);
+    x.addEventListener('click',function(){ box.value=''; filter(); box.focus(); });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){setTimeout(initSearch,700);});
+  else setTimeout(initSearch,700);
+})();
+</script>
 </body>
 </html>
