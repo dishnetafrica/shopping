@@ -1,0 +1,19 @@
+DEPLOY — Sidebar reverted to original design
+============================================
+The redesign (search box + collapsible sections + restyle) has been fully removed.
+The sidebar is back to the ORIGINAL look and behaviour.
+
+KEPT (still there, these are the useful additions from before the redesign):
+  Order Trading section links: Customers, Buy List, Suppliers We Owe,
+  Payments Received, Sourcing Requests, Partners, Invoiced.
+
+REMOVED (the redesign):
+  - the "Search menu" box
+  - collapsible section headers / chevrons
+  - the <style id="side-redesign"> override
+  - the enhancement <script>
+
+Everything else (all pages, role-gating, feature flags, #orderSysNav) is untouched.
+
+DEPLOY
+  Replace seller.html at the same repo path -> commit -> EasyPanel Rebuild.

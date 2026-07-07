@@ -271,7 +271,6 @@
 <div class="app hide" id="app">
   <aside class="side" id="side">
     <div class="brand"><div class="lg" id="sideLogo">FS</div><b><span id="sideName">Family Shopper</span><br><span style="font-size:11px;font-weight:500;opacity:.75">Seller panel</span></b></div>
-    <div class="navsearch"><span class="nsi">⌕</span><input id="navSearch" placeholder="Search menu…" autocomplete="off" spellcheck="false"><span class="nsx" id="navSearchX">×</span></div>
     <nav>
       <div class="navsec">Main</div>
       <a class="nav on" data-page="dash"><span class="i">▦</span> Dashboard</a>
@@ -4683,117 +4682,5 @@ if(token){startApp();}else{showLogin();}
   </div>
 </div>
 
-<style id="side-redesign">
-  /* ===== Sidebar redesign (Level 1: navigation only) ===== */
-  .side{width:248px!important;background:linear-gradient(180deg,#0C4527 0%,#0A3A21 100%)!important;color:#cfe7d8;}
-  .side .brand{padding:16px 16px 12px!important;border-bottom:1px solid rgba(255,255,255,.07)!important;}
-  .side .brand .lg{box-shadow:0 2px 8px rgba(0,0,0,.25);}
-  /* search */
-  .navsearch{position:relative;padding:12px 12px 8px;}
-  .navsearch input{width:100%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#eaf4ee;font-size:13px;font-weight:500;padding:9px 30px 9px 30px;outline:none;transition:.15s;}
-  .navsearch input::placeholder{color:rgba(255,255,255,.45);}
-  .navsearch input:focus{background:rgba(255,255,255,.13);border-color:rgba(124,214,161,.55);}
-  .navsearch .nsi{position:absolute;left:23px;top:50%;transform:translateY(-40%);color:rgba(255,255,255,.5);font-size:15px;pointer-events:none;}
-  .navsearch .nsx{position:absolute;right:22px;top:50%;transform:translateY(-55%);color:rgba(255,255,255,.5);font-size:18px;cursor:pointer;display:none;line-height:1;}
-  .navsearch .nsx.show{display:block;}
-  .side nav{padding:6px 8px 20px!important;}
-  .side nav::-webkit-scrollbar{width:7px;}
-  .side nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:6px;}
-  /* section header (now a collapsible toggle) */
-  .side .navsec{display:flex;align-items:center;gap:7px;margin:8px 6px 3px;padding:7px 10px!important;font-size:10px!important;letter-spacing:1px!important;color:rgba(255,255,255,.42)!important;border-radius:8px;cursor:pointer;user-select:none;transition:.12s;}
-  .side .navsec:hover{background:rgba(255,255,255,.05);color:rgba(255,255,255,.7)!important;}
-  .side .navsec.trade{color:#8FE0B4!important;}
-  .side .navsec .chev{font-size:9px;transition:transform .18s;opacity:.7;display:inline-block;width:9px;}
-  .side .navsec.sec-collapsed-head .chev{transform:rotate(-90deg);}
-  .side .navsec .lbl{flex:1;}
-  /* links */
-  .side a.nav{margin:1px 6px;padding:9px 12px!important;border-radius:9px!important;border-left:none!important;font-size:13.5px!important;color:#c3ddce!important;gap:10px!important;transition:.12s;}
-  .side a.nav:hover{background:rgba(255,255,255,.07)!important;color:#fff!important;}
-  .side a.nav.on{background:rgba(124,214,161,.16)!important;color:#fff!important;box-shadow:inset 0 0 0 1px rgba(124,214,161,.25);}
-  .side a.nav.on .i{filter:none;}
-  .side a.nav .i{width:20px!important;font-size:14px;opacity:.95;}
-  .side a.nav.sub{margin-left:20px!important;padding:7px 12px!important;font-size:12.5px!important;opacity:.85;}
-  .side a.nav.sub .i{opacity:.4;}
-  /* collapse / search visibility (role-hidden links keep their own inline display:none) */
-  .side a.nav.sec-collapsed{display:none!important;}
-  .side a.nav.search-hidden{display:none!important;}
-</style>
-<script>
-(function(){
-  function build(){
-    var nav=document.querySelector('.side nav'); if(!nav || nav.__enh) return; nav.__enh=1;
-    var groups=[], cur=null;
-    // wrap each navsec label so chevron + text align; collect following links
-    [].slice.call(nav.children).forEach(function(el){
-      if(el.classList && el.classList.contains('navsec')){
-        // move text into a .lbl span, prepend chevron
-        if(!el.querySelector('.lbl')){
-          var txt=el.textContent.trim();
-          el.textContent='';
-          var chev=document.createElement('span'); chev.className='chev'; chev.textContent='\u25B8';
-          var lbl=document.createElement('span'); lbl.className='lbl'; lbl.textContent=txt;
-          el.appendChild(chev); el.appendChild(lbl);
-        }
-        cur={head:el,links:[],expanded:true};
-        groups.push(cur);
-        el.addEventListener('click',function(){ toggle(cur); });
-      } else if(el.id==='orderSysNav'){
-        var oh=el.querySelector('.navsec');
-        if(oh){
-          if(!oh.querySelector('.lbl')){
-            var t2=oh.textContent.trim(); oh.textContent='';
-            var c2=document.createElement('span'); c2.className='chev'; c2.textContent='\u25B8';
-            var l2=document.createElement('span'); l2.className='lbl'; l2.textContent=t2;
-            oh.appendChild(c2); oh.appendChild(l2);
-          }
-          var g={head:oh,links:[].slice.call(el.querySelectorAll('a.nav')),expanded:true};
-          groups.push(g);
-          oh.addEventListener('click',function(){ toggle(g); });
-        }
-        cur=null;
-      } else if(cur && el.tagName==='A' && el.classList.contains('nav')){
-        cur.links.push(el);
-      }
-    });
-    window.__navGroups=groups;
-
-    function toggle(g){
-      g.expanded=!g.expanded;
-      g.head.classList.toggle('sec-collapsed-head',!g.expanded);
-      g.links.forEach(function(l){ l.classList.toggle('sec-collapsed',!g.expanded); });
-    }
-    // start: collapse every section except the one holding the active link
-    groups.forEach(function(g){
-      var hasActive=g.links.some(function(l){return l.classList.contains('on');});
-      if(!hasActive){ g.expanded=false; g.head.classList.add('sec-collapsed-head'); g.links.forEach(function(l){l.classList.add('sec-collapsed');}); }
-    });
-
-    // search
-    var box=document.getElementById('navSearch'), x=document.getElementById('navSearchX');
-    function filter(){
-      var q=(box.value||'').toLowerCase().trim();
-      x.classList.toggle('show',!!q);
-      var links=document.querySelectorAll('.side a.nav');
-      var secs=document.querySelectorAll('.side .navsec');
-      if(!q){
-        secs.forEach(function(sn){sn.style.display='';});
-        links.forEach(function(l){ l.classList.remove('search-hidden'); });
-        (window.__navGroups||[]).forEach(function(g){ g.links.forEach(function(l){ l.classList.toggle('sec-collapsed',!g.expanded); }); });
-        return;
-      }
-      secs.forEach(function(sn){sn.style.display='none';});
-      links.forEach(function(l){
-        l.classList.remove('sec-collapsed');
-        var t=(l.textContent||'').toLowerCase();
-        l.classList.toggle('search-hidden', t.indexOf(q)<0);
-      });
-    }
-    if(box){ box.addEventListener('input',filter); }
-    if(x){ x.addEventListener('click',function(){ box.value=''; filter(); box.focus(); }); }
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){setTimeout(build,300);});
-  else setTimeout(build,300);
-})();
-</script>
 </body>
 </html>
