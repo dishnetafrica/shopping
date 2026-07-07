@@ -84,23 +84,49 @@
 .empty{text-align:center;color:#94a3b8;padding:40px 20px;font-size:14px;font-weight:600}
 .loading{text-align:center;color:#94a3b8;padding:24px}
 </style>
+<style>
+.modebar{display:flex;gap:6px;margin-bottom:10px}
+.modebar button{flex:1;padding:9px;border:1.5px solid var(--border);border-radius:10px;background:#fff;font-size:12.5px;font-weight:800;color:#374151;cursor:pointer}
+.modebar button.on{border-color:#15803D;background:#E6F4EA;color:#0B3D22}
+.warn{background:#FEF2F2;border:1px solid #FCA5A5;border-radius:13px;padding:12px 14px;margin-bottom:12px}
+.warnh{font-size:13px;font-weight:800;color:#B4232A;margin-bottom:6px}
+.warni{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;padding:6px 0}
+.warni .rec{flex:0 0 auto;background:#B4232A;color:#fff;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer}
+.ordtag{font-size:10.5px;font-weight:700;color:#475569;background:#f1f5f9;border-radius:20px;padding:2px 9px}
+</style>
 </head>
 <body><div class="wrap">
   <div class="top"><h1>🧺 Buy List</h1><a href="/panel">← Panel</a></div>
   <div class="sub" id="sub">What to buy for confirmed orders</div>
+  <div id="warn"></div>
   <div id="ready"></div>
+  <div class="modebar" id="modebar">
+    <button data-m="byorder">📋 By order</button>
+    <button data-m="agg">🧺 Aggregated</button>
+  </div>
   <div id="list"><div class="loading">Loading…</div></div>
   <div id="bought"></div>
+  <div class="note">“By order” shows each order’s item on its own line — buy &amp; record marks only that order. “Aggregated” groups a product across orders so you buy it once for all. Items show while an order is Confirmed or Packed and drop off at Out-for-delivery/Delivered/Cancelled. A red ⚠ flag warns if an order advanced without being bought.</div>
 </div>
+
 <script>
 const $=s=>document.getElementById(s);
 function nf(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
 function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-var WINDOW=['Confirmed','Packed'];  // drops off once an order is Out for delivery / Delivered / Cancelled
+var WINDOW=['Confirmed','Packed'];
+var ADVANCED=['Packed','Out for delivery','Delivered'];
+var REVERT=['New','Cancelled','Returned'];
 var ORDERS=[], ALLORDERS=[], TICKS={}, IMG={};
+var MODE='byorder'; try{ MODE=localStorage.getItem('bl_mode')||'byorder'; }catch(e){}
 
 function tkey(on,nm){return on+'|'+nm;}
-var REVERT=['New','Cancelled','Returned'];   // reverting to these clears the order's bought marks
+function boughtOf(o,nm){return TICKS[tkey(o.order_no,nm)]||0;}
+function remOf(o,it){return Math.max(0,(Number(it.qty)||0)-boughtOf(o,(it.name||'').trim()));}
+function imgOf(name){return IMG[(name||'').trim().toLowerCase()];}
+function leftCell(name,qty){ var im=imgOf(name);
+  return im ? '<div class="ph"><img src="'+esc(im)+'" loading="lazy" onerror="this.style.display=\'none\'"><span class="qb">'+nf(qty)+'</span></div>'
+            : '<div class="q"><b>'+nf(qty)+'</b><small>qty</small></div>'; }
+
 function autoClearStale(ticks, done){
   var statusByNo={}; ALLORDERS.forEach(function(o){ statusByNo[o.order_no]=o.status; });
   var stale=ticks.filter(function(t){ return REVERT.indexOf(statusByNo[t.order_no])>=0; });
@@ -110,6 +136,7 @@ function autoClearStale(ticks, done){
     body:JSON.stringify({undo:true, items:stale.map(function(t){return {order_no:t.order_no,item_name:t.item_name};})})})
     .then(function(){ done(); }).catch(function(){ done(); });
 }
+
 function load(){
   Promise.all([
     fetch('/papi/orders',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(function(r){return r.json();}),
@@ -118,118 +145,139 @@ function load(){
   ]).then(function(res){
     var od=res[0]||{}, td=res[1]||{}, pd=res[2]||{};
     IMG={};
-    ((pd&&pd.products)||[]).forEach(function(p){
-      var nm=(p['Product Name']||p.name||'').trim().toLowerCase(); if(!nm) return;
-      var im=p['Image']||p.image||''; if(im) IMG[nm]=im;
-    });
+    ((pd&&pd.products)||[]).forEach(function(p){ var nm=(p['Product Name']||p.name||'').trim().toLowerCase(); if(!nm) return; var im=p['Image']||p.image||''; if(im) IMG[nm]=im; });
     ALLORDERS=(od.orders||[]);
     ORDERS=ALLORDERS.filter(function(o){return WINDOW.indexOf(o.status)>=0;});
-    TICKS={};
-    ((td&&td.ticks)||[]).forEach(function(t){ TICKS[tkey(t.order_no,t.item_name)]=Number(t.qty)||0; });
+    TICKS={}; ((td&&td.ticks)||[]).forEach(function(t){ TICKS[tkey(t.order_no,t.item_name)]=Number(t.qty)||0; });
     autoClearStale((td&&td.ticks)||[], render);
   }).catch(function(){ $('list').innerHTML='<div class="empty">Could not load orders.</div>'; });
 }
 
 function render(){
-  // aggregate remaining by item name; also track per-order remaining for ready-to-pack
-  var agg={};                 // name -> {name, remaining, unit, orders:{on:id}, pairs:[{order_no,order_id,name,qty}]}
-  var orderRemain={};          // order_no -> total remaining across its items
-  ORDERS.forEach(function(o){
-    var items=o.items_json||[];
-    items.forEach(function(it){
-      var nm=(it.name||'').trim(); if(!nm) return;
-      var qty=Number(it.qty)||0;
-      var bought=TICKS[tkey(o.order_no,nm)]||0;
-      var rem=Math.max(0, qty-bought);
-      orderRemain[o.order_no]=(orderRemain[o.order_no]||0)+rem;
-      if(rem<=0) return;
-      var k=nm.toLowerCase();
-      if(!agg[k]) agg[k]={name:nm, remaining:0, orders:{}, pairs:[]};
-      agg[k].remaining+=rem;
-      agg[k].orders[o.order_no]=1;
-      agg[k].pairs.push({order_no:o.order_no, order_id:o.id, name:nm, qty:rem});
-    });
+  renderMode(); renderWarn(); renderReady(); renderList(); renderBought();
+}
+
+function renderMode(){
+  var bar=$('modebar');
+  bar.querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-m')===MODE); });
+}
+document.addEventListener('click',function(e){
+  var b=e.target.closest('#modebar button'); if(!b) return;
+  MODE=b.getAttribute('data-m'); try{localStorage.setItem('bl_mode',MODE);}catch(e){} render();
+});
+
+function renderWarn(){
+  var W=$('warn');
+  var bad=ALLORDERS.filter(function(o){
+    if(ADVANCED.indexOf(o.status)<0) return false;
+    var its=o.items_json||[]; if(!its.length) return false;
+    return its.some(function(it){ return remOf(o,it)>0; });
   });
-  var items=Object.keys(agg).map(function(k){return agg[k];}).sort(function(a,b){return b.remaining-a.remaining;});
+  if(!bad.length){ W.innerHTML=''; return; }
+  W.innerHTML='<div class="warn"><div class="warnh">⚠ Advanced but not bought ('+bad.length+')</div>'+
+    bad.map(function(o){
+      return '<div class="warni"><div><b>'+esc(o.order_no)+'</b> · <span class="ordtag">'+esc(o.status)+'</span></div>'+
+        '<button class="rec" onclick="recordAdvanced('+o.id+',\''+esc(o.order_no)+'\')">Record now</button></div>';
+    }).join('')+'</div>';
+}
 
-  // ready to pack = CONFIRMED orders whose every item is fully bought
-  var ready=ORDERS.filter(function(o){ return o.status==='Confirmed' && (orderRemain[o.order_no]||0)<=0 && (o.items_json||[]).length>0; });
+function orderFullyBought(o){ var its=o.items_json||[]; if(!its.length) return false; return its.every(function(it){ return remOf(o,it)<=0; }); }
+
+function renderReady(){
   var R=$('ready');
-  if(ready.length){
-    R.innerHTML='<div class="rp"><div class="rph">✅ Ready to pack ('+ready.length+')</div>'+
-      ready.map(function(o){return '<div class="rpi"><div class="rpinfo"><b>'+esc(o.order_no)+'</b> · '+esc(o.name||'')+'</div>'+
-        '<button class="pk" onclick="markPacked('+o.id+',this)" data-no="'+esc(o.order_no)+'" data-phone="'+esc(o.phone||'')+'" data-name="'+esc(o.name||'')+'">Mark Packed</button></div>';}).join('')+'</div>';
-  } else { R.innerHTML=''; }
+  var ready=ORDERS.filter(function(o){ return o.status==='Confirmed' && orderFullyBought(o); });
+  if(!ready.length){ R.innerHTML=''; return; }
+  R.innerHTML='<div class="rp"><div class="rph">✅ Ready to pack ('+ready.length+')</div>'+
+    ready.map(function(o){ return '<div class="rpi"><div class="rpinfo"><b>'+esc(o.order_no)+'</b> · '+esc(o.name||'')+'</div>'+
+      '<button class="pk" onclick="markPacked('+o.id+',this)" data-no="'+esc(o.order_no)+'" data-phone="'+esc(o.phone||'')+'" data-name="'+esc(o.name||'')+'">Mark Packed</button></div>'; }).join('')+'</div>';
+}
 
-  // bought items (undo returns them to the list)
-  var bagg={};
-  ORDERS.forEach(function(o){ (o.items_json||[]).forEach(function(it){
-    var nm=(it.name||'').trim(); if(!nm) return;
-    var bought=TICKS[tkey(o.order_no,nm)]||0; if(bought<=0) return;
-    var k=nm.toLowerCase();
-    if(!bagg[k]) bagg[k]={name:nm, qty:0, pairs:[]};
-    bagg[k].qty+=bought; bagg[k].pairs.push({order_no:o.order_no, item_name:nm});
-  });});
-  var boughtItems=Object.keys(bagg).map(function(k){return bagg[k];});
-  window.__bought=boughtItems;
-  var B=$('bought');
-  if(boughtItems.length){
-    B.innerHTML='<div class="sub" style="margin-top:16px">✅ Bought — tap Undo to put back</div>'+
-      boughtItems.map(function(b,i){
-        var img=IMG[(b.name||'').trim().toLowerCase()];
-        var left = img
-          ? '<div class="ph"><img src="'+esc(img)+'" loading="lazy" onerror="this.style.display=\'none\'"><span class="qb">'+nf(b.qty)+'</span></div>'
-          : '<div class="q"><b>'+nf(b.qty)+'</b><small>qty</small></div>';
-        return '<div class="item" style="opacity:.85">'+left+
-          '<div class="mid"><div class="nm">'+esc(b.name)+'</div></div>'+
-          '<button class="buy" style="background:#6b7280" onclick="undoBought('+i+')">Undo</button></div>';
-      }).join('');
-  } else { B.innerHTML=''; }
-
+function renderList(){
   var L=$('list');
-  if(!items.length){
-    $('sub').textContent = ready.length ? 'Nothing left to buy' : 'All caught up';
-    L.innerHTML='<div class="empty">✅ Nothing to buy right now.<br><span style="font-size:12px;color:#94a3b8">Confirm an order and its items appear here.</span></div>';
-    return;
-  }
-  $('sub').textContent=items.length+' item'+(items.length>1?'s':'')+' to buy';
+  if(MODE==='agg'){ renderAgg(L); } else { renderByOrder(L); }
+}
+
+function renderByOrder(L){
+  var rows=[];
+  ORDERS.forEach(function(o){ (o.items_json||[]).forEach(function(it){
+    var nm=(it.name||'').trim(); if(!nm) return; var rem=remOf(o,it); if(rem<=0) return;
+    rows.push({order_no:o.order_no, order_id:o.id, name:nm, rem:rem});
+  }); });
+  window.__rows=rows;
+  if(!rows.length){ $('sub').textContent='All caught up'; L.innerHTML='<div class="empty">✅ Nothing to buy right now.<br><span style="font-size:12px;color:#94a3b8">Confirm an order and its items appear here.</span></div>'; return; }
+  $('sub').textContent=rows.length+' line'+(rows.length>1?'s':'')+' to buy · by order';
+  L.innerHTML=rows.map(function(r,i){
+    return '<div class="item">'+leftCell(r.name,r.rem)+
+      '<div class="mid"><div class="nm">'+esc(r.name)+'</div><div class="ords"><span class="ord">'+esc(r.order_no)+'</span></div></div>'+
+      '<button class="buy" onclick="buyOne('+i+')">Buy &amp; record</button></div>';
+  }).join('');
+}
+
+function renderAgg(L){
+  var agg={};
+  ORDERS.forEach(function(o){ (o.items_json||[]).forEach(function(it){
+    var nm=(it.name||'').trim(); if(!nm) return; var rem=remOf(o,it); if(rem<=0) return;
+    var k=nm.toLowerCase();
+    if(!agg[k]) agg[k]={name:nm, remaining:0, orders:{}, pairs:[]};
+    agg[k].remaining+=rem; agg[k].orders[o.order_no]=1;
+    agg[k].pairs.push({order_no:o.order_no, order_id:o.id, name:nm, qty:rem});
+  }); });
+  var items=Object.keys(agg).map(function(k){return agg[k];}).sort(function(a,b){return b.remaining-a.remaining;});
+  window.__items=items;
+  if(!items.length){ $('sub').textContent='All caught up'; L.innerHTML='<div class="empty">✅ Nothing to buy right now.</div>'; return; }
+  $('sub').textContent=items.length+' item'+(items.length>1?'s':'')+' to buy · aggregated';
   L.innerHTML=items.map(function(it,i){
     var ords=Object.keys(it.orders).map(function(o){return '<span class="ord">'+esc(o)+'</span>';}).join('');
-    var img=IMG[(it.name||'').trim().toLowerCase()];
-    var left = img
-      ? '<div class="ph"><img src="'+esc(img)+'" loading="lazy" onerror="this.style.display=\'none\'"><span class="qb">'+nf(it.remaining)+'</span></div>'
-      : '<div class="q"><b>'+nf(it.remaining)+'</b><small>qty</small></div>';
-    return '<div class="item">'+left+
+    return '<div class="item">'+leftCell(it.name,it.remaining)+
       '<div class="mid"><div class="nm">'+esc(it.name)+'</div><div class="ords">'+ords+'</div></div>'+
       '<button class="buy" onclick="buyRecord('+i+')">Buy &amp; record</button></div>';
   }).join('');
-  window.__items=items;
 }
 
-function buyRecord(i){
-  var it=window.__items[i]; if(!it) return;
-  // 1) mark those order-items bought
-  fetch('/papi/buy-list/mark',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/json'},credentials:'same-origin',
-      body:JSON.stringify({items:it.pairs.map(function(p){return {order_no:p.order_no,item_name:p.name,qty:p.qty};})})})
-    .then(function(r){return r.json();}).then(function(){
-      // 2) open Book Purchase pre-filled: split across those orders, note = item
-      var ids=it.pairs.map(function(p){return p.order_id;}).filter(Boolean).join(',');
-      location.href='/panel/book-cost?orders='+encodeURIComponent(ids)+'&note='+encodeURIComponent(it.name)+'&stage=purchase';
-    }).catch(function(){ alert('Could not update. Try again.'); });
+function renderBought(){
+  var bagg={};
+  ORDERS.forEach(function(o){ (o.items_json||[]).forEach(function(it){
+    var nm=(it.name||'').trim(); if(!nm) return; var b=boughtOf(o,nm); if(b<=0) return;
+    var k=nm.toLowerCase();
+    if(!bagg[k]) bagg[k]={name:nm, qty:0, pairs:[]};
+    bagg[k].qty+=b; bagg[k].pairs.push({order_no:o.order_no, item_name:nm});
+  }); });
+  var boughtItems=Object.keys(bagg).map(function(k){return bagg[k];});
+  window.__bought=boughtItems;
+  var B=$('bought');
+  if(!boughtItems.length){ B.innerHTML=''; return; }
+  B.innerHTML='<div class="sub" style="margin-top:16px">✅ Bought — tap Undo to put back</div>'+
+    boughtItems.map(function(b,i){ return '<div class="item" style="opacity:.85">'+leftCell(b.name,b.qty)+
+      '<div class="mid"><div class="nm">'+esc(b.name)+'</div></div>'+
+      '<button class="buy" style="background:#6b7280" onclick="undoBought('+i+')">Undo</button></div>'; }).join('');
 }
-function undoBought(i){
-  var b=(window.__bought||[])[i]; if(!b) return;
+
+function markBought(pairs, then){
   fetch('/papi/buy-list/mark',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/json'},credentials:'same-origin',
-    body:JSON.stringify({undo:true, items:b.pairs})})
-    .then(function(r){return r.json();}).then(function(){ load(); })
-    .catch(function(){ alert('Could not undo. Try again.'); });
+    body:JSON.stringify({items:pairs})}).then(function(r){return r.json();}).then(function(){ then&&then(); }).catch(function(){ alert('Could not update. Try again.'); });
+}
+function gotoBook(ids, note){ location.href='/panel/book-cost?orders='+encodeURIComponent(ids)+'&note='+encodeURIComponent(note||'')+'&stage=purchase'; }
+
+function buyOne(i){ var r=(window.__rows||[])[i]; if(!r) return;
+  markBought([{order_no:r.order_no,item_name:r.name,qty:r.rem}], function(){ gotoBook(r.order_id, r.name); }); }
+function buyRecord(i){ var it=(window.__items||[])[i]; if(!it) return;
+  markBought(it.pairs.map(function(p){return {order_no:p.order_no,item_name:p.name,qty:p.qty};}),
+    function(){ gotoBook(it.pairs.map(function(p){return p.order_id;}).filter(Boolean).join(','), it.name); }); }
+function recordAdvanced(id, on){
+  var o=ALLORDERS.filter(function(x){return String(x.id)===String(id);})[0]; if(!o) return;
+  var pairs=(o.items_json||[]).filter(function(it){return remOf(o,it)>0;}).map(function(it){return {order_no:on,item_name:(it.name||'').trim(),qty:remOf(o,it)};});
+  if(!pairs.length){ location.href='/panel/book-cost?orders='+id+'&stage=purchase'; return; }
+  markBought(pairs, function(){ gotoBook(id, pairs[0].item_name); });
+}
+function undoBought(i){ var b=(window.__bought||[])[i]; if(!b) return;
+  fetch('/papi/buy-list/mark',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/json'},credentials:'same-origin',
+    body:JSON.stringify({undo:true, items:b.pairs})}).then(function(r){return r.json();}).then(function(){ load(); }).catch(function(){ alert('Could not undo.'); });
 }
 function markPacked(id,btn){
   var no=btn.getAttribute('data-no'), phone=btn.getAttribute('data-phone')||'', name=btn.getAttribute('data-name')||'';
   if(!confirm('Set '+no+' to Packed?')) return;
   btn.disabled=true; btn.textContent='…';
-  fetch('/papi/update-status?token=session&row='+id+'&status=Packed&phone='+encodeURIComponent(phone)+'&name='+encodeURIComponent(name),
-        {credentials:'same-origin',headers:{'X-Requested-With':'XMLHttpRequest'}})
+  fetch('/papi/update-status?token=session&row='+id+'&status=Packed&phone='+encodeURIComponent(phone)+'&name='+encodeURIComponent(name),{credentials:'same-origin',headers:{'X-Requested-With':'XMLHttpRequest'}})
     .then(function(r){return r.text();}).then(function(){ load(); })
     .catch(function(){ btn.disabled=false; btn.textContent='Mark Packed'; alert('Could not update. Try again.'); });
 }

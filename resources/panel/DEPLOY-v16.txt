@@ -1,0 +1,37 @@
+DEPLOY — Buy List clarity: By-order/Aggregated toggle + "Not bought" flag (v16)
+================================================================================
+Removes the order-vs-mark confusion at the root.
+
+FILE CHANGED (one, front-end)
+  resources/panel/buy_list.html
+
+WHAT'S NEW
+  1. VIEW TOGGLE at the top: "By order" | "Aggregated" (your choice is remembered).
+     - By order (default): each order's item is its own row (shows its ORD-xx).
+       "Buy & record" marks ONLY that order and opens Book Purchase for just it.
+       -> no more silently marking other orders that share the same product.
+     - Aggregated: groups a product across orders so you buy it once for all;
+       "Buy & record" marks all those orders and opens the split Book Purchase.
+  2. RED "Advanced but not bought" flag: any order at Packed / Out-for-delivery /
+     Delivered whose items were never bought is listed at the top with a
+     "Record now" button (marks them bought + opens Book Purchase) so the cost is
+     never silently lost.
+  3. Keeps everything from before: photos, Ready-to-pack + Mark Packed, the
+     Bought/Undo section, and auto-clear of bought-marks when an order reverts to
+     New/Cancelled/Returned.
+
+  Verified: by-order lists each order-item separately; aggregated groups shared
+  products; Ready-to-pack only fires when an order is genuinely fully bought (the
+  ORD-6 misfire can't recur); Out-for-delivery/Packed unbought orders show the red
+  flag.
+
+DEPLOY
+  Upload to resources/panel/buy_list.html -> commit -> Rebuild. No migration.
+
+VERIFY
+  - Open /panel/buy-list -> "By order" view: ORD-11 foil and ORD-6 items on
+    separate lines with their order numbers.
+  - Toggle "Aggregated" -> shared products group into one line.
+  - Move an order to Out-for-delivery without buying -> it appears under the red
+    "Advanced but not bought" flag with "Record now".
+  - Buy an order fully -> it moves to "Ready to pack" (only then).
