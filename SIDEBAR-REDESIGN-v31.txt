@@ -1,0 +1,39 @@
+DEPLOY — Sidebar redesign (v31)  [Level 1: navigation only]
+===========================================================
+A cleaner, modern sidebar. NO page logic changed — every link, href, data-page,
+data-feature, id, the #orderSysNav group, role-gating, feature flags and page
+switching are exactly as before. Only navigation UX + styling changed.
+
+FILE
+  seller.html  ->  upload to the SAME repo path as before (file with id="orderSysNav").
+
+WHAT'S NEW
+  - COLLAPSIBLE SECTIONS: each section header (Main, Order Trading, Catalog & Sales,
+    Money, Logistics, Grow, Manage) is now a toggle with a chevron. On load, only the
+    section containing the current page is open; the rest are collapsed -> far less
+    clutter. Click a header to expand/collapse.
+  - SEARCH MENU: a search box at the top. Type "cashbook", "payments", "leads"... and
+    the matching links appear instantly (searches across all sections). Clear with ×.
+  - MODERN STYLE: refined dark-green gradient, rounded links, softer section labels,
+    a pill-style active state with a subtle green ring, better icon alignment and
+    spacing, custom scrollbar.
+  - Role-hidden links stay hidden (the redesign respects the existing gating): items a
+    login shouldn't see never appear, even in search.
+
+HOW IT'S SAFE
+  The link DOM is unchanged (same .nav / .navsec / #orderSysNav structure the panel's
+  JS binds to). The redesign is layered on as a style override + a small enhancement
+  script that only toggles CSS classes for collapse/search. If anything ever looked
+  off, removing the <style id="side-redesign"> block + the trailing <script> reverts
+  to the old sidebar with zero other impact.
+
+DEPLOY
+  Replace seller.html -> commit -> EasyPanel Rebuild. Reload /panel.
+
+VERIFY
+  Sidebar sections collapse/expand; the section with your current page is open on load;
+  the search box filters links; active page is highlighted. All pages open as before.
+
+NOTE: this file already includes the v30 "Customers" link. If you had made other
+manual edits to the live seller.html since v23, tell me and I'll give you just the
+style+script snippet to paste instead of the whole file.
