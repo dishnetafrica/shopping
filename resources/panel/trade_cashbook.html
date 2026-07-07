@@ -146,7 +146,13 @@
     <button class="btn" id="saveBtn" onclick="save()">Record entry</button>
   </div>
 
-  <div class="sectlbl" style="margin-bottom:8px">📒 ENTRIES</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <div class="sectlbl" style="margin:0">📒 ENTRIES</div>
+    <div style="display:flex;gap:6px">
+      <button onclick="exportCsv()" style="background:#0B3D22;color:#fff;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">⬇ CSV</button>
+      <button onclick="exportPdf()" style="background:#eef2f7;color:#334155;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">🖨 PDF</button>
+    </div>
+  </div>
   <div id="list"><div class="loading">Loading…</div></div>
   <div class="pager" id="pager"></div>
 </div>
@@ -194,6 +200,51 @@ function load(){
     $('pager').innerHTML = PAGES>1 ? `<button ${PAGE<=1?'disabled':''} onclick="PAGE--;load()">‹ Prev</button><span style="padding:7px 4px;font-size:13px;color:#64748b">Page ${PAGE}/${PAGES}</span><button ${PAGE>=PAGES?'disabled':''} onclick="PAGE++;load()">Next ›</button>` : '';
   });
 }
+function fetchAll(){
+  return fetch('/papi/trade-cashbook/all?currency='+FILT,{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json());
+}
+function csvCell(v){ v=(v==null?'':String(v)); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+function exportCsv(){
+  fetchAll().then(function(d){
+    if(!d.ok||!d.entries.length){ alert('Nothing to export'); return; }
+    var head=['Ref','Date','Category','Particulars','Person','Currency','In','Out','Balance','USD','Status'];
+    var lines=[head.map(csvCell).join(',')];
+    d.entries.forEach(function(e){
+      lines.push([e.ref,e.date,e.category,e.note,e.person,e.currency,e.in||'',e.out||'',e.balance,e.usd,e.status].map(csvCell).join(','));
+    });
+    var blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
+    var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='cashbook-'+(FILT==='ALL'?'all':FILT)+'-'+new Date().toISOString().slice(0,10)+'.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }).catch(function(){ alert('Export failed'); });
+}
+function exportPdf(){
+  fetchAll().then(function(d){
+    if(!d.ok||!d.entries.length){ alert('Nothing to export'); return; }
+    var w=window.open('','_blank'); if(!w){ alert('Allow pop-ups to print'); return; }
+    var rows=d.entries.map(function(e){
+      return '<tr class="'+(e.in?'in':'out')+'"><td>'+esc(e.ref)+'</td><td>'+esc(e.date)+'</td>'+
+        '<td><b>'+esc(e.category)+'</b>'+(e.note?'<br><span class=n>'+esc(e.note)+'</span>':'')+'</td>'+
+        '<td>'+esc(e.person||'')+'</td>'+
+        '<td class="num in">'+(e.in?esc(e.currency)+' '+fmt(e.in):'')+'</td>'+
+        '<td class="num out">'+(e.out?esc(e.currency)+' '+fmt(e.out):'')+'</td>'+
+        '<td class="num b">'+esc(e.currency)+' '+fmt(e.balance)+'</td>'+
+        '<td>'+esc(e.status)+'</td></tr>';
+    }).join('');
+    w.document.write('<html><head><title>Cashbook '+(FILT==='ALL'?'':FILT)+'</title>'+
+      '<style>body{font-family:Arial,sans-serif;color:#111;padding:16px}h2{margin:0 0 2px}.sub{color:#666;font-size:12px;margin-bottom:12px}'+
+      'table{width:100%;border-collapse:collapse;font-size:11px}th,td{border-bottom:1px solid #ddd;padding:6px 7px;text-align:left;vertical-align:top}'+
+      'th{background:#f3f5f3;text-transform:uppercase;font-size:9px;letter-spacing:.4px;color:#555}.num{text-align:right;white-space:nowrap}'+
+      'tr.in td.in{color:#15803d;font-weight:700}tr.out td.out{color:#dc2626;font-weight:700}td.b{font-weight:700;color:#0B3D22}.n{color:#666}'+
+      '@media print{button{display:none}}</style></head><body>'+
+      '<h2>Cashbook — '+(FILT==='ALL'?'All currencies':FILT)+'</h2>'+
+      '<div class="sub">Family Shoppers · '+d.count+' entries · '+new Date().toLocaleString()+'</div>'+
+      '<table><thead><tr><th>Ref</th><th>Date</th><th>Particulars</th><th>Person</th><th class=num>In</th><th class=num>Out</th><th class=num>Balance</th><th>Status</th></tr></thead>'+
+      '<tbody>'+rows+'</tbody></table></body></html>');
+    w.document.close(); setTimeout(function(){ w.focus(); w.print(); },400);
+  }).catch(function(){ alert('Export failed'); });
+}
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function save(){
   const native=($('amt').value||'').replace(/,/g,''),rate=($('rate').value||'').replace(/,/g,'');
   if(!(parseFloat(native)>0)){alert('Enter an amount');return;}

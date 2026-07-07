@@ -93,6 +93,44 @@ class TradeCashbookController extends Controller
                               'SSP'=>(float)$t->setting('rate_ssp_per_usd',5180),'USD'=>1]]);
     }
 
+    /** GET /papi/trade-cashbook/all — every filtered entry (no pagination) for export. */
+    public function all(Request $request)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok'=>false],401);
+        $cur = strtoupper((string)$request->query('currency','ALL'));
+        $isOwner = $u->isOwnerLike() || in_array((string)$u->role,['manager'],true);
+
+        $q = OrderCost::where('tenant_id',$t->id);
+        if (! $isOwner) $q->where(fn($w)=>$w->where('holder_user_id',$u->id)->orWhere('holder',$u->name));
+        if ($cur !== 'ALL') $q->where('currency',$cur);
+
+        $rows = $q->orderBy('created_at')->orderBy('id')->get();
+        $runCur = ['USD'=>0.0,'UGX'=>0.0,'SSP'=>0.0];
+        $stageLabels = ['cash_in'=>'Cash In','cash_out'=>'Cash Out','funding'=>'Funding','purchase'=>'Purchase',
+            'customer_payment'=>'Receipt','drawing'=>'Drawing','supplier_payment'=>'Supplier Pay'];
+        $out = [];
+        foreach ($rows as $c) {
+            $isIn = in_array($c->stage,['funding','cash_in','customer_payment'],true);
+            if (isset($runCur[$c->currency])) $runCur[$c->currency] += ($isIn?1:-1) * (float)$c->paid_native;
+            $label = $stageLabels[$c->stage] ?? ucfirst(str_replace('_',' ',$c->stage));
+            $ref = in_array($c->stage,['cash_in','cash_out'],true)
+                ? 'CB-'.str_pad((string)$c->id,4,'0',STR_PAD_LEFT)
+                : ($c->order_no ?: strtoupper(substr($c->stage,0,3)).'-'.str_pad((string)$c->id,4,'0',STR_PAD_LEFT));
+            $out[] = [
+                'ref'=>$ref,'date'=>$c->created_at?->format('Y-m-d H:i'),
+                'category'=>$c->category ?: $label,'note'=>$c->note ?: ($c->order_no ?: ''),
+                'person'=>$c->holder,'currency'=>$c->currency,
+                'in'=>$isIn?(float)$c->native_amount:0,'out'=>$isIn?0:(float)$c->native_amount,
+                'usd'=>(float)$c->usd_amount,'balance'=>round($runCur[$c->currency] ?? 0,2),
+                'status'=>$c->status,
+            ];
+        }
+        // newest first for display/export
+        $out = array_reverse($out);
+        return response()->json(['ok'=>true,'currency'=>$cur,'entries'=>$out,'count'=>count($out)]);
+    }
+
     /** POST /papi/trade-cashbook — record a cash in/out entry. */
     public function store(Request $request)
     {

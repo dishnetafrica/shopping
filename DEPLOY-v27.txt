@@ -1,0 +1,32 @@
+DEPLOY — Cashbook CSV + PDF export (v27)
+========================================
+Adds CSV and PDF/Print export to the cashbook, respecting the active currency
+filter (All / USD / UGX / SSP) and exporting ALL entries (not just the page).
+
+FILES CHANGED
+  app/Http/Controllers/Panel/TradeCashbookController.php   (+all() export endpoint)
+  routes/web.php                                            (+GET trade-cashbook/all)
+  resources/panel/trade_cashbook.html                      (CSV + PDF buttons)
+
+HOW IT WORKS
+  - Two buttons next to "ENTRIES": "⬇ CSV" and "🖨 PDF".
+  - Both pull the FULL ledger for the current filter via /papi/trade-cashbook/all
+    (no pagination), with the running balance per row.
+  - CSV: downloads cashbook-<filter>-<date>.csv with columns Ref, Date, Category,
+    Particulars, Person, Currency, In, Out, Balance, USD, Status. UTF-8 BOM so
+    Excel opens it cleanly.
+  - PDF: opens a clean printable ledger (green IN / red OUT, running balance) and
+    triggers the print dialog -> choose "Save as PDF".
+  - Switch the currency filter first (e.g. UGX) to export just that currency, like
+    DishNet's "USD only / SSP only".
+
+DEPLOY
+  git add app/Http/Controllers/Panel/TradeCashbookController.php routes/web.php \
+          resources/panel/trade_cashbook.html
+  git commit -m "v27: cashbook CSV + PDF export"
+  git push -> EasyPanel Rebuild        (no migration)
+
+VERIFY
+  Open Cashbook -> tap CSV (a file downloads) and PDF (print dialog opens with the
+  full table). Change the currency filter and export again to get a single-currency
+  file.
