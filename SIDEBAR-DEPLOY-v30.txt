@@ -1,0 +1,16 @@
+DEPLOY — Sidebar: add Customers (v30)
+=====================================
+Adds the Customers (customer 360) link to the desktop Order Trading sidebar, so it's
+clickable there too (it was only on the app-home tile + Payments before).
+
+FILE
+  seller.html  ->  upload to the SAME repo path as before (the file with id="orderSysNav").
+
+CHANGE
+  #orderSysNav: added <a href="/panel/customers360">👥 Customers</a> right after
+  "Orders & Margin". It's ungated (everyone with the trading panel sees it), so it is
+  NOT added to hrefMap. Sidebar now has 14 Order Trading links.
+
+DEPLOY
+  Replace seller.html -> commit -> EasyPanel Rebuild. Reload /panel -> "Customers"
+  shows in the Order Trading section.
