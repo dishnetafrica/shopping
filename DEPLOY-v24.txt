@@ -1,0 +1,35 @@
+DEPLOY — Cashbook: running balance + clearer cards (v24)
+=======================================================
+Adds a running balance to every cashbook entry and cleans up the entry design so
+it's easy to read.
+
+FILES CHANGED
+  app/Http/Controllers/Panel/TradeCashbookController.php   (running balance calc)
+  resources/panel/trade_cashbook.html                      (redesigned entry cards)
+
+WHAT'S NEW
+  - RUNNING BALANCE per row: each entry shows "balance <CUR> <amount>" = the balance
+    of that currency AFTER that entry. Computed server-side over all entries (oldest
+    -> newest), so it's correct even across pages. Per-currency (UGX / USD / SSP each
+    track their own), matching the balance cards at the top.
+    Verified: USD 600 -> 1,886 -> 1,286 ; UGX 2,720,000 -> 0 -> -660,000 -> 1,533,000.
+  - CLEARER CARDS: green left-border + dot for money-in, red for money-out; the
+    amount is bigger; the running balance sits in its own box on the right; the
+    stage / person / note / status / time read on one clean meta line; Delete is a
+    small ✕.
+
+NOTE on running balance basis
+  It uses cash actually moved (paid_native) and includes ALL listed entries (incl.
+  "pending"), so the running balance matches exactly what you see in the list. The
+  top balance cards still show approved-only totals, so if you have pending entries
+  the last row's running balance can differ from the card until those are approved.
+  If you'd rather the running balance count approved-only too, tell me and I'll switch it.
+
+DEPLOY
+  git add app/Http/Controllers/Panel/TradeCashbookController.php resources/panel/trade_cashbook.html
+  git commit -m "v24: cashbook running balance + clearer entries"
+  git push -> EasyPanel Rebuild        (no migration)
+
+VERIFY
+  Open Cashbook -> each entry shows a "balance" box on the right; filter by a single
+  currency (USD/UGX/SSP) to follow that currency's balance cleanly down the list.

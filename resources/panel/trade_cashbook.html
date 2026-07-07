@@ -35,12 +35,22 @@
   .row{display:flex;gap:10px;}.row>div{flex:1;}
   .conv{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:800;color:#475569;margin-top:10px;}
   .btn{width:100%;margin-top:14px;color:#fff;border:none;border-radius:11px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;background:var(--dark);}
-  .entry{background:#fff;border:1px solid var(--border);border-radius:11px;padding:11px 13px;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center;gap:10px;}
-  .entry .l{min-width:0;}
-  .entry .amt{font-weight:800;font-size:14px;}
+  .entry{background:#fff;border:1px solid var(--border);border-radius:12px;padding:11px 13px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;border-left:4px solid #e5e7eb;}
+  .entry.in{border-left-color:#15803d;}.entry.out{border-left-color:#dc2626;}
+  .entry .l{min-width:0;flex:1;}
+  .entry .top{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+  .entry .dot{width:7px;height:7px;border-radius:50%;background:#cbd5e1;flex:0 0 auto;}
+  .entry.in .dot{background:#15803d;}.entry.out .dot{background:#dc2626;}
+  .entry .amt{font-weight:800;font-size:15px;}
   .entry .amt.in{color:#15803d;}.entry .amt.out{color:#dc2626;}
-  .entry .meta{font-size:11px;color:#64748b;margin-top:2px;}
-  .entry .del{background:#fff;border:1.5px solid #fca5a5;color:#dc2626;border-radius:8px;padding:4px 9px;font-size:11px;font-weight:800;cursor:pointer;flex-shrink:0;}
+  .entry .usd{font-size:11px;color:#94a3b8;font-weight:700;}
+  .entry .meta{font-size:11px;color:#64748b;margin-top:4px;line-height:1.4;}
+  .entry .pend{color:#d97706;font-weight:700;}
+  .entry .r{display:flex;align-items:center;gap:8px;flex:0 0 auto;}
+  .entry .balbox{text-align:right;background:#f6f8f6;border:1px solid #e6ece6;border-radius:9px;padding:5px 9px;min-width:96px;}
+  .entry .bl{font-size:8.5px;font-weight:800;letter-spacing:.4px;color:#94a3b8;text-transform:uppercase;}
+  .entry .bv{font-size:13px;font-weight:800;color:#0B3D22;margin-top:1px;white-space:nowrap;}
+  .entry .del{background:#fff;border:1.5px solid #fecaca;color:#dc2626;border-radius:8px;width:28px;height:28px;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;}
   .pager{display:flex;justify-content:center;gap:8px;margin-top:12px;}
   .pager button{padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-weight:700;cursor:pointer;}
   .loading{text-align:center;color:var(--mute);padding:20px;}
@@ -158,10 +168,16 @@ function load(){
     PAGES=d.pages||1;
     if(!d.entries.length){$('list').innerHTML='<div class="loading">No entries.</div>';$('pager').innerHTML='';return;}
     $('list').innerHTML=d.entries.map(e=>`
-      <div class="entry"><div class="l">
-        <div class="amt ${e.dir}">${e.dir==='in'?'+':'−'}${e.currency} ${fmt(e.native)} <span style="font-size:11px;color:#64748b;font-weight:600">· $${fmt(e.usd)}</span></div>
-        <div class="meta"><span class="pill">${e.stage.replace('_',' ')}</span> ${e.holder||''} ${e.note?'· '+e.note:''} ${e.status!=='approved'?'· <span style="color:#d97706">'+e.status+'</span>':''} · ${e.when||''}</div>
-      </div>${(e.stage==='cash_in'||e.stage==='cash_out')?`<button class="del" onclick="del(${e.id})">Delete</button>`:''}</div>`).join('');
+      <div class="entry ${e.dir}">
+        <div class="l">
+          <div class="top"><span class="dot"></span><span class="amt ${e.dir}">${e.dir==='in'?'+':'−'}${e.currency} ${fmt(e.native)}</span><span class="usd">$${fmt(e.usd)}</span></div>
+          <div class="meta"><span class="pill">${e.stage.replace('_',' ')}</span>${e.holder?' '+e.holder:''}${e.note?' · '+e.note:''}${e.status!=='approved'?' · <span class="pend">'+e.status+'</span>':''} · ${e.when||''}</div>
+        </div>
+        <div class="r">
+          <div class="balbox"><div class="bl">balance</div><div class="bv">${e.currency} ${fmt(e.run)}</div></div>
+          ${(e.stage==='cash_in'||e.stage==='cash_out')?`<button class="del" onclick="del(${e.id})">✕</button>`:''}
+        </div>
+      </div>`).join('');
     // pager
     $('pager').innerHTML = PAGES>1 ? `<button ${PAGE<=1?'disabled':''} onclick="PAGE--;load()">‹ Prev</button><span style="padding:7px 4px;font-size:13px;color:#64748b">Page ${PAGE}/${PAGES}</span><button ${PAGE>=PAGES?'disabled':''} onclick="PAGE++;load()">Next ›</button>` : '';
   });

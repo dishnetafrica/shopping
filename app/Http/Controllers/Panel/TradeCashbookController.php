@@ -57,10 +57,24 @@ class TradeCashbookController extends Controller
         if (! $isOwner) $listQ->where(fn($w)=>$w->where('holder_user_id',$u->id)->orWhere('holder',$u->name));
         if ($cur !== 'ALL') $listQ->where('currency',$cur);
         $total = (clone $listQ)->count();
-        $rows = $listQ->orderByDesc('id')->forPage($page,$per)->get()->map(function($c){
+
+        // running balance per entry (per-currency, by cash actually moved), oldest->newest,
+        // over the SAME set shown in the list so each row shows the balance after it.
+        $allRows = (clone $listQ)->orderBy('id')->get(['id','currency','stage','paid_native','rate_to_usd']);
+        $runCur = ['USD'=>0.0,'UGX'=>0.0,'SSP'=>0.0]; $runUsd = 0.0; $runById = [];
+        foreach ($allRows as $r) {
+            $sign = in_array($r->stage,['funding','cash_in','customer_payment'],true) ? 1 : -1;
+            $pn = (float)$r->paid_native;
+            if (isset($runCur[$r->currency])) $runCur[$r->currency] += $sign * $pn;
+            $rate = (float)$r->rate_to_usd; $runUsd += $sign * ($rate>0 ? $pn/$rate : 0);
+            $runById[$r->id] = ['run'=>round($runCur[$r->currency] ?? 0, 2), 'run_usd'=>round($runUsd, 2)];
+        }
+
+        $rows = $listQ->orderByDesc('id')->forPage($page,$per)->get()->map(function($c) use ($runById) {
             $isIn = in_array($c->stage,['funding','cash_in','customer_payment'],true);
             return ['id'=>$c->id,'stage'=>$c->stage,'dir'=>$isIn?'in':'out',
                 'currency'=>$c->currency,'native'=>(float)$c->native_amount,'usd'=>(float)$c->usd_amount,
+                'run'=>$runById[$c->id]['run'] ?? 0, 'run_usd'=>$runById[$c->id]['run_usd'] ?? 0,
                 'holder'=>$c->holder,'note'=>$c->note ?: ($c->expense_category ?: ($c->order_no ?: '')),
                 'status'=>$c->status,'when'=>$c->created_at?->format('d M H:i')];
         });
