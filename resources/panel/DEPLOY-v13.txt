@@ -1,0 +1,23 @@
+DEPLOY — Buy List window fix (v13)
+==================================
+Bug: an order that advanced to "Out for delivery" (e.g. ORD-3) without its items
+being ticked "bought" still showed on the Buy List. Fix: items now leave the Buy
+List once the order is Out for delivery / Delivered / Cancelled.
+
+CHANGE (one line, front-end)
+  resources/panel/buy_list.html
+    WINDOW = ['Confirmed','Packed']   (was ['Confirmed','Packed','Out for delivery'])
+
+EFFECT
+  - Buy List shows items only while the order is Confirmed or Packed.
+  - The moment an order goes Out for delivery/Delivered/Cancelled, its items drop
+    off automatically (ORD-3 disappears).
+  - Ready-to-pack is unaffected (it was already Confirmed-only).
+  Verified: ORD-3 (Out for delivery) excluded; Confirmed/Packed orders still show.
+
+DEPLOY
+  Upload to resources/panel/buy_list.html -> commit -> Rebuild. No migration.
+
+VERIFY
+  Open /panel/buy-list -> ORD-3's foil & cling are gone. A Confirmed order still
+  lists its items.

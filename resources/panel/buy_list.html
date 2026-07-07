@@ -95,7 +95,7 @@
 const $=s=>document.getElementById(s);
 function nf(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
 function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-var WINDOW=['Confirmed','Packed','Out for delivery'];
+var WINDOW=['Confirmed','Packed'];  // drops off once an order is Out for delivery / Delivered / Cancelled
 var ORDERS=[], TICKS={}, IMG={};
 
 function tkey(on,nm){return on+'|'+nm;}
