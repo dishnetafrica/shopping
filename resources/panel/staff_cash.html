@@ -34,7 +34,7 @@
   .kdbal .m small{color:var(--mut);font-weight:600;}
   .acts{display:flex;gap:8px;padding:13px 15px;flex-wrap:wrap;}
   .act{border:none;border-radius:10px;padding:10px 13px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;color:#fff;flex:1;min-width:110px;}
-  .act.wa{background:#25D366;}.act.give{background:#15803D;}.act.soon{background:#eef2ee;color:#8a978e;cursor:not-allowed;flex:0 0 auto;}
+  .act.wa{background:#25D366;}.act.give{background:#15803D;}.act.spent{background:#C0392B;}.act.recv{background:#1D4ED8;}.act.soon{background:#eef2ee;color:#8a978e;cursor:not-allowed;flex:0 0 auto;}
   .lbl{padding:8px 15px 4px;font-size:10.5px;font-weight:800;color:var(--mut);text-transform:uppercase;letter-spacing:.4px;border-top:1px solid var(--line);}
   .ent{display:flex;align-items:center;gap:12px;padding:11px 15px;border-top:1px solid #F1F5F2;}
   .ent .d{font-size:11px;color:var(--mut);width:48px;flex:0 0 auto;font-weight:600;line-height:1.3;}
@@ -61,6 +61,10 @@
   .gsheet .g2{display:flex;gap:10px;}.gsheet .g2>*{flex:1;}
   .gsave{width:100%;margin-top:14px;background:#0B3D22;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;}
   .gx{position:absolute;right:14px;top:14px;background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer;}
+
+  .modeseg{display:flex;gap:8px;margin-bottom:4px;}
+  .modeseg .mo{flex:1;text-align:center;border:1.5px solid var(--line);border-radius:10px;padding:10px;font-size:13px;font-weight:800;color:var(--mut);cursor:pointer;}
+  .modeseg .mo.on{border-color:var(--green);background:var(--gbg);color:var(--green-d);}
 </style><!-- ===== DishNet mobile app shell (injected v2) ===== -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -182,7 +186,7 @@ function renderDetail(d){
       '<div><div class="nm">'+esc(d.person)+'</div><div class="rl">cash in hand</div></div></div>'+
     '<div class="kdbal"><div class="l">Cash in hand</div><div class="b">'+balLine(b)+'</div><div class="m"><span>≈ $'+nf(d.usd)+'</span></div></div>'+
     '<div class="acts"><button class="act wa" onclick="sendBalance()">💬 Send balance</button>'+
-      '<button class="act give" onclick="openGive()">＋ Give cash</button><button class="act soon" disabled>− He spent</button><button class="act soon" disabled>⚖ Settle</button></div>'+
+      '<button class="act give" onclick="openGive()">＋ Give cash</button><button class="act spent" onclick="openSpend()">− He spent</button><button class="act recv" onclick="openRecv()">💰 He received</button><button class="act soon" disabled>⚖ Settle</button></div>'+
     '<div class="lbl">History (newest first)</div>'+(entries||'<div class="empty">No entries yet.</div>')+'</div>';
   window.__bal=b; window.__usd=d.usd;
 }
@@ -225,6 +229,63 @@ function saveGive(){
       } else alert('Could not save: '+((r&&r.error)||'error'));
     }).catch(function(){ b.disabled=false; b.textContent='Give cash'; alert('Failed'); });
 }
+
+var ORDERS=[], CUSTS=[], SPEND_MODE='order';
+function loadPickers(){
+  fetch('/papi/orders',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json()).then(function(d){
+    ORDERS=(d&&d.orders)||[];
+    var seen={}; CUSTS=[];
+    ORDERS.forEach(function(o){ if(o.name&&!seen[o.name.toLowerCase()]){seen[o.name.toLowerCase()]=1;CUSTS.push({name:o.name,phone:o.phone});} });
+    var od=$('sOrders'); if(od) od.innerHTML=ORDERS.map(function(o){return '<option value="'+esc(o.order_no)+'">'+esc(o.name||'')+'</option>';}).join('');
+    var cd=$('rCusts'); if(cd) cd.innerHTML=CUSTS.map(function(c){return '<option value="'+esc(c.name)+'">';}).join('');
+  }).catch(function(){});
+}
+function closeSheet(id){ $('gback').classList.remove('on'); $(id).classList.remove('on'); }
+function openSheet(id){ $('gback').classList.add('on'); $(id).classList.add('on'); }
+function nowLocal(){ var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16); }
+
+function openSpend(){
+  $('sPerson').value=CUR||''; $('sAmt').value=''; $('sNote').value=''; $('sCur').selectedIndex=0; $('sOrder').value=''; SPEND_MODE='order'; setMode('order');
+  $('sDate').value=nowLocal(); sRate(); openSheet('ssheet'); setTimeout(function(){$('sAmt').focus();},250);
+}
+function setMode(m){ SPEND_MODE=m; $('moOrder').classList.toggle('on',m==='order'); $('moExp').classList.toggle('on',m==='expense');
+  $('orderWrap').style.display=m==='order'?'block':'none'; $('expWrap').style.display=m==='expense'?'block':'none'; }
+function sRate(){ var c=$('sCur').value; $('sRateWrap').style.display=c==='USD'?'none':'flex'; if(c!=='USD') $('sRateI').value=RATES[c]||''; }
+function saveSpend(){
+  var person=$('sPerson').value.trim(); if(!person){alert('Who?');return;}
+  var amt=parseFloat(($('sAmt').value||'').replace(/,/g,''))||0; if(amt<=0){alert('Amount?');return;}
+  var body={person:person,amount:amt,currency:$('sCur').value,rate_to_usd:($('sCur').value==='USD'?1:($('sRateI').value||'')),mode:SPEND_MODE,note:$('sNote').value.trim(),created_date:$('sDate').value};
+  if(SPEND_MODE==='order'){ if(!$('sOrder').value.trim()){alert('Which order?');return;} body.order_no=$('sOrder').value.trim(); var o=ORDERS.find(function(x){return x.order_no===body.order_no;}); if(o)body.order_id=o.id; }
+  else body.category=$('sCat').value;
+  var b=$('sSave'); b.disabled=true; b.textContent='Saving…';
+  fetch('/papi/staff-cash/spend',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:new URLSearchParams(body)})
+   .then(r=>r.json()).then(function(r){ b.disabled=false; b.textContent='Save spend';
+     if(r&&r.ok){ closeSheet('ssheet'); loadPeople();
+       setTimeout(function(){ var where=r.order_no?('on '+r.order_no):(r.category); var txt='*Family Shoppers*\n'+person+' spent '+r.currency+' '+nf(r.amount)+' ('+where+')\nCash in hand updated.'; if(confirm('Saved. Send WhatsApp update?')) location.href='https://wa.me/?text='+encodeURIComponent(txt); },300);
+     } else alert('Could not save: '+((r&&r.error)||'error')); })
+   .catch(function(){ b.disabled=false; b.textContent='Save spend'; alert('Failed'); });
+}
+
+function openRecv(){
+  $('rPerson').value=CUR||''; $('rCust').value=''; $('rAmt').value=''; $('rCur').selectedIndex=0; $('rOrder').value=''; $('rKind').selectedIndex=0;
+  $('rDate').value=nowLocal(); rRate(); openSheet('rsheet'); setTimeout(function(){$('rCust').focus();},250);
+}
+function rRate(){ var c=$('rCur').value; $('rRateWrap').style.display=c==='USD'?'none':'flex'; if(c!=='USD') $('rRateI').value=RATES[c]||''; }
+function saveRecv(){
+  var person=$('rPerson').value.trim(); if(!person){alert('Who received it?');return;}
+  var cust=$('rCust').value.trim(); if(!cust){alert('Customer?');return;}
+  var amt=parseFloat(($('rAmt').value||'').replace(/,/g,''))||0; if(amt<=0){alert('Amount?');return;}
+  var c=CUSTS.find(function(x){return x.name.toLowerCase()===cust.toLowerCase();});
+  var body={person:person,customer:cust,customer_phone:(c&&c.phone)||'',amount:amt,currency:$('rCur').value,rate_to_usd:($('rCur').value==='USD'?1:($('rRateI').value||'')),order_no:$('rOrder').value.trim(),kind:$('rKind').value,created_date:$('rDate').value};
+  var b=$('rSave'); b.disabled=true; b.textContent='Saving…';
+  fetch('/papi/staff-cash/receive',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:new URLSearchParams(body)})
+   .then(r=>r.json()).then(function(r){ b.disabled=false; b.textContent='Save receipt';
+     if(r&&r.ok){ closeSheet('rsheet'); loadPeople();
+       setTimeout(function(){ var txt='*Family Shoppers* — Receipt '+r.receipt_no+'\n'+r.customer+' paid '+r.currency+' '+nf(r.amount)+' to '+person+'.'; if(confirm('Saved. Send WhatsApp receipt?')) location.href='https://wa.me/?text='+encodeURIComponent(txt); },300);
+     } else alert('Could not save: '+((r&&r.error)||'error')); })
+   .catch(function(){ b.disabled=false; b.textContent='Save receipt'; alert('Failed'); });
+}
+loadPickers();
 loadPeople();
 </script><!-- ===== DishNet role-aware tab bar + amount format (injected v2) ===== -->
 <nav class="dn-tabbar" id="dnTabbar"></nav>
@@ -305,5 +366,36 @@ loadPeople();
   <label>Note (optional)</label><input id="gNote" placeholder="e.g. float for buying">
   <label>Date</label><input id="gDate" type="datetime-local">
   <button class="gsave" id="gSave" onclick="saveGive()">Give cash</button>
+</div>
+
+<div class="gsheet" id="ssheet">
+  <button class="gx" onclick="closeSheet('ssheet')">✕</button>
+  <h3>He spent</h3>
+  <label>Who</label><input id="sPerson" list="gPeople" placeholder="Person">
+  <div class="g2"><div><label>Amount</label><input id="sAmt" inputmode="decimal" placeholder="0"></div>
+  <div style="max-width:110px"><label>Currency</label><select id="sCur" onchange="sRate()"><option>UGX</option><option>USD</option><option>SSP</option></select></div></div>
+  <div class="g2" id="sRateWrap"><div><label>Rate (per 1 USD)</label><input id="sRateI" inputmode="decimal"></div><div></div></div>
+  <label>What was it for?</label>
+  <div class="modeseg"><div class="mo on" id="moOrder" onclick="setMode('order')">📦 An order</div><div class="mo" id="moExp" onclick="setMode('expense')">🏷 Expense</div></div>
+  <div id="orderWrap"><label>Which order</label><input id="sOrder" list="sOrders" placeholder="ORD-…"><datalist id="sOrders"></datalist></div>
+  <div id="expWrap" style="display:none"><label>Expense category</label>
+    <select id="sCat"><option>Travel &amp; Field</option><option>Food Allowance</option><option>Transport</option><option>Fuel</option><option>Loading / Labour</option><option>Misc Expense</option><option>Other</option></select></div>
+  <label>Note (optional)</label><input id="sNote" placeholder="e.g. Kikuubo, 12 cartons">
+  <label>Date</label><input id="sDate" type="datetime-local">
+  <button class="gsave" id="sSave" onclick="saveSpend()" style="background:#C0392B">Save spend</button>
+</div>
+
+<div class="gsheet" id="rsheet">
+  <button class="gx" onclick="closeSheet('rsheet')">✕</button>
+  <h3>He received (customer paid)</h3>
+  <label>Who received it</label><input id="rPerson" list="gPeople" placeholder="Person">
+  <label>Customer</label><input id="rCust" list="rCusts" placeholder="Customer name"><datalist id="rCusts"></datalist>
+  <div class="g2"><div><label>Amount</label><input id="rAmt" inputmode="decimal" placeholder="0"></div>
+  <div style="max-width:110px"><label>Currency</label><select id="rCur" onchange="rRate()"><option>UGX</option><option>USD</option><option>SSP</option></select></div></div>
+  <div class="g2" id="rRateWrap"><div><label>Rate (per 1 USD)</label><input id="rRateI" inputmode="decimal"></div>
+  <div style="max-width:150px"><label>For order (optional)</label><input id="rOrder" list="sOrders" placeholder="ORD-…"></div></div>
+  <label>Type</label><select id="rKind"><option value="settlement">Payment for delivered order</option><option value="advance">Advance (order not delivered yet)</option></select>
+  <label>Date</label><input id="rDate" type="datetime-local">
+  <button class="gsave" id="rSave" onclick="saveRecv()" style="background:#1D4ED8">Save receipt</button>
 </div>
 </body></html>

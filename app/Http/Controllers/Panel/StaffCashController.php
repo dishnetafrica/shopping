@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
 use App\Models\OrderCost;
+use App\Models\CustomerPayment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -172,5 +173,112 @@ class StaffCashController extends Controller
         if ($createdAt) { $c->created_at = $createdAt; $c->save(); }
 
         return response()->json(['ok'=>true,'id'=>$c->id,'person'=>$person,'currency'=>$cur,'amount'=>$amount,'usd'=>$usd]);
+    }
+
+    /** POST /papi/staff-cash/spend — a person spends cash: on an ORDER (purchase) OR an EXPENSE. */
+    public function spend(Request $request)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok'=>false],403);
+        $t = $u->tenant;
+        $isOwner = $u->isOwnerLike() || in_array((string)$u->role,['manager'],true);
+
+        $person = trim((string)$request->input('person',''));
+        if ($person === '') return response()->json(['ok'=>false,'error'=>'no_person'],422);
+        if (! $isOwner && mb_strtolower($person) !== mb_strtolower((string)$u->name))
+            return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
+
+        $cur = strtoupper((string)$request->input('currency','UGX'));
+        $amount = round((float)$request->input('amount',0), 2);
+        if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
+        $rate = (float)$request->input('rate_to_usd', 0);
+        if ($rate <= 0) $rate = $cur==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3655:5180);
+        if ($rate <= 0) $rate = 1;
+        $usd = OrderCost::toUsd($amount, $rate);
+        $mode = $request->input('mode','order') === 'expense' ? 'expense' : 'order';
+        $note = trim((string)$request->input('note','')) ?: null;
+
+        $uid = null;
+        try { $uid = \App\Models\User::where('tenant_id',$t->id)->where('name',$person)->value('id'); } catch (\Throwable $e) { $uid = null; }
+        $createdAt = null;
+        $cd = trim((string)$request->input('created_date',''));
+        if ($cd !== '') { try { $createdAt = \Illuminate\Support\Carbon::parse($cd); } catch (\Throwable $e) { $createdAt = null; } }
+
+        if ($mode === 'order') {
+            $orderNo = trim((string)$request->input('order_no','')) ?: null;
+            $orderId = $request->input('order_id'); $orderId = is_numeric($orderId) ? (int)$orderId : null;
+            $stage = 'purchase'; $category = null;
+            if (! $orderNo) return response()->json(['ok'=>false,'error'=>'no_order'],422);
+        } else {
+            $orderNo = null; $orderId = null; $stage = 'expense';
+            $category = trim((string)$request->input('category','')) ?: 'Misc Expense';
+        }
+
+        $c = OrderCost::create([
+            'tenant_id'=>$t->id,'order_id'=>$orderId,'order_no'=>$orderNo,'stage'=>$stage,
+            'currency'=>$cur,'native_amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
+            'holder'=>$person,'holder_user_id'=>$uid,'pay_status'=>'cash','paid_native'=>$amount,
+            'category'=>$category,'note'=>$note,'status'=>'approved','created_by'=>$u->name ?? '',
+        ]);
+        if ($createdAt) { $c->created_at = $createdAt; $c->save(); }
+
+        return response()->json(['ok'=>true,'id'=>$c->id,'person'=>$person,'mode'=>$mode,
+            'currency'=>$cur,'amount'=>$amount,'usd'=>$usd,'order_no'=>$orderNo,'category'=>$category]);
+    }
+
+    /** POST /papi/staff-cash/receive — a person receives a customer payment (cash up + lands on customer). */
+    public function receive(Request $request)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok'=>false],403);
+        $t = $u->tenant;
+        $isOwner = $u->isOwnerLike() || in_array((string)$u->role,['manager'],true);
+
+        $person = trim((string)$request->input('person',''));
+        if ($person === '') return response()->json(['ok'=>false,'error'=>'no_person'],422);
+        if (! $isOwner && mb_strtolower($person) !== mb_strtolower((string)$u->name))
+            return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
+
+        $customer = trim((string)$request->input('customer','')) ?: 'Customer';
+        $phone = trim((string)$request->input('customer_phone','')) ?: null;
+        $orderNo = trim((string)$request->input('order_no','')) ?: null;
+        $cur = strtoupper((string)$request->input('currency','UGX'));
+        $amount = round((float)$request->input('amount',0), 2);
+        if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
+        $rate = (float)$request->input('rate_to_usd', 0);
+        if ($rate <= 0) $rate = $cur==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3655:5180);
+        if ($rate <= 0) $rate = 1;
+        $usd = OrderCost::toUsd($amount, $rate);
+        $kind = $request->input('kind','settlement') === 'advance' ? 'advance' : 'settlement';
+        $method = trim((string)$request->input('method','Cash')) ?: 'Cash';
+        if (mb_strlen($method) > 24) $method = mb_substr($method,0,24);
+
+        $uid = null;
+        try { $uid = \App\Models\User::where('tenant_id',$t->id)->where('name',$person)->value('id'); } catch (\Throwable $e) { $uid = null; }
+        $createdAt = null;
+        $cd = trim((string)$request->input('created_date',''));
+        if ($cd !== '') { try { $createdAt = \Illuminate\Support\Carbon::parse($cd); } catch (\Throwable $e) { $createdAt = null; } }
+
+        $result = DB::transaction(function () use ($t,$u,$uid,$person,$customer,$phone,$orderNo,$kind,$cur,$amount,$rate,$usd,$method,$createdAt) {
+            $cost = OrderCost::create([
+                'tenant_id'=>$t->id,'order_id'=>null,'order_no'=>$orderNo,'stage'=>'customer_payment',
+                'currency'=>$cur,'native_amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
+                'holder'=>$person,'holder_user_id'=>$uid,'pay_status'=>'cash','paid_native'=>$amount,
+                'category'=>'Receipt','note'=>'Payment from '.$customer.($orderNo?(' ('.$orderNo.')'):''),
+                'status'=>'approved','created_by'=>$u->name ?? '',
+            ]);
+            $pay = CustomerPayment::create([
+                'tenant_id'=>$t->id,'receipt_no'=>'TMP','customer_name'=>$customer,'customer_phone'=>$phone,
+                'order_no'=>$orderNo,'invoice_no'=>null,'kind'=>$kind,'currency'=>$cur,'amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
+                'method'=>$method,'reference'=>null,'receipt_path'=>null,'applied'=>($kind==='settlement'),
+                'order_cost_id'=>$cost->id,'holder'=>$person,'holder_user_id'=>$uid,'created_by'=>$u->name ?? '',
+            ]);
+            $pay->receipt_no = 'RCP-'.str_pad((string)$pay->id, 5, '0', STR_PAD_LEFT);
+            if ($createdAt) { $pay->created_at = $createdAt; $cost->created_at = $createdAt; $cost->save(); }
+            $pay->save();
+            return ['pay_id'=>$pay->id,'receipt_no'=>$pay->receipt_no,'cost_id'=>$cost->id];
+        });
+
+        return response()->json(['ok'=>true,'person'=>$person,'customer'=>$customer,'currency'=>$cur,'amount'=>$amount,'usd'=>$usd] + $result);
     }
 }

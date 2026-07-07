@@ -1,0 +1,48 @@
+DEPLOY — Staff Cash slice 3: He spent + He received (v36)
+========================================================
+The "one entry, two places" writes. A person's spend also becomes an order cost or
+an expense; a receipt also lands on the customer's account. Builds on v34/v35.
+
+FILES CHANGED
+  app/Http/Controllers/Panel/StaffCashController.php   (+spend(), +receive())
+  routes/web.php                                        (+staff-cash/spend, /receive)
+  resources/panel/staff_cash.html                       (He spent + He received forms)
+
+HE SPENT  (− cash)
+  Tap "− He spent" -> amount + currency, then choose:
+    • An order  -> pick ORD-xx. Writes a 'purchase' cost on that order (holder = the
+      person). Their cash drops AND it shows as the order's cost in Orders & Margin / P&L.
+    • Expense   -> pick a category (Travel & Field, Fuel, Transport, Misc…). Writes an
+      'expense' entry (holder = person, category set). Their cash drops; it shows in the
+      cashbook by category.
+  Optional note + date. WhatsApp update offered after saving.
+
+HE RECEIVED  (+ cash)
+  Tap "💰 He received" -> customer (picker), amount + currency, optional order, type
+  (payment for delivered order / advance). Writes a 'customer_payment' (holder = the
+  person) AND a customer payment record — so it shows on the customer's account
+  (Customer 360 / Payments) too. WhatsApp receipt offered after saving.
+
+ONE ENTRY, TWO PLACES — no double entry: the same row feeds the person's Staff Cash
+AND the order / customer. Access: owner/manager for anyone; a staff user only for
+themselves (server-checked).
+
+DEPLOY
+  git add app/Http/Controllers/Panel/StaffCashController.php routes/web.php \
+          resources/panel/staff_cash.html
+  git commit -m "v36: Staff Cash he-spent (order/expense) + he-received (customer)"
+  git push -> EasyPanel Rebuild        (no migration)
+
+VERIFY (do small tests, then delete test rows if needed)
+  He spent -> An order -> pick ORD -> save: person cash down; open that order/P&L and
+  see the cost. He spent -> Expense -> category -> save: cash down; shows in cashbook.
+  He received -> customer -> save: person cash up; open Customer 360 for that customer
+  and see the payment.
+
+NOTE ON EXPENSE MODE: expense entries use stage='expense' with the category. They
+reduce Staff Cash and appear in the cashbook. If your P&L "expenses" total is built
+on a different convention (the Expenses page controller isn't in this package), an
+expense-mode entry may not roll into the P&L expense figure until we align it — tell
+me and I'll match your Expenses page exactly. Order-mode and receipts are unaffected.
+
+NEXT: slice 4 — Settle / count with the shortage flow.
