@@ -1,0 +1,43 @@
+DEPLOY — Profit share by ownership % (v12)   [cumulative]
+=========================================================
+Adds "Distribute profit by %" on the Partners screen. Enter the profit to share;
+it splits by each partner's ownership % into their capital account. Owner-only.
+
+NEW / CHANGED for v12
+  CHG  app/Http/Controllers/Panel/PartnerController.php   (+distribute())
+  CHG  routes/web.php                                     (+/papi/partners/distribute)
+  CHG  resources/panel/partners.html                      (Distribute UI + live preview)
+  (v11 partners tables/models must already be deployed + migrated)
+
+HOW IT WORKS
+  - Owner taps "Distribute profit by %" -> enters profit amount (USD) + note.
+  - It tries to prefill the amount from /papi/pnl (net profit); edit if needed.
+  - Live preview shows each partner's share = amount x their% / total% (exact,
+    last partner absorbs the rounding remainder). Verified: 50/30/20 of $1000 ->
+    500/300/200; equal 3-way of $100 -> 33.33/33.33/33.34.
+  - Saving writes a partner_capital row (kind 'profit_share') per partner.
+
+IMPORTANT — profit share does NOT move cash
+  Opening/introduced/drawings move cash (they did in v11). Profit distribution is
+  DIFFERENT: it's retained earnings moving INTO capital accounts. The cash is
+  already in the business from operations, so distribute() writes NO cash row.
+  => After distributing, Total Capital will be HIGHER than Cash on Hand. That's
+     correct accounting (the gap = profit earned, held as goods/cash/receivables).
+     Only the cash-injection kinds reconcile 1:1 with cash.
+
+DEPLOY
+  git add app/Http/Controllers/Panel/PartnerController.php routes/web.php resources/panel/partners.html
+  git commit -m "v12: profit distribution by ownership %"
+  git push -> EasyPanel Rebuild        (no new migration)
+
+VERIFY (owner)
+  1. Partners -> set each %, totalling 100%.
+  2. Tap "Distribute profit by %" -> enter e.g. 900 -> preview shows the split.
+  3. Distribute -> each partner's capital rises by their share; Cash Position
+     is UNCHANGED (by design).
+  Console: fetch('/papi/partners',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(console.log)
+
+NOTE: distribution is a deliberate owner action (not automatic), so you distribute
+when you decide to, for whatever period/amount you choose. To correct a mistake,
+record an equal drawing or a negative-note distribution (or tell me and I'll add an
+"undo last distribution" action).
