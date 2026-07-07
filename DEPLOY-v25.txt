@@ -1,0 +1,39 @@
+DEPLOY — Cashbook: DishNet-style ledger (v25)   [cumulative]
+============================================================
+Rebuilds the Shree cashbook to match your DishNet ledger: a proper table with
+Ref | Date | Particulars | Person | IN | OUT | BALANCE | Status, plus a Category
+on each entry and an auto Ref/voucher number.
+
+FILES CHANGED
+  NEW  database/migrations/2026_07_06_001400_add_category_to_order_costs.php
+  CHG  app/Models/OrderCost.php                              (+category fillable)
+  CHG  app/Http/Controllers/Panel/TradeCashbookController.php (category + auto Ref)
+  CHG  resources/panel/trade_cashbook.html                    (ledger table + Category field)
+
+WHAT'S NEW (matches DishNet)
+  - TABLE with columns: Ref, Date, Particulars (Category + note), Person, IN (green),
+    OUT (red), Balance (running, per currency), Status. Green/red left border per row.
+    Horizontally scrolls on narrow phones so all columns stay intact.
+  - CATEGORY on every entry: choose Receipt / Sale / Funding / Local Purchase /
+    Travel & Field / Food Allowance / Transport / Salary / Misc / Other. Auto-derived
+    for system entries (Purchase, Receipt, Funding...).
+  - AUTO REF per entry: CB-0001 for manual cash in/out; purchases show their ORD-xx;
+    others get a stage prefix (FUN-/PAY-/etc.). Traceable like DishNet's SR/voucher.
+  - RUNNING BALANCE per currency (from v24) shown in its own column.
+  - STATUS shows Done / pending (your cost-approval flow drives this).
+
+DEPLOY
+  git add database/migrations app/Models/OrderCost.php \
+          app/Http/Controllers/Panel/TradeCashbookController.php resources/panel/trade_cashbook.html
+  git commit -m "v25: DishNet-style cashbook ledger (columns + category + ref)"
+  git push -> EasyPanel Rebuild
+  php artisan migrate      (adds category column; additive, safe)
+
+VERIFY
+  Open Cashbook -> entries now render as a ledger table with IN/OUT/Balance columns,
+  Category, and a Ref per row. Record an entry with a Category -> it shows in the
+  Particulars column. Filter by currency to follow one balance down the list.
+
+NOTE: entries still show "pending" until approved (your cost_approval setting). If
+you want cashbook entries to post as approved immediately, tell me and I'll flip
+that default (or add a one-tap approve here).

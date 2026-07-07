@@ -72,10 +72,17 @@ class TradeCashbookController extends Controller
 
         $rows = $listQ->orderByDesc('id')->forPage($page,$per)->get()->map(function($c) use ($runById) {
             $isIn = in_array($c->stage,['funding','cash_in','customer_payment'],true);
-            return ['id'=>$c->id,'stage'=>$c->stage,'dir'=>$isIn?'in':'out',
+            $stageLabels = ['cash_in'=>'Cash In','cash_out'=>'Cash Out','funding'=>'Funding','purchase'=>'Purchase',
+                'customer_payment'=>'Receipt','drawing'=>'Drawing','supplier_payment'=>'Supplier Pay'];
+            $stageLabel = $stageLabels[$c->stage] ?? ucfirst(str_replace('_',' ',$c->stage));
+            $ref = in_array($c->stage,['cash_in','cash_out'],true)
+                ? 'CB-'.str_pad((string)$c->id,4,'0',STR_PAD_LEFT)
+                : ($c->order_no ?: strtoupper(substr($c->stage,0,3)).'-'.str_pad((string)$c->id,4,'0',STR_PAD_LEFT));
+            return ['id'=>$c->id,'stage'=>$c->stage,'dir'=>$isIn?'in':'out','ref'=>$ref,
                 'currency'=>$c->currency,'native'=>(float)$c->native_amount,'usd'=>(float)$c->usd_amount,
                 'run'=>$runById[$c->id]['run'] ?? 0, 'run_usd'=>$runById[$c->id]['run_usd'] ?? 0,
-                'holder'=>$c->holder,'note'=>$c->note ?: ($c->expense_category ?: ($c->order_no ?: '')),
+                'category'=>$c->category ?: $stageLabel,
+                'holder'=>$c->holder,'note'=>$c->note ?: ($c->order_no ?: ''),
                 'status'=>$c->status,'when'=>$c->created_at?->format('d M H:i')];
         });
 
@@ -103,6 +110,7 @@ class TradeCashbookController extends Controller
             'usd_amount'=>OrderCost::toUsd($native,$rate),
             'holder'=>(string)($u->name ?? ''), 'holder_user_id'=>$u->id,
             'note'=>(string)$request->input('note',''),
+            'category'=>trim((string)$request->input('category','')) ?: null,
             'status'=>((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved',
             'created_by'=>$u->name ?? '',
         ]);

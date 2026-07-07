@@ -35,22 +35,26 @@
   .row{display:flex;gap:10px;}.row>div{flex:1;}
   .conv{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:800;color:#475569;margin-top:10px;}
   .btn{width:100%;margin-top:14px;color:#fff;border:none;border-radius:11px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;background:var(--dark);}
-  .entry{background:#fff;border:1px solid var(--border);border-radius:12px;padding:11px 13px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;border-left:4px solid #e5e7eb;}
-  .entry.in{border-left-color:#15803d;}.entry.out{border-left-color:#dc2626;}
-  .entry .l{min-width:0;flex:1;}
-  .entry .top{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
-  .entry .dot{width:7px;height:7px;border-radius:50%;background:#cbd5e1;flex:0 0 auto;}
-  .entry.in .dot{background:#15803d;}.entry.out .dot{background:#dc2626;}
-  .entry .amt{font-weight:800;font-size:15px;}
-  .entry .amt.in{color:#15803d;}.entry .amt.out{color:#dc2626;}
-  .entry .usd{font-size:11px;color:#94a3b8;font-weight:700;}
-  .entry .meta{font-size:11px;color:#64748b;margin-top:4px;line-height:1.4;}
-  .entry .pend{color:#d97706;font-weight:700;}
-  .entry .r{display:flex;align-items:center;gap:8px;flex:0 0 auto;}
-  .entry .balbox{text-align:right;background:#f6f8f6;border:1px solid #e6ece6;border-radius:9px;padding:5px 9px;min-width:96px;}
-  .entry .bl{font-size:8.5px;font-weight:800;letter-spacing:.4px;color:#94a3b8;text-transform:uppercase;}
-  .entry .bv{font-size:13px;font-weight:800;color:#0B3D22;margin-top:1px;white-space:nowrap;}
-  .entry .del{background:#fff;border:1.5px solid #fecaca;color:#dc2626;border-radius:8px;width:28px;height:28px;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;}
+  .ledwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border);border-radius:12px;background:#fff;}
+  table.ledger{width:100%;border-collapse:collapse;font-size:12.5px;min-width:640px;}
+  table.ledger th{text-align:left;font-size:9.5px;font-weight:800;letter-spacing:.5px;color:#94a3b8;text-transform:uppercase;padding:9px 10px;border-bottom:1px solid var(--border);background:#fafbfa;white-space:nowrap;position:sticky;top:0;}
+  table.ledger th.num{text-align:right;}
+  table.ledger th.in{color:#15803d;}table.ledger th.out{color:#dc2626;}
+  table.ledger td{padding:9px 10px;border-bottom:1px solid #f1f4f1;vertical-align:top;}
+  table.ledger tr:last-child td{border-bottom:none;}
+  table.ledger tr.in{border-left:3px solid #15803d;}table.ledger tr.out{border-left:3px solid #dc2626;}
+  table.ledger .ref{font-weight:800;color:#334155;white-space:nowrap;font-size:11px;}
+  table.ledger .dt{color:#64748b;white-space:nowrap;font-size:11px;}
+  table.ledger .part .cat{font-weight:800;color:#0f172a;}
+  table.ledger .part .nt{color:#64748b;font-size:11px;margin-top:1px;}
+  table.ledger .pers{color:#475569;white-space:nowrap;}
+  table.ledger .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}
+  table.ledger td.in{color:#15803d;font-weight:800;}
+  table.ledger td.out{color:#dc2626;font-weight:800;}
+  table.ledger .bal{font-weight:800;color:#0B3D22;}
+  table.ledger .st{font-size:9.5px;font-weight:800;padding:2px 7px;border-radius:20px;white-space:nowrap;}
+  table.ledger .st.ok{background:#E6F4EA;color:#0B3D22;}table.ledger .st.pend{background:#FFF7E6;color:#d97706;}
+  table.ledger .del{background:#fff;border:1.5px solid #fecaca;color:#dc2626;border-radius:7px;width:24px;height:24px;font-size:12px;font-weight:800;cursor:pointer;}
   .pager{display:flex;justify-content:center;gap:8px;margin-top:12px;}
   .pager button{padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-weight:700;cursor:pointer;}
   .loading{text-align:center;color:var(--mute);padding:20px;}
@@ -134,8 +138,10 @@
     <label>Rate (native per 1 USD)</label>
     <input id="rate" inputmode="decimal" oninput="calc()">
     <div class="conv" id="conv">≈ $0.00 USD</div>
+    <label>Category</label>
+    <select id="cat"><option value="">— choose —</option><option>Receipt</option><option>Sale</option><option>Funding / Float</option><option>Local Purchase</option><option>Travel &amp; Field</option><option>Food Allowance</option><option>Transport</option><option>Salary / Wages</option><option>Misc Expense</option><option>Other</option></select>
     <label>Note (optional)</label>
-    <input id="note" placeholder="e.g. float to Jaeysh, sold goods">
+    <input id="note" placeholder="e.g. float to Jayesh, sold goods">
     <button class="btn" id="saveBtn" onclick="save()">Record entry</button>
   </div>
 
@@ -167,17 +173,22 @@ function load(){
     // entries
     PAGES=d.pages||1;
     if(!d.entries.length){$('list').innerHTML='<div class="loading">No entries.</div>';$('pager').innerHTML='';return;}
-    $('list').innerHTML=d.entries.map(e=>`
-      <div class="entry ${e.dir}">
-        <div class="l">
-          <div class="top"><span class="dot"></span><span class="amt ${e.dir}">${e.dir==='in'?'+':'−'}${e.currency} ${fmt(e.native)}</span><span class="usd">$${fmt(e.usd)}</span></div>
-          <div class="meta"><span class="pill">${e.stage.replace('_',' ')}</span>${e.holder?' '+e.holder:''}${e.note?' · '+e.note:''}${e.status!=='approved'?' · <span class="pend">'+e.status+'</span>':''} · ${e.when||''}</div>
-        </div>
-        <div class="r">
-          <div class="balbox"><div class="bl">balance</div><div class="bv">${e.currency} ${fmt(e.run)}</div></div>
-          ${(e.stage==='cash_in'||e.stage==='cash_out')?`<button class="del" onclick="del(${e.id})">✕</button>`:''}
-        </div>
-      </div>`).join('');
+    $('list').innerHTML = `
+      <div class="ledwrap"><table class="ledger">
+        <thead><tr><th>Ref</th><th>Date</th><th>Particulars</th><th>Person</th><th class="num in">IN</th><th class="num out">OUT</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
+        <tbody>${d.entries.map(e=>`
+          <tr class="${e.dir}">
+            <td class="ref">${e.ref||''}</td>
+            <td class="dt">${e.when||''}</td>
+            <td class="part"><div class="cat">${e.category||''}</div>${e.note?`<div class="nt">${e.note}</div>`:''}</td>
+            <td class="pers">${e.holder||''}</td>
+            <td class="num in">${e.dir==='in'?e.currency+' '+fmt(e.native):''}</td>
+            <td class="num out">${e.dir==='out'?e.currency+' '+fmt(e.native):''}</td>
+            <td class="num bal">${e.currency} ${fmt(e.run)}</td>
+            <td>${e.status==='approved'?'<span class="st ok">Done</span>':'<span class="st pend">'+e.status+'</span>'}</td>
+            <td>${(e.stage==='cash_in'||e.stage==='cash_out')?`<button class="del" onclick="del(${e.id})">✕</button>`:''}</td>
+          </tr>`).join('')}</tbody>
+      </table></div>`;
     // pager
     $('pager').innerHTML = PAGES>1 ? `<button ${PAGE<=1?'disabled':''} onclick="PAGE--;load()">‹ Prev</button><span style="padding:7px 4px;font-size:13px;color:#64748b">Page ${PAGE}/${PAGES}</span><button ${PAGE>=PAGES?'disabled':''} onclick="PAGE++;load()">Next ›</button>` : '';
   });
@@ -185,11 +196,11 @@ function load(){
 function save(){
   const native=($('amt').value||'').replace(/,/g,''),rate=($('rate').value||'').replace(/,/g,'');
   if(!(parseFloat(native)>0)){alert('Enter an amount');return;}
-  const p=new URLSearchParams({dir:DIR,currency:$('cur').value,native_amount:native,rate_to_usd:rate,note:$('note').value});
+  const p=new URLSearchParams({dir:DIR,currency:$('cur').value,native_amount:native,rate_to_usd:rate,category:$('cat').value,note:$('note').value});
   const b=$('saveBtn');b.disabled=true;
   fetch('/papi/trade-cashbook?'+p,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(r=>{
     b.disabled=false;setDir(DIR);
-    if(r.ok){$('amt').value='';$('note').value='';calc();PAGE=1;load();}else alert('Failed: '+(r.error||'error'));
+    if(r.ok){$('amt').value='';$('note').value='';$('cat').value='';calc();PAGE=1;load();}else alert('Failed: '+(r.error||'error'));
   }).catch(()=>{b.disabled=false;alert('Failed.');});
 }
 function del(id){if(!confirm('Delete this entry?'))return;
