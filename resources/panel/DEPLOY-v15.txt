@@ -1,0 +1,30 @@
+DEPLOY — Buy List: handle status up/down + undo bought (v15)
+===========================================================
+Two safety additions so bought-marks never go stale when order status moves both
+ways:
+
+1. AUTO-CLEAR on revert. If an order drops back to New / Cancelled / Returned, its
+   bought-marks are cleared automatically on the next Buy List load. So if it's
+   later re-confirmed, its items correctly re-appear to buy.
+   (Only these three statuses clear. Delivered/Out-for-delivery keep their marks;
+    orders merely missing from the feed are NOT touched, to avoid false clears.)
+
+2. MANUAL UNDO. A new "Bought — tap Undo to put back" section lists items marked
+   bought (with photo). Undo clears that mark and returns the item to the to-buy
+   list. Fixes accidental "Buy & record" taps.
+
+Status up/down was already handled (the list recomputes live from current status
+every load): New->Confirmed shows; Confirmed<->Packed shows; ->Out-for-delivery/
+Delivered/Cancelled drops; reverting re-shows. This just closes the stale-tick gap.
+
+FILE CHANGED (one, front-end)
+  resources/panel/buy_list.html
+
+DEPLOY
+  Upload to resources/panel/buy_list.html -> commit -> Rebuild. No migration.
+
+VERIFY
+  - Mark an item bought -> it moves to the "Bought" section with an Undo button.
+  - Tap Undo -> it returns to the to-buy list.
+  - Revert an order to New (Orders screen) -> reopen Buy List -> its items are back
+    to-buy and any old bought-mark is gone.

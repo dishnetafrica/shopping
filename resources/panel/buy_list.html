@@ -90,15 +90,26 @@
   <div class="sub" id="sub">What to buy for confirmed orders</div>
   <div id="ready"></div>
   <div id="list"><div class="loading">Loading…</div></div>
+  <div id="bought"></div>
 </div>
 <script>
 const $=s=>document.getElementById(s);
 function nf(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
 function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 var WINDOW=['Confirmed','Packed'];  // drops off once an order is Out for delivery / Delivered / Cancelled
-var ORDERS=[], TICKS={}, IMG={};
+var ORDERS=[], ALLORDERS=[], TICKS={}, IMG={};
 
 function tkey(on,nm){return on+'|'+nm;}
+var REVERT=['New','Cancelled','Returned'];   // reverting to these clears the order's bought marks
+function autoClearStale(ticks, done){
+  var statusByNo={}; ALLORDERS.forEach(function(o){ statusByNo[o.order_no]=o.status; });
+  var stale=ticks.filter(function(t){ return REVERT.indexOf(statusByNo[t.order_no])>=0; });
+  if(!stale.length){ done(); return; }
+  stale.forEach(function(t){ delete TICKS[tkey(t.order_no,t.item_name)]; });
+  fetch('/papi/buy-list/mark',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/json'},credentials:'same-origin',
+    body:JSON.stringify({undo:true, items:stale.map(function(t){return {order_no:t.order_no,item_name:t.item_name};})})})
+    .then(function(){ done(); }).catch(function(){ done(); });
+}
 function load(){
   Promise.all([
     fetch('/papi/orders',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(function(r){return r.json();}),
@@ -111,10 +122,11 @@ function load(){
       var nm=(p['Product Name']||p.name||'').trim().toLowerCase(); if(!nm) return;
       var im=p['Image']||p.image||''; if(im) IMG[nm]=im;
     });
-    ORDERS=(od.orders||[]).filter(function(o){return WINDOW.indexOf(o.status)>=0;});
+    ALLORDERS=(od.orders||[]);
+    ORDERS=ALLORDERS.filter(function(o){return WINDOW.indexOf(o.status)>=0;});
     TICKS={};
     ((td&&td.ticks)||[]).forEach(function(t){ TICKS[tkey(t.order_no,t.item_name)]=Number(t.qty)||0; });
-    render();
+    autoClearStale((td&&td.ticks)||[], render);
   }).catch(function(){ $('list').innerHTML='<div class="empty">Could not load orders.</div>'; });
 }
 
@@ -149,6 +161,31 @@ function render(){
         '<button class="pk" onclick="markPacked('+o.id+',this)" data-no="'+esc(o.order_no)+'" data-phone="'+esc(o.phone||'')+'" data-name="'+esc(o.name||'')+'">Mark Packed</button></div>';}).join('')+'</div>';
   } else { R.innerHTML=''; }
 
+  // bought items (undo returns them to the list)
+  var bagg={};
+  ORDERS.forEach(function(o){ (o.items_json||[]).forEach(function(it){
+    var nm=(it.name||'').trim(); if(!nm) return;
+    var bought=TICKS[tkey(o.order_no,nm)]||0; if(bought<=0) return;
+    var k=nm.toLowerCase();
+    if(!bagg[k]) bagg[k]={name:nm, qty:0, pairs:[]};
+    bagg[k].qty+=bought; bagg[k].pairs.push({order_no:o.order_no, item_name:nm});
+  });});
+  var boughtItems=Object.keys(bagg).map(function(k){return bagg[k];});
+  window.__bought=boughtItems;
+  var B=$('bought');
+  if(boughtItems.length){
+    B.innerHTML='<div class="sub" style="margin-top:16px">✅ Bought — tap Undo to put back</div>'+
+      boughtItems.map(function(b,i){
+        var img=IMG[(b.name||'').trim().toLowerCase()];
+        var left = img
+          ? '<div class="ph"><img src="'+esc(img)+'" loading="lazy" onerror="this.style.display=\'none\'"><span class="qb">'+nf(b.qty)+'</span></div>'
+          : '<div class="q"><b>'+nf(b.qty)+'</b><small>qty</small></div>';
+        return '<div class="item" style="opacity:.85">'+left+
+          '<div class="mid"><div class="nm">'+esc(b.name)+'</div></div>'+
+          '<button class="buy" style="background:#6b7280" onclick="undoBought('+i+')">Undo</button></div>';
+      }).join('');
+  } else { B.innerHTML=''; }
+
   var L=$('list');
   if(!items.length){
     $('sub').textContent = ready.length ? 'Nothing left to buy' : 'All caught up';
@@ -179,6 +216,13 @@ function buyRecord(i){
       var ids=it.pairs.map(function(p){return p.order_id;}).filter(Boolean).join(',');
       location.href='/panel/book-cost?orders='+encodeURIComponent(ids)+'&note='+encodeURIComponent(it.name)+'&stage=purchase';
     }).catch(function(){ alert('Could not update. Try again.'); });
+}
+function undoBought(i){
+  var b=(window.__bought||[])[i]; if(!b) return;
+  fetch('/papi/buy-list/mark',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/json'},credentials:'same-origin',
+    body:JSON.stringify({undo:true, items:b.pairs})})
+    .then(function(r){return r.json();}).then(function(){ load(); })
+    .catch(function(){ alert('Could not undo. Try again.'); });
 }
 function markPacked(id,btn){
   var no=btn.getAttribute('data-no'), phone=btn.getAttribute('data-phone')||'', name=btn.getAttribute('data-name')||'';
