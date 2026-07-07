@@ -75,6 +75,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/partners', [\App\Http\Controllers\Panel\PartnerController::class, 'page']);
     Route::get('/panel/invoiced', [\App\Http\Controllers\Panel\InvoiceReportController::class, 'page']);
     Route::get('/panel/payments', [\App\Http\Controllers\Panel\PaymentController::class, 'page']);
+    Route::get('/panel/sourcing', [\App\Http\Controllers\Panel\SourcingController::class, 'page']);
     Route::get('/panel/staff', [SellerPanelController::class, 'staff']);
     Route::get('/panel/scheduled', [SellerPanelController::class, 'scheduled']);
     Route::get('/panel/marketing', [SellerPanelController::class, 'marketing']);
@@ -149,6 +150,10 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('payments', [\App\Http\Controllers\Panel\PaymentController::class, 'store']);
         Route::get('payments/{id}', [\App\Http\Controllers\Panel\PaymentController::class, 'show']);
         Route::post('payments/{id}/apply', [\App\Http\Controllers\Panel\PaymentController::class, 'apply']);
+        Route::get('sourcing', [\App\Http\Controllers\Panel\SourcingController::class, 'index']);
+        Route::post('sourcing', [\App\Http\Controllers\Panel\SourcingController::class, 'store']);
+        Route::post('sourcing/{id}/price', [\App\Http\Controllers\Panel\SourcingController::class, 'price']);
+        Route::post('sourcing/{id}/status', [\App\Http\Controllers\Panel\SourcingController::class, 'status']);
         Route::post('orders/quick', [\App\Http\Controllers\Panel\OrderCostController::class, 'quickOrder']);
         Route::get('orders/{id}/costs', [\App\Http\Controllers\Panel\OrderCostController::class, 'orderDetail']);
         Route::get('order-costs/pending', [\App\Http\Controllers\Panel\OrderCostController::class, 'pending']);

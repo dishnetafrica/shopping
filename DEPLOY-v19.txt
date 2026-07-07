@@ -1,0 +1,44 @@
+DEPLOY — Sourcing Requests: Asish -> Jayesh (v19)   [cumulative]
+================================================================
+Asish (field, South Sudan) logs items customers want but you don't stock, and asks
+Jayesh (purchaser, Uganda) to find a price. Jayesh prices it; Asish sees the price
+to quote the customer. The item does NOT need to exist in the catalogue.
+
+NEW / CHANGED
+  NEW  database/migrations/2026_07_06_001200_create_sourcing_requests.php
+  NEW  app/Models/SourcingRequest.php
+  NEW  app/Http/Controllers/Panel/SourcingController.php
+  NEW  resources/panel/sourcing.html
+  CHG  routes/web.php                     (+/panel/sourcing, +/papi/sourcing...)
+  CHG  resources/panel/app_home.html      (+Sourcing tile, everyone with the panel)
+
+FLOW
+  1. Asish: "New request (get me a price)" -> item name + optional photo + note +
+     demand (Low/Medium/High). Status = NEEDS PRICE.
+  2. Jayesh: opens the request -> "Add price" -> price found + currency + supplier +
+     availability + note. Status = PRICED.
+  3. Asish sees the price on the card -> quotes the customer. "Mark done" closes it.
+  A "WhatsApp" button on each request shares the text (opens WhatsApp).
+  Counts at top: Needs price / Priced. New requests sort to the top.
+
+  Access = anyone with the trading panel (Asish posts, Jayesh prices, both see).
+  Isolated table; nothing touches the catalogue or orders.
+
+DEPLOY
+  git add database/migrations app/Models/SourcingRequest.php \
+          app/Http/Controllers/Panel/SourcingController.php resources/panel/sourcing.html \
+          routes/web.php resources/panel/app_home.html
+  git commit -m "v19: sourcing requests (field -> purchaser pricing)"
+  git push -> EasyPanel Rebuild
+  php artisan migrate      (adds sourcing_requests; additive)
+  If request PHOTOS 404: php artisan storage:link (once).
+
+VERIFY
+  App home -> Sourcing tile (or /panel/sourcing).
+  - Post a request -> shows under "Needs price".
+  - Add price -> moves to "Priced" with the price + supplier shown.
+  - Mark done -> closes.
+
+NEXT (optional): ping Jayesh on WhatsApp automatically when Asish posts a request
+(needs the WhatsApp/n8n hook + Jayesh's number). Also: "turn a priced request into
+a real product / quotation" in one tap. Say the word.
