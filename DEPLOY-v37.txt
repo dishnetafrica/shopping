@@ -1,0 +1,47 @@
+DEPLOY — Staff Cash slice 4: Settle / count (v37)  [system complete]
+====================================================================
+The final slice. A person counts their cash; the app compares to the system and
+records any gap: a shortage (owed by the person until explained) or an overage.
+Completes the Staff Cash system (slices 1–4).
+
+FILES CHANGED
+  app/Http/Controllers/Panel/StaffCashController.php   (+settle(), +shortage flag in people())
+  routes/web.php                                        (+staff-cash/settle)
+  resources/panel/staff_cash.html                       (Settle form + shortage flag)
+
+HOW "SETTLE / COUNT" WORKS
+  Tap "⚖ Settle" -> pick currency -> the sheet shows what the system thinks they hold
+  -> enter the counted amount -> it shows the gap live:
+    • Match      -> "Settled ✓", no entry written.
+    • Shortage   -> counted < system: records the gap as a 'Shortage' (cash_out,
+      category Shortage). Cash in hand drops to the counted amount, and the shortage
+      shows as a ⚠ flag on that person until explained/recovered.
+    • Overage    -> counted > system: records the gap as an 'Overage' (cash_in) so
+      cash in hand rises to the counted amount.
+  Verified: system 840,000, counted 820,000 -> shortage 20,000 -> cash in hand = 820,000.
+  Owner/manager for anyone; a staff user only for themselves (server-checked).
+
+THE FULL STAFF CASH SYSTEM (all live after this deploy)
+  1. Per-person "cash in hand" list + ledger with running balance (read-only view)
+  2. Give cash (+) with WhatsApp confirm
+  3. He spent (-> order cost OR expense) and He received (-> customer payment),
+     one entry feeding both the person AND the order/customer
+  4. Settle / count with shortage & overage
+
+DEPLOY
+  git add app/Http/Controllers/Panel/StaffCashController.php routes/web.php \
+          resources/panel/staff_cash.html
+  git commit -m "v37: Staff Cash settle/count + shortage flag (system complete)"
+  git push -> EasyPanel Rebuild        (no migration)
+
+VERIFY
+  Open a person -> Settle -> enter a count different from the system -> save. A
+  shortage/overage row appears in their history; a shortage shows a ⚠ flag in the
+  people list; cash in hand now equals the count.
+
+NOTES
+  - Shortage entries are tagged category='Shortage' (overage 'Overage'); they show in
+    the cashbook too. Recovering a shortage later can be done via "Give cash" when the
+    person pays it back; a formal one-tap "clear shortage" can be added if you want.
+  - Reminder from v36: expense-mode spends use stage='expense'; if your P&L expense
+    total uses a different convention, tell me and I'll align it.

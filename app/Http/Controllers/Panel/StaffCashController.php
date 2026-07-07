@@ -68,6 +68,13 @@ class StaffCashController extends Controller
             $people[$k]['usd'] += $sign * (float)$r->usd;
         }
 
+        // open shortages per person (category='Shortage') — shown as a ⚠ flag
+        $shq = OrderCost::where('tenant_id',$t->id)->where('category','Shortage');
+        if (! $isOwner) $shq->where(function($w) use ($u){ $w->where('holder_user_id',$u->id)->orWhere(function($w2) use ($u){ $w2->whereNull('holder_user_id')->where('holder',$u->name); }); });
+        $shRows = $shq->select('holder','currency',DB::raw('SUM(paid_native) as amt'))->groupBy('holder','currency')->get();
+        $shorts = [];
+        foreach ($shRows as $r) { $shorts[$r->holder][$r->currency] = round((float)$r->amt,2); }
+
         $list = [];
         $companyUsd = 0.0;
         foreach ($people as $p) {
@@ -76,6 +83,7 @@ class StaffCashController extends Controller
                 'name'=>$p['name'],'uid'=>$p['uid'],
                 'usd'=>round($p['usd'],2),
                 'balances'=>['USD'=>round($p['cur']['USD'],2),'UGX'=>round($p['cur']['UGX'],2),'SSP'=>round($p['cur']['SSP'],2)],
+                'shortage'=>$shorts[$p['name']] ?? null,
             ];
         }
         usort($list, fn($a,$b)=>$b['usd'] <=> $a['usd']);
@@ -280,5 +288,58 @@ class StaffCashController extends Controller
         });
 
         return response()->json(['ok'=>true,'person'=>$person,'customer'=>$customer,'currency'=>$cur,'amount'=>$amount,'usd'=>$usd] + $result);
+    }
+
+    /** POST /papi/staff-cash/settle — count a person's cash and record any gap (shortage/overage). */
+    public function settle(Request $request)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok'=>false],403);
+        $t = $u->tenant;
+        $isOwner = $u->isOwnerLike() || in_array((string)$u->role,['manager'],true);
+
+        $person = trim((string)$request->input('person',''));
+        if ($person === '') return response()->json(['ok'=>false,'error'=>'no_person'],422);
+        if (! $isOwner && mb_strtolower($person) !== mb_strtolower((string)$u->name))
+            return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
+
+        $cur = strtoupper((string)$request->input('currency','UGX'));
+        $counted = round((float)$request->input('counted',-1), 2);
+        if ($counted < 0) return response()->json(['ok'=>false,'error'=>'bad_count'],422);
+
+        // system balance for this person + currency (signed cash actually moved)
+        $rows = OrderCost::where('tenant_id',$t->id)->where('holder',$person)->where('currency',$cur)
+            ->get(['stage','paid_native']);
+        $system = 0.0;
+        foreach ($rows as $r) $system += (in_array($r->stage,$this->inStages,true)?1:-1) * (float)$r->paid_native;
+        $system = round($system, 2);
+
+        $gap = round($counted - $system, 2); // negative = shortage, positive = overage
+        if (abs($gap) < 0.005) {
+            return response()->json(['ok'=>true,'settled'=>true,'gap'=>0,'system'=>$system,'counted'=>$counted,'currency'=>$cur]);
+        }
+
+        $rate = $cur==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3655:5180);
+        if ($rate <= 0) $rate = 1;
+        $mag = abs($gap);
+        $usd = OrderCost::toUsd($mag, $rate);
+        $isShort = $gap < 0;
+        $note = ($isShort?'Shortage':'Overage').': counted '.$cur.' '.number_format($counted,2)
+              .' vs system '.$cur.' '.number_format($system,2).' — gap '.$cur.' '.number_format($mag,2)
+              .($isShort?' owed by '.$person.' until explained':'');
+        $extra = trim((string)$request->input('note','')); if ($extra !== '') $note .= ' · '.$extra;
+
+        $uid = null;
+        try { $uid = \App\Models\User::where('tenant_id',$t->id)->where('name',$person)->value('id'); } catch (\Throwable $e) { $uid = null; }
+
+        $c = OrderCost::create([
+            'tenant_id'=>$t->id,'stage'=>$isShort?'cash_out':'cash_in',
+            'currency'=>$cur,'native_amount'=>$mag,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
+            'holder'=>$person,'holder_user_id'=>$uid,'pay_status'=>'cash','paid_native'=>$mag,
+            'category'=>$isShort?'Shortage':'Overage','note'=>$note,'status'=>'approved','created_by'=>$u->name ?? '',
+        ]);
+
+        return response()->json(['ok'=>true,'settled'=>false,'kind'=>$isShort?'shortage':'overage',
+            'gap'=>$mag,'system'=>$system,'counted'=>$counted,'currency'=>$cur,'id'=>$c->id]);
     }
 }

@@ -34,7 +34,7 @@
   .kdbal .m small{color:var(--mut);font-weight:600;}
   .acts{display:flex;gap:8px;padding:13px 15px;flex-wrap:wrap;}
   .act{border:none;border-radius:10px;padding:10px 13px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;color:#fff;flex:1;min-width:110px;}
-  .act.wa{background:#25D366;}.act.give{background:#15803D;}.act.spent{background:#C0392B;}.act.recv{background:#1D4ED8;}.act.soon{background:#eef2ee;color:#8a978e;cursor:not-allowed;flex:0 0 auto;}
+  .act.wa{background:#25D366;}.act.give{background:#15803D;}.act.spent{background:#C0392B;}.act.recv{background:#1D4ED8;}.act.settle{background:#16231C;}.act.soon{background:#eef2ee;color:#8a978e;cursor:not-allowed;flex:0 0 auto;}
   .lbl{padding:8px 15px 4px;font-size:10.5px;font-weight:800;color:var(--mut);text-transform:uppercase;letter-spacing:.4px;border-top:1px solid var(--line);}
   .ent{display:flex;align-items:center;gap:12px;padding:11px 15px;border-top:1px solid #F1F5F2;}
   .ent .d{font-size:11px;color:var(--mut);width:48px;flex:0 0 auto;font-weight:600;line-height:1.3;}
@@ -65,6 +65,13 @@
   .modeseg{display:flex;gap:8px;margin-bottom:4px;}
   .modeseg .mo{flex:1;text-align:center;border:1.5px solid var(--line);border-radius:10px;padding:10px;font-size:13px;font-weight:800;color:var(--mut);cursor:pointer;}
   .modeseg .mo.on{border-color:var(--green);background:var(--gbg);color:var(--green-d);}
+
+  .prow .mt .short{display:inline-block;margin-top:3px;font-size:10px;font-weight:800;color:#B45309;background:#FEF3C7;padding:1px 7px;border-radius:20px;}
+  .settleprev{border:1px dashed var(--line);border-radius:11px;padding:12px;margin:4px 0;}
+  .settleprev .r{display:flex;justify-content:space-between;font-size:13.5px;font-weight:700;padding:2px 0;}
+  .settleprev .r span{color:var(--mut);font-weight:600;}
+  .gapnote{margin-top:8px;font-size:12px;font-weight:700;border-radius:8px;padding:8px 10px;}
+  .gapnote.short{color:#B45309;background:#FEF3C7;}.gapnote.over{color:#0B3D22;background:#E6F4EA;}
 </style><!-- ===== DishNet mobile app shell (injected v2) ===== -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -146,7 +153,7 @@ function loadPeople(){
       if(!PEOPLE.length){ L.innerHTML='<div class="empty">No cash activity yet.</div>'; return; }
       L.innerHTML=PEOPLE.map(function(p){
         return '<div class="prow" data-p="'+esc(p.name)+'" onclick="pick(this)"><div class="pav" style="background:'+colorFor(p.name)+'">'+esc(initials(p.name))+'</div>'+
-          '<div><div class="nm">'+esc(p.name)+'</div><div class="mt">in hand</div></div>'+
+          '<div><div class="nm">'+esc(p.name)+'</div><div class="mt">in hand</div>'+shortFlag(p)+'</div>'+
           '<div class="rt"><div class="bal">'+balLine(p.balances)+'</div><div class="bl">≈ $'+nf(p.usd)+'</div></div></div>';
       }).join('');
       // auto-open from ?person= or first person
@@ -186,7 +193,7 @@ function renderDetail(d){
       '<div><div class="nm">'+esc(d.person)+'</div><div class="rl">cash in hand</div></div></div>'+
     '<div class="kdbal"><div class="l">Cash in hand</div><div class="b">'+balLine(b)+'</div><div class="m"><span>≈ $'+nf(d.usd)+'</span></div></div>'+
     '<div class="acts"><button class="act wa" onclick="sendBalance()">💬 Send balance</button>'+
-      '<button class="act give" onclick="openGive()">＋ Give cash</button><button class="act spent" onclick="openSpend()">− He spent</button><button class="act recv" onclick="openRecv()">💰 He received</button><button class="act soon" disabled>⚖ Settle</button></div>'+
+      '<button class="act give" onclick="openGive()">＋ Give cash</button><button class="act spent" onclick="openSpend()">− He spent</button><button class="act recv" onclick="openRecv()">💰 He received</button><button class="act settle" onclick="openSettle()">⚖ Settle</button></div>'+
     '<div class="lbl">History (newest first)</div>'+(entries||'<div class="empty">No entries yet.</div>')+'</div>';
   window.__bal=b; window.__usd=d.usd;
 }
@@ -284,6 +291,45 @@ function saveRecv(){
        setTimeout(function(){ var txt='*Family Shoppers* — Receipt '+r.receipt_no+'\n'+r.customer+' paid '+r.currency+' '+nf(r.amount)+' to '+person+'.'; if(confirm('Saved. Send WhatsApp receipt?')) location.href='https://wa.me/?text='+encodeURIComponent(txt); },300);
      } else alert('Could not save: '+((r&&r.error)||'error')); })
    .catch(function(){ b.disabled=false; b.textContent='Save receipt'; alert('Failed'); });
+}
+
+function shortFlag(p){
+  if(!p.shortage) return '';
+  var parts=[]; ['UGX','USD','SSP'].forEach(function(c){ if(p.shortage[c]>0.005) parts.push((c==='USD'?'$':c+' ')+nf(p.shortage[c])); });
+  return parts.length?'<div class="mt"><span class="short">⚠ shortage '+parts.join(' · ')+'</span></div>':'';
+}
+function openSettle(){
+  $('xPerson').value=CUR||''; $('xCur').selectedIndex=0; $('xCount').value=''; $('xNote').value='';
+  $('xMsg').style.display='none'; openSheet('xsheet'); xCalc(); setTimeout(function(){$('xCount').focus();},250);
+}
+function sysFor(cur){ var b=window.__bal||{UGX:0,USD:0,SSP:0}; return b[cur]||0; }
+function xCalc(){
+  var cur=$('xCur').value, sys=sysFor(cur);
+  $('xSys').textContent=(cur==='USD'?'$':cur+' ')+nf(sys);
+  var cv=$('xCount').value.trim();
+  if(cv===''){ $('xGap').textContent='—'; $('xMsg').style.display='none'; return; }
+  var counted=parseFloat(cv.replace(/,/g,''))||0; var gap=Math.round((counted-sys)*100)/100;
+  $('xGap').textContent=(gap<0?'−':'+')+(cur==='USD'?'$':cur+' ')+nf(Math.abs(gap));
+  $('xGap').style.color=Math.abs(gap)<0.005?'#15803D':(gap<0?'#C0392B':'#0B3D22');
+  var m=$('xMsg');
+  if(Math.abs(gap)<0.005){ m.style.display='block'; m.className='gapnote over'; m.textContent='✓ Matches — will mark settled.'; }
+  else if(gap<0){ m.style.display='block'; m.className='gapnote short'; m.textContent='⚠ Shortage '+(cur==='USD'?'$':cur+' ')+nf(Math.abs(gap))+' — recorded as owed by the person until explained.'; }
+  else { m.style.display='block'; m.className='gapnote over'; m.textContent='Overage '+(cur==='USD'?'$':cur+' ')+nf(gap)+' — extra cash, will be added.'; }
+}
+function saveSettle(){
+  var person=$('xPerson').value.trim(); if(!person){alert('Person?');return;}
+  var cv=$('xCount').value.trim(); if(cv===''){alert('Enter the counted amount');return;}
+  var counted=parseFloat(cv.replace(/,/g,'')); if(!(counted>=0)){alert('Bad count');return;}
+  var b=$('xSave'); b.disabled=true; b.textContent='Saving…';
+  fetch('/papi/staff-cash/settle',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:new URLSearchParams({person:person,currency:$('xCur').value,counted:counted,note:$('xNote').value.trim()})})
+   .then(r=>r.json()).then(function(r){ b.disabled=false; b.textContent='Record count';
+     if(r&&r.ok){ closeSheet('xsheet'); loadPeople();
+       var msg = r.settled ? 'Counted — matches the system. Settled ✓' :
+         (r.kind==='shortage' ? ('Shortage of '+(r.currency==='USD'?'$':r.currency+' ')+nf(r.gap)+' recorded against '+person+'.') :
+                                ('Overage of '+(r.currency==='USD'?'$':r.currency+' ')+nf(r.gap)+' added to '+person+'.'));
+       setTimeout(function(){ alert(msg); },200);
+     } else alert('Could not save: '+((r&&r.error)||'error')); })
+   .catch(function(){ b.disabled=false; b.textContent='Record count'; alert('Failed'); });
 }
 loadPickers();
 loadPeople();
@@ -397,5 +443,21 @@ loadPeople();
   <label>Type</label><select id="rKind"><option value="settlement">Payment for delivered order</option><option value="advance">Advance (order not delivered yet)</option></select>
   <label>Date</label><input id="rDate" type="datetime-local">
   <button class="gsave" id="rSave" onclick="saveRecv()" style="background:#1D4ED8">Save receipt</button>
+</div>
+
+<div class="gsheet" id="xsheet">
+  <button class="gx" onclick="closeSheet('xsheet')">✕</button>
+  <h3>Settle / count</h3>
+  <p style="font-size:12.5px;color:var(--mut);margin:0 0 10px">Ask the person to count their cash. Enter what they physically have — the app compares to the system and records any gap.</p>
+  <label>Person</label><input id="xPerson" list="gPeople" placeholder="Person">
+  <label>Currency</label><select id="xCur" onchange="xCalc()"><option>UGX</option><option>USD</option><option>SSP</option></select>
+  <div class="settleprev">
+    <div class="r"><span>System says</span><b id="xSys">—</b></div>
+    <label style="margin-top:8px">Counted in pocket</label><input id="xCount" inputmode="decimal" placeholder="0" oninput="xCalc()">
+    <div class="r" style="margin-top:8px"><span>Gap</span><b id="xGap">—</b></div>
+    <div id="xMsg" class="gapnote" style="display:none"></div>
+  </div>
+  <label>Note (optional)</label><input id="xNote" placeholder="reason, if known">
+  <button class="gsave" id="xSave" onclick="saveSettle()" style="background:#16231C">Record count</button>
 </div>
 </body></html>

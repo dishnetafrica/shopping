@@ -161,6 +161,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('staff-cash/give', [\App\Http\Controllers\Panel\StaffCashController::class, 'give']);
         Route::post('staff-cash/spend', [\App\Http\Controllers\Panel\StaffCashController::class, 'spend']);
         Route::post('staff-cash/receive', [\App\Http\Controllers\Panel\StaffCashController::class, 'receive']);
+        Route::post('staff-cash/settle', [\App\Http\Controllers\Panel\StaffCashController::class, 'settle']);
         Route::post('orders/quick', [\App\Http\Controllers\Panel\OrderCostController::class, 'quickOrder']);
         Route::get('orders/{id}/costs', [\App\Http\Controllers\Panel\OrderCostController::class, 'orderDetail']);
         Route::get('order-costs/pending', [\App\Http\Controllers\Panel\OrderCostController::class, 'pending']);
