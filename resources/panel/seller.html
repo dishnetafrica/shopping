@@ -285,12 +285,18 @@
       <div id="orderSysNav" style="display:none">
       <div class="navsec trade">🌍 Order Trading</div>
       <a class="nav" href="/panel/orders-costs"><span class="i">🧾</span> Orders &amp; Margin</a>
+      <a class="nav" href="/panel/buy-list"><span class="i">🧺</span> Buy List</a>
       <a class="nav" href="/panel/book-cost"><span class="i">🛒</span> Book Purchase</a>
+      <a class="nav" href="/panel/supplier-debt"><span class="i">🧾</span> Suppliers We Owe</a>
       <a class="nav" href="/panel/approvals"><span class="i">✅</span> Cost Approvals</a>
+      <a class="nav" href="/panel/payments"><span class="i">💵</span> Payments Received</a>
+      <a class="nav" href="/panel/sourcing"><span class="i">🔎</span> Sourcing Requests</a>
       <a class="nav" href="/panel/cash-position"><span class="i">💰</span> Cash Position</a>
       <a class="nav" href="/panel/trade-cashbook"><span class="i">💵</span> Cashbook (multi-cur)</a>
       <a class="nav" href="/panel/expenses"><span class="i">💸</span> Expenses</a>
       <a class="nav" href="/panel/pnl"><span class="i">📈</span> Profit &amp; Loss</a>
+      <a class="nav" href="/panel/partners"><span class="i">🤝</span> Partners</a>
+      <a class="nav" href="/panel/invoiced"><span class="i">🧾</span> Invoiced</a>
       </div>
       <script>try{if(window.SHOP_FEATURES&&window.SHOP_FEATURES.order_system){document.getElementById('orderSysNav').style.display='block';}}catch(e){}</script>
 
@@ -2131,8 +2137,9 @@ function applyPermissions(){
                '/panel/scheduled':'marketing','/panel/marketing':'marketing','/panel/leads':'marketing',
                '/panel/diagnostics':'settings','/panel/setup':'settings','/panel/billing':'settings',
                '/panel/operations':'orders',
-               '/panel/orders-costs':'ordercosts','/panel/book-cost':'purchases',
-               '/panel/approvals':'approvals','/panel/cash-position':'cash','/panel/expenses':'purchases','/panel/pnl':'cash','/panel/trade-cashbook':'cash'};
+               '/panel/orders-costs':'ordercosts','/panel/book-cost':'purchases','/panel/buy-list':'purchases','/panel/supplier-debt':'purchases',
+               '/panel/approvals':'approvals','/panel/cash-position':'cash','/panel/expenses':'purchases','/panel/pnl':'cash','/panel/trade-cashbook':'cash',
+               '/panel/partners':'finance','/panel/invoiced':'finance'};
   try{
     document.querySelectorAll('.side a.nav').forEach(function(a){
       var menu=null;

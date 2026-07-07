@@ -1,0 +1,37 @@
+DEPLOY — Full Order Trading sidebar (permanent)
+===============================================
+This is your seller panel file with the Order Trading sidebar expanded from 7 to
+13 links, and role-gating registered for the new ones.
+
+FILE
+  seller.html  ->  upload it back to the SAME path you downloaded it from in the
+                   repo (the file that contains id="orderSysNav").
+
+WHAT CHANGED (2 spots)
+  1. #orderSysNav block: added 6 links ->
+       Buy List, Suppliers We Owe, Payments Received, Sourcing Requests,
+       Partners, Invoiced   (alongside the original 7)
+  2. hrefMap (role gating): registered the new links so the sidebar hides what a
+     login shouldn't see:
+       /panel/buy-list      -> purchases   (purchaser/field see it)
+       /panel/supplier-debt -> purchases
+       /panel/partners      -> finance     (owner/manager only)
+       /panel/invoiced      -> finance     (owner/manager only)
+       /panel/payments      -> (ungated)   everyone with the trading panel
+       /panel/sourcing      -> (ungated)   everyone with the trading panel
+
+RESULT BY ROLE
+  Owner/manager: all 13 links.
+  Purchaser (Jayesh): Orders&Margin, Buy List, Book Purchase, Suppliers We Owe,
+    Cost Approvals, Payments, Sourcing, Cash Position, Cashbook, Expenses, P&L
+    (NOT Partners/Invoiced).
+  (Gating uses the same me/nav menus the sidebar already uses.)
+
+DEPLOY
+  Replace the file -> commit -> EasyPanel Rebuild. Reload /panel -> the sidebar now
+  shows all 13 (for owner). No console needed; survives reloads.
+
+NOTE: if you'd rather Partners/Invoiced be visible to everyone in the sidebar,
+remove the two '/panel/partners':'finance' and '/panel/invoiced':'finance'
+entries from hrefMap. If you want P&L/Cashbook stricter too, tell me and I'll
+tighten those gates.
