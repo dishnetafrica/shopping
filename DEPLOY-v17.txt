@@ -1,0 +1,36 @@
+DEPLOY — Tap a product -> choose orders & qty (v17)   [cumulative]
+==================================================================
+In the Aggregated view, tapping a product now opens a per-order breakdown so you
+buy for exactly the orders you want, with the quantity per order. Partial buys are
+recorded correctly. This makes "what did I buy for whom" unambiguous.
+
+FILES CHANGED
+  resources/panel/buy_list.html                          (expandable per-order picker)
+  app/Http/Controllers/Panel/BuyListController.php        (bought marks now INCREMENT)
+
+HOW IT WORKS (Aggregated view)
+  - Each product shows "for N orders · tap to choose".
+  - Tap it (or Buy & record) -> it expands to each order needing it:
+        [x] ORD-9    qty [5]
+        [x] ORD-11   qty [2]
+    All orders start CHECKED; edit the qty per order for partial buys; untick an
+    order you're NOT buying for now (it stays on the list).
+  - "Buy & record" marks ONLY the ticked orders (with the qty entered) and opens
+    Book Purchase split across exactly those orders.
+  - By-order view is unchanged (one line per order-item).
+
+BACKEND CHANGE (needed for partials)
+  Bought marks now ADD instead of overwrite: buy 3 of 5 for an order today, 2 more
+  tomorrow -> total 5. Verified: partial buys accumulate; other orders untouched.
+  (No schema change; same trade_purchase_ticks table.)
+
+DEPLOY
+  git add resources/panel/buy_list.html app/Http/Controllers/Panel/BuyListController.php
+  git commit -m "v17: per-order pick + qty on the Buy List, partial buys"
+  git push -> EasyPanel Rebuild        (no migration)
+
+VERIFY
+  - Aggregated view -> tap a product shared by 2 orders -> see both with qty.
+  - Untick one order, buy -> only the other is marked; the unticked stays.
+  - Edit a qty down (partial) -> buy -> that order keeps the leftover to buy.
+  - Buy the leftover later -> it adds up and the order clears.

@@ -94,6 +94,16 @@
 .warni .rec{flex:0 0 auto;background:#B4232A;color:#fff;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer}
 .ordtag{font-size:10.5px;font-weight:700;color:#475569;background:#f1f5f9;border-radius:20px;padding:2px 9px}
 </style>
+<style>
+.aggrow{cursor:pointer}
+.exp{background:#F4F7F4;border:1px solid var(--border);border-top:none;border-radius:0 0 13px 13px;margin:-10px 0 10px;padding:10px 14px 12px}
+.exprow{display:flex;align-items:center;gap:10px;padding:6px 0}
+.exprow label{display:flex;align-items:center;gap:8px;flex:1;font-size:13px;font-weight:700;color:#16231C}
+.exprow input[type=checkbox]{width:18px;height:18px;accent-color:#15803D}
+.exprow .pq{width:64px;padding:8px;text-align:center;font-size:15px;border:1.5px solid var(--border);border-radius:9px}
+.exp .go{width:100%;margin-top:8px;background:#0B3D22;color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:800;cursor:pointer}
+.chev{font-size:11px;color:#64748b;font-weight:700;margin-left:6px}
+</style>
 </head>
 <body><div class="wrap">
   <div class="top"><h1>🧺 Buy List</h1><a href="/panel">← Panel</a></div>
@@ -227,11 +237,37 @@ function renderAgg(L){
   if(!items.length){ $('sub').textContent='All caught up'; L.innerHTML='<div class="empty">✅ Nothing to buy right now.</div>'; return; }
   $('sub').textContent=items.length+' item'+(items.length>1?'s':'')+' to buy · aggregated';
   L.innerHTML=items.map(function(it,i){
-    var ords=Object.keys(it.orders).map(function(o){return '<span class="ord">'+esc(o)+'</span>';}).join('');
-    return '<div class="item">'+leftCell(it.name,it.remaining)+
-      '<div class="mid"><div class="nm">'+esc(it.name)+'</div><div class="ords">'+ords+'</div></div>'+
-      '<button class="buy" onclick="buyRecord('+i+')">Buy &amp; record</button></div>';
+    var norder=it.pairs.length;
+    var head='<div class="item aggrow" onclick="toggleExp('+i+')">'+leftCell(it.name,it.remaining)+
+      '<div class="mid"><div class="nm">'+esc(it.name)+'</div><div class="ords">for '+norder+' order'+(norder>1?'s':'')+' <span class="chev" id="chev_'+i+'">tap to choose \u25BE</span></div></div>'+
+      '<button class="buy" onclick="event.stopPropagation();toggleExp('+i+')">Buy &amp; record</button></div>';
+    var rows=it.pairs.map(function(p){
+      return '<div class="exprow"><label><input type="checkbox" class="pchk" data-oid="'+p.order_id+'" data-on="'+esc(p.order_no)+'" checked> '+esc(p.order_no)+'</label>'+
+        '<input class="pq" inputmode="decimal" value="'+nf(p.qty)+'"></div>';
+    }).join('');
+    var exp='<div class="exp" id="exp_'+i+'" style="display:none">'+rows+
+      '<button class="go" onclick="buySelected('+i+')">Buy &amp; record</button></div>';
+    return head+exp;
   }).join('');
+}
+function toggleExp(i){
+  var e=$('exp_'+i); if(!e) return;
+  var open=e.style.display==='none';
+  e.style.display=open?'block':'none';
+  var c=$('chev_'+i); if(c) c.textContent=open?'choose orders \u25B4':'tap to choose \u25BE';
+}
+function buySelected(i){
+  var e=$('exp_'+i); if(!e) return;
+  var it=(window.__items||[])[i]; var name=it?it.name:'';
+  var pairs=[], ids=[];
+  e.querySelectorAll('.exprow').forEach(function(row){
+    var chk=row.querySelector('.pchk'); if(!chk.checked) return;
+    var q=parseFloat((row.querySelector('.pq').value||'').replace(/,/g,''))||0; if(q<=0) return;
+    pairs.push({order_no:chk.getAttribute('data-on'), item_name:name, qty:q});
+    ids.push(chk.getAttribute('data-oid'));
+  });
+  if(!pairs.length){ alert('Tick at least one order (with a quantity).'); return; }
+  markBought(pairs, function(){ gotoBook(ids.join(','), name); });
 }
 
 function renderBought(){

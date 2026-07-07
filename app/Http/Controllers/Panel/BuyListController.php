@@ -57,10 +57,11 @@ class BuyListController extends Controller
             if ($undo) {
                 TradePurchaseTick::where('tenant_id',$t->id)->where('order_no',$on)->where('item_name',$nm)->delete();
             } else {
-                TradePurchaseTick::updateOrCreate(
-                    ['tenant_id'=>$t->id, 'order_no'=>$on, 'item_name'=>$nm],
-                    ['qty'=>$qy, 'created_by'=>$request->user()->name ?? '']
-                );
+                // increment: partial buys accumulate (buy 3 now + 2 later = 5), never overwrite
+                $row = TradePurchaseTick::firstOrNew(['tenant_id'=>$t->id, 'order_no'=>$on, 'item_name'=>$nm]);
+                $row->qty = (float)($row->qty ?? 0) + $qy;
+                $row->created_by = $request->user()->name ?? '';
+                $row->save();
             }
             $n++;
         }
