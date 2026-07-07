@@ -131,4 +131,46 @@ class StaffCashController extends Controller
         $bal = ['USD'=>round($run['USD'],2),'UGX'=>round($run['UGX'],2),'SSP'=>round($run['SSP'],2)];
         return response()->json(['ok'=>true,'person'=>$person,'balances'=>$bal,'usd'=>round($usdRun,2),'entries'=>$out]);
     }
+
+    /** POST /papi/staff-cash/give — owner/manager gives cash to a person (adds to their hand). */
+    public function give(Request $request)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok'=>false],403);
+        $isOwner = $u->isOwnerLike() || in_array((string)$u->role,['manager'],true);
+        if (! $isOwner) return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
+        $t = $u->tenant;
+
+        $person = trim((string)$request->input('person',''));
+        if ($person === '') return response()->json(['ok'=>false,'error'=>'no_person'],422);
+        $cur = strtoupper((string)$request->input('currency','UGX'));
+        $amount = round((float)$request->input('amount',0), 2);
+        if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
+        $rate = (float)$request->input('rate_to_usd', 0);
+        if ($rate <= 0) $rate = $cur==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3655:5180);
+        if ($rate <= 0) $rate = 1;
+        $usd = OrderCost::toUsd($amount, $rate);
+        $method = trim((string)$request->input('method','Cash')) ?: 'Cash';
+        if (mb_strlen($method) > 24) $method = mb_substr($method,0,24);
+        $note = trim((string)$request->input('note','')) ?: null;
+
+        // best-effort: link to a staff user with this exact name (so "my cash" works for them)
+        $uid = null;
+        try { $uid = \App\Models\User::where('tenant_id',$t->id)->where('name',$person)->value('id'); } catch (\Throwable $e) { $uid = null; }
+
+        $createdAt = null;
+        $cd = trim((string)$request->input('created_date',''));
+        if ($cd !== '') { try { $createdAt = \Illuminate\Support\Carbon::parse($cd); } catch (\Throwable $e) { $createdAt = null; } }
+
+        $c = OrderCost::create([
+            'tenant_id'=>$t->id,'stage'=>'funding','holder'=>$person,'holder_user_id'=>$uid,
+            'currency'=>$cur,'native_amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
+            'pay_status'=>'cash','paid_native'=>$amount,'category'=>'Funding / Float',
+            'note'=>'Cash given ('.$method.')'.($note?(' — '.$note):''),
+            'status'=>'approved','created_by'=>$u->name ?? '',
+        ]);
+        if ($createdAt) { $c->created_at = $createdAt; $c->save(); }
+
+        return response()->json(['ok'=>true,'id'=>$c->id,'person'=>$person,'currency'=>$cur,'amount'=>$amount,'usd'=>$usd]);
+    }
 }

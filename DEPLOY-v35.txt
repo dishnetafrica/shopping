@@ -1,0 +1,38 @@
+DEPLOY — Staff Cash slice 2: Give cash + WhatsApp confirm (v35)
+==============================================================
+Adds the first WRITE action: give cash to a person. It records a funding entry on
+that person's account (their cash in hand goes up), then offers to WhatsApp them a
+confirmation. Owner/manager only. Builds on slice 1 (v34).
+
+FILES CHANGED
+  app/Http/Controllers/Panel/StaffCashController.php   (+give())
+  routes/web.php                                        (+POST staff-cash/give)
+  resources/panel/staff_cash.html                       (Give cash form + WhatsApp)
+
+HOW "GIVE CASH" WORKS
+  - Tap "＋ Give cash" -> choose the person, amount, currency (rate auto-fills for
+    UGX/SSP, editable), how (Cash / MoMo / Airtel / Bank), optional note, date.
+  - Saves as a 'funding' entry (holder = that person, category "Funding / Float",
+    status approved). Their cash in hand rises immediately; it shows in their ledger
+    as GIVEN and in the company total.
+  - After saving, it offers to open WhatsApp to send them: "Given you <amount>,
+    please confirm you received it" — the trust step.
+  - Only owner/manager can give cash (checked server-side).
+
+NOTE: since you fund people independently, Give cash only adds to the receiver; it
+does not reduce anyone else. (If later you want it to also come out of Bhavin's
+hand, that's a one-line change to write a linked pair.)
+
+DEPLOY
+  git add app/Http/Controllers/Panel/StaffCashController.php routes/web.php \
+          resources/panel/staff_cash.html
+  git commit -m "v35: Staff Cash give cash + whatsapp confirm"
+  git push -> EasyPanel Rebuild        (no migration)
+
+VERIFY
+  Staff Cash -> open a person -> Give cash -> fill + save. Balance goes up; entry
+  shows as GIVEN; WhatsApp confirm opens. Do one small test, confirm the number, then
+  delete the test entry from Cashbook if needed.
+
+NEXT: slice 3 — He spent (-> order or expense) and He received (-> customer),
+the linked "one entry, two places" writes.
