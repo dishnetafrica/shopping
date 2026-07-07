@@ -1,0 +1,36 @@
+DEPLOY — Payments: CRM-style record form (v21)   [cumulative]
+=============================================================
+Upgrades the "Record a payment" form to match the CRM style, with a Client picker,
+proper Payment-method dropdown, Created date, Note, Send-receipt toggle, and
+Invoice/Order no. Builds on v18 (advances + receipts).
+
+NEW / CHANGED
+  NEW  database/migrations/2026_07_06_001300_add_invoice_no_to_customer_payments.php
+  CHG  app/Models/CustomerPayment.php                (+invoice_no fillable)
+  CHG  app/Http/Controllers/Panel/PaymentController.php (invoice_no, created_date
+        override, free-text method, send_receipt flag)
+  CHG  resources/panel/payments.html                 (CRM-style form)
+
+FORM FIELDS (like the CRM modal)
+  - Client: pick from your existing customers (auto-filled from orders) or type a new
+    one; picking auto-fills the phone.
+  - Amount + Currency.
+  - Payment method: Cash / Bank Transfer-ECO Bank / MTN MoMo / Airtel Money /
+    Stripe credit card / Other.
+  - Type: Advance / On delivery (advance = unearned, shows under "Advances held").
+  - Created date: editable (defaults to now) - lets you back-date a payment.
+  - Note, Invoice/Order no., optional receipt photo.
+  - Send receipt (YES/NO): if YES, the receipt opens right after saving for WhatsApp
+    / Print. If NO, it just records.
+  Cash still rises by the amount; advances still stay out of invoiced revenue.
+
+DEPLOY
+  git add database/migrations app/Models/CustomerPayment.php \
+          app/Http/Controllers/Panel/PaymentController.php resources/panel/payments.html
+  git commit -m "v21: CRM-style payment record form"
+  git push -> EasyPanel Rebuild
+  php artisan migrate     (adds invoice_no column; additive, safe)
+
+VERIFY
+  Payments -> Record a payment -> the new form. Pick a client, enter amount, method,
+  date, toggle Send receipt -> Save. Cash Position rises; receipt opens if toggled.

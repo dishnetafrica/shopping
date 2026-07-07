@@ -76,14 +76,22 @@ class PaymentController extends Controller
 
         $kind    = in_array((string)$request->input('kind'), ['advance','settlement'], true) ? (string)$request->input('kind') : 'advance';
         $orderNo = trim((string)$request->input('order_no','')) ?: null;
-        $method  = in_array((string)$request->input('method'), ['cash','momo','bank','other'], true) ? (string)$request->input('method') : 'cash';
+        $method  = trim((string)$request->input('method','Cash')) ?: 'Cash';
+        if (mb_strlen($method) > 24) $method = mb_substr($method, 0, 24);
+        $invoice = trim((string)$request->input('invoice_no','')) ?: null;
         $ref     = trim((string)$request->input('reference','')) ?: null;
         $phone   = trim((string)$request->input('customer_phone','')) ?: null;
+        $note    = trim((string)$request->input('note','')) ?: null;
+        $sendReceipt = filter_var($request->input('send_receipt', true), FILTER_VALIDATE_BOOLEAN);
+        // optional created-date override
+        $createdAt = null;
+        $cd = trim((string)$request->input('created_date',''));
+        if ($cd !== '') { try { $createdAt = \Illuminate\Support\Carbon::parse($cd); } catch (\Throwable $e) { $createdAt = null; } }
 
         $path = null;
         if ($request->hasFile('receipt')) $path = $request->file('receipt')->store("receipts/t{$t->id}", 'public');
 
-        $result = DB::transaction(function () use ($t,$u,$customer,$phone,$orderNo,$kind,$cur,$amount,$rate,$usd,$method,$ref,$path) {
+        $result = DB::transaction(function () use ($t,$u,$customer,$phone,$orderNo,$invoice,$kind,$cur,$amount,$rate,$usd,$method,$ref,$note,$path,$createdAt) {
             // cash side: money IN
             $cost = OrderCost::create([
                 'tenant_id'=>$t->id,'order_id'=>null,'order_no'=>$orderNo,
@@ -94,16 +102,17 @@ class PaymentController extends Controller
             ]);
             $pay = CustomerPayment::create([
                 'tenant_id'=>$t->id,'receipt_no'=>'TMP','customer_name'=>$customer,'customer_phone'=>$phone,
-                'order_no'=>$orderNo,'kind'=>$kind,'currency'=>$cur,'amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
-                'method'=>$method,'reference'=>$ref,'receipt_path'=>$path,'applied'=>($kind==='settlement'),
+                'order_no'=>$orderNo,'invoice_no'=>$invoice,'kind'=>$kind,'currency'=>$cur,'amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
+                'method'=>$method,'reference'=>$ref ?: $note,'receipt_path'=>$path,'applied'=>($kind==='settlement'),
                 'order_cost_id'=>$cost->id,'holder'=>$u->name ?? '','holder_user_id'=>$u->id,'created_by'=>$u->name ?? '',
             ]);
             $pay->receipt_no = 'RCP-'.str_pad((string)$pay->id, 5, '0', STR_PAD_LEFT);
+            if ($createdAt) { $pay->created_at = $createdAt; $cost->created_at = $createdAt; $cost->save(); }
             $pay->save();
             return ['id'=>$pay->id,'receipt_no'=>$pay->receipt_no];
         });
 
-        return response()->json(['ok'=>true] + $result + ['usd'=>$usd,'currency'=>$cur,'amount'=>$amount]);
+        return response()->json(['ok'=>true,'send_receipt'=>$sendReceipt] + $result + ['usd'=>$usd,'currency'=>$cur,'amount'=>$amount]);
     }
 
     /** GET /papi/payments/{id} — one payment (for the receipt). */
