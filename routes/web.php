@@ -152,6 +152,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('payments', [\App\Http\Controllers\Panel\PaymentController::class, 'store']);
         Route::get('payments/{id}', [\App\Http\Controllers\Panel\PaymentController::class, 'show']);
         Route::post('payments/{id}/apply', [\App\Http\Controllers\Panel\PaymentController::class, 'apply']);
+        Route::post('payments/{id}/update', [\App\Http\Controllers\Panel\PaymentController::class, 'update']);
         Route::get('sourcing', [\App\Http\Controllers\Panel\SourcingController::class, 'index']);
         Route::post('sourcing', [\App\Http\Controllers\Panel\SourcingController::class, 'store']);
         Route::post('sourcing/{id}/price', [\App\Http\Controllers\Panel\SourcingController::class, 'price']);

@@ -115,7 +115,8 @@
   <input id="fName" list="clientList" placeholder="Choose or type a customer" autocomplete="off" oninput="fillPhone()">
   <datalist id="clientList"></datalist>
   <div class="g2"><div><label>Phone (for receipt)</label><input id="fPhone" inputmode="tel" placeholder="2567..."></div>
-  <div style="max-width:150px"><label>Invoice / Order no.</label><input id="fOrder" placeholder="ORD-6"></div></div>
+  <div style="max-width:170px"><label>Order <span style="color:#C0392B">*</span></label><input id="fOrder" list="orderList" placeholder="ORD-6" autocomplete="off"><datalist id="orderList"></datalist></div></div>
+  <div id="recvWrap" style="display:none"><label>Received by <span style="color:#C0392B">*</span></label><input id="fReceiver" list="peopleList" placeholder="Who physically got the cash" autocomplete="off"><datalist id="peopleList"></datalist></div>
   <div class="g2"><div><label>Amount</label><input id="fAmt" inputmode="decimal" placeholder="0"></div>
   <div style="max-width:120px"><label>Currency</label><select id="fCur"><option>USD</option><option>UGX</option><option>SSP</option></select></div></div>
   <label>Payment method</label>
@@ -143,8 +144,21 @@
 const $=s=>document.getElementById(s);
 function nf(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
 function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-var FKIND='advance', RC=null, SEND=true, CLIENTS=[];
+var FKIND='advance', RC=null, SEND=true, CLIENTS=[]; var EDIT_ID=null, IS_OWNER=false, WHOAMI='', ORDERS=[], PEOPLE=[];
 
+
+function bootPay(){
+  fetch('/papi/me/nav',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json()).then(function(d){
+    IS_OWNER=!!(d&&d.is_owner); WHOAMI=(d&&d.name)||'';
+    if(IS_OWNER) $('recvWrap').style.display='block';
+  }).catch(function(){});
+  fetch('/papi/orders',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json()).then(function(d){
+    ORDERS=(d&&d.orders)||[]; var od=$('orderList'); if(od) od.innerHTML=ORDERS.map(function(o){return '<option value="'+esc(o.order_no)+'">'+esc(o.name||'')+'</option>';}).join('');
+  }).catch(function(){});
+  fetch('/papi/staff-cash',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json()).then(function(d){
+    PEOPLE=(d&&d.people)||[]; var pd=$('peopleList'); if(pd) pd.innerHTML=PEOPLE.map(function(p){return '<option value="'+esc(p.name)+'">';}).join('');
+  }).catch(function(){});
+}
 function load(){
   fetch('/papi/payments',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
     .then(r=>r.json()).then(function(d){
@@ -159,7 +173,7 @@ function load(){
         var ord=p.order_no?' <span class="otag">'+esc(p.order_no)+'</span>':'';
         return '<div class="row"><div><div class="no"><a href="/panel/customers360?'+(p.phone?('phone='+encodeURIComponent(p.phone)):('name='+encodeURIComponent(p.customer)))+'" style="color:#5B21B6;text-decoration:none" onclick="event.stopPropagation()">'+esc(p.customer)+'</a>'+badge+'</div>'+
           '<div class="meta" onclick="openReceipt('+p.id+')" style="cursor:pointer">'+esc(p.receipt_no)+' &middot; '+esc(p.method)+ord+' &middot; '+esc(p.date||'')+'</div></div>'+
-          '<div class="amt" onclick="openReceipt('+p.id+')" style="cursor:pointer">'+esc(p.currency)+' '+nf(p.amount)+'<div style="font-size:11px;color:#94a3b8;font-weight:700">$'+nf(p.usd)+'</div></div></div>';
+          '<div class="amt" onclick="openReceipt('+p.id+')" style="cursor:pointer">'+esc(p.currency)+' '+nf(p.amount)+'<div style="font-size:11px;color:#94a3b8;font-weight:700">$'+nf(p.usd)+'</div></div>'+(IS_OWNER?'<button onclick="event.stopPropagation();openEdit('+p.id+')" style="margin-left:8px;background:#fff;border:1px solid #d7dee3;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:800;color:#0B3D22;cursor:pointer">Edit</button>':'')+'</div>';
       }).join('');
     }).catch(function(){ $('list').innerHTML='<div class="empty">Could not load.</div>'; });
 }
@@ -178,7 +192,7 @@ function loadClients(){
 function fillPhone(){ var n=$('fName').value.trim().toLowerCase(); var c=CLIENTS.filter(function(x){return x.name.toLowerCase()===n;})[0]; if(c&&c.phone&&!$('fPhone').value) $('fPhone').value=c.phone; }
 function nowLocal(){ var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16); }
 
-function openForm(){ ['fName','fPhone','fOrder','fAmt'].forEach(function(i){$(i).value='';}); $('fNote').value=''; $('fReceipt').value=''; $('fMethod2').selectedIndex=0; $('fDate').value=nowLocal(); FKIND='advance'; SEND=true;
+function openForm(){ EDIT_ID=null; if($('fReceiver'))$('fReceiver').value=''; ['fName','fPhone','fOrder','fAmt'].forEach(function(i){$(i).value='';}); $('fNote').value=''; $('fReceipt').value=''; $('fMethod2').selectedIndex=0; $('fDate').value=nowLocal(); FKIND='advance'; SEND=true;
   $('fKind').querySelectorAll('.chip').forEach(function(x,i){x.classList.toggle('on',i===0);});
   var sb=$('fSend'); sb.textContent='YES'; sb.classList.add('on');
   loadClients();
@@ -188,20 +202,47 @@ function closeAll(){ $('backdrop').classList.remove('on'); $('payForm').classLis
 function savePay(){
   var name=$('fName').value.trim(); if(!name){ alert('Choose or type a client'); return; }
   var amt=parseFloat(($('fAmt').value||'').replace(/,/g,''))||0; if(amt<=0){ alert('Amount?'); return; }
+  var ord=$('fOrder').value.trim(); if(!ord){ alert('Pick the order this payment is for'); $('fOrder').focus(); return; }
+  var recv=IS_OWNER?$('fReceiver').value.trim():'';
+  if(IS_OWNER && !recv){ alert('Who received the cash?'); $('fReceiver').focus(); return; }
   var b=$('fSave'); b.disabled=true; b.textContent='Saving...';
-  var ord=$('fOrder').value.trim();
+  if(EDIT_ID){
+    var body=new URLSearchParams({customer_name:name,customer_phone:$('fPhone').value.trim(),order_no:ord,kind:FKIND,currency:$('fCur').value,amount:amt,method:$('fMethod2').value,note:$('fNote').value.trim(),created_date:$('fDate').value,receiver:recv});
+    fetch('/papi/payments/'+EDIT_ID+'/update',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body})
+      .then(r=>r.json()).then(function(r){ b.disabled=false; b.textContent='Save & make receipt';
+        if(r&&r.ok){ closeAll(); load(); alert('Receipt '+r.receipt_no+' updated.'); }
+        else alert('Could not save: '+((r&&r.error==='no_order')?'pick an order':((r&&r.error)||'error'))); })
+      .catch(function(){ b.disabled=false; b.textContent='Save & make receipt'; alert('Failed'); });
+    return;
+  }
   var fd=new FormData();
   fd.append('customer_name',name); fd.append('customer_phone',$('fPhone').value.trim());
   fd.append('order_no',ord); fd.append('invoice_no',ord); fd.append('kind',FKIND);
   fd.append('currency',$('fCur').value); fd.append('amount',amt); fd.append('method',$('fMethod2').value);
   fd.append('note',$('fNote').value.trim()); fd.append('created_date',$('fDate').value); fd.append('send_receipt',SEND?'1':'0');
+  if(recv) fd.append('receiver',recv);
   if($('fReceipt').files[0]) fd.append('receipt',$('fReceipt').files[0]);
   fetch('/papi/payments',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',body:fd})
     .then(r=>r.json()).then(function(r){
       b.disabled=false; b.textContent='Save & make receipt';
       if(r&&r.ok){ closeAll(); load(); if(r.send_receipt!==false) openReceipt(r.id); }
-      else alert('Could not save: '+((r&&r.error)||'error'));
+      else alert('Could not save: '+((r&&r.error==='no_order')?'pick an order':((r&&r.error)||'error')));
     }).catch(function(){ b.disabled=false; b.textContent='Save & make receipt'; alert('Failed'); });
+}
+function openEdit(id){
+  fetch('/papi/payments/'+id,{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json()).then(function(d){
+    if(!d||!d.ok){ alert('Could not load'); return; }
+    var p=d.payment; EDIT_ID=id;
+    openForm();
+    $('fName').value=p.customer||''; $('fPhone').value=p.phone||''; $('fOrder').value=p.order_no||'';
+    $('fAmt').value=p.amount||''; $('fCur').value=p.currency||'USD'; $('fNote').value=p.reference||'';
+    if(p.created_date) $('fDate').value=p.created_date;
+    FKIND=p.kind||'advance';
+    document.querySelectorAll('#fKind .chip').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-k')===FKIND);});
+    if(IS_OWNER){ $('recvWrap').style.display='block'; $('fReceiver').value=p.holder||''; }
+    $('fSave').textContent='Update receipt';
+    var t=document.querySelector('#payForm h3, #payForm .fh'); if(t) t.textContent='Edit receipt';
+  }).catch(function(){ alert('Failed'); });
 }
 
 function openReceipt(id){
@@ -277,6 +318,7 @@ function expPdf(){
     '</tbody><tfoot><tr><td colspan=6>Total received (USD)</td><td class=num>$'+nf(p.recv)+'</td></tr></tfoot></table></body></html>');
   w.document.close();setTimeout(function(){w.focus();w.print();},400);
 }
+bootPay();
 load();
 </script><!-- ===== DishNet role-aware tab bar + amount format (injected v2) ===== -->
 <nav class="dn-tabbar" id="dnTabbar"></nav>

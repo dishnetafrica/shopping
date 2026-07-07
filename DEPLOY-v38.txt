@@ -1,0 +1,45 @@
+DEPLOY — Receipt fixes: order required, correct receiver, edit (v38)
+====================================================================
+Fixes the receipt bug from the cashbook screenshot. A receipt now (1) must be tied
+to an order, (2) records WHO received the cash (so it lands in their cashbook), and
+(3) can be EDITED — with the edit fixing the cash row AND the customer-payment record
+together.
+
+FILES CHANGED
+  app/Http/Controllers/Panel/PaymentController.php   (store: order required + receiver;
+                                                       show: returns receiver/date;
+                                                       NEW update())
+  routes/web.php                                      (+POST payments/{id}/update)
+  resources/panel/payments.html                       (order picker required, "Received
+                                                       by" for owner, Edit button + edit mode)
+
+WHAT CHANGED
+  1. ORDER REQUIRED: recording a payment now needs an order (pick from the list).
+     Advances still allowed, but must name the order they're an advance for.
+  2. RECEIVER = who got the cash: owner/manager picks "Received by" (defaults to the
+     logged-in user; staff always record as themselves). The receipt is credited to
+     THAT person's cash in hand (Staff Cash), not just whoever typed it.
+  3. EDIT (owner/manager): each payment row shows an "Edit" button. Editing lets you
+     fix customer, order, amount, currency, method, receiver, type, note and date. On
+     save it updates BOTH the customer-payment record and the mirrored cash row in one
+     transaction, so Staff Cash, Customer 360 and the cashbook all stay consistent.
+     Staff cannot edit.
+
+DEPLOY
+  git add app/Http/Controllers/Panel/PaymentController.php routes/web.php \
+          resources/panel/payments.html
+  git commit -m "v38: receipts require order + receiver; edit receipt (both rows)"
+  git push -> EasyPanel Rebuild        (no migration)
+
+VERIFY
+  New receipt: try to save without an order -> blocked. As owner, set "Received by"
+  = Asish -> the receipt shows on Asish's Staff Cash. Edit an existing receipt (e.g.
+  the USD 1,286 one): set the correct order and receiver -> Customer 360 for that
+  customer and the receiver's Staff Cash both update; the cashbook row changes too.
+
+NOTES
+  - The Cashbook screen shows receipts as mirrored rows; edit them from the Payments
+    page (that's where the receipt lives). If you want an Edit link directly on the
+    cashbook receipt rows too, say so and I'll add it.
+  - Existing receipts recorded before this may still show the old holder (whoever
+    typed them) until you edit them.
