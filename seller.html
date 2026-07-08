@@ -439,6 +439,19 @@
             <datalist id="riderList"></datalist>
             <div class="note">Dispatch sets the order to “Out for delivery”, texts the customer a live tracking link, and shares the rider's number.</div>
           </div></div>
+          <div class="card" id="payCard"><div class="head">💵 Payment</div><div class="body">
+            <div id="paySummary" class="note" style="margin-bottom:10px">—</div>
+            <div class="inrow" style="flex-wrap:wrap;gap:8px;align-items:center">
+              <select id="payCur" style="border:1px solid var(--line);border-radius:9px;padding:9px 10px;font-size:13px;font-weight:700;max-width:90px"><option>UGX</option><option>USD</option><option>SSP</option></select>
+              <input id="payAmt" placeholder="Amount" inputmode="decimal" style="max-width:150px">
+              <select id="payMethod" style="border:1px solid var(--line);border-radius:9px;padding:9px 10px;font-size:13px;font-weight:600"><option>Cash</option><option>Mobile Money</option><option>Bank</option></select>
+              <input id="payRecv" placeholder="Received by (optional)" list="payRecvList" style="max-width:160px">
+              <input id="payRef" placeholder="Reference (optional)" style="max-width:160px">
+              <button class="btn" id="payBtn">＋ Record payment</button>
+            </div>
+            <datalist id="payRecvList"></datalist>
+            <div class="note">Records the customer's payment and adds it to the receiver's cash in hand. Amount is pre-filled with the outstanding balance.</div>
+          </div></div>
           <div class="card"><div class="head">Order Details <span style="font-weight:500;font-size:12px;opacity:.85">— edit quantities, add or delete items</span></div><div class="body">
             <div class="inv" id="printArea">
               <div class="ihead">
@@ -2470,7 +2483,45 @@ function openOrder(id){
   (function(){var cb=$('creditBtn');if(cb){var cbal=CREDIT[String(current.phone||'').replace(/[^0-9]/g,'')]||0;
     if(cbal>0){cb.style.display='';cb.textContent='💳 Apply credit ('+ugx(cbal)+')';cb.onclick=applyCredit;}else{cb.style.display='none';}}})();
   setupDispatch();
+  setupPayment();
+  renderPayments();
   renderInvoice();
+}
+function renderPayments(){
+  var o=current; if(!o) return; var ono=oNo(o);
+  var totalUgx=orderTotal(o);
+  fetch('/papi/payments',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
+    var mine=((d&&d.payments)||[]).filter(function(p){return (p.order_no||'')===ono;});
+    var paidUsd=mine.reduce(function(s,p){return s+(Number(p.usd)||0);},0);
+    var paidUgx=Math.round(paidUsd*RATES.usdUgx);
+    var outUgx=Math.max(0, totalUgx-paidUgx);
+    window.__payOutUgx=outUgx;
+    var rows=mine.map(function(p){return (p.receipt_no||'RCP')+' · '+esc(p.currency)+' '+Number(p.amount).toLocaleString()+' · '+esc(p.method||'')+(p.reference?(' · '+esc(p.reference)):'');}).join('<br>');
+    $('paySummary').innerHTML='<b>Total:</b> '+ugx(totalUgx)+' &nbsp;·&nbsp; <b>Paid:</b> '+ugx(paidUgx)+' &nbsp;·&nbsp; <b>Outstanding:</b> <span style="color:'+(outUgx>0.5?'#C0392B':'#15803D')+';font-weight:800">'+ugx(outUgx)+'</span>'+(rows?('<br><br><span style="color:var(--muted)">Payments:</span><br>'+rows):'<br><span style="color:var(--muted)">No payments recorded yet</span>');
+    prefillPayAmt();
+  }).catch(function(){ $('paySummary').textContent='Could not load payments.'; });
+}
+function prefillPayAmt(){
+  var out=Number(window.__payOutUgx||0); var cur=($('payCur')&&$('payCur').value)||'UGX';
+  if(!$('payAmt'))return;
+  $('payAmt').value = cur==='UGX'? Math.round(out) : (cur==='USD'? (out/RATES.usdUgx).toFixed(2) : Math.round(out/RATES.usdUgx*RATES.usdSsp));
+}
+function setupPayment(){
+  if($('payCur')){ $('payCur').value='UGX'; $('payCur').onchange=prefillPayAmt; }
+  if($('payBtn')) $('payBtn').onclick=function(){
+    var o=current; if(!o)return;
+    var amt=parseFloat((($('payAmt').value)||'').replace(/,/g,''))||0;
+    if(amt<=0){toast('Enter an amount');return;}
+    var cur=$('payCur').value||'UGX';
+    var rate= cur==='USD'?1:(cur==='UGX'?RATES.usdUgx:RATES.usdSsp);
+    var b=$('payBtn'); b.disabled=true; b.textContent='Recording…';
+    var body=new URLSearchParams({customer_name:(o.customer||''),customer_phone:(o.phone||''),order_no:oNo(o),currency:cur,amount:amt,rate_to_usd:rate,method:$('payMethod').value,reference:($('payRef').value||'').trim(),receiver:($('payRecv').value||'').trim(),kind:'settlement'});
+    fetch('/papi/payments',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body}).then(function(r){return r.json();}).then(function(r){
+      b.disabled=false; b.textContent='＋ Record payment';
+      if(r&&r.ok){ toast('Payment recorded ✓'); if($('payRef'))$('payRef').value=''; renderPayments(); }
+      else toast('Could not record: '+((r&&r.error==='no_order')?'order missing':((r&&r.error)||'error')));
+    }).catch(function(){ b.disabled=false; b.textContent='＋ Record payment'; toast('Failed'); });
+  };
 }
 function renderInvoice(){
   var o=current;

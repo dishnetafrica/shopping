@@ -1,0 +1,30 @@
+DEPLOY — "Add Payment" on the order screen (v50)
+================================================
+Adds a 💵 Payment card directly on each order's detail page, so you record a customer
+payment right where you're looking at the order — no jumping to the Payments tab.
+
+WHAT IT DOES
+  On the order page (between Rider & Delivery and Order Details) a Payment card shows:
+    Total  ·  Paid  ·  Outstanding   (+ list of payments already recorded for this order)
+  and a one-line form:
+    Currency (UGX/USD/SSP) · Amount (pre-filled to the outstanding) · Method
+    (Cash/Mobile Money/Bank) · Received by (optional) · Reference (optional) · Record.
+  Pressing Record posts the payment (kind=settlement), adds it to the receiver's cash in
+  hand, and refreshes Total/Paid/Outstanding instantly. If WhatsApp receipts are enabled,
+  the customer gets one.
+
+  It uses the SAME endpoint as the Payments screen (/papi/payments), so everything stays
+  consistent — the receipt appears in Payments, Cashbook, Staff Cash and Cash Position too.
+
+NOTES
+  - "Received by" defaults to you (the logged-in user). Owner/manager can type another
+    staff name to credit that person's cash instead.
+  - Amount is pre-filled with the outstanding balance in the chosen currency; change the
+    currency and it re-computes at your current rates.
+
+FILE
+  seller.html   (only file changed)
+
+DEPLOY
+  Unzip -> GitHub upload seller.html -> Commit -> EasyPanel Rebuild -> hard-refresh.
+  Open any order -> the Payment card appears under Rider & Delivery.
