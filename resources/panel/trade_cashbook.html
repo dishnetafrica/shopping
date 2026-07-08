@@ -220,7 +220,7 @@ function load(){
       : balCard(FILT,b[FILT]);
     // entries
     PAGES=d.pages||1;
-    if(!d.entries.length){$('list').innerHTML='<div class="loading">No entries.</div>';$('pager').innerHTML='';return;}
+    if(!d.entries||!d.entries.length){$('list').innerHTML='<div class="loading">No entries.</div>';$('pager').innerHTML='';return;}
     $('list').innerHTML = `
       <div class="ledwrap"><table class="ledger">
         <thead><tr><th>Ref</th><th>Date</th><th>Particulars</th><th>Person</th><th class="num in">IN</th><th class="num out">OUT</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
@@ -247,7 +247,7 @@ function fetchAll(){
 function csvCell(v){ v=(v==null?'':String(v)); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
 function exportCsv(){
   fetchAll().then(function(d){
-    if(!d.ok||!d.entries.length){ alert('Nothing to export'); return; }
+    if(!d.ok||!d.entries||!d.entries.length){ alert('Nothing to export'); return; }
     var head=['Ref','Date','Category','Particulars','Person','Currency','In','Out','Balance','USD','Status'];
     var lines=[head.map(csvCell).join(',')];
     d.entries.forEach(function(e){
@@ -261,7 +261,7 @@ function exportCsv(){
 }
 function exportPdf(){
   fetchAll().then(function(d){
-    if(!d.ok||!d.entries.length){ alert('Nothing to export'); return; }
+    if(!d.ok||!d.entries||!d.entries.length){ alert('Nothing to export'); return; }
     var w=window.open('','_blank'); if(!w){ alert('Allow pop-ups to print'); return; }
     var rows=d.entries.map(function(e){
       return '<tr class="'+(e.in?'in':'out')+'"><td>'+esc(e.ref)+'</td><td>'+esc(e.date)+'</td>'+

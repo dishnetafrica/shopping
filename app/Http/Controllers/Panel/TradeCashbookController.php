@@ -92,6 +92,7 @@ class TradeCashbookController extends Controller
 
         return response()->json(['ok'=>true,'currency'=>$cur,'balances'=>$bal,
             'view'=>$isOwner?'everyone':'mine','whoami'=>$u->name,'is_owner'=>$isOwner,
+            'entries'=>$rows,'total'=>$total,'page'=>$page,'per'=>$per,'pages'=>(int)ceil($total/$per),
             'default_rates'=>['UGX'=>(float)$t->setting('rate_ugx_per_usd',3700),
                               'SSP'=>(float)$t->setting('rate_ssp_per_usd',5180),'USD'=>1]]);
     }
