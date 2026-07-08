@@ -2510,6 +2510,7 @@ function prefillPayAmt(){
 }
 function setupPayment(){
   if($('payCur')){ $('payCur').value='UGX'; $('payCur').onchange=prefillPayAmt; }
+  if($('payRecvList')){ fetch('/papi/staff-cash',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',cache:'no-store'}).then(function(r){return r.json();}).then(function(sd){ var names=((sd&&sd.people)||[]).map(function(p){return p.name;}).filter(Boolean); if($('payRecvList'))$('payRecvList').innerHTML=names.map(function(nm){return '<option value="'+esc(nm)+'">';}).join(''); }).catch(function(){}); }
   if($('payBtn')) $('payBtn').onclick=function(){
     var o=current; if(!o)return;
     var amt=parseFloat((($('payAmt').value)||'').replace(/,/g,''))||0;
@@ -2525,6 +2526,7 @@ function setupPayment(){
     }).catch(function(){ b.disabled=false; b.textContent='＋ Record payment'; toast('Failed'); });
   };
 }
+function mpRecvChange(){ var sel=document.getElementById('mpRecv'); var oth=document.getElementById('mpRecvOther'); if(!sel||!oth)return; if(sel.value==='__other'){ oth.style.display='block'; oth.focus(); } else { oth.style.display='none'; } }
 function openPayModal(){
   var o=current; if(!o) return; var ono=oNo(o);
   $('modalTitle').textContent='Record Payment · '+ono;
@@ -2550,20 +2552,32 @@ function openPayModal(){
       '</div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+
         '<select id="mpMethod" style="border:1.5px solid var(--line);border-radius:10px;padding:11px;font-weight:600;flex:1;min-width:130px"><option>Cash</option><option>Mobile Money</option><option>Bank</option></select>'+
-        '<input id="mpRecv" placeholder="Received by (e.g. Asish)" style="flex:1;min-width:160px;padding:11px;border:1.5px solid var(--line);border-radius:10px">'+
+        '<select id="mpRecv" onchange="mpRecvChange()" style="flex:1;min-width:160px;padding:11px;border:1.5px solid var(--line);border-radius:10px;font-weight:600;background:#fff"><option value="">— who collected? —</option></select>'+
       '</div>'+
+      '<input id="mpRecvOther" placeholder="Type the person&#39;s name" style="display:none;width:100%;margin-bottom:8px;padding:11px;border:1.5px solid var(--line);border-radius:10px;box-sizing:border-box">'+
       '<input id="mpRef" placeholder="Reference / note (optional)" style="width:100%;padding:11px;border:1.5px solid var(--line);border-radius:10px;box-sizing:border-box">'+
       '<button class="btn" id="mpSave" style="width:100%;margin-top:12px;background:#15803D;color:#fff;font-size:16px;font-weight:800;padding:13px;border-radius:10px">💵 Record Payment</button>'+
       '<div style="margin-top:16px"><div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Payments on this order</div>'+
         '<table style="width:100%;font-size:12.5px;border-collapse:collapse"><tbody>'+hist+'</tbody></table></div>';
     $('mpCur').value='UGX'; $('mpAmt').value=Math.round(outUgx);
     $('mpCur').onchange=function(){ var c=this.value; $('mpAmt').value= c==='UGX'?Math.round(outUgx):(c==='USD'?(outUgx/RATES.usdUgx).toFixed(2):Math.round(outUgx/RATES.usdUgx*RATES.usdSsp)); };
+    fetch('/papi/staff-cash',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',cache:'no-store'}).then(function(r){return r.json();}).then(function(sd){
+      var names=((sd&&sd.people)||[]).map(function(p){return p.name;}).filter(Boolean);
+      var whoami=(sd&&sd.whoami)||'';
+      if(whoami && names.indexOf(whoami)===-1) names.unshift(whoami);
+      var uniq=[]; names.forEach(function(nm){ if(uniq.indexOf(nm)===-1)uniq.push(nm); });
+      var sel=$('mpRecv'); if(!sel)return;
+      sel.innerHTML='<option value="">— who collected? —</option>'+uniq.map(function(nm){return '<option value="'+esc(nm)+'">'+esc(nm)+'</option>';}).join('')+'<option value="__other">Other…</option>';
+      if(whoami) sel.value=whoami;
+    }).catch(function(){});
     $('mpSave').onclick=function(){
       var amt=parseFloat((($('mpAmt').value)||'').replace(/,/g,''))||0;
       if(amt<=0){ toast('Enter the amount collected'); return; }
       var cur=$('mpCur').value; var rate=cur==='USD'?1:(cur==='UGX'?RATES.usdUgx:RATES.usdSsp);
+      var rsel=$('mpRecv').value; var receiver = rsel==='__other' ? (($('mpRecvOther').value)||'').trim() : rsel;
+      if(!receiver){ toast('Choose who collected the money'); return; }
       var btn=$('mpSave'); btn.disabled=true; btn.textContent='Recording…';
-      var body=new URLSearchParams({customer_name:(o.customer||''),customer_phone:(o.phone||''),order_no:ono,currency:cur,amount:amt,rate_to_usd:rate,method:$('mpMethod').value,reference:(($('mpRef').value)||'').trim(),receiver:(($('mpRecv').value)||'').trim(),kind:'settlement'});
+      var body=new URLSearchParams({customer_name:(o.customer||''),customer_phone:(o.phone||''),order_no:ono,currency:cur,amount:amt,rate_to_usd:rate,method:$('mpMethod').value,reference:(($('mpRef').value)||'').trim(),receiver:receiver,kind:'settlement'});
       fetch('/papi/payments',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body}).then(function(r){return r.json();}).then(function(r){
         btn.disabled=false; btn.textContent='💵 Record Payment';
         if(r&&r.ok){ closeModal(); toast('Payment recorded ✓'); if(typeof renderPayments==='function') renderPayments(); }

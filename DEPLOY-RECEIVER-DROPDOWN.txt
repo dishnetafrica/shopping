@@ -1,0 +1,27 @@
+DEPLOY — Record Payment: "Received by" = staff dropdown (v55)
+============================================================
+Path: resources/panel/seller.html  (the file the app actually serves — confirmed on server)
+
+CHANGE
+  In the Record Payment modal, "Received by" is now a DROPDOWN of your real staff
+  (Bhavin / Asish / Jayesh — pulled live from /papi/staff-cash), defaulting to whoever is
+  logged in. It is REQUIRED — you cannot record a payment without saying who collected it.
+  An "Other…" option reveals a text box for a one-off name.
+  The inline Payment card's "Received by" autocomplete is fed the same staff names.
+
+WHY
+  Free-text names caused split custody (Jaeysh vs Jayesh). A dropdown of real people means
+  every payment is unambiguously attributed, so Cash Position always shows the right person
+  holding the money.
+
+DEPLOY
+  1. Upload so the file lands at  resources/panel/seller.html  in the repo (REPLACE the
+     existing one there). Commit.
+  2. EasyPanel REBUILD (force/no-cache if available — the container builds from an image).
+  3. Container check:  grep -c 'who collected' /var/www/html/resources/panel/seller.html  (>0)
+     then:  php /var/www/html/artisan view:clear
+  4. Normal browser (not incognito): unregister service worker + clear caches, reopen panel.
+
+VERIFY
+  Open an order -> Record Payment -> "Received by" shows Bhavin/Asish/Jayesh, pre-set to you.
+  Try to Record without picking one -> it blocks with "Choose who collected the money".
