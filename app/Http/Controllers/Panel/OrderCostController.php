@@ -235,6 +235,123 @@ class OrderCostController extends Controller
             'rows'=>$out,'total_native'=>$total,'total_usd'=>$totalUsd,'currency'=>$cur]);
     }
 
+    /** GET /panel/purchases — the multi-line Purchase screen. */
+    public function purchasePage(Request $request)
+    {
+        $user = $request->user();
+        if (! $user || ! $user->tenant_id) return redirect('/app/login');
+        $path = resource_path('panel/purchase.html');
+        if (! is_file($path)) abort(500, 'Purchase asset missing.');
+        return response(file_get_contents($path), 200)
+            ->header('Content-Type','text/html; charset=UTF-8')->header('Cache-Control','no-store');
+    }
+
+    /** POST /papi/purchases — a full product-line purchase from a supplier (cash or credit).
+     *  Each line becomes an OrderCost (stage 'purchase') sharing one purchase_group_id, so it flows
+     *  into Cash Position, P&L, ledger and supplier debt. Also updates each product's cost_price. */
+    public function purchaseStore(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok'=>false],401);
+        $u = $request->user();
+
+        $cur  = strtoupper((string) $request->input('currency','UGX'));
+        $rate = (float) $request->input('rate_to_usd', $cur==='USD'?1:0);
+        if ($rate <= 0) return response()->json(['ok'=>false,'error'=>'bad_rate'],422);
+
+        $raw   = $request->input('lines');
+        $lines = is_array($raw) ? $raw : json_decode((string) $raw, true);
+        if (! is_array($lines) || ! count($lines)) return response()->json(['ok'=>false,'error'=>'no_lines'],422);
+
+        $payStatus = strtolower((string) $request->input('pay_status','cash')) === 'credit' ? 'credit' : 'cash';
+        [$supId,$supName] = $this->resolveSupplier($request, $t);
+        if ($payStatus === 'credit' && ! $supId) return response()->json(['ok'=>false,'error'=>'supplier_required_for_credit'],422);
+
+        // Holder (whose cash) — owner/manager may attribute; else self. Only meaningful for cash.
+        $isPriv = $u->isOwnerLike() || in_array((string)$u->role,['manager'],true);
+        $holderName = (string)($u->name ?? ''); $holderUid = $u->id;
+        $reqHolder = trim((string)$request->input('holder',''));
+        if ($isPriv && $reqHolder !== '') {
+            $holderName = $reqHolder;
+            try { $holderUid = \App\Models\User::where('tenant_id',$t->id)->where('name',$reqHolder)->value('id'); } catch (\Throwable $e) { $holderUid = null; }
+        }
+        $status = $isPriv ? 'approved' : (((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved');
+        $group  = (string) \Illuminate\Support\Str::uuid();
+
+        // Rate to convert a unit cost in the purchase currency to base UGX for the product's cost_price.
+        $ugxPerUsd = (float) $t->setting('usdUgx', 3700) ?: 3700;
+        $sspPerUsd = (float) $t->setting('rate_ssp_per_usd', 5180) ?: 5180;
+        $toUgx = function($amtNative) use ($cur,$ugxPerUsd,$sspPerUsd) {
+            if ($cur === 'UGX') return (float)$amtNative;
+            if ($cur === 'USD') return (float)$amtNative * $ugxPerUsd;
+            if ($cur === 'SSP') return $sspPerUsd>0 ? (float)$amtNative * ($ugxPerUsd/$sspPerUsd) : (float)$amtNative;
+            return (float)$amtNative;
+        };
+
+        $updateCost = (bool) $request->input('update_cost', true);
+        $out = []; $totalNative = 0.0;
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($lines,$t,$cur,$rate,$holderName,$holderUid,$status,$group,$u,$supId,$supName,$payStatus,$request,$toUgx,$updateCost,&$out,&$totalNative) {
+            foreach ($lines as $ln) {
+                $qty  = (float) ($ln['qty'] ?? 0);
+                $unit = (float) ($ln['unit_cost'] ?? 0);
+                $pid  = (int) ($ln['product_id'] ?? 0) ?: null;
+                $name = trim((string) ($ln['name'] ?? ''));
+                if ($qty <= 0 || $unit < 0) continue;
+                $native = round($qty * $unit, 2);
+                if ($native <= 0) continue;
+                $totalNative += $native;
+
+                OrderCost::create([
+                    'tenant_id'=>$t->id, 'stage'=>'purchase',
+                    'product_id'=>$pid, 'qty'=>$qty, 'unit_cost'=>$unit,
+                    'currency'=>$cur, 'native_amount'=>$native, 'rate_to_usd'=>$rate,
+                    'usd_amount'=>OrderCost::toUsd($native,$rate),
+                    'holder'=>$payStatus==='cash' ? $holderName : '', 'holder_user_id'=>$payStatus==='cash' ? $holderUid : null,
+                    'note'=>$name !== '' ? $name : (string)$request->input('note',''),
+                    'category'=>'Purchase',
+                    'purchase_group_id'=>$group, 'created_by'=>$u->name ?? '',
+                    'supplier_id'=>$supId, 'supplier_name'=>$supName,
+                    'pay_status'=>$payStatus, 'paid_native'=>($payStatus==='credit' ? 0 : $native),
+                    'status'=>$status,
+                ]);
+
+                if ($updateCost && $pid) {
+                    try {
+                        $p = \App\Models\Product::where('tenant_id',$t->id)->find($pid);
+                        if ($p) { $p->cost_price = round($toUgx($unit), 2); $p->save(); }
+                    } catch (\Throwable $e) {}
+                }
+                $out[] = ['product_id'=>$pid,'name'=>$name,'qty'=>$qty,'unit_cost'=>$unit,'native'=>$native];
+            }
+        });
+
+        if (! count($out)) return response()->json(['ok'=>false,'error'=>'no_valid_lines'],422);
+        return response()->json(['ok'=>true,'group_id'=>$group,'count'=>count($out),
+            'total_native'=>round($totalNative,2),'currency'=>$cur,'pay_status'=>$payStatus,'lines'=>$out]);
+    }
+
+    /** GET /papi/purchases — recent purchases grouped by purchase_group_id. */
+    public function purchaseList(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok'=>false],401);
+        $rows = OrderCost::where('tenant_id',$t->id)->where('stage','purchase')
+            ->whereNotNull('purchase_group_id')
+            ->orderByDesc('id')->limit(400)->get();
+        $groups = [];
+        foreach ($rows as $r) {
+            $g = $r->purchase_group_id;
+            if (! isset($groups[$g])) $groups[$g] = [
+                'group_id'=>$g,'supplier'=>$r->supplier_name,'currency'=>$r->currency,
+                'pay_status'=>$r->pay_status,'holder'=>$r->holder,'status'=>$r->status,
+                'date'=>optional($r->created_at)->format('d M Y'),'total'=>0.0,'items'=>[]];
+            $groups[$g]['total'] += (float)$r->native_amount;
+            $groups[$g]['items'][] = ['name'=>$r->note,'qty'=>$r->qty,'unit_cost'=>$r->unit_cost,'native'=>(float)$r->native_amount];
+        }
+        return response()->json(['ok'=>true,'purchases'=>array_values($groups)]);
+    }
+
     /** POST /papi/orders/quick — create a Juba order with its customer-pays currency. */
     public function quickOrder(Request $request)
     {

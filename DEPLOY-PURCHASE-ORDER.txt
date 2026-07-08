@@ -1,0 +1,55 @@
+DEPLOY — Full Purchase (product-line) + richer suppliers (v59)
+=============================================================
+Built ON your existing foundations (Supplier model, order_costs, supplier-debt), so purchases
+flow into Cash Position, P&L, ledger and "Suppliers We Owe" automatically — no parallel system.
+
+NEW SCREEN:  /panel/purchases
+  - Pick a supplier (or add one inline: name, phone, pay-term days, opening balance).
+  - Add product line items: product (autocomplete from your catalogue) + qty + unit cost.
+    Unit cost pre-fills from the product's saved cost if it has one. Line & grand totals live.
+  - Currency (UGX/USD/SSP) + rate.
+  - Payment:
+      CASH  -> pick "whose cash" (Bhavin/Asish/Jayesh); reduces that person's cash in hand.
+      CREDIT-> adds to that supplier's balance in "Suppliers We Owe" (supplier required).
+  - On save each line becomes an order_costs row (stage 'purchase') sharing one
+    purchase_group_id, and each product's COST PRICE is updated (converted to your UGX base),
+    so margins stay current everywhere.
+
+SUPPLIERS enriched: pay_term_days, opening_balance (+ currency). Opening balances are folded
+into "Suppliers We Owe".
+
+WHAT'S DELIBERATELY NOT INCLUDED (your choices): no stock quantity tracking, no VAT/tax.
+
+FILES
+  database/migrations/2026_07_09_000002_add_purchase_fields.php   (order_costs: product_id, qty,
+        unit_cost; suppliers: pay_term_days, opening_balance, opening_currency)
+  app/Models/OrderCost.php                    (+fillable)
+  app/Models/Supplier.php                     (+fillable)
+  app/Http/Controllers/Panel/OrderCostController.php   (purchaseStore, purchaseList, purchasePage)
+  app/Http/Controllers/Panel/SupplierController.php    (store + index + debt enriched)
+  resources/panel/purchase.html               (the new screen)
+  routes/web.php                              (/panel/purchases + /papi/purchases GET/POST)
+
+DEPLOY
+  1. Upload all at those paths (REPLACE existing). Commit.
+  2. php artisan migrate
+  3. EasyPanel REBUILD (force/no-cache).
+  4. Normal browser: clear service worker + caches. Open  mycloudbss.com/panel/purchases
+     (add a sidebar link later if you want; the page works directly by URL now).
+
+VERIFY
+  - /panel/purchases -> add supplier "Test", add 2 product lines with qty & unit cost ->
+    total updates. Choose CREDIT -> Record -> check "Suppliers We Owe" shows the amount.
+  - Do a CASH purchase attributed to Asish -> Cash Position shows Asish reduced.
+  - Open one of those products -> its Cost price now reflects the purchase unit cost, and the
+    Profit/Margin in the edit form updates.
+
+NOTE (depends on v58): this reuses the products.cost_price column added in v58
+(product-cost-margin). Deploy v58 first (or together) so cost updates land on a real column.
+Its migration is separate, so running both migrations is fine.
+
+UPDATE (this zip): now also includes resources/panel/seller.html with:
+  - a "New Purchase" link in the Order Trading sidebar (→ /panel/purchases), and
+  - the v58 product Cost/Margin field (this seller.html is cumulative: cost field + sidebar).
+So deploying THIS zip gives you the sidebar link AND the product cost field together.
+Still run BOTH migrations (v58 cost_price + v59 purchase fields).

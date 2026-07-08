@@ -1,0 +1,127 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>New Purchase</title>
+<style>
+:root{--dark:#1B3A2B;--green:#15803D;--red:#C0392B;--line:#e4e9e4;--muted:#6b7280;--bg:#f6f8f6}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1B211D;background:var(--bg)}
+.top{background:var(--dark);color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between}
+.top h1{font-size:18px;margin:0;font-weight:800}.back{background:#ffffff22;border:none;color:#fff;border-radius:9px;padding:8px 12px;font-weight:700;cursor:pointer}
+.wrap{max-width:760px;margin:0 auto;padding:14px}
+.card{background:#fff;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 1px 3px #0000000d}
+label{display:block;font-size:12px;font-weight:800;color:#374151;margin:8px 0 4px}
+input,select{width:100%;padding:11px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;font-family:inherit}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.lines{width:100%;border-collapse:collapse;margin-top:6px}
+.lines th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);text-align:left;padding:4px}
+.lines td{padding:4px;border-top:1px solid var(--line);vertical-align:middle}
+.lines input{padding:8px}
+.x{background:#fdecea;color:var(--red);border:none;border-radius:8px;padding:8px 10px;font-weight:800;cursor:pointer}
+.addln{background:#eef4ee;color:var(--green);border:1px dashed var(--green);border-radius:10px;padding:10px;width:100%;font-weight:800;cursor:pointer;margin-top:8px}
+.tot{display:flex;justify-content:space-between;font-size:16px;font-weight:800;margin-top:10px;border-top:2px solid #1B211D;padding-top:8px}
+.seg{display:flex;gap:8px;margin-bottom:8px}
+.seg button{flex:1;padding:11px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-weight:800;cursor:pointer}
+.seg button.on{background:var(--dark);color:#fff;border-color:var(--dark)}
+.save{width:100%;padding:14px;background:var(--green);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:800;cursor:pointer;margin-top:6px}
+.save:disabled{opacity:.6}
+.note{font-size:12px;color:var(--muted)}
+.phist{font-size:13px;border-top:1px solid var(--line);padding:8px 0}
+.pill{display:inline-block;font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px}
+.pill.cash{background:#eaf6ee;color:var(--green)}.pill.credit{background:#fef3e2;color:#b45309}
+</style></head>
+<body>
+<div class="top"><button class="back" onclick="history.back()">‹ Back</button><h1>🧾 New Purchase</h1><span></span></div>
+<div class="wrap">
+
+  <div class="card">
+    <label>Supplier</label>
+    <div class="row">
+      <select id="sup"><option value="">— pick supplier —</option></select>
+      <button class="x" style="background:#eef4ee;color:var(--green);flex:0 0 auto" onclick="toggleNewSup()">+ New</button>
+    </div>
+    <div id="newSupBox" style="display:none;margin-top:8px">
+      <div class="row"><input id="nsName" placeholder="Supplier name *"><input id="nsPhone" placeholder="Phone"></div>
+      <div class="row"><input id="nsPayTerm" type="number" min="0" placeholder="Pay term (credit days)"><input id="nsOpen" type="number" placeholder="Opening balance owed"></div>
+      <button class="addln" onclick="saveNewSup()">Save supplier</button>
+    </div>
+    <div class="note" id="supHint" style="margin-top:6px"></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div style="flex:0 0 110px"><label>Currency</label><select id="cur" onchange="onCur()"><option>UGX</option><option>USD</option><option>SSP</option></select></div>
+      <div><label>Rate (native per 1 USD)</label><input id="rate" inputmode="decimal" value="3700"></div>
+    </div>
+    <label style="margin-top:10px">Items</label>
+    <table class="lines"><thead><tr><th style="width:44%">Product</th><th>Qty</th><th>Unit cost</th><th>Line</th><th></th></tr></thead>
+      <tbody id="lines"></tbody></table>
+    <button class="addln" onclick="addLine()">+ Add item</button>
+    <datalist id="prodList"></datalist>
+    <div class="tot"><span>Total</span><span id="total">—</span></div>
+  </div>
+
+  <div class="card">
+    <label>Payment</label>
+    <div class="seg"><button id="segCash" class="on" onclick="setPay('cash')">💵 Cash (paid now)</button><button id="segCredit" onclick="setPay('credit')">📆 Credit (owe supplier)</button></div>
+    <div id="cashBox"><label>Whose cash (person)</label><select id="who"><option value="">— me —</option></select></div>
+    <div id="creditBox" style="display:none"><div class="note">This will be added to <b>Suppliers We Owe</b> for the chosen supplier.<span id="ptHint"></span></div></div>
+    <label style="margin-top:10px">Note (optional)</label>
+    <input id="note" placeholder="e.g. invoice #, delivery ref">
+    <button class="save" id="saveBtn" onclick="save()">Record purchase</button>
+    <div class="note" id="saveMsg" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card">
+    <label>Recent purchases</label>
+    <div id="hist"><div class="note">Loading…</div></div>
+  </div>
+</div>
+
+<script>
+var $=function(id){return document.getElementById(id);};
+var token=new URLSearchParams(location.search).get('token')||'';
+var PAY='cash', SUPPLIERS=[], PRODUCTS=[];
+function api(u,opt){opt=opt||{};opt.headers=Object.assign({'X-Requested-With':'XMLHttpRequest'},opt.headers||{});opt.credentials='same-origin';opt.cache='no-store';return fetch(u,opt).then(function(r){return r.json();});}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function nf(n){return Number(n||0).toLocaleString(undefined,{maximumFractionDigits:2});}
+
+function onCur(){var c=$('cur').value;$('rate').value=c==='USD'?'1':(c==='SSP'?'5180':'3700');$('rate').disabled=(c==='USD');recompute();}
+function setPay(p){PAY=p;$('segCash').classList.toggle('on',p==='cash');$('segCredit').classList.toggle('on',p==='credit');$('cashBox').style.display=p==='cash'?'block':'none';$('creditBox').style.display=p==='credit'?'block':'none';}
+
+function loadSuppliers(){api('/papi/suppliers').then(function(d){SUPPLIERS=(d&&d.suppliers)||[];var s=$('sup');s.innerHTML='<option value="">— pick supplier —</option>'+SUPPLIERS.map(function(x){return '<option value="'+x.id+'">'+esc(x.name)+(x.pay_term_days?(' · '+x.pay_term_days+'d'):'')+'</option>';}).join('');});}
+function loadProducts(){api('/papi/products').then(function(d){PRODUCTS=(Array.isArray(d.products)?d.products:[]).filter(function(p){return p['Product Name'];});$('prodList').innerHTML=PRODUCTS.map(function(p){return '<option value="'+esc(p['Product Name'])+'">';}).join('');});}
+function loadStaff(){api('/papi/staff-cash').then(function(d){var me=(d&&d.whoami)||'';var names=((d&&d.people)||[]).map(function(p){return p.name;}).filter(Boolean);if(me&&names.indexOf(me)<0)names.unshift(me);var u=[];names.forEach(function(n){if(u.indexOf(n)<0)u.push(n);});$('who').innerHTML='<option value="">— me ('+esc(me||'you')+') —</option>'+u.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');});}
+function loadHist(){api('/papi/purchases').then(function(d){var ps=(d&&d.purchases)||[];if(!ps.length){$('hist').innerHTML='<div class="note">No purchases yet.</div>';return;}$('hist').innerHTML=ps.map(function(p){return '<div class="phist"><div style="display:flex;justify-content:space-between"><b>'+esc(p.supplier||'—')+'</b><span>'+esc(p.currency)+' '+nf(p.total)+' <span class="pill '+(p.pay_status==='credit'?'credit':'cash')+'">'+(p.pay_status==='credit'?'credit':'cash')+'</span></span></div><div class="note">'+esc(p.date||'')+' · '+p.items.length+' item(s)'+(p.holder?(' · '+esc(p.holder)):'')+'</div></div>';}).join('');});}
+
+function lineRow(){var tr=document.createElement('tr');
+  tr.innerHTML='<td><input class="pn" list="prodList" placeholder="Product" oninput="matchProd(this)"><input type="hidden" class="pid"></td>'+
+    '<td><input class="qty" type="number" min="0" step="any" value="1" oninput="recompute()" style="width:64px"></td>'+
+    '<td><input class="uc" type="number" min="0" step="any" placeholder="0" oninput="recompute()" style="width:80px"></td>'+
+    '<td class="lt note">—</td>'+
+    '<td><button class="x" onclick="this.closest(\'tr\').remove();recompute()">✕</button></td>';
+  return tr;}
+function addLine(){$('lines').appendChild(lineRow());}
+function matchProd(inp){var v=(inp.value||'').trim().toLowerCase();var hit=PRODUCTS.find(function(p){return String(p['Product Name']).toLowerCase()===v;});var tr=inp.closest('tr');tr.querySelector('.pid').value=hit?hit._row:'';if(hit&&hit.Cost!==''&&hit.Cost!=null&&!tr.querySelector('.uc').value){tr.querySelector('.uc').value=hit.Cost;}recompute();}
+function recompute(){var tot=0;$('lines').querySelectorAll('tr').forEach(function(tr){var q=Number(tr.querySelector('.qty').value)||0,u=Number(tr.querySelector('.uc').value)||0;var lt=q*u;tot+=lt;tr.querySelector('.lt').textContent=lt>0?($('cur').value+' '+nf(lt)):'—';});$('total').textContent=$('cur').value+' '+nf(tot);return tot;}
+
+function toggleNewSup(){$('newSupBox').style.display=$('newSupBox').style.display==='none'?'block':'none';}
+function saveNewSup(){var name=($('nsName').value||'').trim();if(!name){$('supHint').textContent='Enter a supplier name';return;}
+  var body=new URLSearchParams({name:name,phone:($('nsPhone').value||'').trim(),pay_term_days:($('nsPayTerm').value||''),opening_balance:($('nsOpen').value||''),opening_currency:$('cur').value});
+  api('/papi/suppliers',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){if(r&&r.ok){$('supHint').textContent='Supplier saved ✓';$('newSupBox').style.display='none';$('nsName').value='';loadSuppliers();setTimeout(function(){$('sup').value=r.id;},400);}else $('supHint').textContent='Could not save supplier';});}
+
+function save(){
+  var lines=[];$('lines').querySelectorAll('tr').forEach(function(tr){var q=Number(tr.querySelector('.qty').value)||0,u=Number(tr.querySelector('.uc').value)||0;var name=(tr.querySelector('.pn').value||'').trim();var pid=tr.querySelector('.pid').value||'';if(q>0&&name){lines.push({product_id:pid,name:name,qty:q,unit_cost:u});}});
+  if(!lines.length){$('saveMsg').textContent='Add at least one item';return;}
+  var cur=$('cur').value,rate=Number($('rate').value)||0;if(rate<=0){$('saveMsg').textContent='Enter the rate';return;}
+  if(PAY==='credit'&&!$('sup').value){$('saveMsg').textContent='Credit purchase needs a supplier';return;}
+  var body=new URLSearchParams({currency:cur,rate_to_usd:rate,pay_status:PAY,supplier_id:$('sup').value||'',holder:(PAY==='cash'?($('who').value||''):''),note:($('note').value||'').trim(),update_cost:'1',lines:JSON.stringify(lines)});
+  var b=$('saveBtn');b.disabled=true;b.textContent='Saving…';
+  api('/papi/purchases',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
+    b.disabled=false;b.textContent='Record purchase';
+    if(r&&r.ok){$('saveMsg').innerHTML='<b style="color:var(--green)">✓ Purchase recorded — '+esc(r.currency)+' '+nf(r.total_native)+' ('+r.count+' item'+(r.count>1?'s':'')+')</b>';$('lines').innerHTML='';addLine();$('note').value='';recompute();loadHist();}
+    else{$('saveMsg').textContent='Failed: '+((r&&r.error)||'error');}
+  }).catch(function(){b.disabled=false;b.textContent='Record purchase';$('saveMsg').textContent='Network error';});
+}
+
+loadSuppliers();loadProducts();loadStaff();loadHist();addLine();onCur();
+</script>
+</body></html>

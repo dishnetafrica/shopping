@@ -29,8 +29,9 @@ class SupplierController extends Controller
         $t = $request->user()->tenant;
         if (! $t) return response()->json(['ok'=>false],401);
         $suppliers = Supplier::where('tenant_id',$t->id)->orderBy('name')
-            ->get(['id','name','phone'])
-            ->map(fn($s)=>['id'=>$s->id,'name'=>$s->name,'phone'=>$s->phone]);
+            ->get(['id','name','phone','pay_term_days','opening_balance','opening_currency'])
+            ->map(fn($s)=>['id'=>$s->id,'name'=>$s->name,'phone'=>$s->phone,
+                'pay_term_days'=>$s->pay_term_days,'opening_balance'=>$s->opening_balance===null?null:(float)$s->opening_balance,'opening_currency'=>$s->opening_currency]);
         return response()->json(['ok'=>true,'suppliers'=>$suppliers]);
     }
 
@@ -45,7 +46,10 @@ class SupplierController extends Controller
         $s = Supplier::firstOrCreate(
             ['tenant_id'=>$t->id, 'name'=>$name],
             ['phone'=>trim((string)$request->input('phone','')) ?: null,
-             'note' =>trim((string)$request->input('note','')) ?: null]
+             'note' =>trim((string)$request->input('note','')) ?: null,
+             'pay_term_days'=>$request->filled('pay_term_days') ? max(0,(int)$request->input('pay_term_days')) : null,
+             'opening_balance'=>$request->filled('opening_balance') ? (float)$request->input('opening_balance') : null,
+             'opening_currency'=>trim((string)$request->input('opening_currency','')) ?: null]
         );
         return response()->json(['ok'=>true,'id'=>$s->id,'name'=>$s->name]);
     }
@@ -70,6 +74,15 @@ class SupplierController extends Controller
         foreach ($paidRows as $p) { $paid[$p->supplier_id.'|'.$p->currency] = (float)$p->paid; }
 
         $out = [];
+        // Fold in any opening balances (what you already owed the supplier before this system).
+        $openings = Supplier::where('tenant_id',$tid)->whereNotNull('opening_balance')->where('opening_balance','>',0)
+            ->get(['id','name','opening_balance','opening_currency']);
+        foreach ($openings as $s) {
+            $ocur = strtoupper((string)($s->opening_currency ?: 'USD'));
+            $key  = $s->id.'|'.$ocur;
+            $owed = (float)$s->opening_balance - ($paid[$key] ?? 0);
+            if ($owed > 0.005) $out[] = ['supplier_id'=>$s->id,'name'=>$s->name,'currency'=>$ocur,'owed'=>round($owed,2),'opening'=>true];
+        }
         foreach ($credit as $c) {
             $owed = (float)$c->owed - ($paid[$c->supplier_id.'|'.$c->currency] ?? 0);
             if ($owed <= 0.005) continue;
