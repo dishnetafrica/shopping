@@ -1,0 +1,44 @@
+DEPLOY — Cashbook: purchase + "whose cash" person (v57)
+=======================================================
+Built against your CURRENT code (the repo you sent), so it maintains everything you have.
+
+WHAT'S NEW ON THE CASHBOOK
+  1. "Whose cash (person)" selector on the Money in / Money out form.
+     - Defaults to "— me (yourname) —".
+     - Owner/manager can pick another person (Bhavin / Asish / Jayesh …), so the cash leaves
+       (money out) or lands in (money in) THAT person's hand — not always the logged-in user.
+     - Staff who aren't owner/manager always record under themselves (safe).
+     - People list comes from /papi/staff-cash (same source as everywhere else).
+  2. Record a PURCHASE directly: pick category "Purchase" (or "Local Purchase") on a Money out.
+     It is booked as stage 'purchase' so it counts as a purchase/COGS in P&L & the ledger,
+     instead of a generic expense. Cash still leaves the chosen person's hand exactly the same.
+  3. Negative-cash guard on Money out: if the chosen person doesn't have enough in that
+     currency, you get a warning with the numbers and can continue or cancel (field-friendly).
+
+BUG FIX INCLUDED
+  Your routes had /papi/holder-balance registered but the controller method was MISSING
+  (that endpoint was 500-ing). This restores balanceFor() so the route works (it also powers
+  the negative-cash guard above).
+
+FILES (correct served paths)
+  app/Http/Controllers/Panel/TradeCashbookController.php   (store: holder + purchase; +balanceFor)
+  resources/panel/trade_cashbook.html                      (person dropdown, Purchase category, guard)
+
+DEPLOY
+  1. Upload both to the repo at those paths (REPLACE existing). Commit.
+  2. EasyPanel REBUILD (force/no-cache).
+  3. Container check:
+       grep -c 'function balanceFor' /var/www/html/app/Http/Controllers/Panel/TradeCashbookController.php   (=1)
+       grep -c 'Whose cash' /var/www/html/resources/panel/trade_cashbook.html                                (>=1)
+  4. Normal browser: clear service worker + caches, reopen /panel/trade-cashbook.
+
+VERIFY
+  - Money out -> pick "Purchase" + person "Asish" -> record -> entry shows holder Asish and
+    reduces Asish's cash; it appears as a purchase in P&L.
+  - Try money out bigger than the person holds -> negative warning appears.
+  - Owner can attribute to any person; a staff login records only under themselves.
+
+NOTE
+  This is the QUICK cashbook purchase (cash, one person). The full "Book Purchase" screen
+  (supplier, credit/cash, order link) is unchanged and still the place for supplier/credit
+  purchases. Both write to order_costs consistently.

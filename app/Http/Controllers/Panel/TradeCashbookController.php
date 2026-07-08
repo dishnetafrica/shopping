@@ -146,17 +146,62 @@ class TradeCashbookController extends Controller
         $rate = (float)$request->input('rate_to_usd', $cur==='USD'?1:0);
         if ($native<=0 || $rate<=0) return response()->json(['ok'=>false,'error'=>'bad_amount']);
 
+        $isPriv = $u->isOwnerLike() || in_array((string)$u->role,['manager'],true);
+        $category = trim((string)$request->input('category','')) ?: null;
+
+        // "Whose cash" — owner/manager may attribute the entry to another person; staff record under themselves.
+        $holderName = (string)($u->name ?? ''); $holderUid = $u->id;
+        $reqHolder = trim((string)$request->input('holder',''));
+        if ($isPriv && $reqHolder !== '') {
+            $holderName = $reqHolder;
+            try { $holderUid = \App\Models\User::where('tenant_id',$t->id)->where('name',$reqHolder)->value('id'); }
+            catch (\Throwable $e) { $holderUid = null; }
+        }
+
+        // A cash-out tagged as a purchase is booked as stage 'purchase' so it lands as a purchase/COGS,
+        // not a generic expense. (Cash still leaves the chosen person's hand exactly the same way.)
+        $stage = $dir;
+        $purchaseCats = ['local purchase','purchase','goods','stock purchase'];
+        if ($dir==='cash_out' && $category!==null && in_array(mb_strtolower($category),$purchaseCats,true)) {
+            $stage = 'purchase';
+        }
+
         $c = OrderCost::create([
-            'tenant_id'=>$t->id, 'stage'=>$dir,
+            'tenant_id'=>$t->id, 'stage'=>$stage,
             'currency'=>$cur, 'native_amount'=>$native, 'rate_to_usd'=>$rate,
             'usd_amount'=>OrderCost::toUsd($native,$rate),
-            'holder'=>(string)($u->name ?? ''), 'holder_user_id'=>$u->id,
+            'holder'=>$holderName, 'holder_user_id'=>$holderUid,
+            'pay_status'=>'cash',
             'note'=>(string)$request->input('note',''),
-            'category'=>trim((string)$request->input('category','')) ?: null,
-            'status'=>($u->isOwnerLike() || in_array((string)$u->role,['manager'],true)) ? 'approved' : (((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved'),
+            'category'=>$category,
+            'order_no'=>trim((string)$request->input('order_no','')) ?: null,
+            'status'=>$isPriv ? 'approved' : (((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved'),
             'created_by'=>$u->name ?? '',
         ]);
-        return response()->json(['ok'=>true,'id'=>$c->id,'usd'=>$c->usd_amount]);
+        return response()->json(['ok'=>true,'id'=>$c->id,'usd'=>$c->usd_amount,'holder'=>$holderName,'stage'=>$stage]);
+    }
+
+    /** GET /papi/holder-balance?holder=&holder_user_id=&currency= — current native cash for one
+     *  person+currency. Read-only helper for the negative-cash warning; touches no write path.
+     *  (Restores the method the route references.) */
+    public function balanceFor(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok'=>false],401);
+        $holder = trim((string)$request->input('holder',''));
+        $uid    = (int)$request->input('holder_user_id', 0);
+        $cur    = strtoupper((string)$request->input('currency','UGX'));
+        if (! in_array($cur,['USD','UGX','SSP'],true)) return response()->json(['ok'=>false,'error'=>'bad_currency'],422);
+        if ($holder === '' && $uid <= 0) return response()->json(['ok'=>false,'error'=>'no_holder'],422);
+        $inStages = ['funding','cash_in','customer_payment'];
+        $q = OrderCost::where('tenant_id',$t->id)->where('currency',$cur)->whereIn('status',['approved','pending']);
+        if ($uid > 0) $q->where(function($w) use ($uid,$holder){ $w->where('holder_user_id',$uid); if($holder!=='') $w->orWhere('holder',$holder); });
+        else $q->where('holder',$holder);
+        $bal = 0.0;
+        foreach ($q->get(['stage','paid_native']) as $r) {
+            $bal += (in_array($r->stage,$inStages,true) ? 1 : -1) * (float)$r->paid_native;
+        }
+        return response()->json(['ok'=>true,'holder'=>$holder,'currency'=>$cur,'balance'=>round($bal,2)]);
     }
 
     /** POST /papi/trade-cashbook/convert — convert one currency to another as TWO linked legs

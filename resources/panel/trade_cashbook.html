@@ -167,7 +167,9 @@
     <input id="rate" inputmode="decimal" oninput="calc()">
     <div class="conv" id="conv">≈ $0.00 USD</div>
     <label>Category</label>
-    <select id="cat"><option value="">— choose —</option><option>Receipt</option><option>Sale</option><option>Funding / Float</option><option>Local Purchase</option><option>Travel &amp; Field</option><option>Food Allowance</option><option>Transport</option><option>Salary / Wages</option><option>Misc Expense</option><option>Other</option></select>
+    <select id="cat"><option value="">— choose —</option><option>Purchase</option><option>Receipt</option><option>Sale</option><option>Funding / Float</option><option>Local Purchase</option><option>Travel &amp; Field</option><option>Food Allowance</option><option>Transport</option><option>Salary / Wages</option><option>Misc Expense</option><option>Other</option></select>
+    <label id="whoLbl">Whose cash (person)</label>
+    <select id="who"><option value="">— me —</option></select>
     <label>Note (optional)</label>
     <input id="note" placeholder="e.g. float to Jayesh, sold goods">
     <button class="btn" id="saveBtn" onclick="save()">Record entry</button>
@@ -369,19 +371,48 @@ function exportPdf(){
   }).catch(function(){ alert('Export failed'); });
 }
 function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-function save(){
+function doSaveEntry(){
   const native=($('amt').value||'').replace(/,/g,''),rate=($('rate').value||'').replace(/,/g,'');
-  if(!(parseFloat(native)>0)){alert('Enter an amount');return;}
-  const p=new URLSearchParams({dir:DIR,currency:$('cur').value,native_amount:native,rate_to_usd:rate,category:$('cat').value,note:$('note').value});
+  const who=($('who')&&$('who').value||'').trim();
+  const p=new URLSearchParams({dir:DIR,currency:$('cur').value,native_amount:native,rate_to_usd:rate,category:$('cat').value,note:$('note').value,holder:who});
   const b=$('saveBtn');b.disabled=true;
   fetch('/papi/trade-cashbook?'+p,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(r=>{
     b.disabled=false;setDir(DIR);
     if(r.ok){$('amt').value='';$('note').value='';$('cat').value='';calc();PAGE=1;load();}else alert('Failed: '+(r.error||'error'));
   }).catch(()=>{b.disabled=false;alert('Failed.');});
 }
+function save(){
+  const native=parseFloat(($('amt').value||'').replace(/,/g,''))||0,rate=parseFloat(($('rate').value||'').replace(/,/g,''))||0;
+  if(!(native>0)){alert('Enter an amount');return;}
+  if(!(rate>0)){alert('Enter the rate');return;}
+  // Negative-cash guard on money out: warn if the chosen person doesn't have enough in this currency.
+  if(DIR==='out'){
+    const who=($('who')&&$('who').value||'').trim();
+    const cur=$('cur').value;
+    const qs='holder='+encodeURIComponent(who)+'&currency='+encodeURIComponent(cur);
+    fetch('/papi/holder-balance?'+qs,{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+      .then(r=>r.json()).then(function(d){
+        if(d&&d.ok && native > (Number(d.balance)+0.001)){
+          const nm=who||'you';
+          if(!confirm('\u26a0 '+nm+' has only '+cur+' '+Number(d.balance).toLocaleString()+' in hand.\n\nThis '+cur+' '+native.toLocaleString()+' will make it negative ('+cur+' '+(Number(d.balance)-native).toLocaleString()+').\n\nRecord funding first if that cash was received but not entered. Continue anyway?')) return;
+        }
+        doSaveEntry();
+      }).catch(function(){ doSaveEntry(); });
+  } else { doSaveEntry(); }
+}
 function del(id){var e=(window.__ENTRIES||[]).find(function(x){return x.id===id;});var msg=(e&&e.stage==='customer_payment')?'Delete this receipt? It will be removed from the customer account too. Cannot be undone.':'Delete this entry? Cannot be undone.';if(!confirm(msg))return;
   fetch('/papi/trade-cashbook/'+id+'/delete',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(r=>{if(r.ok)load();else alert(r.error==='not_allowed'?'Only owner/manager can delete':'Failed');});}
-setRate();load();
+function loadWho(){
+  fetch('/papi/staff-cash',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',cache:'no-store'})
+    .then(function(r){return r.json();}).then(function(d){
+      var sel=$('who'); if(!sel)return;
+      var me=(d&&d.whoami)||''; var names=((d&&d.people)||[]).map(function(p){return p.name;}).filter(Boolean);
+      if(me && names.indexOf(me)===-1) names.unshift(me);
+      var uniq=[]; names.forEach(function(n){ if(uniq.indexOf(n)===-1)uniq.push(n); });
+      sel.innerHTML='<option value="">— me ('+(me||'you')+') —</option>'+uniq.map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>';}).join('');
+    }).catch(function(){});
+}
+setRate();load();loadWho();
 </script>
 <!-- ===== DishNet role-aware tab bar + amount format (injected v2) ===== -->
 <nav class="dn-tabbar" id="dnTabbar"></nav>
