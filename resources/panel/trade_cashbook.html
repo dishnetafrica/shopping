@@ -177,6 +177,7 @@
     <div class="sectlbl" style="margin:0">📒 ENTRIES</div>
     <div style="display:flex;gap:6px">
       <button id="convBtn" onclick="openConv()" style="display:none;background:#1D4ED8;color:#fff;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">⇄ Convert</button>
+      <button id="moveBtn" onclick="openMove()" style="display:none;background:#7A4B12;color:#fff;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">⇆ Move cash</button>
       <button onclick="exportCsv()" style="background:#0B3D22;color:#fff;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">⬇ CSV</button>
       <button onclick="exportPdf()" style="background:#eef2f7;color:#334155;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">🖨 PDF</button>
     </div>
@@ -260,12 +261,40 @@ function saveConv(){
       else alert('Could not convert: '+((r&&r.error==='not_allowed')?'owner/manager only':((r&&r.error)||'error'))); })
     .catch(function(){ b.disabled=false; b.textContent='Convert & record both'; alert('Failed'); });
 }
+
+function openMove(){
+  $('mvFrom').value=''; $('mvTo').value=''; $('mvAmt').value=''; $('mvNote').value=''; $('mvCur').value='UGX';
+  var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); $('mvDate').value=d.toISOString().slice(0,16);
+  var names={}; (window.__ENTRIES||[]).forEach(function(x){if(x.holder)names[x.holder]=1;});
+  $('mvPeople').innerHTML=Object.keys(names).map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">';}).join('');
+  mvCalc(); $('mvback').classList.add('on'); $('mvsheet').classList.add('on'); setTimeout(function(){$('mvFrom').focus();},250);
+}
+function closeMove(){ $('mvback').classList.remove('on'); $('mvsheet').classList.remove('on'); }
+function mvCalc(){
+  var f=$('mvFrom').value.trim(), t=$('mvTo').value.trim(), c=$('mvCur').value;
+  var amt=parseFloat(($('mvAmt').value||'').replace(/,/g,''))||0;
+  if(amt>0&&f&&t&&f.toLowerCase()!==t.toLowerCase()){ $('mvPrev').textContent=(f||'—')+'  →  '+(t||'—'); $('mvPrev2').textContent=c+' '+fmt(amt)+' moves hands'; $('mvSave').disabled=false; }
+  else { $('mvPrev').textContent='—'; $('mvPrev2').textContent=(f&&t&&f.toLowerCase()===t.toLowerCase())?'Pick two different people':''; $('mvSave').disabled=true; }
+}
+function saveMove(){
+  var f=$('mvFrom').value.trim(), t=$('mvTo').value.trim();
+  if(!f||!t){alert('From and To?');return;} if(f.toLowerCase()===t.toLowerCase()){alert('Pick two different people');return;}
+  var amt=parseFloat(($('mvAmt').value||'').replace(/,/g,''))||0; if(amt<=0){alert('Amount?');return;}
+  var b=$('mvSave'); b.disabled=true; b.textContent='Moving…';
+  var body=new URLSearchParams({from_person:f,to_person:t,currency:$('mvCur').value,amount:amt,note:$('mvNote').value.trim(),created_date:$('mvDate').value});
+  fetch('/papi/trade-cashbook/transfer',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body})
+    .then(r=>r.json()).then(function(r){ b.disabled=false; b.textContent='Move cash';
+      if(r&&r.ok){ closeMove(); load(); alert('✅ '+r.currency+' '+fmt(r.amount)+' moved from '+r.from+' to '+r.to+'.'); }
+      else alert('Could not move: '+((r&&r.error==='not_allowed')?'owner/manager only':((r&&r.error==='same_person')?'pick two different people':((r&&r.error)||'error')))); })
+    .catch(function(){ b.disabled=false; b.textContent='Move cash'; alert('Failed'); });
+}
 function load(){
   fetch('/papi/trade-cashbook?currency='+FILT+'&page='+PAGE+'&per=20',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(d=>{
     if(!d.ok){$('list').innerHTML='<div class="loading">Could not load.</div>';return;}
     if(d.default_rates)rates=d.default_rates;
     $('title').textContent=d.view==='mine'?'💵 My Cashbook':'💵 Cashbook';
     if($('convBtn'))$('convBtn').style.display=d.is_owner?'inline-block':'none';
+    if($('moveBtn'))$('moveBtn').style.display=d.is_owner?'inline-block':'none';
     $('sub').textContent=(d.view==='mine'?('My cash · '+d.whoami):'All staff')+' · currency-aware ledger';
     // balances
     const b=d.balances;
@@ -452,5 +481,20 @@ setRate();load();
   <label>Date</label><input id="cvDate" type="datetime-local">
   <div class="cvprev"><div class="a" id="cvPrev">—</div><div class="m" id="cvPrev2"></div></div>
   <button class="cvsave" id="cvSave" onclick="saveConv()">Convert &amp; record both</button>
+</div>
+<div class="cvbackdrop" id="mvback" onclick="closeMove()"></div>
+<div class="cvsheet" id="mvsheet">
+  <button class="cvx" onclick="closeMove()">✕</button>
+  <h3>⇆ Move cash between people</h3>
+  <div class="hint">Hand cash from one person to another (same currency) — records it OUT of the giver's hand and IN to the receiver's hand.</div>
+  <div class="g2"><div><label>From (giver)</label><input id="mvFrom" list="mvPeople" placeholder="Person"></div>
+  <div><label>To (receiver)</label><input id="mvTo" list="mvPeople" placeholder="Person"></div></div>
+  <datalist id="mvPeople"></datalist>
+  <div class="g2"><div><label>Amount</label><input id="mvAmt" inputmode="decimal" placeholder="0" oninput="mvCalc()"></div>
+  <div style="max-width:120px"><label>Currency</label><select id="mvCur" onchange="mvCalc()"><option>UGX</option><option>USD</option><option>SSP</option></select></div></div>
+  <label>Note (optional)</label><input id="mvNote" placeholder="e.g. float for Kikuubo buying">
+  <label>Date</label><input id="mvDate" type="datetime-local">
+  <div class="cvprev"><div class="a" id="mvPrev">—</div><div class="m" id="mvPrev2"></div></div>
+  <button class="cvsave" id="mvSave" style="background:#7A4B12" onclick="saveMove()">Move cash</button>
 </div>
 </body></html>

@@ -1,32 +1,30 @@
-DEPLOY — All-in-one: Convert Currency button added (v43)
-========================================================
-Adds a "⇄ Convert" button to the Cashbook so you never need a console script for
-conversions again. It records BOTH legs (money OUT of the source currency, money IN to
-the target) in ONE server transaction — no more half-done conversions. Owner/manager only.
+DEPLOY — All-in-one: Move cash between people (v44)
+===================================================
+Adds "⇆ Move cash" to the Cashbook, completing the internal cash tools. Hand cash from
+one person to another (same currency) — records it OUT of the giver's hand and IN to the
+receiver's hand in ONE transaction. Owner/manager only.
 
 NEW IN THIS BUILD
-  - Cashbook toolbar: "⇄ Convert" button (owner/manager). Opens a form:
-      From currency + Amount out  ->  To currency + Rate (auto-suggested)  +  Held by  +  Date
-    Live preview shows e.g. "USD 600 -> UGX 2,193,000". One tap writes both legs
-    (cash_out of source + cash_in of target), both tagged "Conversion", both held by the
-    chosen person (default: you), linked by matching notes.
-  - Backend: new atomic endpoint POST /papi/trade-cashbook/convert (single DB
-    transaction, so it can never leave a one-sided conversion).
-  - Both legs carry the same USD value, so company USD value stays constant — the money
-    just moves between currency pockets.
+  - Cashbook toolbar: "⇆ Move cash" button (owner/manager). Form:
+      From (giver) -> To (receiver) + Amount + Currency + Note + Date
+    Live preview "Bhavin -> Jayesh · UGX 2,000,000 moves hands". One click writes both
+    legs (cash_out from giver, cash_in to receiver), same currency, tagged "Transfer".
+  - Backend: POST /papi/trade-cashbook/transfer (single DB transaction).
+  - Giver's cash in hand goes down, receiver's goes up; company total for that currency
+    is unchanged (it just moved between people).
 
-  Example (your case): From USD 600 -> To UGX @ 3655, Held by Bhavin ->
-    USD book -600 (Bhavin), UGX book +2,193,000 (Bhavin). Done in one click.
+  Example: Bhavin hands Jayesh UGX 2,000,000 -> Bhavin UGX -2,000,000, Jayesh +2,000,000.
 
-INCLUDES EVERYTHING ELSE (Staff Cash, My Cash field app, receipt/cashbook edit + delete,
-seller nav) — single upload.
+FULL CASH TOOLKIT NOW (all in the Cashbook, owner/manager)
+  Record entry · ⇄ Convert currency · ⇆ Move cash · Edit · Delete
+  (plus Staff Cash, My Cash field app, receipts with order+receiver+edit+delete)
 
 FILES (folders match your repo paths)
-  app/Http/Controllers/Panel/StaffCashController.php
+  app/Http/Controllers/Panel/TradeCashbookController.php   (+transfer(); +convert; edit/delete)
   app/Http/Controllers/Panel/PaymentController.php
-  app/Http/Controllers/Panel/TradeCashbookController.php   (+convert(); edit/delete)
-  routes/web.php                                            (+trade-cashbook/convert)
-  resources/panel/trade_cashbook.html                       (Convert button + form)
+  app/Http/Controllers/Panel/StaffCashController.php
+  routes/web.php                                            (+trade-cashbook/transfer)
+  resources/panel/trade_cashbook.html                       (Move cash button + form)
   resources/panel/staff_cash.html, my_cash.html, payments.html, app_home.html
   seller.html
 
@@ -36,7 +34,6 @@ UPLOAD
   Hard-refresh (Cmd/Ctrl+Shift+R).
 
 VERIFY
-  Cashbook -> ⇄ Convert -> From USD 600, To UGX, rate 3655, Held by Bhavin -> preview
-  shows UGX 2,193,000 -> Convert. USD book drops 600, UGX book rises 2,193,000, both as
-  "Conversion" rows held by Bhavin. (If cost_approval is on they show pending; approve in
-  Cost Approvals for the Done badge.)
+  Cashbook -> ⇆ Move cash -> From Bhavin, To Jayesh, UGX 2,000,000 -> preview -> Move.
+  Bhavin's UGX drops, Jayesh's rises by the same; two "Transfer" rows appear. (Pending if
+  cost_approval is on -> approve in Cost Approvals.)

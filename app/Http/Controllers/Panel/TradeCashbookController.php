@@ -228,6 +228,62 @@ class TradeCashbookController extends Controller
             'rate'=>$rate,'holder'=>$holderName,'usd_value'=>$usdValue] + $res);
     }
 
+    /** POST /papi/trade-cashbook/transfer — move cash from one person to another (same currency):
+     *  OUT of the giver's hand + IN to the receiver's hand, in one transaction. */
+    public function transfer(Request $request)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok'=>false],401);
+        if (! ($u->isOwnerLike() || in_array((string)$u->role,['manager'],true)))
+            return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
+
+        $giver = trim((string)$request->input('from_person',''));
+        $receiver = trim((string)$request->input('to_person',''));
+        if ($giver === '' || $receiver === '') return response()->json(['ok'=>false,'error'=>'no_person'],422);
+        if (mb_strtolower($giver) === mb_strtolower($receiver)) return response()->json(['ok'=>false,'error'=>'same_person'],422);
+
+        $cur = strtoupper((string)$request->input('currency','UGX'));
+        if (! in_array($cur,['USD','UGX','SSP'],true)) return response()->json(['ok'=>false,'error'=>'bad_currency'],422);
+        $amount = round((float)$request->input('amount',0), 2);
+        if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
+        $rate = $cur==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3655:5180);
+        if ($rate <= 0) $rate = 1;
+        $usd = OrderCost::toUsd($amount, $rate);
+
+        $resolve = function($name) use ($t) {
+            try { return \App\Models\User::where('tenant_id',$t->id)->where('name',$name)->value('id'); } catch (\Throwable $e) { return null; }
+        };
+        $giverUid = $resolve($giver); $recvUid = $resolve($receiver);
+        $note = trim((string)$request->input('note','')) ?: null;
+        $createdAt = null;
+        $cd = trim((string)$request->input('created_date',''));
+        if ($cd !== '') { try { $createdAt = \Illuminate\Support\Carbon::parse($cd); } catch (\Throwable $e) { $createdAt = null; } }
+        $status = ((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved';
+
+        $res = DB::transaction(function () use ($t,$u,$giver,$giverUid,$receiver,$recvUid,$cur,$amount,$rate,$usd,$note,$createdAt,$status) {
+            $out = OrderCost::create([
+                'tenant_id'=>$t->id,'stage'=>'cash_out','currency'=>$cur,
+                'native_amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
+                'holder'=>$giver,'holder_user_id'=>$giverUid,'pay_status'=>'cash','paid_native'=>$amount,
+                'category'=>'Transfer',
+                'note'=>($note?($note.' — '):'').'Handed to '.$receiver,
+                'status'=>$status,'created_by'=>$u->name ?? '',
+            ]);
+            $in = OrderCost::create([
+                'tenant_id'=>$t->id,'stage'=>'cash_in','currency'=>$cur,
+                'native_amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
+                'holder'=>$receiver,'holder_user_id'=>$recvUid,'pay_status'=>'cash','paid_native'=>$amount,
+                'category'=>'Transfer',
+                'note'=>($note?($note.' — '):'').'Received from '.$giver,
+                'status'=>$status,'created_by'=>$u->name ?? '',
+            ]);
+            if ($createdAt) { $out->created_at=$createdAt; $out->save(); $in->created_at=$createdAt; $in->save(); }
+            return ['out_id'=>$out->id,'in_id'=>$in->id];
+        });
+
+        return response()->json(['ok'=>true,'from'=>$giver,'to'=>$receiver,'currency'=>$cur,'amount'=>$amount,'usd'=>$usd] + $res);
+    }
+
     /** POST /papi/trade-cashbook/{id}/delete — owner/manager only. */
     public function delete(Request $request, int $id)
     {
