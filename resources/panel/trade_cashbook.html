@@ -72,6 +72,21 @@
   .esheet .e2{display:flex;gap:10px;}.esheet .e2>*{flex:1;}
   .esave{width:100%;margin-top:14px;background:#0B3D22;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;}
   .ex{position:absolute;right:14px;top:14px;background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer;}
+
+  .cvbackdrop{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:79;display:none;}.cvbackdrop.on{display:block;}
+  .cvsheet{position:fixed;left:0;right:0;bottom:0;z-index:80;background:#fff;border-radius:18px 18px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 18px);box-shadow:0 -8px 30px -10px rgba(0,0,0,.25);transform:translateY(110%);transition:.22s;max-height:92vh;overflow:auto;max-width:520px;margin:0 auto;}
+  .cvsheet.on{transform:translateY(0);}
+  .cvsheet h3{margin:0 0 2px;font-size:17px;font-weight:900;}
+  .cvsheet .hint{font-size:12px;color:#6E7D72;margin:0 0 10px;font-weight:600;}
+  .cvsheet label{display:block;font-size:12px;font-weight:800;color:#374151;margin:10px 0 5px;}
+  .cvsheet input,.cvsheet select{width:100%;padding:11px;border:1.5px solid #E1E8E2;border-radius:11px;font-size:16px;font-family:inherit;background:#fff;}
+  .cvsheet .g2{display:flex;gap:10px;}.cvsheet .g2>*{flex:1;}
+  .cvprev{margin-top:12px;background:linear-gradient(135deg,#EFF4FF,#fff);border:1px solid #DBE4FF;border-radius:12px;padding:14px;text-align:center;}
+  .cvprev .a{font-size:20px;font-weight:900;color:#0B3D22;letter-spacing:-.4px;}
+  .cvprev .m{font-size:11.5px;color:#6E7D72;font-weight:700;margin-top:3px;}
+  .cvsave{width:100%;margin-top:14px;background:#1D4ED8;color:#fff;border:none;border-radius:12px;padding:15px;font-size:15px;font-weight:900;cursor:pointer;}
+  .cvsave:disabled{opacity:.6;}
+  .cvx{position:absolute;right:14px;top:14px;background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer;}
 </style>
 <!-- ===== DishNet mobile app shell (injected v2) ===== -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -161,6 +176,7 @@
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <div class="sectlbl" style="margin:0">📒 ENTRIES</div>
     <div style="display:flex;gap:6px">
+      <button id="convBtn" onclick="openConv()" style="display:none;background:#1D4ED8;color:#fff;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">⇄ Convert</button>
       <button onclick="exportCsv()" style="background:#0B3D22;color:#fff;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">⬇ CSV</button>
       <button onclick="exportPdf()" style="background:#eef2f7;color:#334155;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">🖨 PDF</button>
     </div>
@@ -207,11 +223,49 @@ function saveEdit(){
      if(r&&r.ok){ closeEdit(); load(); } else alert('Could not save: '+((r&&r.error)||'error')); })
    .catch(function(){ b.disabled=false; b.textContent='Save changes'; alert('Failed'); });
 }
+
+function openConv(){
+  $('cvFrom').value='USD'; $('cvTo').value='UGX'; $('cvAmt').value=''; $('cvHolder').value='';
+  var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); $('cvDate').value=d.toISOString().slice(0,16);
+  var names={}; (window.__ENTRIES||[]).forEach(function(x){if(x.holder)names[x.holder]=1;});
+  $('cvPeople').innerHTML=Object.keys(names).map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">';}).join('');
+  cvDefaultRate(); cvCalc(); $('cvback').classList.add('on'); $('cvsheet').classList.add('on'); setTimeout(function(){$('cvAmt').focus();},250);
+}
+function closeConv(){ $('cvback').classList.remove('on'); $('cvsheet').classList.remove('on'); }
+function cvDefaultRate(){
+  var f=$('cvFrom').value, t=$('cvTo').value; var dr=(rates||{UGX:3700,SSP:5180,USD:1});
+  // rate = to-native per 1 from-native = (to per USD) / (from per USD)
+  var toPerUsd=t==='USD'?1:(dr[t]||(t==='UGX'?3655:5180)); var fromPerUsd=f==='USD'?1:(dr[f]||(f==='UGX'?3655:5180));
+  var r=toPerUsd/fromPerUsd; $('cvRate').value=(r>=100?Math.round(r):r.toFixed(4));
+}
+function cvCalc(){
+  var f=$('cvFrom').value, t=$('cvTo').value;
+  if(f===t){ $('cvPrev').textContent='Pick two different currencies'; $('cvPrev2').textContent=''; $('cvSave').disabled=true; return; }
+  var amt=parseFloat(($('cvAmt').value||'').replace(/,/g,''))||0;
+  var rate=parseFloat(($('cvRate').value||'').replace(/,/g,''))||0;
+  var to=Math.round(amt*rate*100)/100;
+  if(amt>0&&rate>0){ $('cvPrev').textContent=f+' '+fmt(amt)+'  →  '+t+' '+fmt(to); $('cvPrev2').textContent='OUT of '+f+' book · IN to '+t+' book @ '+rate; $('cvSave').disabled=false; }
+  else { $('cvPrev').textContent='—'; $('cvPrev2').textContent=''; $('cvSave').disabled=true; }
+}
+function saveConv(){
+  var f=$('cvFrom').value, t=$('cvTo').value;
+  var amt=parseFloat(($('cvAmt').value||'').replace(/,/g,''))||0; if(amt<=0){alert('Amount?');return;}
+  var rate=parseFloat(($('cvRate').value||'').replace(/,/g,''))||0; if(rate<=0){alert('Rate?');return;}
+  if(f===t){alert('Pick two different currencies');return;}
+  var b=$('cvSave'); b.disabled=true; b.textContent='Converting…';
+  var body=new URLSearchParams({from_currency:f,to_currency:t,from_amount:amt,rate:rate,holder:$('cvHolder').value.trim(),created_date:$('cvDate').value});
+  fetch('/papi/trade-cashbook/convert',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body})
+    .then(r=>r.json()).then(function(r){ b.disabled=false; b.textContent='Convert & record both';
+      if(r&&r.ok){ closeConv(); load(); alert('✅ Converted '+r.from+' '+fmt(r.from_amount)+' → '+r.to+' '+fmt(r.to_amount)+'.'); }
+      else alert('Could not convert: '+((r&&r.error==='not_allowed')?'owner/manager only':((r&&r.error)||'error'))); })
+    .catch(function(){ b.disabled=false; b.textContent='Convert & record both'; alert('Failed'); });
+}
 function load(){
   fetch('/papi/trade-cashbook?currency='+FILT+'&page='+PAGE+'&per=20',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(d=>{
     if(!d.ok){$('list').innerHTML='<div class="loading">Could not load.</div>';return;}
     if(d.default_rates)rates=d.default_rates;
     $('title').textContent=d.view==='mine'?'💵 My Cashbook':'💵 Cashbook';
+    if($('convBtn'))$('convBtn').style.display=d.is_owner?'inline-block':'none';
     $('sub').textContent=(d.view==='mine'?('My cash · '+d.whoami):'All staff')+' · currency-aware ledger';
     // balances
     const b=d.balances;
@@ -384,5 +438,19 @@ setRate();load();
   <label>Note</label><input id="eNote" placeholder="optional">
   <label>Date</label><input id="eDate" type="datetime-local">
   <button class="esave" id="eSave" onclick="saveEdit()">Save changes</button>
+</div>
+<div class="cvbackdrop" id="cvback" onclick="closeConv()"></div>
+<div class="cvsheet" id="cvsheet">
+  <button class="cvx" onclick="closeConv()">✕</button>
+  <h3>⇄ Convert currency</h3>
+  <div class="hint">Moves cash from one currency to another — records the money OUT of the source and IN to the target, both in one step.</div>
+  <div class="g2"><div><label>From</label><select id="cvFrom" onchange="cvCalc()"><option>USD</option><option>UGX</option><option>SSP</option></select></div>
+  <div><label>Amount out</label><input id="cvAmt" inputmode="decimal" placeholder="0" oninput="cvCalc()"></div></div>
+  <div class="g2"><div><label>To</label><select id="cvTo" onchange="cvCalc()"><option>UGX</option><option>USD</option><option>SSP</option></select></div>
+  <div><label>Rate (to per 1 from)</label><input id="cvRate" inputmode="decimal" oninput="cvCalc()"></div></div>
+  <label>Held by</label><input id="cvHolder" list="cvPeople" placeholder="Person (default: you)"><datalist id="cvPeople"></datalist>
+  <label>Date</label><input id="cvDate" type="datetime-local">
+  <div class="cvprev"><div class="a" id="cvPrev">—</div><div class="m" id="cvPrev2"></div></div>
+  <button class="cvsave" id="cvSave" onclick="saveConv()">Convert &amp; record both</button>
 </div>
 </body></html>

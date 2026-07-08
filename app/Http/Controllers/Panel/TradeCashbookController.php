@@ -159,6 +159,75 @@ class TradeCashbookController extends Controller
         return response()->json(['ok'=>true,'id'=>$c->id,'usd'=>$c->usd_amount]);
     }
 
+    /** POST /papi/trade-cashbook/convert — convert one currency to another as TWO linked legs
+     *  (money OUT of the source currency, money IN to the target) in a single transaction. */
+    public function convert(Request $request)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok'=>false],401);
+        if (! ($u->isOwnerLike() || in_array((string)$u->role,['manager'],true)))
+            return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
+
+        $from = strtoupper((string)$request->input('from_currency',''));
+        $to   = strtoupper((string)$request->input('to_currency',''));
+        $ok3  = ['USD','UGX','SSP'];
+        if (! in_array($from,$ok3,true) || ! in_array($to,$ok3,true) || $from===$to)
+            return response()->json(['ok'=>false,'error'=>'bad_currency'],422);
+
+        $fromAmt = round((float)$request->input('from_amount',0), 2);
+        if ($fromAmt <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
+        // rate = target native per 1 source native (e.g. USD->UGX rate 3655)
+        $rate = round((float)$request->input('rate',0), 6);
+        if ($rate <= 0) return response()->json(['ok'=>false,'error'=>'bad_rate'],422);
+        $toAmt = round($fromAmt * $rate, 2);
+
+        // USD value each leg (so both legs carry a consistent usd_amount)
+        $usdPerFrom = $from==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($from).'_per_usd', $from==='UGX'?3655:5180);
+        if ($usdPerFrom <= 0) $usdPerFrom = 1;
+        $usdValue = OrderCost::toUsd($fromAmt, $usdPerFrom);   // value moved, in USD
+
+        // holder: owner may name one; default current user
+        $holderName = (string)($u->name ?? ''); $holderUid = $u->id;
+        $recv = trim((string)$request->input('holder',''));
+        if ($recv !== '' && mb_strtolower($recv) !== mb_strtolower($holderName)) {
+            $holderName = $recv;
+            try { $holderUid = \App\Models\User::where('tenant_id',$t->id)->where('name',$recv)->value('id'); } catch (\Throwable $e) { $holderUid = null; }
+        }
+        $note = trim((string)$request->input('note','')) ?: null;
+        $createdAt = null;
+        $cd = trim((string)$request->input('created_date',''));
+        if ($cd !== '') { try { $createdAt = \Illuminate\Support\Carbon::parse($cd); } catch (\Throwable $e) { $createdAt = null; } }
+        $status = ((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved';
+
+        $rateFromToUsd = $from==='USD' ? 1.0 : $usdPerFrom;         // native/USD for the FROM leg
+        $rateToToUsd   = $to==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($to).'_per_usd', $to==='UGX'?3655:5180);
+        if ($rateToToUsd <= 0) $rateToToUsd = ($usdValue>0 ? $toAmt/$usdValue : 1);
+
+        $res = DB::transaction(function () use ($t,$u,$from,$to,$fromAmt,$toAmt,$rate,$rateFromToUsd,$rateToToUsd,$usdValue,$holderName,$holderUid,$note,$createdAt,$status) {
+            $out = OrderCost::create([
+                'tenant_id'=>$t->id,'stage'=>'cash_out','currency'=>$from,
+                'native_amount'=>$fromAmt,'rate_to_usd'=>$rateFromToUsd,'usd_amount'=>$usdValue,
+                'holder'=>$holderName,'holder_user_id'=>$holderUid,'pay_status'=>'cash','paid_native'=>$fromAmt,
+                'category'=>'Conversion',
+                'note'=>($note?($note.' — '):'').'Converted '.$from.' '.number_format($fromAmt,2).' → '.$to.' '.number_format($toAmt,2).' @ '.$rate,
+                'status'=>$status,'created_by'=>$u->name ?? '',
+            ]);
+            $in = OrderCost::create([
+                'tenant_id'=>$t->id,'stage'=>'cash_in','currency'=>$to,
+                'native_amount'=>$toAmt,'rate_to_usd'=>$rateToToUsd,'usd_amount'=>$usdValue,
+                'holder'=>$holderName,'holder_user_id'=>$holderUid,'pay_status'=>'cash','paid_native'=>$toAmt,
+                'category'=>'Conversion',
+                'note'=>($note?($note.' — '):'').'From '.$from.' '.number_format($fromAmt,2).' @ '.$rate,
+                'status'=>$status,'created_by'=>$u->name ?? '',
+            ]);
+            if ($createdAt) { $out->created_at=$createdAt; $out->save(); $in->created_at=$createdAt; $in->save(); }
+            return ['out_id'=>$out->id,'in_id'=>$in->id];
+        });
+
+        return response()->json(['ok'=>true,'from'=>$from,'to'=>$to,'from_amount'=>$fromAmt,'to_amount'=>$toAmt,
+            'rate'=>$rate,'holder'=>$holderName,'usd_value'=>$usdValue] + $res);
+    }
+
     /** POST /papi/trade-cashbook/{id}/delete — owner/manager only. */
     public function delete(Request $request, int $id)
     {

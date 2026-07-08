@@ -181,6 +181,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('trade-cashbook', [\App\Http\Controllers\Panel\TradeCashbookController::class, 'store']);
         Route::post('trade-cashbook/{id}/delete', [\App\Http\Controllers\Panel\TradeCashbookController::class, 'delete']);
         Route::post('trade-cashbook/{id}/update', [\App\Http\Controllers\Panel\TradeCashbookController::class, 'update']);
+        Route::post('trade-cashbook/convert', [\App\Http\Controllers\Panel\TradeCashbookController::class, 'convert']);
 
         // in-product release notes
         Route::get('whatsnew', [PanelApiController::class, 'whatsNew']);

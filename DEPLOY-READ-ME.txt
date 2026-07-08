@@ -1,36 +1,34 @@
-DEPLOY — All-in-one: full CRUD (delete added) v42
-=================================================
-Adds DELETE everywhere it was missing, completing Create/Read/Update/Delete on the
-cashbook and receipts. Owner/manager only; deletes are permanent and remove linked
-rows together so the books never drift. Single upload — has everything.
+DEPLOY — All-in-one: Convert Currency button added (v43)
+========================================================
+Adds a "⇄ Convert" button to the Cashbook so you never need a console script for
+conversions again. It records BOTH legs (money OUT of the source currency, money IN to
+the target) in ONE server transaction — no more half-done conversions. Owner/manager only.
 
 NEW IN THIS BUILD
-  - Payments Received: each receipt now has a "Delete" button (next to Edit). It removes
-    BOTH the payment record AND its mirrored cashbook row, in one transaction. This lets
-    you clear duplicates like the two RCP-0000x / Mehul bhai $1,286 rows.
-  - Cashbook: the delete (✕) now works on EVERY entry (purchase, funding, receipt, cash
-    in/out, expense) — not just cash in/out. Deleting a receipt also removes its linked
-    customer-payment record (Customer 360 stays correct).
-  - Both are owner/manager only (staff cannot delete). Confirm prompt before deleting;
-    hard delete (cannot be undone).
+  - Cashbook toolbar: "⇄ Convert" button (owner/manager). Opens a form:
+      From currency + Amount out  ->  To currency + Rate (auto-suggested)  +  Held by  +  Date
+    Live preview shows e.g. "USD 600 -> UGX 2,193,000". One tap writes both legs
+    (cash_out of source + cash_in of target), both tagged "Conversion", both held by the
+    chosen person (default: you), linked by matching notes.
+  - Backend: new atomic endpoint POST /papi/trade-cashbook/convert (single DB
+    transaction, so it can never leave a one-sided conversion).
+  - Both legs carry the same USD value, so company USD value stays constant — the money
+    just moves between currency pockets.
 
-FULL CRUD NOW
-  Create: Record entry / Record payment / Give-Spent-Received / field app
-  Read:   all lists
-  Update: Cashbook Edit (all types) + Payments Edit  (v38/v39)
-  Delete: Cashbook ✕ (all types) + Payments Delete    (this build)
+  Example (your case): From USD 600 -> To UGX @ 3655, Held by Bhavin ->
+    USD book -600 (Bhavin), UGX book +2,193,000 (Bhavin). Done in one click.
+
+INCLUDES EVERYTHING ELSE (Staff Cash, My Cash field app, receipt/cashbook edit + delete,
+seller nav) — single upload.
 
 FILES (folders match your repo paths)
   app/Http/Controllers/Panel/StaffCashController.php
-  app/Http/Controllers/Panel/PaymentController.php       (+destroy())
-  app/Http/Controllers/Panel/TradeCashbookController.php (delete = all types + linked)
-  routes/web.php                                          (+payments/{id}/delete)
-  resources/panel/staff_cash.html
-  resources/panel/my_cash.html
-  resources/panel/payments.html                          (+Delete button)
-  resources/panel/trade_cashbook.html                    (✕ on all rows for owner)
-  resources/panel/app_home.html
-  seller.html                                            (+Staff Cash +My Cash)
+  app/Http/Controllers/Panel/PaymentController.php
+  app/Http/Controllers/Panel/TradeCashbookController.php   (+convert(); edit/delete)
+  routes/web.php                                            (+trade-cashbook/convert)
+  resources/panel/trade_cashbook.html                       (Convert button + form)
+  resources/panel/staff_cash.html, my_cash.html, payments.html, app_home.html
+  seller.html
 
 UPLOAD
   Unzip -> GitHub Add file -> Upload files -> drag contents (app/ routes/ resources/
@@ -38,6 +36,7 @@ UPLOAD
   Hard-refresh (Cmd/Ctrl+Shift+R).
 
 VERIFY
-  Payments -> Delete one of the duplicate Mehul bhai $1,286 receipts -> it disappears
-  and Cash Position / Customer 360 drop by that amount. Cashbook -> ✕ on a purchase or
-  funding row -> it's removed. Staff logins see no Edit/Delete (owner/manager only).
+  Cashbook -> ⇄ Convert -> From USD 600, To UGX, rate 3655, Held by Bhavin -> preview
+  shows UGX 2,193,000 -> Convert. USD book drops 600, UGX book rises 2,193,000, both as
+  "Conversion" rows held by Bhavin. (If cost_approval is on they show pending; approve in
+  Cost Approvals for the Done badge.)
