@@ -218,4 +218,24 @@ class PaymentController extends Controller
         $p->save();
         return response()->json(['ok'=>true,'applied'=>(bool)$p->applied]);
     }
+
+    /** POST /papi/payments/{id}/delete — owner/manager hard-deletes a receipt and its mirrored cash row. */
+    public function destroy(Request $request, int $id)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok'=>false],403);
+        if (! ($u->isOwnerLike() || in_array((string)$u->role,['manager'],true)))
+            return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
+        $p = CustomerPayment::where('tenant_id',$u->tenant_id)->find($id);
+        if (! $p) return response()->json(['ok'=>false,'error'=>'not_found'],404);
+
+        DB::transaction(function () use ($p, $u) {
+            if ($p->order_cost_id) {
+                $cost = OrderCost::where('tenant_id',$u->tenant_id)->find($p->order_cost_id);
+                if ($cost) $cost->delete();
+            }
+            $p->delete();
+        });
+        return response()->json(['ok'=>true]);
+    }
 }

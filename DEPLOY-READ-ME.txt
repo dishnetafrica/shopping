@@ -1,35 +1,43 @@
-DEPLOY — All-in-one (FIXED cashbook loading bug) v41
-====================================================
-IMPORTANT FIX: the Cashbook was stuck on "Loading…" because an earlier edit dropped the
-'entries' array from the API response. Restored it, and added guards so a bad response
-can never freeze the page again. Upload this single zip — it has everything.
+DEPLOY — All-in-one: full CRUD (delete added) v42
+=================================================
+Adds DELETE everywhere it was missing, completing Create/Read/Update/Delete on the
+cashbook and receipts. Owner/manager only; deletes are permanent and remove linked
+rows together so the books never drift. Single upload — has everything.
 
-WHAT WAS WRONG (and is now fixed)
-  /papi/trade-cashbook was returning ok:true but WITHOUT the entries list, so the page
-  crashed at "d.entries.length" and never rendered. Root cause fixed in
-  TradeCashbookController (entries/total/page/per/pages restored) + JS hardened.
-  (The site.webmanifest 404 in your console is unrelated and harmless.)
+NEW IN THIS BUILD
+  - Payments Received: each receipt now has a "Delete" button (next to Edit). It removes
+    BOTH the payment record AND its mirrored cashbook row, in one transaction. This lets
+    you clear duplicates like the two RCP-0000x / Mehul bhai $1,286 rows.
+  - Cashbook: the delete (✕) now works on EVERY entry (purchase, funding, receipt, cash
+    in/out, expense) — not just cash in/out. Deleting a receipt also removes its linked
+    customer-payment record (Customer 360 stays correct).
+  - Both are owner/manager only (staff cannot delete). Confirm prompt before deleting;
+    hard delete (cannot be undone).
 
-WHAT'S INSIDE (folders match your repo paths)
-  app/Http/Controllers/Panel/StaffCashController.php     (Staff Cash + My Cash field app)
-  app/Http/Controllers/Panel/PaymentController.php       (receipts: order required, receiver, edit)
-  app/Http/Controllers/Panel/TradeCashbookController.php (cashbook edit + LOADING FIX)
-  routes/web.php
+FULL CRUD NOW
+  Create: Record entry / Record payment / Give-Spent-Received / field app
+  Read:   all lists
+  Update: Cashbook Edit (all types) + Payments Edit  (v38/v39)
+  Delete: Cashbook ✕ (all types) + Payments Delete    (this build)
+
+FILES (folders match your repo paths)
+  app/Http/Controllers/Panel/StaffCashController.php
+  app/Http/Controllers/Panel/PaymentController.php       (+destroy())
+  app/Http/Controllers/Panel/TradeCashbookController.php (delete = all types + linked)
+  routes/web.php                                          (+payments/{id}/delete)
   resources/panel/staff_cash.html
-  resources/panel/my_cash.html                           (mobile field app)
-  resources/panel/payments.html
-  resources/panel/trade_cashbook.html                    (guarded render + fixed PDF)
-  resources/panel/app_home.html                          (Staff Cash + My Cash tiles)
-  seller.html                                            (sidebar: +Staff Cash +My Cash)
+  resources/panel/my_cash.html
+  resources/panel/payments.html                          (+Delete button)
+  resources/panel/trade_cashbook.html                    (✕ on all rows for owner)
+  resources/panel/app_home.html
+  seller.html                                            (+Staff Cash +My Cash)
 
-UPLOAD (GitHub web -> github.com/dishnetafrica/shopping)
-  1. Unzip.
-  2. Add file -> Upload files -> drag the unzipped contents (app/, routes/, resources/
-     AND seller.html), paths preserved.
-  3. Commit -> EasyPanel Rebuild (NOT Restart). No migration.
-  4. Hard-refresh the panel (Cmd/Ctrl+Shift+R).
+UPLOAD
+  Unzip -> GitHub Add file -> Upload files -> drag contents (app/ routes/ resources/
+  AND seller.html) -> Commit -> EasyPanel Rebuild (NOT Restart). No migration.
+  Hard-refresh (Cmd/Ctrl+Shift+R).
 
 VERIFY
-  Open Cashbook -> the entries table loads (no more "Loading…"). Console error at
-  trade-cashbook:223 is gone. Edit buttons show for owner. Sidebar shows Staff Cash +
-  My Cash after seller.html loads.
+  Payments -> Delete one of the duplicate Mehul bhai $1,286 receipts -> it disappears
+  and Cash Position / Customer 360 drop by that amount. Cashbook -> ✕ on a purchase or
+  funding row -> it's removed. Staff logins see no Edit/Delete (owner/manager only).

@@ -173,7 +173,7 @@ function load(){
         var ord=p.order_no?' <span class="otag">'+esc(p.order_no)+'</span>':'';
         return '<div class="row"><div><div class="no"><a href="/panel/customers360?'+(p.phone?('phone='+encodeURIComponent(p.phone)):('name='+encodeURIComponent(p.customer)))+'" style="color:#5B21B6;text-decoration:none" onclick="event.stopPropagation()">'+esc(p.customer)+'</a>'+badge+'</div>'+
           '<div class="meta" onclick="openReceipt('+p.id+')" style="cursor:pointer">'+esc(p.receipt_no)+' &middot; '+esc(p.method)+ord+' &middot; '+esc(p.date||'')+'</div></div>'+
-          '<div class="amt" onclick="openReceipt('+p.id+')" style="cursor:pointer">'+esc(p.currency)+' '+nf(p.amount)+'<div style="font-size:11px;color:#94a3b8;font-weight:700">$'+nf(p.usd)+'</div></div>'+(IS_OWNER?'<button onclick="event.stopPropagation();openEdit('+p.id+')" style="margin-left:8px;background:#fff;border:1px solid #d7dee3;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:800;color:#0B3D22;cursor:pointer">Edit</button>':'')+'</div>';
+          '<div class="amt" onclick="openReceipt('+p.id+')" style="cursor:pointer">'+esc(p.currency)+' '+nf(p.amount)+'<div style="font-size:11px;color:#94a3b8;font-weight:700">$'+nf(p.usd)+'</div></div>'+(IS_OWNER?'<button onclick="event.stopPropagation();openEdit('+p.id+')" style="margin-left:8px;background:#fff;border:1px solid #d7dee3;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:800;color:#0B3D22;cursor:pointer">Edit</button><button onclick="event.stopPropagation();delPay('+p.id+')" style="margin-left:6px;background:#fff;border:1px solid #f0c9c4;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:800;color:#C0392B;cursor:pointer">Delete</button>':'')+'</div>';
       }).join('');
     }).catch(function(){ $('list').innerHTML='<div class="empty">Could not load.</div>'; });
 }
@@ -228,6 +228,12 @@ function savePay(){
       if(r&&r.ok){ closeAll(); load(); if(r.send_receipt!==false) openReceipt(r.id); }
       else alert('Could not save: '+((r&&r.error==='no_order')?'pick an order':((r&&r.error)||'error')));
     }).catch(function(){ b.disabled=false; b.textContent='Save & make receipt'; alert('Failed'); });
+}
+function delPay(id){
+  if(!confirm('Delete this receipt? This removes it from the customer\'s account and the cashbook too. This cannot be undone.')) return;
+  fetch('/papi/payments/'+id+'/delete',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+    .then(r=>r.json()).then(function(r){ if(r&&r.ok){ load(); } else alert('Could not delete: '+((r&&r.error==='not_allowed')?'owner/manager only':((r&&r.error)||'error'))); })
+    .catch(function(){ alert('Failed'); });
 }
 function openEdit(id){
   fetch('/papi/payments/'+id,{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json()).then(function(d){

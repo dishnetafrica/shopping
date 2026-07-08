@@ -166,9 +166,16 @@ class TradeCashbookController extends Controller
         if (! $t) return response()->json(['ok'=>false],401);
         if (! ($u->isOwnerLike() || in_array((string)$u->role,['manager'],true)))
             return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
-        $c = OrderCost::where('tenant_id',$t->id)->whereIn('stage',['cash_in','cash_out'])->find($id);
+        $c = OrderCost::where('tenant_id',$t->id)->find($id);
         if (! $c) return response()->json(['ok'=>false,'error'=>'not_found'],404);
-        $c->delete();
+        DB::transaction(function () use ($c, $t) {
+            // if it's a receipt, remove the linked customer-payment record too
+            if ($c->stage === 'customer_payment') {
+                try { CustomerPayment::where('tenant_id',$t->id)->where('order_cost_id',$c->id)->delete(); }
+                catch (\Throwable $e) { /* customer_payments optional */ }
+            }
+            $c->delete();
+        });
         return response()->json(['ok'=>true]);
     }
 

@@ -234,7 +234,7 @@ function load(){
             <td class="num out">${e.dir==='out'?e.currency+' '+fmt(e.native):''}</td>
             <td class="num bal">${e.currency} ${fmt(e.run)}</td>
             <td>${e.status==='approved'?'<span class="st ok">Done</span>':'<span class="st pend">'+e.status+'</span>'}</td>
-            <td style="white-space:nowrap">${window.__OWNER&&e.editable?`<button class="edt" onclick="editRow(${e.id})">Edit</button>`:''}${(e.stage==='cash_in'||e.stage==='cash_out')?`<button class="del" onclick="del(${e.id})">✕</button>`:''}</td>
+            <td style="white-space:nowrap">${window.__OWNER&&e.editable?`<button class="edt" onclick="editRow(${e.id})">Edit</button>`:''}${window.__OWNER&&e.editable?`<button class="del" onclick="del(${e.id})">✕</button>`:''}</td>
           </tr>`).join('')}</tbody>
       </table></div>`;
     // pager
@@ -296,7 +296,7 @@ function save(){
     if(r.ok){$('amt').value='';$('note').value='';$('cat').value='';calc();PAGE=1;load();}else alert('Failed: '+(r.error||'error'));
   }).catch(()=>{b.disabled=false;alert('Failed.');});
 }
-function del(id){if(!confirm('Delete this entry?'))return;
+function del(id){var e=(window.__ENTRIES||[]).find(function(x){return x.id===id;});var msg=(e&&e.stage==='customer_payment')?'Delete this receipt? It will be removed from the customer account too. Cannot be undone.':'Delete this entry? Cannot be undone.';if(!confirm(msg))return;
   fetch('/papi/trade-cashbook/'+id+'/delete',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(r=>{if(r.ok)load();else alert(r.error==='not_allowed'?'Only owner/manager can delete':'Failed');});}
 setRate();load();
 </script>
