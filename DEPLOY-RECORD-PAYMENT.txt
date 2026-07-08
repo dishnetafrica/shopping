@@ -1,0 +1,36 @@
+DEPLOY — Prominent "Record Payment" on orders (v53)
+===================================================
+Adds a green 💵 Record Payment button right in the Order Action bar (next to Print Invoice)
+on EVERY order, including delivered/completed ones. Tapping it opens a clean payment modal.
+
+THE MODAL SHOWS
+  Order total · Already paid · Outstanding   (live, for this order)
+  and a form:
+    Amount collected (big) · Currency (UGX/USD/SSP) · Method (Cash/Mobile Money/Bank) ·
+    Received by (e.g. Asish) · Reference (optional) · Record.
+  Amount is pre-filled with the outstanding balance; change the currency and it re-computes.
+  A list of payments already on the order is shown at the bottom.
+
+WHY YOU DIDN'T SEE IT BEFORE
+  The earlier "Add Payment card" only appears lower on the page (below Rider & Delivery) and
+  needs the updated seller.html deployed. This version ALSO adds a can't-miss button up top
+  in the action bar. Both use the same /papi/payments endpoint, so everything stays
+  consistent (Payments, Cashbook, Cash Position).
+
+EXAMPLE (your ORD-2 case)
+  Open ORD-2 -> 💵 Record Payment -> Currency USD -> enter the amount Asish collected ->
+  Received by: Asish -> Record. It lands in Asish's USD cash in Juba and clears the order's
+  outstanding.
+
+FILE
+  seller.html   (only file changed)
+
+DEPLOY
+  Unzip -> GitHub upload seller.html -> Commit -> EasyPanel REBUILD (not Restart) ->
+  hard-refresh (Cmd/Ctrl+Shift+R). Open any order -> the green Record Payment button is in
+  the Order Action bar.
+
+NOTE
+  If after Rebuild + hard-refresh you still don't see it, the browser is serving a cached
+  page: open the order, then Cmd/Ctrl+Shift+R once more. This seller.html also carries the
+  Financial Statements nav (ledger) and the inline payment card from earlier versions.

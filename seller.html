@@ -420,6 +420,7 @@
               <button class="btn ghost" id="backBtn">← Back to list</button>
               <select id="dStatus" style="border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px;font-weight:600"></select>
               <button class="btn blue" id="printBtn">🖨 Print Invoice</button>
+              <button class="btn" id="payNowBtn" style="background:#15803D;color:#fff;font-weight:800">💵 Record Payment</button>
               <button class="btn" id="pdfBtn">⤓ Export Invoice (PDF)</button>
               <button class="btn red" id="delOrderBtn">🗑 Delete order</button>
               <button class="btn" id="returnBtn">↩ Return / refund</button>
@@ -2476,6 +2477,7 @@ function openOrder(id){
   $('addBtn').onclick=function(){var idx=Number($('addProd').value);var p=CATALOGUE[idx];if(!p||$('addProd').value===''){toast('Pick a product first');return;}addProductToOrder(idx,$('addQty').value);$('addQty').value=1;if($('addSearch'))$('addSearch').value='';renderAddOptions('');};
   $('saveBtn').onclick=saveInvoice;
   $('printBtn').onclick=function(){window.print();};
+  if($('payNowBtn'))$('payNowBtn').onclick=openPayModal;
   $('pdfBtn').onclick=function(){window.print();};
   $('delOrderBtn').onclick=function(){cancelOrder(current.id);};
   $('returnBtn').onclick=openReturnModal;
@@ -2522,6 +2524,54 @@ function setupPayment(){
       else toast('Could not record: '+((r&&r.error==='no_order')?'order missing':((r&&r.error)||'error')));
     }).catch(function(){ b.disabled=false; b.textContent='＋ Record payment'; toast('Failed'); });
   };
+}
+function openPayModal(){
+  var o=current; if(!o) return; var ono=oNo(o);
+  $('modalTitle').textContent='Record Payment · '+ono;
+  $('modalBody').innerHTML='<div class="note">Loading…</div>';
+  $('modal').classList.remove('hide');
+  var totalUgx=orderTotal(o);
+  fetch('/papi/payments',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
+    var mine=((d&&d.payments)||[]).filter(function(p){return (p.order_no||'')===ono;});
+    var paidUsd=mine.reduce(function(s,p){return s+(Number(p.usd)||0);},0);
+    var paidUgx=Math.round(paidUsd*RATES.usdUgx);
+    var outUgx=Math.max(0,totalUgx-paidUgx);
+    var hist=mine.length?mine.map(function(p){return '<tr><td style="padding:3px 0">'+esc(p.receipt_no||'RCP')+'</td><td>'+esc(p.currency)+' '+Number(p.amount).toLocaleString()+'</td><td>'+esc(p.method||'')+'</td></tr>';}).join(''):'<tr><td colspan="3" style="color:var(--muted);padding:3px 0">No payments yet</td></tr>';
+    $('modalBody').innerHTML=
+      '<div style="background:#F6F8F6;border-radius:10px;padding:12px;margin-bottom:12px;font-size:13px">'+
+        '<div style="display:flex;justify-content:space-between;margin-bottom:2px"><span>Order total</span><b>'+ugx(totalUgx)+'</b></div>'+
+        '<div style="display:flex;justify-content:space-between;margin-bottom:2px"><span>Already paid</span><b>'+ugx(paidUgx)+'</b></div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:15px;margin-top:4px;border-top:1px solid #e4e9e4;padding-top:6px"><span>Outstanding</span><b style="color:'+(outUgx>0.5?'#C0392B':'#15803D')+'">'+ugx(outUgx)+'</b></div>'+
+      '</div>'+
+      '<label style="font-size:12px;font-weight:800;color:#374151">Amount collected</label>'+
+      '<div style="display:flex;gap:8px;margin:5px 0 10px">'+
+        '<select id="mpCur" style="border:1.5px solid var(--line);border-radius:10px;padding:12px;font-weight:800;max-width:92px;font-size:15px"><option>UGX</option><option>USD</option><option>SSP</option></select>'+
+        '<input id="mpAmt" inputmode="decimal" placeholder="0" style="flex:1;font-size:22px;font-weight:800;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px">'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+
+        '<select id="mpMethod" style="border:1.5px solid var(--line);border-radius:10px;padding:11px;font-weight:600;flex:1;min-width:130px"><option>Cash</option><option>Mobile Money</option><option>Bank</option></select>'+
+        '<input id="mpRecv" placeholder="Received by (e.g. Asish)" style="flex:1;min-width:160px;padding:11px;border:1.5px solid var(--line);border-radius:10px">'+
+      '</div>'+
+      '<input id="mpRef" placeholder="Reference / note (optional)" style="width:100%;padding:11px;border:1.5px solid var(--line);border-radius:10px;box-sizing:border-box">'+
+      '<button class="btn" id="mpSave" style="width:100%;margin-top:12px;background:#15803D;color:#fff;font-size:16px;font-weight:800;padding:13px;border-radius:10px">💵 Record Payment</button>'+
+      '<div style="margin-top:16px"><div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Payments on this order</div>'+
+        '<table style="width:100%;font-size:12.5px;border-collapse:collapse"><tbody>'+hist+'</tbody></table></div>';
+    $('mpCur').value='UGX'; $('mpAmt').value=Math.round(outUgx);
+    $('mpCur').onchange=function(){ var c=this.value; $('mpAmt').value= c==='UGX'?Math.round(outUgx):(c==='USD'?(outUgx/RATES.usdUgx).toFixed(2):Math.round(outUgx/RATES.usdUgx*RATES.usdSsp)); };
+    $('mpSave').onclick=function(){
+      var amt=parseFloat((($('mpAmt').value)||'').replace(/,/g,''))||0;
+      if(amt<=0){ toast('Enter the amount collected'); return; }
+      var cur=$('mpCur').value; var rate=cur==='USD'?1:(cur==='UGX'?RATES.usdUgx:RATES.usdSsp);
+      var btn=$('mpSave'); btn.disabled=true; btn.textContent='Recording…';
+      var body=new URLSearchParams({customer_name:(o.customer||''),customer_phone:(o.phone||''),order_no:ono,currency:cur,amount:amt,rate_to_usd:rate,method:$('mpMethod').value,reference:(($('mpRef').value)||'').trim(),receiver:(($('mpRecv').value)||'').trim(),kind:'settlement'});
+      fetch('/papi/payments',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body}).then(function(r){return r.json();}).then(function(r){
+        btn.disabled=false; btn.textContent='💵 Record Payment';
+        if(r&&r.ok){ closeModal(); toast('Payment recorded ✓'); if(typeof renderPayments==='function') renderPayments(); }
+        else toast('Could not record: '+((r&&r.error==='no_order')?'order missing':((r&&r.error)||'error')));
+      }).catch(function(){ btn.disabled=false; btn.textContent='💵 Record Payment'; toast('Failed — check signal'); });
+    };
+    setTimeout(function(){ if($('mpAmt'))$('mpAmt').focus(); },200);
+  }).catch(function(){ $('modalBody').innerHTML='<div class="note" style="color:var(--red)">Could not load. Try again.</div>'; });
 }
 function renderInvoice(){
   var o=current;
