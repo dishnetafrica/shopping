@@ -33,6 +33,25 @@ class LedgerController extends Controller
             ->header('Content-Type', 'text/html; charset=UTF-8')->header('Cache-Control', 'no-store');
     }
 
+    /** POST /papi/ledger/live — turn write-time GL posting on/off (dormant by default). */
+    public function toggleLive(Request $request)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok' => false], 403);
+        $on = filter_var($request->input('on', false), FILTER_VALIDATE_BOOLEAN);
+        app(LedgerService::class)->setLivePosting((int) $u->tenant_id, $on);
+        return response()->json(['ok' => true, 'live' => $on]);
+    }
+
+    /** GET /papi/ledger/status */
+    public function status(Request $request)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok' => false], 403);
+        $live = app(LedgerService::class)->livePosting((int) $u->tenant_id);
+        return response()->json(['ok' => true, 'live' => $live]);
+    }
+
     /** POST /papi/ledger/rebuild — regenerate the derived ledger from order_costs. */
     public function rebuild(Request $request, LedgerService $svc)
     {

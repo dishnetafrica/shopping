@@ -36,6 +36,7 @@
     <div class="tab" data-t="bs" onclick="setTab(this)">Balance Sheet</div>
     <div class="tab" data-t="pl" onclick="setTab(this)">Profit &amp; Loss</div>
     <button class="rebuild" onclick="rebuild(this)">↻ Rebuild ledger</button>
+    <button class="rebuild" id="liveBtn" style="background:#6E7D72" onclick="toggleLive()">● Live posting: …</button>
   </div>
   <div id="view"><div class="loading">Loading…</div></div>
 </div>
@@ -94,5 +95,16 @@ function renderPL(){
       '<div class="card"><table><tbody><tr class="total"><td>Net Profit / (Loss)</td><td class="num '+(d.net_profit<0?'neg':'')+'">'+nf(d.net_profit)+'</td></tr></tbody></table></div>';
   });
 }
+
+function loadStatus(){ get('/papi/ledger/status').then(function(d){ if(d&&d.ok){ LIVE=!!d.live; paintLive(); } }); }
+var LIVE=false;
+function paintLive(){ var b=$('liveBtn'); if(!b)return; b.textContent=(LIVE?'● Live posting: ON':'○ Live posting: OFF'); b.style.background=LIVE?'#15803D':'#6E7D72'; }
+function toggleLive(){
+  var next=!LIVE;
+  if(next && !confirm('Turn ON live posting?\n\nFrom now on, every new cash entry also posts a journal to the ledger automatically (edits/deletes post reversing entries). Your cashbook is unaffected. You can turn this off anytime.')) return;
+  fetch('/papi/ledger/live',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:'on='+(next?'1':'0')})
+    .then(r=>r.json()).then(function(r){ if(r&&r.ok){ LIVE=r.live; paintLive(); } else alert('Failed'); }).catch(function(){alert('Failed');});
+}
 render();
+loadStatus();
 </script></body></html>

@@ -167,6 +167,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('ledger/balance-sheet', [\App\Http\Controllers\Panel\LedgerController::class, 'balanceSheet']);
         Route::get('ledger/pnl', [\App\Http\Controllers\Panel\LedgerController::class, 'pnl']);
         Route::get('ledger/gl', [\App\Http\Controllers\Panel\LedgerController::class, 'generalLedger']);
+        Route::get('ledger/status', [\App\Http\Controllers\Panel\LedgerController::class, 'status']);
+        Route::post('ledger/live', [\App\Http\Controllers\Panel\LedgerController::class, 'toggleLive']);
         Route::post('staff-cash/give', [\App\Http\Controllers\Panel\StaffCashController::class, 'give']);
         Route::post('staff-cash/spend', [\App\Http\Controllers\Panel\StaffCashController::class, 'spend']);
         Route::post('staff-cash/receive', [\App\Http\Controllers\Panel\StaffCashController::class, 'receive']);

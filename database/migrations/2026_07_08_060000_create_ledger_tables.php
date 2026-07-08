@@ -66,10 +66,19 @@ return new class extends Migration
                 $t->index(['tenant_id','account_id']);
             });
         }
+        // Per-tenant ledger config (controls dormant/live write-time posting)
+        if (! Schema::hasTable('ledger_config')) {
+            Schema::create('ledger_config', function (Blueprint $t) {
+                $t->unsignedBigInteger('tenant_id')->primary();
+                $t->boolean('live_posting')->default(false);
+                $t->timestamps();
+            });
+        }
     }
 
     public function down(): void
     {
+        Schema::dropIfExists('ledger_config');
         Schema::dropIfExists('ledger_lines');
         Schema::dropIfExists('ledger_journals');
         Schema::dropIfExists('ledger_accounts');

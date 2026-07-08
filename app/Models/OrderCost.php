@@ -25,6 +25,7 @@ class OrderCost extends Model
      */
     protected static function booted(): void
     {
+        static::observe(\App\Observers\OrderCostObserver::class);
         static::creating(function (self $m) {
             if ($m->paid_native === null) {
                 $m->paid_native = ((string) $m->pay_status === 'credit') ? 0 : (float) $m->native_amount;

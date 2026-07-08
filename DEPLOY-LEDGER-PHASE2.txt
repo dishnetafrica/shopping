@@ -1,0 +1,48 @@
+DEPLOY — Phase 2: Live GL posting + immutability (v47)
+=====================================================
+Builds on Phase 1. Adds (a) automatic write-time posting to the general ledger and
+(b) an immutable, append-only ledger where edits/deletes post REVERSING journals instead
+of changing history. Ships DORMANT — nothing changes until you switch "Live posting" ON
+in the Financial Statements page.
+
+HOW IT WORKS
+  - A single model observer on OrderCost is the only integration point (no controller was
+    changed). When live posting is ON:
+      * new cash entry      -> posts a balanced journal automatically
+      * edit an entry       -> posts a reversal of the old journal + a new journal
+      * delete an entry     -> posts a reversal (the ledger row is NEVER deleted)
+  - The ledger is therefore append-only and fully auditable, even though your cashbook
+    stays fast and editable. Every version is preserved; the net balance always reflects
+    the current state and the Trial Balance always balances.
+  - Best-effort by design: a GL hiccup can NEVER block an operational cash entry; the
+    `ledger:backfill` command reconciles/rebuilds at any time.
+
+SAFE ROLLOUT
+  - Default is OFF (dormant). Deploy changes nothing.
+  - When ready: Financial Statements -> "Live posting: OFF" button -> turn ON.
+  - You can turn it OFF again anytime; the backfill always rebuilds from scratch.
+
+NEW/CHANGED FILES
+  database/migrations/2026_07_08_060000_create_ledger_tables.php  (+ledger_config table)
+  app/Services/LedgerService.php        (postForOrderCost, reverseActiveFor, live flags)
+  app/Observers/OrderCostObserver.php   (NEW — the posting hook)
+  app/Models/OrderCost.php              (registers the observer in booted())
+  app/Http/Controllers/Panel/LedgerController.php (live toggle + status)
+  resources/panel/ledger.html           (Live posting toggle)
+  routes/web.php
+
+DEPLOY
+  1. Unzip -> GitHub upload -> Commit -> EasyPanel Rebuild.
+  2. php artisan migrate           (adds ledger_config; safe/idempotent)
+  3. php artisan ledger:backfill   (rebuild history) — or press Rebuild in the page
+  4. Financial Statements -> confirm Trial Balance "In balance".
+  5. WHEN READY: press "Live posting" to turn it ON. Test one entry, confirm a journal
+     appears, edit it, confirm a reversal + new journal appear and TB stays balanced.
+
+VERIFIED (logic simulation)
+  create 100 -> edit 150 -> delete : GL nets 100 -> 150 -> 0, 4 journals kept, 0 deleted,
+  Trial Balance balanced at every step.
+
+STILL TO COME (Phase 3)
+  FX gain/loss recognition, inventory + COGS, tax (VAT/GST), period lock, and switching
+  the operational cash screens to read one canonical GL-backed balance.

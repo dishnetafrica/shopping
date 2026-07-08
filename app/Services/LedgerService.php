@@ -184,6 +184,73 @@ class LedgerService
         });
     }
 
+    /** Is live write-time posting enabled for this tenant? (dormant by default) */
+    public function livePosting(int $tenantId): bool
+    {
+        try { return (bool) DB::table('ledger_config')->where('tenant_id', $tenantId)->value('live_posting'); }
+        catch (\Throwable $e) { return false; }
+    }
+
+    public function setLivePosting(int $tenantId, bool $on): void
+    {
+        DB::table('ledger_config')->updateOrInsert(
+            ['tenant_id' => $tenantId],
+            ['live_posting' => $on, 'updated_at' => now(), 'created_at' => now()]
+        );
+    }
+
+    /** Post the journal for a single order_costs row (used by the live observer). Best-effort. */
+    public function postForOrderCost(object $c): ?LedgerJournal
+    {
+        $spec = $this->linesForOrderCost($c);
+        if ($spec === null) return null;
+        $codeToId = $this->ensureChart((int) $c->tenant_id);
+        $lines = [];
+        foreach ($spec as [$code, $debit, $credit]) {
+            if (! isset($codeToId[$code])) return null;
+            $lines[] = ['account_id' => $codeToId[$code], 'debit' => $debit, 'credit' => $credit,
+                'currency' => (string) $c->currency, 'native_amount' => (float) $c->native_amount];
+        }
+        return $this->post(
+            (int) $c->tenant_id, $lines, 'order_cost', (int) $c->id,
+            trim(((string) $c->category ? $c->category . ' — ' : '') . (string) $c->note) ?: (string) $c->stage,
+            (string) ($c->created_by ?? ''), $c->created_at
+        );
+    }
+
+    /**
+     * Reverse the ACTIVE journals for a source row (append-only, immutable GL).
+     * Posts a mirror-opposite "reversal" journal for each active journal and marks the
+     * original as reversed. Nothing is ever deleted from the ledger.
+     */
+    public function reverseActiveFor(int $tenantId, string $source, int $sourceId): int
+    {
+        $active = LedgerJournal::where('tenant_id', $tenantId)->where('source', $source)
+            ->where('source_id', $sourceId)->where('status', 'posted')->whereNull('reversed_by')->get();
+        $n = 0;
+        foreach ($active as $j) {
+            $lines = LedgerLine::where('journal_id', $j->id)->get();
+            $rev = LedgerJournal::create([
+                'tenant_id' => $tenantId, 'source' => 'reversal', 'source_id' => $sourceId,
+                'memo' => 'Reversal of ' . $j->ref, 'amount_usd' => $j->amount_usd, 'status' => 'posted',
+                'posted_at' => now(),
+            ]);
+            $rev->ref = 'JV-' . str_pad((string) $rev->id, 6, '0', STR_PAD_LEFT);
+            $rev->save();
+            foreach ($lines as $l) {
+                LedgerLine::create([
+                    'tenant_id' => $tenantId, 'journal_id' => $rev->id, 'account_id' => $l->account_id,
+                    'debit_usd' => $l->credit_usd, 'credit_usd' => $l->debit_usd,   // swapped
+                    'currency' => $l->currency, 'native_amount' => $l->native_amount !== null ? -1 * (float) $l->native_amount : null,
+                    'memo' => 'reversal',
+                ]);
+            }
+            $j->reversed_by = $rev->id; $j->save();
+            $n++;
+        }
+        return $n;
+    }
+
     /**
      * Rebuild the ledger for a tenant from order_costs. Idempotent: it clears previously
      * derived journals (source=order_cost) and regenerates them, so it is safe to re-run.
