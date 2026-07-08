@@ -1,0 +1,50 @@
+DEPLOY — Phase 1: Double-Entry Ledger foundation (v46)
+======================================================
+This is the first phase of turning the cashbook into a real accounting engine, per the
+CFO audit. It is ADDITIVE and SAFE: it only creates three new tables and DERIVES a proper
+double-entry general ledger from your existing order_costs. It does NOT change how the
+cashbook writes today — your live screens are untouched.
+
+*** RUN THE BACKFILL ON A SNAPSHOT/STAGING COPY FIRST if you can. It only writes to the
+new ledger_* tables, but always prudent for accounting. ***
+
+WHAT IT ADDS
+  - Tables: ledger_accounts (chart of accounts), ledger_journals, ledger_lines (the GL).
+  - LedgerService: seeds a standard chart, maps every cash event to a BALANCED journal
+    (Debit=Credit enforced; throws if not), and backfills the ledger from order_costs.
+  - Command: `php artisan ledger:backfill {tenantId?}`  (safe to re-run; it regenerates).
+  - Reports page /panel/ledger: Trial Balance, Balance Sheet, Profit & Loss (USD),
+    with a "Rebuild ledger" button. Owner/manager/accounts only.
+  - Seller sidebar: "Financial Statements" link; app-home "Statements" tile.
+
+WHAT IT PROVES / SURFACES (tested on your real data)
+  - Trial Balance BALANCES (total debits = total credits).
+  - Owner's Capital now appears (the working-capital/opening entries that had no equity
+    side before).
+  - FX conversions net through an "FX Clearing" account; any residual there = an
+    unreconciled/one-legged conversion (e.g. the old manual CB-0012) flagged for you.
+  - Accounts Receivable shows the accrual gap: customer receipts with no matching sales
+    invoice (Phase 2/3 will add invoicing/AR properly).
+
+FILES
+  database/migrations/2026_07_08_060000_create_ledger_tables.php
+  app/Models/LedgerAccount.php  LedgerJournal.php  LedgerLine.php
+  app/Services/LedgerService.php
+  app/Console/Commands/LedgerBackfill.php
+  app/Http/Controllers/Panel/LedgerController.php
+  resources/panel/ledger.html
+  resources/panel/app_home.html
+  routes/web.php
+  seller.html
+
+DEPLOY
+  1. Unzip -> GitHub Upload files (paths preserved) -> Commit -> EasyPanel Rebuild.
+  2. Run the migration:   php artisan migrate
+  3. Build the ledger:    php artisan ledger:backfill          (or use the Rebuild button)
+  4. Open Financial Statements (sidebar) -> check the Trial Balance says "In balance".
+
+IMPORTANT — WHAT THIS IS AND ISN'T
+  This is a DERIVED, read-only management ledger (functional currency USD). It is not yet
+  audited financial statements. It does not change your cashbook. FX gain/loss recognition,
+  inventory/COGS, tax, immutability (void/reversal), and write-time posting come in
+  Phase 2 & 3. The point of Phase 1 is a balanced foundation that makes the gaps visible.

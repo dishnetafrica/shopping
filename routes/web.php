@@ -79,6 +79,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/customers360', [\App\Http\Controllers\Panel\CustomerController::class, 'page']);
     Route::get('/panel/staff-cash', [\App\Http\Controllers\Panel\StaffCashController::class, 'page']);
     Route::get('/panel/my-cash', [\App\Http\Controllers\Panel\StaffCashController::class, 'myPage']);
+    Route::get('/panel/ledger', [\App\Http\Controllers\Panel\LedgerController::class, 'page']);
     Route::get('/panel/staff', [SellerPanelController::class, 'staff']);
     Route::get('/panel/scheduled', [SellerPanelController::class, 'scheduled']);
     Route::get('/panel/marketing', [SellerPanelController::class, 'marketing']);
@@ -161,6 +162,11 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('sourcing/{id}/status', [\App\Http\Controllers\Panel\SourcingController::class, 'status']);
         Route::get('staff-cash', [\App\Http\Controllers\Panel\StaffCashController::class, 'people']);
         Route::get('staff-cash/ledger', [\App\Http\Controllers\Panel\StaffCashController::class, 'ledger']);
+        Route::post('ledger/rebuild', [\App\Http\Controllers\Panel\LedgerController::class, 'rebuild']);
+        Route::get('ledger/trial-balance', [\App\Http\Controllers\Panel\LedgerController::class, 'trialBalance']);
+        Route::get('ledger/balance-sheet', [\App\Http\Controllers\Panel\LedgerController::class, 'balanceSheet']);
+        Route::get('ledger/pnl', [\App\Http\Controllers\Panel\LedgerController::class, 'pnl']);
+        Route::get('ledger/gl', [\App\Http\Controllers\Panel\LedgerController::class, 'generalLedger']);
         Route::post('staff-cash/give', [\App\Http\Controllers\Panel\StaffCashController::class, 'give']);
         Route::post('staff-cash/spend', [\App\Http\Controllers\Panel\StaffCashController::class, 'spend']);
         Route::post('staff-cash/receive', [\App\Http\Controllers\Panel\StaffCashController::class, 'receive']);

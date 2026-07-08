@@ -1,0 +1,98 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Financial Statements</title>
+<style>
+  :root{--green:#15803D;--green-d:#0B3D22;--ink:#16231C;--mut:#6E7D72;--line:#E4E9E4;--bg:#f5f5f2;--blue:#1D4ED8;--red:#C0392B;--amber:#B45309;--font:'Inter',-apple-system,'Segoe UI',sans-serif;}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:var(--font);color:var(--ink);}
+  .wrap{max-width:920px;margin:0 auto;padding:16px;}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+  .top h1{font-size:20px;margin:0;font-weight:900;}
+  .top a{color:var(--green);text-decoration:none;font-weight:700;font-size:13px;}
+  .banner{background:#FFF9E9;border:1px solid #F3E4B8;border-radius:10px;padding:10px 13px;font-size:12.5px;color:#7a5b12;line-height:1.5;margin-bottom:12px;}
+  .tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+  .tab{padding:9px 14px;border-radius:10px;background:#fff;border:1px solid var(--line);font-size:13px;font-weight:800;color:var(--mut);cursor:pointer;}
+  .tab.on{background:var(--green-d);color:#fff;border-color:var(--green-d);}
+  .rebuild{margin-left:auto;background:var(--blue);color:#fff;border:none;border-radius:10px;padding:9px 14px;font-size:12.5px;font-weight:800;cursor:pointer;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:14px;}
+  .card h2{font-size:13px;font-weight:900;margin:0;padding:13px 16px;border-bottom:1px solid var(--line);text-transform:uppercase;letter-spacing:.4px;background:#FAFBFA;}
+  table{width:100%;border-collapse:collapse;}
+  td,th{padding:9px 16px;font-size:13px;text-align:left;border-bottom:1px solid #F1F5F2;}
+  th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--mut);font-weight:800;}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  tr.total td{font-weight:900;border-top:2px solid var(--line);background:#FAFBFA;}
+  .sub td{color:var(--mut);}
+  .chk{font-size:12.5px;font-weight:800;padding:8px 16px;border-radius:0;}
+  .chk.ok{background:#E6F4EA;color:var(--green-d);}.chk.bad{background:#FBEBE9;color:var(--red);}
+  .code{color:var(--mut);font-size:11px;font-weight:700;margin-right:6px;}
+  .loading{text-align:center;color:var(--mut);padding:24px;}
+  .neg{color:var(--red);}
+  .flag{font-size:11px;color:var(--amber);font-weight:700;padding:2px 16px 10px;}
+</style></head>
+<body><div class="wrap">
+  <div class="top"><h1>📊 Financial Statements</h1><a href="/panel">← Panel</a></div>
+  <div class="banner">📐 <b>Phase 1 — derived double-entry ledger (USD).</b> These statements are generated from your cashbook by a proper Debit=Credit engine. They make the gaps visible (equity, FX, receivables) rather than hiding them. This is a management view, not yet audited financials. Tap <b>Rebuild</b> after new entries to refresh.</div>
+  <div class="tabs">
+    <div class="tab on" data-t="tb" onclick="setTab(this)">Trial Balance</div>
+    <div class="tab" data-t="bs" onclick="setTab(this)">Balance Sheet</div>
+    <div class="tab" data-t="pl" onclick="setTab(this)">Profit &amp; Loss</div>
+    <button class="rebuild" onclick="rebuild(this)">↻ Rebuild ledger</button>
+  </div>
+  <div id="view"><div class="loading">Loading…</div></div>
+</div>
+<script>
+const $=s=>document.getElementById(s);
+function nf(n){var v=Number(n||0);return (v<0?'(':'')+Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+(v<0?')':'');}
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+var TAB='tb';
+function setTab(el){document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('on');});el.classList.add('on');TAB=el.getAttribute('data-t');render();}
+function get(u){return fetch(u,{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json());}
+
+function rebuild(btn){btn.disabled=true;btn.textContent='Rebuilding…';
+  fetch('/papi/ledger/rebuild',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json()).then(function(r){
+    btn.disabled=false;btn.textContent='↻ Rebuild ledger';
+    if(r&&r.ok){ render(); alert('Ledger rebuilt: '+r.posted+' journals posted, '+r.skipped+' internal moves skipped, of '+r.rows+' entries.'+(r.errors&&r.errors.length?('\n\nNotes:\n'+r.errors.slice(0,10).join('\n')):'')); }
+    else alert('Rebuild failed (owner/manager only?)');
+  }).catch(function(){btn.disabled=false;btn.textContent='↻ Rebuild ledger';alert('Failed');});
+}
+
+function render(){
+  $('view').innerHTML='<div class="loading">Loading…</div>';
+  if(TAB==='tb') return renderTB();
+  if(TAB==='bs') return renderBS();
+  return renderPL();
+}
+
+function renderTB(){
+  get('/papi/ledger/trial-balance').then(function(d){
+    if(!d||!d.ok){$('view').innerHTML='<div class="loading">Could not load. Rebuild first.</div>';return;}
+    var rows=(d.rows||[]).map(function(r){return '<tr><td><span class="code">'+esc(r.code)+'</span>'+esc(r.name)+'</td><td class="num">'+(r.debit?nf(r.debit):'')+'</td><td class="num">'+(r.credit?nf(r.credit):'')+'</td></tr>';}).join('');
+    $('view').innerHTML='<div class="card"><h2>Trial Balance (USD)</h2>'+
+      '<div class="chk '+(d.balanced?'ok':'bad')+'">'+(d.balanced?'✓ In balance — total debits equal total credits':'✗ OUT OF BALANCE by '+nf(d.total_debit-d.total_credit))+'</div>'+
+      '<table><thead><tr><th>Account</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead><tbody>'+rows+
+      '<tr class="total"><td>Total</td><td class="num">'+nf(d.total_debit)+'</td><td class="num">'+nf(d.total_credit)+'</td></tr></tbody></table></div>';
+  });
+}
+function renderBS(){
+  get('/papi/ledger/balance-sheet').then(function(d){
+    if(!d||!d.ok){$('view').innerHTML='<div class="loading">Could not load. Rebuild first.</div>';return;}
+    function sec(title,items,total){return '<div class="card"><h2>'+title+'</h2><table><tbody>'+
+      items.map(function(i){return '<tr class="sub"><td>'+esc(i.name)+'</td><td class="num '+(i.amount<0?'neg':'')+'">'+nf(i.amount)+'</td></tr>';}).join('')+
+      '<tr class="total"><td>Total '+title+'</td><td class="num">'+nf(total)+'</td></tr></tbody></table></div>';}
+    $('view').innerHTML=
+      '<div class="chk '+(d.balanced?'ok':'bad')+'">'+(d.balanced?'✓ Assets = Liabilities + Equity':'✗ Does not balance — imbalance '+nf(d.imbalance)+' (usually an unbooked side: e.g. receipts with no sales invoice, or unreconciled FX)')+'</div>'+
+      sec('Assets',d.assets,d.asset_total)+sec('Liabilities',d.liabilities,d.liability_total)+sec('Equity',d.equity,d.equity_total)+
+      '<div class="flag">Assets '+nf(d.asset_total)+'  =  Liabilities '+nf(d.liability_total)+'  +  Equity '+nf(d.equity_total)+'</div>';
+  });
+}
+function renderPL(){
+  get('/papi/ledger/pnl').then(function(d){
+    if(!d||!d.ok){$('view').innerHTML='<div class="loading">Could not load. Rebuild first.</div>';return;}
+    function sec(title,items,total){return '<div class="card"><h2>'+title+'</h2><table><tbody>'+
+      (items.length?items.map(function(i){return '<tr class="sub"><td>'+esc(i.name)+'</td><td class="num">'+nf(i.amount)+'</td></tr>';}).join(''):'<tr class="sub"><td>—</td><td class="num">0.00</td></tr>')+
+      '<tr class="total"><td>Total '+title+'</td><td class="num">'+nf(total)+'</td></tr></tbody></table></div>';}
+    $('view').innerHTML=sec('Income',d.income,d.income_total)+sec('Expenses',d.expense,d.expense_total)+
+      '<div class="card"><table><tbody><tr class="total"><td>Net Profit / (Loss)</td><td class="num '+(d.net_profit<0?'neg':'')+'">'+nf(d.net_profit)+'</td></tr></tbody></table></div>';
+  });
+}
+render();
+</script></body></html>
