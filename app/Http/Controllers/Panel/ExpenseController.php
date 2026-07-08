@@ -69,6 +69,44 @@ class ExpenseController extends Controller
         $path = null;
         if ($request->hasFile('receipt')) $path = $request->file('receipt')->store("receipts/t{$t->id}",'public');
 
+        // Optional order attachment. If order(s) are given, book this as an ORDER cost (so it
+        // counts in that order's margin and as a trading cost in P&L — not as flat overhead).
+        // Comma-separated order numbers split the amount evenly across them.
+        $orderRaw = trim((string)$request->input('order_no',''));
+        if ($orderRaw !== '') {
+            $nos = array_values(array_filter(array_map('trim', preg_split('/[,\s]+/', $orderRaw))));
+            $orders = [];
+            foreach ($nos as $no) {
+                $o = \App\Models\Order::where('tenant_id',$t->id)->where('order_no',$no)->first();
+                if ($o) $orders[] = $o;
+            }
+            if (! count($orders)) return response()->json(['ok'=>false,'error'=>'order_not_found','detail'=>$orderRaw],422);
+
+            // Map the logistics category to an order-cost stage; anything else → generic order_cost.
+            $stageMap = ['bus freight'=>'freight_bus','boda / delivery'=>'delivery_boda','boda/delivery'=>'delivery_boda','transport / fuel'=>'transport','transport/fuel'=>'transport'];
+            $stage = $stageMap[mb_strtolower($cat)] ?? 'order_cost';
+
+            $n = count($orders); $acc = 0.0; $out = []; $grpId = $n>1 ? (string)\Illuminate\Support\Str::uuid() : null;
+            foreach ($orders as $i => $o) {
+                $share = ($i === $n-1) ? round($native - $acc, 2) : round($native / $n, 2);
+                $acc += $share;
+                $c = OrderCost::create([
+                    'tenant_id'=>$t->id, 'order_id'=>$o->id, 'order_no'=>$o->order_no,
+                    'stage'=>$stage, 'expense_category'=>$cat,
+                    'currency'=>$cur, 'native_amount'=>$share, 'rate_to_usd'=>$rate,
+                    'usd_amount'=>OrderCost::toUsd($share,$rate),
+                    'holder'=>(string)($u->name ?? ''), 'holder_user_id'=>$u->id,
+                    'receipt_path'=>$path, 'note'=>(string)$request->input('note',''),
+                    'purchase_group_id'=>$grpId,
+                    'status'=>((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved',
+                    'created_by'=>$u->name ?? '',
+                ]);
+                $out[] = ['order_no'=>$o->order_no,'native'=>$share,'usd'=>(float)$c->usd_amount];
+            }
+            $usd = round(array_sum(array_map(fn($x)=>$x['usd'],$out)),2);
+            return response()->json(['ok'=>true,'attached'=>count($out),'orders'=>$out,'usd'=>$usd,'split'=>$n>1]);
+        }
+
         $c = OrderCost::create([
             'tenant_id'=>$t->id, 'order_id'=>null, 'order_no'=>null,
             'stage'=>'expense', 'expense_category'=>$cat,

@@ -1,0 +1,33 @@
+DEPLOY — Attach order(s) to freight/delivery expenses (v61)
+===========================================================
+Answers "Bus Freight has no order number." The Expenses screen now has an optional Order(s)
+field. It handles the mix (sometimes one order, sometimes many) on ONE screen.
+
+BEHAVIOUR
+  - Order(s) EMPTY  -> books as a general expense (stage 'expense'), exactly like before
+    (correct for rent, electricity, salaries…).
+  - ONE order (e.g. ORD-19) -> books the cost AGAINST that order as an order cost, so it shows
+    in that order's margin and counts as a trading cost in P&L (NOT as flat overhead — no
+    double count).
+  - MANY orders (ORD-18, ORD-19) -> splits the amount EVENLY across them, one order-cost row
+    each (grouped), so every order carries its fair share of the freight.
+  - Category is mapped to a stage: Bus Freight -> freight_bus, Boda/Delivery -> delivery_boda,
+    Transport/Fuel -> transport, anything else -> order_cost. expense_category is kept as a label.
+
+FILES
+  app/Http/Controllers/Panel/ExpenseController.php   (store() handles order_no, one or split)
+  resources/panel/expenses.html                      (optional "Order(s)" field + messaging)
+
+DEPLOY
+  Upload both (replace) -> commit -> EasyPanel REBUILD (force/no-cache) -> clear SW+caches.
+  No migration needed (reuses existing order_costs columns).
+
+VERIFY
+  Expenses -> Bus Freight -> amount 50000 -> Order(s): ORD-18, ORD-19 -> Record.
+    -> message "Freight attached to 2 orders (split evenly)".
+    -> open ORD-18 costs/margin: shows 25,000 freight. Same for ORD-19.
+  Bus Freight with Order(s) empty -> still books as a normal expense in P&L.
+
+WHY NOT ON THE EXPENSES 'expense' BUCKET: freight tied to an order is a cost of THAT order
+(cost of sale), not overhead. Booking it as an order cost keeps per-order margin honest and
+avoids double-counting it in both the order and the general-expense line.

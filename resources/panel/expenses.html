@@ -103,6 +103,9 @@
     <label>Note (optional)</label>
     <input id="note" placeholder="e.g. July office rent">
 
+    <label>Order(s) <span style="font-weight:500;color:#64748b">— optional, for freight/delivery tied to orders. One (ORD-19) or several (ORD-18, ORD-19) to split the cost across them.</span></label>
+    <input id="orderNo" placeholder="ORD-19 or ORD-18, ORD-19">
+
     <button class="btn" onclick="save()">Record expense</button>
   </div>
   <div style="font-size:11px;font-weight:800;letter-spacing:.6px;color:var(--mute);margin:16px 0 8px">RECENT EXPENSES</div>
@@ -134,12 +137,16 @@ function save(){
   fd.append('native_amount',($('amt').value||'').replace(/,/g,''));
   fd.append('rate_to_usd',($('rate').value||'').replace(/,/g,''));
   fd.append('note',$('note').value);
+  if($('orderNo')&&$('orderNo').value.trim())fd.append('order_no',$('orderNo').value.trim());
   if($('receipt').files[0])fd.append('receipt',$('receipt').files[0]);
   const b=document.querySelector('.btn');b.disabled=true;b.textContent='Saving…';
   fetch('/papi/expenses',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json()).then(r=>{
     b.disabled=false;b.textContent='Record expense';
-    if(r.ok){alert('Expense recorded ✅ ($'+r.usd+' USD)');$('amt').value='';$('note').value='';$('receipt').value='';$('rname').textContent='';calc();}
-    else alert('Failed: '+(r.error||'error'));
+    if(r.ok){
+      var msg = r.attached ? ('Freight attached to '+r.attached+' order'+(r.attached>1?'s':'')+(r.split?' (split evenly)':'')+' ✅ ($'+r.usd+')') : ('Expense recorded ✅ ($'+r.usd+' USD)');
+      alert(msg);$('amt').value='';$('note').value='';if($('orderNo'))$('orderNo').value='';$('receipt').value='';$('rname').textContent='';calc();
+    }
+    else alert('Failed: '+(r.error==='order_not_found'?('order not found: '+(r.detail||'')):(r.error||'error')));
   }).catch(()=>{b.disabled=false;b.textContent='Record expense';alert('Failed.');});
 }
 
