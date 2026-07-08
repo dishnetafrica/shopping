@@ -469,6 +469,7 @@
               </table></div>
               <div class="totals">
                 <div class="r"><span>Subtotal</span><span id="tSub"></span></div>
+                <div class="r"><span>Discount <select id="tDiscMode" style="border:1px solid var(--line);border-radius:6px;padding:2px 5px;font-size:11px;margin-left:4px;font-family:inherit"><option value="amount">$ off</option><option value="percent">% off</option></select></span><span><input id="tDiscIn" type="number" min="0" step="1" value="0" style="width:120px;text-align:right;border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-family:inherit;font-size:13px"></span></div>
                 <div class="r"><span>Delivery fee <span id="tDelHint" style="color:var(--muted);font-size:11px;font-weight:400"></span></span><span><input id="tDelIn" type="number" min="0" step="500" style="width:120px;text-align:right;border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-family:inherit;font-size:13px"></span></div>
                 <div class="r grand"><span>Total</span><span id="tGrand"></span></div>
                 <div class="note" id="curNote" style="text-align:right;margin-top:4px"></div>
@@ -1591,7 +1592,8 @@ async function saveInvoice(){
   if(!current)return;
   var items=current.items.map(function(it){return {name:it.name,qty:it.qty,price:it.price};});
   var sub=items.reduce(function(s,it){return s+(Number(it.price)||0)*(Number(it.qty)||0);},0);
-  var total=sub+(Number(current.deliveryFee)||0);
+  var discUgx=(current.discMode==='percent')?Math.max(0,Math.round(sub*(Number(current.discPct)||0)/100)):Math.max(0,Number(current.discount)||0);
+  var total=sub-discUgx+(Number(current.deliveryFee)||0);
   var nm=(($('dCustName')||{}).value||'').trim();
   var addr=(($('dCustAddr')||{}).value||'').trim();
   var loc=addr; if(addr&&current.pin&&addr.indexOf(current.pin)<0)loc=addr+' \u2014 '+current.pin; else if(!addr&&current.pin)loc=current.pin;
@@ -1638,7 +1640,8 @@ function syncCurrencyLabels(){
     var bot=$('setBotCur');if(bot){var bm=bot.closest('.mfield');if(bm)bm.style.display='none';} // Auto UGX/SSP/USD routing is meaningless for a single native currency
   }
 }
-function orderTotal(o){if(o.total!=null&&Number(o.total)>0)return Number(o.total);return o.items.reduce(function(s,it){return s+(Number(it.price)||0)*(Number(it.qty)||0);},0)+(Number(o.deliveryFee)||0);}
+function discountUgxFor(o,sub){ if((o.discMode||'amount')==='percent'){ var p=Number(o.discPct)||0; return Math.max(0,Math.round((Number(sub)||0)*p/100)); } return Math.max(0,Number(o.discount)||0); }
+function orderTotal(o){if(o.total!=null&&Number(o.total)>0)return Number(o.total);var sub=o.items.reduce(function(s,it){return s+(Number(it.price)||0)*(Number(it.qty)||0);},0);return sub-discountUgxFor(o,sub)+(Number(o.deliveryFee)||0);}
 function fmtDate(s){return String(s||'').replace('T',' ');}
 function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(function(){t.remove();},2300);}
 
@@ -2599,15 +2602,35 @@ function renderInvoice(){
   }).join('');
   var sub=o.items.reduce(function(s,it){return s+(Number(it.price)||0)*(Number(it.qty)||0);},0);
   var suggested=(DELIV.freeOver>0&&sub>=DELIV.freeOver)?0:(feeFor(o.coords)||0);
-  if(o._feeInit!==true){var existing=(o.total!=null&&Number(o.total)>sub)?(Number(o.total)-sub):0;o.deliveryFee=existing>0?existing:suggested;o._feeInit=true;}
+  if(o._feeInit!==true){
+    var savedTotal=(o.total!=null)?Number(o.total):null;
+    if(savedTotal!=null && savedTotal>sub){ o.deliveryFee=savedTotal-sub; o.discount=0; }
+    else if(savedTotal!=null && savedTotal>0 && savedTotal<sub){ o.discount=sub-savedTotal; o.deliveryFee=0; }
+    else { o.deliveryFee=suggested; o.discount=Number(o.discount)||0; }
+    o.discMode=o.discMode||'amount'; o.discPct=Number(o.discPct)||0;
+    o._feeInit=true;
+  }
+  var discUgx=discountUgxFor(o,sub);
   var km=distKm(o.coords);
   var freeHint=(DELIV.freeOver>0&&sub>=DELIV.freeOver)?' \u00b7 free over '+ugx(DELIV.freeOver):'';
   var org=o.coords?originFor(o.coords):null;
   var fromTxt=(org&&org.name)?(' from '+esc(org.name)):' from store';
   $('tDelHint').textContent=o.coords?('~'+km.toFixed(1)+' km'+fromTxt+' \u00b7 suggested '+ugx(suggested)+freeHint):'no map pin on this order \u2014 enter manually'+freeHint;
-  var di=$('tDelIn'); if(di){var dm=curMeta();di.value=convFromUgx(o.deliveryFee).toFixed(dm.dec);di.oninput=function(){o.deliveryFee=convToUgx(this.value);$('tGrand').textContent=ugx(sub+(Number(o.deliveryFee)||0));};}
+  var di=$('tDelIn'); if(di){var dm=curMeta();di.value=convFromUgx(o.deliveryFee).toFixed(dm.dec);di.oninput=function(){o.deliveryFee=convToUgx(this.value);$('tGrand').textContent=ugx(sub-(discountUgxFor(o,sub))+(Number(o.deliveryFee)||0));};}
+  var dscM=$('tDiscMode'), dscI=$('tDiscIn');
+  if(dscM&&dscI){
+    dscM.value=o.discMode||'amount';
+    dscI.value=(o.discMode==='percent')?(Number(o.discPct)||0):convFromUgx(o.discount||0).toFixed(curMeta().dec);
+    var applyDisc=function(){
+      if(dscM.value==='percent'){ o.discMode='percent'; o.discPct=Math.max(0,Number(dscI.value)||0); o.discount=Math.max(0,Math.round(sub*o.discPct/100)); }
+      else { o.discMode='amount'; o.discount=Math.max(0,convToUgx(dscI.value)); o.discPct=0; }
+      $('tGrand').textContent=ugx(sub-(o.discount||0)+(Number(o.deliveryFee)||0));
+    };
+    dscI.oninput=applyDisc;
+    dscM.onchange=function(){ if(dscM.value==='percent'){dscI.value=Number(o.discPct)||0;}else{dscI.value=convFromUgx(o.discount||0).toFixed(curMeta().dec);} applyDisc(); };
+  }
   var cn=$('curNote'); if(cn)cn.textContent=inUGX()?'':('Prices shown in '+curMeta().code+' · 1 USD = '+RATES.usdUgx.toLocaleString('en-US')+' UGX = '+RATES.usdSsp.toLocaleString('en-US')+' SSP');
-  $('tSub').textContent=ugx(sub);$('tGrand').textContent=ugx(sub+(Number(o.deliveryFee)||0));
+  $('tSub').textContent=ugx(sub);$('tGrand').textContent=ugx(sub-discUgx+(Number(o.deliveryFee)||0));
   $('dStatus').style.borderColor=stColor(o.status);
   renderStageTracker();
 }

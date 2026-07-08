@@ -1,0 +1,40 @@
+DEPLOY — Order discount ($ or %) (v56)
+======================================
+Path: resources/panel/seller.html  (the file the app serves)
+
+WHAT'S NEW
+  A Discount row in the order invoice totals, between Subtotal and Delivery fee, with a
+  toggle:  "$ off" (flat amount) OR "% off" (percentage). Choose per order.
+    Total = Subtotal − Discount + Delivery fee
+  Use it when you can't deliver the full order or want to give a reduction.
+
+  You can STILL adjust per line (change a line's qty or price) — that already works and is
+  the truest way to handle a short-delivered item. The discount field is for a flat/percent
+  reduction on top.
+
+OUTSTANDING IS CORRECT
+  The discounted total is saved as the order total, so the Record Payment modal shows
+  Outstanding = discounted total automatically. Pay the discounted amount and the order
+  clears.
+
+HOW IT PERSISTS (no backend change needed)
+  The discount reduces the saved order total. On reload the app reconstructs it:
+    saved total < subtotal  -> the difference is shown as Discount
+    saved total > subtotal  -> the difference is shown as Delivery fee (unchanged behaviour)
+  LIMITATION: applying BOTH a manual delivery fee AND a discount on the SAME order will,
+  after a reload, show as a single combined adjustment (the math/total stays correct; only
+  the split between "discount" and "delivery" may merge). For a clean separate discount that
+  always survives reload, I can add a proper discount field to the order backend — send me
+  app/Http/Controllers/Panel/PanelApiController.php (the saveOrder method) and I'll wire it.
+
+DEPLOY
+  1. Upload to  resources/panel/seller.html  (REPLACE existing). Commit.
+  2. EasyPanel REBUILD (force/no-cache).
+  3. Container: grep -c tDiscMode /var/www/html/resources/panel/seller.html  (>0)
+     then php /var/www/html/artisan view:clear
+  4. Normal browser: clear service worker + caches, reopen panel.
+
+VERIFY
+  Open an order -> Discount row shows under Subtotal. Enter "50" with "$ off" -> Total drops
+  by 50. Switch to "% off", enter 10 -> Total = Subtotal − 10%. Save. Record Payment ->
+  Outstanding equals the discounted Total.
