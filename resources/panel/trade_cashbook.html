@@ -60,6 +60,18 @@
   .pager button{padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-weight:700;cursor:pointer;}
   .loading{text-align:center;color:var(--mute);padding:20px;}
   .pill{font-size:9px;background:#f1f5f9;color:#475569;padding:2px 7px;border-radius:8px;font-weight:800;}
+
+  table.ledger .edt{background:#fff;border:1.5px solid #cfe0d4;color:#0B3D22;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:800;cursor:pointer;margin-right:5px;}
+  .ebackdrop{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:79;display:none;}.ebackdrop.on{display:block;}
+  .esheet{position:fixed;left:0;right:0;bottom:0;z-index:80;background:#fff;border-radius:18px 18px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 18px);box-shadow:0 -8px 30px -10px rgba(0,0,0,.25);transform:translateY(110%);transition:.22s;max-height:92vh;overflow:auto;max-width:520px;margin:0 auto;}
+  .esheet.on{transform:translateY(0);}
+  .esheet h3{margin:0 0 4px;font-size:16px;font-weight:900;}
+  .esheet .rf{font-size:12px;color:#6E7D72;margin:0 0 10px;font-weight:700;}
+  .esheet label{display:block;font-size:12px;font-weight:800;color:#374151;margin:10px 0 5px;}
+  .esheet input,.esheet select{width:100%;padding:11px;border:1.5px solid #E1E8E2;border-radius:11px;font-size:16px;font-family:inherit;}
+  .esheet .e2{display:flex;gap:10px;}.esheet .e2>*{flex:1;}
+  .esave{width:100%;margin-top:14px;background:#0B3D22;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;}
+  .ex{position:absolute;right:14px;top:14px;background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer;}
 </style>
 <!-- ===== DishNet mobile app shell (injected v2) ===== -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -166,6 +178,35 @@ function setRate(){$('rate').value=rates[$('cur').value]||'';calc();}
 function calc(){const a=parseFloat(($('amt').value||'').replace(/,/g,''))||0,r=parseFloat(($('rate').value||'').replace(/,/g,''))||0;$('conv').textContent='≈ $'+(r>0?fmt(a/r):'0.00')+' USD';}
 function balCard(cur,v){const cls={USD:'usd',UGX:'ugx',SSP:'ssp'}[cur];const sym=cur==='USD'?'$':'';const unit=cur==='USD'?'':cur;
   return `<div class="balcard ${cls}"><div class="circ"></div><div class="lbl">${cur} balance</div><div class="val">${sym}${fmt(v)} <span class="u">${unit}</span></div></div>`;}
+
+var ERATES={UGX:3655,SSP:5180,USD:1};
+function editRow(id){
+  var e=(window.__ENTRIES||[]).find(function(x){return x.id===id;}); if(!e){return;}
+  window.__EID=id;
+  $('eRef').textContent=(e.ref||'')+' · '+(e.category||'')+' · '+(e.when||'');
+  $('eAmt').value=e.native||''; $('eCur').value=e.currency||'UGX';
+  $('eRate').value=e.rate||ERATES[e.currency]||''; $('eHolder').value=e.holder||'';
+  $('eOrder').value=e.order_no||''; $('eCat').value=e.category||''; $('eNote').value=(e.note||'');
+  $('eDate').value=e.created_date||'';
+  $('eOrderWrap').style.display=(e.stage==='purchase'||e.stage==='customer_payment')?'block':'none';
+  // fill people datalist from current holders
+  var names={}; (window.__ENTRIES||[]).forEach(function(x){if(x.holder)names[x.holder]=1;});
+  $('ePeople').innerHTML=Object.keys(names).map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">';}).join('');
+  eRate();
+  $('eback').classList.add('on'); $('esheet').classList.add('on');
+}
+function closeEdit(){ $('eback').classList.remove('on'); $('esheet').classList.remove('on'); }
+function eRate(){ var c=$('eCur').value; $('eRateWrap').style.display=c==='USD'?'none':'flex'; }
+function saveEdit(){
+  var id=window.__EID; if(!id) return;
+  var amt=parseFloat(($('eAmt').value||'').replace(/,/g,''))||0; if(amt<=0){alert('Amount?');return;}
+  var body=new URLSearchParams({amount:amt,currency:$('eCur').value,rate_to_usd:($('eCur').value==='USD'?1:($('eRate').value||'')),holder:$('eHolder').value.trim(),order_no:$('eOrder').value.trim(),category:$('eCat').value.trim(),note:$('eNote').value.trim(),created_date:$('eDate').value});
+  var b=$('eSave'); b.disabled=true; b.textContent='Saving…';
+  fetch('/papi/trade-cashbook/'+id+'/update',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body})
+   .then(r=>r.json()).then(function(r){ b.disabled=false; b.textContent='Save changes';
+     if(r&&r.ok){ closeEdit(); load(); } else alert('Could not save: '+((r&&r.error)||'error')); })
+   .catch(function(){ b.disabled=false; b.textContent='Save changes'; alert('Failed'); });
+}
 function load(){
   fetch('/papi/trade-cashbook?currency='+FILT+'&page='+PAGE+'&per=20',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(d=>{
     if(!d.ok){$('list').innerHTML='<div class="loading">Could not load.</div>';return;}
@@ -183,7 +224,7 @@ function load(){
     $('list').innerHTML = `
       <div class="ledwrap"><table class="ledger">
         <thead><tr><th>Ref</th><th>Date</th><th>Particulars</th><th>Person</th><th class="num in">IN</th><th class="num out">OUT</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
-        <tbody>${d.entries.map(e=>`
+        <tbody>${(window.__ENTRIES=d.entries, window.__OWNER=!!d.is_owner, d.entries).map(e=>`
           <tr class="${e.dir}">
             <td class="ref">${e.ref||''}</td>
             <td class="dt">${e.when||''}</td>
@@ -193,7 +234,7 @@ function load(){
             <td class="num out">${e.dir==='out'?e.currency+' '+fmt(e.native):''}</td>
             <td class="num bal">${e.currency} ${fmt(e.run)}</td>
             <td>${e.status==='approved'?'<span class="st ok">Done</span>':'<span class="st pend">'+e.status+'</span>'}</td>
-            <td>${(e.stage==='cash_in'||e.stage==='cash_out')?`<button class="del" onclick="del(${e.id})">✕</button>`:''}</td>
+            <td style="white-space:nowrap">${window.__OWNER&&e.editable?`<button class="edt" onclick="editRow(${e.id})">Edit</button>`:''}${(e.stage==='cash_in'||e.stage==='cash_out')?`<button class="del" onclick="del(${e.id})">✕</button>`:''}</td>
           </tr>`).join('')}</tbody>
       </table></div>`;
     // pager
@@ -329,4 +370,19 @@ setRate();load();
   wire('total','sellcur'); // orders_costs
 })();
 </script>
+<div class="ebackdrop" id="eback" onclick="closeEdit()"></div>
+<div class="esheet" id="esheet">
+  <button class="ex" onclick="closeEdit()">✕</button>
+  <h3>Edit entry</h3>
+  <div class="rf" id="eRef"></div>
+  <div class="e2"><div><label>Amount</label><input id="eAmt" inputmode="decimal"></div>
+  <div style="max-width:110px"><label>Currency</label><select id="eCur" onchange="eRate()"><option>UGX</option><option>USD</option><option>SSP</option></select></div></div>
+  <div class="e2" id="eRateWrap"><div><label>Rate (per 1 USD)</label><input id="eRate" inputmode="decimal"></div><div></div></div>
+  <label>Person (who holds / received)</label><input id="eHolder" list="ePeople" placeholder="Person"><datalist id="ePeople"></datalist>
+  <div id="eOrderWrap"><label>Order (for purchases / receipts)</label><input id="eOrder" placeholder="ORD-…"></div>
+  <label>Category</label><input id="eCat" placeholder="Category">
+  <label>Note</label><input id="eNote" placeholder="optional">
+  <label>Date</label><input id="eDate" type="datetime-local">
+  <button class="esave" id="eSave" onclick="saveEdit()">Save changes</button>
+</div>
 </body></html>

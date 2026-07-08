@@ -1,0 +1,43 @@
+DEPLOY — Cashbook edit for all entry types + receiver (v39)
+==========================================================
+Extends the receipt fix (v38) to the whole cashbook: owner/manager can now EDIT any
+entry (purchase, funding, cash in/out, receipt, expense) directly from the Cashbook,
+including the Person (who holds/received the cash). Editing a receipt keeps the
+linked customer-payment record in sync.
+
+ALSO FIXES a pre-existing bug in the Cashbook PDF export (an unterminated string in
+expPdf) that was in the file before — PDF export now parses/works correctly.
+
+FILES CHANGED
+  app/Http/Controllers/Panel/TradeCashbookController.php  (+update(); row now exposes
+                                                            rate/order_no/pay_status/
+                                                            editable/created_date;
+                                                            +is_owner; +CustomerPayment)
+  routes/web.php                                           (+POST trade-cashbook/{id}/update)
+  resources/panel/trade_cashbook.html                      (Edit button per row for owner;
+                                                            edit sheet; expPdf string fix)
+
+WHAT YOU CAN DO NOW
+  - On the Cashbook, each row shows an "Edit" button (owner/manager only). Edit lets you
+    fix Amount, Currency, Rate, Person (who holds/received), Order (for purchases &
+    receipts), Category, Note and Date.
+  - Editing a receipt (customer_payment) updates BOTH the cash row and the customer-
+    payment record together, so Staff Cash, Customer 360 and the cashbook stay in step.
+  - Cash in/out entries keep their delete (✕); everything else is corrected via Edit.
+  - Staff cannot edit; only owner/manager.
+
+DEPLOY
+  git add app/Http/Controllers/Panel/TradeCashbookController.php routes/web.php \
+          resources/panel/trade_cashbook.html
+  git commit -m "v39: cashbook edit all entry types + receiver; fix expPdf string"
+  git push -> EasyPanel Rebuild        (no migration)
+
+VERIFY
+  Cashbook -> Edit on a purchase: change the Person to Jayesh -> that purchase now
+  shows on Jayesh's Staff Cash. Edit a receipt: fix order/person/amount -> Customer 360
+  and Staff Cash both update. Try the PDF export button -> it opens the print view.
+
+NOTES
+  - Editing changes the running balance from that entry onward (expected).
+  - The "Person" field offers existing holders as suggestions; you can type any staff
+    name (it links to their user where the name matches).

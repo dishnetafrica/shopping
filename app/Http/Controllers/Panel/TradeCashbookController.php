@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
 use App\Models\OrderCost;
+use App\Models\CustomerPayment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -78,17 +79,19 @@ class TradeCashbookController extends Controller
             $ref = in_array($c->stage,['cash_in','cash_out'],true)
                 ? 'CB-'.str_pad((string)$c->id,4,'0',STR_PAD_LEFT)
                 : ($c->order_no ?: strtoupper(substr($c->stage,0,3)).'-'.str_pad((string)$c->id,4,'0',STR_PAD_LEFT));
+            $editable = in_array($c->stage,['cash_in','cash_out','funding','purchase','customer_payment','expense','drawing','supplier_payment'],true);
             return ['id'=>$c->id,'stage'=>$c->stage,'dir'=>$isIn?'in':'out','ref'=>$ref,
                 'currency'=>$c->currency,'native'=>(float)$c->native_amount,'usd'=>(float)$c->usd_amount,
+                'rate'=>(float)$c->rate_to_usd,'order_no'=>$c->order_no,'pay_status'=>$c->pay_status,'editable'=>$editable,
                 'run'=>$runById[$c->id]['run'] ?? 0, 'run_usd'=>$runById[$c->id]['run_usd'] ?? 0,
                 'category'=>$c->category ?: $stageLabel,
                 'holder'=>$c->holder,'note'=>$c->note ?: ($c->order_no ?: ''),
-                'status'=>$c->status,'when'=>$c->created_at?->format('d M H:i')];
+                'status'=>$c->status,'when'=>$c->created_at?->format('d M H:i'),
+                'created_date'=>$c->created_at?->format('Y-m-d\TH:i')];
         });
 
         return response()->json(['ok'=>true,'currency'=>$cur,'balances'=>$bal,
-            'view'=>$isOwner?'everyone':'mine','whoami'=>$u->name,
-            'entries'=>$rows,'total'=>$total,'page'=>$page,'per'=>$per,'pages'=>(int)ceil($total/$per),
+            'view'=>$isOwner?'everyone':'mine','whoami'=>$u->name,'is_owner'=>$isOwner,
             'default_rates'=>['UGX'=>(float)$t->setting('rate_ugx_per_usd',3700),
                               'SSP'=>(float)$t->setting('rate_ssp_per_usd',5180),'USD'=>1]]);
     }
@@ -166,5 +169,65 @@ class TradeCashbookController extends Controller
         if (! $c) return response()->json(['ok'=>false,'error'=>'not_found'],404);
         $c->delete();
         return response()->json(['ok'=>true]);
+    }
+
+    /** POST /papi/trade-cashbook/{id}/update — owner/manager edits any cash entry.
+     *  If it's a customer_payment, the linked customer-payment record is kept in sync. */
+    public function update(Request $request, int $id)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok'=>false],401);
+        if (! ($u->isOwnerLike() || in_array((string)$u->role,['manager'],true)))
+            return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
+        $c = OrderCost::where('tenant_id',$t->id)->find($id);
+        if (! $c) return response()->json(['ok'=>false,'error'=>'not_found'],404);
+
+        $cur = strtoupper((string)$request->input('currency', $c->currency));
+        $amount = round((float)$request->input('amount', (float)$c->native_amount), 2);
+        if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
+        $rate = (float)$request->input('rate_to_usd', 0);
+        if ($rate <= 0) $rate = $cur==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3655:5180);
+        if ($rate <= 0) $rate = 1;
+        $usd = OrderCost::toUsd($amount, $rate);
+        $category = trim((string)$request->input('category', (string)$c->category)) ?: $c->category;
+        $note = trim((string)$request->input('note',''));
+        $orderNo = $request->has('order_no') ? (trim((string)$request->input('order_no','')) ?: null) : $c->order_no;
+
+        // person / receiver (holder)
+        $holderName = (string)$c->holder; $holderUid = $c->holder_user_id;
+        $recv = trim((string)$request->input('holder',''));
+        if ($recv !== '' && mb_strtolower($recv) !== mb_strtolower($holderName)) {
+            $holderName = $recv;
+            try { $holderUid = \App\Models\User::where('tenant_id',$t->id)->where('name',$recv)->value('id'); } catch (\Throwable $e) { $holderUid = null; }
+        }
+        $createdAt = null;
+        $cd = trim((string)$request->input('created_date',''));
+        if ($cd !== '') { try { $createdAt = \Illuminate\Support\Carbon::parse($cd); } catch (\Throwable $e) { $createdAt = null; } }
+
+        DB::transaction(function () use ($c,$cur,$amount,$rate,$usd,$category,$note,$orderNo,$holderName,$holderUid,$createdAt,$t) {
+            $isCredit = ($c->pay_status === 'credit');
+            $c->currency = $cur; $c->native_amount = $amount; $c->rate_to_usd = $rate; $c->usd_amount = $usd;
+            $c->paid_native = $isCredit ? 0 : $amount;
+            $c->category = $category; $c->order_no = $orderNo;
+            $c->holder = $holderName; $c->holder_user_id = $holderUid;
+            if ($note !== '') $c->note = $note;
+            if ($createdAt) $c->created_at = $createdAt;
+            $c->save();
+
+            // keep the customer-payment record in sync when editing a receipt
+            if ($c->stage === 'customer_payment') {
+                try {
+                    $pay = CustomerPayment::where('tenant_id',$t->id)->where('order_cost_id',$c->id)->first();
+                    if ($pay) {
+                        $pay->currency = $cur; $pay->amount = $amount; $pay->rate_to_usd = $rate; $pay->usd_amount = $usd;
+                        $pay->order_no = $orderNo; $pay->holder = $holderName; $pay->holder_user_id = $holderUid;
+                        if ($createdAt) $pay->created_at = $createdAt;
+                        $pay->save();
+                    }
+                } catch (\Throwable $e) { /* customer_payments optional */ }
+            }
+        });
+
+        return response()->json(['ok'=>true,'id'=>$c->id,'currency'=>$cur,'amount'=>$amount,'usd'=>$usd,'holder'=>$holderName]);
     }
 }
