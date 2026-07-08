@@ -1,0 +1,25 @@
+DEPLOY — the MISSING v59 migration (permanent fix)
+==================================================
+Diagnosis: the container had only 2026_07_09_000001 (cost_price). The purchase-fields
+migration 2026_07_09_000002 was NEVER deployed, so `migrate` had nothing to run and the
+columns (order_costs.product_id/qty/unit_cost, suppliers.pay_term_days/opening_balance/
+opening_currency) don't exist -> /papi/suppliers 500s.
+
+FIX (permanent, proper):
+  1. Upload this file to the repo at EXACTLY:
+       database/migrations/2026_07_09_000002_add_purchase_fields.php
+     (same folder as 2026_07_09_000001_add_cost_price_to_products.php)
+  2. Commit -> EasyPanel REBUILD (force/no-cache so the file is baked into the image).
+  3. In the container:
+       php /var/www/html/artisan migrate --force
+     You should see it run "2026_07_09_000002_add_purchase_fields ... DONE".
+  4. Verify (all YES):
+       php /var/www/html/artisan tinker --execute="foreach(['order_costs.product_id','order_costs.qty','order_costs.unit_cost','suppliers.pay_term_days','suppliers.opening_balance','suppliers.opening_currency'] as \$c){[\$t,\$col]=explode('.',\$c);echo \$c.': '.(\Illuminate\Support\Facades\Schema::hasColumn(\$t,\$col)?'YES':'NO').PHP_EOL;}"
+
+The migration is idempotent (Schema::hasColumn guards), so it is safe even if some columns
+somehow already exist. After this, Save Supplier / supplier list / Record Purchase all work.
+
+WHY IT KEPT HAPPENING: a zip's code deployed but its database/migrations/*.php file didn't
+land in the repo. RULE: every zip with a database/migrations file needs that file uploaded to
+the SAME path in the repo, then `php artisan migrate --force` after Rebuild. Code + migration
+must ship together.
