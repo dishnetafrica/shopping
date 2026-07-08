@@ -50,7 +50,7 @@ class CashPositionController extends Controller
 
         $cur = [];   // currency => ['native'=>, 'usd'=>, 'holders'=>[holder=>native]]
         foreach ($rows as $r) {
-            $sign = in_array($r->stage,['funding','customer_payment'],true) ? 1 : -1;   // costs reduce cash; funding + customer payments add
+            $sign = in_array($r->stage,['funding','cash_in','customer_payment'],true) ? 1 : -1;   // IN stages add cash; everything else (costs, conversions out, drawings, transfers out) reduces it — MUST match the cashbook's rule
             $c = $r->currency;
             $cur[$c]['native'] = ($cur[$c]['native'] ?? 0) + $sign * (float)$r->native;
             $cur[$c]['usd']    = ($cur[$c]['usd'] ?? 0) + $sign * (float)$r->usd;

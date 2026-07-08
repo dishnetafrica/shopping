@@ -1,0 +1,31 @@
+DEPLOY — Cash Position sign fix (v49)
+=====================================
+CRITICAL data-accuracy fix. The Cash Position screen was showing every balance with the
+WRONG SIGN — money you HOLD was displayed as NEGATIVE.
+
+ROOT CAUSE
+  Cash Position treated only stages ['funding','customer_payment'] as cash-IN. It was
+  missing 'cash_in' — the stage used by currency conversions and moved cash. So conversion
+  inflows (e.g. Jayesh UGX 4,700,330, Bhavin UGX 2,193,000) were signed as OUT, flipping
+  the whole screen negative (showed UGX -6,893,330 / combined -$3,086 instead of
+  +6,893,330 / +$1,886).
+
+  Every other money screen (Cashbook, Staff Cash, My Cash) already used the correct rule
+  ['funding','cash_in','customer_payment'] — Cash Position was the only one out of step.
+  This is why the verification showed all screens agreeing EXCEPT Cash Position.
+
+FIX (one line, CashPositionController::data())
+  $sign = in_array($r->stage,['funding','cash_in','customer_payment'],true) ? 1 : -1;
+  (added 'cash_in' so it matches the cashbook exactly)
+
+FILE
+  app/Http/Controllers/Panel/CashPositionController.php
+
+DEPLOY
+  1. Unzip -> GitHub upload -> Commit -> EasyPanel Rebuild.
+  2. Open Cash Position -> balances should now READ POSITIVE and match the cashbook:
+       UGX +6,893,330  (Jayesh +4,700,330, Bhavin +2,193,000) · USD 0 · SSP 0
+       Combined ~ +$1,886.
+  3. Re-run the Cash Position verification script -> both checks PASS.
+
+No migration.
