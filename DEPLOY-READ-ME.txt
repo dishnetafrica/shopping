@@ -1,0 +1,41 @@
+DEPLOY — Everything in one upload (Staff Cash + field app + receipt/cashbook edit + seller nav)
+==============================================================================================
+This single zip contains the complete latest state of all the recent work. Upload it
+once and you're done — nothing separate.
+
+WHAT'S INSIDE (folders match your repo paths)
+  app/Http/Controllers/Panel/StaffCashController.php     (Staff Cash + My Cash field app)
+  app/Http/Controllers/Panel/PaymentController.php       (receipts: order required, receiver, edit)
+  app/Http/Controllers/Panel/TradeCashbookController.php (cashbook: edit any entry; PDF fix)
+  routes/web.php                                          (all routes for the above)
+  resources/panel/staff_cash.html                        (Staff Cash screen)
+  resources/panel/my_cash.html                           (My Cash — mobile field app)
+  resources/panel/payments.html                          (order required + receiver + edit)
+  resources/panel/trade_cashbook.html                    (per-row edit + fixed PDF export)
+  resources/panel/app_home.html                          (Staff Cash + My Cash tiles)
+  seller.html                                            (sidebar now has Staff Cash + My Cash)
+
+HOW TO UPLOAD (GitHub web -> your repo github.com/dishnetafrica/shopping)
+  1. Unzip this file.
+  2. On GitHub, "Add file -> Upload files", then drag the UNZIPPED contents in
+     (the app/, routes/, resources/ folders AND seller.html) so paths are preserved.
+     - If GitHub asks, it will place each file into its matching folder.
+     - seller.html sits at the repo root (same place you normally upload it). If your
+       seller.html lives somewhere else in your repo, drop that one file there instead.
+  3. Commit.
+  4. EasyPanel -> Rebuild (NOT Restart).
+  5. No database migration needed.
+
+AFTER DEPLOY
+  - Hard-refresh the seller panel (Cmd/Ctrl+Shift+R) so the new seller.html loads.
+  - Sidebar (Order Trading) now shows "Staff Cash" and "My Cash".
+  - /panel/my-cash = the mobile field cashbook for Jayesh & Asish (each sees own cash).
+  - Payments: order required, "Received by", and Edit on each receipt.
+  - Cashbook: Edit button on every row (owner/manager).
+
+VERIFY (paste in browser console on the seller panel, logged in as owner)
+  Re-run your checker; Staff Cash and My Cash should now show "visible".
+
+NOTE
+  My Cash matches a person's entries by their login name. If old entries used a
+  different spelling for the holder, tidy those names so they line up.
