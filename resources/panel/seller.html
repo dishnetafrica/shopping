@@ -294,9 +294,12 @@
       <a class="nav" href="/panel/payments"><span class="i">💵</span> Payments Received</a>
       <a class="nav" href="/panel/sourcing"><span class="i">🔎</span> Sourcing Requests</a>
       <a class="nav" href="/panel/cash-position"><span class="i">💰</span> Cash Position</a>
+      <a class="nav" href="/panel/staff-cash"><span class="i">🧑‍💼</span> Staff Cash</a>
+      <a class="nav" href="/panel/my-cash"><span class="i">📒</span> My Cash</a>
       <a class="nav" href="/panel/trade-cashbook"><span class="i">💵</span> Cashbook (multi-cur)</a>
       <a class="nav" href="/panel/expenses"><span class="i">💸</span> Expenses</a>
       <a class="nav" href="/panel/pnl"><span class="i">📈</span> Profit &amp; Loss</a>
+      <a class="nav" href="/panel/ledger"><span class="i">📊</span> Financial Statements</a>
       <a class="nav" href="/panel/partners"><span class="i">🤝</span> Partners</a>
       <a class="nav" href="/panel/invoiced"><span class="i">🧾</span> Invoiced</a>
       </div>
@@ -417,6 +420,7 @@
               <button class="btn ghost" id="backBtn">← Back to list</button>
               <select id="dStatus" style="border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px;font-weight:600"></select>
               <button class="btn blue" id="printBtn">🖨 Print Invoice</button>
+              <button class="btn" id="payNowBtn" style="background:#15803D;color:#fff;font-weight:800">💵 Record Payment</button>
               <button class="btn" id="pdfBtn">⤓ Export Invoice (PDF)</button>
               <button class="btn red" id="delOrderBtn">🗑 Delete order</button>
               <button class="btn" id="returnBtn">↩ Return / refund</button>
@@ -435,6 +439,19 @@
             </div>
             <datalist id="riderList"></datalist>
             <div class="note">Dispatch sets the order to “Out for delivery”, texts the customer a live tracking link, and shares the rider's number.</div>
+          </div></div>
+          <div class="card" id="payCard"><div class="head">💵 Payment</div><div class="body">
+            <div id="paySummary" class="note" style="margin-bottom:10px">—</div>
+            <div class="inrow" style="flex-wrap:wrap;gap:8px;align-items:center">
+              <select id="payCur" style="border:1px solid var(--line);border-radius:9px;padding:9px 10px;font-size:13px;font-weight:700;max-width:90px"><option>UGX</option><option>USD</option><option>SSP</option></select>
+              <input id="payAmt" placeholder="Amount" inputmode="decimal" style="max-width:150px">
+              <select id="payMethod" style="border:1px solid var(--line);border-radius:9px;padding:9px 10px;font-size:13px;font-weight:600"><option>Cash</option><option>Mobile Money</option><option>Bank</option></select>
+              <input id="payRecv" placeholder="Received by (optional)" list="payRecvList" style="max-width:160px">
+              <input id="payRef" placeholder="Reference (optional)" style="max-width:160px">
+              <button class="btn" id="payBtn">＋ Record payment</button>
+            </div>
+            <datalist id="payRecvList"></datalist>
+            <div class="note">Records the customer's payment and adds it to the receiver's cash in hand. Amount is pre-filled with the outstanding balance.</div>
           </div></div>
           <div class="card"><div class="head">Order Details <span style="font-weight:500;font-size:12px;opacity:.85">— edit quantities, add or delete items</span></div><div class="body">
             <div class="inv" id="printArea">
@@ -2140,7 +2157,7 @@ function applyPermissions(){
                '/panel/diagnostics':'settings','/panel/setup':'settings','/panel/billing':'settings',
                '/panel/operations':'orders',
                '/panel/orders-costs':'ordercosts','/panel/book-cost':'purchases','/panel/buy-list':'purchases','/panel/supplier-debt':'purchases',
-               '/panel/approvals':'approvals','/panel/cash-position':'cash','/panel/expenses':'purchases','/panel/pnl':'cash','/panel/trade-cashbook':'cash',
+               '/panel/approvals':'approvals','/panel/cash-position':'cash','/panel/expenses':'purchases','/panel/pnl':'cash','/panel/trade-cashbook':'cash','/panel/staff-cash':'cash','/panel/ledger':'cash',
                '/panel/partners':'finance','/panel/invoiced':'finance'};
   try{
     document.querySelectorAll('.side a.nav').forEach(function(a){
@@ -2460,6 +2477,7 @@ function openOrder(id){
   $('addBtn').onclick=function(){var idx=Number($('addProd').value);var p=CATALOGUE[idx];if(!p||$('addProd').value===''){toast('Pick a product first');return;}addProductToOrder(idx,$('addQty').value);$('addQty').value=1;if($('addSearch'))$('addSearch').value='';renderAddOptions('');};
   $('saveBtn').onclick=saveInvoice;
   $('printBtn').onclick=function(){window.print();};
+  if($('payNowBtn'))$('payNowBtn').onclick=openPayModal;
   $('pdfBtn').onclick=function(){window.print();};
   $('delOrderBtn').onclick=function(){cancelOrder(current.id);};
   $('returnBtn').onclick=openReturnModal;
@@ -2467,7 +2485,93 @@ function openOrder(id){
   (function(){var cb=$('creditBtn');if(cb){var cbal=CREDIT[String(current.phone||'').replace(/[^0-9]/g,'')]||0;
     if(cbal>0){cb.style.display='';cb.textContent='💳 Apply credit ('+ugx(cbal)+')';cb.onclick=applyCredit;}else{cb.style.display='none';}}})();
   setupDispatch();
+  setupPayment();
+  renderPayments();
   renderInvoice();
+}
+function renderPayments(){
+  var o=current; if(!o) return; var ono=oNo(o);
+  var totalUgx=orderTotal(o);
+  fetch('/papi/payments',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
+    var mine=((d&&d.payments)||[]).filter(function(p){return (p.order_no||'')===ono;});
+    var paidUsd=mine.reduce(function(s,p){return s+(Number(p.usd)||0);},0);
+    var paidUgx=Math.round(paidUsd*RATES.usdUgx);
+    var outUgx=Math.max(0, totalUgx-paidUgx);
+    window.__payOutUgx=outUgx;
+    var rows=mine.map(function(p){return (p.receipt_no||'RCP')+' · '+esc(p.currency)+' '+Number(p.amount).toLocaleString()+' · '+esc(p.method||'')+(p.reference?(' · '+esc(p.reference)):'');}).join('<br>');
+    $('paySummary').innerHTML='<b>Total:</b> '+ugx(totalUgx)+' &nbsp;·&nbsp; <b>Paid:</b> '+ugx(paidUgx)+' &nbsp;·&nbsp; <b>Outstanding:</b> <span style="color:'+(outUgx>0.5?'#C0392B':'#15803D')+';font-weight:800">'+ugx(outUgx)+'</span>'+(rows?('<br><br><span style="color:var(--muted)">Payments:</span><br>'+rows):'<br><span style="color:var(--muted)">No payments recorded yet</span>');
+    prefillPayAmt();
+  }).catch(function(){ $('paySummary').textContent='Could not load payments.'; });
+}
+function prefillPayAmt(){
+  var out=Number(window.__payOutUgx||0); var cur=($('payCur')&&$('payCur').value)||'UGX';
+  if(!$('payAmt'))return;
+  $('payAmt').value = cur==='UGX'? Math.round(out) : (cur==='USD'? (out/RATES.usdUgx).toFixed(2) : Math.round(out/RATES.usdUgx*RATES.usdSsp));
+}
+function setupPayment(){
+  if($('payCur')){ $('payCur').value='UGX'; $('payCur').onchange=prefillPayAmt; }
+  if($('payBtn')) $('payBtn').onclick=function(){
+    var o=current; if(!o)return;
+    var amt=parseFloat((($('payAmt').value)||'').replace(/,/g,''))||0;
+    if(amt<=0){toast('Enter an amount');return;}
+    var cur=$('payCur').value||'UGX';
+    var rate= cur==='USD'?1:(cur==='UGX'?RATES.usdUgx:RATES.usdSsp);
+    var b=$('payBtn'); b.disabled=true; b.textContent='Recording…';
+    var body=new URLSearchParams({customer_name:(o.customer||''),customer_phone:(o.phone||''),order_no:oNo(o),currency:cur,amount:amt,rate_to_usd:rate,method:$('payMethod').value,reference:($('payRef').value||'').trim(),receiver:($('payRecv').value||'').trim(),kind:'settlement'});
+    fetch('/papi/payments',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body}).then(function(r){return r.json();}).then(function(r){
+      b.disabled=false; b.textContent='＋ Record payment';
+      if(r&&r.ok){ toast('Payment recorded ✓'); if($('payRef'))$('payRef').value=''; renderPayments(); }
+      else toast('Could not record: '+((r&&r.error==='no_order')?'order missing':((r&&r.error)||'error')));
+    }).catch(function(){ b.disabled=false; b.textContent='＋ Record payment'; toast('Failed'); });
+  };
+}
+function openPayModal(){
+  var o=current; if(!o) return; var ono=oNo(o);
+  $('modalTitle').textContent='Record Payment · '+ono;
+  $('modalBody').innerHTML='<div class="note">Loading…</div>';
+  $('modal').classList.remove('hide');
+  var totalUgx=orderTotal(o);
+  fetch('/papi/payments',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
+    var mine=((d&&d.payments)||[]).filter(function(p){return (p.order_no||'')===ono;});
+    var paidUsd=mine.reduce(function(s,p){return s+(Number(p.usd)||0);},0);
+    var paidUgx=Math.round(paidUsd*RATES.usdUgx);
+    var outUgx=Math.max(0,totalUgx-paidUgx);
+    var hist=mine.length?mine.map(function(p){return '<tr><td style="padding:3px 0">'+esc(p.receipt_no||'RCP')+'</td><td>'+esc(p.currency)+' '+Number(p.amount).toLocaleString()+'</td><td>'+esc(p.method||'')+'</td></tr>';}).join(''):'<tr><td colspan="3" style="color:var(--muted);padding:3px 0">No payments yet</td></tr>';
+    $('modalBody').innerHTML=
+      '<div style="background:#F6F8F6;border-radius:10px;padding:12px;margin-bottom:12px;font-size:13px">'+
+        '<div style="display:flex;justify-content:space-between;margin-bottom:2px"><span>Order total</span><b>'+ugx(totalUgx)+'</b></div>'+
+        '<div style="display:flex;justify-content:space-between;margin-bottom:2px"><span>Already paid</span><b>'+ugx(paidUgx)+'</b></div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:15px;margin-top:4px;border-top:1px solid #e4e9e4;padding-top:6px"><span>Outstanding</span><b style="color:'+(outUgx>0.5?'#C0392B':'#15803D')+'">'+ugx(outUgx)+'</b></div>'+
+      '</div>'+
+      '<label style="font-size:12px;font-weight:800;color:#374151">Amount collected</label>'+
+      '<div style="display:flex;gap:8px;margin:5px 0 10px">'+
+        '<select id="mpCur" style="border:1.5px solid var(--line);border-radius:10px;padding:12px;font-weight:800;max-width:92px;font-size:15px"><option>UGX</option><option>USD</option><option>SSP</option></select>'+
+        '<input id="mpAmt" inputmode="decimal" placeholder="0" style="flex:1;font-size:22px;font-weight:800;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px">'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+
+        '<select id="mpMethod" style="border:1.5px solid var(--line);border-radius:10px;padding:11px;font-weight:600;flex:1;min-width:130px"><option>Cash</option><option>Mobile Money</option><option>Bank</option></select>'+
+        '<input id="mpRecv" placeholder="Received by (e.g. Asish)" style="flex:1;min-width:160px;padding:11px;border:1.5px solid var(--line);border-radius:10px">'+
+      '</div>'+
+      '<input id="mpRef" placeholder="Reference / note (optional)" style="width:100%;padding:11px;border:1.5px solid var(--line);border-radius:10px;box-sizing:border-box">'+
+      '<button class="btn" id="mpSave" style="width:100%;margin-top:12px;background:#15803D;color:#fff;font-size:16px;font-weight:800;padding:13px;border-radius:10px">💵 Record Payment</button>'+
+      '<div style="margin-top:16px"><div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Payments on this order</div>'+
+        '<table style="width:100%;font-size:12.5px;border-collapse:collapse"><tbody>'+hist+'</tbody></table></div>';
+    $('mpCur').value='UGX'; $('mpAmt').value=Math.round(outUgx);
+    $('mpCur').onchange=function(){ var c=this.value; $('mpAmt').value= c==='UGX'?Math.round(outUgx):(c==='USD'?(outUgx/RATES.usdUgx).toFixed(2):Math.round(outUgx/RATES.usdUgx*RATES.usdSsp)); };
+    $('mpSave').onclick=function(){
+      var amt=parseFloat((($('mpAmt').value)||'').replace(/,/g,''))||0;
+      if(amt<=0){ toast('Enter the amount collected'); return; }
+      var cur=$('mpCur').value; var rate=cur==='USD'?1:(cur==='UGX'?RATES.usdUgx:RATES.usdSsp);
+      var btn=$('mpSave'); btn.disabled=true; btn.textContent='Recording…';
+      var body=new URLSearchParams({customer_name:(o.customer||''),customer_phone:(o.phone||''),order_no:ono,currency:cur,amount:amt,rate_to_usd:rate,method:$('mpMethod').value,reference:(($('mpRef').value)||'').trim(),receiver:(($('mpRecv').value)||'').trim(),kind:'settlement'});
+      fetch('/papi/payments',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body}).then(function(r){return r.json();}).then(function(r){
+        btn.disabled=false; btn.textContent='💵 Record Payment';
+        if(r&&r.ok){ closeModal(); toast('Payment recorded ✓'); if(typeof renderPayments==='function') renderPayments(); }
+        else toast('Could not record: '+((r&&r.error==='no_order')?'order missing':((r&&r.error)||'error')));
+      }).catch(function(){ btn.disabled=false; btn.textContent='💵 Record Payment'; toast('Failed — check signal'); });
+    };
+    setTimeout(function(){ if($('mpAmt'))$('mpAmt').focus(); },200);
+  }).catch(function(){ $('modalBody').innerHTML='<div class="note" style="color:var(--red)">Could not load. Try again.</div>'; });
 }
 function renderInvoice(){
   var o=current;

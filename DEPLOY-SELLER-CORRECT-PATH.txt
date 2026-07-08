@@ -1,0 +1,31 @@
+DEPLOY — seller.html at the CORRECT path (v54)
+==============================================
+ROOT CAUSE of "I uploaded but nothing changed":
+  The app serves the panel from   resources/panel/seller.html
+  (LandingController::panel reads that path). Earlier zips placed seller.html at the REPO
+  ROOT, so the panel file the app actually loads was never updated — every front-end change
+  (Record Payment button, inline payment card, Financial Statements nav) was invisible even
+  though the upload "succeeded".
+
+THIS ZIP puts seller.html at the correct path:
+  resources/panel/seller.html   <-- the file the app really serves
+
+It contains everything: 💵 Record Payment button in the Order Action bar + modal, the inline
+payment card, and the Financial Statements (ledger) nav link.
+
+DEPLOY
+  1. Unzip. Upload so the file lands at  resources/panel/seller.html  in the repo
+     (dishnetafrica/shopping). If GitHub already has an old resources/panel/seller.html,
+     REPLACE it with this one. Commit.
+  2. EasyPanel: REBUILD (not Restart). IMPORTANT: if the build uses a cached layer, use
+     "force rebuild / clear build cache" so the new file is baked in. The container had
+     NO git repo, meaning it built from an image — make sure the build pulls the new commit.
+  3. In the container, confirm:
+       grep -c payNowBtn /var/www/html/resources/panel/seller.html   (should be > 0)
+       php /var/www/html/artisan view:clear
+  4. In a NORMAL browser window (not incognito): unregister the service worker + clear caches
+     (script provided in chat), close tab, reopen mycloudbss.com/panel, open an order ->
+     green "Record Payment" button is in the Order Action bar.
+
+VERIFY (browser console):
+  fetch('/panel?b='+Date.now(),{cache:'reload'}).then(r=>r.text()).then(t=>console.log('payNowBtn on server:', t.includes('payNowBtn')?'YES':'NO','bytes',t.length));
