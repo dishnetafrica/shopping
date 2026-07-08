@@ -238,7 +238,7 @@ class StaffCashController extends Controller
             'tenant_id'=>$t->id,'order_id'=>$orderId,'order_no'=>$orderNo,'stage'=>$stage,
             'currency'=>$cur,'native_amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
             'holder'=>$person,'holder_user_id'=>$uid,'pay_status'=>'cash','paid_native'=>$amount,
-            'category'=>$category,'note'=>$note,'status'=>'approved','created_by'=>$u->name ?? '',
+            'category'=>$category,'note'=>$note,'status'=>(($u->isOwnerLike() || in_array((string)$u->role,['manager'],true)) ? 'approved' : (((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved')),'created_by'=>$u->name ?? '',
         ]);
         if ($createdAt) { $c->created_at = $createdAt; $c->save(); }
 

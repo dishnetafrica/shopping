@@ -1,31 +1,34 @@
-DEPLOY — All-in-one: Move cash between people (v44)
-===================================================
-Adds "⇆ Move cash" to the Cashbook, completing the internal cash tools. Hand cash from
-one person to another (same currency) — records it OUT of the giver's hand and IN to the
-receiver's hand in ONE transaction. Owner/manager only.
+DEPLOY — Owner cash actions auto-approve (v45)
+==============================================
+Owner/manager-created entries now post as APPROVED immediately (no more pending on your
+own conversions, transfers, capital, cashbook entries and purchases). Staff-entered
+costs still follow your cost_approval setting (pending -> Cost Approvals).
 
-NEW IN THIS BUILD
-  - Cashbook toolbar: "⇆ Move cash" button (owner/manager). Form:
-      From (giver) -> To (receiver) + Amount + Currency + Note + Date
-    Live preview "Bhavin -> Jayesh · UGX 2,000,000 moves hands". One click writes both
-    legs (cash_out from giver, cash_in to receiver), same currency, tagged "Transfer".
-  - Backend: POST /papi/trade-cashbook/transfer (single DB transaction).
-  - Giver's cash in hand goes down, receiver's goes up; company total for that currency
-    is unchanged (it just moved between people).
+WHAT CHANGED (status logic)
+  - Cashbook Record entry: owner/manager -> approved; staff -> pending (if approval on).
+  - Convert currency  -> approved (owner/manager-gated action).
+  - Move cash          -> approved (owner/manager-gated action).
+  - Purchases (Book Cost / Buy List): owner/manager -> approved; staff -> pending.
+  - Field app "I spent": owner/manager -> approved; staff -> pending (still reviewable).
+  - Unchanged: Give cash (owner-only, approved), He received / receipts (approved),
+    Settle (approved).
 
-  Example: Bhavin hands Jayesh UGX 2,000,000 -> Bhavin UGX -2,000,000, Jayesh +2,000,000.
+RESULT
+  Your own conversions/capital/transfers stop landing in "pending" — they're Done at once.
+  Staff-entered costs still route through Cost Approvals so you keep control there.
 
-FULL CASH TOOLKIT NOW (all in the Cashbook, owner/manager)
-  Record entry · ⇄ Convert currency · ⇆ Move cash · Edit · Delete
-  (plus Staff Cash, My Cash field app, receipts with order+receiver+edit+delete)
+WHERE APPROVE/REJECT LIVES (unchanged, already deployed)
+  Seller sidebar -> "Cost Approvals" (or mycloudbss.com/panel/approvals). Tabs:
+  Pending / Approved / Rejected, with Approve & Reject buttons per row. Owner/manager/
+  accounts only. It lists every pending entry (purchases, receipts, cashbook, etc.).
 
 FILES (folders match your repo paths)
-  app/Http/Controllers/Panel/TradeCashbookController.php   (+transfer(); +convert; edit/delete)
+  app/Http/Controllers/Panel/TradeCashbookController.php   (owner-aware status; convert/move)
+  app/Http/Controllers/Panel/OrderCostController.php       (purchases owner-aware)
+  app/Http/Controllers/Panel/StaffCashController.php       (field spend owner-aware)
   app/Http/Controllers/Panel/PaymentController.php
-  app/Http/Controllers/Panel/StaffCashController.php
-  routes/web.php                                            (+trade-cashbook/transfer)
-  resources/panel/trade_cashbook.html                       (Move cash button + form)
-  resources/panel/staff_cash.html, my_cash.html, payments.html, app_home.html
+  routes/web.php
+  resources/panel/trade_cashbook.html  staff_cash.html  my_cash.html  payments.html  app_home.html
   seller.html
 
 UPLOAD
@@ -34,6 +37,10 @@ UPLOAD
   Hard-refresh (Cmd/Ctrl+Shift+R).
 
 VERIFY
-  Cashbook -> ⇆ Move cash -> From Bhavin, To Jayesh, UGX 2,000,000 -> preview -> Move.
-  Bhavin's UGX drops, Jayesh's rises by the same; two "Transfer" rows appear. (Pending if
-  cost_approval is on -> approve in Cost Approvals.)
+  As owner: Cashbook -> Convert or Move -> the two rows show "Done" (not pending)
+  straight away. Book a purchase as owner -> approved. (Staff-created costs still show
+  pending in Cost Approvals.)
+
+NOTE
+  Entries you already created while approval was on stay pending until you approve them
+  once in Cost Approvals; this change only affects new entries.

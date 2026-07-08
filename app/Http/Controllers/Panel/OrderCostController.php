@@ -130,7 +130,7 @@ class OrderCostController extends Controller
             'usd_amount'=>OrderCost::toUsd($native,$rate),
             'holder'=>$holderName, 'holder_user_id'=>$holderUserId,
             'receipt_path'=>$path, 'note'=>(string)$request->input('note',''),
-            'status'=>((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved',
+            'status'=>($user->isOwnerLike() || in_array((string)$user->role,['manager'],true)) ? 'approved' : (((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved'),
             'created_by'=>$user->name ?? '',
         ]);
         return response()->json(['ok'=>true,'id'=>$c->id,'usd'=>$c->usd_amount]);
@@ -207,7 +207,7 @@ class OrderCostController extends Controller
             $holderName = (string) $request->input('holder'); $holderUserId = null;
         }
 
-        $status = ((bool) $t->setting('cost_approval', true)) ? 'pending' : 'approved';
+        $status = ($user->isOwnerLike() || in_array((string)$user->role,['manager'],true)) ? 'approved' : (((bool) $t->setting('cost_approval', true)) ? 'pending' : 'approved');
         $group  = (string) \Illuminate\Support\Str::uuid();
         [$supId,$supName] = $this->resolveSupplier($request, $t);
         $payStatus = strtolower((string) $request->input('pay_status','cash')) === 'credit' ? 'credit' : 'cash';

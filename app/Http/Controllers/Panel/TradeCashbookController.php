@@ -153,7 +153,7 @@ class TradeCashbookController extends Controller
             'holder'=>(string)($u->name ?? ''), 'holder_user_id'=>$u->id,
             'note'=>(string)$request->input('note',''),
             'category'=>trim((string)$request->input('category','')) ?: null,
-            'status'=>((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved',
+            'status'=>($u->isOwnerLike() || in_array((string)$u->role,['manager'],true)) ? 'approved' : (((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved'),
             'created_by'=>$u->name ?? '',
         ]);
         return response()->json(['ok'=>true,'id'=>$c->id,'usd'=>$c->usd_amount]);
@@ -197,7 +197,7 @@ class TradeCashbookController extends Controller
         $createdAt = null;
         $cd = trim((string)$request->input('created_date',''));
         if ($cd !== '') { try { $createdAt = \Illuminate\Support\Carbon::parse($cd); } catch (\Throwable $e) { $createdAt = null; } }
-        $status = ((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved';
+        $status = 'approved'; // owner/manager-gated action -> auto-approved
 
         $rateFromToUsd = $from==='USD' ? 1.0 : $usdPerFrom;         // native/USD for the FROM leg
         $rateToToUsd   = $to==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($to).'_per_usd', $to==='UGX'?3655:5180);
@@ -258,7 +258,7 @@ class TradeCashbookController extends Controller
         $createdAt = null;
         $cd = trim((string)$request->input('created_date',''));
         if ($cd !== '') { try { $createdAt = \Illuminate\Support\Carbon::parse($cd); } catch (\Throwable $e) { $createdAt = null; } }
-        $status = ((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved';
+        $status = 'approved'; // owner/manager-gated action -> auto-approved
 
         $res = DB::transaction(function () use ($t,$u,$giver,$giverUid,$receiver,$recvUid,$cur,$amount,$rate,$usd,$note,$createdAt,$status) {
             $out = OrderCost::create([
