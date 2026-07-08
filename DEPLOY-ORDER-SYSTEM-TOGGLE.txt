@@ -1,0 +1,31 @@
+DEPLOY — Owner toggle for Order Trading system (v60)
+====================================================
+ROOT CAUSE of the missing sidebar section: the tenant setting `order_system_enabled` is FALSE.
+That one flag hides the whole "Order Trading" group in the sidebar AND makes the money/purchase
+endpoints (Cash Position, Cashbook, Payments, Staff Cash, Purchases, etc.) return 404.
+It must be TRUE for Family Shoppers.
+
+FASTEST FIX (no deploy) — run in the container:
+  php /var/www/html/artisan tinker --execute="\$t=\App\Models\Tenant::where('slug','fs')->first() ?: \App\Models\Tenant::find(1); \$s=\$t->settings ?? []; \$s['order_system_enabled']=true; \$t->settings=\$s; \$t->save(); echo json_encode(\$t->fresh()->setting('order_system_enabled'));"
+  -> reload panel; the section appears.
+
+PERMANENT (this zip): adds an owner/manager-only endpoint so you can flip it without the container.
+  POST or GET  /papi/order-system?on=1   -> enable
+  POST or GET  /papi/order-system?on=0   -> disable
+  (gated to owner/manager; persists to tenant settings.)
+
+FILES
+  app/Http/Controllers/Panel/PanelApiController.php   (adds orderSystemToggle)
+  routes/web.php                                      (adds /papi/order-system route)
+  NOTE: these two files are CUMULATIVE — they also carry the v58 (product cost) and v59
+  (purchase) backend changes. If you deploy this zip you are also deploying those backends,
+  so make sure the v58 + v59 MIGRATIONS are run too (php artisan migrate). Cleanest: deploy
+  v58, v59, then this — or all together — then `php artisan migrate` once.
+
+AFTER ENABLING (either path), turn it on:
+  Browser console (owner):  fetch('/papi/order-system?on=1',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json()).then(console.log)
+  Then hard-reload the panel.
+
+VERIFY
+  window.SHOP_FEATURES.order_system  -> true
+  Sidebar shows Order Trading (Orders & Margin … New Purchase … Financial Statements).

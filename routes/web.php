@@ -348,6 +348,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('rider-delete', [PanelApiController::class, 'riderDel']);
         Route::get('return',          [PanelApiController::class, 'returnSave']);
         Route::get('settings-save',   [PanelApiController::class, 'settingsSave']);
+        Route::match(['get','post'],'order-system', [PanelApiController::class, 'orderSystemToggle']);
         Route::get('reengage-save',   [PanelApiController::class, 'reengageSave']);
         Route::get('credit-reminder-save', [PanelApiController::class, 'creditReminderSave']);
         Route::post('branding-save',  [PanelApiController::class, 'brandingSave']);

@@ -4138,6 +4138,24 @@ class PanelApiController extends Controller
     }
 
     /* -------------------------------------------------- settings / config (3b) */
+    /** POST /papi/order-system?on=1  — owner/manager turns the Order Trading system on/off for
+     *  this tenant. This drives the sidebar section AND the money/purchase endpoints' 404 guard. */
+    public function orderSystemToggle(Request $r)
+    {
+        $u = $r->user();
+        if (! ($u->isOwnerLike() || in_array((string) $u->role, ['manager'], true))) {
+            return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        }
+        $t = $u->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $on = filter_var($r->input('on', $r->query('on', true)), FILTER_VALIDATE_BOOLEAN);
+        $s = $t->settings ?? [];
+        $s['order_system_enabled'] = $on;
+        $t->settings = $s;              // reassign whole array (it's an array cast)
+        $t->save();
+        return response()->json(['ok' => true, 'order_system_enabled' => $on]);
+    }
+
     public function settingsSave(Request $r)
     {
         if (! $r->user()->canMenu('settings')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
