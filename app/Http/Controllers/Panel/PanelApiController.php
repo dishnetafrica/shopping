@@ -100,6 +100,7 @@ class PanelApiController extends Controller
                 'Price_UGX'    => (float) ($p->base_price ?? $p->price ?? 0),
                 'Price'        => (float) ($p->price ?? 0),
                 'Base Price'   => (float) ($p->base_price ?? $p->price ?? 0),
+                'Cost'         => $p->cost_price === null ? '' : (float) $p->cost_price,
                 'Active'       => (bool) ($p->active ?? true),
                 'Stock'        => (int) ($p->stock ?? 0),
                 'StockByBranch'=> null,
@@ -1698,6 +1699,10 @@ class PanelApiController extends Controller
                 return response()->json(['ok' => false, 'error' => 'forbidden_category'], 403);
             }
         }
+        if ($r->has('cost')) {
+            $cv = trim((string) $r->query('cost', ''));
+            $p->cost_price = ($cv === '' ? null : (float) $cv);
+        }
         if ($r->has('price')) {
             $price = (float) $r->query('price', 0);
             $p->base_price = $price;
@@ -2257,6 +2262,7 @@ class PanelApiController extends Controller
             'keywords'   => (string) $r->query('keywords', ''),
             'base_price' => $price,
             'price'      => $price,
+            'cost_price' => $r->filled('cost') ? (float) $r->query('cost') : null,
             'stock'      => (int) $r->query('stock', 0),
             'image_url'  => trim((string) $r->query('image', '')),
             'moq'        => $r->filled('moq') ? max(1, (int) $r->query('moq')) : null,

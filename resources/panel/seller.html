@@ -1346,7 +1346,7 @@ function mapProduct(row){
   if(bc.length<6){var km=kw.match(/\b\d{12,14}\b/);if(km)bc=km[0];}   // Barcode_1/2/3 cols are corrupted (sci-notation) — recover real EAN from Keywords
   var ic=String(row.Item_Code||row.item_code||row.ItemCode||'').replace(/[^0-9A-Za-z]/g,'');
   return {name:v?pn+' '+v:pn,baseName:pn,variant:v,brand:String(row.Brand||''),category:String(row.Category||''),
-    keywords:kw,basePrice:numFrom(row.Price_UGX),price:netUgx(numFrom(row.Price_UGX)),stock:numFrom(row.Stock),stockByBranch:sbb,barcode:bc,itemCode:ic,
+    keywords:kw,basePrice:numFrom(row.Price_UGX),price:netUgx(numFrom(row.Price_UGX)),cost:(row.Cost===''||row.Cost==null)?'':Number(row.Cost),stock:numFrom(row.Stock),stockByBranch:sbb,barcode:bc,itemCode:ic,
     image:String(row.Image||row.Photo||row.Image_URL||row['Image URL']||''),g1:String(row.Gallery_1||''),g2:String(row.Gallery_2||''),g3:String(row.Gallery_3||''),order:Number(row.Display_Order||row.display_order||0),
     moq:(row.MOQ===''||row.MOQ==null)?'':Number(row.MOQ),packSize:(row.PackSize===''||row.PackSize==null)?'':Number(row.PackSize),unit:String(row.Unit||''),_row:Number(row._row)};
 }
@@ -3169,6 +3169,20 @@ function bindProdGallery(){
     }
   });
 }
+function pmMarginBox(costId,priceId,outId){
+  function calc(){
+    var cost=Number((document.getElementById(costId)||{}).value)||0;
+    var price=Number((document.getElementById(priceId)||{}).value)||0;
+    var el=document.getElementById(outId); if(!el)return;
+    if(cost>0&&price>0){ var profit=price-cost; var mpct=cost>0?(profit/cost*100):0;
+      el.innerHTML='Profit: <b style="color:'+(profit>=0?'#15803D':'#C0392B')+'">'+baseCode()+' '+profit.toLocaleString(undefined,{maximumFractionDigits:2})+'</b> · Margin: <b>'+mpct.toFixed(1)+'%</b>'; }
+    else if(price>0&&cost===0){ el.innerHTML='<span style="color:#6b7280">Enter cost to see profit &amp; margin</span>'; }
+    else el.textContent='';
+  }
+  var c=document.getElementById(costId),pr=document.getElementById(priceId);
+  if(c)c.oninput=calc; if(pr){var prev=pr.oninput;pr.oninput=function(e){if(prev)prev.call(pr,e);calc();};}
+  calc();
+}
 function openEdit(row){
   var p=findProd(row);if(!p)return;
   var cats=pmCats();
@@ -3179,6 +3193,7 @@ function openEdit(row){
   $('modalBody').innerHTML=
     '<div class="mfield"><label>Product name</label><input id="mName" value="'+esc(p.name||'')+'"><div class="note" style="margin-top:4px">Rename the product. Existing orders keep their old name.</div></div>'+
     '<div class="mfield"><label>Price ('+baseCode()+' — base'+(discActive()?', before discount':'')+')</label><input id="mPrice" type="number" min="0" value="'+(p.basePrice!=null?p.basePrice:p.price)+'"><div class="note" id="mPriceHint" style="margin-top:4px"></div></div>'+
+    '<div class="mfield"><label>Cost price ('+baseCode()+') <span style="font-weight:400;color:#6b7280">— what you pay (for profit view)</span></label><input id="mCost" type="number" min="0" value="'+(p.cost!==''&&p.cost!=null?p.cost:'')+'"><div class="note" id="mMargin" style="margin-top:4px"></div></div>'+
     '<div class="mfield"><label>Category</label><input id="mCat" list="catListE" value="'+esc(p.category||'')+'"><datalist id="catListE">'+cats.map(function(c){return '<option value="'+esc(c)+'">';}).join('')+'</datalist><div class="note" style="margin-top:4px">Pick an existing category or type a new one.</div></div>'+
     '<div class="mfield"><label>'+stockLabel+'</label><input id="mStock" type="number" min="0" value="'+prodStock(p)+'"></div>'+stockNote+
     '<div class="mfield"><label>Selling unit &amp; minimum order <span style="font-weight:400;color:#6b7280">(wholesale — leave blank for normal retail)</span></label>'+
@@ -3196,6 +3211,7 @@ function openEdit(row){
   bindProdImg();
   bindProdGallery();
   (function(){function mph(){var v=Number($('mPrice').value)||0;if($('mPriceHint'))$('mPriceHint').textContent=inUGX()?'':('\u2248 '+ugx(v)+' at current rate');}if($('mPrice'))$('mPrice').oninput=mph;mph();})();
+  pmMarginBox('mCost','mPrice','mMargin');
   if($('mOOS'))$('mOOS').onclick=toggleOOS;
   $('mSave').onclick=function(){saveProduct(row);};
 }
@@ -3209,11 +3225,12 @@ async function saveProduct(row){
   var unit=($('mUnit')?$('mUnit').value:'').trim();
   var pack=($('mPack')?$('mPack').value:'').trim();
   var moq=($('mMOQ')?$('mMOQ').value:'').trim();
-  var qs='?token='+encodeURIComponent(token)+'&row='+row+'&price='+price+'&stock='+stock+'&image='+encodeURIComponent(image)+'&gallery_1='+encodeURIComponent(g1)+'&gallery_2='+encodeURIComponent(g2)+'&gallery_3='+encodeURIComponent(g3)+(cat?'&category='+encodeURIComponent(cat):'')+(name?'&name='+encodeURIComponent(name):'')+'&unit_label='+encodeURIComponent(unit)+'&pack_size='+encodeURIComponent(pack)+'&moq='+encodeURIComponent(moq)+'&mode='+INVENTORY_MODE+(branchMode?'&branch='+encodeURIComponent(BRANCH_FILTER):'');
+  var cost=($('mCost')?$('mCost').value:'').trim();
+  var qs='?token='+encodeURIComponent(token)+'&row='+row+'&price='+price+'&cost='+encodeURIComponent(cost)+'&stock='+stock+'&image='+encodeURIComponent(image)+'&gallery_1='+encodeURIComponent(g1)+'&gallery_2='+encodeURIComponent(g2)+'&gallery_3='+encodeURIComponent(g3)+(cat?'&category='+encodeURIComponent(cat):'')+(name?'&name='+encodeURIComponent(name):'')+'&unit_label='+encodeURIComponent(unit)+'&pack_size='+encodeURIComponent(pack)+'&moq='+encodeURIComponent(moq)+'&mode='+INVENTORY_MODE+(branchMode?'&branch='+encodeURIComponent(BRANCH_FILTER):'');
   $('mSave').disabled=true;$('mSave').textContent='Saving…';
   try{var r=await fetch(EP.updProduct+qs,{cache:'no-store'});
     var d=await r.json();
-    if(d&&d.ok){var p=findProd(row);if(p){p.basePrice=price;p.price=netUgx(price);p.image=image;p.g1=g1;p.g2=g2;p.g3=g3;p.unit=unit;p.packSize=(pack===''?'':Number(pack));p.moq=(moq===''?'':Number(moq));if(cat)p.category=cat;if(name)p.name=name;if(branchMode){p.stockByBranch=p.stockByBranch||{};p.stockByBranch[BRANCH_FILTER]=stock;}else p.stock=stock;}toast('Saved \u00b7 '+ugx(netUgx(price))+(discActive()?' (after discount)':'')+' \u00b7 stock '+stock);closeModal();renderPM();}
+    if(d&&d.ok){var p=findProd(row);if(p){p.basePrice=price;p.price=netUgx(price);p.cost=(cost===''?'':Number(cost));p.image=image;p.g1=g1;p.g2=g2;p.g3=g3;p.unit=unit;p.packSize=(pack===''?'':Number(pack));p.moq=(moq===''?'':Number(moq));if(cat)p.category=cat;if(name)p.name=name;if(branchMode){p.stockByBranch=p.stockByBranch||{};p.stockByBranch[BRANCH_FILTER]=stock;}else p.stock=stock;}toast('Saved \u00b7 '+ugx(netUgx(price))+(discActive()?' (after discount)':'')+' \u00b7 stock '+stock);closeModal();renderPM();}
     else toast('Could not save');
   }catch(e){toast('Network error');}
   $('mSave').disabled=false;$('mSave').textContent='Save changes';
@@ -3227,7 +3244,9 @@ function openAdd(){
       '<div class="mfield" style="flex:1"><label>Variant</label><input id="aVar"></div></div>'+
     '<div class="mfield"><label>Category</label><input id="aCat" list="catList"><datalist id="catList">'+cats.map(function(c){return '<option value="'+esc(c)+'">';}).join('')+'</datalist></div>'+
     '<div class="inrow"><div class="mfield" style="flex:1"><label>Price ('+baseCode()+') *</label><input id="aPrice" type="number" min="0"></div>'+
-      '<div class="mfield" style="flex:1"><label>Stock</label><input id="aStock" type="number" min="0" value="100"></div></div>'+
+      '<div class="mfield" style="flex:1"><label>Cost ('+baseCode()+')</label><input id="aCost" type="number" min="0"></div></div>'+
+    '<div class="note" id="aMargin" style="margin:-6px 0 10px"></div>'+
+    '<div class="inrow"><div class="mfield" style="flex:1"><label>Stock</label><input id="aStock" type="number" min="0" value="100"></div></div>'+
     '<div class="mfield"><label>Keywords</label><input id="aKw" placeholder="comma separated"></div>'+
     prodImgField('')+
     '<button type="button" class="lbtn" id="aIdentify" style="background:linear-gradient(135deg,#6d4ad6,#8a63ff);margin-bottom:10px">\u2728 Identify with AI</button>'+
@@ -3237,6 +3256,7 @@ function openAdd(){
   bindProdImg();
   $('aSave').onclick=saveNewProduct;
   $('aIdentify').onclick=aiIdentifyFill;
+  pmMarginBox('aCost','aPrice','aMargin');
 }
 async function aiIdentifyFill(){
   var url=($('pImg')?$('pImg').value:'').trim();
@@ -3263,7 +3283,7 @@ async function saveNewProduct(){
   if(!name||price<=0){toast('Name and price are required');return;}
   var q='?token='+encodeURIComponent(token)+'&name='+encodeURIComponent(name)+'&brand='+encodeURIComponent($('aBrand').value||'')+
     '&variant='+encodeURIComponent($('aVar').value||'')+'&category='+encodeURIComponent($('aCat').value||'')+
-    '&price='+price+'&stock='+(Number($('aStock').value)||0)+'&keywords='+encodeURIComponent($('aKw').value||'')+
+    '&price='+price+'&cost='+encodeURIComponent(($('aCost')?$('aCost').value:'')||'')+'&stock='+(Number($('aStock').value)||0)+'&keywords='+encodeURIComponent($('aKw').value||'')+
     '&image='+encodeURIComponent(($('pImg')?$('pImg').value:'').trim());
   $('aSave').disabled=true;$('aSave').textContent='Adding…';
   try{var r=await fetch(EP.addProduct+q,{cache:'no-store'});var d=await r.json();

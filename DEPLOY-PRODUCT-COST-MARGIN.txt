@@ -1,0 +1,38 @@
+DEPLOY — Product cost + margin (profit view) (v58)
+==================================================
+Built against your CURRENT code. Adds a per-product COST PRICE and a live margin/profit
+readout. NO stock tracking changes, NO tax — exactly the light "profit view" scope.
+
+WHAT'S NEW
+  - Product Add & Edit forms now have a "Cost price" field next to Price.
+  - As you type cost + price it shows live:  Profit: <amount>  ·  Margin: <%>
+    (margin = (price − cost) / cost × 100, i.e. markup on cost, like Ultimate POS).
+  - Cost is saved per product and returned by the products API (so it prefills on edit and is
+    available for profit reporting later).
+
+FILES (correct served paths)
+  database/migrations/2026_07_09_000001_add_cost_price_to_products.php   (adds products.cost_price)
+  app/Models/Product.php                                                (fillable + cast)
+  app/Http/Controllers/Panel/PanelApiController.php                     (add/update/list handle cost)
+  resources/panel/seller.html                                          (Cost field + live margin)
+       ^ NOTE: this is the file the app actually serves (confirmed on your container).
+
+DEPLOY
+  1. Upload all four at those paths (REPLACE existing). Commit.
+  2. php artisan migrate            (adds the cost_price column)
+  3. EasyPanel REBUILD (force/no-cache).
+  4. Normal browser: clear service worker + caches, reopen the panel.
+
+VERIFY
+  - Products → edit any item → a "Cost price" field appears; type a cost → Profit & Margin
+    show live. Save, reopen → cost is still there.
+  - Add product → Cost field + margin readout works the same.
+
+WHAT THIS IS / ISN'T (so expectations are clear)
+  - This is SLICE 1: cost & margin captured per product, shown in the product form.
+  - It does NOT yet change the "Orders & Margin" screen. That screen still computes margin
+    from booked order_costs (what you actually spent). Feeding product cost_price into an
+    order/period profit report is SLICE 2 — say the word and I'll add it as a separate,
+    clearly-labelled "gross margin from product cost" lens (kept separate so we never
+    double-count product cost against booked purchase costs).
+  - No stock levels, no VAT (as you chose).
