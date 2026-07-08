@@ -169,6 +169,12 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('ledger/gl', [\App\Http\Controllers\Panel\LedgerController::class, 'generalLedger']);
         Route::get('ledger/status', [\App\Http\Controllers\Panel\LedgerController::class, 'status']);
         Route::post('ledger/live', [\App\Http\Controllers\Panel\LedgerController::class, 'toggleLive']);
+        Route::get('ledger/accounts', [\App\Http\Controllers\Panel\LedgerController::class, 'accounts']);
+        Route::post('ledger/manual', [\App\Http\Controllers\Panel\LedgerController::class, 'manual']);
+        Route::post('ledger/fx-recognize', [\App\Http\Controllers\Panel\LedgerController::class, 'fxRecognize']);
+        Route::post('ledger/revalue', [\App\Http\Controllers\Panel\LedgerController::class, 'revalue']);
+        Route::get('ledger/reconcile', [\App\Http\Controllers\Panel\LedgerController::class, 'reconcile']);
+        Route::match(['get','post'],'ledger/lock', [\App\Http\Controllers\Panel\LedgerController::class, 'lock']);
         Route::post('staff-cash/give', [\App\Http\Controllers\Panel\StaffCashController::class, 'give']);
         Route::post('staff-cash/spend', [\App\Http\Controllers\Panel\StaffCashController::class, 'spend']);
         Route::post('staff-cash/receive', [\App\Http\Controllers\Panel\StaffCashController::class, 'receive']);

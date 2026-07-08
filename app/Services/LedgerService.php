@@ -199,11 +199,169 @@ class LedgerService
         );
     }
 
+    /* ---------------- Phase 3: period lock ---------------- */
+
+    public function lockDate(int $tenantId): ?string
+    {
+        try { return DB::table('ledger_config')->where('tenant_id', $tenantId)->value('lock_date'); }
+        catch (\Throwable $e) { return null; }
+    }
+
+    public function setLockDate(int $tenantId, ?string $date): void
+    {
+        DB::table('ledger_config')->updateOrInsert(
+            ['tenant_id' => $tenantId],
+            ['lock_date' => $date, 'updated_at' => now(), 'created_at' => now()]
+        );
+    }
+
+    /** True if a posting dated $when falls in a locked (closed) period. */
+    public function isLocked(int $tenantId, $when): bool
+    {
+        $lock = $this->lockDate($tenantId);
+        if (! $lock) return false;
+        try { return \Illuminate\Support\Carbon::parse($when)->lte(\Illuminate\Support\Carbon::parse($lock)->endOfDay()); }
+        catch (\Throwable $e) { return false; }
+    }
+
+    /* ---------------- Phase 3: manual journals ---------------- */
+
+    /**
+     * Post a manual balanced journal from the accountant.
+     * $lines = [ ['code'=>'1010','debit'=>100,'credit'=>0,'memo'=>...], ... ]
+     */
+    public function postManual(int $tenantId, array $rawLines, string $memo, ?string $date, ?string $createdBy = null): LedgerJournal
+    {
+        if ($date && $this->isLocked($tenantId, $date)) {
+            throw new \RuntimeException('Period is locked on/before the lock date.');
+        }
+        $codeToId = $this->ensureChart($tenantId);
+        $lines = [];
+        foreach ($rawLines as $l) {
+            $code = (string) ($l['code'] ?? '');
+            if (! isset($codeToId[$code])) throw new \RuntimeException("Unknown account {$code}");
+            $d = round((float) ($l['debit'] ?? 0), 2);
+            $c = round((float) ($l['credit'] ?? 0), 2);
+            if ($d <= 0 && $c <= 0) continue;
+            $lines[] = ['account_id' => $codeToId[$code], 'debit' => $d, 'credit' => $c,
+                'memo' => (string) ($l['memo'] ?? '')];
+        }
+        if (count($lines) < 2) throw new \RuntimeException('A journal needs at least two lines.');
+        $postedAt = $date ? \Illuminate\Support\Carbon::parse($date) : now();
+        return $this->post($tenantId, $lines, 'manual', null, $memo, $createdBy, $postedAt);
+    }
+
+    /* ---------------- Phase 3: FX recognition ---------------- */
+
+    /** account USD balance (debit-positive) */
+    private function acctUsd(int $tenantId, string $code): float
+    {
+        $id = LedgerAccount::where('tenant_id', $tenantId)->where('code', $code)->value('id');
+        if (! $id) return 0.0;
+        $r = DB::table('ledger_lines')->join('ledger_journals', 'ledger_lines.journal_id', '=', 'ledger_journals.id')
+            ->where('ledger_journals.tenant_id', $tenantId)->where('ledger_journals.status', 'posted')
+            ->where('ledger_lines.account_id', $id)
+            ->selectRaw('SUM(debit_usd) d, SUM(credit_usd) c')->first();
+        return round((float) ($r->d ?? 0) - (float) ($r->c ?? 0), 2);
+    }
+
+    /** account native balance (sum of native_amount, debit-positive) */
+    private function acctNative(int $tenantId, string $code): float
+    {
+        $id = LedgerAccount::where('tenant_id', $tenantId)->where('code', $code)->value('id');
+        if (! $id) return 0.0;
+        // native follows the USD side: debit adds, credit subtracts
+        $r = DB::table('ledger_lines')->join('ledger_journals', 'ledger_lines.journal_id', '=', 'ledger_journals.id')
+            ->where('ledger_journals.tenant_id', $tenantId)->where('ledger_journals.status', 'posted')
+            ->where('ledger_lines.account_id', $id)
+            ->selectRaw('SUM(CASE WHEN debit_usd>0 THEN native_amount ELSE 0 END) d, SUM(CASE WHEN credit_usd>0 THEN native_amount ELSE 0 END) c')->first();
+        return round((float) ($r->d ?? 0) - (float) ($r->c ?? 0), 2);
+    }
+
+    /** Sweep the FX Clearing suspense (1900) into realized FX Gain/Loss. */
+    public function recognizeFxClearing(int $tenantId, ?string $createdBy = null): array
+    {
+        $bal = $this->acctUsd($tenantId, '1900'); // debit-positive
+        if (abs($bal) < 0.01) return ['recognized' => 0.0, 'note' => 'FX Clearing already zero'];
+        if ($bal > 0) {
+            // debit balance in clearing => a loss
+            $lines = [['code' => '5900', 'debit' => $bal, 'credit' => 0], ['code' => '1900', 'debit' => 0, 'credit' => $bal]];
+            $memo = 'Recognize realized FX loss from clearing';
+        } else {
+            $g = -$bal;
+            $lines = [['code' => '1900', 'debit' => $g, 'credit' => 0], ['code' => '4900', 'debit' => 0, 'credit' => $g]];
+            $memo = 'Recognize realized FX gain from clearing';
+        }
+        $codeToId = $this->ensureChart($tenantId);
+        $ll = array_map(fn ($l) => ['account_id' => $codeToId[$l['code']], 'debit' => $l['debit'], 'credit' => $l['credit']], $lines);
+        $this->post($tenantId, $ll, 'manual', null, $memo, $createdBy, now());
+        return ['recognized' => round($bal, 2), 'note' => $memo];
+    }
+
+    /**
+     * Revalue a foreign-currency cash account to a supplied current rate (native per 1 USD).
+     * Posts the unrealized FX difference against FX Gain/Loss.
+     */
+    public function revalueForeignCash(int $tenantId, string $code, float $currentRateNativePerUsd, ?string $createdBy = null): array
+    {
+        if ($currentRateNativePerUsd <= 0) throw new \RuntimeException('bad rate');
+        $native = $this->acctNative($tenantId, $code);      // e.g. UGX on hand
+        $bookUsd = $this->acctUsd($tenantId, $code);        // current GL USD carrying value
+        $currentUsd = round($native / $currentRateNativePerUsd, 2);
+        $diff = round($currentUsd - $bookUsd, 2);           // +ve => account worth more => gain
+        if (abs($diff) < 0.01) return ['diff' => 0.0, 'note' => 'no revaluation needed'];
+        $codeToId = $this->ensureChart($tenantId);
+        if ($diff > 0) {
+            $lines = [['account_id' => $codeToId[$code], 'debit' => $diff, 'credit' => 0],
+                ['account_id' => $codeToId['4900'], 'debit' => 0, 'credit' => $diff]];
+            $memo = "Revaluation gain on {$code} @ {$currentRateNativePerUsd}";
+        } else {
+            $a = -$diff;
+            $lines = [['account_id' => $codeToId['5900'], 'debit' => $a, 'credit' => 0],
+                ['account_id' => $codeToId[$code], 'debit' => 0, 'credit' => $a]];
+            $memo = "Revaluation loss on {$code} @ {$currentRateNativePerUsd}";
+        }
+        $this->post($tenantId, $lines, 'manual', null, $memo, $createdBy, now());
+        return ['diff' => $diff, 'native' => $native, 'book_usd' => $bookUsd, 'current_usd' => $currentUsd, 'note' => $memo];
+    }
+
+    /* ---------------- Phase 3: reconciliation ---------------- */
+
+    /** Compare GL cash (per currency, USD) with the operational order_costs cash total. */
+    public function reconcileCash(int $tenantId): array
+    {
+        // GL cash USD per currency account
+        $codes = ['USD' => '1010', 'UGX' => '1011', 'SSP' => '1012'];
+        $out = [];
+        foreach ($codes as $ccy => $code) {
+            $glUsd = $this->acctUsd($tenantId, $code);
+            $glNative = $this->acctNative($tenantId, $code);
+            // operational native cash for this currency (posted stages, sign rule)
+            $rows = OrderCost::where('tenant_id', $tenantId)->where('currency', $ccy)
+                ->whereIn('status', ['approved', 'pending'])->get(['stage', 'paid_native']);
+            $opNative = 0.0;
+            foreach ($rows as $r) {
+                $opNative += (in_array($r->stage, $this->inStages, true) ? 1 : -1) * (float) $r->paid_native;
+            }
+            $out[] = [
+                'currency' => $ccy,
+                'gl_native' => round($glNative, 2), 'op_native' => round($opNative, 2),
+                'drift_native' => round($glNative - $opNative, 2),
+                'gl_usd' => round($glUsd, 2),
+                'matches' => abs($glNative - $opNative) < 0.01,
+            ];
+        }
+        return $out;
+    }
+
+    private array $inStages = ['funding', 'cash_in', 'customer_payment'];
+
     /** Post the journal for a single order_costs row (used by the live observer). Best-effort. */
     public function postForOrderCost(object $c): ?LedgerJournal
     {
         $spec = $this->linesForOrderCost($c);
         if ($spec === null) return null;
+        if ($this->isLocked((int) $c->tenant_id, $c->created_at)) return null; // don't post into a closed period
         $codeToId = $this->ensureChart((int) $c->tenant_id);
         $lines = [];
         foreach ($spec as [$code, $debit, $credit]) {

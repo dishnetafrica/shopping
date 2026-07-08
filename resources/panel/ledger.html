@@ -27,6 +27,19 @@
   .loading{text-align:center;color:var(--mut);padding:24px;}
   .neg{color:var(--red);}
   .flag{font-size:11px;color:var(--amber);font-weight:700;padding:2px 16px 10px;}
+
+  .tool{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;}
+  .tool h3{margin:0 0 4px;font-size:14px;font-weight:900;}
+  .tool p{margin:0 0 10px;font-size:12px;color:var(--mut);line-height:1.5;}
+  .tool label{font-size:11px;font-weight:800;color:#374151;display:block;margin:8px 0 4px;}
+  .tool input,.tool select{padding:9px;border:1.5px solid var(--line);border-radius:9px;font-size:14px;font-family:inherit;}
+  .tool .btn{background:var(--green-d);color:#fff;border:none;border-radius:9px;padding:9px 14px;font-size:12.5px;font-weight:800;cursor:pointer;}
+  .tool .btn.blue{background:var(--blue);} .tool .btn.amber{background:var(--amber);}
+  .jrow{display:grid;grid-template-columns:1fr 100px 100px;gap:6px;margin-bottom:6px;}
+  .jrow input,.jrow select{width:100%;}
+  .jbal{font-size:12.5px;font-weight:800;padding:6px 0;}
+  .jbal.ok{color:var(--green);} .jbal.bad{color:var(--red);}
+  .drift-ok{color:var(--green);font-weight:800;} .drift-bad{color:var(--red);font-weight:800;}
 </style></head>
 <body><div class="wrap">
   <div class="top"><h1>📊 Financial Statements</h1><a href="/panel">← Panel</a></div>
@@ -35,6 +48,8 @@
     <div class="tab on" data-t="tb" onclick="setTab(this)">Trial Balance</div>
     <div class="tab" data-t="bs" onclick="setTab(this)">Balance Sheet</div>
     <div class="tab" data-t="pl" onclick="setTab(this)">Profit &amp; Loss</div>
+    <div class="tab" data-t="rc" onclick="setTab(this)">Reconcile</div>
+    <div class="tab" data-t="tools" onclick="setTab(this)">Tools</div>
     <button class="rebuild" onclick="rebuild(this)">↻ Rebuild ledger</button>
     <button class="rebuild" id="liveBtn" style="background:#6E7D72" onclick="toggleLive()">● Live posting: …</button>
   </div>
@@ -60,6 +75,8 @@ function render(){
   $('view').innerHTML='<div class="loading">Loading…</div>';
   if(TAB==='tb') return renderTB();
   if(TAB==='bs') return renderBS();
+  if(TAB==='rc') return renderRC();
+  if(TAB==='tools') return renderTools();
   return renderPL();
 }
 
@@ -104,6 +121,60 @@ function toggleLive(){
   if(next && !confirm('Turn ON live posting?\n\nFrom now on, every new cash entry also posts a journal to the ledger automatically (edits/deletes post reversing entries). Your cashbook is unaffected. You can turn this off anytime.')) return;
   fetch('/papi/ledger/live',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:'on='+(next?'1':'0')})
     .then(r=>r.json()).then(function(r){ if(r&&r.ok){ LIVE=r.live; paintLive(); } else alert('Failed'); }).catch(function(){alert('Failed');});
+}
+
+function renderRC(){
+  get('/papi/ledger/reconcile').then(function(d){
+    if(!d||!d.ok){$('view').innerHTML='<div class="loading">Could not load.</div>';return;}
+    var rows=(d.rows||[]).map(function(r){return '<tr><td>'+r.currency+'</td><td class="num">'+nf(r.gl_native)+'</td><td class="num">'+nf(r.op_native)+'</td><td class="num '+(r.matches?'drift-ok':'drift-bad')+'">'+(r.matches?'✓ 0.00':nf(r.drift_native))+'</td><td class="num">'+nf(r.gl_usd)+'</td></tr>';}).join('');
+    $('view').innerHTML='<div class="card"><h2>GL ⇄ Cashbook reconciliation (per currency)</h2>'+
+      '<table><thead><tr><th>Ccy</th><th class="num">Ledger (native)</th><th class="num">Cashbook (native)</th><th class="num">Drift</th><th class="num">Ledger USD</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      '<div class="flag">Drift should be 0. Non-zero = the ledger and the operational cashbook disagree (usually because live posting was off for some entries — press Rebuild, or check for locked-period entries).</div></div>';
+  });
+}
+
+var ACCTS=[];
+function renderTools(){
+  $('view').innerHTML='<div class="loading">Loading…</div>';
+  Promise.all([get('/papi/ledger/accounts'),get('/papi/ledger/lock')]).then(function(res){
+    ACCTS=(res[0]&&res[0].accounts)||[];
+    var lock=(res[1]&&res[1].lock_date)||'';
+    var opts=ACCTS.map(function(a){return '<option value="'+a.code+'">'+a.code+' · '+esc(a.name)+'</option>';}).join('');
+    var jrows='';
+    for(var i=0;i<4;i++){ jrows+='<div class="jrow"><select class="jacct">'+('<option value="">— account —</option>'+opts)+'</select><input class="jdr" inputmode="decimal" placeholder="Debit" oninput="jbal()"><input class="jcr" inputmode="decimal" placeholder="Credit" oninput="jbal()"></div>'; }
+    $('view').innerHTML=
+      '<div class="tool"><h3>🔒 Period lock</h3><p>No journal can post on or before this date. Use it to close a month once reviewed.</p>'+
+      '<input type="date" id="lockD" value="'+esc(lock)+'"> <button class="btn" onclick="saveLock()">Save lock date</button> '+(lock?'<button class="btn amber" onclick="clearLock()">Clear</button>':'')+'</div>'+
+      '<div class="tool"><h3>💱 Recognize FX (realized)</h3><p>Sweeps the FX Clearing suspense into FX Gain/Loss. Run after conversions.</p><button class="btn blue" onclick="fxRec()">Recognize FX now</button></div>'+
+      '<div class="tool"><h3>📉 Revalue foreign cash (unrealized)</h3><p>Restate UGX/SSP cash at today\'s rate; posts the difference to FX Gain/Loss.</p>'+
+      '<label>Account</label><select id="rvAcct"><option value="1011">1011 · Cash on Hand — UGX</option><option value="1012">1012 · Cash on Hand — SSP</option></select>'+
+      '<label>Current rate (native per 1 USD)</label><input id="rvRate" inputmode="decimal" placeholder="e.g. 3700"> <button class="btn blue" onclick="revalue()">Revalue</button></div>'+
+      '<div class="tool"><h3>📝 Manual journal</h3><p>Post a balanced entry (tax, accruals, prepayments, opening balances, corrections). Debits must equal credits.</p>'+
+      '<label>Memo</label><input id="jMemo" placeholder="What is this journal for?" style="width:100%">'+
+      '<label>Date</label><input type="datetime-local" id="jDate">'+
+      '<div style="margin-top:8px">'+jrows+'</div>'+
+      '<div class="jbal" id="jBal">Debits 0.00 · Credits 0.00</div>'+
+      '<button class="btn" id="jPost" onclick="postManual()" disabled>Post journal</button></div>';
+    var dd=new Date(); dd.setMinutes(dd.getMinutes()-dd.getTimezoneOffset()); $('jDate').value=dd.toISOString().slice(0,16);
+  });
+}
+function saveLock(){ var d=$('lockD').value; fetch('/papi/ledger/lock',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:'lock_date='+encodeURIComponent(d)}).then(r=>r.json()).then(function(r){alert(r.ok?('Lock date set: '+(r.lock_date||'none')):'Failed');}); }
+function clearLock(){ fetch('/papi/ledger/lock',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:'lock_date='}).then(r=>r.json()).then(function(){renderTools();}); }
+function fxRec(){ fetch('/papi/ledger/fx-recognize',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json()).then(function(r){alert(r.ok?(r.note+' ('+nf(r.recognized)+')'):'Failed');render();}); }
+function revalue(){ var code=$('rvAcct').value,rate=parseFloat($('rvRate').value||'0'); if(!(rate>0)){alert('Rate?');return;} fetch('/papi/ledger/revalue',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:'code='+code+'&rate='+rate}).then(r=>r.json()).then(function(r){alert(r.ok?(r.note+' · diff '+nf(r.diff)):('Failed: '+(r.error||'')));render();}); }
+function jbal(){
+  var rows=document.querySelectorAll('#view .jrow'); var dr=0,cr=0;
+  rows.forEach(function(row){ dr+=parseFloat((row.querySelector('.jdr').value||'0').replace(/,/g,''))||0; cr+=parseFloat((row.querySelector('.jcr').value||'0').replace(/,/g,''))||0; });
+  var el=$('jBal'); var ok=Math.abs(dr-cr)<0.005 && dr>0; el.textContent='Debits '+nf(dr)+' · Credits '+nf(cr)+(ok?' ✓ balanced':(dr||cr?' ✗ not balanced':''));
+  el.className='jbal '+(ok?'ok':'bad'); $('jPost').disabled=!ok;
+}
+function postManual(){
+  var rows=document.querySelectorAll('#view .jrow'); var lines=[];
+  rows.forEach(function(row){ var code=row.querySelector('.jacct').value; var d=parseFloat((row.querySelector('.jdr').value||'0').replace(/,/g,''))||0; var c=parseFloat((row.querySelector('.jcr').value||'0').replace(/,/g,''))||0; if(code&&(d>0||c>0))lines.push({code:code,debit:d,credit:c}); });
+  if(lines.length<2){alert('At least two lines');return;}
+  var body=new URLSearchParams(); body.append('memo',$('jMemo').value||'Manual journal'); body.append('date',$('jDate').value);
+  lines.forEach(function(l,i){ body.append('lines['+i+'][code]',l.code); body.append('lines['+i+'][debit]',l.debit); body.append('lines['+i+'][credit]',l.credit); });
+  fetch('/papi/ledger/manual',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body}).then(r=>r.json()).then(function(r){ if(r.ok){alert('Posted '+r.ref);renderTools();}else alert('Failed: '+(r.error||'error')); });
 }
 render();
 loadStatus();

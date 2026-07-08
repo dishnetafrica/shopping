@@ -52,6 +52,77 @@ class LedgerController extends Controller
         return response()->json(['ok' => true, 'live' => $live]);
     }
 
+    /** GET /papi/ledger/accounts — chart for manual-journal dropdowns */
+    public function accounts(Request $request)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok' => false], 403);
+        $rows = LedgerAccount::where('tenant_id', $u->tenant_id)->where('is_active', true)
+            ->orderBy('code')->get(['code', 'name', 'type'])->map(fn ($a) => ['code' => $a->code, 'name' => $a->name, 'type' => $a->type]);
+        return response()->json(['ok' => true, 'accounts' => $rows]);
+    }
+
+    /** POST /papi/ledger/manual — post a balanced manual journal */
+    public function manual(Request $request, LedgerService $svc)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok' => false], 403);
+        $lines = $request->input('lines', []);
+        if (! is_array($lines) || count($lines) < 2) return response()->json(['ok' => false, 'error' => 'need_two_lines'], 422);
+        try {
+            $j = $svc->postManual((int) $u->tenant_id, $lines, (string) $request->input('memo', 'Manual journal'),
+                trim((string) $request->input('date', '')) ?: null, (string) ($u->name ?? ''));
+            return response()->json(['ok' => true, 'ref' => $j->ref]);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+    }
+
+    /** POST /papi/ledger/fx-recognize */
+    public function fxRecognize(Request $request, LedgerService $svc)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok' => false], 403);
+        return response()->json(['ok' => true] + $svc->recognizeFxClearing((int) $u->tenant_id, (string) ($u->name ?? '')));
+    }
+
+    /** POST /papi/ledger/revalue  {code, rate} */
+    public function revalue(Request $request, LedgerService $svc)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok' => false], 403);
+        $code = (string) $request->input('code', '');
+        $rate = (float) $request->input('rate', 0);
+        if (! in_array($code, ['1011', '1012'], true)) return response()->json(['ok' => false, 'error' => 'bad_account'], 422);
+        if ($rate <= 0) return response()->json(['ok' => false, 'error' => 'bad_rate'], 422);
+        try {
+            return response()->json(['ok' => true] + $svc->revalueForeignCash((int) $u->tenant_id, $code, $rate, (string) ($u->name ?? '')));
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+    }
+
+    /** GET /papi/ledger/reconcile */
+    public function reconcile(Request $request, LedgerService $svc)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok' => false], 403);
+        return response()->json(['ok' => true, 'rows' => $svc->reconcileCash((int) $u->tenant_id)]);
+    }
+
+    /** GET/POST /papi/ledger/lock */
+    public function lock(Request $request, LedgerService $svc)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok' => false], 403);
+        if ($request->isMethod('post')) {
+            $d = trim((string) $request->input('lock_date', ''));
+            $svc->setLockDate((int) $u->tenant_id, $d ?: null);
+            return response()->json(['ok' => true, 'lock_date' => $d ?: null]);
+        }
+        return response()->json(['ok' => true, 'lock_date' => $svc->lockDate((int) $u->tenant_id)]);
+    }
+
     /** POST /papi/ledger/rebuild — regenerate the derived ledger from order_costs. */
     public function rebuild(Request $request, LedgerService $svc)
     {

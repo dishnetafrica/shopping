@@ -1,0 +1,50 @@
+DEPLOY — Phase 3: FX recognition, manual journals, period lock, reconciliation (v48)
+====================================================================================
+Completes the controls + FX gaps from the CFO audit. Builds on Phases 1 & 2. All new
+tools live in the Financial Statements page (Tools + Reconcile tabs). Owner/manager/
+accounts only.
+
+WHAT'S NEW
+  1. PERIOD LOCK — set a lock date; no journal (live posting or manual) can post on/before
+     it. Close a month once reviewed. (Tools tab.)
+  2. MANUAL JOURNALS — a proper balanced Dr/Cr entry screen. Debits must equal credits.
+     This is how your accountant posts tax, accruals, prepayments, provisions, opening
+     balances and corrections — correctly — without hard-coded guesses.
+  3. FX RECOGNITION (realized) — "Recognize FX" sweeps the FX Clearing suspense into
+     FX Gain/Loss. Run after conversions.
+  4. FX REVALUATION (unrealized) — restate UGX/SSP cash at today's rate; posts the
+     difference to FX Gain/Loss. (Verified: UGX 4,700,330 @ 3700 => USD 1,270.36, books a
+     15.64 loss vs a 1,286 carrying value.)
+  5. RECONCILIATION — Reconcile tab compares the ledger's cash (per currency) with the
+     operational cashbook and flags any drift (should be 0).
+
+FILES
+  database/migrations/2026_07_08_061000_add_ledger_lock_date.php   (NEW)
+  app/Services/LedgerService.php        (lock, manual, FX recognize, revalue, reconcile)
+  app/Http/Controllers/Panel/LedgerController.php  (endpoints)
+  resources/panel/ledger.html           (Reconcile + Tools tabs)
+  routes/web.php
+
+DEPLOY
+  1. Unzip -> GitHub upload -> Commit -> EasyPanel Rebuild.
+  2. php artisan migrate          (adds lock_date; safe/idempotent)
+  3. Financial Statements -> Tools / Reconcile now available.
+
+HOW TO USE (typical month-end)
+  a) Rebuild ledger (or leave live posting ON so it's already current).
+  b) Reconcile tab -> confirm drift is 0 per currency.
+  c) Tools -> Recognize FX (sweeps conversion differences to P&L).
+  d) Tools -> Revalue UGX/SSP at month-end rate (unrealized FX).
+  e) Post any manual journals (tax, accruals, adjustments).
+  f) Tools -> set the Period lock date to close the month.
+
+*** STILL DEFERRED (Phase 3b / 4) — needs your input, not a code drop ***
+  - Item-level INVENTORY valuation (FIFO/Weighted-Average) and automated COGS/revenue
+    recognition on delivery. Requires: a valuation-method decision and capturing item cost
+    + delivery on the order flow. Until then, purchases sit in COGS/Purchases and the
+    accountant can reclassify to Inventory via a manual journal at period end.
+  - Full TAX engine (VAT/GST). Requires: registration status + rates per entity, and
+    capturing tax at entry time (form change). Until then, post output/input VAT via
+    manual journals to accounts 2300 (Tax Payable) — the account already exists.
+  Tell me your valuation method (FIFO vs Weighted-Average) and VAT setup and I'll build
+  3b properly with entry-form capture.
