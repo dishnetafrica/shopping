@@ -1,0 +1,57 @@
+DEPLOY — Double-Entry Ledger, Phases 1+2+3 combined (v52)
+=========================================================
+One upload, one migrate. This is the full accounting-engine foundation from the CFO audit:
+a real double-entry general ledger derived from your cashbook, made live + immutable, with
+FX recognition, manual journals, period lock and reconciliation. It is ADDITIVE and ships
+DORMANT — deploying changes nothing your staff see until you turn "Live posting" ON.
+
+WHAT'S INCLUDED (all three phases)
+  Phase 1 — Chart of accounts + journals + lines; derive a balanced GL from order_costs;
+            Trial Balance / Balance Sheet / P&L reports; `ledger:backfill` command.
+  Phase 2 — Live write-time posting via an OrderCost observer (dormant behind a toggle);
+            append-only immutability (edits/deletes post REVERSING journals, never delete).
+  Phase 3 — Period lock, manual journals, FX realized (clearing sweep) + unrealized
+            (revaluation), and GL↔cashbook reconciliation.
+  Also includes the v51 fix: the observer is inert (Schema::hasTable guard) until these
+  tables exist, so it can never poison a transaction.
+
+FILES
+  database/migrations/2026_07_08_060000_create_ledger_tables.php
+  database/migrations/2026_07_08_061000_add_ledger_lock_date.php
+  app/Models/LedgerAccount.php  LedgerJournal.php  LedgerLine.php
+  app/Models/OrderCost.php                     (registers the observer)
+  app/Services/LedgerService.php
+  app/Observers/OrderCostObserver.php
+  app/Console/Commands/LedgerBackfill.php
+  app/Http/Controllers/Panel/LedgerController.php
+  resources/panel/ledger.html
+  resources/panel/app_home.html                (Statements tile)
+  routes/web.php
+  seller.html                                  (Financial Statements nav link)
+
+DEPLOY (in order)
+  1. Unzip -> GitHub upload (keep folder paths) -> Commit -> EasyPanel REBUILD (not Restart).
+  2. Run migrations:   php artisan migrate
+       (creates ledger_accounts, ledger_journals, ledger_lines, ledger_config, + lock_date)
+  3. Build the ledger:  php artisan ledger:backfill
+       (or open Financial Statements -> "Rebuild ledger")
+  4. Open Financial Statements (sidebar) and CHECK:
+       - Trial Balance says "In balance".
+       - Reconcile tab: drift 0 per currency.
+       - Balance Sheet: assets = liabilities + equity (any gap here = receipts without a
+         sales invoice, or unreconciled FX — both are surfaced, not hidden).
+
+WHEN THE STATEMENTS LOOK RIGHT
+  - Tools tab -> Recognize FX (sweeps conversion differences to P&L).
+  - Tools tab -> turn "Live posting" ON. From then on every cash entry auto-posts a journal,
+    and edits/deletes post reversing entries. Your cashbook is unaffected.
+  - You can turn Live posting OFF anytime; `ledger:backfill` always rebuilds from scratch.
+
+STILL DEFERRED (Phase 3b — needs your input, not a code drop)
+  - Item-level inventory (FIFO / Weighted-Average) + automated COGS/revenue on delivery.
+  - Full tax engine (VAT/GST). Meanwhile post tax via manual journals to account 2300.
+  Send me your valuation method + VAT setup and I'll build 3b with entry-form capture.
+
+NOTE
+  seller.html here also carries the "Add Payment on order" card (v50). If you already
+  deployed v50 this is identical; if not, you get it now.

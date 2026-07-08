@@ -187,8 +187,12 @@ class LedgerService
     /** Is live write-time posting enabled for this tenant? (dormant by default) */
     public function livePosting(int $tenantId): bool
     {
-        try { return (bool) DB::table('ledger_config')->where('tenant_id', $tenantId)->value('live_posting'); }
-        catch (\Throwable $e) { return false; }
+        try {
+            // Never touch ledger tables before Phase 1 migration — a missing-table error inside
+            // a caller's DB::transaction would abort it (PostgreSQL), causing phantom rollbacks.
+            if (! \Illuminate\Support\Facades\Schema::hasTable('ledger_config')) return false;
+            return (bool) DB::table('ledger_config')->where('tenant_id', $tenantId)->value('live_posting');
+        } catch (\Throwable $e) { return false; }
     }
 
     public function setLivePosting(int $tenantId, bool $on): void

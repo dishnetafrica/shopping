@@ -191,6 +191,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('expenses/list', [\App\Http\Controllers\Panel\ExpenseController::class, 'list']);
         Route::post('expenses/{id}/delete', [\App\Http\Controllers\Panel\ExpenseController::class, 'deleteExpense']);
         Route::get('trade-cashbook', [\App\Http\Controllers\Panel\TradeCashbookController::class, 'data']);
+        Route::get('holder-balance', [\App\Http\Controllers\Panel\TradeCashbookController::class, 'balanceFor']);
         Route::get('trade-cashbook/all', [\App\Http\Controllers\Panel\TradeCashbookController::class, 'all']);
         Route::post('trade-cashbook', [\App\Http\Controllers\Panel\TradeCashbookController::class, 'store']);
         Route::post('trade-cashbook/{id}/delete', [\App\Http\Controllers\Panel\TradeCashbookController::class, 'delete']);
