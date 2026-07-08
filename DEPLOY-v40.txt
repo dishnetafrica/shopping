@@ -1,0 +1,47 @@
+DEPLOY — My Cash field app + seller nav links (v40)
+===================================================
+The mobile "My Cash" field app for Jayesh & Asish (each sees only their OWN cashbook),
+built on the Staff Cash APIs. Plus: Staff Cash and My Cash added to the seller panel
+sidebar.
+
+FILES CHANGED
+  app/Http/Controllers/Panel/StaffCashController.php   (+myPage())
+  routes/web.php                                        (+GET /panel/my-cash)
+  resources/panel/my_cash.html                          (NEW — the field app)
+  resources/panel/app_home.html                         (+My Cash tile)
+  seller.html  (SEPARATE FILE — see below)              (+Staff Cash, +My Cash links)
+
+THE FIELD APP  (/panel/my-cash)
+  - Shows the logged-in person's own cash in hand (per currency) + recent history with
+    running balance. A staff user sees only themselves (server-enforced).
+  - Two big buttons, role-tuned: sales/field roles get "I received" as the primary;
+    buyers get "I spent". Both always present.
+  - Amount-first entry: full-screen number pad, quick chips (10k/50k/…), currency
+    defaults to the person's usual currency (from their latest entry), tap to switch.
+  - I spent -> an order (picker) OR an expense (category). I received -> customer
+    (chips + Walk-in) + optional order. Saves via the same one-entry-two-places engine,
+    so orders / customers / P&L update automatically.
+  - "Saved ✓" toast, then offers a WhatsApp update to the office. 💬 in the header
+    sends the current balance.
+
+SELLER PANEL
+  Sidebar (Order Trading group) now includes "Staff Cash" (gated to the cash menu, like
+  the other finance screens) and "My Cash" (visible to everyone — personal view).
+  Deploy seller.html the usual way (upload to the ShopBot seller panel).
+
+DEPLOY (panel)
+  git add app/Http/Controllers/Panel/StaffCashController.php routes/web.php \
+          resources/panel/my_cash.html resources/panel/app_home.html
+  git commit -m "v40: My Cash field app + nav"
+  git push -> EasyPanel Rebuild        (no migration)
+  Then upload the updated seller.html to the seller panel.
+
+VERIFY
+  Open /panel/my-cash on a phone as Jayesh -> see his balance + history; tap I spent ->
+  pick order -> save -> balance drops, office can see it. As Asish -> I received ->
+  pick customer -> save -> Customer 360 updates.
+
+NOTE — holder names must match the login name
+  My Cash matches entries by the person's user name. If older entries used a different
+  spelling for the holder (e.g. "Jayesh Bhai" vs the login "Jayesh"), those won't show
+  in that person's My Cash until corrected. Tidy holder names once and it lines up.

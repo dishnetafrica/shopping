@@ -39,6 +39,18 @@ class StaffCashController extends Controller
             ->header('Content-Type','text/html; charset=UTF-8')->header('Cache-Control','no-store');
     }
 
+    /** GET /panel/my-cash — the mobile "my cash" field app (a person's own cashbook). */
+    public function myPage(Request $request)
+    {
+        $u = $request->user();
+        if (! $u || ! $u->tenant_id) return redirect('/app/login');
+        if (! (bool) $u->tenant->setting('order_system_enabled', false)) abort(404);
+        $path = resource_path('panel/my_cash.html');
+        if (! is_file($path)) abort(500, 'My Cash asset missing.');
+        return response(file_get_contents($path), 200)
+            ->header('Content-Type','text/html; charset=UTF-8')->header('Cache-Control','no-store');
+    }
+
     /** GET /papi/staff-cash — people with cash in hand + company total.
      *  Owner/manager see everyone; a staff member sees only themselves. */
     public function people(Request $request)

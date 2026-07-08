@@ -78,6 +78,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/sourcing', [\App\Http\Controllers\Panel\SourcingController::class, 'page']);
     Route::get('/panel/customers360', [\App\Http\Controllers\Panel\CustomerController::class, 'page']);
     Route::get('/panel/staff-cash', [\App\Http\Controllers\Panel\StaffCashController::class, 'page']);
+    Route::get('/panel/my-cash', [\App\Http\Controllers\Panel\StaffCashController::class, 'myPage']);
     Route::get('/panel/staff', [SellerPanelController::class, 'staff']);
     Route::get('/panel/scheduled', [SellerPanelController::class, 'scheduled']);
     Route::get('/panel/marketing', [SellerPanelController::class, 'marketing']);
