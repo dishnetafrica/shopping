@@ -1,0 +1,50 @@
+DEPLOY — Edit / Delete a purchase from the Supplier view (Purchase CRUD)
+=======================================================================
+Fixes: "I made a mistake entering a purchase and can't correct it."
+Adds Edit + Delete (void) actions to each purchase row inside the Suppliers screen
+(/panel/suppliers -> View a supplier -> Purchases table).
+
+Also adds the same Edit + Delete on the standalone "New Purchase" screen
+(/panel/purchases -> Recent purchases), so a wrong line can be fixed right where it was entered.
+
+WHAT'S NEW
+  - Each purchase line now has an "Edit" and a "Delete" button (both in the Supplier view's
+    Purchases table AND in the Recent-purchases list on the New Purchase screen).
+  - Edit: correct the item/description, qty, unit cost (or amount), currency and
+    cash/credit. If the line has qty x unit cost, the amount recalculates automatically;
+    amount-only lines let you type the corrected amount directly.
+  - Delete: VOIDS the line (soft delete). Financial history is never physically erased —
+    the row is marked "void", drops out of the Owed balance, and stays in the audit trail.
+  - Both actions are owner/manager only, are blocked in a locked accounting period, and
+    are written to the audit log (before/after values + optional reason). This respects the
+    existing frozen accounting controls — nothing bypasses the period lock or the ledger.
+  - When live GL posting is on, editing a line auto-reverses the old journal and posts the
+    corrected one (handled by the existing OrderCostObserver — no extra work).
+
+FILES CHANGED
+  app/Http/Controllers/Panel/SupplierController.php
+      show(): purchases now include id, qty, unit_cost, rate_to_usd (so the UI can target/prefill).
+  app/Http/Controllers/Panel/OrderCostController.php
+      + purchaseUpdate(): POST /papi/order-costs/{id}/update  (owner/manager, period-guarded, audited).
+      purchaseList(): items now carry id + status; voided lines are excluded from the group total.
+      (Delete reuses the existing deleteCost() = POST /papi/order-costs/{id}/delete.)
+  routes/web.php
+      + Route::post('order-costs/{id}/update', ...purchaseUpdate)  (next to the existing delete route).
+  resources/panel/suppliers.html
+      + Actions column on the Purchases table, an "Edit purchase" modal, and the JS to save/void
+        and refresh the view.
+  resources/panel/purchase.html
+      + Per-line item table with Edit/Delete under each Recent-purchases entry, plus the same
+        "Edit purchase" modal + save/void JS. Voided lines grey out and drop from the total.
+
+DEPLOY
+  1. Upload/replace the 5 files above -> commit.  (No migration needed.)
+  2. EasyPanel REBUILD (force / no-cache).
+  3. Browser: clear the service worker + caches, then reload /panel/suppliers.
+
+VERIFY
+  - Suppliers -> View "Nira bhai" -> Purchases: each row shows Edit + Delete.
+  - Edit a line's amount/qty -> Save -> the Owed figure and the row update immediately.
+  - Delete a wrong line -> confirm -> row shows "void", greys out, and Owed drops.
+  - As a non-owner/non-manager staff login, the update/delete return "not_allowed" (403).
+  - With a period lock set on/before the line's date, edit/delete return "period_locked" (422).

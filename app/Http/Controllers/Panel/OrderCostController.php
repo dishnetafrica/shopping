@@ -346,8 +346,11 @@ class OrderCostController extends Controller
                 'group_id'=>$g,'supplier'=>$r->supplier_name,'currency'=>$r->currency,
                 'pay_status'=>$r->pay_status,'holder'=>$r->holder,'status'=>$r->status,
                 'date'=>optional($r->created_at)->format('d M Y'),'total'=>0.0,'items'=>[]];
-            $groups[$g]['total'] += (float)$r->native_amount;
-            $groups[$g]['items'][] = ['name'=>$r->note,'qty'=>$r->qty,'unit_cost'=>$r->unit_cost,'native'=>(float)$r->native_amount];
+            $voided = strtolower((string)$r->status) === 'void';
+            if (! $voided) $groups[$g]['total'] += (float)$r->native_amount;   // voided lines don't count toward the total
+            $groups[$g]['items'][] = ['id'=>$r->id,'name'=>$r->note,
+                'qty'=>$r->qty===null?null:(float)$r->qty,'unit_cost'=>$r->unit_cost===null?null:(float)$r->unit_cost,
+                'native'=>(float)$r->native_amount,'currency'=>$r->currency,'pay_status'=>$r->pay_status,'status'=>$r->status];
         }
         return response()->json(['ok'=>true,'purchases'=>array_values($groups)]);
     }
@@ -499,6 +502,69 @@ class OrderCostController extends Controller
         $c->save();
         \App\Services\AuditLogger::log($t->id,'order_cost',$c->id,'void',$u,$before,['status'=>'void'],$c->void_reason);
         return response()->json(['ok'=>true,'voided'=>true]);
+    }
+
+    /**
+     * EDIT a single purchase line — correct a data-entry mistake. POST /papi/order-costs/{id}/update
+     * Owner/manager only; blocked in locked periods; every change is audit-logged.
+     * Accepts any of: qty, unit_cost, native_amount, note, pay_status, currency, rate_to_usd.
+     * If qty AND unit_cost are supplied, native_amount is recomputed (qty × unit_cost);
+     * otherwise a supplied native_amount is used directly. usd_amount and paid_native are kept consistent.
+     */
+    public function purchaseUpdate(Request $request, int $id)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok'=>false],401);
+        if (! $this->canDelete($u)) return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
+        $c = OrderCost::where('tenant_id',$t->id)->find($id);
+        if (! $c) return response()->json(['ok'=>false,'error'=>'not_found'],404);
+        if ((string)$c->stage === 'supplier_payment')
+            return response()->json(['ok'=>false,'error'=>'not_a_purchase'],422);
+        if (\App\Services\AccountingGuard::isLocked($t->id, $c->created_at))
+            return response()->json(['ok'=>false,'error'=>'period_locked','detail'=>\App\Services\AccountingGuard::lockDate($t->id)],422);
+
+        $before = ['qty'=>$c->qty===null?null:(float)$c->qty,'unit_cost'=>$c->unit_cost===null?null:(float)$c->unit_cost,
+            'currency'=>$c->currency,'native_amount'=>(float)$c->native_amount,'rate_to_usd'=>(float)$c->rate_to_usd,
+            'usd_amount'=>(float)$c->usd_amount,'pay_status'=>$c->pay_status,'note'=>$c->note];
+
+        // Scalar fields
+        if ($request->has('note'))     $c->note = trim((string)$request->input('note')) ?: null;
+        if ($request->has('currency')) $c->currency = strtoupper((string)$request->input('currency')) ?: $c->currency;
+        if ($request->filled('rate_to_usd')) {
+            $r = (float)$request->input('rate_to_usd');
+            if ($r > 0) $c->rate_to_usd = $r;
+        }
+        if ($request->has('pay_status')) {
+            $ps = strtolower((string)$request->input('pay_status')) === 'credit' ? 'credit' : 'cash';
+            $c->pay_status = $ps;
+        }
+
+        // Quantity / unit cost / amount
+        $hasQty  = $request->has('qty');
+        $hasUnit = $request->has('unit_cost');
+        if ($hasQty)  $c->qty       = $request->filled('qty') ? max(0,(float)$request->input('qty')) : null;
+        if ($hasUnit) $c->unit_cost = $request->filled('unit_cost') ? max(0,(float)$request->input('unit_cost')) : null;
+
+        if ($hasQty && $hasUnit && $c->qty !== null && $c->unit_cost !== null) {
+            $native = round((float)$c->qty * (float)$c->unit_cost, 2);
+            $c->native_amount = $native;
+        } elseif ($request->filled('native_amount')) {
+            $c->native_amount = round(max(0,(float)$request->input('native_amount')), 2);
+        }
+
+        $native = (float)$c->native_amount;
+        $rate   = (float)$c->rate_to_usd;
+        $c->usd_amount   = OrderCost::toUsd($native, $rate);
+        // Cash lines are paid in full; credit lines carry 0 paid on the purchase row (payments are separate).
+        $c->paid_native  = ((string)$c->pay_status === 'credit') ? 0 : $native;
+        $c->save();
+
+        $after = ['qty'=>$c->qty===null?null:(float)$c->qty,'unit_cost'=>$c->unit_cost===null?null:(float)$c->unit_cost,
+            'currency'=>$c->currency,'native_amount'=>(float)$c->native_amount,'rate_to_usd'=>(float)$c->rate_to_usd,
+            'usd_amount'=>(float)$c->usd_amount,'pay_status'=>$c->pay_status,'note'=>$c->note];
+        \App\Services\AuditLogger::log($t->id,'order_cost',$c->id,'edit',$u,$before,$after,trim((string)$request->input('reason','')) ?: null);
+        return response()->json(['ok'=>true,'updated'=>true,'id'=>$c->id,
+            'native_amount'=>(float)$c->native_amount,'usd_amount'=>(float)$c->usd_amount,'pay_status'=>$c->pay_status]);
     }
 
     /** VOID an order and its costs (soft). POST /papi/orders/{id}/delete */

@@ -196,6 +196,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('order-costs/pending', [\App\Http\Controllers\Panel\OrderCostController::class, 'pending']);
         Route::post('order-costs/{id}/decide', [\App\Http\Controllers\Panel\OrderCostController::class, 'decide']);
         Route::post('order-costs/{id}/delete', [\App\Http\Controllers\Panel\OrderCostController::class, 'deleteCost']);
+        Route::post('order-costs/{id}/update', [\App\Http\Controllers\Panel\OrderCostController::class, 'purchaseUpdate']);
         Route::post('orders/{id}/delete', [\App\Http\Controllers\Panel\OrderCostController::class, 'deleteOrder']);
         Route::get('expenses/categories', [\App\Http\Controllers\Panel\ExpenseController::class, 'categories']);
         Route::post('expenses', [\App\Http\Controllers\Panel\ExpenseController::class, 'store']);

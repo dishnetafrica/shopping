@@ -75,10 +75,32 @@ tr:hover td{background:#fafcfa}
   <div class="subt">Payments</div><div id="vPay"></div>
 </div></div>
 
+<!-- Edit purchase modal -->
+<div class="modalwrap hide" id="pedit"><div class="modal">
+  <button class="x" onclick="closeP()">×</button>
+  <h2>Edit purchase</h2>
+  <div class="note" id="pRef" style="margin-bottom:10px"></div>
+  <div class="f"><label>Item / description</label><input id="pNote"></div>
+  <div id="pQtyRow" class="frow">
+    <div class="f"><label>Qty</label><input id="pQty" type="number" step="any" min="0" oninput="pCalc()"></div>
+    <div class="f"><label>Unit cost</label><input id="pUnit" type="number" step="any" min="0" oninput="pCalc()"></div>
+  </div>
+  <div class="frow">
+    <div class="f"><label>Amount</label><input id="pAmt" type="number" step="any" min="0"></div>
+    <div class="f"><label>Currency</label><select id="pCur"><option>UGX</option><option>USD</option><option>SSP</option></select></div>
+  </div>
+  <div class="frow">
+    <div class="f"><label>Payment</label><select id="pPay"><option value="cash">cash</option><option value="credit">credit</option></select></div>
+    <div class="f"><label>Reason (for audit)</label><input id="pReason" placeholder="e.g. wrong amount entered"></div>
+  </div>
+  <button class="save" id="pSave" onclick="savePur()">Save changes</button>
+  <div class="note" id="pMsg" style="margin-top:8px"></div>
+</div></div>
+
 <script>
 var $=function(id){return document.getElementById(id);};
 var token=new URLSearchParams(location.search).get('token')||'';
-var PAGE=1, PAGES=1, Q='', EDIT_ID=null, _t=null;
+var PAGE=1, PAGES=1, Q='', EDIT_ID=null, _t=null, VIEW_ID=null, PUR=[], PEDIT_ID=null;
 function api(u,opt){opt=opt||{};opt.headers=Object.assign({'X-Requested-With':'XMLHttpRequest'},opt.headers||{});opt.credentials='same-origin';opt.cache='no-store';return fetch(u,opt).then(function(r){return r.json();});}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function nf(n){return Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -137,6 +159,7 @@ function del(id,name){if(!confirm('Delete supplier "'+name+'"?\n\n(If it has pur
     else alert('Could not delete: '+((r&&r.error)||'error'));});
 }
 function viewS(id){
+  VIEW_ID=id;PUR=[];
   $('vName').textContent='Loading…';$('vHead').textContent='';$('vOwed').textContent='';$('vPur').innerHTML='';$('vPay').innerHTML='';
   $('view').classList.remove('hide');
   api('/papi/suppliers/'+id).then(function(d){
@@ -145,11 +168,60 @@ function viewS(id){
     $('vName').textContent=(s.business_name||s.name)+(s.contact_id?(' · '+s.contact_id):'');
     $('vHead').innerHTML=[s.contact_name?('Contact: '+esc(s.contact_name)):'',s.phone?('📞 '+esc(s.phone)):'',s.email?('✉ '+esc(s.email)):'',s.tax_number?('Tax: '+esc(s.tax_number)):'',s.pay_term_days!=null?('Pay term: '+s.pay_term_days+'d'):'',s.address?('📍 '+esc(s.address)):''].filter(Boolean).join(' · ');
     $('vOwed').innerHTML='<span style="color:'+(d.owed_usd>0.005?'#C0392B':'#15803D')+'">$'+nf(d.owed_usd)+'</span>';
-    $('vPur').innerHTML=(d.purchases&&d.purchases.length)?('<table><thead><tr><th>Date</th><th>Ref</th><th>Item</th><th>Amount</th><th>Pay</th><th>Status</th></tr></thead><tbody>'+d.purchases.map(function(p){return '<tr><td class="note">'+esc(p.date)+'</td><td>'+esc(p.ref)+'</td><td>'+esc(p.note||p.stage)+'</td><td>'+esc(p.currency)+' '+nf(p.amount)+'</td><td>'+esc(p.pay_status||'')+'</td><td>'+esc(p.status||'')+'</td></tr>';}).join('')+'</tbody></table>'):'<div class="note">No purchases.</div>';
+    PUR=d.purchases||[];
+    $('vPur').innerHTML=(PUR.length)?('<table><thead><tr><th>Date</th><th>Ref</th><th>Item</th><th>Amount</th><th>Pay</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+PUR.map(function(p){
+      var voided=String(p.status||'').toLowerCase()==='void';
+      var acts=voided?'<span class="note">voided</span>':('<div class="act"><button class="e" onclick="editPur('+p.id+')">Edit</button><button class="d" onclick="voidPur('+p.id+",'"+esc(String(p.ref).replace(/'/g,''))+"'"+')">Delete</button></div>');
+      return '<tr'+(voided?' style="opacity:.5"':'')+'><td class="note">'+esc(p.date)+'</td><td>'+esc(p.ref)+'</td><td>'+esc(p.note||p.stage)+'</td><td>'+esc(p.currency)+' '+nf(p.amount)+'</td><td>'+esc(p.pay_status||'')+'</td><td>'+esc(p.status||'')+'</td><td>'+acts+'</td></tr>';
+    }).join('')+'</tbody></table>'):'<div class="note">No purchases.</div>';
     $('vPay').innerHTML=(d.payments&&d.payments.length)?('<table><thead><tr><th>Date</th><th>Amount</th><th>By</th><th>Status</th></tr></thead><tbody>'+d.payments.map(function(p){return '<tr><td class="note">'+esc(p.date)+'</td><td>'+esc(p.currency)+' '+nf(p.amount)+'</td><td>'+esc(p.by||'')+'</td><td>'+esc(p.status||'')+'</td></tr>';}).join('')+'</tbody></table>'):'<div class="note">No payments.</div>';
   });
 }
 function closeV(){$('view').classList.add('hide');}
+
+// ---- Edit / delete a single purchase line ----
+function editPur(id){
+  var p=(PUR||[]).find(function(x){return x.id===id;});if(!p)return;
+  PEDIT_ID=id;
+  $('pRef').textContent='Ref '+(p.ref||('#'+id))+' · '+(p.date||'');
+  $('pNote').value=p.note||'';
+  var hasBreak=(p.qty!=null&&p.unit_cost!=null);
+  $('pQtyRow').style.display=hasBreak?'':'none';
+  $('pQty').value=hasBreak?p.qty:'';
+  $('pUnit').value=hasBreak?p.unit_cost:'';
+  $('pAmt').value=(p.amount!=null?p.amount:'');
+  $('pAmt').readOnly=hasBreak;             // when qty×unit drives it, amount is computed
+  $('pCur').value=p.currency||'UGX';
+  $('pPay').value=(String(p.pay_status||'cash').toLowerCase()==='credit')?'credit':'cash';
+  $('pReason').value='';$('pMsg').textContent='';
+  $('pedit').classList.remove('hide');
+}
+function pCalc(){ // recompute amount live when qty/unit present
+  if($('pQtyRow').style.display==='none')return;
+  var q=parseFloat($('pQty').value||'0'),u=parseFloat($('pUnit').value||'0');
+  if(!isNaN(q)&&!isNaN(u))$('pAmt').value=(Math.round(q*u*100)/100);
+}
+function closeP(){$('pedit').classList.add('hide');}
+function savePur(){
+  if(!PEDIT_ID)return;
+  var params={note:$('pNote').value.trim(),currency:$('pCur').value,pay_status:$('pPay').value,reason:$('pReason').value.trim()};
+  if($('pQtyRow').style.display!=='none'){params.qty=$('pQty').value;params.unit_cost=$('pUnit').value;}
+  else{params.native_amount=$('pAmt').value;}
+  var b=$('pSave');b.disabled=true;b.textContent='Saving…';
+  api('/papi/order-costs/'+PEDIT_ID+'/update',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(params)}).then(function(r){
+    b.disabled=false;b.textContent='Save changes';
+    if(r&&r.ok){closeP();if(VIEW_ID)viewS(VIEW_ID);load();}
+    else $('pMsg').textContent='Failed: '+((r&&(r.detail||r.error))||'error');
+  }).catch(function(){b.disabled=false;b.textContent='Save changes';$('pMsg').textContent='Network error';});
+}
+function voidPur(id,ref){
+  if(!confirm('Delete purchase '+ref+'?\n\nIt will be voided (kept in the audit trail, removed from balances).'))return;
+  var reason=prompt('Reason (optional):')||'';
+  api('/papi/order-costs/'+id+'/delete',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({reason:reason})}).then(function(r){
+    if(r&&r.ok){if(VIEW_ID)viewS(VIEW_ID);load();}
+    else alert('Could not delete: '+((r&&(r.detail||r.error))||'error'));
+  }).catch(function(){alert('Network error');});
+}
 
 load();
 </script>

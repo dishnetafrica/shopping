@@ -125,9 +125,11 @@ class SupplierController extends Controller
 
         $purchases = OrderCost::where('tenant_id',$t->id)->where('supplier_id',$id)
             ->where('stage','!=','supplier_payment')->orderByDesc('id')->limit(100)
-            ->get(['id','order_no','note','stage','currency','native_amount','pay_status','status','created_at'])
-            ->map(fn($c)=>['ref'=>$c->order_no ?: ('#'.$c->id),'note'=>$c->note,'stage'=>$c->stage,
-                'currency'=>$c->currency,'amount'=>(float)$c->native_amount,'pay_status'=>$c->pay_status,
+            ->get(['id','order_no','note','stage','currency','native_amount','qty','unit_cost','rate_to_usd','pay_status','status','created_at'])
+            ->map(fn($c)=>['id'=>$c->id,'ref'=>$c->order_no ?: ('#'.$c->id),'note'=>$c->note,'stage'=>$c->stage,
+                'currency'=>$c->currency,'amount'=>(float)$c->native_amount,
+                'qty'=>$c->qty===null?null:(float)$c->qty,'unit_cost'=>$c->unit_cost===null?null:(float)$c->unit_cost,
+                'rate_to_usd'=>$c->rate_to_usd===null?null:(float)$c->rate_to_usd,'pay_status'=>$c->pay_status,
                 'status'=>$c->status,'date'=>optional($c->created_at)->format('d M Y')]);
         $payments = OrderCost::where('tenant_id',$t->id)->where('supplier_id',$id)
             ->where('stage','supplier_payment')->orderByDesc('id')->limit(100)

@@ -27,6 +27,17 @@ input,select{width:100%;padding:11px;border:1.5px solid var(--line);border-radiu
 .phist{font-size:13px;border-top:1px solid var(--line);padding:8px 0}
 .pill{display:inline-block;font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px}
 .pill.cash{background:#eaf6ee;color:var(--green)}.pill.credit{background:#fef3e2;color:#b45309}
+.hitems{width:100%;border-collapse:collapse;margin-top:6px;font-size:12px}
+.hitems td{padding:5px 4px;border-top:1px solid var(--line);vertical-align:middle}
+.hact{display:flex;gap:4px}
+.hact button{border:1px solid var(--line);background:#fff;border-radius:7px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer}
+.hact .e{color:#b45309}.hact .d{color:var(--red);border-color:#fca5a5}
+.modalwrap{position:fixed;inset:0;background:#0006;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow:auto;z-index:50}
+.modalwrap.hide{display:none}
+.modal{background:#fff;border-radius:14px;max-width:520px;width:100%;padding:18px}
+.modal h2{margin:0 0 6px;font-size:17px}
+.modal .mx{float:right;background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)}
+.frow{display:flex;gap:8px}.frow>*{flex:1}
 </style></head>
 <body>
 <div class="top"><button class="back" onclick="history.back()">‹ Back</button><h1>🧾 New Purchase</h1><span></span></div>
@@ -76,10 +87,32 @@ input,select{width:100%;padding:11px;border:1.5px solid var(--line);border-radiu
   </div>
 </div>
 
+<!-- Edit purchase modal -->
+<div class="modalwrap hide" id="pedit"><div class="modal">
+  <button class="mx" onclick="closeP()">×</button>
+  <h2>Edit purchase</h2>
+  <div class="note" id="pRef" style="margin-bottom:10px"></div>
+  <label>Item / description</label><input id="pNote">
+  <div id="pQtyRow" class="frow">
+    <div><label>Qty</label><input id="pQty" type="number" step="any" min="0" oninput="pCalc()"></div>
+    <div><label>Unit cost</label><input id="pUnit" type="number" step="any" min="0" oninput="pCalc()"></div>
+  </div>
+  <div class="frow">
+    <div><label>Amount</label><input id="pAmt" type="number" step="any" min="0"></div>
+    <div><label>Currency</label><select id="pCur"><option>UGX</option><option>USD</option><option>SSP</option></select></div>
+  </div>
+  <div class="frow">
+    <div><label>Payment</label><select id="pPay"><option value="cash">cash</option><option value="credit">credit</option></select></div>
+    <div><label>Reason (for audit)</label><input id="pReason" placeholder="e.g. wrong amount"></div>
+  </div>
+  <button class="save" id="pSave" onclick="savePur()">Save changes</button>
+  <div class="note" id="pMsg" style="margin-top:8px"></div>
+</div></div>
+
 <script>
 var $=function(id){return document.getElementById(id);};
 var token=new URLSearchParams(location.search).get('token')||'';
-var PAY='cash', SUPPLIERS=[], PRODUCTS=[];
+var PAY='cash', SUPPLIERS=[], PRODUCTS=[], PLINES={}, PEDIT_ID=null;
 function api(u,opt){opt=opt||{};opt.headers=Object.assign({'X-Requested-With':'XMLHttpRequest'},opt.headers||{});opt.credentials='same-origin';opt.cache='no-store';return fetch(u,opt).then(function(r){return r.json();});}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function nf(n){return Number(n||0).toLocaleString(undefined,{maximumFractionDigits:2});}
@@ -107,7 +140,54 @@ function applyPrefill(){
   }
 }
 function loadStaff(){api('/papi/staff-cash').then(function(d){var me=(d&&d.whoami)||'';var names=((d&&d.people)||[]).map(function(p){return p.name;}).filter(Boolean);if(me&&names.indexOf(me)<0)names.unshift(me);var u=[];names.forEach(function(n){if(u.indexOf(n)<0)u.push(n);});$('who').innerHTML='<option value="">— me ('+esc(me||'you')+') —</option>'+u.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');});}
-function loadHist(){api('/papi/purchases').then(function(d){var ps=(d&&d.purchases)||[];if(!ps.length){$('hist').innerHTML='<div class="note">No purchases yet.</div>';return;}$('hist').innerHTML=ps.map(function(p){return '<div class="phist"><div style="display:flex;justify-content:space-between"><b>'+esc(p.supplier||'—')+'</b><span>'+esc(p.currency)+' '+nf(p.total)+' <span class="pill '+(p.pay_status==='credit'?'credit':'cash')+'">'+(p.pay_status==='credit'?'credit':'cash')+'</span></span></div><div class="note">'+esc(p.date||'')+' · '+p.items.length+' item(s)'+(p.holder?(' · '+esc(p.holder)):'')+'</div></div>';}).join('');});}
+function loadHist(){api('/papi/purchases').then(function(d){var ps=(d&&d.purchases)||[];PLINES={};if(!ps.length){$('hist').innerHTML='<div class="note">No purchases yet.</div>';return;}
+  $('hist').innerHTML=ps.map(function(p){
+    var itemRows=(p.items||[]).map(function(it){
+      if(it.id!=null)PLINES[it.id]=it;
+      var voided=String(it.status||'').toLowerCase()==='void';
+      var qtyTxt=(it.qty!=null&&it.unit_cost!=null)?(nf(it.qty)+' × '+nf(it.unit_cost)):'';
+      var acts=voided?'<span class="note">voided</span>':('<div class="hact"><button class="e" onclick="editPur('+it.id+')">Edit</button><button class="d" onclick="voidPur('+it.id+",'"+esc(String(it.name||'item').replace(/'/g,''))+"'"+')">Delete</button></div>');
+      return '<tr'+(voided?' style="opacity:.5"':'')+'><td>'+esc(it.name||'—')+'</td><td class="note">'+qtyTxt+'</td><td>'+esc(p.currency)+' '+nf(it.native)+'</td><td>'+acts+'</td></tr>';
+    }).join('');
+    return '<div class="phist"><div style="display:flex;justify-content:space-between"><b>'+esc(p.supplier||'—')+'</b><span>'+esc(p.currency)+' '+nf(p.total)+' <span class="pill '+(p.pay_status==='credit'?'credit':'cash')+'">'+(p.pay_status==='credit'?'credit':'cash')+'</span></span></div>'+
+      '<div class="note">'+esc(p.date||'')+' · '+p.items.length+' item(s)'+(p.holder?(' · '+esc(p.holder)):'')+'</div>'+
+      '<table class="hitems"><tbody>'+itemRows+'</tbody></table></div>';
+  }).join('');});}
+
+// ---- Edit / delete a single purchase line ----
+function editPur(id){
+  var p=PLINES[id];if(!p)return;PEDIT_ID=id;
+  $('pRef').textContent=(p.name||'item')+' · #'+id;
+  $('pNote').value=p.name||'';
+  var hasBreak=(p.qty!=null&&p.unit_cost!=null);
+  $('pQtyRow').style.display=hasBreak?'':'none';
+  $('pQty').value=hasBreak?p.qty:'';$('pUnit').value=hasBreak?p.unit_cost:'';
+  $('pAmt').value=(p.native!=null?p.native:'');$('pAmt').readOnly=hasBreak;
+  $('pCur').value=p.currency||'UGX';
+  $('pPay').value=(String(p.pay_status||'cash').toLowerCase()==='credit')?'credit':'cash';
+  $('pReason').value='';$('pMsg').textContent='';
+  $('pedit').classList.remove('hide');
+}
+function pCalc(){if($('pQtyRow').style.display==='none')return;var q=parseFloat($('pQty').value||'0'),u=parseFloat($('pUnit').value||'0');if(!isNaN(q)&&!isNaN(u))$('pAmt').value=(Math.round(q*u*100)/100);}
+function closeP(){$('pedit').classList.add('hide');}
+function savePur(){
+  if(!PEDIT_ID)return;
+  var params={note:$('pNote').value.trim(),currency:$('pCur').value,pay_status:$('pPay').value,reason:$('pReason').value.trim()};
+  if($('pQtyRow').style.display!=='none'){params.qty=$('pQty').value;params.unit_cost=$('pUnit').value;}
+  else{params.native_amount=$('pAmt').value;}
+  var b=$('pSave');b.disabled=true;b.textContent='Saving…';
+  api('/papi/order-costs/'+PEDIT_ID+'/update',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(params)}).then(function(r){
+    b.disabled=false;b.textContent='Save changes';
+    if(r&&r.ok){closeP();loadHist();}else $('pMsg').textContent='Failed: '+((r&&(r.detail||r.error))||'error');
+  }).catch(function(){b.disabled=false;b.textContent='Save changes';$('pMsg').textContent='Network error';});
+}
+function voidPur(id,name){
+  if(!confirm('Delete "'+name+'"?\n\nIt will be voided (kept in the audit trail, removed from balances).'))return;
+  var reason=prompt('Reason (optional):')||'';
+  api('/papi/order-costs/'+id+'/delete',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({reason:reason})}).then(function(r){
+    if(r&&r.ok){loadHist();}else alert('Could not delete: '+((r&&(r.detail||r.error))||'error'));
+  }).catch(function(){alert('Network error');});
+}
 
 function lineRow(){var tr=document.createElement('tr');
   tr.innerHTML='<td><input class="pn" list="prodList" placeholder="Product" oninput="matchProd(this)"><input type="hidden" class="pid"></td>'+
