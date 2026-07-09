@@ -1,0 +1,75 @@
+DEPLOY — Purchase Edit/Delete  +  Cashbook edit 500 fix   (one combined drop)
+=============================================================================
+Two changes in one package. No database migration is needed for either.
+
+FILES CHANGED (7) + 1 one-off script
+  app/Http/Controllers/Panel/SupplierController.php
+  app/Http/Controllers/Panel/OrderCostController.php
+  app/Http/Controllers/Panel/TradeCashbookController.php
+  routes/web.php
+  resources/panel/suppliers.html
+  resources/panel/purchase.html
+  fix-cashbook-holder.php            (one-off correction script — not wired into the app)
+
+DEPLOY (both changes together)
+  1. Upload/replace the 6 app files above -> commit.
+  2. EasyPanel REBUILD (force / no-cache).
+  3. Browser: clear the service worker + caches, then reload.
+  (fix-cashbook-holder.php is only used if you want to move CB-0067 — see part 2.)
+
+=============================================================================
+PART 1 — Edit / Delete a purchase (fix a wrong purchase entry)
+=============================================================================
+Adds an "Edit" and a "Delete" button to every purchase line, in two places:
+  - Suppliers screen: /panel/suppliers -> View a supplier -> Purchases table.
+  - New Purchase screen: /panel/purchases -> Recent purchases (each line).
+
+  Edit  : correct item/description, qty, unit cost (or amount), currency, cash/credit.
+          If the line has qty x unit cost, the amount recalculates automatically.
+  Delete: VOIDS the line (soft delete) — kept in the audit trail, dropped from the
+          Owed balance and the purchase total. Financial history is never erased.
+
+  Both actions are owner/manager only, are blocked in a locked accounting period, and
+  are written to the audit log. When live GL posting is on, an edit auto-reverses the
+  old journal and posts the corrected one (existing OrderCostObserver — no extra work).
+
+  Endpoints:
+    POST /papi/order-costs/{id}/update   (new — purchaseUpdate)
+    POST /papi/order-costs/{id}/delete   (existing deleteCost = void)
+
+VERIFY
+  - Suppliers -> View a supplier -> each purchase row shows Edit + Delete.
+  - Edit an amount/qty -> Save -> the Owed figure and the row update immediately.
+  - Delete a wrong line -> confirm -> row greys to "void" and Owed drops.
+  - New Purchase -> Recent purchases -> same Edit/Delete per line.
+
+=============================================================================
+PART 2 — Cashbook edit "Something went wrong on our side" (500) fix
+=============================================================================
+THE BUG
+  On /panel/trade-cashbook, Edit -> Save on ANY entry returned a 500. In
+  TradeCashbookController::update() the currency variable ($cur) was used but never
+  defined, so the code tried to save currency = NULL. order_costs.currency is NOT NULL,
+  so the database rejected the write. This broke every cashbook edit.
+
+THE FIX (1 line + guard, in update())
+  $cur = strtoupper((string)$request->input('currency', (string)$c->currency)) ?: (string)$c->currency;
+  if (! in_array($cur, ['USD','UGX','SSP'], true)) $cur = (string)$c->currency;
+
+  After deploy, Edit -> Save works again; editing an entry's "Person" moves that cash
+  to them.
+
+CORRECTING CB-0067 -> Jayesh Bhai (the conversion that should sit with Jayesh Bhai)
+  A conversion is TWO rows (USD out + UGX in); both belong to the same person. The Edit
+  screen edits one row at a time, so to move BOTH legs at once run the included script:
+
+      php artisan tinker
+      >>> require base_path('fix-cashbook-holder.php');
+
+  - Preset to move CB-0067 (id 67) and its matching leg to "Jayesh Bhai".
+  - Prints a BEFORE/AFTER table and audit-logs each change; runs in a transaction.
+  - Preview first: open the file and set  $DRY_RUN = true.
+  - If the name isn't exactly "Jayesh Bhai" in the panel, edit $NEW_HOLDER at the top.
+
+  (Or, after deploy, just open CB-0067 in the panel, set Person = Jayesh Bhai, Save —
+   then repeat on the paired USD leg.)

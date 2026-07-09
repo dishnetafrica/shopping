@@ -393,6 +393,11 @@ class TradeCashbookController extends Controller
         $auditBefore = ['currency'=>$c->currency,'native_amount'=>(float)$c->native_amount,'rate_to_usd'=>(float)$c->rate_to_usd,
             'category'=>$c->category,'order_no'=>$c->order_no,'holder'=>$c->holder,'note'=>$c->note,
             'created_at'=>optional($c->created_at)->format('Y-m-d H:i')];
+        // Currency: accept a change, else keep the entry's existing currency.
+        // (Previously this variable was never defined, so every edit tried to save
+        //  currency = null and the NOT NULL column rejected it -> 500 "went wrong on our side".)
+        $cur = strtoupper((string)$request->input('currency', (string)$c->currency)) ?: (string)$c->currency;
+        if (! in_array($cur, ['USD','UGX','SSP'], true)) $cur = (string)$c->currency;
         $amount = round((float)$request->input('amount', (float)$c->native_amount), 2);
         if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
         $rate = (float)$request->input('rate_to_usd', 0);
