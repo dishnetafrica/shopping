@@ -38,6 +38,7 @@ class SendOrderStatusNotification implements ShouldQueue
             // Legacy grocery flow (kept for existing tenants)
             'Confirmed'        => "Hi {$first}! \u{1F389} Your {$name} order *{$order->order_no}* is confirmed. We're preparing it now.",
             'Packed'           => "\u{1F4E6} {$first}, your order *{$order->order_no}* is packed and ready to go!",
+            'In transit'       => "\u{1F69A} {$first}, your order *{$order->order_no}* has left Kampala and is on its way to Juba. We'll let you know as soon as it arrives.",
             'Out for delivery' => "\u{1F6F5} Your {$name} order is on the way! Our rider will reach you shortly.",
             'Delivered'        => "\u{2705} Your order *{$order->order_no}* has been delivered. Thank you for choosing {$name}! \u{1F64F}",
             'Cancelled'        => "Your {$name} order *{$order->order_no}* has been cancelled. Reply here if you need help.",

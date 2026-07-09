@@ -1,0 +1,53 @@
+DEPLOY — New order status "In transit" (Kampala → Juba leg)
+===========================================================
+Adds an "In transit" stage between Packed and Out for delivery, so you can mark and
+track orders that have left Kampala and are on the bus/truck to Juba.
+
+NEW FLOW
+  New → Confirmed → Packed → In transit → Out for delivery → Delivered
+  (Cancelled / Returned unchanged.)
+
+WHAT YOU GET
+  - "In transit" appears in the order status dropdown (inside an order) and in the
+    order-detail progress tracker (now 6 steps).
+  - "In transit" is added to the Orders list Status filter, so you can filter the list
+    to see exactly which orders are currently in transit to Juba.
+  - A new "In transit" KPI tile on the dashboard shows the live count at a glance.
+  - When you set an order to "In transit", the customer gets a WhatsApp:
+    "🚚 <name>, your order <no> has left Kampala and is on its way to Juba. We'll let
+     you know as soon as it arrives."  (Only sends if WhatsApp status notifications are live.)
+
+HOW IT WORKS
+  It's a MANUAL status you pick from the dropdown after packing. Dispatch (assigning a
+  rider) still sets the order to "Out for delivery" as before — so the natural sequence
+  is: pack in Kampala → set "In transit" → on arrival in Juba, Dispatch a rider
+  (→ Out for delivery) → Delivered.
+
+FILES CHANGED (4)
+  app/Models/Order.php
+      + 'In transit' added to STATUSES (between Packed and Out for delivery).
+  app/Jobs/SendOrderStatusNotification.php
+      + 'In transit' customer WhatsApp message (Kampala → Juba).
+  resources/panel/seller.html
+      + 'In transit' in STATUSES (feeds the dropdown, the list Status filter, and colours),
+      + 'In transit' in the order-detail stage tracker flow,
+      + an 'In transit' dashboard KPI tile,
+      + help text / status table updated.
+
+DEPLOY
+  1. Upload/replace the 3 app files above -> commit.  (No database migration needed —
+     status is a free-text column; existing orders are untouched.)
+  2. EasyPanel REBUILD (force / no-cache).
+  3. Browser: clear the service worker + caches, then reload the panel.
+
+VERIFY
+  - Open any order -> Status dropdown now lists "In transit" after "Packed".
+  - Set an order to "In transit" -> the progress tracker shows it as the current step,
+    and (if WhatsApp is live) the customer gets the Kampala→Juba message.
+  - Orders list -> Status filter -> "In transit" shows only those orders.
+  - Dashboard -> the "In transit" tile shows the count.
+
+NOTE
+  The separate mobile panel (/panel/m) uses the restaurant kitchen flow (New → Confirmed →
+  Preparing → Out for delivery → Delivered) and has no Packed/In-transit stage, so it was
+  intentionally left unchanged. Tell me if you also want "In transit" added there.

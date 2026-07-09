@@ -1022,7 +1022,7 @@
           </ul>
           <h3>Inside an order (invoice)</h3>
           <ul>
-            <li><b>Change status</b> from the dropdown (New → Confirmed → Packed → Out for delivery → Delivered).</li>
+            <li><b>Change status</b> from the dropdown (New → Confirmed → Packed → In transit → Out for delivery → Delivered).</li>
             <li><b>Add / remove items</b> and edit quantities, then <b>Save</b>.</li>
             <li><b>Print / PDF</b> the invoice, <b>Cancel</b> the order, or <b>Apply credit</b> if the customer has store credit.</li>
             <li><b>Dispatch</b> — assign a rider (see section 5).</li>
@@ -1035,6 +1035,7 @@
             <tr><td>New</td><td>Just received, not yet confirmed</td></tr>
             <tr><td>Confirmed</td><td>You've accepted the order</td></tr>
             <tr><td>Packed</td><td>Items packed and ready</td></tr>
+            <tr><td>In transit</td><td>Left Kampala, on the bus/truck to Juba (set manually)</td></tr>
             <tr><td>Out for delivery</td><td>Rider assigned and on the way (set automatically on Dispatch)</td></tr>
             <tr><td>Delivered</td><td>Completed</td></tr>
             <tr><td>Cancelled</td><td>Order cancelled</td></tr>
@@ -1191,6 +1192,7 @@
 var YEAR=new Date().getFullYear(), MON=new Date().getMonth();
 function tISO(d){var p=function(n){return String(n).padStart(2,'0');};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}
 var STATUSES=[{v:'New',c:'#2563A8'},{v:'Confirmed',c:'#15803D'},{v:'Packed',c:'#6D4AD6'},
+ {v:'In transit',c:'#C2700A'},
  {v:'Out for delivery',c:'#0EA5E9'},{v:'Delivered',c:'#0F8A4D'},{v:'Cancelled',c:'#B4232A'},{v:'Returned',c:'#6B7280'}];
 function stColor(s){var f=STATUSES.find(function(x){return x.v.toLowerCase()===String(s||'').toLowerCase();});return f?f.c:'#6B7280';}
 
@@ -1566,7 +1568,7 @@ function applyStatusOverrides(){
 }
 function renderStageTracker(){
   var el=$('stageTracker'); if(!el||!current)return;
-  var flow=['New','Confirmed','Packed','Out for delivery','Delivered'];
+  var flow=['New','Confirmed','Packed','In transit','Out for delivery','Delivered'];
   var st=String(current.status||''), low=st.toLowerCase();
   if(low==='cancelled'||low==='returned'){
     var c=stColor(st);
@@ -2285,6 +2287,7 @@ function renderDash(){
   var kpis=[
     {t:'Total Orders',n:O.length,c:'#1F3A93',ic:'🚚'},
     {t:'Pending',n:countBy('pending'),c:'#7C3AED',ic:'⏳'},
+    {t:'In transit',n:countBy('in transit'),c:'#C2700A',ic:'🚚'},
     {t:'Out for delivery',n:countBy('out for delivery'),c:'#0EA5E9',ic:'🛵'},
     {t:'Delivered',n:countBy('delivered'),c:'#15803D',ic:'✅'},
     {t:'Cancelled',n:countBy('cancelled'),c:'#B4232A',ic:'✖'},

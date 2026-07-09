@@ -18,7 +18,7 @@ class Order extends Model
     public const STATUSES = [
         'New', 'Accepted', 'Preparing', 'Ready', 'Dispatched', 'Delivered', 'Customer confirmed', 'Cancelled', 'Rejected',
         // legacy grocery states (still valid, not surfaced on the Kitchen Board)
-        'Confirmed', 'Packed', 'Out for delivery',
+        'Confirmed', 'Packed', 'In transit', 'Out for delivery',
     ];
 
     protected $fillable = ['tenant_id','order_no','idempotency_key','customer_name','customer_phone','items_text',
