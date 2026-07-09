@@ -44,7 +44,7 @@ class AuditLogger
             // Never break the caller — but make the failure DISCOVERABLE in the logs.
             try {
                 Log::error('Audit logging failed', [
-                    'exception' => $e->getMessage(),
+                    'exception' => $e,   // full Throwable → stack trace, file, line
                     'entity'    => $entityType,
                     'entity_id' => $entityId,
                     'action'    => $action,
