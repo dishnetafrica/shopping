@@ -232,10 +232,15 @@ class PaymentController extends Controller
         DB::transaction(function () use ($p, $u) {
             if ($p->order_cost_id) {
                 $cost = OrderCost::where('tenant_id',$u->tenant_id)->find($p->order_cost_id);
-                if ($cost) $cost->delete();
+                if ($cost) {
+                    $before = ['status'=>$cost->status,'currency'=>$cost->currency,'native_amount'=>(float)$cost->native_amount];
+                    $cost->status='void'; $cost->voided_at=now(); $cost->voided_by=$u->name ?? ''; $cost->void_reason='payment voided'; $cost->save();
+                    \App\Services\AuditLogger::log($u->tenant_id,'order_cost',$cost->id,'void',$u,$before,['status'=>'void'],'payment voided');
+                }
             }
+            \App\Services\AuditLogger::log($u->tenant_id,'customer_payment',$p->id,'void',$u,['amount'=>(float)($p->amount ?? 0)],null,'payment voided');
             $p->delete();
         });
-        return response()->json(['ok'=>true]);
+        return response()->json(['ok'=>true,'voided'=>true]);
     }
 }

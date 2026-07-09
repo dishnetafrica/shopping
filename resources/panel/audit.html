@@ -1,0 +1,114 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accounting Controls</title>
+<style>
+:root{--dark:#1B3A2B;--green:#15803D;--red:#C0392B;--amber:#b45309;--line:#e4e9e4;--muted:#6b7280;--bg:#f6f8f6}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1B211D;background:var(--bg)}
+.top{background:var(--dark);color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between}
+.top h1{font-size:18px;margin:0;font-weight:800}.back{background:#ffffff22;border:none;color:#fff;border-radius:9px;padding:8px 12px;font-weight:700;cursor:pointer}
+.wrap{max-width:940px;margin:0 auto;padding:14px}
+.card{background:#fff;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 1px 3px #0000000d}
+h2{font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 12px}
+.btn{background:var(--green);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:800;cursor:pointer}
+.btn.alt{background:#eef2f7;color:#334155}.btn.danger{background:#fdecea;color:var(--red)}
+.chk{display:flex;justify-content:space-between;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.ok{color:var(--green);font-weight:800}.bad{color:var(--red);font-weight:800}
+.pill{display:inline-block;font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;background:#eef4ee;color:var(--green)}
+.pill.void{background:#fdecea;color:var(--red)}.pill.lock{background:#fef3e2;color:var(--amber)}.pill.reject{background:#fdecea;color:var(--red)}.pill.approve{background:#eaf6ee;color:var(--green)}
+input,select{padding:9px;border:1.5px solid var(--line);border-radius:9px;font-size:14px;font-family:inherit}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px;font-size:11px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--line)}
+td{padding:8px;border-top:1px solid var(--line);vertical-align:top}
+.note{font-size:12px;color:var(--muted)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pag{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:13px;color:var(--muted)}
+.pag button{border:1.5px solid var(--line);background:#fff;border-radius:8px;padding:6px 11px;font-weight:700;cursor:pointer}
+.pag button:disabled{opacity:.4}
+code{background:#f0f4f0;padding:1px 5px;border-radius:5px;font-size:12px}
+</style></head>
+<body>
+<div class="top"><button class="back" onclick="history.back()">‹ Back</button><h1>🛡 Accounting Controls</h1><span></span></div>
+<div class="wrap">
+
+  <div class="card">
+    <h2>Integrity check</h2>
+    <div class="row"><button class="btn" onclick="runIntegrity()">Run integrity check</button><span class="note" id="ranAt"></span></div>
+    <div id="intResult" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Period lock</h2>
+    <div class="note" id="lockState">Loading…</div>
+    <div class="row" style="margin-top:10px">
+      <input id="lockDate" type="date">
+      <button class="btn" onclick="setLock()">Lock through this date</button>
+      <button class="btn danger" onclick="clearLock()">Unlock</button>
+    </div>
+    <div class="note" style="margin-top:8px">Entries dated on/before the lock date can't be edited or voided. Owner/manager only. Every lock &amp; unlock is recorded below.</div>
+  </div>
+
+  <div class="card">
+    <h2>Audit trail</h2>
+    <div class="row" style="margin-bottom:10px">
+      <select id="fAction" onchange="P=1;loadAudit()"><option value="">All actions</option><option>void</option><option>approve</option><option>reject</option><option>lock</option><option>unlock</option><option>update</option></select>
+      <input id="fActor" placeholder="Filter by person" oninput="deb()">
+    </div>
+    <div style="overflow:auto"><table><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Item</th><th>Reason / change</th></tr></thead><tbody id="auditRows"><tr><td colspan="5" class="note" style="padding:14px">Loading…</td></tr></tbody></table></div>
+    <div class="pag"><span id="pinfo"></span><span><button id="prev" onclick="go(-1)">‹ Prev</button> <button id="next" onclick="go(1)">Next ›</button></span></div>
+  </div>
+</div>
+
+<script>
+var $=function(id){return document.getElementById(id);};
+var P=1,PAGES=1,_t=null;
+function api(u,opt){opt=opt||{};opt.headers=Object.assign({'X-Requested-With':'XMLHttpRequest'},opt.headers||{});opt.credentials='same-origin';opt.cache='no-store';return fetch(u,opt).then(function(r){return r.json();});}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function deb(){clearTimeout(_t);_t=setTimeout(function(){P=1;loadAudit();},300);}
+
+function runIntegrity(){
+  $('intResult').innerHTML='<span class="note">Running…</span>';
+  api('/papi/integrity-check').then(function(d){
+    if(!d||!d.ok){$('intResult').innerHTML='<span class="bad">Could not run.</span>';return;}
+    $('ranAt').textContent='Last run: '+esc(d.ran_at||'');
+    var head='<div style="font-size:16px;font-weight:800;margin-bottom:8px" class="'+(d.healthy?'ok':'bad')+'">'+(d.healthy?'✓ Books are healthy':'⚠ '+d.issues.length+' issue(s) found')+'</div>';
+    var checks=(d.checks||[]).map(function(c){return '<div class="chk"><span>'+esc(c.name)+'</span><span class="'+(c.ok?'ok':'bad')+'">'+(c.ok?'OK':'✗ '+esc(c.detail))+'</span></div>';}).join('');
+    var issues=(d.issues&&d.issues.length)?('<div style="margin-top:10px" class="bad">'+d.issues.map(function(x){return '• '+esc(x);}).join('<br>')+'</div>'):'';
+    var bals=d.balances?('<div class="note" style="margin-top:10px">Cash position: '+Object.keys(d.balances).map(function(k){return k+' '+Number(d.balances[k]).toLocaleString();}).join(' · ')+'</div>'):'';
+    $('intResult').innerHTML=head+checks+issues+bals;
+  });
+}
+
+function loadLock(){api('/papi/period-lock').then(function(d){
+  var ld=d&&d.lock_date;
+  $('lockState').innerHTML=ld?('🔒 Locked through <b>'+esc(ld)+'</b> — entries on/before this date are protected.'):'🔓 No period lock set. All dates are open for edits.';
+  if(ld)$('lockDate').value=ld;
+});}
+function setLock(){var d=$('lockDate').value;if(!d){alert('Pick a date');return;}
+  api('/papi/period-lock',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({date:d})}).then(function(r){
+    if(r&&r.ok){loadLock();loadAudit();}else alert('Could not lock: '+((r&&r.error)||'error'));});}
+function clearLock(){if(!confirm('Remove the period lock? Past entries will be editable again.'))return;
+  api('/papi/period-lock',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({clear:'1'})}).then(function(r){
+    if(r&&r.ok){loadLock();loadAudit();}else alert('Could not unlock.');});}
+
+function loadAudit(){
+  var qs=new URLSearchParams({page:P,per:30,action:$('fAction').value||'',actor:$('fActor').value||''});
+  api('/papi/audit-log?'+qs).then(function(d){
+    if(!d||!d.ok){$('auditRows').innerHTML='<tr><td colspan="5" class="note">Could not load.</td></tr>';return;}
+    PAGES=d.pages||1;P=d.page||1;
+    var rows=d.logs||[];
+    $('auditRows').innerHTML=rows.length?rows.map(function(l){
+      var chg='';
+      if(l.reason)chg=esc(l.reason);
+      else if(l.old||l.new){var o=l.old||{},n=l.new||{};var keys=Object.keys(Object.assign({},o,n));chg=keys.map(function(k){return k+': '+esc(JSON.stringify(o[k]))+'→'+esc(JSON.stringify(n[k]));}).join(', ');}
+      var pc={void:'void',reject:'reject',approve:'approve',lock:'lock',unlock:'lock'}[l.action]||'';
+      return '<tr><td class="note">'+esc(l.when)+'</td><td>'+esc(l.actor||'—')+'</td><td><span class="pill '+pc+'">'+esc(l.action)+'</span></td><td>'+esc(l.entity)+(l.entity_id?(' #'+l.entity_id):'')+'</td><td>'+chg+'</td></tr>';
+    }).join(''):'<tr><td colspan="5" class="note" style="padding:14px">No audit entries'+($('fAction').value||$('fActor').value?' match the filter':' yet')+'.</td></tr>';
+    $('pinfo').textContent='Page '+P+' of '+PAGES+' · '+(d.total||0)+' entries';
+    $('prev').disabled=P<=1;$('next').disabled=P>=PAGES;
+  });
+}
+function go(d){P=Math.min(PAGES,Math.max(1,P+d));loadAudit();}
+
+runIntegrity();loadLock();loadAudit();
+</script>
+</body></html>

@@ -96,11 +96,11 @@ class SupplierController extends Controller
     {
         $out = [];
         $credit = OrderCost::where('tenant_id',$tid)->whereNotNull('supplier_id')
-            ->where('pay_status','credit')->where('status','!=','rejected')
+            ->where('pay_status','credit')->whereNotIn('status',['rejected','void'])
             ->select('supplier_id', DB::raw('SUM(usd_amount) as usd'))->groupBy('supplier_id')->get();
         foreach ($credit as $c) $out[$c->supplier_id] = ($out[$c->supplier_id] ?? 0) + (float)$c->usd;
         $paid = OrderCost::where('tenant_id',$tid)->whereNotNull('supplier_id')
-            ->where('stage','supplier_payment')->where('status','!=','rejected')
+            ->where('stage','supplier_payment')->whereNotIn('status',['rejected','void'])
             ->select('supplier_id', DB::raw('SUM(usd_amount) as usd'))->groupBy('supplier_id')->get();
         foreach ($paid as $p) $out[$p->supplier_id] = ($out[$p->supplier_id] ?? 0) - (float)$p->usd;
         // opening balances (converted to USD via tenant rates)
@@ -219,12 +219,12 @@ class SupplierController extends Controller
         $tid = $t->id;
 
         $credit = OrderCost::where('tenant_id',$tid)->whereNotNull('supplier_id')
-            ->where('pay_status','credit')->where('status','!=','rejected')
+            ->where('pay_status','credit')->whereNotIn('status',['rejected','void'])
             ->select('supplier_id','supplier_name','currency', DB::raw('SUM(native_amount) as owed'))
             ->groupBy('supplier_id','supplier_name','currency')->get();
 
         $paidRows = OrderCost::where('tenant_id',$tid)->whereNotNull('supplier_id')
-            ->where('stage','supplier_payment')->where('status','!=','rejected')
+            ->where('stage','supplier_payment')->whereNotIn('status',['rejected','void'])
             ->select('supplier_id','currency', DB::raw('SUM(native_amount) as paid'))
             ->groupBy('supplier_id','currency')->get();
         $paid = [];

@@ -1,0 +1,66 @@
+DEPLOY — Accounting Controls milestone (v67)
+============================================
+Adds enterprise-style integrity controls WITHOUT touching the money math. New screen:
+/panel/audit  (sidebar: Order Trading -> "Accounting Controls").
+
+WHAT'S INCLUDED
+1. IMMUTABLE AUDIT TRAIL (audit_logs table)
+   Every void, approval, rejection, and period lock/unlock is recorded: who, when, the
+   before/after values, and an optional reason. Append-only — audit rows are never edited.
+   Viewer: /panel/audit -> Audit trail (paginated, filter by action / person).
+
+2. SOFT-VOID (never physically delete)
+   All "delete" actions on money entries (cashbook, order costs, expenses, payments) now
+   VOID instead of deleting: the row is kept forever, marked status='void' with voided_at/by/
+   reason. Because balances only count status='approved', a void is automatically excluded
+   from cash position, P&L, cashbook and supplier debt — but stays visible for audit.
+   (Supplier-debt queries were updated to also exclude void.)
+
+3. PERIOD LOCK
+   Owner/manager can lock all entries dated on/before a chosen date (/panel/audit -> Period
+   lock). Once locked, voiding/deleting a locked-date entry is refused (422 period_locked).
+   Lock and unlock are audited (who/when). Admin-only.
+
+4. APPROVAL LOGGING
+   Approve/Reject now writes an audit row with previous->new status + actor + reason.
+
+5. INTEGRITY CHECK (/panel/audit -> Run integrity check, or GET /papi/integrity-check)
+   Verifies: ledger journals balance (debit=credit), approved entries have currency+amount,
+   voided rows aren't leaking into balances, and flags any negative cash position. Returns a
+   pass/fail report you can run any time.
+
+FILES
+  database/migrations/2026_07_09_000004_accounting_controls.php   (audit_logs + order_costs void cols)
+  app/Models/AuditLog.php, app/Models/OrderCost.php
+  app/Services/AuditLogger.php, app/Services/AccountingGuard.php
+  app/Http/Controllers/Panel/AccountingControlsController.php     (period lock, integrity, audit list)
+  app/Http/Controllers/Panel/OrderCostController.php   (soft-void deleteCost/deleteOrder + approve/reject audit)
+  app/Http/Controllers/Panel/TradeCashbookController.php (soft-void delete)
+  app/Http/Controllers/Panel/ExpenseController.php     (soft-void)
+  app/Http/Controllers/Panel/PaymentController.php     (soft-void)
+  app/Http/Controllers/Panel/SupplierController.php    (exclude void from debt)
+  resources/panel/audit.html          (the Controls screen)
+  resources/panel/seller.html         (sidebar link; cumulative)
+  routes/web.php                      (/panel/audit + /papi/audit-log, /papi/period-lock, /papi/integrity-check)
+
+DEPLOY
+  1. Upload all (replace) -> commit.
+  2. php artisan migrate --force        (creates audit_logs + adds void columns) -- REQUIRED.
+  3. EasyPanel REBUILD (force/no-cache).
+  4. Clear SW + caches. Open sidebar -> Accounting Controls.
+
+VERIFY
+  - Delete a test cashbook entry -> it becomes 'void' (still listed, not counted); Audit trail
+    shows the void with your name + time.
+  - Run integrity check -> "Books are healthy".
+  - Set a period lock to today -> try to void an entry dated today -> refused (period_locked).
+  - Approve/reject a pending cost -> audit shows prev->new status.
+
+SAFE BY DESIGN: audit logging is best-effort (a logging hiccup never blocks a business action).
+The money math is unchanged — void just flips status to 'void', which existing balance queries
+already exclude.
+
+PHASE 2 (deliberately deferred, per our plan): auto-reversing LEDGER journals on void (the
+subledger already reverses; full GL auto-reverse next), guarding EDIT/back-dated CREATE against
+the period lock (currently guards void/delete), a scheduled DAILY integrity cron (today it's
+on-demand), and DB-level CHECK constraints. None affect current correctness.

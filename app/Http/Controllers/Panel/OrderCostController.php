@@ -468,10 +468,12 @@ class OrderCostController extends Controller
         $c = OrderCost::where('tenant_id',$t->id)->find($id);
         if (! $c) return response()->json(['ok'=>false,'error'=>'not_found'],404);
         $action = $request->input('action');
+        $prev = $c->status;
         if ($action==='approve') $c->status='approved';
         elseif ($action==='reject') $c->status='rejected';
         else return response()->json(['ok'=>false,'error'=>'bad_action']);
         $c->save();
+        \App\Services\AuditLogger::log($t->id,'order_cost',$c->id,$action,$u,['status'=>$prev],['status'=>$c->status],trim((string)$request->input('reason','')) ?: null);
         return response()->json(['ok'=>true,'status'=>$c->status]);
     }
 
@@ -481,29 +483,41 @@ class OrderCostController extends Controller
         return $u->isOwnerLike() || in_array((string)$u->role, ['manager'], true);
     }
 
-    /** DELETE a single order cost. POST /papi/order-costs/{id}/delete */
+    /** VOID a single order cost (soft — never physically deleted). POST /papi/order-costs/{id}/delete */
     public function deleteCost(Request $request, int $id)
     {
-        $t = $request->user()->tenant;
+        $t = $request->user()->tenant; $u = $request->user();
         if (! $t) return response()->json(['ok'=>false],401);
-        if (! $this->canDelete($request->user())) return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
+        if (! $this->canDelete($u)) return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
         $c = OrderCost::where('tenant_id',$t->id)->find($id);
         if (! $c) return response()->json(['ok'=>false,'error'=>'not_found'],404);
-        if ($c->receipt_path) { try { \Storage::disk('public')->delete($c->receipt_path); } catch (\Throwable $e) {} }
-        $c->delete();
-        return response()->json(['ok'=>true]);
+        if (\App\Services\AccountingGuard::isLocked($t->id, $c->created_at))
+            return response()->json(['ok'=>false,'error'=>'period_locked','detail'=>\App\Services\AccountingGuard::lockDate($t->id)],422);
+        $before = ['status'=>$c->status,'currency'=>$c->currency,'native_amount'=>(float)$c->native_amount,'stage'=>$c->stage,'note'=>$c->note];
+        $c->status = 'void'; $c->voided_at = now(); $c->voided_by = $u->name ?? '';
+        $c->void_reason = trim((string)$request->input('reason','')) ?: null;
+        $c->save();
+        \App\Services\AuditLogger::log($t->id,'order_cost',$c->id,'void',$u,$before,['status'=>'void'],$c->void_reason);
+        return response()->json(['ok'=>true,'voided'=>true]);
     }
 
-    /** DELETE an order and all its costs. POST /papi/orders/{id}/delete */
+    /** VOID an order and its costs (soft). POST /papi/orders/{id}/delete */
     public function deleteOrder(Request $request, int $id)
     {
-        $t = $request->user()->tenant;
+        $t = $request->user()->tenant; $u = $request->user();
         if (! $t) return response()->json(['ok'=>false],401);
-        if (! $this->canDelete($request->user())) return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
+        if (! $this->canDelete($u)) return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
         $o = Order::where('tenant_id',$t->id)->find($id);
         if (! $o) return response()->json(['ok'=>false,'error'=>'not_found'],404);
-        OrderCost::where('tenant_id',$t->id)->where('order_id',$id)->delete();
+        $reason = trim((string)$request->input('reason','')) ?: null;
+        $costs = OrderCost::where('tenant_id',$t->id)->where('order_id',$id)->whereNull('voided_at')->get();
+        foreach ($costs as $c) {
+            if (\App\Services\AccountingGuard::isLocked($t->id, $c->created_at)) continue;
+            $c->status='void'; $c->voided_at=now(); $c->voided_by=$u->name ?? ''; $c->void_reason=$reason; $c->save();
+            \App\Services\AuditLogger::log($t->id,'order_cost',$c->id,'void',$u,null,['status'=>'void'],$reason);
+        }
+        \App\Services\AuditLogger::log($t->id,'order',$o->id,'void',$u,['order_no'=>$o->order_no],null,$reason);
         $o->delete();
-        return response()->json(['ok'=>true]);
+        return response()->json(['ok'=>true,'voided_costs'=>$costs->count()]);
     }
 }

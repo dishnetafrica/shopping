@@ -361,15 +361,20 @@ class TradeCashbookController extends Controller
             return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
         $c = OrderCost::where('tenant_id',$t->id)->find($id);
         if (! $c) return response()->json(['ok'=>false,'error'=>'not_found'],404);
-        DB::transaction(function () use ($c, $t) {
-            // if it's a receipt, remove the linked customer-payment record too
+        if (\App\Services\AccountingGuard::isLocked($t->id, $c->created_at))
+            return response()->json(['ok'=>false,'error'=>'period_locked','detail'=>\App\Services\AccountingGuard::lockDate($t->id)],422);
+        $before = ['status'=>$c->status,'currency'=>$c->currency,'native_amount'=>(float)$c->native_amount,'stage'=>$c->stage,'note'=>$c->note];
+        $reason = trim((string)$request->input('reason','')) ?: null;
+        DB::transaction(function () use ($c, $t, $u, $reason) {
+            $c->status = 'void'; $c->voided_at = now(); $c->voided_by = $u->name ?? ''; $c->void_reason = $reason;
+            $c->save();
             if ($c->stage === 'customer_payment') {
                 try { CustomerPayment::where('tenant_id',$t->id)->where('order_cost_id',$c->id)->delete(); }
                 catch (\Throwable $e) { /* customer_payments optional */ }
             }
-            $c->delete();
         });
-        return response()->json(['ok'=>true]);
+        \App\Services\AuditLogger::log($t->id,'order_cost',$c->id,'void',$u,$before,['status'=>'void'],$reason);
+        return response()->json(['ok'=>true,'voided'=>true]);
     }
 
     /** POST /papi/trade-cashbook/{id}/update — owner/manager edits any cash entry.

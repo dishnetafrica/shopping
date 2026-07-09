@@ -209,8 +209,12 @@ class ExpenseController extends Controller
             return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
         $c = OrderCost::where('tenant_id',$t->id)->where('stage','expense')->find($id);
         if (! $c) return response()->json(['ok'=>false,'error'=>'not_found'],404);
-        if ($c->receipt_path) { try { \Storage::disk('public')->delete($c->receipt_path); } catch (\Throwable $e) {} }
-        $c->delete();
-        return response()->json(['ok'=>true]);
+        if (\App\Services\AccountingGuard::isLocked($t->id, $c->created_at))
+            return response()->json(['ok'=>false,'error'=>'period_locked','detail'=>\App\Services\AccountingGuard::lockDate($t->id)],422);
+        $before = ['status'=>$c->status,'currency'=>$c->currency,'native_amount'=>(float)$c->native_amount,'note'=>$c->note];
+        $c->status='void'; $c->voided_at=now(); $c->voided_by=$u->name ?? '';
+        $c->void_reason=trim((string)$request->input('reason','')) ?: null; $c->save();
+        \App\Services\AuditLogger::log($t->id,'order_cost',$c->id,'void',$u,$before,['status'=>'void'],$c->void_reason);
+        return response()->json(['ok'=>true,'voided'=>true]);
     }
 }

@@ -74,6 +74,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/buy-list', [\App\Http\Controllers\Panel\BuyListController::class, 'page']);
     Route::get('/panel/supplier-debt', [\App\Http\Controllers\Panel\SupplierController::class, 'page']);
     Route::get('/panel/suppliers', [\App\Http\Controllers\Panel\SupplierController::class, 'manage']);
+    Route::get('/panel/audit', [\App\Http\Controllers\Panel\AccountingControlsController::class, 'page']);
     Route::get('/panel/partners', [\App\Http\Controllers\Panel\PartnerController::class, 'page']);
     Route::get('/panel/invoiced', [\App\Http\Controllers\Panel\InvoiceReportController::class, 'page']);
     Route::get('/panel/payments', [\App\Http\Controllers\Panel\PaymentController::class, 'page']);
@@ -146,6 +147,10 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('suppliers', [\App\Http\Controllers\Panel\SupplierController::class, 'index']);
         Route::post('suppliers', [\App\Http\Controllers\Panel\SupplierController::class, 'store']);
         Route::get('purchases', [\App\Http\Controllers\Panel\OrderCostController::class, 'purchaseList']);
+        Route::get('audit-log', [\App\Http\Controllers\Panel\AccountingControlsController::class, 'auditList']);
+        Route::get('period-lock', [\App\Http\Controllers\Panel\AccountingControlsController::class, 'periodStatus']);
+        Route::post('period-lock', [\App\Http\Controllers\Panel\AccountingControlsController::class, 'periodLock']);
+        Route::get('integrity-check', [\App\Http\Controllers\Panel\AccountingControlsController::class, 'integrity']);
         Route::post('purchases', [\App\Http\Controllers\Panel\OrderCostController::class, 'purchaseStore']);
         Route::get('suppliers/debt', [\App\Http\Controllers\Panel\SupplierController::class, 'debt']);
         Route::post('suppliers/{id}/pay', [\App\Http\Controllers\Panel\SupplierController::class, 'pay']);
