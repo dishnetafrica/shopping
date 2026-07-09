@@ -23,35 +23,192 @@ class SupplierController extends Controller
             ->header('Content-Type','text/html; charset=UTF-8')->header('Cache-Control','no-store');
     }
 
-    /** GET /papi/suppliers — this tenant's suppliers. */
+    /** GET /panel/suppliers — full supplier management screen. */
+    public function manage(Request $request)
+    {
+        $user = $request->user();
+        if (! $user || ! $user->tenant_id) return redirect('/app/login');
+        if (! (bool) $user->tenant->setting('order_system_enabled', false)) abort(404);
+        $path = resource_path('panel/suppliers.html');
+        if (! is_file($path)) abort(500, 'Suppliers asset missing.');
+        return response(file_get_contents($path), 200)
+            ->header('Content-Type','text/html; charset=UTF-8')->header('Cache-Control','no-store');
+    }
+
+    /** GET /papi/suppliers — this tenant's suppliers.
+     *  ?full=1 → paginated management list (page/per/q/search + computed owed). Otherwise the
+     *  lightweight name list other screens use. */
     public function index(Request $request)
     {
         $t = $request->user()->tenant;
         if (! $t) return response()->json(['ok'=>false],401);
-        $suppliers = Supplier::where('tenant_id',$t->id)->orderBy('name')
-            ->get(['id','name','phone','pay_term_days','opening_balance','opening_currency'])
-            ->map(fn($s)=>['id'=>$s->id,'name'=>$s->name,'phone'=>$s->phone,
-                'pay_term_days'=>$s->pay_term_days,'opening_balance'=>$s->opening_balance===null?null:(float)$s->opening_balance,'opening_currency'=>$s->opening_currency]);
-        return response()->json(['ok'=>true,'suppliers'=>$suppliers]);
+
+        if (! $request->boolean('full')) {
+            $suppliers = Supplier::where('tenant_id',$t->id)->orderBy('name')
+                ->get(['id','name','phone','pay_term_days','opening_balance','opening_currency'])
+                ->map(fn($s)=>['id'=>$s->id,'name'=>$s->name,'phone'=>$s->phone,
+                    'pay_term_days'=>$s->pay_term_days,'opening_balance'=>$s->opening_balance===null?null:(float)$s->opening_balance,'opening_currency'=>$s->opening_currency]);
+            return response()->json(['ok'=>true,'suppliers'=>$suppliers]);
+        }
+
+        // Full management list — paginated + searchable + owed balance.
+        $q    = trim((string) $request->input('q',''));
+        $per  = min(100, max(5, (int) $request->input('per', 20)));
+        $page = max(1, (int) $request->input('page', 1));
+
+        $base = Supplier::where('tenant_id',$t->id);
+        if ($q !== '') {
+            $base->where(function($w) use ($q){
+                foreach (['name','business_name','contact_name','phone','email','tax_number','contact_id'] as $col)
+                    $w->orWhere($col,'like','%'.$q.'%');
+            });
+        }
+        $total = (clone $base)->count();
+        $rows  = $base->orderBy('name')->forPage($page,$per)->get();
+
+        // owed per supplier (credit purchases + opening − supplier payments), summed to USD for a single figure
+        $owedUsd = $this->owedBySupplierUsd($t->id);
+
+        $items = $rows->map(function($s) use ($owedUsd) {
+            return [
+                'id'=>$s->id,
+                'contact_id'=>$s->contact_id,
+                'business_name'=>$s->business_name ?: $s->name,
+                'contact_name'=>$s->contact_name,
+                'name'=>$s->name,
+                'phone'=>$s->phone,
+                'email'=>$s->email,
+                'tax_number'=>$s->tax_number,
+                'address'=>$s->address,
+                'pay_term_days'=>$s->pay_term_days,
+                'opening_balance'=>$s->opening_balance===null?null:(float)$s->opening_balance,
+                'opening_currency'=>$s->opening_currency,
+                'active'=>(bool)($s->active ?? true),
+                'added_on'=>optional($s->created_at)->format('d M Y'),
+                'owed_usd'=>round($owedUsd[$s->id] ?? 0, 2),
+            ];
+        });
+        return response()->json(['ok'=>true,'suppliers'=>$items,'total'=>$total,'page'=>$page,'per'=>$per,'pages'=>(int)ceil($total/$per)]);
     }
 
-    /** POST /papi/suppliers — add (or return existing) a supplier by name. */
+    /** Helper: net owed (USD) per supplier = credit purchases + opening − supplier payments. */
+    protected function owedBySupplierUsd(int $tid): array
+    {
+        $out = [];
+        $credit = OrderCost::where('tenant_id',$tid)->whereNotNull('supplier_id')
+            ->where('pay_status','credit')->where('status','!=','rejected')
+            ->select('supplier_id', DB::raw('SUM(usd_amount) as usd'))->groupBy('supplier_id')->get();
+        foreach ($credit as $c) $out[$c->supplier_id] = ($out[$c->supplier_id] ?? 0) + (float)$c->usd;
+        $paid = OrderCost::where('tenant_id',$tid)->whereNotNull('supplier_id')
+            ->where('stage','supplier_payment')->where('status','!=','rejected')
+            ->select('supplier_id', DB::raw('SUM(usd_amount) as usd'))->groupBy('supplier_id')->get();
+        foreach ($paid as $p) $out[$p->supplier_id] = ($out[$p->supplier_id] ?? 0) - (float)$p->usd;
+        // opening balances (converted to USD via tenant rates)
+        $openings = Supplier::where('tenant_id',$tid)->whereNotNull('opening_balance')->where('opening_balance','>',0)
+            ->get(['id','opening_balance','opening_currency']);
+        foreach ($openings as $s) {
+            $cur = strtoupper((string)($s->opening_currency ?: 'USD'));
+            $rate = $cur==='USD' ? 1.0 : (float) optional(\App\Models\Tenant::find($tid))->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3700:5180);
+            if ($rate <= 0) $rate = 1;
+            $out[$s->id] = ($out[$s->id] ?? 0) + ((float)$s->opening_balance / $rate);
+        }
+        return $out;
+    }
+
+    /** GET /papi/suppliers/{id} — one supplier + recent purchases & payments (the view page). */
+    public function show(Request $request, int $id)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok'=>false],401);
+        $s = Supplier::where('tenant_id',$t->id)->find($id);
+        if (! $s) return response()->json(['ok'=>false,'error'=>'not_found'],404);
+
+        $purchases = OrderCost::where('tenant_id',$t->id)->where('supplier_id',$id)
+            ->where('stage','!=','supplier_payment')->orderByDesc('id')->limit(100)
+            ->get(['id','order_no','note','stage','currency','native_amount','pay_status','status','created_at'])
+            ->map(fn($c)=>['ref'=>$c->order_no ?: ('#'.$c->id),'note'=>$c->note,'stage'=>$c->stage,
+                'currency'=>$c->currency,'amount'=>(float)$c->native_amount,'pay_status'=>$c->pay_status,
+                'status'=>$c->status,'date'=>optional($c->created_at)->format('d M Y')]);
+        $payments = OrderCost::where('tenant_id',$t->id)->where('supplier_id',$id)
+            ->where('stage','supplier_payment')->orderByDesc('id')->limit(100)
+            ->get(['id','currency','native_amount','holder','status','created_at'])
+            ->map(fn($c)=>['currency'=>$c->currency,'amount'=>(float)$c->native_amount,'by'=>$c->holder,
+                'status'=>$c->status,'date'=>optional($c->created_at)->format('d M Y')]);
+
+        return response()->json(['ok'=>true,'supplier'=>[
+            'id'=>$s->id,'contact_id'=>$s->contact_id,'business_name'=>$s->business_name ?: $s->name,
+            'contact_name'=>$s->contact_name,'name'=>$s->name,'phone'=>$s->phone,'email'=>$s->email,
+            'tax_number'=>$s->tax_number,'address'=>$s->address,'pay_term_days'=>$s->pay_term_days,
+            'opening_balance'=>$s->opening_balance===null?null:(float)$s->opening_balance,'opening_currency'=>$s->opening_currency,
+            'active'=>(bool)($s->active ?? true),
+        ],'purchases'=>$purchases,'payments'=>$payments,'owed_usd'=>round($this->owedBySupplierUsd($t->id)[$s->id] ?? 0,2)]);
+    }
+
+    /** POST /papi/suppliers/{id} — update a supplier. */
+    public function update(Request $request, int $id)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok'=>false],401);
+        $s = Supplier::where('tenant_id',$t->id)->find($id);
+        if (! $s) return response()->json(['ok'=>false,'error'=>'not_found'],404);
+        $name = trim((string)$request->input('name', $request->input('business_name','')));
+        if ($name !== '') $s->name = $name;
+        foreach (['business_name'=>'string','contact_name'=>'string','phone'=>'string','email'=>'string',
+                  'tax_number'=>'string','address'=>'string','note'=>'string','contact_id'=>'string','opening_currency'=>'string'] as $f=>$_) {
+            if ($request->has($f)) $s->$f = trim((string)$request->input($f)) ?: null;
+        }
+        if ($request->has('pay_term_days'))   $s->pay_term_days = $request->filled('pay_term_days') ? max(0,(int)$request->input('pay_term_days')) : null;
+        if ($request->has('opening_balance')) $s->opening_balance = $request->filled('opening_balance') ? (float)$request->input('opening_balance') : null;
+        if ($request->has('active'))          $s->active = filter_var($request->input('active'), FILTER_VALIDATE_BOOLEAN);
+        $s->save();
+        return response()->json(['ok'=>true,'id'=>$s->id]);
+    }
+
+    /** POST /papi/suppliers/{id}/delete — remove a supplier (blocked if it has purchases/payments). */
+    public function destroy(Request $request, int $id)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok'=>false],401);
+        $u = $request->user();
+        if (! ($u->isOwnerLike() || in_array((string)$u->role,['manager'],true))) return response()->json(['ok'=>false,'error'=>'forbidden'],403);
+        $s = Supplier::where('tenant_id',$t->id)->find($id);
+        if (! $s) return response()->json(['ok'=>false,'error'=>'not_found'],404);
+        $used = OrderCost::where('tenant_id',$t->id)->where('supplier_id',$id)->exists();
+        if ($used) {
+            // Don't destroy financial history — deactivate instead.
+            $s->active = false; $s->save();
+            return response()->json(['ok'=>true,'deactivated'=>true,'note'=>'has_history']);
+        }
+        $s->delete();
+        return response()->json(['ok'=>true,'deleted'=>true]);
+    }
+
+    /** POST /papi/suppliers — add (or return existing) a supplier by name; enriches on create. */
     public function store(Request $request)
     {
         $t = $request->user()->tenant;
         if (! $t) return response()->json(['ok'=>false],401);
-        $name = trim((string) $request->input('name',''));
+        $name = trim((string) $request->input('name', $request->input('business_name','')));
         if ($name === '') return response()->json(['ok'=>false,'error'=>'no_name'],422);
 
-        $s = Supplier::firstOrCreate(
-            ['tenant_id'=>$t->id, 'name'=>$name],
-            ['phone'=>trim((string)$request->input('phone','')) ?: null,
-             'note' =>trim((string)$request->input('note','')) ?: null,
-             'pay_term_days'=>$request->filled('pay_term_days') ? max(0,(int)$request->input('pay_term_days')) : null,
-             'opening_balance'=>$request->filled('opening_balance') ? (float)$request->input('opening_balance') : null,
-             'opening_currency'=>trim((string)$request->input('opening_currency','')) ?: null]
-        );
-        return response()->json(['ok'=>true,'id'=>$s->id,'name'=>$s->name]);
+        $existing = Supplier::where('tenant_id',$t->id)->where('name',$name)->first();
+        $wasNew = ! $existing;
+        $s = $existing ?: new Supplier(['tenant_id'=>$t->id,'name'=>$name]);
+
+        // set/enrich fields (create OR fill blanks on an existing one)
+        foreach (['business_name','contact_name','phone','email','tax_number','address','note','opening_currency'] as $f) {
+            $v = trim((string)$request->input($f,''));
+            if ($v !== '') $s->$f = $v;
+        }
+        if ($request->filled('pay_term_days'))   $s->pay_term_days   = max(0,(int)$request->input('pay_term_days'));
+        if ($request->filled('opening_balance')) $s->opening_balance = (float)$request->input('opening_balance');
+        if ($s->active === null) $s->active = true;
+        if (! $s->contact_id) {
+            $n = Supplier::where('tenant_id',$t->id)->count() + 1;
+            $s->contact_id = 'SUP-'.str_pad((string)$n, 4, '0', STR_PAD_LEFT);
+        }
+        $s->save();
+        return response()->json(['ok'=>true,'id'=>$s->id,'name'=>$s->name,'contact_id'=>$s->contact_id,'created'=>$wasNew]);
     }
 
     /** GET /papi/suppliers/debt — outstanding per supplier per currency (credit − payments). */

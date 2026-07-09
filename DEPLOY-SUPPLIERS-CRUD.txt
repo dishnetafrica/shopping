@@ -1,0 +1,43 @@
+DEPLOY — Supplier records: full CRUD + view + pagination (v62)
+=============================================================
+Adds a proper Suppliers management screen at /panel/suppliers, built on your existing
+Supplier model + SupplierController (no parallel system). Also enriches supplier fields.
+
+NEW SCREEN  /panel/suppliers  (sidebar: Order Trading → "Suppliers")
+  - Paginated, searchable list: Contact ID, Business, Contact person, Phone, Email, Tax No,
+    Pay term, Owed ($, live from credit purchases + opening − payments), Added on.
+  - Add supplier (auto Contact ID like SUP-0001).
+  - Edit supplier (all fields).
+  - Delete — if the supplier has purchases/payments it is DEACTIVATED instead of deleted
+    (never destroys financial history); clean suppliers with no history are deleted.
+  - View — opens supplier detail + its Purchases and Payments (a mini ledger).
+
+ENRICHED FIELDS (migration): contact_id, business_name, contact_name, email, tax_number,
+  address, active. (pay_term_days, opening_balance, opening_currency already existed.)
+
+BACKWARD COMPATIBLE: the inline "+ New supplier" on the Purchase screen and the debt screen
+still work — /papi/suppliers (no ?full) still returns the light name list; store() still
+find-or-creates by name and now also stamps a Contact ID.
+
+FILES
+  database/migrations/2026_07_09_000003_enrich_suppliers.php
+  app/Models/Supplier.php
+  app/Http/Controllers/Panel/SupplierController.php   (index paginated + show/update/destroy/manage)
+  resources/panel/suppliers.html                      (the management screen)
+  resources/panel/seller.html                         (sidebar "Suppliers" link; cumulative)
+  routes/web.php                                       (/panel/suppliers + /papi/suppliers/{id} GET/POST/delete)
+
+DEPLOY
+  1. Upload all (replace) -> commit.
+  2. php artisan migrate --force      (adds the new supplier columns)
+  3. EasyPanel REBUILD (force/no-cache).
+  4. Normal browser: clear service worker + caches. Open sidebar -> Suppliers.
+
+VERIFY
+  - Suppliers -> Add -> fill business name + details -> Save -> row appears with a Contact ID.
+  - Search filters; Prev/Next paginate.
+  - Record a credit Purchase for that supplier -> its "Owed ($)" goes up; View shows the purchase.
+  - Edit changes stick; Delete on a supplier with history deactivates (keeps history).
+
+NOTE: routes order matters and is correct — suppliers/debt is registered BEFORE suppliers/{id}
+so "debt" is never captured as an id. No action needed; just don't reorder them.

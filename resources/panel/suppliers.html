@@ -1,0 +1,156 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Suppliers</title>
+<style>
+:root{--dark:#1B3A2B;--green:#15803D;--red:#C0392B;--line:#e4e9e4;--muted:#6b7280;--bg:#f6f8f6}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1B211D;background:var(--bg)}
+.top{background:var(--dark);color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between}
+.top h1{font-size:18px;margin:0;font-weight:800}.back{background:#ffffff22;border:none;color:#fff;border-radius:9px;padding:8px 12px;font-weight:700;cursor:pointer}
+.wrap{max-width:1000px;margin:0 auto;padding:14px}
+.bar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.bar input{flex:1;min-width:180px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:14px}
+.add{background:var(--green);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:800;cursor:pointer}
+.card{background:#fff;border-radius:14px;padding:0;overflow:hidden;box-shadow:0 1px 3px #0000000d}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#f0f4f0;text-align:left;padding:10px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);position:sticky;top:0}
+td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
+tr:hover td{background:#fafcfa}
+.owed{font-weight:800}.owed.pos{color:var(--red)}.owed.zero{color:var(--muted)}
+.act{display:flex;gap:4px;flex-wrap:wrap}
+.act button{border:1px solid var(--line);background:#fff;border-radius:7px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer}
+.act .v{color:#1D4ED8}.act .e{color:#b45309}.act .d{color:var(--red);border-color:#fca5a5}
+.pag{display:flex;justify-content:space-between;align-items:center;padding:10px;font-size:13px;color:var(--muted)}
+.pag button{border:1.5px solid var(--line);background:#fff;border-radius:8px;padding:7px 12px;font-weight:700;cursor:pointer}
+.pag button:disabled{opacity:.4;cursor:default}
+.modalwrap{position:fixed;inset:0;background:#0006;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow:auto;z-index:50}
+.modalwrap.hide{display:none}
+.modal{background:#fff;border-radius:14px;max-width:640px;width:100%;padding:18px}
+.modal h2{margin:0 0 12px;font-size:17px}
+.f{margin-bottom:10px}.f label{display:block;font-size:12px;font-weight:800;color:#374151;margin-bottom:4px}
+.f input,.f textarea,.f select{width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-size:14px;font-family:inherit}
+.frow{display:flex;gap:8px}.frow>*{flex:1}
+.save{width:100%;background:var(--green);color:#fff;border:none;border-radius:10px;padding:12px;font-weight:800;font-size:15px;cursor:pointer;margin-top:6px}
+.x{float:right;background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)}
+.subt{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:14px 0 4px}
+.note{font-size:12px;color:var(--muted)}
+</style></head>
+<body>
+<div class="top"><button class="back" onclick="history.back()">‹ Back</button><h1>🏢 Suppliers</h1><span></span></div>
+<div class="wrap">
+  <div class="bar">
+    <input id="q" placeholder="Search name, phone, email, tax…" oninput="debounced()">
+    <button class="add" onclick="openAdd()">+ Add supplier</button>
+  </div>
+  <div class="card">
+    <div style="overflow:auto">
+    <table><thead><tr>
+      <th>Contact ID</th><th>Business</th><th>Contact</th><th>Phone</th><th>Email</th><th>Tax No</th><th>Pay term</th><th>Owed ($)</th><th>Added</th><th>Actions</th>
+    </tr></thead><tbody id="rows"><tr><td colspan="10" class="note" style="padding:16px">Loading…</td></tr></tbody></table>
+    </div>
+    <div class="pag"><span id="pinfo"></span><span><button id="prev" onclick="go(-1)">‹ Prev</button> <button id="next" onclick="go(1)">Next ›</button></span></div>
+  </div>
+</div>
+
+<!-- Add / Edit modal -->
+<div class="modalwrap hide" id="modal"><div class="modal">
+  <button class="x" onclick="closeM()">×</button>
+  <h2 id="mTitle">Add supplier</h2>
+  <div class="frow"><div class="f"><label>Business name *</label><input id="mBiz"></div><div class="f"><label>Contact person</label><input id="mContact"></div></div>
+  <div class="frow"><div class="f"><label>Phone</label><input id="mPhone"></div><div class="f"><label>Email</label><input id="mEmail"></div></div>
+  <div class="frow"><div class="f"><label>Tax number</label><input id="mTax"></div><div class="f"><label>Pay term (credit days)</label><input id="mPayTerm" type="number" min="0"></div></div>
+  <div class="frow"><div class="f"><label>Opening balance owed</label><input id="mOpen" type="number" step="any"></div><div class="f"><label>Opening currency</label><select id="mOpenCur"><option value="">—</option><option>UGX</option><option>USD</option><option>SSP</option></select></div></div>
+  <div class="f"><label>Address</label><textarea id="mAddr" rows="2"></textarea></div>
+  <div class="f"><label>Note</label><input id="mNote"></div>
+  <button class="save" id="mSave" onclick="saveM()">Save supplier</button>
+  <div class="note" id="mMsg" style="margin-top:8px"></div>
+</div></div>
+
+<!-- View modal -->
+<div class="modalwrap hide" id="view"><div class="modal">
+  <button class="x" onclick="closeV()">×</button>
+  <h2 id="vName">Supplier</h2>
+  <div id="vHead" class="note"></div>
+  <div class="subt">Owed</div><div id="vOwed" style="font-size:18px;font-weight:800"></div>
+  <div class="subt">Purchases</div><div id="vPur"></div>
+  <div class="subt">Payments</div><div id="vPay"></div>
+</div></div>
+
+<script>
+var $=function(id){return document.getElementById(id);};
+var token=new URLSearchParams(location.search).get('token')||'';
+var PAGE=1, PAGES=1, Q='', EDIT_ID=null, _t=null;
+function api(u,opt){opt=opt||{};opt.headers=Object.assign({'X-Requested-With':'XMLHttpRequest'},opt.headers||{});opt.credentials='same-origin';opt.cache='no-store';return fetch(u,opt).then(function(r){return r.json();});}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function nf(n){return Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
+function debounced(){clearTimeout(_t);_t=setTimeout(function(){Q=$('q').value.trim();PAGE=1;load();},300);}
+
+function load(){
+  api('/papi/suppliers?full=1&page='+PAGE+'&per=20&q='+encodeURIComponent(Q)).then(function(d){
+    if(!d||!d.ok){$('rows').innerHTML='<tr><td colspan="10" class="note" style="padding:16px">Could not load.</td></tr>';return;}
+    PAGES=d.pages||1;PAGE=d.page||1;
+    var rows=(d.suppliers||[]);
+    $('rows').innerHTML = rows.length ? rows.map(function(s){
+      var owedCls = s.owed_usd>0.005?'owed pos':'owed zero';
+      return '<tr>'+
+        '<td>'+esc(s.contact_id||'')+'</td>'+
+        '<td><b>'+esc(s.business_name||s.name||'')+'</b>'+(s.active?'':' <span class="note">(inactive)</span>')+'</td>'+
+        '<td>'+esc(s.contact_name||'')+'</td>'+
+        '<td>'+esc(s.phone||'')+'</td>'+
+        '<td>'+esc(s.email||'')+'</td>'+
+        '<td>'+esc(s.tax_number||'')+'</td>'+
+        '<td>'+(s.pay_term_days!=null?(s.pay_term_days+'d'):'')+'</td>'+
+        '<td class="'+owedCls+'">$'+nf(s.owed_usd)+'</td>'+
+        '<td class="note">'+esc(s.added_on||'')+'</td>'+
+        '<td><div class="act"><button class="v" onclick="viewS('+s.id+')">View</button><button class="e" onclick="edit('+s.id+')">Edit</button><button class="d" onclick="del('+s.id+",'"+esc((s.business_name||s.name||'').replace(/'/g,''))+"'"+')">Delete</button></div></td>'+
+      '</tr>';
+    }).join('') : '<tr><td colspan="10" class="note" style="padding:16px">No suppliers'+(Q?' match "'+esc(Q)+'"':' yet')+'.</td></tr>';
+    $('pinfo').textContent='Page '+PAGE+' of '+PAGES+' · '+(d.total||0)+' supplier'+((d.total||0)===1?'':'s');
+    $('prev').disabled=PAGE<=1;$('next').disabled=PAGE>=PAGES;
+    window.__ROWS=rows;
+  });
+}
+function go(dir){PAGE=Math.min(PAGES,Math.max(1,PAGE+dir));load();}
+
+function openAdd(){EDIT_ID=null;$('mTitle').textContent='Add supplier';
+  ['mBiz','mContact','mPhone','mEmail','mTax','mPayTerm','mOpen','mAddr','mNote'].forEach(function(id){$(id).value='';});$('mOpenCur').value='';
+  $('mMsg').textContent='';$('modal').classList.remove('hide');}
+function edit(id){var s=(window.__ROWS||[]).find(function(x){return x.id===id;});if(!s)return;EDIT_ID=id;$('mTitle').textContent='Edit supplier';
+  $('mBiz').value=s.business_name||s.name||'';$('mContact').value=s.contact_name||'';$('mPhone').value=s.phone||'';$('mEmail').value=s.email||'';
+  $('mTax').value=s.tax_number||'';$('mPayTerm').value=s.pay_term_days!=null?s.pay_term_days:'';$('mOpen').value=s.opening_balance!=null?s.opening_balance:'';
+  $('mOpenCur').value=s.opening_currency||'';$('mAddr').value=s.address||'';$('mNote').value='';$('mMsg').textContent='';$('modal').classList.remove('hide');}
+function closeM(){$('modal').classList.add('hide');}
+function saveM(){
+  var biz=($('mBiz').value||'').trim();if(!biz){$('mMsg').textContent='Business name is required';return;}
+  var body=new URLSearchParams({name:biz,business_name:biz,contact_name:$('mContact').value.trim(),phone:$('mPhone').value.trim(),
+    email:$('mEmail').value.trim(),tax_number:$('mTax').value.trim(),pay_term_days:$('mPayTerm').value,opening_balance:$('mOpen').value,
+    opening_currency:$('mOpenCur').value,address:$('mAddr').value.trim(),note:$('mNote').value.trim()});
+  var url=EDIT_ID?('/papi/suppliers/'+EDIT_ID):'/papi/suppliers';
+  var b=$('mSave');b.disabled=true;b.textContent='Saving…';
+  api(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
+    b.disabled=false;b.textContent='Save supplier';
+    if(r&&r.ok){closeM();load();}else $('mMsg').textContent='Failed: '+((r&&r.error)||'error');
+  }).catch(function(){b.disabled=false;b.textContent='Save supplier';$('mMsg').textContent='Network error';});
+}
+function del(id,name){if(!confirm('Delete supplier "'+name+'"?\n\n(If it has purchases/payments it will be deactivated instead, to keep history.)'))return;
+  api('/papi/suppliers/'+id+'/delete',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'}}).then(function(r){
+    if(r&&r.ok){load();if(r.deactivated)alert('This supplier has history, so it was deactivated (not deleted).');}
+    else alert('Could not delete: '+((r&&r.error)||'error'));});
+}
+function viewS(id){
+  $('vName').textContent='Loading…';$('vHead').textContent='';$('vOwed').textContent='';$('vPur').innerHTML='';$('vPay').innerHTML='';
+  $('view').classList.remove('hide');
+  api('/papi/suppliers/'+id).then(function(d){
+    if(!d||!d.ok){$('vName').textContent='Could not load';return;}
+    var s=d.supplier;
+    $('vName').textContent=(s.business_name||s.name)+(s.contact_id?(' · '+s.contact_id):'');
+    $('vHead').innerHTML=[s.contact_name?('Contact: '+esc(s.contact_name)):'',s.phone?('📞 '+esc(s.phone)):'',s.email?('✉ '+esc(s.email)):'',s.tax_number?('Tax: '+esc(s.tax_number)):'',s.pay_term_days!=null?('Pay term: '+s.pay_term_days+'d'):'',s.address?('📍 '+esc(s.address)):''].filter(Boolean).join(' · ');
+    $('vOwed').innerHTML='<span style="color:'+(d.owed_usd>0.005?'#C0392B':'#15803D')+'">$'+nf(d.owed_usd)+'</span>';
+    $('vPur').innerHTML=(d.purchases&&d.purchases.length)?('<table><thead><tr><th>Date</th><th>Ref</th><th>Item</th><th>Amount</th><th>Pay</th><th>Status</th></tr></thead><tbody>'+d.purchases.map(function(p){return '<tr><td class="note">'+esc(p.date)+'</td><td>'+esc(p.ref)+'</td><td>'+esc(p.note||p.stage)+'</td><td>'+esc(p.currency)+' '+nf(p.amount)+'</td><td>'+esc(p.pay_status||'')+'</td><td>'+esc(p.status||'')+'</td></tr>';}).join('')+'</tbody></table>'):'<div class="note">No purchases.</div>';
+    $('vPay').innerHTML=(d.payments&&d.payments.length)?('<table><thead><tr><th>Date</th><th>Amount</th><th>By</th><th>Status</th></tr></thead><tbody>'+d.payments.map(function(p){return '<tr><td class="note">'+esc(p.date)+'</td><td>'+esc(p.currency)+' '+nf(p.amount)+'</td><td>'+esc(p.by||'')+'</td><td>'+esc(p.status||'')+'</td></tr>';}).join('')+'</tbody></table>'):'<div class="note">No payments.</div>';
+  });
+}
+function closeV(){$('view').classList.add('hide');}
+
+load();
+</script>
+</body></html>
