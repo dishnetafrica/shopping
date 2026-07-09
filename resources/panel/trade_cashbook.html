@@ -177,7 +177,8 @@
 
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <div class="sectlbl" style="margin:0">📒 ENTRIES</div>
-    <div style="display:flex;gap:6px">
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <select id="pfilt" onchange="PERSON=this.value;PAGE=1;load();" style="border:1.5px solid #d7ddd7;border-radius:9px;padding:8px 10px;font-size:12px;font-weight:700;background:#fff"><option value="">👥 All staff</option></select>
       <button id="convBtn" onclick="openConv()" style="display:none;background:#1D4ED8;color:#fff;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">⇄ Convert</button>
       <button id="moveBtn" onclick="openMove()" style="display:none;background:#7A4B12;color:#fff;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">⇆ Move cash</button>
       <button onclick="exportCsv()" style="background:#0B3D22;color:#fff;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">⬇ CSV</button>
@@ -189,7 +190,7 @@
 </div>
 <script>
 const $=s=>document.getElementById(s);
-let FILT='ALL', DIR='in', PAGE=1, PAGES=1, rates={UGX:3700,SSP:5180,USD:1};
+let FILT='ALL', PERSON='', DIR='in', PAGE=1, PAGES=1, rates={UGX:3700,SSP:5180,USD:1};
 function fmt(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
 function setFilt(el){document.querySelectorAll('.filt').forEach(f=>f.classList.remove('on'));el.classList.add('on');FILT=el.dataset.c;PAGE=1;load();}
 function setDir(d){DIR=d;document.querySelectorAll('.dirbtn').forEach(b=>b.classList.remove('on'));document.querySelector('.dirbtn.'+d).classList.add('on');$('saveBtn').style.background=d==='out'?'var(--red)':'var(--dark)';$('saveBtn').textContent=d==='out'?'Record money out':'Record money in';}
@@ -291,7 +292,7 @@ function saveMove(){
     .catch(function(){ b.disabled=false; b.textContent='Move cash'; alert('Failed'); });
 }
 function load(){
-  fetch('/papi/trade-cashbook?currency='+FILT+'&page='+PAGE+'&per=20',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(d=>{
+  fetch('/papi/trade-cashbook?currency='+FILT+'&page='+PAGE+'&per=20&person='+encodeURIComponent(PERSON),{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(d=>{
     if(!d.ok){$('list').innerHTML='<div class="loading">Could not load.</div>';return;}
     if(d.default_rates)rates=d.default_rates;
     $('title').textContent=d.view==='mine'?'💵 My Cashbook':'💵 Cashbook';
@@ -327,7 +328,7 @@ function load(){
   });
 }
 function fetchAll(){
-  return fetch('/papi/trade-cashbook/all?currency='+FILT,{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json());
+  return fetch('/papi/trade-cashbook/all?currency='+FILT+'&person='+encodeURIComponent(PERSON),{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json());
 }
 function csvCell(v){ v=(v==null?'':String(v)); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
 function exportCsv(){
@@ -340,7 +341,7 @@ function exportCsv(){
     });
     var blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
     var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-    a.download='cashbook-'+(FILT==='ALL'?'all':FILT)+'-'+new Date().toISOString().slice(0,10)+'.csv';
+    a.download='cashbook-'+(PERSON?PERSON.replace(/[^A-Za-z0-9]+/g,'_')+'-':'')+(FILT==='ALL'?'all':FILT)+'-'+new Date().toISOString().slice(0,10)+'.csv';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   }).catch(function(){ alert('Export failed'); });
 }
@@ -357,13 +358,13 @@ function exportPdf(){
         '<td class="num b">'+esc(e.currency)+' '+fmt(e.balance)+'</td>'+
         '<td>'+esc(e.status)+'</td></tr>';
     }).join('');
-    w.document.write('<html><head><title>Cashbook '+(FILT==='ALL'?'':FILT)+'</title>'+
+    w.document.write('<html><head><title>Cashbook '+(PERSON?(PERSON+' '):'')+(FILT==='ALL'?'':FILT)+'</title>'+
       '<style>body{font-family:Arial,sans-serif;color:#111;padding:16px}h2{margin:0 0 2px}.sub{color:#666;font-size:12px;margin-bottom:12px}'+
       'table{width:100%;border-collapse:collapse;font-size:11px}th,td{border-bottom:1px solid #ddd;padding:6px 7px;text-align:left;vertical-align:top}'+
       'th{background:#f3f5f3;text-transform:uppercase;font-size:9px;letter-spacing:.4px;color:#555}.num{text-align:right;white-space:nowrap}'+
       'tr.in td.in{color:#15803d;font-weight:700}tr.out td.out{color:#dc2626;font-weight:700}td.b{font-weight:700;color:#0B3D22}.n{color:#666}'+
       '@media print{button{display:none}}</style></head><body>'+
-      '<h2>Cashbook — '+(FILT==='ALL'?'All currencies':FILT)+'</h2>'+
+      '<h2>Cashbook — '+(PERSON?esc(PERSON)+' · ':'')+(FILT==='ALL'?'All currencies':FILT)+'</h2>'+
       '<div class="sub">Family Shoppers · '+d.count+' entries · '+new Date().toLocaleString()+'</div>'+
       '<table><thead><tr><th>Ref</th><th>Date</th><th>Particulars</th><th>Person</th><th class=num>In</th><th class=num>Out</th><th class=num>Balance</th><th>Status</th></tr></thead>'+
       '<tbody>'+rows+'</tbody></table></body></html>');
@@ -402,6 +403,15 @@ function save(){
 }
 function del(id){var e=(window.__ENTRIES||[]).find(function(x){return x.id===id;});var msg=(e&&e.stage==='customer_payment')?'Delete this receipt? It will be removed from the customer account too. Cannot be undone.':'Delete this entry? Cannot be undone.';if(!confirm(msg))return;
   fetch('/papi/trade-cashbook/'+id+'/delete',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(r=>{if(r.ok)load();else alert(r.error==='not_allowed'?'Only owner/manager can delete':'Failed');});}
+function loadPfilt(){
+  fetch('/papi/staff-cash',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',cache:'no-store'})
+    .then(function(r){return r.json();}).then(function(d){
+      var sel=document.getElementById('pfilt'); if(!sel)return;
+      var names=((d&&d.people)||[]).map(function(x){return x.name;}).filter(Boolean);
+      var uniq=[]; names.forEach(function(n){ if(uniq.indexOf(n)<0)uniq.push(n); });
+      sel.innerHTML='<option value="">👥 All staff</option>'+uniq.map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>';}).join('');
+    }).catch(function(){});
+}
 function loadWho(){
   fetch('/papi/staff-cash',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',cache:'no-store'})
     .then(function(r){return r.json();}).then(function(d){
@@ -412,7 +422,7 @@ function loadWho(){
       sel.innerHTML='<option value="">— me ('+(me||'you')+') —</option>'+uniq.map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>';}).join('');
     }).catch(function(){});
 }
-setRate();load();loadWho();
+setRate();load();loadWho();loadPfilt();
 </script>
 <!-- ===== DishNet role-aware tab bar + amount format (injected v2) ===== -->
 <nav class="dn-tabbar" id="dnTabbar"></nav>

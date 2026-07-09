@@ -1,0 +1,25 @@
+DEPLOY — Per-person Cashbook + export (v65)
+===========================================
+Adds a "person" filter to the Cashbook so you (owner/manager) can view and export ONE
+person's cashbook — e.g. Bhavin only — to see exactly what's happening with their cash.
+
+WHAT'S NEW
+  - A "👥 All staff" dropdown above the entries. Pick Bhavin / Asish / Jayesh → the list,
+    the balance cards, AND the running balance all switch to just that person.
+  - CSV export → only that person's rows; filename includes the name
+    (e.g. cashbook-Bhavin_Madlani-UGX-2026-07-09.csv).
+  - PDF export → titled "Cashbook — Bhavin Madlani · UGX" with only their rows.
+  - Also carried forward: credit purchases stay OUT of the cashbook, and purchase rows show
+    "(qty N x <cur> <unit>)" — now in the export too.
+
+FILES
+  app/Http/Controllers/Panel/TradeCashbookController.php   (data() + all() accept ?person=)
+  resources/panel/trade_cashbook.html                      (person dropdown + export wiring)
+
+DEPLOY
+  Upload both (replace) -> commit -> EasyPanel REBUILD (force/no-cache) -> clear SW+caches.
+  No migration.
+
+VERIFY
+  Cashbook -> pick "Bhavin Madlani" -> list + balances show only Bhavin; CSV/PDF export just
+  Bhavin's cashbook with his running balance and qty on purchases.

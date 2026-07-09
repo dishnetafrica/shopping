@@ -47,6 +47,8 @@ class TradeCashbookController extends Controller
         $balQ = OrderCost::where('tenant_id',$t->id)->where('status','approved')
             ->where(fn($w)=>$w->where('pay_status','!=','credit')->orWhereNull('pay_status'));
         if (! $isOwner) $balQ->where(fn($w)=>$w->where('holder_user_id',$u->id)->orWhere('holder',$u->name));
+        $person = trim((string)$request->query('person',''));
+        if ($isOwner && $person !== '') $balQ->where('holder',$person);   // owner: view one person's cashbook
         $balRows = (clone $balQ)->select('currency','stage',
                 DB::raw('SUM(paid_native) as native'))->groupBy('currency','stage')->get();
         $bal = ['USD'=>0,'UGX'=>0,'SSP'=>0];
@@ -60,6 +62,7 @@ class TradeCashbookController extends Controller
         $listQ = OrderCost::where('tenant_id',$t->id)
             ->where(fn($w)=>$w->where('pay_status','!=','credit')->orWhereNull('pay_status'));
         if (! $isOwner) $listQ->where(fn($w)=>$w->where('holder_user_id',$u->id)->orWhere('holder',$u->name));
+        if ($isOwner && $person !== '') $listQ->where('holder',$person);
         if ($cur !== 'ALL') $listQ->where('currency',$cur);
         $total = (clone $listQ)->count();
 
@@ -116,8 +119,11 @@ class TradeCashbookController extends Controller
         $cur = strtoupper((string)$request->query('currency','ALL'));
         $isOwner = $u->isOwnerLike() || in_array((string)$u->role,['manager'],true);
 
-        $q = OrderCost::where('tenant_id',$t->id);
+        $q = OrderCost::where('tenant_id',$t->id)
+            ->where(fn($w)=>$w->where('pay_status','!=','credit')->orWhereNull('pay_status'));
         if (! $isOwner) $q->where(fn($w)=>$w->where('holder_user_id',$u->id)->orWhere('holder',$u->name));
+        $person = trim((string)$request->query('person',''));
+        if ($isOwner && $person !== '') $q->where('holder',$person);
         if ($cur !== 'ALL') $q->where('currency',$cur);
 
         $rows = $q->orderBy('created_at')->orderBy('id')->get();
@@ -129,12 +135,18 @@ class TradeCashbookController extends Controller
             $isIn = in_array($c->stage,['funding','cash_in','customer_payment'],true);
             if (isset($runCur[$c->currency])) $runCur[$c->currency] += ($isIn?1:-1) * (float)$c->paid_native;
             $label = $stageLabels[$c->stage] ?? ucfirst(str_replace('_',' ',$c->stage));
+            $noteText = $c->note ?: ($c->order_no ?: '');
+            if ($c->qty !== null && (float)$c->qty > 0) {
+                $qtyStr = rtrim(rtrim(number_format((float)$c->qty, 2, '.', ''), '0'), '.');
+                $ucStr  = $c->unit_cost !== null ? (' x '.$c->currency.' '.number_format((float)$c->unit_cost, 0)) : '';
+                $noteText = trim($noteText.'  (qty '.$qtyStr.$ucStr.')');
+            }
             $ref = in_array($c->stage,['cash_in','cash_out'],true)
                 ? 'CB-'.str_pad((string)$c->id,4,'0',STR_PAD_LEFT)
                 : ($c->order_no ?: strtoupper(substr($c->stage,0,3)).'-'.str_pad((string)$c->id,4,'0',STR_PAD_LEFT));
             $out[] = [
                 'ref'=>$ref,'date'=>$c->created_at?->format('Y-m-d H:i'),
-                'category'=>$c->category ?: $label,'note'=>$c->note ?: ($c->order_no ?: ''),
+                'category'=>$c->category ?: $label,'note'=>$noteText,
                 'person'=>$c->holder,'currency'=>$c->currency,
                 'in'=>$isIn?(float)$c->native_amount:0,'out'=>$isIn?0:(float)$c->native_amount,
                 'usd'=>(float)$c->usd_amount,'balance'=>round($runCur[$c->currency] ?? 0,2),
