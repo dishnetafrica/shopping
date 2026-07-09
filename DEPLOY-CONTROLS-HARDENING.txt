@@ -1,0 +1,38 @@
+DEPLOY — Controls hardening: observable audit + shared request-id + authorization (v69)
+=======================================================================================
+Three changes, all from the code review. Deploy after v67 + v68.
+
+1. AUDIT FAILURES ARE NOW OBSERVABLE
+   AuditLogger still never breaks the caller, but a failure now writes Log::error('Audit
+   logging failed', {exception, entity, entity_id, action, tenant_id}) so operations can
+   detect an audit outage instead of it failing silently.
+
+2. SHARED REQUEST ID (not a per-record uuid)
+   Your app already has a RequestId middleware that assigns one id per HTTP request, shares it
+   into the log context, tags Sentry, and returns X-Request-Id. AuditLogger now READS that same
+   id (request->attributes 'request_id') instead of minting its own — so an audit row, the log
+   lines, Sentry, and the response header for one request all share ONE id. Falls back to the
+   header, then a uuid, only if the middleware id isn't present (e.g. console).
+
+3. AUTHORIZATION GAP CLOSED (the important one)
+   Audit found: money actions were already correctly gated to owner/manager (period lock/unlock,
+   void, delete, edit, approve/reject). BUT the audit trail itself was readable by ANY logged-in
+   user. Now gated to owner/manager:
+     - GET  /panel/audit          (screen)        -> 403 for non-admins
+     - GET  /papi/audit-log       (trail)         -> forbidden
+     - GET  /papi/integrity-check                 -> forbidden
+     - GET  /papi/period-lock     (status)        -> forbidden
+   (POST /papi/period-lock was already owner-gated.)
+
+FILES (replace)
+  app/Services/AuditLogger.php
+  app/Http/Controllers/Panel/AccountingControlsController.php
+
+DEPLOY
+  Upload both (replace) -> commit -> EasyPanel REBUILD (force/no-cache) -> clear SW+caches.
+  No migration.
+
+VERIFY
+  - Log in as a non-admin (field/sales) -> /panel/audit returns 403; /papi/audit-log forbidden.
+  - Log in as owner -> audit screen loads; rows show shared request id (matches X-Request-Id
+    response header for the same request).

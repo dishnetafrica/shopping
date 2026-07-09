@@ -18,23 +18,25 @@ class AccountingControlsController extends Controller
         return $u && ($u->isOwnerLike() || in_array((string)$u->role, ['manager'], true));
     }
 
-    /** GET /panel/audit — the Accounting Controls screen. */
+    /** GET /panel/audit — the Accounting Controls screen (owner/manager only). */
     public function page(Request $request)
     {
         $u = $request->user();
         if (! $u || ! $u->tenant_id) return redirect('/app/login');
         if (! (bool) $u->tenant->setting('order_system_enabled', false)) abort(404);
+        if (! $this->owner($u)) abort(403);   // audit trail is sensitive — admins only
         $path = resource_path('panel/audit.html');
         if (! is_file($path)) abort(500, 'Audit asset missing.');
         return response(file_get_contents($path), 200)
             ->header('Content-Type','text/html; charset=UTF-8')->header('Cache-Control','no-store');
     }
 
-    /** GET /papi/audit-log — paginated immutable audit trail. */
+    /** GET /papi/audit-log — paginated immutable audit trail (owner/manager only). */
     public function auditList(Request $request)
     {
-        $t = $request->user()->tenant;
+        $u = $request->user(); $t = $u->tenant;
         if (! $t) return response()->json(['ok'=>false],401);
+        if (! $this->owner($u)) return response()->json(['ok'=>false,'error'=>'forbidden'],403);
         $per  = min(100, max(10, (int)$request->input('per', 30)));
         $page = max(1, (int)$request->input('page', 1));
         $q = AuditLog::where('tenant_id',$t->id);
@@ -53,11 +55,12 @@ class AccountingControlsController extends Controller
             ])]);
     }
 
-    /** GET /papi/period-lock — current lock date. */
+    /** GET /papi/period-lock — current lock date (owner/manager only). */
     public function periodStatus(Request $request)
     {
-        $t = $request->user()->tenant;
+        $u = $request->user(); $t = $u->tenant;
         if (! $t) return response()->json(['ok'=>false],401);
+        if (! $this->owner($u)) return response()->json(['ok'=>false,'error'=>'forbidden'],403);
         return response()->json(['ok'=>true,'lock_date'=>AccountingGuard::lockDate($t->id)]);
     }
 
@@ -83,11 +86,12 @@ class AccountingControlsController extends Controller
         return response()->json(['ok'=>true,'lock_date'=>$date]);
     }
 
-    /** GET /papi/integrity-check — verify the books and report any inconsistencies. */
+    /** GET /papi/integrity-check — verify the books and report inconsistencies (owner/manager only). */
     public function integrity(Request $request)
     {
-        $t = $request->user()->tenant;
+        $u = $request->user(); $t = $u->tenant;
         if (! $t) return response()->json(['ok'=>false],401);
+        if (! $this->owner($u)) return response()->json(['ok'=>false,'error'=>'forbidden'],403);
         $tid = $t->id;
         $issues = []; $checks = [];
 
