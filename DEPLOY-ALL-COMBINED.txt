@@ -1,0 +1,111 @@
+DEPLOY — CloudBSS combined drop (4 features in one)
+===================================================
+Everything from the recent sessions, ready to deploy together.
+
+  1. Purchase Edit/Delete (fix a wrong purchase)
+  2. Cashbook edit 500 fix (+ CB-0067 correction script)
+  3. "In transit" order status (Kampala → Juba) on the desktop panel
+  4. "In transit" on the mobile panel + shipment tracker last-mile bridge
+
+------------------------------------------------------------------------------
+FILES CHANGED (11 app files) + 1 one-off script
+------------------------------------------------------------------------------
+  app/Http/Controllers/Panel/SupplierController.php      (1) purchase id in show()
+  app/Http/Controllers/Panel/OrderCostController.php     (1) purchaseUpdate + list ids
+  app/Http/Controllers/Panel/TradeCashbookController.php  (2) $cur undefined-variable fix
+  app/Models/Order.php                                   (3) 'In transit' in STATUSES
+  app/Jobs/SendOrderStatusNotification.php               (3) In-transit WhatsApp message
+  app/Services/Logistics/LastMileBridge.php   [NEW]      (4) shipment -> delivery handoff
+  routes/web.php                                         (1) order-costs/{id}/update route
+  resources/panel/suppliers.html                         (1) Edit/Delete on Purchases
+  resources/panel/purchase.html                          (1) Edit/Delete on Recent purchases
+  resources/panel/seller.html                            (3) In transit: dropdown/stepper/filter/KPI/help
+  resources/panel/mobile.html                            (4) In transit in the mobile flow
+  fix-cashbook-holder.php                     [SCRIPT]   (2) move CB-0067 to Jayesh Bhai
+
+DEPLOY (all at once)
+  1. Upload/replace the 11 app files -> commit. (fix-cashbook-holder.php is optional, run by hand.)
+  2. php artisan migrate --force
+       - No new migration is required for features 1-3.
+       - Feature 4 (shipment tracker) uses the existing shipment tables; run migrate so
+         they exist if they haven't been migrated yet (shipments, shipment_events,
+         shipment_exceptions, shipment_boxes, shipment_box_scans).
+  3. EasyPanel REBUILD (force / no-cache).
+  4. Browser: clear the service worker + caches, then reload.
+
+==============================================================================
+1) PURCHASE EDIT / DELETE
+==============================================================================
+Every purchase line gets Edit + Delete, in two places:
+  - /panel/suppliers -> View a supplier -> Purchases table
+  - /panel/purchases -> Recent purchases (each line)
+Edit corrects item/qty/unit cost/amount/currency/cash-credit; Delete VOIDS (soft, kept in
+audit trail, dropped from Owed + totals). Owner/manager only, period-lock guarded, audited.
+Endpoints: POST /papi/order-costs/{id}/update (new), POST /papi/order-costs/{id}/delete (void).
+
+==============================================================================
+2) CASHBOOK EDIT 500 FIX  (+ CB-0067 correction)
+==============================================================================
+Bug: TradeCashbookController::update() used $cur without defining it, so every cashbook edit
+tried to save currency = NULL -> NOT NULL column rejected it -> 500. Fixed by reading the
+currency from the request and falling back to the entry's existing currency.
+
+To move CB-0067 (a conversion = 2 legs) to Jayesh Bhai in one go:
+    php artisan tinker
+    >>> require base_path('fix-cashbook-holder.php');
+  Prints BEFORE/AFTER, audit-logs, runs in a transaction. Set $DRY_RUN=true to preview.
+  (Or, after deploy, edit each leg in the panel by hand.)
+
+==============================================================================
+3) "IN TRANSIT" ORDER STATUS (desktop)  — New->Confirmed->Packed->In transit->Out for delivery->Delivered
+==============================================================================
+Manual status you pick after packing. Shows in the order dropdown, the 6-step progress
+tracker, the Orders list Status filter (to see which are in transit to Juba), and a new
+"In transit" dashboard KPI tile. Sets a customer WhatsApp: "left Kampala, on its way to Juba"
+(only if WhatsApp status notifications are live). Dispatching a rider still moves the order to
+Out for delivery. No migration (status is free text; existing orders untouched).
+
+==============================================================================
+4) MOBILE "IN TRANSIT"  +  SHIPMENT TRACKER LAST-MILE BRIDGE
+==============================================================================
+MOBILE (/panel/m): the mobile order flow now includes "In transit"
+  (New -> Confirmed -> Preparing -> In transit -> Out for delivery -> Delivered).
+  The advance button reads "Mark in transit" then "Send out for delivery"; the In-transit
+  pill and active-order buckets are updated.
+
+SHIPMENT TRACKER: the app already ships a full shipment platform (Logistics nav) that tracks
+the Kampala->Juba transport leg per shipment (Packed -> Sent to transporter -> Transport
+confirmed -> Bus departed/In transit -> Arrived), with a custody ledger, transporter/agent
+tokenized pages, a logistics dashboard, and printable box QR labels + manifest. The ONE
+missing piece was the service that hands an ARRIVED shipment to the last-mile Delivery — the
+"Hand off to delivery" button and the auto-handoff-on-arrival toggle both call
+App\Services\Logistics\LastMileBridge, which did not exist (so the button returned an error).
+
+  Added app/Services/Logistics/LastMileBridge.php:
+    - On an ARRIVED shipment, creates (or links) an "Awaiting rider" Delivery for the order,
+      so it appears on the Delivery Board ready to assign a rider.
+    - Idempotent: never makes a second delivery, never disturbs one that already has a rider.
+    - deliveries.status is free text (string 16), so the "awaiting" bucket is safe.
+
+  How a seller uses the shipment tracker (after deploy + migrate):
+    a. Open a confirmed/paid order -> "🚚 Create shipment" -> enter transporter, origin
+       (Kampala), destination (Juba), box count -> shipment created (Packed).
+    b. Advance on the shipment page: Dispatch -> Confirm receipt -> Bus departed ->
+       Mark arrived. (Or the transporter/agent act via their shared /t/{token} and /a/{token}
+       links.) Box-count mismatches auto-flag on the exact leg.
+    c. On arrival, "Hand off to delivery" (or auto-handoff) creates the Awaiting-rider task;
+       assign a rider -> Out for delivery -> Delivered.
+
+VERIFY (feature 4)
+  - Mobile: an active order's Advance button shows "Mark in transit", then "Send out for delivery".
+  - Shipment: create a shipment on an order, advance it to Arrived, click "Hand off to delivery"
+    -> the order shows on the Delivery Board as "Awaiting rider" (no more error).
+
+------------------------------------------------------------------------------
+NOTES / NOT DONE (by design — tell me if you want these)
+------------------------------------------------------------------------------
+  - Shipment-stage WhatsApp updates (Phase 3) are not built; share transporter/agent links
+    manually from the shipment "Share links" card.
+  - Rider box-scan pages (V6.2) are deferred; after arrival the normal rider flow takes over.
+  - Test each feature on one real record before relying on it — these changes were verified by
+    syntax/lint only, not run against your live database.

@@ -105,6 +105,7 @@
   .p-new{color:var(--s-new);background:var(--s-new-bg)}
   .p-confirmed{color:var(--s-confirmed);background:var(--s-confirmed-bg)}
   .p-preparing{color:var(--s-prep);background:var(--s-prep-bg)}
+  .p-transit{color:#8a5a00;background:#fdefd0}
   .p-out{color:var(--s-out);background:var(--s-out-bg)}
   .p-delivered{color:var(--s-done);background:var(--s-done-bg)}
   .p-cancelled{color:var(--s-cancel);background:var(--s-cancel-bg)}
@@ -320,9 +321,9 @@
 
 <script>
 const API = "/papi";
-const FLOW = ["New","Confirmed","Preparing","Out for delivery","Delivered"];
-const PCLASS = {"New":"p-new","Confirmed":"p-confirmed","Preparing":"p-preparing","Out for delivery":"p-out","Delivered":"p-delivered","Cancelled":"p-cancelled"};
-const ADV = {"New":"Confirm order","Confirmed":"Start preparing","Preparing":"Send out for delivery","Out for delivery":"Mark delivered"};
+const FLOW = ["New","Confirmed","Preparing","In transit","Out for delivery","Delivered"];
+const PCLASS = {"New":"p-new","Confirmed":"p-confirmed","Preparing":"p-preparing","In transit":"p-transit","Out for delivery":"p-out","Delivered":"p-delivered","Cancelled":"p-cancelled"};
+const ADV = {"New":"Confirm order","Confirmed":"Start preparing","Preparing":"Mark in transit","In transit":"Send out for delivery","Out for delivery":"Mark delivered"};
 const fmt = n => "UGX " + Number(n||0).toLocaleString("en-UG");
 const SHOP = window.SHOP || {name:"Seller", initials:"FS", phone:"", plan:""};
 
@@ -385,7 +386,7 @@ function isToday(s){ if(!s) return false; const t=new Date(s.replace(" ","T")), 
 function inGroup(o){
   if(filter==="new") return o.status==="New";
   if(filter==="done") return o.status==="Delivered"||o.status==="Cancelled";
-  return ["New","Confirmed","Preparing","Out for delivery"].includes(o.status);
+  return ["New","Confirmed","Preparing","In transit","Out for delivery"].includes(o.status);
 }
 async function loadOrders(silent){
   if(!silent && !ordersLoaded) document.getElementById("feed").innerHTML = '<div class="loading"><div class="spin"></div></div>';
@@ -407,7 +408,7 @@ function refresh(){
   const count = f => orders.filter(o=>{
     if(f==="new") return o.status==="New";
     if(f==="done") return o.status==="Delivered"||o.status==="Cancelled";
-    return ["New","Confirmed","Preparing","Out for delivery"].includes(o.status);
+    return ["New","Confirmed","Preparing","In transit","Out for delivery"].includes(o.status);
   }).length;
   document.getElementById("c-active").textContent = count("active");
   document.getElementById("c-new").textContent = count("new");
