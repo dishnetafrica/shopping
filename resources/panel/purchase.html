@@ -88,7 +88,24 @@ function onCur(){var c=$('cur').value;$('rate').value=c==='USD'?'1':(c==='SSP'?'
 function setPay(p){PAY=p;$('segCash').classList.toggle('on',p==='cash');$('segCredit').classList.toggle('on',p==='credit');$('cashBox').style.display=p==='cash'?'block':'none';$('creditBox').style.display=p==='credit'?'block':'none';}
 
 function loadSuppliers(){api('/papi/suppliers').then(function(d){SUPPLIERS=(d&&d.suppliers)||[];var s=$('sup');s.innerHTML='<option value="">— pick supplier —</option>'+SUPPLIERS.map(function(x){return '<option value="'+x.id+'">'+esc(x.name)+(x.pay_term_days?(' · '+x.pay_term_days+'d'):'')+'</option>';}).join('');});}
-function loadProducts(){api('/papi/products').then(function(d){PRODUCTS=(Array.isArray(d.products)?d.products:[]).filter(function(p){return p['Product Name'];});$('prodList').innerHTML=PRODUCTS.map(function(p){return '<option value="'+esc(p['Product Name'])+'">';}).join('');});}
+function loadProducts(){api('/papi/products').then(function(d){PRODUCTS=(Array.isArray(d.products)?d.products:[]).filter(function(p){return p['Product Name'];});$('prodList').innerHTML=PRODUCTS.map(function(p){return '<option value="'+esc(p['Product Name'])+'">';}).join('');applyPrefill();});}
+function applyPrefill(){
+  var pf=new URLSearchParams(location.search).get('prefill'); if(!pf) return;
+  var data; try{ data=JSON.parse(decodeURIComponent(pf)); }catch(e){ return; }
+  window.__marks=data.marks||[];
+  var lines=data.lines||[]; if(!lines.length){ return; }
+  $('lines').innerHTML='';
+  lines.forEach(function(ln){ addLine(); var tr=$('lines').lastElementChild;
+    tr.querySelector('.pn').value=ln.name||''; matchProd(tr.querySelector('.pn'));
+    if(ln.qty){ tr.querySelector('.qty').value=ln.qty; } });
+  recompute();
+  if(window.__marks.length){
+    var uniq=[]; window.__marks.forEach(function(m){ if(uniq.indexOf(m.order_no)<0)uniq.push(m.order_no); });
+    var bn=document.createElement('div'); bn.className='card'; bn.style.background='#eef4ee'; bn.style.borderLeft='4px solid var(--green)';
+    bn.innerHTML='<b>🧺 From Buy List</b> — buying for '+uniq.length+' order'+(uniq.length>1?'s':'')+': '+esc(uniq.join(', '))+'.<div class="note" style="margin-top:4px">These will be marked <b>bought</b> automatically when you record this purchase.</div>';
+    var w=document.querySelector('.wrap'); w.insertBefore(bn, w.firstChild);
+  }
+}
 function loadStaff(){api('/papi/staff-cash').then(function(d){var me=(d&&d.whoami)||'';var names=((d&&d.people)||[]).map(function(p){return p.name;}).filter(Boolean);if(me&&names.indexOf(me)<0)names.unshift(me);var u=[];names.forEach(function(n){if(u.indexOf(n)<0)u.push(n);});$('who').innerHTML='<option value="">— me ('+esc(me||'you')+') —</option>'+u.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');});}
 function loadHist(){api('/papi/purchases').then(function(d){var ps=(d&&d.purchases)||[];if(!ps.length){$('hist').innerHTML='<div class="note">No purchases yet.</div>';return;}$('hist').innerHTML=ps.map(function(p){return '<div class="phist"><div style="display:flex;justify-content:space-between"><b>'+esc(p.supplier||'—')+'</b><span>'+esc(p.currency)+' '+nf(p.total)+' <span class="pill '+(p.pay_status==='credit'?'credit':'cash')+'">'+(p.pay_status==='credit'?'credit':'cash')+'</span></span></div><div class="note">'+esc(p.date||'')+' · '+p.items.length+' item(s)'+(p.holder?(' · '+esc(p.holder)):'')+'</div></div>';}).join('');});}
 
@@ -117,7 +134,14 @@ function save(){
   var b=$('saveBtn');b.disabled=true;b.textContent='Saving…';
   api('/papi/purchases',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
     b.disabled=false;b.textContent='Record purchase';
-    if(r&&r.ok){$('saveMsg').innerHTML='<b style="color:var(--green)">✓ Purchase recorded — '+esc(r.currency)+' '+nf(r.total_native)+' ('+r.count+' item'+(r.count>1?'s':'')+')</b>';$('lines').innerHTML='';addLine();$('note').value='';recompute();loadHist();}
+    if(r&&r.ok){$('saveMsg').innerHTML='<b style="color:var(--green)">✓ Purchase recorded — '+esc(r.currency)+' '+nf(r.total_native)+' ('+r.count+' item'+(r.count>1?'s':'')+')</b>';
+      if(window.__marks&&window.__marks.length){
+        api('/papi/buy-list/mark',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:window.__marks})}).then(function(){
+          $('saveMsg').innerHTML+='<br><span class="note">🧺 Buy List updated — items marked bought. <a href="/panel/buy-list">Back to Buy List</a></span>';
+          window.__marks=[];
+        }).catch(function(){});
+      }
+      $('lines').innerHTML='';addLine();$('note').value='';recompute();loadHist();}
     else{$('saveMsg').textContent='Failed: '+((r&&r.error)||'error');}
   }).catch(function(){b.disabled=false;b.textContent='Record purchase';$('saveMsg').textContent='Network error';});
 }

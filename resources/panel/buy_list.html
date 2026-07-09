@@ -267,7 +267,8 @@ function buySelected(i){
     ids.push(chk.getAttribute('data-oid'));
   });
   if(!pairs.length){ alert('Tick at least one order (with a quantity).'); return; }
-  markBought(pairs, function(){ gotoBook(ids.join(','), name); });
+  var tot=pairs.reduce(function(a,b){return a+(Number(b.qty)||0);},0);
+  gotoPurchase([{name:name,qty:tot}], pairs);
 }
 
 function renderBought(){
@@ -293,17 +294,22 @@ function markBought(pairs, then){
     body:JSON.stringify({items:pairs})}).then(function(r){return r.json();}).then(function(){ then&&then(); }).catch(function(){ alert('Could not update. Try again.'); });
 }
 function gotoBook(ids, note){ location.href='/panel/book-cost?orders='+encodeURIComponent(ids)+'&note='+encodeURIComponent(note||'')+'&stage=purchase'; }
+// New: open the product Purchase screen prefilled. It books the real purchase (cost/supplier/
+// cash-credit + updates product cost) AND marks these Buy-List items bought on save.
+function gotoPurchase(lines, marks){ location.href='/panel/purchases?prefill='+encodeURIComponent(JSON.stringify({lines:lines,marks:marks})); }
 
 function buyOne(i){ var r=(window.__rows||[])[i]; if(!r) return;
-  markBought([{order_no:r.order_no,item_name:r.name,qty:r.rem}], function(){ gotoBook(r.order_id, r.name); }); }
+  gotoPurchase([{name:r.name,qty:r.rem}], [{order_no:r.order_no,item_name:r.name,qty:r.rem}]); }
 function buyRecord(i){ var it=(window.__items||[])[i]; if(!it) return;
-  markBought(it.pairs.map(function(p){return {order_no:p.order_no,item_name:p.name,qty:p.qty};}),
-    function(){ gotoBook(it.pairs.map(function(p){return p.order_id;}).filter(Boolean).join(','), it.name); }); }
+  var marks=it.pairs.map(function(p){return {order_no:p.order_no,item_name:p.name,qty:p.qty};});
+  var tot=marks.reduce(function(a,b){return a+(Number(b.qty)||0);},0);
+  gotoPurchase([{name:it.name,qty:tot}], marks); }
 function recordAdvanced(id, on){
   var o=ALLORDERS.filter(function(x){return String(x.id)===String(id);})[0]; if(!o) return;
   var pairs=(o.items_json||[]).filter(function(it){return remOf(o,it)>0;}).map(function(it){return {order_no:on,item_name:(it.name||'').trim(),qty:remOf(o,it)};});
-  if(!pairs.length){ location.href='/panel/book-cost?orders='+id+'&stage=purchase'; return; }
-  markBought(pairs, function(){ gotoBook(id, pairs[0].item_name); });
+  if(!pairs.length){ location.href='/panel/purchases'; return; }
+  var lines=pairs.map(function(p){return {name:p.item_name,qty:p.qty};});
+  gotoPurchase(lines, pairs);
 }
 function undoBought(i){ var b=(window.__bought||[])[i]; if(!b) return;
   fetch('/papi/buy-list/mark',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/json'},credentials:'same-origin',

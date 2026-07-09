@@ -1,0 +1,37 @@
+DEPLOY — Buy List <-> Purchase screen, connected (v66)
+======================================================
+YOUR QUESTION: "if we do a purchase entry, does the Buy List become aware?"
+BEFORE: No. The Buy List's "Buy & record" only ticked an item as bought (no money booked) and
+sent you to the OLD /panel/book-cost. The NEW Purchase screen booked real money but the Buy
+List never knew. Two disconnected halves.
+
+NOW: They're unified. On the Buy List, "Buy & record" (aggregated, per-order, and partial) and
+"Record now" (advanced-but-not-bought) all open the NEW Purchase screen PRE-FILLED with the
+product(s) + quantity + which orders it's for. When you record that purchase:
+  - it books the real cost (supplier, cash/credit, updates product cost_price), AND
+  - it automatically marks those Buy-List items BOUGHT (so they drop off + the red
+    "advanced but not bought" flag clears).
+Marking now happens AFTER the purchase saves (not before), so abandoning a purchase no longer
+leaves an item wrongly ticked.
+
+FLOW EXAMPLE
+  Buy List -> Cling Film "Buy & record" -> Purchase screen opens with Cling Film qty 55 and a
+  "🧺 From Buy List — buying for 4 orders" banner -> pick supplier, unit cost, cash/credit ->
+  Record -> cost booked + those 4 orders' cling film marked bought -> back on Buy List they're gone.
+
+FILES
+  resources/panel/buy_list.html    (buy actions -> gotoPurchase, no premature tick)
+  resources/panel/purchase.html    (reads ?prefill=, prefills lines + banner, marks bought on save)
+
+DEPLOY
+  Upload both (replace) -> commit -> EasyPanel REBUILD (force/no-cache) -> clear SW+caches.
+  No migration. (Uses the existing /papi/buy-list/mark and /papi/purchases.)
+
+VERIFY
+  Buy List -> Buy & record on a product -> Purchase screen prefilled + banner -> record ->
+  item disappears from Buy List; the purchase shows in Cashbook (cash) or Suppliers We Owe
+  (credit) with its qty.
+
+NOTE: this reuses the new product Purchase screen (better fit than book-cost — it's product +
+qty based, updates cost_price, handles supplier debt). The old /panel/book-cost still exists if
+you ever want raw order-cost allocation, but the Buy List now points at the new screen.
