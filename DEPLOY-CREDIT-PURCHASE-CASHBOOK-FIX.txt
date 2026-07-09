@@ -1,0 +1,30 @@
+DEPLOY — Keep credit purchases OUT of the Cashbook (v63)
+=======================================================
+THE PROBLEM you saw: a CREDIT purchase (bought now, pay supplier later) was appearing in the
+Cashbook as a big "Out" (e.g. Out 745,000), which is confusing — no cash actually left your
+hand. (Your balance was already correct because it uses paid_native = 0 for credit; only the
+list row was showing the full amount.)
+
+THE RIGHT ACCOUNTING (what this does)
+  - CASH purchase   -> cash left your hand -> shows in Cashbook as Out. (unchanged)
+  - CREDIT purchase -> a PAYABLE, no cash moved -> now EXCLUDED from the Cashbook. It shows in
+    "Suppliers We Owe" and on the supplier's View ledger instead.
+  - When you later PAY the supplier -> that payment IS a cash-out and shows in the Cashbook.
+  So the Cashbook = money that actually moved. Amounts you owe live in Suppliers We Owe.
+
+Credit purchases still correctly count as COST in P&L (accrual — you incurred the cost) and
+still raise the supplier's "Owed". Cash Position and Staff Cash were already credit-safe
+(they use paid_native), so they need no change.
+
+FILE
+  app/Http/Controllers/Panel/TradeCashbookController.php   (data(): exclude pay_status='credit')
+
+DEPLOY
+  Upload (replace) -> commit -> EasyPanel REBUILD (force/no-cache) -> clear SW+caches.
+  No migration.
+
+VERIFY
+  - Record a CREDIT purchase -> it does NOT appear in the Cashbook; it appears in Suppliers We
+    Owe and in the supplier's View. Cashbook balance unchanged.
+  - Record a CASH purchase -> it appears in the Cashbook as Out and reduces the balance.
+  - Pay a supplier -> the payment appears in the Cashbook as Out.

@@ -42,8 +42,10 @@ class TradeCashbookController extends Controller
         $page = max(1,(int)$request->query('page',1));
         $isOwner = $u->isOwnerLike() || in_array((string)$u->role,['manager'],true);
 
-        // running per-currency balance (approved only) across ALL cash movements
-        $balQ = OrderCost::where('tenant_id',$t->id)->where('status','approved');
+        // running per-currency balance (approved only) across ALL cash movements.
+        // Credit purchases are payables (no cash moved) → excluded from the cashbook.
+        $balQ = OrderCost::where('tenant_id',$t->id)->where('status','approved')
+            ->where(fn($w)=>$w->where('pay_status','!=','credit')->orWhereNull('pay_status'));
         if (! $isOwner) $balQ->where(fn($w)=>$w->where('holder_user_id',$u->id)->orWhere('holder',$u->name));
         $balRows = (clone $balQ)->select('currency','stage',
                 DB::raw('SUM(paid_native) as native'))->groupBy('currency','stage')->get();
@@ -53,8 +55,10 @@ class TradeCashbookController extends Controller
             if (isset($bal[$r->currency])) $bal[$r->currency] += $sign * (float)$r->native;
         }
 
-        // the transaction list (all cash-affecting entries), filterable by currency
-        $listQ = OrderCost::where('tenant_id',$t->id);
+        // the transaction list (cash-affecting entries only), filterable by currency.
+        // Credit purchases don't move cash → they show in "Suppliers We Owe", not here.
+        $listQ = OrderCost::where('tenant_id',$t->id)
+            ->where(fn($w)=>$w->where('pay_status','!=','credit')->orWhereNull('pay_status'));
         if (! $isOwner) $listQ->where(fn($w)=>$w->where('holder_user_id',$u->id)->orWhere('holder',$u->name));
         if ($cur !== 'ALL') $listQ->where('currency',$cur);
         $total = (clone $listQ)->count();
