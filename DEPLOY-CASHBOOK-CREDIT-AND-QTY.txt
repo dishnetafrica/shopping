@@ -1,0 +1,27 @@
+DEPLOY — Cashbook: credit purchases out + show purchase QTY (v64)
+=================================================================
+This ONE file replaces the v63 file — it contains BOTH improvements:
+
+1. CREDIT PURCHASES excluded from the Cashbook (v63). A credit purchase is a payable, not a
+   cash movement, so it no longer shows as a cash "Out". It lives in "Suppliers We Owe" and on
+   the supplier's View. When you pay the supplier, THAT cash-out shows in the Cashbook.
+   (Cash purchases and supplier payments still show normally.)
+
+2. QUANTITY now shown on purchase lines. Purchases made via the New Purchase screen (which
+   capture qty + unit cost) now read e.g.:
+       CLING FILM 45CM (CARTON OF 6PC, MIN 10)  (qty 15 x UGX 49,667)
+   The qty appears in the on-screen list, the CSV export, and the PDF (all read the same field).
+   Older purchases booked without a qty just show the name (nothing to display).
+
+FILE
+  app/Http/Controllers/Panel/TradeCashbookController.php
+
+DEPLOY
+  Upload (replace) -> commit -> EasyPanel REBUILD (force/no-cache) -> clear SW+caches.
+  No migration. (Reads qty/unit_cost columns added by the v59 migration — make sure that ran;
+  if a purchase shows no qty, it was booked before qty capture or via the quick cash-purchase.)
+
+VERIFY
+  - New Purchase of 15 cartons -> Cashbook (cash) or Suppliers We Owe (credit) shows
+    "(qty 15 x UGX ...)" in Particulars; CSV & PDF too.
+  - A credit purchase does NOT appear in the Cashbook.

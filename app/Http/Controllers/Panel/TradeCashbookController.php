@@ -84,12 +84,19 @@ class TradeCashbookController extends Controller
                 ? 'CB-'.str_pad((string)$c->id,4,'0',STR_PAD_LEFT)
                 : ($c->order_no ?: strtoupper(substr($c->stage,0,3)).'-'.str_pad((string)$c->id,4,'0',STR_PAD_LEFT));
             $editable = in_array($c->stage,['cash_in','cash_out','funding','purchase','customer_payment','expense','drawing','supplier_payment'],true);
+            $noteText = $c->note ?: ($c->order_no ?: '');
+            if ($c->qty !== null && (float)$c->qty > 0) {
+                $qtyStr = rtrim(rtrim(number_format((float)$c->qty, 2, '.', ''), '0'), '.');
+                $ucStr  = $c->unit_cost !== null ? (' x '.$c->currency.' '.number_format((float)$c->unit_cost, 0)) : '';
+                $noteText = trim($noteText.'  (qty '.$qtyStr.$ucStr.')');
+            }
             return ['id'=>$c->id,'stage'=>$c->stage,'dir'=>$isIn?'in':'out','ref'=>$ref,
                 'currency'=>$c->currency,'native'=>(float)$c->native_amount,'usd'=>(float)$c->usd_amount,
                 'rate'=>(float)$c->rate_to_usd,'order_no'=>$c->order_no,'pay_status'=>$c->pay_status,'editable'=>$editable,
+                'qty'=>$c->qty!==null?(float)$c->qty:null,'unit_cost'=>$c->unit_cost!==null?(float)$c->unit_cost:null,
                 'run'=>$runById[$c->id]['run'] ?? 0, 'run_usd'=>$runById[$c->id]['run_usd'] ?? 0,
                 'category'=>$c->category ?: $stageLabel,
-                'holder'=>$c->holder,'note'=>$c->note ?: ($c->order_no ?: ''),
+                'holder'=>$c->holder,'note'=>$noteText,
                 'status'=>$c->status,'when'=>$c->created_at?->format('d M H:i'),
                 'created_date'=>$c->created_at?->format('Y-m-d\TH:i')];
         });
