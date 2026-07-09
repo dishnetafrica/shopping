@@ -1,0 +1,46 @@
+DEPLOY — Accounting Controls refinements (v68, applies your code-review requests)
+================================================================================
+Three requested changes on top of v67. Deploy AFTER (or together with) v67.
+
+1. JSONB audit snapshots (was TEXT)
+   - audit_logs.old_values / new_values are now JSONB (searchable, indexable, structured —
+     no manual JSON decoding). AuditLog casts them to array; AuditLogger passes arrays directly.
+   - Migration 000004 now creates JSONB. Migration 000005 is an IDEMPOTENT UPGRADE: if you
+     already ran the TEXT version, it converts the columns to jsonb and adds the metadata
+     columns. Safe to run whether or not v67 was deployed.
+
+2. Request metadata in the audit log
+   - Now captured on every audit row: ip_address, user_agent, request_id. Shown in the audit
+     viewer under the actor (IP + short request id). Invaluable for investigating a suspicious
+     change ("who, from where, in which request").
+
+3. Period lock now also protects EDITS + back-dated creates (the gap I flagged)
+   - Cashbook edit (/papi/trade-cashbook/{id}/update) now refuses to edit an entry already in
+     a locked period (period_locked), AND refuses to BACK-DATE an entry into a locked period
+     (period_locked_target). Edits are also fully audited (before -> after snapshot + reason).
+
+FILES (replace)
+  database/migrations/2026_07_09_000004_accounting_controls.php   (now JSONB + metadata)
+  database/migrations/2026_07_09_000005_audit_jsonb_upgrade.php    (NEW — idempotent upgrade)
+  app/Models/AuditLog.php                     (metadata fields + array casts)
+  app/Services/AuditLogger.php                (arrays for JSONB + capture ip/ua/request_id)
+  app/Http/Controllers/Panel/TradeCashbookController.php  (edit-guard + edit audit)
+  app/Http/Controllers/Panel/AccountingControlsController.php (returns ip/request_id)
+  resources/panel/audit.html                  (shows IP + request id)
+
+DEPLOY
+  1. Upload all (replace) -> commit.
+  2. php artisan migrate --force
+       - fresh: 000004 creates audit_logs as JSONB+metadata; 000005 is a no-op.
+       - if you already ran v67 (TEXT): 000005 converts to jsonb + adds ip/ua/request_id.
+  3. EasyPanel REBUILD (force/no-cache) -> clear SW+caches.
+
+VERIFY
+  - Set a period lock to today. Try to EDIT a cashbook entry dated today -> refused. Try to
+    back-date any entry into the locked range -> refused.
+  - Void/edit an entry -> audit row shows your name, IP, and a request id.
+  - Postgres: \d audit_logs -> old_values/new_values are jsonb; ip_address/user_agent/request_id present.
+
+STILL DEFERRED (unchanged from v67, by plan): auto-reversing GL journals on void; daily
+integrity cron (still on-demand); DB-level CHECK constraints; extended integrity rules
+(orphan lines, missing FX rates, duplicate doc numbers) — all additive, none affect correctness.

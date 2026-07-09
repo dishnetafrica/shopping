@@ -101,7 +101,8 @@ function loadAudit(){
       if(l.reason)chg=esc(l.reason);
       else if(l.old||l.new){var o=l.old||{},n=l.new||{};var keys=Object.keys(Object.assign({},o,n));chg=keys.map(function(k){return k+': '+esc(JSON.stringify(o[k]))+'→'+esc(JSON.stringify(n[k]));}).join(', ');}
       var pc={void:'void',reject:'reject',approve:'approve',lock:'lock',unlock:'lock'}[l.action]||'';
-      return '<tr><td class="note">'+esc(l.when)+'</td><td>'+esc(l.actor||'—')+'</td><td><span class="pill '+pc+'">'+esc(l.action)+'</span></td><td>'+esc(l.entity)+(l.entity_id?(' #'+l.entity_id):'')+'</td><td>'+chg+'</td></tr>';
+      var meta=l.ip?('<div class="note" style="margin-top:2px">'+esc(l.ip)+(l.request_id?(' · req '+esc(String(l.request_id).slice(0,8))):'')+'</div>'):'';
+      return '<tr><td class="note">'+esc(l.when)+'</td><td>'+esc(l.actor||'—')+meta+'</td><td><span class="pill '+pc+'">'+esc(l.action)+'</span></td><td>'+esc(l.entity)+(l.entity_id?(' #'+l.entity_id):'')+'</td><td>'+chg+'</td></tr>';
     }).join(''):'<tr><td colspan="5" class="note" style="padding:14px">No audit entries'+($('fAction').value||$('fActor').value?' match the filter':' yet')+'.</td></tr>';
     $('pinfo').textContent='Page '+P+' of '+PAGES+' · '+(d.total||0)+' entries';
     $('prev').disabled=P<=1;$('next').disabled=P>=PAGES;

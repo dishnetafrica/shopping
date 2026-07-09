@@ -48,6 +48,7 @@ class AccountingControlsController extends Controller
                 'id'=>$r->id,'when'=>optional($r->created_at)->format('d M Y H:i'),
                 'entity'=>$r->entity_type,'entity_id'=>$r->entity_id,'action'=>$r->action,
                 'actor'=>$r->actor,'reason'=>$r->reason,
+                'ip'=>$r->ip_address,'request_id'=>$r->request_id,
                 'old'=>$r->old_values,'new'=>$r->new_values,
             ])]);
     }

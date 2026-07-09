@@ -387,8 +387,12 @@ class TradeCashbookController extends Controller
             return response()->json(['ok'=>false,'error'=>'not_allowed'],403);
         $c = OrderCost::where('tenant_id',$t->id)->find($id);
         if (! $c) return response()->json(['ok'=>false,'error'=>'not_found'],404);
-
-        $cur = strtoupper((string)$request->input('currency', $c->currency));
+        // Period lock: can't edit an entry already in a locked period.
+        if (\App\Services\AccountingGuard::isLocked($t->id, $c->created_at))
+            return response()->json(['ok'=>false,'error'=>'period_locked','detail'=>\App\Services\AccountingGuard::lockDate($t->id)],422);
+        $auditBefore = ['currency'=>$c->currency,'native_amount'=>(float)$c->native_amount,'rate_to_usd'=>(float)$c->rate_to_usd,
+            'category'=>$c->category,'order_no'=>$c->order_no,'holder'=>$c->holder,'note'=>$c->note,
+            'created_at'=>optional($c->created_at)->format('Y-m-d H:i')];
         $amount = round((float)$request->input('amount', (float)$c->native_amount), 2);
         if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
         $rate = (float)$request->input('rate_to_usd', 0);
@@ -409,6 +413,8 @@ class TradeCashbookController extends Controller
         $createdAt = null;
         $cd = trim((string)$request->input('created_date',''));
         if ($cd !== '') { try { $createdAt = \Illuminate\Support\Carbon::parse($cd); } catch (\Throwable $e) { $createdAt = null; } }
+        if ($createdAt && \App\Services\AccountingGuard::isLocked($t->id, $createdAt))
+            return response()->json(['ok'=>false,'error'=>'period_locked_target','detail'=>\App\Services\AccountingGuard::lockDate($t->id)],422);
 
         DB::transaction(function () use ($c,$cur,$amount,$rate,$usd,$category,$note,$orderNo,$holderName,$holderUid,$createdAt,$t) {
             $isCredit = ($c->pay_status === 'credit');
@@ -433,6 +439,12 @@ class TradeCashbookController extends Controller
                 } catch (\Throwable $e) { /* customer_payments optional */ }
             }
         });
+
+        \App\Services\AuditLogger::log($t->id,'order_cost',$c->id,'update',$u,$auditBefore,
+            ['currency'=>$cur,'native_amount'=>$amount,'rate_to_usd'=>$rate,'category'=>$category,
+             'order_no'=>$orderNo,'holder'=>$holderName,'note'=>($note!==''?$note:$c->note),
+             'created_at'=>optional($createdAt ?: $c->created_at)->format('Y-m-d H:i')],
+            trim((string)$request->input('reason','')) ?: null);
 
         return response()->json(['ok'=>true,'id'=>$c->id,'currency'=>$cur,'amount'=>$amount,'usd'=>$usd,'holder'=>$holderName]);
     }
