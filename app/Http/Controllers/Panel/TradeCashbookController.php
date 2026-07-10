@@ -100,6 +100,7 @@ class TradeCashbookController extends Controller
                 'run'=>$runById[$c->id]['run'] ?? 0, 'run_usd'=>$runById[$c->id]['run_usd'] ?? 0,
                 'category'=>$c->category ?: $stageLabel,
                 'holder'=>$c->holder,'note'=>$noteText,
+                'supplier'=>$c->supplier_name,'supplier_id'=>$c->supplier_id,
                 'status'=>$c->status,'when'=>$c->created_at?->format('d M H:i'),
                 'created_date'=>$c->created_at?->format('Y-m-d\TH:i')];
         });
@@ -181,6 +182,15 @@ class TradeCashbookController extends Controller
             catch (\Throwable $e) { $holderUid = null; }
         }
 
+        // Optional supplier link. A cash-out can be tagged to a supplier (informational for a
+        // purchase, required for an on-account payment).
+        $supId = (int) $request->input('supplier_id', 0) ?: null;
+        $supName = null;
+        if ($supId) {
+            $sup = \App\Models\Supplier::where('tenant_id',$t->id)->find($supId);
+            if ($sup) { $supName = $sup->name; } else { $supId = null; }
+        }
+
         // A cash-out tagged as a purchase is booked as stage 'purchase' so it lands as a purchase/COGS,
         // not a generic expense. (Cash still leaves the chosen person's hand exactly the same way.)
         $stage = $dir;
@@ -189,19 +199,30 @@ class TradeCashbookController extends Controller
             $stage = 'purchase';
         }
 
+        // "Supplier payment (on account)" — money paid to a supplier to reduce what we owe them.
+        // Booked as stage 'supplier_payment' so it nets against their credit purchases automatically
+        // (it does NOT book goods again — that avoids double-counting the items).
+        $payCats = ['supplier payment','supplier payment (on account)','on account','account payment'];
+        $isOnAccount = ($dir==='cash_out' && $category!==null && in_array(mb_strtolower($category),$payCats,true));
+        if ($isOnAccount) {
+            if (! $supId) return response()->json(['ok'=>false,'error'=>'supplier_required','message'=>'Choose the supplier this payment is for.'],422);
+            $stage = 'supplier_payment';
+        }
+
         $c = OrderCost::create([
             'tenant_id'=>$t->id, 'stage'=>$stage,
             'currency'=>$cur, 'native_amount'=>$native, 'rate_to_usd'=>$rate,
             'usd_amount'=>OrderCost::toUsd($native,$rate),
             'holder'=>$holderName, 'holder_user_id'=>$holderUid,
             'pay_status'=>'cash',
+            'supplier_id'=>$supId, 'supplier_name'=>$supName,
             'note'=>(string)$request->input('note',''),
             'category'=>$category,
             'order_no'=>trim((string)$request->input('order_no','')) ?: null,
             'status'=>$isPriv ? 'approved' : (((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved'),
             'created_by'=>$u->name ?? '',
         ]);
-        return response()->json(['ok'=>true,'id'=>$c->id,'usd'=>$c->usd_amount,'holder'=>$holderName,'stage'=>$stage]);
+        return response()->json(['ok'=>true,'id'=>$c->id,'usd'=>$c->usd_amount,'holder'=>$holderName,'stage'=>$stage,'supplier_id'=>$supId]);
     }
 
     /** GET /papi/holder-balance?holder=&holder_user_id=&currency= — current native cash for one
@@ -421,13 +442,36 @@ class TradeCashbookController extends Controller
         if ($createdAt && \App\Services\AccountingGuard::isLocked($t->id, $createdAt))
             return response()->json(['ok'=>false,'error'=>'period_locked_target','detail'=>\App\Services\AccountingGuard::lockDate($t->id)],422);
 
-        DB::transaction(function () use ($c,$cur,$amount,$rate,$usd,$category,$note,$orderNo,$holderName,$holderUid,$createdAt,$t) {
+        // Supplier link. false = field not sent (leave as-is); null = sent empty (clear); int = set.
+        $supId = false; $supName = null;
+        if ($request->has('supplier_id')) {
+            $supId = (int)$request->input('supplier_id') ?: null;
+            if ($supId) {
+                $sup = \App\Models\Supplier::where('tenant_id',$t->id)->find($supId);
+                $supName = $sup ? $sup->name : null;
+                if (! $sup) $supId = null;
+            }
+        }
+        // on_account: true -> reclassify as a supplier payment (reduces what we owe);
+        //             false -> if it currently is a payment, put it back to a purchase/cash-out.
+        $onAcct = $request->has('on_account') ? filter_var($request->input('on_account'), FILTER_VALIDATE_BOOLEAN) : null;
+        $effectiveSup = ($supId !== false) ? $supId : $c->supplier_id;
+        if ($onAcct === true && ! $effectiveSup)
+            return response()->json(['ok'=>false,'error'=>'supplier_required','message'=>'Choose the supplier this payment is for.'],422);
+
+        DB::transaction(function () use ($c,$cur,$amount,$rate,$usd,$category,$note,$orderNo,$holderName,$holderUid,$createdAt,$t,$supId,$supName,$onAcct) {
             $isCredit = ($c->pay_status === 'credit');
             $c->currency = $cur; $c->native_amount = $amount; $c->rate_to_usd = $rate; $c->usd_amount = $usd;
             $c->paid_native = $isCredit ? 0 : $amount;
             $c->category = $category; $c->order_no = $orderNo;
             $c->holder = $holderName; $c->holder_user_id = $holderUid;
             if ($note !== '') $c->note = $note;
+            if ($supId !== false) { $c->supplier_id = $supId; $c->supplier_name = $supName; }
+            if ($onAcct === true) {
+                $c->stage = 'supplier_payment';
+            } elseif ($onAcct === false && $c->stage === 'supplier_payment') {
+                $c->stage = in_array(mb_strtolower((string)$category), ['purchase','local purchase','goods','stock purchase'], true) ? 'purchase' : 'cash_out';
+            }
             if ($createdAt) $c->created_at = $createdAt;
             $c->save();
 
@@ -448,9 +492,10 @@ class TradeCashbookController extends Controller
         \App\Services\AuditLogger::log($t->id,'order_cost',$c->id,'update',$u,$auditBefore,
             ['currency'=>$cur,'native_amount'=>$amount,'rate_to_usd'=>$rate,'category'=>$category,
              'order_no'=>$orderNo,'holder'=>$holderName,'note'=>($note!==''?$note:$c->note),
+             'supplier_id'=>$c->supplier_id,'stage'=>$c->stage,
              'created_at'=>optional($createdAt ?: $c->created_at)->format('Y-m-d H:i')],
             trim((string)$request->input('reason','')) ?: null);
 
-        return response()->json(['ok'=>true,'id'=>$c->id,'currency'=>$cur,'amount'=>$amount,'usd'=>$usd,'holder'=>$holderName]);
+        return response()->json(['ok'=>true,'id'=>$c->id,'currency'=>$cur,'amount'=>$amount,'usd'=>$usd,'holder'=>$holderName,'stage'=>$c->stage,'supplier_id'=>$c->supplier_id]);
     }
 }

@@ -7,13 +7,14 @@ Everything from the recent sessions, ready to deploy together.
   3. "In transit" order status (Kampala → Juba) on the desktop panel
   4. "In transit" on the mobile panel + shipment tracker last-mile bridge
   5. Cashbook shortcut to the full New Purchase screen (items + supplier)
+  6. Cashbook supplier picker + "Supplier payment (on account)" that reduces what we owe
 
 ------------------------------------------------------------------------------
 FILES CHANGED (12 app files) + 1 one-off script
 ------------------------------------------------------------------------------
   app/Http/Controllers/Panel/SupplierController.php      (1) purchase id in show()
   app/Http/Controllers/Panel/OrderCostController.php     (1) purchaseUpdate + list ids
-  app/Http/Controllers/Panel/TradeCashbookController.php  (2) $cur undefined-variable fix
+  app/Http/Controllers/Panel/TradeCashbookController.php  (2,6) $cur fix + supplier/on-account
   app/Models/Order.php                                   (3) 'In transit' in STATUSES
   app/Jobs/SendOrderStatusNotification.php               (3) In-transit WhatsApp message
   app/Services/Logistics/LastMileBridge.php   [NEW]      (4) shipment -> delivery handoff
@@ -22,7 +23,7 @@ FILES CHANGED (12 app files) + 1 one-off script
   resources/panel/purchase.html                          (1) Edit/Delete on Recent purchases
   resources/panel/seller.html                            (3) In transit: dropdown/stepper/filter/KPI/help
   resources/panel/mobile.html                            (4) In transit in the mobile flow
-  resources/panel/trade_cashbook.html                    (5) shortcut to New Purchase (items + supplier)
+  resources/panel/trade_cashbook.html                    (5,6) New-Purchase shortcut + supplier picker/on-account
   fix-cashbook-holder.php                     [SCRIPT]   (2) move CB-0067 to Jayesh Bhai
 
 DEPLOY (all at once)
@@ -115,6 +116,47 @@ Suppliers We Owe, and product costs. The button highlights when you pick the "Pu
 VERIFY (feature 5)
   - Cashbook -> under "Record entry" the "Buying stock?…" button appears.
   - Pick category "Purchase" -> the button highlights; click it -> New Purchase screen opens.
+
+==============================================================================
+6) CASHBOOK SUPPLIER PICKER + "SUPPLIER PAYMENT (ON ACCOUNT)"
+==============================================================================
+WHY: paying a supplier "on account" is settling what you already owe them — NOT buying
+goods again. Booking it as a Purchase double-counts the items. Your books track supplier
+debt as a running balance: owed = (credit purchases) + (opening) − (supplier payments).
+A payment simply reduces that balance — that IS the automatic "adjust against items"; there
+is no per-item matching to do.
+
+WHAT'S NEW (record form + Edit modal on /panel/trade-cashbook):
+  - A "Supplier" dropdown (loads your suppliers). Tag any purchase/payment to a supplier;
+    the supplier now shows in the ledger's Particulars ("Purchase · Nira bhai").
+  - A new category "Supplier payment (on account)". When you pick it on a Money-out and
+    choose a supplier, the entry is booked as a SUPPLIER PAYMENT (stage=supplier_payment)
+    that reduces "Suppliers We Owe" for that supplier — instead of a new purchase.
+  - When a supplier is selected for a purchase/payment, a hint shows how much you currently
+    owe them.
+  - In the Edit modal you can now attach a supplier to an existing entry, and tick
+    "Payment on supplier account (reduces what we owe)" to reclassify a mis-booked purchase
+    into a supplier payment (or untick to turn it back). Owner/manager only; audited;
+    period-lock guarded.
+
+BEST PRACTICE (what to advise staff):
+  - Record the goods ONCE, as a credit Purchase (New Purchase screen -> items + supplier ->
+    Credit). That raises what you owe the supplier.
+  - When you hand the supplier cash, record it as "Supplier payment (on account)" against that
+    supplier. It nets against their balance automatically. Don't also record it as a Purchase.
+  - If you never recorded the goods separately and a cash Purchase entry is your only record
+    of the cost, leave it as a Purchase and just tag the supplier.
+
+FILES (backend TradeCashbookController.php: store/update/data; frontend trade_cashbook.html)
+No migration — supplier_id/supplier_name already exist on the order_costs table.
+
+VERIFY (feature 6)
+  - Cashbook -> Money out -> category "Supplier payment (on account)" -> pick a supplier ->
+    the owed hint appears -> Record. The ledger shows "Supplier Pay · <supplier>" and that
+    supplier's owed (in Suppliers / Suppliers We Owe) drops by the amount.
+  - Edit an existing wrong Purchase (e.g. PUR-0094) -> choose the supplier -> tick "Payment on
+    supplier account" -> Save. It becomes a supplier payment and the owed balance corrects.
+  - Leaving a Purchase as-is but choosing a supplier just tags it (owed unchanged).
 
 ------------------------------------------------------------------------------
 NOTES / NOT DONE (by design — tell me if you want these)

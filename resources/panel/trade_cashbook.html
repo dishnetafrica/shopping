@@ -170,7 +170,10 @@
     <input id="rate" inputmode="decimal" oninput="calc()">
     <div class="conv" id="conv">≈ $0.00 USD</div>
     <label>Category</label>
-    <select id="cat" onchange="hotBuy()"><option value="">— choose —</option><option>Purchase</option><option>Receipt</option><option>Sale</option><option>Funding / Float</option><option>Local Purchase</option><option>Travel &amp; Field</option><option>Food Allowance</option><option>Transport</option><option>Salary / Wages</option><option>Misc Expense</option><option>Other</option></select>
+    <select id="cat" onchange="hotBuy();supHint()"><option value="">— choose —</option><option>Purchase</option><option>Supplier payment (on account)</option><option>Receipt</option><option>Sale</option><option>Funding / Float</option><option>Local Purchase</option><option>Travel &amp; Field</option><option>Food Allowance</option><option>Transport</option><option>Salary / Wages</option><option>Misc Expense</option><option>Other</option></select>
+    <label id="supLbl">Supplier (for purchases / payments)</label>
+    <select id="sup" onchange="supHint()"><option value="">— none —</option></select>
+    <div id="supOwed" class="buyhint" style="display:none"></div>
     <label id="whoLbl">Whose cash (person)</label>
     <select id="who"><option value="">— me —</option></select>
     <label>Note (optional)</label>
@@ -214,6 +217,9 @@ function editRow(id){
   $('eOrder').value=e.order_no||''; $('eCat').value=e.category||''; $('eNote').value=(e.note||'');
   $('eDate').value=e.created_date||'';
   $('eOrderWrap').style.display=(e.stage==='purchase'||e.stage==='customer_payment')?'block':'none';
+  if($('eSup'))$('eSup').value=(e.supplier_id!=null?String(e.supplier_id):'');
+  if($('eOnAcct'))$('eOnAcct').checked=(e.stage==='supplier_payment');
+  eOnAcctHint();
   // fill people datalist from current holders
   var names={}; (window.__ENTRIES||[]).forEach(function(x){if(x.holder)names[x.holder]=1;});
   $('ePeople').innerHTML=Object.keys(names).map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">';}).join('');
@@ -225,11 +231,11 @@ function eRate(){ var c=$('eCur').value; $('eRateWrap').style.display=c==='USD'?
 function saveEdit(){
   var id=window.__EID; if(!id) return;
   var amt=parseFloat(($('eAmt').value||'').replace(/,/g,''))||0; if(amt<=0){alert('Amount?');return;}
-  var body=new URLSearchParams({amount:amt,currency:$('eCur').value,rate_to_usd:($('eCur').value==='USD'?1:($('eRate').value||'')),holder:$('eHolder').value.trim(),order_no:$('eOrder').value.trim(),category:$('eCat').value.trim(),note:$('eNote').value.trim(),created_date:$('eDate').value});
+  var body=new URLSearchParams({amount:amt,currency:$('eCur').value,rate_to_usd:($('eCur').value==='USD'?1:($('eRate').value||'')),holder:$('eHolder').value.trim(),order_no:$('eOrder').value.trim(),category:$('eCat').value.trim(),note:$('eNote').value.trim(),created_date:$('eDate').value,supplier_id:(($('eSup')&&$('eSup').value)||''),on_account:(($('eOnAcct')&&$('eOnAcct').checked)?1:0)});
   var b=$('eSave'); b.disabled=true; b.textContent='Saving…';
   fetch('/papi/trade-cashbook/'+id+'/update',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body})
    .then(r=>r.json()).then(function(r){ b.disabled=false; b.textContent='Save changes';
-     if(r&&r.ok){ closeEdit(); load(); } else alert('Could not save: '+((r&&r.error)||'error')); })
+     if(r&&r.ok){ closeEdit(); load(); } else alert((r&&r.message)||('Could not save: '+((r&&r.error)||'error'))); })
    .catch(function(){ b.disabled=false; b.textContent='Save changes'; alert('Failed'); });
 }
 
@@ -319,7 +325,7 @@ function load(){
           <tr class="${e.dir}">
             <td class="ref">${e.ref||''}</td>
             <td class="dt">${e.when||''}</td>
-            <td class="part"><div class="cat">${e.category||''}</div>${e.note?`<div class="nt">${e.note}</div>`:''}</td>
+            <td class="part"><div class="cat">${e.category||''}${e.supplier?` · ${e.supplier}`:''}</div>${e.note?`<div class="nt">${e.note}</div>`:''}</td>
             <td class="pers">${e.holder||''}</td>
             <td class="num in">${e.dir==='in'?e.currency+' '+fmt(e.native):''}</td>
             <td class="num out">${e.dir==='out'?e.currency+' '+fmt(e.native):''}</td>
@@ -382,11 +388,11 @@ function hotBuy(){var c=($('cat')&&$('cat').value||'').toLowerCase();var isBuy=(
 function doSaveEntry(){
   const native=($('amt').value||'').replace(/,/g,''),rate=($('rate').value||'').replace(/,/g,'');
   const who=($('who')&&$('who').value||'').trim();
-  const p=new URLSearchParams({dir:DIR,currency:$('cur').value,native_amount:native,rate_to_usd:rate,category:$('cat').value,note:$('note').value,holder:who});
+  const p=new URLSearchParams({dir:DIR,currency:$('cur').value,native_amount:native,rate_to_usd:rate,category:$('cat').value,note:$('note').value,holder:who,supplier_id:(($('sup')&&$('sup').value)||'')});
   const b=$('saveBtn');b.disabled=true;
   fetch('/papi/trade-cashbook?'+p,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'}}).then(r=>r.json()).then(r=>{
     b.disabled=false;setDir(DIR);
-    if(r.ok){$('amt').value='';$('note').value='';$('cat').value='';calc();PAGE=1;load();}else alert('Failed: '+(r.error||'error'));
+    if(r.ok){$('amt').value='';$('note').value='';$('cat').value='';if($('sup'))$('sup').value='';supHint();calc();PAGE=1;load();}else alert((r&&r.message)||('Failed: '+((r&&r.error)||'error')));
   }).catch(()=>{b.disabled=false;alert('Failed.');});
 }
 function save(){
@@ -429,7 +435,32 @@ function loadWho(){
       sel.innerHTML='<option value="">— me ('+(me||'you')+') —</option>'+uniq.map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>';}).join('');
     }).catch(function(){});
 }
-setRate();load();loadWho();loadPfilt();
+// ---- Suppliers (for tagging purchases + on-account payments) ----
+window.__SUP={};
+function loadSuppliers(){
+  fetch('/papi/suppliers?full=1&per=200',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',cache:'no-store'})
+    .then(function(r){return r.json();}).then(function(d){
+      var list=(d&&d.suppliers)||[]; window.__SUP={};
+      var opts='<option value="">— none —</option>'+list.map(function(s){
+        var nm=(s.business_name||s.name||('Supplier #'+s.id));
+        window.__SUP[s.id]={name:nm,owed:(s.owed_usd!=null?s.owed_usd:null)};
+        return '<option value="'+s.id+'">'+nm.replace(/</g,'&lt;')+'</option>';
+      }).join('');
+      if($('sup'))$('sup').innerHTML=opts;
+      if($('eSup'))$('eSup').innerHTML=opts;
+    }).catch(function(){});
+}
+function supHint(){
+  var el=$('supOwed'); if(!el)return;
+  var cat=($('cat')&&$('cat').value||'').toLowerCase();
+  var relevant=(cat==='purchase'||cat==='local purchase'||cat==='supplier payment (on account)');
+  var id=$('sup')&&$('sup').value;
+  var s=id&&window.__SUP[id];
+  if(relevant && s && s.owed!=null){ el.style.display='block'; el.innerHTML='Currently owed to <b>'+s.name+'</b>: <b>$'+Number(s.owed).toLocaleString(undefined,{maximumFractionDigits:2})+'</b>'+(cat==='supplier payment (on account)'?' — this payment will reduce it.':''); }
+  else { el.style.display='none'; }
+}
+function eOnAcctHint(){ var h=$('eOnAcctHint'); if(h)h.style.display=($('eOnAcct')&&$('eOnAcct').checked)?'block':'none'; }
+setRate();load();loadWho();loadPfilt();loadSuppliers();
 </script>
 <!-- ===== DishNet role-aware tab bar + amount format (injected v2) ===== -->
 <nav class="dn-tabbar" id="dnTabbar"></nav>
@@ -512,6 +543,11 @@ setRate();load();loadWho();loadPfilt();
   <label>Person (who holds / received)</label><input id="eHolder" list="ePeople" placeholder="Person"><datalist id="ePeople"></datalist>
   <div id="eOrderWrap"><label>Order (for purchases / receipts)</label><input id="eOrder" placeholder="ORD-…"></div>
   <label>Category</label><input id="eCat" placeholder="Category">
+  <label>Supplier</label><select id="eSup"><option value="">— none —</option></select>
+  <label style="display:flex;align-items:center;gap:8px;font-weight:700;margin-top:10px;cursor:pointer">
+    <input type="checkbox" id="eOnAcct" onchange="eOnAcctHint()" style="width:auto;margin:0"> Payment on supplier account (reduces what we owe)
+  </label>
+  <div id="eOnAcctHint" class="buyhint" style="display:none">This entry will be booked as a <b>supplier payment</b> — it reduces the supplier's outstanding balance instead of adding a new purchase.</div>
   <label>Note</label><input id="eNote" placeholder="optional">
   <label>Date</label><input id="eDate" type="datetime-local">
   <button class="esave" id="eSave" onclick="saveEdit()">Save changes</button>
