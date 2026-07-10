@@ -453,12 +453,25 @@ function loadSuppliers(){
 function supHint(){
   var el=$('supOwed'); if(!el)return;
   var cat=($('cat')&&$('cat').value||'').toLowerCase();
-  var relevant=(cat==='purchase'||cat==='local purchase'||cat==='supplier payment (on account)');
+  var isBuy=(cat==='purchase'||cat==='local purchase');
+  var isPay=(cat==='supplier payment (on account)');
   var id=$('sup')&&$('sup').value;
   var s=id&&window.__SUP[id];
-  if(relevant && s && s.owed!=null){ el.style.display='block'; el.innerHTML='Currently owed to <b>'+s.name+'</b>: <b>$'+Number(s.owed).toLocaleString(undefined,{maximumFractionDigits:2})+'</b>'+(cat==='supplier payment (on account)'?' — this payment will reduce it.':''); }
-  else { el.style.display='none'; }
+  if(!(isBuy||isPay) || !s || s.owed==null){ el.style.display='none'; return; }
+  var owed=Number(s.owed)||0;
+  var owedTxt='Currently owed to <b>'+s.name+'</b>: <b>$'+owed.toLocaleString(undefined,{maximumFractionDigits:2})+'</b>';
+  if(isPay){
+    el.style.color=''; el.innerHTML=owedTxt+' — this payment will reduce it.';
+  } else if(owed>0.005){
+    // Purchase category, but this supplier is already owed money -> nudge toward on-account.
+    el.style.color='#b45309';
+    el.innerHTML=owedTxt+'.<br>Paying him? Switch to <a href="#" onclick="switchToOnAccount();return false;" style="font-weight:800;color:#15803D">Supplier payment (on account)</a> so it lowers the balance instead of adding a purchase.';
+  } else {
+    el.style.color=''; el.innerHTML=owedTxt+'.';
+  }
+  el.style.display='block';
 }
+function switchToOnAccount(){ if($('cat')){$('cat').value='Supplier payment (on account)';} if(DIR!=='out')setDir('out'); hotBuy(); supHint(); }
 function eOnAcctHint(){ var h=$('eOnAcctHint'); if(h)h.style.display=($('eOnAcct')&&$('eOnAcct').checked)?'block':'none'; }
 setRate();load();loadWho();loadPfilt();loadSuppliers();
 </script>
