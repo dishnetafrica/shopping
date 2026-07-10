@@ -36,6 +36,9 @@
   .row{display:flex;gap:10px;}.row>div{flex:1;}
   .conv{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:800;color:#475569;margin-top:10px;}
   .btn{width:100%;margin-top:14px;color:#fff;border:none;border-radius:11px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;background:var(--dark);}
+  .btn-alt{display:block;width:100%;margin-top:10px;text-align:center;text-decoration:none;color:var(--dark,#15803D);border:1.5px solid var(--dark,#15803D);border-radius:11px;padding:12px;font-size:13.5px;font-weight:800;background:#fff;box-sizing:border-box;}
+  .btn-alt.hot{background:#eef6ef;box-shadow:0 0 0 3px #15803d22;}
+  .buyhint{font-size:11.5px;color:#6b7280;margin-top:6px;line-height:1.45;}
   .ledwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border);border-radius:12px;background:#fff;}
   table.ledger{width:100%;border-collapse:collapse;font-size:12.5px;min-width:640px;}
   table.ledger th{text-align:left;font-size:9.5px;font-weight:800;letter-spacing:.5px;color:#94a3b8;text-transform:uppercase;padding:9px 10px;border-bottom:1px solid var(--border);background:#fafbfa;white-space:nowrap;position:sticky;top:0;}
@@ -167,12 +170,14 @@
     <input id="rate" inputmode="decimal" oninput="calc()">
     <div class="conv" id="conv">≈ $0.00 USD</div>
     <label>Category</label>
-    <select id="cat"><option value="">— choose —</option><option>Purchase</option><option>Receipt</option><option>Sale</option><option>Funding / Float</option><option>Local Purchase</option><option>Travel &amp; Field</option><option>Food Allowance</option><option>Transport</option><option>Salary / Wages</option><option>Misc Expense</option><option>Other</option></select>
+    <select id="cat" onchange="hotBuy()"><option value="">— choose —</option><option>Purchase</option><option>Receipt</option><option>Sale</option><option>Funding / Float</option><option>Local Purchase</option><option>Travel &amp; Field</option><option>Food Allowance</option><option>Transport</option><option>Salary / Wages</option><option>Misc Expense</option><option>Other</option></select>
     <label id="whoLbl">Whose cash (person)</label>
     <select id="who"><option value="">— me —</option></select>
     <label>Note (optional)</label>
     <input id="note" placeholder="e.g. float to Jayesh, sold goods">
     <button class="btn" id="saveBtn" onclick="save()">Record entry</button>
+    <a href="/panel/purchases" id="buyLink" class="btn-alt">🧾 Buying stock? Record items &amp; supplier →</a>
+    <div id="buyHint" class="buyhint">Logs what you bought, from which supplier, cash or credit — and updates <b>Suppliers We Owe</b> and product costs automatically.</div>
   </div>
 
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -372,6 +377,8 @@ function exportPdf(){
   }).catch(function(){ alert('Export failed'); });
 }
 function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+// Nudge toward the full purchase screen (items + supplier) when logging a stock buy.
+function hotBuy(){var c=($('cat')&&$('cat').value||'').toLowerCase();var isBuy=(c==='purchase'||c==='local purchase');var b=$('buyLink');if(b)b.classList.toggle('hot',isBuy);}
 function doSaveEntry(){
   const native=($('amt').value||'').replace(/,/g,''),rate=($('rate').value||'').replace(/,/g,'');
   const who=($('who')&&$('who').value||'').trim();

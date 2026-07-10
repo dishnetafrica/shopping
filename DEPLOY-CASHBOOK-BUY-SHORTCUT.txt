@@ -1,0 +1,35 @@
+DEPLOY — Cashbook shortcut to "Record a purchase (items + supplier)"
+====================================================================
+On the Cashbook (/panel/trade-cashbook), under the "Record cash movement" form, there's
+now a button:
+
+    🧾 Buying stock? Record items & supplier →
+
+It opens the existing New Purchase screen (/panel/purchases), where you record exactly
+what you bought, from which supplier, and whether it's cash or credit. That screen already
+updates the cashbook, "Suppliers We Owe", and product costs — so buying stock is captured
+in full instead of as a bare cash-out line.
+
+Nice touch: when you pick the "Purchase" or "Local Purchase" category in the cash form,
+the button highlights, nudging you to log the items + supplier there.
+
+FILES CHANGED (1)
+  resources/panel/trade_cashbook.html
+      + shortcut button + hint under the record form,
+      + small highlight when a Purchase category is selected.
+
+DEPLOY
+  1. Replace resources/panel/trade_cashbook.html -> commit. (No backend change, no migration.)
+  2. EasyPanel REBUILD (force / no-cache).
+  3. Browser: clear the service worker + caches, then reload the Cashbook.
+
+VERIFY
+  - Open the Cashbook -> under "Record entry" you see the "Buying stock?…" button.
+  - Choose category "Purchase" -> the button highlights.
+  - Click it -> the New Purchase screen opens; recording there shows the items + supplier
+    and flows back into the cashbook and Suppliers We Owe.
+
+NOTE
+  You picked the "link to the full New Purchase screen" option. If later you'd rather capture
+  the supplier/items INSIDE the cash form itself (without leaving the cashbook), tell me and
+  I'll add a supplier dropdown + items box to the Money-out form instead.
