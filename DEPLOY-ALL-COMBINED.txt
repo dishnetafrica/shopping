@@ -6,9 +6,10 @@ Everything from the recent sessions, ready to deploy together.
   2. Cashbook edit 500 fix (+ CB-0067 correction script)
   3. "In transit" order status (Kampala → Juba) on the desktop panel
   4. "In transit" on the mobile panel + shipment tracker last-mile bridge
+  5. Cashbook shortcut to the full New Purchase screen (items + supplier)
 
 ------------------------------------------------------------------------------
-FILES CHANGED (11 app files) + 1 one-off script
+FILES CHANGED (12 app files) + 1 one-off script
 ------------------------------------------------------------------------------
   app/Http/Controllers/Panel/SupplierController.php      (1) purchase id in show()
   app/Http/Controllers/Panel/OrderCostController.php     (1) purchaseUpdate + list ids
@@ -21,6 +22,7 @@ FILES CHANGED (11 app files) + 1 one-off script
   resources/panel/purchase.html                          (1) Edit/Delete on Recent purchases
   resources/panel/seller.html                            (3) In transit: dropdown/stepper/filter/KPI/help
   resources/panel/mobile.html                            (4) In transit in the mobile flow
+  resources/panel/trade_cashbook.html                    (5) shortcut to New Purchase (items + supplier)
   fix-cashbook-holder.php                     [SCRIPT]   (2) move CB-0067 to Jayesh Bhai
 
 DEPLOY (all at once)
@@ -100,6 +102,19 @@ VERIFY (feature 4)
   - Mobile: an active order's Advance button shows "Mark in transit", then "Send out for delivery".
   - Shipment: create a shipment on an order, advance it to Arrived, click "Hand off to delivery"
     -> the order shows on the Delivery Board as "Awaiting rider" (no more error).
+
+==============================================================================
+5) CASHBOOK SHORTCUT — "Record a purchase (items + supplier)"
+==============================================================================
+On the Cashbook (/panel/trade-cashbook), under the "Record cash movement" form, a new button
+"🧾 Buying stock? Record items & supplier →" opens the existing New Purchase screen
+(/panel/purchases), which records items + supplier + cash/credit and updates the cashbook,
+Suppliers We Owe, and product costs. The button highlights when you pick the "Purchase" or
+"Local Purchase" category. Frontend only — no backend change, no migration.
+
+VERIFY (feature 5)
+  - Cashbook -> under "Record entry" the "Buying stock?…" button appears.
+  - Pick category "Purchase" -> the button highlights; click it -> New Purchase screen opens.
 
 ------------------------------------------------------------------------------
 NOTES / NOT DONE (by design — tell me if you want these)
