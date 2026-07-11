@@ -44,6 +44,9 @@ class SelfcheckController extends Controller
             class_exists(\App\Http\Controllers\Panel\ConsignmentController::class) && class_exists(\App\Models\ConsignmentStock::class));
         $add('lastmile_bridge', 'Shipment→delivery bridge (LastMileBridge)',
             class_exists(\App\Services\Logistics\LastMileBridge::class));
+        $add('consignment_request', 'Consignment stock-request + notify Kampala',
+            method_exists(\App\Http\Controllers\Panel\ConsignmentController::class, 'requestNotify')
+            && (bool) $this->fileHas('resources/panel/consignment.html', 'addReqBulk'));
         $add('ads_screen', 'Facebook Ads screen',
             class_exists(\App\Http\Controllers\Panel\AdsController::class) && is_file(resource_path('panel/ads.html')));
         $add('invoice_pdf', 'Professional invoice PDF (server-side)',
@@ -95,6 +98,28 @@ class SelfcheckController extends Controller
         $moqFaq   = $this->fileHas('app/Services/Bot/FaqDictionary.php', 'moq_product');
         $add('bot_moq_code', 'Bot product-specific MOQ code',
             ($moqBrain && $moqFaq) ? true : (($moqBrain === null || $moqFaq === null) ? null : false));
+
+        // --- Bot behaviour patch (ad-brand ignore, keep-AI-on, warehouse, product guidance) ---
+        $add('bot_ad_brand_ignore', 'Ad page/brand not treated as product (SkyTrips fix)',
+            (bool) $this->fileHas('app/Jobs/ProcessIncomingMessage.php', 'adTitleIsBrand'));
+        $add('bot_keep_ai_on', 'Keep-AI-on after manual message (setting)',
+            (bool) $this->fileHas('app/Jobs/ProcessIncomingMessage.php', 'human_takeover_on_reply'));
+        $add('bot_warehouse', 'Warehouse / pickup answer (Luri)',
+            (bool) $this->fileHas('app/Services/Bot/AiBrain.php', 'warehouse_location')
+            && (bool) $this->fileHas('app/Services/Bot/FaqDictionary.php', 'warehouse'));
+        $add('bot_product_guidance', 'Bot explains what products are for',
+            (bool) $this->fileHas('app/Services/Bot/AiBrain.php', "GUIDE, DON'T JUST LIST"));
+        $add('ads_settings_ui', 'Ads screen behaviour controls',
+            method_exists(\App\Http\Controllers\Panel\AdsController::class, 'saveSettings')
+            && (bool) $this->fileHas('resources/panel/ads.html', 'saveBot'));
+        if ($t) {
+            $wh = trim((string) $t->setting('warehouse_location', ''));
+            $add('warehouse_set', 'Warehouse location set', $wh !== '' ? true : null,
+                $wh !== '' ? $wh : 'set it on /panel/ads → Bot behaviour');
+            $ai = ! (bool) $t->setting('human_takeover_on_reply', true);
+            $add('keep_ai_on_set', 'AI keeps replying after manual msg', $ai ? true : null,
+                $ai ? 'on' : 'off — turn on at /panel/ads if wanted');
+        }
 
         // --- Settings + live signal ---------------------------------------------------
         if ($t) {

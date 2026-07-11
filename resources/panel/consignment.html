@@ -186,6 +186,13 @@ function loadDetail(){
       '<input id="skCost" type="number" min="0" step="any" placeholder="Cost each">'+
       '<button class="btn g" onclick="addStock()">＋ Add</button></div>'+
       '<div class="note" id="skPickMsg" style="margin-top:2px"></div></div>';
+    // Quick request list — paste what Asish asked for (e.g. "Cling Film 10"), one per line.
+    stockSec+='<div class="addbox" style="margin-top:8px">'+
+      '<div class="note" style="margin-bottom:4px"><b>Quick request list</b> — paste what Asish needs, one item per line (e.g. <i>Cling Film 10</i>). Each is matched to a product and added as <b>Requested</b>.</div>'+
+      '<textarea id="reqBulk" rows="3" placeholder="Cling Film 10&#10;Aluminium Foil 15" style="width:100%;padding:9px;border:1px solid var(--line,#e4e9e4);border-radius:9px;font-size:13px;font-family:inherit"></textarea>'+
+      '<div class="btnrow" style="margin-top:6px"><button class="btn g" onclick="addReqBulk()">＋ Add all as requested</button>'+
+      '<button class="btn" onclick="notifyRequest()">📤 Send request to Kampala</button></div>'+
+      '<div class="note" id="reqMsg" style="margin-top:4px"></div></div>';
     if(stk.length){
       stockSec+=stk.map(function(k){
         var short=(Number(k.short)||0)>0.0001;
@@ -308,6 +315,51 @@ function addStock(){
   api('/papi/consignment-stock-add',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
     if(r&&r.ok)loadDetail(); else alert('Failed: '+((r&&r.error)||'error'));
   });
+}
+/* Fuzzy-match a typed name to a catalogue product: exact → starts-with → contains → all-tokens. */
+function prodMatch(name){
+  var v=String(name||'').trim().toLowerCase(); if(!v)return null;
+  var list=window.PRODUCTS||[];
+  var f=function(test){return list.find(function(p){return test(String(p['Product Name']||'').toLowerCase());});};
+  return f(function(n){return n===v;}) || f(function(n){return n.indexOf(v)===0;}) || f(function(n){return n.indexOf(v)>=0;})
+      || (function(){var toks=v.split(/\s+/).filter(Boolean);return f(function(n){return toks.every(function(t){return n.indexOf(t)>=0;});});})()
+      || null;
+}
+/* Parse one request line into {name, qty}. Accepts "Cling Film 10", "Cling Film x10",
+   "Cling Film - 10", "10 Cling Film"; defaults qty 1 if none given. */
+function parseReqLine(line){
+  var s=String(line||'').trim(); if(!s)return null;
+  var m=s.match(/^(.*?)[\s:\-x×*]*(\d+(?:\.\d+)?)\s*(?:ctns?|cartons?|pcs?|boxes?|bags?)?$/i);
+  if(m&&m[1].trim())return {name:m[1].trim(), qty:Number(m[2])||1};
+  var m2=s.match(/^(\d+(?:\.\d+)?)\s*(?:x|×)?\s+(.*)$/i);
+  if(m2&&m2[2].trim())return {name:m2[2].trim(), qty:Number(m2[1])||1};
+  return {name:s, qty:1};
+}
+function addReqBulk(){
+  var raw=($('reqBulk')&&$('reqBulk').value)||''; var msg=$('reqMsg');
+  var rows=raw.split(/\n+/).map(parseReqLine).filter(Boolean);
+  if(!rows.length){if(msg)msg.textContent='Type at least one line, e.g. "Cling Film 10".';return;}
+  if(msg)msg.textContent='Adding '+rows.length+' item'+(rows.length===1?'':'s')+'…';
+  var i=0, added=0, unmatched=[];
+  (function next(){
+    if(i>=rows.length){
+      if(msg)msg.textContent='Added '+added+' request'+(added===1?'':'s')+(unmatched.length?(' · not found (added as loose): '+unmatched.join(', ')):'');
+      if($('reqBulk'))$('reqBulk').value=''; loadDetail(); return;
+    }
+    var r=rows[i++]; var p=prodMatch(r.name); if(!p)unmatched.push(r.name);
+    var body=new URLSearchParams({id:CID, name:(p?p['Product Name']:r.name), product_id:(p?p._row:''), qty_requested:String(r.qty), qty_sent:'0'});
+    api('/papi/consignment-stock-add',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body})
+      .then(function(rr){ if(rr&&rr.ok)added++; next(); })
+      .catch(function(){ next(); });
+  })();
+}
+function notifyRequest(){
+  var msg=$('reqMsg'); if(msg)msg.textContent='Sending to Kampala…';
+  api('/papi/consignment-request-notify',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({id:CID})}).then(function(r){
+    if(r&&r.ok){ if(msg)msg.textContent='Sent to Kampala ✓ ('+r.items+' item'+(r.items===1?'':'s')+')'; }
+    else if(msg)msg.textContent = r&&r.error==='no_dispatch_phone' ? 'Set Kampala/Jayesh WhatsApp first (sourcing buyer number).'
+      : (r&&r.error==='nothing_to_send' ? 'Nothing short to send — add requested items first.' : 'Could not send.');
+  }).catch(function(){ if(msg)msg.textContent='Network error.'; });
 }
 function saveStock(lineId,field,value){
   var b={line_id:lineId}; b[field]=value;

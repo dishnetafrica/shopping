@@ -1,0 +1,63 @@
+DEPLOY — Consignment stock requests (Asish → Kampala) : quick request list + notify
+====================================================================================
+
+THE SHORT ANSWER TO "how do we handle Asish requesting Cling Film 10, Aluminium 15?"
+  Use the CONSIGNMENT loose-stock — it is ALREADY a request → sent → received → sold pipeline.
+  Asish's request is just loose-stock lines with a REQUESTED quantity. Jayesh fulfils by setting
+  SENT when he loads them; on arrival Asish sets RECEIVED; then SOLD as he sells in the market.
+  Anything requested-but-not-sent shows as a red "short" and can be carried to the next
+  consignment. So you do NOT need a separate system — this is what it's for.
+
+WHAT WAS MISSING (now added) — two conveniences so it matches how Asish actually asks:
+
+1) QUICK REQUEST LIST (paste)
+   On the consignment screen, under Loose stock, there's a new box:
+       "Quick request list — paste what Asish needs, one item per line"
+   Paste exactly what he sends, e.g.
+       Cling Film 10
+       Aluminium Foil 15
+   Tap "＋ Add all as requested". Each line is parsed (name + quantity) and matched to a product
+   from your list, then added as a loose-stock line with REQUESTED = that quantity (cost/price
+   auto-filled from the product). Accepts "Cling Film 10", "Cling Film x10", "10 Cling Film",
+   "Cling Film - 10". Anything it can't match is still added as a loose item and listed so you can
+   fix the name.
+
+2) SEND REQUEST TO KAMPALA (WhatsApp)
+   Button "📤 Send request to Kampala" WhatsApps the still-short list (requested > sent) to the
+   Kampala dispatcher so Jayesh knows what to pack:
+       📋 Stock request — CNS-00012 (Kampala → Juba)
+       Please pack & send:
+       • 10 × Cling Film
+       • 15 × Aluminium Foil
+       Mark each as Sent on the consignment once loaded. — Family Shoppers
+   Target number = setting consignment_dispatch_phone, else your sourcing buyer number
+   (sourcing_buyer_phone = Jayesh) — so it works out of the box if that's already set.
+
+THE DAILY FLOW (recommended)
+   1. Asish sends his list on WhatsApp → you paste it into "Quick request list" on TODAY's
+      consignment → Add all as requested.
+   2. Tap "Send request to Kampala" → Jayesh gets the pack list.
+   3. Jayesh packs and sets SENT on each line (or edits the number if he sends part).
+   4. Dispatch the consignment as usual (one AWB). On arrival Asish sets RECEIVED, then SELL.
+   5. Shortfalls (requested > sent) carry to the next consignment via "Carry over unsent requests".
+
+FILES
+  app/Http/Controllers/Panel/ConsignmentController.php  new requestNotify() (WhatsApp the short
+      list to Kampala). Uses existing addStock/updateStock for the requested/sent fields.
+  routes/web.php                                        papi/consignment-request-notify.
+  resources/panel/consignment.html                     quick request-list paste box + parser +
+      "Send request to Kampala" button.
+  app/Http/Controllers/Panel/SelfcheckController.php    probe "Consignment stock-request…".
+
+DEPLOY
+  1. Replace the files -> commit.  (No migration — the qty_requested/qty_sent columns already exist.)
+  2. EasyPanel REBUILD.
+  3. (Optional) Set a dedicated Kampala dispatcher number in settings key consignment_dispatch_phone;
+     otherwise it uses sourcing_buyer_phone (Jayesh), which you already set on /panel/sourcing.
+
+VERIFY
+  - Open a consignment → paste "Cling Film 10 / Aluminium Foil 15" → Add all as requested → two
+    lines appear with Requested 10 and 15.
+  - Tap "Send request to Kampala" → Jayesh's WhatsApp gets the pack list.
+  - Set Sent on each once packed; short badge clears. /papi/selfcheck shows
+    "Consignment stock-request + notify Kampala" = true.

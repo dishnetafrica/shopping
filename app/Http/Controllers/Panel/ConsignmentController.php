@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\Shipment;
 use App\Models\ShipmentOrder;
 use App\Services\Logistics\ShipmentService;
+use App\Services\WhatsApp\WhatsAppManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -466,6 +467,51 @@ class ConsignmentController extends Controller
             $n++;
         }
         return response()->json(['ok' => true, 'notified' => $n]);
+    }
+
+    /**
+     * POST /papi/consignment-request-notify — WhatsApp the "please pack & send" list to Kampala.
+     * Asish (Juba) has entered what he needs as loose-stock REQUESTS on this consignment; this sends
+     * everything still short (requested > sent) to the Kampala dispatcher (Jayesh) so he packs it.
+     * Target number = setting consignment_dispatch_phone, else sourcing_buyer_phone (Jayesh).
+     */
+    public function requestNotify(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $s = Shipment::where('tenant_id', $t->id)->find((int) $request->input('id'));
+        if (! $s) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        $to = preg_replace('/[^0-9]/', '', (string) ($t->setting('consignment_dispatch_phone', '')
+            ?: $t->setting('sourcing_buyer_phone', '')));
+        if ($to === '') return response()->json(['ok' => false, 'error' => 'no_dispatch_phone'], 422);
+
+        // Everything still short = requested but not yet fully sent.
+        $rows = ConsignmentStock::where('tenant_id', $t->id)->where('shipment_id', $s->id)->orderBy('id')->get()
+            ->filter(fn ($k) => $k->shortfall() > 0)->values();
+        if ($rows->isEmpty()) return response()->json(['ok' => false, 'error' => 'nothing_to_send'], 422);
+
+        $num = fn ($n) => rtrim(rtrim(number_format((float) $n, 2), '0'), '.');
+        $lines = $rows->map(function ($k) use ($num) {
+            $qty = $num($k->shortfall());
+            return "• {$qty} × {$k->name}";
+        })->all();
+
+        $route = trim((string) $s->origin_city . ' → ' . (string) $s->destination_city, ' →');
+        $msg = "📋 *Stock request* — {$s->shipment_number}" . ($route !== '' ? " ({$route})" : '') . "\n"
+             . "Please pack & send:\n" . implode("\n", $lines)
+             . "\n\nMark each as *Sent* on the consignment once loaded. — " . $t->name;
+
+        try {
+            $gw   = app(WhatsAppManager::class)->forTenant($t);
+            $inst = (string) ($t->whatsapp_instance ?? '');
+            $gw->sendText($inst, $to, $msg);
+        } catch (\Throwable $e) {
+            \Log::warning('consignment request notify failed: ' . $e->getMessage());
+            return response()->json(['ok' => false, 'error' => 'send_failed'], 500);
+        }
+
+        return response()->json(['ok' => true, 'sent_to' => $to, 'items' => count($lines)]);
     }
 
     /** GET /papi/consignment-sheet?id= — printable manifest / AWB sheet for the bus. */
