@@ -3,7 +3,10 @@ DEPLOY — Sourcing: auto-ask Jayesh on WhatsApp, remind until priced, reply-to-
 
 WHAT YOU GET (on /panel/sourcing)
   - Post a sourcing request → the buyer (Jayesh) is messaged on WhatsApp automatically, right
-    away, using your connected WhatsApp — no more tapping a wa.me link.
+    away, using your connected WhatsApp — no more tapping a wa.me link. If the request has a
+    PHOTO, it's sent as the image (with the details as the caption) so Jayesh sees exactly what
+    to price. Reminders stay text-only. (Needs the photo to be reachable at your public
+    /storage URL, which it is by default.)
   - The system keeps nudging him every few hours (working hours) until he prices it — capped at
     6 nudges so it can never spam. Each request shows "asked 2×" etc., with a "Remind now" button.
   - Jayesh replies the price straight from WhatsApp: "12 45000" (SR id + price, optional UGX/USD/

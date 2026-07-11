@@ -55,7 +55,16 @@ class SourcingController extends Controller
             $lines[] = "Reply here with the price, e.g.  *{$r->id} 45000*";
             $msg = implode("\n", $lines);
 
-            app(WhatsAppManager::class)->forTenant($t)->sendText($inst, $phone, $msg);
+            $gw = app(WhatsAppManager::class)->forTenant($t);
+            // On first contact, send the request PHOTO (with the text as caption) so Jayesh can
+            // see exactly what to price. Reminders stay text-only (no spammy re-sends).
+            $media = (! $reminder && $r->photo_path) ? url('/storage/' . $r->photo_path) : '';
+            if ($media !== '' && method_exists($gw, 'sendImage')) {
+                try { $gw->sendImage($inst, $phone, $media, $msg); }
+                catch (\Throwable $e) { $gw->sendText($inst, $phone, $msg); }
+            } else {
+                $gw->sendText($inst, $phone, $msg);
+            }
             try { MessageLog::record($t->id, $phone, $inst, 'out', 'system', $msg); } catch (\Throwable $e) {}
 
             $r->reminder_count = (int) $r->reminder_count + ($reminder ? 1 : 0);
