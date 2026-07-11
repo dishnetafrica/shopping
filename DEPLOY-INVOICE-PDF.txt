@@ -94,5 +94,17 @@ REQUIREMENT for part-carton pricing to work: the product must have a PACK SIZE (
 carton) set. Products → "Bulk set unit / pack / MOQ" — set unit "carton", pack e.g. 24, min 1.
 Without a pack size the Piece option is greyed out and the loose rate simply isn't shown.
 
+--------------------------------------------------------------------------------
+"WHICH PRODUCTS STILL NEED A PACK SIZE?" — a setup finder on the Products screen
+--------------------------------------------------------------------------------
+On Products you'll now see a red "⚠ N missing pack size" chip (only when some are missing).
+  - Tap it -> the list narrows to just the products with no pack size. Tap again to clear.
+  - Each product card shows either "carton ×24 · min 5" (good) or a red "⚠ set pack size".
+  - Best workflow: tap the chip to show the missing ones, then tap "⚙ Unit/Pack" (top bar) —
+    the bulk editor applies to exactly the products currently shown, so you can set unit/pack/MOQ
+    for a whole batch in one go. Repeat per category until the chip hits 0.
+When every product has a pack size, the chip disappears and carton + loose pricing works
+everywhere (invoice, order entry, bot). This is UI-only in seller.html — no backend change.
+
 VERIFY
   /papi/selfcheck  ->  "Professional invoice PDF (server-side)" = true.
