@@ -1,0 +1,63 @@
+DEPLOY — Invoices register with proper numbering (INV-2026-0001)
+================================================================
+
+WHAT YOU GET — how e-commerce/quick-commerce do invoices
+  A proper invoice is a PERMANENT, NUMBERED document, separate from the order number:
+  - Its own gapless sequence per year: INV-2026-0001, INV-2026-0002 … resets to 0001 each January.
+  - Frozen the moment it's issued: the number, line items and totals are stored and never change
+    (the order number keeps tracking fulfilment; the invoice number is for billing/accounting/tax).
+  - Lives in a searchable Invoices register with the stored PDF, paid vs balance, and status.
+
+  A new "Invoices" screen (/panel/invoices) shows every invoice: number, date, customer, total,
+  paid, balance (red = outstanding), and status (issued / part paid / paid / void). Search by
+  number, customer or phone. Re-download the exact PDF anytime. Void one (kept on record) —
+  owner/manager only.
+
+HOW AN INVOICE IS CREATED (you chose BOTH)
+  1) MANUAL — open an order → "🧾 Issue invoice". It numbers it (INV-2026-0001), stores the line
+     items + totals exactly as shown on screen (your currency, discounts, freight, cartons/loose),
+     saves the PDF, and opens it. Issuing the same order again returns the SAME invoice (never
+     double-numbers).
+  2) AUTOMATIC — when an order is marked "Delivered", an invoice is auto-issued in the background
+     (queued, idempotent) if the order doesn't already have one. Safety net so nothing is missed.
+
+NUMBERING (defaults set to your choice: INV-2026-0001, year reset)
+  Tenant settings (optional overrides):
+    invoice_prefix        default "INV"            (e.g. set to your shop code)
+    invoice_number_mode   default "year"           ("year" = INV-2026-0001, "plain" = INV-0001)
+    invoice_seq_pad       default 4                (zero-padding width)
+    invoice_auto_on_delivery  default true         (turn off to make it manual-only)
+  Header/terms/bank reuse the SAME settings as the quotation + quick invoice PDF (invoice_title,
+  invoice_terms, bank_details, invoice_terms_days, credit_terms, logo, TIN, etc.).
+
+FILES
+  database/migrations/2026_07_12_000001_create_invoices_tables.php  [NEW] invoices, invoice_items,
+      invoice_counters (the per-year sequence).
+  app/Models/Invoice.php, app/Models/InvoiceItem.php               [NEW]
+  app/Services/Invoicing/InvoiceRenderer.php                       [NEW] shared PDF builder (the
+      quick "Export PDF" and the issued invoice now use ONE renderer, so they look identical).
+  app/Services/Invoicing/InvoiceService.php                        [NEW] issue() + gapless numbering.
+  app/Http/Controllers/Panel/InvoiceController.php                 [NEW] register/issue/show/pdf/void.
+  app/Http/Controllers/Panel/OrderInvoiceController.php            slimmed to use the shared renderer.
+  app/Jobs/AutoIssueInvoice.php                                    [NEW] queued auto-issue on delivery.
+  app/Observers/OrderObserver.php                                  dispatches it when status=Delivered.
+  resources/panel/invoices.html                                   [NEW] the register screen.
+  resources/panel/seller.html                                     "🧾 Issue invoice" button + nav
+      "Invoices" (the old monthly report is now "Invoiced report").
+  resources/panel/mobile.html                                     "Invoices" tile.
+  routes/web.php                                                   /panel/invoices + papi/invoice-*.
+  app/Http/Controllers/Panel/SelfcheckController.php               probes.
+
+DEPLOY
+  1. Replace/add the files -> commit.
+  2. php artisan migrate --force        (creates the 3 invoice tables — REQUIRED)
+  3. EasyPanel REBUILD (force / no-cache) — picks up the new code + restarts the queue worker
+     (the auto-issue job runs on the queue).
+  4. (Optional) set invoice_prefix / invoice_number_mode if you want a different format.
+
+VERIFY
+  - /papi/selfcheck → "Invoice register tables migrated", "Numbered invoice register (INV-2026-0001)",
+    "Auto-issue invoice on delivery", "Issue-invoice button on order" = true.
+  - Open an order → "🧾 Issue invoice" → you get INV-2026-0001 and its PDF; open /panel/invoices and
+    it's listed with the balance. Issue the same order again → same number (no duplicate).
+  - Mark another order "Delivered" → within a few seconds it appears in /panel/invoices (auto).

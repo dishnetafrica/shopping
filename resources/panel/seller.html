@@ -304,7 +304,8 @@
       <a class="nav" href="/panel/ledger"><span class="i">📊</span> Financial Statements</a>
       <a class="nav" href="/panel/audit"><span class="i">🛡</span> Accounting Controls</a>
       <a class="nav" href="/panel/partners"><span class="i">🤝</span> Partners</a>
-      <a class="nav" href="/panel/invoiced"><span class="i">🧾</span> Invoiced</a>
+      <a class="nav" href="/panel/invoices"><span class="i">🧾</span> Invoices</a>
+      <a class="nav" href="/panel/invoiced"><span class="i">📊</span> Invoiced report</a>
       </div>
       <script>try{if(window.SHOP_FEATURES&&window.SHOP_FEATURES.order_system){document.getElementById('orderSysNav').style.display='block';}}catch(e){}</script>
 
@@ -427,6 +428,7 @@
               <button class="btn blue" id="printBtn">🖨 Print Invoice</button>
               <button class="btn" id="payNowBtn" style="background:#15803D;color:#fff;font-weight:800">💵 Record Payment</button>
               <button class="btn" id="pdfBtn">⤓ Export Invoice (PDF)</button>
+              <button class="btn" id="issueInvBtn" style="background:#1B3A2B;color:#fff;font-weight:800">🧾 Issue invoice</button>
               <button class="btn red" id="delOrderBtn">🗑 Delete order</button>
               <button class="btn" id="returnBtn">↩ Return / refund</button>
               <button class="btn" id="shipBtn" style="display:none">🚚 Shipment</button>
@@ -2515,6 +2517,7 @@ function openOrder(id){
   $('printBtn').onclick=function(){window.print();};
   if($('payNowBtn'))$('payNowBtn').onclick=openPayModal;
   $('pdfBtn').onclick=exportInvoicePdf;
+  if($('issueInvBtn'))$('issueInvBtn').onclick=issueInvoice;
   $('delOrderBtn').onclick=function(){cancelOrder(current.id);};
   $('returnBtn').onclick=openReturnModal;
   setupShipBtn(current);
@@ -2680,8 +2683,9 @@ function renderAddOptions(q){
 /* Professional server-side wholesale invoice PDF (dompdf) — WYSIWYG with what's on screen,
    in the currency currently selected. Posts the live line items/discount/freight so the PDF
    matches exactly, then opens it in a new tab (no browser chrome, no editable controls). */
-function exportInvoicePdf(){
-  var o=current; if(!o){toast('Open an order first');return;}
+/* Build the WYSIWYG invoice payload (shared by Export PDF + Issue invoice) as [k,v] pairs. */
+function invoiceFields(){
+  var o=current; if(!o)return null;
   var m=curMeta();
   var sub=o.items.reduce(function(s,it){return s+(Number(it.price)||0)*(Number(it.qty)||0);},0);
   var discUgx=discountUgxFor(o,sub);
@@ -2693,25 +2697,40 @@ function exportInvoicePdf(){
   var lines=o.items.map(function(it){
     var uom=(it.uom!=null)?it.uom:'';
     var pk=(it.pack!=null)?Number(it.pack):0;
-    if(it.uom==null){ // legacy/saved line: enrich from catalogue only when price still matches the carton price
-      var p=byName[String(it.name||'').toLowerCase()];
-      if(p&&Math.abs((Number(p.price)||0)-(Number(it.price)||0))<1){uom=p.unit||'';pk=packOf(p);}
-    }
+    if(it.uom==null){ var p=byName[String(it.name||'').toLowerCase()];
+      if(p&&Math.abs((Number(p.price)||0)-(Number(it.price)||0))<1){uom=p.unit||'';pk=packOf(p);} }
     return {name:it.name,qty:it.qty,unit:Number(convFromUgx(it.price).toFixed(m.dec)),uom:uom,pack:pk};
   });
   var nm=(($('dCustName')||{}).value||o.customer||'').trim();
   var addr=(($('dCustAddr')||{}).value||o.locClean||'').trim();
+  var f=[['id',o.id],['order_no',oNo(o)],['customer',nm],['phone',o.phone||''],['address',addr],
+    ['status',o.status||''],['payment',o.payment||''],['notes',o.notes||''],['currency',m.code],['dec',m.dec],
+    ['lines',JSON.stringify(lines)],['discount',convFromUgx(discUgx).toFixed(m.dec)],
+    ['delivery',convFromUgx(delUgx).toFixed(m.dec)],['paid',convFromUgx(paidUgx).toFixed(m.dec)]];
+  if((o.discMode||'amount')==='percent'&&Number(o.discPct)>0)f.push(['disc_label','Discount '+Number(o.discPct)+'%']);
+  return f;
+}
+/* Professional server-side wholesale invoice PDF (dompdf) — quick, un-numbered preview. */
+function exportInvoicePdf(){
+  var fields=invoiceFields(); if(!fields){toast('Open an order first');return;}
   var f=document.createElement('form');
   f.method='POST'; f.action='/papi/order-invoice-pdf'; f.target='_blank';
-  var add=function(k,v){var i=document.createElement('input');i.type='hidden';i.name=k;i.value=(v==null?'':String(v));f.appendChild(i);};
-  add('id',o.id); add('order_no',oNo(o)); add('customer',nm); add('phone',o.phone||'');
-  add('address',addr); add('status',o.status||''); add('payment',o.payment||''); add('notes',o.notes||'');
-  add('currency',m.code); add('dec',m.dec); add('lines',JSON.stringify(lines));
-  add('discount',convFromUgx(discUgx).toFixed(m.dec)); add('delivery',convFromUgx(delUgx).toFixed(m.dec));
-  add('paid',convFromUgx(paidUgx).toFixed(m.dec));
-  if((o.discMode||'amount')==='percent'&&Number(o.discPct)>0)add('disc_label','Discount '+Number(o.discPct)+'%');
+  fields.forEach(function(kv){var i=document.createElement('input');i.type='hidden';i.name=kv[0];i.value=(kv[1]==null?'':String(kv[1]));f.appendChild(i);});
   document.body.appendChild(f); f.submit();
   setTimeout(function(){if(f.parentNode)f.parentNode.removeChild(f);},1500);
+}
+/* Issue a PERMANENT numbered invoice (INV-2026-0001) from this order + open its PDF. */
+function issueInvoice(){
+  var fields=invoiceFields(); if(!fields){toast('Open an order first');return;}
+  if(!confirm('Issue a numbered invoice for this order? The number is permanent.'))return;
+  var b=$('issueInvBtn'); if(b){b.disabled=true;b.textContent='Issuing…';}
+  var body=new URLSearchParams(); fields.forEach(function(kv){body.append(kv[0],kv[1]==null?'':String(kv[1]));});
+  fetch('/papi/invoice-issue',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body})
+    .then(function(r){return r.json();}).then(function(r){
+      if(b){b.disabled=false;b.textContent='🧾 Issue invoice';}
+      if(r&&r.ok){ toast((r.already?'Already invoiced: ':'Invoice issued: ')+r.invoice_no); if(r.pdf)window.open(r.pdf,'_blank'); }
+      else toast('Could not issue: '+((r&&r.error)||'error'));
+    }).catch(function(){ if(b){b.disabled=false;b.textContent='🧾 Issue invoice';} toast('Network error'); });
 }
 function setQty(idx,v){current.items[idx].qty=Math.max(1,Number(v)||1);renderInvoice();}
 function setPrice(idx,v){current.items[idx].price=Math.max(0,convToUgx(v));renderInvoice();}

@@ -79,6 +79,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/audit', [\App\Http\Controllers\Panel\AccountingControlsController::class, 'page']);
     Route::get('/panel/partners', [\App\Http\Controllers\Panel\PartnerController::class, 'page']);
     Route::get('/panel/invoiced', [\App\Http\Controllers\Panel\InvoiceReportController::class, 'page']);
+    Route::get('/panel/invoices', [\App\Http\Controllers\Panel\InvoiceController::class, 'page']);
     Route::get('/panel/payments', [\App\Http\Controllers\Panel\PaymentController::class, 'page']);
     Route::get('/panel/sourcing', [\App\Http\Controllers\Panel\SourcingController::class, 'page']);
     Route::get('/panel/customers360', [\App\Http\Controllers\Panel\CustomerController::class, 'page']);
@@ -233,6 +234,12 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('today',      [PanelApiController::class, 'today']);   // Today / Needs-attention home screen
         Route::get('quotation-pdf', [PanelApiController::class, 'quotationPdf']); // stream PDF (no /storage symlink)
         Route::match(['get','post'], 'order-invoice-pdf', [\App\Http\Controllers\Panel\OrderInvoiceController::class, 'pdf']); // clean wholesale invoice PDF (WYSIWYG)
+        // Numbered invoice register (INV-2026-0001)
+        Route::get('invoices',                    [\App\Http\Controllers\Panel\InvoiceController::class, 'index']);
+        Route::match(['get','post'], 'invoice-issue', [\App\Http\Controllers\Panel\InvoiceController::class, 'issue']);
+        Route::get('invoice-show',                [\App\Http\Controllers\Panel\InvoiceController::class, 'show']);
+        Route::get('invoice-pdf',                 [\App\Http\Controllers\Panel\InvoiceController::class, 'pdf']);
+        Route::match(['get','post'], 'invoice-void', [\App\Http\Controllers\Panel\InvoiceController::class, 'void']);
         Route::get('inventory-list',  [PanelApiController::class, 'inventoryList']);
         Route::get('inventory-count', [PanelApiController::class, 'inventoryCount']);
 

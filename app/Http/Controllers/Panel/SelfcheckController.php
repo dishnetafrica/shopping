@@ -55,6 +55,23 @@ class SelfcheckController extends Controller
             && (bool) $this->fileHas('resources/panel/consignment.html', 'qAddPick'));
         $add('ads_screen', 'Facebook Ads screen',
             class_exists(\App\Http\Controllers\Panel\AdsController::class) && is_file(resource_path('panel/ads.html')));
+        try {
+            $t1 = Schema::hasTable('invoices');
+            $t2 = Schema::hasTable('invoice_items');
+            $t3 = Schema::hasTable('invoice_counters');
+            $add('invoice_register_migrated', 'Invoice register tables migrated', $t1 && $t2 && $t3,
+                ($t1 && $t2 && $t3) ? '' : 'run: php artisan migrate --force');
+        } catch (\Throwable $e) { $add('invoice_register_migrated', 'Invoice register tables migrated', null, 'probe error'); }
+        $add('invoice_register_code', 'Numbered invoice register (INV-2026-0001)',
+            class_exists(\App\Http\Controllers\Panel\InvoiceController::class)
+            && class_exists(\App\Services\Invoicing\InvoiceService::class)
+            && is_file(resource_path('panel/invoices.html')));
+        $add('invoice_auto_issue', 'Auto-issue invoice on delivery',
+            class_exists(\App\Jobs\AutoIssueInvoice::class)
+            && (bool) $this->fileHas('app/Observers/OrderObserver.php', 'AutoIssueInvoice'));
+        $add('invoice_issue_btn', 'Issue-invoice button on order',
+            (bool) $this->fileHas('resources/panel/seller.html', 'issueInvoice'));
+
         $add('invoice_pdf', 'Professional invoice PDF (server-side)',
             class_exists(\App\Http\Controllers\Panel\OrderInvoiceController::class)
             && class_exists(\Dompdf\Dompdf::class)

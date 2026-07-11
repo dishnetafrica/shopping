@@ -92,5 +92,14 @@ class OrderObserver
         if ($order->wasChanged('status') && $order->customer_phone) {
             SendOrderStatusNotification::dispatch($order->tenant_id, $order->id, $order->status);
         }
+
+        // Auto-issue a numbered invoice the moment an order is Delivered (safety net alongside the
+        // manual "Issue invoice" button). Queued + idempotent, so it never slows the save or
+        // double-numbers. Gated by tenant setting invoice_auto_on_delivery (default on).
+        if ($order->wasChanged('status') && strcasecmp((string) $order->status, 'Delivered') === 0) {
+            try {
+                \App\Jobs\AutoIssueInvoice::dispatch((int) $order->tenant_id, (int) $order->id);
+            } catch (\Throwable $e) { /* never break the order save */ }
+        }
     }
 }

@@ -1,0 +1,80 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Invoices</title>
+<style>
+:root{--dark:#1B3A2B;--green:#15803D;--red:#C0392B;--amber:#C2700A;--line:#e4e9e4;--muted:#6b7280;--bg:#f6f8f6}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1B211D;background:var(--bg)}
+.top{background:var(--dark);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+.top h1{font-size:17px;margin:0;font-weight:800}
+.back{background:#ffffff22;border:none;color:#fff;border-radius:9px;padding:8px 12px;font-weight:700;cursor:pointer;text-decoration:none}
+.wrap{max-width:820px;margin:0 auto;padding:14px}
+.stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.stat{background:#fff;border-radius:12px;padding:10px 14px;box-shadow:0 1px 3px #0000000d;flex:1;min-width:120px}
+.stat .n{font-size:19px;font-weight:800}.stat .l{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.search{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:14px;margin-bottom:12px}
+.card{background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:9px;box-shadow:0 1px 3px #0000000d}
+.rowb{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.no{font-weight:800;font-size:15px}
+.sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+.badge{font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px}
+.b-issued{background:#eef2ff;color:#3730a3}.b-part_paid{background:#fff7ed;color:#c2410c}.b-paid{background:#eaf6ee;color:var(--green)}.b-void{background:#f3f4f6;color:#6b7280;text-decoration:line-through}
+.btnrow{display:flex;gap:8px;margin-top:9px;flex-wrap:wrap}
+.btn{border:none;border-radius:9px;padding:8px 12px;font-weight:700;font-size:13px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.p{background:var(--green);color:#fff}.btn.g{background:#eef1ee;color:#243b53}.btn.d{background:#fdecea;color:var(--red)}
+.empty{text-align:center;color:var(--muted);padding:26px 8px}
+.amt{font-weight:800}
+.bal{color:var(--red);font-weight:800}.bal0{color:var(--green);font-weight:800}
+.note{font-size:12.5px;color:var(--muted);line-height:1.5}
+</style></head>
+<body>
+<div class="top"><h1>🧾 Invoices</h1><a class="back" href="/panel">Panel</a></div>
+<div class="wrap" id="wrap"><div class="empty">Loading…</div></div>
+<script>
+var $=function(id){return document.getElementById(id);};
+function api(u,opt){opt=opt||{};opt.headers=Object.assign({'X-Requested-With':'XMLHttpRequest'},opt.headers||{});opt.credentials='same-origin';opt.cache='no-store';return fetch(u,opt).then(function(r){return r.json();});}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function nf(n){return Number(n||0).toLocaleString('en-US');}
+function money(cur,n){return esc(cur)+' '+nf(n);}
+var Q='';
+function load(){
+  $('wrap').innerHTML='<div class="empty">Loading…</div>';
+  api('/papi/invoices'+(Q?('?q='+encodeURIComponent(Q)):'')).then(function(d){
+    if(!d||!d.ok){$('wrap').innerHTML='<div class="empty">Could not load.</div>';return;}
+    var s=d.stats||{};
+    var h='<div class="stats">'+
+      '<div class="stat"><div class="n">'+nf(s.count)+'</div><div class="l">Invoices</div></div>'+
+      '<div class="stat"><div class="n">'+nf(s.invoiced)+'</div><div class="l">Invoiced</div></div>'+
+      '<div class="stat"><div class="n" style="color:'+((s.outstanding>0)?'var(--red)':'var(--green)')+'">'+nf(s.outstanding)+'</div><div class="l">Outstanding</div></div>'+
+      '</div>';
+    h+='<input class="search" id="q" placeholder="Search invoice no, customer, phone…" value="'+esc(Q)+'">';
+    var list=d.invoices||[];
+    if(!list.length){ h+='<div class="empty">No invoices yet.<br>Issue one from an order (Orders → open an order → “Issue invoice”), or it’s created automatically when an order is delivered.</div>'; }
+    else{
+      h+=list.map(function(i){
+        var bal=(Number(i.balance)||0);
+        return '<div class="card"><div class="rowb"><span class="no">'+esc(i.no)+'</span><span class="badge b-'+esc(i.status)+'">'+esc(i.status.replace("_"," "))+'</span></div>'+
+          '<div class="sub">'+esc(i.date||'')+' · '+esc(i.customer||'—')+(i.phone?(' · '+esc(i.phone)):'')+'</div>'+
+          '<div class="sub"><span class="amt">'+money(i.currency,i.total)+'</span>'+
+            ' · paid '+nf(i.paid)+' · <span class="'+(bal>0.5?'bal':'bal0')+'">'+(bal>0.5?('due '+nf(bal)):'paid')+'</span>'+
+            (i.due&&bal>0.5?(' · due '+esc(i.due)):'')+'</div>'+
+          '<div class="btnrow">'+
+            (i.pdf?('<a class="btn p" href="'+esc(i.pdf)+'" target="_blank">⤓ PDF</a>'):'')+
+            (i.status!=='void'?('<button class="btn d" onclick="voidInv('+i.id+',\''+esc(i.no)+'\')">Void</button>'):'')+
+          '</div></div>';
+      }).join('');
+    }
+    $('wrap').innerHTML=h;
+    if($('q')){ $('q').oninput=function(){Q=this.value;clearTimeout(window.__qt);window.__qt=setTimeout(load,350);}; $('q').focus();
+      // keep caret at end after focus
+      var v=$('q').value;$('q').value='';$('q').value=v; }
+  });
+}
+function voidInv(id,no){
+  if(!confirm('Void invoice '+no+'? It stays on record but is marked VOID.'))return;
+  api('/papi/invoice-void',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({id:id})}).then(function(r){
+    if(r&&r.ok)load(); else alert(r&&r.error==='not_allowed'?'Owner/manager only.':'Could not void.');
+  });
+}
+load();
+</script>
+</body></html>
