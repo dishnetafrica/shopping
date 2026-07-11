@@ -50,6 +50,9 @@ class SelfcheckController extends Controller
         $add('consignment_request_quick', 'One-tap stock request (Asish) → auto consignment',
             method_exists(\App\Http\Controllers\Panel\ConsignmentController::class, 'requestQuick')
             && (bool) $this->fileHas('resources/panel/consignment.html', 'quickRequest'));
+        $add('consignment_request_picker', 'Request: catalogue picker + requested-by/send-to',
+            method_exists(\App\Http\Controllers\Panel\ConsignmentController::class, 'contacts')
+            && (bool) $this->fileHas('resources/panel/consignment.html', 'qAddPick'));
         $add('ads_screen', 'Facebook Ads screen',
             class_exists(\App\Http\Controllers\Panel\AdsController::class) && is_file(resource_path('panel/ads.html')));
         $add('invoice_pdf', 'Professional invoice PDF (server-side)',

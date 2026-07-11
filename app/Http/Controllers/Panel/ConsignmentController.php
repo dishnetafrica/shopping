@@ -482,7 +482,9 @@ class ConsignmentController extends Controller
         $s = Shipment::where('tenant_id', $t->id)->find((int) $request->input('id'));
         if (! $s) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
 
-        $res = $this->pushRequestList($t, $s);
+        $res = $this->pushRequestList($t, $s,
+            (string) $request->input('send_to_phone', ''),
+            trim((string) $request->input('requested_by', '')));
         return response()->json($res, $res['ok'] ? 200 : ($res['code'] ?? 422));
     }
 
@@ -493,11 +495,37 @@ class ConsignmentController extends Controller
             ?: $t->setting('sourcing_buyer_phone', '')));
     }
 
+    /**
+     * GET /papi/consignment-contacts — who can request / receive a request.
+     * `me` = signed-in user (default "Requested by"); `team` = tenant staff (name + phone);
+     * `dispatch` = the default Kampala recipient (Jayesh), so "Send to" defaults sensibly.
+     */
+    public function contacts(Request $request)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok' => false], 401);
+
+        $team = \App\Models\User::where('tenant_id', $t->id)->orderBy('name')->get()
+            ->map(fn ($x) => [
+                'name'  => trim((string) $x->name),
+                'phone' => preg_replace('/[^0-9]/', '', (string) ($x->phone ?? '')),
+                'role'  => (string) $x->role,
+            ])
+            ->filter(fn ($x) => $x['name'] !== '')->values();
+
+        $dispatch = [
+            'name'  => trim((string) $t->setting('sourcing_buyer_name', '')) ?: 'Kampala (Jayesh)',
+            'phone' => $this->dispatchPhone($t),
+        ];
+
+        return response()->json(['ok' => true, 'me' => (string) ($u->name ?? ''), 'team' => $team, 'dispatch' => $dispatch]);
+    }
+
     /** WhatsApp the still-short (requested > sent) list of a consignment to Kampala. Shared by
      *  requestNotify() and the quick-request flow. Returns a JSON-ready array. */
-    private function pushRequestList($t, Shipment $s): array
+    private function pushRequestList($t, Shipment $s, string $toOverride = '', string $requestedBy = ''): array
     {
-        $to = $this->dispatchPhone($t);
+        $to = preg_replace('/[^0-9]/', '', $toOverride) ?: $this->dispatchPhone($t);
         if ($to === '') return ['ok' => false, 'error' => 'no_dispatch_phone', 'code' => 422];
 
         $rows = ConsignmentStock::where('tenant_id', $t->id)->where('shipment_id', $s->id)->orderBy('id')->get()
@@ -507,8 +535,9 @@ class ConsignmentController extends Controller
         $num = fn ($n) => rtrim(rtrim(number_format((float) $n, 2), '0'), '.');
         $lines = $rows->map(fn ($k) => '• ' . $num($k->shortfall()) . ' × ' . $k->name)->all();
 
-        $route = trim((string) $s->origin_city . ' → ' . (string) $s->destination_city, ' →');
-        $msg = "📋 *Stock request* — {$s->shipment_number}" . ($route !== '' ? " ({$route})" : '') . "\n"
+        $route  = trim((string) $s->origin_city . ' → ' . (string) $s->destination_city, ' →');
+        $byLine = $requestedBy !== '' ? "\nRequested by: {$requestedBy}" : '';
+        $msg = "📋 *Stock request* — {$s->shipment_number}" . ($route !== '' ? " ({$route})" : '') . $byLine . "\n"
              . "Please pack & send:\n" . implode("\n", $lines)
              . "\n\nMark each as *Sent* on the consignment once loaded. — " . $t->name;
 
@@ -557,6 +586,9 @@ class ConsignmentController extends Controller
             $created = true;
         }
 
+        $requestedBy = trim((string) $request->input('requested_by', '')) ?: (string) ($u->name ?? '');
+        $noteBy = $requestedBy !== '' ? ('Requested by ' . $requestedBy) : null;
+
         $added = 0;
         foreach ($items as $it) {
             $name = trim((string) ($it['name'] ?? ''));
@@ -572,6 +604,7 @@ class ConsignmentController extends Controller
                 'qty_requested' => $qty, 'qty_sent' => 0, 'qty_sold' => 0,
                 'unit_cost'  => $prod && $prod->cost_price !== null ? (float) $prod->cost_price : null,
                 'unit_price' => $prod ? (float) $prod->price : null,
+                'note'       => $noteBy,
             ]);
             $added++;
         }
@@ -579,7 +612,7 @@ class ConsignmentController extends Controller
 
         $notified = null;
         if (filter_var($request->input('notify', 0), FILTER_VALIDATE_BOOLEAN)) {
-            $push = $this->pushRequestList($t, $s);
+            $push = $this->pushRequestList($t, $s, (string) $request->input('send_to_phone', ''), $requestedBy);
             $notified = $push['ok'] ? ($push['items'] ?? 0) : ('err:' . ($push['error'] ?? 'x'));
         }
 

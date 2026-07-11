@@ -92,13 +92,29 @@ function load(){
     if(!d||!d.ok){$('wrap').innerHTML='<div class="empty">Could not load.</div>';return;}
     var list=d.consignments||[];
     var html='<button class="add" onclick="openNew()">＋ New consignment</button>';
-    // Asish's one-tap request: paste the list, it lands on today's open consignment (or starts one).
+    // Asish's one-tap request: pick from the catalogue OR paste; lands on today's open consignment.
+    var fst='width:100%;padding:9px;border:1px solid var(--line,#e4e9e4);border-radius:9px;font-size:13px;font-family:inherit';
     html+='<div class="card" style="cursor:default">'+
       '<div class="row"><b>📥 Request stock from Kampala</b></div>'+
-      '<div class="sub" style="margin:2px 0 6px">Paste what you need, one per line (e.g. <i>Cling Film 10</i>). It’s added to today’s load — no need to create a consignment first.</div>'+
-      '<textarea id="qReqBulk" rows="3" placeholder="Cling Film 10&#10;Aluminium Foil 15" style="width:100%;padding:9px;border:1px solid var(--line,#e4e9e4);border-radius:9px;font-size:13px;font-family:inherit"></textarea>'+
-      '<label class="sub" style="display:flex;align-items:center;gap:6px;margin:6px 0"><input type="checkbox" id="qReqNotify" checked> Also WhatsApp the list to Kampala (Jayesh)</label>'+
-      '<div class="btnrow"><button class="btn g" onclick="quickRequest()">📨 Send request</button></div>'+
+      '<div class="sub" style="margin:2px 0 6px">Pick a product and add it, or paste a list below (e.g. <i>Cling Film 10</i>). It’s added to today’s load — no need to create a consignment first.</div>'+
+      // product picker row
+      '<div class="mini" style="display:flex;gap:6px;flex-wrap:wrap">'+
+        '<input id="qPick" list="qProdDL" autocomplete="off" placeholder="Search product from your catalogue…" style="flex:1;min-width:150px;'+fst+'">'+
+        '<datalist id="qProdDL"></datalist>'+
+        '<input id="qPickQty" type="number" min="1" value="1" placeholder="Qty" style="width:74px;'+fst+'">'+
+        '<button class="btn" onclick="qAddPick()">＋ Add</button>'+
+      '</div>'+
+      '<textarea id="qReqBulk" rows="3" placeholder="Cling Film 10&#10;Aluminium Foil 15" style="margin-top:6px;'+fst+'"></textarea>'+
+      // requested-by + send-to
+      '<div class="mini" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">'+
+        '<div style="flex:1;min-width:150px"><div class="sub" style="margin:0 0 2px">Requested by</div>'+
+          '<input id="qReqBy" list="qTeamDL" autocomplete="off" placeholder="your name" style="'+fst+'"><datalist id="qTeamDL"></datalist></div>'+
+        '<div style="flex:1;min-width:150px"><div class="sub" style="margin:0 0 2px">Send to (Kampala)</div>'+
+          '<select id="qSendTo" onchange="qSendToChange()" style="'+fst+'"></select>'+
+          '<input id="qSendPhone" placeholder="+256…" style="display:none;margin-top:4px;'+fst+'"></div>'+
+      '</div>'+
+      '<label class="sub" style="display:flex;align-items:center;gap:6px;margin:8px 0 0"><input type="checkbox" id="qReqNotify" checked> Also WhatsApp the list to the person above</label>'+
+      '<div class="btnrow" style="margin-top:6px"><button class="btn g" onclick="quickRequest()">📨 Send request</button></div>'+
       '<div class="sub" id="qReqMsg" style="margin-top:4px"></div></div>';
     if(!list.length){html+='<div class="empty">No consignments yet. Create one to start today’s Kampala → Juba load.</div>';}
     else{html+=list.map(function(c){
@@ -112,12 +128,38 @@ function load(){
       '</div>';
     }).join('');}
     $('wrap').innerHTML=html;
+    fillRequestControls();
     // Deep-link from the mobile home ("Request stock") lands right on the paste box.
     if((location.hash||'').replace('#','')==='request'){
-      var el=$('qReqBulk');
+      var el=$('qPick')||$('qReqBulk');
       if(el){ try{el.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){el.scrollIntoView();} el.focus(); }
     }
   });
+}
+// Fill the request card's catalogue picker + requested-by/send-to selectors.
+function fillRequestControls(){
+  var dl=$('qProdDL');
+  if(dl) dl.innerHTML=(window.PRODUCTS||[]).map(function(p){return '<option value="'+esc(p['Product Name'])+'">';}).join('');
+  var c=window.__CONTACTS||{};
+  var team=c.team||[];
+  var tdl=$('qTeamDL'); if(tdl) tdl.innerHTML=team.map(function(m){return '<option value="'+esc(m.name)+'">';}).join('');
+  var rb=$('qReqBy'); if(rb && !rb.value) rb.value=c.me||'';
+  var sel=$('qSendTo');
+  if(sel){
+    var opts=[];
+    var disp=c.dispatch||{};
+    if(disp.phone) opts.push('<option value="'+esc(disp.phone)+'" data-name="'+esc(disp.name||'Kampala')+'">'+esc(disp.name||'Kampala')+'</option>');
+    team.forEach(function(m){ if(m.phone && (!disp.phone||m.phone!==disp.phone)) opts.push('<option value="'+esc(m.phone)+'" data-name="'+esc(m.name)+'">'+esc(m.name)+(m.role?(' ('+esc(m.role)+')'):'')+'</option>'); });
+    opts.push('<option value="__custom">Custom number…</option>');
+    sel.innerHTML=opts.join('');
+  }
+}
+function qSendToChange(){ var sel=$('qSendTo'), inp=$('qSendPhone'); if(!sel||!inp)return; if(sel.value==='__custom'){inp.style.display='';inp.focus();} else {inp.style.display='none';} }
+function qAddPick(){
+  var nm=($('qPick')&&$('qPick').value||'').trim(); var q=($('qPickQty')&&$('qPickQty').value)||'1';
+  if(!nm){if($('qPick'))$('qPick').focus();return;}
+  var ta=$('qReqBulk'); if(ta){ ta.value=(ta.value?ta.value.replace(/\s*$/,'')+'\n':'')+nm+' '+q; }
+  if($('qPick'))$('qPick').value=''; if($('qPickQty'))$('qPickQty').value='1'; if($('qPick'))$('qPick').focus();
 }
 
 function loadDetail(){
@@ -311,7 +353,8 @@ function deliverAll(n){
 // ---- loose stock ----
 // ---- product picker for loose stock ----
 window.PRODUCTS=[];
-function loadProducts(){ api('/papi/products').then(function(d){ window.PRODUCTS=(Array.isArray(d.products)?d.products:[]).filter(function(p){return p['Product Name'];}); fillProdDL(); }).catch(function(){}); }
+function loadProducts(){ api('/papi/products').then(function(d){ window.PRODUCTS=(Array.isArray(d.products)?d.products:[]).filter(function(p){return p['Product Name'];}); fillProdDL(); if(typeof fillRequestControls==='function'&&$('qProdDL'))fillRequestControls(); }).catch(function(){}); }
+function loadContacts(){ api('/papi/consignment-contacts').then(function(d){ if(d&&d.ok){window.__CONTACTS=d; if(typeof fillRequestControls==='function'&&$('qSendTo'))fillRequestControls();} }).catch(function(){}); }
 function fillProdDL(){ var dl=$('prodDL'); if(!dl)return; dl.innerHTML=(window.PRODUCTS||[]).map(function(p){return '<option value="'+esc(p['Product Name'])+'">';}).join(''); }
 function prodFor(name){ var v=String(name||'').trim().toLowerCase(); return (window.PRODUCTS||[]).find(function(p){return String(p['Product Name']).toLowerCase()===v;}); }
 function prodPick(){
@@ -376,9 +419,12 @@ function quickRequest(){
   });
   if(!items.length){if(msg)msg.textContent='Type at least one line, e.g. "Cling Film 10".';return;}
   var notify=($('qReqNotify')&&$('qReqNotify').checked)?1:0;
+  var reqBy=($('qReqBy')&&$('qReqBy').value||'').trim();
+  var sel=$('qSendTo'), toPhone='';
+  if(sel){ toPhone = (sel.value==='__custom') ? (($('qSendPhone')&&$('qSendPhone').value)||'') : sel.value; }
   if(msg)msg.textContent='Sending…';
   api('/papi/consignment-request-quick',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body:new URLSearchParams({items:JSON.stringify(items),notify:notify})}).then(function(r){
+    body:new URLSearchParams({items:JSON.stringify(items),notify:notify,requested_by:reqBy,send_to_phone:toPhone})}).then(function(r){
     if(r&&r.ok){ openC(r.id); }
     else if(msg){ msg.textContent = (r&&r.error==='no_items')?'Type at least one line.':'Could not send: '+((r&&r.error)||'error'); }
   }).catch(function(){ if(msg)msg.textContent='Network error.'; });
@@ -436,6 +482,6 @@ function createConsignment(){
   }).catch(function(){b.disabled=false;b.textContent='Create consignment';$('nMsg').textContent='Network error';});
 }
 
-load();loadProducts();
+load();loadProducts();loadContacts();
 </script>
 </body></html>

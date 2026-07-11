@@ -41,6 +41,12 @@ ONE-TAP REQUEST FOR ASISH (no need to create a consignment first)
    So Asish never has to create or pick a consignment; he just sends his list like a message.
    (Any signed-in staff can request; it only creates a draft request, not a dispatch.)
 
+   PICK FROM CATALOGUE + WHO↔WHO: the request card also lets you pick a product from your
+   catalogue (search box + qty + Add) instead of only pasting, and choose "Requested by" (your
+   team, defaults to you) and "Send to (Kampala)" (Jayesh by default, or any staff member with a
+   phone, or a custom number). The chosen recipient gets the WhatsApp, the message shows who
+   requested it, and each line is stamped "Requested by …". (Contacts come from your staff list.)
+
    ON MOBILE: the phone panel (More menu) now has a dedicated tile "📥 Request stock from Kampala"
    that opens the consignment screen straight on the paste box (deep-link /panel/consignment#request,
    which auto-focuses the request field). So from his phone Asish taps that tile, pastes, and sends.
