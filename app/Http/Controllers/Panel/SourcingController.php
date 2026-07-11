@@ -97,7 +97,16 @@ class SourcingController extends Controller
             $lines[] = "(SR-{$r->id})";
             $msg = implode("\n", $lines);
 
-            app(WhatsAppManager::class)->forTenant($t)->sendText($inst, $phone, $msg);
+            $gw = app(WhatsAppManager::class)->forTenant($t);
+            // Include the photo so Asish sees exactly which item got priced (helps when he has
+            // several similar requests open).
+            $media = $r->photo_path ? url('/storage/' . $r->photo_path) : '';
+            if ($media !== '' && method_exists($gw, 'sendImage')) {
+                try { $gw->sendImage($inst, $phone, $media, $msg); }
+                catch (\Throwable $e) { $gw->sendText($inst, $phone, $msg); }
+            } else {
+                $gw->sendText($inst, $phone, $msg);
+            }
             try { MessageLog::record($t->id, $phone, $inst, 'out', 'system', $msg); } catch (\Throwable $e) {}
             return true;
         } catch (\Throwable $e) {
