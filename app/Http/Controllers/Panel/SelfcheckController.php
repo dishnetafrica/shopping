@@ -57,6 +57,29 @@ class SelfcheckController extends Controller
         $add('cashbook_supplier', 'Cashbook supplier + on-account payment',
             (bool) $this->fileHas('app/Http/Controllers/Panel/TradeCashbookController.php', 'supplier_payment'));
 
+        // --- Sourcing: auto-ask Jayesh + finalise into catalogue ----------------------
+        try {
+            $s1 = Schema::hasColumn('sourcing_requests', 'reminder_count');
+            $s2 = Schema::hasColumn('sourcing_requests', 'product_id');
+            $s3 = Schema::hasColumn('sourcing_requests', 'decision_note');
+            $add('sourcing_migrated', 'Sourcing tables migrated', $s1 && $s2 && $s3,
+                $s1 && $s2 && $s3 ? '' : 'run: php artisan migrate --force');
+        } catch (\Throwable $e) { $add('sourcing_migrated', 'Sourcing tables migrated', null, 'probe error'); }
+        $sc = $this->fileHas('app/Http/Controllers/Panel/SourcingController.php', 'sendToBuyer');
+        $scv = $this->fileHas('app/Http/Controllers/Panel/SourcingController.php', 'function convert');
+        $srn = $this->fileHas('app/Http/Controllers/Panel/SourcingController.php', 'function renegotiate');
+        $add('sourcing_code', 'Sourcing auto-ask + catalogue + renegotiate code',
+            ($sc && $scv && $srn) ? true : (($sc === null) ? null : false));
+        $add('sourcing_reply_code', 'Buyer reply-to-price (WhatsApp) code',
+            (bool) $this->fileHas('app/Jobs/ProcessIncomingMessage.php', 'sourcing_buyer_phone'));
+        $add('sourcing_remind_cmd', 'Sourcing reminder command',
+            class_exists(\App\Console\Commands\SourcingRemindCommand::class));
+        if ($t) {
+            $bp = preg_replace('/[^0-9]/', '', (string) $t->setting('sourcing_buyer_phone', ''));
+            $add('sourcing_buyer_set', 'Buyer (Jayesh) WhatsApp set', $bp !== '' ? true : null,
+                $bp !== '' ? $bp : 'set it on /panel/sourcing');
+        }
+
         // --- Bot patch (no screen — detect from deployed source) ----------------------
         $adGate = $this->fileHas('app/Services/WhatsApp/EvolutionGateway.php', 'externalAdReply');
         $adJob  = $this->fileHas('app/Jobs/ProcessIncomingMessage.php', 'bot_ad_awareness');
