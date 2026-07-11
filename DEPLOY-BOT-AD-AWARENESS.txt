@@ -1,0 +1,66 @@
+DEPLOY — Bot understands Facebook-ad customers ("which product are they asking about?")
+=======================================================================================
+
+THE PROBLEM
+  A customer arrives from your Facebook ad (or forwards the ad image) and asks "what is the
+  minimum order quantity?". The bot didn't know WHICH product they meant, so it answered
+  generically ("it varies by product… if you have a specific product in mind I can check").
+
+WHY IT HAPPENED
+  WhatsApp attaches the ad's details (headline/body) to a click-to-WhatsApp message inside
+  contextInfo.externalAdReply — but the gateway never read it, so the product name the ad
+  carried was thrown away before any bot brain saw it.
+
+THE FIX (2 files, additive, gated, defensive)
+  1) app/Services/WhatsApp/EvolutionGateway.php
+       parseIncoming() now also captures the Facebook ad referral (title/body/sourceUrl) from
+       contextInfo.externalAdReply across message types, and returns:
+         ad_headline, ad_body, ad_source_url, is_ad_referral.
+       Purely additive — nothing else changes.
+
+  2) app/Jobs/ProcessIncomingMessage.php
+       Before the AI / n8n / inbuilt brains run, a gated block weaves the advertised product
+       into the customer's message so EVERY brain answers about that product:
+         - Click-to-WhatsApp ad  -> uses ad_headline.
+         - Forwarded ad image    -> uses the image caption.
+         - The customer's question is preserved, e.g. the bot now receives:
+             About our advertised product "Galaxy Pack Disposable Glasses 500ml":
+             What is the minimum order quantity?
+         - It remembers the ad topic for 30 min, so a bare follow-up ("MOQ?", "price?",
+           "how much?", "available?") re-attaches to that product. Strict patterns only, so it
+           never hijacks a genuine new product query.
+       The whole block is wrapped in try/catch and gated by a setting — it can NEVER break the
+       bot, and you can switch it off instantly.
+
+SETTING (on by default)
+  bot_ad_awareness = true (default).  Set it to 0/false to turn the behaviour off.
+  (It's a normal tenant setting like bot_mode; if you'd like a visible on/off toggle on the
+   Setup screen, tell me and I'll add it.)
+
+WORKS FOR ALL BOT MODES
+  - ai  (native AI brain): the model receives the product-named message + the image, and answers
+        the specific MOQ/price/availability using its catalogue (which already includes MOQ).
+  - n8n (external workflow): the product-named message is forwarded to n8n, so its LLM answers
+        specifically too — no n8n workflow change required.
+  - auto/inbuilt: the product is now recognised (instead of a total miss). NOTE: the inbuilt
+        deterministic "minimum order" answer is still shop-wide; making the inbuilt FAQ quote a
+        SPECIFIC product's MOQ is a small follow-up if you run that mode (you appear to run an
+        LLM mode, where it already works).
+
+DEPLOY
+  1. Replace the 2 files -> commit.  (No migration, no schema change.)
+  2. EasyPanel REBUILD (force / no-cache).  (Restarts the queue worker that runs the bot.)
+  3. No browser cache step needed — this is server-side bot logic.
+
+VERIFY
+  - From a test number, click your Facebook ad -> WhatsApp opens -> send "what's the MOQ?".
+    The bot should name the advertised product and give that product's answer.
+  - Or forward the ad image + ask a question -> same.
+  - Watch the bot trace: you'll see events "ad_referral" / "ad_followup" when it fires.
+  - Turn it off (bot_ad_awareness=0) -> behaviour reverts to before. On again -> restored.
+
+NOTE / LIMITS
+  - Best results are on clicked ads (WhatsApp sends the exact product headline). A manually
+    forwarded post that arrives as a plain link (no image, no ad-referral) may not carry a
+    product name — those still fall back to the normal flow.
+  - Verified by syntax/lint only; please run the two live tests above before relying on it.

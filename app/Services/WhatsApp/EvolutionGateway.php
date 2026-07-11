@@ -264,6 +264,22 @@ class EvolutionGateway implements WhatsAppGateway
             ?? ''
         ) : '';
 
+        // Facebook click-to-WhatsApp ad referral: when a customer arrives from (or replies to)
+        // one of our Facebook/Instagram ads, WhatsApp attaches the ad's headline + body in
+        // contextInfo.externalAdReply. The headline usually names the advertised product, so
+        // capturing it lets the bot answer about THAT product instead of generically.
+        // Best-effort: present in different message types; never fatal.
+        $adReply = data_get($msg, 'message.extendedTextMessage.contextInfo.externalAdReply')
+            ?? data_get($msg, 'message.imageMessage.contextInfo.externalAdReply')
+            ?? data_get($msg, 'message.videoMessage.contextInfo.externalAdReply')
+            ?? data_get($msg, 'message.buttonsResponseMessage.contextInfo.externalAdReply')
+            ?? data_get($msg, 'message.listResponseMessage.contextInfo.externalAdReply')
+            ?? data_get($payload, 'data.contextInfo.externalAdReply')
+            ?? null;
+        $adHeadline  = is_array($adReply) ? trim((string) (data_get($adReply, 'title') ?: '')) : '';
+        $adBody      = is_array($adReply) ? trim((string) (data_get($adReply, 'body') ?: '')) : '';
+        $adSourceUrl = is_array($adReply) ? (string) (data_get($adReply, 'sourceUrl') ?: '') : '';
+
         // Voice note: a customer spoke their order instead of typing. Capture it so the job
         // can transcribe it (inline base64 if Evolution sent it, else fetched via media_key).
         $aud      = data_get($msg, 'message.audioMessage');
@@ -291,6 +307,10 @@ class EvolutionGateway implements WhatsAppGateway
             'image_b64'       => $imageB64,
             'has_audio'       => $hasAudio,
             'audio_b64'       => $audioB64,
+            'ad_headline'     => $adHeadline,
+            'ad_body'         => $adBody,
+            'ad_source_url'   => $adSourceUrl,
+            'is_ad_referral'  => ($adHeadline !== '' || $adBody !== ''),
             'media_key'       => ($hasImage || $hasAudio) ? [
                 'id'          => (string) data_get($msg, 'key.id', ''),
                 'remoteJid'   => (string) $remote,

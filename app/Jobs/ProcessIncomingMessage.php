@@ -168,6 +168,43 @@ class ProcessIncomingMessage implements ShouldQueue
             BotTrace::log($this->tenantId, $trace, $from, 'skipped', 'owner is handling this chat (recent manual reply)');
             return;
         }
+
+        // ---- Facebook-ad awareness (gated, best-effort — NEVER breaks the bot) ----------
+        // When a customer arrives from / forwards one of our Facebook ads, weave the advertised
+        // product into their message so every brain (ai / n8n / inbuilt) answers about THAT
+        // product instead of "it varies by product…". Toggle off with setting bot_ad_awareness=0.
+        try {
+            if ((bool) $tenant->setting('bot_ad_awareness', true)) {
+                $adHead = trim((string) ($this->incoming['ad_headline'] ?? ''));
+                if ($adHead === '' && ! empty($this->incoming['is_forwarded']) && ! empty($this->incoming['has_image'])) {
+                    $adHead = trim((string) ($this->incoming['image_caption'] ?? ''));   // forwarded ad image
+                }
+                $adHead = trim(preg_replace('/\s+/', ' ', (string) $adHead));
+                $q = trim((string) $this->incoming['text']);
+                if ($adHead !== '') {
+                    $adHead = mb_substr($adHead, 0, 160);
+                    $st = is_array($convo->state) ? $convo->state : [];
+                    $st['ad_topic'] = $adHead; $st['ad_topic_at'] = time();
+                    $convo->state = $st; $convo->save();
+                    $this->incoming['text'] = $q !== ''
+                        ? ('About our advertised product "' . $adHead . '": ' . $q)
+                        : ('Tell me about "' . $adHead . '"');
+                    BotTrace::log($this->tenantId, $trace, $from, 'ad_referral', $adHead);
+                } elseif ($q !== '') {
+                    // Bare, context-less follow-up (e.g. "MOQ?", "price?") — reattach the recent
+                    // ad topic. Strict patterns only, so it never hijacks a real product query.
+                    $st = is_array($convo->state) ? $convo->state : [];
+                    if (! empty($st['ad_topic']) && (time() - (int) ($st['ad_topic_at'] ?? 0) < 1800)
+                        && (preg_match('/^\s*(what\'?s\s+the\s+)?(moq|minimum\s*order(\s*quantity)?|price|cost|rate)\s*\??\s*$/i', $q)
+                            || preg_match('/^\s*how\s+much\s*\??\s*$/i', $q)
+                            || preg_match('/^\s*(is\s+it\s+|are\s+they\s+)?(available|in\s+stock)\s*\??\s*$/i', $q))) {
+                        $this->incoming['text'] = 'About "' . $st['ad_topic'] . '": ' . $q;
+                        BotTrace::log($this->tenantId, $trace, $from, 'ad_followup', $st['ad_topic']);
+                    }
+                }
+            }
+        } catch (\Throwable $e) { /* ad-awareness must never break message handling */ }
+
         // ---- Native AI brain (bot_mode = ai) — same behaviour as n8n, no external workflow ----
         if ($botMode === 'ai') {
             $mutedDigits = array_map(fn ($p) => preg_replace('/[^0-9]/', '', (string) $p), (array) $tenant->setting('bot_muted', []));
