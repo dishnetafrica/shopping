@@ -482,6 +482,7 @@
               <div class="additem editcol">
                 <div class="fg"><label>Search product</label><input id="addSearch" placeholder="type to filter…" autocomplete="off" style="min-width:200px"></div>
                 <div class="fg"><label>Add product</label><select id="addProd" class="pname"></select></div>
+                <div class="fg"><label>Unit</label><select id="addUnit" title="Sell a full carton, or loose pieces (part carton)"><option value="carton">Carton</option><option value="piece">Piece (loose)</option></select></div>
                 <div class="fg"><label>Qty</label><input id="addQty" type="number" min="1" value="1" style="width:70px"></div>
                 <button class="btn" id="addBtn">+ Add item</button>
                 <button class="btn ghost" id="addScanCam" type="button">📷 Scan</button>
@@ -1429,13 +1430,30 @@ function closeCameraScan(){
    New order lines / POS adds default to this so orders are built in cartons, not single pieces.
    Products with no MOQ behave exactly as before (default 1). */
 function cartonQty(p){return (p&&p.moq!==''&&p.moq!=null&&Number(p.moq)>1)?Number(p.moq):1;}
-function prefillAddQty(){var p=CATALOGUE[Number($('addProd').value)];if(p&&$('addQty'))$('addQty').value=cartonQty(p);}
-function addProductToOrder(idx,qty){
+function packOf(p){return (p&&p.packSize!==''&&p.packSize!=null&&Number(p.packSize)>0)?Number(p.packSize):0;}
+/* Per-piece price for a partial (loose) carton = carton price / pieces-per-carton. */
+function piecePriceUgx(p){var pk=packOf(p);return pk>0?Math.round((Number(p.price)||0)/pk):(Number(p.price)||0);}
+/* Sync the Qty default + the Piece option to the selected product: Piece is only offered when the
+   product has a pack size (we know how many pieces per carton); otherwise it's a plain unit. */
+function prefillAddQty(){
+  var p=CATALOGUE[Number($('addProd').value)];
+  var us=$('addUnit'), pk=packOf(p);
+  if(us){var pc=us.querySelector('option[value="piece"]');if(pc)pc.disabled=(pk<=0);if(pk<=0)us.value='carton';}
+  var mode=us?us.value:'carton';
+  if($('addQty'))$('addQty').value=(mode==='piece')?1:cartonQty(p);
+}
+function addProductToOrder(idx,qty,mode){
   var p=CATALOGUE[idx]; if(!p||!current)return;
   qty=Math.max(1,Number(qty)||1);
-  var ex=current.items.find(function(it){return it.name===p.name;});
-  if(ex)ex.qty+=qty; else current.items.push({name:p.name,price:p.price,qty:qty});
-  renderInvoice(); toast('Added '+qty+' \u00d7 '+p.name);
+  mode=mode||($('addUnit')?$('addUnit').value:'carton');
+  var pk=packOf(p), piece=(mode==='piece'&&pk>0);
+  var price=piece?piecePriceUgx(p):(Number(p.price)||0);
+  var uom=piece?'pc':(p.unit||'');
+  var su=piece?'piece':'carton';
+  /* a carton line and a loose-piece line of the same product stay as SEPARATE invoice lines */
+  var ex=current.items.find(function(it){return it.name===p.name&&(it.sellUnit||'carton')===su;});
+  if(ex)ex.qty+=qty; else current.items.push({name:p.name,price:price,qty:qty,uom:uom,pack:(piece?0:pk),sellUnit:su});
+  renderInvoice(); toast('Added '+qty+(piece?' pc':(p.unit?(' '+p.unit):''))+' \u00d7 '+p.name);
 }
 function rerenderCurrent(){
   if(!$('pageDash').classList.contains('hide'))renderDash();
@@ -2653,7 +2671,9 @@ function renderAddOptions(q){
   if(q) list=list.filter(function(o){return o.p.name.toLowerCase().indexOf(q)>=0;});
   list=list.slice(0,200);
   $('addProd').innerHTML=list.length?list.map(function(o){var u=o.p.unit?(' / '+esc(o.p.unit)):'';var mq=(o.p.moq!==''&&o.p.moq!=null&&Number(o.p.moq)>1)?(' \u00b7 min '+Number(o.p.moq)):'';return '<option value="'+o.i+'">'+esc(o.p.name)+' \u2014 '+ugx(o.p.price)+u+mq+'</option>';}).join(''):'<option value="">No match</option>';
-  if($('addProd')){$('addProd').onchange=prefillAddQty;prefillAddQty();}
+  if($('addProd')){$('addProd').onchange=prefillAddQty;}
+  if($('addUnit')){$('addUnit').onchange=prefillAddQty;}
+  prefillAddQty();
 }
 /* Professional server-side wholesale invoice PDF (dompdf) — WYSIWYG with what's on screen,
    in the currency currently selected. Posts the live line items/discount/freight so the PDF
@@ -2669,9 +2689,13 @@ function exportInvoicePdf(){
   var paidUgx=Math.max(0,grandUgx-outUgx);
   var byName={}; CATALOGUE.forEach(function(p){if(p&&p.name)byName[String(p.name).toLowerCase()]=p;});
   var lines=o.items.map(function(it){
-    var p=byName[String(it.name||'').toLowerCase()];
-    var pk=(p&&p.packSize!==''&&Number(p.packSize)>0)?Number(p.packSize):0;
-    return {name:it.name,qty:it.qty,unit:Number(convFromUgx(it.price).toFixed(m.dec)),uom:(p&&p.unit)?p.unit:'',pack:pk};
+    var uom=(it.uom!=null)?it.uom:'';
+    var pk=(it.pack!=null)?Number(it.pack):0;
+    if(it.uom==null){ // legacy/saved line: enrich from catalogue only when price still matches the carton price
+      var p=byName[String(it.name||'').toLowerCase()];
+      if(p&&Math.abs((Number(p.price)||0)-(Number(it.price)||0))<1){uom=p.unit||'';pk=packOf(p);}
+    }
+    return {name:it.name,qty:it.qty,unit:Number(convFromUgx(it.price).toFixed(m.dec)),uom:uom,pack:pk};
   });
   var nm=(($('dCustName')||{}).value||o.customer||'').trim();
   var addr=(($('dCustAddr')||{}).value||o.locClean||'').trim();

@@ -34,7 +34,7 @@ class OrderCalculator
             // the product image, and can never block the quote ("nothing to quote").
             $given = isset($it['price']) ? (float) $it['price'] : 0.0;
             if ($given > 0) {
-                $name = $query; $img = ''; $unit = ''; $moq = null;
+                $name = $query; $img = ''; $unit = ''; $moq = null; $pack = 0;
                 $hits = $this->matcher->search($query, $products);
                 $p    = $hits[0]['product'] ?? ($hits[0] ?? null);
                 if (is_array($p) && mb_strtolower(trim((string) ($p['name'] ?? ''))) === mb_strtolower(trim($query))) {
@@ -42,10 +42,11 @@ class OrderCalculator
                     $img  = (string) ($p['image'] ?? '');
                     $unit = (string) ($p['unit_label'] ?? '');
                     $moq  = isset($p['moq']) ? (int) $p['moq'] : null;
+                    $pack = (int) ($p['pack_size'] ?? 0);
                 }
                 $sum    = $given * $qty;
                 $total += $sum;
-                $lines[] = ['name' => $name, 'qty' => $qty, 'price' => $given, 'sum' => $sum, 'unit' => $unit, 'moq' => $moq, 'image' => $img, 'matched' => true];
+                $lines[] = ['name' => $name, 'qty' => $qty, 'price' => $given, 'sum' => $sum, 'unit' => $unit, 'moq' => $moq, 'pack' => $pack, 'image' => $img, 'matched' => true];
                 continue;
             }
 
@@ -98,6 +99,7 @@ class OrderCalculator
                 'weight_grams' => $grams ?: null,
                 'unit'         => (string) ($p['unit_label'] ?? ''),
                 'moq'          => $moq,
+                'pack'         => (int) ($p['pack_size'] ?? 0),
                 'req_qty'      => $reqQty,
                 'adjusted'     => $adjusted,
                 'image'        => (string) ($p['image'] ?? ''),
@@ -129,7 +131,14 @@ class OrderCalculator
             } elseif (! empty($l['moq']) && $l['qty'] < $l['moq']) {
                 $note = " (min order {$l['moq']})";
             }
-            $out[] = "• {$l['qty']} × {$l['name']}{$unit} = {$cur} " . number_format($l['sum'], $dec) . $note;
+            // Loose / part-carton rate: when a product is sold by carton with a known pack size,
+            // show the per-piece price so a customer who wants less than a full carton knows the rate.
+            $per = '';
+            if (! empty($l['pack']) && (int) $l['pack'] > 1 && $l['unit'] && ! empty($l['price'])) {
+                $pp  = (float) $l['price'] / (int) $l['pack'];
+                $per = " _(loose: {$cur} " . number_format($pp, $dec) . "/pc)_";
+            }
+            $out[] = "• {$l['qty']} × {$l['name']}{$unit} = {$cur} " . number_format($l['sum'], $dec) . $note . $per;
         }
         $out[] = "————\n*Total: {$cur} " . number_format($quote['total'], $dec) . "*";
         return implode("\n", $out);
@@ -145,6 +154,7 @@ class OrderCalculator
                     'id' => $p->id, 'name' => (string) $p->name, 'price' => (float) ($p->base_price ?? $p->price ?? 0),
                     'category' => (string) ($p->category ?? ''), 'keywords' => (string) ($p->keywords ?? ''),
                     'unit_label' => (string) ($p->unit_label ?? ''), 'moq' => $p->moq ? (int) $p->moq : null,
+                    'pack_size' => $p->pack_size ? (int) $p->pack_size : 0,
                     'image' => (string) ($p->image_url ?? ''),
                     'sold_by_weight' => (bool) ($p->sold_by_weight ?? false),
                     'reference_price' => $p->reference_price !== null ? (float) $p->reference_price : null,

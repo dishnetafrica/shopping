@@ -65,5 +65,34 @@ WHOLESALE EXTRAS (added)
     with no MOQ still default to 1, exactly as before. (MOQ/unit/pack are set per product under
     Products → "Bulk set unit / pack / MOQ", or on each product.)
 
+--------------------------------------------------------------------------------
+PART CARTONS (loose pieces) — "sometimes we supply less than a full carton"
+--------------------------------------------------------------------------------
+The clean rule: per-piece price = carton price ÷ pieces-per-carton (pack size). So a partial
+supply is just a line billed in PIECES at that rate. This is now built in:
+
+  SELLER PANEL (order "Add item"): a new "Unit" selector — Carton or Piece (loose).
+    - Carton  -> full carton price, qty defaults to the carton minimum (MOQ). (as before)
+    - Piece   -> the per-piece price (carton ÷ pack), qty in pieces. Only offered when the
+                 product has a pack size (so we know pieces-per-carton).
+    You can put BOTH on one order — e.g. "45 cartons" + "12 pieces" — as two separate lines,
+    which is exactly how you invoice a part-carton shortfall or a small loose sale.
+
+  INVOICE PDF: a carton line prints "50 CTN · ×24 · 180,000 (= 7,500/pc)"; a loose line prints
+    "12 PC · 7,500". So the buyer sees cartons, the pack, the per-carton price AND the piece rate.
+
+  WHATSAPP BOT quote: for any product sold by carton with a pack size, each quoted line now also
+    shows the loose rate, e.g. "• 5 × Sugar carton = UGX 900,000 (loose: UGX 7,500/pc)", so a
+    customer who wants less than a carton knows the piece price up front. (No change to how the
+    bot reads quantities — it just shows the extra rate. To also auto-bump a below-minimum order
+    up to the carton minimum, set moq_mode = roundup.)
+
+FILES (added to this bundle for the above)
+  app/Services/Bot/OrderCalculator.php   pack_size in the catalogue + per-piece line in the quote.
+
+REQUIREMENT for part-carton pricing to work: the product must have a PACK SIZE (pieces per
+carton) set. Products → "Bulk set unit / pack / MOQ" — set unit "carton", pack e.g. 24, min 1.
+Without a pack size the Piece option is greyed out and the loose rate simply isn't shown.
+
 VERIFY
   /papi/selfcheck  ->  "Professional invoice PDF (server-side)" = true.
