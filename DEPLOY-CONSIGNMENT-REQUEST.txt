@@ -33,6 +33,14 @@ WHAT WAS MISSING (now added) — two conveniences so it matches how Asish actual
    Target number = setting consignment_dispatch_phone, else your sourcing buyer number
    (sourcing_buyer_phone = Jayesh) — so it works out of the box if that's already set.
 
+ONE-TAP REQUEST FOR ASISH (no need to create a consignment first)
+   On the consignment LIST screen there's now a card: "📥 Request stock from Kampala".
+   Asish just pastes his list, ticks "Also WhatsApp the list to Kampala", and taps "Send request".
+   The system finds TODAY's open consignment (the latest one not yet departed) and adds the items to
+   it — or starts a fresh Kampala→Juba consignment automatically if none is open — then opens it.
+   So Asish never has to create or pick a consignment; he just sends his list like a message.
+   (Any signed-in staff can request; it only creates a draft request, not a dispatch.)
+
 THE DAILY FLOW (recommended)
    1. Asish sends his list on WhatsApp → you paste it into "Quick request list" on TODAY's
       consignment → Add all as requested.
@@ -42,12 +50,13 @@ THE DAILY FLOW (recommended)
    5. Shortfalls (requested > sent) carry to the next consignment via "Carry over unsent requests".
 
 FILES
-  app/Http/Controllers/Panel/ConsignmentController.php  new requestNotify() (WhatsApp the short
-      list to Kampala). Uses existing addStock/updateStock for the requested/sent fields.
-  routes/web.php                                        papi/consignment-request-notify.
-  resources/panel/consignment.html                     quick request-list paste box + parser +
-      "Send request to Kampala" button.
-  app/Http/Controllers/Panel/SelfcheckController.php    probe "Consignment stock-request…".
+  app/Http/Controllers/Panel/ConsignmentController.php  requestNotify() + requestQuick() (one-tap:
+      find/create today's consignment, add the request, optionally notify). Uses existing
+      addStock/updateStock for the requested/sent fields.
+  routes/web.php                                        papi/consignment-request-notify + -request-quick.
+  resources/panel/consignment.html                     LIST-view "Request stock from Kampala" card
+      (one-tap), plus the in-consignment quick request box + "Send request to Kampala" button.
+  app/Http/Controllers/Panel/SelfcheckController.php    probes for both.
 
 DEPLOY
   1. Replace the files -> commit.  (No migration — the qty_requested/qty_sent columns already exist.)

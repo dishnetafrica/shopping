@@ -482,20 +482,30 @@ class ConsignmentController extends Controller
         $s = Shipment::where('tenant_id', $t->id)->find((int) $request->input('id'));
         if (! $s) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
 
-        $to = preg_replace('/[^0-9]/', '', (string) ($t->setting('consignment_dispatch_phone', '')
-            ?: $t->setting('sourcing_buyer_phone', '')));
-        if ($to === '') return response()->json(['ok' => false, 'error' => 'no_dispatch_phone'], 422);
+        $res = $this->pushRequestList($t, $s);
+        return response()->json($res, $res['ok'] ? 200 : ($res['code'] ?? 422));
+    }
 
-        // Everything still short = requested but not yet fully sent.
+    /** The Kampala dispatcher's WhatsApp: dedicated number, else the sourcing buyer (Jayesh). */
+    private function dispatchPhone($t): string
+    {
+        return preg_replace('/[^0-9]/', '', (string) ($t->setting('consignment_dispatch_phone', '')
+            ?: $t->setting('sourcing_buyer_phone', '')));
+    }
+
+    /** WhatsApp the still-short (requested > sent) list of a consignment to Kampala. Shared by
+     *  requestNotify() and the quick-request flow. Returns a JSON-ready array. */
+    private function pushRequestList($t, Shipment $s): array
+    {
+        $to = $this->dispatchPhone($t);
+        if ($to === '') return ['ok' => false, 'error' => 'no_dispatch_phone', 'code' => 422];
+
         $rows = ConsignmentStock::where('tenant_id', $t->id)->where('shipment_id', $s->id)->orderBy('id')->get()
             ->filter(fn ($k) => $k->shortfall() > 0)->values();
-        if ($rows->isEmpty()) return response()->json(['ok' => false, 'error' => 'nothing_to_send'], 422);
+        if ($rows->isEmpty()) return ['ok' => false, 'error' => 'nothing_to_send', 'code' => 422];
 
         $num = fn ($n) => rtrim(rtrim(number_format((float) $n, 2), '0'), '.');
-        $lines = $rows->map(function ($k) use ($num) {
-            $qty = $num($k->shortfall());
-            return "• {$qty} × {$k->name}";
-        })->all();
+        $lines = $rows->map(fn ($k) => '• ' . $num($k->shortfall()) . ' × ' . $k->name)->all();
 
         $route = trim((string) $s->origin_city . ' → ' . (string) $s->destination_city, ' →');
         $msg = "📋 *Stock request* — {$s->shipment_number}" . ($route !== '' ? " ({$route})" : '') . "\n"
@@ -508,10 +518,75 @@ class ConsignmentController extends Controller
             $gw->sendText($inst, $to, $msg);
         } catch (\Throwable $e) {
             \Log::warning('consignment request notify failed: ' . $e->getMessage());
-            return response()->json(['ok' => false, 'error' => 'send_failed'], 500);
+            return ['ok' => false, 'error' => 'send_failed', 'code' => 500];
+        }
+        return ['ok' => true, 'sent_to' => $to, 'items' => count($lines)];
+    }
+
+    /** Consignment statuses that can still accept new stock requests (not yet departed). */
+    private const OPEN = ['packed', 'sent_to_transporter'];
+
+    /**
+     * POST /papi/consignment-request-quick — the one-tap "Asish asks for stock" flow.
+     * Adds the pasted request straight onto TODAY's open consignment (reusing the latest one that
+     * hasn't left yet, or creating a fresh Kampala→Juba consignment if there is none) — so Asish
+     * never has to create/pick a consignment first. Optionally WhatsApps the list to Kampala.
+     * Any signed-in staff can request (it only creates a draft request, not a dispatch).
+     *
+     * Body: items = JSON [{name, product_id?, qty}], notify = 0|1.
+     */
+    public function requestQuick(Request $request)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok' => false], 401);
+
+        $items = $request->input('items');
+        if (is_string($items)) $items = json_decode($items, true);
+        if (! is_array($items) || ! $items) return response()->json(['ok' => false, 'error' => 'no_items'], 422);
+
+        // Reuse the latest not-yet-departed consignment, else make one.
+        $s = Shipment::where('tenant_id', $t->id)->whereIn('status', self::OPEN)->orderByDesc('id')->first();
+        $created = false;
+        if (! $s) {
+            $s = $this->shipments->create([
+                'tenant_id'        => $t->id,
+                'origin_city'      => trim((string) $request->input('origin_city', 'Kampala')) ?: 'Kampala',
+                'destination_city' => trim((string) $request->input('destination_city', 'Juba')) ?: 'Juba',
+                'actor_name'       => (string) ($u->name ?? 'staff'),
+            ]);
+            $created = true;
         }
 
-        return response()->json(['ok' => true, 'sent_to' => $to, 'items' => count($lines)]);
+        $added = 0;
+        foreach ($items as $it) {
+            $name = trim((string) ($it['name'] ?? ''));
+            $qty  = max(0, (float) ($it['qty'] ?? 0));
+            if ($name === '' || $qty <= 0) continue;
+            $pid  = (int) ($it['product_id'] ?? 0) ?: null;
+            $prod = $pid ? \App\Models\Product::where('tenant_id', $t->id)->find($pid) : null;
+            if (! $prod) $pid = null;
+            if ($name === '' && $prod) $name = (string) $prod->name;
+
+            ConsignmentStock::create([
+                'tenant_id' => $t->id, 'shipment_id' => $s->id, 'product_id' => $pid, 'name' => $name,
+                'qty_requested' => $qty, 'qty_sent' => 0, 'qty_sold' => 0,
+                'unit_cost'  => $prod && $prod->cost_price !== null ? (float) $prod->cost_price : null,
+                'unit_price' => $prod ? (float) $prod->price : null,
+            ]);
+            $added++;
+        }
+        if ($added === 0) return response()->json(['ok' => false, 'error' => 'no_valid_items'], 422);
+
+        $notified = null;
+        if (filter_var($request->input('notify', 0), FILTER_VALIDATE_BOOLEAN)) {
+            $push = $this->pushRequestList($t, $s);
+            $notified = $push['ok'] ? ($push['items'] ?? 0) : ('err:' . ($push['error'] ?? 'x'));
+        }
+
+        return response()->json([
+            'ok' => true, 'id' => $s->id, 'number' => $s->shipment_number,
+            'created' => $created, 'added' => $added, 'notified' => $notified,
+        ]);
     }
 
     /** GET /papi/consignment-sheet?id= — printable manifest / AWB sheet for the bus. */

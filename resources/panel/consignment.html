@@ -92,6 +92,14 @@ function load(){
     if(!d||!d.ok){$('wrap').innerHTML='<div class="empty">Could not load.</div>';return;}
     var list=d.consignments||[];
     var html='<button class="add" onclick="openNew()">＋ New consignment</button>';
+    // Asish's one-tap request: paste the list, it lands on today's open consignment (or starts one).
+    html+='<div class="card" style="cursor:default">'+
+      '<div class="row"><b>📥 Request stock from Kampala</b></div>'+
+      '<div class="sub" style="margin:2px 0 6px">Paste what you need, one per line (e.g. <i>Cling Film 10</i>). It’s added to today’s load — no need to create a consignment first.</div>'+
+      '<textarea id="qReqBulk" rows="3" placeholder="Cling Film 10&#10;Aluminium Foil 15" style="width:100%;padding:9px;border:1px solid var(--line,#e4e9e4);border-radius:9px;font-size:13px;font-family:inherit"></textarea>'+
+      '<label class="sub" style="display:flex;align-items:center;gap:6px;margin:6px 0"><input type="checkbox" id="qReqNotify" checked> Also WhatsApp the list to Kampala (Jayesh)</label>'+
+      '<div class="btnrow"><button class="btn g" onclick="quickRequest()">📨 Send request</button></div>'+
+      '<div class="sub" id="qReqMsg" style="margin-top:4px"></div></div>';
     if(!list.length){html+='<div class="empty">No consignments yet. Create one to start today’s Kampala → Juba load.</div>';}
     else{html+=list.map(function(c){
       return '<div class="card" onclick="openC('+c.id+')">'+
@@ -352,6 +360,23 @@ function addReqBulk(){
       .then(function(rr){ if(rr&&rr.ok)added++; next(); })
       .catch(function(){ next(); });
   })();
+}
+/* One-tap request from the LIST view: parse + match, then land it on today's open consignment
+   (server creates one if none is open) and optionally WhatsApp Kampala. Opens the consignment. */
+function quickRequest(){
+  var raw=($('qReqBulk')&&$('qReqBulk').value)||''; var msg=$('qReqMsg');
+  var items=raw.split(/\n+/).map(parseReqLine).filter(Boolean).map(function(r){
+    var p=prodMatch(r.name);
+    return {name:(p?p['Product Name']:r.name), product_id:(p?p._row:''), qty:r.qty};
+  });
+  if(!items.length){if(msg)msg.textContent='Type at least one line, e.g. "Cling Film 10".';return;}
+  var notify=($('qReqNotify')&&$('qReqNotify').checked)?1:0;
+  if(msg)msg.textContent='Sending…';
+  api('/papi/consignment-request-quick',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:new URLSearchParams({items:JSON.stringify(items),notify:notify})}).then(function(r){
+    if(r&&r.ok){ openC(r.id); }
+    else if(msg){ msg.textContent = (r&&r.error==='no_items')?'Type at least one line.':'Could not send: '+((r&&r.error)||'error'); }
+  }).catch(function(){ if(msg)msg.textContent='Network error.'; });
 }
 function notifyRequest(){
   var msg=$('reqMsg'); if(msg)msg.textContent='Sending to Kampala…';
