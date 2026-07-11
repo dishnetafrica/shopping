@@ -176,7 +176,8 @@ function load(){
       L.innerHTML=REQS.map(function(r){
         var ph=r.photo?'<img src="'+esc(r.photo)+'" onerror="this.style.display=\'none\'">':'📦';
         var dbadge='<span class="badge d-'+r.demand+'">'+r.demand.toUpperCase()+' DEMAND</span>';
-        var sbadge='<span class="badge s-'+r.status+'">'+(r.status==='new'?'NEEDS PRICE':(r.status==='priced'?'PRICED':'DONE'))+'</span>';
+        var slabel=(r.status==='new'?'NEEDS PRICE':(r.status==='priced'?'PRICED':(r.status==='rejected'?'NOT STOCKED':'DONE')));
+        var sbadge='<span class="badge s-'+r.status+'"'+(r.status==='rejected'?' style="background:#fdecea;color:#C0392B"':'')+'>'+slabel+'</span>';
         var price='';
         if(r.status!=='new' && r.quoted_price!=null){
           price='<div class="price">'+esc(r.currency||'')+' '+nf(r.quoted_price)+
@@ -194,13 +195,18 @@ function load(){
         var acts='<div class="acts">';
         if(r.status==='new') acts+='<button class="b-price" onclick="openPrice('+r.id+')">Add price</button>';
         if(r.status==='new' && BUYER.auto && BUYER.phone) acts+='<button class="b-wa" onclick="remindNow('+r.id+')">Remind now</button>';
-        if(r.status==='priced') acts+='<button class="b-price" onclick="openConvert('+r.id+')">➕ Add to catalogue</button>';
-        if(r.status==='priced') acts+='<button class="b-done" onclick="setStatus('+r.id+',\'closed\')">Mark done</button>';
+        if(r.status==='priced'){
+          acts+='<button class="b-price" onclick="openConvert('+r.id+')">➕ Add to catalogue</button>';
+          acts+='<button class="b-wa" style="background:#C2700A" onclick="renegotiate('+r.id+')">Ask better price</button>';
+          acts+='<button class="b-done" style="background:#C0392B" onclick="reject('+r.id+')">Too high · won’t stock</button>';
+        }
+        if(r.status==='rejected') acts+='<button class="b-wa" style="background:#C2700A" onclick="renegotiate('+r.id+')">Ask better price</button>';
         acts+='<button class="b-wa" onclick="waReq('+r.id+')">WhatsApp</button></div>';
-        return '<div class="card'+(r.status==='closed'?' done':'')+'"><div class="ph">'+ph+'</div>'+
+        var decision=r.decision_note?('<div class="price" style="background:#fdecea;color:#C0392B"><small>🚫 '+esc(r.decision_note)+'</small></div>'):'';
+        return '<div class="card'+((r.status==='closed'||r.status==='rejected')?' done':'')+'"><div class="ph">'+ph+'</div>'+
           '<div class="mid"><div class="nm">'+esc(r.item)+'</div>'+
           '<div class="meta">'+(r.requested_by?('by '+esc(r.requested_by)+' · '):'')+esc(r.date||'')+(r.note?('<br>'+esc(r.note)):'')+'</div>'+
-          '<div class="badges">'+dbadge+sbadge+chase+'</div>'+price+acts+'</div></div>';
+          '<div class="badges">'+dbadge+sbadge+chase+'</div>'+price+decision+acts+'</div></div>';
       }).join('');
     }).catch(function(){ $('list').innerHTML='<div class="empty">Could not load.</div>'; });
 }
@@ -266,8 +272,22 @@ function openConvert(id){
   $('cCat').value=''; $('cMoq').value=''; $('cUnit').value=''; cMargin();
   $('backdrop').classList.add('on'); $('convForm').classList.add('on'); setTimeout(function(){$('cPrice').focus();},250);
 }
+function reject(id){
+  var why=prompt('Why won’t we stock this? (e.g. Kampala price too high, no margin)','Price too high from Kampala — no margin to sell');
+  if(why===null)return;
+  fetch('/papi/sourcing/'+id+'/reject',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:new URLSearchParams({reason:why.trim()})})
+    .then(r=>r.json()).then(function(r){ if(r&&r.ok){ load(); } else alert('Could not update'); });
+}
+function renegotiate(id){
+  if(!confirm('Ask '+(BUYER.name||'the buyer')+' for a better price? This re-opens the request and starts nudging again.'))return;
+  var target=prompt('Target price to suggest (optional, e.g. UGX 40000):','')||'';
+  fetch('/papi/sourcing/'+id+'/renegotiate',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:new URLSearchParams({target:target.trim()})})
+    .then(r=>r.json()).then(function(r){ if(r&&r.ok){ if(typeof toast==='function')toast(r.sent?'Asked for a better price':'Re-opened (set buyer’s WhatsApp to auto-send)'); load(); } else alert('Could not send'); });
+}
 function saveConvert(){
   if(!CID_C)return; var name=$('cName').value.trim(); if(!name){alert('Product name?');return;}
+  var cost=parseFloat(($('cCost').value||'').replace(/,/g,''))||0, sell=parseFloat(($('cPrice').value||'').replace(/,/g,''))||0;
+  if(sell>0 && cost>0 && sell<=cost){ if(!confirm('⚠️ Selling price ('+nf(sell)+') is at or below cost ('+nf(cost)+') — this product would sell at a loss. Add it anyway?'))return; }
   var b=$('cSave'); b.disabled=true; b.textContent='Creating…';
   var body=new URLSearchParams({name:name, price:($('cPrice').value||'').replace(/,/g,''), category:$('cCat').value.trim(), moq:$('cMoq').value.trim(), unit_label:$('cUnit').value.trim()});
   fetch('/papi/sourcing/'+CID_C+'/convert',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body})

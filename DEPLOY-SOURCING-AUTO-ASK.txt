@@ -87,3 +87,23 @@ VERIFY (finalise)
   - Price a request -> it shows "Add to catalogue" -> tap it -> set selling price -> Create.
   - The item appears under Products with cost = Jayesh's price and your selling price, and the
     request shows "✓ IN CATALOGUE". Search the bot / price list for it — it's there.
+
+--------------------------------------------------------------------------------
+WHEN THE KAMPALA PRICE IS TOO HIGH TO SELL (safety valve)
+--------------------------------------------------------------------------------
+A priced request now has THREE choices instead of only "Add to catalogue":
+  - "Ask better price"  -> re-opens the request, restarts the auto-nudges, and messages Jayesh
+      "⚠️ The Juba price (UGX X) is too high to sell — can you find a better price? Target: …".
+      His next "<id> <price>" reply re-prices it. This is the negotiation loop.
+  - "Too high · won't stock" -> marks it NOT STOCKED with your reason (kept for the record), and
+      WhatsApps the requester "🚫 Not stocking <item> — <reason>." so nothing is left hanging.
+  - Loss guard: on "Add to catalogue", if the selling price is at/below cost, you get a
+      "would sell at a loss — add anyway?" confirm (you can still do a deliberate loss-leader).
+
+Statuses now: new (needs price) → priced → closed (in catalogue) OR rejected (not stocked).
+Migration 2026_07_11_000003 adds sourcing_requests.decision_note (the "why not stocked" reason).
+
+STRESS-TEST NOTES (handled)
+  - Zero/negative reply price: ignored (must be > 0).  - Convert unpriced/twice: blocked.
+  - Below-cost selling price: warned.  - Missing requester phone / unreachable photo: degrades
+    to text / skips quietly.  - Reminders are capped (6) and stop on price/closed/rejected.
