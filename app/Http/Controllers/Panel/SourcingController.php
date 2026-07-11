@@ -69,6 +69,34 @@ class SourcingController extends Controller
         }
     }
 
+    /** Tell the person who asked (Asish) that the price is in — on WhatsApp. Best-effort. */
+    public static function notifyRequester(Tenant $t, SourcingRequest $r): bool
+    {
+        try {
+            $inst = (string) ($t->whatsapp_instance ?? '');
+            if ($inst === '' || ! $r->requested_by_user_id) return false;
+            $u = \App\Models\User::where('tenant_id', $t->id)->find($r->requested_by_user_id);
+            $phone = $u ? preg_replace('/[^0-9]/', '', (string) $u->phone) : '';
+            if ($phone === '') return false;
+
+            $cur = $r->currency ?: 'UGX';
+            $lines = ["\u{2705} Price in — *{$r->item_name}*", $cur . ' ' . number_format((float) $r->quoted_price)];
+            if (trim((string) $r->supplier_name) !== '') $lines[] = 'Supplier: ' . $r->supplier_name;
+            if (trim((string) $r->availability) !== '') $lines[] = (string) $r->availability;
+            if (trim((string) $r->price_note) !== '') $lines[] = (string) $r->price_note;
+            if (trim((string) $r->priced_by) !== '') $lines[] = 'by ' . $r->priced_by;
+            $lines[] = "(SR-{$r->id})";
+            $msg = implode("\n", $lines);
+
+            app(WhatsAppManager::class)->forTenant($t)->sendText($inst, $phone, $msg);
+            try { MessageLog::record($t->id, $phone, $inst, 'out', 'system', $msg); } catch (\Throwable $e) {}
+            return true;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('sourcing.notify_requester_failed', ['id' => $r->id, 'err' => $e->getMessage()]);
+            return false;
+        }
+    }
+
     public function page(Request $request)
     {
         $u = $request->user();
@@ -189,6 +217,8 @@ class SourcingController extends Controller
         $r->priced_at     = now();
         $r->status        = 'priced';
         $r->save();
+        // Tell the requester (Asish) — unless they priced their own request.
+        if ((int) $r->requested_by_user_id !== (int) $u->id) self::notifyRequester($u->tenant, $r);
         return response()->json(['ok'=>true]);
     }
 

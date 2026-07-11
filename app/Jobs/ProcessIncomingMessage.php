@@ -180,6 +180,8 @@ class ProcessIncomingMessage implements ShouldQueue
                         $reply = "\u{2705} Saved: {$sr->item_name} = {$sr->currency} " . number_format($price) . " (SR-{$sr->id}). Thank you!";
                         $gateway->sendText($tenant->whatsapp_instance, $from, $reply);
                         try { MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'system', $reply); } catch (\Throwable $e) {}
+                        // Tell the person who asked (Asish) the price is in.
+                        try { \App\Http\Controllers\Panel\SourcingController::notifyRequester($tenant, $sr); } catch (\Throwable $e) {}
                         BotTrace::log($this->tenantId, $trace, $from, 'sourcing_priced', 'SR-' . $sr->id . ' = ' . $price);
                         return;
                     }

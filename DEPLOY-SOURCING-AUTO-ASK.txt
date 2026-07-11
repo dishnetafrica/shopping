@@ -9,6 +9,10 @@ WHAT YOU GET (on /panel/sourcing)
   - Jayesh replies the price straight from WhatsApp: "12 45000" (SR id + price, optional UGX/USD/
     SSP). The request is marked PRICED instantly and he gets "✅ Saved: <item> = UGX 45,000".
     This works even if the bot is switched off (it's an internal ops reply, handled first).
+  - The person who ASKED (e.g. Asish) is then WhatsApp'd automatically: "✅ Price in — <item>:
+    UGX 45,000 (by Jayesh)…", so he knows without checking the screen. (Needs the requester's
+    User to have a phone number saved; if not, it's simply skipped. Not sent if he priced it
+    himself.) Fires whether the price came from Jayesh's reply or the panel "Add price".
   - Set the buyer once via the "⚙ Set buyer's WhatsApp" chip (name + number) — now stored on the
     server (a tenant setting), so it works for everyone, not just one browser. An old number saved
     in a browser is migrated up automatically.
