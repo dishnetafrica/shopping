@@ -56,13 +56,44 @@ class AdsController extends Controller
         } catch (\Throwable $e) { /* bot_events optional */ }
 
         return response()->json([
-            'ok'          => true,
-            'enabled'     => (bool) $t->setting('bot_ad_awareness', true),
-            'bot_mode'    => (string) $t->setting('bot_mode', 'auto'),
-            'is_owner'    => $this->priv($request->user()),
-            'arrivals_7d' => $count7,
-            'events'      => $events,
+            'ok'               => true,
+            'enabled'          => (bool) $t->setting('bot_ad_awareness', true),
+            'bot_mode'         => (string) $t->setting('bot_mode', 'auto'),
+            'is_owner'         => $this->priv($request->user()),
+            'arrivals_7d'      => $count7,
+            'events'           => $events,
+            // Bot behaviour controls surfaced on this screen
+            'business_name'    => (string) $t->name,
+            'ad_ignore_titles' => (string) $t->setting('ad_ignore_titles', ''),
+            'keep_ai_on'       => ! (bool) $t->setting('human_takeover_on_reply', true), // true = AI keeps replying after a manual message
+            'warehouse'        => (string) $t->setting('warehouse_location', ''),
+            'moq_note'         => (string) $t->setting('moq_note', ''),
         ]);
+    }
+
+    /** POST /papi/ads-settings — owner/manager saves the bot-behaviour controls on this screen. */
+    public function saveSettings(Request $request)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok' => false], 401);
+        if (! $this->priv($u)) return response()->json(['ok' => false, 'error' => 'not_allowed'], 403);
+
+        if ($request->has('ad_ignore_titles')) {
+            $t->putSetting('ad_ignore_titles', trim((string) $request->input('ad_ignore_titles')));
+        }
+        if ($request->has('keep_ai_on')) {
+            // UI sends keep_ai_on = 1 when the owner wants the AI to keep replying after a manual
+            // message. That is the INVERSE of human_takeover_on_reply.
+            $keep = filter_var($request->input('keep_ai_on'), FILTER_VALIDATE_BOOLEAN);
+            $t->putSetting('human_takeover_on_reply', ! $keep);
+        }
+        if ($request->has('warehouse')) {
+            $t->putSetting('warehouse_location', trim((string) $request->input('warehouse')));
+        }
+        if ($request->has('moq_note')) {
+            $t->putSetting('moq_note', trim((string) $request->input('moq_note')));
+        }
+        return response()->json(['ok' => true]);
     }
 
     /** POST /papi/ads-toggle?on=1|0 — owner/manager turns ad understanding on/off. */

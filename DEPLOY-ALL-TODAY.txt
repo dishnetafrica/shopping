@@ -1,0 +1,66 @@
+DEPLOY — ALL of today's changes in ONE bundle
+==============================================
+This single zip contains the three features shipped today, already merged (each file here is the
+latest version with every change applied). Deploy once. NO database migration is needed for any of
+this — everything is code + tenant settings.
+
+WHAT'S INSIDE (3 features)
+
+A) PROFESSIONAL INVOICE PDF + wholesale pricing            (details: DEPLOY-INVOICE-PDF.txt)
+   - "Export Invoice (PDF)" now builds a clean, branded server-side PDF (dompdf, like the
+     quotation) instead of printing the editable screen. WYSIWYG in the selected currency.
+   - Cartons + per-piece: line shows unit ("50 CTN"), pack ("×24") and per-piece rate.
+   - Part-carton (loose): a Carton/Piece selector — sell loose pieces at carton-price / pack.
+   - New orders default to carton quantities (MOQ); bot quote shows the loose per-piece rate.
+   - "Missing pack size" finder on Products to fill the setup gaps fast.
+   - Optional settings: invoice_title, invoice_terms, bank_details, invoice_footer,
+     invoice_terms_days, credit_terms.
+
+B) WHATSAPP BOT FIXES from real chats                      (details: DEPLOY-BOT-CHAT-FIXES.txt)
+   - "SkyTrips" fix: an ad's page/brand title is no longer treated as a product. Set the ignore
+     list on /panel/ads → Bot behaviour (add: SkyTrips).
+   - MOQ question answered with a wholesale carton default.
+   - Bot explains what products are for ("good for juice/water"); uses product Description.
+   - Warehouse in Luri: set it on /panel/ads → Bot behaviour; bot tells customers the pickup point.
+   - "Don't stop the AI when I message by hand": /panel/ads → "Keep AI replying…" switch.
+
+C) CONSIGNMENT STOCK REQUESTS (Asish → Kampala)           (details: DEPLOY-CONSIGNMENT-REQUEST.txt)
+   - The consignment loose-stock is the request→sent→received→sold pipeline (already built).
+   - Quick request list: paste "Cling Film 10 / Aluminium Foil 15" → added as Requested.
+   - "Send request to Kampala": WhatsApps the short list to Jayesh.
+   - One-tap for Asish: a "Request stock from Kampala" card on the consignment list AND a tile on
+     the mobile panel — lands on today's open consignment (auto-creates one if none is open).
+
+FILES IN THIS BUNDLE (14 code/asset + 4 notes)
+  app/Http/Controllers/Panel/OrderInvoiceController.php   [NEW]
+  app/Http/Controllers/Panel/AdsController.php
+  app/Http/Controllers/Panel/ConsignmentController.php
+  app/Http/Controllers/Panel/SelfcheckController.php      (all probes, incl. today's)
+  app/Jobs/ProcessIncomingMessage.php
+  app/Services/Bot/AiBrain.php
+  app/Services/Bot/BotBrain.php
+  app/Services/Bot/FaqDictionary.php
+  app/Services/Bot/OrderCalculator.php
+  resources/panel/seller.html
+  resources/panel/ads.html
+  resources/panel/consignment.html
+  resources/panel/mobile.html
+  routes/web.php
+  DEPLOY-INVOICE-PDF.txt · DEPLOY-BOT-CHAT-FIXES.txt · DEPLOY-CONSIGNMENT-REQUEST.txt · this file
+
+DEPLOY (once)
+  1. Replace all the files above -> commit.
+  2. php artisan migrate --force        (harmless — there are NO new migrations in this bundle;
+                                         run only if you have earlier pending ones.)
+  3. EasyPanel REBUILD (force / no-cache) — restarts the queue worker so the bot picks up the new
+     code, and serves the new panel screens.
+  4. Set these on /panel/ads → "Bot behaviour":
+       - Ad page/brand names to ignore:  SkyTrips
+       - Keep AI replying after I message a customer:  ON
+       - Warehouse / pickup location:  Luri, just outside Juba, South Sudan
+     And make sure Jayesh's WhatsApp is set (sourcing buyer number, or consignment_dispatch_phone).
+
+VERIFY — /papi/selfcheck should now show these true:
+   Professional invoice PDF (server-side); Ad page/brand not treated as product (SkyTrips fix);
+   Keep-AI-on…; Warehouse / pickup answer (Luri); Bot explains what products are for; Ads screen
+   behaviour controls; Consignment stock-request + notify Kampala; One-tap stock request (Asish).

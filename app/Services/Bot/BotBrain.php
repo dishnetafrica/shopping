@@ -1905,8 +1905,10 @@ class BotBrain
             'hours'           => trim((string) $tenant->setting('business_hours', '')) ?: null,
             'deliver_areas'   => is_array($areas) ? $areas : null,
             'min_order'       => $tenant->setting('min_order', null),
+            'moq_note'        => trim((string) $tenant->setting('moq_note', '')) ?: null,
             'delivery_note'   => trim((string) $tenant->setting('delivery_note', '')) ?: null,
             'pay_on_delivery' => $tenant->setting('pay_on_delivery', true),
+            'warehouse'       => trim((string) $tenant->setting('warehouse_location', '')) ?: null,
         ], fn ($v) => $v !== null);
 
         // Product-specific MOQ: only when the message is a minimum-order/MOQ question that
@@ -2419,9 +2421,13 @@ class BotBrain
                      . "and I'll check the charge for you. You can keep adding items meanwhile.";
             case 'location':
                 $addr = trim((string) $tenant->setting('address', ''));
+                $wh   = trim((string) $tenant->setting('warehouse_location', ''));
+                $whTxt = $wh !== '' ? " Our warehouse (pickup) is at {$wh}." : '';
                 return $addr !== ''
-                    ? "\u{1F4CD} We're at {$addr}. We're open and taking orders — tell me what you'd like."
-                    : "We're open and taking orders \u{1F642} Tell me what you'd like and where to deliver.";
+                    ? "\u{1F4CD} We're at {$addr}.{$whTxt} We're open and taking orders — tell me what you'd like."
+                    : ($wh !== ''
+                        ? "\u{1F4CD} Our warehouse (pickup) is at {$wh}. We're open and taking orders — tell me what you'd like."
+                        : "We're open and taking orders \u{1F642} Tell me what you'd like and where to deliver.");
             case 'open':
             case 'general':
             default:

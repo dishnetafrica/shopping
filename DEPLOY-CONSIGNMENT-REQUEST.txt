@@ -41,6 +41,10 @@ ONE-TAP REQUEST FOR ASISH (no need to create a consignment first)
    So Asish never has to create or pick a consignment; he just sends his list like a message.
    (Any signed-in staff can request; it only creates a draft request, not a dispatch.)
 
+   ON MOBILE: the phone panel (More menu) now has a dedicated tile "📥 Request stock from Kampala"
+   that opens the consignment screen straight on the paste box (deep-link /panel/consignment#request,
+   which auto-focuses the request field). So from his phone Asish taps that tile, pastes, and sends.
+
 THE DAILY FLOW (recommended)
    1. Asish sends his list on WhatsApp → you paste it into "Quick request list" on TODAY's
       consignment → Add all as requested.
@@ -56,6 +60,8 @@ FILES
   routes/web.php                                        papi/consignment-request-notify + -request-quick.
   resources/panel/consignment.html                     LIST-view "Request stock from Kampala" card
       (one-tap), plus the in-consignment quick request box + "Send request to Kampala" button.
+  resources/panel/mobile.html                          "📥 Request stock from Kampala" tile in the
+      phone panel's More menu (deep-links to the paste box).
   app/Http/Controllers/Panel/SelfcheckController.php    probes for both.
 
 DEPLOY

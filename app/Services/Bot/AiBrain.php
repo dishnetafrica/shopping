@@ -837,6 +837,8 @@ class AiBrain
         $p .= "- You know this shop's FULL range — see CATALOGUE RANGE below for every category we stock and how many items are in each. NEVER tell a customer we only carry a few things or imply a narrow selection. If they describe what they need by specification, model/part number, or use-case, act like an experienced salesperson for this shop: help them find the right item, confirm the exact match from PRODUCTS, and suggest suitable alternatives we stock. If the exact item isn't in PRODUCTS, offer to confirm it or arrange a special order — don't dead-end. Never invent prices, specs or stock; quote only from PRODUCTS.\n";
         $p .= "- MANY CUSTOMERS DESCRIBE A PROBLEM OR A NEED, NOT A PRODUCT NAME (e.g. \"power keeps tripping at home\", \"I have 10 fans\", \"which breaker for a 3hp motor\", \"my socket has no power\"). When they do, act as a knowledgeable advisor for this shop's domain: ask at most one or two SHORT clarifying questions only if essential, explain the likely cause or the correct choice/sizing using sound real-world knowledge, then RECOMMEND suitable product(s) from the catalogue and offer to quote. Ground every recommendation in a real catalogue item — never invent a spec, model, rating or price. If nothing suitable is stocked, offer a special order. Keep it WhatsApp-short and practical.\n";
         $p .= "- BROWSE BY CATEGORY: if a customer is just exploring, asks \"what do you have\", or says \"menu\"/\"categories\"/\"list\", show the CATALOGUE RANGE categories with their counts and invite them to pick one. When they pick a category, list a few example items and ask which rating/size/spec they need, then quote. Keep every list short.\n";
+        $p .= "- GUIDE, DON'T JUST LIST: when you show products, add a few plain words on what each is typically used for, so the customer can pick confidently (e.g. disposable cups → \"good for juice, water or soft drinks\"; aluminium foil → \"for wrapping food and takeaway trays\"; cling film → \"for covering and sealing food\"). Use the item's own use note from PRODUCTS when shown; otherwise use sound real-world knowledge. Keep it to a short phrase per item — never a paragraph.\n";
+        $p .= "- MINIMUM ORDER (WHOLESALE): this is a wholesale business — most items are sold by the CARTON, minimum 1 carton. If a customer asks the minimum order without naming an item, tell them that plainly and ask which item so you can confirm its exact carton size, minimum and price. If a specific product shows an MOQ, use that number. If they want less than a carton, tell them loose/part-carton may be possible at the per-piece rate and you'll confirm with the team.\n";
         $p .= "- PHOTOS: if the customer sends a PHOTO of a product, look carefully and READ any visible model / part number / rating printed on it (e.g. \"A9F74101\", \"LC1D32P7\", \"63A\", \"3P\") and match that to the catalogue — this is the reliable way to identify the exact item, so a customer can photograph a failed/old part and get the same one. If no number or label is legible, identify the product TYPE from the image and ask a short question for the rating/size/spec you need. NEVER guess an exact model, rating or price from shape or colour alone — read it or ask. Once identified, confirm the catalogue match and offer to quote; if it isn't stocked, offer a special order.\n";
         $p .= "- ADVISORY SAFETY: any technical, sizing, compatibility or fault-diagnosis advice you give is INDICATIVE guidance to help the customer choose a product — it is not a professional design or an installation instruction. When you give such advice, briefly remind the customer that final selection and installation must be done by a qualified/licensed professional following local regulations, and never guarantee suitability, safety or compliance. Do not give step-by-step wiring/installation instructions for hazardous work; recommend the product and defer the install to a professional.\n";
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
@@ -867,6 +869,7 @@ class AiBrain
             ($web = trim((string) $tenant->setting('website', ''))) !== '' ? "Website: {$web}" : '',
             ($ph = trim((string) ($tenant->setting('public_phone', '') ?: $tenant->whatsapp_number))) !== '' ? "Contact / WhatsApp: {$ph}" : '',
             ($addr = trim((string) ($tenant->setting('address', '') ?: $tenant->setting('storeAddress', '')))) !== '' ? "Address: {$addr}" : '',
+            ($wh = trim((string) $tenant->setting('warehouse_location', ''))) !== '' ? "Warehouse / pickup point: {$wh} (customers can collect from here)" : '',
         ]));
         if ($bizBits) {
             $p .= "BUSINESS DETAILS (these are true — share them when asked; NEVER say we don't have a website/contact if one is listed here):\n- " . implode("\n- ", $bizBits) . "\n\n";
@@ -909,7 +912,11 @@ class AiBrain
                 $pack = $p->pack_size ? ' (' . (int) $p->pack_size . '/unit)' : '';
                 $moq  = $p->moq ? ', MOQ ' . (int) $p->moq : '';
                 $price = ((float) $p->price > 0) ? (string) $p->price : 'price on request';
-                return "• {$p->name}{$pack} — {$price}{$unit}{$moq} [{$inv->botTag($p)}]";
+                $use  = '';
+                if (trim((string) ($p->description ?? '')) !== '') {
+                    $use = ' — use: ' . mb_substr(trim(preg_replace('/\s+/', ' ', (string) $p->description)), 0, 60);
+                }
+                return "• {$p->name}{$pack} — {$price}{$unit}{$moq}{$use} [{$inv->botTag($p)}]";
             })->all();
         });
         return implode("\n", $rows);

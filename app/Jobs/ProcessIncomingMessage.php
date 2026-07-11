@@ -106,6 +106,11 @@ class ProcessIncomingMessage implements ShouldQueue
             $txt   = trim((string) $this->incoming['text']);
             $state = is_array($convo->state) ? $convo->state : [];
             if ($txt !== '' && $this->norm($txt) !== ($state['lg_last_out'] ?? '')) {
+                // A manually-typed reply logs into history (so the AI SEES it and stays consistent) —
+                // then, by default, soft-pauses the bot so it doesn't talk over a live human. But if
+                // the owner has turned this off (human_takeover_on_reply = false), a stray manual
+                // message must NOT stop the AI: log it for context and let the bot keep replying.
+                $pauseOnReply = (bool) $tenant->setting('human_takeover_on_reply', true);
                 $full  = (int) $tenant->setting('human_takeover_minutes', 60);
                 $nudge = (int) $tenant->setting('human_nudge_minutes', 3);
                 // A short greeting ("hi") is a nudge to wake a silent bot, not a real takeover: pause
@@ -114,7 +119,7 @@ class ProcessIncomingMessage implements ShouldQueue
                 $alreadyEngaged = (int) ($state['human_until'] ?? 0) > time();
                 $isNudge = \App\Support\AgentNudge::is($txt) && ! $alreadyEngaged;
                 $mins = $isNudge ? $nudge : $full;
-                if ($mins > 0) {
+                if ($pauseOnReply && $mins > 0) {
                     $state['human_until'] = time() + $mins * 60;
                     $convo->state = $state;
                 }
@@ -122,7 +127,7 @@ class ProcessIncomingMessage implements ShouldQueue
                 $convo->save();
                 MessageLog::record($this->tenantId, $this->incoming['from'], $this->incoming['instance'], 'out', 'human', $txt);
                 BotTrace::log($this->tenantId, (string) ($this->incoming['trace'] ?? $mid), (string) $this->incoming['from'],
-                    'manual_takeover', ($isNudge ? 'nudge' : 'takeover') . ' — bot paused ' . $mins . 'm');
+                    'manual_takeover', $pauseOnReply ? (($isNudge ? 'nudge' : 'takeover') . ' — bot paused ' . $mins . 'm') : 'logged — AI stays on (takeover-on-reply off)');
             }
             return; // never auto-reply to our own number
         }
@@ -212,6 +217,15 @@ class ProcessIncomingMessage implements ShouldQueue
                 }
                 $adHead = trim(preg_replace('/\s+/', ' ', (string) $adHead));
                 $q = trim((string) $this->incoming['text']);
+                // The ad TITLE is often our page / campaign / brand name (e.g. "SkyTrips"), NOT a
+                // product we stock. Treating it as a product makes the bot reply "I don't have
+                // information on SkyTrips" and ignore the customer's real question. So: if the title
+                // is a known page/brand name (ad_ignore_titles setting, or our own business name),
+                // DON'T weave it as a product — just let the customer's real message through.
+                if ($adHead !== '' && $this->adTitleIsBrand($tenant, $adHead)) {
+                    BotTrace::log($this->tenantId, $trace, $from, 'ad_referral', $adHead . ' (page/brand — not treated as product)');
+                    $adHead = '';   // fall through: answer the customer's actual text (or greet)
+                }
                 if ($adHead !== '') {
                     $adHead = mb_substr($adHead, 0, 160);
                     $st = is_array($convo->state) ? $convo->state : [];
@@ -850,6 +864,35 @@ class ProcessIncomingMessage implements ShouldQueue
     private function norm(string $s): string
     {
         return strtolower(trim(preg_replace('/\s+/', ' ', $s)));
+    }
+
+    /**
+     * Is this Facebook-ad title actually our page / campaign / brand name (not a product)?
+     * True when it matches any entry in the tenant's `ad_ignore_titles` setting (comma/newline
+     * separated), or the tenant's own business name. Used so an ad titled e.g. "SkyTrips" is not
+     * mistaken for a product the customer is asking about. Case-insensitive, punctuation-tolerant.
+     */
+    private function adTitleIsBrand(\App\Models\Tenant $tenant, string $head): bool
+    {
+        $clean = fn (string $s) => trim(preg_replace('/[^a-z0-9 ]+/', '', strtolower($s)));
+        $h = $clean($head);
+        if ($h === '') return false;
+
+        $names = [];
+        $raw = (string) $tenant->setting('ad_ignore_titles', '');
+        foreach (preg_split('/[,\n;]+/', $raw) as $n) {
+            $n = $clean((string) $n);
+            if ($n !== '') $names[] = $n;
+        }
+        // Our own business name is always a brand name, never a product.
+        $bn = $clean((string) $tenant->name);
+        if ($bn !== '') $names[] = $bn;
+
+        foreach ($names as $n) {
+            // whole-title match, or the brand name appears as a word-run inside the title
+            if ($h === $n || str_contains($h, $n) || str_contains($n, $h)) return true;
+        }
+        return false;
     }
 
     /**

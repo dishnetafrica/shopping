@@ -145,9 +145,25 @@ class FaqDictionary
                 }
                 $min = $ctx['min_order'] ?? null;
                 $cur = self::cur($ctx);
-                return $min
-                    ? "\u{1F6D2} The minimum order is {$cur} " . number_format((int) $min) . ". Add what you need and I'll keep the running total."
-                    : "\u{1F6D2} There's no fixed minimum — order what you need. Delivery has a small fee depending on your area.";
+                if ($min) {
+                    return "\u{1F6D2} The minimum order is {$cur} " . number_format((int) $min) . ". Add what you need and I'll keep the running total.";
+                }
+                $note = trim((string) ($ctx['moq_note'] ?? ''));
+                if ($note !== '') return "\u{1F6D2} " . $note;
+                // Wholesale default: sold by the carton, min 1 carton — ask which item to confirm.
+                return "\u{1F6D2} We sell wholesale by the carton — the minimum is usually 1 carton. Tell me which item and I'll confirm its carton size, minimum and price.";
+            }],
+
+            // --- Warehouse / pickup / collection --------------------------------
+            [[
+                '/\b(ware\s*house|godown|go\s*down|depot|store\s*room)\b/',
+                '/\b(pick\s*up|collect(ion)?|self[-\s]?pickup)\b/',
+                '/\bcome (and )?(buy|collect|pick)\b/',
+            ], function ($ctx) {
+                $wh = trim((string) ($ctx['warehouse'] ?? ''));
+                return $wh !== ''
+                    ? "\u{1F3EC} Yes — you can collect from our warehouse at {$wh}. Tell me what you need and I'll have it ready for pickup."
+                    : "\u{1F3EC} Yes, you can collect from our warehouse — tell me what you need and I'll confirm the pickup details.";
             }],
 
             // --- Discounts / negotiate / wholesale ------------------------------

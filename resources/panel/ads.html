@@ -58,6 +58,31 @@ function load(){
        '<span class="chip">'+d.arrivals_7d+' ad arrival'+(d.arrivals_7d===1?'':'s')+' · 7 days</span></div>'+
        (d.is_owner?'':'<div class="note">Only the owner or a manager can change this.</div>')+
        '<div class="note" id="togMsg"></div></div>';
+    // --- Bot behaviour controls ---
+    var dis=d.is_owner?'':'disabled';
+    var keepAi=!!d.keep_ai_on;
+    h+='<div class="card">'+
+      '<div class="h">Bot behaviour</div>'+
+      '<div class="note">Small settings that fix common WhatsApp mix-ups. '+(d.is_owner?'':'Owner/manager only.')+'</div>'+
+
+      '<div class="sec">Ad page / brand names to ignore</div>'+
+      '<input id="btIgnore" '+dis+' value="'+esc(d.ad_ignore_titles||'')+'" placeholder="e.g. '+esc(d.business_name||'SkyTrips')+', SkyTrips" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:9px;font-size:13px">'+
+      '<div class="note">When someone arrives from an ad, the ad’s <b>title</b> is often your <b>page or campaign name</b> (e.g. “SkyTrips”), not a product. Without this, the bot searches for a product called “SkyTrips” and replies “I don’t have that” — ignoring the customer’s real question. List those page/campaign names here (comma-separated) and the bot will skip them and just help the customer. Your business name is always ignored automatically.</div>'+
+
+      '<div class="sec">Keep AI replying after I message a customer</div>'+
+      '<div class="rowb"><div class="note" style="margin:0;flex:1">If you (a human) send one message in a chat by mistake, don’t stop the AI. With this ON, your message is kept for context and the AI keeps answering the customer. With it OFF, a manual message pauses the bot for a while (so a person can take over).</div>'+
+      '<label class="switch"><input type="checkbox" id="btKeepAi" '+(keepAi?'checked':'')+' '+dis+'><span class="slider"></span></label></div>'+
+
+      '<div class="sec">Warehouse / pickup location</div>'+
+      '<input id="btWh" '+dis+' value="'+esc(d.warehouse||'')+'" placeholder="e.g. Luri, just outside Juba, South Sudan" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:9px;font-size:13px">'+
+      '<div class="note">When a customer asks where you are / can they collect, the bot will tell them the pickup point. Leave blank to skip.</div>'+
+
+      '<div class="sec">Minimum-order note (optional)</div>'+
+      '<input id="btMoq" '+dis+' value="'+esc(d.moq_note||'')+'" placeholder="Leave blank for the default carton wording" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:9px;font-size:13px">'+
+      '<div class="note">Shown when a customer asks the minimum order without naming an item. Blank = “We sell wholesale by the carton — minimum 1 carton…”</div>'+
+
+      (d.is_owner?('<div style="margin-top:14px"><button id="btSave" onclick="saveBot()" style="background:var(--green);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:800;cursor:pointer">Save behaviour</button> <span class="note" id="btMsg" style="margin-left:8px"></span></div>'):'')+
+      '</div>';
     // events
     h+='<div class="sec">Recent ad arrivals</div>';
     var ev=d.events||[];
@@ -78,6 +103,18 @@ function load(){
        'Each time it fires you’ll see a “from ad” / “follow-up” row above. If nothing appears, make sure this switch is ON and that the bot is answering (Diagnostics shows the full message trace).</div>';
     $('wrap').innerHTML=h;
   });
+}
+function saveBot(){
+  var m=$('btMsg'); if(m)m.textContent='Saving…';
+  var body=new URLSearchParams({
+    ad_ignore_titles:($('btIgnore')?$('btIgnore').value:''),
+    keep_ai_on:($('btKeepAi')&&$('btKeepAi').checked)?1:0,
+    warehouse:($('btWh')?$('btWh').value:''),
+    moq_note:($('btMoq')?$('btMoq').value:'')
+  });
+  api('/papi/ads-settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
+    if(m)m.textContent=(r&&r.ok)?'Saved ✓':((r&&r.error==='not_allowed')?'Owner/manager only.':'Could not save.');
+  }).catch(function(){ if(m)m.textContent='Network error.'; });
 }
 function toggle(on){
   var m=$('togMsg'); if(m)m.textContent='Saving…';

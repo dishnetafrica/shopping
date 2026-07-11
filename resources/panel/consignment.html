@@ -112,6 +112,11 @@ function load(){
       '</div>';
     }).join('');}
     $('wrap').innerHTML=html;
+    // Deep-link from the mobile home ("Request stock") lands right on the paste box.
+    if((location.hash||'').replace('#','')==='request'){
+      var el=$('qReqBulk');
+      if(el){ try{el.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){el.scrollIntoView();} el.focus(); }
+    }
   });
 }
 
