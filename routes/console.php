@@ -50,4 +50,5 @@ Schedule::command('bot:lead-followup')->everyFiveMinutes()->between('8:00', '20:
 Schedule::command('sourcing:remind')->hourly()->between('8:00', '20:00')->withoutOverlapping()->onOneServer();
 
 // Virtual salesperson: enquiry follow-up cadence + reorder reminders (opt-in per tenant).
-Schedule::command('bot:sales-cadence')->hourly()->between('9:00', '19:00')->withoutOverlapping()->onOneServer();
+// Pinned to East Africa Time so "9am–7pm" is local (Kampala/Juba), regardless of server TZ.
+Schedule::command('bot:sales-cadence')->hourly()->between('9:00', '19:00')->timezone('Africa/Kampala')->withoutOverlapping()->onOneServer();

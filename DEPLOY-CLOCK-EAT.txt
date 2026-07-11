@@ -1,0 +1,33 @@
+DEPLOY — Universal business clock (East Africa Time) + bot follow-up pinned to EAT
+==================================================================================
+
+WHY
+  Your bot's "working hours" run on a clock, and Kampala + Juba are both East Africa Time (EAT,
+  UTC+3). This makes the time visible everywhere and guarantees the bot's follow-up window is EAT.
+
+WHAT YOU GET
+  1) A live clock in the top bar of every major screen — Seller panel, Mobile, Consignments,
+     Invoices, Ads, Sourcing — showing e.g. "🕒 Mon 14:32 EAT". It's computed as UTC+3, so it reads
+     the SAME on every phone/computer no matter how that device's own clock is set. Everyone on the
+     team sees one shared business time.
+  2) The Virtual salesperson follow-up window is now pinned to Africa/Kampala (EAT) in the
+     scheduler, so "9am–7pm" always means 9am–7pm in Juba/Kampala — not server/UTC time. The Ads
+     card now says "(9am–7pm EAT)".
+
+FILES
+  resources/panel/seller.html, mobile.html, consignment.html, invoices.html, ads.html,
+      sourcing.html   — the shared clock snippet in each top bar.
+  routes/console.php  — bot:sales-cadence pinned ->timezone('Africa/Kampala').
+  (ads.html also carries the earlier 'fst' page-load fix + the ex-Juba "Price basis city" field.)
+
+DEPLOY
+  1. Replace the files -> commit.  (No migration.)
+  2. EasyPanel REBUILD.
+  3. Open any panel screen → the EAT clock shows top-right and ticks.
+
+NOTE
+  - Other scheduled reminders (delivery, credit, sourcing) still follow the app's configured
+    timezone. If you want ALL of them pinned to EAT too, say so and I'll add ->timezone to each —
+    or set APP_TIMEZONE=Africa/Kampala in the environment so everything is EAT by default.
+  - The clock uses a fixed UTC+3 offset (EAT has no daylight saving), so it's always correct for
+    Uganda & South Sudan.

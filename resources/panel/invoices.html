@@ -93,4 +93,22 @@ function voidInv(id,no){
 }
 load();
 </script>
+<script>
+/* Universal business clock — East Africa Time (Kampala/Juba, UTC+3). Shown identically on every
+   device regardless of the phone/computer's own timezone, so everyone reads the same clock. */
+(function(){
+  function eat(){var d=new Date();var e=new Date(d.getTime()+d.getTimezoneOffset()*60000+3*3600000);
+    function p(n){return (n<10?'0':'')+n;} var wd=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    return '\u{1F552} '+wd[e.getDay()]+' '+p(e.getHours())+':'+p(e.getMinutes())+' EAT';}
+  function mount(){
+    var host=document.querySelector('.top,.topbar,header.top'); if(!host||document.getElementById('fsClock'))return;
+    var c=document.createElement('span'); c.id='fsClock';
+    c.style.cssText='margin-left:auto;font-weight:800;font-size:12px;background:rgba(128,128,128,.18);color:inherit;border-radius:8px;padding:5px 9px;white-space:nowrap;align-self:center';
+    c.title='Business time — East Africa Time (Kampala / Juba)';
+    var back=host.querySelector('.back'); if(back&&back.parentNode===host){host.insertBefore(c,back);} else {host.appendChild(c);}
+    function tick(){c.textContent=eat();} tick(); setInterval(tick,15000);
+  }
+  if(document.readyState!=='loading')mount(); else document.addEventListener('DOMContentLoaded',mount);
+})();
+</script>
 </body></html>
