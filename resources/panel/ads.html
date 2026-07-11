@@ -74,7 +74,7 @@ function load(){
       '<label class="switch"><input type="checkbox" id="btKeepAi" '+(keepAi?'checked':'')+' '+dis+'><span class="slider"></span></label></div>'+
 
       '<div class="sec">Price basis city (USD prices are ex-…)</div>'+
-      '<input id="btBasis" '+dis+' value="'+esc(d.basis_city||'')+'" placeholder="e.g. Juba" style="'+fst+'">'+
+      '<input id="btBasis" '+dis+' value="'+esc(d.basis_city||'')+'" placeholder="e.g. Juba" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:9px;font-size:13px">'+
       '<div class="note">Your USD prices are quoted “ex-” this city (goods ready here; onward transport to the customer’s town is arranged after the order). Set it to <b>Juba</b>. The bot also asks out-of-town South Sudan customers how they receive goods (their transporter/route, or collect) and notes it on the order.</div>'+
 
       '<div class="sec">Warehouse / pickup location</div>'+
