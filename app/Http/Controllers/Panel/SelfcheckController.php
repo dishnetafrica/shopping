@@ -115,6 +115,10 @@ class SelfcheckController extends Controller
             && (bool) $this->fileHas('app/Services/Bot/FaqDictionary.php', 'warehouse'));
         $add('bot_product_guidance', 'Bot explains what products are for',
             (bool) $this->fileHas('app/Services/Bot/AiBrain.php', "GUIDE, DON'T JUST LIST"));
+        $add('bot_reply_photo', 'Bot sends photo of the product it recommended',
+            (bool) $this->fileHas('app/Services/Bot/AiBrain.php', 'product the BOT recommended'));
+        $add('missing_photo_finder', 'Products “missing photo” finder',
+            (bool) $this->fileHas('resources/panel/seller.html', 'pmMissingImgCount'));
         $add('ads_settings_ui', 'Ads screen behaviour controls',
             method_exists(\App\Http\Controllers\Panel\AdsController::class, 'saveSettings')
             && (bool) $this->fileHas('resources/panel/ads.html', 'saveBot'));

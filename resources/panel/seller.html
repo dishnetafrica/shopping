@@ -569,6 +569,7 @@
               <div class="fg search"><label>Search</label><input id="pmSearch" placeholder="name, brand, keyword…"></div>
               <div class="fg"><label>Category</label><select id="pmCat"></select></div>
               <div class="fg"><label>Wholesale setup</label><button class="btn ghost" id="pmNeedPackBtn" type="button" title="Show products with no carton pack size — fill these in for carton/loose pricing">⚠ Missing pack size</button></div>
+              <div class="fg"><label>Bot photos</label><button class="btn ghost" id="pmNeedImgBtn" type="button" title="Show products with no photo — the bot can only send a product photo if one is uploaded">⚠ Missing photo</button></div>
               <div class="spacer"></div>
               <div class="fg"><label>&nbsp;</label><span class="count" id="pmCount"></span></div>
             </div>
@@ -2863,7 +2864,7 @@ function reportsInit(){
 
 /* boot */
 /* ---------------- PRODUCTS management ---------------- */
-var pmQuery='',pmCatFilter='',pmNeedsPack=false,_cats=[];
+var pmQuery='',pmCatFilter='',pmNeedsPack=false,pmNeedsImg=false,_cats=[];
 function pmCats(){return Array.from(new Set(CATALOGUE.map(function(p){return (p.category||'').trim();}).filter(Boolean))).sort();}
 function pmInit(){
   bindWedge($('pmScan'),function(code,idx){openEdit(CATALOGUE[idx]._row);});
@@ -2872,6 +2873,7 @@ function pmInit(){
   $('pmSearch').oninput=function(){pmQuery=this.value.toLowerCase();renderPM();};
   $('pmCat').onchange=function(){pmCatFilter=this.value;renderPM();};
   if($('pmNeedPackBtn'))$('pmNeedPackBtn').onclick=function(){pmNeedsPack=!pmNeedsPack;renderPM();};
+  if($('pmNeedImgBtn'))$('pmNeedImgBtn').onclick=function(){pmNeedsImg=!pmNeedsImg;renderPM();};
   $('addProdBtn').onclick=openAdd;
   if($('pmExport'))$('pmExport').onclick=exportProductsCSV;
   if($('pmBulkMeta'))$('pmBulkMeta').onclick=openBulkMeta;
@@ -3104,17 +3106,22 @@ function pmFiltered(){
   if(pmCatFilter)list=list.filter(function(p){return (p.category||'').trim()===pmCatFilter;});
   if(pmQuery)list=list.filter(function(p){return (p.name+' '+p.brand+' '+p.category+' '+p.keywords).toLowerCase().indexOf(pmQuery)>=0;});
   if(pmNeedsPack)list=list.filter(function(p){return packOf(p)<=0;});
+  if(pmNeedsImg)list=list.filter(function(p){return !String(p.image||'').trim();});
   list.sort(function(a,b){return (Number(b.order||0)-Number(a.order||0))||String(a.name||'').localeCompare(String(b.name||''));});
   return list;
 }
 /* How many products still lack a carton pack size (blocks carton/loose pricing). */
 function pmMissingPackCount(){return CATALOGUE.filter(function(p){return packOf(p)<=0;}).length;}
+/* How many products have no photo (the bot can't send a product photo without one). */
+function pmMissingImgCount(){return CATALOGUE.filter(function(p){return !String(p.image||'').trim();}).length;}
 function renderPM(){
   if(!CATALOGUE.length){$('pmGrid').innerHTML='<div class="empty">No products loaded — tap \u21bb Refresh.</div>';$('pmCount').textContent='';return;}
   var list=pmFiltered(),capped=list.slice(0,300);
   $('pmCount').textContent=list.length.toLocaleString()+' products'+(list.length>300?' · showing 300':'');
   var miss=pmMissingPackCount(),nb=$('pmNeedPackBtn');
   if(nb){nb.textContent=(pmNeedsPack?'✓ ':'⚠ ')+miss+' missing pack size';nb.style.background=pmNeedsPack?'#B4232A':(miss>0?'#FBE9E7':'');nb.style.color=pmNeedsPack?'#fff':(miss>0?'#B4232A':'');nb.style.display=(miss>0||pmNeedsPack)?'':'none';}
+  var missI=pmMissingImgCount(),ib=$('pmNeedImgBtn');
+  if(ib){ib.textContent=(pmNeedsImg?'✓ ':'⚠ ')+missI+' missing photo';ib.style.background=pmNeedsImg?'#B4232A':(missI>0?'#FBE9E7':'');ib.style.color=pmNeedsImg?'#fff':(missI>0?'#B4232A':'');ib.style.display=(missI>0||pmNeedsImg)?'':'none';}
   $('pmGrid').innerHTML=capped.length?capped.map(function(p){var st=prodStock(p),out=st===0;
     var im=p.image?'<img class="pthumb" loading="lazy" src="'+esc(p.image)+'" onerror="this.style.display=\'none\'">':'';
     var ordCtl='<div class="pmord" onclick="event.stopPropagation()" style="margin-top:6px;display:flex;gap:8px;font-size:11px;font-weight:700;align-items:center">'+
@@ -3128,9 +3135,10 @@ function renderPM(){
       '<a href="#" onclick="event.preventDefault();event.stopPropagation();pmDelete('+p._row+')" style="color:#B4232A;text-decoration:none">\uD83D\uDDD1 Delete</a>'+
     '</div>';
     var packBadge=(packOf(p)<=0)?'<div class="st" style="color:#B4232A;font-weight:700" title="No carton pack size \u2014 tap to set unit/pack/MOQ for carton & loose pricing">\u26a0 set pack size</div>':(p.unit?'<div class="st" style="color:#0C831F">'+esc(p.unit)+' \u00d7'+packOf(p)+(p.moq&&Number(p.moq)>1?(' \u00b7 min '+Number(p.moq)):'')+'</div>':'');
+    var imgBadge=(!String(p.image||'').trim())?'<div class="st" style="color:#B4232A;font-weight:700" title="No photo \u2014 the bot can\u2019t send a product photo. Tap to add one.">\u26a0 no photo</div>':'';
     return '<div class="pcard" onclick="openEdit('+p._row+')">'+im+'<div class="nm">'+esc(p.name)+'</div>'+
       (p.brand||p.category?'<div class="st">'+esc(p.brand)+(p.category?' \u00b7 '+esc(p.category):'')+'</div>':'')+
-      '<div class="pr">'+ugx(p.price)+'</div><div class="st'+(out?' out':'')+'">'+(out?'OUT OF STOCK':'Stock: '+st)+'</div>'+packBadge+ordCtl+actCtl+'</div>';
+      '<div class="pr">'+ugx(p.price)+'</div><div class="st'+(out?' out':'')+'">'+(out?'OUT OF STOCK':'Stock: '+st)+'</div>'+packBadge+imgBadge+ordCtl+actCtl+'</div>';
   }).join(''):'<div class="empty">No matching products</div>';
 }
 function pmPin(row,mode){

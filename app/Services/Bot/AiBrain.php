@@ -142,6 +142,14 @@ class AiBrain
                     $lp = (string) (Cache::get("lastproduct:{$tenant->id}:{$from}") ?? '');
                     if ($lp !== '') $imgs = $responder->imagesFor($tenant, $convo, $lp);
                 }
+                // Send the photo of the product the BOT recommended — the customer's words
+                // ("cup for juice") often don't match the product name, but the reply does. Only
+                // when the reply names exactly ONE product (in *asterisks*), so lists never spam.
+                if (empty($imgs) && preg_match_all('/\*([^*\n]{3,70})\*/u', (string) $reply, $mm)
+                    && count($mm[1]) === 1) {
+                    $named = trim($mm[1][0]);
+                    if ($named !== '') $imgs = $responder->imagesFor($tenant, $convo, $named);
+                }
                 foreach (array_slice($imgs, 0, 3) as $im) {
                     if (empty($im['media'])) continue;
                     $gateway->sendImage($tenant->whatsapp_instance, $from, $im['media'], (string) ($im['caption'] ?? ''));

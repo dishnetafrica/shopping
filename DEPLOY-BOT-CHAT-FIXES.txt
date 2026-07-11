@@ -45,11 +45,28 @@ WHAT THESE FIX (all seen in your live chats)
    Note: the web-inbox "Take over" button is unchanged — that's a deliberate takeover and still
    silences the bot for that chat until you hand it back.
 
+6) PHOTOS — recognise what customers send, and send our own product photos.
+   INBOUND (customer sends a photo): the "SkyTrips" fix is what unblocks this. In the failing chat
+   the customer sent a Galaxy Pack photo + "What is the MOQ?", but the ad title "SkyTrips" was
+   injected as the product, so the AI answered "I don't have SkyTrips" and ignored the image. With
+   SkyTrips in the ignore list, the real question + the photo reach the AI (vision), which reads
+   the box and matches it. So: add SkyTrips to the ignore list (item 1) and photo questions work.
+   (Photo vision needs your OpenAI key + feature_image_search on — both already set.)
+   OUTBOUND (bot sends a product photo): the bot already sends a product's photo when a customer
+   asks or names a product. NEW: it now also sends the photo of the product the BOT recommended —
+   e.g. customer says "cup for juice", the bot suggests *Galaxy Pack Disposable Glasses 500ml* and
+   the photo goes with it (only when the reply names exactly one product, so lists don't spam).
+   REQUIREMENT: the product must have a PHOTO uploaded. New "⚠ missing photo" finder on Products
+   (next to "missing pack size") lists products with no image and flags each card — fill those so
+   the bot always has a photo to send. (Governed by the send_product_images setting, on by default.)
+
 FILES
   app/Jobs/ProcessIncomingMessage.php     ad-title-is-brand ignore (adTitleIsBrand); human-takeover
                                           gated by human_takeover_on_reply.
   app/Services/Bot/AiBrain.php            product use-notes + wholesale-MOQ rules; warehouse in the
-                                          business facts; product description fed to the model.
+                                          business facts; product description fed to the model;
+                                          sends the photo of the product the bot recommended.
+  resources/panel/seller.html             "⚠ missing photo" finder on Products (+ per-card flag).
   app/Services/Bot/FaqDictionary.php      carton-default MOQ answer; new warehouse/pickup answer.
   app/Services/Bot/BotBrain.php           faqContext: warehouse + moq_note; location answer mentions
                                           the warehouse.
