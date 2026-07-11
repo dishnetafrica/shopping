@@ -71,6 +71,9 @@ class SelfcheckController extends Controller
             && (bool) $this->fileHas('app/Observers/OrderObserver.php', 'AutoIssueInvoice'));
         $add('invoice_issue_btn', 'Issue-invoice button on order',
             (bool) $this->fileHas('resources/panel/seller.html', 'issueInvoice'));
+        $add('invoice_send', 'Send invoice PDF on WhatsApp',
+            method_exists(\App\Http\Controllers\Panel\InvoiceController::class, 'send')
+            && (bool) $this->fileHas('resources/panel/invoices.html', 'sendInv'));
 
         $add('invoice_pdf', 'Professional invoice PDF (server-side)',
             class_exists(\App\Http\Controllers\Panel\OrderInvoiceController::class)

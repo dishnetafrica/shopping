@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
+use App\Models\MessageLog;
 use App\Services\Invoicing\InvoiceRenderer;
 use App\Services\Invoicing\InvoiceService;
+use App\Services\WhatsApp\WhatsAppManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -152,6 +154,61 @@ class InvoiceController extends Controller
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="' . $inv->invoice_no . '.pdf"',
         ]);
+    }
+
+    /** Raw PDF bytes for an invoice — from the stored file, else render + store. */
+    private function pdfBytes($t, Invoice $inv): string
+    {
+        $disk = Storage::disk('public');
+        if ($inv->pdf_path && $disk->exists($inv->pdf_path)) return $disk->get($inv->pdf_path);
+        $inv->loadMissing('items');
+        $pdf = $this->renderer->pdf($t, $this->renderer->fromInvoice($t, $inv));
+        try {
+            $path = "invoices/{$t->id}/{$inv->invoice_no}.pdf";
+            $disk->put($path, $pdf); $inv->pdf_path = $path; $inv->save();
+        } catch (\Throwable $e) { /* still return the bytes */ }
+        return $pdf;
+    }
+
+    /**
+     * POST /papi/invoice-send — WhatsApp the invoice PDF to the customer (like a quotation send).
+     * Uses the invoice's own phone unless a phone is passed. Never issues/changes the invoice.
+     */
+    public function send(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $inv = Invoice::with('items')->where('tenant_id', $t->id)->find((int) $request->input('id'));
+        if (! $inv) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        if ($inv->status === 'void') return response()->json(['ok' => false, 'error' => 'void'], 422);
+        if (! class_exists(\Dompdf\Dompdf::class)) return response()->json(['ok' => false, 'error' => 'pdf_unavailable'], 503);
+
+        $phone = preg_replace('/[^0-9]/', '', (string) ($request->input('phone', '') ?: $inv->customer_phone));
+        if ($phone === '') return response()->json(['ok' => false, 'error' => 'no_phone'], 422);
+
+        $gw = app(WhatsAppManager::class)->forTenant($t);
+        if (! method_exists($gw, 'sendDocument') || ! $t->whatsapp_instance) {
+            return response()->json(['ok' => false, 'error' => 'whatsapp_off'], 422);
+        }
+
+        try {
+            $pdf = $this->pdfBytes($t, $inv);
+            $cur = (string) $inv->currency;
+            $dec = in_array($cur, ['USD'], true) ? 2 : 0;
+            $fmt = fn ($n) => $cur . ' ' . number_format((float) $n, $dec);
+            $bal = (float) $inv->balance;
+            $caption = "🧾 {$inv->title} {$inv->invoice_no} — Total " . $fmt($inv->total)
+                . ($bal > 0.5
+                    ? '. Balance due ' . $fmt($bal) . (optional($inv->due_at) ? ' by ' . $inv->due_at->format('d/m/Y') : '') . '. Please quote the invoice number on payment.'
+                    : '. Paid in full — thank you for your business.');
+            $gw->sendDocument($t->whatsapp_instance, $phone, base64_encode($pdf), $inv->invoice_no . '.pdf', $caption);
+            MessageLog::record($t->id, $phone, $t->whatsapp_instance, 'out', 'panel',
+                "[invoice {$inv->invoice_no}] " . $caption, null, null, ['via' => 'panel', 'kind' => 'invoice', 'invoice_no' => $inv->invoice_no]);
+        } catch (\Throwable $e) {
+            \Log::warning('invoice send failed: ' . $e->getMessage());
+            return response()->json(['ok' => false, 'error' => 'send_failed'], 500);
+        }
+        return response()->json(['ok' => true, 'sent_to' => $phone]);
     }
 
     /** POST /papi/invoice-void — void an invoice (kept for the record). Owner/manager only. */

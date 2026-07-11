@@ -59,6 +59,7 @@ function load(){
             (i.due&&bal>0.5?(' · due '+esc(i.due)):'')+'</div>'+
           '<div class="btnrow">'+
             (i.pdf?('<a class="btn p" href="'+esc(i.pdf)+'" target="_blank">⤓ PDF</a>'):'')+
+            (i.status!=='void'?('<button class="btn g" onclick="sendInv('+i.id+',\''+esc((i.phone||'').replace(/\x27/g,""))+'\')">📤 WhatsApp</button>'):'')+
             (i.status!=='void'?('<button class="btn d" onclick="voidInv('+i.id+',\''+esc(i.no)+'\')">Void</button>'):'')+
           '</div></div>';
       }).join('');
@@ -68,6 +69,14 @@ function load(){
       // keep caret at end after focus
       var v=$('q').value;$('q').value='';$('q').value=v; }
   });
+}
+function sendInv(id,phone){
+  var to=(phone||'').trim();
+  if(!to){ to=(prompt('Customer WhatsApp number (with country code):','')||'').trim(); if(!to)return; }
+  api('/papi/invoice-send',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({id:id,phone:to})}).then(function(r){
+    if(r&&r.ok)alert('Invoice sent on WhatsApp ✓');
+    else alert('Could not send: '+((r&&r.error==='whatsapp_off')?'WhatsApp not connected':((r&&r.error==='no_phone')?'no phone number':((r&&r.error)||'error'))));
+  }).catch(function(){alert('Network error');});
 }
 function voidInv(id,no){
   if(!confirm('Void invoice '+no+'? It stays on record but is marked VOID.'))return;

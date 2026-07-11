@@ -21,6 +21,13 @@ HOW AN INVOICE IS CREATED (you chose BOTH)
   2) AUTOMATIC — when an order is marked "Delivered", an invoice is auto-issued in the background
      (queued, idempotent) if the order doesn't already have one. Safety net so nothing is missed.
 
+SEND ON WHATSAPP
+  - After issuing from an order, you're asked "Send invoice … to the customer on WhatsApp?" — yes
+    sends the numbered PDF straight to the order's number (like a quotation send).
+  - In the Invoices register, each invoice has a "📤 WhatsApp" button (uses the invoice's phone, or
+    asks for a number). The message caption states the total + balance due + "quote the invoice
+    number on payment". Needs WhatsApp connected (it is).
+
 NUMBERING (defaults set to your choice: INV-2026-0001, year reset)
   Tenant settings (optional overrides):
     invoice_prefix        default "INV"            (e.g. set to your shop code)

@@ -2728,7 +2728,15 @@ function issueInvoice(){
   fetch('/papi/invoice-issue',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body})
     .then(function(r){return r.json();}).then(function(r){
       if(b){b.disabled=false;b.textContent='🧾 Issue invoice';}
-      if(r&&r.ok){ toast((r.already?'Already invoiced: ':'Invoice issued: ')+r.invoice_no); if(r.pdf)window.open(r.pdf,'_blank'); }
+      if(r&&r.ok){
+        toast((r.already?'Already invoiced: ':'Invoice issued: ')+r.invoice_no);
+        if(r.pdf)window.open(r.pdf,'_blank');
+        var ph=(current&&current.phone)||'';
+        if(r.id&&confirm('Send invoice '+r.invoice_no+' to the customer on WhatsApp'+(ph?(' ('+ph+')'):'')+'?')){
+          fetch('/papi/invoice-send',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:new URLSearchParams({id:r.id,phone:ph})})
+            .then(function(x){return x.json();}).then(function(x){ toast(x&&x.ok?'Invoice sent on WhatsApp ✓':'Could not send: '+((x&&x.error)||'error')); }).catch(function(){toast('Send failed');});
+        }
+      }
       else toast('Could not issue: '+((r&&r.error)||'error'));
     }).catch(function(){ if(b){b.disabled=false;b.textContent='🧾 Issue invoice';} toast('Network error'); });
 }
