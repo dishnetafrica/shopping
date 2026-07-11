@@ -40,6 +40,7 @@ FILES CHANGED (12 app files) + 1 one-off script
   app/Http/Controllers/Panel/AdsController.php [NEW]     (11) Facebook Ads screen (toggle + activity)
   resources/panel/ads.html                    [NEW]      (11) the Ads screen
   resources/panel/seller.html / mobile.html              (11) "Facebook Ads" nav links
+  app/Http/Controllers/Panel/SelfcheckController.php [NEW] (12) GET /papi/selfcheck status report
   (ConsignmentController.php & consignment.html above also carry the Phase-2 additions)
   fix-cashbook-holder.php                     [SCRIPT]   (2) move CB-0067 to Jayesh Bhai
 

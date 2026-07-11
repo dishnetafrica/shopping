@@ -407,6 +407,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         // Ads (Facebook-ad bot understanding: toggle + activity)
         Route::get('ads',                          [\App\Http\Controllers\Panel\AdsController::class, 'data']);
         Route::match(['get','post'], 'ads-toggle', [\App\Http\Controllers\Panel\AdsController::class, 'toggle']);
+        Route::get('selfcheck', [\App\Http\Controllers\Panel\SelfcheckController::class, 'run']);
         Route::get('bot-config-save', [PanelApiController::class, 'botConfigSave']);
         Route::get('branch-save',     [PanelApiController::class, 'branchSave']);
         Route::get('branch-delete',   [PanelApiController::class, 'branchDel']);
