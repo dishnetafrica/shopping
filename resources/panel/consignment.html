@@ -1,0 +1,202 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Consignments</title>
+<style>
+:root{--dark:#1B3A2B;--green:#15803D;--red:#C0392B;--amber:#C2700A;--blue:#0EA5E9;--line:#e4e9e4;--muted:#6b7280;--bg:#f6f8f6}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1B211D;background:var(--bg)}
+.top{background:var(--dark);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+.top h1{font-size:17px;margin:0;font-weight:800}
+.back{background:#ffffff22;border:none;color:#fff;border-radius:9px;padding:8px 12px;font-weight:700;cursor:pointer}
+.wrap{max-width:720px;margin:0 auto;padding:14px}
+.add{width:100%;background:var(--green);color:#fff;border:none;border-radius:12px;padding:14px;font-weight:800;font-size:15px;cursor:pointer;margin-bottom:14px}
+.card{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px #0000000d;cursor:pointer}
+.card .no{font-weight:800;font-size:15px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.sub{font-size:12px;color:var(--muted);margin-top:4px}
+.badge{display:inline-block;font-size:11px;font-weight:800;padding:3px 9px;border-radius:20px;white-space:nowrap}
+.pill{display:inline-block;font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;background:#eef2ee;color:#444}
+.mono{font-variant-numeric:tabular-nums}
+.sec{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:16px 0 8px}
+.line{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+.line .cust{font-weight:700}
+.btn{border:none;border-radius:10px;padding:10px 12px;font-weight:800;font-size:13px;cursor:pointer}
+.btn.g{background:var(--green);color:#fff}.btn.o{background:#fff;color:var(--amber);border:1.5px solid var(--amber)}
+.btn.d{background:#fff;color:var(--red);border:1.5px solid #f0b4ae}.btn.b{background:var(--dark);color:#fff}
+.btn.grey{background:#eef2ee;color:#333}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.f{margin-bottom:10px}.f label{display:block;font-size:12px;font-weight:800;color:#374151;margin-bottom:4px}
+.f input{width:100%;padding:11px;border:1.5px solid var(--line);border-radius:10px;font-size:14px}
+.note{font-size:12px;color:var(--muted)}
+.empty{text-align:center;color:var(--muted);padding:24px 8px}
+.search{width:100%;padding:11px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;margin-bottom:10px}
+.modalwrap{position:fixed;inset:0;background:#0006;display:flex;align-items:flex-start;justify-content:center;padding:18px;overflow:auto;z-index:40}
+.modalwrap.hide{display:none}
+.modal{background:#fff;border-radius:14px;max-width:460px;width:100%;padding:18px}
+.modal h3{margin:0 0 10px}
+.x{float:right;background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)}
+.stat{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.chip{font-size:12px;font-weight:700;background:#f0f4f0;border-radius:9px;padding:6px 9px;color:#333}
+</style></head>
+<body>
+<div class="top">
+  <button class="back" id="topBack" onclick="goList()" style="visibility:hidden">‹ Back</button>
+  <h1>🚚 Consignments</h1>
+  <a class="back" href="/panel" style="text-decoration:none">Panel</a>
+</div>
+<div class="wrap" id="wrap"><div class="empty">Loading…</div></div>
+
+<!-- New consignment modal -->
+<div class="modalwrap hide" id="newM"><div class="modal">
+  <button class="x" onclick="closeNew()">×</button>
+  <h3>New consignment (Kampala → Juba)</h3>
+  <div class="f"><label>Transporter / bus company</label><input id="nTransport" placeholder="e.g. Nile Coach"></div>
+  <div class="f"><label>Bus number (optional)</label><input id="nBus" placeholder="e.g. UAX 123A"></div>
+  <div class="f"><label>Receiver in Juba (agent)</label><input id="nAgent" placeholder="e.g. Asish"></div>
+  <div class="f"><label>Agent phone (optional)</label><input id="nAgentPh" placeholder="+211…"></div>
+  <button class="add" id="nSave" onclick="createConsignment()" style="margin-bottom:0">Create consignment</button>
+  <div class="note" id="nMsg" style="margin-top:8px"></div>
+</div></div>
+
+<script>
+var $=function(id){return document.getElementById(id);};
+var VIEW='list', CID=null;
+function api(u,opt){opt=opt||{};opt.headers=Object.assign({'X-Requested-With':'XMLHttpRequest'},opt.headers||{});opt.credentials='same-origin';opt.cache='no-store';return fetch(u,opt).then(function(r){return r.json();});}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function nf(n){return Number(n||0).toLocaleString(undefined,{maximumFractionDigits:2});}
+
+var ST={packed:['Packed','#6b7280'],sent_to_transporter:['Sent to transporter','#C2700A'],transport_confirmed:['Transport confirmed','#0EA5E9'],in_transit:['In transit','#7c5cd0'],arrived:['Arrived in Juba','#15803D'],cancelled:['Cancelled','#C0392B']};
+function stBadge(s){var m=ST[s]||[s,'#6b7280'];return '<span class="badge" style="background:'+m[1]+'1a;color:'+m[1]+';border:1px solid '+m[1]+'55">'+esc(m[0])+'</span>';}
+// next custody step per status
+var NEXT={packed:['dispatch','📦 Dispatch (load on bus)'],sent_to_transporter:['transport_confirm','✅ Transporter received'],transport_confirmed:['depart','🚌 Bus departed'],in_transit:['arrive','📍 Mark arrived in Juba']};
+
+function goList(){VIEW='list';CID=null;$('topBack').style.visibility='hidden';load();}
+function openC(id){VIEW='detail';CID=id;$('topBack').style.visibility='visible';loadDetail();}
+
+function load(){
+  $('wrap').innerHTML='<div class="empty">Loading…</div>';
+  api('/papi/consignments').then(function(d){
+    if(!d||!d.ok){$('wrap').innerHTML='<div class="empty">Could not load.</div>';return;}
+    var list=d.consignments||[];
+    var html='<button class="add" onclick="openNew()">＋ New consignment</button>';
+    if(!list.length){html+='<div class="empty">No consignments yet. Create one to start today’s Kampala → Juba load.</div>';}
+    else{html+=list.map(function(c){
+      return '<div class="card" onclick="openC('+c.id+')">'+
+        '<div class="row"><span class="no">'+esc(c.number||('#'+c.id))+'</span>'+stBadge(c.status)+'</div>'+
+        '<div class="sub">'+esc(c.route||'')+(c.transport?(' · '+esc(c.transport)):'')+(c.bus?(' · '+esc(c.bus)):'')+'</div>'+
+        '<div class="stat"><span class="chip">'+c.orders+' order'+(c.orders===1?'':'s')+'</span>'+
+          '<span class="chip">'+c.delivered+' delivered</span>'+
+          (c.boxes_sent?('<span class="chip">'+c.boxes_sent+' boxes</span>'):'')+
+          '<span class="chip">'+esc(c.when||'')+'</span></div>'+
+      '</div>';
+    }).join('');}
+    $('wrap').innerHTML=html;
+  });
+}
+
+function loadDetail(){
+  $('wrap').innerHTML='<div class="empty">Loading…</div>';
+  api('/papi/consignment?id='+CID).then(function(d){
+    if(!d||!d.ok){$('wrap').innerHTML='<div class="empty">Could not load.</div>';return;}
+    var c=d.consignment, m=d.manifest||[];
+    var next=NEXT[c.status];
+    var head='<div class="card" style="cursor:default">'+
+      '<div class="row"><span class="no">'+esc(c.number||('#'+c.id))+'</span>'+stBadge(c.status)+'</div>'+
+      '<div class="sub">'+esc(c.route||'')+(c.transport?(' · '+esc(c.transport)):'')+(c.bus?(' · Bus '+esc(c.bus)):'')+(c.agent?(' · Agent '+esc(c.agent)):'')+'</div>'+
+      '<div class="btnrow">'+
+        (next?('<button class="btn b" onclick="advance(\''+next[0]+'\')">'+next[1]+'</button>'):'')+
+        (c.status!=='cancelled'&&c.status!=='arrived'?('<button class="btn d" onclick="advance(\'cancel\')">Cancel</button>'):'')+
+      '</div></div>';
+
+    var delivered=m.filter(function(x){return x.line_status==='delivered';}).length;
+    var manifest='<div class="sec">Manifest · '+m.length+' order'+(m.length===1?'':'s')+' · '+delivered+' delivered</div>';
+    if(!m.length){manifest+='<div class="empty">No orders yet. Add ready orders below.</div>';}
+    else{manifest+=m.map(function(l){
+      var isDel=l.line_status==='delivered', isRet=l.line_status==='returned';
+      var lbadge=isDel?'<span class="badge" style="background:#15803d1a;color:#15803D;border:1px solid #15803d55">Delivered'+(l.delivered_at?(' · '+esc(l.delivered_at)):'')+'</span>':(isRet?'<span class="badge" style="background:#C0392B1a;color:#C0392B;border:1px solid #C0392B55">Returned</span>':'<span class="pill">On board</span>');
+      var acts='';
+      if(c.status==='arrived'||c.status==='in_transit'){
+        acts+= isDel? '<button class="btn grey" onclick="lineStatus('+l.line_id+',\'on_board\')">Undo</button>'
+                    : '<button class="btn g" onclick="lineStatus('+l.line_id+',\'delivered\')">✓ Delivered</button>';
+        if(!isDel&&!isRet) acts+='<button class="btn o" onclick="lineStatus('+l.line_id+',\'returned\')">Returned</button>';
+      }
+      if(!isDel && (c.status==='packed'||c.status==='sent_to_transporter')) acts+='<button class="btn d" onclick="removeLine('+l.line_id+')">Remove</button>';
+      return '<div class="line"><div class="row"><span class="cust">'+esc(l.order_no)+' · '+esc(l.customer||'—')+'</span>'+lbadge+'</div>'+
+        (l.items?('<div class="sub">'+esc(l.items)+'</div>'):'')+
+        '<div class="sub">'+(l.phone?('📞 '+esc(l.phone)+' '):'')+(l.location?('📍 '+esc(l.location)+' '):'')+(l.total?('· UGX '+nf(l.total)):'')+'</div>'+
+        (acts?('<div class="btnrow">'+acts+'</div>'):'')+
+      '</div>';
+    }).join('');}
+
+    // add-orders section (only before it leaves, i.e. packed / sent_to_transporter)
+    var addSec='';
+    if(c.status==='packed'||c.status==='sent_to_transporter'){
+      addSec='<div class="sec">Add ready orders</div>'+
+        '<input class="search" id="oq" placeholder="Search order no, customer, phone…" oninput="searchCand()">'+
+        '<div id="cand"><div class="note">Loading ready orders…</div></div>';
+    }
+    $('wrap').innerHTML=head+manifest+addSec;
+    if(addSec) searchCand();
+  });
+}
+
+function advance(action){
+  var extra='';
+  if(action==='dispatch'){
+    var tr=prompt('Transporter / bus company (optional):','')||'';
+    var bus=prompt('Bus number (optional):','')||'';
+    var boxes=prompt('Total boxes on the bus (optional):','')||'';
+    extra='&transport_company='+encodeURIComponent(tr)+'&bus_number='+encodeURIComponent(bus)+(boxes?('&box_count='+encodeURIComponent(boxes)):'');
+  } else if(action==='arrive'){
+    var rb=prompt('Boxes received in Juba (optional):','')||''; if(rb)extra='&box_count='+encodeURIComponent(rb);
+  } else if(action==='cancel'){ if(!confirm('Cancel this consignment?'))return; }
+  api('/papi/shipment-action?id='+CID+'&action='+action+extra).then(function(r){
+    if(r&&r.ok){loadDetail();} else alert('Could not update: '+((r&&r.error)||'error'));
+  });
+}
+function lineStatus(lineId,status){
+  api('/papi/consignment-line-status',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({line_id:lineId,status:status})}).then(function(r){
+    if(r&&r.ok)loadDetail(); else alert('Failed: '+((r&&r.error)||'error'));
+  });
+}
+function removeLine(lineId){
+  if(!confirm('Remove this order from the consignment?'))return;
+  api('/papi/consignment-remove-order',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({line_id:lineId})}).then(function(r){
+    if(r&&r.ok)loadDetail(); else alert('Failed: '+((r&&r.error)||'error'));
+  });
+}
+var _cq=null;
+function searchCand(){clearTimeout(_cq);_cq=setTimeout(doSearchCand,250);}
+function doSearchCand(){
+  var q=($('oq')&&$('oq').value||'').trim();
+  api('/papi/consignment-candidates?id='+CID+'&q='+encodeURIComponent(q)).then(function(d){
+    if(!$('cand'))return;
+    var list=(d&&d.orders)||[];
+    if(!list.length){$('cand').innerHTML='<div class="note">No matching ready orders.</div>';return;}
+    $('cand').innerHTML=list.map(function(o){
+      return '<div class="line"><div class="row"><span class="cust">'+esc(o.order_no)+' · '+esc(o.customer||'—')+'</span>'+
+        '<button class="btn g" onclick="addOrder('+o.id+')">＋ Add</button></div>'+
+        (o.items?('<div class="sub">'+esc(o.items)+'</div>'):'')+
+        '<div class="sub">'+esc(o.status||'')+(o.total?(' · UGX '+nf(o.total)):'')+'</div></div>';
+    }).join('');
+  });
+}
+function addOrder(oid){
+  api('/papi/consignment-add-order',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({id:CID,order_id:oid})}).then(function(r){
+    if(r&&r.ok)loadDetail(); else alert('Failed: '+((r&&r.error)||'error'));
+  });
+}
+
+function openNew(){['nTransport','nBus','nAgent','nAgentPh'].forEach(function(id){$(id).value='';});$('nMsg').textContent='';$('newM').classList.remove('hide');}
+function closeNew(){$('newM').classList.add('hide');}
+function createConsignment(){
+  var b=$('nSave');b.disabled=true;b.textContent='Creating…';
+  var body=new URLSearchParams({transport_company:$('nTransport').value.trim(),bus_number:$('nBus').value.trim(),destination_agent_name:$('nAgent').value.trim(),destination_agent_phone:$('nAgentPh').value.trim(),origin_city:'Kampala',destination_city:'Juba'});
+  api('/papi/consignment-create',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
+    b.disabled=false;b.textContent='Create consignment';
+    if(r&&r.ok){closeNew();openC(r.id);} else $('nMsg').textContent='Failed: '+((r&&(r.error==='not_allowed'?'owner/manager only':r.error))||'error');
+  }).catch(function(){b.disabled=false;b.textContent='Create consignment';$('nMsg').textContent='Network error';});
+}
+
+load();
+</script>
+</body></html>

@@ -71,6 +71,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/expenses', [\App\Http\Controllers\Panel\ExpenseController::class, 'page']);
     Route::get('/panel/pnl', [\App\Http\Controllers\Panel\ExpenseController::class, 'pnlPage']);
     Route::get('/panel/trade-cashbook', [\App\Http\Controllers\Panel\TradeCashbookController::class, 'page']);
+    Route::get('/panel/consignment', [\App\Http\Controllers\Panel\ConsignmentController::class, 'page']);
     Route::get('/panel/buy-list', [\App\Http\Controllers\Panel\BuyListController::class, 'page']);
     Route::get('/panel/supplier-debt', [\App\Http\Controllers\Panel\SupplierController::class, 'page']);
     Route::get('/panel/suppliers', [\App\Http\Controllers\Panel\SupplierController::class, 'manage']);
@@ -387,6 +388,14 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('shipment-auto-toggle',     [\App\Http\Controllers\Panel\ShipmentController::class, 'autoToggle']);
         Route::get('shipment-labels',          [\App\Http\Controllers\Panel\ShipmentController::class, 'labels']);
         Route::get('shipment-manifest',        [\App\Http\Controllers\Panel\ShipmentController::class, 'manifest']);
+        // Consignment (one AWB, many orders) — Kampala -> Juba daily consolidation
+        Route::get('consignments',                 [\App\Http\Controllers\Panel\ConsignmentController::class, 'index']);
+        Route::get('consignment',                  [\App\Http\Controllers\Panel\ConsignmentController::class, 'show']);
+        Route::get('consignment-candidates',       [\App\Http\Controllers\Panel\ConsignmentController::class, 'candidates']);
+        Route::match(['get','post'], 'consignment-create',      [\App\Http\Controllers\Panel\ConsignmentController::class, 'create']);
+        Route::match(['get','post'], 'consignment-add-order',   [\App\Http\Controllers\Panel\ConsignmentController::class, 'addOrder']);
+        Route::match(['get','post'], 'consignment-remove-order',[\App\Http\Controllers\Panel\ConsignmentController::class, 'removeOrder']);
+        Route::match(['get','post'], 'consignment-line-status', [\App\Http\Controllers\Panel\ConsignmentController::class, 'setLineStatus']);
         Route::get('bot-config-save', [PanelApiController::class, 'botConfigSave']);
         Route::get('branch-save',     [PanelApiController::class, 'branchSave']);
         Route::get('branch-delete',   [PanelApiController::class, 'branchDel']);

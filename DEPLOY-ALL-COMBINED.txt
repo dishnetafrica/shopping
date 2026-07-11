@@ -8,6 +8,7 @@ Everything from the recent sessions, ready to deploy together.
   4. "In transit" on the mobile panel + shipment tracker last-mile bridge
   5. Cashbook shortcut to the full New Purchase screen (items + supplier)
   6. Cashbook supplier picker + "Supplier payment (on account)" that reduces what we owe
+  7. Consignment (Phase 1): one AWB carries MANY orders (Kampala → Juba daily consolidation)
 
 ------------------------------------------------------------------------------
 FILES CHANGED (12 app files) + 1 one-off script
@@ -24,6 +25,11 @@ FILES CHANGED (12 app files) + 1 one-off script
   resources/panel/seller.html                            (3) In transit: dropdown/stepper/filter/KPI/help
   resources/panel/mobile.html                            (4) In transit in the mobile flow
   resources/panel/trade_cashbook.html                    (5,6) New-Purchase shortcut + supplier picker/on-account
+  app/Http/Controllers/Panel/ConsignmentController.php [NEW] (7) consignment/manifest API + page
+  app/Models/ShipmentOrder.php                [NEW]      (7) manifest line (order on an AWB)
+  app/Models/Shipment.php                                (7) + lines() manifest relation
+  resources/panel/consignment.html            [NEW]      (7) mobile-first consignment screen
+  database/migrations/2026_07_10_000001_create_shipment_orders.php [NEW] (7) manifest join table
   fix-cashbook-holder.php                     [SCRIPT]   (2) move CB-0067 to Jayesh Bhai
 
 DEPLOY (all at once)
@@ -157,6 +163,42 @@ VERIFY (feature 6)
   - Edit an existing wrong Purchase (e.g. PUR-0094) -> choose the supplier -> tick "Payment on
     supplier account" -> Save. It becomes a supplier payment and the owed balance corrects.
   - Leaving a Purchase as-is but choosing a supplier just tags it (owed unchanged).
+
+==============================================================================
+7) CONSIGNMENT — one AWB, many orders (Kampala → Juba daily consolidation)   [PHASE 1]
+==============================================================================
+THE PROBLEM: South Sudan customers order individually, but you can't ship per order. Every
+day Jayesh consolidates the ready orders into one load, sends it to Asish in Juba under a
+single AWB, and Asish distributes to each customer. Until now a shipment could hold only ONE
+order. Phase 1 lets one shipment (a "consignment"/AWB) carry MANY customer orders.
+
+NEW SCREEN  /panel/consignment   (mobile-first; works for Jayesh and Asish on phones)
+  Jayesh (Kampala):
+    - "+ New consignment" -> creates a Kampala→Juba AWB (transporter, bus, Juba agent).
+    - Open it -> "Add ready orders" -> search and add each customer order going today.
+    - Advance custody with one tap: Dispatch -> Transporter received -> Bus departed ->
+      Mark arrived in Juba. (Reuses the existing shipment custody engine.)
+  Asish (Juba), on arrival:
+    - Opens the same consignment -> sees the full manifest (every order + customer + items).
+    - Taps "Delivered" on each order as he hands it out (or "Returned"). Delivering an order
+      sets that customer order to Delivered (fires the customer WhatsApp) and records it.
+
+HOW IT FITS: a consignment IS a shipment, so the transporter/agent token pages, custody
+ledger, box counts and dashboard all still apply. Orders keep their identity end-to-end.
+An order MAY sit on more than one consignment (an order split across two buses is allowed).
+
+FILES: ConsignmentController.php, ShipmentOrder.php, Shipment.php (+lines()), consignment.html,
+  routes/web.php (consignment* routes + /panel/consignment), shipment_orders migration.
+DEPLOY: the migrate step above now also creates shipment_orders (no existing data touched).
+  Reach it at /panel/consignment (I can wire it into the sidebar/tab bar on request).
+
+VERIFY (feature 7)
+  - /panel/consignment -> New consignment -> add 2-3 ready orders -> Dispatch -> ... -> Mark
+    arrived -> tick each order Delivered. The list shows "3 orders · 3 delivered".
+
+NEXT (not in Phase 1): loose stock on the consignment + Asish creating Juba market orders
+  against it (Phase 2); per-order shortfall on arrival, printable manifest, shipment-stage
+  customer WhatsApp (Phase 3).
 
 ------------------------------------------------------------------------------
 NOTES / NOT DONE (by design — tell me if you want these)
