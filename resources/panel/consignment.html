@@ -36,6 +36,18 @@
 .x{float:right;background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)}
 .stat{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .chip{font-size:12px;font-weight:700;background:#f0f4f0;border-radius:9px;padding:6px 9px;color:#333}
+.qgrid{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;align-items:flex-end}
+.qcell{display:flex;flex-direction:column;gap:3px}
+.qcell label{font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+.qcell input{width:72px;padding:8px;border:1.5px solid var(--line);border-radius:9px;font-size:14px;text-align:right}
+.qro{font-size:13px;font-weight:800;padding:6px 0}
+.short{color:var(--amber);font-weight:800}
+.addbox{background:#fff;border:1px dashed var(--green);border-radius:12px;padding:12px;margin-bottom:10px}
+.addbox input{width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-size:14px;margin-bottom:8px}
+.addbox .mini{display:flex;gap:8px}.addbox .mini input{margin-bottom:0}
+.chkline{display:flex;align-items:center;gap:8px;font-weight:700;margin:6px 0 10px;cursor:pointer}
+.chkline input{width:auto;margin:0}
+.hide{display:none!important}
 </style></head>
 <body>
 <div class="top">
@@ -53,6 +65,7 @@
   <div class="f"><label>Bus number (optional)</label><input id="nBus" placeholder="e.g. UAX 123A"></div>
   <div class="f"><label>Receiver in Juba (agent)</label><input id="nAgent" placeholder="e.g. Asish"></div>
   <div class="f"><label>Agent phone (optional)</label><input id="nAgentPh" placeholder="+211…"></div>
+  <label class="chkline hide" id="carryWrap"><input type="checkbox" id="nCarry"> <span id="carryLbl"></span></label>
   <button class="add" id="nSave" onclick="createConsignment()" style="margin-bottom:0">Create consignment</button>
   <div class="note" id="nMsg" style="margin-top:8px"></div>
 </div></div>
@@ -134,7 +147,36 @@ function loadDetail(){
         '<input class="search" id="oq" placeholder="Search order no, customer, phone…" oninput="searchCand()">'+
         '<div id="cand"><div class="note">Loading ready orders…</div></div>';
     }
-    $('wrap').innerHTML=head+manifest+addSec;
+
+    // loose stock (market) section — request → sent → received → sold
+    var stk=d.stock||[]; window.__STK={}; stk.forEach(function(x){window.__STK[x.id]=x;});
+    var beforeSend=(c.status==='packed'||c.status==='sent_to_transporter');
+    var arrived=(c.status==='arrived');
+    var totShort=stk.reduce(function(a,x){return a+(Number(x.short)||0);},0);
+    var stockSec='<div class="sec">Loose stock (market) · '+stk.length+' item'+(stk.length===1?'':'s')+(totShort>0?(' · <span class="short">short '+nf(totShort)+'</span>'):'')+'</div>';
+    stockSec+='<div class="addbox"><input id="skName" placeholder="Item to request / send (e.g. Cling film 45cm)">'+
+      '<div class="mini"><input id="skReq" type="number" min="0" step="any" placeholder="Requested">'+
+      '<input id="skSent" type="number" min="0" step="any" placeholder="Sent"'+(beforeSend?'':' style="display:none"')+'>'+
+      '<button class="btn g" onclick="addStock()">＋ Add</button></div></div>';
+    if(stk.length){
+      stockSec+=stk.map(function(k){
+        var short=(Number(k.short)||0)>0.0001;
+        var head='<div class="row"><b>'+esc(k.name)+'</b>'+(short?('<span class="short">short '+nf(k.short)+'</span>'):(k.remaining>0?('<span class="pill">'+nf(k.remaining)+' left</span>'):''))+'</div>';
+        var grid='<div class="qgrid">'+
+          '<div class="qcell"><label>Requested</label><input type="number" min="0" step="any" value="'+(k.requested||0)+'" onchange="saveStock('+k.id+',\'qty_requested\',this.value)"></div>'+
+          '<div class="qcell"><label>Sent</label><input type="number" min="0" step="any" value="'+(k.sent||0)+'" onchange="saveStock('+k.id+',\'qty_sent\',this.value)"></div>'+
+          (arrived||k.received!=null?('<div class="qcell"><label>Received</label><input type="number" min="0" step="any" value="'+(k.received!=null?k.received:'')+'" placeholder="'+(k.sent||0)+'" onchange="saveStock('+k.id+',\'qty_received\',this.value)"></div>'):'')+
+          '<div class="qcell"><label>Sold</label><div class="qro">'+nf(k.sold||0)+'</div></div>'+
+          '<div class="qcell"><label>Price</label><input type="number" min="0" step="any" value="'+(k.unit_price!=null?k.unit_price:'')+'" placeholder="0" onchange="saveStock('+k.id+',\'unit_price\',this.value)"></div>'+
+          '</div>';
+        var acts='<div class="btnrow">';
+        if(arrived) acts+='<button class="btn g" onclick="sellStock('+k.id+')">💵 Sell in market</button>';
+        acts+='<button class="btn d" onclick="removeStock('+k.id+')">Remove</button></div>';
+        return '<div class="line">'+head+grid+acts+'</div>';
+      }).join('');
+    }
+
+    $('wrap').innerHTML=head+manifest+addSec+stockSec;
     if(addSec) searchCand();
   });
 }
@@ -186,12 +228,54 @@ function addOrder(oid){
   });
 }
 
-function openNew(){['nTransport','nBus','nAgent','nAgentPh'].forEach(function(id){$(id).value='';});$('nMsg').textContent='';$('newM').classList.remove('hide');}
+// ---- loose stock ----
+function addStock(){
+  var name=($('skName').value||'').trim(); if(!name){alert('Item name?');return;}
+  var body=new URLSearchParams({id:CID,name:name,qty_requested:($('skReq').value||'0'),qty_sent:($('skSent')&&$('skSent').value||'0')});
+  api('/papi/consignment-stock-add',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
+    if(r&&r.ok)loadDetail(); else alert('Failed: '+((r&&r.error)||'error'));
+  });
+}
+function saveStock(lineId,field,value){
+  var b={line_id:lineId}; b[field]=value;
+  api('/papi/consignment-stock-update',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(b)}).then(function(r){
+    if(r&&r.ok)loadDetail(); else alert('Failed: '+((r&&r.error)||'error'));
+  });
+}
+function removeStock(lineId){
+  if(!confirm('Remove this stock line?'))return;
+  api('/papi/consignment-stock-remove',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({line_id:lineId})}).then(function(r){
+    if(r&&r.ok)loadDetail(); else alert(r&&r.error==='not_allowed'?'Owner/manager only':('Failed: '+((r&&r.error)||'error')));
+  });
+}
+function sellStock(lineId){
+  var k=window.__STK[lineId]; if(!k)return;
+  var q=prompt('Sell how many '+k.name+'? ('+nf(k.remaining)+' left)',''); if(q===null)return;
+  q=parseFloat(q); if(!(q>0)){alert('Enter a quantity');return;}
+  var price=prompt('Price each (UGX)?',(k.unit_price!=null?k.unit_price:''))||'';
+  var buyer=prompt('Buyer name (optional):','')||'';
+  var body=new URLSearchParams({line_id:lineId,qty:q,price:price,buyer:buyer});
+  api('/papi/consignment-stock-sell',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
+    if(r&&r.ok){alert('✅ Sold '+nf(r.sold)+' · order '+r.order_no+' · UGX '+nf(r.total)+'\n'+nf(r.remaining)+' left.');loadDetail();}
+    else alert((r&&r.message)||('Failed: '+((r&&r.error)||'error')));
+  });
+}
+
+var CARRY_SRC=null;
+function openNew(){
+  ['nTransport','nBus','nAgent','nAgentPh'].forEach(function(id){$(id).value='';});
+  $('nMsg').textContent='';$('nCarry').checked=false;$('carryWrap').classList.add('hide');CARRY_SRC=null;
+  $('newM').classList.remove('hide');
+  api('/papi/consignment-carry-source').then(function(d){
+    if(d&&d.ok&&d.source){CARRY_SRC=d.source.id;$('carryLbl').textContent='Carry over '+d.source.items+' unsent request'+(d.source.items===1?'':'s')+' from '+d.source.number;$('carryWrap').classList.remove('hide');}
+  });
+}
 function closeNew(){$('newM').classList.add('hide');}
 function createConsignment(){
   var b=$('nSave');b.disabled=true;b.textContent='Creating…';
-  var body=new URLSearchParams({transport_company:$('nTransport').value.trim(),bus_number:$('nBus').value.trim(),destination_agent_name:$('nAgent').value.trim(),destination_agent_phone:$('nAgentPh').value.trim(),origin_city:'Kampala',destination_city:'Juba'});
-  api('/papi/consignment-create',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
+  var p={transport_company:$('nTransport').value.trim(),bus_number:$('nBus').value.trim(),destination_agent_name:$('nAgent').value.trim(),destination_agent_phone:$('nAgentPh').value.trim(),origin_city:'Kampala',destination_city:'Juba'};
+  if(CARRY_SRC&&$('nCarry').checked)p.carry_from=CARRY_SRC;
+  api('/papi/consignment-create',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(p)}).then(function(r){
     b.disabled=false;b.textContent='Create consignment';
     if(r&&r.ok){closeNew();openC(r.id);} else $('nMsg').textContent='Failed: '+((r&&(r.error==='not_allowed'?'owner/manager only':r.error))||'error');
   }).catch(function(){b.disabled=false;b.textContent='Create consignment';$('nMsg').textContent='Network error';});

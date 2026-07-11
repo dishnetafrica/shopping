@@ -9,6 +9,8 @@ Everything from the recent sessions, ready to deploy together.
   5. Cashbook shortcut to the full New Purchase screen (items + supplier)
   6. Cashbook supplier picker + "Supplier payment (on account)" that reduces what we owe
   7. Consignment (Phase 1): one AWB carries MANY orders (Kampala → Juba daily consolidation)
+  8. Consignment (Phase 2): loose market stock with Requested/Sent/Received/Sold, shortfall +
+     carry-forward, and Asish selling in Juba (creates market orders)
 
 ------------------------------------------------------------------------------
 FILES CHANGED (12 app files) + 1 one-off script
@@ -30,6 +32,9 @@ FILES CHANGED (12 app files) + 1 one-off script
   app/Models/Shipment.php                                (7) + lines() manifest relation
   resources/panel/consignment.html            [NEW]      (7) mobile-first consignment screen
   database/migrations/2026_07_10_000001_create_shipment_orders.php [NEW] (7) manifest join table
+  app/Models/ConsignmentStock.php             [NEW]      (8) loose-stock line model
+  database/migrations/2026_07_10_000002_create_consignment_stock.php [NEW] (8) loose-stock table
+  (ConsignmentController.php & consignment.html above also carry the Phase-2 additions)
   fix-cashbook-holder.php                     [SCRIPT]   (2) move CB-0067 to Jayesh Bhai
 
 DEPLOY (all at once)
@@ -196,9 +201,41 @@ VERIFY (feature 7)
   - /panel/consignment -> New consignment -> add 2-3 ready orders -> Dispatch -> ... -> Mark
     arrived -> tick each order Delivered. The list shows "3 orders · 3 delivered".
 
-NEXT (not in Phase 1): loose stock on the consignment + Asish creating Juba market orders
-  against it (Phase 2); per-order shortfall on arrival, printable manifest, shipment-stage
-  customer WhatsApp (Phase 3).
+==============================================================================
+8) CONSIGNMENT — loose market stock + "we didn't send everything Asish asked"   [PHASE 2]
+==============================================================================
+Adds LOOSE STOCK to a consignment — the extra cartons Asish sells in the Juba market that
+aren't tied to a customer order — and tracks the whole chain so the request/fulfilment gap is
+always visible:  REQUESTED (Asish asked) → SENT (Jayesh loaded) → RECEIVED (arrived) → SOLD.
+
+On the consignment screen (/panel/consignment), under "Loose stock (market)":
+  - Anyone can add an item with a Requested qty (Asish's daily request) — and Jayesh fills the
+    Sent qty as he loads. If Sent < Requested, the line shows "short N" in amber and the whole
+    consignment shows the total shortfall. THIS is the answer to "we may not send what Asish
+    requested": the gap is recorded, not lost.
+  - On arrival Asish confirms Received (defaults to Sent), then taps "Sell in market" to sell:
+    enter qty + price + buyer. That draws the stock down (Sold ↑, remaining ↓) AND creates a
+    market Order (Delivered, channel 'market') so the sale is real revenue in your books/P&L.
+
+CARRY-FORWARD (handles the shortfall automatically):
+  When you create a NEW consignment, if the last one had unsent requests you'll see a checkbox
+  "Carry over N unsent requests from SHP-xxxx". Tick it and those shortfalls (requested − sent)
+  are copied into the new consignment as fresh requests — so what you couldn't send yesterday
+  is queued on today's load without re-typing.
+
+FILES: ConsignmentController.php (stock add/update/remove/sell + carry-forward + carrySource),
+  ConsignmentStock.php, Shipment.php (+stock()), consignment.html, routes/web.php,
+  consignment_stock migration.
+DEPLOY: the migrate step now also creates consignment_stock. No existing data touched.
+
+VERIFY (feature 8)
+  - Open a consignment -> Loose stock -> add "Cling film" Requested 50, Sent 30 -> shows
+    "short 20". Create a new consignment -> tick "Carry over…" -> the 20 appears as a request.
+  - Take a consignment to Arrived -> Received 30 -> "Sell in market" 10 @ 5000 -> a market order
+    is created, Sold shows 10, remaining 20.
+
+NEXT (Phase 3): per-order shortfall/damage on arrival, printable manifest/AWB sheet, and
+  shipment-stage customer WhatsApp ("left Kampala", "arrived in Juba").
 
 ------------------------------------------------------------------------------
 NOTES / NOT DONE (by design — tell me if you want these)

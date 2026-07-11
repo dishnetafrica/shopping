@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
+use App\Models\ConsignmentStock;
 use App\Models\Order;
 use App\Models\Shipment;
 use App\Models\ShipmentOrder;
@@ -87,7 +88,49 @@ class ConsignmentController extends Controller
             'notes'                   => trim((string) $request->input('notes', '')) ?: null,
             'actor_name'              => (string) ($u->name ?? 'owner'),
         ]);
-        return response()->json(['ok' => true, 'id' => $s->id, 'number' => $s->shipment_number]);
+
+        // Carry forward: pull the UNSENT part of a previous consignment's stock requests
+        // (requested - sent) into this new one as fresh requests. This is how "what we didn't
+        // send Asish yesterday" automatically shows up on the next load.
+        $carried = 0;
+        $fromId = (int) $request->input('carry_from', 0);
+        if ($fromId) {
+            $src = Shipment::where('tenant_id', $t->id)->find($fromId);
+            if ($src) {
+                foreach (ConsignmentStock::where('tenant_id', $t->id)->where('shipment_id', $src->id)->get() as $k) {
+                    $short = $k->shortfall();
+                    if ($short > 0.0001) {
+                        ConsignmentStock::create([
+                            'tenant_id' => $t->id, 'shipment_id' => $s->id,
+                            'product_id' => $k->product_id, 'name' => $k->name,
+                            'qty_requested' => $short, 'qty_sent' => 0, 'qty_sold' => 0,
+                            'unit_price' => $k->unit_price, 'currency' => $k->currency,
+                            'note' => 'Carried over (unsent) from ' . ($src->shipment_number ?: ('#' . $src->id)),
+                        ]);
+                        $carried++;
+                    }
+                }
+            }
+        }
+        return response()->json(['ok' => true, 'id' => $s->id, 'number' => $s->shipment_number, 'carried' => $carried]);
+    }
+
+    /** GET /papi/consignment-carry-source — the most recent consignment with unsent requests (for the carry-forward prompt). */
+    public function carrySource(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $rows = ConsignmentStock::where('tenant_id', $t->id)
+            ->whereColumn('qty_requested', '>', 'qty_sent')
+            ->orderByDesc('shipment_id')->get()->groupBy('shipment_id');
+        if ($rows->isEmpty()) return response()->json(['ok' => true, 'source' => null]);
+        $sid = (int) $rows->keys()->first();
+        $s = Shipment::where('tenant_id', $t->id)->find($sid);
+        $lines = $rows->get($sid);
+        $items = $lines->sum(fn ($k) => $k->shortfall() > 0 ? 1 : 0);
+        return response()->json(['ok' => true, 'source' => [
+            'id' => $sid, 'number' => $s->shipment_number ?? ('#' . $sid), 'items' => $items,
+        ]]);
     }
 
     /** GET /papi/consignment?id= — one consignment + its manifest. */
@@ -114,6 +157,15 @@ class ConsignmentController extends Controller
             ];
         });
 
+        $stock = ConsignmentStock::where('tenant_id', $t->id)->where('shipment_id', $s->id)->orderBy('id')->get()
+            ->map(fn ($k) => [
+                'id' => $k->id, 'name' => $k->name,
+                'requested' => (float) $k->qty_requested, 'sent' => (float) $k->qty_sent,
+                'received' => $k->qty_received === null ? null : (float) $k->qty_received,
+                'sold' => (float) $k->qty_sold, 'short' => $k->shortfall(), 'remaining' => $k->remaining(),
+                'unit_price' => $k->unit_price === null ? null : (float) $k->unit_price, 'currency' => $k->currency,
+            ]);
+
         return response()->json(['ok' => true, 'consignment' => [
             'id' => $s->id, 'number' => $s->shipment_number, 'status' => $s->status, 'token' => $s->token,
             'route' => trim((string) $s->origin_city . ' → ' . (string) $s->destination_city, ' →'),
@@ -121,7 +173,7 @@ class ConsignmentController extends Controller
             'transport' => $s->transport_company, 'bus' => $s->bus_number, 'driver_phone' => $s->driver_phone,
             'agent' => $s->destination_agent_name, 'agent_phone' => $s->destination_agent_phone,
             'boxes_sent' => $s->boxes_sent, 'notes' => $s->notes,
-        ], 'manifest' => $manifest]);
+        ], 'manifest' => $manifest, 'stock' => $stock]);
     }
 
     /** GET /papi/consignment-candidates?id= — ready orders not already on this consignment. */
@@ -220,5 +272,97 @@ class ConsignmentController extends Controller
         });
 
         return response()->json(['ok' => true, 'status' => $line->status]);
+    }
+
+    /** POST /papi/consignment-stock-add — add a loose-stock line (a request or direct stock). */
+    public function addStock(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $s = Shipment::where('tenant_id', $t->id)->find((int) $request->input('id'));
+        if (! $s) return response()->json(['ok' => false, 'error' => 'consignment_not_found'], 404);
+        $name = trim((string) $request->input('name', ''));
+        if ($name === '') return response()->json(['ok' => false, 'error' => 'name_required'], 422);
+
+        $k = ConsignmentStock::create([
+            'tenant_id' => $t->id, 'shipment_id' => $s->id, 'name' => $name,
+            'qty_requested' => max(0, (float) $request->input('qty_requested', 0)),
+            'qty_sent'      => max(0, (float) $request->input('qty_sent', 0)),
+            'unit_price'    => $request->filled('unit_price') ? (float) $request->input('unit_price') : null,
+            'currency'      => strtoupper((string) $request->input('currency', '')) ?: null,
+        ]);
+        return response()->json(['ok' => true, 'id' => $k->id]);
+    }
+
+    /** POST /papi/consignment-stock-update — set any of requested/sent/received/unit_price/name on a line. */
+    public function updateStock(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $k = ConsignmentStock::where('tenant_id', $t->id)->find((int) $request->input('line_id'));
+        if (! $k) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        if ($request->has('name') && trim((string) $request->input('name')) !== '') $k->name = trim((string) $request->input('name'));
+        foreach (['qty_requested', 'qty_sent', 'qty_received', 'unit_price'] as $f) {
+            if ($request->has($f)) {
+                $k->$f = $request->input($f) === '' ? ($f === 'qty_received' || $f === 'unit_price' ? null : 0) : max(0, (float) $request->input($f));
+            }
+        }
+        if ($request->has('currency')) $k->currency = strtoupper((string) $request->input('currency')) ?: null;
+        $k->save();
+        return response()->json(['ok' => true, 'short' => $k->shortfall(), 'remaining' => $k->remaining()]);
+    }
+
+    /** POST /papi/consignment-stock-remove — delete a loose-stock line (owner/manager). */
+    public function removeStock(Request $request)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok' => false], 401);
+        if (! $this->priv($u)) return response()->json(['ok' => false, 'error' => 'not_allowed'], 403);
+        $k = ConsignmentStock::where('tenant_id', $t->id)->find((int) $request->input('line_id'));
+        if (! $k) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        $k->delete();
+        return response()->json(['ok' => true, 'removed' => true]);
+    }
+
+    /** POST /papi/consignment-stock-sell — Asish sells loose stock in Juba: draws it down AND
+     *  creates a market Order (Delivered) so the sale is revenue in the books. */
+    public function sellStock(Request $request)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok' => false], 401);
+        $k = ConsignmentStock::where('tenant_id', $t->id)->find((int) $request->input('line_id'));
+        if (! $k) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        $qty = (float) $request->input('qty', 0);
+        if ($qty <= 0) return response()->json(['ok' => false, 'error' => 'bad_qty'], 422);
+        if ($qty > $k->remaining() + 0.0001)
+            return response()->json(['ok' => false, 'error' => 'not_enough', 'message' => 'Only ' . rtrim(rtrim(number_format($k->remaining(), 2, '.', ''), '0'), '.') . ' left of ' . $k->name . '.'], 422);
+        $price = $request->filled('price') ? (float) $request->input('price') : ($k->unit_price !== null ? (float) $k->unit_price : 0);
+        $buyer = trim((string) $request->input('buyer', '')) ?: 'Market sale';
+
+        $order = DB::transaction(function () use ($t, $k, $qty, $price, $buyer, $u, $request) {
+            $s = Shipment::where('tenant_id', $t->id)->find($k->shipment_id);
+            $o = new Order();
+            $o->tenant_id     = $t->id;
+            $o->status        = 'Delivered';
+            $o->channel       = 'market';
+            $o->customer_name = $buyer;
+            $o->customer_phone= preg_replace('/[^0-9+]/', '', (string) $request->input('phone', ''));
+            $o->location      = $s->destination_city ?: 'Juba';
+            $o->total         = round($qty * $price, 2);
+            $qtyStr           = rtrim(rtrim(number_format($qty, 2, '.', ''), '0'), '.');
+            $o->items_text    = $qtyStr . ' x ' . $k->name;
+            $o->delivered_at  = now();
+            $o->delivered_by  = (string) ($u->name ?? '');
+            $o->save();   // OrderObserver assigns order_no
+
+            $k->qty_sold = (float) $k->qty_sold + $qty;
+            $k->save();
+            return $o;
+        });
+
+        return response()->json(['ok' => true, 'order_no' => $order->order_no, 'sold' => $qty,
+            'remaining' => $k->remaining(), 'total' => (float) $order->total]);
     }
 }

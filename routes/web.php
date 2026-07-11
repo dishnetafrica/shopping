@@ -396,6 +396,11 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::match(['get','post'], 'consignment-add-order',   [\App\Http\Controllers\Panel\ConsignmentController::class, 'addOrder']);
         Route::match(['get','post'], 'consignment-remove-order',[\App\Http\Controllers\Panel\ConsignmentController::class, 'removeOrder']);
         Route::match(['get','post'], 'consignment-line-status', [\App\Http\Controllers\Panel\ConsignmentController::class, 'setLineStatus']);
+        Route::get('consignment-carry-source',     [\App\Http\Controllers\Panel\ConsignmentController::class, 'carrySource']);
+        Route::match(['get','post'], 'consignment-stock-add',    [\App\Http\Controllers\Panel\ConsignmentController::class, 'addStock']);
+        Route::match(['get','post'], 'consignment-stock-update', [\App\Http\Controllers\Panel\ConsignmentController::class, 'updateStock']);
+        Route::match(['get','post'], 'consignment-stock-remove', [\App\Http\Controllers\Panel\ConsignmentController::class, 'removeStock']);
+        Route::match(['get','post'], 'consignment-stock-sell',   [\App\Http\Controllers\Panel\ConsignmentController::class, 'sellStock']);
         Route::get('bot-config-save', [PanelApiController::class, 'botConfigSave']);
         Route::get('branch-save',     [PanelApiController::class, 'branchSave']);
         Route::get('branch-delete',   [PanelApiController::class, 'branchDel']);

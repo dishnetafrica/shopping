@@ -37,6 +37,8 @@ class Shipment extends Model
     public function order(): BelongsTo { return $this->belongsTo(Order::class); }
     /** Manifest lines: the customer orders this consignment carries. */
     public function lines(): HasMany { return $this->hasMany(ShipmentOrder::class)->orderBy('id'); }
+    /** Loose stock lines: market stock Asish sells in Juba. */
+    public function stock(): HasMany { return $this->hasMany(ConsignmentStock::class)->orderBy('id'); }
     public function events(): HasMany { return $this->hasMany(ShipmentEvent::class)->orderBy('id'); }
     public function exceptions(): HasMany { return $this->hasMany(ShipmentException::class); }
 
