@@ -1,0 +1,81 @@
+DEPLOY — WhatsApp bot fixes from real chats (SkyTrips, MOQ, product guidance,
+         warehouse in Luri, and "don't stop the AI when I message by hand")
+=============================================================================
+
+WHAT THESE FIX (all seen in your live chats)
+
+1) "SkyTrips" — the #1 bug.
+   Customers arriving from your Facebook page/ad "SkyTrips" were getting:
+     "Sorry, I don't have information on 'SkyTrips'…"
+   Cause: the ad's TITLE ("SkyTrips") is your PAGE/CAMPAIGN name, but the bot treated it as a
+   PRODUCT and searched for it — so it apologised AND ignored the customer's real question
+   ("What is the minimum order quantity?").
+   Fix: a new "ad page/brand names to ignore" list. When the ad title matches one of these
+   (or your own business name), the bot skips it and just answers the customer normally.
+   → Set it on /panel/ads → "Bot behaviour" → add:  SkyTrips
+   (Your business name is always ignored automatically; you can list several, comma-separated.)
+
+2) "What is the minimum order quantity?" now gets a real answer.
+   Once the SkyTrips pollution is gone, this reaches the bot cleanly. The bot now answers with a
+   wholesale default: "We sell wholesale by the carton — minimum 1 carton. Tell me which item and
+   I'll confirm its carton size, minimum and price." (In AI mode the prompt now says the same.)
+   You can override the wording on /panel/ads → "Minimum-order note".
+
+3) Guide customers on what things are FOR.
+   When listing products (e.g. disposable glasses), the bot now adds a short use note —
+   "good for juice, water or soft drinks", "foil for wrapping & takeaway trays", etc. It uses each
+   product's own description when set, otherwise sensible real-world knowledge. (AI mode: new rule
+   "GUIDE, DON'T JUST LIST" + the product's description is now fed into the catalogue the AI sees.)
+   TIP: fill in a product's Description to control the exact use note it gives.
+
+4) Warehouse in Luri.
+   Set your pickup point once on /panel/ads → "Warehouse / pickup location", e.g.
+     Luri, just outside Juba, South Sudan
+   Now when a customer asks "where are you / can I collect / do you have a warehouse", the bot
+   tells them the Luri pickup point (both the AI brain and the inbuilt bot).
+   (For reference: Luri is a real locality on the western edge of Juba, South Sudan — so customers
+   can indeed Google it. See sources in the chat.)
+
+5) "Even if we send one message by hand, don't stop the AI."
+   Before: any manual WhatsApp reply from your number paused the bot for ~60 min (so a human could
+   take over). A stray message therefore silenced the AI.
+   Now: a new switch "Keep AI replying after I message a customer" (/panel/ads → Bot behaviour).
+   Turn it ON → your manual message is still saved so the AI sees it for context, but the AI keeps
+   answering immediately (no pause). Turn it OFF → old behaviour (manual message pauses the bot).
+   Note: the web-inbox "Take over" button is unchanged — that's a deliberate takeover and still
+   silences the bot for that chat until you hand it back.
+
+FILES
+  app/Jobs/ProcessIncomingMessage.php     ad-title-is-brand ignore (adTitleIsBrand); human-takeover
+                                          gated by human_takeover_on_reply.
+  app/Services/Bot/AiBrain.php            product use-notes + wholesale-MOQ rules; warehouse in the
+                                          business facts; product description fed to the model.
+  app/Services/Bot/FaqDictionary.php      carton-default MOQ answer; new warehouse/pickup answer.
+  app/Services/Bot/BotBrain.php           faqContext: warehouse + moq_note; location answer mentions
+                                          the warehouse.
+  app/Http/Controllers/Panel/AdsController.php   read + save the new controls.
+  resources/panel/ads.html               new "Bot behaviour" card (ignore list, keep-AI switch,
+                                          warehouse, MOQ note).
+  app/Http/Controllers/Panel/SelfcheckController.php   probes for all of the above.
+  routes/web.php                          papi/ads-settings.
+
+DEPLOY
+  1. Replace the files -> commit.  (No migration — all are tenant settings.)
+  2. EasyPanel REBUILD (force / no-cache) so the queue worker picks up the new bot code.
+  3. On /panel/ads → "Bot behaviour":
+       - Ad page/brand names to ignore:  SkyTrips
+       - Keep AI replying after I message a customer:  ON  (per your request)
+       - Warehouse / pickup location:  Luri, just outside Juba, South Sudan
+       - (optional) Minimum-order note
+     Save.
+
+VERIFY
+  - /papi/selfcheck  ->  the new rows are true:
+      "Ad page/brand not treated as product (SkyTrips fix)", "Keep-AI-on…", "Warehouse / pickup
+      answer (Luri)", "Bot explains what products are for", "Ads screen behaviour controls",
+      "Warehouse location set", "AI keeps replying after manual msg".
+  - From a test phone that came via the SkyTrips ad, send "What is the minimum order quantity?" ->
+    the bot answers the MOQ, no "I don't have SkyTrips".
+  - Ask "where is your warehouse / can I collect?" -> it names Luri.
+  - Send one manual reply in a live chat, then have the test phone message again -> the AI still
+    answers (with Keep-AI ON).
