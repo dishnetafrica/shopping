@@ -199,6 +199,13 @@ HOW IT FITS: a consignment IS a shipment, so the transporter/agent token pages, 
 ledger, box counts and dashboard all still apply. Orders keep their identity end-to-end.
 An order MAY sit on more than one consignment (an order split across two buses is allowed).
 
+EASE OF USE (one-tap flow):
+  - A plain-language "what to do next" hint sits on every consignment (changes with status).
+  - "＋ Add all N ready orders" button loads the whole day's ready orders in one tap (you can
+    still add/remove individual ones, or search).
+  - On arrival, "✓ Mark all delivered (N)" clears the whole manifest at once (with confirm;
+    each customer still gets their delivered message).
+
 FILES: ConsignmentController.php, ShipmentOrder.php, Shipment.php (+lines()), consignment.html,
   routes/web.php (consignment* routes + /panel/consignment), shipment_orders migration.
 DEPLOY: the migrate step above now also creates shipment_orders (no existing data touched).

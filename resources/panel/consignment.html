@@ -48,6 +48,7 @@
 .chkline{display:flex;align-items:center;gap:8px;font-weight:700;margin:6px 0 10px;cursor:pointer}
 .chkline input{width:auto;margin:0}
 .hide{display:none!important}
+.hintline{background:#f0f6ff;border:1px solid #cfe0ff;border-radius:10px;padding:9px 11px;font-size:12.5px;color:#243b53;margin-top:8px;line-height:1.5}
 </style></head>
 <body>
 <div class="top">
@@ -114,11 +115,22 @@ function loadDetail(){
     var next=NEXT[c.status];
     var onboard=m.filter(function(x){return x.line_status==='on_board';}).length;
     var canNotify=(['sent_to_transporter','transport_confirmed','in_transit'].indexOf(c.status)>=0 && onboard>0);
+    var HINT={
+      packed:'📋 Build the load — add today’s ready orders below, add any market stock, then tap Dispatch when the bus is loaded.',
+      sent_to_transporter:'🚌 Handed to the transporter. Tap “Transporter received” once they confirm.',
+      transport_confirmed:'✅ Transporter has it. Tap “Bus departed” when it leaves Kampala.',
+      in_transit:'🛣️ On the way to Juba. Tap “Tell customers it’s on the way”, then “Mark arrived” when it reaches Juba.',
+      arrived:'📍 In Juba — hand out each order and tap Delivered (or “Mark all delivered”), and sell any market stock below.',
+      cancelled:'This consignment was cancelled.'
+    };
+    var hint=HINT[c.status]||'';
     var head='<div class="card" style="cursor:default">'+
       '<div class="row"><span class="no">'+esc(c.number||('#'+c.id))+'</span>'+stBadge(c.status)+'</div>'+
       '<div class="sub">'+esc(c.route||'')+(c.transport?(' · '+esc(c.transport)):'')+(c.bus?(' · Bus '+esc(c.bus)):'')+(c.agent?(' · Agent '+esc(c.agent)):'')+'</div>'+
+      (hint?('<div class="hintline">'+hint+'</div>'):'')+
       '<div class="btnrow">'+
         (next?('<button class="btn b" onclick="advance(\''+next[0]+'\')">'+next[1]+'</button>'):'')+
+        (c.status==='arrived'&&onboard>0?('<button class="btn g" onclick="deliverAll('+onboard+')">✓ Mark all delivered ('+onboard+')</button>'):'')+
         (canNotify?('<button class="btn o" onclick="notifyCustomers()">📣 Tell customers it’s on the way</button>'):'')+
         '<button class="btn grey" onclick="printSheet()">🖨 Print manifest</button>'+
         (c.status!=='cancelled'&&c.status!=='arrived'?('<button class="btn d" onclick="advance(\'cancel\')">Cancel</button>'):'')+
@@ -149,6 +161,7 @@ function loadDetail(){
     var addSec='';
     if(c.status==='packed'||c.status==='sent_to_transporter'){
       addSec='<div class="sec">Add ready orders</div>'+
+        '<button class="btn b" id="addAllBtn" style="width:100%;padding:12px;margin-bottom:8px;display:none" onclick="addAllOrders()"></button>'+
         '<input class="search" id="oq" placeholder="Search order no, customer, phone…" oninput="searchCand()">'+
         '<div id="cand"><div class="note">Loading ready orders…</div></div>';
     }
@@ -245,7 +258,10 @@ function doSearchCand(){
   api('/papi/consignment-candidates?id='+CID+'&q='+encodeURIComponent(q)).then(function(d){
     if(!$('cand'))return;
     var list=(d&&d.orders)||[];
-    if(!list.length){$('cand').innerHTML='<div class="note">No matching ready orders.</div>';return;}
+    // "Add all" appears only when browsing (no search), and there are orders to add
+    var ab=$('addAllBtn');
+    if(ab){ if(!q && list.length){ ab.style.display='block'; ab.textContent='＋ Add all '+list.length+' ready order'+(list.length===1?'':'s'); } else ab.style.display='none'; }
+    if(!list.length){$('cand').innerHTML='<div class="note">'+(q?'No matching ready orders.':'No ready orders to add.')+'</div>';return;}
     $('cand').innerHTML=list.map(function(o){
       return '<div class="line"><div class="row"><span class="cust">'+esc(o.order_no)+' · '+esc(o.customer||'—')+'</span>'+
         '<button class="btn g" onclick="addOrder('+o.id+')">＋ Add</button></div>'+
@@ -257,6 +273,18 @@ function doSearchCand(){
 function addOrder(oid){
   api('/papi/consignment-add-order',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({id:CID,order_id:oid})}).then(function(r){
     if(r&&r.ok)loadDetail(); else alert('Failed: '+((r&&r.error)||'error'));
+  });
+}
+function addAllOrders(){
+  var b=$('addAllBtn'); if(b){b.disabled=true;b.textContent='Adding…';}
+  api('/papi/consignment-add-all',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({id:CID})}).then(function(r){
+    if(r&&r.ok){loadDetail();} else { alert(r&&r.error==='not_allowed'?'Owner/manager only':('Failed: '+((r&&r.error)||'error'))); if(b)b.disabled=false; }
+  });
+}
+function deliverAll(n){
+  if(!confirm('Mark all '+n+' remaining order'+(n===1?'':'s')+' as delivered? Each customer gets the delivered message.'))return;
+  api('/papi/consignment-deliver-all',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({id:CID})}).then(function(r){
+    if(r&&r.ok){loadDetail();} else alert('Failed: '+((r&&r.error)||'error'));
   });
 }
 

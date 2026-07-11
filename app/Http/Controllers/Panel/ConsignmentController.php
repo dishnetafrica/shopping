@@ -235,6 +235,55 @@ class ConsignmentController extends Controller
         return response()->json(['ok' => true, 'line_id' => $line->id, 'already' => ! $line->wasRecentlyCreated]);
     }
 
+    /** POST /papi/consignment-add-all — add EVERY ready order to the consignment in one tap. */
+    public function addAll(Request $request)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok' => false], 401);
+        if (! $this->priv($u)) return response()->json(['ok' => false, 'error' => 'not_allowed'], 403);
+        $s = Shipment::where('tenant_id', $t->id)->find((int) $request->input('id'));
+        if (! $s) return response()->json(['ok' => false, 'error' => 'consignment_not_found'], 404);
+
+        $already = ShipmentOrder::where('tenant_id', $t->id)->where('shipment_id', $s->id)->pluck('order_id')->all();
+        $ids = Order::where('tenant_id', $t->id)->whereNotIn('status', self::TERMINAL)
+            ->when($already, fn ($w) => $w->whereNotIn('id', $already))
+            ->orderByDesc('id')->limit(300)->pluck('id');
+        $n = 0;
+        foreach ($ids as $oid) {
+            $line = ShipmentOrder::firstOrCreate(
+                ['shipment_id' => $s->id, 'order_id' => $oid],
+                ['tenant_id' => $t->id, 'status' => ShipmentOrder::ON_BOARD]
+            );
+            if ($line->wasRecentlyCreated) $n++;
+        }
+        return response()->json(['ok' => true, 'added' => $n]);
+    }
+
+    /** POST /papi/consignment-deliver-all — mark every still-on-board order delivered (Asish). */
+    public function deliverAll(Request $request)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok' => false], 401);
+        $s = Shipment::where('tenant_id', $t->id)->find((int) $request->input('id'));
+        if (! $s) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        $lines = ShipmentOrder::where('tenant_id', $t->id)->where('shipment_id', $s->id)
+            ->where('status', ShipmentOrder::ON_BOARD)->get();
+        $n = 0;
+        DB::transaction(function () use ($lines, $u, $t, &$n) {
+            foreach ($lines as $line) {
+                $line->status = ShipmentOrder::DELIVERED;
+                $line->delivered_at = now();
+                $line->delivered_by = (string) ($u->name ?? '');
+                $line->save();
+                $order = Order::where('tenant_id', $t->id)->find($line->order_id);
+                if ($order && $order->status !== 'Delivered') { $order->status = 'Delivered'; $order->save(); }
+                $n++;
+            }
+        });
+        return response()->json(['ok' => true, 'delivered' => $n]);
+    }
+
     /** POST /papi/consignment-remove-order — detach a manifest line (only if not delivered). */
     public function removeOrder(Request $request)
     {

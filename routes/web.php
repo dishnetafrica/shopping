@@ -396,6 +396,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::match(['get','post'], 'consignment-create',      [\App\Http\Controllers\Panel\ConsignmentController::class, 'create']);
         Route::match(['get','post'], 'consignment-add-order',   [\App\Http\Controllers\Panel\ConsignmentController::class, 'addOrder']);
         Route::match(['get','post'], 'consignment-remove-order',[\App\Http\Controllers\Panel\ConsignmentController::class, 'removeOrder']);
+        Route::match(['get','post'], 'consignment-add-all',     [\App\Http\Controllers\Panel\ConsignmentController::class, 'addAll']);
+        Route::match(['get','post'], 'consignment-deliver-all', [\App\Http\Controllers\Panel\ConsignmentController::class, 'deliverAll']);
         Route::match(['get','post'], 'consignment-line-status', [\App\Http\Controllers\Panel\ConsignmentController::class, 'setLineStatus']);
         Route::get('consignment-carry-source',     [\App\Http\Controllers\Panel\ConsignmentController::class, 'carrySource']);
         Route::match(['get','post'], 'consignment-stock-add',    [\App\Http\Controllers\Panel\ConsignmentController::class, 'addStock']);
