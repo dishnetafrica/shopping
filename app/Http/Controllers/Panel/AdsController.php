@@ -68,6 +68,7 @@ class AdsController extends Controller
             'keep_ai_on'       => ! (bool) $t->setting('human_takeover_on_reply', true), // true = AI keeps replying after a manual message
             'warehouse'        => (string) $t->setting('warehouse_location', ''),
             'moq_note'         => (string) $t->setting('moq_note', ''),
+            'basis_city'       => (string) $t->setting('export_basis_city', ''),
             // Virtual salesperson (auto follow-up cadence)
             'sales_on'         => (bool) $t->setting('sales_followup_enabled', false),
             'sales_buyers'     => (bool) $t->setting('sales_include_buyers', true),
@@ -98,6 +99,9 @@ class AdsController extends Controller
         }
         if ($request->has('moq_note')) {
             $t->putSetting('moq_note', trim((string) $request->input('moq_note')));
+        }
+        if ($request->has('basis_city')) {
+            $t->putSetting('export_basis_city', trim((string) $request->input('basis_city')));
         }
         // Virtual salesperson
         if ($request->has('sales_on')) {

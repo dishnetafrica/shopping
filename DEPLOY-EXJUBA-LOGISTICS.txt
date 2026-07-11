@@ -1,0 +1,45 @@
+DEPLOY — Ex-Juba pricing wording + "learn the customer's route" (South Sudan)
+=============================================================================
+
+WHAT CHANGED
+1) PRICES ARE EX-JUBA (not ex-Kampala).
+   The bot + quotation PDF now say the USD price is "ex-<your basis city>" and that onward
+   transport to the customer's own town is arranged AFTER the order (not in the quote). Set your
+   basis city to Juba on /panel/ads → Bot behaviour → "Price basis city" = Juba.
+
+2) SOUTH SUDAN = MORE THAN JUBA.
+   The bot now explicitly knows Wau, Malakal, Bor, Yei, Aweil, Bentiu, Rumbek, Torit, Kuajok,
+   Renk, Nimule, Nasir, Maridi, Yambio, etc. are South Sudan — so a customer from any of these is
+   priced in USD ex-Juba, and it never invents a free delivery to their town.
+
+3) LEARN THEIR ROUTE (acts like a real salesperson).
+   Once items are agreed and the customer is NOT in Juba, the bot asks ONE short question about how
+   they normally receive goods — e.g. "Do you have a transporter/route you use from Juba, or will
+   you send someone to collect from our Juba store?" — then:
+     - if they have a transporter/route → tells them we'll hand the goods to it in Juba on their
+       behalf,
+     - if they'll collect → confirms the Juba pickup point,
+   and ALWAYS records their delivery method / transporter / contact in the ORDER note, so Asish and
+   the team can arrange the onward leg. It doesn't force a delivery fee — their route sets that.
+
+SET IT UP  (/panel/ads → "Bot behaviour")
+   - "Price basis city" = Juba.
+   - (Warehouse / pickup location already set, e.g. Luri, is what the bot points collectors to.)
+   Optional: settings.quote_terms overrides the quotation footer wording entirely if you want your
+   own; settings.ssMarkupPct is the South Sudan markup applied to the USD price.
+
+FILES
+  app/Services/Bot/AiBrain.php                    ex-basis wording; SS-cities awareness; route-
+                                                  discovery rule; records the route in the ORDER note.
+  app/Http/Controllers/Panel/AdsController.php    read + save export_basis_city.
+  resources/panel/ads.html                        "Price basis city" field.
+
+DEPLOY
+  1. Replace the files -> commit.  (No migration.)
+  2. EasyPanel REBUILD (restarts the queue worker so the bot uses the new prompt).
+  3. /panel/ads → set Price basis city = Juba → Save.
+
+VERIFY
+  - From a test number: "Do you have cling film? I'm in Wau." → the bot quotes in USD, calls it
+    ex-Juba, and asks how you'll receive it (transporter or collect).
+  - Confirm an order → the delivery method/route you gave appears in the order's note in the panel.

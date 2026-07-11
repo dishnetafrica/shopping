@@ -653,10 +653,11 @@ class AiBrain
             // note applies ONLY to the Uganda-base export model — never to a native-currency shop whose
             // prices ARE the local/Juba price (no conversion).
             $terms   = trim((string) $tenant->setting('quote_terms', ''));
+            $basisCity = trim((string) $tenant->setting('export_basis_city', 'Kampala')) ?: 'Kampala';
             $tail    = $terms !== ''
                 ? ' — ' . $terms
                 : (($ss && $cur === 'USD' && ! $pricer->isNativeBasis($tenant))
-                    ? " — price is ex-Kampala; South Sudan clearance & transport are confirmed after the order."
+                    ? " — price is ex-{$basisCity}; onward transport to your town is arranged after the order (tell us your usual transporter, or if you'll collect)."
                     : " and we'll arrange delivery.");
             $caption = "📄 Quotation {$doc['no']} — Total {$cur} {$amt}. Valid {$days} days. Reply to confirm" . $tail;
 
@@ -851,13 +852,17 @@ class AiBrain
         $p .= "- ADVISORY SAFETY: any technical, sizing, compatibility or fault-diagnosis advice you give is INDICATIVE guidance to help the customer choose a product — it is not a professional design or an installation instruction. When you give such advice, briefly remind the customer that final selection and installation must be done by a qualified/licensed professional following local regulations, and never guarantee suitability, safety or compliance. Do not give step-by-step wiring/installation instructions for hazardous work; recommend the product and defer the install to a professional.\n";
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
         $p .= "- Each PRODUCT shows a stock tag in [brackets]. Reflect it honestly: \"in stock: N\" → you may say it's available (you can state N); \"usually available — confirm\" → say it's usually available but you'll confirm before placing the order; \"stock unknown — confirm before promising\" → do NOT promise availability, say you'll confirm with the team first; \"OUT OF STOCK\" → tell the customer it's currently unavailable and offer to note it. Never state a stock number that isn't shown as \"in stock: N\".\n";
+        $basisCity = trim((string) $tenant->setting('export_basis_city', 'Kampala')) ?: 'Kampala';
         $usdRate = (float) $tenant->setting('usdUgx', 0);
         if ($usdRate > 0 && $basis !== 'native') {
             $ssPct = (float) $tenant->setting('ssMarkupPct', 0);
             $rateStr = rtrim(rtrim(number_format($usdRate, 2), '0'), '.');
-            $p .= "- PRICING & CURRENCY: base prices are UGX, and you DO know the exchange rate — 1 USD = {$rateStr} UGX. If the customer asks for a USD price, or mentions export or a South Sudan / Juba destination, you can quote in USD: emit the <<QUOTE>> line as usual and the system converts at this rate"
-                . ($ssPct > 0 ? " and applies the South Sudan markup" : "") . " and sends the PDF. For South Sudan, tell the customer the USD price is ex-Kampala and that clearance & transport are confirmed after the order (not included in the quote). NEVER say you don't have the exchange rate or that it needs confirming — you have it.\n";
+            $p .= "- PRICING & CURRENCY: base prices are UGX, and you DO know the exchange rate — 1 USD = {$rateStr} UGX. If the customer asks for a USD price, or mentions export or a South Sudan destination (Juba OR any other town), you can quote in USD: emit the <<QUOTE>> line as usual and the system converts at this rate"
+                . ($ssPct > 0 ? " and applies the South Sudan markup" : "") . " and sends the PDF. The USD price is ex-{$basisCity} (goods ready at our {$basisCity} point); onward transport to the customer's own town is arranged AFTER the order and is NOT in the quote. NEVER say you don't have the exchange rate or that it needs confirming — you have it.\n";
         }
+        // South Sudan cities awareness + salesperson-style logistics discovery.
+        $p .= "- SOUTH SUDAN IS MORE THAN JUBA: Wau, Malakal, Bor, Yei, Aweil, Bentiu, Rumbek, Torit, Kuajok, Renk, Nimule, Nasir, Maridi, Yambio, Bentiu and others are ALL in South Sudan. Treat any of them (or 'South Sudan' / 'export') as a South Sudan destination priced in USD ex-{$basisCity}. NEVER assume the goods are delivered free to their town, and never invent a delivery fee.\n";
+        $p .= "- LEARN THEIR ROUTE (act like a real salesperson): once the items are agreed and the customer is NOT in {$basisCity}, ask ONE short, warm question about how they normally receive goods — for example: \"Do you have a transporter or route you use from {$basisCity}, or will you send someone to collect from our {$basisCity} store?\" Then use their answer: if they have a transporter/route, tell them we'll hand the goods to it in {$basisCity} on their behalf; if they'll collect, confirm the {$basisCity} pickup point. ALWAYS record their delivery method, transporter name and any contact in the ORDER note so our team can arrange it. Let their route decide the onward cost — don't force a delivery fee.\n";
         $p .= "- Never invent, promise, or imply a discount, \"bulk price\" or \"special price\". Quote the listed prices. If the customer asks for a bulk discount and none is offered, say the price is as listed and offer a formal quotation — the team can review bulk pricing separately. Do not claim a discount exists unless it is actually shown here.\n";
         $p .= "- Some items show \"price on request\" (e.g. jumbo parent reels) — these have no fixed price. Don't guess a figure: capture what they need (type, grade, GSM, quantity, origin) and tell them the team will send a quote.\n";
         $p .= "- Use the recent conversation for context; don't re-ask what the customer already told you.\n";

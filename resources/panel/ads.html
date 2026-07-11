@@ -73,6 +73,10 @@ function load(){
       '<div class="rowb"><div class="note" style="margin:0;flex:1">If you (a human) send one message in a chat by mistake, don’t stop the AI. With this ON, your message is kept for context and the AI keeps answering the customer. With it OFF, a manual message pauses the bot for a while (so a person can take over).</div>'+
       '<label class="switch"><input type="checkbox" id="btKeepAi" '+(keepAi?'checked':'')+' '+dis+'><span class="slider"></span></label></div>'+
 
+      '<div class="sec">Price basis city (USD prices are ex-…)</div>'+
+      '<input id="btBasis" '+dis+' value="'+esc(d.basis_city||'')+'" placeholder="e.g. Juba" style="'+fst+'">'+
+      '<div class="note">Your USD prices are quoted “ex-” this city (goods ready here; onward transport to the customer’s town is arranged after the order). Set it to <b>Juba</b>. The bot also asks out-of-town South Sudan customers how they receive goods (their transporter/route, or collect) and notes it on the order.</div>'+
+
       '<div class="sec">Warehouse / pickup location</div>'+
       '<input id="btWh" '+dis+' value="'+esc(d.warehouse||'')+'" placeholder="e.g. Luri, just outside Juba, South Sudan" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:9px;font-size:13px">'+
       '<div class="note">When a customer asks where you are / can they collect, the bot will tell them the pickup point. Leave blank to skip.</div>'+
@@ -133,7 +137,8 @@ function saveBot(){
     ad_ignore_titles:($('btIgnore')?$('btIgnore').value:''),
     keep_ai_on:($('btKeepAi')&&$('btKeepAi').checked)?1:0,
     warehouse:($('btWh')?$('btWh').value:''),
-    moq_note:($('btMoq')?$('btMoq').value:'')
+    moq_note:($('btMoq')?$('btMoq').value:''),
+    basis_city:($('btBasis')?$('btBasis').value:'')
   });
   api('/papi/ads-settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
     if(m)m.textContent=(r&&r.ok)?'Saved ✓':((r&&r.error==='not_allowed')?'Owner/manager only.':'Could not save.');
