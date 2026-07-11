@@ -43,5 +43,16 @@ OPTIONAL BRANDING (tenant settings — all have sensible defaults, set only if y
   invoice_footer   default "Thank you for your business. ... valid without signature."
   (Header logo/name/address/tel/email/website/TIN reuse the SAME settings as your quotation.)
 
+WHOLESALE EXTRAS (added)
+  - Cartons/units on each line: the Qty column now prints the product's unit (e.g. "50 CTN",
+    "20 BAG") when the product has a unit set — so a wholesale line reads "50 CTN" not just "50".
+    Nothing to configure; it uses the unit already on each product. Products with no unit just
+    show the number, as before.
+  - Credit terms + due date: set invoice_terms_days (e.g. 14) and every UNPAID/part-paid invoice
+    prints "Terms: Net 14 days", a bold "Due Date", and a "Payment terms" line. A fully-paid
+    invoice prints "Paid in full" and no due date. Per-order override: post terms_days.
+      invoice_terms_days   whole days of credit (default 0 = due on receipt)
+      credit_terms         override the auto credit sentence if you want your own wording
+
 VERIFY
   /papi/selfcheck  ->  "Professional invoice PDF (server-side)" = true.

@@ -2661,7 +2661,11 @@ function exportInvoicePdf(){
   var grandUgx=Math.max(0,sub-discUgx+delUgx);
   var outUgx=(window.__payOutUgx!=null)?Number(window.__payOutUgx):0;
   var paidUgx=Math.max(0,grandUgx-outUgx);
-  var lines=o.items.map(function(it){return {name:it.name,qty:it.qty,unit:Number(convFromUgx(it.price).toFixed(m.dec))};});
+  var byName={}; CATALOGUE.forEach(function(p){if(p&&p.name)byName[String(p.name).toLowerCase()]=p;});
+  var lines=o.items.map(function(it){
+    var p=byName[String(it.name||'').toLowerCase()];
+    return {name:it.name,qty:it.qty,unit:Number(convFromUgx(it.price).toFixed(m.dec)),uom:(p&&p.unit)?p.unit:''};
+  });
   var nm=(($('dCustName')||{}).value||o.customer||'').trim();
   var addr=(($('dCustAddr')||{}).value||o.locClean||'').trim();
   var f=document.createElement('form');

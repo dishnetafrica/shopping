@@ -76,7 +76,7 @@ class OrderInvoiceController extends Controller
                 $unit = (float) ($l['unit'] ?? 0);
                 if ($qty <= 0) $qty = 1;
                 $lines[] = ['name' => $name, 'qty' => $qty, 'unit' => $unit, 'amount' => $qty * $unit,
-                            'sku' => trim((string) ($l['sku'] ?? ''))];
+                            'sku' => trim((string) ($l['sku'] ?? '')), 'uom' => trim((string) ($l['uom'] ?? ''))];
             }
         }
 
@@ -105,7 +105,7 @@ class OrderInvoiceController extends Controller
                 $qty  = (float) ($it['qty'] ?? 1);
                 $unit = (float) ($it['price'] ?? 0);
                 if ($qty <= 0) $qty = 1;
-                $lines[] = ['name' => $name, 'qty' => $qty, 'unit' => $unit, 'amount' => $qty * $unit, 'sku' => ''];
+                $lines[] = ['name' => $name, 'qty' => $qty, 'unit' => $unit, 'amount' => $qty * $unit, 'sku' => '', 'uom' => ''];
             }
         }
 
@@ -124,6 +124,20 @@ class OrderInvoiceController extends Controller
         }
         $balance = round($grand - $paid, 2);
 
+        // Credit terms: tenant default number of days, unless the order is already paid in full.
+        // A per-order override can be posted as terms_days (e.g. a special agreement with a buyer).
+        $termsDays = $r->has('terms_days') ? max(0, (int) $r->input('terms_days')) : max(0, (int) $t->setting('invoice_terms_days', 0));
+        if ($balance <= 0.5) {
+            $termsLabel = 'Paid in full';
+            $dueDate    = '';
+        } elseif ($termsDays > 0) {
+            $termsLabel = 'Net ' . $termsDays . ' days';
+            $dueDate    = now()->addDays($termsDays)->format('d/m/Y');
+        } else {
+            $termsLabel = 'Due on receipt';
+            $dueDate    = '';
+        }
+
         return [
             'no' => $no, 'customer' => $customer, 'phone' => $phone, 'address' => $address,
             'status' => $status, 'notes' => $notes, 'payment' => trim((string) $r->input('payment', '')),
@@ -131,6 +145,7 @@ class OrderInvoiceController extends Controller
             'subtotal' => $subtotal, 'discount' => $discount, 'freight' => $freight,
             'grand' => $grand, 'paid' => $paid, 'balance' => $balance,
             'disc_label' => trim((string) $r->input('disc_label', 'Discount')) ?: 'Discount',
+            'terms_days' => $termsDays, 'terms_label' => $termsLabel, 'due_date' => $dueDate,
         ];
     }
 
@@ -186,6 +201,8 @@ class OrderInvoiceController extends Controller
         foreach ($d['lines'] as $l) {
             $i++;
             $qty = rtrim(rtrim(number_format((float) $l['qty'], 2), '0'), '.');
+            $uom = trim((string) ($l['uom'] ?? ''));
+            if ($uom !== '') $qty .= ' ' . strtoupper(e($uom));
             $sku = $l['sku'] !== '' ? '<div style="font-size:8.5px;color:#777;">' . e($l['sku']) . '</div>' : '';
             $rows .= '<tr>'
                 . '<td class="c">' . $i . '</td>'
@@ -218,6 +235,12 @@ class OrderInvoiceController extends Controller
         $statusChip = $d['status'] !== ''
             ? '<span style="border:1px solid #111;border-radius:3px;padding:1px 6px;font-size:9px;">' . e($d['status']) . '</span>'
             : '';
+
+        // Payment-terms + due-date rows in the info box (credit-sale aware).
+        $termsRow = '<tr><td class="k">Terms</td><td>' . e((string) $d['terms_label']) . '</td></tr>';
+        $dueRow   = $d['due_date'] !== ''
+            ? '<tr><td class="k">Due Date</td><td><b>' . e((string) $d['due_date']) . '</b></td></tr>'
+            : '';
         $notesHtml = $d['notes'] !== ''
             ? '<div class="notes"><b>Notes:</b> ' . nl2br(e($d['notes'])) . '</div>'
             : '';
@@ -233,6 +256,18 @@ class OrderInvoiceController extends Controller
         $termsHtml = $terms !== ''
             ? '<div class="terms"><span class="h">Terms:</span> ' . nl2br(e($terms)) . '</div>'
             : '';
+
+        // Credit-terms line: only meaningful on an unpaid/partly-paid credit sale.
+        $creditHtml = '';
+        if ($d['balance'] > 0.5 && (int) $d['terms_days'] > 0) {
+            $default = 'This is a credit sale on ' . $d['terms_label']
+                . ($d['due_date'] !== '' ? ' — full balance due by ' . $d['due_date'] : '')
+                . '. Overdue balances may attract interest and hold further supply.';
+            $credit  = trim((string) $t->setting('credit_terms', $default));
+            if ($credit !== '') {
+                $creditHtml = '<div class="terms"><span class="h">Payment terms:</span> ' . nl2br(e($credit)) . '</div>';
+            }
+        }
         $footer = trim((string) $t->setting('invoice_footer',
             'Thank you for your business. This is a computer-generated invoice and is valid without signature.'));
 
@@ -289,6 +324,8 @@ table.tot tr.bal td { font-weight:bold; font-size:11.5px; }
     <table class="kv">
       <tr><td class="k">Invoice No.</td><td>{$no}</td></tr>
       <tr><td class="k">Date</td><td>{$date}</td></tr>
+      {$termsRow}
+      {$dueRow}
       <tr><td class="k">Currency</td><td>{$cur}</td></tr>
       <tr><td class="k">Status</td><td>{$statusChip}</td></tr>
     </table>
@@ -299,8 +336,8 @@ table.tot tr.bal td { font-weight:bold; font-size:11.5px; }
   <tr>
     <th style="width:24px;">#</th>
     <th>Description</th>
-    <th style="width:70px;">Qty</th>
-    <th style="width:110px;">Unit Price</th>
+    <th style="width:80px;">Qty / Unit</th>
+    <th style="width:105px;">Unit Price</th>
     <th style="width:120px;">Amount</th>
   </tr>
   {$rows}
@@ -319,6 +356,7 @@ table.tot tr.bal td { font-weight:bold; font-size:11.5px; }
   </td>
 </tr></table>
 
+{$creditHtml}
 {$termsHtml}
 {$bankHtml}
 
