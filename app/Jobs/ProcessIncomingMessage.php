@@ -158,6 +158,35 @@ class ProcessIncomingMessage implements ShouldQueue
             }
         }
 
+        // Buyer replies the Juba price for a sourcing request: "<id> <price>" (e.g. "12 45000").
+        // Handled before the bot gates so it works even when the bot is off. Only fires for the
+        // configured buyer number and a real open request, so it can't catch normal messages.
+        try {
+            $buyerPhone = preg_replace('/[^0-9]/', '', (string) $tenant->setting('sourcing_buyer_phone', ''));
+            if ($buyerPhone !== '' && preg_replace('/[^0-9]/', '', (string) $from) === $buyerPhone
+                && preg_match('/^\s*(?:price\s+)?#?(\d+)\s+([0-9][0-9,]*(?:\.[0-9]+)?)\s*([a-zA-Z]{3})?\s*$/', (string) $this->incoming['text'], $mm)) {
+                $sr = \App\Models\SourcingRequest::where('tenant_id', $tenant->id)->where('id', (int) $mm[1])->first();
+                if ($sr && $sr->status === 'new') {
+                    $price = (float) str_replace(',', '', $mm[2]);
+                    if ($price > 0) {
+                        $sr->quoted_price = round($price, 2);
+                        $cur = strtoupper((string) ($mm[3] ?? ''));
+                        if (in_array($cur, ['UGX', 'USD', 'SSP'], true)) $sr->currency = $cur;
+                        elseif (! $sr->currency) $sr->currency = 'UGX';
+                        $sr->priced_by = trim((string) $tenant->setting('sourcing_buyer_name', '')) ?: 'Buyer';
+                        $sr->priced_at = now();
+                        $sr->status = 'priced';
+                        $sr->save();
+                        $reply = "\u{2705} Saved: {$sr->item_name} = {$sr->currency} " . number_format($price) . " (SR-{$sr->id}). Thank you!";
+                        $gateway->sendText($tenant->whatsapp_instance, $from, $reply);
+                        try { MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'system', $reply); } catch (\Throwable $e) {}
+                        BotTrace::log($this->tenantId, $trace, $from, 'sourcing_priced', 'SR-' . $sr->id . ' = ' . $price);
+                        return;
+                    }
+                }
+            }
+        } catch (\Throwable $e) { /* never break message handling */ }
+
         $botMode = (string) $tenant->setting('bot_mode', 'auto');
         $convo->refresh();
         if ($convo->agent_active) {

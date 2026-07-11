@@ -174,6 +174,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('sourcing', [\App\Http\Controllers\Panel\SourcingController::class, 'store']);
         Route::post('sourcing/{id}/price', [\App\Http\Controllers\Panel\SourcingController::class, 'price']);
         Route::post('sourcing/{id}/status', [\App\Http\Controllers\Panel\SourcingController::class, 'status']);
+        Route::get('sourcing/buyer',  [\App\Http\Controllers\Panel\SourcingController::class, 'buyerGet']);
+        Route::post('sourcing/buyer', [\App\Http\Controllers\Panel\SourcingController::class, 'buyerSave']);
+        Route::post('sourcing/{id}/remind', [\App\Http\Controllers\Panel\SourcingController::class, 'remind']);
         Route::get('staff-cash', [\App\Http\Controllers\Panel\StaffCashController::class, 'people']);
         Route::get('staff-cash/ledger', [\App\Http\Controllers\Panel\StaffCashController::class, 'ledger']);
         Route::post('ledger/rebuild', [\App\Http\Controllers\Panel\LedgerController::class, 'rebuild']);

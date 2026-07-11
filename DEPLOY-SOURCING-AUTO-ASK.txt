@@ -1,0 +1,55 @@
+DEPLOY — Sourcing: auto-ask Jayesh on WhatsApp, remind until priced, reply-to-price
+====================================================================================
+
+WHAT YOU GET (on /panel/sourcing)
+  - Post a sourcing request → the buyer (Jayesh) is messaged on WhatsApp automatically, right
+    away, using your connected WhatsApp — no more tapping a wa.me link.
+  - The system keeps nudging him every few hours (working hours) until he prices it — capped at
+    6 nudges so it can never spam. Each request shows "asked 2×" etc., with a "Remind now" button.
+  - Jayesh replies the price straight from WhatsApp: "12 45000" (SR id + price, optional UGX/USD/
+    SSP). The request is marked PRICED instantly and he gets "✅ Saved: <item> = UGX 45,000".
+    This works even if the bot is switched off (it's an internal ops reply, handled first).
+  - Set the buyer once via the "⚙ Set buyer's WhatsApp" chip (name + number) — now stored on the
+    server (a tenant setting), so it works for everyone, not just one browser. An old number saved
+    in a browser is migrated up automatically.
+
+HOW THE REPLY IS SAFE
+  Only the configured buyer number can price by reply, and only when the message is exactly
+  "<id> <price>" for a real OPEN request — so it can never catch a normal chat message. The whole
+  hook is wrapped in try/catch and runs before the bot, so it never affects customer replies.
+
+FILES
+  database/migrations/2026_07_11_000001_add_sourcing_reminders.php  [NEW] notified_at,
+      last_reminded_at, reminder_count on sourcing_requests.
+  app/Models/SourcingRequest.php                     new columns fillable/cast.
+  app/Http/Controllers/Panel/SourcingController.php  sendToBuyer(), store() auto-send,
+      buyer get/save, manual remind, buyer info in index().
+  app/Console/Commands/SourcingRemindCommand.php     [NEW] 'sourcing:remind' chaser.
+  routes/console.php                                 schedules sourcing:remind hourly (8-20h).
+  app/Jobs/ProcessIncomingMessage.php                buyer "<id> <price>" reply → mark priced.
+  routes/web.php                                     sourcing/buyer + sourcing/{id}/remind.
+  resources/panel/sourcing.html                      server-side buyer, auto-send confirmation,
+      "asked N×" + "Remind now".
+
+REQUIREMENTS
+  - WhatsApp must be connected for the tenant (whatsapp_instance set) — it already is for you.
+  - The scheduler must be running (it is — same cron that runs shopbot:process-scheduled etc.).
+
+DEPLOY
+  1. Replace the files above -> commit.
+  2. php artisan migrate --force        (adds the 3 sourcing columns)
+  3. EasyPanel REBUILD (force / no-cache) — restarts the queue worker + picks up the new command.
+  4. On /panel/sourcing, tap "⚙ Set buyer's WhatsApp" once, enter Jayesh's name + number.
+
+VERIFY
+  - Post a new request -> Jayesh gets a WhatsApp within seconds ("please get me the Juba price —
+    SR-XX ... reply 'XX 45000'").
+  - From Jayesh's WhatsApp reply "XX 45000" -> the request flips to PRICED with that price, and he
+    gets a "✅ Saved" confirmation.
+  - Leave one unpriced -> within a few hours it nudges again; the card shows "asked 2×".
+  - Test the chaser now without waiting:  php artisan sourcing:remind --dry   (lists who'd be
+    nudged) then  php artisan sourcing:remind  (sends).
+
+TUNING
+  - Nudge gap: sourcing:remind --gap=3 (hours). Cap is 6 (SourcingController::REMINDER_CAP).
+  - Turn a request off the chase list by pricing it or "Mark done" (status closed).

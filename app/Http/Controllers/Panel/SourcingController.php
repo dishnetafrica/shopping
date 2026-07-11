@@ -4,20 +4,69 @@ namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
 use App\Models\SourcingRequest;
+use App\Models\Tenant;
+use App\Services\WhatsApp\WhatsAppManager;
+use App\Support\MessageLog;
 use Illuminate\Http\Request;
 
 /**
  * Sourcing Requests — Asish asks Jayesh to find a price for an item customers want.
  * Access = anyone with the trading panel (Asish posts, Jayesh prices, both see).
+ * The buyer (Jayesh) is auto-asked on WhatsApp and nudged until he replies the price.
  */
 class SourcingController extends Controller
 {
+    /** Max auto-nudges before we stop (so it can never spam the buyer). */
+    public const REMINDER_CAP = 6;
+
     private function ok(Request $request)
     {
         $u = $request->user();
         if (! $u || ! $u->tenant_id) return null;
         if (! (bool) $u->tenant->setting('order_system_enabled', false)) return null;
         return $u;
+    }
+
+    private function buyerPhone(Tenant $t): string
+    {
+        return preg_replace('/[^0-9]/', '', (string) $t->setting('sourcing_buyer_phone', ''));
+    }
+
+    /** Send (or re-send) a sourcing request to the buyer on WhatsApp. Best-effort; never throws. */
+    public static function sendToBuyer(Tenant $t, SourcingRequest $r, bool $reminder = false): bool
+    {
+        try {
+            $phone = preg_replace('/[^0-9]/', '', (string) $t->setting('sourcing_buyer_phone', ''));
+            $inst  = (string) ($t->whatsapp_instance ?? '');
+            if ($phone === '' || $inst === '') return false;
+
+            $name = trim((string) $t->setting('sourcing_buyer_name', '')) ?: 'there';
+            $ref  = 'SR-' . $r->id;
+            $lines = [];
+            if ($reminder) {
+                $lines[] = "\u{23F0} Reminder — still need the Juba price for {$ref}:";
+            } else {
+                $lines[] = "\u{1F6D2} Hi {$name}, please get me the Juba price — {$ref}:";
+            }
+            $lines[] = "*{$r->item_name}*";
+            if (trim((string) $r->note) !== '') $lines[] = (string) $r->note;
+            if ($r->demand) $lines[] = 'Demand: ' . ucfirst((string) $r->demand);
+            $lines[] = '';
+            $lines[] = "Reply here with the price, e.g.  *{$r->id} 45000*";
+            $msg = implode("\n", $lines);
+
+            app(WhatsAppManager::class)->forTenant($t)->sendText($inst, $phone, $msg);
+            try { MessageLog::record($t->id, $phone, $inst, 'out', 'system', $msg); } catch (\Throwable $e) {}
+
+            $r->reminder_count = (int) $r->reminder_count + ($reminder ? 1 : 0);
+            if ($r->notified_at === null) $r->notified_at = now();
+            $r->last_reminded_at = now();
+            $r->save();
+            return true;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('sourcing.notify_failed', ['id' => $r->id, 'err' => $e->getMessage()]);
+            return false;
+        }
     }
 
     public function page(Request $request)
@@ -46,11 +95,18 @@ class SourcingController extends Controller
                 'quoted_price'=>$r->quoted_price!==null?(float)$r->quoted_price:null,'currency'=>$r->currency,
                 'supplier'=>$r->supplier_name,'availability'=>$r->availability,'price_note'=>$r->price_note,
                 'priced_by'=>$r->priced_by,'requested_by'=>$r->requested_by,
+                'reminders'=>(int)$r->reminder_count,'notified'=>(bool)$r->notified_at,
                 'date'=>optional($r->created_at)->format('Y-m-d H:i'),
             ];
         });
+        $t = $u->tenant;
         return response()->json([
             'ok'=>true,'requests'=>$list,
+            'buyer'=>[
+                'phone'=>preg_replace('/[^0-9]/','',(string)$t->setting('sourcing_buyer_phone','')),
+                'name'=>trim((string)$t->setting('sourcing_buyer_name','')),
+                'auto'=>trim((string)($t->whatsapp_instance ?? '')) !== '',
+            ],
             'counts'=>[
                 'new'=>$rows->where('status','new')->count(),
                 'priced'=>$rows->where('status','priced')->count(),
@@ -73,7 +129,46 @@ class SourcingController extends Controller
             'demand'=>$demand,'photo_path'=>$photo,'status'=>'new',
             'requested_by'=>$u->name ?? '','requested_by_user_id'=>$u->id,
         ]);
-        return response()->json(['ok'=>true,'id'=>$r->id]);
+        // Auto-ask the buyer (Jayesh) on WhatsApp right away.
+        $sent = self::sendToBuyer($u->tenant, $r, false);
+        return response()->json(['ok'=>true,'id'=>$r->id,'sent'=>$sent]);
+    }
+
+    /** GET /papi/sourcing/buyer — the configured buyer (Jayesh) + whether auto-send is possible. */
+    public function buyerGet(Request $request)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok'=>false],403);
+        $t = $u->tenant;
+        return response()->json(['ok'=>true,
+            'phone'=>$this->buyerPhone($t),
+            'name'=>trim((string)$t->setting('sourcing_buyer_name','')),
+            'wa_ready'=>trim((string)($t->whatsapp_instance ?? '')) !== '',
+        ]);
+    }
+
+    /** POST /papi/sourcing/buyer — set the buyer's WhatsApp number + name. */
+    public function buyerSave(Request $request)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok'=>false],403);
+        $t = $u->tenant;
+        $phone = preg_replace('/[^0-9]/', '', (string)$request->input('phone',''));
+        $t->putSetting('sourcing_buyer_phone', $phone);
+        if ($request->has('name')) $t->putSetting('sourcing_buyer_name', trim((string)$request->input('name','')) ?: null);
+        return response()->json(['ok'=>true,'phone'=>$phone]);
+    }
+
+    /** POST /papi/sourcing/{id}/remind — nudge the buyer now (manual). */
+    public function remind(Request $request, int $id)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok'=>false],403);
+        $r = SourcingRequest::where('tenant_id',$u->tenant_id)->find($id);
+        if (! $r) return response()->json(['ok'=>false,'error'=>'not_found'],404);
+        if ($r->status !== 'new') return response()->json(['ok'=>false,'error'=>'not_open'],422);
+        $ok = self::sendToBuyer($u->tenant, $r, (bool)$r->notified_at);
+        return response()->json(['ok'=>$ok,'error'=>$ok?null:'no_whatsapp']);
     }
 
     /** POST /papi/sourcing/{id}/price — Jayesh adds the price found. */

@@ -127,27 +127,30 @@
 const $=s=>document.getElementById(s);
 function nf(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
 function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-var NDEMAND='medium', PID=null, REQS=[];
-function purchaserNo(){ try{ return localStorage.getItem('src_purchaser_wa')||''; }catch(e){ return ''; } }
+var NDEMAND='medium', PID=null, REQS=[], BUYER={phone:'',name:'',auto:false};
+function purchaserNo(){ return (BUYER&&BUYER.phone)||''; }
 function setPurchaser(){
-  var cur=purchaserNo();
-  var v=prompt('Jayesh\u2019s WhatsApp number (with country code, e.g. 2567XXXXXXXX)', cur);
+  var name=prompt('Buyer\u2019s name (who prices \u2014 e.g. Jayesh Bhai):', BUYER.name||'Jayesh Bhai'); if(name===null)return;
+  var v=prompt('Buyer\u2019s WhatsApp number (with country code, e.g. 2567XXXXXXXX):', BUYER.phone||'');
   if(v===null) return; v=(v||'').replace(/[^0-9]/g,'');
-  try{ localStorage.setItem('src_purchaser_wa', v); }catch(e){}
-  refreshJbtn();
+  fetch('/papi/sourcing/buyer',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:new URLSearchParams({phone:v,name:name.trim()})})
+    .then(r=>r.json()).then(function(r){ if(r&&r.ok){BUYER.phone=r.phone;BUYER.name=name.trim();refreshJbtn();} else alert('Could not save'); });
 }
-function refreshJbtn(){ var n=purchaserNo(); var b=document.getElementById('jbtn'); if(b) b.textContent = n ? ('\u2699 Jayesh: '+n) : '\u2699 Set Jayesh\u2019s WhatsApp'; }
+function refreshJbtn(){ var n=BUYER.phone; var b=document.getElementById('jbtn'); if(b) b.textContent = n ? ('\u2699 '+(BUYER.name||'Buyer')+': '+n) : '\u2699 Set buyer\u2019s WhatsApp'; }
 function notifyJayesh(item,note,demand){
-  var n=purchaserNo(); if(!n) return false;
+  var n=BUYER.phone; if(!n) return false;
   var txt='*New sourcing request*\nItem: '+item+'\nDemand: '+demand+(note?('\nNote: '+note):'')+'\n\nPlease find a price.';
   location.href='https://wa.me/'+n+'?text='+encodeURIComponent(txt); return true;
 }
+// One-time migration: if an old device had the number in localStorage but the server has none, save it up.
+function migrateBuyer(){ try{ var old=localStorage.getItem('src_purchaser_wa')||''; if(old && !BUYER.phone){ fetch('/papi/sourcing/buyer',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:new URLSearchParams({phone:old.replace(/[^0-9]/g,''),name:BUYER.name||'Jayesh Bhai'})}).then(r=>r.json()).then(function(r){ if(r&&r.ok){BUYER.phone=r.phone;refreshJbtn();} }); } }catch(e){} }
 
 function load(){
   fetch('/papi/sourcing',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
     .then(r=>r.json()).then(function(d){
       if(!d.ok){ $('list').innerHTML='<div class="empty">Not available.</div>'; return; }
       REQS=d.requests||[];
+      if(d.buyer){ BUYER.phone=d.buyer.phone||''; BUYER.name=d.buyer.name||''; BUYER.auto=!!d.buyer.auto; refreshJbtn(); migrateBuyer(); }
       $('cNew').textContent=d.counts.new; $('cPrc').textContent=d.counts.priced;
       var L=$('list');
       if(!REQS.length){ $('sub').textContent='Requests'; L.innerHTML='<div class="empty">No requests yet. Tap “New request”.</div>'; return; }
@@ -164,14 +167,20 @@ function load(){
             (r.price_note?('<br><small>'+esc(r.price_note)+'</small>'):'')+
             (r.priced_by?('<br><small>by '+esc(r.priced_by)+'</small>'):'')+'</div>';
         }
+        var chase='';
+        if(r.status==='new'){
+          if(r.reminders>0) chase='<span class="badge" style="background:#fff3e0;color:#b45309">asked '+(r.reminders+1)+'×</span>';
+          else if(r.notified) chase='<span class="badge" style="background:#e8f0fe;color:#1877F2">asked</span>';
+        }
         var acts='<div class="acts">';
         if(r.status==='new') acts+='<button class="b-price" onclick="openPrice('+r.id+')">Add price</button>';
+        if(r.status==='new' && BUYER.auto && BUYER.phone) acts+='<button class="b-wa" onclick="remindNow('+r.id+')">Remind now</button>';
         if(r.status==='priced') acts+='<button class="b-done" onclick="setStatus('+r.id+',\'closed\')">Mark done</button>';
         acts+='<button class="b-wa" onclick="waReq('+r.id+')">WhatsApp</button></div>';
         return '<div class="card'+(r.status==='closed'?' done':'')+'"><div class="ph">'+ph+'</div>'+
           '<div class="mid"><div class="nm">'+esc(r.item)+'</div>'+
           '<div class="meta">'+(r.requested_by?('by '+esc(r.requested_by)+' · '):'')+esc(r.date||'')+(r.note?('<br>'+esc(r.note)):'')+'</div>'+
-          '<div class="badges">'+dbadge+sbadge+'</div>'+price+acts+'</div></div>';
+          '<div class="badges">'+dbadge+sbadge+chase+'</div>'+price+acts+'</div></div>';
       }).join('');
     }).catch(function(){ $('list').innerHTML='<div class="empty">Could not load.</div>'; });
 }
@@ -193,7 +202,10 @@ function saveNew(){
   fetch('/papi/sourcing',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',body:fd})
     .then(r=>r.json()).then(function(r){ b.disabled=false; b.textContent='Send request';
       if(r&&r.ok){ closeAll(); load();
-        notifyJayesh(item, noteVal, demandVal);
+        // Server auto-sends to the buyer when configured. If it couldn't (no number / WhatsApp
+        // not connected), fall back to opening WhatsApp so nothing is missed.
+        if(r.sent){ if(typeof toast==='function') toast('✓ Sent to '+(BUYER.name||'the buyer')+' on WhatsApp'); }
+        else { notifyJayesh(item, noteVal, demandVal); }
       } else alert('Could not send'); })
     .catch(function(){ b.disabled=false; b.textContent='Send request'; alert('Failed'); });
 }
@@ -213,6 +225,10 @@ function savePrice(){
 function setStatus(id,s){
   fetch('/papi/sourcing/'+id+'/status',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:new URLSearchParams({status:s})})
     .then(r=>r.json()).then(function(){ load(); });
+}
+function remindNow(id){
+  fetch('/papi/sourcing/'+id+'/remind',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+    .then(r=>r.json()).then(function(r){ if(r&&r.ok){ if(typeof toast==='function')toast('Reminder sent'); load(); } else alert(r&&r.error==='no_whatsapp'?'WhatsApp not connected / no buyer number':'Could not send'); });
 }
 function waReq(id){
   var r=REQS.filter(function(x){return x.id===id;})[0]; if(!r) return;
