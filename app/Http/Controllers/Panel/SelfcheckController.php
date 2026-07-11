@@ -46,6 +46,11 @@ class SelfcheckController extends Controller
             class_exists(\App\Services\Logistics\LastMileBridge::class));
         $add('ads_screen', 'Facebook Ads screen',
             class_exists(\App\Http\Controllers\Panel\AdsController::class) && is_file(resource_path('panel/ads.html')));
+        $add('invoice_pdf', 'Professional invoice PDF (server-side)',
+            class_exists(\App\Http\Controllers\Panel\OrderInvoiceController::class)
+            && class_exists(\Dompdf\Dompdf::class)
+            && (bool) $this->fileHas('resources/panel/seller.html', 'exportInvoicePdf'),
+            class_exists(\Dompdf\Dompdf::class) ? '' : 'dompdf not installed');
 
         // --- "In transit" status ------------------------------------------------------
         try {

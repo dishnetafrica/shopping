@@ -1,0 +1,47 @@
+DEPLOY — Professional wholesale INVOICE PDF (server-side, like the quotation)
+============================================================================
+
+THE PROBLEM
+  "Export Invoice (PDF)" was just the browser printing the live editing screen (window.print).
+  That's why the PDF showed form controls (Discount dropdown, "Delivery fee — enter manually"),
+  browser chrome (date, https://mycloudbss.com/panel, "1/2"), and the "groceries delivered fast"
+  quick-commerce tagline. It looked nothing like your clean quotation.
+
+WHAT YOU GET NOW
+  "Export Invoice (PDF)" builds a real, branded PDF on the server with dompdf — the SAME engine
+  that makes your good-looking quotation — and opens it in a new tab. It is WYSIWYG: whatever you
+  see on the order (line prices you tweaked, discount, freight/delivery, and the currency you've
+  selected — UGX / USD / SSP) is exactly what prints. No form controls, no browser chrome, no
+  Blinkit tagline. A proper B2B trade document:
+
+    - Centred shop header (logo + name + address), contact line, TIN — same branding as the quote.
+    - Big "INVOICE" title, "Bill To" business block (name, tel, address), Invoice No / Date /
+      Currency / Status box.
+    - Bordered line grid: #, Description (+ item code if any), Qty, Unit Price, Amount.
+    - Totals: Subtotal, Discount (labelled with the % if you used percent), Freight / Delivery,
+      TOTAL, then Amount Paid and a red "Balance Due" (or green "Paid in Full").
+    - Terms + optional bank/payment details, and a "computer-generated, valid without signature"
+      footer.
+
+FILES
+  app/Http/Controllers/Panel/OrderInvoiceController.php   [NEW]  builds + streams the PDF.
+  routes/web.php                                          adds papi/order-invoice-pdf (get|post).
+  resources/panel/seller.html                            new exportInvoicePdf(); "Export Invoice
+      (PDF)" now posts the on-screen invoice to the endpoint instead of window.print().
+  app/Http/Controllers/Panel/SelfcheckController.php     new "invoice_pdf" probe.
+
+DEPLOY
+  1. Replace the files above -> commit.
+  2. EasyPanel REBUILD (no migration needed — this feature has no new tables).
+  3. Open any order -> "Export Invoice (PDF)" -> a clean PDF opens in a new tab. Switch the
+     currency (UGX/USD/SSP) and export again — the PDF follows the selected currency.
+
+OPTIONAL BRANDING (tenant settings — all have sensible defaults, set only if you want to change)
+  invoice_title    default "INVOICE"  (use "TAX INVOICE" if/when you register for VAT)
+  invoice_terms    default retention-of-title + 48h claims wording
+  bank_details     e.g. bank name / account no / mobile-money — printed under "Payment details"
+  invoice_footer   default "Thank you for your business. ... valid without signature."
+  (Header logo/name/address/tel/email/website/TIN reuse the SAME settings as your quotation.)
+
+VERIFY
+  /papi/selfcheck  ->  "Professional invoice PDF (server-side)" = true.

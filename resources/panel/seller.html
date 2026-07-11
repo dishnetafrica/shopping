@@ -2489,7 +2489,7 @@ function openOrder(id){
   $('saveBtn').onclick=saveInvoice;
   $('printBtn').onclick=function(){window.print();};
   if($('payNowBtn'))$('payNowBtn').onclick=openPayModal;
-  $('pdfBtn').onclick=function(){window.print();};
+  $('pdfBtn').onclick=exportInvoicePdf;
   $('delOrderBtn').onclick=function(){cancelOrder(current.id);};
   $('returnBtn').onclick=openReturnModal;
   setupShipBtn(current);
@@ -2648,6 +2648,33 @@ function renderAddOptions(q){
   if(q) list=list.filter(function(o){return o.p.name.toLowerCase().indexOf(q)>=0;});
   list=list.slice(0,200);
   $('addProd').innerHTML=list.length?list.map(function(o){return '<option value="'+o.i+'">'+esc(o.p.name)+' \u2014 '+ugx(o.p.price)+'</option>';}).join(''):'<option value="">No match</option>';
+}
+/* Professional server-side wholesale invoice PDF (dompdf) — WYSIWYG with what's on screen,
+   in the currency currently selected. Posts the live line items/discount/freight so the PDF
+   matches exactly, then opens it in a new tab (no browser chrome, no editable controls). */
+function exportInvoicePdf(){
+  var o=current; if(!o){toast('Open an order first');return;}
+  var m=curMeta();
+  var sub=o.items.reduce(function(s,it){return s+(Number(it.price)||0)*(Number(it.qty)||0);},0);
+  var discUgx=discountUgxFor(o,sub);
+  var delUgx=Number(o.deliveryFee)||0;
+  var grandUgx=Math.max(0,sub-discUgx+delUgx);
+  var outUgx=(window.__payOutUgx!=null)?Number(window.__payOutUgx):0;
+  var paidUgx=Math.max(0,grandUgx-outUgx);
+  var lines=o.items.map(function(it){return {name:it.name,qty:it.qty,unit:Number(convFromUgx(it.price).toFixed(m.dec))};});
+  var nm=(($('dCustName')||{}).value||o.customer||'').trim();
+  var addr=(($('dCustAddr')||{}).value||o.locClean||'').trim();
+  var f=document.createElement('form');
+  f.method='POST'; f.action='/papi/order-invoice-pdf'; f.target='_blank';
+  var add=function(k,v){var i=document.createElement('input');i.type='hidden';i.name=k;i.value=(v==null?'':String(v));f.appendChild(i);};
+  add('id',o.id); add('order_no',oNo(o)); add('customer',nm); add('phone',o.phone||'');
+  add('address',addr); add('status',o.status||''); add('payment',o.payment||''); add('notes',o.notes||'');
+  add('currency',m.code); add('dec',m.dec); add('lines',JSON.stringify(lines));
+  add('discount',convFromUgx(discUgx).toFixed(m.dec)); add('delivery',convFromUgx(delUgx).toFixed(m.dec));
+  add('paid',convFromUgx(paidUgx).toFixed(m.dec));
+  if((o.discMode||'amount')==='percent'&&Number(o.discPct)>0)add('disc_label','Discount '+Number(o.discPct)+'%');
+  document.body.appendChild(f); f.submit();
+  setTimeout(function(){if(f.parentNode)f.parentNode.removeChild(f);},1500);
 }
 function setQty(idx,v){current.items[idx].qty=Math.max(1,Number(v)||1);renderInvoice();}
 function setPrice(idx,v){current.items[idx].price=Math.max(0,convToUgx(v));renderInvoice();}
