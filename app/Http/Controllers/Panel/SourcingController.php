@@ -124,6 +124,7 @@ class SourcingController extends Controller
                 'supplier'=>$r->supplier_name,'availability'=>$r->availability,'price_note'=>$r->price_note,
                 'priced_by'=>$r->priced_by,'requested_by'=>$r->requested_by,
                 'reminders'=>(int)$r->reminder_count,'notified'=>(bool)$r->notified_at,
+                'product_id'=>$r->product_id!==null?(int)$r->product_id:null,
                 'date'=>optional($r->created_at)->format('Y-m-d H:i'),
             ];
         });
@@ -220,6 +221,52 @@ class SourcingController extends Controller
         // Tell the requester (Asish) — unless they priced their own request.
         if ((int) $r->requested_by_user_id !== (int) $u->id) self::notifyRequester($u->tenant, $r);
         return response()->json(['ok'=>true]);
+    }
+
+    /** POST /papi/sourcing/{id}/convert — finalise a priced request into a catalogue product. */
+    public function convert(Request $request, int $id)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok'=>false],403);
+        if (! $u->canMenu('products')) return response()->json(['ok'=>false,'error'=>'forbidden'],403);
+        $r = SourcingRequest::where('tenant_id',$u->tenant_id)->find($id);
+        if (! $r) return response()->json(['ok'=>false,'error'=>'not_found'],404);
+        if ($r->quoted_price === null) return response()->json(['ok'=>false,'error'=>'not_priced'],422);
+        if ($r->product_id) return response()->json(['ok'=>true,'product_id'=>(int)$r->product_id,'already'=>true]);
+
+        $name = trim((string)$request->input('name','')) ?: trim((string)$r->item_name);
+        if ($name === '') return response()->json(['ok'=>false,'error'=>'no_name'],422);
+
+        // Selling price = what you'll sell for in Juba; falls back to the cost if left blank.
+        $sell = round((float)$request->input('price', 0), 2);
+        if ($sell <= 0) $sell = (float)$r->quoted_price;
+
+        $category = trim((string)$request->input('category',''));
+        $scope = $u->categoryScope();
+        if (is_array($scope) && $category !== '' && ! in_array($category, $scope, true))
+            return response()->json(['ok'=>false,'error'=>'forbidden_category'],403);
+
+        $image = $r->photo_path ? '/storage/'.$r->photo_path : '';
+
+        $p = \App\Models\Product::create([
+            'name'       => $name,
+            'category'   => $category,
+            'keywords'   => trim((string)$request->input('keywords','')),
+            'base_price' => $sell,
+            'price'      => $sell,
+            'cost_price' => (float)$r->quoted_price,      // Jayesh's Juba price is our cost
+            'stock'      => (int)$request->input('stock', 0),
+            'image_url'  => $image,
+            'moq'        => $request->filled('moq') ? max(1,(int)$request->input('moq')) : null,
+            'pack_size'  => $request->filled('pack_size') ? max(1,(int)$request->input('pack_size')) : null,
+            'unit_label' => trim((string)$request->input('unit_label','')) ?: null,
+            'active'     => true,
+        ]);
+
+        $r->product_id = $p->id;
+        $r->status     = 'closed';
+        $r->save();
+        return response()->json(['ok'=>true,'product_id'=>$p->id]);
     }
 
     /** POST /papi/sourcing/{id}/status — close/reopen. */

@@ -123,6 +123,24 @@
   <button class="save" id="pSave" onclick="savePrice()">Save price</button>
 </div>
 
+<!-- convert to catalogue product -->
+<div class="sheet" id="convForm">
+  <button class="cancel" onclick="closeAll()">✕</button>
+  <h3>Add to catalogue</h3><div class="who" id="cWho"></div>
+  <label>Product name</label><input id="cName" placeholder="Name shown to customers">
+  <div class="g2">
+    <div><label>Cost (Jayesh’s price)</label><input id="cCost" inputmode="decimal" readonly style="background:#f3f5f7"></div>
+    <div><label>Selling price (Juba)</label><input id="cPrice" inputmode="decimal" placeholder="0" oninput="cMargin()"></div>
+  </div>
+  <div class="who" id="cMarginMsg" style="margin:-4px 0 6px"></div>
+  <label>Category</label><input id="cCat" list="catDL" placeholder="e.g. Foil & Cling"><datalist id="catDL"></datalist>
+  <div class="g2">
+    <div><label>MOQ (optional)</label><input id="cMoq" inputmode="numeric" placeholder="e.g. 10"></div>
+    <div><label>Unit (optional)</label><input id="cUnit" placeholder="e.g. cartons"></div>
+  </div>
+  <button class="save" id="cSave" onclick="saveConvert()">➕ Create product</button>
+</div>
+
 <script>
 const $=s=>document.getElementById(s);
 function nf(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2});}
@@ -172,9 +190,11 @@ function load(){
           if(r.reminders>0) chase='<span class="badge" style="background:#fff3e0;color:#b45309">asked '+(r.reminders+1)+'×</span>';
           else if(r.notified) chase='<span class="badge" style="background:#e8f0fe;color:#1877F2">asked</span>';
         }
+        if(r.product_id) chase='<span class="badge" style="background:#eaf6ee;color:#15803D">✓ IN CATALOGUE</span>';
         var acts='<div class="acts">';
         if(r.status==='new') acts+='<button class="b-price" onclick="openPrice('+r.id+')">Add price</button>';
         if(r.status==='new' && BUYER.auto && BUYER.phone) acts+='<button class="b-wa" onclick="remindNow('+r.id+')">Remind now</button>';
+        if(r.status==='priced') acts+='<button class="b-price" onclick="openConvert('+r.id+')">➕ Add to catalogue</button>';
         if(r.status==='priced') acts+='<button class="b-done" onclick="setStatus('+r.id+',\'closed\')">Mark done</button>';
         acts+='<button class="b-wa" onclick="waReq('+r.id+')">WhatsApp</button></div>';
         return '<div class="card'+(r.status==='closed'?' done':'')+'"><div class="ph">'+ph+'</div>'+
@@ -191,7 +211,7 @@ document.addEventListener('click',function(e){
 function openNew(){ $('nItem').value='';$('nNote').value='';$('nPhoto').value=''; NDEMAND='medium';
   $('nDemand').querySelectorAll('.chip').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-d')==='medium');});
   $('backdrop').classList.add('on'); $('newForm').classList.add('on'); setTimeout(function(){$('nItem').focus();},250); }
-function closeAll(){ $('backdrop').classList.remove('on'); $('newForm').classList.remove('on'); $('priceForm').classList.remove('on'); }
+function closeAll(){ $('backdrop').classList.remove('on'); $('newForm').classList.remove('on'); $('priceForm').classList.remove('on'); var cf=$('convForm'); if(cf)cf.classList.remove('on'); }
 
 function saveNew(){
   var item=$('nItem').value.trim(); if(!item){ alert('What item?'); return; }
@@ -226,6 +246,36 @@ function setStatus(id,s){
   fetch('/papi/sourcing/'+id+'/status',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:new URLSearchParams({status:s})})
     .then(r=>r.json()).then(function(){ load(); });
 }
+// ---- finalise a priced request into a catalogue product ----
+var CID_C=null, CATS=[];
+function loadCats(){
+  fetch('/papi/products',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json()).then(function(d){
+    var seen={}; CATS=[]; ((d&&d.products)||[]).forEach(function(p){ var c=((p['Category']||'')+'').trim(); if(c&&!seen[c]){seen[c]=1;CATS.push(c);} });
+    var dl=$('catDL'); if(dl)dl.innerHTML=CATS.map(function(c){return '<option value="'+esc(c)+'">';}).join('');
+  }).catch(function(){});
+}
+function cMargin(){
+  var cost=parseFloat(($('cCost').value||'').replace(/,/g,''))||0, sell=parseFloat(($('cPrice').value||'').replace(/,/g,''))||0, m=$('cMarginMsg'); if(!m)return;
+  if(cost>0&&sell>0){ var mg=sell-cost, pct=Math.round((mg/cost)*100); m.textContent='Margin: '+nf(mg)+' ('+pct+'%)'; m.style.color=mg>=0?'#15803D':'#C0392B'; } else m.textContent='';
+}
+function openConvert(id){
+  CID_C=id; var r=REQS.filter(function(x){return x.id===id;})[0]; if(!r)return;
+  $('cWho').textContent='From: '+r.item+(r.priced_by?(' · priced by '+r.priced_by):'');
+  $('cName').value=r.item||''; $('cCost').value=(r.quoted_price!=null?r.quoted_price:'');
+  $('cPrice').value=(r.quoted_price!=null?Math.round(r.quoted_price*1.3):''); // suggest cost +30%
+  $('cCat').value=''; $('cMoq').value=''; $('cUnit').value=''; cMargin();
+  $('backdrop').classList.add('on'); $('convForm').classList.add('on'); setTimeout(function(){$('cPrice').focus();},250);
+}
+function saveConvert(){
+  if(!CID_C)return; var name=$('cName').value.trim(); if(!name){alert('Product name?');return;}
+  var b=$('cSave'); b.disabled=true; b.textContent='Creating…';
+  var body=new URLSearchParams({name:name, price:($('cPrice').value||'').replace(/,/g,''), category:$('cCat').value.trim(), moq:$('cMoq').value.trim(), unit_label:$('cUnit').value.trim()});
+  fetch('/papi/sourcing/'+CID_C+'/convert',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body})
+    .then(r=>r.json()).then(function(r){ b.disabled=false; b.textContent='➕ Create product';
+      if(r&&r.ok){ closeAll(); load(); if(typeof toast==='function')toast('✓ Added to catalogue'); }
+      else alert(r&&r.error==='forbidden'?'You don’t have product access':(r&&r.error==='not_priced'?'Add a price first':'Could not create')); })
+    .catch(function(){ b.disabled=false; b.textContent='➕ Create product'; alert('Failed'); });
+}
 function remindNow(id){
   fetch('/papi/sourcing/'+id+'/remind',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
     .then(r=>r.json()).then(function(r){ if(r&&r.ok){ if(typeof toast==='function')toast('Reminder sent'); load(); } else alert(r&&r.error==='no_whatsapp'?'WhatsApp not connected / no buyer number':'Could not send'); });
@@ -238,6 +288,7 @@ function waReq(id){
 }
 refreshJbtn();
 load();
+loadCats();
 </script><!-- ===== DishNet role-aware tab bar + amount format (injected v2) ===== -->
 <nav class="dn-tabbar" id="dnTabbar"></nav>
 <script>

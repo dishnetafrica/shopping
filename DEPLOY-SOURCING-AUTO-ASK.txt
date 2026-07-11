@@ -57,3 +57,30 @@ VERIFY
 TUNING
   - Nudge gap: sourcing:remind --gap=3 (hours). Cap is 6 (SourcingController::REMINDER_CAP).
   - Turn a request off the chase list by pricing it or "Mark done" (status closed).
+
+--------------------------------------------------------------------------------
+FINALISE INTO CATALOGUE — the operations last mile (what to do after it's priced)
+--------------------------------------------------------------------------------
+THE FLOW (as an ops person):
+  1) KNOW: the moment Jayesh prices it, the request goes PRICED and the requester gets a
+     WhatsApp. Nothing to watch.
+  2) DECIDE: open the priced request — you see the cost (Jayesh's Juba price). Decide the
+     Juba SELLING price = cost + your margin.
+  3) FINALISE: tap "➕ Add to catalogue". A short form is prefilled — product name, cost
+     (locked to Jayesh's price), suggested selling price (cost +30%, editable, shows live
+     margin %), category (type-ahead from your existing categories), MOQ, unit. Tap
+     "Create product".
+  4) LIVE: the product is created in your catalogue with that cost + price, and the sourcing
+     photo becomes its image. It is now sellable everywhere — customers/WhatsApp bot, price
+     list, orders, and it can be picked in loose stock / added to a consignment for Juba.
+     The request is marked done and shows "✓ IN CATALOGUE".
+
+NEW: POST /papi/sourcing/{id}/convert  (SourcingController::convert) — creates a Product
+  (name, category, price, cost_price = quote, image from the request photo, moq/unit) and
+  links it back. Needs product permission (canMenu('products')); respects category scope.
+  Migration 2026_07_11_000002 adds sourcing_requests.product_id.
+
+VERIFY (finalise)
+  - Price a request -> it shows "Add to catalogue" -> tap it -> set selling price -> Create.
+  - The item appears under Products with cost = Jayesh's price and your selling price, and the
+    request shows "✓ IN CATALOGUE". Search the bot / price list for it — it's there.
