@@ -37,6 +37,9 @@ FILES CHANGED (12 app files) + 1 one-off script
   app/Models/ConsignmentStock.php             [NEW]      (8) loose-stock line model
   database/migrations/2026_07_10_000002_create_consignment_stock.php [NEW] (8) loose-stock table
   database/migrations/2026_07_10_000003_add_cost_to_consignment_stock.php [NEW] (10) cost+margin cols
+  app/Http/Controllers/Panel/AdsController.php [NEW]     (11) Facebook Ads screen (toggle + activity)
+  resources/panel/ads.html                    [NEW]      (11) the Ads screen
+  resources/panel/seller.html / mobile.html              (11) "Facebook Ads" nav links
   (ConsignmentController.php & consignment.html above also carry the Phase-2 additions)
   fix-cashbook-holder.php                     [SCRIPT]   (2) move CB-0067 to Jayesh Bhai
 
@@ -271,6 +274,30 @@ VERIFY (feature 9)
 NAV: a "📦 Consignments" link is now in the desktop sidebar (under Logistics, in seller.html)
   and in the mobile "More" menu (mobile.html), so Jayesh and Asish reach it without typing the
   URL. (Still also at /panel/consignment.)
+
+==============================================================================
+11) FACEBOOK ADS SCREEN — control + visibility for the ad-understanding bot
+==============================================================================
+A new screen at /panel/ads (sidebar "📣 Facebook Ads"; mobile "More" menu):
+  - An on/off switch for "Understand ad customers" (the bot_ad_awareness setting) — owner /
+    manager only. Flip it here instead of touching the database.
+  - Shows the bot mode and how many ad arrivals in the last 7 days.
+  - "Recent ad arrivals": each customer who messaged from a Facebook ad, the product/headline
+    the bot matched, and whether it was the first ad message ("from ad") or a follow-up.
+    (Read from the bot_events trace: stages ad_referral / ad_followup.)
+  - A short "how to test" panel.
+
+This is the SCREEN for the bot ad-understanding + product-MOQ logic, which ships in the
+separate bot patch (EvolutionGateway.php, ProcessIncomingMessage.php, BotBrain.php,
+FaqDictionary.php). The screen works on its own (the toggle + list), but arrivals only appear
+once that bot patch is deployed and customers start messaging from ads.
+
+FILES: AdsController.php (page/data/toggle), ads.html, routes/web.php (/panel/ads + papi/ads +
+  papi/ads-toggle), seller.html + mobile.html (nav). No migration (reuses bot_events + settings).
+
+VERIFY (feature 11)
+  - Open /panel/ads -> toggle shows ON -> flip it off and on (owner/manager). Message the bot
+    from a test number via your ad -> a "from ad" row appears with the matched product.
 
 DONE: Phases 1-3 of the Kampala→Juba consignment model are complete.
 

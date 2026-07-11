@@ -72,6 +72,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/pnl', [\App\Http\Controllers\Panel\ExpenseController::class, 'pnlPage']);
     Route::get('/panel/trade-cashbook', [\App\Http\Controllers\Panel\TradeCashbookController::class, 'page']);
     Route::get('/panel/consignment', [\App\Http\Controllers\Panel\ConsignmentController::class, 'page']);
+    Route::get('/panel/ads', [\App\Http\Controllers\Panel\AdsController::class, 'page']);
     Route::get('/panel/buy-list', [\App\Http\Controllers\Panel\BuyListController::class, 'page']);
     Route::get('/panel/supplier-debt', [\App\Http\Controllers\Panel\SupplierController::class, 'page']);
     Route::get('/panel/suppliers', [\App\Http\Controllers\Panel\SupplierController::class, 'manage']);
@@ -403,6 +404,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::match(['get','post'], 'consignment-stock-sell',   [\App\Http\Controllers\Panel\ConsignmentController::class, 'sellStock']);
         Route::match(['get','post'], 'consignment-notify',       [\App\Http\Controllers\Panel\ConsignmentController::class, 'notify']);
         Route::get('consignment-sheet',            [\App\Http\Controllers\Panel\ConsignmentController::class, 'sheet']);
+        // Ads (Facebook-ad bot understanding: toggle + activity)
+        Route::get('ads',                          [\App\Http\Controllers\Panel\AdsController::class, 'data']);
+        Route::match(['get','post'], 'ads-toggle', [\App\Http\Controllers\Panel\AdsController::class, 'toggle']);
         Route::get('bot-config-save', [PanelApiController::class, 'botConfigSave']);
         Route::get('branch-save',     [PanelApiController::class, 'branchSave']);
         Route::get('branch-delete',   [PanelApiController::class, 'branchDel']);

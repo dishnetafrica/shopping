@@ -1,0 +1,91 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Ads</title>
+<style>
+:root{--dark:#1B3A2B;--green:#15803D;--red:#C0392B;--amber:#C2700A;--blue:#1877F2;--line:#e4e9e4;--muted:#6b7280;--bg:#f6f8f6}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1B211D;background:var(--bg)}
+.top{background:var(--dark);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+.top h1{font-size:17px;margin:0;font-weight:800}
+.back{background:#ffffff22;border:none;color:#fff;border-radius:9px;padding:8px 12px;font-weight:700;cursor:pointer;text-decoration:none}
+.wrap{max-width:720px;margin:0 auto;padding:14px}
+.card{background:#fff;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 1px 3px #0000000d}
+.rowb{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.h{font-weight:800;font-size:15px}
+.note{font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:6px}
+.switch{position:relative;width:52px;height:30px;flex:none}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:#cbd5cb;border-radius:30px;transition:.2s;cursor:pointer}
+.slider:before{content:"";position:absolute;height:24px;width:24px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+.switch input:checked+.slider{background:var(--green)}
+.switch input:checked+.slider:before{transform:translateX(22px)}
+.pill{display:inline-block;font-size:11px;font-weight:800;padding:3px 10px;border-radius:20px}
+.pill.on{background:#eaf6ee;color:var(--green)}.pill.off{background:#fdecea;color:var(--red)}
+.stat{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.chip{font-size:12px;font-weight:700;background:#f0f4f0;border-radius:9px;padding:6px 9px;color:#333}
+.sec{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:16px 0 8px}
+.ev{background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:9px}
+.ev .l1{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.ev .ph{font-weight:700}.ev .tm{font-size:11px;color:var(--muted);white-space:nowrap}
+.ev .dt{font-size:13px;color:#1B211D;margin-top:3px}
+.badge{font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px}
+.badge.ref{background:#e8f0fe;color:#1877F2}.badge.fol{background:#f3eefe;color:#7c3aed}
+.empty{text-align:center;color:var(--muted);padding:22px 8px}
+.help{background:#f0f6ff;border:1px solid #cfe0ff;border-radius:12px;padding:12px;font-size:12.5px;color:#243b53;line-height:1.55}
+</style></head>
+<body>
+<div class="top"><h1>📣 Facebook Ads</h1><a class="back" href="/panel">Panel</a></div>
+<div class="wrap" id="wrap"><div class="empty">Loading…</div></div>
+
+<script>
+var $=function(id){return document.getElementById(id);};
+function api(u,opt){opt=opt||{};opt.headers=Object.assign({'X-Requested-With':'XMLHttpRequest'},opt.headers||{});opt.credentials='same-origin';opt.cache='no-store';return fetch(u,opt).then(function(r){return r.json();});}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function ago(s){ if(!s)return''; var d=new Date(String(s).replace(' ','T')); if(isNaN(d))return esc(s); var m=Math.floor((Date.now()-d.getTime())/60000); if(m<1)return'just now'; if(m<60)return m+'m ago'; var h=Math.floor(m/60); if(h<24)return h+'h ago'; return Math.floor(h/24)+'d ago'; }
+
+function load(){
+  $('wrap').innerHTML='<div class="empty">Loading…</div>';
+  api('/papi/ads').then(function(d){
+    if(!d||!d.ok){$('wrap').innerHTML='<div class="empty">Could not load.</div>';return;}
+    var on=!!d.enabled;
+    var modeNice={ai:'AI brain',n8n:'n8n workflow',auto:'Inbuilt bot',inbuilt:'Inbuilt bot'}[d.bot_mode]||d.bot_mode;
+    var h='';
+    // toggle card
+    h+='<div class="card"><div class="rowb"><div><div class="h">Understand ad customers</div>'+
+       '<div class="note">When a customer arrives from (or forwards) a Facebook/Instagram ad, the bot reads the ad, works out which product they mean, and answers about that product — instead of a generic reply.</div></div>'+
+       '<label class="switch"><input type="checkbox" id="tog" '+(on?'checked':'')+' '+(d.is_owner?'':'disabled')+' onchange="toggle(this.checked)"><span class="slider"></span></label></div>'+
+       '<div class="stat"><span class="pill '+(on?'on':'off')+'">'+(on?'ON':'OFF')+'</span>'+
+       '<span class="chip">Bot mode: '+esc(modeNice)+'</span>'+
+       '<span class="chip">'+d.arrivals_7d+' ad arrival'+(d.arrivals_7d===1?'':'s')+' · 7 days</span></div>'+
+       (d.is_owner?'':'<div class="note">Only the owner or a manager can change this.</div>')+
+       '<div class="note" id="togMsg"></div></div>';
+    // events
+    h+='<div class="sec">Recent ad arrivals</div>';
+    var ev=d.events||[];
+    if(!ev.length){
+      h+='<div class="empty">No ad arrivals recorded yet.<br>When a customer messages from your Facebook ad, they’ll appear here with the product the bot matched.</div>';
+    } else {
+      h+=ev.map(function(e){
+        var isRef=e.stage==='ad_referral';
+        return '<div class="ev"><div class="l1"><span class="ph">'+esc(e.phone||'—')+'</span>'+
+          '<span class="tm">'+ago(e.when)+'</span></div>'+
+          '<div class="dt"><span class="badge '+(isRef?'ref':'fol')+'">'+(isRef?'from ad':'follow-up')+'</span> '+esc(e.detail||'')+'</div></div>';
+      }).join('');
+    }
+    // help
+    h+='<div class="sec">How to test</div>'+
+       '<div class="help">1) From a test phone, tap your Facebook ad → WhatsApp opens → send “what’s the MOQ?”. The bot should name the advertised product and answer.<br>'+
+       '2) Or forward the ad image and ask a question.<br>'+
+       'Each time it fires you’ll see a “from ad” / “follow-up” row above. If nothing appears, make sure this switch is ON and that the bot is answering (Diagnostics shows the full message trace).</div>';
+    $('wrap').innerHTML=h;
+  });
+}
+function toggle(on){
+  var m=$('togMsg'); if(m)m.textContent='Saving…';
+  api('/papi/ads-toggle',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({on:on?1:0})}).then(function(r){
+    if(r&&r.ok){ if(m)m.textContent=''; load(); }
+    else { if(m)m.textContent=(r&&r.error==='not_allowed')?'Owner/manager only.':'Could not save.'; if($('tog'))$('tog').checked=!on; }
+  }).catch(function(){ if(m)m.textContent='Network error.'; if($('tog'))$('tog').checked=!on; });
+}
+load();
+</script>
+</body></html>
