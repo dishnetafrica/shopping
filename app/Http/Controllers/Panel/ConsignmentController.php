@@ -104,7 +104,7 @@ class ConsignmentController extends Controller
                             'tenant_id' => $t->id, 'shipment_id' => $s->id,
                             'product_id' => $k->product_id, 'name' => $k->name,
                             'qty_requested' => $short, 'qty_sent' => 0, 'qty_sold' => 0,
-                            'unit_price' => $k->unit_price, 'currency' => $k->currency,
+                            'unit_price' => $k->unit_price, 'unit_cost' => $k->unit_cost, 'currency' => $k->currency,
                             'note' => 'Carried over (unsent) from ' . ($src->shipment_number ?: ('#' . $src->id)),
                         ]);
                         $carried++;
@@ -158,14 +158,22 @@ class ConsignmentController extends Controller
             ];
         });
 
-        $stock = ConsignmentStock::where('tenant_id', $t->id)->where('shipment_id', $s->id)->orderBy('id')->get()
-            ->map(fn ($k) => [
-                'id' => $k->id, 'name' => $k->name,
-                'requested' => (float) $k->qty_requested, 'sent' => (float) $k->qty_sent,
-                'received' => $k->qty_received === null ? null : (float) $k->qty_received,
-                'sold' => (float) $k->qty_sold, 'short' => $k->shortfall(), 'remaining' => $k->remaining(),
-                'unit_price' => $k->unit_price === null ? null : (float) $k->unit_price, 'currency' => $k->currency,
-            ]);
+        $stockRows = ConsignmentStock::where('tenant_id', $t->id)->where('shipment_id', $s->id)->orderBy('id')->get();
+        $stock = $stockRows->map(fn ($k) => [
+            'id' => $k->id, 'name' => $k->name,
+            'requested' => (float) $k->qty_requested, 'sent' => (float) $k->qty_sent,
+            'received' => $k->qty_received === null ? null : (float) $k->qty_received,
+            'sold' => (float) $k->qty_sold, 'short' => $k->shortfall(), 'remaining' => $k->remaining(),
+            'unit_price' => $k->unit_price === null ? null : (float) $k->unit_price,
+            'unit_cost' => $k->unit_cost === null ? null : (float) $k->unit_cost,
+            'revenue' => (float) $k->sold_amount, 'cost' => $k->costOfSold(), 'margin' => $k->margin(),
+            'currency' => $k->currency,
+        ]);
+        $market = [
+            'revenue' => round($stockRows->sum(fn ($k) => (float) $k->sold_amount), 2),
+            'cost' => round($stockRows->sum(fn ($k) => $k->costOfSold()), 2),
+            'margin' => round($stockRows->sum(fn ($k) => $k->margin()), 2),
+        ];
 
         return response()->json(['ok' => true, 'consignment' => [
             'id' => $s->id, 'number' => $s->shipment_number, 'status' => $s->status, 'token' => $s->token,
@@ -174,7 +182,7 @@ class ConsignmentController extends Controller
             'transport' => $s->transport_company, 'bus' => $s->bus_number, 'driver_phone' => $s->driver_phone,
             'agent' => $s->destination_agent_name, 'agent_phone' => $s->destination_agent_phone,
             'boxes_sent' => $s->boxes_sent, 'notes' => $s->notes,
-        ], 'manifest' => $manifest, 'stock' => $stock]);
+        ], 'manifest' => $manifest, 'stock' => $stock, 'market' => $market]);
     }
 
     /** GET /papi/consignment-candidates?id= — ready orders not already on this consignment. */
@@ -291,6 +299,7 @@ class ConsignmentController extends Controller
             'qty_requested' => max(0, (float) $request->input('qty_requested', 0)),
             'qty_sent'      => max(0, (float) $request->input('qty_sent', 0)),
             'unit_price'    => $request->filled('unit_price') ? (float) $request->input('unit_price') : null,
+            'unit_cost'     => $request->filled('unit_cost') ? (float) $request->input('unit_cost') : null,
             'currency'      => strtoupper((string) $request->input('currency', '')) ?: null,
         ]);
         return response()->json(['ok' => true, 'id' => $k->id]);
@@ -305,9 +314,10 @@ class ConsignmentController extends Controller
         if (! $k) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
 
         if ($request->has('name') && trim((string) $request->input('name')) !== '') $k->name = trim((string) $request->input('name'));
-        foreach (['qty_requested', 'qty_sent', 'qty_received', 'unit_price'] as $f) {
+        foreach (['qty_requested', 'qty_sent', 'qty_received', 'unit_price', 'unit_cost'] as $f) {
             if ($request->has($f)) {
-                $k->$f = $request->input($f) === '' ? ($f === 'qty_received' || $f === 'unit_price' ? null : 0) : max(0, (float) $request->input($f));
+                $nullable = in_array($f, ['qty_received', 'unit_price', 'unit_cost'], true);
+                $k->$f = $request->input($f) === '' ? ($nullable ? null : 0) : max(0, (float) $request->input($f));
             }
         }
         if ($request->has('currency')) $k->currency = strtoupper((string) $request->input('currency')) ?: null;
@@ -360,12 +370,14 @@ class ConsignmentController extends Controller
             $o->save();   // OrderObserver assigns order_no
 
             $k->qty_sold = (float) $k->qty_sold + $qty;
+            $k->sold_amount = (float) $k->sold_amount + round($qty * $price, 2);   // actual revenue
             $k->save();
             return $o;
         });
 
+        $saleMargin = $k->unit_cost !== null ? round($qty * ($price - (float) $k->unit_cost), 2) : null;
         return response()->json(['ok' => true, 'order_no' => $order->order_no, 'sold' => $qty,
-            'remaining' => $k->remaining(), 'total' => (float) $order->total]);
+            'remaining' => $k->remaining(), 'total' => (float) $order->total, 'margin' => $saleMargin]);
     }
 
     /** POST /papi/consignment-notify — tell every customer still on board their order is on the way

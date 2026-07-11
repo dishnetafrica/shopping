@@ -159,9 +159,16 @@ function loadDetail(){
     var arrived=(c.status==='arrived');
     var totShort=stk.reduce(function(a,x){return a+(Number(x.short)||0);},0);
     var stockSec='<div class="sec">Loose stock (market) · '+stk.length+' item'+(stk.length===1?'':'s')+(totShort>0?(' · <span class="short">short '+nf(totShort)+'</span>'):'')+'</div>';
+    var mk=d.market||{revenue:0,cost:0,margin:0};
+    if((mk.revenue||0)>0){
+      stockSec+='<div class="card" style="cursor:default"><div class="row"><span>Market sales</span></div>'+
+        '<div class="stat"><span class="chip">Revenue '+nf(mk.revenue)+'</span><span class="chip">Cost '+nf(mk.cost)+'</span>'+
+        '<span class="chip" style="background:'+((mk.margin||0)>=0?'#eaf6ee':'#fdecea')+';color:'+((mk.margin||0)>=0?'#15803D':'#C0392B')+'">Margin '+nf(mk.margin)+'</span></div></div>';
+    }
     stockSec+='<div class="addbox"><input id="skName" placeholder="Item to request / send (e.g. Cling film 45cm)">'+
       '<div class="mini"><input id="skReq" type="number" min="0" step="any" placeholder="Requested">'+
       '<input id="skSent" type="number" min="0" step="any" placeholder="Sent"'+(beforeSend?'':' style="display:none"')+'>'+
+      '<input id="skCost" type="number" min="0" step="any" placeholder="Cost each">'+
       '<button class="btn g" onclick="addStock()">＋ Add</button></div></div>';
     if(stk.length){
       stockSec+=stk.map(function(k){
@@ -172,8 +179,10 @@ function loadDetail(){
           '<div class="qcell"><label>Sent</label><input type="number" min="0" step="any" value="'+(k.sent||0)+'" onchange="saveStock('+k.id+',\'qty_sent\',this.value)"></div>'+
           (arrived||k.received!=null?('<div class="qcell"><label>Received</label><input type="number" min="0" step="any" value="'+(k.received!=null?k.received:'')+'" placeholder="'+(k.sent||0)+'" onchange="saveStock('+k.id+',\'qty_received\',this.value)"></div>'):'')+
           '<div class="qcell"><label>Sold</label><div class="qro">'+nf(k.sold||0)+'</div></div>'+
+          '<div class="qcell"><label>Cost each</label><input type="number" min="0" step="any" value="'+(k.unit_cost!=null?k.unit_cost:'')+'" placeholder="0" onchange="saveStock('+k.id+',\'unit_cost\',this.value)"></div>'+
           '<div class="qcell"><label>Price</label><input type="number" min="0" step="any" value="'+(k.unit_price!=null?k.unit_price:'')+'" placeholder="0" onchange="saveStock('+k.id+',\'unit_price\',this.value)"></div>'+
-          '</div>';
+          '</div>'+
+          ((k.sold||0)>0?('<div class="sub" style="margin-top:6px">Revenue <b>'+nf(k.revenue)+'</b> · Cost '+nf(k.cost)+' · Margin <b style="color:'+((k.margin||0)>=0?'#15803D':'#C0392B')+'">'+nf(k.margin)+'</b></div>'):'');
         var acts='<div class="btnrow">';
         if(arrived) acts+='<button class="btn g" onclick="sellStock('+k.id+')">💵 Sell in market</button>';
         acts+='<button class="btn d" onclick="removeStock('+k.id+')">Remove</button></div>';
@@ -250,7 +259,7 @@ function addOrder(oid){
 // ---- loose stock ----
 function addStock(){
   var name=($('skName').value||'').trim(); if(!name){alert('Item name?');return;}
-  var body=new URLSearchParams({id:CID,name:name,qty_requested:($('skReq').value||'0'),qty_sent:($('skSent')&&$('skSent').value||'0')});
+  var body=new URLSearchParams({id:CID,name:name,qty_requested:($('skReq').value||'0'),qty_sent:($('skSent')&&$('skSent').value||'0'),unit_cost:($('skCost')&&$('skCost').value||'')});
   api('/papi/consignment-stock-add',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
     if(r&&r.ok)loadDetail(); else alert('Failed: '+((r&&r.error)||'error'));
   });
@@ -275,7 +284,7 @@ function sellStock(lineId){
   var buyer=prompt('Buyer name (optional):','')||'';
   var body=new URLSearchParams({line_id:lineId,qty:q,price:price,buyer:buyer});
   api('/papi/consignment-stock-sell',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
-    if(r&&r.ok){alert('✅ Sold '+nf(r.sold)+' · order '+r.order_no+' · UGX '+nf(r.total)+'\n'+nf(r.remaining)+' left.');loadDetail();}
+    if(r&&r.ok){alert('✅ Sold '+nf(r.sold)+' · order '+r.order_no+' · UGX '+nf(r.total)+(r.margin!=null?(' · margin UGX '+nf(r.margin)):'')+'\n'+nf(r.remaining)+' left.');loadDetail();}
     else alert((r&&r.message)||('Failed: '+((r&&r.error)||'error')));
   });
 }

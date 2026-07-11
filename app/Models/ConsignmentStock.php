@@ -19,14 +19,26 @@ class ConsignmentStock extends Model
     protected $fillable = [
         'tenant_id', 'shipment_id', 'product_id', 'name',
         'qty_requested', 'qty_sent', 'qty_received', 'qty_sold',
-        'unit_price', 'currency', 'note',
+        'unit_price', 'unit_cost', 'sold_amount', 'currency', 'note',
     ];
 
     protected $casts = [
         'qty_requested' => 'decimal:2', 'qty_sent' => 'decimal:2',
         'qty_received'  => 'decimal:2', 'qty_sold' => 'decimal:2',
-        'unit_price'    => 'decimal:2',
+        'unit_price'    => 'decimal:2', 'unit_cost' => 'decimal:2', 'sold_amount' => 'decimal:2',
     ];
+
+    /** Cost of what's been sold (qty_sold × unit_cost). */
+    public function costOfSold(): float
+    {
+        return round((float) $this->qty_sold * (float) ($this->unit_cost ?? 0), 2);
+    }
+
+    /** Actual profit on this line so far = real revenue − cost of what sold. */
+    public function margin(): float
+    {
+        return round((float) $this->sold_amount - $this->costOfSold(), 2);
+    }
 
     public function shipment(): BelongsTo { return $this->belongsTo(Shipment::class); }
 
