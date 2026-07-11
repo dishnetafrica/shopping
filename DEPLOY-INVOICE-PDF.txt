@@ -54,5 +54,16 @@ WHOLESALE EXTRAS (added)
       invoice_terms_days   whole days of credit (default 0 = due on receipt)
       credit_terms         override the auto credit sentence if you want your own wording
 
+  - Per-carton PRICE column: when a product has a pack size (pcs per carton), the invoice adds a
+    "Pack" column (e.g. ×24) and prints the per-piece price under the carton price
+    ("180,000  = 7,500 /pc"), so a buyer sees both the carton and the piece rate. A plain
+    single-piece invoice (no pack sizes anywhere) hides the column and looks unchanged.
+
+  - New orders default to CARTONS: when you add a product that has an MOQ set, the quantity
+    defaults to that MOQ (the carton minimum) instead of 1 — in both the order "Add item" box and
+    the POS grid. The Add dropdown now shows the unit + "min N" next to each product. Products
+    with no MOQ still default to 1, exactly as before. (MOQ/unit/pack are set per product under
+    Products → "Bulk set unit / pack / MOQ", or on each product.)
+
 VERIFY
   /papi/selfcheck  ->  "Professional invoice PDF (server-side)" = true.

@@ -76,7 +76,8 @@ class OrderInvoiceController extends Controller
                 $unit = (float) ($l['unit'] ?? 0);
                 if ($qty <= 0) $qty = 1;
                 $lines[] = ['name' => $name, 'qty' => $qty, 'unit' => $unit, 'amount' => $qty * $unit,
-                            'sku' => trim((string) ($l['sku'] ?? '')), 'uom' => trim((string) ($l['uom'] ?? ''))];
+                            'sku' => trim((string) ($l['sku'] ?? '')), 'uom' => trim((string) ($l['uom'] ?? '')),
+                            'pack' => max(0.0, (float) ($l['pack'] ?? 0))];
             }
         }
 
@@ -105,7 +106,7 @@ class OrderInvoiceController extends Controller
                 $qty  = (float) ($it['qty'] ?? 1);
                 $unit = (float) ($it['price'] ?? 0);
                 if ($qty <= 0) $qty = 1;
-                $lines[] = ['name' => $name, 'qty' => $qty, 'unit' => $unit, 'amount' => $qty * $unit, 'sku' => '', 'uom' => ''];
+                $lines[] = ['name' => $name, 'qty' => $qty, 'unit' => $unit, 'amount' => $qty * $unit, 'sku' => '', 'uom' => '', 'pack' => 0.0];
             }
         }
 
@@ -195,6 +196,12 @@ class OrderInvoiceController extends Controller
         ], fn ($x) => $x !== '');
         $billExtra = $billLines ? '<div style="margin-top:4px;font-size:10px;line-height:1.5;">' . implode('<br>', $billLines) . '</div>' : '';
 
+        // Only show the "Pack" column at all if at least one line has a pack size — keeps a
+        // simple single-piece invoice clean.
+        $hasPack = false;
+        foreach ($d['lines'] as $l) { if ((float) ($l['pack'] ?? 0) > 0) { $hasPack = true; break; } }
+        $ppDec = $dec > 0 ? $dec : 2; // per-piece can be fractional even when the currency shows 0dp
+
         // --- Line rows ---
         $rows = '';
         $i = 0;
@@ -203,15 +210,31 @@ class OrderInvoiceController extends Controller
             $qty = rtrim(rtrim(number_format((float) $l['qty'], 2), '0'), '.');
             $uom = trim((string) ($l['uom'] ?? ''));
             if ($uom !== '') $qty .= ' ' . strtoupper(e($uom));
-            $sku = $l['sku'] !== '' ? '<div style="font-size:8.5px;color:#777;">' . e($l['sku']) . '</div>' : '';
+            $sku  = $l['sku'] !== '' ? '<div style="font-size:8.5px;color:#777;">' . e($l['sku']) . '</div>' : '';
+            $pack = (float) ($l['pack'] ?? 0);
+
+            // Unit price + (when sold by carton with a known pack) the per-piece equivalent.
+            $unitCell = number_format((float) $l['unit'], $dec);
+            if ($pack > 0 && $uom !== '') {
+                $per = (float) $l['unit'] / $pack;
+                $unitCell .= '<div style="font-size:8px;color:#777;">= ' . number_format($per, $ppDec) . ' /pc</div>';
+            }
+            $packCell = '';
+            if ($hasPack) {
+                $packTxt  = $pack > 0 ? '&times;' . rtrim(rtrim(number_format($pack, 2), '0'), '.') : '&mdash;';
+                $packCell = '<td class="c">' . $packTxt . '</td>';
+            }
+
             $rows .= '<tr>'
                 . '<td class="c">' . $i . '</td>'
                 . '<td>' . e($l['name']) . $sku . '</td>'
                 . '<td class="c">' . $qty . '</td>'
-                . '<td class="r">' . number_format((float) $l['unit'], $dec) . '</td>'
+                . $packCell
+                . '<td class="r">' . $unitCell . '</td>'
                 . '<td class="r">' . number_format((float) $l['amount'], $dec) . '</td>'
                 . '</tr>';
         }
+        $packHead = $hasPack ? '<th style="width:52px;">Pack</th>' : '';
 
         $sub   = $this->money($d['subtotal'], $cur, $dec);
         $grand = $this->money($d['grand'], $cur, $dec);
@@ -336,7 +359,8 @@ table.tot tr.bal td { font-weight:bold; font-size:11.5px; }
   <tr>
     <th style="width:24px;">#</th>
     <th>Description</th>
-    <th style="width:80px;">Qty / Unit</th>
+    <th style="width:78px;">Qty / Unit</th>
+    {$packHead}
     <th style="width:105px;">Unit Price</th>
     <th style="width:120px;">Amount</th>
   </tr>

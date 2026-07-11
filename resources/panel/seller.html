@@ -1425,6 +1425,11 @@ function closeCameraScan(){
   if(_scan.stream){_scan.stream.getTracks().forEach(function(t){t.stop();});_scan.stream=null;}
   var ov=$('scanOverlay'); if(ov)ov.remove();
 }
+/* Wholesale default: a product's "carton" order quantity = its MOQ when set (>1), else 1.
+   New order lines / POS adds default to this so orders are built in cartons, not single pieces.
+   Products with no MOQ behave exactly as before (default 1). */
+function cartonQty(p){return (p&&p.moq!==''&&p.moq!=null&&Number(p.moq)>1)?Number(p.moq):1;}
+function prefillAddQty(){var p=CATALOGUE[Number($('addProd').value)];if(p&&$('addQty'))$('addQty').value=cartonQty(p);}
 function addProductToOrder(idx,qty){
   var p=CATALOGUE[idx]; if(!p||!current)return;
   qty=Math.max(1,Number(qty)||1);
@@ -2647,7 +2652,8 @@ function renderAddOptions(q){
   var list=CATALOGUE.map(function(p,i){return {p:p,i:i};});
   if(q) list=list.filter(function(o){return o.p.name.toLowerCase().indexOf(q)>=0;});
   list=list.slice(0,200);
-  $('addProd').innerHTML=list.length?list.map(function(o){return '<option value="'+o.i+'">'+esc(o.p.name)+' \u2014 '+ugx(o.p.price)+'</option>';}).join(''):'<option value="">No match</option>';
+  $('addProd').innerHTML=list.length?list.map(function(o){var u=o.p.unit?(' / '+esc(o.p.unit)):'';var mq=(o.p.moq!==''&&o.p.moq!=null&&Number(o.p.moq)>1)?(' \u00b7 min '+Number(o.p.moq)):'';return '<option value="'+o.i+'">'+esc(o.p.name)+' \u2014 '+ugx(o.p.price)+u+mq+'</option>';}).join(''):'<option value="">No match</option>';
+  if($('addProd')){$('addProd').onchange=prefillAddQty;prefillAddQty();}
 }
 /* Professional server-side wholesale invoice PDF (dompdf) — WYSIWYG with what's on screen,
    in the currency currently selected. Posts the live line items/discount/freight so the PDF
@@ -2664,7 +2670,8 @@ function exportInvoicePdf(){
   var byName={}; CATALOGUE.forEach(function(p){if(p&&p.name)byName[String(p.name).toLowerCase()]=p;});
   var lines=o.items.map(function(it){
     var p=byName[String(it.name||'').toLowerCase()];
-    return {name:it.name,qty:it.qty,unit:Number(convFromUgx(it.price).toFixed(m.dec)),uom:(p&&p.unit)?p.unit:''};
+    var pk=(p&&p.packSize!==''&&Number(p.packSize)>0)?Number(p.packSize):0;
+    return {name:it.name,qty:it.qty,unit:Number(convFromUgx(it.price).toFixed(m.dec)),uom:(p&&p.unit)?p.unit:'',pack:pk};
   });
   var nm=(($('dCustName')||{}).value||o.customer||'').trim();
   var addr=(($('dCustAddr')||{}).value||o.locClean||'').trim();
@@ -2705,7 +2712,7 @@ function posGrid(){
     return '<div class="pcard" onclick="posAdd('+o.i+')">'+im+'<div class="nm">'+esc(o.p.name)+'</div><div class="pr">'+posM(o.p.price)+'</div><div class="st'+(out?' out':'')+'">'+(out?'OUT OF STOCK':'Stock: '+st)+'</div></div>';
   }).join('')+(list.length>60?'<div class="empty" style="grid-column:1/-1">Showing first 60 of '+list.length+' \u2014 refine your search.</div>':''):'<div class="empty">No match for \u201c'+esc(f)+'\u201d</div>';
 }
-function posAdd(i){var p=CATALOGUE[i];if(prodStock(p)===0){toast('Out of stock'+(INVENTORY_MODE==='branch'&&BRANCH_FILTER?' at '+branchName(BRANCH_FILTER):''));return;}var ex=POS.cart.find(function(c){return c.i===i;});if(ex)ex.qty++;else POS.cart.push({i:i,name:p.name,price:p.price,qty:1});posRenderCart();}
+function posAdd(i){var p=CATALOGUE[i];if(prodStock(p)===0){toast('Out of stock'+(INVENTORY_MODE==='branch'&&BRANCH_FILTER?' at '+branchName(BRANCH_FILTER):''));return;}var ex=POS.cart.find(function(c){return c.i===i;});if(ex)ex.qty++;else POS.cart.push({i:i,name:p.name,price:p.price,qty:cartonQty(p)});posRenderCart();}
 function posQty(k,d){POS.cart[k].qty+=d;if(POS.cart[k].qty<1)POS.cart.splice(k,1);posRenderCart();}
 function posSetPrice(k,v){if(POS.cart[k])POS.cart[k].price=Math.max(0,convToUgx(v));posRenderCart();}
 function posRenderCart(){
