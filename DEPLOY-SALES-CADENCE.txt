@@ -1,0 +1,60 @@
+DEPLOY — Virtual salesperson: auto WhatsApp follow-up cadence + re-order reminders
+==================================================================================
+
+THE IDEA
+  Automate the salesperson's WhatsApp follow-ups so your rep is free to VISIT customers in person.
+  The bot works a proper rhythm, personally (uses the customer's name + the items they asked about),
+  and stops the moment they reply or order — so it feels human, not spammy.
+
+TWO TRACKS (both run automatically once switched on)
+  A) ENQUIRY CADENCE — someone asked but hasn't ordered:
+       Day 1  → "Hi {name} 👋 Following up on {items} — want a quote or delivery?"
+       Day 3  → sends your LATEST PRICE LIST (PDF, generated live from your products)
+       Day 7  → "Just checking in — anything to stock up on this week?"
+       + every 14 days → an updated price-list touch (capped so it never runs forever)
+  B) RE-ORDER REMINDER — past buyers who've gone quiet:
+       When their last order is older than N days (default 21):
+       "Hi {name} 👋 It's been {days} days since your last order (…their last items…). Ready for a
+        fresh supply? I can send today's prices and arrange delivery."
+
+GUARDRAILS (why it won't get you blocked)
+  - OFF by default — opt-in per shop. Office-hours only (09:00–19:00 via the scheduler).
+  - One touch per customer per run; each stage is days apart.
+  - STOPS the moment the customer replies or places an order (never talks over a live chat).
+  - Never messages mid-cart, during a human takeover, or a do-not-contact number.
+  - Every message is personal (name + their items) and reason-coded in the message log.
+
+TURN IT ON  (/panel/ads → "🧑‍💼 Virtual salesperson")
+  - Toggle it on.
+  - "Also remind past buyers to re-order" on/off, and the re-order window in days.
+  - Optional custom wording for the Day-1 and Re-order messages (placeholders {name} {items} {days});
+    leave blank for the built-in human-sounding defaults.
+
+FILES
+  app/Console/Commands/SalesCadenceCommand.php   [NEW] the cadence engine (bot:sales-cadence).
+  routes/console.php                             schedules it hourly, 09:00–19:00.
+  app/Http/Controllers/Panel/AdsController.php   read + save the salesperson settings.
+  resources/panel/ads.html                       "Virtual salesperson" card.
+  app/Http/Controllers/Panel/SelfcheckController.php  probes.
+
+SETTINGS (all optional; sensible defaults)
+  sales_followup_enabled(false) · sales_include_buyers(true) · sales_reorder_days(21)
+  sales_price_list_days(14) · sales_msg_day1 · sales_msg_day7 · sales_msg_pricelist · sales_msg_reorder
+  sales_price_list_link  (fallback link if the PDF engine/products aren't available)
+
+DEPLOY
+  1. Replace/add the files -> commit.  (No migration — cadence state lives on the conversation.)
+  2. EasyPanel REBUILD (force / no-cache) — the queue worker + scheduler pick up the new command.
+  3. /panel/ads → turn the Virtual salesperson ON and set the re-order window.
+
+VERIFY
+  - Dry run (sends nothing, lists who'd be messaged):   php artisan bot:sales-cadence --dry
+  - Then real:                                          php artisan bot:sales-cadence
+  - /papi/selfcheck → "Virtual salesperson (auto follow-up) code" = true, and once you enable it,
+    "Virtual salesperson switched ON" = true.
+  - Best test: from a spare number, ask about a product (don't order) → tomorrow you'll get the Day-1
+    follow-up. Or set sales_reorder_days low and a past buyer gets a re-order nudge on the next run.
+
+TUNING
+  - Price-list touches use your live product list (PriceListService) — make sure products have prices.
+  - Personalisation is best when orders/leads carry the customer's NAME and the enquiry INTEREST.

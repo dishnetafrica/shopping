@@ -83,6 +83,29 @@ function load(){
 
       (d.is_owner?('<div style="margin-top:14px"><button id="btSave" onclick="saveBot()" style="background:var(--green);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:800;cursor:pointer">Save behaviour</button> <span class="note" id="btMsg" style="margin-left:8px"></span></div>'):'')+
       '</div>';
+    // --- Virtual salesperson (auto follow-up) ---
+    var son=!!d.sales_on, sbuy=(d.sales_buyers!==false);
+    h+='<div class="card">'+
+      '<div class="rowb"><div><div class="h">🧑‍💼 Virtual salesperson (auto follow-up)</div>'+
+        '<div class="note">Follows up on WhatsApp like a sales rep so your team can visit customers in person. <b>Day 1</b>: follows up on what they asked about. <b>Day 3</b>: sends the latest price list. <b>Day 7</b>: a friendly check-in. Then a price-list touch every 2 weeks. It stops the moment they reply or order, never messages mid-chat, and only runs in working hours.</div></div>'+
+        '<label class="switch"><input type="checkbox" id="btSalesOn" '+(son?'checked':'')+' '+dis+'><span class="slider"></span></label></div>'+
+
+      '<div class="sec">Also remind past buyers to re-order</div>'+
+      '<div class="rowb"><div class="note" style="margin:0;flex:1">When a customer hasn’t ordered for a while, nudge them: “It’s been N days since your last order (…) — ready for a fresh supply?”</div>'+
+        '<label class="switch"><input type="checkbox" id="btSalesBuyers" '+(sbuy?'checked':'')+' '+dis+'><span class="slider"></span></label></div>'+
+      '<div class="sec">Re-order reminder after (days)</div>'+
+      '<input id="btReorderDays" type="number" min="3" '+dis+' value="'+(d.sales_reorder_days||21)+'" style="width:120px;padding:9px;border:1px solid var(--line);border-radius:9px;font-size:13px">'+
+
+      '<div class="sec">Day-1 follow-up message (optional)</div>'+
+      '<input id="btMsgDay1" '+dis+' value="'+esc(d.sales_msg_day1||'')+'" placeholder="Hi {name} 👋 Following up on {items} — want a quote or delivery?" style="'+ (function(){return 'width:100%;padding:9px;border:1px solid var(--line);border-radius:9px;font-size:13px';})() +'">'+
+      '<div class="note">Placeholders: <b>{name}</b> (customer), <b>{items}</b> (what they asked about). Blank = a sensible default.</div>'+
+
+      '<div class="sec">Re-order message (optional)</div>'+
+      '<input id="btMsgReorder" '+dis+' value="'+esc(d.sales_msg_reorder||'')+'" placeholder="Hi {name} 👋 It’s been {days} days since your last order{items}. Ready for more?" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:9px;font-size:13px">'+
+      '<div class="note">Placeholders: <b>{name}</b>, <b>{days}</b> (since last order), <b>{items}</b> (their last order).</div>'+
+
+      (d.is_owner?('<div style="margin-top:14px"><button onclick="saveSales()" style="background:var(--green);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:800;cursor:pointer">Save salesperson</button> <span class="note" id="salesMsg" style="margin-left:8px"></span></div>'):'')+
+      '</div>';
     // events
     h+='<div class="sec">Recent ad arrivals</div>';
     var ev=d.events||[];
@@ -111,6 +134,19 @@ function saveBot(){
     keep_ai_on:($('btKeepAi')&&$('btKeepAi').checked)?1:0,
     warehouse:($('btWh')?$('btWh').value:''),
     moq_note:($('btMoq')?$('btMoq').value:'')
+  });
+  api('/papi/ads-settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
+    if(m)m.textContent=(r&&r.ok)?'Saved ✓':((r&&r.error==='not_allowed')?'Owner/manager only.':'Could not save.');
+  }).catch(function(){ if(m)m.textContent='Network error.'; });
+}
+function saveSales(){
+  var m=$('salesMsg'); if(m)m.textContent='Saving…';
+  var body=new URLSearchParams({
+    sales_on:($('btSalesOn')&&$('btSalesOn').checked)?1:0,
+    sales_buyers:($('btSalesBuyers')&&$('btSalesBuyers').checked)?1:0,
+    sales_reorder_days:($('btReorderDays')?$('btReorderDays').value:'21'),
+    sales_msg_day1:($('btMsgDay1')?$('btMsgDay1').value:''),
+    sales_msg_reorder:($('btMsgReorder')?$('btMsgReorder').value:'')
   });
   api('/papi/ads-settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
     if(m)m.textContent=(r&&r.ok)?'Saved ✓':((r&&r.error==='not_allowed')?'Owner/manager only.':'Could not save.');

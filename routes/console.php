@@ -48,3 +48,6 @@ Schedule::command('bot:lead-followup')->everyFiveMinutes()->between('8:00', '20:
 
 // Sourcing: keep nudging the buyer (Jayesh) for unpriced requests until he replies the price.
 Schedule::command('sourcing:remind')->hourly()->between('8:00', '20:00')->withoutOverlapping()->onOneServer();
+
+// Virtual salesperson: enquiry follow-up cadence + reorder reminders (opt-in per tenant).
+Schedule::command('bot:sales-cadence')->hourly()->between('9:00', '19:00')->withoutOverlapping()->onOneServer();

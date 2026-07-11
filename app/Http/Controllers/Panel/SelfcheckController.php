@@ -135,6 +135,13 @@ class SelfcheckController extends Controller
             && (bool) $this->fileHas('app/Services/Bot/FaqDictionary.php', 'warehouse'));
         $add('bot_product_guidance', 'Bot explains what products are for',
             (bool) $this->fileHas('app/Services/Bot/AiBrain.php', "GUIDE, DON'T JUST LIST"));
+        $add('sales_cadence_code', 'Virtual salesperson (auto follow-up) code',
+            class_exists(\App\Console\Commands\SalesCadenceCommand::class));
+        if ($t) {
+            $on = (bool) $t->setting('sales_followup_enabled', false);
+            $add('sales_cadence_on', 'Virtual salesperson switched ON', $on ? true : null,
+                $on ? ('reorder after ' . (int) $t->setting('sales_reorder_days', 21) . 'd') : 'turn on at /panel/ads');
+        }
         $add('bot_reply_photo', 'Bot sends photo of the product it recommended',
             (bool) $this->fileHas('app/Services/Bot/AiBrain.php', 'product the BOT recommended'));
         $add('missing_photo_finder', 'Products “missing photo” finder',

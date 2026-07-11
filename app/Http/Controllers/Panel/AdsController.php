@@ -68,6 +68,12 @@ class AdsController extends Controller
             'keep_ai_on'       => ! (bool) $t->setting('human_takeover_on_reply', true), // true = AI keeps replying after a manual message
             'warehouse'        => (string) $t->setting('warehouse_location', ''),
             'moq_note'         => (string) $t->setting('moq_note', ''),
+            // Virtual salesperson (auto follow-up cadence)
+            'sales_on'         => (bool) $t->setting('sales_followup_enabled', false),
+            'sales_buyers'     => (bool) $t->setting('sales_include_buyers', true),
+            'sales_reorder_days' => (int) $t->setting('sales_reorder_days', 21),
+            'sales_msg_day1'   => (string) $t->setting('sales_msg_day1', ''),
+            'sales_msg_reorder'=> (string) $t->setting('sales_msg_reorder', ''),
         ]);
     }
 
@@ -92,6 +98,22 @@ class AdsController extends Controller
         }
         if ($request->has('moq_note')) {
             $t->putSetting('moq_note', trim((string) $request->input('moq_note')));
+        }
+        // Virtual salesperson
+        if ($request->has('sales_on')) {
+            $t->putSetting('sales_followup_enabled', filter_var($request->input('sales_on'), FILTER_VALIDATE_BOOLEAN));
+        }
+        if ($request->has('sales_buyers')) {
+            $t->putSetting('sales_include_buyers', filter_var($request->input('sales_buyers'), FILTER_VALIDATE_BOOLEAN));
+        }
+        if ($request->has('sales_reorder_days')) {
+            $t->putSetting('sales_reorder_days', max(3, (int) $request->input('sales_reorder_days')));
+        }
+        if ($request->has('sales_msg_day1')) {
+            $t->putSetting('sales_msg_day1', trim((string) $request->input('sales_msg_day1')));
+        }
+        if ($request->has('sales_msg_reorder')) {
+            $t->putSetting('sales_msg_reorder', trim((string) $request->input('sales_msg_reorder')));
         }
         return response()->json(['ok' => true]);
     }
