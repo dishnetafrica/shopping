@@ -33,7 +33,7 @@ class SourcingController extends Controller
     }
 
     /** Send (or re-send) a sourcing request to the buyer on WhatsApp. Best-effort; never throws. */
-    public static function sendToBuyer(Tenant $t, SourcingRequest $r, bool $reminder = false): bool
+    public static function sendToBuyer(Tenant $t, SourcingRequest $r, bool $reminder = false, string $context = ''): bool
     {
         try {
             $phone = preg_replace('/[^0-9]/', '', (string) $t->setting('sourcing_buyer_phone', ''));
@@ -43,7 +43,9 @@ class SourcingController extends Controller
             $name = trim((string) $t->setting('sourcing_buyer_name', '')) ?: 'there';
             $ref  = 'SR-' . $r->id;
             $lines = [];
-            if ($reminder) {
+            if ($context !== '') {
+                $lines[] = $context;
+            } elseif ($reminder) {
                 $lines[] = "\u{23F0} Reminder — still need the Juba price for {$ref}:";
             } else {
                 $lines[] = "\u{1F6D2} Hi {$name}, please get me the Juba price — {$ref}:";
@@ -143,6 +145,7 @@ class SourcingController extends Controller
                 'priced_by'=>$r->priced_by,'requested_by'=>$r->requested_by,
                 'reminders'=>(int)$r->reminder_count,'notified'=>(bool)$r->notified_at,
                 'product_id'=>$r->product_id!==null?(int)$r->product_id:null,
+                'decision_note'=>$r->decision_note,
                 'date'=>optional($r->created_at)->format('Y-m-d H:i'),
             ];
         });
@@ -287,6 +290,52 @@ class SourcingController extends Controller
         return response()->json(['ok'=>true,'product_id'=>$p->id]);
     }
 
+    /** POST /papi/sourcing/{id}/reject — price too high / won't stock. Terminal, with a reason. */
+    public function reject(Request $request, int $id)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok'=>false],403);
+        $r = SourcingRequest::where('tenant_id',$u->tenant_id)->find($id);
+        if (! $r) return response()->json(['ok'=>false,'error'=>'not_found'],404);
+        $r->decision_note = trim((string)$request->input('reason','')) ?: 'Price too high from Kampala — not viable to sell';
+        $r->status = 'rejected';
+        $r->save();
+        // Let the requester know it won't be stocked (best-effort).
+        try {
+            if ((int)$r->requested_by_user_id !== (int)$u->id && $r->requested_by_user_id) {
+                $usr = \App\Models\User::where('tenant_id',$u->tenant_id)->find($r->requested_by_user_id);
+                $ph = $usr ? preg_replace('/[^0-9]/','',(string)$usr->phone) : '';
+                $inst = (string)($u->tenant->whatsapp_instance ?? '');
+                if ($ph !== '' && $inst !== '') {
+                    $msg = "\u{1F6AB} Not stocking *{$r->item_name}* (SR-{$r->id}) — {$r->decision_note}.";
+                    app(WhatsAppManager::class)->forTenant($u->tenant)->sendText($inst, $ph, $msg);
+                    try { MessageLog::record($u->tenant_id, $ph, $inst, 'out', 'system', $msg); } catch (\Throwable $e) {}
+                }
+            }
+        } catch (\Throwable $e) {}
+        return response()->json(['ok'=>true,'status'=>'rejected']);
+    }
+
+    /** POST /papi/sourcing/{id}/renegotiate — price too high: ask the buyer for a better one and re-chase. */
+    public function renegotiate(Request $request, int $id)
+    {
+        $u = $this->ok($request);
+        if (! $u) return response()->json(['ok'=>false],403);
+        $r = SourcingRequest::where('tenant_id',$u->tenant_id)->find($id);
+        if (! $r) return response()->json(['ok'=>false,'error'=>'not_found'],404);
+
+        $target = trim((string)$request->input('target',''));
+        $was = $r->quoted_price !== null ? (($r->currency ?: 'UGX').' '.number_format((float)$r->quoted_price)) : '';
+        // Reopen for a fresh price and restart the chaser.
+        $r->status = 'new';
+        $r->notified_at = null; $r->last_reminded_at = null; $r->reminder_count = 0;
+        $r->save();
+        $ctx = "\u{26A0}\u{FE0F} The Juba price" . ($was !== '' ? " ({$was})" : '') . " is too high to sell — can you find a *better price* for SR-{$r->id}?"
+             . ($target !== '' ? "\nTarget: {$target}" : '');
+        $sent = self::sendToBuyer($u->tenant, $r, false, $ctx);
+        return response()->json(['ok'=>true,'sent'=>$sent]);
+    }
+
     /** POST /papi/sourcing/{id}/status — close/reopen. */
     public function status(Request $request, int $id)
     {
@@ -295,7 +344,7 @@ class SourcingController extends Controller
         $r = SourcingRequest::where('tenant_id',$u->tenant_id)->find($id);
         if (! $r) return response()->json(['ok'=>false,'error'=>'not_found'],404);
         $s = (string)$request->input('status','closed');
-        if (! in_array($s, ['new','priced','closed'], true)) $s = 'closed';
+        if (! in_array($s, ['new','priced','closed','rejected'], true)) $s = 'closed';
         $r->status = $s; $r->save();
         return response()->json(['ok'=>true,'status'=>$s]);
     }
