@@ -216,6 +216,9 @@ aren't tied to a customer order — and tracks the whole chain so the request/fu
 always visible:  REQUESTED (Asish asked) → SENT (Jayesh loaded) → RECEIVED (arrived) → SOLD.
 
 On the consignment screen (/panel/consignment), under "Loose stock (market)":
+  - The item box is a PRODUCT PICKER from your catalogue (type-ahead): pick a product and its
+    name links to product_id and its cost/price auto-fill from the catalogue. Free-text still
+    works for the rare true "loose" item (shown as "Loose item (not in product list)").
   - Anyone can add an item with a Requested qty (Asish's daily request) — and Jayesh fills the
     Sent qty as he loads. If Sent < Requested, the line shows "short N" in amber and the whole
     consignment shows the total shortfall. THIS is the answer to "we may not send what Asish

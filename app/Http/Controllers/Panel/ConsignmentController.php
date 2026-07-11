@@ -291,15 +291,30 @@ class ConsignmentController extends Controller
         if (! $t) return response()->json(['ok' => false], 401);
         $s = Shipment::where('tenant_id', $t->id)->find((int) $request->input('id'));
         if (! $s) return response()->json(['ok' => false, 'error' => 'consignment_not_found'], 404);
+
+        // Prefer a catalogue product (the usual case): links product_id and fills name/cost/price
+        // from the product. Free-text name still works for the rare true "loose" item.
+        $pid  = (int) $request->input('product_id', 0) ?: null;
+        $prod = $pid ? \App\Models\Product::where('tenant_id', $t->id)->find($pid) : null;
+        if (! $prod) $pid = null;
+
         $name = trim((string) $request->input('name', ''));
+        if ($name === '' && $prod) $name = (string) $prod->name;
         if ($name === '') return response()->json(['ok' => false, 'error' => 'name_required'], 422);
 
+        $unitCost = $request->filled('unit_cost')
+            ? (float) $request->input('unit_cost')
+            : ($prod && $prod->cost_price !== null ? (float) $prod->cost_price : null);
+        $unitPrice = $request->filled('unit_price')
+            ? (float) $request->input('unit_price')
+            : ($prod ? (float) $prod->price : null);
+
         $k = ConsignmentStock::create([
-            'tenant_id' => $t->id, 'shipment_id' => $s->id, 'name' => $name,
+            'tenant_id' => $t->id, 'shipment_id' => $s->id, 'product_id' => $pid, 'name' => $name,
             'qty_requested' => max(0, (float) $request->input('qty_requested', 0)),
             'qty_sent'      => max(0, (float) $request->input('qty_sent', 0)),
-            'unit_price'    => $request->filled('unit_price') ? (float) $request->input('unit_price') : null,
-            'unit_cost'     => $request->filled('unit_cost') ? (float) $request->input('unit_cost') : null,
+            'unit_price'    => $unitPrice,
+            'unit_cost'     => $unitCost,
             'currency'      => strtoupper((string) $request->input('currency', '')) ?: null,
         ]);
         return response()->json(['ok' => true, 'id' => $k->id]);

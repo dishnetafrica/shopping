@@ -165,11 +165,14 @@ function loadDetail(){
         '<div class="stat"><span class="chip">Revenue '+nf(mk.revenue)+'</span><span class="chip">Cost '+nf(mk.cost)+'</span>'+
         '<span class="chip" style="background:'+((mk.margin||0)>=0?'#eaf6ee':'#fdecea')+';color:'+((mk.margin||0)>=0?'#15803D':'#C0392B')+'">Margin '+nf(mk.margin)+'</span></div></div>';
     }
-    stockSec+='<div class="addbox"><input id="skName" placeholder="Item to request / send (e.g. Cling film 45cm)">'+
+    stockSec+='<div class="addbox">'+
+      '<input id="skName" list="prodDL" autocomplete="off" placeholder="Pick a product from your list (or type a loose item)" oninput="prodPick()">'+
+      '<datalist id="prodDL"></datalist><input type="hidden" id="skPid">'+
       '<div class="mini"><input id="skReq" type="number" min="0" step="any" placeholder="Requested">'+
       '<input id="skSent" type="number" min="0" step="any" placeholder="Sent"'+(beforeSend?'':' style="display:none"')+'>'+
       '<input id="skCost" type="number" min="0" step="any" placeholder="Cost each">'+
-      '<button class="btn g" onclick="addStock()">＋ Add</button></div></div>';
+      '<button class="btn g" onclick="addStock()">＋ Add</button></div>'+
+      '<div class="note" id="skPickMsg" style="margin-top:2px"></div></div>';
     if(stk.length){
       stockSec+=stk.map(function(k){
         var short=(Number(k.short)||0)>0.0001;
@@ -191,6 +194,7 @@ function loadDetail(){
     }
 
     $('wrap').innerHTML=head+manifest+addSec+stockSec;
+    fillProdDL();
     if(addSec) searchCand();
   });
 }
@@ -257,9 +261,22 @@ function addOrder(oid){
 }
 
 // ---- loose stock ----
+// ---- product picker for loose stock ----
+window.PRODUCTS=[];
+function loadProducts(){ api('/papi/products').then(function(d){ window.PRODUCTS=(Array.isArray(d.products)?d.products:[]).filter(function(p){return p['Product Name'];}); fillProdDL(); }).catch(function(){}); }
+function fillProdDL(){ var dl=$('prodDL'); if(!dl)return; dl.innerHTML=(window.PRODUCTS||[]).map(function(p){return '<option value="'+esc(p['Product Name'])+'">';}).join(''); }
+function prodFor(name){ var v=String(name||'').trim().toLowerCase(); return (window.PRODUCTS||[]).find(function(p){return String(p['Product Name']).toLowerCase()===v;}); }
+function prodPick(){
+  var hit=prodFor($('skName').value); var msg=$('skPickMsg');
+  if($('skPid'))$('skPid').value = hit? hit._row : '';
+  if(hit){
+    if($('skCost') && !$('skCost').value && hit.Cost!=='' && hit.Cost!=null) $('skCost').value=hit.Cost;
+    if(msg)msg.innerHTML='✓ From your product list'+(hit.Unit?(' · '+esc(hit.Unit)):'')+(hit.MOQ!==''&&hit.MOQ!=null?(' · MOQ '+hit.MOQ):'');
+  } else { if(msg)msg.textContent = $('skName').value.trim()? 'Loose item (not in product list)':''; }
+}
 function addStock(){
   var name=($('skName').value||'').trim(); if(!name){alert('Item name?');return;}
-  var body=new URLSearchParams({id:CID,name:name,qty_requested:($('skReq').value||'0'),qty_sent:($('skSent')&&$('skSent').value||'0'),unit_cost:($('skCost')&&$('skCost').value||'')});
+  var body=new URLSearchParams({id:CID,name:name,product_id:(($('skPid')&&$('skPid').value)||''),qty_requested:($('skReq').value||'0'),qty_sent:($('skSent')&&$('skSent').value||'0'),unit_cost:($('skCost')&&$('skCost').value||'')});
   api('/papi/consignment-stock-add',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
     if(r&&r.ok)loadDetail(); else alert('Failed: '+((r&&r.error)||'error'));
   });
@@ -309,6 +326,6 @@ function createConsignment(){
   }).catch(function(){b.disabled=false;b.textContent='Create consignment';$('nMsg').textContent='Network error';});
 }
 
-load();
+load();loadProducts();
 </script>
 </body></html>
