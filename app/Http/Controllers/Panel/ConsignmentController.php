@@ -154,6 +154,7 @@ class ConsignmentController extends Controller
                 'items' => $o ? ($o->items_text ?: '') : '', 'total' => $o ? (float) $o->total : 0,
                 'location' => $o->location ?? '', 'order_status' => $o->status ?? '',
                 'line_status' => $ln->status, 'delivered_at' => optional($ln->delivered_at)->format('d M H:i'),
+                'note' => $ln->note,
             ];
         });
 
@@ -254,8 +255,9 @@ class ConsignmentController extends Controller
         if (! in_array($to, [ShipmentOrder::ON_BOARD, ShipmentOrder::DELIVERED, ShipmentOrder::RETURNED], true))
             return response()->json(['ok' => false, 'error' => 'bad_status'], 422);
 
-        DB::transaction(function () use ($line, $to, $u, $t) {
+        DB::transaction(function () use ($line, $to, $u, $t, $request) {
             $line->status = $to;
+            if ($request->has('note')) $line->note = trim((string) $request->input('note')) ?: null;
             $line->delivered_at = $to === ShipmentOrder::DELIVERED ? now() : null;
             $line->delivered_by = $to === ShipmentOrder::DELIVERED ? (string) ($u->name ?? '') : null;
             $line->save();
@@ -364,5 +366,91 @@ class ConsignmentController extends Controller
 
         return response()->json(['ok' => true, 'order_no' => $order->order_no, 'sold' => $qty,
             'remaining' => $k->remaining(), 'total' => (float) $order->total]);
+    }
+
+    /** POST /papi/consignment-notify — tell every customer still on board their order is on the way
+     *  to Juba. Reuses the "In transit" order status (fires the existing customer WhatsApp). */
+    public function notify(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $s = Shipment::where('tenant_id', $t->id)->find((int) $request->input('id'));
+        if (! $s) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        $lines = ShipmentOrder::where('tenant_id', $t->id)->where('shipment_id', $s->id)
+            ->where('status', ShipmentOrder::ON_BOARD)->pluck('order_id')->all();
+        if (! $lines) return response()->json(['ok' => true, 'notified' => 0]);
+
+        $n = 0;
+        foreach (Order::where('tenant_id', $t->id)->whereIn('id', $lines)->get() as $o) {
+            if (in_array($o->status, self::TERMINAL, true)) continue;
+            if ($o->status === 'In transit') continue;
+            $o->status = 'In transit';           // OrderObserver -> "left Kampala, on its way to Juba"
+            $o->save();
+            $n++;
+        }
+        return response()->json(['ok' => true, 'notified' => $n]);
+    }
+
+    /** GET /papi/consignment-sheet?id= — printable manifest / AWB sheet for the bus. */
+    public function sheet(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response('Not allowed', 401);
+        $s = Shipment::where('tenant_id', $t->id)->find((int) $request->query('id'));
+        if (! $s) return response('Consignment not found', 404);
+
+        $lines = ShipmentOrder::where('tenant_id', $t->id)->where('shipment_id', $s->id)->orderBy('id')->get();
+        $orders = $lines->count() ? Order::whereIn('id', $lines->pluck('order_id'))->get()->keyBy('id') : collect();
+        $stock = ConsignmentStock::where('tenant_id', $t->id)->where('shipment_id', $s->id)->orderBy('id')->get();
+
+        $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES);
+        $shop = $s->tenant ? (string) $s->tenant->name : 'Consignment';
+        $route = trim((string) $s->origin_city . ' → ' . (string) $s->destination_city, ' →');
+
+        $rows = '';
+        $i = 0;
+        foreach ($lines as $ln) {
+            $o = $orders->get($ln->order_id);
+            $i++;
+            $rows .= '<tr><td>' . $i . '</td><td>' . $e($o->order_no ?? ('#' . $ln->order_id)) . '</td>'
+                . '<td>' . $e($o->customer_name ?? '') . '<br><span class="s">' . $e($o->customer_phone ?? '') . '</span></td>'
+                . '<td>' . $e($o ? ($o->items_text ?: '') : '') . '</td>'
+                . '<td class="r">' . ($o ? number_format((float) $o->total) : '') . '</td>'
+                . '<td class="c">☐</td></tr>';
+        }
+        if ($rows === '') $rows = '<tr><td colspan="6" class="s" style="text-align:center;padding:16px">No orders on this consignment.</td></tr>';
+
+        $stockRows = '';
+        foreach ($stock as $k) {
+            $stockRows .= '<tr><td>' . $e($k->name) . '</td><td class="r">' . rtrim(rtrim(number_format((float) $k->qty_sent, 2), '0'), '.') . '</td><td class="c">☐</td></tr>';
+        }
+        $stockBlock = $stockRows === '' ? '' :
+            '<h3>Loose stock (market)</h3><table><thead><tr><th>Item</th><th class="r">Sent</th><th class="c">✓</th></tr></thead><tbody>' . $stockRows . '</tbody></table>';
+
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Manifest ' . $e($s->shipment_number) . '</title>'
+            . '<style>body{font-family:system-ui,Arial,sans-serif;color:#111;margin:24px;font-size:13px}'
+            . 'h1{margin:0 0 2px;font-size:20px}h3{margin:18px 0 6px}.s{color:#666;font-size:11px}'
+            . '.head{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:12px}'
+            . '.meta div{margin:2px 0}table{width:100%;border-collapse:collapse;margin-top:6px}'
+            . 'th,td{border:1px solid #bbb;padding:6px 8px;text-align:left;vertical-align:top}'
+            . 'th{background:#f0f0f0;font-size:11px;text-transform:uppercase;letter-spacing:.3px}'
+            . '.r{text-align:right;white-space:nowrap}.c{text-align:center;font-size:16px}'
+            . '.sign{margin-top:26px;display:flex;justify-content:space-between;gap:20px}.sign div{flex:1;border-top:1px solid #111;padding-top:5px;font-size:12px;color:#333}'
+            . '@media print{button{display:none}}</style></head><body>'
+            . '<div class="head"><div><h1>' . $e($shop) . '</h1><div class="s">Consignment manifest · ' . $e($route) . '</div></div>'
+            . '<div class="meta s"><div><b>' . $e($s->shipment_number) . '</b></div>'
+            . '<div>Transporter: ' . $e($s->transport_company ?: '—') . '</div>'
+            . '<div>Bus: ' . $e($s->bus_number ?: '—') . '</div>'
+            . '<div>Agent (Juba): ' . $e($s->destination_agent_name ?: '—') . '</div>'
+            . '<div>Date: ' . $e(optional($s->created_at)->format('d M Y H:i')) . '</div></div></div>'
+            . '<h3>Customer orders (' . $lines->count() . ')</h3>'
+            . '<table><thead><tr><th>#</th><th>Order</th><th>Customer</th><th>Items</th><th class="r">Value</th><th class="c">Rcvd</th></tr></thead><tbody>' . $rows . '</tbody></table>'
+            . $stockBlock
+            . '<div class="sign"><div>Dispatched by (Kampala)</div><div>Received by (Juba)</div></div>'
+            . '<button onclick="window.print()" style="margin-top:18px;padding:10px 16px;font-weight:700;cursor:pointer">🖨 Print</button>'
+            . '</body></html>';
+
+        return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
     }
 }

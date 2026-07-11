@@ -11,6 +11,8 @@ Everything from the recent sessions, ready to deploy together.
   7. Consignment (Phase 1): one AWB carries MANY orders (Kampala → Juba daily consolidation)
   8. Consignment (Phase 2): loose market stock with Requested/Sent/Received/Sold, shortfall +
      carry-forward, and Asish selling in Juba (creates market orders)
+  9. Consignment (Phase 3): printable manifest sheet, "tell customers it's on the way" WhatsApp,
+     and per-order short/damaged/returned notes on arrival
 
 ------------------------------------------------------------------------------
 FILES CHANGED (12 app files) + 1 one-off script
@@ -234,8 +236,43 @@ VERIFY (feature 8)
   - Take a consignment to Arrived -> Received 30 -> "Sell in market" 10 @ 5000 -> a market order
     is created, Sold shows 10, remaining 20.
 
-NEXT (Phase 3): per-order shortfall/damage on arrival, printable manifest/AWB sheet, and
-  shipment-stage customer WhatsApp ("left Kampala", "arrived in Juba").
+==============================================================================
+9) CONSIGNMENT — manifest sheet, customer "on the way", arrival notes   [PHASE 3]
+==============================================================================
+On the consignment screen (/panel/consignment), when you open one:
+
+  - 🖨 Print manifest — opens a clean printable manifest / AWB sheet: header (number, route,
+    transporter, bus, Juba agent, date), the numbered list of customer orders (order, customer,
+    phone, items, value, a "received ☐" tick box), the loose-stock list, and Dispatched-by /
+    Received-by signature lines. Print it or Save-as-PDF to hand to the bus.
+
+  - 📣 Tell customers it's on the way — appears once the load is moving (sent to transporter /
+    departed / in transit). One tap sets every still-on-board order to "In transit", which fires
+    the existing customer WhatsApp ("left Kampala, on its way to Juba"). Skips orders already
+    delivered/notified. (On delivery, Asish's per-order "Delivered" tick sends the arrival/
+    delivered message as before.)
+
+  - Short / returned (per order, on arrival) — instead of a plain "Returned", Asish is asked
+    what happened (e.g. "short 2 cartons", "damaged", "customer refused"); the reason is saved
+    on that manifest line and shown in red. Marking it also sets the order to Returned.
+
+FILES: ConsignmentController.php (notify + sheet + line note), routes/web.php, consignment.html.
+  No new tables — Phase 3 reuses the Phase 1/2 schema. (Migrations still only the two from
+  Phase 1/2.)
+
+VERIFY (feature 9)
+  - Open a consignment with orders -> Print manifest -> a printable sheet opens.
+  - Dispatch it -> "Tell customers it's on the way" -> customers with a phone get the WhatsApp
+    and their orders show In transit.
+  - On arrival -> "Short / returned" on a line -> type a reason -> it shows in red and the order
+    is set to Returned.
+
+NAV: a "📦 Consignments" link is now in the desktop sidebar (under Logistics, in seller.html)
+  and in the mobile "More" menu (mobile.html), so Jayesh and Asish reach it without typing the
+  URL. (Still also at /panel/consignment.)
+
+DONE: Phases 1-3 of the Kampala→Juba consignment model are complete. Possible later add-on:
+  loose-stock COST/margin (market sales currently record revenue only).
 
 ------------------------------------------------------------------------------
 NOTES / NOT DONE (by design — tell me if you want these)
