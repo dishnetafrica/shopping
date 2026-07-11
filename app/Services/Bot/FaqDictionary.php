@@ -131,10 +131,18 @@ class FaqDictionary
 
             // --- Minimum order ---------------------------------------------------
             [[
-                '/\bminimum (order|purchase|amount|spend)\b/',
+                '/\bminimum (order|purchase|amount|spend|quantity|qty)\b/',
                 '/\bmin(imum)? (to )?order\b/',
+                '/\bmoq\b/',
                 '/\bhow much.{0,15}\b(minimum|at least)\b/',
             ], function ($ctx) {
+                // Product-specific MOQ (when the customer named a product) takes priority.
+                $mp = $ctx['moq_product'] ?? null;
+                if (is_array($mp) && (float) ($mp['moq'] ?? 0) > 0) {
+                    $qty  = rtrim(rtrim(number_format((float) $mp['moq'], 2, '.', ''), '0'), '.');
+                    $unit = trim((string) ($mp['unit'] ?? 'cartons')) ?: 'cartons';
+                    return "\u{1F6D2} {$mp['name']} — the minimum order is {$qty} {$unit}. Want me to add that and quote you?";
+                }
                 $min = $ctx['min_order'] ?? null;
                 $cur = self::cur($ctx);
                 return $min

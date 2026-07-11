@@ -42,10 +42,8 @@ WORKS FOR ALL BOT MODES
         the specific MOQ/price/availability using its catalogue (which already includes MOQ).
   - n8n (external workflow): the product-named message is forwarded to n8n, so its LLM answers
         specifically too — no n8n workflow change required.
-  - auto/inbuilt: the product is now recognised (instead of a total miss). NOTE: the inbuilt
-        deterministic "minimum order" answer is still shop-wide; making the inbuilt FAQ quote a
-        SPECIFIC product's MOQ is a small follow-up if you run that mode (you appear to run an
-        LLM mode, where it already works).
+  - auto/inbuilt: the product is now recognised (instead of a total miss), AND the inbuilt
+        "minimum order" answer is now product-specific (see PART 2 below).
 
 DEPLOY
   1. Replace the 2 files -> commit.  (No migration, no schema change.)
@@ -59,8 +57,39 @@ VERIFY
   - Watch the bot trace: you'll see events "ad_referral" / "ad_followup" when it fires.
   - Turn it off (bot_ad_awareness=0) -> behaviour reverts to before. On again -> restored.
 
+==============================================================================
+PART 2 — Inbuilt-mode: product-specific "minimum order" answer
+==============================================================================
+Before: the inbuilt/auto bot answered every "minimum order" question with the shop-wide
+minimum (or "no fixed minimum"), even when the customer named a product.
+Now: when the question names a product that has its own MOQ (products.moq), the bot answers
+that product's minimum specifically.
+
+  Customer: "What is the MOQ of Galaxy Pack?"
+  Bot:      "🛒 Galaxy Pack Disposable Glasses 500ml — the minimum order is 20 cartons.
+             Want me to add that and quote you?"
+
+Combined with PART 1, an ad customer's "MOQ?" now resolves to the advertised product AND
+quotes that product's minimum — end to end.
+
+FILES (PART 2)
+  app/Services/Bot/BotBrain.php    — faqContext() now takes the message text and, for an
+     MOQ/minimum-order question naming a product, attaches that product's moq (best-effort;
+     falls back to the shop-wide minimum on any miss). 4 call sites updated to pass the text.
+  app/Services/Bot/FaqDictionary.php — the "minimum order" answer prefers the product's MOQ
+     when present; also now recognises a bare "MOQ" and "minimum order quantity".
+  No migration — products.moq already exists (set it per product in the product editor / import).
+
+VERIFY (PART 2)
+  - Set a product's MOQ (e.g. Galaxy Pack = 20). In inbuilt/auto mode, ask "MOQ of Galaxy Pack"
+    -> the bot quotes 20 cartons. Ask a generic "minimum order" with no product -> shop-wide
+    minimum as before. Ask "how much is rice" -> unaffected (not an MOQ question).
+
 NOTE / LIMITS
-  - Best results are on clicked ads (WhatsApp sends the exact product headline). A manually
+  - Product MOQ only shows if that product actually has a moq value set (else the shop-wide
+    minimum answer is used). Set MOQ per product in your catalogue.
+  - Best ad results are on clicked ads (WhatsApp sends the exact product headline). A manually
     forwarded post that arrives as a plain link (no image, no ad-referral) may not carry a
     product name — those still fall back to the normal flow.
-  - Verified by syntax/lint only; please run the two live tests above before relying on it.
+  - Verified by syntax/lint + a regex behaviour check; please run the live tests above before
+    relying on it.

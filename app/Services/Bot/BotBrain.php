@@ -816,7 +816,7 @@ class BotBrain
             case IntentClassifier::GREETING:
                 return $this->greetingReply($tenant, $text);
             case IntentClassifier::QUESTION:
-                return \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant))
+                return \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant, $text))
                     ?? $this->forwardQuestionToShop($tenant, $convo, $text);
             case IntentClassifier::HUMAN_AGENT:
                 $convo->agent_active = true;
@@ -842,7 +842,7 @@ class BotBrain
                 // framing or a typo ("ou have balaji masala wafer in stock"). Try the FAQ, then
                 // fall through to category-browse + product search; only if those also find nothing
                 // does the "don't stock / didn't catch" fallback below apply.
-                if (($faq = \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant))) !== null) {
+                if (($faq = \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant, $text))) !== null) {
                     return $faq;
                 }
                 break;
@@ -886,7 +886,7 @@ class BotBrain
 
         // Conversational / off-topic message: try the FAQ, then forward genuine questions to
         // the shop; otherwise a warm catch-all that never blames the wording.
-        if (($faq = \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant))) !== null) {
+        if (($faq = \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant, $text))) !== null) {
             return $faq;
         }
         if (preg_match('/\?|\b(will|would|can|could|do|does|are|is|when|what|how|why|provide|deliver|delivery|open|close|closed|available|price|cost|charge|free|refund|return|exchange)\b/i', $text)) {
@@ -1842,7 +1842,7 @@ class BotBrain
                 return null; // couldn't resolve -> re-prompt
             default:
                 // An everyday question while a list is up -> answer it, keep the list live.
-                if (($faq = \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant))) !== null) {
+                if (($faq = \App\Services\Bot\FaqDictionary::match($text, $this->faqContext($tenant, $text))) !== null) {
                     return $faq . $keepNote;
                 }
                 return null; // QUESTION / UNKNOWN -> re-prompt
@@ -1886,8 +1886,10 @@ class BotBrain
              . "Tap \u{1F4CE} (or +) \u{2192} *Location* \u{2192} *Send your current location*.";
     }
 
-    /** Context passed to the FAQ matcher so answers use the tenant's real settings. */
-    protected function faqContext(Tenant $tenant): array
+    /** Context passed to the FAQ matcher so answers use the tenant's real settings.
+     *  $text (the customer message) lets us attach a SPECIFIC product's MOQ when they ask
+     *  "minimum order" about a named product, so the answer isn't just the shop-wide minimum. */
+    protected function faqContext(Tenant $tenant, string $text = ''): array
     {
         $payments = $tenant->setting('payment_methods', null);
         if (is_string($payments) && $payments !== '') {
@@ -1897,7 +1899,7 @@ class BotBrain
         if (is_string($areas) && $areas !== '') {
             $areas = array_map('trim', explode(',', $areas));
         }
-        return array_filter([
+        $ctx = array_filter([
             'currency'        => $this->currencyFor($tenant),
             'payments'        => is_array($payments) ? $payments : null,
             'hours'           => trim((string) $tenant->setting('business_hours', '')) ?: null,
@@ -1906,6 +1908,31 @@ class BotBrain
             'delivery_note'   => trim((string) $tenant->setting('delivery_note', '')) ?: null,
             'pay_on_delivery' => $tenant->setting('pay_on_delivery', true),
         ], fn ($v) => $v !== null);
+
+        // Product-specific MOQ: only when the message is a minimum-order/MOQ question that
+        // names a product. Resolve the product and, if it has its own MOQ, attach it. Best-effort.
+        try {
+            if ($text !== '' && (
+                    preg_match('/\bmoq\b/i', $text)
+                    || preg_match('/\bminimum (order|purchase|amount|spend|quantity|qty)\b/i', $text)
+                    || preg_match('/\bmin(imum)? (to )?order\b/i', $text)
+                )) {
+                $hits = $this->searchCatalogue($tenant, $text);
+                $pid  = (int) ($hits[0]['product']['id'] ?? 0);
+                if ($pid) {
+                    $p = \App\Models\Product::where('tenant_id', $tenant->id)->find($pid);
+                    if ($p && (float) ($p->moq ?? 0) > 0) {
+                        $ctx['moq_product'] = [
+                            'name' => (string) $p->name,
+                            'moq'  => (float) $p->moq,
+                            'unit' => trim((string) ($p->unit_label ?? '')) ?: 'cartons',
+                        ];
+                    }
+                }
+            }
+        } catch (\Throwable $e) { /* fall back to the shop-wide minimum */ }
+
+        return $ctx;
     }
 
     /** Build a fresh engine (request-scoped token cache) and handle one message. */
