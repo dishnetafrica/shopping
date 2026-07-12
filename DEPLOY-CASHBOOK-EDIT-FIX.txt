@@ -1,0 +1,42 @@
+DEPLOY — Fix "Could not save: Something went wrong on our side" on Cashbook edit
+===============================================================================
+
+THE BUG
+  On /panel/trade-cashbook, clicking Edit -> Save on ANY entry returned a 500
+  ("Something went wrong on our side"). Cause: in TradeCashbookController::update()
+  the currency variable ($cur) was used but never defined, so the code tried to save
+  currency = NULL. The order_costs.currency column is NOT NULL, so the database
+  rejected the write and the whole edit failed. This affected every cashbook edit
+  (conversions, cash in/out, receipts, etc.), not just this one entry.
+
+THE FIX  (1 line + guard)
+  app/Http/Controllers/Panel/TradeCashbookController.php  — update() now reads the
+  currency from the request and falls back to the entry's existing currency:
+      $cur = strtoupper((string)$request->input('currency', (string)$c->currency)) ?: (string)$c->currency;
+      if (! in_array($cur, ['USD','UGX','SSP'], true)) $cur = (string)$c->currency;
+
+DEPLOY
+  1. Replace app/Http/Controllers/Panel/TradeCashbookController.php -> commit.
+  2. EasyPanel REBUILD (force / no-cache).  (No migration.)
+  3. Edit -> Save now works. Editing an entry's "Person" moves that cash to them.
+
+--------------------------------------------------------------------------------
+CORRECTING CB-0067 (the conversion that should sit with Jayesh Bhai)
+--------------------------------------------------------------------------------
+A conversion is TWO rows — the USD that left the hand and the UGX that came in —
+and both belong to the same person. The Edit screen only touches one row at a time,
+so to move BOTH legs at once use the included script:
+
+  fix-cashbook-holder.php
+
+  How to run (app container terminal, e.g. EasyPanel -> Terminal):
+      php artisan tinker
+      >>> require base_path('fix-cashbook-holder.php');
+
+  - It is preset to move CB-0067 (id 67) and the matching leg to "Jayesh Bhai".
+  - It prints a BEFORE/AFTER table and writes an audit-log row for each change.
+  - To preview first without saving, open the file and set  $DRY_RUN = true.
+  - If the person's name isn't exactly "Jayesh Bhai" in the panel, edit $NEW_HOLDER.
+
+  (Alternatively, after deploying the fix above you can just open CB-0067 in the
+   panel, set Person = Jayesh Bhai, Save — then do the same on the paired USD leg.)
