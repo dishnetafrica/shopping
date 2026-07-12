@@ -34,7 +34,7 @@
 .note{font-size:12.5px;color:var(--muted);line-height:1.5}
 </style></head>
 <body>
-<div class="top"><h1>🧾 Invoices</h1><a class="back" href="/panel">Panel</a></div>
+<div class="top"><h1>🧾 Invoices</h1><span style="display:flex;gap:8px"><a class="back" href="/panel/credit-notes">Credit notes</a><a class="back" href="/panel">Panel</a></span></div>
 <div class="wrap" id="wrap"><div class="empty">Loading…</div></div>
 <script>
 var $=function(id){return document.getElementById(id);};
@@ -69,6 +69,7 @@ function load(){
             (i.status!=='void'&&bal>0.5?('<button class="btn g" onclick="payInv('+i.id+',\''+esc(i.no)+'\',\''+esc(i.currency)+'\','+bal+')">💵 Pay</button>'):'')+
             (i.status!=='void'?('<button class="btn wa" onclick="sendInv('+i.id+',\''+esc((i.phone||'').replace(/\x27/g,""))+'\')">📤 Invoice</button>'):'')+
             (i.status!=='void'&&i.phone?('<button class="btn g" onclick="stmt(\''+esc((i.phone||'').replace(/\x27/g,""))+'\')">📄 Statement</button>'):'')+
+            (i.status!=='void'?('<button class="btn g" onclick="creditNote('+i.id+',\''+esc(i.no)+'\',\''+esc(i.currency)+'\','+bal+')">🧾 Credit note</button>'):'')+
             (i.status!=='void'?('<button class="btn d" onclick="voidInv('+i.id+',\''+esc(i.no)+'\')">Void</button>'):'')+
           '</div></div>';
       }).join('');
@@ -102,6 +103,19 @@ function sendInv(id,phone){
   api('/papi/invoice-send',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({id:id,phone:to})}).then(function(r){
     if(r&&r.ok)alert('Invoice sent on WhatsApp ✓');
     else alert('Could not send: '+((r&&r.error==='whatsapp_off')?'WhatsApp not connected':((r&&r.error==='no_phone')?'no phone number':((r&&r.error)||'error'))));
+  }).catch(function(){alert('Network error');});
+}
+function creditNote(id,no,cur,bal){
+  var v=prompt('Raise a credit note against '+no+' ('+cur+').\nAmount to credit'+(bal>0.5?(' — balance is '+cur+' '+nf(bal)):'')+':', String(bal>0.5?bal:''));
+  if(v===null)return; var amt=parseFloat(String(v).replace(/,/g,''))||0;
+  if(amt<=0){alert('Enter an amount');return;}
+  var reasons=['return','price_adjustment','overpayment','goodwill','damage','other'];
+  var r=prompt('Reason? Type one of:\n1 = Return of goods\n2 = Price adjustment\n3 = Over-payment refund\n4 = Goodwill / discount\n5 = Damaged / short supply\n6 = Other','1');
+  if(r===null)return; var rc=reasons[(parseInt(r,10)||1)-1]||'return';
+  var note=prompt('Optional note (shown on the document):','')||'';
+  api('/papi/credit-note-issue',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({invoice_id:id,amount:amt,reason_code:rc,notes:note})}).then(function(resp){
+    if(resp&&resp.ok){ if(confirm('Credit note '+resp.credit_note_no+' issued ✓\nOpen the PDF now?'))window.open(resp.pdf,'_blank'); load(); }
+    else alert('Could not issue: '+((resp&&resp.error==='not_allowed')?'owner/manager only':((resp&&resp.error)||'error')));
   }).catch(function(){alert('Network error');});
 }
 function voidInv(id,no){

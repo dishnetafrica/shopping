@@ -80,6 +80,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
     Route::get('/panel/partners', [\App\Http\Controllers\Panel\PartnerController::class, 'page']);
     Route::get('/panel/invoiced', [\App\Http\Controllers\Panel\InvoiceReportController::class, 'page']);
     Route::get('/panel/invoices', [\App\Http\Controllers\Panel\InvoiceController::class, 'page']);
+    Route::get('/panel/credit-notes', [\App\Http\Controllers\Panel\CreditNoteController::class, 'page']);
     Route::get('/panel/payments', [\App\Http\Controllers\Panel\PaymentController::class, 'page']);
     Route::get('/panel/sourcing', [\App\Http\Controllers\Panel\SourcingController::class, 'page']);
     Route::get('/panel/customers360', [\App\Http\Controllers\Panel\CustomerController::class, 'page']);
@@ -242,6 +243,14 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::match(['get','post'], 'invoice-send', [\App\Http\Controllers\Panel\InvoiceController::class, 'send']);
         Route::match(['get','post'], 'invoice-pay',  [\App\Http\Controllers\Panel\InvoiceController::class, 'pay']);
         Route::match(['get','post'], 'invoice-void', [\App\Http\Controllers\Panel\InvoiceController::class, 'void']);
+        // Numbered credit note register (CN-2026-0001)
+        Route::get('credit-notes',                     [\App\Http\Controllers\Panel\CreditNoteController::class, 'index']);
+        Route::match(['get','post'], 'credit-note-issue', [\App\Http\Controllers\Panel\CreditNoteController::class, 'issue']);
+        Route::get('credit-note-show',                 [\App\Http\Controllers\Panel\CreditNoteController::class, 'show']);
+        Route::get('credit-note-pdf',                  [\App\Http\Controllers\Panel\CreditNoteController::class, 'pdf']);
+        Route::match(['get','post'], 'credit-note-send',  [\App\Http\Controllers\Panel\CreditNoteController::class, 'send']);
+        Route::match(['get','post'], 'credit-note-void',  [\App\Http\Controllers\Panel\CreditNoteController::class, 'void']);
+        Route::get('credit-note-invoices',             [\App\Http\Controllers\Panel\CreditNoteController::class, 'invoiceOptions']);
         // Customer statement of account
         Route::get('statement',      [\App\Http\Controllers\Panel\InvoiceController::class, 'statementData']);
         Route::get('statement-pdf',  [\App\Http\Controllers\Panel\InvoiceController::class, 'statementPdf']);

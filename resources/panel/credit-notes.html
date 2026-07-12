@@ -1,0 +1,183 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Credit Notes</title>
+<style>
+:root{--dark:#1B3A2B;--green:#15803D;--red:#C0392B;--amber:#C2700A;--line:#e4e9e4;--muted:#6b7280;--bg:#f6f8f6}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1B211D;background:var(--bg)}
+.top{background:var(--dark);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+.top h1{font-size:17px;margin:0;font-weight:800}
+.back{background:#ffffff22;border:none;color:#fff;border-radius:9px;padding:8px 12px;font-weight:700;cursor:pointer;text-decoration:none}
+.wrap{max-width:820px;margin:0 auto;padding:14px}
+.stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.stat{background:#fff;border-radius:12px;padding:10px 14px;box-shadow:0 1px 3px #0000000d;flex:1;min-width:120px}
+.stat .n{font-size:19px;font-weight:800}.stat .l{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.search{flex:1;min-width:160px;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:14px}
+.newb{background:var(--dark);color:#fff;border:none;border-radius:10px;padding:10px 14px;font-weight:800;cursor:pointer;white-space:nowrap}
+.card{background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:9px;box-shadow:0 1px 3px #0000000d}
+.rowb{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.no{font-weight:800;font-size:15px}
+.sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+.badge{font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px}
+.b-issued{background:#eaf6ee;color:var(--green)}.b-void{background:#f3f4f6;color:#6b7280;text-decoration:line-through}
+.btnrow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.btn{border:none;border-radius:9px;padding:9px 13px;font-weight:700;font-size:13px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;min-height:40px}
+.btn.p{background:var(--green);color:#fff}.btn.g{background:#eef1ee;color:#243b53}.btn.d{background:#fdecea;color:var(--red)}
+.btn.wa{background:#25D366;color:#fff}
+@media (max-width:520px){.wrap{padding:10px}.btnrow .btn{flex:1 1 30%}.btn{font-size:14px;min-height:44px}.stat{min-width:96px;padding:9px 10px}.stat .n{font-size:17px}}
+.empty{text-align:center;color:var(--muted);padding:26px 8px}
+.amt{font-weight:800;color:var(--red)}
+.credtag{display:inline-block;font-size:10px;font-weight:700;color:#854F0B;background:#FAEEDA;border-radius:20px;padding:1px 8px;margin-left:6px}
+/* modal */
+.modal{position:fixed;inset:0;background:#0006;display:none;align-items:flex-end;justify-content:center;z-index:20}
+.modal.on{display:flex}
+.sheet{background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:520px;padding:18px;max-height:92vh;overflow:auto}
+@media(min-width:560px){.modal{align-items:center}.sheet{border-radius:16px}}
+.sheet h2{margin:0 0 4px;font-size:17px}
+.fld{margin-top:11px}.fld label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:4px}
+.fld input,.fld select,.fld textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit}
+.mrow{display:flex;gap:8px}.mrow>*{flex:1}
+.mact{display:flex;gap:8px;margin-top:16px}
+.mact .btn{flex:1}
+.hint{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.5}
+</style></head>
+<body>
+<div class="top"><h1>🧾 Credit Notes</h1><a class="back" href="/panel">Panel</a></div>
+<div class="wrap" id="wrap"><div class="empty">Loading…</div></div>
+
+<div class="modal" id="modal"><div class="sheet">
+  <h2>New credit note</h2>
+  <div class="hint">A credit note reduces what a customer owes — for a return, a price adjustment, an over-payment or goodwill. It shows on their statement and can be sent on WhatsApp.</div>
+  <div class="fld"><label>Against invoice (optional)</label>
+    <select id="mInv"><option value="">— Standalone (not tied to an invoice) —</option></select>
+    <div class="hint" id="mInvHint"></div>
+  </div>
+  <div class="mrow">
+    <div class="fld"><label>Customer name</label><input id="mName" placeholder="Customer"></div>
+    <div class="fld"><label>Phone (WhatsApp)</label><input id="mPhone" placeholder="2118…"></div>
+  </div>
+  <div class="mrow">
+    <div class="fld"><label>Currency</label>
+      <select id="mCur"><option>USD</option><option>UGX</option><option>SSP</option></select></div>
+    <div class="fld"><label>Amount to credit</label><input id="mAmt" inputmode="decimal" placeholder="0"></div>
+  </div>
+  <div class="fld"><label>Reason</label>
+    <select id="mReason">
+      <option value="return">Return of goods</option>
+      <option value="price_adjustment">Price adjustment</option>
+      <option value="overpayment">Over-payment refund</option>
+      <option value="goodwill">Goodwill / discount</option>
+      <option value="damage">Damaged / short supply</option>
+      <option value="other">Other adjustment</option>
+    </select></div>
+  <div class="fld"><label>Note (optional, shown on the document)</label><textarea id="mNote" rows="2" placeholder="e.g. 3 cartons returned, seal broken"></textarea></div>
+  <div class="mact">
+    <button class="btn g" onclick="closeModal()">Cancel</button>
+    <button class="btn p" id="mSave" onclick="saveCN()">Issue credit note</button>
+  </div>
+</div></div>
+
+<script>
+var $=function(id){return document.getElementById(id);};
+function api(u,opt){opt=opt||{};opt.headers=Object.assign({'X-Requested-With':'XMLHttpRequest'},opt.headers||{});opt.credentials='same-origin';opt.cache='no-store';return fetch(u,opt).then(function(r){return r.json();});}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function nf(n){return Number(n||0).toLocaleString('en-US');}
+function money(cur,n){return esc(cur)+' '+nf(n);}
+var Q='',INVS=[];
+function load(){
+  $('wrap').innerHTML='<div class="empty">Loading…</div>';
+  api('/papi/credit-notes'+(Q?('?q='+encodeURIComponent(Q)):'')).then(function(d){
+    if(!d||!d.ok){$('wrap').innerHTML='<div class="empty">Could not load.</div>';return;}
+    var s=d.stats||{};
+    var h='<div class="stats">'+
+      '<div class="stat"><div class="n">'+nf(s.count)+'</div><div class="l">Credit notes</div></div>'+
+      '<div class="stat"><div class="n" style="color:var(--red)">'+nf(s.credited)+'</div><div class="l">Total credited</div></div>'+
+      '</div>';
+    h+='<div class="toolbar"><input class="search" id="q" placeholder="Search CN no, invoice, customer…" value="'+esc(Q)+'"><button class="newb" onclick="openModal()">＋ New credit note</button></div>';
+    var list=d.credit_notes||[];
+    if(!list.length){ h+='<div class="empty">No credit notes yet.<br>Raise one with “＋ New credit note”, or from an invoice (Invoices → “🧾 Credit note”).</div>'; }
+    else{
+      h+=list.map(function(c){
+        return '<div class="card"><div class="rowb"><span class="no">'+esc(c.no)+(c.against?('<span class="credtag">vs '+esc(c.against)+'</span>'):'')+'</span><span class="badge b-'+esc(c.status)+'">'+esc(c.status)+'</span></div>'+
+          '<div class="sub">'+esc(c.date||'')+' · '+esc(c.customer||'—')+(c.phone?(' · '+esc(c.phone)):'')+'</div>'+
+          '<div class="sub"><span class="amt">− '+money(c.currency,c.total)+'</span> · '+esc(c.reason||'')+'</div>'+
+          '<div class="btnrow">'+
+            (c.pdf?('<a class="btn p" href="'+esc(c.pdf)+'" target="_blank">⤓ PDF</a>'):'')+
+            (c.status!=='void'?('<button class="btn wa" onclick="sendCN('+c.id+',\''+esc((c.phone||'').replace(/\x27/g,""))+'\')">📤 Send</button>'):'')+
+            (c.status!=='void'?('<button class="btn d" onclick="voidCN('+c.id+',\''+esc(c.no)+'\')">Void</button>'):'')+
+          '</div></div>';
+      }).join('');
+    }
+    $('wrap').innerHTML=h;
+    if($('q')){ $('q').oninput=function(){Q=this.value;clearTimeout(window.__qt);window.__qt=setTimeout(load,350);}; }
+  });
+}
+function openModal(){
+  $('modal').classList.add('on');
+  api('/papi/credit-note-invoices').then(function(d){
+    INVS=(d&&d.invoices)||[];
+    var sel=$('mInv');
+    sel.innerHTML='<option value="">— Standalone (not tied to an invoice) —</option>'+INVS.map(function(i){
+      return '<option value="'+i.id+'">'+esc(i.no)+' · '+esc(i.customer||i.phone||'—')+' · bal '+esc(i.currency)+' '+nf(i.balance)+'</option>';
+    }).join('');
+    sel.onchange=onPickInv;
+  });
+}
+function onPickInv(){
+  var id=$('mInv').value; var inv=INVS.filter(function(x){return String(x.id)===String(id);})[0];
+  if(inv){
+    $('mName').value=inv.customer||''; $('mPhone').value=inv.phone||'';
+    $('mCur').value=inv.currency||'USD'; $('mAmt').value=inv.balance||inv.total||'';
+    $('mInvHint').textContent='Crediting invoice '+inv.no+' (balance '+inv.currency+' '+nf(inv.balance)+'). Amount defaults to the full balance — change it for a partial credit.';
+  } else { $('mInvHint').textContent=''; }
+}
+function closeModal(){$('modal').classList.remove('on');}
+function saveCN(){
+  var amt=parseFloat(String($('mAmt').value||'').replace(/,/g,''))||0;
+  if(amt<=0){alert('Enter an amount to credit');return;}
+  var b=new URLSearchParams({
+    invoice_id:$('mInv').value||'', amount:amt, currency:$('mCur').value,
+    customer:$('mName').value||'', phone:$('mPhone').value||'',
+    reason_code:$('mReason').value, notes:$('mNote').value||''
+  });
+  $('mSave').disabled=true; $('mSave').textContent='Issuing…';
+  api('/papi/credit-note-issue',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b}).then(function(r){
+    $('mSave').disabled=false; $('mSave').textContent='Issue credit note';
+    if(r&&r.ok){ closeModal(); alert('Credit note '+r.credit_note_no+' issued ✓'); load(); }
+    else alert('Could not issue: '+((r&&r.error==='not_allowed')?'owner/manager only':((r&&r.error)||'error')));
+  }).catch(function(){$('mSave').disabled=false;$('mSave').textContent='Issue credit note';alert('Network error');});
+}
+function sendCN(id,phone){
+  var to=(phone||'').trim();
+  if(!to){ to=(prompt('Customer WhatsApp number (with country code):','')||'').trim(); if(!to)return; }
+  api('/papi/credit-note-send',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({id:id,phone:to})}).then(function(r){
+    if(r&&r.ok)alert('Credit note sent on WhatsApp ✓');
+    else alert('Could not send: '+((r&&r.error==='whatsapp_off')?'WhatsApp not connected':((r&&r.error==='no_phone')?'no phone number':((r&&r.error)||'error'))));
+  }).catch(function(){alert('Network error');});
+}
+function voidCN(id,no){
+  if(!confirm('Void credit note '+no+'? It stays on record but is marked VOID and stops reducing the balance.'))return;
+  api('/papi/credit-note-void',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({id:id})}).then(function(r){
+    if(r&&r.ok)load(); else alert(r&&r.error==='not_allowed'?'Owner/manager only.':'Could not void.');
+  });
+}
+load();
+</script>
+<script>
+/* Universal business clock — East Africa Time (Kampala/Juba, UTC+3). */
+(function(){
+  function eat(){var d=new Date();var e=new Date(d.getTime()+d.getTimezoneOffset()*60000+3*3600000);
+    function p(n){return (n<10?'0':'')+n;} var wd=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    return '\u{1F552} '+wd[e.getDay()]+' '+p(e.getHours())+':'+p(e.getMinutes())+' EAT';}
+  function mount(){
+    var host=document.querySelector('.top,.topbar,header.top'); if(!host||document.getElementById('fsClock'))return;
+    var c=document.createElement('span'); c.id='fsClock';
+    c.style.cssText='margin-left:auto;font-weight:800;font-size:12px;background:rgba(128,128,128,.18);color:inherit;border-radius:8px;padding:5px 9px;white-space:nowrap;align-self:center';
+    c.title='Business time — East Africa Time (Kampala / Juba)';
+    var back=host.querySelector('.back'); if(back&&back.parentNode===host){host.insertBefore(c,back);} else {host.appendChild(c);}
+    function tick(){c.textContent=eat();} tick(); setInterval(tick,15000);
+  }
+  if(document.readyState!=='loading')mount(); else document.addEventListener('DOMContentLoaded',mount);
+})();
+</script>
+</body></html>

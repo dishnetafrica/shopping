@@ -366,6 +366,206 @@ table.tot tr.bal td { font-weight:bold; font-size:11.5px; }
 HTML;
     }
 
+    /* ============================ CREDIT NOTES ============================ */
+
+    /** Normalised data from a stored credit note, for the PDF. */
+    public function fromCreditNote(Tenant $t, \App\Models\CreditNote $cn): array
+    {
+        $cur = (string) $cn->currency;
+        $dec = $this->decimals($cur);
+        $lines = [];
+        foreach ($cn->items as $it) {
+            $lines[] = ['name' => (string) $it->name, 'qty' => (float) $it->qty, 'unit' => (float) $it->unit_price,
+                        'amount' => (float) $it->line_total, 'sku' => (string) ($it->sku ?? ''),
+                        'uom' => (string) ($it->uom ?? ''), 'pack' => (float) ($it->pack ?? 0)];
+        }
+        return [
+            'no' => (string) $cn->credit_note_no, 'title' => (string) ($cn->title ?: 'CREDIT NOTE'),
+            'customer' => (string) $cn->customer_name, 'phone' => (string) $cn->customer_phone,
+            'address' => (string) $cn->bill_address, 'status' => $cn->status === 'void' ? 'VOID' : '',
+            'notes' => (string) $cn->notes, 'cur' => $cur, 'dec' => $dec, 'lines' => $lines,
+            'subtotal' => (float) $cn->subtotal, 'total' => (float) $cn->total,
+            'reason' => \App\Models\CreditNote::reasonLabel((string) $cn->reason_code),
+            'against' => (string) ($cn->invoice_no ?? ''),
+            'date' => optional($cn->issued_at)->format('d/m/Y') ?: now()->format('d/m/Y'),
+        ];
+    }
+
+    public function creditNotePdf(Tenant $t, array $d): string
+    {
+        $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
+        $dompdf->loadHtml($this->creditNoteHtml($t, $d));
+        $dompdf->setPaper('A4');
+        $dompdf->render();
+        return $dompdf->output();
+    }
+
+    public function creditNoteHtml(Tenant $t, array $d): string
+    {
+        $cur = (string) ($d['cur'] ?? ($t->setting('currency', 'UGX') ?: 'UGX'));
+        $dec = (int) ($d['dec'] ?? $this->decimals($cur));
+
+        $company  = e((string) $t->name);
+        $subtitle = trim((string) $t->setting('quote_subtitle', '')) ?: trim((string) $t->setting('address', ''));
+        $subHtml  = $subtitle !== '' ? nl2br(e($subtitle)) : '';
+        $email    = trim((string) $t->setting('public_email', $t->setting('email', '')));
+        $cphone   = trim((string) ($t->setting('public_phone', '') ?: $t->whatsapp_number));
+        $web      = trim((string) $t->setting('website', ''));
+        $tin      = trim((string) $t->setting('tin', ''));
+
+        $contactParts = array_filter([
+            $cphone !== '' ? 'Tel/WhatsApp: ' . e($cphone) : '',
+            $email  !== '' ? 'Email: ' . e($email) : '',
+            $web    !== '' ? 'Website: ' . e($web) : '',
+        ], fn ($x) => $x !== '');
+        $contactLine = $contactParts ? '<div class="webline">' . implode(' &nbsp;|&nbsp; ', $contactParts) . '</div>' : '';
+        $tinLine     = $tin !== '' ? '<div class="webline" style="padding-top:2px;">TIN: ' . e($tin) . '</div>' : '';
+
+        $logoTag = $this->imgData((string) $t->setting('logo', ''));
+        $logoTag = $logoTag !== '' ? '<img src="' . e($logoTag) . '" style="height:58px;max-width:110px;object-fit:contain">' : '&nbsp;';
+
+        $title = e((string) ($d['title'] ?? 'CREDIT NOTE')) ?: 'CREDIT NOTE';
+        $date  = e((string) ($d['date'] ?? now()->format('d/m/Y')));
+        $no    = e((string) $d['no']);
+        $reason = e((string) ($d['reason'] ?? ''));
+        $against = trim((string) ($d['against'] ?? ''));
+
+        $custName = ($d['customer'] ?? '') !== '' ? e($d['customer']) : (($d['phone'] ?? '') !== '' ? e($d['phone']) : 'Customer');
+        $billLines = array_filter([
+            ($d['phone'] ?? '')   !== '' ? 'Tel: ' . e($d['phone']) : '',
+            ($d['address'] ?? '') !== '' ? e($d['address']) : '',
+        ], fn ($x) => $x !== '');
+        $billExtra = $billLines ? '<div style="margin-top:4px;font-size:10px;line-height:1.5;">' . implode('<br>', $billLines) . '</div>' : '';
+
+        $hasPack = false;
+        foreach (($d['lines'] ?? []) as $l) { if ((float) ($l['pack'] ?? 0) > 0) { $hasPack = true; break; } }
+
+        $rows = '';
+        $i = 0;
+        foreach (($d['lines'] ?? []) as $l) {
+            $i++;
+            $qty = rtrim(rtrim(number_format((float) $l['qty'], 2), '0'), '.');
+            $uom = trim((string) ($l['uom'] ?? ''));
+            if ($uom !== '') $qty .= ' ' . strtoupper(e($uom));
+            $sku  = ($l['sku'] ?? '') !== '' ? '<div style="font-size:8.5px;color:#777;">' . e($l['sku']) . '</div>' : '';
+            $pack = (float) ($l['pack'] ?? 0);
+            $packCell = '';
+            if ($hasPack) {
+                $packTxt  = $pack > 0 ? '&times;' . rtrim(rtrim(number_format($pack, 2), '0'), '.') : '&mdash;';
+                $packCell = '<td class="c">' . $packTxt . '</td>';
+            }
+            $rows .= '<tr><td class="c">' . $i . '</td><td>' . e($l['name']) . $sku . '</td>'
+                . '<td class="c">' . $qty . '</td>' . $packCell
+                . '<td class="r">' . number_format((float) $l['unit'], $dec) . '</td>'
+                . '<td class="r">' . number_format((float) $l['amount'], $dec) . '</td></tr>';
+        }
+        $packHead = $hasPack ? '<th style="width:52px;">Pack</th>' : '';
+
+        $total = $this->money((float) ($d['total'] ?? 0), $cur, $dec);
+        $sub   = $this->money((float) ($d['subtotal'] ?? ($d['total'] ?? 0)), $cur, $dec);
+
+        $againstRow = $against !== '' ? '<tr><td class="k">Against Invoice</td><td>' . e($against) . '</td></tr>' : '';
+        $statusChip = ($d['status'] ?? '') !== '' ? '<span style="border:1px solid #C0392B;color:#C0392B;border-radius:3px;padding:1px 6px;font-size:9px;">' . e($d['status']) . '</span>' : '';
+        $notesHtml  = ($d['notes'] ?? '') !== '' ? '<div class="notes"><b>Notes:</b> ' . nl2br(e($d['notes'])) . '</div>' : '';
+        $reasonHtml = $reason !== '' ? '<div class="notes"><b>Reason:</b> ' . $reason . '</div>' : '';
+
+        $blurb = trim((string) $t->setting('credit_note_blurb',
+            'This credit note reduces the amount owing on the account'
+            . ($against !== '' ? ' against invoice ' . $against : '')
+            . '. It may be set off against this or a future invoice, or refunded as agreed.'));
+        $blurbHtml = $blurb !== '' ? '<div class="terms"><span class="h">Note:</span> ' . nl2br(e($blurb)) . '</div>' : '';
+
+        $footer = trim((string) $t->setting('invoice_footer',
+            'This is a computer-generated credit note and is valid without signature.'));
+
+        return <<<HTML
+<!doctype html><html><head><meta charset="utf-8"><style>
+* { font-family: "DejaVu Sans", Arial, sans-serif; }
+body { color:#111; font-size:11px; margin:0; }
+.company { font-size:19px; font-weight:bold; text-align:center; line-height:1.1; }
+.sub { text-align:center; font-size:9.5px; line-height:1.35; }
+.webline { text-align:center; font-size:9.5px; padding-top:6px; }
+.rule { border:0; border-top:1px solid #111; margin:8px 0 0; }
+.qtitle { text-align:right; font-size:22px; font-weight:bold; letter-spacing:2px; margin:14px 0 6px; color:#C0392B; }
+.box { border:1px solid #111; padding:8px 10px; }
+.kv { width:100%; border-collapse:collapse; }
+.kv td { border:1px solid #111; padding:5px 8px; font-size:10.5px; }
+.kv td.k { font-weight:bold; width:46%; }
+table.items { width:100%; border-collapse:collapse; margin-top:12px; }
+table.items th { background:#f0f0f0; border:1px solid #111; padding:6px; font-size:10px; text-align:center; }
+table.items td { border:1px solid #111; padding:6px; font-size:10px; vertical-align:top; }
+.r { text-align:right; } .c { text-align:center; }
+table.tot { border-collapse:collapse; }
+table.tot td { border:1px solid #111; padding:6px 10px; font-size:10.5px; }
+table.tot td.lbl { font-weight:bold; }
+table.tot tr.grand td { font-weight:bold; font-size:12px; background:#FCEBEB; color:#C0392B; }
+.notes { margin-top:14px; font-size:10px; border-left:3px solid #ccc; padding-left:8px; }
+.terms { margin-top:16px; font-size:9.5px; line-height:1.5; }
+.terms .h { font-weight:bold; }
+.foot { text-align:center; font-size:9.5px; color:#444; margin-top:26px; border-top:1px solid #ddd; padding-top:8px; }
+</style></head><body>
+<table width="100%"><tr>
+  <td style="width:110px;vertical-align:middle;">{$logoTag}</td>
+  <td style="vertical-align:middle;">
+    <div class="company">{$company}</div>
+    <div class="sub">{$subHtml}</div>
+  </td>
+  <td style="width:110px;">&nbsp;</td>
+</tr></table>
+{$contactLine}
+{$tinLine}
+<hr class="rule">
+
+<div class="qtitle">{$title}</div>
+
+<table width="100%"><tr>
+  <td width="55%" style="vertical-align:top;padding-right:14px;">
+    <div class="box" style="min-height:96px;">
+      <div style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:1px;">Credit To</div>
+      <div style="font-weight:bold;font-size:12px;margin-top:3px;">{$custName}</div>
+      {$billExtra}
+    </div>
+  </td>
+  <td width="45%" style="vertical-align:top;">
+    <table class="kv">
+      <tr><td class="k">Credit Note No.</td><td>{$no}</td></tr>
+      <tr><td class="k">Date</td><td>{$date}</td></tr>
+      {$againstRow}
+      <tr><td class="k">Currency</td><td>{$cur}</td></tr>
+      <tr><td class="k">Status</td><td>{$statusChip}</td></tr>
+    </table>
+  </td>
+</tr></table>
+
+<table class="items">
+  <tr>
+    <th style="width:24px;">#</th>
+    <th>Description</th>
+    <th style="width:78px;">Qty / Unit</th>
+    {$packHead}
+    <th style="width:105px;">Unit Price</th>
+    <th style="width:120px;">Amount</th>
+  </tr>
+  {$rows}
+</table>
+
+<table width="100%" style="margin-top:10px;"><tr>
+  <td width="50%" style="vertical-align:top;">{$reasonHtml}{$notesHtml}</td>
+  <td width="50%">
+    <table class="tot" width="100%">
+      <tr><td class="lbl">Subtotal</td><td class="r">{$sub}</td></tr>
+      <tr class="grand"><td>Total Credit &nbsp; {$cur}</td><td class="r">{$total}</td></tr>
+    </table>
+  </td>
+</tr></table>
+
+{$blurbHtml}
+
+<div class="foot">{$footer}</div>
+</body></html>
+HTML;
+    }
+
     /** Render a customer STATEMENT of account (from StatementService::for) to PDF bytes. */
     public function statementPdf(Tenant $t, array $stmt): string
     {
@@ -402,15 +602,24 @@ HTML;
             $i++;
             $dec = in_array($l['currency'], ['USD'], true) ? 2 : 0;
             $bal = (float) $l['balance'];
-            $col = $bal > 0.005 ? '#C0392B' : '#15803D';
+            $isCredit = (($l['status'] ?? '') === 'credit') || (($l['kind'] ?? '') === 'credit');
+            $col = $isCredit ? '#15803D' : ($bal > 0.005 ? '#C0392B' : '#15803D');
+            $label = e($l['no']);
+            if ($isCredit) {
+                $sub = trim((string) ($l['reason'] ?? 'Credit note'));
+                if (($l['against'] ?? '') !== '') $sub .= ' · ' . $l['against'];
+                $label .= '<div style="font-size:8.5px;color:#C0392B;">Credit note — ' . e($sub) . '</div>';
+            }
+            $balTxt = $isCredit ? '(' . number_format(abs($bal), $dec) . ')' : number_format($bal, $dec);
+            $totTxt = $isCredit ? '(' . number_format(abs((float) $l['total']), $dec) . ')' : number_format((float) $l['total'], $dec);
             $rows .= '<tr>'
                 . '<td class="c">' . $i . '</td>'
-                . '<td>' . e($l['no']) . '</td>'
+                . '<td>' . $label . '</td>'
                 . '<td class="c">' . e((string) $l['date']) . '</td>'
                 . '<td class="c">' . e($l['currency']) . '</td>'
-                . '<td class="r">' . number_format((float) $l['total'], $dec) . '</td>'
+                . '<td class="r">' . $totTxt . '</td>'
                 . '<td class="r">' . number_format((float) $l['paid'], $dec) . '</td>'
-                . '<td class="r" style="color:' . $col . ';font-weight:bold;">' . number_format($bal, $dec) . '</td>'
+                . '<td class="r" style="color:' . $col . ';font-weight:bold;">' . $balTxt . '</td>'
                 . '</tr>';
         }
         if ($rows === '') $rows = '<tr><td colspan="7" class="c" style="color:#777;">No invoices on record.</td></tr>';
@@ -419,6 +628,10 @@ HTML;
         foreach ($stmt['outstanding'] as $cur => $amt) {
             $dec = in_array($cur, ['USD'], true) ? 2 : 0;
             $outRows .= '<tr class="grand"><td>Total outstanding &nbsp; ' . e($cur) . '</td><td class="r">' . e($cur) . ' ' . number_format((float) $amt, $dec) . '</td></tr>';
+        }
+        foreach (($stmt['credit_balance'] ?? []) as $cur => $amt) {
+            $dec = in_array($cur, ['USD'], true) ? 2 : 0;
+            $outRows .= '<tr class="grand"><td style="color:#15803D;">Credit in your favour &nbsp; ' . e($cur) . '</td><td class="r" style="color:#15803D;">' . e($cur) . ' ' . number_format((float) $amt, $dec) . '</td></tr>';
         }
         if ($outRows === '') $outRows = '<tr class="grand"><td>Total outstanding</td><td class="r" style="color:#15803D;">Nil — thank you</td></tr>';
 

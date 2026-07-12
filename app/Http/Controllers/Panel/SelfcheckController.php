@@ -87,6 +87,28 @@ class SelfcheckController extends Controller
         $add('customer_360_invoices', 'Customer 360 shows invoices + statement',
             (bool) $this->fileHas('resources/panel/customers360.html', 'loadStatement'));
 
+        // --- Credit notes (CN-2026-0001) ---------------------------------------------
+        try {
+            $c1 = Schema::hasTable('credit_notes');
+            $c2 = Schema::hasTable('credit_note_items');
+            $c3 = Schema::hasTable('credit_note_counters');
+            $add('credit_notes_migrated', 'Credit note tables migrated', $c1 && $c2 && $c3,
+                ($c1 && $c2 && $c3) ? '' : 'run: php artisan migrate --force');
+        } catch (\Throwable $e) { $add('credit_notes_migrated', 'Credit note tables migrated', null, 'probe error'); }
+        $add('credit_notes_code', 'Numbered credit notes (CN-2026-0001)',
+            class_exists(\App\Http\Controllers\Panel\CreditNoteController::class)
+            && class_exists(\App\Services\Invoicing\CreditNoteService::class)
+            && is_file(resource_path('panel/credit-notes.html')));
+        $add('credit_note_pdf', 'Credit note PDF + WhatsApp send',
+            method_exists(\App\Services\Invoicing\InvoiceRenderer::class, 'creditNotePdf')
+            && method_exists(\App\Http\Controllers\Panel\CreditNoteController::class, 'send'));
+        $add('credit_note_from_invoice', 'Credit note from an invoice',
+            method_exists(\App\Services\Invoicing\CreditNoteService::class, 'issueForInvoice')
+            && (bool) $this->fileHas('resources/panel/invoices.html', 'creditNote'));
+        $add('credit_note_statement', 'Credit notes reduce statement balance',
+            (bool) $this->fileHas('app/Services/Invoicing/StatementService.php', 'CreditNote')
+            && (bool) $this->fileHas('resources/panel/customers360.html', 'tabCredits'));
+
         $add('invoice_pdf', 'Professional invoice PDF (server-side)',
             class_exists(\App\Http\Controllers\Panel\OrderInvoiceController::class)
             && class_exists(\Dompdf\Dompdf::class)

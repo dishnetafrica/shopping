@@ -184,7 +184,7 @@ function renderDetail(key){
   var phones=Object.keys(c.phones); var ph=phones[0]||'';
   var oweCls=c.outstanding>0.005?'':'ok';
   var oweTxt=c.outstanding>0.005?'$'+nf(c.outstanding):(c.outstanding<-0.005?'+$'+nf(-c.outstanding)+' credit':'$0');
-  var TABS=[['overview','Overview'],['invoices','Invoices'],['payments','Payments'],['statement','Statement'],['returns','Returns / Refunds'],['activity','Activity']];
+  var TABS=[['overview','Overview'],['invoices','Invoices'],['payments','Payments'],['statement','Statement'],['credits','Credit notes'],['returns','Returns / Refunds'],['activity','Activity']];
   $('view').innerHTML=
     '<div class="chead"><div class="av">'+esc(initials(c.name))+'</div><div><div class="nm">'+esc(c.name||ph||'—')+'</div>'+
       '<div class="ph">'+(phones.length?phones.map(esc).join(' · '):'no phone')+'</div></div>'+
@@ -209,6 +209,7 @@ function showTab(name){
   else if(name==='invoices')box.innerHTML=tabInvoices(c);
   else if(name==='payments')box.innerHTML=paysList(c);
   else if(name==='statement')box.innerHTML=tabStatement(c);
+  else if(name==='credits')box.innerHTML=tabCredits(c);
   else if(name==='returns')box.innerHTML=tabReturns(c);
   else if(name==='activity')box.innerHTML=tabActivity(c);
 }
@@ -229,11 +230,32 @@ function paysList(c){
       '<div class="b">'+esc(p.date||'')+' · '+esc(p.method)+(p.order_no?' · '+esc(p.order_no):'')+'</div></div>'+
       '<div class="amt">'+esc(p.currency)+' '+nf(p.amount)+'<div style="font-size:11px;color:#94a3b8">$'+nf(p.usd)+'</div></div></div>';}).join('');
 }
+function fmtN(n,dec){return Number(n).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});}
 function statementRows(s){
   return s.lines.map(function(l){var dec=(l.currency==='USD')?2:0;var bal=Number(l.balance);
+    if(l.kind==='credit'||l.status==='credit'){
+      var cr=Math.abs(Number(l.total));
+      return '<div class="item"><div class="l"><div class="a">'+esc(l.no)+'<span class="pill2" style="background:#FCEBEB;color:#B4232A">credit note</span></div>'+
+        '<div class="b">'+esc(l.date||'')+' · '+esc(l.reason||'Credit')+(l.against?(' · vs '+esc(l.against)):'')+'</div></div>'+
+        '<div class="amt" style="color:#15803D">− '+esc(l.currency)+' '+fmtN(cr,dec)+'</div></div>';
+    }
     return '<div class="item"><div class="l"><div class="a">'+esc(l.no)+'<span class="st s-'+esc(l.status)+'">'+esc(String(l.status).replace("_"," "))+'</span></div>'+
-      '<div class="b">'+esc(l.date||'')+' · billed '+esc(l.currency)+' '+Number(l.total).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})+' · paid '+Number(l.paid).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})+'</div></div>'+
-      '<div class="amt" style="color:'+(bal>0.005?'#C0392B':'#15803D')+'">'+(bal>0.005?(esc(l.currency)+' '+bal.toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})):'Paid')+'</div></div>';
+      '<div class="b">'+esc(l.date||'')+' · billed '+esc(l.currency)+' '+fmtN(l.total,dec)+' · paid '+fmtN(l.paid,dec)+'</div></div>'+
+      '<div class="amt" style="color:'+(bal>0.005?'#C0392B':'#15803D')+'">'+(bal>0.005?(esc(l.currency)+' '+fmtN(bal,dec)):'Paid')+'</div></div>';
+  }).join('');
+}
+function tabCredits(c){
+  var s=window.__STMT;
+  if(!s)return '<div class="loading">Loading credit notes…</div>';
+  var cns=(s.lines||[]).filter(function(l){return l.kind==='credit'||l.status==='credit';});
+  var head='';
+  if(s.credit_balance&&Object.keys(s.credit_balance).length)
+    head='<div class="cards" style="grid-template-columns:1fr"><div class="adv"><div class="t">Credit in the customer’s favour</div><div class="n">'+esc(fmtMoneyMap(s.credit_balance))+'</div></div></div>';
+  if(!cns.length)return head+'<div class="empty">No credit notes for this customer.<br>Raise one from the Invoices screen (“🧾 Credit note”) or the Credit notes register.</div>';
+  return head+cns.map(function(l){var dec=(l.currency==='USD')?2:0;
+    return '<div class="item"><div class="l"><div class="a">'+esc(l.no)+'<span class="pill2" style="background:#FCEBEB;color:#B4232A">'+esc(l.reason||'credit')+'</span></div>'+
+      '<div class="b">'+esc(l.date||'')+(l.against?(' · against '+esc(l.against)):'')+'</div></div>'+
+      '<div class="amt" style="color:#15803D">− '+esc(l.currency)+' '+fmtN(Math.abs(Number(l.total)),dec)+'</div></div>';
   }).join('');
 }
 function tabOverview(c){
@@ -247,8 +269,9 @@ function tabOverview(c){
 function tabInvoices(c){
   var s=window.__STMT;
   if(!s)return '<div class="loading">Loading invoices…</div>';
-  if(!s.lines||!s.lines.length)return '<div class="empty">No invoices yet. Issue one from an order (Orders → open → Issue invoice).</div>';
-  return statementRows(s)+'<div class="sub" style="margin-top:8px">Pay or send an invoice from the Invoices screen.</div>';
+  var inv={lines:(s.lines||[]).filter(function(l){return (l.kind||'invoice')!=='credit'&&l.status!=='credit';})};
+  if(!inv.lines.length)return '<div class="empty">No invoices yet. Issue one from an order (Orders → open → Issue invoice).</div>';
+  return statementRows(inv)+'<div class="sub" style="margin-top:8px">Pay or send an invoice from the Invoices screen.</div>';
 }
 function tabStatement(c){
   var ph=Object.keys(c.phones)[0]||''; var s=window.__STMT;
@@ -282,9 +305,9 @@ function tabActivity(c){
 /* Invoice-based statement (accurate, in the customer's billed currency) — fills the tabs when ready. */
 function loadStatement(phone){
   fetch('/papi/statement?phone='+encodeURIComponent(phone),{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
-    window.__STMT=(d&&d.ok&&d.statement)?d.statement:{lines:[],outstanding:{},count:0};
-    if(['overview','invoices','statement'].indexOf(CURTAB)>=0)showTab(CURTAB);
-  }).catch(function(){window.__STMT={lines:[],outstanding:{},count:0};if(['overview','invoices','statement'].indexOf(CURTAB)>=0)showTab(CURTAB);});
+    window.__STMT=(d&&d.ok&&d.statement)?d.statement:{lines:[],outstanding:{},credit_balance:{},count:0};
+    if(['overview','invoices','statement','credits'].indexOf(CURTAB)>=0)showTab(CURTAB);
+  }).catch(function(){window.__STMT={lines:[],outstanding:{},credit_balance:{},count:0};if(['overview','invoices','statement','credits'].indexOf(CURTAB)>=0)showTab(CURTAB);});
 }
 function sendStatement(phone){
   var m=document.getElementById('stmtMsg'); if(m)m.textContent='Sending…';

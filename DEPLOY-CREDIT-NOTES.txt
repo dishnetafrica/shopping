@@ -1,0 +1,70 @@
+DEPLOY — Credit Notes (CN-2026-0001) — the numbered "we owe you" document
+==========================================================================
+This mirrors your ISP CRM's "Credit notes" tab. A credit note is the opposite of an invoice:
+it records money you owe the customer (a return, a price adjustment, an over-payment or goodwill),
+carries its own permanent number (CN-2026-0001), has a branded PDF, can be sent on WhatsApp, and
+REDUCES what the customer owes on their statement.
+
+REQUIRES ONE MIGRATION (additive, safe — never wipes data or settings).
+
+SAFE-DEPLOY STEPS
+  1. Replace / add the files below -> commit.
+  2. php artisan migrate --force        (creates 3 credit-note tables; additive, safe)
+  3. EasyPanel REBUILD.
+  NEVER run on production: migrate:fresh, migrate:refresh, db:wipe.
+
+WHAT YOU CAN DO NOW
+  • Invoices screen → any invoice → "🧾 Credit note": raise a credit note against that invoice
+    (defaults to the full balance; type a smaller number for a partial credit; pick a reason).
+  • New "Credit notes" register  (/panel/credit-notes, linked from the Invoices screen top bar):
+      - stat tiles (count · total credited), search, per-note PDF / 📤 Send on WhatsApp / Void.
+      - "＋ New credit note": pick an invoice to credit OR make a standalone one (over-payment /
+        goodwill) with customer, phone, currency, amount, reason + a note.
+  • Customer 360 → new "Credit notes" tab: every credit note for that customer + any credit
+    standing in their favour. The Statement tab now shows credit notes as green credit lines and
+    the outstanding total is netted down automatically.
+  • The customer's own "My account" (shop login) statement shows the credit lines + the reduced
+    balance too.
+
+HOW THE ACCOUNTING WORKS (simple + safe)
+  • A non-void credit note reduces the customer's outstanding balance on the STATEMENT, per
+    currency (USD stays USD, UGX stays UGX). If credits exceed what they owe, the excess shows as
+    "Credit in your favour" (store credit you can set off against their next invoice or refund).
+  • Numbering is gapless + per-year via its OWN atomic counter (credit_note_counters) — a credit
+    note never borrows an invoice number, and two people issuing at once never collide.
+  • Voiding a credit note keeps it on record (marked VOID) and stops it reducing the balance.
+  • This does NOT touch the cash ledger / unified-payments flow — a credit note is not a cash
+    receipt, so it never inflates the cashbook. It only adjusts what is owed.
+  • Reasons captured: Return of goods · Price adjustment · Over-payment refund · Goodwill /
+    discount · Damaged / short supply · Other.
+
+RELATION TO THE EXISTING RETURN / REFUND FLOW
+  The order "↩ Return / refund" (store credit / refund pending / redeem) still works as before for
+  quick operational adjustments. Credit notes are the FORMAL numbered document version — issue one
+  when the customer needs a proper credit-note PDF or when it must show on the account statement.
+
+FILES
+  database/migrations/2026_07_12_000002_create_credit_notes_tables.php   [NEW]  (needs migrate)
+  app/Models/CreditNote.php                                              [NEW]
+  app/Models/CreditNoteItem.php                                          [NEW]
+  app/Services/Invoicing/CreditNoteService.php                           [NEW]  issue + CN numbering
+  app/Services/Invoicing/InvoiceRenderer.php                             [EDIT] creditNoteHtml/Pdf/fromCreditNote
+  app/Services/Invoicing/StatementService.php                            [EDIT] nets credit notes into statement
+  app/Http/Controllers/Panel/CreditNoteController.php                    [NEW]  page/index/issue/show/pdf/send/void
+  app/Http/Controllers/Panel/SelfcheckController.php                     [EDIT] credit-note probes
+  routes/web.php                                                         [EDIT] /panel/credit-notes + papi routes
+  resources/panel/credit-notes.html                                     [NEW]  register + "New credit note" sheet
+  resources/panel/invoices.html                                         [EDIT] "🧾 Credit note" button + register link
+  resources/panel/customers360.html                                     [EDIT] "Credit notes" tab + credit lines
+  resources/storefront/shop.html                                        [EDIT] customer statement shows credit lines
+
+VERIFY (open /papi/selfcheck — should be TRUE after migrate + rebuild)
+  Credit note tables migrated; Numbered credit notes (CN-2026-0001); Credit note PDF + WhatsApp
+  send; Credit note from an invoice; Credit notes reduce statement balance.
+
+QUICK TEST
+  1. Invoices → open an invoice with a balance → "🧾 Credit note" → amount + reason → a CN-2026-000x
+     PDF is created.
+  2. Open that customer's Statement (Invoices → 📄 Statement, or Customer 360 → Statement): the
+     outstanding total dropped by the credit amount and a green credit line appears.
+  3. Credit notes register → 📤 Send → the customer gets the credit-note PDF on WhatsApp.

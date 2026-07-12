@@ -734,6 +734,12 @@ function renderMyStatement(){
     : '<div style="background:#E4F2EA;border:1px solid #b7e0c6;border-radius:12px;padding:12px;margin-bottom:12px"><div style="font-weight:800;color:#15803D">✓ No outstanding balance — thank you!</div></div>';
   var rows=s.lines.map(function(l){
     var bal=Number(l.balance)||0;
+    if(l.kind==='credit'||l.status==='credit'){
+      var cr=Math.abs(Number(l.total)||0);
+      return '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:8px 0">'+
+        '<div><div style="font-weight:700;font-size:13px">'+esc(l.no)+'</div><div style="font-size:11px;color:#15803D">'+esc(l.date||'')+' · credit note'+(l.reason?(' · '+esc(l.reason)):'')+(l.against?(' · '+esc(l.against)):'')+'</div></div>'+
+        '<div style="font-weight:800;color:#15803D">− '+fmt(l.currency,cr)+'</div></div>';
+    }
     return '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:8px 0">'+
       '<div><div style="font-weight:700;font-size:13px">'+esc(l.no)+'</div><div style="font-size:11px;color:var(--muted)">'+esc(l.date||'')+' · billed '+fmt(l.currency,l.total)+' · paid '+fmt(l.currency,l.paid)+'</div></div>'+
       '<div style="font-weight:800;color:'+(bal>0.005?'#B4232A':'#15803D')+'">'+(bal>0.005?fmt(l.currency,bal):'Paid')+'</div></div>';
