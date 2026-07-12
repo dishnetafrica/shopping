@@ -41,7 +41,7 @@ return [
             // order_system_enabled (OrderCostController::ordersPage aborts 404 when off).
             // Gate the menu link on the SAME setting so we never show a link that 404s.
             ['key' => 'orders',    'label' => 'Orders',    'route' => '/panel/orders-costs', 'icon' => '🧾', 'menu' => 'orders', 'setting' => 'order_system_enabled'],
-            ['key' => 'customers', 'label' => 'Customers', 'route' => '/panel/customers360', 'icon' => '👥', 'menu' => 'customers'],
+            ['key' => 'customers', 'label' => 'Customers', 'route' => '/panel/customers360', 'icon' => '👥', 'menu' => 'customers', 'setting' => 'order_system_enabled'],
             ['key' => 'invoices',  'label' => 'Invoices',  'route' => '/panel/invoices',     'icon' => '📄', 'menu' => 'finance'],
         ],
     ],
@@ -49,9 +49,9 @@ return [
     [
         'key' => 'purchases', 'label' => 'Purchases', 'module' => 'purchases',
         'items' => [
-            ['key' => 'buy-list',  'label' => 'Buy List',  'route' => '/panel/buy-list',  'icon' => '📋', 'menu' => 'purchases'],
+            ['key' => 'buy-list',  'label' => 'Buy List',  'route' => '/panel/buy-list',  'icon' => '📋', 'menu' => 'purchases', 'setting' => 'order_system_enabled'],
             ['key' => 'purchases', 'label' => 'Purchases', 'route' => '/panel/purchases', 'icon' => '🛒', 'menu' => 'purchases'],
-            ['key' => 'suppliers', 'label' => 'Suppliers', 'route' => '/panel/suppliers', 'icon' => '🏭', 'menu' => 'purchases'],
+            ['key' => 'suppliers', 'label' => 'Suppliers', 'route' => '/panel/suppliers', 'icon' => '🏭', 'menu' => 'purchases', 'setting' => 'order_system_enabled'],
         ],
     ],
 
@@ -67,12 +67,12 @@ return [
     [
         'key' => 'money', 'label' => 'Money', 'module' => 'finance',
         'items' => [
-            ['key' => 'payments', 'label' => 'Payments', 'route' => '/panel/payments',       'icon' => '💵', 'menu' => 'finance'],
+            ['key' => 'payments', 'label' => 'Payments', 'route' => '/panel/payments',       'icon' => '💵', 'menu' => 'finance', 'setting' => 'order_system_enabled'],
             // E5.3 — Cashbook is ONE screen with tabs. Cash Position / Staff Cash / My Cash used to be
             // separate left-menu links (and separate sums, see E5.2); they are now sub-views (tabs) of
             // this one Cashbook entry, so the sidebar offers a single way in. Their standalone routes
             // still resolve for deep links but are retired as menu links (NavController::RETIRED_ROUTES).
-            ['key' => 'cashbook', 'label' => 'Cashbook', 'route' => '/panel/trade-cashbook', 'icon' => '💰', 'menu' => 'cash',
+            ['key' => 'cashbook', 'label' => 'Cashbook', 'route' => '/panel/trade-cashbook', 'icon' => '💰', 'menu' => 'cash', 'setting' => 'order_system_enabled',
                 'tabs' => [
                     ['key' => 'trade',     'label' => 'Cashbook',      'route' => '/panel/trade-cashbook'],
                     ['key' => 'positions', 'label' => 'Cash Position', 'route' => '/panel/cash-position'],
@@ -80,14 +80,14 @@ return [
                     ['key' => 'mine',      'label' => 'My Cash',       'route' => '/panel/my-cash'],
                 ],
             ],
-            ['key' => 'expenses', 'label' => 'Expenses', 'route' => '/panel/expenses',       'icon' => '💸', 'menu' => 'finance'],
+            ['key' => 'expenses', 'label' => 'Expenses', 'route' => '/panel/expenses',       'icon' => '💸', 'menu' => 'finance', 'setting' => 'order_system_enabled'],
         ],
     ],
 
     [
         'key' => 'reports', 'label' => 'Reports', 'module' => 'finance',
         'items' => [
-            ['key' => 'reports', 'label' => 'Reports', 'route' => '/panel/pnl', 'icon' => '📊', 'menu' => 'finance'],
+            ['key' => 'reports', 'label' => 'Reports', 'route' => '/panel/pnl', 'icon' => '📊', 'menu' => 'finance', 'setting' => 'order_system_enabled'],
         ],
     ],
 
