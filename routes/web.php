@@ -143,6 +143,10 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         // Cash position + order costs (three-currency)
         Route::get('cash-position', [\App\Http\Controllers\Panel\CashPositionController::class, 'data']);
         Route::get('me/nav', [\App\Http\Controllers\Panel\OrderCostController::class, 'nav']);
+        // E1.1 — single config-driven grouped menu (Product Architecture v2 §1). Read-only.
+        Route::get('nav', [\App\Http\Controllers\Panel\NavController::class, 'nav']);
+        // E3.3 — canonical exchange rate from the single FX service. Read-only.
+        Route::get('fx', [\App\Http\Controllers\Panel\FxController::class, 'rates']);
         Route::get('order-costs/orders', [\App\Http\Controllers\Panel\OrderCostController::class, 'orders']);
         Route::post('order-costs', [\App\Http\Controllers\Panel\OrderCostController::class, 'store']);
         Route::post('order-costs/bulk', [\App\Http\Controllers\Panel\OrderCostController::class, 'bulkStore']);
@@ -368,6 +372,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('products-restore', [PanelApiController::class, 'productsRestore']);
         Route::get('product-bulk-meta', [PanelApiController::class, 'productBulkMeta']);
         Route::post('stock-sync', [PanelApiController::class, 'stockSync']);
+        Route::post('stock/reconcile-cache', [PanelApiController::class, 'stockReconcileCache']); // E6.5
         Route::post('images-borrow', [PanelApiController::class, 'imagesBorrow']);
         Route::post('upload-image',  [PanelApiController::class, 'uploadImage']);
         Route::post('upload-doc',    [PanelApiController::class, 'uploadDoc']);
