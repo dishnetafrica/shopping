@@ -1,0 +1,57 @@
+DEPLOY — Partial payments on invoices, customer statement of account, 360 + self-service
+========================================================================================
+
+WHAT YOU GET
+1) PARTIAL PAYMENTS on an invoice (currency-correct).
+   In the Invoices register each unpaid invoice has a "💵 Pay" button. Enter what the customer
+   paid (in the invoice's own currency — USD for export, UGX for local) and the invoice updates
+   live: Paid goes up, Balance goes down, status flips issued → part paid → paid. The stored PDF
+   is refreshed so a re-download shows the new balance. (This is the customer-billing view; your
+   operational cash tracking on the order / staff-cash is unchanged.)
+
+2) CUSTOMER STATEMENT OF ACCOUNT.
+   A statement is built from a customer's non-void invoices, in the currency they were billed, and
+   grouped so a South Sudan customer sees "Total outstanding: USD 380". Two ways to send it:
+     - Invoices register → "📄 Statement" on any of that customer's invoices → WhatsApps them the
+       full statement PDF (all invoices, paid, balance, total outstanding).
+     - Customer 360 → open a customer → new "📄 Invoices & statement" section with a
+       "📤 Send statement on WhatsApp" button.
+
+3) CUSTOMER 360 — now includes invoices.
+   The 360 detail page now shows the customer's invoices with paid/balance, the accurate billed
+   outstanding (per currency), and the send-statement button — alongside the existing orders,
+   payments and activity timeline.
+
+4) CUSTOMER SELF-SERVICE.
+   The customer's phone-login account API (myOrders) now also returns their statement (each
+   invoice's paid vs balance + total outstanding), so a logged-in customer can self-check what they
+   owe. (The storefront account screen needs to display the new `statement` field — the data is now
+   there; say the word and I'll wire the storefront UI too.)
+
+FILES
+  app/Services/Invoicing/StatementService.php     [NEW] builds the per-customer statement.
+  app/Services/Invoicing/InvoiceRenderer.php      statement PDF (statementPdf / statementHtml).
+  app/Http/Controllers/Panel/InvoiceController.php pay(), statementData/Pdf/Send.
+  app/Http/Controllers/Storefront/CustomerAuthController.php   myOrders returns statement.
+  resources/panel/invoices.html                   "💵 Pay" + "📄 Statement" buttons.
+  resources/panel/customers360.html               invoices + statement section + send button.
+  routes/web.php                                  invoice-pay, statement, statement-pdf, statement-send.
+  app/Http/Controllers/Panel/SelfcheckController.php  probes.
+
+DEPLOY
+  1. Replace/add the files -> commit.  (No migration — uses the existing invoices tables.)
+  2. EasyPanel REBUILD.
+
+VERIFY
+  - /papi/selfcheck → "Record partial payment on invoice", "Customer statement of account (+
+    WhatsApp)", "Customer 360 shows invoices + statement", "Customer self-service statement" = true.
+  - Invoices → "💵 Pay" a part of an invoice → balance drops, status = part paid.
+  - Invoices → "📄 Statement" (or Customers 360 → a customer → "📤 Send statement") → the customer
+    gets a statement PDF listing invoices + total outstanding.
+
+NOTE ON PAYMENTS (so the books stay clean)
+  - "💵 Pay" here records against the INVOICE in the invoice's currency (what the customer owes on
+    paper). The order-level "💵 Record Payment" on the Orders screen records operational cash in
+    UGX. For export (USD) customers these are naturally different views; use the invoice Pay for the
+    customer's statement/balance. If you'd like the two unified (one payment updates both), I can
+    add that with an explicit UGX↔USD rate on each payment — just ask.

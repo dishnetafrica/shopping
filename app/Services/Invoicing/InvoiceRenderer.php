@@ -366,6 +366,111 @@ table.tot tr.bal td { font-weight:bold; font-size:11.5px; }
 HTML;
     }
 
+    /** Render a customer STATEMENT of account (from StatementService::for) to PDF bytes. */
+    public function statementPdf(Tenant $t, array $stmt): string
+    {
+        $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
+        $dompdf->loadHtml($this->statementHtml($t, $stmt));
+        $dompdf->setPaper('A4');
+        $dompdf->render();
+        return $dompdf->output();
+    }
+
+    public function statementHtml(Tenant $t, array $stmt): string
+    {
+        $company  = e((string) $t->name);
+        $subtitle = trim((string) $t->setting('quote_subtitle', '')) ?: trim((string) $t->setting('address', ''));
+        $subHtml  = $subtitle !== '' ? nl2br(e($subtitle)) : '';
+        $email    = trim((string) $t->setting('public_email', $t->setting('email', '')));
+        $cphone   = trim((string) ($t->setting('public_phone', '') ?: $t->whatsapp_number));
+        $tin      = trim((string) $t->setting('tin', ''));
+        $contact  = array_filter([
+            $cphone !== '' ? 'Tel/WhatsApp: ' . e($cphone) : '',
+            $email  !== '' ? 'Email: ' . e($email) : '',
+            $tin    !== '' ? 'TIN: ' . e($tin) : '',
+        ], fn ($x) => $x !== '');
+        $contactLine = $contact ? '<div class="webline">' . implode(' &nbsp;|&nbsp; ', $contact) . '</div>' : '';
+        $logoTag = $this->imgData((string) $t->setting('logo', ''));
+        $logoTag = $logoTag !== '' ? '<img src="' . e($logoTag) . '" style="height:56px;max-width:110px;object-fit:contain">' : '&nbsp;';
+
+        $cust = $stmt['name'] !== '' ? e($stmt['name']) : e($stmt['phone']);
+        $date = now()->format('d/m/Y');
+
+        $rows = '';
+        $i = 0;
+        foreach ($stmt['lines'] as $l) {
+            $i++;
+            $dec = in_array($l['currency'], ['USD'], true) ? 2 : 0;
+            $bal = (float) $l['balance'];
+            $col = $bal > 0.005 ? '#C0392B' : '#15803D';
+            $rows .= '<tr>'
+                . '<td class="c">' . $i . '</td>'
+                . '<td>' . e($l['no']) . '</td>'
+                . '<td class="c">' . e((string) $l['date']) . '</td>'
+                . '<td class="c">' . e($l['currency']) . '</td>'
+                . '<td class="r">' . number_format((float) $l['total'], $dec) . '</td>'
+                . '<td class="r">' . number_format((float) $l['paid'], $dec) . '</td>'
+                . '<td class="r" style="color:' . $col . ';font-weight:bold;">' . number_format($bal, $dec) . '</td>'
+                . '</tr>';
+        }
+        if ($rows === '') $rows = '<tr><td colspan="7" class="c" style="color:#777;">No invoices on record.</td></tr>';
+
+        $outRows = '';
+        foreach ($stmt['outstanding'] as $cur => $amt) {
+            $dec = in_array($cur, ['USD'], true) ? 2 : 0;
+            $outRows .= '<tr class="grand"><td>Total outstanding &nbsp; ' . e($cur) . '</td><td class="r">' . e($cur) . ' ' . number_format((float) $amt, $dec) . '</td></tr>';
+        }
+        if ($outRows === '') $outRows = '<tr class="grand"><td>Total outstanding</td><td class="r" style="color:#15803D;">Nil — thank you</td></tr>';
+
+        $footer = trim((string) $t->setting('invoice_footer', 'This is a computer-generated statement.'));
+
+        return <<<HTML
+<!doctype html><html><head><meta charset="utf-8"><style>
+* { font-family:"DejaVu Sans",Arial,sans-serif; }
+body { color:#111; font-size:11px; margin:0; }
+.company { font-size:19px; font-weight:bold; text-align:center; }
+.sub { text-align:center; font-size:9.5px; }
+.webline { text-align:center; font-size:9.5px; padding-top:6px; }
+.rule { border:0; border-top:1px solid #111; margin:8px 0 0; }
+.qtitle { text-align:right; font-size:20px; font-weight:bold; letter-spacing:1px; margin:14px 0 6px; }
+.box { border:1px solid #111; padding:8px 10px; }
+table.items { width:100%; border-collapse:collapse; margin-top:12px; }
+table.items th { background:#f0f0f0; border:1px solid #111; padding:6px; font-size:10px; }
+table.items td { border:1px solid #111; padding:6px; font-size:10px; }
+.r { text-align:right; } .c { text-align:center; }
+table.tot { border-collapse:collapse; margin-top:10px; }
+table.tot td { border:1px solid #111; padding:6px 10px; font-size:11px; }
+table.tot tr.grand td { font-weight:bold; font-size:12px; background:#f0f0f0; }
+.foot { text-align:center; font-size:9.5px; color:#444; margin-top:24px; border-top:1px solid #ddd; padding-top:8px; }
+</style></head><body>
+<table width="100%"><tr>
+  <td style="width:110px;">{$logoTag}</td>
+  <td style="vertical-align:middle;"><div class="company">{$company}</div><div class="sub">{$subHtml}</div></td>
+  <td style="width:110px;">&nbsp;</td>
+</tr></table>
+{$contactLine}
+<hr class="rule">
+<div class="qtitle">STATEMENT OF ACCOUNT</div>
+<table width="100%"><tr>
+  <td width="60%" style="vertical-align:top;">
+    <div class="box"><div style="font-size:9px;color:#666;text-transform:uppercase;">Account</div>
+      <div style="font-weight:bold;font-size:12px;margin-top:3px;">{$cust}</div>
+      <div style="font-size:10px;margin-top:2px;">Tel: {$stmt['phone']}</div></div>
+  </td>
+  <td width="40%" style="vertical-align:top;text-align:right;font-size:10.5px;">Statement date: <b>{$date}</b></td>
+</tr></table>
+<table class="items">
+  <tr><th style="width:22px;">#</th><th>Invoice</th><th style="width:78px;">Date</th><th style="width:44px;">Cur</th><th style="width:80px;">Total</th><th style="width:80px;">Paid</th><th style="width:88px;">Balance</th></tr>
+  {$rows}
+</table>
+<table width="100%"><tr><td width="55%">&nbsp;</td><td width="45%">
+  <table class="tot" width="100%">{$outRows}</table>
+</td></tr></table>
+<div class="foot">{$footer}</div>
+</body></html>
+HTML;
+    }
+
     private function imgData(string $url): string
     {
         $url = trim($url);

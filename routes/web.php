@@ -240,7 +240,12 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('invoice-show',                [\App\Http\Controllers\Panel\InvoiceController::class, 'show']);
         Route::get('invoice-pdf',                 [\App\Http\Controllers\Panel\InvoiceController::class, 'pdf']);
         Route::match(['get','post'], 'invoice-send', [\App\Http\Controllers\Panel\InvoiceController::class, 'send']);
+        Route::match(['get','post'], 'invoice-pay',  [\App\Http\Controllers\Panel\InvoiceController::class, 'pay']);
         Route::match(['get','post'], 'invoice-void', [\App\Http\Controllers\Panel\InvoiceController::class, 'void']);
+        // Customer statement of account
+        Route::get('statement',      [\App\Http\Controllers\Panel\InvoiceController::class, 'statementData']);
+        Route::get('statement-pdf',  [\App\Http\Controllers\Panel\InvoiceController::class, 'statementPdf']);
+        Route::match(['get','post'], 'statement-send', [\App\Http\Controllers\Panel\InvoiceController::class, 'statementSend']);
         Route::get('inventory-list',  [PanelApiController::class, 'inventoryList']);
         Route::get('inventory-count', [PanelApiController::class, 'inventoryCount']);
 

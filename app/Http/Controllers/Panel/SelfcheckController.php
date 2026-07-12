@@ -74,6 +74,15 @@ class SelfcheckController extends Controller
         $add('invoice_send', 'Send invoice PDF on WhatsApp',
             method_exists(\App\Http\Controllers\Panel\InvoiceController::class, 'send')
             && (bool) $this->fileHas('resources/panel/invoices.html', 'sendInv'));
+        $add('invoice_partial_pay', 'Record partial payment on invoice',
+            method_exists(\App\Http\Controllers\Panel\InvoiceController::class, 'pay'));
+        $add('customer_statement', 'Customer statement of account (+ WhatsApp)',
+            class_exists(\App\Services\Invoicing\StatementService::class)
+            && method_exists(\App\Http\Controllers\Panel\InvoiceController::class, 'statementSend'));
+        $add('customer_selfservice_statement', 'Customer self-service statement (login)',
+            (bool) $this->fileHas('app/Http/Controllers/Storefront/CustomerAuthController.php', 'StatementService'));
+        $add('customer_360_invoices', 'Customer 360 shows invoices + statement',
+            (bool) $this->fileHas('resources/panel/customers360.html', 'loadStatement'));
 
         $add('invoice_pdf', 'Professional invoice PDF (server-side)',
             class_exists(\App\Http\Controllers\Panel\OrderInvoiceController::class)

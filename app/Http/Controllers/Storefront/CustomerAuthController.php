@@ -144,10 +144,18 @@ class CustomerAuthController extends Controller
                     : [],
             ])->values();
 
+        // Statement of account (invoice balances in the customer's billed currency) so the
+        // logged-in customer can self-check paid vs balance and total outstanding.
+        $statement = ['lines' => [], 'outstanding' => [], 'count' => 0];
+        try {
+            $statement = app(\App\Services\Invoicing\StatementService::class)->for($tenant, $phone);
+        } catch (\Throwable $e) { /* self-service statement is best-effort */ }
+
         return response()->json([
-            'ok'      => true,
-            'profile' => $this->profileFor($tenant, $phone),
-            'orders'  => $orders,
+            'ok'        => true,
+            'profile'   => $this->profileFor($tenant, $phone),
+            'orders'    => $orders,
+            'statement' => $statement,
         ]);
     }
 

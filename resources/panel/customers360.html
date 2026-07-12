@@ -207,9 +207,35 @@ function renderDetail(key){
       '<div class="owe"><div class="t">Outstanding</div><div class="n '+oweCls+'">'+oweTxt+'</div></div>'+
       '<div class="adv"><div class="t">Advances held</div><div class="n">$'+nf(c.advances)+'</div></div>'+
     '</div>'+
+    '<div id="stmtBox"></div>'+
     '<div class="sectlbl">🧾 Orders ('+c.orders.length+')</div>'+ordersHtml+
     '<div class="sectlbl">💵 Payments ('+c.pays.length+')</div>'+paysHtml+
     '<div class="sectlbl">🕘 Activity</div><div class="tl">'+(ev.length?ev.map(function(e){return '<div class="ev '+e.cls+'"><div class="x">'+e.x+'</div><div class="d">'+esc(e.d)+'</div></div>';}).join(''):'<div class="empty">No activity.</div>')+'</div>';
+  if(phones[0]) loadStatement(phones[0]);
+}
+/* Invoice-based statement (accurate, in the customer's billed currency USD/UGX) + send button. */
+function loadStatement(phone){
+  var box=document.getElementById('stmtBox'); if(!box)return;
+  fetch('/papi/statement?phone='+encodeURIComponent(phone),{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
+    if(!d||!d.ok||!d.statement||!d.statement.lines.length){box.innerHTML='';return;}
+    var s=d.statement;
+    function fmap(m){var a=[];Object.keys(m||{}).forEach(function(cur){var dec=(cur==='USD')?2:0;a.push(cur+' '+Number(m[cur]).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec}));});return a.length?a.join(' · '):'0';}
+    var rows=s.lines.map(function(l){var dec=(l.currency==='USD')?2:0;var bal=Number(l.balance);
+      return '<div class="item"><div class="l"><div class="a">'+esc(l.no)+'<span class="st s-'+esc(l.status)+'">'+esc(l.status.replace("_"," "))+'</span></div>'+
+        '<div class="b">'+esc(l.date||'')+' · '+esc(l.currency)+' '+Number(l.total).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})+' · paid '+Number(l.paid).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})+'</div></div>'+
+        '<div class="amt" style="color:'+(bal>0.005?'#C0392B':'#15803D')+'">'+esc(l.currency)+' '+bal.toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})+'</div></div>';
+    }).join('');
+    box.innerHTML='<div class="sectlbl">📄 Invoices &amp; statement ('+s.count+')</div>'+
+      '<div class="cards"><div class="owe"><div class="t">Outstanding (billed)</div><div class="n">'+esc(fmap(s.outstanding))+'</div></div></div>'+
+      rows+
+      '<div style="margin:10px 0 4px"><button onclick="sendStatement(\''+esc(digits(phone))+'\')" style="background:#25D366;color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:800;cursor:pointer">📤 Send statement on WhatsApp</button> <span id="stmtMsg" style="font-size:12px;color:#64748b"></span></div>';
+  }).catch(function(){});
+}
+function sendStatement(phone){
+  var m=document.getElementById('stmtMsg'); if(m)m.textContent='Sending…';
+  fetch('/papi/statement-send',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:new URLSearchParams({phone:phone})}).then(function(r){return r.json();}).then(function(r){
+    if(m)m.textContent=(r&&r.ok)?'Sent ✓':('Could not send: '+((r&&r.error)||'error'));
+  }).catch(function(){if(m)m.textContent='Network error';});
 }
 boot();
 </script><!-- ===== DishNet role-aware tab bar + amount format (injected v2) ===== -->

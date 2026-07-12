@@ -7,6 +7,7 @@ use App\Models\Invoice;
 use App\Models\MessageLog;
 use App\Services\Invoicing\InvoiceRenderer;
 use App\Services\Invoicing\InvoiceService;
+use App\Services\Invoicing\StatementService;
 use App\Services\WhatsApp\WhatsAppManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -18,7 +19,7 @@ use Illuminate\Support\Facades\Storage;
  */
 class InvoiceController extends Controller
 {
-    public function __construct(private InvoiceService $svc, private InvoiceRenderer $renderer) {}
+    public function __construct(private InvoiceService $svc, private InvoiceRenderer $renderer, private StatementService $stmt) {}
 
     private function priv($u): bool
     {
@@ -206,6 +207,89 @@ class InvoiceController extends Controller
                 "[invoice {$inv->invoice_no}] " . $caption, null, null, ['via' => 'panel', 'kind' => 'invoice', 'invoice_no' => $inv->invoice_no]);
         } catch (\Throwable $e) {
             \Log::warning('invoice send failed: ' . $e->getMessage());
+            return response()->json(['ok' => false, 'error' => 'send_failed'], 500);
+        }
+        return response()->json(['ok' => true, 'sent_to' => $phone]);
+    }
+
+    /**
+     * POST /papi/invoice-pay — record a (partial) payment against an invoice, in the invoice's own
+     * currency. Updates paid/balance/status live so the statement is always current.
+     */
+    public function pay(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $inv = Invoice::where('tenant_id', $t->id)->find((int) $request->input('id'));
+        if (! $inv) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        if ($inv->status === 'void') return response()->json(['ok' => false, 'error' => 'void'], 422);
+
+        $amt = round((float) $request->input('amount', 0), 2);
+        if ($amt <= 0) return response()->json(['ok' => false, 'error' => 'bad_amount'], 422);
+
+        $inv->amount_paid = round((float) $inv->amount_paid + $amt, 2);
+        $inv->balance     = round(max(0, (float) $inv->total - (float) $inv->amount_paid), 2);
+        $inv->status      = $inv->balance <= 0.5 ? 'paid' : ((float) $inv->amount_paid > 0 ? 'part_paid' : 'issued');
+        $inv->save();
+
+        // Drop the cached PDF so a re-download shows the new balance.
+        try { if ($inv->pdf_path) Storage::disk('public')->delete($inv->pdf_path); } catch (\Throwable $e) {}
+        $inv->pdf_path = null; $inv->save();
+
+        return response()->json(['ok' => true, 'paid' => (float) $inv->amount_paid,
+            'balance' => (float) $inv->balance, 'status' => $inv->status]);
+    }
+
+    /** GET /papi/statement?phone= — a customer's statement of account (JSON). */
+    public function statementData(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        return response()->json(['ok' => true, 'statement' => $this->stmt->for($t, (string) $request->query('phone', ''))]);
+    }
+
+    /** GET /papi/statement-pdf?phone= — stream the statement PDF. */
+    public function statementPdf(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) abort(401);
+        if (! class_exists(\Dompdf\Dompdf::class)) abort(503);
+        $s = $this->stmt->for($t, (string) $request->query('phone', ''));
+        if (empty($s['lines'])) abort(404, 'No invoices for this customer');
+        $pdf = $this->renderer->statementPdf($t, $s);
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="Statement-' . preg_replace('/[^0-9]/', '', $s['phone']) . '.pdf"',
+        ]);
+    }
+
+    /** POST /papi/statement-send — WhatsApp the statement PDF to the customer. */
+    public function statementSend(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        if (! class_exists(\Dompdf\Dompdf::class)) return response()->json(['ok' => false, 'error' => 'pdf_unavailable'], 503);
+
+        $s = $this->stmt->for($t, (string) $request->input('phone', ''));
+        if (empty($s['lines'])) return response()->json(['ok' => false, 'error' => 'nothing_to_send'], 422);
+        $phone = preg_replace('/[^0-9+]/', '', (string) ($request->input('phone', '') ?: $s['phone']));
+        if ($phone === '') return response()->json(['ok' => false, 'error' => 'no_phone'], 422);
+
+        $gw = app(WhatsAppManager::class)->forTenant($t);
+        if (! method_exists($gw, 'sendDocument') || ! $t->whatsapp_instance) {
+            return response()->json(['ok' => false, 'error' => 'whatsapp_off'], 422);
+        }
+        try {
+            $pdf = $this->renderer->statementPdf($t, $s);
+            $owe = StatementService::fmtMap($s['outstanding']);
+            $caption = $owe === '0'
+                ? "🧾 Statement of account — no outstanding balance. Thank you!"
+                : "🧾 Statement of account — total outstanding: {$owe}. Please quote the invoice numbers on payment.";
+            $gw->sendDocument($t->whatsapp_instance, $phone, base64_encode($pdf), 'Statement.pdf', $caption);
+            MessageLog::record($t->id, $phone, $t->whatsapp_instance, 'out', 'panel',
+                "[statement] " . $caption, null, null, ['via' => 'panel', 'kind' => 'statement']);
+        } catch (\Throwable $e) {
+            \Log::warning('statement send failed: ' . $e->getMessage());
             return response()->json(['ok' => false, 'error' => 'send_failed'], 500);
         }
         return response()->json(['ok' => true, 'sent_to' => $phone]);
