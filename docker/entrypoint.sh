@@ -28,10 +28,9 @@ php artisan db:seed --class=Database\\Seeders\\InitialSeeder --force || true
 php artisan storage:link || true
 php artisan filament:assets || true
 
-# E9 shared assets (tokens.css / ui.js) are served as STATIC files by nginx from public/, not through
-# a Laravel route. Copy them into the web root at boot so /panel/shared/*.css|js resolve directly
-# (fixes the 404 and makes the money-flow buttons' ui.js dependency reliable).
-mkdir -p public/panel/shared && cp -f resources/panel/shared/*.css resources/panel/shared/*.js public/panel/shared/ 2>/dev/null || true
+# E9 shared assets (tokens.css / ui.js) are served by nginx directly via an `alias` to resources/
+# (see docker/nginx.conf: location ^~ /panel/shared/). We deliberately do NOT create a public/panel/
+# directory here — that would shadow the /panel Laravel route and make nginx 403 the whole panel.
 
 php artisan config:cache || true   # NOTE: no route:cache (routes use a closure) / no view:cache
 

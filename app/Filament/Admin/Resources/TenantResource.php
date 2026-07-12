@@ -150,6 +150,36 @@ class TenantResource extends Resource
                     }),
             ])->columns(3),
 
+            Forms\Components\Section::make('Feature flags (rollout)')
+                ->description('New UI/engine rollouts. All default OFF and are safe to toggle per tenant — turning one off reverts instantly to the previous behaviour. Enable per business as you roll out.')
+                ->collapsed()
+                ->schema([
+                    Forms\Components\Toggle::make('settings.nav_v2')
+                        ->label('Navigation v2')
+                        ->helperText('New consolidated left-nav / panel navigation.'),
+                    Forms\Components\Toggle::make('settings.dash_v2')
+                        ->label('Role dashboard v2')
+                        ->helperText('Role-aware widget dashboard on the seller home screen.'),
+                    Forms\Components\Toggle::make('settings.pay_unify')
+                        ->label('Unified payments')
+                        ->helperText('Single customer-payment ledger (PaymentService) for all money-in.'),
+                    Forms\Components\Toggle::make('settings.fx_v2')
+                        ->label('FX v2 (effective-dated)')
+                        ->helperText('Effective-dated FX rates via the Fx service.'),
+                    Forms\Components\Toggle::make('settings.stock_ledger')
+                        ->label('Stock ledger')
+                        ->helperText('Record every stock move in stock_movements (dual-write).'),
+                    Forms\Components\Toggle::make('settings.stock_v2')
+                        ->label('Stock v2 (read from ledger)')
+                        ->helperText('Derive on-hand from the stock ledger. Enable together with Stock ledger.'),
+                    Forms\Components\Toggle::make('settings.table_v2')
+                        ->label('Data tables v2')
+                        ->helperText('Server-side searchable/sortable/exportable register tables.'),
+                    Forms\Components\Toggle::make('settings.ledger_enabled')
+                        ->label('Accounting ledger (GL)')
+                        ->helperText('Double-entry general ledger + P&L / Trial Balance reports.'),
+                ])->columns(2),
+
             Forms\Components\Section::make('Leads & assignment')->schema([
                 Forms\Components\Select::make('settings.lead_assignment_mode')
                     ->label('Assignment mode')
