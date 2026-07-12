@@ -37,7 +37,10 @@ return [
     [
         'key' => 'sales', 'label' => 'Sales', 'module' => 'sales',
         'items' => [
-            ['key' => 'orders',    'label' => 'Orders',    'route' => '/panel/orders-costs', 'icon' => '🧾', 'menu' => 'orders'],
+            // The Order-Trading "Orders & Margin" page is gated by the tenant setting
+            // order_system_enabled (OrderCostController::ordersPage aborts 404 when off).
+            // Gate the menu link on the SAME setting so we never show a link that 404s.
+            ['key' => 'orders',    'label' => 'Orders',    'route' => '/panel/orders-costs', 'icon' => '🧾', 'menu' => 'orders', 'setting' => 'order_system_enabled'],
             ['key' => 'customers', 'label' => 'Customers', 'route' => '/panel/customers360', 'icon' => '👥', 'menu' => 'customers'],
             ['key' => 'invoices',  'label' => 'Invoices',  'route' => '/panel/invoices',     'icon' => '📄', 'menu' => 'finance'],
         ],

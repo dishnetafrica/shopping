@@ -23,9 +23,11 @@ class NavController extends Controller
      * @param  array       $effectiveMenus  keys from User::effectiveMenus()
      * @param  array       $moduleFlags     tenant modules map, e.g. ['inventory' => false]; unset = enabled
      * @param  array|null  $nav             navigation config; defaults to config('navigation')
+     * @param  array       $settings        tenant boolean setting gates, e.g. ['order_system_enabled' => true];
+     *                                       an item with a 'setting' key is hidden unless that setting is truthy
      * @return array       groups, each ['key','label','items'=>[['key','label','route','icon'], …]]
      */
-    public static function menuFor(array $effectiveMenus, array $moduleFlags = [], ?array $nav = null): array
+    public static function menuFor(array $effectiveMenus, array $moduleFlags = [], ?array $nav = null, array $settings = []): array
     {
         $nav = $nav ?? (array) config('navigation', []);
         $out = [];
@@ -45,6 +47,13 @@ class NavController extends Controller
             foreach (($group['items'] ?? []) as $it) {
                 $need = $it['menu'] ?? null;
                 if ($need !== null && ! in_array($need, $effectiveMenus, true)) {
+                    continue;
+                }
+                // Setting gate: an item may require a tenant boolean setting (e.g. order_system_enabled).
+                // Hidden unless that setting is truthy — mirrors the route's own abort(404) guard so the
+                // menu never offers a link that would 404. Absent 'setting' = always shown.
+                $gate = $it['setting'] ?? null;
+                if ($gate !== null && ! (bool) ($settings[$gate] ?? false)) {
                     continue;
                 }
                 $entry = [
@@ -148,6 +157,12 @@ class NavController extends Controller
             }
         }
 
+        // Per-item boolean setting gates (e.g. Order-Trading pages behind order_system_enabled).
+        // Keeps the menu link in lock-step with the route's own guard so nothing 404s.
+        $settings = [
+            'order_system_enabled' => $t ? (bool) $t->setting('order_system_enabled', false) : false,
+        ];
+
         // E1.2 flag: the sidebar only renders from this config when the tenant has
         // opted in (nav_v2 = true). Default false => existing menu is untouched.
         $navV2 = $t ? (bool) $t->setting('nav_v2', false) : false;
@@ -159,7 +174,7 @@ class NavController extends Controller
             'name'     => (string) ($u->name ?? ''),
             'role'     => (string) $u->role,
             'is_owner' => method_exists($u, 'isOwnerLike') ? $u->isOwnerLike() : false,
-            'groups'   => self::menuFor($menus, $flags),
+            'groups'   => self::menuFor($menus, $flags, null, $settings),
         ]);
     }
 }
