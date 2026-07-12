@@ -51,8 +51,9 @@ class ExpenseController extends Controller
         $cats = ExpenseCategory::where('tenant_id',$t->id)->where('active',true)
             ->orderBy('sort')->get(['id','name','icon','group']);
         return response()->json(['ok'=>true,'categories'=>$cats,
-            'default_rates'=>['UGX'=>(float)$t->setting('rate_ugx_per_usd',3700),
-                              'SSP'=>(float)$t->setting('rate_ssp_per_usd',5180),'USD'=>1]]);
+            // E3.4 — one FX source (unifies the old 3700 UGX default with the accounting rate).
+            'default_rates'=>['UGX'=>\App\Services\Money\Fx::forTenant($t)->ratePerUsd('UGX'),
+                              'SSP'=>\App\Services\Money\Fx::forTenant($t)->ratePerUsd('SSP'),'USD'=>1]]);
     }
 
     /** POST /papi/expenses — book an expense (a cost with stage=expense). */
@@ -136,10 +137,10 @@ class ExpenseController extends Controller
         $ordersQ = \App\Models\Order::where('tenant_id',$tid);
         if ($since) $ordersQ->where('created_at','>=',$since);
         $revenueUsd = 0.0; $orderCount = 0;
-        foreach ($ordersQ->get(['total','payment','created_at']) as $o) {
-            $sellCur = 'USD';
-            if (strpos((string)$o->payment,'sell:')===0) $sellCur = substr($o->payment,5);
-            $r = $sellCur==='USD' ? 1 : (float)$t->setting('rate_'.strtolower($sellCur).'_per_usd', $sellCur==='UGX'?3700:5180);
+        $fx = \App\Services\Money\Fx::forTenant($t); // E3.4 — one FX source (hoisted out of the loop)
+        foreach ($ordersQ->get(['total','payment','sell_currency','created_at']) as $o) {
+            $sellCur = $o->sellCurrency(); // E4.5 — typed column, legacy sell: decode as fallback
+            $r = $fx->ratePerUsd($sellCur);
             $revenueUsd += $r>0 ? (float)$o->total / $r : 0;
             $orderCount++;
         }

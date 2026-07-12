@@ -12,11 +12,10 @@ class InvoiceReportController extends Controller
     {
         $u = $request->user();
         if (! $u || ! $u->tenant_id) return redirect('/app/login');
-        if (! (bool) $u->tenant->setting('order_system_enabled', false)) abort(404);
-        if (! (method_exists($u,'isOwnerLike') ? $u->isOwnerLike() : false)) abort(403);
-        $path = resource_path('panel/invoiced.html');
-        if (! is_file($path)) abort(500, 'Invoiced report asset missing.');
-        return response(file_get_contents($path), 200)
-            ->header('Content-Type','text/html; charset=UTF-8')->header('Cache-Control','no-store');
+        // E7.3 — this screen converted to USD with a hard-coded rate (3750), so it could disagree with
+        // the rest of the app. It is replaced by the SSOT-backed Sales report (GET /papi/reports/sales,
+        // which converts via the Fx service). Retire the hard-coded screen: send deep links to Reports.
+        // Reversible: restore the file-serving block below to bring the old screen back.
+        return redirect('/panel/pnl');
     }
 }

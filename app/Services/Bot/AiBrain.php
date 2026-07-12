@@ -854,6 +854,12 @@ class AiBrain
         $p .= "- Each PRODUCT shows a stock tag in [brackets]. Reflect it honestly: \"in stock: N\" → you may say it's available (you can state N); \"usually available — confirm\" → say it's usually available but you'll confirm before placing the order; \"stock unknown — confirm before promising\" → do NOT promise availability, say you'll confirm with the team first; \"OUT OF STOCK\" → tell the customer it's currently unavailable and offer to note it. Never state a stock number that isn't shown as \"in stock: N\".\n";
         $basisCity = trim((string) $tenant->setting('export_basis_city', 'Kampala')) ?: 'Kampala';
         $usdRate = (float) $tenant->setting('usdUgx', 0);
+        // E3.4 — quote at the canonical FX rate when fx_v2 is on so the bot's stated rate matches the
+        // invoice/ledger rate. Flag OFF (default) => legacy usdUgx (unchanged). Gate (usdUgx>0) preserved.
+        if ($usdRate > 0 && (bool) $tenant->setting('fx_v2', false)) {
+            $c = \App\Services\Money\Fx::forTenant($tenant)->ratePerUsd('UGX');
+            if ($c > 0) $usdRate = $c;
+        }
         if ($usdRate > 0 && $basis !== 'native') {
             $ssPct = (float) $tenant->setting('ssMarkupPct', 0);
             $rateStr = rtrim(rtrim(number_format($usdRate, 2), '0'), '.');

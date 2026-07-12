@@ -81,8 +81,9 @@ class OrderCostController extends Controller
             'orders_total'=>$ordersTotal ?? count($orders), 'page'=>$page ?? 1, 'per'=>$per ?? 25,
             'me'=>['id'=>$me->id,'name'=>$me->name,'is_owner'=>$me->isOwnerLike()],
             'staff'=>$staff,
-            'default_rates'=>['UGX'=>(float)$t->setting('rate_ugx_per_usd',3700),
-                              'SSP'=>(float)$t->setting('rate_ssp_per_usd',5180),'USD'=>1]]);
+            // E3.4 — one FX source (unifies the old 3700 UGX default with the accounting rate).
+            'default_rates'=>['UGX'=>\App\Services\Money\Fx::forTenant($t)->ratePerUsd('UGX'),
+                              'SSP'=>\App\Services\Money\Fx::forTenant($t)->ratePerUsd('SSP'),'USD'=>1]]);
     }
 
     /** POST /papi/order-costs — book one cost line. */
@@ -179,8 +180,8 @@ class OrderCostController extends Controller
             if ($method === 'even') { $weights[] = 1.0; continue; }
             if ($method === 'qty')  { $weights[] = max(0.0, $r['qty']); continue; }
             $o  = $r['order'];
-            $sc = (strpos((string)$o->payment,'sell:')===0) ? substr($o->payment,5) : 'USD';
-            $or = $sc==='USD' ? 1.0 : (float) $t->setting('rate_'.strtolower($sc).'_per_usd', $sc==='UGX'?3700:5180);
+            $sc = $o->sellCurrency(); // E4.5 — typed column, legacy sell: decode as fallback
+            $or = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($sc); // E3.4 — one FX source
             $weights[] = $or > 0 ? max(0.0, (float)$o->total / $or) : 0.0;
         }
         $sumW = array_sum($weights);
@@ -279,8 +280,11 @@ class OrderCostController extends Controller
         $group  = (string) \Illuminate\Support\Str::uuid();
 
         // Rate to convert a unit cost in the purchase currency to base UGX for the product's cost_price.
-        $ugxPerUsd = (float) $t->setting('usdUgx', 3700) ?: 3700;
-        $sspPerUsd = (float) $t->setting('rate_ssp_per_usd', 5180) ?: 5180;
+        // E3.4 — one FX source. Previously $ugxPerUsd read the CLIENT display rate (usdUgx); it now
+        // uses the accounting rate so a product's cost_price is computed on the same rate as invoices,
+        // the cashbook and the ledger. (For UGX purchases the rate is unused; zero-diff there.)
+        $ugxPerUsd = \App\Services\Money\Fx::forTenant($t)->ratePerUsd('UGX');
+        $sspPerUsd = \App\Services\Money\Fx::forTenant($t)->ratePerUsd('SSP');
         $toUgx = function($amtNative) use ($cur,$ugxPerUsd,$sspPerUsd) {
             if ($cur === 'UGX') return (float)$amtNative;
             if ($cur === 'USD') return (float)$amtNative * $ugxPerUsd;
@@ -389,8 +393,10 @@ class OrderCostController extends Controller
         } else {
             $o->items_text = (string) $raw;   // legacy free text
         }
-        // record the sell currency as an order note-setting (kept on the order's payment field)
+        // E4.5 — sell currency now lives in a typed column; the legacy `payment='sell:XXX'`
+        // marker is kept in lock-step for backward compatibility until the later cleanup.
         $sellCur = strtoupper((string)$request->input('sell_currency','USD'));
+        $o->sell_currency = $sellCur;
         $o->payment = 'sell:'.$sellCur;
         $o->save();
         return response()->json(['ok'=>true,'id'=>$o->id,'order_no'=>$o->order_no,'sell_currency'=>$sellCur]);
@@ -413,10 +419,9 @@ class OrderCostController extends Controller
                 'usd'=>(float)$c->usd_amount,'holder'=>$c->holder,'note'=>$c->note,
                 'receipt'=>$c->receipt_path ? '/storage/'.$c->receipt_path : null];
         }
-        $sellCur = 'USD';
-        if (strpos((string)$o->payment,'sell:')===0) $sellCur = substr($o->payment,5);
+        $sellCur = $o->sellCurrency(); // E4.5 — typed column, legacy sell: decode as fallback
         // revenue: order total is in sell currency; convert to USD for margin using tenant rate
-        $rate = $sellCur==='USD' ? 1 : (float)$t->setting('rate_'.strtolower($sellCur).'_per_usd', $sellCur==='UGX'?3700:5180);
+        $rate = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($sellCur); // E3.4 — one FX source
         $revenueUsd = $rate>0 ? round((float)$o->total / $rate, 2) : (float)$o->total;
         return response()->json([
             'ok'=>true,
@@ -570,6 +575,7 @@ class OrderCostController extends Controller
     /** VOID an order and its costs (soft). POST /papi/orders/{id}/delete */
     public function deleteOrder(Request $request, int $id)
     {
+        if (\App\Support\Access::blocks($request->user(), 'order.delete')) return response()->json(['ok'=>false,'error'=>'forbidden'],403);
         $t = $request->user()->tenant; $u = $request->user();
         if (! $t) return response()->json(['ok'=>false],401);
         if (! $this->canDelete($u)) return response()->json(['ok'=>false,'error'=>'not_allowed'],403);

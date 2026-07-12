@@ -10,6 +10,28 @@ class Product extends Model
     protected $fillable = ['tenant_id','name','description','sku','category','price','base_price','cost_price','stock','barcode','keywords','image_url','gallery_1','gallery_2','gallery_3','active','sold_by_weight','weight_unit','reference_weight_grams','reference_price','display_order','is_fresh_today','moq','pack_size','unit_label','archived_at'];
     protected $casts = ['price'=>'decimal:2','base_price'=>'decimal:2','cost_price'=>'decimal:2','active'=>'boolean','sold_by_weight'=>'boolean','reference_weight_grams'=>'integer','reference_price'=>'decimal:2','display_order'=>'integer','is_fresh_today'=>'boolean','archived_at'=>'datetime'];
 
+    /** E6.4 (prereq) — mirror catalog stock changes into the one stock ledger (gated on stock_ledger). */
+    protected static function booted(): void
+    {
+        static::observe(\App\Observers\ProductStockObserver::class);
+    }
+
+    /**
+     * Effective on-hand at Kampala (E6.4). Reads the stock ledger projection when the tenant has
+     * opted into ledger reads (stock_v2 + stock_ledger), otherwise the legacy `stock` column. When
+     * the ledger is maintained the two agree; this makes the ledger the source of truth without
+     * changing the number, so E6.5 can later drop the column.
+     */
+    public function onHand(): float
+    {
+        $t = $this->tenant;
+        if ($t && \App\Services\Inventory\StockLedger::readsFromLedger($t)) {
+            return \App\Services\Inventory\StockLedger::forTenant($t)
+                ->onHandFor($this->id, null, \App\Services\Inventory\StockLedger::LOC_KAMPALA);
+        }
+        return (float) ($this->stock ?? 0);
+    }
+
     public function weightVariants() { return $this->hasMany(\App\Models\ProductWeightVariant::class); }
 
     public function modifierGroups() { return $this->belongsToMany(ModifierGroup::class, 'product_modifier_group')->orderBy('product_modifier_group.sort'); }

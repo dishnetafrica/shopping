@@ -159,6 +159,7 @@ class ShipmentController extends Controller
     /** Create a shipment from an order (status starts at packed). Idempotent per order. */
     public function store(Request $r)
     {
+        if (\App\Support\Access::blocks($r->user(), 'shipment.manage')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
         try {
             $order = Order::find((int) $r->query('order_id'));
             if (! $order) return response()->json(['ok' => false, 'error' => 'order_not_found'], 404);
@@ -191,6 +192,7 @@ class ShipmentController extends Controller
     /** Advance the transport leg. ?id=&action=dispatch|transport_confirm|depart|arrive|cancel */
     public function action(Request $r)
     {
+        if (\App\Support\Access::blocks($r->user(), 'shipment.manage')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
         try {
             $s = Shipment::find((int) $r->query('id'));
             if (! $s) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
@@ -216,6 +218,7 @@ class ShipmentController extends Controller
     /** Mark a discrepancy resolved (owner has chased it down). */
     public function resolveException(Request $r)
     {
+        if (\App\Support\Access::blocks($r->user(), 'shipment.manage')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
         try {
             $x = ShipmentException::find((int) $r->query('id'));
             if (! $x) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
@@ -356,6 +359,7 @@ class ShipmentController extends Controller
     /** Hand an arrived shipment to the last mile (create/link an Awaiting-Rider delivery). */
     public function handoff(Request $r)
     {
+        if (\App\Support\Access::blocks($r->user(), 'shipment.manage')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
         try {
             $s = Shipment::find((int) $r->query('id'));
             if (! $s) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
@@ -370,6 +374,7 @@ class ShipmentController extends Controller
     /** Read/set the "auto hand off to the last mile on arrival" tenant toggle. */
     public function autoToggle(Request $r)
     {
+        if (\App\Support\Access::blocks($r->user(), 'shipment.manage')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
         $t = $r->user()->tenant;
         if ($r->has('on')) {
             $t->putSetting('logistics_auto_handoff', $r->query('on') === '1');

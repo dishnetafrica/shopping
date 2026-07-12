@@ -607,6 +607,17 @@ HTML;
         if (! $user || ! $user->tenant_id) {
             return redirect('/app/login');
         }
+        // E5.4 — retire the second (ledger_entries) cashbook after the E4 payment cutover. Once
+        // pay_unify is ON, every receipt lives in the ONE Cashbook (trade-cashbook), so this legacy
+        // screen is redundant: redirect deep links/bookmarks there instead of showing a duplicate.
+        // Pre-cutover (pay_unify OFF, the default) order payments still live only in ledger_entries,
+        // so the legacy screen is kept untouched until the tenant cuts over. Reversible: drop this
+        // branch to restore the old screen. Only redirect when the target Cashbook is actually
+        // reachable (it requires order_system_enabled) so we never send anyone to a 404.
+        if ((bool) $user->tenant->setting('pay_unify', false)
+            && (bool) $user->tenant->setting('order_system_enabled', false)) {
+            return redirect('/panel/trade-cashbook');
+        }
         $path = resource_path('panel/cashbook.html');
         if (! is_file($path)) {
             abort(500, 'Cashbook asset missing.');

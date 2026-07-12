@@ -171,6 +171,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::post('partners/{id}/capital', [\App\Http\Controllers\Panel\PartnerController::class, 'capital']);
         Route::post('partners/distribute', [\App\Http\Controllers\Panel\PartnerController::class, 'distribute']);
         Route::get('payments', [\App\Http\Controllers\Panel\PaymentController::class, 'index']);
+        Route::get('payments/table', [\App\Http\Controllers\Panel\RegisterTableController::class, 'payments']); // E8.4 — before {id}
         Route::post('payments', [\App\Http\Controllers\Panel\PaymentController::class, 'store']);
         Route::get('payments/{id}', [\App\Http\Controllers\Panel\PaymentController::class, 'show']);
         Route::post('payments/{id}/apply', [\App\Http\Controllers\Panel\PaymentController::class, 'apply']);
@@ -241,6 +242,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::match(['get','post'], 'order-invoice-pdf', [\App\Http\Controllers\Panel\OrderInvoiceController::class, 'pdf']); // clean wholesale invoice PDF (WYSIWYG)
         // Numbered invoice register (INV-2026-0001)
         Route::get('invoices',                    [\App\Http\Controllers\Panel\InvoiceController::class, 'index']);
+        Route::get('invoices/table', [\App\Http\Controllers\Panel\RegisterTableController::class, 'invoices']); // E8.4 — before any {id}
         Route::match(['get','post'], 'invoice-issue', [\App\Http\Controllers\Panel\InvoiceController::class, 'issue']);
         Route::get('invoice-show',                [\App\Http\Controllers\Panel\InvoiceController::class, 'show']);
         Route::get('invoice-pdf',                 [\App\Http\Controllers\Panel\InvoiceController::class, 'pdf']);
@@ -373,6 +375,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::get('product-bulk-meta', [PanelApiController::class, 'productBulkMeta']);
         Route::post('stock-sync', [PanelApiController::class, 'stockSync']);
         Route::post('stock/reconcile-cache', [PanelApiController::class, 'stockReconcileCache']); // E6.5
+        Route::get('reports', [\App\Http\Controllers\Panel\ReportController::class, 'index']);       // E7.2
+        Route::get('reports/{key}', [\App\Http\Controllers\Panel\ReportController::class, 'show']);  // E7.2
+        Route::get('dashboard', [\App\Http\Controllers\Panel\DashboardController::class, 'index']);  // E10.1
         Route::post('images-borrow', [PanelApiController::class, 'imagesBorrow']);
         Route::post('upload-image',  [PanelApiController::class, 'uploadImage']);
         Route::post('upload-doc',    [PanelApiController::class, 'uploadDoc']);

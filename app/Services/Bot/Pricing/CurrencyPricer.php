@@ -19,8 +19,15 @@ class CurrencyPricer
 {
     public function usdRate(Tenant $t): float
     {
-        $rate = (float) $t->setting('usdUgx', 3750);
-        return $rate > 0 ? $rate : 3750.0;
+        // Single FX source. Default rate constants live ONLY in App\Services\Money\Fx (E3.5).
+        $canonical = \App\Services\Money\Fx::forTenant($t)->ratePerUsd('UGX');
+        // fx_v2 ON => the bot quotes at the canonical rate (matches the invoice/ledger). OFF (default)
+        // => the legacy usdUgx display rate, defaulting to the canonical rate (no hardcoded constant).
+        if ((bool) $t->setting('fx_v2', false)) {
+            return $canonical;
+        }
+        $rate = (float) $t->setting('usdUgx', $canonical);
+        return $rate > 0 ? $rate : $canonical;
     }
 
     /**

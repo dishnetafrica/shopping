@@ -108,8 +108,10 @@ class TradeCashbookController extends Controller
         return response()->json(['ok'=>true,'currency'=>$cur,'balances'=>$bal,
             'view'=>$isOwner?'everyone':'mine','whoami'=>$u->name,'is_owner'=>$isOwner,
             'entries'=>$rows,'total'=>$total,'page'=>$page,'per'=>$per,'pages'=>(int)ceil($total/$per),
-            'default_rates'=>['UGX'=>(float)$t->setting('rate_ugx_per_usd',3700),
-                              'SSP'=>(float)$t->setting('rate_ssp_per_usd',5180),'USD'=>1]]);
+            // E3.4 — one FX source (App\Services\Money\Fx). Unifies the old inconsistent 3700 UGX
+            // default with the accounting rate the rest of the app uses.
+            'default_rates'=>['UGX'=>\App\Services\Money\Fx::forTenant($t)->ratePerUsd('UGX'),
+                              'SSP'=>\App\Services\Money\Fx::forTenant($t)->ratePerUsd('SSP'),'USD'=>1]]);
     }
 
     /** GET /papi/trade-cashbook/all — every filtered entry (no pagination) for export. */
@@ -271,7 +273,7 @@ class TradeCashbookController extends Controller
         $toAmt = round($fromAmt * $rate, 2);
 
         // USD value each leg (so both legs carry a consistent usd_amount)
-        $usdPerFrom = $from==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($from).'_per_usd', $from==='UGX'?3655:5180);
+        $usdPerFrom = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($from); // E3.4 — one FX source
         if ($usdPerFrom <= 0) $usdPerFrom = 1;
         $usdValue = OrderCost::toUsd($fromAmt, $usdPerFrom);   // value moved, in USD
 
@@ -289,7 +291,7 @@ class TradeCashbookController extends Controller
         $status = 'approved'; // owner/manager-gated action -> auto-approved
 
         $rateFromToUsd = $from==='USD' ? 1.0 : $usdPerFrom;         // native/USD for the FROM leg
-        $rateToToUsd   = $to==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($to).'_per_usd', $to==='UGX'?3655:5180);
+        $rateToToUsd   = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($to); // E3.4 — one FX source
         if ($rateToToUsd <= 0) $rateToToUsd = ($usdValue>0 ? $toAmt/$usdValue : 1);
 
         $res = DB::transaction(function () use ($t,$u,$from,$to,$fromAmt,$toAmt,$rate,$rateFromToUsd,$rateToToUsd,$usdValue,$holderName,$holderUid,$note,$createdAt,$status) {
@@ -335,7 +337,7 @@ class TradeCashbookController extends Controller
         if (! in_array($cur,['USD','UGX','SSP'],true)) return response()->json(['ok'=>false,'error'=>'bad_currency'],422);
         $amount = round((float)$request->input('amount',0), 2);
         if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
-        $rate = $cur==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3655:5180);
+        $rate = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($cur); // E3.4 — one FX source
         if ($rate <= 0) $rate = 1;
         $usd = OrderCost::toUsd($amount, $rate);
 
@@ -422,7 +424,7 @@ class TradeCashbookController extends Controller
         $amount = round((float)$request->input('amount', (float)$c->native_amount), 2);
         if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
         $rate = (float)$request->input('rate_to_usd', 0);
-        if ($rate <= 0) $rate = $cur==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3655:5180);
+        if ($rate <= 0) $rate = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($cur); // E3.4 — one FX source
         if ($rate <= 0) $rate = 1;
         $usd = OrderCost::toUsd($amount, $rate);
         $category = trim((string)$request->input('category', (string)$c->category)) ?: $c->category;

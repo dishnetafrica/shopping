@@ -106,9 +106,10 @@ class SupplierController extends Controller
         // opening balances (converted to USD via tenant rates)
         $openings = Supplier::where('tenant_id',$tid)->whereNotNull('opening_balance')->where('opening_balance','>',0)
             ->get(['id','opening_balance','opening_currency']);
+        $fx = \App\Services\Money\Fx::forTenant(\App\Models\Tenant::find($tid)); // E3.4 — one FX source (hoisted out of the loop)
         foreach ($openings as $s) {
             $cur = strtoupper((string)($s->opening_currency ?: 'USD'));
-            $rate = $cur==='USD' ? 1.0 : (float) optional(\App\Models\Tenant::find($tid))->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3700:5180);
+            $rate = $fx->ratePerUsd($cur);
             if ($rate <= 0) $rate = 1;
             $out[$s->id] = ($out[$s->id] ?? 0) + ((float)$s->opening_balance / $rate);
         }
@@ -255,6 +256,7 @@ class SupplierController extends Controller
     /** POST /papi/suppliers/{id}/pay — record a cash payment to a supplier (reduces cash, clears debt). */
     public function pay(Request $request, int $id)
     {
+        if (\App\Support\Access::blocks($request->user(), 'supplier.pay')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
         $t = $request->user()->tenant;
         if (! $t) return response()->json(['ok'=>false],401);
         $s = Supplier::where('tenant_id',$t->id)->find($id);
@@ -264,7 +266,7 @@ class SupplierController extends Controller
         $amount = round((float) $request->input('amount',0), 2);
         if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
         $rate = (float) $request->input('rate_to_usd', 0);
-        if ($rate <= 0) $rate = $cur==='USD' ? 1.0 : (float) $t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3700:5180);
+        if ($rate <= 0) $rate = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($cur); // E3.4 — one FX source
         if ($rate <= 0) $rate = 1;
 
         $user = $request->user();

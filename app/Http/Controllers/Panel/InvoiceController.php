@@ -235,29 +235,30 @@ class InvoiceController extends Controller
         // the invoice balance from that ledger. Falls back to a direct invoice update only if the
         // invoice somehow has no linked order (can't tie a receipt to an order then).
         if ($orderNo) {
-            $rate = $cur === 'USD' ? 1.0 : (float) $t->setting('rate_' . strtolower($cur) . '_per_usd', $cur === 'UGX' ? 3655 : 5180);
+            // E4.2 — record through the ONE payment recorder, so the invoice "Pay" writes the SAME
+            // ledger row as the seller "Record Payment" (and re-derives the invoice/statement).
+            $rate = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($cur); // one FX source
             if ($rate <= 0) $rate = 1;
             $usd    = \App\Models\OrderCost::toUsd($amt, $rate);
             $method = trim((string) $request->input('method', 'Cash')) ?: 'Cash';
-            \Illuminate\Support\Facades\DB::transaction(function () use ($t, $u, $inv, $orderNo, $cur, $amt, $rate, $usd, $method) {
-                $cost = \App\Models\OrderCost::create([
-                    'tenant_id' => $t->id, 'order_id' => null, 'order_no' => $orderNo,
-                    'stage' => 'customer_payment', 'currency' => $cur, 'native_amount' => $amt, 'rate_to_usd' => $rate,
-                    'usd_amount' => $usd, 'holder' => (string) ($u->name ?? ''), 'holder_user_id' => $u->id,
-                    'pay_status' => 'cash', 'paid_native' => $amt, 'category' => 'Receipt',
-                    'note' => 'Payment on ' . $inv->invoice_no, 'status' => 'approved', 'created_by' => $u->name ?? '',
-                ]);
-                $pay = \App\Models\CustomerPayment::create([
-                    'tenant_id' => $t->id, 'receipt_no' => 'TMP', 'customer_name' => (string) ($inv->customer_name ?? 'Customer'),
-                    'customer_phone' => $inv->customer_phone, 'order_no' => $orderNo, 'invoice_no' => $inv->invoice_no,
-                    'kind' => 'settlement', 'currency' => $cur, 'amount' => $amt, 'rate_to_usd' => $rate, 'usd_amount' => $usd,
-                    'method' => $method, 'applied' => true, 'order_cost_id' => $cost->id,
-                    'holder' => (string) ($u->name ?? ''), 'holder_user_id' => $u->id, 'created_by' => $u->name ?? '',
-                ]);
-                $pay->receipt_no = 'RCP-' . str_pad((string) $pay->id, 5, '0', STR_PAD_LEFT);
-                $pay->save();
-            });
-            $this->svc->syncByPayment($t, $inv->invoice_no, $orderNo);
+            app(\App\Services\Money\PaymentService::class)->record($t, [
+                'customer'       => (string) ($inv->customer_name ?? 'Customer'),
+                'phone'          => $inv->customer_phone,
+                'order_no'       => $orderNo,
+                'invoice_no'     => $inv->invoice_no,
+                'kind'           => 'settlement',
+                'currency'       => $cur,
+                'amount'         => $amt,
+                'rate'           => $rate,
+                'usd'            => $usd,
+                'method'         => $method,
+                'reference'      => null,
+                'receipt_path'   => null,
+                'holder'         => (string) ($u->name ?? ''),
+                'holder_user_id' => $u->id,
+                'created_by'     => $u->name ?? '',
+                'cost_note'      => 'Payment on ' . $inv->invoice_no,
+            ]);
             $inv->refresh();
         } else {
             // no order to tie a receipt to — update the invoice directly
@@ -330,6 +331,7 @@ class InvoiceController extends Controller
     /** POST /papi/invoice-void — void an invoice (kept for the record). Owner/manager only. */
     public function void(Request $request)
     {
+        if (\App\Support\Access::blocks($request->user(), 'invoice.void')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
         $t = $request->user()->tenant; $u = $request->user();
         if (! $t) return response()->json(['ok' => false], 401);
         if (! $this->priv($u)) return response()->json(['ok' => false, 'error' => 'not_allowed'], 403);

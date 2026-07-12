@@ -119,7 +119,7 @@ class PartnerController extends Controller
         $amount = round((float)$request->input('amount',0), 2);
         if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
         $rate = (float)$request->input('rate_to_usd', 0);
-        if ($rate <= 0) $rate = $cur==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3700:5180);
+        if ($rate <= 0) $rate = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($cur); // E3.4 — one FX source
         if ($rate <= 0) $rate = 1;
         $usd  = OrderCost::toUsd($amount, $rate);
         $note = trim((string)$request->input('note','')) ?: (ucfirst($kind).' capital — '.$p->name);

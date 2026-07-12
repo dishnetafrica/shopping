@@ -70,6 +70,8 @@ class PanelApiController extends Controller
                 'phone'         => (string) ($o->customer_phone ?? ''),
                 'location'      => (string) ($o->location ?? ''),
                 'payment'       => (string) ($o->payment ?? ''),
+                'sell_currency' => $o->sellCurrency(),                 // E4.5 — typed money
+                'payment_method' => (string) ($o->paymentMethodResolved() ?? ''), // E4.5 — typed money
                 'status'        => (string) ($o->status ?: 'New'),
                 'channel'       => (string) ($o->channel ?? ''),
                 'rider'         => (string) ($o->rider->name ?? ''),
@@ -90,7 +92,17 @@ class PanelApiController extends Controller
         $q = Product::whereNull('archived_at')->orderByDesc('display_order')->orderBy('name');
         $scope = $r->user()->categoryScope();
         if (is_array($scope)) $q->whereIn('category', $scope); // [] → sees nothing until assigned
-        $rows = $q->get()->map(function (Product $p) {
+
+        // E6.4 — read on-hand from the stock ledger projection when the tenant has opted in
+        // (stock_v2 + stock_ledger). Batched into ONE query (no N+1); products with no ledger rows
+        // fall back to the legacy column, so nothing shows a spurious 0 mid-cutover.
+        $t = $r->user()->tenant;
+        $ohMap = ($t && \App\Services\Inventory\StockLedger::readsFromLedger($t))
+            ? \App\Services\Inventory\StockLedger::forTenant($t)->onHandMap(\App\Services\Inventory\StockLedger::LOC_KAMPALA)
+            : [];
+
+        $rows = $q->get()->map(function (Product $p) use ($ohMap) {
+            $onHand = array_key_exists($p->id, $ohMap) ? (int) round($ohMap[$p->id]) : (int) ($p->stock ?? 0);
             return [
                 'Product Name' => (string) $p->name,
                 'Variant'      => '',
@@ -102,7 +114,7 @@ class PanelApiController extends Controller
                 'Base Price'   => (float) ($p->base_price ?? $p->price ?? 0),
                 'Cost'         => $p->cost_price === null ? '' : (float) $p->cost_price,
                 'Active'       => (bool) ($p->active ?? true),
-                'Stock'        => (int) ($p->stock ?? 0),
+                'Stock'        => $onHand,
                 'StockByBranch'=> null,
                 'Barcode'      => (string) ($p->barcode ?? ''),
                 'Item_Code'    => (string) ($p->sku ?? ''),
@@ -247,8 +259,8 @@ class PanelApiController extends Controller
             'lat'           => (float) ($s['lat'] ?? 0.3428795),
             'lng'           => (float) ($s['lng'] ?? 32.5825996),
             'inventoryMode' => (string) ($s['inventoryMode'] ?? 'shared'),
-            'usdUgx'        => (float) ($s['usdUgx'] ?? 3750),
-            'usdSsp'        => (float) ($s['usdSsp'] ?? 7000),
+            'usdUgx'        => (float) ($s['usdUgx'] ?? \App\Services\Money\Fx::forTenant($t)->ratePerUsd('UGX')), // E3.5 — default from the one FX source
+            'usdSsp'        => (float) ($s['usdSsp'] ?? \App\Services\Money\Fx::forTenant($t)->ratePerUsd('SSP')),
             'ssMarkupPct'   => (float) ($s['ssMarkupPct'] ?? 0),
             'comboRecommendations' => (bool) ($s['combo_recommendations'] ?? true),
             'sendProductImages'    => (bool) ($s['send_product_images'] ?? true),
@@ -1040,8 +1052,11 @@ class PanelApiController extends Controller
     {
         $t = $r->user()->tenant;
         return response()->json(['config' => [
-            'usdUgx'       => (float) $t->setting('usdUgx', 3750),
-            'usdSsp'       => (float) $t->setting('usdSsp', 7000),
+            // E3.5 — default from the single FX source, not a hardcoded constant. When fx_v2 is on the
+            // client overrides this with the canonical rate anyway (applyFxV2); an explicit usdUgx is
+            // still honoured on the legacy path.
+            'usdUgx'       => (float) $t->setting('usdUgx', \App\Services\Money\Fx::forTenant($t)->ratePerUsd('UGX')),
+            'usdSsp'       => (float) $t->setting('usdSsp', \App\Services\Money\Fx::forTenant($t)->ratePerUsd('SSP')),
             'currency'     => (string) $t->setting('currency', 'auto'),
             'showSwitcher' => (bool) $t->setting('showSwitcher', false),
             'discountPct'  => (float) $t->setting('discountPct', 0),
@@ -1215,7 +1230,12 @@ class PanelApiController extends Controller
         if ($r->filled('status'))   $o->status         = (string) $r->query('status');
         if ($r->filled('name'))     $o->customer_name  = (string) $r->query('name');
         if ($r->filled('phone'))    $o->customer_phone = preg_replace('/[^0-9]/', '', (string) $r->query('phone'));
-        if ($r->filled('payment'))  $o->payment        = (string) $r->query('payment');
+        if ($r->filled('payment')) {
+            // E4.5 — this path carries a cash/MoMo method (never a "sell:" currency marker);
+            // write the typed column and keep `payment` in lock-step for backward compatibility.
+            $o->payment        = (string) $r->query('payment');
+            $o->payment_method = (string) $r->query('payment');
+        }
         if ($r->filled('location')) $o->location       = (string) $r->query('location');
         if ($r->filled('channel'))  $o->channel        = (string) $r->query('channel');
 
@@ -1474,8 +1494,10 @@ class PanelApiController extends Controller
         $native  = (bool) data_get($q->meta, 'native')
                    || app(\App\Services\Bot\Pricing\CurrencyPricer::class)->isNativeBasis($t);
         $convert = $usd && ! $native;   // only convert when USD is a display layer over a UGX base
-        $rate = $convert ? (float) (data_get($q->meta, 'usd_rate') ?: $t->setting('usdUgx', 3750)) : 1.0;
-        if ($convert && $rate <= 0) $rate = (float) $t->setting('usdUgx', 3750);
+        // E3.5 — the historical rate captured on the quote (meta.usd_rate) is preserved; the fallback
+        // defaults from the single FX source rather than a hardcoded constant.
+        $rate = $convert ? (float) (data_get($q->meta, 'usd_rate') ?: $t->setting('usdUgx', \App\Services\Money\Fx::forTenant($t)->ratePerUsd('UGX'))) : 1.0;
+        if ($convert && $rate <= 0) $rate = (float) $t->setting('usdUgx', \App\Services\Money\Fx::forTenant($t)->ratePerUsd('UGX'));
 
         $items = []; $textParts = [];
         foreach ($q->items as $it) {
@@ -1756,6 +1778,27 @@ class PanelApiController extends Controller
     }
 
     /**
+     * POST /papi/stock/reconcile-cache — E6.5. Derive the legacy products.stock column from the stock
+     * ledger projection so the column becomes a cache of the ledger truth ("stock becomes derived").
+     * Owner/manager only, and only when the tenant reads on-hand from the ledger (stock_v2 +
+     * stock_ledger). Never zeros a product missing from the ledger (see StockLedger::syncProductStockCache).
+     */
+    public function stockReconcileCache(Request $r)
+    {
+        $t = $r->user()->tenant;
+        $u = $r->user();
+        if (! $t) return response()->json(['ok' => false], 401);
+        if (! ($u->isOwnerLike() || in_array((string) $u->role, ['manager'], true)))
+            return response()->json(['ok' => false, 'error' => 'not_allowed'], 403);
+        if (! \App\Services\Inventory\StockLedger::readsFromLedger($t))
+            return response()->json(['ok' => false, 'error' => 'stock_v2_off',
+                'message' => 'Enable stock_v2 (and stock_ledger) before deriving stock from the ledger.'], 422);
+
+        $count = \App\Services\Inventory\StockLedger::forTenant($t)->syncProductStockCache();
+        return response()->json(['ok' => true, 'reconciled' => $count]);
+    }
+
+    /**
      * Sync stock from a supermarket report CSV (columns: name, code, stock). Matches each row to an
      * existing product by sku → barcode → normalised name, then sets stock and active=(stock>0) so
      * out-of-stock items stop showing. NEVER touches images, price, name or category. Backfills the
@@ -1789,6 +1832,7 @@ class PanelApiController extends Controller
         $matched = $updated = $hidden = $neg = $skuFilled = 0;
         $notFound = [];
         $ups = [];
+        $stockDeltas = [];   // E6.4 (prereq) — id => [old,new,sku] for the ledger mirror
 
         foreach ($rows as $row) {
             $name  = (string) $row['name'];
@@ -1810,6 +1854,9 @@ class PanelApiController extends Controller
             $u = ['stock' => $stock, 'active' => $active];
             if (trim((string) $p->sku) === '' && $code !== '') { $u['sku'] = $code; $skuFilled++; }
             $ups[$p->id] = $u;
+            // E6.4 (prereq) — this raw bulk update bypasses Eloquent events, so remember the stock
+            // delta so we can mirror it into the stock ledger explicitly after applying.
+            $stockDeltas[$p->id] = ['old' => (float) $p->stock, 'new' => (float) $stock, 'sku' => (string) $p->sku];
             $updated++;
         }
 
@@ -1819,6 +1866,25 @@ class PanelApiController extends Controller
                     \Illuminate\Support\Facades\DB::table('products')->where('id', $id)->update($u);
                 }
             });
+
+            // E6.4 (prereq) — mirror the applied stock changes into the ONE stock ledger as ADJUST
+            // movements (gated on stock_ledger; best-effort). Keeps the projection correct for the
+            // CSV sync path, which the Product observer can't see (raw update = no model events).
+            if ((bool) $t->setting('stock_ledger', false)) {
+                $sl = \App\Services\Inventory\StockLedger::forTenant($t);
+                foreach ($stockDeltas as $id => $d) {
+                    $delta = round($d['new'] - $d['old'], 3);
+                    if (abs($delta) < 0.0001) continue;
+                    try {
+                        $sl->adjust([
+                            'product_id' => $id, 'sku' => $d['sku'] ?: null,
+                            'location' => \App\Services\Inventory\StockLedger::LOC_KAMPALA,
+                            'qty' => $delta, 'ref_type' => 'stock_sync', 'ref_id' => $id,
+                            'note' => 'CSV stock sync', 'created_by' => (string) ($r->user()->name ?? ''),
+                        ]);
+                    } catch (\Throwable $e) { /* never break the sync */ }
+                }
+            }
         }
 
         return response()->json([
@@ -3443,19 +3509,56 @@ class PanelApiController extends Controller
             return response()->json(['ok' => false, 'error' => 'order_not_found'], 404);
         }
 
-        LedgerEntry::create([
-            'type'        => 'in',
-            'category'    => 'order_payment',
-            'order_id'    => $order->id,
-            'amount'      => $amount,
-            'currency'    => 'UGX',
-            'method'      => $method,
-            'received_by' => (string) ($r->user()->name ?? ''),
-            'note'        => $note,
-        ]);
+        $payUnify = (bool) $t->setting('pay_unify', false);
+
+        // E4.6 — legacy order_payment write retired under pay_unify. When the flag is ON the payment is
+        // recorded ONCE, in the unified CustomerPayment ledger (below), and stays visible in the trade
+        // cashbook/Payments/statements — so this duplicate ledger_entries copy is no longer written.
+        // When the flag is OFF the legacy write is preserved verbatim (zero-diff default). Reversible:
+        // flipping pay_unify off restores the legacy cashbook write.
+        if (! $payUnify) {
+            LedgerEntry::create([
+                'type'        => 'in',
+                'category'    => 'order_payment',
+                'order_id'    => $order->id,
+                'amount'      => $amount,
+                'currency'    => 'UGX',
+                'method'      => $method,
+                'received_by' => (string) ($r->user()->name ?? ''),
+                'note'        => $note,
+            ]);
+        }
 
         $order->amount_paid = round((float) $order->amount_paid + $amount, 2);
         $order->save();
+
+        // E4.4 — dual-write into the ONE payment ledger (CustomerPayment) so this cashbook payment is
+        // visible in Payments, the trade cashbook and the invoice/statement — not only the legacy
+        // ledger_entries table. Gated on pay_unify. Best-effort: never break the cashbook payment path.
+        if ($payUnify) {
+            try {
+                $rate = \App\Services\Money\Fx::forTenant($t)->ratePerUsd('UGX');
+                if ($rate <= 0) $rate = 1;
+                app(\App\Services\Money\PaymentService::class)->record($t, [
+                    'customer'       => (string) ($order->customer_name ?? 'Customer'),
+                    'phone'          => $order->customer_phone,
+                    'order_no'       => (string) $order->order_no,
+                    'invoice_no'     => null,
+                    'kind'           => 'settlement',
+                    'currency'       => 'UGX',
+                    'amount'         => $amount,
+                    'rate'           => $rate,
+                    'usd'            => \App\Models\OrderCost::toUsd($amount, $rate),
+                    'method'         => $method,
+                    'reference'      => $note,
+                    'receipt_path'   => null,
+                    'holder'         => (string) ($r->user()->name ?? ''),
+                    'holder_user_id' => $r->user()->id,
+                    'created_by'     => (string) ($r->user()->name ?? ''),
+                    'cost_note'      => 'Payment from ' . (string) ($order->customer_name ?? '') . ' (' . (string) $order->order_no . ')',
+                ]);
+            } catch (\Throwable $e) { /* keep the legacy cashbook payment path working regardless */ }
+        }
 
         $balance = $order->balanceDue();
         $state   = $order->paymentState();
@@ -3522,6 +3625,7 @@ class PanelApiController extends Controller
 
     public function staffList(Request $r)
     {
+        if (\App\Support\Access::blocks($r->user(), 'staff.manage')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
         $t   = $r->user()->tenant;
         $me  = (int) $r->user()->id;
         $cap = $t->userCap();

@@ -17,8 +17,8 @@ use Illuminate\Support\Facades\DB;
  */
 class StaffCashController extends Controller
 {
-    /** stages that ADD to a person's cash in hand */
-    private array $inStages = ['funding','cash_in','customer_payment'];
+    /** stages that ADD to a person's cash in hand — the ONE rule, owned by CashService (E5.2). */
+    private array $inStages = \App\Services\Money\CashService::IN_STAGES;
 
     private function ok(Request $request)
     {
@@ -168,7 +168,7 @@ class StaffCashController extends Controller
         $amount = round((float)$request->input('amount',0), 2);
         if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
         $rate = (float)$request->input('rate_to_usd', 0);
-        if ($rate <= 0) $rate = $cur==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3655:5180);
+        if ($rate <= 0) $rate = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($cur); // E3.4 — one FX source
         if ($rate <= 0) $rate = 1;
         $usd = OrderCost::toUsd($amount, $rate);
         $method = trim((string)$request->input('method','Cash')) ?: 'Cash';
@@ -212,7 +212,7 @@ class StaffCashController extends Controller
         $amount = round((float)$request->input('amount',0), 2);
         if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
         $rate = (float)$request->input('rate_to_usd', 0);
-        if ($rate <= 0) $rate = $cur==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3655:5180);
+        if ($rate <= 0) $rate = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($cur); // E3.4 — one FX source
         if ($rate <= 0) $rate = 1;
         $usd = OrderCost::toUsd($amount, $rate);
         $mode = $request->input('mode','order') === 'expense' ? 'expense' : 'order';
@@ -262,11 +262,12 @@ class StaffCashController extends Controller
         $customer = trim((string)$request->input('customer','')) ?: 'Customer';
         $phone = trim((string)$request->input('customer_phone','')) ?: null;
         $orderNo = trim((string)$request->input('order_no','')) ?: null;
+        $invoice = trim((string)$request->input('invoice_no','')) ?: null; // E4.3 — capture the invoice this receipt settles
         $cur = strtoupper((string)$request->input('currency','UGX'));
         $amount = round((float)$request->input('amount',0), 2);
         if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
         $rate = (float)$request->input('rate_to_usd', 0);
-        if ($rate <= 0) $rate = $cur==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3655:5180);
+        if ($rate <= 0) $rate = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($cur); // E3.4 — one FX source
         if ($rate <= 0) $rate = 1;
         $usd = OrderCost::toUsd($amount, $rate);
         $kind = $request->input('kind','settlement') === 'advance' ? 'advance' : 'settlement';
@@ -279,7 +280,7 @@ class StaffCashController extends Controller
         $cd = trim((string)$request->input('created_date',''));
         if ($cd !== '') { try { $createdAt = \Illuminate\Support\Carbon::parse($cd); } catch (\Throwable $e) { $createdAt = null; } }
 
-        $result = DB::transaction(function () use ($t,$u,$uid,$person,$customer,$phone,$orderNo,$kind,$cur,$amount,$rate,$usd,$method,$createdAt) {
+        $result = DB::transaction(function () use ($t,$u,$uid,$person,$customer,$phone,$orderNo,$invoice,$kind,$cur,$amount,$rate,$usd,$method,$createdAt) {
             $cost = OrderCost::create([
                 'tenant_id'=>$t->id,'order_id'=>null,'order_no'=>$orderNo,'stage'=>'customer_payment',
                 'currency'=>$cur,'native_amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
@@ -289,7 +290,7 @@ class StaffCashController extends Controller
             ]);
             $pay = CustomerPayment::create([
                 'tenant_id'=>$t->id,'receipt_no'=>'TMP','customer_name'=>$customer,'customer_phone'=>$phone,
-                'order_no'=>$orderNo,'invoice_no'=>null,'kind'=>$kind,'currency'=>$cur,'amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
+                'order_no'=>$orderNo,'invoice_no'=>$invoice,'kind'=>$kind,'currency'=>$cur,'amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
                 'method'=>$method,'reference'=>null,'receipt_path'=>null,'applied'=>($kind==='settlement'),
                 'order_cost_id'=>$cost->id,'holder'=>$person,'holder_user_id'=>$uid,'created_by'=>$u->name ?? '',
             ]);
@@ -298,6 +299,12 @@ class StaffCashController extends Controller
             $pay->save();
             return ['pay_id'=>$pay->id,'receipt_no'=>$pay->receipt_no,'cost_id'=>$cost->id];
         });
+
+        // E4.3 — reflect this staff receipt on the linked invoice/statement (the audit bug: it wasn't).
+        // Gated on pay_unify because enabling it corrects invoice balances that were stale-high.
+        if ((bool) $t->setting('pay_unify', false)) {
+            try { app(\App\Services\Invoicing\InvoiceService::class)->syncByPayment($t, $invoice, $orderNo); } catch (\Throwable $e) {}
+        }
 
         return response()->json(['ok'=>true,'person'=>$person,'customer'=>$customer,'currency'=>$cur,'amount'=>$amount,'usd'=>$usd] + $result);
     }
@@ -331,7 +338,7 @@ class StaffCashController extends Controller
             return response()->json(['ok'=>true,'settled'=>true,'gap'=>0,'system'=>$system,'counted'=>$counted,'currency'=>$cur]);
         }
 
-        $rate = $cur==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3655:5180);
+        $rate = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($cur); // E3.4 — one FX source
         if ($rate <= 0) $rate = 1;
         $mag = abs($gap);
         $usd = OrderCost::toUsd($mag, $rate);

@@ -1,0 +1,53 @@
+CloudBSS — Roadmap execution bundle (Milestone M1 complete + Epic 3 so far)
+===========================================================================
+Combined, cumulative change set for tasks E1.1 → E3.4(i). Every file is the LATEST
+version with all edits applied. Deploy once.
+
+WHAT'S INSIDE
+  Epic 1 — Navigation cleanup (M1)
+    E1.1 single nav config + /papi/nav        config/navigation.php, NavController.php
+    E1.2 sidebar renders from config (flag)   resources/panel/seller.html  [flag: nav_v2]
+    E1.3 restaurant behind module.restaurant  resources/panel/seller.html
+    E1.4 backfill modules.* flags             migration 2026_07_12_000003 + ModuleDefaults.php
+    E1.5 duplicate/retired-link guard         NavController::menuIssues
+  Epic 2 — Permission system (M1)
+    E2.1 roles cashier/accountant/warehouse/procurement/marketing   User.php
+    E2.2 deny-by-default (flag: perm_strict)                        User.php
+    E2.3 Access action gate                                        Access.php
+    E2.4 server guards on 10 money/data endpoints (flag: perm_enforce)
+    E2.5 module+role two-gate                                      Access.php + NavController.php
+    E2.6 permissions_ready roll-up probe
+  Epic 3 — Single FX service (M2)
+    E3.1 Fx service (effective-dated)         app/Services/Money/Fx.php
+    E3.2 backfill fx_rates                     migration 2026_07_12_000004
+    E3.3 panel reads /papi/fx (flag: fx_v2)   FxController + seller.html + invoiced.html
+    E3.4 route readers through Fx:
+         accounting (rate_*_per_usd) — UNCONDITIONAL, zero-diff:
+           InvoiceService, InvoiceController, TradeCashbookController, OrderCostController,
+           ExpenseController, SupplierController, PartnerController, StaffCashController, PaymentController
+         bot pricing (usdUgx) — behind fx_v2: CurrencyPricer, AiBrain
+
+DEPLOY
+  1. Replace all files -> commit.
+  2. php artisan migrate --force     (adds settings only: modules.* and fx_rates; additive, reversible)
+  3. EasyPanel REBUILD.
+  4. Verify /papi/selfcheck: permissions_ready = true, fx_single_source = true.
+
+FLAGS (all default OFF — nothing changes for a tenant until set; enable per tenant after review)
+  nav_v2       : render the clean grouped sidebar from /papi/nav
+  perm_strict  : deny-by-default menu for unknown/legacy roles
+  perm_enforce : enforce the action gate (403) on the guarded endpoints
+                 -> BEFORE enabling, reassign staff to the v2 roles
+  fx_v2        : switch the CLIENT display + BOT quotes to the canonical rate
+                 (accounting paths already unified, unconditionally, zero-diff)
+  modules.restaurant : per E1.4 backfill; controls the restaurant feature group
+
+SAFETY
+  - No destructive migration. Settings + data survive redeploys.
+  - Accounting FX migration is value-identical (zero-diff) for all real currencies.
+  - Every behaviour change is behind a flag OR a documented zero-diff refactor.
+  - Rollback: toggle the relevant flag off, or revert the file(s), or migrate:rollback.
+
+NOT YET DONE (remaining in Epic 3): E3.5 cleanup (remove legacy usdUgx/usdSsp keys +
+hardcoded defaults; point PanelApi botConfig/quote at Fx; CI grep-guard). Then M2 continues
+with Epic 4 (unified payment ledger), Epic 5 (cashbook consolidation), etc.

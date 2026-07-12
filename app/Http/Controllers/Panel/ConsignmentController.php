@@ -378,6 +378,7 @@ class ConsignmentController extends Controller
         $k = ConsignmentStock::where('tenant_id', $t->id)->find((int) $request->input('line_id'));
         if (! $k) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
 
+        $receivedBefore = (float) ($k->qty_received ?? 0);   // E6.2 — track the received delta
         if ($request->has('name') && trim((string) $request->input('name')) !== '') $k->name = trim((string) $request->input('name'));
         foreach (['qty_requested', 'qty_sent', 'qty_received', 'unit_price', 'unit_cost'] as $f) {
             if ($request->has($f)) {
@@ -387,6 +388,31 @@ class ConsignmentController extends Controller
         }
         if ($request->has('currency')) $k->currency = strtoupper((string) $request->input('currency')) ?: null;
         $k->save();
+
+        // E6.2 — dual-write the ONE stock ledger when received qty changes: goods arriving in Juba are
+        // stock IN (a later downward correction is an ADJUST). Gated on stock_ledger, best-effort, so
+        // the existing edit path is untouched and nothing reads the ledger yet (E6.4).
+        if ((bool) $t->setting('stock_ledger', false)) {
+            $receivedAfter = (float) ($k->qty_received ?? 0);
+            $delta = round($receivedAfter - $receivedBefore, 3);
+            if (abs($delta) > 0.0001) {
+                try {
+                    $sl = \App\Services\Inventory\StockLedger::forTenant($t);
+                    $mv = [
+                        'product_id' => $k->product_id,
+                        'sku'        => null,
+                        'location'   => \App\Services\Inventory\StockLedger::LOC_JUBA,
+                        'qty'        => $delta,
+                        'ref_type'   => 'consignment_receive',
+                        'ref_id'     => $k->id,
+                        'note'       => 'Received: ' . $k->name,
+                        'created_by' => (string) ($request->user()->name ?? ''),
+                    ];
+                    // IN for a positive arrival; a negative correction goes through ADJUST (signed).
+                    $delta > 0 ? $sl->receive($mv) : $sl->adjust($mv);
+                } catch (\Throwable $e) { /* never break the stock edit path */ }
+            }
+        }
         return response()->json(['ok' => true, 'short' => $k->shortfall(), 'remaining' => $k->remaining()]);
     }
 
@@ -439,6 +465,24 @@ class ConsignmentController extends Controller
             $k->save();
             return $o;
         });
+
+        // E6.2 — dual-write the ONE stock ledger: a consignment sale is stock OUT of the Juba position.
+        // Gated on stock_ledger (default off) and best-effort, so the existing sale path is untouched;
+        // nothing reads the ledger yet (E6.4). Reversible: turn stock_ledger off.
+        if ((bool) $t->setting('stock_ledger', false)) {
+            try {
+                \App\Services\Inventory\StockLedger::forTenant($t)->issue([
+                    'product_id' => $k->product_id,
+                    'sku'        => null,
+                    'location'   => \App\Services\Inventory\StockLedger::LOC_JUBA,
+                    'qty'        => $qty,
+                    'ref_type'   => 'consignment_sale',
+                    'ref_id'     => $order->id,
+                    'note'       => 'Market sale: ' . $k->name,
+                    'created_by' => (string) ($u->name ?? ''),
+                ]);
+            } catch (\Throwable $e) { /* never break the sale path */ }
+        }
 
         $saleMargin = $k->unit_cost !== null ? round($qty * ($price - (float) $k->unit_cost), 2) : null;
         return response()->json(['ok' => true, 'order_no' => $order->order_no, 'sold' => $qty,

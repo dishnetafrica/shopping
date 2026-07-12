@@ -60,6 +60,7 @@ class PaymentController extends Controller
     /** POST /papi/payments — record a customer payment; mirror cash-in. */
     public function store(Request $request)
     {
+        if (\App\Support\Access::blocks($request->user(), 'payment.record')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
         $u = $this->ok($request);
         if (! $u) return response()->json(['ok'=>false],403);
         $t = $u->tenant;
@@ -70,7 +71,7 @@ class PaymentController extends Controller
         $amount = round((float)$request->input('amount',0), 2);
         if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
         $rate = (float)$request->input('rate_to_usd', 0);
-        if ($rate <= 0) $rate = $cur==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3655:5180);
+        if ($rate <= 0) $rate = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($cur); // E3.4 — one FX source
         if ($rate <= 0) $rate = 1;
         $usd = OrderCost::toUsd($amount, $rate);
 
@@ -100,29 +101,28 @@ class PaymentController extends Controller
         $path = null;
         if ($request->hasFile('receipt')) $path = $request->file('receipt')->store("receipts/t{$t->id}", 'public');
 
-        $result = DB::transaction(function () use ($t,$u,$holderName,$holderUid,$customer,$phone,$orderNo,$invoice,$kind,$cur,$amount,$rate,$usd,$method,$ref,$note,$path,$createdAt) {
-            // cash side: money IN — credited to the RECEIVER's cash in hand
-            $cost = OrderCost::create([
-                'tenant_id'=>$t->id,'order_id'=>null,'order_no'=>$orderNo,
-                'stage'=>'customer_payment','currency'=>$cur,'native_amount'=>$amount,'rate_to_usd'=>$rate,
-                'usd_amount'=>$usd,'holder'=>$holderName,'holder_user_id'=>$holderUid,
-                'pay_status'=>'cash','paid_native'=>$amount,'category'=>'Receipt',
-                'note'=>'Payment from '.$customer.($orderNo?(' ('.$orderNo.')'):''),'status'=>'approved','created_by'=>$u->name ?? '',
-            ]);
-            $pay = CustomerPayment::create([
-                'tenant_id'=>$t->id,'receipt_no'=>'TMP','customer_name'=>$customer,'customer_phone'=>$phone,
-                'order_no'=>$orderNo,'invoice_no'=>$invoice,'kind'=>$kind,'currency'=>$cur,'amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
-                'method'=>$method,'reference'=>$ref ?: $note,'receipt_path'=>$path,'applied'=>($kind==='settlement'),
-                'order_cost_id'=>$cost->id,'holder'=>$holderName,'holder_user_id'=>$holderUid,'created_by'=>$u->name ?? '',
-            ]);
-            $pay->receipt_no = 'RCP-'.str_pad((string)$pay->id, 5, '0', STR_PAD_LEFT);
-            if ($createdAt) { $pay->created_at = $createdAt; $cost->created_at = $createdAt; $cost->save(); }
-            $pay->save();
-            return ['id'=>$pay->id,'receipt_no'=>$pay->receipt_no];
-        });
-
-        // Unify with invoices: reflect this payment on the linked invoice's balance + statement.
-        try { app(\App\Services\Invoicing\InvoiceService::class)->syncByPayment($t, $invoice, $orderNo); } catch (\Throwable $e) {}
+        // E4.1 — record through the ONE payment recorder (behaviour-identical to the previous inline
+        // transaction). This is the single ledger the invoice "Pay", staff-cash and cashbook paths
+        // converge on in E4.2–E4.4.
+        $result = app(\App\Services\Money\PaymentService::class)->record($t, [
+            'customer'      => $customer,
+            'phone'         => $phone,
+            'order_no'      => $orderNo,
+            'invoice_no'    => $invoice,
+            'kind'          => $kind,
+            'currency'      => $cur,
+            'amount'        => $amount,
+            'rate'          => $rate,
+            'usd'           => $usd,
+            'method'        => $method,
+            'reference'     => $ref ?: $note,
+            'receipt_path'  => $path,
+            'holder'        => $holderName,
+            'holder_user_id'=> $holderUid,
+            'created_by'    => $u->name ?? '',
+            'cost_note'     => 'Payment from '.$customer.($orderNo?(' ('.$orderNo.')'):''),
+            'created_at'    => $createdAt,
+        ]);
 
         return response()->json(['ok'=>true,'send_receipt'=>$sendReceipt] + $result + ['usd'=>$usd,'currency'=>$cur,'amount'=>$amount]);
     }
@@ -163,7 +163,7 @@ class PaymentController extends Controller
         $amount = round((float)$request->input('amount', (float)$p->amount), 2);
         if ($amount <= 0) return response()->json(['ok'=>false,'error'=>'bad_amount'],422);
         $rate = (float)$request->input('rate_to_usd', 0);
-        if ($rate <= 0) $rate = $cur==='USD' ? 1.0 : (float)$t->setting('rate_'.strtolower($cur).'_per_usd', $cur==='UGX'?3655:5180);
+        if ($rate <= 0) $rate = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($cur); // E3.4 — one FX source
         if ($rate <= 0) $rate = 1;
         $usd = OrderCost::toUsd($amount, $rate);
         $kind = in_array((string)$request->input('kind', $p->kind), ['advance','settlement'], true) ? (string)$request->input('kind', $p->kind) : $p->kind;

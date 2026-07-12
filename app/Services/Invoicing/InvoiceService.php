@@ -127,8 +127,9 @@ class InvoiceService
                 ->get();
 
             $cur = strtoupper((string) $inv->currency);
-            $ratePerUsd = fn (string $c) => (float) $t->setting('rate_' . strtolower($c) . '_per_usd',
-                $c === 'UGX' ? 3655 : ($c === 'SSP' ? 5180 : 1)) ?: 1;
+            // E3.4 — one FX source (App\Services\Money\Fx): express each USD-normalised payment in
+            // the invoice currency. Equivalent to the previous inline rate_*_per_usd read.
+            $fx = \App\Services\Money\Fx::forTenant($t);
 
             $paid = 0.0;
             foreach ($pays as $p) {
@@ -137,7 +138,7 @@ class InvoiceService
                 } elseif ($cur === 'USD') {
                     $paid += (float) $p->usd_amount;             // any → USD (already normalised)
                 } else {
-                    $paid += (float) $p->usd_amount * $ratePerUsd($cur); // USD → invoice currency
+                    $paid += (float) $p->usd_amount * $fx->ratePerUsd($cur); // USD → invoice currency
                 }
             }
             $paid = round($paid, 2);
