@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="stylesheet" href="/panel/shared/tokens.css">
+  <script src="/panel/shared/ui.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Family Shopper — Seller Panel</title>
@@ -366,6 +368,38 @@
       <!-- ============ DASHBOARD ============ -->
       <div id="pageDash">
         <div class="crumb">Home / <b>Dashboard</b></div>
+        <div id="role-dashboard" style="margin-bottom:14px"></div>
+        <script>
+        /* Roadmap E10.2 — role dashboard (behind dash_v2). Renders the /papi/dashboard widget cards
+           for the signed-in user's role. Self-gates on the response's `enabled` flag, so with dash_v2
+           OFF (default) it renders nothing and the legacy dashboard below is untouched. */
+        (function(){
+          function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+          function money(n){ n=Number(n||0); return n.toLocaleString(undefined,{maximumFractionDigits:2}); }
+          function line(w){
+            var v=w.value||{};
+            if(w.key==='cash_on_hand'){ var b=v.balances||{}; return 'USD '+money(b.USD)+' · UGX '+money(b.UGX)+' · SSP '+money(b.SSP); }
+            if(w.key==='open_invoices'){ return (v.count||0)+' open · USD '+money(v.balance_usd); }
+            if(w.key==='payments_today'){ return (v.count||0)+' today · USD '+money(v.usd); }
+            if(w.key==='low_stock'){ return (v.count||0)+' at/below '+(v.threshold||0); }
+            if(w.key==='net_profit'){ return v.enabled ? ('USD '+money(v.net_profit)) : 'ledger off'; }
+            return '';
+          }
+          function render(d){
+            var host=document.getElementById('role-dashboard'); if(!host) return;
+            if(!d || !d.enabled){ host.innerHTML=''; return; }
+            var cards=(d.widgets||[]).map(function(w){
+              return '<div class="card" style="flex:1;min-width:170px"><div class="body">'
+                +'<div class="note" style="font-weight:700">'+esc(w.title)+'</div>'
+                +'<div style="font-size:18px;font-weight:800;margin-top:4px">'+esc(line(w))+'</div>'
+                +'</div></div>';
+            }).join('');
+            host.innerHTML = '<div style="display:flex;gap:12px;flex-wrap:wrap">'+cards+'</div>';
+          }
+          function load(){ fetch('/papi/dashboard',{credentials:'same-origin'}).then(function(r){return r.json();}).then(render).catch(function(){}); }
+          if(document.readyState!=='loading') load(); else document.addEventListener('DOMContentLoaded',load);
+        })();
+        </script>
         <div id="botSwitch" class="card" style="margin-bottom:14px;display:none">
           <div class="body" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
             <div style="flex:1;min-width:190px"><div style="font-weight:800;font-size:15px">WhatsApp auto-reply</div>

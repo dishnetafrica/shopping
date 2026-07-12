@@ -1,4 +1,6 @@
 <!DOCTYPE html><html lang="en"><head>
+  <link rel="stylesheet" href="/panel/shared/tokens.css">
+  <script src="/panel/shared/ui.js"></script>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Invoices</title>
 <style>
@@ -81,13 +83,15 @@ function load(){
   });
 }
 function payInv(id,no,cur,bal){
-  var v=prompt('Record payment on '+no+' ('+cur+'). Amount received:', String(bal));
-  if(v===null)return; var amt=parseFloat(String(v).replace(/,/g,''))||0;
-  if(amt<=0){alert('Enter an amount');return;}
-  api('/papi/invoice-pay',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({id:id,amount:amt})}).then(function(r){
-    if(r&&r.ok){ alert('Recorded ✓ · balance now '+cur+' '+nf(r.balance)); load(); }
-    else alert('Could not record: '+((r&&r.error)||'error'));
-  }).catch(function(){alert('Network error');});
+  /* E9.3 — off blocking browser dialogs onto the shared promptDialog + toasts. Payment POST unchanged. */
+  CloudBSSUI.promptDialog('Record payment on '+no+' ('+cur+'). Amount received:',{value:String(bal),okText:'Record payment'}).then(function(v){
+    if(v===null)return; var amt=parseFloat(String(v).replace(/,/g,''))||0;
+    if(amt<=0){CloudBSSUI.toast('Enter an amount','warn');return;}
+    api('/papi/invoice-pay',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({id:id,amount:amt})}).then(function(r){
+      if(r&&r.ok){ CloudBSSUI.toast('Recorded ✓ · balance now '+cur+' '+nf(r.balance),'ok'); load(); }
+      else CloudBSSUI.toast('Could not record: '+CloudBSSUI.errorMessage(r&&r.error),'error');
+    }).catch(function(){CloudBSSUI.toast('Network error','error');});
+  });
 }
 function stmt(phone){
   var to=(phone||'').trim(); if(!to){to=(prompt('Customer WhatsApp number:','')||'').trim(); if(!to)return;}
@@ -106,17 +110,27 @@ function sendInv(id,phone){
   }).catch(function(){alert('Network error');});
 }
 function creditNote(id,no,cur,bal){
-  var v=prompt('Raise a credit note against '+no+' ('+cur+').\nAmount to credit'+(bal>0.5?(' — balance is '+cur+' '+nf(bal)):'')+':', String(bal>0.5?bal:''));
-  if(v===null)return; var amt=parseFloat(String(v).replace(/,/g,''))||0;
-  if(amt<=0){alert('Enter an amount');return;}
-  var reasons=['return','price_adjustment','overpayment','goodwill','damage','other'];
-  var r=prompt('Reason? Type one of:\n1 = Return of goods\n2 = Price adjustment\n3 = Over-payment refund\n4 = Goodwill / discount\n5 = Damaged / short supply\n6 = Other','1');
-  if(r===null)return; var rc=reasons[(parseInt(r,10)||1)-1]||'return';
-  var note=prompt('Optional note (shown on the document):','')||'';
-  api('/papi/credit-note-issue',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({invoice_id:id,amount:amt,reason_code:rc,notes:note})}).then(function(resp){
-    if(resp&&resp.ok){ if(confirm('Credit note '+resp.credit_note_no+' issued ✓\nOpen the PDF now?'))window.open(resp.pdf,'_blank'); load(); }
-    else alert('Could not issue: '+((resp&&resp.error==='not_allowed')?'owner/manager only':((resp&&resp.error)||'error')));
-  }).catch(function(){alert('Network error');});
+  /* E9.3 — off the prompt-chain onto shared dialogs + toasts. The issue POST + reason codes unchanged. */
+  var reasons=[{value:'return',label:'Return of goods'},{value:'price_adjustment',label:'Price adjustment'},
+    {value:'overpayment',label:'Over-payment refund'},{value:'goodwill',label:'Goodwill / discount'},
+    {value:'damage',label:'Damaged / short supply'},{value:'other',label:'Other'}];
+  CloudBSSUI.promptDialog('Raise a credit note against '+no+' ('+cur+'). Amount to credit'+(bal>0.5?(' — balance is '+cur+' '+nf(bal)):'')+':',{value:String(bal>0.5?bal:''),okText:'Next'}).then(function(v){
+    if(v===null)return; var amt=parseFloat(String(v).replace(/,/g,''))||0;
+    if(amt<=0){CloudBSSUI.toast('Enter an amount','warn');return;}
+    CloudBSSUI.selectDialog('Reason for the credit note:',reasons,{okText:'Next'}).then(function(rc){
+      if(rc===null)return;
+      CloudBSSUI.promptDialog('Optional note (shown on the document):',{okText:'Issue credit note'}).then(function(note){
+        if(note===null)note='';
+        api('/papi/credit-note-issue',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({invoice_id:id,amount:amt,reason_code:rc,notes:note})}).then(function(resp){
+          if(resp&&resp.ok){
+            CloudBSSUI.toast('Credit note '+resp.credit_note_no+' issued ✓','ok'); load();
+            CloudBSSUI.confirmDialog('Credit note '+resp.credit_note_no+' issued. Open the PDF now?',{okText:'Open PDF'}).then(function(y){ if(y)window.open(resp.pdf,'_blank'); });
+          }
+          else CloudBSSUI.toast('Could not issue: '+((resp&&resp.error==='not_allowed')?'owner/manager only':CloudBSSUI.errorMessage(resp&&resp.error)),'error');
+        }).catch(function(){CloudBSSUI.toast('Network error','error');});
+      });
+    });
+  });
 }
 function voidInv(id,no){
   if(!confirm('Void invoice '+no+'? It stays on record but is marked VOID.'))return;

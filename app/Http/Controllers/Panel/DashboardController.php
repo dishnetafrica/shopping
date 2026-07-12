@@ -41,6 +41,10 @@ class DashboardController extends Controller
 
         return response()->json([
             'ok'      => true,
+            // E10.2 — the home screen renders this board only when the tenant opts into dash_v2.
+            // Default off => the legacy home is untouched. The widgets are still computed so the
+            // client can preview, but the screen self-gates on this flag.
+            'enabled' => (bool) $t->setting('dash_v2', false),
             'role'    => (string) ($u->role ?? ''),
             'widgets' => $out,
         ]);

@@ -1,4 +1,6 @@
 <!DOCTYPE html><html lang="en"><head>
+  <link rel="stylesheet" href="/panel/shared/tokens.css">
+  <script src="/panel/shared/ui.js"></script>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Consignments</title>
 <style>
@@ -450,15 +452,22 @@ function removeStock(lineId){
   });
 }
 function sellStock(lineId){
+  /* E9.3 — the consignment sale off the prompt-chain onto shared dialogs + toasts. Sale POST unchanged. */
   var k=window.__STK[lineId]; if(!k)return;
-  var q=prompt('Sell how many '+k.name+'? ('+nf(k.remaining)+' left)',''); if(q===null)return;
-  q=parseFloat(q); if(!(q>0)){alert('Enter a quantity');return;}
-  var price=prompt('Price each (UGX)?',(k.unit_price!=null?k.unit_price:''))||'';
-  var buyer=prompt('Buyer name (optional):','')||'';
-  var body=new URLSearchParams({line_id:lineId,qty:q,price:price,buyer:buyer});
-  api('/papi/consignment-stock-sell',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
-    if(r&&r.ok){alert('✅ Sold '+nf(r.sold)+' · order '+r.order_no+' · UGX '+nf(r.total)+(r.margin!=null?(' · margin UGX '+nf(r.margin)):'')+'\n'+nf(r.remaining)+' left.');loadDetail();}
-    else alert((r&&r.message)||('Failed: '+((r&&r.error)||'error')));
+  CloudBSSUI.promptDialog('Sell how many '+k.name+'? ('+nf(k.remaining)+' left)',{okText:'Next'}).then(function(qv){
+    if(qv===null)return;
+    var q=parseFloat(qv); if(!(q>0)){CloudBSSUI.toast('Enter a quantity','warn');return;}
+    CloudBSSUI.promptDialog('Price each (UGX)?',{value:(k.unit_price!=null?String(k.unit_price):''),okText:'Next'}).then(function(price){
+      if(price===null)price='';   // matches original: cancelling price proceeds with an empty price
+      CloudBSSUI.promptDialog('Buyer name (optional):',{okText:'Record sale'}).then(function(buyer){
+        if(buyer===null)buyer='';
+        var body=new URLSearchParams({line_id:lineId,qty:q,price:price,buyer:buyer});
+        api('/papi/consignment-stock-sell',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}).then(function(r){
+          if(r&&r.ok){CloudBSSUI.toast('✅ Sold '+nf(r.sold)+' · order '+r.order_no+' · UGX '+nf(r.total)+(r.margin!=null?(' · margin UGX '+nf(r.margin)):'')+' · '+nf(r.remaining)+' left.','ok');loadDetail();}
+          else CloudBSSUI.toast((r&&r.message)||('Could not sell: '+CloudBSSUI.errorMessage(r&&r.error)),'error');
+        });
+      });
+    });
   });
 }
 

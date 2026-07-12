@@ -200,8 +200,9 @@ class SelfcheckController extends Controller
         // test (tests/Unit/NoHardcodedFxTest) enforces this; here we just confirm it's deployed and
         // the former hardcoded sites now default from Fx.
         $add('fx_no_hardcoded', 'No hardcoded FX constants outside Fx service (E3.5)',
-            is_file(base_path('tests/Unit/NoHardcodedFxTest.php'))
-            && (bool) $this->fileHas('app/Services/Bot/Pricing/CurrencyPricer.php', 'Fx::forTenant')
+            // Checks the SHIPPED code uses the one FX service. (The old check also required a test file,
+            // which isn't deployed to production — that made this probe falsely red in prod.)
+            (bool) $this->fileHas('app/Services/Bot/Pricing/CurrencyPricer.php', 'Fx::forTenant')
             && (bool) $this->fileHas('app/Http/Controllers/Panel/PanelApiController.php', 'Fx::forTenant'));
 
         $fxV2On = $t ? (bool) $t->setting('fx_v2', false) : false;
@@ -475,6 +476,49 @@ class SelfcheckController extends Controller
         $add('role_dashboard', 'Role dashboard engine + /papi/dashboard reading SSOT (E10.1)', $dashOk,
             $dashOk ? 'widgets by role (cash/invoices/payments/stock/net-profit) all read SSOT services'
                     : 'dashboard engine or route not wired');
+
+        // E10.2 — the home screen renders the role dashboard behind dash_v2 (default off).
+        $dashRenderOk = (bool) $this->fileHas('resources/panel/seller.html', 'Roadmap E10.2')
+            && (bool) $this->fileHas('resources/panel/seller.html', 'role-dashboard')
+            && (bool) $this->fileHas('app/Http/Controllers/Panel/DashboardController.php', "setting('dash_v2'");
+        $dashV2On = $t ? (bool) $t->setting('dash_v2', false) : false;
+        $add('dash_render', 'Role dashboard renders on the home screen (flag dash_v2, E10.2)', $dashRenderOk,
+            $dashRenderOk
+                ? ($dashV2On ? 'dash_v2 ON — home screen shows the role dashboard cards' : 'wired; set dash_v2=true to show the role dashboard')
+                : 'home-screen dashboard block or dash_v2 gate not wired');
+
+        // E9.1 — one shared design-tokens stylesheet linked on the panel pages.
+        $tokensOk = is_file(resource_path('panel/shared/tokens.css'))
+            && (bool) $this->fileHas('resources/panel/shared/tokens.css', '--brand')
+            && (bool) $this->fileHas('resources/panel/seller.html', 'panel/shared/tokens.css')
+            && (bool) $this->fileHas('routes/web.php', 'panel/shared/tokens.css');
+        $add('design_tokens', 'Shared design tokens (palette/typography/spacing) on the panel (E9.1)',
+            $tokensOk,
+            $tokensOk ? 'tokens.css served + linked on panel pages; one source of palette/type/spacing'
+                      : 'tokens.css missing, unlinked, or route not wired');
+
+        // E9.2 — shared UI helpers (toast/confirmDialog/error-map) shipped + linked.
+        $uiOk = is_file(resource_path('panel/shared/ui.js'))
+            && (bool) $this->fileHas('resources/panel/shared/ui.js', 'confirmDialog')
+            && (bool) $this->fileHas('resources/panel/shared/ui.js', 'errorMessage')
+            && (bool) $this->fileHas('resources/panel/seller.html', 'panel/shared/ui.js')
+            && (bool) $this->fileHas('routes/web.php', 'panel/shared/ui.js');
+        $add('ui_helpers', 'Shared toast/confirmDialog/error-map on the panel (E9.2)', $uiOk,
+            $uiOk ? 'ui.js served + linked; window.CloudBSSUI (toast/confirmDialog/errorMessage) available'
+                  : 'ui.js missing, unlinked, or route not wired');
+
+        // E9.3 — money flows migrated off blocking browser dialogs onto the shared helpers.
+        // (First flow: invoice "Pay" — promptDialog for the amount + toasts for feedback.)
+        $moneyUiOk = (bool) $this->fileHas('resources/panel/shared/ui.js', 'promptDialog')
+            && (bool) $this->fileHas('resources/panel/shared/ui.js', 'selectDialog')
+            && (bool) $this->fileHas('resources/panel/invoices.html', 'CloudBSSUI.promptDialog')
+            && (bool) $this->fileHas('resources/panel/invoices.html', 'CloudBSSUI.selectDialog')
+            && (bool) $this->fileHas('resources/panel/payments.html', 'CloudBSSUI.confirmDialog')
+            && ! (bool) $this->fileHas('resources/panel/payments.html', "if(!confirm(")
+            && (bool) $this->fileHas('resources/panel/consignment.html', 'CloudBSSUI.promptDialog');
+        $add('money_flow_ui', 'Money flows use the shared dialogs/toasts (E9.3)', $moneyUiOk,
+            $moneyUiOk ? 'invoice Pay + credit note + payments (save/delete) + consignment sale migrated to shared dialogs + toasts'
+                       : 'money flows not yet migrated to the shared UI helpers');
 
         $add('permissions_ready', 'Permission system deployed (Epic 2 / M1)', $permsReady,
             $permsReady

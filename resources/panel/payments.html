@@ -1,4 +1,6 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8">
+<!doctype html><html lang="en"><head>
+  <link rel="stylesheet" href="/panel/shared/tokens.css">
+  <script src="/panel/shared/ui.js"></script><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Payments Received</title>
 <style>
@@ -200,19 +202,20 @@ function openForm(){ EDIT_ID=null; if($('fReceiver'))$('fReceiver').value=''; ['
 function closeAll(){ $('backdrop').classList.remove('on'); $('payForm').classList.remove('on'); $('rcSheet').classList.remove('on'); }
 
 function savePay(){
-  var name=$('fName').value.trim(); if(!name){ alert('Choose or type a client'); return; }
-  var amt=parseFloat(($('fAmt').value||'').replace(/,/g,''))||0; if(amt<=0){ alert('Amount?'); return; }
-  var ord=$('fOrder').value.trim(); if(!ord){ alert('Pick the order this payment is for'); $('fOrder').focus(); return; }
+  /* E9.3 — validation + feedback off alert() onto shared toasts. Save POSTs unchanged. */
+  var name=$('fName').value.trim(); if(!name){ CloudBSSUI.toast('Choose or type a client','warn'); return; }
+  var amt=parseFloat(($('fAmt').value||'').replace(/,/g,''))||0; if(amt<=0){ CloudBSSUI.toast('Enter an amount','warn'); return; }
+  var ord=$('fOrder').value.trim(); if(!ord){ CloudBSSUI.toast('Pick the order this payment is for','warn'); $('fOrder').focus(); return; }
   var recv=IS_OWNER?$('fReceiver').value.trim():'';
-  if(IS_OWNER && !recv){ alert('Who received the cash?'); $('fReceiver').focus(); return; }
+  if(IS_OWNER && !recv){ CloudBSSUI.toast('Who received the cash?','warn'); $('fReceiver').focus(); return; }
   var b=$('fSave'); b.disabled=true; b.textContent='Saving...';
   if(EDIT_ID){
     var body=new URLSearchParams({customer_name:name,customer_phone:$('fPhone').value.trim(),order_no:ord,kind:FKIND,currency:$('fCur').value,amount:amt,method:$('fMethod2').value,note:$('fNote').value.trim(),created_date:$('fDate').value,receiver:recv});
     fetch('/papi/payments/'+EDIT_ID+'/update',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body})
       .then(r=>r.json()).then(function(r){ b.disabled=false; b.textContent='Save & make receipt';
-        if(r&&r.ok){ closeAll(); load(); alert('Receipt '+r.receipt_no+' updated.'); }
-        else alert('Could not save: '+((r&&r.error==='no_order')?'pick an order':((r&&r.error)||'error'))); })
-      .catch(function(){ b.disabled=false; b.textContent='Save & make receipt'; alert('Failed'); });
+        if(r&&r.ok){ closeAll(); load(); CloudBSSUI.toast('Receipt '+r.receipt_no+' updated.','ok'); }
+        else CloudBSSUI.toast('Could not save: '+((r&&r.error==='no_order')?'pick an order':CloudBSSUI.errorMessage(r&&r.error)),'error'); })
+      .catch(function(){ b.disabled=false; b.textContent='Save & make receipt'; CloudBSSUI.toast('Network error','error'); });
     return;
   }
   var fd=new FormData();
@@ -226,18 +229,21 @@ function savePay(){
     .then(r=>r.json()).then(function(r){
       b.disabled=false; b.textContent='Save & make receipt';
       if(r&&r.ok){ closeAll(); load(); if(r.send_receipt!==false) openReceipt(r.id); }
-      else alert('Could not save: '+((r&&r.error==='no_order')?'pick an order':((r&&r.error)||'error')));
-    }).catch(function(){ b.disabled=false; b.textContent='Save & make receipt'; alert('Failed'); });
+      else CloudBSSUI.toast('Could not save: '+((r&&r.error==='no_order')?'pick an order':CloudBSSUI.errorMessage(r&&r.error)),'error');
+    }).catch(function(){ b.disabled=false; b.textContent='Save & make receipt'; CloudBSSUI.toast('Network error','error'); });
 }
 function delPay(id){
-  if(!confirm('Delete this receipt? This removes it from the customer\'s account and the cashbook too. This cannot be undone.')) return;
-  fetch('/papi/payments/'+id+'/delete',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
-    .then(r=>r.json()).then(function(r){ if(r&&r.ok){ load(); } else alert('Could not delete: '+((r&&r.error==='not_allowed')?'owner/manager only':((r&&r.error)||'error'))); })
-    .catch(function(){ alert('Failed'); });
+  /* E9.3 — off confirm()/alert() onto the shared confirmDialog + toasts. Delete POST unchanged. */
+  CloudBSSUI.confirmDialog('Delete this receipt? This removes it from the customer\'s account and the cashbook too. This cannot be undone.',{danger:true,okText:'Delete'}).then(function(yes){
+    if(!yes)return;
+    fetch('/papi/payments/'+id+'/delete',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+      .then(r=>r.json()).then(function(r){ if(r&&r.ok){ load(); CloudBSSUI.toast('Receipt deleted.','ok'); } else CloudBSSUI.toast('Could not delete: '+((r&&r.error==='not_allowed')?'owner/manager only':CloudBSSUI.errorMessage(r&&r.error)),'error'); })
+      .catch(function(){ CloudBSSUI.toast('Network error','error'); });
+  });
 }
 function openEdit(id){
   fetch('/papi/payments/'+id,{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json()).then(function(d){
-    if(!d||!d.ok){ alert('Could not load'); return; }
+    if(!d||!d.ok){ CloudBSSUI.toast('Could not load','error'); return; }
     var p=d.payment; EDIT_ID=id;
     openForm();
     $('fName').value=p.customer||''; $('fPhone').value=p.phone||''; $('fOrder').value=p.order_no||'';
@@ -248,13 +254,13 @@ function openEdit(id){
     if(IS_OWNER){ $('recvWrap').style.display='block'; $('fReceiver').value=p.holder||''; }
     $('fSave').textContent='Update receipt';
     var t=document.querySelector('#payForm h3, #payForm .fh'); if(t) t.textContent='Edit receipt';
-  }).catch(function(){ alert('Failed'); });
+  }).catch(function(){ CloudBSSUI.toast('Network error','error'); });
 }
 
 function openReceipt(id){
   fetch('/papi/payments/'+id,{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
     .then(r=>r.json()).then(function(d){
-      if(!d.ok){ alert('Receipt not found'); return; }
+      if(!d.ok){ CloudBSSUI.toast('Receipt not found','error'); return; }
       RC=d.payment;
       var forLine=RC.order_no?('Order '+esc(RC.order_no)):'Account credit';
       var kindTxt=RC.kind==='advance'?'Advance payment':'Payment on delivery';
@@ -267,7 +273,7 @@ function openReceipt(id){
         (RC.reference?'<div class="line"><span>Note</span><b>'+esc(RC.reference)+'</b></div>':'')+
         '<div style="text-align:center;font-size:12px;color:#94a3b8;margin-top:12px;font-weight:700">Thank you!</div>';
       $('backdrop').classList.add('on'); $('rcSheet').classList.add('on');
-    }).catch(function(){ alert('Could not load receipt'); });
+    }).catch(function(){ CloudBSSUI.toast('Could not load receipt','error'); });
 }
 function receiptText(){
   if(!RC) return '';
@@ -286,7 +292,7 @@ function waShare(){
   location.href = ph ? ('https://wa.me/'+ph+'?text='+txt) : ('https://wa.me/?text='+txt);
 }
 function printRc(){
-  var w=window.open('','_blank'); if(!w){ alert('Allow pop-ups to print'); return; }
+  var w=window.open('','_blank'); if(!w){ CloudBSSUI.toast('Allow pop-ups to print','warn'); return; }
   var html='<html><head><title>'+esc(RC.receipt_no)+'</title><meta name="viewport" content="width=device-width,initial-scale=1">'+
     '<style>body{font-family:Inter,Arial,sans-serif;max-width:420px;margin:20px auto;color:#111;padding:0 16px}'+
     'h1{font-size:20px;margin:0}.rno{color:#666;font-size:12px;margin:2px 0 14px}.amt{font-size:30px;font-weight:800;color:#0B3D22;margin:12px 0}'+
@@ -306,7 +312,7 @@ function printRc(){
 
 function csvCell(v){v=(v==null?'':String(v));return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
 function expCsv(){
-  var p=window.__pay; if(!p||!p.rows.length){alert('Nothing to export');return;}
+  var p=window.__pay; if(!p||!p.rows.length){CloudBSSUI.toast('Nothing to export','warn');return;}
   var lines=[['Receipt','Date','Customer','Order/Invoice','Type','Method','Currency','Amount','USD'].join(',')];
   p.rows.forEach(function(e){lines.push([e.receipt_no,e.date,e.customer,e.order_no||'',e.kind,e.method,e.currency,e.amount,e.usd].map(csvCell).join(','));});
   lines.push(['','','','','','','','Total USD',p.recv].map(csvCell).join(','));
@@ -315,8 +321,8 @@ function expCsv(){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
 }
 function expPdf(){
-  var p=window.__pay; if(!p||!p.rows.length){alert('Nothing to export');return;}
-  var w=window.open('','_blank'); if(!w){alert('Allow pop-ups');return;}
+  var p=window.__pay; if(!p||!p.rows.length){CloudBSSUI.toast('Nothing to export','warn');return;}
+  var w=window.open('','_blank'); if(!w){CloudBSSUI.toast('Allow pop-ups','warn');return;}
   var rows=p.rows.map(function(e){return '<tr><td>'+esc(e.receipt_no)+'</td><td>'+esc(e.date||'')+'</td><td>'+esc(e.customer)+(e.order_no?' <span class=n>('+esc(e.order_no)+')</span>':'')+'</td><td>'+esc(e.kind)+'</td><td>'+esc(e.method)+'</td><td class=num>'+esc(e.currency)+' '+nf(e.amount)+'</td><td class=num>$'+nf(e.usd)+'</td></tr>';}).join('');
   w.document.write('<html><head><title>Payments</title><style>body{font-family:Arial,sans-serif;padding:16px;color:#111}h2{margin:0}.sub{color:#666;font-size:12px;margin:2px 0 12px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border-bottom:1px solid #ddd;padding:6px 7px;text-align:left}.num{text-align:right;white-space:nowrap}.n{color:#888}tfoot td{font-weight:800;border-top:2px solid #333}</style></head><body>'+
     '<h2>Payments Received</h2><div class="sub">Family Shoppers · '+p.rows.length+' payments · Advances held $'+nf(p.held)+' · Total received $'+nf(p.recv)+'</div>'+

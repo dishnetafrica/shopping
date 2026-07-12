@@ -56,6 +56,22 @@ Route::get('/icons/{name}',         [PwaController::class, 'icon']);
 // The customer's existing Family Shopper seller UI, served verbatim behind the
 // /app web session. (Filament business panel stays available at /app.)
 Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () {
+    // E9.1 — shared design tokens stylesheet (one palette/typography/spacing), served for every panel page.
+    Route::get('/panel/shared/tokens.css', function () {
+        $path = resource_path('panel/shared/tokens.css');
+        abort_unless(is_file($path), 404);
+        return response(file_get_contents($path), 200)
+            ->header('Content-Type', 'text/css; charset=UTF-8')
+            ->header('Cache-Control', 'public, max-age=3600');
+    });
+    // E9.2 — shared UI helpers (toast / confirmDialog / error-code map).
+    Route::get('/panel/shared/ui.js', function () {
+        $path = resource_path('panel/shared/ui.js');
+        abort_unless(is_file($path), 404);
+        return response(file_get_contents($path), 200)
+            ->header('Content-Type', 'application/javascript; charset=UTF-8')
+            ->header('Cache-Control', 'public, max-age=3600');
+    });
     Route::get('/panel', [\App\Http\Controllers\Panel\LandingController::class, 'panel']);
     Route::get('/panel/app', [\App\Http\Controllers\Panel\LauncherController::class, 'page']);
     Route::match(['get', 'post'], '/panel/logout', [SellerPanelController::class, 'logout']);

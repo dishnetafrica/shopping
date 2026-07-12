@@ -1,0 +1,95 @@
+/*
+ * CloudBSS design tokens (Roadmap E9.1) — the ONE source of palette, typography, spacing, radius and
+ * shadow for the panel. Values match the existing seller.html palette exactly, so including this on a
+ * page that already defines its own :root is a no-op (the page's own vars win); pages that DON'T
+ * define them inherit the canonical set. Add tokens here, not per-page, so the UI stays consistent.
+ */
+:root {
+  /* Brand + status palette (identical to the current panel values) */
+  --green:   #15803D;
+  --green-d: #0B3D22;
+  --amber:   #C2700A;
+  --red:     #B4232A;
+  --blue:    #2563A8;
+  --teal:    #0F8A6B;
+
+  /* Surfaces + text */
+  --bg:    #EEF2EE;
+  --card:  #FFFFFF;
+  --ink:   #16231C;
+  --muted: #6E7D72;
+  --line:  #E2E8E2;
+  --side:  #0B3D22;
+
+  /* Semantic aliases (prefer these in new code) */
+  --brand:        var(--green);
+  --brand-strong: var(--green-d);
+  --surface:      var(--card);
+  --text:         var(--ink);
+  --text-soft:    var(--muted);
+  --border:       var(--line);
+  --ok:           var(--green);
+  --warn:         var(--amber);
+  --danger:       var(--red);
+  --info:         var(--blue);
+
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+  --fs-xs: 11px;
+  --fs-sm: 13px;
+  --fs-md: 15px;
+  --fs-lg: 18px;
+  --fs-xl: 24px;
+  --fw-normal: 500;
+  --fw-bold:   800;
+  --lh-base:   1.45;
+
+  /* Spacing scale */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 14px;
+
+  /* Elevation */
+  --shadow-1: 0 1px 2px rgba(11, 61, 34, 0.06);
+  --shadow-2: 0 4px 14px rgba(11, 61, 34, 0.10);
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur: 200ms;
+}
+
+/* Optional shared primitives — used by pages that opt in via these class names. They are namespaced
+   (ds-*) so they never collide with a page's existing styles. */
+.ds-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+  font-family: var(--font-sans); font-size: var(--fs-sm); font-weight: var(--fw-bold);
+  padding: var(--sp-2) var(--sp-4); border-radius: var(--radius-md); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); cursor: pointer; transition: background var(--dur-fast) var(--ease);
+}
+.ds-btn:hover { background: var(--bg); }
+.ds-btn--primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+.ds-btn--danger  { background: var(--danger); border-color: var(--danger); color: #fff; }
+.ds-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.ds-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1); padding: var(--sp-4);
+}
+
+.ds-empty { padding: var(--sp-6); text-align: center; color: var(--text-soft); font-size: var(--fs-sm); }
+
+.ds-spinner {
+  width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--brand);
+  border-radius: 50%; display: inline-block; animation: ds-spin 0.7s linear infinite;
+}
+@keyframes ds-spin { to { transform: rotate(360deg); } }
