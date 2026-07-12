@@ -45,6 +45,13 @@
   .tl .ev .x{font-size:13px;font-weight:700;}.tl .ev .d{font-size:11px;color:#94a3b8;margin-top:1px;}
   .empty{text-align:center;color:var(--mute);padding:34px 18px;font-size:14px;font-weight:600;}
   .loading{text-align:center;color:var(--mute);padding:24px;}
+  /* tabbed customer detail */
+  .tabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1.5px solid var(--border);margin:6px 0 14px;-webkit-overflow-scrolling:touch;}
+  .tabs::-webkit-scrollbar{height:0;}
+  .tabs button{flex:0 0 auto;background:none;border:none;padding:10px 14px;font-family:inherit;font-size:13.5px;font-weight:700;color:#64748b;cursor:pointer;border-bottom:2.5px solid transparent;white-space:nowrap;}
+  .tabs button.on{color:var(--gd);border-bottom-color:var(--g);}
+  .wa2{background:#25D366;color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:800;cursor:pointer;font-size:13px;text-decoration:none;display:inline-block;}
+  .pill2{display:inline-block;font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;background:#eef2ee;color:#475569;margin-left:6px;text-transform:capitalize;}
 </style><!-- ===== DishNet mobile app shell (injected v2) ===== -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -104,14 +111,16 @@ function orderAmt(o){var a=(o.total!=null?o.total:(o.total_ugx!=null?o.total_ugx
 function orderDate(o){return (o.delivery_date&&String(o.delivery_date).trim())?o.delivery_date:o.created_at;}
 function keyOf(name,phone){var d=digits(phone);return d?('p:'+d):('n:'+(name||'').trim().toLowerCase());}
 
-var ORDERS=[], PAYS=[];
+var ORDERS=[], PAYS=[], RETURNS=[];
 function boot(){
   Promise.all([
     fetch('/papi/orders',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json()).catch(()=>({})),
-    fetch('/papi/payments',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json()).catch(()=>({}))
+    fetch('/papi/payments',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json()).catch(()=>({})),
+    fetch('/papi/returns',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(r=>r.json()).catch(()=>({}))
   ]).then(function(res){
     ORDERS=(res[0]&&res[0].orders)||[];
     PAYS=(res[1]&&res[1].payments)||[];
+    RETURNS=(res[2]&&res[2].returns)||[];
     route();
   }).catch(function(){ $('view').innerHTML='<div class="empty">Could not load.</div>'; });
 }
@@ -166,70 +175,116 @@ function filterList(){
   paintList(list);
 }
 
+var CURTAB='overview';
 function renderDetail(key){
   var map=buildCustomers(); var c=map[key];
   $('title').textContent='Customer'; $('back').textContent='← Customers'; $('back').href='/panel/customers360';
   if(!c){ $('view').innerHTML='<div class="empty">Customer not found.</div>'; return; }
-  var phones=Object.keys(c.phones);
+  window.__C=c; window.__STMT=null;
+  var phones=Object.keys(c.phones); var ph=phones[0]||'';
   var oweCls=c.outstanding>0.005?'':'ok';
   var oweTxt=c.outstanding>0.005?'$'+nf(c.outstanding):(c.outstanding<-0.005?'+$'+nf(-c.outstanding)+' credit':'$0');
-
-  // timeline: orders (placed + delivered) + payments
-  var ev=[];
-  c.orders.forEach(function(o){
-    ev.push({t:o.created_at||'',cls:'ord',x:'Order '+ (o.order_no||'') +' placed · $'+nf(orderAmt(o)),d:(o.created_at||'')});
-    if(o.status==='Delivered'&&o.delivery_date) ev.push({t:o.delivery_date,cls:'del',x:'Delivered '+(o.order_no||''),d:o.delivery_date});
-    if(['Cancelled','Returned'].indexOf(o.status)>=0) ev.push({t:o.created_at||'',cls:'ord',x:(o.order_no||'')+' '+o.status,d:''});
-  });
-  c.pays.forEach(function(p){ ev.push({t:p.date||'',cls:'pay',x:'Payment '+esc(p.currency)+' '+nf(p.amount)+' ($'+nf(p.usd)+') · '+esc(p.method)+(p.kind==='advance'?' · advance':''),d:(p.date||'')+' · '+(p.receipt_no||'')}); });
-  ev.sort(function(a,b){return (a.t<b.t)?1:-1;});
-
-  var ordersHtml=c.orders.length? c.orders.slice().sort(function(a,b){return (String(orderDate(a))<String(orderDate(b)))?1:-1;}).map(function(o){
-    var st=o.status||''; var scls=['Out for delivery'].indexOf(st)>=0?'s-out':('s-'+st.replace(/\s+/g,''));
-    return '<div class="item"><div class="l"><div class="a">'+esc(o.order_no||'')+'<span class="st '+scls+'">'+esc(st)+'</span></div>'+
-      '<div class="b">'+esc(String(orderDate(o)).slice(0,10))+' · '+((o.items_json||[]).length||0)+' item(s)</div></div>'+
-      '<div class="amt">$'+nf(orderAmt(o))+'</div></div>';
-  }).join('') : '<div class="empty">No orders.</div>';
-
-  var paysHtml=c.pays.length? c.pays.slice().sort(function(a,b){return (String(a.date)<String(b.date))?1:-1;}).map(function(p){
-    return '<div class="item"><div class="l"><div class="a">'+esc(p.receipt_no||'')+(p.kind==='advance'?'<span class="st s-out">ADVANCE</span>':'')+'</div>'+
-      '<div class="b">'+esc(p.date||'')+' · '+esc(p.method)+(p.order_no?' · '+esc(p.order_no):'')+'</div></div>'+
-      '<div class="amt">'+esc(p.currency)+' '+nf(p.amount)+'<div style="font-size:11px;color:#94a3b8">$'+nf(p.usd)+'</div></div></div>';
-  }).join('') : '<div class="empty">No payments.</div>';
-
+  var TABS=[['overview','Overview'],['invoices','Invoices'],['payments','Payments'],['statement','Statement'],['returns','Returns / Refunds'],['activity','Activity']];
   $('view').innerHTML=
-    '<div class="chead"><div class="av">'+esc(initials(c.name))+'</div><div><div class="nm">'+esc(c.name||phones[0]||'—')+'</div>'+
+    '<div class="chead"><div class="av">'+esc(initials(c.name))+'</div><div><div class="nm">'+esc(c.name||ph||'—')+'</div>'+
       '<div class="ph">'+(phones.length?phones.map(esc).join(' · '):'no phone')+'</div></div>'+
-      (phones[0]?'<a class="top" style="margin-left:auto" href="https://wa.me/'+esc(digits(phones[0]))+'">💬 WhatsApp</a>':'')+'</div>'+
+      (ph?'<a class="wa2" style="margin-left:auto" href="https://wa.me/'+esc(digits(ph))+'">💬 WhatsApp</a>':'')+'</div>'+
     '<div class="cards">'+
       '<div><div class="t">Invoiced (delivered)</div><div class="n">$'+nf(c.invoiced)+'</div></div>'+
       '<div><div class="t">Payments received</div><div class="n">$'+nf(c.received)+'</div></div>'+
       '<div class="owe"><div class="t">Outstanding</div><div class="n '+oweCls+'">'+oweTxt+'</div></div>'+
       '<div class="adv"><div class="t">Advances held</div><div class="n">$'+nf(c.advances)+'</div></div>'+
     '</div>'+
-    '<div id="stmtBox"></div>'+
-    '<div class="sectlbl">🧾 Orders ('+c.orders.length+')</div>'+ordersHtml+
-    '<div class="sectlbl">💵 Payments ('+c.pays.length+')</div>'+paysHtml+
-    '<div class="sectlbl">🕘 Activity</div><div class="tl">'+(ev.length?ev.map(function(e){return '<div class="ev '+e.cls+'"><div class="x">'+e.x+'</div><div class="d">'+esc(e.d)+'</div></div>';}).join(''):'<div class="empty">No activity.</div>')+'</div>';
-  if(phones[0]) loadStatement(phones[0]);
+    '<div class="tabs" id="tabs">'+TABS.map(function(t){return '<button data-t="'+t[0]+'" onclick="showTab(\''+t[0]+'\')">'+esc(t[1])+'</button>';}).join('')+'</div>'+
+    '<div id="tabc"><div class="loading">Loading…</div></div>';
+  if(!TABS.some(function(t){return t[0]===CURTAB;}))CURTAB='overview';
+  showTab(CURTAB);
+  if(ph) loadStatement(ph);
 }
-/* Invoice-based statement (accurate, in the customer's billed currency USD/UGX) + send button. */
+function showTab(name){
+  CURTAB=name;
+  var tb=$('tabs'); if(tb){[].forEach.call(tb.children,function(b){b.className=(b.getAttribute('data-t')===name)?'on':'';});}
+  var c=window.__C, box=$('tabc'); if(!c||!box)return;
+  if(name==='overview')box.innerHTML=tabOverview(c);
+  else if(name==='invoices')box.innerHTML=tabInvoices(c);
+  else if(name==='payments')box.innerHTML=paysList(c);
+  else if(name==='statement')box.innerHTML=tabStatement(c);
+  else if(name==='returns')box.innerHTML=tabReturns(c);
+  else if(name==='activity')box.innerHTML=tabActivity(c);
+}
+function fmtMoneyMap(m){var a=[];Object.keys(m||{}).forEach(function(cur){var dec=(cur==='USD')?2:0;a.push(cur+' '+Number(m[cur]).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec}));});return a.length?a.join(' · '):'0';}
+function ordersList(c,limit){
+  var arr=c.orders.slice().sort(function(a,b){return (String(orderDate(a))<String(orderDate(b)))?1:-1;});
+  if(limit)arr=arr.slice(0,limit);
+  if(!arr.length)return '<div class="empty">No orders.</div>';
+  return arr.map(function(o){var st=o.status||'';var scls=['Out for delivery'].indexOf(st)>=0?'s-out':('s-'+st.replace(/\s+/g,''));
+    return '<div class="item"><div class="l"><div class="a">'+esc(o.order_no||'')+'<span class="st '+scls+'">'+esc(st)+'</span></div>'+
+      '<div class="b">'+esc(String(orderDate(o)).slice(0,10))+' · '+((o.items_json||[]).length||0)+' item(s)</div></div>'+
+      '<div class="amt">$'+nf(orderAmt(o))+'</div></div>';}).join('');
+}
+function paysList(c){
+  if(!c.pays.length)return '<div class="empty">No payments.</div>';
+  return c.pays.slice().sort(function(a,b){return (String(a.date)<String(b.date))?1:-1;}).map(function(p){
+    return '<div class="item"><div class="l"><div class="a">'+esc(p.receipt_no||'')+(p.kind==='advance'?'<span class="st s-out">ADVANCE</span>':'')+'</div>'+
+      '<div class="b">'+esc(p.date||'')+' · '+esc(p.method)+(p.order_no?' · '+esc(p.order_no):'')+'</div></div>'+
+      '<div class="amt">'+esc(p.currency)+' '+nf(p.amount)+'<div style="font-size:11px;color:#94a3b8">$'+nf(p.usd)+'</div></div></div>';}).join('');
+}
+function statementRows(s){
+  return s.lines.map(function(l){var dec=(l.currency==='USD')?2:0;var bal=Number(l.balance);
+    return '<div class="item"><div class="l"><div class="a">'+esc(l.no)+'<span class="st s-'+esc(l.status)+'">'+esc(String(l.status).replace("_"," "))+'</span></div>'+
+      '<div class="b">'+esc(l.date||'')+' · billed '+esc(l.currency)+' '+Number(l.total).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})+' · paid '+Number(l.paid).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})+'</div></div>'+
+      '<div class="amt" style="color:'+(bal>0.005?'#C0392B':'#15803D')+'">'+(bal>0.005?(esc(l.currency)+' '+bal.toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})):'Paid')+'</div></div>';
+  }).join('');
+}
+function tabOverview(c){
+  var ph=Object.keys(c.phones)[0]||''; var s=window.__STMT;
+  var oc=(s&&s.lines&&s.lines.length)?('<div class="cards" style="grid-template-columns:1fr"><div class="owe"><div class="t">Outstanding (billed invoices)</div><div class="n">'+esc(fmtMoneyMap(s.outstanding))+'</div></div></div>'):'';
+  return oc+
+    '<div class="sectlbl">Recent orders</div>'+ordersList(c,4)+
+    '<div class="sectlbl">Recent payments</div>'+paysList(c)+
+    (ph?'<div style="margin-top:12px"><button class="wa2" onclick="sendStatement(\''+esc(digits(ph))+'\')">📤 Send statement</button> <span id="stmtMsg" style="font-size:12px;color:#64748b"></span></div>':'');
+}
+function tabInvoices(c){
+  var s=window.__STMT;
+  if(!s)return '<div class="loading">Loading invoices…</div>';
+  if(!s.lines||!s.lines.length)return '<div class="empty">No invoices yet. Issue one from an order (Orders → open → Issue invoice).</div>';
+  return statementRows(s)+'<div class="sub" style="margin-top:8px">Pay or send an invoice from the Invoices screen.</div>';
+}
+function tabStatement(c){
+  var ph=Object.keys(c.phones)[0]||''; var s=window.__STMT;
+  if(!s)return '<div class="loading">Loading statement…</div>';
+  if(!s.lines||!s.lines.length)return '<div class="empty">No invoices to show on the statement yet.</div>';
+  return '<div class="cards" style="grid-template-columns:1fr"><div class="owe"><div class="t">Total outstanding</div><div class="n">'+esc(fmtMoneyMap(s.outstanding))+'</div></div></div>'+
+    statementRows(s)+
+    (ph?'<div style="margin-top:12px"><button class="wa2" onclick="sendStatement(\''+esc(digits(ph))+'\')">📤 Send statement on WhatsApp</button> <span id="stmtMsg" style="font-size:12px;color:#64748b"></span></div>':'');
+}
+function tabReturns(c){
+  var d=digits(Object.keys(c.phones)[0]||'');
+  var rows=(RETURNS||[]).filter(function(r){return digits(r.phone)===d;});
+  var credit=(c.outstanding<-0.005)?(-c.outstanding):0;
+  var head=credit>0?'<div class="cards" style="grid-template-columns:1fr"><div class="adv"><div class="t">Store credit available</div><div class="n">$'+nf(credit)+'</div></div></div>':'';
+  if(!rows.length)return head+'<div class="empty">No returns or refunds for this customer.</div>';
+  return head+rows.map(function(r){
+    return '<div class="item"><div class="l"><div class="a">'+esc(r.customer||'—')+'<span class="pill2">'+esc(r.resolution||'return')+'</span></div>'+
+      '<div class="b">'+esc(r.date||'')+(r.items?' · '+esc(r.items):'')+(r.reason?' · '+esc(r.reason):'')+'</div></div>'+
+      '<div class="amt">$'+nf(r.amount)+'</div></div>';
+  }).join('');
+}
+function tabActivity(c){
+  var ev=[];
+  c.orders.forEach(function(o){ev.push({t:o.created_at||'',cls:'ord',x:'Order '+(o.order_no||'')+' placed · $'+nf(orderAmt(o)),d:(o.created_at||'')});
+    if(o.status==='Delivered'&&o.delivery_date)ev.push({t:o.delivery_date,cls:'del',x:'Delivered '+(o.order_no||''),d:o.delivery_date});
+    if(['Cancelled','Returned'].indexOf(o.status)>=0)ev.push({t:o.created_at||'',cls:'ord',x:(o.order_no||'')+' '+o.status,d:''});});
+  c.pays.forEach(function(p){ev.push({t:p.date||'',cls:'pay',x:'Payment '+esc(p.currency)+' '+nf(p.amount)+' ($'+nf(p.usd)+') · '+esc(p.method)+(p.kind==='advance'?' · advance':''),d:(p.date||'')+' · '+(p.receipt_no||'')});});
+  ev.sort(function(a,b){return (a.t<b.t)?1:-1;});
+  return '<div class="tl">'+(ev.length?ev.map(function(e){return '<div class="ev '+e.cls+'"><div class="x">'+e.x+'</div><div class="d">'+esc(e.d)+'</div></div>';}).join(''):'<div class="empty">No activity.</div>')+'</div>';
+}
+/* Invoice-based statement (accurate, in the customer's billed currency) — fills the tabs when ready. */
 function loadStatement(phone){
-  var box=document.getElementById('stmtBox'); if(!box)return;
   fetch('/papi/statement?phone='+encodeURIComponent(phone),{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
-    if(!d||!d.ok||!d.statement||!d.statement.lines.length){box.innerHTML='';return;}
-    var s=d.statement;
-    function fmap(m){var a=[];Object.keys(m||{}).forEach(function(cur){var dec=(cur==='USD')?2:0;a.push(cur+' '+Number(m[cur]).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec}));});return a.length?a.join(' · '):'0';}
-    var rows=s.lines.map(function(l){var dec=(l.currency==='USD')?2:0;var bal=Number(l.balance);
-      return '<div class="item"><div class="l"><div class="a">'+esc(l.no)+'<span class="st s-'+esc(l.status)+'">'+esc(l.status.replace("_"," "))+'</span></div>'+
-        '<div class="b">'+esc(l.date||'')+' · '+esc(l.currency)+' '+Number(l.total).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})+' · paid '+Number(l.paid).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})+'</div></div>'+
-        '<div class="amt" style="color:'+(bal>0.005?'#C0392B':'#15803D')+'">'+esc(l.currency)+' '+bal.toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})+'</div></div>';
-    }).join('');
-    box.innerHTML='<div class="sectlbl">📄 Invoices &amp; statement ('+s.count+')</div>'+
-      '<div class="cards"><div class="owe"><div class="t">Outstanding (billed)</div><div class="n">'+esc(fmap(s.outstanding))+'</div></div></div>'+
-      rows+
-      '<div style="margin:10px 0 4px"><button onclick="sendStatement(\''+esc(digits(phone))+'\')" style="background:#25D366;color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:800;cursor:pointer">📤 Send statement on WhatsApp</button> <span id="stmtMsg" style="font-size:12px;color:#64748b"></span></div>';
-  }).catch(function(){});
+    window.__STMT=(d&&d.ok&&d.statement)?d.statement:{lines:[],outstanding:{},count:0};
+    if(['overview','invoices','statement'].indexOf(CURTAB)>=0)showTab(CURTAB);
+  }).catch(function(){window.__STMT={lines:[],outstanding:{},count:0};if(['overview','invoices','statement'].indexOf(CURTAB)>=0)showTab(CURTAB);});
 }
 function sendStatement(phone){
   var m=document.getElementById('stmtMsg'); if(m)m.textContent='Sending…';

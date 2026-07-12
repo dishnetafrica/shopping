@@ -1,0 +1,36 @@
+DEPLOY — Customer 360 redesigned (tabbed, CRM-style) + where the statement lives
+================================================================================
+
+WHAT CHANGED (resources/panel/customers360.html only — no backend, no migration)
+  The customer detail page is rebuilt into a clean, tabbed layout like a proper CRM:
+    Header:  avatar · name · phone(s) · WhatsApp
+    Cards:   Invoiced (delivered) · Payments received · Outstanding · Advances held
+    Tabs:    Overview · Invoices · Payments · Statement · Returns / Refunds · Activity
+
+  - OVERVIEW: outstanding balance + recent orders + recent payments + a "Send statement" button.
+  - INVOICES: every invoice for the customer with billed / paid / balance (from the invoice ledger).
+  - PAYMENTS: all receipts (native amount + USD).
+  - STATEMENT: the full statement of account (total outstanding per currency) + "Send statement on
+    WhatsApp". ← this is WHERE YOU SEE THE STATEMENT.
+  - RETURNS / REFUNDS: this customer's returns/refunds, plus any store-credit available.
+  - ACTIVITY: the timeline (orders placed/delivered, payments).
+
+WHERE TO SEE A STATEMENT (three places)
+  1) Customer 360 → open a customer → "Statement" tab (or the Overview "Send statement" button).
+  2) Invoices register → "📄 Statement" on any of that customer's invoices.
+  3) The customer themselves: shop login → "My account" shows their balance + invoices.
+
+HOW REFUNDS & CREDIT WORK TODAY (for reference)
+  - Order screen → "↩ Return / refund" lets you: give STORE CREDIT, mark a REFUND pending, or
+    REDEEM existing credit. Returns are stored (ReturnRecord) and show in the new Returns tab.
+  - STORE CREDIT is a running balance tracked by the customer's phone and auto-offered on their
+    next order ("💳 Apply credit").
+  - There is NOT yet a formal numbered "Credit note" document (like your ISP CRM's Credit notes
+    tab). If you want proper numbered credit notes (CN-2026-0001, PDF, WhatsApp), say the word and
+    I'll add them the same way as invoices.
+
+DEPLOY
+  1. Replace resources/panel/customers360.html -> commit.
+  2. EasyPanel REBUILD (static asset; a hard refresh in the browser also picks it up).
+  (Requires the statement endpoints from the STATEMENT bundle to be deployed — they are part of
+   today's all-in-one zip.)
