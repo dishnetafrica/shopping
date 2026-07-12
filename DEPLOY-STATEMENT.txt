@@ -22,17 +22,19 @@ WHAT YOU GET
    outstanding (per currency), and the send-statement button — alongside the existing orders,
    payments and activity timeline.
 
-4) CUSTOMER SELF-SERVICE.
-   The customer's phone-login account API (myOrders) now also returns their statement (each
-   invoice's paid vs balance + total outstanding), so a logged-in customer can self-check what they
-   owe. (The storefront account screen needs to display the new `statement` field — the data is now
-   there; say the word and I'll wire the storefront UI too.)
+4) CUSTOMER SELF-SERVICE (wired end-to-end).
+   A customer logs into your shop (mycloudbss.com/<shop>) with a phone OTP and taps "My account".
+   They now see, above their past orders: a big "Total outstanding" banner (per currency, e.g.
+   USD 380 — or a green "No outstanding balance" when clear), and each invoice with its date, amount
+   billed, amount paid and balance. So customers self-check exactly what they owe, in the currency
+   they were billed. Backend (myOrders) returns it; the storefront screen (shop.html) displays it.
 
 FILES
   app/Services/Invoicing/StatementService.php     [NEW] builds the per-customer statement.
   app/Services/Invoicing/InvoiceRenderer.php      statement PDF (statementPdf / statementHtml).
   app/Http/Controllers/Panel/InvoiceController.php pay(), statementData/Pdf/Send.
   app/Http/Controllers/Storefront/CustomerAuthController.php   myOrders returns statement.
+  resources/storefront/shop.html                  customer "My account" shows their statement.
   resources/panel/invoices.html                   "💵 Pay" + "📄 Statement" buttons.
   resources/panel/customers360.html               invoices + statement section + send button.
   routes/web.php                                  invoice-pay, statement, statement-pdf, statement-send.

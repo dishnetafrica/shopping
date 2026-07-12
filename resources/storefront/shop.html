@@ -287,7 +287,7 @@ var TINTS=['#EEF2FB','#FDEEF3','#EAF6EF','#FFF4E6','#F1EEFB','#E9F5F9','#FCEEEA'
 var STORE_KEY='cb_cart_'+(SHOP.slug||'shop'), DELV_KEY='cb_delv_'+(SHOP.slug||'shop');
 var CUST_KEY='cb_cust_'+(SHOP.slug||'shop'), LAST_KEY='cb_last_'+(SHOP.slug||'shop');
 var CUST=null, LASTORDER=null;
-var AUTH_KEY='cb_tok_'+(SHOP.slug||'shop'), AUTHTOK=null, MYORDERS=null;
+var AUTH_KEY='cb_tok_'+(SHOP.slug||'shop'), AUTHTOK=null, MYORDERS=null, MYSTMT=null;
 function loadCust(){try{CUST=JSON.parse(localStorage.getItem(CUST_KEY)||'null');}catch(e){CUST=null;} try{LASTORDER=JSON.parse(localStorage.getItem(LAST_KEY)||'null');}catch(e){LASTORDER=null;} try{AUTHTOK=localStorage.getItem(AUTH_KEY)||null;}catch(e){AUTHTOK=null;} if(AUTHTOK)loadMyOrders();}
 function saveCust(c){CUST=c;try{localStorage.setItem(CUST_KEY,JSON.stringify(c));}catch(e){}}
 function saveLast(items){LASTORDER={items:items,at:Date.now()};try{localStorage.setItem(LAST_KEY,JSON.stringify(LASTORDER));}catch(e){}}
@@ -700,17 +700,18 @@ async function loadMyOrders(){
   try{var r=await fetch(authBase()+'/account/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:AUTHTOK})});
     if(r.status===401){logoutCust();return;}
     var d=await r.json();
-    if(d&&d.ok){MYORDERS=d.orders||[];var pr=d.profile||{};if(pr.name||pr.address)saveCust({name:pr.name||(CUST&&CUST.name)||'',phone:pr.phone||(CUST&&CUST.phone)||'',addr:pr.address||(CUST&&CUST.addr)||''});
+    if(d&&d.ok){MYORDERS=d.orders||[];MYSTMT=d.statement||null;var pr=d.profile||{};if(pr.name||pr.address)saveCust({name:pr.name||(CUST&&CUST.name)||'',phone:pr.phone||(CUST&&CUST.phone)||'',addr:pr.address||(CUST&&CUST.addr)||''});
       if(MYORDERS.length&&MYORDERS[0].items&&MYORDERS[0].items.length)saveLast(MYORDERS[0].items);render();}
   }catch(e){}
 }
-function logoutCust(){AUTHTOK=null;MYORDERS=null;try{localStorage.removeItem(AUTH_KEY);}catch(e){}forgetCust();}
+function logoutCust(){AUTHTOK=null;MYORDERS=null;MYSTMT=null;try{localStorage.removeItem(AUTH_KEY);}catch(e){}forgetCust();}
 function openMyOrders(){
   if(!AUTHTOK){openLogin();return;}
   if(!MYORDERS){loadMyOrders().then(openMyOrders);return;}
-  $('sheetTitle').textContent='My orders';
-  if(!MYORDERS.length){$('sheetBody').innerHTML='<div class="empty">No past orders yet.</div><button class="place" style="background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="closeSheet()">Close</button>';$('sheet').classList.add('show');return;}
-  var html=MYORDERS.map(function(o,i){
+  $('sheetTitle').textContent='My account';
+  var stmtHtml=renderMyStatement();
+  if(!MYORDERS.length){$('sheetBody').innerHTML=stmtHtml+'<div class="empty">No past orders yet.</div><button class="place" style="background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="closeSheet()">Close</button>';$('sheet').classList.add('show');return;}
+  var html=stmtHtml+MYORDERS.map(function(o,i){
     var items=(o.items||[]).map(function(it){return it.qty+'\u00D7 '+it.name;}).join(', ');
     return '<div style="border:1px solid var(--line);border-radius:11px;padding:11px;margin-bottom:10px">'+
       '<div style="display:flex;justify-content:space-between"><b>'+esc(o.order_no||('Order '+(i+1)))+'</b><span style="color:var(--muted);font-size:12px">'+esc(o.status||'')+'</span></div>'+
@@ -722,6 +723,24 @@ function openMyOrders(){
   $('sheet').classList.add('show');
 }
 function reorderFrom(i){if(MYORDERS&&MYORDERS[i])reorderItems(MYORDERS[i].items);}
+/* Customer self-service statement: total outstanding + each invoice's paid/balance. */
+function renderMyStatement(){
+  var s=MYSTMT; if(!s||!s.lines||!s.lines.length)return '';
+  function fmt(cur,n){var dec=(cur==='USD')?2:0;return esc(cur)+' '+(Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});}
+  var owe=s.outstanding||{}; var oweKeys=Object.keys(owe);
+  var oweTxt=oweKeys.length?oweKeys.map(function(c){return fmt(c,owe[c]);}).join(' · '):'';
+  var banner=oweKeys.length
+    ? '<div style="background:#FDECEA;border:1px solid #f3b4ad;border-radius:12px;padding:12px;margin-bottom:12px"><div style="font-size:11px;font-weight:800;color:#B4232A;text-transform:uppercase;letter-spacing:.4px">Total outstanding</div><div style="font-size:20px;font-weight:900;color:#B4232A;margin-top:2px">'+oweTxt+'</div></div>'
+    : '<div style="background:#E4F2EA;border:1px solid #b7e0c6;border-radius:12px;padding:12px;margin-bottom:12px"><div style="font-weight:800;color:#15803D">✓ No outstanding balance — thank you!</div></div>';
+  var rows=s.lines.map(function(l){
+    var bal=Number(l.balance)||0;
+    return '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:8px 0">'+
+      '<div><div style="font-weight:700;font-size:13px">'+esc(l.no)+'</div><div style="font-size:11px;color:var(--muted)">'+esc(l.date||'')+' · billed '+fmt(l.currency,l.total)+' · paid '+fmt(l.currency,l.paid)+'</div></div>'+
+      '<div style="font-weight:800;color:'+(bal>0.005?'#B4232A':'#15803D')+'">'+(bal>0.005?fmt(l.currency,bal):'Paid')+'</div></div>';
+  }).join('');
+  return '<div style="margin-bottom:14px">'+banner+
+    '<div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:2px 0 4px">Invoices ('+s.count+')</div>'+rows+'</div>';
+}
 function thaliBanner(){
   if(!THALI)return '';
   var hasImg=!!THALI.image, items=THALI.items||[];
