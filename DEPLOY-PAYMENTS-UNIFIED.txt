@@ -1,0 +1,47 @@
+DEPLOY — Unified payments (one payment updates cash + invoice + statement)
+==========================================================================
+
+THE PROBLEM WE SOLVED
+  There were two "record payment" spots that didn't talk to each other: the seller "Record Payment"
+  (operational cash receipts) and the invoice "Pay" (customer's billed balance). Now they're ONE.
+
+HOW IT WORKS NOW
+  There is a single payment ledger — the settlement receipts (CustomerPayment) the team already
+  uses on the seller screen. Every payment is normalised to USD internally, so it can be expressed
+  in any invoice's currency. Whenever a payment is recorded, edited, applied or voided, the linked
+  invoice's Paid / Balance / status are RE-DERIVED from that ledger automatically — and the
+  customer statement + 360 update in the same breath.
+
+  - Seller "💵 Record Payment" on an order → the order's invoice balance + the customer's statement
+    update instantly. (No behaviour change for the team — they keep using the same button.)
+  - Invoice "💵 Pay" (Invoices register) → now writes a real receipt in the SAME ledger, so it also
+    shows up in the cashbook and the order's payments — not just on the invoice.
+  - Cross-currency is handled: a UGX cash receipt correctly reduces a USD invoice (via the payment's
+    USD value); a USD receipt reduces a USD invoice exactly. Same-currency is always exact.
+  - Voiding/deleting a receipt puts the balance back. Issuing an invoice for an order that already
+    has receipts shows the right paid/balance from the start.
+
+FILES
+  app/Services/Invoicing/InvoiceService.php        syncPaidFromPayments() + syncByPayment() —
+      re-derive an invoice's paid/balance from the CustomerPayment ledger; called on issue.
+  app/Http/Controllers/Panel/PaymentController.php store/update/apply/destroy now sync the invoice.
+  app/Http/Controllers/Panel/InvoiceController.php  invoice "Pay" writes a real receipt (unified)
+      then re-derives — instead of only touching the invoice.
+  app/Http/Controllers/Panel/SelfcheckController.php  probe "Payments unified".
+
+DEPLOY
+  1. Replace the files -> commit.  (No migration.)
+  2. EasyPanel REBUILD.
+
+VERIFY
+  - /papi/selfcheck → "Payments unified (one payment → cash + invoice)" = true.
+  - Open an order with an issued invoice → "💵 Record Payment" (seller) for part of it → open the
+    Invoices register / the customer's statement: balance dropped by that amount.
+  - In the Invoices register → "💵 Pay" an invoice → the receipt also appears in Payments/cashbook,
+    and the invoice balance updates.
+  - Void that receipt (Payments screen) → the invoice balance goes back up.
+
+RATES
+  Cross-currency conversion uses your existing payment rates (settings rate_ugx_per_usd,
+  rate_ssp_per_usd — the same ones the receipts already use). For USD invoices with USD receipts no
+  conversion happens, so it's always exact for the common export case.

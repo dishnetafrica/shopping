@@ -1,66 +1,56 @@
-DEPLOY — ALL of today's changes in ONE bundle
-==============================================
-This single zip contains the three features shipped today, already merged (each file here is the
-latest version with every change applied). Deploy once. NO database migration is needed for any of
-this — everything is code + tenant settings.
+DEPLOY — EVERYTHING in ONE bundle (master checklist)
+====================================================
+This single zip contains all of today's features, already merged (each file is the latest version
+with every change applied). Deploy once. ONE database migration is required (the Invoices register).
 
-WHAT'S INSIDE (3 features)
-
-A) PROFESSIONAL INVOICE PDF + wholesale pricing            (details: DEPLOY-INVOICE-PDF.txt)
-   - "Export Invoice (PDF)" now builds a clean, branded server-side PDF (dompdf, like the
-     quotation) instead of printing the editable screen. WYSIWYG in the selected currency.
-   - Cartons + per-piece: line shows unit ("50 CTN"), pack ("×24") and per-piece rate.
-   - Part-carton (loose): a Carton/Piece selector — sell loose pieces at carton-price / pack.
-   - New orders default to carton quantities (MOQ); bot quote shows the loose per-piece rate.
-   - "Missing pack size" finder on Products to fill the setup gaps fast.
-   - Optional settings: invoice_title, invoice_terms, bank_details, invoice_footer,
-     invoice_terms_days, credit_terms.
-
-B) WHATSAPP BOT FIXES from real chats                      (details: DEPLOY-BOT-CHAT-FIXES.txt)
-   - "SkyTrips" fix: an ad's page/brand title is no longer treated as a product. Set the ignore
-     list on /panel/ads → Bot behaviour (add: SkyTrips).
-   - MOQ question answered with a wholesale carton default.
-   - Bot explains what products are for ("good for juice/water"); uses product Description.
-   - Warehouse in Luri: set it on /panel/ads → Bot behaviour; bot tells customers the pickup point.
-   - "Don't stop the AI when I message by hand": /panel/ads → "Keep AI replying…" switch.
-
-C) CONSIGNMENT STOCK REQUESTS (Asish → Kampala)           (details: DEPLOY-CONSIGNMENT-REQUEST.txt)
-   - The consignment loose-stock is the request→sent→received→sold pipeline (already built).
-   - Quick request list: paste "Cling Film 10 / Aluminium Foil 15" → added as Requested.
-   - "Send request to Kampala": WhatsApps the short list to Jayesh.
-   - One-tap for Asish: a "Request stock from Kampala" card on the consignment list AND a tile on
-     the mobile panel — lands on today's open consignment (auto-creates one if none is open).
-
-FILES IN THIS BUNDLE (14 code/asset + 4 notes)
-  app/Http/Controllers/Panel/OrderInvoiceController.php   [NEW]
-  app/Http/Controllers/Panel/AdsController.php
-  app/Http/Controllers/Panel/ConsignmentController.php
-  app/Http/Controllers/Panel/SelfcheckController.php      (all probes, incl. today's)
-  app/Jobs/ProcessIncomingMessage.php
-  app/Services/Bot/AiBrain.php
-  app/Services/Bot/BotBrain.php
-  app/Services/Bot/FaqDictionary.php
-  app/Services/Bot/OrderCalculator.php
-  resources/panel/seller.html
-  resources/panel/ads.html
-  resources/panel/consignment.html
-  resources/panel/mobile.html
-  routes/web.php
-  DEPLOY-INVOICE-PDF.txt · DEPLOY-BOT-CHAT-FIXES.txt · DEPLOY-CONSIGNMENT-REQUEST.txt · this file
-
-DEPLOY (once)
-  1. Replace all the files above -> commit.
-  2. php artisan migrate --force        (harmless — there are NO new migrations in this bundle;
-                                         run only if you have earlier pending ones.)
-  3. EasyPanel REBUILD (force / no-cache) — restarts the queue worker so the bot picks up the new
-     code, and serves the new panel screens.
-  4. Set these on /panel/ads → "Bot behaviour":
+SAFE-DEPLOY STEPS (do these; nothing here wipes your data or settings)
+  1. Replace ALL the files in this zip -> commit.
+  2. php artisan migrate --force        (creates the 3 Invoices tables; additive, safe)
+  3. EasyPanel REBUILD (force / no-cache) — restarts the queue worker + scheduler.
+  4. Set on /panel/ads → "Bot behaviour":
        - Ad page/brand names to ignore:  SkyTrips
        - Keep AI replying after I message a customer:  ON
+       - Price basis city:  Juba
        - Warehouse / pickup location:  Luri, just outside Juba, South Sudan
-     And make sure Jayesh's WhatsApp is set (sourcing buyer number, or consignment_dispatch_phone).
+       - (optional) turn ON the Virtual salesperson + set the re-order window
+  NEVER run on production: migrate:fresh, migrate:refresh, db:wipe (these DROP data). A normal
+  "migrate --force" only adds tables and is safe to run on every deploy.
 
-VERIFY — /papi/selfcheck should now show these true:
-   Professional invoice PDF (server-side); Ad page/brand not treated as product (SkyTrips fix);
-   Keep-AI-on…; Warehouse / pickup answer (Luri); Bot explains what products are for; Ads screen
-   behaviour controls; Consignment stock-request + notify Kampala; One-tap stock request (Asish).
+WHAT'S INSIDE (feature → details file)
+  A) Professional INVOICE PDF + wholesale pricing        → DEPLOY-INVOICE-PDF.txt
+     Server-side branded PDF; cartons + per-piece; part-carton (loose) selling; carton-default
+     order qty; "missing pack size" + "missing photo" finders on Products.
+  B) WhatsApp bot fixes (from real chats)                → DEPLOY-BOT-CHAT-FIXES.txt
+     SkyTrips ad-name fix; wholesale MOQ answer; product-use guidance; warehouse answer;
+     keep-AI-on after a manual message; sends the photo of the product it recommended.
+  C) Consignment stock requests (Asish → Kampala)        → DEPLOY-CONSIGNMENT-REQUEST.txt
+     Paste/pick a request list; "Send request to Kampala"; one-tap from the list + mobile tile;
+     requested-by / send-to (staff contacts).
+  D) INVOICES register + numbering (INV-2026-0001)       → DEPLOY-INVOICES.txt   [needs migration]
+     Numbered, permanent invoices; manual "Issue invoice" + auto on delivery; stored PDF;
+     send invoice on WhatsApp.
+  E) Customer STATEMENT + self-service + 360             → DEPLOY-STATEMENT.txt
+     Partial payment on invoices; statement of account (WhatsApp + PDF); customer login "My
+     account" shows their balance; team 360 shows invoices.
+  F) Unified PAYMENTS                                     → DEPLOY-PAYMENTS-UNIFIED.txt
+     One payment (seller Record Payment OR invoice Pay) updates cash + invoice + statement;
+     cross-currency (UGX cash reduces a USD invoice).
+  G) Virtual salesperson (auto follow-up)                → DEPLOY-SALES-CADENCE.txt
+     Day 1 enquiry follow-up → Day 3 price list → Day 7 check-in → every 2 weeks; re-order
+     reminders for past buyers; governed + opt-in; pinned to EAT.
+  H) Universal EAT clock + follow-up pinned to EAT       → DEPLOY-CLOCK-EAT.txt
+     Live "🕒 Mon 14:32 EAT" on every major screen; bot working-hours in East Africa Time.
+  I) Ex-Juba pricing + learn-the-route                   → DEPLOY-EXJUBA-LOGISTICS.txt
+     USD prices quoted ex-Juba; bot asks out-of-town South Sudan customers their transporter/route
+     (or collect) and records it on the order; knows all SS cities.
+
+VERIFY (open /papi/selfcheck — these should be TRUE)
+  Professional invoice PDF; Ad page/brand not treated as product (SkyTrips fix); Keep-AI-on;
+  Warehouse/pickup answer; Bot explains what products are for; Bot sends photo of recommended
+  product; Ads screen behaviour controls; Consignment stock-request + notify Kampala; One-tap
+  stock request; Invoice register tables migrated; Numbered invoice register; Auto-issue on
+  delivery; Issue-invoice button; Send invoice on WhatsApp; Record partial payment on invoice;
+  Payments unified; Customer statement of account; Customer self-service statement; Customer 360
+  shows invoices; Virtual salesperson code (+ ON once you enable it); "Price basis city" reflected.
+
+  (Rows tied to a tenant setting only turn green after you set them in step 4.)

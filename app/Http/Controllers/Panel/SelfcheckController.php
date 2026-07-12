@@ -76,6 +76,9 @@ class SelfcheckController extends Controller
             && (bool) $this->fileHas('resources/panel/invoices.html', 'sendInv'));
         $add('invoice_partial_pay', 'Record partial payment on invoice',
             method_exists(\App\Http\Controllers\Panel\InvoiceController::class, 'pay'));
+        $add('payment_unified', 'Payments unified (one payment → cash + invoice)',
+            method_exists(\App\Services\Invoicing\InvoiceService::class, 'syncByPayment')
+            && (bool) $this->fileHas('app/Http/Controllers/Panel/PaymentController.php', 'syncByPayment'));
         $add('customer_statement', 'Customer statement of account (+ WhatsApp)',
             class_exists(\App\Services\Invoicing\StatementService::class)
             && method_exists(\App\Http\Controllers\Panel\InvoiceController::class, 'statementSend'));

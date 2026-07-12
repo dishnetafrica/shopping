@@ -2,6 +2,7 @@
 
 namespace App\Services\Invoicing;
 
+use App\Models\CustomerPayment;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Order;
@@ -90,6 +91,10 @@ class InvoiceService
             \Log::warning('Invoice PDF store failed: ' . $e->getMessage());
         }
 
+        // If the order already has settlement payments, reflect them on the fresh invoice so its
+        // paid/balance is unified with the payment ledger from the start.
+        if ($orderId) $this->syncPaidFromPayments($inv);
+
         return $inv;
     }
 
@@ -97,6 +102,70 @@ class InvoiceService
     public function issueForOrder(Tenant $t, Order $order, string $source = 'auto'): Invoice
     {
         return $this->issue($t, $this->renderer->fromOrder($t, $order), (int) $order->id, $source);
+    }
+
+    /**
+     * Re-derive an invoice's paid/balance from the ONE payment ledger the team uses (CustomerPayment,
+     * the settlement receipts), so a payment recorded anywhere — the seller "Record Payment", the
+     * invoice "Pay" button, the cashbook — updates the invoice + statement in the same breath.
+     * Each payment is normalised to USD (usd_amount); we express it in the invoice's currency.
+     */
+    public function syncPaidFromPayments(Invoice $inv): void
+    {
+        try {
+            $t = Tenant::find($inv->tenant_id);
+            if (! $t) return;
+            $inv->loadMissing('order');
+            $orderNo = $inv->order?->order_no;
+
+            $pays = CustomerPayment::where('tenant_id', $inv->tenant_id)
+                ->where(function ($w) use ($inv, $orderNo) {
+                    $w->where('invoice_no', $inv->invoice_no);
+                    if ($orderNo) $w->orWhere('order_no', $orderNo);
+                })
+                ->where('kind', 'settlement')   // advances aren't applied to a balance until settled
+                ->get();
+
+            $cur = strtoupper((string) $inv->currency);
+            $ratePerUsd = fn (string $c) => (float) $t->setting('rate_' . strtolower($c) . '_per_usd',
+                $c === 'UGX' ? 3655 : ($c === 'SSP' ? 5180 : 1)) ?: 1;
+
+            $paid = 0.0;
+            foreach ($pays as $p) {
+                if (strtoupper((string) $p->currency) === $cur) {
+                    $paid += (float) $p->amount;                 // same currency → exact
+                } elseif ($cur === 'USD') {
+                    $paid += (float) $p->usd_amount;             // any → USD (already normalised)
+                } else {
+                    $paid += (float) $p->usd_amount * $ratePerUsd($cur); // USD → invoice currency
+                }
+            }
+            $paid = round($paid, 2);
+
+            $inv->amount_paid = $paid;
+            $inv->balance     = round(max(0, (float) $inv->total - $paid), 2);
+            $inv->status      = $inv->balance <= 0.5 ? 'paid' : ($paid > 0 ? 'part_paid' : 'issued');
+            // drop the cached PDF so a re-download shows the new balance
+            if ($inv->pdf_path) { try { Storage::disk('public')->delete($inv->pdf_path); } catch (\Throwable $e) {} $inv->pdf_path = null; }
+            $inv->save();
+        } catch (\Throwable $e) {
+            \Log::warning('syncPaidFromPayments failed: ' . $e->getMessage());
+        }
+    }
+
+    /** Find + sync the invoice tied to a payment (by invoice_no, else the order's invoice). */
+    public function syncByPayment($t, ?string $invoiceNo, ?string $orderNo): void
+    {
+        try {
+            $inv = null;
+            if ($invoiceNo) $inv = Invoice::where('tenant_id', $t->id)->where('invoice_no', $invoiceNo)->first();
+            if (! $inv && $orderNo) {
+                $order = Order::where('tenant_id', $t->id)->where('order_no', $orderNo)->first();
+                if ($order) $inv = Invoice::where('tenant_id', $t->id)->where('order_id', $order->id)
+                    ->where('status', '!=', 'void')->orderByDesc('id')->first();
+            }
+            if ($inv) $this->syncPaidFromPayments($inv);
+        } catch (\Throwable $e) { /* never break the payment path */ }
     }
 
     /** Next gapless number for this tenant + current year, e.g. INV-2026-0001. */

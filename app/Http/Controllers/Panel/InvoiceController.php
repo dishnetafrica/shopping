@@ -218,23 +218,55 @@ class InvoiceController extends Controller
      */
     public function pay(Request $request)
     {
-        $t = $request->user()->tenant;
+        $t = $request->user()->tenant; $u = $request->user();
         if (! $t) return response()->json(['ok' => false], 401);
-        $inv = Invoice::where('tenant_id', $t->id)->find((int) $request->input('id'));
+        $inv = Invoice::with('order')->where('tenant_id', $t->id)->find((int) $request->input('id'));
         if (! $inv) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
         if ($inv->status === 'void') return response()->json(['ok' => false, 'error' => 'void'], 422);
 
         $amt = round((float) $request->input('amount', 0), 2);
         if ($amt <= 0) return response()->json(['ok' => false, 'error' => 'bad_amount'], 422);
+        $cur = strtoupper(trim((string) $request->input('currency', ''))) ?: (string) $inv->currency;
 
-        $inv->amount_paid = round((float) $inv->amount_paid + $amt, 2);
-        $inv->balance     = round(max(0, (float) $inv->total - (float) $inv->amount_paid), 2);
-        $inv->status      = $inv->balance <= 0.5 ? 'paid' : ((float) $inv->amount_paid > 0 ? 'part_paid' : 'issued');
-        $inv->save();
+        $orderNo = $inv->order?->order_no;
 
-        // Drop the cached PDF so a re-download shows the new balance.
-        try { if ($inv->pdf_path) Storage::disk('public')->delete($inv->pdf_path); } catch (\Throwable $e) {}
-        $inv->pdf_path = null; $inv->save();
+        // UNIFIED: record the payment in the ONE ledger (CustomerPayment settlement) — so it lands
+        // in the cashbook + the order's payments AND updates the invoice/statement — then re-derive
+        // the invoice balance from that ledger. Falls back to a direct invoice update only if the
+        // invoice somehow has no linked order (can't tie a receipt to an order then).
+        if ($orderNo) {
+            $rate = $cur === 'USD' ? 1.0 : (float) $t->setting('rate_' . strtolower($cur) . '_per_usd', $cur === 'UGX' ? 3655 : 5180);
+            if ($rate <= 0) $rate = 1;
+            $usd    = \App\Models\OrderCost::toUsd($amt, $rate);
+            $method = trim((string) $request->input('method', 'Cash')) ?: 'Cash';
+            \Illuminate\Support\Facades\DB::transaction(function () use ($t, $u, $inv, $orderNo, $cur, $amt, $rate, $usd, $method) {
+                $cost = \App\Models\OrderCost::create([
+                    'tenant_id' => $t->id, 'order_id' => null, 'order_no' => $orderNo,
+                    'stage' => 'customer_payment', 'currency' => $cur, 'native_amount' => $amt, 'rate_to_usd' => $rate,
+                    'usd_amount' => $usd, 'holder' => (string) ($u->name ?? ''), 'holder_user_id' => $u->id,
+                    'pay_status' => 'cash', 'paid_native' => $amt, 'category' => 'Receipt',
+                    'note' => 'Payment on ' . $inv->invoice_no, 'status' => 'approved', 'created_by' => $u->name ?? '',
+                ]);
+                $pay = \App\Models\CustomerPayment::create([
+                    'tenant_id' => $t->id, 'receipt_no' => 'TMP', 'customer_name' => (string) ($inv->customer_name ?? 'Customer'),
+                    'customer_phone' => $inv->customer_phone, 'order_no' => $orderNo, 'invoice_no' => $inv->invoice_no,
+                    'kind' => 'settlement', 'currency' => $cur, 'amount' => $amt, 'rate_to_usd' => $rate, 'usd_amount' => $usd,
+                    'method' => $method, 'applied' => true, 'order_cost_id' => $cost->id,
+                    'holder' => (string) ($u->name ?? ''), 'holder_user_id' => $u->id, 'created_by' => $u->name ?? '',
+                ]);
+                $pay->receipt_no = 'RCP-' . str_pad((string) $pay->id, 5, '0', STR_PAD_LEFT);
+                $pay->save();
+            });
+            $this->svc->syncByPayment($t, $inv->invoice_no, $orderNo);
+            $inv->refresh();
+        } else {
+            // no order to tie a receipt to — update the invoice directly
+            $inv->amount_paid = round((float) $inv->amount_paid + $amt, 2);
+            $inv->balance     = round(max(0, (float) $inv->total - (float) $inv->amount_paid), 2);
+            $inv->status      = $inv->balance <= 0.5 ? 'paid' : ((float) $inv->amount_paid > 0 ? 'part_paid' : 'issued');
+            try { if ($inv->pdf_path) Storage::disk('public')->delete($inv->pdf_path); } catch (\Throwable $e) {}
+            $inv->pdf_path = null; $inv->save();
+        }
 
         return response()->json(['ok' => true, 'paid' => (float) $inv->amount_paid,
             'balance' => (float) $inv->balance, 'status' => $inv->status]);

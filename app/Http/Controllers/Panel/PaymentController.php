@@ -121,6 +121,9 @@ class PaymentController extends Controller
             return ['id'=>$pay->id,'receipt_no'=>$pay->receipt_no];
         });
 
+        // Unify with invoices: reflect this payment on the linked invoice's balance + statement.
+        try { app(\App\Services\Invoicing\InvoiceService::class)->syncByPayment($t, $invoice, $orderNo); } catch (\Throwable $e) {}
+
         return response()->json(['ok'=>true,'send_receipt'=>$sendReceipt] + $result + ['usd'=>$usd,'currency'=>$cur,'amount'=>$amount]);
     }
 
@@ -204,6 +207,8 @@ class PaymentController extends Controller
             }
         });
 
+        try { app(\App\Services\Invoicing\InvoiceService::class)->syncByPayment($t, $p->invoice_no, $orderNo); } catch (\Throwable $e) {}
+
         return response()->json(['ok'=>true,'id'=>$p->id,'receipt_no'=>$p->receipt_no,'currency'=>$cur,'amount'=>$amount,'usd'=>$usd,'holder'=>$holderName,'order_no'=>$orderNo]);
     }
 
@@ -216,6 +221,7 @@ class PaymentController extends Controller
         if (! $p) return response()->json(['ok'=>false,'error'=>'not_found'],404);
         $p->applied = ! filter_var($request->input('undo', false), FILTER_VALIDATE_BOOLEAN);
         $p->save();
+        try { app(\App\Services\Invoicing\InvoiceService::class)->syncByPayment($u->tenant, $p->invoice_no, $p->order_no); } catch (\Throwable $e) {}
         return response()->json(['ok'=>true,'applied'=>(bool)$p->applied]);
     }
 
@@ -241,6 +247,7 @@ class PaymentController extends Controller
             \App\Services\AuditLogger::log($u->tenant_id,'customer_payment',$p->id,'void',$u,['amount'=>(float)($p->amount ?? 0)],null,'payment voided');
             $p->delete();
         });
+        try { app(\App\Services\Invoicing\InvoiceService::class)->syncByPayment($u->tenant, $p->invoice_no, $p->order_no); } catch (\Throwable $e) {}
         return response()->json(['ok'=>true,'voided'=>true]);
     }
 }
