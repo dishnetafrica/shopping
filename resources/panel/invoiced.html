@@ -105,10 +105,24 @@ function orderCur(o){
 }
 function orderDate(o){ return (o.delivery_date && String(o.delivery_date).trim()) ? o.delivery_date : o.created_at; }
 
+/* E3.3 — single FX rate. Log divergence from the hardcoded display rate (parallel-run
+   reconciliation); only override RATE_UGX/RATE_SSP when the tenant has enabled fx_v2. */
+function applyFxV2(){
+  return fetch('/papi/fx',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',cache:'no-store'})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d||!d.ok)return;
+      var newU=Number(d.ugx_per_usd)||0, newS=Number(d.ssp_per_usd)||0;
+      if(newU>0&&Math.abs(newU-RATE_UGX)>0.5){try{console.warn('[fx_v2] UGX per USD: current '+RATE_UGX+' vs canonical '+newU);}catch(e){}}
+      if(newS>0&&Math.abs(newS-RATE_SSP)>0.5){try{console.warn('[fx_v2] SSP per USD: current '+RATE_SSP+' vs canonical '+newS);}catch(e){}}
+      if(d.enabled){ if(newU>0)RATE_UGX=newU; if(newS>0)RATE_SSP=newS; }
+    }).catch(function(){});
+}
 function load(){
-  fetch('/papi/orders',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
-    .then(r=>r.json()).then(function(d){ ALL=(d&&d.orders)||[]; render(); })
-    .catch(function(){ $('list').innerHTML='<div class="empty">Could not load orders.</div>'; });
+  applyFxV2().then(function(){
+    fetch('/papi/orders',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+      .then(r=>r.json()).then(function(d){ ALL=(d&&d.orders)||[]; render(); })
+      .catch(function(){ $('list').innerHTML='<div class="empty">Could not load orders.</div>'; });
+  });
 }
 function move(n){ sel.setMonth(sel.getMonth()+n); render(); }
 function render(){

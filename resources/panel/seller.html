@@ -1248,6 +1248,10 @@ var CATALOGUE=[], ORDERS=[], RIDERS=[], RETURNS=[], CREDIT={}, RM_PHOTO='', ARCH
 var CUSTPROFILE={};
 var SETTINGS={storeName:'Family Shopper',storePhone:'+256 7xx xxx xxx',storeAddress:'Kampala, Uganda',storeEmail:'orders@familyshopper.ug',logo:'',slug:'',customDomain:'',onboarded:false,botMode:'auto'};
 var FEATURES={};
+/* E1.3 — restaurant screens are an optional module, default OFF (hidden) unless the
+   tenant enables modules.restaurant. Other data-feature keys keep their own default. */
+var RESTAURANT_KEYS=['kitchen','pos','thali','riders','dispatch'];
+var RESTAURANT_ON=false;
 var BRANCHES=[], BRANCH_FILTER='', INVENTORY_MODE='shared', MY_BRANCH=localStorage.getItem('fs_branch')||'', MY_ROLE=localStorage.getItem('fs_role')||'owner';
 function branchOrders(){return BRANCH_FILTER?ORDERS.filter(function(o){return String(o.branch||'')===BRANCH_FILTER;}):ORDERS;}
 function branchName(id){var b=BRANCHES.find(function(x){return String(x.id)===String(id);});return b?b.name:id;}
@@ -1309,8 +1313,23 @@ async function loadBotConfig(){
       if(BOT_CUR!=='auto'&&!PLAIN){CUR=BOT_CUR;try{localStorage.setItem('fs_cur',CUR);}catch(e){}}
     }
   }catch(e){}
+  try{ await applyFxV2(); }catch(e){}   // E3.3 — override client rate with the canonical FX (flag-gated) before render
   applyDiscount();
   initCurrency(); rerenderCurrent();
+}
+/* E3.3 — single FX rate. Fetch the canonical /papi/fx rate; ALWAYS log divergence from the current
+   client rate (parallel-run reconciliation, even when the flag is off); only override RATES when the
+   tenant has enabled fx_v2. Never throws. */
+async function applyFxV2(){
+  try{
+    var r=await fetch('/papi/fx',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin',cache:'no-store'});
+    var d=await r.json(); if(!d||!d.ok)return;
+    var oldU=Number(RATES.usdUgx)||0, oldS=Number(RATES.usdSsp)||0;
+    var newU=Number(d.ugx_per_usd)||0, newS=Number(d.ssp_per_usd)||0;
+    if(newU>0&&Math.abs(newU-oldU)>0.5){try{console.warn('[fx_v2] UGX per USD: current '+oldU+' vs canonical '+newU);}catch(e){}}
+    if(newS>0&&Math.abs(newS-oldS)>0.5){try{console.warn('[fx_v2] SSP per USD: current '+oldS+' vs canonical '+newS);}catch(e){}}
+    if(d.enabled){ if(newU>0)RATES.usdUgx=newU; if(newS>0)RATES.usdSsp=newS; }
+  }catch(e){}
 }
 function feeFor(c){var km=distKm(c);if(km==null)return 0;var f=Math.max(DELIV.min,DELIV.base+DELIV.perKm*km);return Math.round(f/DELIV.round)*DELIV.round;}
 function haversine(a,b){if(!a||!b||a.lat==null||b.lat==null)return null;var R=6371,dLat=(b.lat-a.lat)*Math.PI/180,dLng=(b.lng-a.lng)*Math.PI/180;
@@ -4128,12 +4147,18 @@ function applySettings(s){
 // Hide panel features this seller doesn't have (e.g. Daily Thali for non-food shops).
 function applyFeatureGates(){
   document.querySelectorAll('[data-feature]').forEach(function(el){
-    var on=FEATURES[el.getAttribute('data-feature')]!==false;
+    var key=el.getAttribute('data-feature');
+    var on=FEATURES[key]!==false;
+    // E1.3: restaurant features are hidden unless the restaurant module is enabled.
+    if(RESTAURANT_KEYS.indexOf(key)>=0){ on = RESTAURANT_ON && (FEATURES[key]!==false); }
     el.style.display = on ? '' : 'none';
   });
   // if we're sitting on a now-hidden page, fall back to the dashboard
   var cur=document.querySelector('.side a.nav.on');
-  if(cur&&cur.getAttribute('data-feature')&&FEATURES[cur.getAttribute('data-feature')]===false){showPage('dash');}
+  if(cur){
+    var ck=cur.getAttribute('data-feature');
+    if(ck && (FEATURES[ck]===false || (RESTAURANT_KEYS.indexOf(ck)>=0 && !RESTAURANT_ON))){showPage('dash');}
+  }
 }
 async function loadSettings(){
   if(!token)return;
@@ -5073,6 +5098,52 @@ if(token){startApp();}else{showLogin();}
     function tick(){c.textContent=eat();} tick(); setInterval(tick,15000);
   }
   if(document.readyState!=='loading')mount(); else document.addEventListener('DOMContentLoaded',mount);
+})();
+</script>
+<script>
+/* Roadmap E1.2 — nav_v2. When the tenant has opted in (setting nav_v2=true, surfaced
+   as `enabled` by /papi/nav), rebuild the sidebar from the ONE navigation config
+   (Product Architecture v2 §1): grouped, full-page links, every screen exactly once.
+   Flag OFF (default) => this does nothing and the existing menu stays as-is. */
+(function(){
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function build(groups){
+    var nav=document.querySelector('#side nav'); if(!nav)return false;
+    var h='';
+    (groups||[]).forEach(function(g){
+      h+='<div class="navsec">'+esc(g.label)+'</div>';
+      (g.items||[]).forEach(function(it){
+        h+='<a class="nav" href="'+esc(it.route)+'"><span class="i">'+esc(it.icon)+'</span> '+esc(it.label)+'</a>';
+      });
+    });
+    h+='<a class="nav" href="/panel/logout"><span class="i">⏻</span> Logout</a>';
+    nav.innerHTML=h;
+    return true;
+  }
+  function go(){
+    fetch('/papi/nav',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+      .then(function(r){return r.json();})
+      .then(function(d){ if(d&&d.ok&&d.enabled&&Array.isArray(d.groups)&&d.groups.length){ build(d.groups); } })
+      .catch(function(){});
+  }
+  if(document.readyState!=='loading')go(); else document.addEventListener('DOMContentLoaded',go);
+})();
+</script>
+<script>
+/* Roadmap E1.3 — gate restaurant features on the optional module.restaurant flag
+   (default OFF). Kitchen/POS/Thali/Riders/Dispatch stay hidden unless the tenant has
+   enabled the restaurant module (modules.restaurant = true). Other data-feature keys
+   (e.g. image_search) are unaffected. */
+(function(){
+  function apply(){ try{ if(typeof applyFeatureGates==='function') applyFeatureGates(); }catch(e){} }
+  function run(){
+    apply(); // default-off immediately, before the flag loads
+    fetch('/papi/nav',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+      .then(function(r){return r.json();})
+      .then(function(d){ if(d&&d.ok&&d.modules){ window.RESTAURANT_ON = !!d.modules.restaurant; apply(); } })
+      .catch(function(){});
+  }
+  if(document.readyState!=='loading')run(); else document.addEventListener('DOMContentLoaded',run);
 })();
 </script>
 </body>
