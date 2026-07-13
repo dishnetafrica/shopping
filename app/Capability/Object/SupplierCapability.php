@@ -10,6 +10,7 @@ use App\Capability\Dto\WorkspacePayload;
 use App\Capability\Support\Money;
 use App\Models\OrderCost;
 use App\Models\Supplier;
+use App\Services\Purchasing\SupplierPaymentService;
 
 final class SupplierCapability implements ObjectCapability
 {
@@ -45,16 +46,41 @@ final class SupplierCapability implements ObjectCapability
             ])
             ->headline(Money::fmt(max(0, $owed), (string) ($s->opening_currency ?: $ctx->baseCurrency())), 'balance owed', $owed > 0 ? 'warn' : 'ok')
             ->financials([
-                new Financial('owed', 'Owed', round(max(0, $owed), 2), (string) ($s->opening_currency ?: 'USD'), $owed > 0 ? 'warn' : 'ok'),
+                new Financial('owed', 'Owed', round(max(0, $owed), 2), (string) ($s->opening_currency ?: $ctx->baseCurrency()), $owed > 0 ? 'warn' : 'ok'),
                 new Financial('terms', 'Terms', $s->pay_term_days ? ('Net ' . $s->pay_term_days) : 'Cash'),
             ])
             ->related($recent)
-            ->actions([['key' => 'new_po', 'label' => 'New purchase order', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/supplier/' . $s->id . '/new_po', 'actor' => 'human', 'tone' => 'primary']])
+            ->actions($owed > 0 ? [[
+                'key' => 'record_supplier_payment', 'label' => 'Record payment', 'method' => 'POST',
+                'endpoint' => '/api/v1/workspace/supplier/' . $s->id . '/record_supplier_payment',
+                'actor' => 'human', 'tone' => 'primary',
+                'schema' => ['amount' => 'money', 'currency' => 'enum:UGX,USD,SSP'],
+                'prefill' => ['currency' => (string) ($s->opening_currency ?: $ctx->baseCurrency())],
+            ]] : [])
             ->meta(['capability' => 'supplier', 'ttl' => 120, 'permissions' => ['menu:purchases']]);
     }
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
-        return ['ok' => false, 'error' => 'unknown_action:' . $action];
+        return match ($action) {
+            'record_supplier_payment' => $this->recordPayment($ctx, $input),
+            default => ['ok' => false, 'error' => 'unknown_action:' . $action],
+        };
+    }
+
+    /** Delegates to the frozen-mirroring SupplierPaymentService — books a supplier_payment row. */
+    private function recordPayment(CapabilityContext $ctx, array $input): array
+    {
+        $s = Supplier::where('tenant_id', $ctx->tenantId())->find((int) ($input['id'] ?? 0));
+        if (! $s) {
+            return ['ok' => false, 'error' => 'not_found'];
+        }
+        try {
+            app(SupplierPaymentService::class)->record($ctx->tenant, $s, $ctx->user, $input);
+        } catch (\InvalidArgumentException $e) {
+            return ['ok' => false, 'error' => $e->getMessage(), 'message' => 'Enter an amount above zero.'];
+        }
+
+        return ['ok' => true, 'message' => 'Payment recorded for ' . $s->name . '.'];
     }
 }
