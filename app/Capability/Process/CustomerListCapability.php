@@ -8,6 +8,7 @@ use App\Capability\Dto\WorkspacePayload;
 use App\Capability\Support\Money;
 use App\Models\CustomerProfile;
 use App\Models\Order;
+use App\Services\Crm\CustomerWriteService;
 use Illuminate\Support\Carbon;
 
 /**
@@ -114,9 +115,21 @@ final class CustomerListCapability implements ProcessCapability
             ])
             ->table($columns, $rows)
             ->actions([
+                ['key' => 'add_customer', 'label' => 'New customer', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/customers/_/add_customer', 'actor' => 'human', 'tone' => 'primary', 'schema' => self::formSchema()],
                 ['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customers', 'actor' => 'human', 'tone' => 'default', 'icon' => 'export'],
             ])
             ->meta(['capability' => 'customers', 'ttl' => 60, 'permissions' => ['menu:customers'], 'note' => 'Segment column omitted — not in the frozen schema; add a nullable customer_profiles.segment field to populate it.']);
+    }
+
+    /** Fields for the add/edit customer form. Phone is the identity key (required). */
+    public static function formSchema(): array
+    {
+        return [
+            'name'    => 'text',
+            'phone'   => 'text',
+            'email'   => 'text',
+            'address' => 'text',
+        ];
     }
 
     public function summary(CapabilityContext $ctx, array $scope = []): array
@@ -126,6 +139,16 @@ final class CustomerListCapability implements ProcessCapability
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
+        if ($action === 'add_customer') {
+            try {
+                $c = app(CustomerWriteService::class)->create($ctx->tenant, $input);
+            } catch (\InvalidArgumentException $e) {
+                return ['ok' => false, 'error' => $e->getMessage(), 'message' => 'A phone number is required to add a customer.'];
+            }
+
+            return ['ok' => true, 'id' => (int) $c->id, 'message' => 'Customer "' . ($c->name ?: $c->phone) . '" added.'];
+        }
+
         return ['ok' => false, 'error' => 'unknown_action'];
     }
 }

@@ -73,7 +73,12 @@ final class CustomerCapability implements ObjectCapability
             ->brief($brief)
             ->timeline($this->timeline->forPhone($ctx, $phone))
             ->related([new Related('invoices', 'invoice', null, null, null, $invCount)])
-            ->actions($brief->actions)
+            ->actions(array_merge($brief->actions, [[
+                'key' => 'edit_customer', 'label' => 'Edit', 'method' => 'POST', 'endpoint' => $endpoint . '/update_customer',
+                'actor' => 'human', 'tone' => 'default',
+                'schema' => \App\Capability\Process\CustomerListCapability::formSchema(),
+                'prefill' => ['name' => (string) $c->name, 'phone' => $phone, 'email' => (string) $c->email, 'address' => (string) $c->address],
+            ]]))
             ->meta(['capability' => 'customer', 'ttl' => 60, 'permissions' => ['menu:customers']]);
     }
 
@@ -81,9 +86,22 @@ final class CustomerCapability implements ObjectCapability
     {
         return match ($action) {
             'record_payment' => $this->recordPayment($ctx, $input),
+            'update_customer' => $this->updateCustomer($ctx, $input),
             'send_reminder' => ['ok' => true, 'sent' => true],
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
+    }
+
+    /** Edit the customer's saved details via the frozen-mirroring CustomerWriteService. */
+    private function updateCustomer(CapabilityContext $ctx, array $input): array
+    {
+        $c = CustomerProfile::where('tenant_id', $ctx->tenantId())->find((int) ($input['id'] ?? $input['customer_id'] ?? 0));
+        if (! $c) {
+            return ['ok' => false, 'error' => 'not_found'];
+        }
+        app(\App\Services\Crm\CustomerWriteService::class)->update($ctx->tenant, $c, $input);
+
+        return ['ok' => true, 'message' => 'Customer updated.'];
     }
 
     /** Delegates to the frozen engine. No model writes, no business logic here. */
