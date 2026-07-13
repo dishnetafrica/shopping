@@ -17,7 +17,7 @@ class OtpLogin extends BaseLogin
 {
     protected static string $view = 'filament.auth.otp-login';
 
-    public string $method = 'whatsapp';   // 'whatsapp' | 'email'
+    public string $method = 'email';   // 'whatsapp' | 'email' — default to email+password (v3 sign-in design); WhatsApp is one click away
 
     // WhatsApp OTP
     public ?string $phone = null;
