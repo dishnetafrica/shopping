@@ -91,7 +91,10 @@ final class QuotationListCapability implements ProcessCapability
                 ['key' => 'conversion', 'label' => 'Conversion rate', 'value' => $conv, 'format' => 'pct', 'foot' => $converted . ' converted to orders'],
                 ['key' => 'openvalue', 'label' => 'Open value', 'value' => Money::fmt($openValue, $cur), 'foot' => 'awaiting reply'],
             ])
-            ->table($columns, $rows)
+            ->table($columns, $rows, [], [
+                'dateKey' => 'created', 'dateLabel' => 'Created', 'currency' => $cur, 'pageSize' => 20,
+                'totals' => [['key' => 'value', 'label' => 'Total value', 'money' => true]],
+            ])
             ->actions([['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/quotations', 'actor' => 'human', 'tone' => 'default']])
             ->meta(['capability' => 'quotations', 'ttl' => 60, 'permissions' => ['menu:orders'], 'note' => 'Prepared-by column omitted — not in the frozen quotations schema.']);
     }

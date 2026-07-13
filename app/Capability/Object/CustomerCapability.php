@@ -124,67 +124,83 @@ final class CustomerCapability implements ObjectCapability
             ['label' => 'Current balance', 'value' => $fmt($balance), 'icon' => 'invoice', 'tone' => $balance > 0 ? 'warn' : 'ok', 'color' => $balance > 0 ? '#d97706' : '#16a34a', 'wash' => $balance > 0 ? 'var(--warn-wash)' : 'var(--brand-wash)', 'foot' => $balance > 0 ? $fmt($ins['overdue']) . ' overdue' : 'settled'],
         ];
 
-        // --- overview cards: the customer's full sales trail (quotations / orders / invoices / payments) ---
-        // Sales orders — the whole recent set, as a click-through list (status + date + total).
-        $orders = Order::where('tenant_id', $ctx->tenantId())
-            ->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [preg_replace('/[^0-9]/', '', $phone)])
-            ->orderByDesc('created_at')->limit(8)->get();
-        $orderItems = $orders->map(function ($o) use ($fmt) {
-            $s = strtolower((string) $o->status);
-            $delivered = $o->delivered_at !== null;
-            $tone = ($delivered || in_array($s, ['delivered', 'complete', 'completed', 'paid'], true)) ? 'ok' : (in_array($s, ['cancelled', 'canceled', 'rejected'], true) ? 'danger' : '');
-            $label = $delivered ? 'Delivered' : ucfirst($s ?: 'pending');
+        // --- the customer's full sales trail, each as its own UCRM-style tab (a table) ---
+        $phoneWhere = fn ($q) => $q->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [preg_replace('/[^0-9]/', '', $phone)]);
+        $badgeCell = fn ($badge, $label) => ['badge' => $badge, 'value' => $label];
 
-            return [
-                'icon' => 'cart', 'color' => '#4f46e5', 'title' => 'Order ' . $o->order_no,
-                'sub' => $label . ($o->created_at ? ' · ' . Carbon::parse($o->created_at)->format('d M Y') : ''),
-                'right' => $fmt($o->total), 'rightTone' => $tone, 'link' => '/api/v1/workspace/salesOrder/' . $o->id,
-            ];
+        $quotes = $phoneWhere(Quotation::where('tenant_id', $ctx->tenantId()))->orderByDesc('created_at')->limit(25)->get();
+        $quoteRows = $quotes->map(function ($q) use ($cur, $badgeCell) {
+            $s = strtolower((string) $q->status);
+            $badge = in_array($s, ['accepted', 'converted'], true) ? 'ok' : ($s === 'declined' ? 'danger' : ($s === 'sent' ? 'info' : 'default'));
+
+            return ['cells' => [(string) $q->quote_no,
+                $q->created_at ? Carbon::parse($q->created_at)->format('d M Y') : '—',
+                $q->valid_until ? Carbon::parse($q->valid_until)->format('d M Y') : '—',
+                Money::fmt((float) $q->total, (string) ($q->currency ?: $cur)),
+                $badgeCell($badge, ucfirst($s ?: 'draft'))],
+                'link' => $q->order_id ? '/api/v1/workspace/salesOrder/' . $q->order_id : '/api/v1/workspace/quotation/' . $q->id];
         })->all();
 
-        // Invoices — ALL of them (paid included), so the full billing history is visible here.
-        $allInv = Invoice::where('tenant_id', $ctx->tenantId())
-            ->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [preg_replace('/[^0-9]/', '', $phone)])
-            ->where('status', '!=', 'void')->orderByDesc('issued_at')->limit(8)->get();
-        $invItems = $allInv->map(function ($i) use ($fmt) {
+        $orders = $phoneWhere(Order::where('tenant_id', $ctx->tenantId()))->orderByDesc('created_at')->limit(25)->get();
+        $orderRows = $orders->map(function ($o) use ($fmt, $badgeCell) {
+            $s = strtolower((string) $o->status);
+            $delivered = $o->delivered_at !== null;
+            $badge = ($delivered || in_array($s, ['delivered', 'complete', 'completed', 'paid'], true)) ? 'ok' : (in_array($s, ['cancelled', 'canceled', 'rejected'], true) ? 'danger' : 'info');
+
+            return ['cells' => ['Order ' . $o->order_no,
+                $o->created_at ? Carbon::parse($o->created_at)->format('d M Y') : '—',
+                $fmt($o->total), $badgeCell($badge, $delivered ? 'Delivered' : ucfirst($s ?: 'pending'))],
+                'link' => '/api/v1/workspace/salesOrder/' . $o->id];
+        })->all();
+
+        $allInv = $phoneWhere(Invoice::where('tenant_id', $ctx->tenantId()))->where('status', '!=', 'void')->orderByDesc('issued_at')->limit(25)->get();
+        $invRows = $allInv->map(function ($i) use ($fmt, $badgeCell) {
             $bal = (float) $i->balance;
             $paid = $bal <= 0.01;
             $overdue = $i->due_at && Carbon::parse($i->due_at)->isPast() && ! $paid;
             $status = $paid ? 'Paid' : ($overdue ? 'Overdue' : ((float) $i->amount_paid > 0 ? 'Part-paid' : 'Unpaid'));
-            $tone = $paid ? 'ok' : ($overdue ? 'danger' : 'warn');
+            $badge = $paid ? 'ok' : ($overdue ? 'danger' : 'warn');
 
-            return [
-                'icon' => 'invoice', 'color' => $paid ? '#16a34a' : '#d97706', 'title' => (string) $i->invoice_no,
-                'sub' => $status . ($i->due_at ? ' · due ' . Carbon::parse($i->due_at)->format('d M Y') : ''),
-                'right' => $paid ? $fmt($i->total) : $fmt($bal), 'rightTone' => $tone, 'link' => '/api/v1/workspace/invoice/' . $i->id,
-            ];
+            return ['cells' => [(string) $i->invoice_no,
+                $i->issued_at ? Carbon::parse($i->issued_at)->format('d M Y') : '—',
+                $i->due_at ? Carbon::parse($i->due_at)->format('d M Y') : '—',
+                $fmt($i->total), $paid ? '—' : $fmt($bal), $badgeCell($badge, $status)],
+                'link' => '/api/v1/workspace/invoice/' . $i->id];
         })->all();
 
-        $pays = CustomerPayment::where('tenant_id', $ctx->tenantId())
-            ->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [preg_replace('/[^0-9]/', '', $phone)])
-            ->orderByDesc('created_at')->limit(5)->get();
-        $payItems = $pays->map(fn ($p) => [
-            'icon' => 'card', 'color' => '#16a34a', 'title' => ucfirst((string) ($p->method ?: 'payment')),
-            'sub' => ($p->created_at ? Carbon::parse($p->created_at)->format('d M Y') : '') . ($p->reference ? ' · ' . $p->reference : ''),
-            'right' => '+' . Money::fmt((float) $p->amount, (string) ($p->currency ?: $cur)), 'rightTone' => 'ok', 'link' => null,
-        ])->all();
+        $pays = $phoneWhere(CustomerPayment::where('tenant_id', $ctx->tenantId()))->orderByDesc('created_at')->limit(25)->get();
+        $payRows = $pays->map(fn ($p) => ['cells' => [
+            (string) ($p->receipt_no ?: '—'),
+            $p->created_at ? Carbon::parse($p->created_at)->format('d M Y') : '—',
+            ucwords(str_replace('_', ' ', (string) ($p->method ?: 'cash'))),
+            (string) ($p->reference ?: '—'),
+            Money::fmt((float) $p->amount, (string) ($p->currency ?: $cur)),
+        ], 'link' => '/api/v1/workspace/payment/' . $p->id])->all();
 
-        // This customer's quotations — surfaced here so they're not hunted for in the Quotations list.
-        $quotes = Quotation::where('tenant_id', $ctx->tenantId())
-            ->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [preg_replace('/[^0-9]/', '', $phone)])
-            ->orderByDesc('created_at')->limit(6)->get();
-        $quoteItems = $quotes->map(function ($q) use ($cur) {
-            $s = strtolower((string) $q->status);
-            $tone = in_array($s, ['accepted', 'converted'], true) ? 'ok' : ($s === 'declined' ? 'danger' : '');
-            $sub = ucfirst($s ?: 'draft') . ($q->valid_until ? ' · valid to ' . Carbon::parse($q->valid_until)->format('d M Y') : '');
+        $creditNotes = $phoneWhere(\App\Models\CreditNote::where('tenant_id', $ctx->tenantId()))->orderByDesc('issued_at')->limit(25)->get();
+        $cnRows = $creditNotes->map(fn ($n) => ['cells' => [
+            (string) $n->credit_note_no,
+            $n->issued_at ? Carbon::parse($n->issued_at)->format('d M Y') : '—',
+            (string) ($n->invoice_no ?: '—'),
+            Money::fmt((float) $n->total, (string) ($n->currency ?: $cur)),
+        ], 'link' => null])->all();
 
-            return [
-                'icon' => 'quotations', 'color' => '#4f46e5', 'title' => (string) $q->quote_no,
-                'sub' => $sub, 'right' => Money::fmt((float) $q->total, (string) ($q->currency ?: $cur)), 'rightTone' => $tone,
-                'link' => $q->order_id ? '/api/v1/workspace/salesOrder/' . $q->order_id : '/api/v1/workspace/quotation/' . $q->id,
-            ];
-        })->all();
+        $tabSections = [
+            'quotations' => [['kind' => 'table', 'title' => 'Quotations', 'sub' => $quotes->count() . ' total',
+                'columns' => [['label' => 'Quote #'], ['label' => 'Created'], ['label' => 'Valid to'], ['label' => 'Value', 'align' => 'right'], ['label' => 'Status']],
+                'rows' => $quoteRows, 'empty' => 'No quotations yet — use “New quotation” above']],
+            'orders' => [['kind' => 'table', 'title' => 'Sales orders', 'sub' => $orders->count() . ' total',
+                'columns' => [['label' => 'Order'], ['label' => 'Created'], ['label' => 'Total', 'align' => 'right'], ['label' => 'Status']],
+                'rows' => $orderRows, 'empty' => 'No orders yet']],
+            'invoices' => [['kind' => 'table', 'title' => 'Invoices', 'sub' => $allInv->count() . ' total',
+                'columns' => [['label' => 'Invoice #'], ['label' => 'Created'], ['label' => 'Due'], ['label' => 'Total', 'align' => 'right'], ['label' => 'Amount due', 'align' => 'right'], ['label' => 'Status']],
+                'rows' => $invRows, 'empty' => 'No invoices yet']],
+            'payments' => [['kind' => 'table', 'title' => 'Payments', 'sub' => $pays->count() . ' total',
+                'columns' => [['label' => 'Receipt #'], ['label' => 'Date'], ['label' => 'Method'], ['label' => 'Reference'], ['label' => 'Amount', 'align' => 'right']],
+                'rows' => $payRows, 'empty' => 'No payments yet']],
+        ];
 
+        // Overview stays a light summary; the full lists live in their own tabs above.
         $overviewCards = [
             ['kind' => 'dl', 'title' => 'Contact', 'rows' => [
                 ['Contact person', (string) ($c->contact_person ?: '—')],
@@ -194,11 +210,15 @@ final class CustomerCapability implements ObjectCapability
                 ['Segment', (string) ($c->segment ?: '—')],
                 ['Customer since', $c->created_at ? Carbon::parse($c->created_at)->format('d M Y') : '—'],
             ]],
-            ['kind' => 'links', 'title' => 'Quotations', 'items' => $quoteItems, 'empty' => 'No quotations yet — use “New quotation” above'],
-            ['kind' => 'links', 'title' => 'Sales orders', 'items' => $orderItems, 'empty' => 'No orders yet'],
-            ['kind' => 'links', 'title' => 'Invoices', 'items' => $invItems, 'empty' => 'No invoices yet'],
-            ['kind' => 'links', 'title' => 'Payments', 'items' => $payItems, 'empty' => 'No payments yet'],
         ];
+
+        // Account statement tab = running ledger + any credit notes.
+        $financialsCards = [];
+        if ($cnRows) {
+            $financialsCards[] = ['kind' => 'table', 'title' => 'Credit notes', 'sub' => count($cnRows) . ' total',
+                'columns' => [['label' => 'Credit note'], ['label' => 'Issued'], ['label' => 'Against invoice'], ['label' => 'Amount', 'align' => 'right']],
+                'rows' => $cnRows, 'empty' => 'No credit notes'];
+        }
 
         // --- statement (Financials tab) ---
         $stmt = app(CustomerInsight::class)->statement($ctx, $c);
@@ -244,14 +264,19 @@ final class CustomerCapability implements ObjectCapability
             ->nba($nbaText, $nbaAction)
             ->quickActions([$newQuote, $payAction, $logCall, $logWa])
             ->overviewCards($overviewCards)
+            ->tabSections($tabSections)
+            ->financialsCards($financialsCards)
             ->timeline($this->timeline->forPhone($ctx, $phone))
             ->statement($stmtRows, 'Balance due', $fmt($stmt['balance']))
             ->documents([])
             ->tabs([
                 ['key' => 'overview', 'label' => 'Overview'],
+                ['key' => 'quotations', 'label' => 'Quotations', 'count' => $quotes->count()],
+                ['key' => 'orders', 'label' => 'Sales orders', 'count' => $orders->count()],
+                ['key' => 'invoices', 'label' => 'Invoices', 'count' => $allInv->count()],
+                ['key' => 'payments', 'label' => 'Payments', 'count' => $pays->count()],
+                ['key' => 'financials', 'label' => 'Account statement'],
                 ['key' => 'timeline', 'label' => 'Timeline', 'count' => count($this->timeline->forPhone($ctx, $phone))],
-                ['key' => 'financials', 'label' => 'Financials'],
-                ['key' => 'documents', 'label' => 'Documents', 'count' => $orders->count() + $ins['invoiceCount']],
             ])
             ->actions([$primary])
             ->more([$editAction, $reminder, $setFollow, $assignRep])

@@ -236,6 +236,18 @@ svg{display:block}
 .qb-tot{font-size:13px;color:var(--muted)}.qb-tot b{font-size:20px;color:var(--ink);margin-left:8px;font-variant-numeric:tabular-nums}
 .qb-wa{display:flex;align-items:center;gap:9px;margin-top:14px;font-size:13px;color:var(--ink-2)}
 .qb-wa input{width:16px;height:16px}
+/* ---- list: grid totals + pagination + date range ---- */
+.chip input[type=date]{border:none;background:none;font:inherit;color:var(--ink);cursor:pointer}
+.pager{display:flex;align-items:center;gap:10px;justify-content:flex-end;padding:11px 16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+.pager:empty{display:none;padding:0;border:none}
+.pager button{height:30px;padding:0 12px;border:1px solid var(--line);border-radius:7px;background:var(--surface);font-weight:600;font-size:12.5px;color:var(--ink-2)}
+.pager button:disabled{opacity:.4;cursor:not-allowed}
+.pager button:not(:disabled):hover{background:var(--brand-wash);border-color:var(--brand);color:var(--brand-ink)}
+.gridtotals{max-width:340px;margin-top:14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--sh-sm);padding:14px 16px}
+.gridtotals .gt-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);margin-bottom:8px}
+.gt-row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;font-size:13px;border-top:1px solid var(--line-2)}
+.gt-row:first-of-type{border-top:none}
+.gt-row span{color:var(--muted)}.gt-row b{font-variant-numeric:tabular-nums;font-size:14px}
 
 /* timeline */
 .tl{position:relative}
@@ -719,6 +731,7 @@ function tabContent(p,tab){
   if(tab==='timeline') return timelineTab(p.timeline);
   if(tab==='financials') return financialsTab(p);
   if(tab==='documents') return docsTab(p.documents);
+  if(p.tabSections && p.tabSections[tab]){ return sectionCards(p.tabSections[tab]); }
   /* overview (default) */
   let h='';
   h+=pipelineHtml(p.pipeline);
@@ -730,6 +743,10 @@ function tabContent(p,tab){
   if(p.health){ h+=healthHtml(p.health); }
   (p.overviewCards||[]).forEach(c=>{ h+='<div style="height:14px"></div>'+overviewCard(c); });
   return h;
+}
+function sectionCards(cards){
+  if(!cards||!cards.length) return '<div class="card"><div class="b">'+emptyState('worklist','Nothing here yet','')+'</div></div>';
+  return cards.map((c,i)=>(i?'<div style="height:14px"></div>':'')+overviewCard(c)).join('');
 }
 function healthHtml(hh){
   return '<div class="card" style="margin-top:14px"><div class="card-h"><h3>'+esc(hh.title||'Health')+'</h3></div><div class="b"><div class="hgrid">'+
@@ -928,12 +945,14 @@ async function qbSubmit(){
 }
 
 /* ================= LIST / DIRECTORY WORKSPACE ================= */
-let TBL = { cols:[], rows:[], filters:[], fval:{}, sort:null, dir:1, q:'' };
+let TBL = { cols:[], rows:[], filters:[], fval:{}, sort:null, dir:1, q:'', dateKey:null, dateLabel:'Created', totals:[], from:'', to:'', page:1, pageSize:15, cur:'UGX' };
 function cellVal(c){ return (c && typeof c==='object') ? (c.value!=null?c.value:'') : (c!=null?c:''); }
 function cellSort(c){ if(c && typeof c==='object') return c.sort!=null?c.sort:(c.value!=null?c.value:''); return c!=null?c:''; }
 function renderList(p){
-  const o=p.object||{}; const cap=(p.meta&&p.meta.capability)||CUR.key;
-  TBL = { cols:(p.table&&p.table.columns)||[], rows:(p.table&&p.table.rows)||[], filters:(p.table&&p.table.filters)||[], fval:{}, sort:null, dir:1, q:'' };
+  const o=p.object||{}; const cap=(p.meta&&p.meta.capability)||CUR.key; const tb=p.table||{};
+  TBL = { cols:tb.columns||[], rows:tb.rows||[], filters:tb.filters||[], fval:{}, sort:null, dir:1, q:'',
+    dateKey:tb.dateKey||null, dateLabel:tb.dateLabel||'Created', totals:tb.totals||[], from:'', to:'', page:1,
+    pageSize:tb.pageSize||15, cur:tb.currency||'UGX' };
   let h='<div class="crumb">'+(LABELS[cap]||cap)+'</div>';
   h+='<div class="lhead"><div><h1 class="ltitle">'+esc(o.title||'')+'</h1>'+(o.subtitle?'<div class="lsub">'+esc(o.subtitle)+'</div>':'')+'</div>'+
      '<div class="acts inl">'+(p.actions||[]).map(actBtn).join('')+
@@ -943,7 +962,7 @@ function renderList(p){
       return '<div class="kpi"><div class="top"><span class="ib '+tc+'">'+icon(cap,'ic-sm')+'</span>'+esc(f.label)+'</div><div class="val '+tc+'">'+esc(fval(f))+'</div>'+(f.foot?'<div class="foot">'+esc(f.foot)+'</div>':'')+'</div>';
     }).join('')+'</div>';
   }
-  h+='<div class="card"><div class="toolbar" id="tbar"></div><div class="tbl-wrap" id="tbl"></div></div>';
+  h+='<div class="card"><div class="toolbar" id="tbar"></div><div class="tbl-wrap" id="tbl"></div><div class="pager" id="pager"></div></div><div id="gtot"></div>';
   document.getElementById('view').innerHTML=h;
   renderToolbar(); renderTable();
 }
@@ -959,7 +978,12 @@ function renderToolbar(){
     const cur=TBL.fval[f.key]||'All';
     h+='<label class="chip">'+esc(f.label)+' <select onchange="setFilter(\''+f.key+'\',this.value)">'+vals.map(v=>'<option'+(v===cur?' selected':'')+'>'+esc(v)+'</option>').join('')+'</select></label>';
   });
-  h+='<div style="flex:1"></div><span class="tinfo" id="tinfo"></span><button class="btn sm" onclick="toast(\'Export — next in the build\')">'+icon('doc','ic-sm')+'Export</button>';
+  if(TBL.dateKey){
+    h+='<label class="chip">From <input type="date" value="'+esc(TBL.from)+'" onchange="TBL.from=this.value;TBL.page=1;renderTable()"></label>'+
+       '<label class="chip">To <input type="date" value="'+esc(TBL.to)+'" onchange="TBL.to=this.value;TBL.page=1;renderTable()"></label>'+
+       ((TBL.from||TBL.to)?'<button class="btn sm" onclick="TBL.from=\'\';TBL.to=\'\';TBL.page=1;renderToolbar();renderTable()">Clear</button>':'');
+  }
+  h+='<div style="flex:1"></div><span class="tinfo" id="tinfo"></span>';
   document.getElementById('tbar').innerHTML=h;
 }
 function sortBy(k){ if(TBL.sort===k){ TBL.dir=-TBL.dir; } else { TBL.sort=k; TBL.dir=1; } renderTable(); }
@@ -968,15 +992,39 @@ function renderTable(){
   const q=(TBL.q||'').trim().toLowerCase();
   if(q) rows=rows.filter(r=>TBL.cols.some(c=>{const v=r[c.key]; return String(cellVal(v)).toLowerCase().includes(q) || (v&&v.sub&&String(v.sub).toLowerCase().includes(q));}));
   Object.keys(TBL.fval||{}).forEach(k=>{ const v=TBL.fval[k]; if(v && v!=='All') rows=rows.filter(r=>cellVal(r[k])===v); });
+  if(TBL.dateKey){
+    const f=TBL.from?Math.floor(Date.parse(TBL.from)/1000):null;
+    const t=TBL.to?Math.floor(Date.parse(TBL.to)/1000)+86399:null;
+    if(f!=null||t!=null) rows=rows.filter(r=>{ const s=Number(cellSort(r[TBL.dateKey]))||0; if(f!=null&&s<f) return false; if(t!=null&&s>t) return false; return true; });
+  }
   if(TBL.sort){ rows.sort((a,b)=>{ let x=cellSort(a[TBL.sort]), y=cellSort(b[TBL.sort]);
     if(typeof x==='string'||typeof y==='string'){ x=String(x).toLowerCase(); y=String(y).toLowerCase(); }
     return (x>y?1:x<y?-1:0)*TBL.dir; }); }
+  const filtered=rows.length;
+  // Grid totals over the full filtered set (not just the visible page).
+  if(TBL.totals&&TBL.totals.length){
+    const parts=['<div class="gt-row"><span>Count</span><b>'+fmtCount(filtered)+'</b></div>'];
+    TBL.totals.forEach(t=>{ const sum=rows.reduce((a,r)=>a+(Number(cellSort(r[t.key]))||0),0);
+      parts.push('<div class="gt-row"><span>'+esc(t.label)+'</span><b>'+esc(t.money?curFmt(sum,TBL.cur):fmtCount(sum))+'</b></div>'); });
+    document.getElementById('gtot').innerHTML='<div class="gridtotals"><div class="gt-h">Grid totals</div>'+parts.join('')+'</div>';
+  } else { const g=document.getElementById('gtot'); if(g) g.innerHTML=''; }
+  // Pagination.
+  const ps=TBL.pageSize||15, pages=Math.max(1,Math.ceil(filtered/ps));
+  if(TBL.page>pages) TBL.page=pages; if(TBL.page<1) TBL.page=1;
+  const start=(TBL.page-1)*ps, pageRows=rows.slice(start,start+ps);
   const arrow=k=> TBL.sort===k ? '<span class="sar">'+(TBL.dir>0?'↑':'↓')+'</span>' : '';
   const th=TBL.cols.map(c=>'<th class="'+(c.align==='right'?'num':'')+(c.sortable!==false?' srt':'')+(TBL.sort===c.key?' sorted':'')+'"'+(c.sortable!==false?' onclick="sortBy(\''+c.key+'\')"':'')+'><span class="thc">'+esc(c.label)+arrow(c.key)+'</span></th>').join('');
-  const body = rows.length ? rows.map(r=>'<tr'+(r.link?' onclick="openLink(\''+esc(r.link)+'\')"':'')+'>'+TBL.cols.map(c=>cellHtml(r[c.key],c)).join('')+'</tr>').join('')
+  const body = pageRows.length ? pageRows.map(r=>'<tr'+(r.link?' onclick="openLink(\''+esc(r.link)+'\')"':'')+'>'+TBL.cols.map(c=>cellHtml(r[c.key],c)).join('')+'</tr>').join('')
     : '<tr><td colspan="'+TBL.cols.length+'"><div class="empty" style="padding:40px">'+icon('worklist','ic-lg')+'<div style="margin-top:8px">No matching records</div></div></td></tr>';
   document.getElementById('tbl').innerHTML='<table class="dt"><thead><tr>'+th+'</tr></thead><tbody>'+body+'</tbody></table>';
-  const ti=document.getElementById('tinfo'); if(ti) ti.textContent=rows.length+' of '+TBL.rows.length;
+  const ti=document.getElementById('tinfo'); if(ti) ti.textContent=fmtCount(filtered)+(filtered!==TBL.rows.length?' of '+fmtCount(TBL.rows.length):'');
+  const pg=document.getElementById('pager');
+  if(pg){ if(filtered>ps){ const a=start+1, b=Math.min(start+ps,filtered);
+      pg.innerHTML='<span>'+a+'–'+b+' of '+fmtCount(filtered)+'</span>'+
+        '<button onclick="TBL.page--;renderTable()"'+(TBL.page<=1?' disabled':'')+'>Prev</button>'+
+        '<span>Page '+TBL.page+' / '+pages+'</span>'+
+        '<button onclick="TBL.page++;renderTable()"'+(TBL.page>=pages?' disabled':'')+'>Next</button>';
+    } else { pg.innerHTML=''; } }
 }
 function cellHtml(c,col){
   const align=col.align==='right'?' num':'';

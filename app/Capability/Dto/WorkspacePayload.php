@@ -23,6 +23,7 @@ final class WorkspacePayload
     private array $stats = [];
     private array $tabs = [];
     private array $overviewCards = [];
+    private array $tabSections = [];
     private ?array $statement = null;
     private array $pipeline = [];
     private array $financialsCards = [];
@@ -79,9 +80,11 @@ final class WorkspacePayload
      * @param array<int,array{key:string,label:string,align?:string,type?:string,sortable?:bool}> $columns
      * @param array<int,array<string,mixed>> $rows
      */
-    public function table(array $columns, array $rows, array $filters = []): self
+    public function table(array $columns, array $rows, array $filters = [], array $opts = []): self
     {
-        $this->table = ['columns' => $columns, 'rows' => $rows, 'filters' => $filters];
+        // $opts may carry: dateKey, dateLabel (enables a From/To range filter on that column),
+        // totals [['key','label','money'?]] (Grid Totals footer), pageSize, currency.
+        $this->table = array_merge(['columns' => $columns, 'rows' => $rows, 'filters' => $filters], $opts);
         return $this;
     }
 
@@ -105,6 +108,12 @@ final class WorkspacePayload
 
     /** Card specs rendered under the Overview tab (kind: dl | table | links). @param array<int,array<string,mixed>> $c */
     public function overviewCards(array $c): self { $this->overviewCards = $c; return $this; }
+
+    /**
+     * Extra record tabs beyond overview/timeline/financials/documents: a map of tab-key => card specs
+     * (same kinds as overviewCards). The tab must also be listed in tabs() to appear. @param array<string,array> $s
+     */
+    public function tabSections(array $s): self { $this->tabSections = $s; return $this; }
 
     /**
      * Statement of account for the Financials tab.
@@ -165,6 +174,7 @@ final class WorkspacePayload
             'stats' => $this->stats,
             'tabs' => $this->tabs,
             'overviewCards' => $this->overviewCards,
+            'tabSections' => $this->tabSections,
             'statement' => $this->statement,
             'pipeline' => $this->pipeline,
             'financialsCards' => $this->financialsCards,

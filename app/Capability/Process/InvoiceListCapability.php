@@ -63,6 +63,7 @@ final class InvoiceListCapability implements ProcessCapability
                 'balance'  => $balance > 0.01
                     ? ['value' => Money::fmt($balance, (string) ($i->currency ?: $cur)), 'tone' => 'danger', 'sort' => $balance]
                     : ['value' => '—', 'sort' => 0],
+                'issued'   => ['value' => $issued ? $issued->format('d M Y') : '—', 'sort' => $issued ? $issued->timestamp : 0],
                 'due'      => ['value' => $due ? $due->format('d M Y') : '—', 'sort' => $due ? $due->timestamp : 0],
                 'status'   => ['value' => $status, 'badge' => $badge],
                 'link'     => '/api/v1/workspace/invoice/' . $i->id,
@@ -76,7 +77,8 @@ final class InvoiceListCapability implements ProcessCapability
             ['key' => 'customer', 'label' => 'Customer',  'type' => 'avatar', 'sortable' => true],
             ['key' => 'total',    'label' => 'Total',     'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'paid',     'label' => 'Paid',      'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'balance',  'label' => 'Balance',   'align' => 'right', 'type' => 'num', 'sortable' => true],
+            ['key' => 'balance',  'label' => 'Amount due', 'align' => 'right', 'type' => 'num', 'sortable' => true],
+            ['key' => 'issued',   'label' => 'Created',   'sortable' => true],
             ['key' => 'due',      'label' => 'Due date',  'sortable' => true],
             ['key' => 'status',   'label' => 'Status',    'type' => 'badge', 'sortable' => true],
         ];
@@ -92,7 +94,13 @@ final class InvoiceListCapability implements ProcessCapability
                 ['key' => 'paid30', 'label' => 'Paid (30d)', 'value' => Money::fmt($paid30, $cur), 'tone' => 'ok', 'foot' => 'issued in last 30 days'],
                 ['key' => 'avgdays', 'label' => 'Avg. days to pay', 'value' => $avgDays . ' days', 'foot' => 'paid invoices'],
             ])
-            ->table($columns, $rows)
+            ->table($columns, $rows, [], [
+                'dateKey' => 'issued', 'dateLabel' => 'Created', 'currency' => $cur, 'pageSize' => 20,
+                'totals' => [
+                    ['key' => 'total', 'label' => 'Total', 'money' => true],
+                    ['key' => 'balance', 'label' => 'Amount due', 'money' => true],
+                ],
+            ])
             ->actions([['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/invoices', 'actor' => 'human', 'tone' => 'default']])
             ->meta(['capability' => 'invoices', 'ttl' => 60, 'permissions' => ['menu:finance']]);
     }
