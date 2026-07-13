@@ -8,6 +8,7 @@ use App\Capability\Dto\WorkspacePayload;
 use App\Capability\Support\Money;
 use App\Models\Category;
 use App\Models\Product;
+use App\Services\Catalog\ImageUploadService;
 use App\Services\Catalog\ProductWriteService;
 
 /**
@@ -109,7 +110,7 @@ final class ProductListCapability implements ProcessCapability
             'cost'       => 'money',
             'stock'      => 'number',
             'unit_label' => 'text',
-            'image'      => 'text',
+            'image'      => 'image',
         ]);
     }
 
@@ -120,6 +121,16 @@ final class ProductListCapability implements ProcessCapability
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
+        if ($action === 'upload_image') {
+            try {
+                $url = app(ImageUploadService::class)->store($ctx->tenant, (string) ($input['data'] ?? ''), (string) ($input['name'] ?? 'upload'));
+            } catch (\InvalidArgumentException $e) {
+                return ['ok' => false, 'error' => $e->getMessage(), 'message' => 'Could not read that image.'];
+            }
+
+            return ['ok' => true, 'url' => $url];
+        }
+
         if ($action === 'add_product') {
             try {
                 $p = app(ProductWriteService::class)->create($ctx->tenant, $input);

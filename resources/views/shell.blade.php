@@ -207,6 +207,9 @@ svg{display:block}
 .fld label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:6px;text-transform:capitalize}
 .fld input,.fld select{width:100%;height:39px;border:1px solid var(--line);border-radius:7px;padding:0 11px;background:var(--surface);transition:.15s}
 .fld input:focus,.fld select:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-wash)}
+.imgfld{display:flex;gap:12px;align-items:center}
+.imgprev{width:56px;height:56px;border-radius:9px;border:1px solid var(--line);background:#f3f4f6 center/cover no-repeat;flex:none}
+.imgbtns{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
 
 /* ================= TOAST ================= */
 #toasts{position:fixed;bottom:22px;right:22px;z-index:80;display:flex;flex-direction:column;gap:9px}
@@ -515,7 +518,14 @@ function formModal(a){
   const pf=a.prefill||{};
   let fields=''; Object.entries(a.schema).forEach(([k,type])=>{
     const lbl=k.replace(/_/g,' '); const val=pf[k]!=null?String(pf[k]):'';
-    if(String(type).startsWith('enum:')){ const opts=String(type).slice(5).split(',');
+    if(type==='image'){
+      fields+='<div class="fld"><label>'+lbl+'</label><div class="imgfld">'+
+        '<div class="imgprev" id="prev_'+k+'"'+(val?' style="background-image:url(\''+esc(val)+'\')"':'')+'></div>'+
+        '<div class="imgbtns"><input type="hidden" id="f_'+k+'" value="'+esc(val)+'">'+
+        '<input type="file" accept="image/*" id="file_'+k+'" style="display:none" onchange="uploadPhoto(\''+k+'\')">'+
+        '<button type="button" class="btn sm" onclick="document.getElementById(\'file_'+k+'\').click()">'+icon('doc','ic-sm')+'Choose photo</button>'+
+        '<span class="mut" id="up_'+k+'" style="font-size:12px"></span></div></div></div>'; }
+    else if(String(type).startsWith('enum:')){ const opts=String(type).slice(5).split(',');
       fields+='<div class="fld"><label>'+lbl+'</label><select id="f_'+k+'">'+opts.map(o=>'<option'+(o===val?' selected':'')+'>'+esc(o)+'</option>').join('')+'</select></div>'; }
     else { const t=(type==='money'||type==='number')?'type="number" step="'+(type==='money'?'0.01':'1')+'"':''; const ph=type==='money'?'placeholder="0.00"':'';
       fields+='<div class="fld"><label>'+lbl+'</label><input id="f_'+k+'" '+t+' '+ph+' value="'+esc(val)+'"></div>'; }
@@ -523,6 +533,20 @@ function formModal(a){
   document.getElementById('modal').innerHTML='<div class="h">'+esc(a.label)+'<button class="x" onclick="closeM()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><div class="b">'+fields+'</div><div class="f"><button class="btn" onclick="closeM()">Cancel</button><button class="btn pri" id="mok">Save</button></div>';
   document.getElementById('ov').classList.add('on');
   document.getElementById('mok').onclick=async()=>{ const body={}; Object.keys(a.schema).forEach(k=>{ const el=document.getElementById('f_'+k); if(el) body[k]=el.value; }); closeM(); const res=await post(a.endpoint,body); toast(res.ok?(res.message||'Saved'):(res.message||res.error||'Error'), !res.ok); refresh(); };
+}
+async function uploadPhoto(k){
+  const fi=document.getElementById('file_'+k); const f=fi&&fi.files&&fi.files[0]; if(!f) return;
+  const st=document.getElementById('up_'+k); if(st) st.textContent='Uploading…';
+  if(f.size>6*1024*1024){ if(st) st.textContent='Image too large (max 6MB)'; return; }
+  const reader=new FileReader();
+  reader.onload=async()=>{
+    try{
+      const res=await post('/api/v1/workspace/products/_/upload_image',{data:reader.result,name:f.name});
+      if(res.ok&&res.url){ document.getElementById('f_'+k).value=res.url; const pv=document.getElementById('prev_'+k); if(pv) pv.style.backgroundImage='url(\''+res.url+'\')'; if(st) st.textContent='✓ uploaded'; }
+      else { if(st) st.textContent=res.message||res.error||'Upload failed'; }
+    }catch(e){ if(st) st.textContent='Upload failed'; }
+  };
+  reader.readAsDataURL(f);
 }
 function closeM(){ document.getElementById('ov').classList.remove('on'); }
 document.getElementById('ov').addEventListener('click',e=>{ if(e.target.id==='ov') closeM(); });
