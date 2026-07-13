@@ -457,7 +457,9 @@ const P = {
   dollar:'M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
   user:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 3a4 4 0 100 8 4 4 0 100-8',
   spark:'M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9z',
-  send:'M22 2L11 13M22 2l-7 20-4-9-9-4z' };
+  send:'M22 2L11 13M22 2l-7 20-4-9-9-4z',
+  download:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+  truck:'M1 3h15v10H1zM16 8h4l3 3v2h-7M3 18a2 2 0 104 0 2 2 0 10-4 0M15 18a2 2 0 104 0 2 2 0 10-4 0' };
 function icon(name,cls){ return '<svg class="ic '+(cls||'')+'" viewBox="0 0 24 24"><path d="'+(P[name]||P.doc)+'"/></svg>'; }
 const AVC = ['#16a34a','#0d9488','#0284c7','#4f46e5','#d97706','#db2777','#7c3aed','#0891b2'];
 function avColor(s){ let h=0; for(const c of (s||'?')) h=(h*31+c.charCodeAt(0))>>>0; return AVC[h%AVC.length]; }
@@ -663,7 +665,7 @@ function qrow(r){ const link=r.link?(' onclick="openLink(\''+esc(r.link)+'\')"')
 function openLink(apiPath){ const h=apiToHash(apiPath); if(h) route(h.key, h.id); }
 
 /* ============ record shell (tabbed 360: answers · health · KPIs · NBA · tabs) ============ */
-const ACTICON={record_payment:'card',log_contact:'phone',log_whatsapp:'mail',edit_customer:'edit',update_customer:'edit',send_reminder:'bell',set_followup:'bell',assign_rep:'user',new_quotation:'quotations',open_invoice:'invoice',open_customer:'user'};
+const ACTICON={record_payment:'card',log_contact:'phone',log_whatsapp:'mail',edit_customer:'edit',update_customer:'edit',send_reminder:'bell',set_followup:'bell',assign_rep:'user',new_quotation:'quotations',open_invoice:'invoice',open_customer:'user',open_order:'cart',receipt_pdf:'download',send_receipt:'send',mark_delivered:'truck',create_invoice:'invoice'};
 function actIcon(a){ return (a&&(a.icon||ACTICON[a.key]))||'chev'; }
 function actJson(a){ return JSON.stringify(a).replace(/'/g,'&#39;'); }
 
@@ -793,7 +795,9 @@ async function doAction(a){
   if(a.builder==='quotation'){ return quoteBuilder(a); }
   if(a.schema){ return formModal(a); }
   if(a.confirm && !window.confirm(a.confirm)) return;
-  const res=await post(a.endpoint,{}); toast(res.ok?(res.message||'Done'):(res.message||res.error||'Error'), !res.ok); refresh();
+  const res=await post(a.endpoint,{}); toast(res.ok?(res.message||'Done'):(res.message||res.error||'Error'), !res.ok);
+  if(res&&res.ok&&res.url){ try{ window.open(res.url,'_blank'); }catch(e){} }
+  refresh();
 }
 window.GAL={};
 function formModal(a){
