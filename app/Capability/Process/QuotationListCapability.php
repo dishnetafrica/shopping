@@ -63,7 +63,7 @@ final class QuotationListCapability implements ProcessCapability
                 'valid'    => ['value' => $valid ? $valid->format('d M Y') : '—', 'sort' => $valid ? $valid->timestamp : 0],
                 'status'   => ['value' => $label, 'badge' => $badge],
                 'created'  => ['value' => $created ? $created->format('d M Y') : '—', 'sort' => $created ? $created->timestamp : 0],
-                'link'     => $q->order_id ? '/api/v1/workspace/salesOrder/' . $q->order_id : null,
+                'link'     => $q->order_id ? '/api/v1/workspace/salesOrder/' . $q->order_id : '/api/v1/workspace/quotation/' . $q->id,
             ];
         }
 

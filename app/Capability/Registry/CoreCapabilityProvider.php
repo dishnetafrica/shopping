@@ -7,6 +7,7 @@ use App\Capability\Object\InvoiceCapability;
 use App\Capability\Object\PaymentCapability;
 use App\Capability\Object\ProductCapability;
 use App\Capability\Object\PurchaseOrderCapability;
+use App\Capability\Object\QuotationCapability;
 use App\Capability\Object\SalesOrderCapability;
 use App\Capability\Object\SupplierCapability;
 use App\Capability\Process\CategoryListCapability;
@@ -66,6 +67,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register(new ProductCapability($reco), new CapabilityManifest(key: 'product', type: 'object', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/product/{id}'));
         $r->register(new SalesOrderCapability(), new CapabilityManifest(key: 'salesOrder', type: 'object', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/salesOrder/{id}'));
         $r->register(new PurchaseOrderCapability(), new CapabilityManifest(key: 'purchaseOrder', type: 'object', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/purchaseOrder/{id}'));
+        $r->register(new QuotationCapability(), new CapabilityManifest(key: 'quotation', type: 'object', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/quotation/{id}'));
 
         // --- process capabilities ---
         $collections = new CollectionsCapability();

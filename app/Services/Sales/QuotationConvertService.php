@@ -1,0 +1,69 @@
+<?php
+
+namespace App\Services\Sales;
+
+use App\Models\Order;
+use App\Models\Quotation;
+use App\Models\Tenant;
+use App\Services\Bot\Pricing\CurrencyPricer;
+use App\Services\Money\Fx;
+
+/**
+ * Converts a quotation into an order. Mirrors PanelApiController::quotationConvert EXACTLY, including
+ * the subtle currency rule: on a CONVERTED basis (catalogue in UGX, USD only a display layer) the
+ * USD quote is written back as marked-up UGX at the rate captured on the quote; on a NATIVE basis
+ * (prices really are USD) values are kept as-is. The OrderObserver assigns order_no on save.
+ *
+ * Returns ['order' => Order, 'already' => bool].
+ * @throws \RuntimeException('no_items') when the quote has no priced/matched lines.
+ */
+final class QuotationConvertService
+{
+    public function convert(Tenant $t, Quotation $q): array
+    {
+        $q->loadMissing('items');
+
+        if ($q->order_id) {
+            return ['order' => Order::withoutGlobalScopes()->find($q->order_id), 'already' => true];
+        }
+
+        $usd     = strtoupper((string) $q->currency) === 'USD';
+        $native  = (bool) data_get($q->meta, 'native')
+                   || app(CurrencyPricer::class)->isNativeBasis($t);
+        $convert = $usd && ! $native;
+        $rate    = $convert ? (float) (data_get($q->meta, 'usd_rate') ?: $t->setting('usdUgx', Fx::forTenant($t)->ratePerUsd('UGX'))) : 1.0;
+        if ($convert && $rate <= 0) {
+            $rate = (float) $t->setting('usdUgx', Fx::forTenant($t)->ratePerUsd('UGX'));
+        }
+
+        $items = []; $textParts = [];
+        foreach ($q->items as $it) {
+            if (! $it->matched) {
+                continue;
+            }
+            $unit = $convert ? round(((float) $it->unit_price) * $rate) : (float) $it->unit_price;
+            $items[] = ['name' => (string) $it->name, 'qty' => (int) $it->qty, 'price' => $unit];
+            $textParts[] = ((int) $it->qty) . 'x ' . $it->name;
+        }
+        if (! $items) {
+            throw new \RuntimeException('no_items');
+        }
+
+        $o = new Order();
+        $o->tenant_id      = $t->id;
+        $o->status         = 'New';
+        $o->channel        = 'quote';
+        $o->customer_name  = (string) ($q->customer_name ?? '');
+        $o->customer_phone = (string) $q->customer_phone;
+        $o->items_json     = $items;
+        $o->items_text     = implode(', ', $textParts);
+        $o->total          = $convert ? round(((float) $q->total) * $rate) : (float) $q->total;
+        $o->save();
+
+        $q->order_id = (int) $o->id;
+        $q->status   = 'converted';
+        $q->save();
+
+        return ['order' => $o, 'already' => false];
+    }
+}
