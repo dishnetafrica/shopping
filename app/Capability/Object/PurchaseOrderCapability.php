@@ -7,6 +7,7 @@ use App\Capability\Contracts\ObjectCapability;
 use App\Capability\Dto\Financial;
 use App\Capability\Dto\Related;
 use App\Capability\Dto\WorkspacePayload;
+use App\Capability\Support\Money;
 use App\Models\OrderCost;
 
 /** Purchase Order Workspace over OrderCost (stage=purchase). */
@@ -31,7 +32,7 @@ final class PurchaseOrderCapability implements ObjectCapability
                 'type' => 'purchaseOrder', 'id' => (string) $c->id, 'ref' => (string) ($c->order_no ?: $c->id),
                 'title' => 'PO ' . ($c->order_no ?: $c->id), 'subtitle' => (string) $c->supplier_name, 'status' => (string) $c->status,
             ])
-            ->headline('$' . number_format((float) $c->native_amount), 'PO total', 'default')
+            ->headline(Money::fmt((float) $c->native_amount, (string) ($c->currency ?: $ctx->baseCurrency())), 'PO total', 'default')
             ->financials([
                 new Financial('total', 'Total', round((float) $c->native_amount, 2), $c->currency),
                 new Financial('paid', 'Paid', round((float) ($c->paid_native ?? 0), 2), $c->currency, 'ok'),

@@ -6,6 +6,7 @@ use App\Capability\Contracts\CapabilityContext;
 use App\Capability\Contracts\ObjectCapability;
 use App\Capability\Dto\Related;
 use App\Capability\Dto\WorkspacePayload;
+use App\Capability\Support\Money;
 use App\Capability\Shared\AssistantCapability;
 use App\Capability\Shared\HealthCapability;
 use App\Capability\Shared\StatementCapability;
@@ -46,9 +47,11 @@ final class CustomerCapability implements ObjectCapability
         $sig = $this->health->signalsForPhone($ctx, $phone);
 
         $balance = 0.0;
+        $balanceCur = $ctx->baseCurrency();
         foreach ($fin as $f) {
             if ($f->key === 'balance') {
                 $balance = (float) $f->value;
+                $balanceCur = (string) ($f->currency ?: $balanceCur);
             }
         }
         $endpoint = '/api/v1/workspace/customer/' . $c->id;
@@ -65,7 +68,7 @@ final class CustomerCapability implements ObjectCapability
                 'subtitle' => trim(($c->address ? $c->address . ' · ' : '') . $phone),
                 'status' => 'active',
             ])
-            ->headline('$' . number_format($balance), $balance > 0 ? 'outstanding balance' : 'no balance due', $balance > 0 ? 'warn' : 'ok')
+            ->headline(Money::fmt($balance, $balanceCur), $balance > 0 ? 'outstanding balance' : 'no balance due', $balance > 0 ? 'warn' : 'ok')
             ->financials($fin)
             ->brief($brief)
             ->timeline($this->timeline->forPhone($ctx, $phone))

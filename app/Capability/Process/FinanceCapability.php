@@ -7,6 +7,7 @@ use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\Financial;
 use App\Capability\Shared\MoneyTimingCapability;
 use App\Capability\Dto\WorkspacePayload;
+use App\Capability\Support\Money;
 
 /** Finance workspace — cash, receivables, payables, runway. Merges the legacy cash screens. */
 final class FinanceCapability implements ProcessCapability
@@ -23,7 +24,7 @@ final class FinanceCapability implements ProcessCapability
 
         return (new WorkspacePayload)
             ->object(['type' => 'process:finance', 'title' => 'Finance'])
-            ->headline('$' . number_format($m['cash']), 'cash on hand', 'ok')
+            ->headline(Money::fmt($m['cash'], 'USD'), 'cash on hand', 'ok')
             ->financials([
                 new Financial('cash', 'Cash on hand', $m['cash'], 'USD', 'ok'),
                 new Financial('receivable', 'Receivable', $m['receivable'], 'USD', 'default'),

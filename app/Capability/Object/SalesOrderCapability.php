@@ -7,6 +7,7 @@ use App\Capability\Contracts\ObjectCapability;
 use App\Capability\Dto\Financial;
 use App\Capability\Dto\Related;
 use App\Capability\Dto\WorkspacePayload;
+use App\Capability\Support\Money;
 use App\Models\Invoice;
 use App\Models\Order;
 
@@ -37,14 +38,14 @@ final class SalesOrderCapability implements ObjectCapability
                 'type' => 'salesOrder', 'id' => (string) $o->id, 'ref' => $o->order_no, 'title' => 'Order ' . $o->order_no,
                 'subtitle' => (string) $o->customer_name, 'status' => (string) $o->status,
             ])
-            ->headline('$' . number_format((float) $o->total), $delivered ? 'delivered' : 'in progress', 'default')
+            ->headline(Money::fmt((float) $o->total, (string) ($o->sell_currency ?: $ctx->baseCurrency())), $delivered ? 'delivered' : 'in progress', 'default')
             ->financials([
                 new Financial('total', 'Total', round((float) $o->total, 2), (string) ($o->sell_currency ?: 'USD')),
                 new Financial('paid', 'Paid', round((float) $o->amount_paid, 2), (string) ($o->sell_currency ?: 'USD'), 'ok'),
             ])
             ->related(array_values(array_filter([
                 new Related('customer', 'customer', null, (string) $o->customer_name, null, null),
-                $inv ? new Related('invoice', 'invoice', (string) $inv->id, 'Invoice ' . $inv->invoice_no, '$' . number_format((float) $inv->balance) . ' due', null, '/api/v1/workspace/invoice/' . $inv->id) : null,
+                $inv ? new Related('invoice', 'invoice', (string) $inv->id, 'Invoice ' . $inv->invoice_no, Money::fmt((float) $inv->balance, (string) ($inv->currency ?: $ctx->baseCurrency())) . ' due', null, '/api/v1/workspace/invoice/' . $inv->id) : null,
             ])))
             ->actions($delivered && ! $inv ? [['key' => 'create_invoice', 'label' => 'Create invoice', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/salesOrder/' . $o->id . '/create_invoice', 'actor' => 'human', 'tone' => 'primary']] : [])
             ->meta(['capability' => 'salesOrder', 'ttl' => 30, 'permissions' => ['menu:orders']]);

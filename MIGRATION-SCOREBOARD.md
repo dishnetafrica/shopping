@@ -27,6 +27,10 @@ Legend: ✅ done · ⏳ in progress · ❌ not started · n/a not applicable
 **Capability Layer: 16 capabilities registered, graph closed, HTTP layer clean.**
 **Shell: one generic renderer live at `/v3`** (served under `web/auth/SetTenantFromUser`), builds nav from the catalog, renders every workspace from the envelope, and posts commands with CSRF. Remaining: point each legacy screen's users at `/v3` and then remove legacy.
 
+**UI polish (prototype parity):** the `/v3` renderer now carries the prototype's design language — record 360 with avatar + financial rail, KPI cards for process metrics, assistant briefing (stats + recommendation + AI actions), timeline nodes, badges, skeleton loading, empty states, animated command modal and toast stack. Still one envelope-driven renderer; no per-workspace code.
+
+**Currency:** headlines/labels now render **native currency** via `App\Capability\Support\Money` (USD → `$`, everything else suffixed, e.g. `745,000 UGX`) instead of a hard-coded `$`. Object records use their own currency; cross-currency process aggregates use `CapabilityContext::baseCurrency()` (tenant `settings.currency`, default `UGX`). Cash-on-hand stays USD (the frozen `CashService::balance` returns the USD holder balance).
+
 ## Milestones
 
 - **M1 — Walking Skeleton** ⏳ *(this commit)* — Contracts, Registry, CommandBus, DTOs, one `CustomerCapability`, one `CollectionsCapability`, `/api/v1/workspace/*`, architecture test. **DoD:** Customer Workspace resolves against real data.

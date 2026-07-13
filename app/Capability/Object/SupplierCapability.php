@@ -7,6 +7,7 @@ use App\Capability\Contracts\ObjectCapability;
 use App\Capability\Dto\Financial;
 use App\Capability\Dto\Related;
 use App\Capability\Dto\WorkspacePayload;
+use App\Capability\Support\Money;
 use App\Models\OrderCost;
 use App\Models\Supplier;
 
@@ -42,7 +43,7 @@ final class SupplierCapability implements ObjectCapability
                 'subtitle' => trim(($s->contact_name ? $s->contact_name . ' · ' : '') . (string) $s->phone),
                 'status' => $s->active === false ? 'inactive' : 'active',
             ])
-            ->headline('$' . number_format(max(0, $owed)), 'balance owed', $owed > 0 ? 'warn' : 'ok')
+            ->headline(Money::fmt(max(0, $owed), (string) ($s->opening_currency ?: $ctx->baseCurrency())), 'balance owed', $owed > 0 ? 'warn' : 'ok')
             ->financials([
                 new Financial('owed', 'Owed', round(max(0, $owed), 2), (string) ($s->opening_currency ?: 'USD'), $owed > 0 ? 'warn' : 'ok'),
                 new Financial('terms', 'Terms', $s->pay_term_days ? ('Net ' . $s->pay_term_days) : 'Cash'),

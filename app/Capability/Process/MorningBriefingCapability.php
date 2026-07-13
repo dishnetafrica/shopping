@@ -7,6 +7,7 @@ use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\ActionSpec;
 use App\Capability\Dto\WorkspacePayload;
 use App\Capability\Shared\MoneyTimingCapability;
+use App\Capability\Support\Money;
 
 /**
  * Level-7 CEO brief. Composes PROCESS capabilities only (never queries objects). A plan, not a dashboard.
@@ -35,34 +36,35 @@ final class MorningBriefingCapability implements ProcessCapability
         $war = $this->warehouse->summary($ctx);
         $dis = $this->dispatch->summary($ctx);
         $cash = $this->money->position($ctx);
+        $cur = $ctx->baseCurrency();
 
         $metrics = [
-            ['label' => 'Cash on hand', 'value' => '$' . number_format($cash['cash']), 'tone' => 'ok'],
+            ['label' => 'Cash on hand', 'value' => Money::fmt($cash['cash'], 'USD'), 'tone' => 'ok'],
             ['label' => 'Runway', 'value' => ($cash['runway'] ?? '∞') . ' days', 'tone' => ($cash['runway'] !== null && $cash['runway'] < 14) ? 'warn' : 'ok'],
-            ['label' => 'To collect', 'value' => '$' . number_format($col['exposure']), 'tone' => 'danger'],
-            ['label' => 'To invoice', 'value' => '$' . number_format($sal['toInvoiceValue']), 'tone' => 'warn'],
-            ['label' => 'Payable', 'value' => '$' . number_format($pur['payable']), 'tone' => 'warn'],
+            ['label' => 'To collect', 'value' => Money::fmt($col['exposure'], $cur), 'tone' => 'danger'],
+            ['label' => 'To invoice', 'value' => Money::fmt($sal['toInvoiceValue'], $cur), 'tone' => 'warn'],
+            ['label' => 'Payable', 'value' => Money::fmt($pur['payable'], $cur), 'tone' => 'warn'],
             ['label' => 'Reorder', 'value' => (string) $war['reorder'], 'tone' => 'warn'],
             ['label' => 'Deliveries', 'value' => (string) $dis['inTransit'], 'tone' => 'default'],
         ];
 
         $plan = [];
         if ($col['overdueCount'] > 0) {
-            $plan[] = new ActionSpec('collect', 'Chase ' . $col['overdueCount'] . ' overdue invoices — $' . number_format($col['exposure']), '/api/v1/workspace/collections', 'GET', 'human', 'primary');
+            $plan[] = new ActionSpec('collect', 'Chase ' . $col['overdueCount'] . ' overdue invoices — ' . Money::fmt($col['exposure'], $cur), '/api/v1/workspace/collections', 'GET', 'human', 'primary');
         }
         if ($sal['toInvoice'] > 0) {
-            $plan[] = new ActionSpec('invoice', 'Invoice ' . $sal['toInvoice'] . ' delivered orders — $' . number_format($sal['toInvoiceValue']), '/api/v1/workspace/sales.process', 'GET', 'human');
+            $plan[] = new ActionSpec('invoice', 'Invoice ' . $sal['toInvoice'] . ' delivered orders — ' . Money::fmt($sal['toInvoiceValue'], $cur), '/api/v1/workspace/sales.process', 'GET', 'human');
         }
         if ($war['reorder'] > 0) {
             $plan[] = new ActionSpec('reorder', 'Reorder ' . $war['reorder'] . ' low-stock SKUs', '/api/v1/workspace/warehouse', 'GET', 'human');
         }
         if ($pur['payable'] > 0) {
-            $plan[] = new ActionSpec('pay', 'Review $' . number_format($pur['payable']) . ' in supplier bills', '/api/v1/workspace/purchase.process', 'GET', 'human');
+            $plan[] = new ActionSpec('pay', 'Review ' . Money::fmt($pur['payable'], $cur) . ' in supplier bills', '/api/v1/workspace/purchase.process', 'GET', 'human');
         }
 
         return (new WorkspacePayload)
             ->object(['type' => 'process:briefing', 'title' => 'Morning briefing'])
-            ->headline('$' . number_format($cash['cash']), 'cash · ' . ($cash['runway'] ?? '∞') . ' days runway', ($cash['runway'] !== null && $cash['runway'] < 14) ? 'warn' : 'ok')
+            ->headline(Money::fmt($cash['cash'], 'USD'), 'cash · ' . ($cash['runway'] ?? '∞') . ' days runway', ($cash['runway'] !== null && $cash['runway'] < 14) ? 'warn' : 'ok')
             ->brief(null)
             ->financials(array_map(fn ($m) => ['key' => strtolower(str_replace(' ', '_', $m['label'])), 'label' => $m['label'], 'value' => $m['value'], 'tone' => $m['tone']], $metrics))
             ->actions($plan)

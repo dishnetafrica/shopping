@@ -6,6 +6,7 @@ use App\Capability\Contracts\CapabilityContext;
 use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\Related;
 use App\Capability\Dto\WorkspacePayload;
+use App\Capability\Support\Money;
 use App\Models\OrderCost;
 
 /** Purchase pipeline: open purchase orders and what is payable. */
@@ -20,13 +21,13 @@ final class PurchaseProcessCapability implements ProcessCapability
         $rows = $this->payable($ctx);
         $related = $rows->take(20)->map(fn ($c) => (new Related(
             'payable', 'purchaseOrder', (string) $c->id, (string) $c->supplier_name,
-            'PO ' . ($c->order_no ?: $c->id) . ' · $' . number_format((float) $c->native_amount - (float) ($c->paid_native ?? 0)), null,
+            'PO ' . ($c->order_no ?: $c->id) . ' · ' . Money::fmt((float) $c->native_amount - (float) ($c->paid_native ?? 0), (string) ($c->currency ?: $ctx->baseCurrency())), null,
             '/api/v1/workspace/purchaseOrder/' . $c->id,
         ))->toArray())->values()->all();
 
         return (new WorkspacePayload)
             ->object(['type' => 'process:purchase', 'title' => 'Purchasing', 'status' => $rows->count() . ' payable'])
-            ->headline('$' . number_format((float) $rows->sum(fn ($c) => (float) $c->native_amount - (float) ($c->paid_native ?? 0))), 'payable', 'warn')
+            ->headline(Money::fmt((float) $rows->sum(fn ($c) => (float) $c->native_amount - (float) ($c->paid_native ?? 0)), $ctx->baseCurrency()), 'payable', 'warn')
             ->related($related)
             ->meta(['capability' => 'purchase.process', 'ttl' => 60, 'permissions' => ['menu:purchases']]);
     }

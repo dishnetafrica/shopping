@@ -7,6 +7,7 @@ use App\Capability\Contracts\ObjectCapability;
 use App\Capability\Dto\Financial;
 use App\Capability\Dto\Related;
 use App\Capability\Dto\WorkspacePayload;
+use App\Capability\Support\Money;
 use App\Models\CustomerPayment;
 
 final class PaymentCapability implements ObjectCapability
@@ -29,7 +30,7 @@ final class PaymentCapability implements ObjectCapability
                 'type' => 'payment', 'id' => (string) $p->id, 'ref' => $p->receipt_no, 'title' => $p->receipt_no,
                 'subtitle' => (string) $p->customer_name . ' · ' . $p->method, 'status' => 'received',
             ])
-            ->headline('$' . number_format((float) $p->amount), (string) $p->method, 'ok')
+            ->headline(Money::fmt((float) $p->amount, (string) ($p->currency ?: $ctx->baseCurrency())), (string) $p->method, 'ok')
             ->financials([
                 new Financial('amount', 'Amount', round((float) $p->amount, 2), $p->currency, 'ok'),
                 new Financial('usd', 'USD', round((float) $p->usd_amount, 2), 'USD'),

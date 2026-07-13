@@ -8,6 +8,7 @@ use App\Capability\Dto\Financial;
 use App\Capability\Dto\Related;
 use App\Capability\Dto\TimelineEvent;
 use App\Capability\Dto\WorkspacePayload;
+use App\Capability\Support\Money;
 use App\Models\CustomerPayment;
 use App\Models\Invoice;
 
@@ -46,7 +47,7 @@ final class InvoiceCapability implements ObjectCapability
                 'type' => 'invoice', 'id' => (string) $i->id, 'ref' => $i->invoice_no, 'title' => 'Invoice ' . $i->invoice_no,
                 'subtitle' => (string) $i->customer_name, 'status' => $overdue ? 'overdue' : (string) $i->status,
             ])
-            ->headline('$' . number_format((float) $i->balance), 'of $' . number_format((float) $i->total) . ' due', (float) $i->balance > 0 ? 'warn' : 'ok')
+            ->headline(Money::fmt((float) $i->balance, (string) ($i->currency ?: $ctx->baseCurrency())), 'of ' . Money::fmt((float) $i->total, (string) ($i->currency ?: $ctx->baseCurrency())) . ' due', (float) $i->balance > 0 ? 'warn' : 'ok')
             ->financials([
                 new Financial('total', 'Total', round((float) $i->total, 2), $i->currency),
                 new Financial('paid', 'Paid', round((float) $i->amount_paid, 2), $i->currency, 'ok'),

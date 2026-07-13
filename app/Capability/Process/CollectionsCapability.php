@@ -7,6 +7,7 @@ use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\ActionSpec;
 use App\Capability\Dto\Related;
 use App\Capability\Dto\WorkspacePayload;
+use App\Capability\Support\Money;
 use App\Models\Invoice;
 use Illuminate\Support\Collection;
 
@@ -24,13 +25,13 @@ final class CollectionsCapability implements ProcessCapability
 
         $related = $rows->take(20)->map(fn ($i) => (new Related(
             'overdue', 'invoice', (string) $i->id, (string) $i->customer_name,
-            'due ' . optional($i->due_at)->format('d M Y') . ' · $' . number_format((float) $i->balance),
+            'due ' . optional($i->due_at)->format('d M Y') . ' · ' . Money::fmt((float) $i->balance, (string) ($i->currency ?: $ctx->baseCurrency())),
             null, '/api/v1/workspace/invoice/' . $i->id,
         ))->toArray())->values()->all();
 
         return (new WorkspacePayload)
             ->object(['type' => 'process:collections', 'title' => 'Collections', 'status' => $rows->count() . ' overdue'])
-            ->headline('$' . number_format($exposure), 'total overdue', $exposure > 0 ? 'danger' : 'ok')
+            ->headline(Money::fmt($exposure, $ctx->baseCurrency()), 'total overdue', $exposure > 0 ? 'danger' : 'ok')
             ->related($related)
             ->actions([new ActionSpec('bulk_remind', 'Send reminders', '/api/v1/workspace/collections/_/bulk_remind', 'POST', 'human', 'primary')])
             ->meta(['capability' => 'collections', 'ttl' => 30, 'permissions' => ['menu:finance']]);

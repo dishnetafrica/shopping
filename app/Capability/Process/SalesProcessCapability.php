@@ -6,6 +6,7 @@ use App\Capability\Contracts\CapabilityContext;
 use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\Related;
 use App\Capability\Dto\WorkspacePayload;
+use App\Capability\Support\Money;
 use App\Models\Invoice;
 use App\Models\Order;
 
@@ -21,13 +22,13 @@ final class SalesProcessCapability implements ProcessCapability
         $toInvoice = $this->toInvoice($ctx);
         $related = $toInvoice->take(20)->map(fn ($o) => (new Related(
             'to_invoice', 'salesOrder', (string) $o->id, (string) $o->customer_name,
-            $o->order_no . ' · delivered · $' . number_format((float) $o->total), null,
+            $o->order_no . ' · delivered · ' . Money::fmt((float) $o->total, (string) ($o->sell_currency ?: $ctx->baseCurrency())), null,
             '/api/v1/workspace/salesOrder/' . $o->id,
         ))->toArray())->values()->all();
 
         return (new WorkspacePayload)
             ->object(['type' => 'process:sales', 'title' => 'Sales pipeline', 'status' => $toInvoice->count() . ' to invoice'])
-            ->headline('$' . number_format((float) $toInvoice->sum(fn ($o) => (float) $o->total)), 'delivered, not invoiced', 'warn')
+            ->headline(Money::fmt((float) $toInvoice->sum(fn ($o) => (float) $o->total), $ctx->baseCurrency()), 'delivered, not invoiced', 'warn')
             ->related($related)
             ->meta(['capability' => 'sales.process', 'ttl' => 30, 'permissions' => ['menu:orders']]);
     }

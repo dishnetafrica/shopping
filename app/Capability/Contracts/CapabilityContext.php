@@ -34,6 +34,17 @@ final class CapabilityContext
         return (int) $this->tenant->id;
     }
 
+    /**
+     * The tenant's home/base currency for headline totals that aren't tied to a single
+     * native record (e.g. process payables). Defaults to UGX — the engine's native default.
+     */
+    public function baseCurrency(): string
+    {
+        $cur = method_exists($this->tenant, 'setting') ? $this->tenant->setting('currency') : null;
+
+        return strtoupper((string) ($cur ?: 'UGX'));
+    }
+
     public function can(string $permission): bool
     {
         if ($permission === '') {
