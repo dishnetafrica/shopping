@@ -296,12 +296,12 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 
 <script>
 const CFG = { base:'/api/v1/workspace', csrf: document.querySelector('meta[name=csrf-token]').content, user: @json(['name'=>'']) };
-const LABELS = { briefing:'Morning Briefing', worklist:'My Work', customers:'Customers', collections:'Collections',
+const LABELS = { setup:'Get started', briefing:'Morning Briefing', worklist:'My Work', customers:'Customers', collections:'Collections',
   salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance',
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
   salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement' };
-const GROUPS = [ ['Overview',['briefing','worklist']],
+const GROUPS = [ ['Overview',['setup','briefing','worklist']],
   ['Sales',['customers','salesOrders','quotations','invoices','payments','collections']],
   ['Inventory',['products','categories','purchase.process','suppliers']],
   ['Operations',['warehouse','dispatch']],
@@ -309,13 +309,14 @@ const GROUPS = [ ['Overview',['briefing','worklist']],
 // Which nav key reads which count from the catalog's counts map.
 const NAVCOUNT = { customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['briefing','worklist','customers','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','collections','finance','warehouse','dispatch']);
+const READY = new Set(['setup','briefing','worklist','customers','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','collections','finance','warehouse','dispatch']);
 // Dedicated list views still pending — none; kept for future additions.
 const SOON = {};
 function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:1)+'k' : String(n); }
 
 /* ---- inline icon set ---- */
 const P = {
+  setup:'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
   briefing:'M12 3v18M3 12h18', worklist:'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01',
   collections:'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
   finance:'M3 3v18h18M7 14l4-4 3 3 5-6', 'sales.process':'M3 3v18h18M18 9l-6 6-4-4-3 3',
@@ -386,7 +387,15 @@ async function boot(){
   document.getElementById('uav').style.background = 'linear-gradient(135deg,#16a34a,#0d9488)';
   renderNav(cat.capabilities||[]);
   const h = parseHash();
-  route(h.key||'briefing', h.id);
+  route(h.key || landingKey(), h.id);
+}
+// A brand-new shop (nothing sold or stocked yet) lands on the Get-started checklist;
+// an established shop lands on the Morning Briefing.
+function landingKey(){
+  const c = CFG.counts||{};
+  const started = ['product','customers','supplier','salesOrder','quotations','invoice','payment']
+    .some(k => Number(c[k]||0) > 0);
+  return started ? 'briefing' : 'setup';
 }
 function parseHash(){ const p=location.hash.replace('#/','').split('/'); return { key:p[0]||'', id:p[1]||null }; }
 function renderNav(caps){
@@ -514,6 +523,20 @@ function briefHtml(b){ if(!b) return '';
 }
 function qrow(r){ const link=r.link?(' onclick="openLink(\''+esc(r.link)+'\')"'):'';
   const right = r.sublabel && /[0-9]/.test(r.sublabel) ? r.sublabel : '';
+  // Setup-checklist rows carry a boolean `done`: render a green tick (done) or a "Start" call-to-action (todo).
+  const isStep = (typeof r.done === 'boolean');
+  if(isStep){
+    const qi = r.done
+      ? '<div class="qi" style="background:var(--ok-wash);color:var(--brand-ink)">'+icon('check','ic-sm')+'</div>'
+      : '<div class="qi">'+icon(r.type||'doc','ic-sm')+'</div>';
+    const rr = r.done
+      ? '<div class="r" style="color:var(--brand-ink)">Done</div>'
+      : '<div class="r" style="color:var(--brand)">Start</div>';
+    return '<div class="qrow"'+link+'>'+qi+
+      '<div class="m"><div class="t"'+(r.done?' style="color:var(--muted)"':'')+'>'+esc(r.label||r.type)+'</div>'+
+      (r.sublabel?'<div class="s">'+esc(r.sublabel)+'</div>':'')+'</div>'+
+      rr+'<div class="chev">'+icon('chev','ic-sm')+'</div></div>';
+  }
   return '<div class="qrow"'+link+'><div class="qi">'+icon(r.type||'doc','ic-sm')+'</div>'+
     '<div class="m"><div class="t">'+esc(r.label||r.type)+(r.count!=null?' <span style="color:var(--muted);font-weight:500">('+r.count+')</span>':'')+'</div>'+
     (r.sublabel&&!right?'<div class="s">'+esc(r.sublabel)+'</div>':'')+'</div>'+
