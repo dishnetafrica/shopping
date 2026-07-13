@@ -210,6 +210,16 @@ svg{display:block}
 .imgfld{display:flex;gap:12px;align-items:center}
 .imgprev{width:56px;height:56px;border-radius:9px;border:1px solid var(--line);background:#f3f4f6 center/cover no-repeat;flex:none}
 .imgbtns{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.gallery{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
+.gthumb{position:relative;width:72px;height:72px;border-radius:10px;border:1px solid var(--line);background:#f3f4f6 center/cover no-repeat;flex:none}
+.gthumb.gload{display:grid;place-items:center;color:var(--muted);font-size:18px}
+.gthumb .grm{position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;background:var(--danger);color:#fff;font-size:13px;line-height:1;display:grid;place-items:center;border:2px solid #fff;cursor:pointer}
+.gthumb .gmain{position:absolute;bottom:0;left:0;right:0;background:rgba(22,163,74,.9);color:#fff;font-size:9px;font-weight:700;text-align:center;border-radius:0 0 9px 9px;padding:1px}
+.gadd{width:72px;height:72px;border-radius:10px;border:1.5px dashed var(--line);display:grid;place-items:center;cursor:pointer;color:var(--muted);flex:none;gap:0}
+.gadd:hover{border-color:var(--brand);color:var(--brand-ink);background:var(--brand-wash)}
+.gadd span{display:block;text-align:center;line-height:1.1}.gadd .gaddt{font-size:9.5px;font-weight:600}
+.gstrip{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.gsimg{width:96px;height:96px;border-radius:11px;border:1px solid var(--line);background:#f3f4f6 center/cover no-repeat;cursor:pointer;flex:none;box-shadow:var(--sh-sm)}
 
 /* ================= TOAST ================= */
 #toasts{position:fixed;bottom:22px;right:22px;z-index:80;display:flex;flex-direction:column;gap:9px}
@@ -452,6 +462,9 @@ function renderView(p){
       (n? p.related.map(qrow).join('') : emptyState('check','All clear','Nothing pending in this queue.'))+'</div>';
   } else {
     h+=briefHtml(p.brief);
+    if(Array.isArray(o.gallery) && o.gallery.length>1){
+      h+='<div class="gstrip">'+o.gallery.map(u=>'<div class="gsimg" style="background-image:url(\''+esc(u)+'\')" onclick="window.open(\''+esc(u)+'\')"></div>').join('')+'</div>';
+    }
     h+='<div class="rec">';
     /* rail */
     h+='<div class="rail">';
@@ -515,11 +528,17 @@ async function doAction(a){
   if(a.confirm && !window.confirm(a.confirm)) return;
   const res=await post(a.endpoint,{}); toast(res.ok?(res.message||'Done'):(res.message||res.error||'Error'), !res.ok); refresh();
 }
+window.GAL={};
 function formModal(a){
   const pf=a.prefill||{};
+  window.GAL={};
   let fields=''; Object.entries(a.schema).forEach(([k,type])=>{
     const lbl=k.replace(/_/g,' '); const val=pf[k]!=null?String(pf[k]):'';
-    if(type==='image'){
+    if(type==='gallery'){
+      window.GAL[k]=Array.isArray(pf[k])?pf[k].slice():[];
+      fields+='<div class="fld"><label>'+lbl+' <span class="mut" style="font-weight:400">(first photo is the main one)</span></label><div class="gallery" id="gal_'+k+'"></div>'+
+        '<input type="file" accept="image/*" id="galf_'+k+'" style="display:none" onchange="galUpload(\''+k+'\')"></div>'; }
+    else if(type==='image'){
       fields+='<div class="fld"><label>'+lbl+'</label><div class="imgfld">'+
         '<div class="imgprev" id="prev_'+k+'"'+(val?' style="background-image:url(\''+esc(val)+'\')"':'')+'></div>'+
         '<div class="imgbtns"><input type="hidden" id="f_'+k+'" value="'+esc(val)+'">'+
@@ -533,7 +552,27 @@ function formModal(a){
   });
   document.getElementById('modal').innerHTML='<div class="h">'+esc(a.label)+'<button class="x" onclick="closeM()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><div class="b">'+fields+'</div><div class="f"><button class="btn" onclick="closeM()">Cancel</button><button class="btn pri" id="mok">Save</button></div>';
   document.getElementById('ov').classList.add('on');
-  document.getElementById('mok').onclick=async()=>{ const body={}; Object.keys(a.schema).forEach(k=>{ const el=document.getElementById('f_'+k); if(el) body[k]=el.value; }); closeM(); const res=await post(a.endpoint,body); toast(res.ok?(res.message||'Saved'):(res.message||res.error||'Error'), !res.ok); refresh(); };
+  Object.entries(a.schema).forEach(([k,type])=>{ if(type==='gallery') renderGal(k); });
+  document.getElementById('mok').onclick=async()=>{ const body={};
+    Object.entries(a.schema).forEach(([k,type])=>{ if(type==='gallery'){ body[k]=window.GAL[k]||[]; } else { const el=document.getElementById('f_'+k); if(el) body[k]=el.value; } });
+    closeM(); const res=await post(a.endpoint,body); toast(res.ok?(res.message||'Saved'):(res.message||res.error||'Error'), !res.ok); refresh(); };
+}
+function renderGal(k){
+  const el=document.getElementById('gal_'+k); if(!el) return; const urls=window.GAL[k]||[];
+  let h=urls.map((u,i)=>'<div class="gthumb" style="background-image:url(\''+esc(u)+'\')">'+(i===0?'<span class="gmain">Main</span>':'')+'<button type="button" class="grm" onclick="galRemove(\''+k+'\','+i+')">×</button></div>').join('');
+  if(urls.length<4) h+='<div class="gadd" onclick="document.getElementById(\'galf_'+k+'\').click()"><span>＋</span><span class="gaddt">Add photo</span></div>';
+  el.innerHTML=h;
+}
+function galRemove(k,i){ (window.GAL[k]||[]).splice(i,1); renderGal(k); }
+async function galUpload(k){
+  const fi=document.getElementById('galf_'+k); const f=fi&&fi.files&&fi.files[0]; if(!f) return; fi.value='';
+  if(f.size>6*1024*1024){ toast('Image too large (max 6MB)', true); return; }
+  const el=document.getElementById('gal_'+k); if(el) el.insertAdjacentHTML('beforeend','<div class="gthumb gload" id="galload_'+k+'">…</div>');
+  const reader=new FileReader();
+  reader.onload=async()=>{ try{ const res=await post('/api/v1/workspace/products/_/upload_image',{data:reader.result,name:f.name});
+    if(res.ok&&res.url){ (window.GAL[k]=window.GAL[k]||[]).push(res.url); } else { toast(res.message||'Upload failed', true); } }
+    catch(e){ toast('Upload failed', true); } renderGal(k); };
+  reader.readAsDataURL(f);
 }
 async function uploadPhoto(k){
   const fi=document.getElementById('file_'+k); const f=fi&&fi.files&&fi.files[0]; if(!f) return;

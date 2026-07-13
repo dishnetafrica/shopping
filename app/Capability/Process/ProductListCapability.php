@@ -109,8 +109,10 @@ final class ProductListCapability implements ProcessCapability
             'price'      => 'money',
             'cost'       => 'money',
             'stock'      => 'number',
+            'moq'        => 'number',
+            'pack_size'  => 'number',
             'unit_label' => 'text',
-            'image'      => 'image',
+            'photos'     => 'gallery',
         ]);
     }
 

@@ -45,23 +45,33 @@ final class ProductCapability implements ObjectCapability
             $marginFin = new Financial('margin', 'Margin', $margin, null, $margin < 0 ? 'danger' : ($margin < 15 ? 'warn' : 'ok'), 'pct');
         }
 
+        $photos = array_values(array_filter([(string) $p->image_url, (string) $p->gallery_1, (string) $p->gallery_2, (string) $p->gallery_3], fn ($u) => trim((string) $u) !== ''));
+
         $edit = ['key' => 'edit_product', 'label' => 'Edit', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/product/' . $p->id . '/update_product', 'actor' => 'human', 'tone' => 'primary',
             'schema' => ProductListCapability::formSchema($ctx->tenantId()),
-            'prefill' => ['name' => (string) $p->name, 'category' => (string) $p->category, 'price' => round($price, 2), 'cost' => $p->cost_price === null ? '' : round($cost, 2), 'stock' => (int) $stock, 'unit_label' => (string) ($p->unit_label ?? ''), 'image' => (string) ($p->image_url ?? '')]];
+            'prefill' => ['name' => (string) $p->name, 'category' => (string) $p->category, 'price' => round($price, 2), 'cost' => $p->cost_price === null ? '' : round($cost, 2), 'stock' => (int) $stock, 'moq' => $p->moq !== null ? (int) $p->moq : '', 'pack_size' => $p->pack_size !== null ? (int) $p->pack_size : '', 'unit_label' => (string) ($p->unit_label ?? ''), 'photos' => $photos]];
         $archive = ['key' => 'archive_product', 'label' => 'Archive', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/product/' . $p->id . '/archive_product', 'actor' => 'human', 'tone' => 'danger', 'confirm' => 'Archive "' . $p->name . '"? It will be hidden from the catalogue but kept for order history.'];
+
+        $fins = [
+            new Financial('price', 'Price', round($price, 2), $cur),
+            new Financial('cost', 'Cost', $p->cost_price === null ? '—' : round($cost, 2), $p->cost_price === null ? null : $cur),
+            $marginFin,
+        ];
+        if ($p->moq !== null) {
+            $fins[] = new Financial('moq', 'Min. order (MOQ)', (int) $p->moq . ' ' . (string) ($p->unit_label ?: 'units'));
+        }
+        if ($p->pack_size !== null) {
+            $fins[] = new Financial('pack', 'Pack size', (int) $p->pack_size);
+        }
 
         return (new WorkspacePayload)
             ->object([
                 'type' => 'product', 'id' => (string) $p->id, 'ref' => (string) $p->sku, 'title' => (string) $p->name,
                 'subtitle' => trim((string) $p->sku . ' · ' . (string) $p->category), 'status' => $status,
-                'image' => (string) ($p->image_url ?? ''),
+                'image' => (string) ($p->image_url ?? ''), 'gallery' => $photos,
             ])
             ->headline(number_format($stock) . ' ' . (string) ($p->unit_label ?: 'units'), 'on hand', $status === 'out' ? 'danger' : ($status === 'low' ? 'warn' : 'ok'))
-            ->financials([
-                new Financial('price', 'Price', round($price, 2), $cur),
-                new Financial('cost', 'Cost', $p->cost_price === null ? '—' : round($cost, 2), $p->cost_price === null ? null : $cur),
-                $marginFin,
-            ])
+            ->financials($fins)
             ->related($p->category ? $this->reco->topInCategory($ctx, (string) $p->category, 6, (int) $p->id) : [])
             ->actions([$edit, $archive])
             ->meta(['capability' => 'product', 'ttl' => 60, 'permissions' => ['menu:products']]);

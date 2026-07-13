@@ -22,7 +22,7 @@ final class ProductWriteService
             throw new \InvalidArgumentException('name_and_price_required');
         }
 
-        return Product::create([
+        return Product::create(array_merge([
             'tenant_id'  => (int) $t->id,
             'name'       => $name,
             'category'   => trim((string) ($d['category'] ?? '')),
@@ -31,12 +31,37 @@ final class ProductWriteService
             'price'      => $price,
             'cost_price' => isset($d['cost']) && $d['cost'] !== '' ? (float) $d['cost'] : null,
             'stock'      => (int) ($d['stock'] ?? 0),
-            'image_url'  => trim((string) ($d['image'] ?? '')),
             'moq'        => isset($d['moq']) && $d['moq'] !== '' ? max(1, (int) $d['moq']) : null,
             'pack_size'  => isset($d['pack_size']) && $d['pack_size'] !== '' ? max(1, (int) $d['pack_size']) : null,
             'unit_label' => trim((string) ($d['unit_label'] ?? '')) ?: null,
             'active'     => true,
-        ]);
+        ], $this->photoColumns($d) ?: ['image_url' => trim((string) ($d['image'] ?? ''))]));
+    }
+
+    /**
+     * Map a `photos` array (up to 4) onto the fixed image slots: first → image_url (the one shown
+     * in lists/bot), the rest → gallery_1..3. Falls back to a single `image` string. Returns [] when
+     * neither key is present, so update() leaves photos untouched.
+     *
+     * @return array<string,?string>
+     */
+    private function photoColumns(array $d): array
+    {
+        if (array_key_exists('photos', $d) && is_array($d['photos'])) {
+            $u = array_values(array_filter(array_map(fn ($x) => trim((string) $x), $d['photos']), fn ($x) => $x !== ''));
+
+            return [
+                'image_url' => $u[0] ?? '',
+                'gallery_1' => $u[1] ?? null,
+                'gallery_2' => $u[2] ?? null,
+                'gallery_3' => $u[3] ?? null,
+            ];
+        }
+        if (array_key_exists('image', $d)) {
+            return ['image_url' => trim((string) $d['image'])];
+        }
+
+        return [];
     }
 
     /** Update only the fields present in $d (blank/absent = left untouched). */
@@ -58,11 +83,14 @@ final class ProductWriteService
         if (array_key_exists('stock', $d) && $d['stock'] !== '') {
             $p->stock = (int) $d['stock'];
         }
-        if (array_key_exists('image', $d)) {
-            $p->image_url = trim((string) $d['image']);
+        foreach ($this->photoColumns($d) as $col => $val) {
+            $p->{$col} = $val;
         }
         if (array_key_exists('moq', $d)) {
             $p->moq = $d['moq'] === '' || $d['moq'] === null ? null : max(1, (int) $d['moq']);
+        }
+        if (array_key_exists('pack_size', $d)) {
+            $p->pack_size = $d['pack_size'] === '' || $d['pack_size'] === null ? null : max(1, (int) $d['pack_size']);
         }
         if (array_key_exists('unit_label', $d)) {
             $p->unit_label = trim((string) $d['unit_label']) ?: null;
