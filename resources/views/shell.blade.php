@@ -192,6 +192,21 @@ svg{display:block}
 .card-h h3{font-size:14px;font-weight:650}
 .card-h .sub{font-size:12.5px;color:var(--muted)}
 .card-h .r{margin-left:auto}
+.pipe{display:flex;align-items:stretch;gap:0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--surface);margin-bottom:14px}
+.pipe .pst{flex:1;padding:13px 14px;display:flex;flex-direction:column;gap:4px;position:relative;border-right:1px solid var(--line)}
+.pipe .pst:last-child{border-right:none}
+.pipe .pst .pl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--faint);display:flex;align-items:center;gap:6px}
+.pipe .pst .pv{font-size:13px;font-weight:600;color:var(--ink-2)}
+.pipe .pst.done{background:var(--brand-wash)}
+.pipe .pst.done .pl{color:var(--brand-ink)}
+.pipe .pst.now{background:#fff;box-shadow:inset 0 -3px 0 var(--brand)}
+.pipe .pst.now .pl{color:var(--ink)}
+.pipe .pst.wait{opacity:.55}
+.pipe .pst .pc{position:absolute;top:12px;right:12px;width:18px;height:18px;border-radius:50%;display:grid;place-items:center}
+.pipe .pst.done .pc{background:var(--brand);color:#fff}
+.pipe .pst.now .pc{border:2px solid var(--brand)}
+.pipe .pst.wait .pc{border:2px solid var(--line)}
+.pipe .pst .pc .ic{width:11px;height:11px}
 
 /* timeline */
 .tl{position:relative}
@@ -671,10 +686,11 @@ document.addEventListener('click',e=>{ if(!e.target.closest('.moremenu')) closeM
 
 function tabContent(p,tab){
   if(tab==='timeline') return timelineTab(p.timeline);
-  if(tab==='financials') return stmtHtml(p.statement);
+  if(tab==='financials') return financialsTab(p);
   if(tab==='documents') return docsTab(p.documents);
   /* overview (default) */
   let h='';
+  h+=pipelineHtml(p.pipeline);
   if(p.stats&&p.stats.length){ h+='<div class="stat-grid">'+p.stats.map(f=>{ const tc=toneCls(f.tone);
     return '<div class="kpi"><div class="top"><span class="ib '+tc+'">'+icon(f.icon||'bolt','ic-sm')+'</span>'+esc(f.label)+'</div><div class="val '+tc+'">'+esc(f.value)+'</div>'+(f.foot?'<div class="foot">'+esc(f.foot)+'</div>':'')+'</div>';
   }).join('')+'</div>'; }
@@ -726,6 +742,15 @@ function stmtHtml(st){
     st.rows.map(r=>'<tr class="'+(r.link?'clk':'')+'"'+(r.link?' onclick="openLink(\''+esc(r.link)+'\')"':'')+'><td>'+esc(r.date)+'</td><td>'+esc(r.detail)+'</td><td class="num">'+esc(r.debit||'')+'</td><td class="num">'+esc(r.credit||'')+'</td><td class="num">'+esc(r.balance)+'</td></tr>').join('')+
     '<tr class="bal"><td colspan="4">'+esc(st.balanceLabel||'Balance')+'</td><td class="num">'+esc(st.balanceValue)+'</td></tr>'+
     '</tbody></table></div></div>';
+}
+function pipelineHtml(stages){ if(!stages||!stages.length) return '';
+  return '<div class="pipe">'+stages.map(s=>'<div class="pst '+esc(s.state||'wait')+'"><div class="pc">'+(s.state==='done'?icon('check','ic-sm'):'')+'</div><div class="pl">'+icon(s.icon||'chev','ic-sm')+esc(s.label)+'</div><div class="pv">'+esc(s.value||'')+'</div></div>').join('')+'</div>'; }
+function financialsTab(p){
+  let h='';
+  if(p.statement && p.statement.rows && p.statement.rows.length) h+=stmtHtml(p.statement);
+  (p.financialsCards||[]).forEach(c=>{ h+=(h?'<div style="height:14px"></div>':'')+overviewCard(c); });
+  if(!h) h=stmtHtml(p.statement);
+  return h;
 }
 function docsTab(docs){
   if(!docs||!docs.length) return '<div class="card"><div class="b">'+emptyState('doc','No documents','Invoices and statements will appear here.')+'</div></div>';

@@ -24,6 +24,8 @@ final class WorkspacePayload
     private array $tabs = [];
     private array $overviewCards = [];
     private ?array $statement = null;
+    private array $pipeline = [];
+    private array $financialsCards = [];
     private ?array $nba = null;
     private array $quickActions = [];
     private array $more = [];
@@ -114,6 +116,15 @@ final class WorkspacePayload
         return $this;
     }
 
+    /**
+     * A horizontal stage tracker (e.g. Order → Confirmed → Delivered → Invoiced → Paid).
+     * @param array<int,array{label:string,value?:string,state:string,icon?:string}> $stages
+     */
+    public function pipeline(array $stages): self { $this->pipeline = $stages; return $this; }
+
+    /** Extra card specs for the Financials tab (same kinds as overviewCards). @param array<int,array<string,mixed>> $c */
+    public function financialsCards(array $c): self { $this->financialsCards = $c; return $this; }
+
     /** The single highlighted next-best-action in the rail. */
     public function nba(string $text, array $action): self { $this->nba = ['text' => $text, 'action' => $action]; return $this; }
 
@@ -155,6 +166,8 @@ final class WorkspacePayload
             'tabs' => $this->tabs,
             'overviewCards' => $this->overviewCards,
             'statement' => $this->statement,
+            'pipeline' => $this->pipeline,
+            'financialsCards' => $this->financialsCards,
             'nba' => $this->nba,
             'quickActions' => $this->quickActions,
             'more' => $this->more,
