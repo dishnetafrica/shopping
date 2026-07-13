@@ -28,7 +28,11 @@ final class AssistantCapability
             ['label' => 'Exposure', 'value' => $money($exposure)],
             ['label' => 'Overdue', 'value' => $count . ' · ' . $money($overdue)],
         ];
-        $pay = fn () => $ep ? new ActionSpec('record_payment', 'Record payment', $ep . '/record_payment', 'POST', 'human', 'primary') : null;
+        $pay = fn () => $ep ? new ActionSpec('record_payment', 'Record payment', $ep . '/record_payment', 'POST', 'human', 'primary', [
+            'amount' => 'money',
+            'currency' => 'enum:UGX,USD,SSP',
+            'method' => 'enum:cash,bank,mobile',
+        ]) : null;
         $remind = fn () => $ep ? new ActionSpec('send_reminder', 'Send reminder', $ep . '/send_reminder', 'POST', 'human') : null;
 
         if ($count >= 2) {

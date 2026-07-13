@@ -10,6 +10,7 @@ use App\Capability\Dto\WorkspacePayload;
 use App\Capability\Support\Money;
 use App\Models\Invoice;
 use App\Models\Order;
+use App\Services\Invoicing\InvoiceService;
 
 /**
  * Sales Order Workspace. NOTE: production stores shopping orders in `Order` and trade/margin lines in
@@ -53,6 +54,30 @@ final class SalesOrderCapability implements ObjectCapability
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
-        return ['ok' => false, 'error' => 'unknown_action:' . $action];
+        return match ($action) {
+            'create_invoice' => $this->createInvoice($ctx, $input),
+            default => ['ok' => false, 'error' => 'unknown_action:' . $action],
+        };
+    }
+
+    /**
+     * Issue an invoice for a delivered order. Delegates entirely to the frozen InvoiceService
+     * (which renders the invoice from the order and books it) — no invoice logic duplicated here.
+     */
+    private function createInvoice(CapabilityContext $ctx, array $input): array
+    {
+        $o = Order::where('tenant_id', $ctx->tenantId())->findOrFail((int) ($input['id'] ?? 0));
+
+        if ($o->delivered_at === null) {
+            return ['ok' => false, 'error' => 'not_delivered', 'message' => 'Only delivered orders can be invoiced.'];
+        }
+        $existing = Invoice::where('tenant_id', $ctx->tenantId())->where('order_id', $o->id)->where('status', '!=', 'void')->first();
+        if ($existing) {
+            return ['ok' => true, 'invoice_no' => (string) $existing->invoice_no, 'message' => 'Invoice already exists.', 'reused' => true];
+        }
+
+        $inv = app(InvoiceService::class)->issueForOrder($ctx->tenant, $o, 'v3');
+
+        return ['ok' => true, 'invoice_no' => (string) $inv->invoice_no, 'invoice_id' => (int) $inv->id, 'message' => 'Invoice ' . $inv->invoice_no . ' created.'];
     }
 }
