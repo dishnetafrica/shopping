@@ -5,6 +5,7 @@ namespace App\Capability\Shared;
 use App\Capability\Contracts\Capability;
 use App\Capability\Contracts\CapabilityContext;
 use App\Capability\Dto\WorkspacePayload;
+use App\Models\Category;
 use App\Models\CustomerPayment;
 use App\Models\CustomerProfile;
 use App\Models\Invoice;
@@ -38,6 +39,7 @@ final class NavCountsCapability implements Capability
             'invoice'          => $c(Invoice::query()),
             'payment'          => $c(CustomerPayment::query()),
             'product'          => $c(Product::query()),
+            'categories'       => $c(Category::query()),
             'supplier'         => $c(Supplier::query()),
             'purchase.process' => $c(OrderCost::query()->where('stage', 'purchase')),
         ], fn ($n) => $n > 0);

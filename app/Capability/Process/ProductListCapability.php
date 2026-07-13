@@ -6,7 +6,9 @@ use App\Capability\Contracts\CapabilityContext;
 use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\WorkspacePayload;
 use App\Capability\Support\Money;
+use App\Models\Category;
 use App\Models\Product;
+use App\Services\Catalog\ProductWriteService;
 
 /**
  * Products directory — list workspace. KPIs (total SKUs / inventory value / low / out of stock)
@@ -38,6 +40,15 @@ final class ProductListCapability implements ProcessCapability
             $price = (float) $p->price;
             $cost = (float) $p->cost_price;
             $margin = $price > 0 ? round(($price - $cost) / $price * 100, 1) : 0.0;
+            // Cost not recorded -> margin is unknown, not 100%. Absurd margin (|.|>500%) -> the cost is
+            // almost certainly a data-entry error, so flag it instead of printing e.g. -260581.8%.
+            if ($cost <= 0) {
+                $marginCell = ['value' => '—', 'tone' => '', 'sort' => -1];
+            } elseif (abs($margin) > 500) {
+                $marginCell = ['value' => '⚠ check cost', 'tone' => 'danger', 'sort' => $margin];
+            } else {
+                $marginCell = ['value' => $margin . '%', 'tone' => $margin < 0 ? 'danger' : ($margin < 15 ? 'warn' : 'ok'), 'sort' => $margin];
+            }
             $stock = (float) $p->stock;
             $low = $stock <= max(5.0, (float) ($p->moq ?: 0));
             $status = $stock <= 0 ? 'Out of stock' : ($low ? 'Low' : 'In stock');
@@ -45,11 +56,11 @@ final class ProductListCapability implements ProcessCapability
             $unit = (string) ($p->unit_label ?: 'units');
 
             $rows[] = [
-                'product'  => ['value' => (string) $p->name, 'sub' => (string) $p->sku, 'avatar' => true],
+                'product'  => ['value' => (string) $p->name, 'sub' => (string) $p->sku, 'avatar' => true, 'image' => (string) ($p->image_url ?: '')],
                 'category' => ['value' => (string) ($p->category ?: '—'), 'badge' => 'default'],
                 'cost'     => ['value' => Money::fmt($cost, $cur), 'sort' => $cost],
                 'price'    => ['value' => Money::fmt($price, $cur), 'sort' => $price],
-                'margin'   => ['value' => $margin . '%', 'tone' => $margin < 15 ? 'warn' : 'ok', 'sort' => $margin],
+                'margin'   => $marginCell,
                 'stock'    => ['value' => number_format($stock) . ' ' . $unit, 'tone' => $stock <= 0 ? 'danger' : '', 'sort' => $stock],
                 'status'   => ['value' => $status, 'badge' => $badge],
                 'link'     => '/api/v1/workspace/product/' . $p->id,
@@ -78,8 +89,28 @@ final class ProductListCapability implements ProcessCapability
                 ['key' => 'out', 'label' => 'Out of stock', 'value' => $outCount, 'tone' => $outCount > 0 ? 'danger' : 'ok', 'foot' => 'need reordering'],
             ])
             ->table($columns, $rows)
-            ->actions([['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/products', 'actor' => 'human', 'tone' => 'default']])
+            ->actions([
+                ['key' => 'add_product', 'label' => 'New product', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/products/_/add_product', 'actor' => 'human', 'tone' => 'primary', 'schema' => $this->formSchema($t)],
+                ['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/products', 'actor' => 'human', 'tone' => 'default'],
+            ])
             ->meta(['capability' => 'products', 'ttl' => 60, 'permissions' => ['menu:products'], 'note' => $totalSkus > self::MAX_ROWS ? ('Showing first ' . self::MAX_ROWS . ' of ' . $totalSkus . ' SKUs; KPIs cover all.') : null]);
+    }
+
+    /** Schema for the add/edit product form. Category is an enum populated from existing categories. */
+    public static function formSchema(int $tenantId): array
+    {
+        $cats = Category::where('tenant_id', $tenantId)->orderBy('name')->pluck('name')
+            ->filter(fn ($n) => trim((string) $n) !== '')->values()->all();
+
+        return array_filter([
+            'name'       => 'text',
+            'category'   => $cats ? ('enum:' . implode(',', $cats)) : 'text',
+            'price'      => 'money',
+            'cost'       => 'money',
+            'stock'      => 'number',
+            'unit_label' => 'text',
+            'image'      => 'text',
+        ]);
     }
 
     public function summary(CapabilityContext $ctx, array $scope = []): array
@@ -89,6 +120,16 @@ final class ProductListCapability implements ProcessCapability
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
+        if ($action === 'add_product') {
+            try {
+                $p = app(ProductWriteService::class)->create($ctx->tenant, $input);
+            } catch (\InvalidArgumentException $e) {
+                return ['ok' => false, 'error' => $e->getMessage(), 'message' => 'A name and a price above zero are required.'];
+            }
+
+            return ['ok' => true, 'id' => (int) $p->id, 'message' => 'Product "' . $p->name . '" added.'];
+        }
+
         return ['ok' => false, 'error' => 'unknown_action'];
     }
 }

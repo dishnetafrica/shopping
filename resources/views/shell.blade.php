@@ -285,18 +285,18 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 const CFG = { base:'/api/v1/workspace', csrf: document.querySelector('meta[name=csrf-token]').content, user: @json(['name'=>'']) };
 const LABELS = { briefing:'Morning Briefing', worklist:'My Work', customers:'Customers', collections:'Collections',
   salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance',
-  products:'Products', 'purchase.process':'Purchasing', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch',
+  products:'Products', categories:'Categories', 'purchase.process':'Purchasing', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier',
   salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement' };
 const GROUPS = [ ['Overview',['briefing','worklist']],
   ['Sales',['customers','salesOrders','quotations','invoices','payments','collections']],
-  ['Inventory',['products','purchase.process','suppliers']],
+  ['Inventory',['products','categories','purchase.process','suppliers']],
   ['Operations',['warehouse','dispatch']],
   ['Finance',['finance']] ];
 // Which nav key reads which count from the catalog's counts map.
-const NAVCOUNT = { customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', suppliers:'supplier', 'purchase.process':'purchase.process' };
+const NAVCOUNT = { customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['briefing','worklist','customers','salesOrders','quotations','invoices','payments','products','suppliers','purchase.process','collections','finance','warehouse','dispatch']);
+const READY = new Set(['briefing','worklist','customers','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','collections','finance','warehouse','dispatch']);
 // Dedicated list views still pending — none; kept for future additions.
 const SOON = {};
 function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:1)+'k' : String(n); }
@@ -319,6 +319,7 @@ const P = {
   suppliers:'M3 21h18M5 21V7l8-4v18M19 21V11l-6-3M9 9v.01M9 12v.01M9 15v.01',
   product:'M12 2 2 7l10 5 10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
   products:'M12 2 2 7l10 5 10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
+  categories:'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
   salesOrder:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
   salesOrders:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
   purchaseOrder:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
@@ -426,7 +427,8 @@ function renderView(p){
   /* ---- header ---- */
   h+='<div class="crumb">'+(LABELS[cap]||cap)+(o.title&&!isProcess?' <span style="color:var(--faint)">/</span> '+esc(o.title):'')+'</div>';
   h+='<div class="rec-head">';
-  if(!isProcess && o.title){ h+='<div class="rec-av" style="background:'+avColor(o.title)+'">'+initials(o.title)+'</div>'; }
+  if(!isProcess && o.image){ h+='<div class="rec-av" style="background:#eef0f3;background-image:url(\''+esc(o.image)+'\');background-size:cover;background-position:center"></div>'; }
+  else if(!isProcess && o.title){ h+='<div class="rec-av" style="background:'+avColor(o.title)+'">'+initials(o.title)+'</div>'; }
   else { h+='<div class="rec-av" style="background:'+avColor(cap)+'">'+icon(cap,'ic-lg')+'</div>'; }
   h+='<div class="idn"><h1>'+esc(o.title||LABELS[cap]||cap)+' '+statusBadge(o.status)+'</h1>'+(o.subtitle?'<div class="sub">'+esc(o.subtitle)+'</div>':'')+'</div>';
   if(p.headline){ h+='<div class="rec-hl"><div class="v '+toneCls(p.headline.tone)+'">'+esc(p.headline.value)+'</div><div class="l">'+esc(p.headline.label)+'</div></div>'; }
@@ -506,16 +508,21 @@ function actBtn(a){ const cls=a.actor==='ai'?'btn ai':('btn'+(a.tone==='primary'
 async function doAction(a){
   if((a.method||'POST')==='GET'){ const h=apiToHash(a.endpoint); if(h){ route(h.key,h.id); } return; }
   if(a.schema){ return formModal(a); }
-  const res=await post(a.endpoint,{}); toast(res.ok?'Done':(res.error||'Error'), !res.ok); refresh();
+  if(a.confirm && !window.confirm(a.confirm)) return;
+  const res=await post(a.endpoint,{}); toast(res.ok?(res.message||'Done'):(res.message||res.error||'Error'), !res.ok); refresh();
 }
 function formModal(a){
+  const pf=a.prefill||{};
   let fields=''; Object.entries(a.schema).forEach(([k,type])=>{
-    if(String(type).startsWith('enum:')){ const opts=String(type).slice(5).split(','); fields+='<div class="fld"><label>'+k.replace(/_/g,' ')+'</label><select id="f_'+k+'">'+opts.map(o=>'<option>'+esc(o)+'</option>').join('')+'</select></div>'; }
-    else fields+='<div class="fld"><label>'+k.replace(/_/g,' ')+'</label><input id="f_'+k+'" '+(type==='money'?'type="number" step="0.01" placeholder="0.00"':'')+'></div>';
+    const lbl=k.replace(/_/g,' '); const val=pf[k]!=null?String(pf[k]):'';
+    if(String(type).startsWith('enum:')){ const opts=String(type).slice(5).split(',');
+      fields+='<div class="fld"><label>'+lbl+'</label><select id="f_'+k+'">'+opts.map(o=>'<option'+(o===val?' selected':'')+'>'+esc(o)+'</option>').join('')+'</select></div>'; }
+    else { const t=(type==='money'||type==='number')?'type="number" step="'+(type==='money'?'0.01':'1')+'"':''; const ph=type==='money'?'placeholder="0.00"':'';
+      fields+='<div class="fld"><label>'+lbl+'</label><input id="f_'+k+'" '+t+' '+ph+' value="'+esc(val)+'"></div>'; }
   });
-  document.getElementById('modal').innerHTML='<div class="h">'+esc(a.label)+'<button class="x" onclick="closeM()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><div class="b">'+fields+'</div><div class="f"><button class="btn" onclick="closeM()">Cancel</button><button class="btn pri" id="mok">Confirm</button></div>';
+  document.getElementById('modal').innerHTML='<div class="h">'+esc(a.label)+'<button class="x" onclick="closeM()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><div class="b">'+fields+'</div><div class="f"><button class="btn" onclick="closeM()">Cancel</button><button class="btn pri" id="mok">Save</button></div>';
   document.getElementById('ov').classList.add('on');
-  document.getElementById('mok').onclick=async()=>{ const body={}; Object.keys(a.schema).forEach(k=>{ const el=document.getElementById('f_'+k); if(el) body[k]=el.value; }); closeM(); const res=await post(a.endpoint,body); toast(res.ok?'Recorded':(res.error||'Error'), !res.ok); refresh(); };
+  document.getElementById('mok').onclick=async()=>{ const body={}; Object.keys(a.schema).forEach(k=>{ const el=document.getElementById('f_'+k); if(el) body[k]=el.value; }); closeM(); const res=await post(a.endpoint,body); toast(res.ok?(res.message||'Saved'):(res.message||res.error||'Error'), !res.ok); refresh(); };
 }
 function closeM(){ document.getElementById('ov').classList.remove('on'); }
 document.getElementById('ov').addEventListener('click',e=>{ if(e.target.id==='ov') closeM(); });
@@ -533,7 +540,7 @@ function renderList(p){
   let h='<div class="crumb">'+(LABELS[cap]||cap)+'</div>';
   h+='<div class="lhead"><div><h1 class="ltitle">'+esc(o.title||'')+'</h1>'+(o.subtitle?'<div class="lsub">'+esc(o.subtitle)+'</div>':'')+'</div>'+
      '<div class="acts inl">'+(p.actions||[]).map(actBtn).join('')+
-     '<button class="btn pri" onclick="toast(\'New record — next in the build\')">'+icon('bolt','ic-sm')+'New</button></div></div>';
+     ((p.actions||[]).some(a=>a.tone==='primary')?'':'<button class="btn pri" onclick="toast(\'New — coming soon\')">'+icon('bolt','ic-sm')+'New</button>')+'</div></div>';
   if(p.financials&&p.financials.length){
     h+='<div class="kpis">'+p.financials.map(f=>{ const tc=toneCls(f.tone);
       return '<div class="kpi"><div class="top"><span class="ib '+tc+'">'+icon(cap,'ic-sm')+'</span>'+esc(f.label)+'</div><div class="val '+tc+'">'+esc(fval(f))+'</div>'+(f.foot?'<div class="foot">'+esc(f.foot)+'</div>':'')+'</div>';
@@ -570,8 +577,9 @@ function renderTable(){
 }
 function cellHtml(c,col){
   const align=col.align==='right'?' num':'';
-  if(col.type==='avatar'){ const nm=cellVal(c), sub=(c&&c.sub)||'';
-    return '<td><div class="cellflex"><div class="av-s" style="background:'+avColor(nm)+'">'+initials(nm)+'</div><div><div class="prim">'+esc(nm)+'</div>'+(sub?'<div class="mut">'+esc(sub)+'</div>':'')+'</div></div></td>'; }
+  if(col.type==='avatar'){ const nm=cellVal(c), sub=(c&&c.sub)||'', img=(c&&c.image)||'';
+    const av = img ? '<div class="av-s" style="background:#eef0f3;background-image:url(\''+esc(img)+'\');background-size:cover;background-position:center"></div>' : '<div class="av-s" style="background:'+avColor(nm)+'">'+initials(nm)+'</div>';
+    return '<td><div class="cellflex">'+av+'<div><div class="prim">'+esc(nm)+'</div>'+(sub?'<div class="mut">'+esc(sub)+'</div>':'')+'</div></div></td>'; }
   if(col.type==='strong'){ return '<td class="prim'+align+'">'+esc(cellVal(c))+'</td>'; }
   if(col.type==='badge'){ const v=cellVal(c), tone=(c&&c.badge)||'default';
     return '<td>'+(v?'<span class="badge '+toneBadge(tone)+'"><span class="d"></span>'+esc(v)+'</span>':'—')+'</td>'; }

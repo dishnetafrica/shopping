@@ -9,6 +9,7 @@ use App\Capability\Object\ProductCapability;
 use App\Capability\Object\PurchaseOrderCapability;
 use App\Capability\Object\SalesOrderCapability;
 use App\Capability\Object\SupplierCapability;
+use App\Capability\Process\CategoryListCapability;
 use App\Capability\Process\CollectionsCapability;
 use App\Capability\Process\CustomerListCapability;
 use App\Capability\Process\DispatchCapability;
@@ -82,6 +83,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register(new PaymentListCapability(), new CapabilityManifest(key: 'payments', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/payments'));
         $r->register(new ProductListCapability(), new CapabilityManifest(key: 'products', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/products'));
         $r->register(new SupplierListCapability(), new CapabilityManifest(key: 'suppliers', type: 'process', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/suppliers'));
+        $r->register(new CategoryListCapability(), new CapabilityManifest(key: 'categories', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/categories'));
         $r->register($purchase, new CapabilityManifest(key: 'purchase.process', type: 'process', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/purchase.process'));
         $r->register(new FinanceCapability($money), new CapabilityManifest(key: 'finance', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/finance'));
         $r->register($warehouse, new CapabilityManifest(key: 'warehouse', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/warehouse'));
