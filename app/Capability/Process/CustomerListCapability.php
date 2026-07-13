@@ -73,9 +73,12 @@ final class CustomerListCapability implements ProcessCapability
             if ($isActive) { $activeCount++; }
             $status = $orders === 0 ? 'New' : ($isActive ? 'Active' : 'Dormant');
 
+            $location = trim(implode(', ', array_filter([(string) $c->city, (string) $c->country]))) ?: (string) ($c->address ?: '—');
+
             $rows[] = [
-                'customer'   => ['value' => (string) ($c->name ?: 'Unnamed'), 'sub' => (string) ($c->phone ?: ''), 'avatar' => true],
-                'location'   => (string) ($c->address ?: '—'),
+                'customer'   => ['value' => (string) ($c->name ?: 'Unnamed'), 'sub' => (string) ($c->contact_person ?: $c->phone ?: ''), 'avatar' => true],
+                'location'   => $location,
+                'segment'    => ['value' => (string) ($c->segment ?: '—'), 'badge' => $c->segment ? 'accent' : 'default'],
                 'orders'     => $orders,
                 'spend'      => ['value' => Money::fmt($spend, $cur), 'sort' => $spend],
                 'balance'    => $balance > 0
@@ -83,6 +86,7 @@ final class CustomerListCapability implements ProcessCapability
                     : ['value' => '—', 'sort' => 0],
                 'status'     => ['value' => $status, 'badge' => $status === 'Active' ? 'ok' : ($status === 'Dormant' ? 'warn' : 'default')],
                 'last_order' => ['value' => $lastAt ? $lastAt->diffForHumans(null, true) . ' ago' : 'never', 'sort' => $lastAt ? $lastAt->timestamp : 0],
+                'country'    => (string) ($c->country ?: ''),
                 'link'       => '/api/v1/workspace/customer/' . $c->id,
             ];
         }
@@ -95,11 +99,17 @@ final class CustomerListCapability implements ProcessCapability
         $columns = [
             ['key' => 'customer',   'label' => 'Customer',   'type' => 'avatar', 'sortable' => true],
             ['key' => 'location',   'label' => 'Location',   'sortable' => true],
+            ['key' => 'segment',    'label' => 'Segment',    'type' => 'badge', 'sortable' => true],
             ['key' => 'orders',     'label' => 'Orders',     'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'spend',      'label' => 'Total spend', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'balance',    'label' => 'Balance',    'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'status',     'label' => 'Status',     'type' => 'badge', 'sortable' => true],
             ['key' => 'last_order', 'label' => 'Last order', 'align' => 'right', 'sortable' => true],
+        ];
+        $filters = [
+            ['key' => 'status',  'label' => 'Status'],
+            ['key' => 'segment', 'label' => 'Segment'],
+            ['key' => 'country', 'label' => 'Country'],
         ];
 
         return (new WorkspacePayload)
@@ -113,7 +123,7 @@ final class CustomerListCapability implements ProcessCapability
                 ['key' => 'outstanding', 'label' => 'Outstanding balance', 'value' => Money::fmt($outstanding, $cur), 'tone' => $outstanding > 0 ? 'warn' : 'ok', 'foot' => 'across ' . $accountsOwing . ' accounts'],
                 ['key' => 'avg', 'label' => 'Avg. order value', 'value' => Money::fmt($avgOrder, $cur), 'foot' => number_format($totalOrders) . ' orders'],
             ])
-            ->table($columns, $rows)
+            ->table($columns, $rows, $filters)
             ->actions([
                 ['key' => 'add_customer', 'label' => 'New customer', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/customers/_/add_customer', 'actor' => 'human', 'tone' => 'primary', 'schema' => self::formSchema()],
                 ['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customers', 'actor' => 'human', 'tone' => 'default', 'icon' => 'export'],
@@ -125,10 +135,14 @@ final class CustomerListCapability implements ProcessCapability
     public static function formSchema(): array
     {
         return [
-            'name'    => 'text',
-            'phone'   => 'text',
-            'email'   => 'text',
-            'address' => 'text',
+            'business_name'  => 'text',
+            'contact_person' => 'text',
+            'phone'          => 'text',
+            'email'          => 'text',
+            'segment'        => 'enum:,Wholesale,Retail,Distributor,Institutional,Walk-in',
+            'city'           => 'text',
+            'country'        => 'enum:,Uganda,South Sudan,Kenya,Tanzania,Rwanda',
+            'credit_limit'   => 'money',
         ];
     }
 

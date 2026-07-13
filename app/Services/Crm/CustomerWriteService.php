@@ -48,10 +48,18 @@ final class CustomerWriteService
     /** Map only the fields present in $d onto the model. */
     private function apply(CustomerProfile $c, array $d): void
     {
-        foreach (['name', 'alt_phone', 'email', 'address', 'notes'] as $f) {
+        // "Business name" is the customer's canonical display name (flows onto orders).
+        if (array_key_exists('business_name', $d) && trim((string) $d['business_name']) !== '') {
+            $c->name = trim((string) $d['business_name']);
+        }
+        foreach (['name', 'contact_person', 'alt_phone', 'email', 'address', 'city', 'country', 'segment', 'notes'] as $f) {
             if (array_key_exists($f, $d)) {
                 $c->{$f} = trim((string) $d[$f]);
             }
+        }
+        if (array_key_exists('credit_limit', $d)) {
+            $v = trim((string) $d['credit_limit']);
+            $c->credit_limit = $v === '' ? null : (float) $v;
         }
     }
 

@@ -77,7 +77,7 @@ final class CustomerCapability implements ObjectCapability
                 'key' => 'edit_customer', 'label' => 'Edit', 'method' => 'POST', 'endpoint' => $endpoint . '/update_customer',
                 'actor' => 'human', 'tone' => 'default',
                 'schema' => \App\Capability\Process\CustomerListCapability::formSchema(),
-                'prefill' => ['name' => (string) $c->name, 'phone' => $phone, 'email' => (string) $c->email, 'address' => (string) $c->address],
+                'prefill' => ['business_name' => (string) $c->name, 'contact_person' => (string) $c->contact_person, 'phone' => $phone, 'email' => (string) $c->email, 'segment' => (string) $c->segment, 'city' => (string) $c->city, 'country' => (string) $c->country, 'credit_limit' => $c->credit_limit !== null ? (float) $c->credit_limit : ''],
             ]]))
             ->meta(['capability' => 'customer', 'ttl' => 60, 'permissions' => ['menu:customers']]);
     }

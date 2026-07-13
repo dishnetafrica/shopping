@@ -10,5 +10,7 @@ class CustomerProfile extends Model
 {
     use BelongsToTenant;
 
-    protected $fillable = ['tenant_id', 'phone', 'name', 'alt_phone', 'email', 'address', 'lang', 'greeting', 'notes', 'ss_markup_pct'];
+    protected $fillable = ['tenant_id', 'phone', 'name', 'contact_person', 'segment', 'alt_phone', 'email', 'address', 'city', 'country', 'credit_limit', 'lang', 'greeting', 'notes', 'ss_markup_pct'];
+
+    protected $casts = ['credit_limit' => 'decimal:2'];
 }

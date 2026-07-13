@@ -67,9 +67,9 @@ final class WorkspacePayload
      * @param array<int,array{key:string,label:string,align?:string,type?:string,sortable?:bool}> $columns
      * @param array<int,array<string,mixed>> $rows
      */
-    public function table(array $columns, array $rows): self
+    public function table(array $columns, array $rows, array $filters = []): self
     {
-        $this->table = ['columns' => $columns, 'rows' => $rows];
+        $this->table = ['columns' => $columns, 'rows' => $rows, 'filters' => $filters];
         return $this;
     }
 

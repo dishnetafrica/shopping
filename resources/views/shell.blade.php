@@ -353,7 +353,7 @@ function toast(m,err){ const t=document.createElement('div'); t.className='toast
   setTimeout(()=>{ t.style.opacity='0'; t.style.transition='.3s'; setTimeout(()=>t.remove(),300); },2600); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function toneCls(t){ return ['warn','danger','ok'].includes(t)?t:''; }
-function toneBadge(t){ const m={danger:'b-danger',warn:'b-warn',ok:'b-ok',info:'b-info'}; return m[t]||'b-default'; }
+function toneBadge(t){ const m={danger:'b-danger',warn:'b-warn',ok:'b-ok',info:'b-info',accent:'b-accent'}; return m[t]||'b-default'; }
 function statusBadge(s){ if(!s) return ''; const map={overdue:'b-danger',out:'b-danger',blocked:'b-danger',partial:'b-warn',low:'b-warn',draft:'b-default',pending:'b-warn',active:'b-ok',paid:'b-ok','in':'b-ok',received:'b-ok',delivered:'b-ok',inactive:'b-default'};
   return '<span class="badge '+(map[s]||'b-default')+'"><span class="d"></span>'+esc(s)+'</span>'; }
 function apiToHash(p){ if(!p) return null; const i=p.indexOf('/workspace/'); if(i<0) return null; const parts=p.slice(i+11).split('/'); return { key:parts[0], id:parts[1]||null, action:parts[2]||null }; }
@@ -555,12 +555,12 @@ document.getElementById('search').addEventListener('keydown',e=>{ if(e.key==='En
 window.addEventListener('hashchange',()=>{ const h=parseHash(); if(h.key && (h.key!==CUR.key||h.id!==CUR.id)) route(h.key,h.id); });
 
 /* ================= LIST / DIRECTORY WORKSPACE ================= */
-let TBL = { cols:[], rows:[], sort:null, dir:1, q:'', status:'All' };
+let TBL = { cols:[], rows:[], filters:[], fval:{}, sort:null, dir:1, q:'' };
 function cellVal(c){ return (c && typeof c==='object') ? (c.value!=null?c.value:'') : (c!=null?c:''); }
 function cellSort(c){ if(c && typeof c==='object') return c.sort!=null?c.sort:(c.value!=null?c.value:''); return c!=null?c:''; }
 function renderList(p){
   const o=p.object||{}; const cap=(p.meta&&p.meta.capability)||CUR.key;
-  TBL = { cols:(p.table&&p.table.columns)||[], rows:(p.table&&p.table.rows)||[], sort:null, dir:1, q:'', status:'All' };
+  TBL = { cols:(p.table&&p.table.columns)||[], rows:(p.table&&p.table.rows)||[], filters:(p.table&&p.table.filters)||[], fval:{}, sort:null, dir:1, q:'' };
   let h='<div class="crumb">'+(LABELS[cap]||cap)+'</div>';
   h+='<div class="lhead"><div><h1 class="ltitle">'+esc(o.title||'')+'</h1>'+(o.subtitle?'<div class="lsub">'+esc(o.subtitle)+'</div>':'')+'</div>'+
      '<div class="acts inl">'+(p.actions||[]).map(actBtn).join('')+
@@ -574,12 +574,18 @@ function renderList(p){
   document.getElementById('view').innerHTML=h;
   renderToolbar(); renderTable();
 }
+function setFilter(k,v){ TBL.fval[k]=v; renderTable(); }
 function renderToolbar(){
-  const vals=['All',...Array.from(new Set(TBL.rows.map(r=>cellVal(r.status)).filter(Boolean)))];
-  const hasStatus=TBL.cols.some(c=>c.key==='status');
+  // Declared filters (payload), else auto-detect a Status column.
+  let filts = TBL.filters && TBL.filters.length ? TBL.filters.slice() : (TBL.cols.some(c=>c.key==='status') ? [{key:'status',label:'Status'}] : []);
   let h='<div class="tsearch"><svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'+
     '<input id="tq" placeholder="Search…" oninput="TBL.q=this.value;renderTable()"></div>';
-  if(hasStatus) h+='<label class="chip">Status <select onchange="TBL.status=this.value;renderTable()">'+vals.map(v=>'<option>'+esc(v)+'</option>').join('')+'</select></label>';
+  filts.forEach(f=>{
+    const vals=['All',...Array.from(new Set(TBL.rows.map(r=>cellVal(r[f.key])).filter(Boolean)))];
+    if(vals.length<=1) return;
+    const cur=TBL.fval[f.key]||'All';
+    h+='<label class="chip">'+esc(f.label)+' <select onchange="setFilter(\''+f.key+'\',this.value)">'+vals.map(v=>'<option'+(v===cur?' selected':'')+'>'+esc(v)+'</option>').join('')+'</select></label>';
+  });
   h+='<div style="flex:1"></div><span class="tinfo" id="tinfo"></span><button class="btn sm" onclick="toast(\'Export — next in the build\')">'+icon('doc','ic-sm')+'Export</button>';
   document.getElementById('tbar').innerHTML=h;
 }
@@ -588,7 +594,7 @@ function renderTable(){
   let rows=TBL.rows.slice();
   const q=(TBL.q||'').trim().toLowerCase();
   if(q) rows=rows.filter(r=>TBL.cols.some(c=>{const v=r[c.key]; return String(cellVal(v)).toLowerCase().includes(q) || (v&&v.sub&&String(v.sub).toLowerCase().includes(q));}));
-  if(TBL.status && TBL.status!=='All') rows=rows.filter(r=>cellVal(r.status)===TBL.status);
+  Object.keys(TBL.fval||{}).forEach(k=>{ const v=TBL.fval[k]; if(v && v!=='All') rows=rows.filter(r=>cellVal(r[k])===v); });
   if(TBL.sort){ rows.sort((a,b)=>{ let x=cellSort(a[TBL.sort]), y=cellSort(b[TBL.sort]);
     if(typeof x==='string'||typeof y==='string'){ x=String(x).toLowerCase(); y=String(y).toLowerCase(); }
     return (x>y?1:x<y?-1:0)*TBL.dir; }); }
