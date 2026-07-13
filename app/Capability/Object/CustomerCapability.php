@@ -15,6 +15,7 @@ use App\Models\CustomerPayment;
 use App\Models\CustomerProfile;
 use App\Models\Invoice;
 use App\Models\Order;
+use App\Models\Quotation;
 use App\Services\Money\Fx;
 use App\Services\Money\PaymentService;
 use Illuminate\Support\Carbon;
@@ -150,6 +151,22 @@ final class CustomerCapability implements ObjectCapability
             'right' => '+' . Money::fmt((float) $p->amount, (string) ($p->currency ?: $cur)), 'rightTone' => 'ok', 'link' => null,
         ])->all();
 
+        // This customer's quotations — surfaced here so they're not hunted for in the Quotations list.
+        $quotes = Quotation::where('tenant_id', $ctx->tenantId())
+            ->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [preg_replace('/[^0-9]/', '', $phone)])
+            ->orderByDesc('created_at')->limit(6)->get();
+        $quoteItems = $quotes->map(function ($q) use ($cur) {
+            $s = strtolower((string) $q->status);
+            $tone = in_array($s, ['accepted', 'converted'], true) ? 'ok' : ($s === 'declined' ? 'danger' : '');
+            $sub = ucfirst($s ?: 'draft') . ($q->valid_until ? ' · valid to ' . Carbon::parse($q->valid_until)->format('d M Y') : '');
+
+            return [
+                'icon' => 'quotations', 'color' => '#4f46e5', 'title' => (string) $q->quote_no,
+                'sub' => $sub, 'right' => Money::fmt((float) $q->total, (string) ($q->currency ?: $cur)), 'rightTone' => $tone,
+                'link' => $q->order_id ? '/api/v1/workspace/salesOrder/' . $q->order_id : '/api/v1/workspace/quotation/' . $q->id,
+            ];
+        })->all();
+
         $overviewCards = [
             ['kind' => 'dl', 'title' => 'Contact', 'rows' => [
                 ['Contact person', (string) ($c->contact_person ?: '—')],
@@ -159,6 +176,7 @@ final class CustomerCapability implements ObjectCapability
                 ['Segment', (string) ($c->segment ?: '—')],
                 ['Customer since', $c->created_at ? Carbon::parse($c->created_at)->format('d M Y') : '—'],
             ]],
+            ['kind' => 'links', 'title' => 'Quotations', 'items' => $quoteItems, 'empty' => 'No quotations yet — use “New quotation” above'],
             ['kind' => 'table', 'title' => 'Recent orders', 'sub' => $orders->count() . ' shown',
              'columns' => [['label' => 'Order'], ['label' => 'Total', 'align' => 'right'], ['label' => 'Status'], ['label' => 'Date']],
              'rows' => $orderRows, 'empty' => 'No orders yet'],
