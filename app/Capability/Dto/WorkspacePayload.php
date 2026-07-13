@@ -17,6 +17,16 @@ final class WorkspacePayload
     private array $related = [];
     private array $actions = [];
     private ?array $table = null;
+    // --- record-shell extensions (all optional; a plain 360 leaves them null/empty) ---
+    private array $answers = [];
+    private ?array $health = null;
+    private array $stats = [];
+    private array $tabs = [];
+    private array $overviewCards = [];
+    private ?array $statement = null;
+    private ?array $nba = null;
+    private array $quickActions = [];
+    private array $more = [];
     private array $meta = [];
 
     public function object(array $o): self { $this->object = $o; return $this; }
@@ -73,6 +83,54 @@ final class WorkspacePayload
         return $this;
     }
 
+    /**
+     * The signature "answers" grid: quick, plain-language answers about this record.
+     * @param array<int,array{q:string,value:string,tone?:string,sub?:string}> $a
+     */
+    public function answers(array $a): self { $this->answers = $a; return $this; }
+
+    /**
+     * A health scorecard: a 0–100 ring plus supporting rows.
+     * @param array{score:int,title?:string,meta?:array<int,array{label:string,value:string,tone?:string}>} $h
+     */
+    public function health(array $h): self { $this->health = $h; return $this; }
+
+    /** KPI cards shown at the top of the Overview tab. @param array<int,array<string,mixed>> $s */
+    public function stats(array $s): self { $this->stats = $s; return $this; }
+
+    /** Ordered tab bar for the record shell. @param array<int,array{key:string,label:string,count?:int}> $t */
+    public function tabs(array $t): self { $this->tabs = $t; return $this; }
+
+    /** Card specs rendered under the Overview tab (kind: dl | table | links). @param array<int,array<string,mixed>> $c */
+    public function overviewCards(array $c): self { $this->overviewCards = $c; return $this; }
+
+    /**
+     * Statement of account for the Financials tab.
+     * @param array<int,array<string,mixed>> $rows
+     */
+    public function statement(array $rows, string $balanceLabel, string $balanceValue): self
+    {
+        $this->statement = ['rows' => $rows, 'balanceLabel' => $balanceLabel, 'balanceValue' => $balanceValue];
+        return $this;
+    }
+
+    /** The single highlighted next-best-action in the rail. */
+    public function nba(string $text, array $action): self { $this->nba = ['text' => $text, 'action' => $action]; return $this; }
+
+    /** @param array<int,array<string,mixed>> $qa */
+    public function quickActions(array $qa): self
+    {
+        $this->quickActions = array_map(fn ($x) => $x instanceof ActionSpec ? $x->toArray() : $x, $qa);
+        return $this;
+    }
+
+    /** Overflow ("…") menu actions in the record header. @param array<int,array<string,mixed>> $m */
+    public function more(array $m): self
+    {
+        $this->more = array_map(fn ($x) => $x instanceof ActionSpec ? $x->toArray() : $x, $m);
+        return $this;
+    }
+
     public function meta(array $m): self
     {
         $this->meta = array_merge(['version' => '1.0'], $this->meta, $m);
@@ -91,6 +149,15 @@ final class WorkspacePayload
             'related' => $this->related,
             'actions' => $this->actions,
             'table' => $this->table,
+            'answers' => $this->answers,
+            'health' => $this->health,
+            'stats' => $this->stats,
+            'tabs' => $this->tabs,
+            'overviewCards' => $this->overviewCards,
+            'statement' => $this->statement,
+            'nba' => $this->nba,
+            'quickActions' => $this->quickActions,
+            'more' => $this->more,
             'meta' => $this->meta,
         ];
     }

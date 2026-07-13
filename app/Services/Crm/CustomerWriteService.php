@@ -52,7 +52,7 @@ final class CustomerWriteService
         if (array_key_exists('business_name', $d) && trim((string) $d['business_name']) !== '') {
             $c->name = trim((string) $d['business_name']);
         }
-        foreach (['name', 'contact_person', 'alt_phone', 'email', 'address', 'city', 'country', 'segment', 'notes'] as $f) {
+        foreach (['name', 'contact_person', 'alt_phone', 'email', 'address', 'city', 'country', 'segment', 'notes', 'assigned_rep', 'follow_up'] as $f) {
             if (array_key_exists($f, $d)) {
                 $c->{$f} = trim((string) $d[$f]);
             }
@@ -61,6 +61,22 @@ final class CustomerWriteService
             $v = trim((string) $d['credit_limit']);
             $c->credit_limit = $v === '' ? null : (float) $v;
         }
+    }
+
+    /** Stamp the last time the shop contacted this customer (call/visit). */
+    public function logContact(Tenant $t, CustomerProfile $c): CustomerProfile
+    {
+        if ($c->isFillable('last_contacted_at')) { $c->last_contacted_at = now(); $c->save(); }
+
+        return $c;
+    }
+
+    /** Stamp the last WhatsApp touch. */
+    public function logWhatsapp(Tenant $t, CustomerProfile $c): CustomerProfile
+    {
+        if ($c->isFillable('last_whatsapp_at')) { $c->last_whatsapp_at = now(); $c->save(); }
+
+        return $c;
     }
 
     private function syncOrders(Tenant $t, string $phone, string $name): void
