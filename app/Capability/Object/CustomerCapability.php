@@ -124,23 +124,41 @@ final class CustomerCapability implements ObjectCapability
             ['label' => 'Current balance', 'value' => $fmt($balance), 'icon' => 'invoice', 'tone' => $balance > 0 ? 'warn' : 'ok', 'color' => $balance > 0 ? '#d97706' : '#16a34a', 'wash' => $balance > 0 ? 'var(--warn-wash)' : 'var(--brand-wash)', 'foot' => $balance > 0 ? $fmt($ins['overdue']) . ' overdue' : 'settled'],
         ];
 
-        // --- overview cards (Contact / Recent orders / Unpaid invoices / Recent payments) ---
+        // --- overview cards: the customer's full sales trail (quotations / orders / invoices / payments) ---
+        // Sales orders — the whole recent set, as a click-through list (status + date + total).
         $orders = Order::where('tenant_id', $ctx->tenantId())
             ->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [preg_replace('/[^0-9]/', '', $phone)])
-            ->orderByDesc('created_at')->limit(6)->get();
-        $orderRows = $orders->map(fn ($o) => [
-            'cells' => [(string) $o->order_no, $fmt($o->total), ['badge' => $this->orderTone((string) $o->status), 'value' => ucfirst((string) $o->status)], $o->created_at ? Carbon::parse($o->created_at)->format('d M Y') : '—'],
-            'link' => '/api/v1/workspace/salesOrder/' . $o->id,
-        ])->all();
+            ->orderByDesc('created_at')->limit(8)->get();
+        $orderItems = $orders->map(function ($o) use ($fmt) {
+            $s = strtolower((string) $o->status);
+            $delivered = $o->delivered_at !== null;
+            $tone = ($delivered || in_array($s, ['delivered', 'complete', 'completed', 'paid'], true)) ? 'ok' : (in_array($s, ['cancelled', 'canceled', 'rejected'], true) ? 'danger' : '');
+            $label = $delivered ? 'Delivered' : ucfirst($s ?: 'pending');
 
-        $invUnpaid = Invoice::where('tenant_id', $ctx->tenantId())
+            return [
+                'icon' => 'cart', 'color' => '#4f46e5', 'title' => 'Order ' . $o->order_no,
+                'sub' => $label . ($o->created_at ? ' · ' . Carbon::parse($o->created_at)->format('d M Y') : ''),
+                'right' => $fmt($o->total), 'rightTone' => $tone, 'link' => '/api/v1/workspace/salesOrder/' . $o->id,
+            ];
+        })->all();
+
+        // Invoices — ALL of them (paid included), so the full billing history is visible here.
+        $allInv = Invoice::where('tenant_id', $ctx->tenantId())
             ->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [preg_replace('/[^0-9]/', '', $phone)])
-            ->where('status', '!=', 'void')->where('balance', '>', 0.01)->orderBy('due_at')->limit(5)->get();
-        $invItems = $invUnpaid->map(fn ($i) => [
-            'icon' => 'invoice', 'color' => '#d97706', 'title' => (string) $i->invoice_no,
-            'sub' => $i->due_at ? 'Due ' . Carbon::parse($i->due_at)->format('d M Y') : 'no due date',
-            'right' => $fmt($i->balance), 'rightTone' => 'danger', 'link' => '/api/v1/workspace/invoice/' . $i->id,
-        ])->all();
+            ->where('status', '!=', 'void')->orderByDesc('issued_at')->limit(8)->get();
+        $invItems = $allInv->map(function ($i) use ($fmt) {
+            $bal = (float) $i->balance;
+            $paid = $bal <= 0.01;
+            $overdue = $i->due_at && Carbon::parse($i->due_at)->isPast() && ! $paid;
+            $status = $paid ? 'Paid' : ($overdue ? 'Overdue' : ((float) $i->amount_paid > 0 ? 'Part-paid' : 'Unpaid'));
+            $tone = $paid ? 'ok' : ($overdue ? 'danger' : 'warn');
+
+            return [
+                'icon' => 'invoice', 'color' => $paid ? '#16a34a' : '#d97706', 'title' => (string) $i->invoice_no,
+                'sub' => $status . ($i->due_at ? ' · due ' . Carbon::parse($i->due_at)->format('d M Y') : ''),
+                'right' => $paid ? $fmt($i->total) : $fmt($bal), 'rightTone' => $tone, 'link' => '/api/v1/workspace/invoice/' . $i->id,
+            ];
+        })->all();
 
         $pays = CustomerPayment::where('tenant_id', $ctx->tenantId())
             ->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [preg_replace('/[^0-9]/', '', $phone)])
@@ -177,11 +195,9 @@ final class CustomerCapability implements ObjectCapability
                 ['Customer since', $c->created_at ? Carbon::parse($c->created_at)->format('d M Y') : '—'],
             ]],
             ['kind' => 'links', 'title' => 'Quotations', 'items' => $quoteItems, 'empty' => 'No quotations yet — use “New quotation” above'],
-            ['kind' => 'table', 'title' => 'Recent orders', 'sub' => $orders->count() . ' shown',
-             'columns' => [['label' => 'Order'], ['label' => 'Total', 'align' => 'right'], ['label' => 'Status'], ['label' => 'Date']],
-             'rows' => $orderRows, 'empty' => 'No orders yet'],
-            ['kind' => 'links', 'title' => 'Unpaid invoices', 'items' => $invItems, 'empty' => 'All settled'],
-            ['kind' => 'links', 'title' => 'Recent payments', 'items' => $payItems, 'empty' => 'No payments'],
+            ['kind' => 'links', 'title' => 'Sales orders', 'items' => $orderItems, 'empty' => 'No orders yet'],
+            ['kind' => 'links', 'title' => 'Invoices', 'items' => $invItems, 'empty' => 'No invoices yet'],
+            ['kind' => 'links', 'title' => 'Payments', 'items' => $payItems, 'empty' => 'No payments yet'],
         ];
 
         // --- statement (Financials tab) ---
