@@ -6,4 +6,5 @@ return [
     App\Providers\Filament\AppPanelProvider::class,
     App\Providers\OkeServiceProvider::class,
     App\Providers\LedgerServiceProvider::class,
+    App\Providers\CapabilityServiceProvider::class,
 ];
