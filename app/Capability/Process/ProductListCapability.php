@@ -123,6 +123,22 @@ final class ProductListCapability implements ProcessCapability
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
+        if ($action === 'search') {
+            $q = trim((string) ($input['q'] ?? ''));
+            $rows = Product::where('tenant_id', $ctx->tenantId())
+                ->where('active', true)
+                ->when($q !== '', fn ($qq) => $qq->where('name', 'ilike', '%' . $q . '%'))
+                ->orderBy('name')->limit(20)->get();
+            $items = $rows->map(fn ($p) => [
+                'name' => (string) $p->name,
+                'price' => round((float) $p->price, 2),
+                'unit' => (string) ($p->unit_label ?: ''),
+                'image' => (string) ($p->image_url ?: ''),
+            ])->all();
+
+            return ['ok' => true, 'items' => $items];
+        }
+
         if ($action === 'upload_image') {
             try {
                 $url = app(ImageUploadService::class)->store($ctx->tenant, (string) ($input['data'] ?? ''), (string) ($input['name'] ?? 'upload'));

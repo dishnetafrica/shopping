@@ -77,8 +77,15 @@ final class CustomerCapability implements ObjectCapability
         $reminder = ['key' => 'send_reminder', 'label' => 'Send reminder', 'method' => 'POST', 'endpoint' => $endpoint . '/send_reminder', 'actor' => 'human', 'tone' => 'default', 'confirm' => 'Send a payment reminder to ' . ($c->name ?: 'this customer') . '?'];
         $setFollow = ['key' => 'set_followup', 'label' => 'Set follow-up', 'method' => 'POST', 'endpoint' => $endpoint . '/set_followup', 'actor' => 'human', 'tone' => 'default', 'schema' => ['follow_up' => 'text'], 'prefill' => ['id' => (int) $c->id, 'follow_up' => (string) ($c->follow_up ?? '')]];
         $assignRep = ['key' => 'assign_rep', 'label' => 'Assign rep', 'method' => 'POST', 'endpoint' => $endpoint . '/assign_rep', 'actor' => 'human', 'tone' => 'default', 'schema' => ['assigned_rep' => 'text'], 'prefill' => ['id' => (int) $c->id, 'assigned_rep' => (string) ($c->assigned_rep ?? '')]];
+        $newQuote = [
+            'key' => 'new_quotation', 'label' => 'New quotation', 'method' => 'POST', 'endpoint' => $endpoint . '/create_quotation',
+            'actor' => 'human', 'tone' => 'primary', 'builder' => 'quotation',
+            'productSearch' => '/api/v1/workspace/products/_/search',
+            'currencies' => array_values(array_unique([$cur, 'USD', 'UGX', 'SSP', 'KES'])),
+            'customer' => (string) ($c->name ?: 'Customer'), 'prefill' => ['id' => (int) $c->id, 'currency' => $cur],
+        ];
 
-        $primary = $balance > 0 ? $payAction : $logCall;
+        $primary = $balance > 0 ? $payAction : $newQuote;
 
         // --- answers grid ---
         $answers = [
@@ -172,11 +179,11 @@ final class CustomerCapability implements ObjectCapability
             $nbaText = ($c->name ?: 'This customer') . ' has ' . $fmt($balance) . ' outstanding' . ($ins['overdue'] > 0 ? ', ' . $fmt($ins['overdue']) . ' overdue' : '') . '. Record a payment or send a reminder.';
             $nbaAction = $payAction;
         } elseif ($ins['status'] === 'prospect') {
-            $nbaText = ($c->name ?: 'This prospect') . ' has no orders yet. Log your first contact to start the relationship.';
-            $nbaAction = $logCall;
+            $nbaText = ($c->name ?: 'This prospect') . ' has no orders yet. Send an opening quotation to win the first order.';
+            $nbaAction = $newQuote;
         } else {
-            $nbaText = 'Strong account with no balance owing. Good time to check in and upsell.';
-            $nbaAction = $logCall;
+            $nbaText = 'Strong account with no balance owing. Good time to upsell — send a quotation for a larger order.';
+            $nbaAction = $newQuote;
         }
 
         return (new WorkspacePayload)
@@ -201,7 +208,7 @@ final class CustomerCapability implements ObjectCapability
             ->answers($answers)
             ->health($health)
             ->nba($nbaText, $nbaAction)
-            ->quickActions([$payAction, $logCall, $logWa, $editAction])
+            ->quickActions([$newQuote, $payAction, $logCall, $logWa])
             ->overviewCards($overviewCards)
             ->timeline($this->timeline->forPhone($ctx, $phone))
             ->statement($stmtRows, 'Balance due', $fmt($stmt['balance']))
@@ -235,9 +242,31 @@ final class CustomerCapability implements ObjectCapability
             'update_customer', 'set_followup', 'assign_rep' => $this->updateCustomer($ctx, $input),
             'log_contact' => $this->touch($ctx, $input, 'contact'),
             'log_whatsapp' => $this->touch($ctx, $input, 'whatsapp'),
+            'create_quotation' => $this->createQuotation($ctx, $input),
             'send_reminder' => ['ok' => true, 'sent' => true, 'message' => 'Reminder sent.'],
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
+    }
+
+    /** Raise a quotation for this customer via the frozen QuotationService (build → PDF → persist → send). */
+    private function createQuotation(CapabilityContext $ctx, array $input): array
+    {
+        $c = CustomerProfile::where('tenant_id', $ctx->tenantId())->find((int) ($input['id'] ?? $input['customer_id'] ?? 0));
+        if (! $c) {
+            return ['ok' => false, 'error' => 'not_found'];
+        }
+        $lines = is_array($input['lines'] ?? null) ? $input['lines'] : [];
+        $res = app(\App\Services\Sales\QuotationWriteService::class)->createFor(
+            $ctx->tenant, (string) $c->phone, (string) $c->name, $lines,
+            isset($input['currency']) ? (string) $input['currency'] : null,
+            (bool) ($input['send_whatsapp'] ?? false),
+        );
+        if (! ($res['ok'] ?? false)) {
+            return $res;
+        }
+        $res['message'] = 'Quotation ' . $res['quote_no'] . ' created' . ($res['sent'] ? ' and sent on WhatsApp' : '') . '.';
+
+        return $res;
     }
 
     private function updateCustomer(CapabilityContext $ctx, array $input): array
