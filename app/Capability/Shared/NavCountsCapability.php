@@ -11,6 +11,7 @@ use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\OrderCost;
 use App\Models\Product;
+use App\Models\Quotation;
 use App\Models\Supplier;
 
 /**
@@ -33,6 +34,7 @@ final class NavCountsCapability implements Capability
         return array_filter([
             'customers'        => $c(CustomerProfile::query()),
             'salesOrder'       => $c(Order::query()),
+            'quotations'       => $c(Quotation::query()),
             'invoice'          => $c(Invoice::query()),
             'payment'          => $c(CustomerPayment::query()),
             'product'          => $c(Product::query()),

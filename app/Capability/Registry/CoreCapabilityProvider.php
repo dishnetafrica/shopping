@@ -12,6 +12,8 @@ use App\Capability\Object\SupplierCapability;
 use App\Capability\Process\CollectionsCapability;
 use App\Capability\Process\CustomerListCapability;
 use App\Capability\Process\DispatchCapability;
+use App\Capability\Process\InvoiceListCapability;
+use App\Capability\Process\QuotationListCapability;
 use App\Capability\Process\FinanceCapability;
 use App\Capability\Process\MorningBriefingCapability;
 use App\Capability\Process\PurchaseProcessCapability;
@@ -70,6 +72,8 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register($collections, new CapabilityManifest(key: 'collections', type: 'process', owner: 'accounts', dependsOn: ['statement'], events: ['consumes' => ['PaymentRecorded'], 'emits' => ['RemindersSent']], permission: 'menu:finance', commands: [['key' => 'bulk_remind', 'actor' => 'human']], api: '/api/v1/workspace/collections'));
         $r->register($sales, new CapabilityManifest(key: 'sales.process', type: 'process', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/sales.process'));
         $r->register(new CustomerListCapability(), new CapabilityManifest(key: 'customers', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/customers'));
+        $r->register(new QuotationListCapability(), new CapabilityManifest(key: 'quotations', type: 'process', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/quotations'));
+        $r->register(new InvoiceListCapability(), new CapabilityManifest(key: 'invoices', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/invoices'));
         $r->register($purchase, new CapabilityManifest(key: 'purchase.process', type: 'process', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/purchase.process'));
         $r->register(new FinanceCapability($money), new CapabilityManifest(key: 'finance', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/finance'));
         $r->register($warehouse, new CapabilityManifest(key: 'warehouse', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/warehouse'));
