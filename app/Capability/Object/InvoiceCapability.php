@@ -4,14 +4,22 @@ namespace App\Capability\Object;
 
 use App\Capability\Contracts\CapabilityContext;
 use App\Capability\Contracts\ObjectCapability;
-use App\Capability\Dto\Financial;
-use App\Capability\Dto\Related;
-use App\Capability\Dto\TimelineEvent;
+use App\Capability\Dto\Brief;
 use App\Capability\Dto\WorkspacePayload;
 use App\Capability\Support\Money;
 use App\Models\CustomerPayment;
+use App\Models\CustomerProfile;
 use App\Models\Invoice;
+use App\Models\Order;
+use App\Services\Money\Fx;
+use App\Services\Money\PaymentService;
+use Illuminate\Support\Carbon;
 
+/**
+ * Invoice 360 — the billing record shell. Read side projects the invoice into a pipeline
+ * (Order → Delivered → Invoiced → Paid), payment allocation and the customer/order links.
+ * Write side records payments through the FROZEN PaymentService (auto-allocated to this invoice_no).
+ */
 final class InvoiceCapability implements ObjectCapability
 {
     public function key(): string { return 'invoice'; }
@@ -26,45 +34,208 @@ final class InvoiceCapability implements ObjectCapability
     public function forId(CapabilityContext $ctx, string $id): WorkspacePayload
     {
         $i = Invoice::where('tenant_id', $ctx->tenantId())->findOrFail((int) $id);
-        $overdue = $i->due_at && $i->due_at->isPast() && (float) $i->balance > 0;
+        $cur = (string) ($i->currency ?: $ctx->baseCurrency());
+        $fmt = fn ($v) => Money::fmt((float) $v, $cur);
         $ep = '/api/v1/workspace/invoice/' . $i->id;
 
-        $pays = CustomerPayment::where('tenant_id', $ctx->tenantId())
-            ->where('invoice_no', $i->invoice_no)->orderByDesc('id')->limit(20)->get()
-            ->map(fn ($p) => new TimelineEvent(
-                (string) optional($p->created_at)->toDateString(), 'payment',
-                'Payment ' . number_format((float) $p->amount) . ' ' . $p->currency, (string) $p->method, (string) $p->created_by,
-            ))->all();
+        $total = (float) $i->total;
+        $paid = (float) $i->amount_paid;
+        $balance = (float) $i->balance;
+        $due = $i->due_at ? Carbon::parse($i->due_at) : null;
+        $overdue = $due && $due->isPast() && $balance > 0.01;
+        $daysOver = $overdue ? (int) $due->diffInDays(Carbon::now()) : 0;
 
-        $actions = [];
-        if ((float) $i->balance > 0) {
-            $actions[] = ['key' => 'record_payment', 'label' => 'Record payment', 'method' => 'POST', 'endpoint' => $ep . '/record_payment', 'actor' => 'human', 'tone' => 'primary'];
-            $actions[] = ['key' => 'send_reminder', 'label' => 'Send reminder', 'method' => 'POST', 'endpoint' => $ep . '/send_reminder', 'actor' => 'human'];
+        $order = $i->order_id ? Order::where('tenant_id', $ctx->tenantId())->find($i->order_id) : null;
+        $delivered = $order && $order->delivered_at !== null;
+        $profile = CustomerProfile::where('tenant_id', $ctx->tenantId())
+            ->whereRaw("regexp_replace(coalesce(phone,''),'[^0-9]','','g') = ?", [preg_replace('/[^0-9]/', '', (string) $i->customer_phone)])->first();
+
+        $pays = CustomerPayment::where('tenant_id', $ctx->tenantId())
+            ->where('invoice_no', $i->invoice_no)->orderByDesc('created_at')->limit(50)->get();
+
+        // --- actions ---
+        $recordPay = [
+            'key' => 'record_payment', 'label' => 'Record payment', 'method' => 'POST', 'endpoint' => $ep . '/record_payment',
+            'actor' => 'human', 'tone' => 'primary',
+            'schema' => ['amount' => 'money', 'method' => 'enum:cash,mobile_money,bank,cheque', 'reference' => 'text'],
+            'prefill' => ['id' => (int) $i->id, 'amount' => round($balance, 2), 'method' => 'cash'],
+        ];
+        $reminder = ['key' => 'send_reminder', 'label' => 'Send reminder', 'method' => 'POST', 'endpoint' => $ep . '/send_reminder', 'actor' => 'human', 'tone' => 'default', 'confirm' => 'Send a payment reminder for ' . $i->invoice_no . '?'];
+        $openCustomer = $profile ? ['key' => 'open_customer', 'label' => 'Open customer', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customer/' . $profile->id, 'actor' => 'human', 'tone' => 'default'] : null;
+        $openOrder = $order ? ['key' => 'open_order', 'label' => 'Open order', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/salesOrder/' . $order->id, 'actor' => 'human', 'tone' => 'default'] : null;
+
+        $primary = $balance > 0.01 ? $recordPay : ($openCustomer ?: $reminder);
+        $quick = array_values(array_filter([$balance > 0.01 ? $recordPay : null, $reminder, $openOrder, $openCustomer]));
+
+        // --- pipeline ---
+        $st = fn ($done, $now) => $done ? 'done' : ($now ? 'now' : 'wait');
+        $pipeline = [
+            ['label' => 'Order', 'value' => $order ? (string) $order->order_no : '—', 'state' => 'done', 'icon' => 'cart'],
+            ['label' => 'Delivered', 'value' => $delivered ? Carbon::parse($order->delivered_at)->format('d M Y') : ($order ? 'Pending' : '—'), 'state' => $st($delivered || ! $order, $order && ! $delivered), 'icon' => 'truck'],
+            ['label' => 'Invoiced', 'value' => (string) $i->invoice_no, 'state' => 'done', 'icon' => 'invoice'],
+            ['label' => 'Paid', 'value' => $balance <= 0.01 ? 'Paid' : ($paid > 0 ? $fmt($balance) . ' left' : 'Unpaid'), 'state' => $st($balance <= 0.01, true), 'icon' => 'card'],
+        ];
+
+        // --- overview cards ---
+        $relItems = [];
+        $relItems[] = ['icon' => 'user', 'color' => '#16a34a', 'title' => (string) ($i->customer_name ?: 'Customer'),
+            'sub' => $profile && ($profile->city || $profile->country) ? trim(implode(', ', array_filter([(string) $profile->city, (string) $profile->country]))) : (string) $i->customer_phone,
+            'right' => '', 'link' => $profile ? '/api/v1/workspace/customer/' . $profile->id : null];
+        if ($order) {
+            $relItems[] = ['icon' => 'cart', 'color' => '#4f46e5', 'title' => 'Order ' . $order->order_no, 'sub' => $fmt($order->total) . ' · ' . ucfirst((string) $order->status), 'right' => '', 'link' => '/api/v1/workspace/salesOrder/' . $order->id];
         }
+
+        $lineRows = [];
+        if ($order) {
+            foreach ($order->items()->get() as $it) {
+                $qty = (float) $it->qty; $price = (float) $it->price;
+                $lineRows[] = ['cells' => [(string) $it->name, rtrim(rtrim(number_format($qty, 2), '0'), '.'), $fmt($price), $fmt($qty * $price)],
+                    'link' => $it->product_id ? '/api/v1/workspace/product/' . $it->product_id : null];
+            }
+        }
+
+        $overviewCards = [
+            ['kind' => 'links', 'title' => 'Related', 'items' => $relItems],
+            ['kind' => 'table', 'title' => 'Line items', 'sub' => $order ? ('from order ' . $order->order_no) : '',
+             'columns' => [['label' => 'Product'], ['label' => 'Qty', 'align' => 'right'], ['label' => 'Unit price', 'align' => 'right'], ['label' => 'Amount', 'align' => 'right']],
+             'rows' => $lineRows, 'empty' => $order ? 'No line items on the source order' : 'No linked order'],
+        ];
+
+        // --- payments tab (allocation table) ---
+        $payRows = $pays->map(fn ($p) => [
+            'cells' => [
+                (string) ($p->receipt_no ?: '—'),
+                ucfirst((string) ($p->method ?: 'cash')),
+                (string) ($p->reference ?: '—'),
+                ['value' => Money::fmt((float) $p->amount, (string) ($p->currency ?: $cur)), 'align' => 'right'],
+                $p->created_at ? Carbon::parse($p->created_at)->format('d M Y') : '—',
+            ], 'link' => null,
+        ])->all();
+        $financialsCards = [[
+            'kind' => 'table', 'title' => 'Payment allocation', 'sub' => $pays->count() . ' payment' . ($pays->count() === 1 ? '' : 's'),
+            'columns' => [['label' => 'Receipt'], ['label' => 'Method'], ['label' => 'Reference'], ['label' => 'Amount', 'align' => 'right'], ['label' => 'Date']],
+            'rows' => $payRows, 'empty' => 'No payments recorded yet',
+        ]];
+
+        // --- timeline ---
+        $tl = [];
+        $tl[] = ['title' => 'Invoice ' . $i->invoice_no . ' issued', 'at' => $i->issued_at ? Carbon::parse($i->issued_at)->format('d M Y') : Carbon::parse($i->created_at)->format('d M Y'), 'actor' => $order ? ('from order ' . $order->order_no) : ''];
+        foreach ($pays as $p) {
+            $tl[] = ['title' => 'Payment received · ' . Money::fmt((float) $p->amount, (string) ($p->currency ?: $cur)), 'at' => $p->created_at ? Carbon::parse($p->created_at)->format('d M Y') : '', 'actor' => (string) ($p->method ?: '')];
+        }
+        if ($overdue) {
+            $tl[] = ['title' => 'Became overdue', 'at' => $due->format('d M Y'), 'actor' => $daysOver . ' days past due'];
+        }
+
+        // --- documents ---
+        $docs = [];
+        if ($i->pdf_path) { $docs[] = ['type' => 'invoice', 'title' => 'Invoice ' . $i->invoice_no . ' (PDF)', 'url' => $i->pdf_path]; }
+
+        $statusLabel = $overdue ? 'overdue' : strtolower((string) ($i->status ?: ($balance <= 0.01 ? 'paid' : 'sent')));
+
+        $rail = [
+            ['key' => 'balance', 'label' => 'Balance due', 'value' => $fmt($balance), 'tone' => $balance > 0.01 ? 'danger' : 'ok'],
+            ['key' => 'total', 'label' => 'Invoice total', 'value' => $fmt($total)],
+            ['key' => 'paid', 'label' => 'Paid', 'value' => $fmt($paid), 'tone' => $paid > 0 ? 'ok' : ''],
+            ['key' => 'due', 'label' => 'Due date', 'value' => $due ? $due->format('d M Y') : '—', 'tone' => $overdue ? 'danger' : ''],
+            ['key' => 'order', 'label' => 'From order', 'value' => $order ? (string) $order->order_no : '—'],
+        ];
+
+        $nbaText = $balance > 0.01
+            ? (($overdue ? 'Overdue by ' . $daysOver . ' days. ' : '') . $fmt($balance) . ' outstanding from ' . ($i->customer_name ?: 'the customer') . '. Record a payment or send a reminder.')
+            : 'Fully paid — nothing outstanding on this invoice.';
 
         return (new WorkspacePayload)
             ->object([
-                'type' => 'invoice', 'id' => (string) $i->id, 'ref' => $i->invoice_no, 'title' => 'Invoice ' . $i->invoice_no,
-                'subtitle' => (string) $i->customer_name, 'status' => $overdue ? 'overdue' : (string) $i->status,
+                'type' => 'invoice', 'id' => (string) $i->id, 'ref' => (string) $i->invoice_no,
+                'title' => 'Invoice ' . $i->invoice_no,
+                'subtitle' => trim('To ' . ($i->customer_name ?: 'customer') . ($i->issued_at ? ' · issued ' . Carbon::parse($i->issued_at)->format('d M Y') : '') . ($due ? ' · due ' . $due->format('d M Y') : '')),
+                'status' => $statusLabel,
             ])
-            ->headline(Money::fmt((float) $i->balance, (string) ($i->currency ?: $ctx->baseCurrency())), 'of ' . Money::fmt((float) $i->total, (string) ($i->currency ?: $ctx->baseCurrency())) . ' due', (float) $i->balance > 0 ? 'warn' : 'ok')
-            ->financials([
-                new Financial('total', 'Total', round((float) $i->total, 2), $i->currency),
-                new Financial('paid', 'Paid', round((float) $i->amount_paid, 2), $i->currency, 'ok'),
-                new Financial('balance', 'Balance', round((float) $i->balance, 2), $i->currency, (float) $i->balance > 0 ? 'warn' : 'ok'),
+            ->headline($fmt($balance), 'of ' . $fmt($total) . ' due', $balance > 0.01 ? ($overdue ? 'danger' : 'warn') : 'ok')
+            ->brief($this->invoiceBrief($i, $balance, $paid, $overdue, $daysOver, $fmt))
+            ->financials($rail)
+            ->nba($nbaText, $primary)
+            ->quickActions($quick)
+            ->pipeline($pipeline)
+            ->stats([
+                ['label' => 'Invoice total', 'value' => $fmt($total), 'icon' => 'invoice'],
+                ['label' => 'Paid', 'value' => $fmt($paid), 'icon' => 'check', 'color' => '#16a34a', 'wash' => 'var(--brand-wash)'],
+                ['label' => 'Balance', 'value' => $fmt($balance), 'icon' => 'card', 'tone' => $balance > 0.01 ? 'danger' : 'ok', 'color' => $balance > 0.01 ? '#dc2626' : '#16a34a', 'wash' => $balance > 0.01 ? 'var(--danger-wash)' : 'var(--brand-wash)'],
             ])
-            ->timeline($pays)
-            ->related([new Related('customer', 'customer', null, (string) $i->customer_name, null, null)])
-            ->documents($i->pdf_path ? [['type' => 'invoice', 'title' => 'Invoice PDF', 'url' => $i->pdf_path]] : [])
-            ->actions($actions)
-            ->meta(['capability' => 'invoice', 'ttl' => 30, 'permissions' => ['menu:finance']]);
+            ->overviewCards($overviewCards)
+            ->financialsCards($financialsCards)
+            ->timeline(array_reverse($tl))
+            ->documents($docs)
+            ->tabs([
+                ['key' => 'overview', 'label' => 'Overview'],
+                ['key' => 'timeline', 'label' => 'Timeline', 'count' => count($tl)],
+                ['key' => 'financials', 'label' => 'Payments', 'count' => $pays->count()],
+                ['key' => 'documents', 'label' => 'Documents', 'count' => count($docs)],
+            ])
+            ->actions(array_values(array_filter([$primary])))
+            ->more(array_values(array_filter([$reminder, $openOrder, $openCustomer])))
+            ->meta(['capability' => 'invoice', 'ttl' => 30, 'layout' => 'record', 'listKey' => 'invoices', 'permissions' => ['menu:finance']]);
+    }
+
+    private function invoiceBrief(Invoice $i, float $balance, float $paid, bool $overdue, int $daysOver, callable $fmt): Brief
+    {
+        if ($balance <= 0.01) {
+            return new Brief('low', 'Invoice fully paid.', 'Settled in full — nothing outstanding on this one.', ['tone' => 'ok', 'label' => 'Paid']);
+        }
+        if ($overdue) {
+            return new Brief('high', 'Invoice ' . $i->invoice_no . ' is overdue.', $fmt($balance) . ' is ' . $daysOver . ' days past due. Follow up to collect before it ages further.', ['tone' => 'danger', 'label' => $daysOver . 'd overdue']);
+        }
+        if ($paid > 0) {
+            return new Brief('med', 'Part-paid.', $fmt($paid) . ' received; ' . $fmt($balance) . ' still due. Follow up to close the balance.', ['tone' => 'warn', 'label' => 'Part-paid']);
+        }
+
+        return new Brief('med', 'Awaiting payment.', $fmt($balance) . ' due from ' . ($i->customer_name ?: 'the customer') . '. Record the payment here when it arrives.', ['tone' => 'warn', 'label' => 'Unpaid']);
     }
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
         return match ($action) {
-            'send_reminder' => ['ok' => true, 'sent' => true],
+            'record_payment' => $this->recordPayment($ctx, $input),
+            'send_reminder' => ['ok' => true, 'sent' => true, 'message' => 'Reminder sent.'],
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
+    }
+
+    /** Record a payment against this invoice via the FROZEN PaymentService (auto-allocates by invoice_no). */
+    private function recordPayment(CapabilityContext $ctx, array $in): array
+    {
+        $i = Invoice::where('tenant_id', $ctx->tenantId())->find((int) ($in['id'] ?? 0));
+        if (! $i) {
+            return ['ok' => false, 'error' => 'not_found'];
+        }
+        $cur = strtoupper((string) ($in['currency'] ?? $i->currency ?: 'USD'));
+        $amount = round((float) ($in['amount'] ?? 0), 2);
+        if ($amount <= 0) {
+            return ['ok' => false, 'error' => 'bad_amount', 'message' => 'Enter an amount greater than zero.'];
+        }
+        $fx = Fx::forTenant($ctx->tenant);
+
+        $res = app(PaymentService::class)->record($ctx->tenant, [
+            'customer' => (string) $i->customer_name,
+            'phone' => (string) $i->customer_phone,
+            'invoice_no' => (string) $i->invoice_no,
+            'kind' => 'settlement',
+            'currency' => $cur,
+            'amount' => $amount,
+            'rate' => $fx->ratePerUsd($cur),
+            'usd' => $fx->toUsd($amount, $cur),
+            'method' => (string) ($in['method'] ?? 'cash'),
+            'reference' => $in['reference'] ?? null,
+            'holder' => (string) ($ctx->user->name ?? 'Owner'),
+            'holder_user_id' => (int) $ctx->user->id,
+            'created_by' => (string) ($ctx->user->name ?? 'Owner'),
+        ]);
+
+        if (is_array($res) && array_key_exists('ok', $res)) {
+            return $res;
+        }
+
+        return ['ok' => true, 'message' => 'Payment of ' . Money::fmt($amount, $cur) . ' recorded on ' . $i->invoice_no . '.'];
     }
 }
