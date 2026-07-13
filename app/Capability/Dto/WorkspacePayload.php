@@ -16,6 +16,7 @@ final class WorkspacePayload
     private array $documents = [];
     private array $related = [];
     private array $actions = [];
+    private ?array $table = null;
     private array $meta = [];
 
     public function object(array $o): self { $this->object = $o; return $this; }
@@ -58,6 +59,20 @@ final class WorkspacePayload
         return $this;
     }
 
+    /**
+     * A directory/list section: sortable, filterable rows with typed columns. Additive to the
+     * envelope (a workspace that lists many records rather than projecting one). Each row is a map
+     * of column-key => cell, where a cell may be a scalar or ['value'=>, 'tone'=>, 'sub'=>, 'link'=>].
+     *
+     * @param array<int,array{key:string,label:string,align?:string,type?:string,sortable?:bool}> $columns
+     * @param array<int,array<string,mixed>> $rows
+     */
+    public function table(array $columns, array $rows): self
+    {
+        $this->table = ['columns' => $columns, 'rows' => $rows];
+        return $this;
+    }
+
     public function meta(array $m): self
     {
         $this->meta = array_merge(['version' => '1.0'], $this->meta, $m);
@@ -75,6 +90,7 @@ final class WorkspacePayload
             'documents' => $this->documents,
             'related' => $this->related,
             'actions' => $this->actions,
+            'table' => $this->table,
             'meta' => $this->meta,
         ];
     }

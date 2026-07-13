@@ -215,6 +215,44 @@ svg{display:block}
 .toast.err .ic{color:#ff8f8f}
 @keyframes slidein{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
 
+/* ================= SIDEBAR COUNT ================= */
+.nitem .nl{flex:1}
+.nitem .cnt{font-size:11px;background:rgba(255,255,255,.1);color:#cfe0d7;padding:1px 8px;border-radius:20px;font-weight:600;min-width:20px;text-align:center}
+.nitem.on .cnt{background:var(--brand);color:#fff}
+
+/* ================= LIST / DIRECTORY WORKSPACE ================= */
+.lhead{display:flex;align-items:flex-start;gap:16px;margin:2px 0 18px;flex-wrap:wrap}
+.lhead .ltitle{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.lhead .lsub{color:var(--muted);font-size:13px;margin-top:3px}
+.lhead .acts{margin-left:auto}
+.toolbar{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tsearch{position:relative;flex:1;min-width:200px;max-width:360px}
+.tsearch svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--faint)}
+.tsearch input{width:100%;height:36px;border:1px solid var(--line);border-radius:8px;padding:0 12px 0 34px;background:var(--surface-2)}
+.tsearch input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-wash);background:#fff}
+.chip{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 11px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface)}
+.chip select{border:none;background:none;font-weight:600;color:inherit;outline:none;cursor:pointer}
+.tinfo{font-size:12.5px;color:var(--muted);margin-right:4px}
+.tbl-wrap{overflow-x:auto}
+table.dt{width:100%;border-collapse:collapse;font-size:13px}
+.dt thead th{text-align:left;font-size:11px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;padding:11px 16px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface-2);user-select:none}
+.dt thead th.srt{cursor:pointer}
+.dt thead th.srt:hover{color:var(--ink)}
+.dt thead th.num,.dt td.num{text-align:right;font-variant-numeric:tabular-nums}
+.dt thead th .thc{display:inline-flex;align-items:center;gap:5px}
+.dt thead th.sorted{color:var(--brand-ink)}
+.dt thead th .sar{font-size:11px}
+.dt tbody td{padding:12px 16px;border-bottom:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap}
+.dt tbody tr:last-child td{border-bottom:none}
+.dt tbody tr{cursor:pointer;transition:.08s}
+.dt tbody tr:hover{background:var(--brand-wash)}
+.dt tbody tr:hover td{color:var(--ink)}
+.dt td.warn{color:var(--warn);font-weight:600}.dt td.danger{color:var(--danger);font-weight:600}.dt td.ok{color:var(--brand-ink);font-weight:600}
+.dt .prim{font-weight:600;color:var(--ink)}
+.dt .mut{color:var(--muted);font-size:12px}
+.cellflex{display:flex;align-items:center;gap:11px}
+.av-s{width:32px;height:32px;border-radius:8px;display:inline-grid;place-items:center;color:#fff;font-weight:700;font-size:11.5px;flex:none}
+
 @media(max-width:880px){
   .app{grid-template-columns:1fr}.side{display:none}
   .rec{grid-template-columns:1fr}
@@ -245,12 +283,22 @@ svg{display:block}
 
 <script>
 const CFG = { base:'/api/v1/workspace', csrf: document.querySelector('meta[name=csrf-token]').content, user: @json(['name'=>'']) };
-const LABELS = { briefing:'Morning Briefing', worklist:'My Work', collections:'Collections', finance:'Finance',
-  'sales.process':'Sales', 'purchase.process':'Purchasing', warehouse:'Warehouse', dispatch:'Dispatch',
-  customer:'Customer', invoice:'Invoice', payment:'Payment', supplier:'Supplier', product:'Product',
-  salesOrder:'Sales Order', purchaseOrder:'Purchase Order', statement:'Statement' };
-const GROUPS = [ ['Overview',['briefing','worklist']], ['Sales',['collections','sales.process']],
-  ['Purchasing',['purchase.process']], ['Operations',['warehouse','dispatch']], ['Finance',['finance']] ];
+const LABELS = { briefing:'Morning Briefing', worklist:'My Work', customers:'Customers', collections:'Collections',
+  'sales.process':'Sales Orders', invoice:'Invoices', payment:'Payments', finance:'Finance',
+  product:'Products', 'purchase.process':'Purchasing', supplier:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch',
+  customer:'Customer', salesOrder:'Sales Order', purchaseOrder:'Purchase Order', statement:'Statement' };
+const GROUPS = [ ['Overview',['briefing','worklist']],
+  ['Sales',['customers','sales.process','invoice','payment','collections']],
+  ['Inventory',['product','purchase.process','supplier']],
+  ['Operations',['warehouse','dispatch']],
+  ['Finance',['finance']] ];
+// Which nav key reads which count from the catalog's counts map.
+const NAVCOUNT = { customers:'customers', 'sales.process':'salesOrder', invoice:'invoice', payment:'payment', product:'product', supplier:'supplier', 'purchase.process':'purchase.process' };
+// Full workspaces that resolve to a real screen today.
+const READY = new Set(['briefing','worklist','customers','sales.process','purchase.process','collections','finance','warehouse','dispatch']);
+// Nav items whose dedicated list view is next in the build — show a graceful placeholder, not a dead screen.
+const SOON = { invoice:{to:'collections',toLabel:'Collections'}, payment:{to:'finance',toLabel:'Finance'}, product:{to:'warehouse',toLabel:'Warehouse'}, supplier:{to:'purchase.process',toLabel:'Purchasing'} };
+function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:1)+'k' : String(n); }
 
 /* ---- inline icon set ---- */
 const P = {
@@ -261,6 +309,7 @@ const P = {
   warehouse:'M3 9l9-6 9 6v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM9 21V9h6v12',
   dispatch:'M1 3h15v13H1zM16 8h4l3 3v5h-7M5.5 18.5a2 2 0 1 0 0 .01M18.5 18.5a2 2 0 1 0 0 .01',
   customer:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8',
+  customers:'M17 21v-2a4 4 0 0 0-3-3.87M9 21v-2a4 4 0 0 1 4-4h0M12 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6M21 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
   invoice:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6',
   payment:'M2 6h20v12H2zM2 10h20', supplier:'M3 21h18M5 21V7l8-4v18M19 21V11l-6-3M9 9v.01M9 12v.01M9 15v.01',
   product:'M12 2 2 7l10 5 10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
@@ -307,9 +356,10 @@ async function boot(){
   document.getElementById('view').innerHTML = skeleton();
   const cat = await api('/');
   CFG.user = cat.user || CFG.user;
+  CFG.counts = cat.counts || {};
   const nm = CFG.user.name||'User';
   document.getElementById('unm').textContent = nm;
-  document.getElementById('url').textContent = CFG.user.role||'';
+  document.getElementById('url').textContent = (CFG.user.role||'') + (CFG.user.org ? ' · ' + CFG.user.org : '');
   document.getElementById('uav').textContent = initials(nm);
   document.getElementById('uav').style.background = 'linear-gradient(135deg,#16a34a,#0d9488)';
   renderNav(cat.capabilities||[]);
@@ -319,12 +369,18 @@ async function boot(){
 function parseHash(){ const p=location.hash.replace('#/','').split('/'); return { key:p[0]||'', id:p[1]||null }; }
 function renderNav(caps){
   const keys = new Set(caps.map(c=>c.key));
+  // A SOON item shows if its underlying entity exists (has a count) even without a list capability yet.
+  const has = k => keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
   let html='';
   GROUPS.forEach(([g,items])=>{
-    const avail=items.filter(k=>keys.has(k));
+    const avail=items.filter(has);
     if(!avail.length) return;
     html+='<div class="ngrp">'+g+'</div>';
-    avail.forEach(k=>{ html+='<div class="nitem" data-key="'+k+'" onclick="route(\''+k+'\')">'+icon(k)+(LABELS[k]||k)+'</div>'; });
+    avail.forEach(k=>{
+      const c = CFG.counts[NAVCOUNT[k]||k];
+      const cnt = (c!=null && c!=='') ? '<span class="cnt">'+fmtCount(c)+'</span>' : '';
+      html+='<div class="nitem" data-key="'+k+'" onclick="route(\''+k+'\')">'+icon(k)+'<span class="nl">'+(LABELS[k]||k)+'</span>'+cnt+'</div>';
+    });
   });
   document.getElementById('nav').innerHTML=html;
 }
@@ -332,10 +388,22 @@ function setActive(key){ document.querySelectorAll('.nitem').forEach(n=>n.classL
 
 async function route(key, id){
   CUR={key,id}; location.hash='#/'+key+(id?'/'+id:''); setActive(key);
+  if(SOON[key] && !id){ renderSoon(key); return; }
   document.getElementById('view').innerHTML=skeleton();
   const p = await api('/'+key+(id?'/'+id:''));
   if(p._error){ document.getElementById('view').innerHTML=emptyState('bolt','Could not load','You may not have access to this workspace ('+p._error+').'); return; }
   renderView(p);
+}
+function renderSoon(key){
+  const s=SOON[key]; const c=CFG.counts[NAVCOUNT[key]||key];
+  document.getElementById('view').innerHTML=
+    '<div class="crumb">'+(LABELS[key]||key)+'</div>'+
+    '<div class="card"><div class="b" style="text-align:center;padding:56px 24px">'+
+    '<div class="eic" style="width:56px;height:56px;margin:0 auto 16px">'+icon(key,'ic-lg')+'</div>'+
+    '<h1 style="font-size:20px;margin-bottom:6px">'+(LABELS[key]||key)+(c!=null?' <span class="mut" style="font-weight:600">('+fmtCount(c)+')</span>':'')+'</h1>'+
+    '<div class="mut" style="max-width:420px;margin:0 auto 18px">This dedicated list view is next in the build. In the meantime, open the related workspace to work these records.</div>'+
+    '<button class="btn pri" onclick="route(\''+s.to+'\')">Open '+s.toLabel+'</button>'+
+    '</div></div>';
 }
 function refresh(){ if(CUR.key) route(CUR.key, CUR.id); }
 
@@ -343,6 +411,7 @@ function skeleton(){ return '<div class="sk sk-head"></div><div class="kpis"><di
 function emptyState(ic,h,s){ return '<div class="empty"><div class="eic">'+icon(ic,'ic-lg')+'</div><h4>'+esc(h)+'</h4><div>'+esc(s||'')+'</div></div>'; }
 
 function renderView(p){
+  if(p.table){ return renderList(p); }
   const o=p.object||{}; const isProcess=(o.type||'').startsWith('process:');
   const cap=(p.meta&&p.meta.capability)||CUR.key;
   let h='';
@@ -446,6 +515,61 @@ document.getElementById('ov').addEventListener('click',e=>{ if(e.target.id==='ov
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeM(); });
 document.getElementById('search').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const p=e.target.value.trim().split(/\s+/); if(p[0]&&p[1]) route(p[0].toLowerCase(),p[1]); } });
 window.addEventListener('hashchange',()=>{ const h=parseHash(); if(h.key && (h.key!==CUR.key||h.id!==CUR.id)) route(h.key,h.id); });
+
+/* ================= LIST / DIRECTORY WORKSPACE ================= */
+let TBL = { cols:[], rows:[], sort:null, dir:1, q:'', status:'All' };
+function cellVal(c){ return (c && typeof c==='object') ? (c.value!=null?c.value:'') : (c!=null?c:''); }
+function cellSort(c){ if(c && typeof c==='object') return c.sort!=null?c.sort:(c.value!=null?c.value:''); return c!=null?c:''; }
+function renderList(p){
+  const o=p.object||{}; const cap=(p.meta&&p.meta.capability)||CUR.key;
+  TBL = { cols:(p.table&&p.table.columns)||[], rows:(p.table&&p.table.rows)||[], sort:null, dir:1, q:'', status:'All' };
+  let h='<div class="crumb">'+(LABELS[cap]||cap)+'</div>';
+  h+='<div class="lhead"><div><h1 class="ltitle">'+esc(o.title||'')+'</h1>'+(o.subtitle?'<div class="lsub">'+esc(o.subtitle)+'</div>':'')+'</div>'+
+     '<div class="acts inl">'+(p.actions||[]).map(actBtn).join('')+
+     '<button class="btn pri" onclick="toast(\'New record — next in the build\')">'+icon('bolt','ic-sm')+'New</button></div></div>';
+  if(p.financials&&p.financials.length){
+    h+='<div class="kpis">'+p.financials.map(f=>{ const tc=toneCls(f.tone);
+      return '<div class="kpi"><div class="top"><span class="ib '+tc+'">'+icon(cap,'ic-sm')+'</span>'+esc(f.label)+'</div><div class="val '+tc+'">'+esc(fval(f))+'</div>'+(f.foot?'<div class="foot">'+esc(f.foot)+'</div>':'')+'</div>';
+    }).join('')+'</div>';
+  }
+  h+='<div class="card"><div class="toolbar" id="tbar"></div><div class="tbl-wrap" id="tbl"></div></div>';
+  document.getElementById('view').innerHTML=h;
+  renderToolbar(); renderTable();
+}
+function renderToolbar(){
+  const vals=['All',...Array.from(new Set(TBL.rows.map(r=>cellVal(r.status)).filter(Boolean)))];
+  const hasStatus=TBL.cols.some(c=>c.key==='status');
+  let h='<div class="tsearch"><svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'+
+    '<input id="tq" placeholder="Search…" oninput="TBL.q=this.value;renderTable()"></div>';
+  if(hasStatus) h+='<label class="chip">Status <select onchange="TBL.status=this.value;renderTable()">'+vals.map(v=>'<option>'+esc(v)+'</option>').join('')+'</select></label>';
+  h+='<div style="flex:1"></div><span class="tinfo" id="tinfo"></span><button class="btn sm" onclick="toast(\'Export — next in the build\')">'+icon('doc','ic-sm')+'Export</button>';
+  document.getElementById('tbar').innerHTML=h;
+}
+function sortBy(k){ if(TBL.sort===k){ TBL.dir=-TBL.dir; } else { TBL.sort=k; TBL.dir=1; } renderTable(); }
+function renderTable(){
+  let rows=TBL.rows.slice();
+  const q=(TBL.q||'').trim().toLowerCase();
+  if(q) rows=rows.filter(r=>TBL.cols.some(c=>{const v=r[c.key]; return String(cellVal(v)).toLowerCase().includes(q) || (v&&v.sub&&String(v.sub).toLowerCase().includes(q));}));
+  if(TBL.status && TBL.status!=='All') rows=rows.filter(r=>cellVal(r.status)===TBL.status);
+  if(TBL.sort){ rows.sort((a,b)=>{ let x=cellSort(a[TBL.sort]), y=cellSort(b[TBL.sort]);
+    if(typeof x==='string'||typeof y==='string'){ x=String(x).toLowerCase(); y=String(y).toLowerCase(); }
+    return (x>y?1:x<y?-1:0)*TBL.dir; }); }
+  const arrow=k=> TBL.sort===k ? '<span class="sar">'+(TBL.dir>0?'↑':'↓')+'</span>' : '';
+  const th=TBL.cols.map(c=>'<th class="'+(c.align==='right'?'num':'')+(c.sortable!==false?' srt':'')+(TBL.sort===c.key?' sorted':'')+'"'+(c.sortable!==false?' onclick="sortBy(\''+c.key+'\')"':'')+'><span class="thc">'+esc(c.label)+arrow(c.key)+'</span></th>').join('');
+  const body = rows.length ? rows.map(r=>'<tr'+(r.link?' onclick="openLink(\''+esc(r.link)+'\')"':'')+'>'+TBL.cols.map(c=>cellHtml(r[c.key],c)).join('')+'</tr>').join('')
+    : '<tr><td colspan="'+TBL.cols.length+'"><div class="empty" style="padding:40px">'+icon('worklist','ic-lg')+'<div style="margin-top:8px">No matching records</div></div></td></tr>';
+  document.getElementById('tbl').innerHTML='<table class="dt"><thead><tr>'+th+'</tr></thead><tbody>'+body+'</tbody></table>';
+  const ti=document.getElementById('tinfo'); if(ti) ti.textContent=rows.length+' of '+TBL.rows.length;
+}
+function cellHtml(c,col){
+  const align=col.align==='right'?' num':'';
+  if(col.type==='avatar'){ const nm=cellVal(c), sub=(c&&c.sub)||'';
+    return '<td><div class="cellflex"><div class="av-s" style="background:'+avColor(nm)+'">'+initials(nm)+'</div><div><div class="prim">'+esc(nm)+'</div>'+(sub?'<div class="mut">'+esc(sub)+'</div>':'')+'</div></div></td>'; }
+  if(col.type==='badge'){ const v=cellVal(c), tone=(c&&c.badge)||'default';
+    return '<td>'+(v?'<span class="badge '+toneBadge(tone==='ok'?'ok':tone==='warn'?'warn':tone==='danger'?'danger':'')+'"><span class="d"></span>'+esc(v)+'</span>':'—')+'</td>'; }
+  const tone=(c&&c.tone)?(' '+toneCls(c.tone)):'';
+  return '<td class="'+align+tone+'">'+esc(cellVal(c))+'</td>';
+}
 
 boot();
 </script>

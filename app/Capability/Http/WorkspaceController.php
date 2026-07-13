@@ -25,9 +25,19 @@ final class WorkspaceController
             $caps[] = ['key' => $m->key, 'type' => $m->type, 'owner' => $m->owner, 'permission' => $m->permission, 'api' => $m->api];
         }
 
+        // Sidebar badge counts, resolved via the registry (no model access in the HTTP layer).
+        $counts = [];
+        if ($registry->has('_nav')) {
+            $nav = $registry->get('_nav');
+            if (method_exists($nav, 'counts')) {
+                $counts = $nav->counts($ctx);
+            }
+        }
+
         return response()->json([
             'ok' => true,
-            'user' => ['name' => (string) ($request->user()->name ?? 'User'), 'role' => $ctx->role],
+            'user' => ['name' => (string) ($request->user()->name ?? 'User'), 'role' => $ctx->role, 'org' => (string) ($ctx->tenant->name ?? '')],
+            'counts' => $counts,
             'capabilities' => $caps,
         ]);
     }
