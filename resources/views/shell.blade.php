@@ -284,20 +284,21 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 <script>
 const CFG = { base:'/api/v1/workspace', csrf: document.querySelector('meta[name=csrf-token]').content, user: @json(['name'=>'']) };
 const LABELS = { briefing:'Morning Briefing', worklist:'My Work', customers:'Customers', collections:'Collections',
-  'sales.process':'Sales Orders', quotations:'Quotations', invoices:'Invoices', payment:'Payments', finance:'Finance',
-  product:'Products', 'purchase.process':'Purchasing', supplier:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch',
-  customer:'Customer', invoice:'Invoice', salesOrder:'Sales Order', purchaseOrder:'Purchase Order', statement:'Statement' };
+  salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance',
+  products:'Products', 'purchase.process':'Purchasing', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch',
+  customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier',
+  salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement' };
 const GROUPS = [ ['Overview',['briefing','worklist']],
-  ['Sales',['customers','sales.process','quotations','invoices','payment','collections']],
-  ['Inventory',['product','purchase.process','supplier']],
+  ['Sales',['customers','salesOrders','quotations','invoices','payments','collections']],
+  ['Inventory',['products','purchase.process','suppliers']],
   ['Operations',['warehouse','dispatch']],
   ['Finance',['finance']] ];
 // Which nav key reads which count from the catalog's counts map.
-const NAVCOUNT = { customers:'customers', 'sales.process':'salesOrder', quotations:'quotations', invoices:'invoice', payment:'payment', product:'product', supplier:'supplier', 'purchase.process':'purchase.process' };
-// Full workspaces that resolve to a real screen today.
-const READY = new Set(['briefing','worklist','customers','sales.process','quotations','invoices','purchase.process','collections','finance','warehouse','dispatch']);
-// Nav items whose dedicated list view is next in the build — show a graceful placeholder, not a dead screen.
-const SOON = { payment:{to:'finance',toLabel:'Finance'}, product:{to:'warehouse',toLabel:'Warehouse'}, supplier:{to:'purchase.process',toLabel:'Purchasing'} };
+const NAVCOUNT = { customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', suppliers:'supplier', 'purchase.process':'purchase.process' };
+// Full workspaces that resolve to a real screen (all menu items are now built).
+const READY = new Set(['briefing','worklist','customers','salesOrders','quotations','invoices','payments','products','suppliers','purchase.process','collections','finance','warehouse','dispatch']);
+// Dedicated list views still pending — none; kept for future additions.
+const SOON = {};
 function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:1)+'k' : String(n); }
 
 /* ---- inline icon set ---- */
@@ -313,9 +314,13 @@ const P = {
   invoice:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6',
   invoices:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6',
   quotations:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 15l2 2 4-4',
-  payment:'M2 6h20v12H2zM2 10h20', supplier:'M3 21h18M5 21V7l8-4v18M19 21V11l-6-3M9 9v.01M9 12v.01M9 15v.01',
+  payment:'M2 6h20v12H2zM2 10h20', payments:'M2 6h20v12H2zM2 10h20',
+  supplier:'M3 21h18M5 21V7l8-4v18M19 21V11l-6-3M9 9v.01M9 12v.01M9 15v.01',
+  suppliers:'M3 21h18M5 21V7l8-4v18M19 21V11l-6-3M9 9v.01M9 12v.01M9 15v.01',
   product:'M12 2 2 7l10 5 10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
+  products:'M12 2 2 7l10 5 10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
   salesOrder:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
+  salesOrders:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
   purchaseOrder:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
   statement:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6',
   doc:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6',
