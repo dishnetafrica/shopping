@@ -11,15 +11,10 @@ use App\Services\Money\ReportingCurrency;
 use App\Services\Settings\SettingsWriteService;
 
 /**
- * Currency & Reporting settings — the one screen where the shop chooses how money is shown across
- * every report in v3. Two decisions live here:
- *
- *   • Base currency        — the home currency the platform consolidates into (USD/UGX/SSP).
- *   • Report currency mode — Consolidated (convert every transaction to base) or
- *                            Original currency (show each transaction in the currency it happened in).
- *
- * Reads/writes only the tenant's own presentation settings (via SettingsWriteService); it does not
- * touch the trading engine, so it is safe over the frozen core.
+ * Settings — the one screen where the shop configures itself, mirroring the prototype's tabs:
+ * Business profile, Currency & reporting, Exchange rates, and Invoice & tax. Each section shows the
+ * current values and has an edit form. Everything is written through SettingsWriteService (tenant name
+ * column + settings JSON), which the PDF renderers, Fx service and bot already read — no engine changes.
  */
 final class SettingsCapability implements ProcessCapability
 {
@@ -29,66 +24,107 @@ final class SettingsCapability implements ProcessCapability
 
     public function project(CapabilityContext $ctx): WorkspacePayload
     {
+        $t = $ctx->tenant;
+        $s = fn (string $k, string $d = '') => trim((string) ($t->setting($k, $d) ?? $d));
+        $name = (string) ($t->name ?: 'Your business');
         $base = $ctx->baseCurrency();
         $mode = $ctx->reportMode();
-        $rc   = ReportingCurrency::forContext($ctx);
-        $fx   = Fx::forTenant($ctx->tenant);
-
+        $rc = ReportingCurrency::forContext($ctx);
+        $fx = Fx::forTenant($t);
+        $ugx = $fx->ratePerUsd('UGX');
+        $ssp = $fx->ratePerUsd('SSP');
+        $ep = '/api/v1/workspace/settings/_';
         $modeLabel = $mode === 'original' ? 'Original transaction currency' : 'Consolidated to base';
+        $email = $s('public_email', $s('email'));
+        $loc = trim(implode(', ', array_filter([$s('address'), $s('city'), $s('country')])));
 
-        $settingsCard = ['kind' => 'dl', 'title' => 'Currency & reporting', 'rows' => [
+        // --- edit forms (all post to save_settings → SettingsWriteService::apply) ---
+        $editProfile = [
+            'key' => 'edit_profile', 'label' => 'Edit business profile', 'method' => 'POST', 'endpoint' => $ep . '/save_settings', 'actor' => 'human', 'tone' => 'primary',
+            'schema' => ['business_name' => 'text', 'trading_as' => 'text', 'owner_name' => 'text', 'public_phone' => 'text', 'public_email' => 'text', 'address' => 'text', 'city' => 'text', 'country' => 'text', 'tin' => 'text', 'tagline' => 'text', 'logo' => 'text'],
+            'prefill' => ['business_name' => $name, 'trading_as' => $s('trading_as'), 'owner_name' => $s('owner_name'), 'public_phone' => $s('public_phone'), 'public_email' => $email, 'address' => $s('address'), 'city' => $s('city'), 'country' => $s('country'), 'tin' => $s('tin'), 'tagline' => $s('tagline'), 'logo' => $s('logo')],
+        ];
+        $editCurrency = [
+            'key' => 'edit_currency', 'label' => 'Currency & reporting', 'method' => 'POST', 'endpoint' => $ep . '/save_settings', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['base_currency' => 'enum:' . implode(',', SettingsWriteService::BASE_CHOICES), 'report_currency_mode' => 'enum:base,original'],
+            'prefill' => ['base_currency' => $base, 'report_currency_mode' => $mode],
+        ];
+        $editRates = [
+            'key' => 'edit_rates', 'label' => 'Exchange rates', 'method' => 'POST', 'endpoint' => $ep . '/save_settings', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['rate_ugx_per_usd' => 'number', 'rate_ssp_per_usd' => 'number'],
+            'prefill' => ['rate_ugx_per_usd' => (int) round($ugx), 'rate_ssp_per_usd' => (int) round($ssp)],
+        ];
+        $editInvoicing = [
+            'key' => 'edit_invoicing', 'label' => 'Invoice & tax', 'method' => 'POST', 'endpoint' => $ep . '/save_settings', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['invoice_title' => 'text', 'invoice_terms_days' => 'number', 'vat_rate' => 'number', 'bank_details' => 'text', 'invoice_footer' => 'text'],
+            'prefill' => ['invoice_title' => $s('invoice_title', 'INVOICE'), 'invoice_terms_days' => $s('invoice_terms_days', '0'), 'vat_rate' => $s('vat_rate', '0'), 'bank_details' => $s('bank_details'), 'invoice_footer' => $s('invoice_footer')],
+        ];
+
+        // --- display cards ---
+        $profileCard = ['kind' => 'dl', 'title' => 'Business profile', 'rows' => [
+            ['Business name', $name],
+            ['Trading as', $s('trading_as') ?: '—'],
+            ['Owner', $s('owner_name') ?: '—'],
+            ['Phone', $s('public_phone') ?: '—'],
+            ['Email', $email ?: '—'],
+            ['Address', $loc ?: '—'],
+            ['TIN', $s('tin') ?: '—'],
+        ]];
+        $currencyCard = ['kind' => 'dl', 'title' => 'Currency & reporting', 'rows' => [
             ['Base currency', $base],
             ['Report mode', $modeLabel],
-            ['Reports show', $rc->isOriginal() ? 'Each transaction in its own currency' : ('All figures in ' . $rc->consolidationCurrency())],
+            ['Figures shown in', $rc->consolidationCurrency()],
             ['KPI tiles', 'Always consolidated to ' . $rc->consolidationCurrency()],
         ]];
-
-        // Transparency: the exchange rates the engine will use (native per 1 USD, today's effective row).
-        $ratesCard = ['kind' => 'dl', 'title' => 'Exchange rates in use (per 1 USD)', 'rows' => [
-            ['UGX', number_format($fx->ratePerUsd('UGX'))],
-            ['SSP', number_format($fx->ratePerUsd('SSP'))],
+        $ratesCard = ['kind' => 'dl', 'title' => 'Exchange rates (per 1 USD)', 'rows' => [
+            ['UGX', number_format($ugx)],
+            ['SSP', number_format($ssp)],
             ['Basis', 'Historical: each transaction keeps its own stored rate'],
         ]];
-
-        $help = ['kind' => 'links', 'title' => 'How this works', 'items' => [
-            ['icon' => 'dollar', 'color' => '#16a34a', 'title' => 'Consolidated mode', 'sub' => 'Every quote, order, invoice and payment is converted to your base currency so totals add up to one number.', 'right' => ''],
-            ['icon' => 'tag', 'color' => '#2563eb', 'title' => 'Original mode', 'sub' => 'Each figure stays in the currency it happened in. KPI tiles still consolidate so they can total.', 'right' => ''],
-            ['icon' => 'book', 'color' => '#d97706', 'title' => 'Historical rates', 'sub' => 'Past documents keep the rate stored on them — they never re-price at today’s rate.', 'right' => ''],
+        $invoiceCard = ['kind' => 'dl', 'title' => 'Invoice & tax', 'rows' => [
+            ['Invoice title', $s('invoice_title', 'INVOICE')],
+            ['Payment terms', ($s('invoice_terms_days', '0') ?: '0') . ' days'],
+            ['VAT rate', ($s('vat_rate', '0') ?: '0') . '%'],
+            ['Bank details', $s('bank_details') ?: '—'],
         ]];
-
-        $changeAction = [
-            'key' => 'save_settings', 'label' => 'Change settings', 'method' => 'POST',
-            'endpoint' => '/api/v1/workspace/settings/_/save_settings', 'actor' => 'human', 'tone' => 'primary',
-            'schema' => [
-                'base_currency' => 'enum:' . implode(',', SettingsWriteService::BASE_CHOICES),
-                'report_currency_mode' => 'enum:base,original',
-            ],
-        ];
-        $toConsolidated = ['key' => 'mode_base', 'label' => 'Use consolidated', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/settings/_/mode_base', 'actor' => 'human', 'tone' => 'default'];
-        $toOriginal = ['key' => 'mode_original', 'label' => 'Use original currency', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/settings/_/mode_original', 'actor' => 'human', 'tone' => 'default'];
+        $help = ['kind' => 'links', 'title' => 'How reporting currency works', 'items' => [
+            ['icon' => 'dollar', 'color' => '#16a34a', 'title' => 'Consolidated', 'sub' => 'Every figure is converted to your base currency so totals add up.', 'right' => ''],
+            ['icon' => 'tag', 'color' => '#2563eb', 'title' => 'Original', 'sub' => 'Each figure stays in its own currency; KPI tiles still consolidate.', 'right' => ''],
+            ['icon' => 'book', 'color' => '#d97706', 'title' => 'Historical rates', 'sub' => 'Past documents keep the rate stored on them — never re-priced at today\'s rate.', 'right' => ''],
+        ]];
 
         $brief = new Brief(
             level: 'low',
-            situation: 'Money across v3 is shown in ' . ($rc->isOriginal() ? 'each transaction’s own currency' : ($base . ' (consolidated)')) . '.',
-            why: 'Change the base currency or switch between consolidated and original-currency reporting. Every dashboard and report follows this setting.',
-            risk: ['tone' => 'info', 'label' => $modeLabel],
+            situation: 'Configure ' . $name . ' — profile, currency, exchange rates and invoicing.',
+            why: 'These settings flow into every document and report: quotations, invoices, receipts, the catalogue and price list all use them.',
+            risk: ['tone' => 'info', 'label' => $base . ' · ' . ($mode === 'original' ? 'Original' : 'Consolidated')],
         );
 
         return (new WorkspacePayload)
-            ->object(['type' => 'process:settings', 'title' => 'Currency & Reporting', 'subtitle' => 'How money is displayed across every v3 report'])
-            ->headline($base, $rc->isOriginal() ? 'original currency' : 'base currency', 'ok')
+            ->object(['type' => 'process:settings', 'title' => 'Settings', 'subtitle' => 'Manage your business, currency and invoicing'])
+            ->headline($base, 'base currency', 'ok')
             ->brief($brief)
             ->financials([
                 ['key' => 'base', 'label' => 'Base currency', 'value' => $base, 'tone' => 'ok'],
-                ['key' => 'mode', 'label' => 'Report mode', 'value' => $rc->isOriginal() ? 'Original' : 'Consolidated'],
-                ['key' => 'shows', 'label' => 'Figures shown in', 'value' => $rc->consolidationCurrency()],
+                ['key' => 'mode', 'label' => 'Report mode', 'value' => $mode === 'original' ? 'Original' : 'Consolidated'],
+                ['key' => 'terms', 'label' => 'Payment terms', 'value' => ($s('invoice_terms_days', '0') ?: '0') . ' days'],
             ])
-            ->quickActions([$changeAction, $mode === 'original' ? $toConsolidated : $toOriginal])
-            ->overviewCards([$settingsCard, $ratesCard, $help])
-            ->tabs([['key' => 'overview', 'label' => 'Overview']])
-            ->actions([$changeAction, $mode === 'original' ? $toConsolidated : $toOriginal])
-            ->more([$mode === 'original' ? $toConsolidated : $toOriginal])
-            ->meta(['capability' => 'settings', 'ttl' => 30, 'layout' => 'record', 'listKey' => 'settings', 'permissions' => []]);
+            ->quickActions([$editProfile, $editCurrency, $editRates, $editInvoicing])
+            ->overviewCards([$profileCard, $currencyCard, $invoiceCard])
+            ->tabSections([
+                'business' => [$profileCard],
+                'currency' => [$currencyCard, $ratesCard, $help],
+                'invoicing' => [$invoiceCard],
+            ])
+            ->tabs([
+                ['key' => 'overview', 'label' => 'Overview'],
+                ['key' => 'business', 'label' => 'Business profile'],
+                ['key' => 'currency', 'label' => 'Currency & rates'],
+                ['key' => 'invoicing', 'label' => 'Invoice & tax'],
+            ])
+            ->actions([$editProfile])
+            ->more([$editCurrency, $editRates, $editInvoicing])
+            ->meta(['capability' => 'settings', 'ttl' => 20, 'layout' => 'record', 'listKey' => 'settings', 'permissions' => []]);
     }
 
     public function summary(CapabilityContext $ctx, array $scope = []): array

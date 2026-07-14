@@ -435,7 +435,7 @@ const LABELS = { setup:'Get started', briefing:'Morning Briefing', worklist:'My 
   salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance',
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
-  salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Currency & Reporting' };
+  salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings' };
 const GROUPS = [ ['Overview',['setup','briefing','worklist']],
   ['Sales',['customers','salesOrders','quotations','invoices','payments','collections']],
   ['Inventory',['products','categories','purchase.process','suppliers']],
