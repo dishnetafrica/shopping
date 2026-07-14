@@ -37,8 +37,8 @@ final class CapabilityServiceProvider extends ServiceProvider
 
             Route::prefix('api/v1/workspace')->group(function () {
                 Route::get('/', [WorkspaceController::class, 'index']);
-                Route::get('/{type}/{id?}', [WorkspaceController::class, 'show'])->where('type', '[a-z.:]+');
-                Route::post('/{type}/{id}/{action}', [CommandController::class, 'dispatch'])->where('type', '[a-z.:]+');
+                Route::get('/{type}/{id?}', [WorkspaceController::class, 'show'])->where('type', '[a-zA-Z.:]+');
+                Route::post('/{type}/{id}/{action}', [CommandController::class, 'dispatch'])->where('type', '[a-zA-Z.:]+');
             });
 
             // Direct PDF streaming for docs without a legacy-panel route (receipt, price list).
