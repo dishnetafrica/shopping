@@ -7,6 +7,7 @@ use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\Brief;
 use App\Capability\Dto\WorkspacePayload;
 use App\Capability\Support\Money;
+use App\Models\Order;
 use App\Models\OrderCost;
 use App\Models\Supplier;
 use App\Models\User;
@@ -208,7 +209,14 @@ final class CashbookCapability implements ProcessCapability
             ->unique(fn ($n) => mb_strtolower($n))->values()->all();
         if ($me !== '') { $peopleList = array_values(array_unique(array_merge([$me], $peopleList))); }
         $supRaw = Supplier::where('tenant_id', $t)->orderBy('name')->pluck('name')->map(fn ($n) => trim(str_replace('|', ' ', (string) $n)))->filter()->all();
-        $payeeList = collect($peopleList)->merge($supRaw)->unique(fn ($n) => mb_strtolower($n))->values()->all();
+        // Also remember informal payees (Mr Tomu, etc.) from past expense entries so they stay tap-able.
+        $pastPayees = OrderCost::where('tenant_id', $t)->where('stage', 'cash_out')
+            ->whereIn('category', ['Transport', 'Salary', 'Rent', 'Utilities', 'Expense', 'Drawing', 'Other', 'Local purchase'])
+            ->whereNotNull('note')->orderByDesc('id')->limit(300)->pluck('note')
+            ->map(fn ($n) => trim(str_replace('|', ' ', (string) $n)))
+            ->filter(fn ($n) => $n !== '' && mb_strlen($n) <= 40 && ! str_contains($n, '—') && stripos($n, 'handed to') === false && stripos($n, 'received from') === false)
+            ->all();
+        $payeeList = collect($peopleList)->merge($supRaw)->merge($pastPayees)->unique(fn ($n) => mb_strtolower($n))->values()->all();
         $comboPeople = 'combo:' . (count($peopleList) ? implode('|', $peopleList) : ($me ?: 'Me'));
         $comboPayee = 'combo:' . (count($payeeList) ? implode('|', $payeeList) : ($me ?: 'Me'));
         $expCats = 'Transport|Salary|Rent|Utilities|Local purchase|Expense|Drawing|Other';
@@ -249,10 +257,30 @@ final class CashbookCapability implements ProcessCapability
             'body' => ['dir' => 'out'],
             'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]];
         $goOrders = ['key' => 'go_orders', 'label' => 'Customer paid', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/salesOrders', 'actor' => 'human'];
+        // Customer paid — inline receipt against an open order; the remaining balance is shown right here.
+        $orderLabels = []; $orderMap = [];
+        foreach (Order::where('tenant_id', $t)->whereColumn('amount_paid', '<', 'total')->orderByDesc('id')->limit(60)->get(['id', 'order_no', 'customer_name', 'total', 'amount_paid', 'sell_currency']) as $o) {
+            $bal = round(max(0, (float) $o->total - (float) $o->amount_paid), 2);
+            if ($bal <= 0.005) { continue; }
+            $ocur = strtoupper(trim((string) ($o->sell_currency ?: ''))) ?: $ctx->nativeCurrency();
+            $cust = trim(str_replace('|', ' ', (string) ($o->customer_name ?: 'Customer')));
+            $ono = (string) ($o->order_no ?: ('#' . $o->id));
+            $label = str_replace('|', ' ', $ono . ' · ' . $cust . ' · owes ' . Money::fmt($bal, $ocur));
+            $orderLabels[] = $label; $orderMap[$label] = (int) $o->id;
+        }
+        $customerPaid = count($orderLabels) ? [
+            'key' => 'ev_customer_paid', 'label' => 'Customer paid', 'method' => 'POST', 'endpoint' => '/papi/record-payment', 'actor' => 'human', 'tone' => 'primary',
+            'schema' => ['order' => 'combo:' . implode('|', $orderLabels), 'amount' => 'money', 'note' => 'text'],
+            'labels' => ['order' => 'Which order (customer · balance owed)', 'amount' => 'Amount received', 'note' => 'Note (optional)'],
+            'prefill' => ['order' => $orderLabels[0]],
+            'body' => ['notify' => '0'],
+            'valueMap' => ['field' => 'order', 'into' => 'order', 'map' => $orderMap, 'error' => 'Pick an order from the list'],
+            'onResult' => 'payment',
+        ] : $goOrders;
 
         $tiles = [];
         $tiles[] = ['icon' => 'download', 'title' => 'Money received', 'sub' => 'Cash in — funding, or from an agent', 'tone' => 'in', 'action' => $evReceived];
-        $tiles[] = ['icon' => 'user', 'title' => 'Customer paid', 'sub' => 'Against their order — shows remaining balance', 'tone' => 'in', 'action' => $goOrders];
+        $tiles[] = ['icon' => 'user', 'title' => 'Customer paid', 'sub' => 'Against their order — shows remaining balance', 'tone' => 'in', 'action' => $customerPaid];
         $tiles[] = ['icon' => 'trend', 'title' => 'Converted currency', 'sub' => 'e.g. $2,000 → UGX at your rate', 'tone' => 'move', 'action' => array_merge($fxExchange, ['label' => 'Converted currency'])];
         if ($paySupplier) { $tiles[] = ['icon' => 'dollar', 'title' => 'Paid a supplier', 'sub' => 'On account — reduces what you owe them', 'tone' => 'out', 'action' => array_merge($paySupplier, ['label' => 'Pay supplier'])]; }
         $tiles[] = ['icon' => 'send', 'title' => 'Paid an expense / someone', 'sub' => 'Transport, salary, rent — to a person or shop', 'tone' => 'out', 'action' => $evExpense];

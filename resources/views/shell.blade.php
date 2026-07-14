@@ -1023,7 +1023,15 @@ function formModal(a){
     if(a.pathMap && a.pathMap.field && a.pathMap.map){ const sel=body[a.pathMap.field]; const mapped=a.pathMap.map[sel];
       if(!mapped){ toast(a.pathMap.error||'Please choose a valid option',true); return; }
       ep=mapped; delete body[a.pathMap.field]; }
-    closeM(); const res=await post(ep,body); toast(res.ok?(res.message||'Saved'):(res.message||res.error||'Error'), !res.ok); refresh(); };
+    // valueMap: translate a picked display value into the real value to send (e.g. "SO-12 · Shop 58 · owes …" → order id).
+    if(a.valueMap && a.valueMap.field && a.valueMap.map){ const sel=body[a.valueMap.field]; const mapped=a.valueMap.map[sel];
+      if(mapped===undefined || mapped===null){ toast(a.valueMap.error||'Please pick a valid option from the list',true); return; }
+      const into=a.valueMap.into||a.valueMap.field; body[into]=mapped; if(into!==a.valueMap.field) delete body[a.valueMap.field]; }
+    closeM(); const res=await post(ep,body);
+    // onResult:'payment' — surface the customer's remaining balance right here instead of a generic "Saved".
+    let msg=res.message;
+    if(a.onResult==='payment' && res.ok){ msg = (res.state==='paid') ? ('✓ '+(res.order_no||'Order')+' paid in full') : ((res.order_no||'Order')+' — balance left: '+Number(res.balance||0).toLocaleString()); }
+    toast(res.ok?(msg||'Saved'):(msg||res.error||'Error'), !res.ok); refresh(); };
 }
 function renderGal(k){
   const el=document.getElementById('gal_'+k); if(!el) return; const urls=window.GAL[k]||[];
