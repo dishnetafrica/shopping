@@ -144,10 +144,11 @@ final class PaymentCapability implements ObjectCapability
             return ['ok' => false, 'error' => 'not_found'];
         }
         $doc = app(ReceiptRenderer::class)->pdf($ctx->tenant, $p);
-        if (! $doc) {
+        if (! $doc || ($doc['b64'] ?? '') === '') {
             return ['ok' => false, 'error' => 'pdf_unavailable', 'message' => 'The PDF engine is not available on this server.'];
         }
 
-        return ['ok' => true, 'url' => $doc['url'], 'message' => 'Receipt ' . $doc['no'] . ' ready.'];
+        // Return base64 so the browser downloads directly (independent of the server's public URL host).
+        return ['ok' => true, 'pdf_b64' => $doc['b64'], 'filename' => $doc['fileName'] ?? ('Receipt-' . $doc['no'] . '.pdf'), 'message' => 'Receipt ' . $doc['no'] . ' downloaded.'];
     }
 }
