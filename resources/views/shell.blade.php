@@ -413,9 +413,35 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 .cellflex{display:flex;align-items:center;gap:11px}
 .av-s{width:32px;height:32px;border-radius:8px;display:inline-grid;place-items:center;color:#fff;font-weight:700;font-size:11.5px;flex:none}
 
+/* account menu (top-right) + mobile nav toggle */
+.hamb{display:none;background:none;border:none;cursor:pointer;color:var(--muted);padding:6px;border-radius:8px;flex:none}
+.hamb:hover{background:var(--surface-2)}
+.acct{position:relative;flex:none}
+.acct-btn{display:flex;align-items:center;gap:8px;background:none;border:1px solid var(--line);border-radius:9px;padding:5px 9px 5px 6px;cursor:pointer;color:var(--ink,#1b211d)}
+.acct-btn:hover{background:var(--surface-2)}
+.acct-btn .av{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#16a34a,#0d9488);display:grid;place-items:center;color:#fff;font-weight:700;font-size:12px}
+.acct-btn .nm{font-size:13px;font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-menu{position:absolute;top:calc(100% + 6px);right:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px #0000001f;min-width:210px;padding:6px;z-index:60;display:none}
+.acct-menu.on{display:block}
+.acct-menu .who{padding:9px 10px 8px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.acct-menu .who .n{font-weight:700;font-size:13.5px}
+.acct-menu .who .s{font-size:11.5px;color:var(--muted);text-transform:capitalize;margin-top:1px}
+.acct-menu button{display:flex;align-items:center;gap:9px;width:100%;background:none;border:none;text-align:left;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13.5px;color:var(--ink,#1b211d)}
+.acct-menu button:hover{background:var(--surface-2)}
+.acct-menu button.dgr{color:#b91c1c}
+.scrim{display:none;position:fixed;inset:0;background:#0006;z-index:40}
+.scrim.on{display:block}
 @media(max-width:880px){
-  .app{grid-template-columns:1fr}.side{display:none}
+  .app{grid-template-columns:1fr}
+  .side{display:none;position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);z-index:50}
+  .app.navopen .side{display:flex}
   .rec{grid-template-columns:1fr}
+  .hamb{display:grid;place-items:center}
+  .top{gap:8px;padding:0 12px}
+  .sb{max-width:none;min-width:0}
+  .curpick{display:none}          /* reporting-currency toggle is desktop-only; base currency still applies */
+  .acct-btn .nm{display:none}
+  .acct-btn{padding:5px 6px}
 }
 </style>
 </head>
@@ -428,6 +454,7 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
   </aside>
   <div class="main">
     <header class="top">
+      <button class="hamb" onclick="toggleNav()" title="Menu" aria-label="Menu"><svg class="ic" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
       <div class="sb">
         <svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
         <input id="search" placeholder="Open a record…  e.g. customer 5">
@@ -435,11 +462,23 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
       <div class="sp"></div>
       <div class="curpick" id="curpick" title="How money is shown across reports"></div>
       <button class="tbtn" onclick="refresh()" title="Refresh"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
+      <div class="acct">
+        <button class="acct-btn" onclick="toggleAcct(event)" title="Account">
+          <span class="av" id="acctav">U</span><span class="nm" id="acctnm">User</span>
+          <svg class="ic ic-sm" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="acct-menu" id="acctMenu">
+          <div class="who"><div class="n" id="acctwho">User</div><div class="s" id="acctrole"></div></div>
+          <button onclick="location.href='/panel'"><svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M4 4h16v12H4zM2 20h20"/></svg>Open classic panel</button>
+          <button class="dgr" onclick="signOut()"><svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign out</button>
+        </div>
+      </div>
     </header>
     <main class="view"><div class="wrap" id="view"></div></main>
   </div>
 </div>
 <div class="ov" id="ov"><div class="modal" id="modal"></div></div>
+<div class="scrim" id="scrim" onclick="closeNav()"></div>
 <div id="toasts"></div>
 
 <script>
@@ -575,6 +614,11 @@ async function boot(){
   document.getElementById('url').textContent = (CFG.user.role||'') + (CFG.user.org ? ' · ' + CFG.user.org : '');
   document.getElementById('uav').textContent = initials(nm);
   document.getElementById('uav').style.background = 'linear-gradient(135deg,#16a34a,#0d9488)';
+  // top-bar account menu (always visible, incl. mobile)
+  document.getElementById('acctav').textContent = initials(nm);
+  document.getElementById('acctnm').textContent = nm;
+  document.getElementById('acctwho').textContent = nm;
+  document.getElementById('acctrole').textContent = (CFG.user.role||'') + (CFG.user.org ? ' · ' + CFG.user.org : '');
   renderNav(cat.capabilities||[]);
   const h = parseHash();
   route(h.key || landingKey(), h.id);
@@ -637,6 +681,7 @@ async function route(key, id){
   // Normalise id to null (not undefined) so the hashchange guard (which compares against parseHash's
   // null id) doesn't fire a spurious second route that re-renders and wipes a just-applied filter.
   id = id != null ? id : null;
+  closeNav();
   CUR={key,id}; REC_TAB='overview'; location.hash='#/'+key+(id?'/'+id:''); setActive(key);
   if(SOON[key] && !id){ renderSoon(key); return; }
   document.getElementById('view').innerHTML=skeleton();
@@ -659,6 +704,12 @@ function renderSoon(key){
     '</div></div>';
 }
 function refresh(){ if(CUR.key) route(CUR.key, CUR.id); }
+/* Mobile nav drawer + top-bar account menu (Sign out / classic panel). */
+function toggleNav(){ const a=document.querySelector('.app'); const open=a.classList.toggle('navopen'); document.getElementById('scrim').classList.toggle('on',open); }
+function closeNav(){ document.querySelector('.app').classList.remove('navopen'); document.getElementById('scrim').classList.remove('on'); }
+function toggleAcct(e){ if(e) e.stopPropagation(); document.getElementById('acctMenu').classList.toggle('on'); }
+function signOut(){ if(window.confirm('Sign out of CloudBSS?')) location.href='/panel/logout'; }
+document.addEventListener('click',e=>{ if(!e.target.closest('.acct')) document.getElementById('acctMenu').classList.remove('on'); });
 
 function skeleton(){ return '<div class="sk sk-head"></div><div class="kpis"><div class="sk sk-kpi"></div><div class="sk sk-kpi"></div><div class="sk sk-kpi"></div></div><div class="sk sk-card"></div>'; }
 function emptyState(ic,h,s){ return '<div class="empty"><div class="eic">'+icon(ic,'ic-lg')+'</div><h4>'+esc(h)+'</h4><div>'+esc(s||'')+'</div></div>'; }
