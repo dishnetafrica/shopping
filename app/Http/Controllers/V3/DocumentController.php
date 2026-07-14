@@ -121,9 +121,10 @@ final class DocumentController extends Controller
             abort(401);
         }
         $svc = app(CashbookExport::class);
-        $data = $svc->collect($t, $r->user(), (string) $r->query('from', ''), (string) $r->query('to', ''), (string) $r->query('currency', ''));
+        $company = strtolower((string) $r->query('view', '')) === 'company';
+        $data = $svc->collect($t, $r->user(), (string) $r->query('from', ''), (string) $r->query('to', ''), (string) $r->query('currency', ''), $company);
         $stamp = now()->format('Ymd-Hi');
-        $tag = ! empty($data['currency']) ? ('-' . $data['currency']) : '';
+        $tag = $company ? '-Company-USD' : (! empty($data['currency']) ? ('-' . $data['currency']) : '');
 
         if (strtolower((string) $r->query('format', 'pdf')) === 'csv') {
             return response($svc->csv($data), 200, [
