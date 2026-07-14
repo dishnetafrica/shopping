@@ -199,33 +199,77 @@ final class CashbookCapability implements ProcessCapability
             $supNames[] = $label; $supMap[$label] = '/papi/suppliers/' . $s->id . '/pay';
         }
 
-        // --- actions (in/out, exchange, transfer) ---
-        $addCash = ['key' => 'add_cash', 'label' => 'Add cash entry', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'primary',
-            'schema' => ['dir' => 'enum:in,out', 'currency' => 'enum:UGX,USD,SSP', 'native_amount' => 'money', 'rate_to_usd' => 'number', 'category' => 'combo:' . self::CATEGORIES, 'holder' => 'text', 'note' => 'text'],
+        // --- "smart pick-list" of people the business actually deals with (team logins + anyone
+        //     who has ever held cash, e.g. Jayesh bhai). combo: = tap-to-pick OR type a new name. ---
+        $members = User::where('tenant_id', $t)->orderBy('name')->pluck('name')->map(fn ($n) => trim((string) $n))->filter()->values()->all();
+        $peopleList = collect(array_keys($holders))->merge($members)
+            ->map(fn ($n) => trim(str_replace('|', ' ', (string) $n)))
+            ->filter(fn ($n) => $n !== '' && strcasecmp($n, 'Unassigned') !== 0)
+            ->unique(fn ($n) => mb_strtolower($n))->values()->all();
+        if ($me !== '') { $peopleList = array_values(array_unique(array_merge([$me], $peopleList))); }
+        $supRaw = Supplier::where('tenant_id', $t)->orderBy('name')->pluck('name')->map(fn ($n) => trim(str_replace('|', ' ', (string) $n)))->filter()->all();
+        $payeeList = collect($peopleList)->merge($supRaw)->unique(fn ($n) => mb_strtolower($n))->values()->all();
+        $comboPeople = 'combo:' . (count($peopleList) ? implode('|', $peopleList) : ($me ?: 'Me'));
+        $comboPayee = 'combo:' . (count($payeeList) ? implode('|', $payeeList) : ($me ?: 'Me'));
+        $expCats = 'Transport|Salary|Rent|Utilities|Local purchase|Expense|Drawing|Other';
+
+        // --- granular actions (kept in Quick actions for power users) ---
+        $addCash = ['key' => 'add_cash', 'label' => 'Add cash entry', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['dir' => 'enum:in,out', 'currency' => 'enum:UGX,USD,SSP', 'native_amount' => 'money', 'rate_to_usd' => 'number', 'category' => 'combo:' . self::CATEGORIES, 'holder' => $comboPeople, 'note' => 'text'],
+            'labels' => ['dir' => 'In or out', 'native_amount' => 'Amount', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => 'Held by', 'category' => 'Category', 'note' => 'Note'],
             'prefill' => ['dir' => 'in', 'currency' => 'UGX', 'rate_to_usd' => (int) round($ugx), 'holder' => $me],
             'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]];
         $fxExchange = ['key' => 'fx_exchange', 'label' => 'Currency exchange', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook/convert', 'actor' => 'human', 'tone' => 'default',
-            'schema' => ['from_currency' => 'enum:USD,UGX,SSP', 'to_currency' => 'enum:UGX,USD,SSP', 'from_amount' => 'money', 'rate' => 'number', 'holder' => 'text', 'note' => 'text'],
-            'prefill' => ['from_currency' => 'USD', 'to_currency' => 'UGX', 'rate' => (int) round($ugx), 'holder' => $me]];
-        $members = User::where('tenant_id', $t)->orderBy('name')->pluck('name')->map(fn ($n) => trim((string) $n))->filter()->unique()->values()->all();
-        $transfer = count($members) >= 2 ? ['key' => 'cash_transfer', 'label' => 'Transfer cash', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook/transfer', 'actor' => 'human', 'tone' => 'default',
-            'schema' => ['from_person' => 'enum:' . implode(',', $members), 'to_person' => 'enum:' . implode(',', $members), 'currency' => 'enum:UGX,USD,SSP', 'amount' => 'money', 'note' => 'text'],
-            'prefill' => ['from_person' => $members[0], 'to_person' => $members[1]]] : null;
+            'schema' => ['from_amount' => 'money', 'from_currency' => 'enum:USD,UGX,SSP', 'to_currency' => 'enum:UGX,USD,SSP', 'rate' => 'number', 'holder' => $comboPeople, 'note' => 'text'],
+            'labels' => ['from_amount' => 'Amount to convert', 'from_currency' => 'From', 'to_currency' => 'To', 'rate' => 'Rate', 'holder' => 'Held by', 'note' => 'Note'],
+            'prefill' => ['from_currency' => 'USD', 'to_currency' => 'UGX', 'rate' => (int) round($ugx), 'holder' => $me],
+            'autoRate' => ['field' => 'rate', 'source' => 'to_currency', 'map' => $rateMap]];
+        $transfer = count($peopleList) >= 2 ? ['key' => 'cash_transfer', 'label' => 'Transfer cash', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook/transfer', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['from_person' => $comboPeople, 'to_person' => $comboPeople, 'currency' => 'enum:UGX,USD,SSP', 'amount' => 'money', 'note' => 'text'],
+            'labels' => ['from_person' => 'From (who gave)', 'to_person' => 'To (who received)', 'amount' => 'Amount', 'note' => 'Note'],
+            'prefill' => ['from_person' => $peopleList[0], 'to_person' => $peopleList[1] ?? '', 'currency' => 'UGX']] : null;
         $paySupplier = ($canPay && count($supNames)) ? ['key' => 'pay_supplier', 'label' => 'Pay supplier', 'method' => 'POST', 'endpoint' => $supMap[$supNames[0]], 'actor' => 'human', 'tone' => 'default',
             'schema' => ['supplier' => 'enum:' . implode(',', $supNames), 'currency' => 'enum:UGX,USD,SSP', 'amount' => 'money', 'rate_to_usd' => 'number', 'note' => 'text'],
+            'labels' => ['supplier' => 'Supplier', 'amount' => 'Amount paid', 'rate_to_usd' => 'Rate (native per $1)', 'note' => 'Note'],
             'prefill' => ['supplier' => $supNames[0], 'currency' => 'UGX', 'rate_to_usd' => (int) round($ugx)],
             'pathMap' => ['field' => 'supplier', 'map' => $supMap, 'error' => 'Pick a supplier from the list'],
             'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]] : null;
+
+        // --- guided recorder sub-actions (plain language; each fills only what its event needs) ---
+        $evReceived = ['key' => 'ev_received', 'label' => 'Money received', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'primary',
+            'schema' => ['native_amount' => 'money', 'currency' => 'enum:USD,UGX,SSP', 'rate_to_usd' => 'number', 'holder' => $comboPeople, 'note' => 'text'],
+            'labels' => ['native_amount' => 'Amount received', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => 'Held by (who has the cash now)', 'note' => 'From / source (e.g. Juba via Jayesh bhai)'],
+            'prefill' => ['currency' => 'USD', 'rate_to_usd' => 1, 'holder' => $me],
+            'body' => ['dir' => 'in', 'category' => 'Funding'],
+            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]];
+        $evExpense = ['key' => 'ev_expense', 'label' => 'Paid an expense / someone', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['native_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'category' => 'combo:' . $expCats, 'note' => $comboPayee, 'holder' => $comboPeople],
+            'labels' => ['native_amount' => 'Amount paid', 'rate_to_usd' => 'Rate (native per $1)', 'category' => 'What for', 'note' => 'Paid to (person or shop)', 'holder' => 'From whose cash'],
+            'prefill' => ['currency' => 'UGX', 'rate_to_usd' => (int) round($ugx), 'category' => 'Transport', 'holder' => $me],
+            'body' => ['dir' => 'out'],
+            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]];
+        $goOrders = ['key' => 'go_orders', 'label' => 'Customer paid', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/salesOrders', 'actor' => 'human'];
+
+        $tiles = [];
+        $tiles[] = ['icon' => 'download', 'title' => 'Money received', 'sub' => 'Cash in — funding, or from an agent', 'tone' => 'in', 'action' => $evReceived];
+        $tiles[] = ['icon' => 'user', 'title' => 'Customer paid', 'sub' => 'Against their order — shows remaining balance', 'tone' => 'in', 'action' => $goOrders];
+        $tiles[] = ['icon' => 'trend', 'title' => 'Converted currency', 'sub' => 'e.g. $2,000 → UGX at your rate', 'tone' => 'move', 'action' => array_merge($fxExchange, ['label' => 'Converted currency'])];
+        if ($paySupplier) { $tiles[] = ['icon' => 'dollar', 'title' => 'Paid a supplier', 'sub' => 'On account — reduces what you owe them', 'tone' => 'out', 'action' => array_merge($paySupplier, ['label' => 'Pay supplier'])]; }
+        $tiles[] = ['icon' => 'send', 'title' => 'Paid an expense / someone', 'sub' => 'Transport, salary, rent — to a person or shop', 'tone' => 'out', 'action' => $evExpense];
+        if ($transfer) { $tiles[] = ['icon' => 'chev', 'title' => 'Moved cash between people', 'sub' => 'Hand cash from one person to another', 'tone' => 'move', 'action' => array_merge($transfer, ['label' => 'Move cash between people'])]; }
+
+        $record = ['key' => 'record_activity', 'label' => 'Record activity', 'actor' => 'human', 'tone' => 'primary', 'chooser' => $tiles];
         $exportAct = ['key' => 'export', 'label' => 'Export', 'href' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'default'];
 
-        $actions = array_values(array_filter([$addCash, $fxExchange, $transfer, $paySupplier]));
+        $headerActions = array_values(array_filter([$record, $paySupplier]));
+        $actions = array_values(array_filter([$record, $addCash, $fxExchange, $transfer, $paySupplier]));
 
         return (new WorkspacePayload)
             ->object(['type' => 'process:cashbook', 'title' => 'Cashbook', 'subtitle' => $isOwner ? 'Cash position, who holds what, and every movement' : 'My cash'])
             ->headline(Money::fmt($combinedUsd, 'USD'), 'combined cash (USD)', $combinedUsd < -0.01 ? 'danger' : 'ok')
             ->brief(new Brief('low',
                 'You hold ' . Money::fmt(round($pos['UGX']['native'], 2), 'UGX') . ', ' . Money::fmt(round($pos['USD']['native'], 2), 'USD') . ' and ' . Money::fmt(round($pos['SSP']['native'], 2), 'SSP') . '.',
-                'Record cash in/out, exchange between currencies, or transfer cash between people. Every entry updates the position instantly.',
+                'Tap "Record activity" and pick what happened — money received, converted, paid to a supplier or person, or handed between people. Every entry updates the position instantly.',
                 ['tone' => 'info', 'label' => count($holderRows) . ' holding cash']))
             ->financials($financials)
             ->quickActions($actions)
@@ -235,7 +279,7 @@ final class CashbookCapability implements ProcessCapability
                 ['key' => 'entries', 'label' => 'All entries', 'count' => count($entryRows)],
                 ['key' => 'payables', 'label' => 'Suppliers you owe', 'count' => count($payRows)],
             ])
-            ->actions($actions)
+            ->actions($headerActions)
             ->more([$exportAct])
             ->meta(['capability' => 'cashbook', 'ttl' => 15, 'layout' => 'record', 'listKey' => 'cashbook', 'permissions' => ['menu:finance']]);
     }

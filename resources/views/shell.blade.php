@@ -337,6 +337,16 @@ svg{display:block}
 .modal .h .x:hover{background:var(--line-2);color:var(--ink)}
 .modal .b{padding:20px}
 .modal .f{display:flex;gap:9px;justify-content:flex-end;padding:15px 20px;border-top:1px solid var(--line);background:var(--surface-2);border-radius:0 0 var(--radius-lg) var(--radius-lg)}
+.chgrid{display:flex;flex-direction:column;gap:9px}
+.chtile{display:flex;align-items:center;gap:13px;width:100%;text-align:left;padding:13px 14px;border:1px solid var(--line);border-radius:11px;background:var(--surface);cursor:pointer;transition:.13s}
+.chtile:hover{border-color:var(--brand);background:var(--brand-wash);transform:translateY(-1px)}
+.chic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;flex:none;background:var(--line-2);color:var(--ink-2)}
+.chic .ic{width:20px;height:20px}
+.chic.chin{background:#dcfce7;color:#16a34a}.chic.chout{background:#fee2e2;color:#dc2626}.chic.chmove{background:#e0e7ff;color:#4f46e5}
+.chtx{display:flex;flex-direction:column;min-width:0;flex:1}
+.chtx .cht{font-weight:650;font-size:14.5px;color:var(--ink)}
+.chtx .chs{font-size:12.5px;color:var(--muted);margin-top:1px}
+.chtile .chev{width:18px;height:18px;color:var(--muted);flex:none}
 .fld{margin-bottom:14px}.fld:last-child{margin-bottom:0}
 .fld label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:6px;text-transform:capitalize}
 .fld input,.fld select{width:100%;height:39px;border:1px solid var(--line);border-radius:7px;padding:0 11px;background:var(--surface);transition:.15s}
@@ -933,6 +943,7 @@ function actBtn(a){ const cls=a.actor==='ai'?'btn ai':('btn'+(a.tone==='primary'
   return '<button class="'+cls+'" onclick=\'doAction('+JSON.stringify(a).replace(/'/g,"&#39;")+')\'>'+(a.actor==='ai'?'✦ ':'')+esc(a.label)+'</button>'; }
 async function doAction(a){
   if(a.href){ try{ window.open(a.href,'_blank'); }catch(e){ location.href=a.href; } return; }
+  if(a.chooser){ return chooserModal(a); }
   if((a.method||'POST')==='GET'){ const h=apiToHash(a.endpoint); if(h){ route(h.key,h.id); } return; }
   if(a.builder==='quotation'){ return quoteBuilder(a); }
   if(a.schema){ return formModal(a); }
@@ -957,12 +968,26 @@ function downloadB64(b64,filename){
     setTimeout(()=>URL.revokeObjectURL(url),5000);
   }catch(e){ toast('Could not open the PDF', true); }
 }
+// Guided "What happened?" recorder: a tile picker. Each tile carries its own action (a form),
+// so the user taps the event first, then only fills the few fields that event needs.
+function chooserModal(a){
+  window.__CHOOSER__=(a.chooser||[]).map(t=>t.action);
+  const tiles=(a.chooser||[]).map((t,i)=>
+    '<button type="button" class="chtile" onclick="chooserPick('+i+')">'+
+    '<span class="chic '+(t.tone==='in'?'chin':(t.tone==='out'?'chout':(t.tone==='move'?'chmove':'')))+'">'+icon(t.icon||'dots','')+'</span>'+
+    '<span class="chtx"><span class="cht">'+esc(t.title)+'</span>'+(t.sub?'<span class="chs">'+esc(t.sub)+'</span>':'')+'</span>'+
+    '<svg class="ic chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>').join('');
+  document.getElementById('modal').innerHTML='<div class="h">'+esc(a.label||'What happened?')+'<button class="x" onclick="closeM()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>'+
+    '<div class="b"><div class="chgrid">'+tiles+'</div></div>';
+  document.getElementById('ov').classList.add('on');
+}
+function chooserPick(i){ const act=(window.__CHOOSER__||[])[i]; closeM(); if(act) setTimeout(()=>doAction(act),60); }
 window.GAL={};
 function formModal(a){
   const pf=a.prefill||{};
   window.GAL={};
   let fields=''; Object.entries(a.schema).forEach(([k,type])=>{
-    const lbl=k.replace(/_/g,' '); const val=pf[k]!=null?String(pf[k]):'';
+    const lbl=(a.labels&&a.labels[k]!=null)?a.labels[k]:k.replace(/_/g,' '); const val=pf[k]!=null?String(pf[k]):'';
     if(type==='gallery'){
       window.GAL[k]=Array.isArray(pf[k])?pf[k].slice():[];
       fields+='<div class="fld"><label>'+lbl+' <span class="mut" style="font-weight:400">(first photo is the main one)</span></label><div class="gallery" id="gal_'+k+'"></div>'+
