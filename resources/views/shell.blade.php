@@ -243,6 +243,9 @@ svg{display:block}
 .qb-cur{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:8px}
 .qb-cur select{height:34px;border:1px solid var(--line);border-radius:7px;padding:0 8px;background:#fff}
 .qb-tot{font-size:13px;color:var(--muted)}.qb-tot b{font-size:20px;color:var(--ink);margin-left:8px;font-variant-numeric:tabular-nums}
+.qb-adj{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap}
+.qb-adj label{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.qb-adj input{width:120px;height:34px;border:1px solid var(--line);border-radius:7px;padding:0 10px;background:#fff;text-align:right;font-variant-numeric:tabular-nums}
 .qb-wa{display:flex;align-items:center;gap:9px;margin-top:14px;font-size:13px;color:var(--ink-2)}
 .qb-wa input{width:16px;height:16px}
 .qb-custwrap{margin-bottom:14px}
@@ -1030,6 +1033,8 @@ function quoteBuilder(a){
     '<div class="b">'+custBlock+
       '<div class="qb-pick"><input id="qbq" placeholder="Search products to add…" autocomplete="off" oninput="qbSearch()"><div class="qb-res" id="qbres"></div></div>'+
       '<div id="qblines"></div>'+
+      (invoice?'<div class="qb-adj"><label>Discount <input id="qbdisc" type="number" min="0" step="0.01" value="0" oninput="qbTotal()"></label>'+
+        '<label>Delivery / freight <input id="qbfrt" type="number" min="0" step="0.01" value="0" oninput="qbTotal()"></label></div>':'')+
       '<div class="qb-bar"><label class="qb-cur">Currency <select id="qbcur" onchange="qbCur()">'+curOpts+'</select></label>'+
         '<div class="qb-tot">Total <b id="qbtot">'+esc(curFmt(0,cur))+'</b></div></div>'+
       waBlock+
@@ -1088,8 +1093,11 @@ function qbRender(){
       '<button class="qb-x" onclick="qbDel('+i+')">'+icon('x','ic-sm')+'</button></div>').join(''); }
   qbTotal();
 }
+function qbNum(id){ const el=document.getElementById(id); return el?(Math.max(0,parseFloat(el.value||'0')||0)):0; }
 function qbTotal(){ let t=0; window.QB.lines.forEach((l,i)=>{ const a=l.qty*l.price; t+=a; const el=document.getElementById('qbamt'+i); if(el) el.textContent=curFmt(a,window.QB.cur); });
-  const tot=document.getElementById('qbtot'); if(tot) tot.textContent=curFmt(t,window.QB.cur);
+  let grand=t;
+  if(window.QB.invoice){ grand=Math.max(0, t - qbNum('qbdisc') + qbNum('qbfrt')); }
+  const tot=document.getElementById('qbtot'); if(tot) tot.textContent=curFmt(grand,window.QB.cur);
   const ok=document.getElementById('qbok'); if(ok) ok.disabled=window.QB.lines.length===0 || (window.QB.pick && !window.QB.customerId);
 }
 async function qbSubmit(){
@@ -1098,6 +1106,7 @@ async function qbSubmit(){
   if(window.QB.invoice){
     // Issue a numbered invoice via the panel's proven /papi/invoice-issue (customer + line items).
     const body={ customer:window.QB.customerName||'', phone:window.QB.customerPhone||'', currency:window.QB.cur,
+      discount:qbNum('qbdisc'), delivery:qbNum('qbfrt'),
       lines:JSON.stringify(window.QB.lines.map(l=>({name:l.name,qty:l.qty,unit:l.price,uom:l.unit||''}))) };
     ok.disabled=true; ok.textContent='Issuing…';
     const res=await post(a.endpoint,body); closeQB();
