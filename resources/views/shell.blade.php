@@ -433,19 +433,19 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 const CFG = { base:'/api/v1/workspace', csrf: document.querySelector('meta[name=csrf-token]').content, user: @json(['name'=>'']) };
 const LABELS = { setup:'Get started', briefing:'Morning Briefing', worklist:'My Work', customers:'Customers', collections:'Collections',
   salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance',
-  products:'Products', categories:'Categories', 'purchase.process':'Purchasing', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch',
+  products:'Products', categories:'Categories', 'purchase.process':'Purchasing', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
   salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings' };
 const GROUPS = [ ['Overview',['setup','briefing','worklist']],
   ['Sales',['customers','salesOrders','quotations','invoices','payments','collections']],
   ['Inventory',['products','categories','purchase.process','suppliers']],
   ['Operations',['warehouse','dispatch']],
-  ['Finance',['finance']],
+  ['Finance',['finance','cashbook']],
   ['Settings',['settings']] ];
 // Which nav key reads which count from the catalog's counts map.
 const NAVCOUNT = { customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['setup','briefing','worklist','customers','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','collections','finance','warehouse','dispatch','settings']);
+const READY = new Set(['setup','briefing','worklist','customers','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','collections','finance','warehouse','dispatch','settings','cashbook']);
 // Dedicated list views still pending — none; kept for future additions.
 const SOON = {};
 function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:1)+'k' : String(n); }
@@ -457,6 +457,7 @@ const P = {
   settings:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
   collections:'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
   finance:'M3 3v18h18M7 14l4-4 3 3 5-6', 'sales.process':'M3 3v18h18M18 9l-6 6-4-4-3 3',
+  cashbook:'M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM2 10h20M16 15h2',
   'purchase.process':'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
   warehouse:'M3 9l9-6 9 6v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM9 21V9h6v12',
   dispatch:'M1 3h15v13H1zM16 8h4l3 3v5h-7M5.5 18.5a2 2 0 1 0 0 .01M18.5 18.5a2 2 0 1 0 0 .01',
@@ -984,6 +985,11 @@ function formModal(a){
   document.getElementById('modal').innerHTML='<div class="h">'+esc(a.label)+'<button class="x" onclick="closeM()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><div class="b">'+fields+'</div><div class="f"><button class="btn" onclick="closeM()">Cancel</button><button class="btn pri" id="mok">Save</button></div>';
   document.getElementById('ov').classList.add('on');
   Object.entries(a.schema).forEach(([k,type])=>{ if(type==='gallery') renderGal(k); });
+  // Auto-fill a rate field from a source select (e.g. currency → rate_to_usd) so the user can't mismatch them.
+  if(a.autoRate && a.autoRate.field && a.autoRate.source && a.autoRate.map){
+    const src=document.getElementById('f_'+a.autoRate.source), tgt=document.getElementById('f_'+a.autoRate.field);
+    if(src&&tgt){ const apply=()=>{ const v=a.autoRate.map[src.value]; if(v!=null) tgt.value=v; }; src.addEventListener('change',apply); apply(); }
+  }
   document.getElementById('mok').onclick=async()=>{ const body=Object.assign({}, a.body||{});
     Object.entries(a.schema).forEach(([k,type])=>{ if(type==='gallery'){ body[k]=window.GAL[k]||[]; } else { const el=document.getElementById('f_'+k); if(el) body[k]=el.value; } });
     closeM(); const res=await post(a.endpoint,body); toast(res.ok?(res.message||'Saved'):(res.message||res.error||'Error'), !res.ok); refresh(); };
