@@ -65,6 +65,9 @@ final class LeadListCapability implements ProcessCapability
             $btns = [];
             if ($canEdit) {
                 $btns[] = ['icon' => 'edit', 'title' => 'Edit lead', 'action' => $this->editForm($l, $comboAssignee, $phoneByName, $nameByPhone)];
+                if (count($recipNames)) {
+                    $btns[] = ['icon' => 'customer', 'title' => 'Assign', 'action' => $this->assignForm($l->id, $name, $recipNames, $phoneByName, $assignedName)];
+                }
                 if (! in_array($status, ['won', 'lost'], true)) {
                     $btns[] = ['icon' => 'check', 'title' => 'Mark won', 'action' => $this->quick($l->id, 'won', 'Mark ' . $name . ' as WON?')];
                     $btns[] = ['icon' => 'trash', 'title' => 'Mark lost', 'tone' => 'danger', 'action' => $this->quick($l->id, 'lost', 'Mark ' . $name . ' as lost?')];
@@ -149,6 +152,24 @@ final class LeadListCapability implements ProcessCapability
                 'lead_score' => (int) $l->lead_score, 'tag' => (string) $l->tag, 'next_followup' => $fu, 'notes' => (string) $l->notes,
             ],
             'body' => ['id' => $l->id]];
+    }
+
+    /**
+     * Assign / reassign / unassign a lead. The recipient combo is a required pick (valueMap → phone);
+     * choosing "— Unassign —" sends an empty assigned_to, which the panel endpoint treats as clearing it.
+     */
+    private function assignForm(int $id, string $name, array $recipNames, array $phoneByName, string $currentAssignee): array
+    {
+        $unassign = '— Unassign —';
+        $options = array_merge([$unassign], $recipNames);
+        $map = array_merge([$unassign => ''], $phoneByName);
+
+        return ['key' => 'assign_lead', 'label' => 'Assign ' . $name, 'queryWrite' => true, 'method' => 'GET', 'endpoint' => '/papi/lead-action', 'actor' => 'human', 'tone' => 'primary',
+            'schema' => ['assignee' => 'combo:' . implode('|', $options)],
+            'labels' => ['assignee' => 'Assign to (salesperson)'],
+            'prefill' => ['assignee' => $currentAssignee ?: $unassign],
+            'body' => ['id' => $id, 'action' => 'assign'],
+            'valueMap' => ['field' => 'assignee', 'into' => 'assigned_to', 'map' => $map, 'error' => 'Pick a salesperson from the list.']];
     }
 
     private function quick(int $id, string $action, string $confirm): array
