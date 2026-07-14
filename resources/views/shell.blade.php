@@ -1019,6 +1019,17 @@ function formModal(a){
     const src=document.getElementById('f_'+a.autoRate.source), tgt=document.getElementById('f_'+a.autoRate.field);
     if(src&&tgt){ const apply=()=>{ const v=a.autoRate.map[src.value]; if(v!=null) tgt.value=v; }; src.addEventListener('change',apply); apply(); }
   }
+  // autoNote: auto-write the description from the other fields (editable; stops auto-updating once the user types).
+  if(a.autoNote && a.autoNote.template){
+    const nf=document.getElementById('f_note');
+    if(nf){
+      let touched = !!(a.prefill && a.prefill.note!=null && String(a.prefill.note)!=='');
+      const render=()=>a.autoNote.template.replace(/\{(\w+)\}/g,(m,k)=>{ const el=document.getElementById('f_'+k); const v=el?el.value:((a.prefill&&a.prefill[k])||''); return (v==null?'':String(v)); }).replace(/\s+/g,' ').replace(/\s+—\s*$/,'').trim();
+      if(!touched){ nf.value=render(); }
+      nf.addEventListener('input',()=>{ touched=true; });
+      (a.autoNote.watch||[]).forEach(k=>{ const el=document.getElementById('f_'+k); if(el){ ['change','input'].forEach(ev=>el.addEventListener(ev,()=>{ if(!touched) nf.value=render(); })); } });
+    }
+  }
   // Live preview: show a computed result (e.g. amount × rate) that updates as the user types.
   if(a.preview && a.preview.left && a.preview.right){
     const pv=document.createElement('div'); pv.className='fpreview'; pv.id='fpv';

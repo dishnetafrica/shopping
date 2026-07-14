@@ -232,7 +232,8 @@ final class CashbookCapability implements ProcessCapability
             'schema' => ['dir' => 'enum:in,out', 'currency' => 'enum:UGX,USD,SSP', 'native_amount' => 'money', 'rate_to_usd' => 'number', 'category' => 'combo:' . self::CATEGORIES, 'holder' => $comboPeople, 'note' => 'text'],
             'labels' => ['dir' => 'In or out', 'native_amount' => 'Amount', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => 'Held by', 'category' => 'Category', 'note' => 'Note'],
             'prefill' => ['dir' => 'in', 'currency' => 'UGX', 'rate_to_usd' => (int) round($ugx), 'holder' => $me],
-            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]];
+            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
+            'autoNote' => ['template' => '{category}', 'watch' => ['category', 'dir']]];
         $fxExchange = ['key' => 'fx_exchange', 'label' => 'Currency exchange', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook/convert', 'actor' => 'human', 'tone' => 'default', 'flow' => 'convert',
             'schema' => ['from_amount' => 'money', 'from_currency' => 'enum:USD,UGX,SSP', 'to_currency' => 'enum:UGX,USD,SSP', 'rate' => 'number', 'holder' => $comboPeople, 'receiver' => $comboPeople, 'note' => 'text'],
             'labels' => ['from_amount' => 'Amount to convert', 'from_currency' => 'From', 'to_currency' => 'To', 'rate' => 'Rate', 'holder' => 'Whose cash goes out (spends the From)', 'receiver' => 'Who gets the converted money (blank = same person)', 'note' => 'Note'],
@@ -245,19 +246,21 @@ final class CashbookCapability implements ProcessCapability
             'prefill' => ['from_person' => $peopleList[0], 'to_person' => $peopleList[1] ?? '', 'currency' => 'UGX']] : null;
         $paySupplier = ($canPay && count($supNames)) ? ['key' => 'pay_supplier', 'label' => 'Pay supplier', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'default',
             'schema' => ['supplier' => 'enum:' . implode(',', $supNames), 'currency' => 'enum:UGX,USD,SSP', 'amount' => 'money', 'rate_to_usd' => 'number', 'holder' => $comboPeople, 'note' => 'text'],
-            'labels' => ['supplier' => 'Supplier', 'amount' => 'Amount paid', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => 'Paid by (whose cash)', 'note' => 'Note'],
+            'labels' => ['supplier' => 'Supplier', 'amount' => 'Amount paid', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => 'Paid by (whose cash)', 'note' => 'Note (auto)'],
             'prefill' => ['supplier' => $supNames[0], 'currency' => 'UGX', 'rate_to_usd' => (int) round($ugx), 'holder' => $me],
             'body' => ['dir' => 'out', 'category' => 'Supplier payment'],
             'valueMap' => ['field' => 'supplier', 'into' => 'supplier_id', 'map' => $supIdMap, 'error' => 'Pick a supplier from the list'],
-            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]] : null;
+            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
+            'autoNote' => ['template' => 'Paid {supplier}', 'watch' => ['supplier']]] : null;
 
         // --- guided recorder sub-actions (plain language; each fills only what its event needs) ---
         $evReceived = ['key' => 'ev_received', 'label' => 'Money received', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'primary',
             'schema' => ['native_amount' => 'money', 'currency' => 'enum:USD,UGX,SSP', 'rate_to_usd' => 'number', 'holder' => $comboPeople, 'note' => 'text'],
-            'labels' => ['native_amount' => 'Amount received', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => 'Held by (who has the cash now)', 'note' => 'From / source (e.g. Juba via Jayesh bhai)'],
+            'labels' => ['native_amount' => 'Amount received', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => 'Held by (who has the cash now)', 'note' => 'Note (auto — add source if you like)'],
             'prefill' => ['currency' => 'USD', 'rate_to_usd' => 1, 'holder' => $me],
             'body' => ['dir' => 'in', 'category' => 'Funding'],
-            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]];
+            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
+            'autoNote' => ['template' => 'Funding received by {holder}', 'watch' => ['holder']]];
         $evExpense = ['key' => 'ev_expense', 'label' => 'Paid an expense / someone', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'default',
             'schema' => ['native_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'category' => 'combo:' . $expCats, 'note' => $comboPayee, 'holder' => $comboPeople],
             'labels' => ['native_amount' => 'Amount paid', 'rate_to_usd' => 'Rate (native per $1)', 'category' => 'What for', 'note' => 'Paid to (person or shop)', 'holder' => 'From whose cash'],
@@ -283,9 +286,10 @@ final class CashbookCapability implements ProcessCapability
         $customerPaid = count($orderLabels) ? [
             'key' => 'ev_customer_paid', 'label' => 'Customer paid', 'method' => 'POST', 'endpoint' => '/papi/record-payment', 'actor' => 'human', 'tone' => 'primary',
             'schema' => ['order' => 'combo:' . implode('|', $orderLabels), 'amount' => 'money', 'note' => 'text'],
-            'labels' => ['order' => 'Which order (customer · balance owed)', 'amount' => 'Amount received', 'note' => 'Note (optional)'],
+            'labels' => ['order' => 'Which order (customer · balance owed)', 'amount' => 'Amount received', 'note' => 'Note (auto)'],
             'prefill' => ['order' => $orderLabels[0]],
             'body' => ['notify' => '0'],
+            'autoNote' => ['template' => 'Customer payment', 'watch' => []],
             'valueMap' => ['field' => 'order', 'into' => 'order', 'map' => $orderMap, 'error' => 'Pick an order from the list'],
             'onResult' => 'payment',
         ] : $goOrders;
