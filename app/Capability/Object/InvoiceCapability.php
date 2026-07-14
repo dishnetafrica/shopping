@@ -61,11 +61,13 @@ final class InvoiceCapability implements ObjectCapability
             'prefill' => ['id' => (int) $i->id, 'amount' => round($balance, 2), 'method' => 'cash'],
         ];
         $reminder = ['key' => 'send_reminder', 'label' => 'Send reminder', 'method' => 'POST', 'endpoint' => $ep . '/send_reminder', 'actor' => 'human', 'tone' => 'default', 'confirm' => 'Send a payment reminder for ' . $i->invoice_no . '?'];
+        // Download via the panel's proven streaming route (same session, correct headers).
+        $downloadPdf = ['key' => 'invoice_pdf', 'label' => 'Download PDF', 'href' => '/papi/invoice-pdf?id=' . $i->id, 'actor' => 'human', 'tone' => 'default'];
         $openCustomer = $profile ? ['key' => 'open_customer', 'label' => 'Open customer', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customer/' . $profile->id, 'actor' => 'human', 'tone' => 'default'] : null;
         $openOrder = $order ? ['key' => 'open_order', 'label' => 'Open order', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/salesOrder/' . $order->id, 'actor' => 'human', 'tone' => 'default'] : null;
 
-        $primary = $balance > 0.01 ? $recordPay : ($openCustomer ?: $reminder);
-        $quick = array_values(array_filter([$balance > 0.01 ? $recordPay : null, $reminder, $openOrder, $openCustomer]));
+        $primary = $balance > 0.01 ? $recordPay : ($downloadPdf);
+        $quick = array_values(array_filter([$balance > 0.01 ? $recordPay : null, $downloadPdf, $reminder, $openOrder, $openCustomer]));
 
         // --- pipeline ---
         $st = fn ($done, $now) => $done ? 'done' : ($now ? 'now' : 'wait');
@@ -174,7 +176,7 @@ final class InvoiceCapability implements ObjectCapability
                 ['key' => 'documents', 'label' => 'Documents', 'count' => count($docs)],
             ])
             ->actions(array_values(array_filter([$primary])))
-            ->more(array_values(array_filter([$reminder, $openOrder, $openCustomer])))
+            ->more(array_values(array_filter([$primary === $downloadPdf ? null : $downloadPdf, $reminder, $openOrder, $openCustomer])))
             ->meta(['capability' => 'invoice', 'ttl' => 30, 'layout' => 'record', 'listKey' => 'invoices', 'permissions' => ['menu:finance']]);
     }
 
