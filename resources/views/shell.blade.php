@@ -687,10 +687,11 @@ const ACTICON={record_payment:'card',log_contact:'phone',log_whatsapp:'mail',edi
 function actIcon(a){ return (a&&(a.icon||ACTICON[a.key]))||'chev'; }
 function actJson(a){ return JSON.stringify(a).replace(/'/g,'&#39;'); }
 
-function renderRecord(p){ LAST_REC=p; document.getElementById('view').innerHTML=recordHtml(p); }
-function setRecTab(k){ REC_TAB=k; if(LAST_REC) document.getElementById('view').innerHTML=recordHtml(LAST_REC); }
+function renderRecord(p){ LAST_REC=p; document.getElementById('view').innerHTML=recordHtml(p); hydrateCardTables(); }
+function setRecTab(k){ REC_TAB=k; if(LAST_REC){ document.getElementById('view').innerHTML=recordHtml(LAST_REC); hydrateCardTables(); } }
 
 function recordHtml(p){
+  window._CT=[];
   const o=p.object||{}, cap=(p.meta&&p.meta.capability)||CUR.key;
   const listKey=(p.meta&&p.meta.listKey)||(cap+'s');
   const tabs=p.tabs||[]; const tab=(tabs.find(t=>t.key===REC_TAB)?REC_TAB:(tabs[0]&&tabs[0].key));
@@ -767,12 +768,10 @@ function overviewCard(c){
     return '<div class="card">'+head+'<div class="b"><dl class="dl">'+(c.rows||[]).map(r=>'<dt>'+esc(r[0])+'</dt><dd>'+esc(r[1])+'</dd>').join('')+'</dl></div></div>';
   }
   if(c.kind==='table'){
-    if(!(c.rows||[]).length) return '<div class="card">'+head+'<div class="b">'+emptyState('doc',c.empty||'Nothing here','')+'</div></div>';
-    const cols=c.columns||[];
-    const thead='<tr>'+cols.map(col=>'<th'+(col.align==='right'?' class="num"':'')+'>'+esc(col.label)+'</th>').join('')+'</tr>';
-    const body=c.rows.map(r=>'<tr class="'+(r.link?'clk':'')+'"'+(r.link?' onclick="openLink(\''+esc(r.link)+'\')"':'')+'>'+
-      r.cells.map((cell,i)=>{ const al=cols[i]&&cols[i].align==='right'?' class="num"':''; return '<td'+al+'>'+cellBadge(cell)+'</td>'; }).join('')+'</tr>').join('');
-    return '<div class="card">'+head+'<div style="overflow-x:auto"><table class="dtbl"><thead>'+thead+'</thead><tbody>'+body+'</tbody></table></div></div>';
+    // Register the rows and paginate after render (record tab tables can be long).
+    const idx=(window._CT=window._CT||[]).length;
+    window._CT.push({cols:c.columns||[], rows:c.rows||[], empty:c.empty||'Nothing here', page:1, ps:c.pageSize||10});
+    return '<div class="card">'+head+'<div id="ct_'+idx+'"></div></div>';
   }
   if(c.kind==='links'){
     if(!(c.items||[]).length) return '<div class="card">'+head+'<div class="b">'+emptyState('check',c.empty||'Nothing here','')+'</div></div>';
@@ -784,6 +783,22 @@ function overviewCard(c){
   return '';
 }
 function cellBadge(cell){ if(cell&&typeof cell==='object'){ if(cell.badge) return '<span class="badge '+toneBadge(cell.badge)+'"><span class="d"></span>'+esc(cell.value)+'</span>'; return esc(cell.value); } return esc(cell); }
+function hydrateCardTables(){ (window._CT||[]).forEach((t,i)=>cardTableRender(i)); }
+function cardTableRender(i){
+  const t=(window._CT||[])[i]; const el=document.getElementById('ct_'+i); if(!t||!el) return;
+  if(!t.rows.length){ el.innerHTML='<div class="b">'+emptyState('doc',t.empty,'')+'</div>'; return; }
+  const ps=t.ps, pages=Math.max(1,Math.ceil(t.rows.length/ps)); if(t.page>pages) t.page=pages; if(t.page<1) t.page=1;
+  const start=(t.page-1)*ps, pageRows=t.rows.slice(start,start+ps);
+  const thead='<tr>'+t.cols.map(col=>'<th'+(col.align==='right'?' class="num"':'')+'>'+esc(col.label)+'</th>').join('')+'</tr>';
+  const body=pageRows.map(r=>'<tr class="'+(r.link?'clk':'')+'"'+(r.link?' onclick="openLink(\''+esc(r.link)+'\')"':'')+'>'+
+    r.cells.map((cell,ci)=>{ const al=t.cols[ci]&&t.cols[ci].align==='right'?' class="num"':''; return '<td'+al+'>'+cellBadge(cell)+'</td>'; }).join('')+'</tr>').join('');
+  let h='<div style="overflow-x:auto"><table class="dtbl"><thead>'+thead+'</thead><tbody>'+body+'</tbody></table></div>';
+  if(t.rows.length>ps){ h+='<div class="pager"><span>'+(start+1)+'–'+Math.min(start+ps,t.rows.length)+' of '+fmtCount(t.rows.length)+'</span>'+
+    '<button onclick="cardTablePage('+i+',-1)"'+(t.page<=1?' disabled':'')+'>Prev</button><span>Page '+t.page+' / '+pages+'</span>'+
+    '<button onclick="cardTablePage('+i+',1)"'+(t.page>=pages?' disabled':'')+'>Next</button></div>'; }
+  el.innerHTML=h;
+}
+function cardTablePage(i,d){ const t=(window._CT||[])[i]; if(!t) return; t.page+=d; cardTableRender(i); }
 
 function timelineTab(events){
   if(!events||!events.length) return '<div class="card"><div class="b">'+emptyState('clock','No activity yet','This customer has no recorded activity.')+'</div></div>';
