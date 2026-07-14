@@ -347,6 +347,9 @@ svg{display:block}
 .chtx .cht{font-weight:650;font-size:14.5px;color:var(--ink)}
 .chtx .chs{font-size:12.5px;color:var(--muted);margin-top:1px}
 .chtile .chev{width:18px;height:18px;color:var(--muted);flex:none}
+.fpreview{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:4px;padding:12px 14px;border-radius:10px;background:var(--brand-wash);border:1px solid var(--brand-line,#bbf7d0)}
+.fpreview span{font-size:13px;color:var(--ink-2);font-weight:600}
+.fpreview strong{font-size:17px;color:var(--brand-ink,#15803d);font-weight:750}
 .fld{margin-bottom:14px}.fld:last-child{margin-bottom:0}
 .fld label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:6px;text-transform:capitalize}
 .fld input,.fld select{width:100%;height:39px;border:1px solid var(--line);border-radius:7px;padding:0 11px;background:var(--surface);transition:.15s}
@@ -1015,6 +1018,16 @@ function formModal(a){
   if(a.autoRate && a.autoRate.field && a.autoRate.source && a.autoRate.map){
     const src=document.getElementById('f_'+a.autoRate.source), tgt=document.getElementById('f_'+a.autoRate.field);
     if(src&&tgt){ const apply=()=>{ const v=a.autoRate.map[src.value]; if(v!=null) tgt.value=v; }; src.addEventListener('change',apply); apply(); }
+  }
+  // Live preview: show a computed result (e.g. amount × rate) that updates as the user types.
+  if(a.preview && a.preview.left && a.preview.right){
+    const pv=document.createElement('div'); pv.className='fpreview'; pv.id='fpv';
+    document.querySelector('#modal .b').appendChild(pv);
+    const compute=()=>{ const L=parseFloat((document.getElementById('f_'+a.preview.left)||{}).value)||0; const R=parseFloat((document.getElementById('f_'+a.preview.right)||{}).value)||0;
+      const cur=a.preview.curField?((document.getElementById('f_'+a.preview.curField)||{}).value||''):'';
+      const val=L*R; pv.innerHTML='<span>'+esc(a.preview.label||'You get')+'</span><strong>'+(val>0?val.toLocaleString(undefined,{maximumFractionDigits:2}):'—')+(cur?' '+esc(cur):'')+'</strong>'; };
+    ['left','right','curField'].forEach(k=>{ if(a.preview[k]){ const el=document.getElementById('f_'+a.preview[k]); if(el){ el.addEventListener('input',compute); el.addEventListener('change',compute); } } });
+    compute();
   }
   document.getElementById('mok').onclick=async()=>{ const body=Object.assign({}, a.body||{});
     Object.entries(a.schema).forEach(([k,type])=>{ if(type==='gallery'){ body[k]=window.GAL[k]||[]; } else { const el=document.getElementById('f_'+k); if(el) body[k]=el.value; } });

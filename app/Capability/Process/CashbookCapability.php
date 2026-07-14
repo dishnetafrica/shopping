@@ -231,7 +231,8 @@ final class CashbookCapability implements ProcessCapability
             'schema' => ['from_amount' => 'money', 'from_currency' => 'enum:USD,UGX,SSP', 'to_currency' => 'enum:UGX,USD,SSP', 'rate' => 'number', 'holder' => $comboPeople, 'note' => 'text'],
             'labels' => ['from_amount' => 'Amount to convert', 'from_currency' => 'From', 'to_currency' => 'To', 'rate' => 'Rate', 'holder' => 'Held by', 'note' => 'Note'],
             'prefill' => ['from_currency' => 'USD', 'to_currency' => 'UGX', 'rate' => (int) round($ugx), 'holder' => $me],
-            'autoRate' => ['field' => 'rate', 'source' => 'to_currency', 'map' => $rateMap]];
+            'autoRate' => ['field' => 'rate', 'source' => 'to_currency', 'map' => $rateMap],
+            'preview' => ['left' => 'from_amount', 'right' => 'rate', 'curField' => 'to_currency', 'label' => 'You will get']];
         $transfer = count($peopleList) >= 2 ? ['key' => 'cash_transfer', 'label' => 'Transfer cash', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook/transfer', 'actor' => 'human', 'tone' => 'default',
             'schema' => ['from_person' => $comboPeople, 'to_person' => $comboPeople, 'currency' => 'enum:UGX,USD,SSP', 'amount' => 'money', 'note' => 'text'],
             'labels' => ['from_person' => 'From (who gave)', 'to_person' => 'To (who received)', 'amount' => 'Amount', 'note' => 'Note'],
@@ -258,15 +259,19 @@ final class CashbookCapability implements ProcessCapability
             'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]];
         $goOrders = ['key' => 'go_orders', 'label' => 'Customer paid', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/salesOrders', 'actor' => 'human'];
         // Customer paid — inline receipt against an open order; the remaining balance is shown right here.
-        $orderLabels = []; $orderMap = [];
-        foreach (Order::where('tenant_id', $t)->whereColumn('amount_paid', '<', 'total')->orderByDesc('id')->limit(60)->get(['id', 'order_no', 'customer_name', 'total', 'amount_paid', 'sell_currency']) as $o) {
+        $orderLabels = []; $orderMap = []; $recvAgg = [];
+        foreach (Order::where('tenant_id', $t)->whereColumn('amount_paid', '<', 'total')->orderByDesc('id')->limit(200)->get(['id', 'order_no', 'customer_name', 'total', 'amount_paid', 'sell_currency']) as $o) {
             $bal = round(max(0, (float) $o->total - (float) $o->amount_paid), 2);
             if ($bal <= 0.005) { continue; }
             $ocur = strtoupper(trim((string) ($o->sell_currency ?: ''))) ?: $ctx->nativeCurrency();
             $cust = trim(str_replace('|', ' ', (string) ($o->customer_name ?: 'Customer')));
             $ono = (string) ($o->order_no ?: ('#' . $o->id));
             $label = str_replace('|', ' ', $ono . ' · ' . $cust . ' · owes ' . Money::fmt($bal, $ocur));
-            $orderLabels[] = $label; $orderMap[$label] = (int) $o->id;
+            $orderMap[$label] = (int) $o->id;                       // full lookup (resolves any prefill)
+            if (count($orderLabels) < 60) { $orderLabels[] = $label; } // but only show the 60 most recent
+            $rk = mb_strtolower($cust) . '|' . $ocur;
+            if (! isset($recvAgg[$rk])) { $recvAgg[$rk] = ['customer' => $cust, 'currency' => $ocur, 'owed' => 0.0, 'order' => $label]; }
+            $recvAgg[$rk]['owed'] += $bal;
         }
         $customerPaid = count($orderLabels) ? [
             'key' => 'ev_customer_paid', 'label' => 'Customer paid', 'method' => 'POST', 'endpoint' => '/papi/record-payment', 'actor' => 'human', 'tone' => 'primary',
@@ -277,6 +282,26 @@ final class CashbookCapability implements ProcessCapability
             'valueMap' => ['field' => 'order', 'into' => 'order', 'map' => $orderMap, 'error' => 'Pick an order from the list'],
             'onResult' => 'payment',
         ] : $goOrders;
+
+        // --- "Customers who owe you" (receivables) — the mirror of the payables tab ---
+        $recvRows = [];
+        if (count($orderLabels)) {
+            $recvList = array_values($recvAgg);
+            usort($recvList, fn ($a, $b) => $b['owed'] <=> $a['owed']);
+            foreach ($recvList as $rv) {
+                if ($rv['owed'] <= 0.005) { continue; }
+                $recAct = array_merge($customerPaid, ['key' => 'ev_customer_paid', 'label' => 'Payment from ' . $rv['customer'],
+                    'prefill' => array_merge($customerPaid['prefill'] ?? [], ['order' => $rv['order']])]);
+                $recvRows[] = ['cells' => [
+                    $rv['customer'],
+                    ['value' => Money::fmt(round($rv['owed'], 2), $rv['currency']), 'tone' => 'danger'],
+                    ['buttons' => [['icon' => 'dollar', 'title' => 'Record payment from ' . $rv['customer'], 'tone' => 'primary', 'action' => $recAct]]],
+                ], 'usd' => 0, 'link' => null];
+            }
+        }
+        $receivablesCard = ['kind' => 'table', 'title' => 'Customers who owe you', 'sub' => count($recvRows) . ' with an open balance', 'searchable' => true,
+            'columns' => [['label' => 'Customer'], ['label' => 'Owed', 'align' => 'right'], ['label' => '', 'align' => 'right']],
+            'rows' => $recvRows, 'empty' => 'Everyone has paid up — nothing outstanding 🎉', 'pageSize' => 25];
 
         $tiles = [];
         $tiles[] = ['icon' => 'download', 'title' => 'Money received', 'sub' => 'Cash in — funding, or from an agent', 'tone' => 'in', 'action' => $evReceived];
@@ -301,10 +326,11 @@ final class CashbookCapability implements ProcessCapability
                 ['tone' => 'info', 'label' => count($holderRows) . ' holding cash']))
             ->financials($financials)
             ->quickActions($actions)
-            ->tabSections(['holders' => [$holderCard], 'entries' => [$entriesCard], 'payables' => [$payablesCard]])
+            ->tabSections(['holders' => [$holderCard], 'entries' => [$entriesCard], 'receivables' => [$receivablesCard], 'payables' => [$payablesCard]])
             ->tabs([
                 ['key' => 'holders', 'label' => 'Cash by person', 'count' => count($holderRows)],
                 ['key' => 'entries', 'label' => 'All entries', 'count' => count($entryRows)],
+                ['key' => 'receivables', 'label' => 'Customers who owe you', 'count' => count($recvRows)],
                 ['key' => 'payables', 'label' => 'Suppliers you owe', 'count' => count($payRows)],
             ])
             ->actions($headerActions)
