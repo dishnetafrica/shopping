@@ -40,6 +40,12 @@ final class CapabilityServiceProvider extends ServiceProvider
                 Route::get('/{type}/{id?}', [WorkspaceController::class, 'show'])->where('type', '[a-z.:]+');
                 Route::post('/{type}/{id}/{action}', [CommandController::class, 'dispatch'])->where('type', '[a-z.:]+');
             });
+
+            // Direct PDF streaming for docs without a legacy-panel route (receipt, price list).
+            Route::prefix('api/v1/doc')->group(function () {
+                Route::get('receipt/{id}', [\App\Http\Controllers\V3\DocumentController::class, 'receipt'])->whereNumber('id');
+                Route::get('price-list', [\App\Http\Controllers\V3\DocumentController::class, 'priceList']);
+            });
         });
     }
 }

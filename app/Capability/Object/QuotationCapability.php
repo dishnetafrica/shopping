@@ -57,7 +57,9 @@ final class QuotationCapability implements ObjectCapability
         })->all();
 
         // --- actions ---
-        $downloadPdf = ['key' => 'quotation_pdf', 'label' => 'Download PDF', 'method' => 'POST', 'endpoint' => $ep . '/quotation_pdf', 'actor' => 'human', 'tone' => $converted ? 'default' : 'primary'];
+        // Download via the same proven streaming route the legacy panel uses (Content-Disposition, same
+        // session) — avoids any public-storage-URL/domain problem. The v3 shell opens the href directly.
+        $downloadPdf = ['key' => 'quotation_pdf', 'label' => 'Download PDF', 'href' => '/papi/quotation-pdf?id=' . $q->id, 'actor' => 'human', 'tone' => $converted ? 'default' : 'primary'];
         $convert = ['key' => 'convert_to_order', 'label' => 'Convert to order', 'method' => 'POST', 'endpoint' => $ep . '/convert_to_order', 'actor' => 'human', 'tone' => 'primary', 'confirm' => 'Convert quotation ' . $q->quote_no . ' into an order?'];
         $openCustomer = $profile ? ['key' => 'open_customer', 'label' => 'Open customer', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customer/' . $profile->id, 'actor' => 'human', 'tone' => 'default'] : null;
         $openOrder = $converted ? ['key' => 'open_order', 'label' => 'Open order', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/salesOrder/' . $q->order_id, 'actor' => 'human', 'tone' => 'default'] : null;
@@ -185,36 +187,44 @@ final class QuotationCapability implements ObjectCapability
         return ['ok' => true, 'order_id' => $o ? (int) $o->id : null, 'message' => ($res['already'] ? 'Already converted — order ' : 'Converted to order ') . ($o ? (string) $o->order_no : '') . '.'];
     }
 
-    /** Serve the stored quotation PDF, or re-render it from the saved line items via the frozen service. */
+    /**
+     * Return the quotation PDF as base64 so the browser downloads it directly — this avoids depending on
+     * the server's public storage URL (which may point at an internal host). Renders fresh from the saved
+     * line items; falls back to streaming the stored PDF file if no items remain.
+     */
     private function pdf(CapabilityContext $ctx, array $input): array
     {
         $q = Quotation::where('tenant_id', $ctx->tenantId())->with('items')->find((int) ($input['id'] ?? 0));
         if (! $q) {
             return ['ok' => false, 'error' => 'not_found'];
         }
-        if ($q->pdf_path) {
-            $url = $this->publicUrl((string) $q->pdf_path);
-            if ($url !== '') {
-                return ['ok' => true, 'url' => $url, 'message' => 'Quotation ' . $q->quote_no . ' PDF ready.'];
-            }
-        }
+        $file = 'Quotation-' . $q->quote_no . '.pdf';
+
         $lines = $q->items->map(fn ($it) => [
             'name' => (string) $it->name, 'qty' => (int) $it->qty, 'price' => (float) $it->unit_price,
             'sum' => (float) $it->line_total, 'unit' => (string) ($it->unit_label ?? ''), 'image' => (string) ($it->image_url ?? ''), 'matched' => true,
         ])->values()->all();
-        if (! $lines) {
-            return ['ok' => false, 'error' => 'no_items', 'message' => 'This quotation has no line items to render.'];
-        }
-        $doc = app(QuotationService::class)->generate($ctx->tenant, (string) $q->customer_phone, (string) $q->customer_name,
-            ['lines' => $lines, 'currency' => (string) ($q->currency ?: $ctx->baseCurrency()), 'total' => (float) $q->total], (string) $q->quote_no);
-        if (! $doc) {
-            return ['ok' => false, 'error' => 'pdf_unavailable', 'message' => 'The PDF engine is not available on this server.'];
-        }
-        if (! $q->pdf_path && ($doc['path'] ?? '') !== '') {
-            $q->pdf_path = $doc['path'];
-            $q->save();
+
+        if ($lines) {
+            $doc = app(QuotationService::class)->generate($ctx->tenant, (string) $q->customer_phone, (string) $q->customer_name,
+                ['lines' => $lines, 'currency' => (string) ($q->currency ?: $ctx->baseCurrency()), 'total' => (float) $q->total], (string) $q->quote_no);
+            if ($doc && ($doc['b64'] ?? '') !== '') {
+                if (! $q->pdf_path && ($doc['path'] ?? '') !== '') { $q->pdf_path = $doc['path']; $q->save(); }
+
+                return ['ok' => true, 'pdf_b64' => $doc['b64'], 'filename' => $doc['fileName'] ?? $file, 'message' => 'Quotation ' . $q->quote_no . ' downloaded.'];
+            }
         }
 
-        return ['ok' => true, 'url' => (string) ($doc['url'] ?? ''), 'message' => 'Quotation ' . $q->quote_no . ' PDF ready.'];
+        // Fallback: stream the previously-saved PDF file bytes.
+        if ($q->pdf_path) {
+            try {
+                $bytes = \Illuminate\Support\Facades\Storage::disk('public')->get((string) $q->pdf_path);
+                if ($bytes) {
+                    return ['ok' => true, 'pdf_b64' => base64_encode($bytes), 'filename' => $file, 'message' => 'Quotation ' . $q->quote_no . ' downloaded.'];
+                }
+            } catch (\Throwable $e) { /* fall through */ }
+        }
+
+        return ['ok' => false, 'error' => 'pdf_unavailable', 'message' => $lines ? 'The PDF engine is not available on this server.' : 'This quotation has no line items to render.'];
     }
 }

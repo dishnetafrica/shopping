@@ -688,7 +688,7 @@ function qrow(r){ const link=r.link?(' onclick="openLink(\''+esc(r.link)+'\')"')
 function openLink(apiPath){ const h=apiToHash(apiPath); if(h) route(h.key, h.id); }
 
 /* ============ record shell (tabbed 360: answers · health · KPIs · NBA · tabs) ============ */
-const ACTICON={record_payment:'card',log_contact:'phone',log_whatsapp:'mail',edit_customer:'edit',update_customer:'edit',send_reminder:'bell',set_followup:'bell',assign_rep:'user',new_quotation:'quotations',open_invoice:'invoice',open_customer:'user',open_order:'cart',receipt_pdf:'download',send_receipt:'send',mark_delivered:'truck',create_invoice:'invoice'};
+const ACTICON={record_payment:'card',log_contact:'phone',log_whatsapp:'mail',edit_customer:'edit',update_customer:'edit',send_reminder:'bell',set_followup:'bell',assign_rep:'user',new_quotation:'quotations',open_invoice:'invoice',open_customer:'user',open_order:'cart',receipt_pdf:'download',quotation_pdf:'download',invoice_pdf:'download',send_receipt:'send',mark_delivered:'truck',create_invoice:'invoice'};
 function actIcon(a){ return (a&&(a.icon||ACTICON[a.key]))||'chev'; }
 function actJson(a){ return JSON.stringify(a).replace(/'/g,'&#39;'); }
 
@@ -860,6 +860,7 @@ function docsTab(docs){
 function actBtn(a){ const cls=a.actor==='ai'?'btn ai':('btn'+(a.tone==='primary'?' pri':(a.tone==='danger'?' danger':'')));
   return '<button class="'+cls+'" onclick=\'doAction('+JSON.stringify(a).replace(/'/g,"&#39;")+')\'>'+(a.actor==='ai'?'✦ ':'')+esc(a.label)+'</button>'; }
 async function doAction(a){
+  if(a.href){ try{ window.open(a.href,'_blank'); }catch(e){ location.href=a.href; } return; }
   if((a.method||'POST')==='GET'){ const h=apiToHash(a.endpoint); if(h){ route(h.key,h.id); } return; }
   if(a.builder==='quotation'){ return quoteBuilder(a); }
   if(a.schema){ return formModal(a); }
@@ -1027,7 +1028,10 @@ async function qbSubmit(){
   if(window.QB.customerId) body.customer_id=window.QB.customerId;
   ok.disabled=true; ok.textContent='Creating…';
   const res=await post(a.endpoint,body); closeQB();
-  if(res&&res.ok){ toast(res.message||('Quotation '+res.quote_no+' created')); if(res.pdf_b64){ downloadB64(res.pdf_b64,res.filename||'Quotation.pdf'); } else if(res.url){ try{ window.open(res.url,'_blank'); }catch(e){} } refresh(); }
+  if(res&&res.ok){ toast(res.message||('Quotation '+res.quote_no+' created'));
+    if(res.id){ try{ window.open('/papi/quotation-pdf?id='+res.id,'_blank'); }catch(e){} }
+    else if(res.pdf_b64){ downloadB64(res.pdf_b64,res.filename||'Quotation.pdf'); }
+    refresh(); }
   else { toast((res&&(res.message||res.error))||'Could not create quotation', true); }
 }
 
