@@ -614,7 +614,10 @@ async function route(key, id){
   CUR={key,id}; REC_TAB='overview'; location.hash='#/'+key+(id?'/'+id:''); setActive(key);
   if(SOON[key] && !id){ renderSoon(key); return; }
   document.getElementById('view').innerHTML=skeleton();
-  const p = await api('/'+key+(id?'/'+id:''));
+  let path='/'+key+(id?'/'+id:'');
+  // A pending server scope (e.g. category → products) is appended to this one fetch, then cleared.
+  if(PENDING_SCOPE && PENDING_SCOPE.key===key){ path += (path.indexOf('?')<0?'?':'&')+PENDING_SCOPE.query; PENDING_SCOPE=null; }
+  const p = await api(path);
   if(p._error){ document.getElementById('view').innerHTML=emptyState('bolt','Could not load','You may not have access to this workspace ('+p._error+').'); return; }
   renderView(p);
 }
@@ -735,10 +738,15 @@ function qrow(r){ const link=r.link?(' onclick="openLink(\''+esc(r.link)+'\')"')
     '<div class="m"><div class="t">'+esc(r.label||r.type)+(r.count!=null?' <span style="color:var(--muted);font-weight:500">('+r.count+')</span>':'')+'</div>'+
     (r.sublabel&&!right?'<div class="s">'+esc(r.sublabel)+'</div>':'')+'</div>'+
     (right?'<div class="r">'+esc(right)+'</div>':'')+'<div class="chev">'+icon('chev','ic-sm')+'</div></div>'; }
-// A row can navigate to a LIST pre-filtered: link = "filter:<listKey>:<colKey>:<urlEncodedValue>".
-// Used e.g. by a category card to open Products already filtered to that category (like the panel).
-let PENDING_FILTER=null;
+// A row can navigate to a LIST pre-filtered two ways:
+//   client:  "filter:<listKey>:<colKey>:<urlEncodedValue>"  → pre-selects a client-side dropdown.
+//   server:  "scope:<listKey>:<param>:<urlEncodedValue>"     → the list is re-fetched with ?param=value
+//            so the BACKEND filters (exact, case-insensitive) — used by category → products, like the panel.
+let PENDING_FILTER=null, PENDING_SCOPE=null;
 function openLink(apiPath){
+  if(apiPath && apiPath.indexOf('scope:')===0){
+    const p=apiPath.split(':'); PENDING_SCOPE={ key:p[1], query:p[2]+'='+(p[3]||'') }; route(p[1]); return;
+  }
   if(apiPath && apiPath.indexOf('filter:')===0){
     const p=apiPath.split(':'); PENDING_FILTER={ key:p[2], val:decodeURIComponent(p[3]||'') }; route(p[1]); return;
   }

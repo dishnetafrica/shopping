@@ -35,7 +35,14 @@ final class ProductListCapability implements ProcessCapability
         $lowCount = Product::where('tenant_id', $t)->whereRaw('stock > 0 AND stock <= GREATEST(5, COALESCE(moq,0))')->count();
         $outCount = Product::where('tenant_id', $t)->where('stock', '<=', 0)->count();
 
-        $products = Product::where('tenant_id', $t)->orderBy('name')->limit(self::MAX_ROWS)->get();
+        // Category drill-through: /workspace/products?category=Beverages filters the list server-side
+        // (exact, case-insensitive) — robust regardless of stored casing or catalogue size.
+        $scope = trim((string) request()->query('category', ''));
+        $prodQ = Product::where('tenant_id', $t);
+        if ($scope !== '') {
+            $prodQ->whereRaw("LOWER(COALESCE(category,'')) = ?", [mb_strtolower($scope)]);
+        }
+        $products = $prodQ->orderBy('name')->limit(self::MAX_ROWS)->get();
         $rows = [];
         foreach ($products as $p) {
             $price = (float) $p->price;
@@ -80,8 +87,10 @@ final class ProductListCapability implements ProcessCapability
 
         return (new WorkspacePayload)
             ->object([
-                'type' => 'list:products', 'title' => 'Products',
-                'subtitle' => number_format($totalSkus) . ' SKUs · ' . number_format($lowCount) . ' low · ' . number_format($outCount) . ' out of stock',
+                'type' => 'list:products', 'title' => $scope !== '' ? 'Products · ' . $scope : 'Products',
+                'subtitle' => $scope !== ''
+                    ? number_format($products->count()) . ' in “' . $scope . '” · ' . number_format($totalSkus) . ' SKUs total'
+                    : number_format($totalSkus) . ' SKUs · ' . number_format($lowCount) . ' low · ' . number_format($outCount) . ' out of stock',
             ])
             ->financials([
                 ['key' => 'total', 'label' => 'Total SKUs', 'value' => $totalSkus, 'tone' => 'ok', 'foot' => 'in catalogue'],
@@ -89,12 +98,16 @@ final class ProductListCapability implements ProcessCapability
                 ['key' => 'low', 'label' => 'Low stock', 'value' => $lowCount, 'tone' => $lowCount > 0 ? 'warn' : 'ok', 'foot' => 'at or below reorder point'],
                 ['key' => 'out', 'label' => 'Out of stock', 'value' => $outCount, 'tone' => $outCount > 0 ? 'danger' : 'ok', 'foot' => 'need reordering'],
             ])
-            ->table($columns, $rows)
-            ->actions([
-                ['key' => 'add_product', 'label' => 'New product', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/products/_/add_product', 'actor' => 'human', 'tone' => 'primary', 'schema' => $this->formSchema($t)],
-                ['key' => 'catalog', 'label' => 'Catalogue PDF', 'href' => '/api/v1/doc/catalog', 'actor' => 'human', 'tone' => 'default'],
-                ['key' => 'price_list', 'label' => 'Price list PDF', 'href' => '/api/v1/doc/price-list', 'actor' => 'human', 'tone' => 'default'],
+            ->table($columns, $rows, [
+                ['key' => 'category', 'label' => 'Category'],
+                ['key' => 'status', 'label' => 'Status'],
             ])
+            ->actions(array_values(array_filter([
+                $scope !== '' ? ['key' => 'all_products', 'label' => 'Show all products', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/products', 'actor' => 'human', 'tone' => 'default'] : null,
+                ['key' => 'add_product', 'label' => 'New product', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/products/_/add_product', 'actor' => 'human', 'tone' => 'primary', 'schema' => $this->formSchema($t)],
+                ['key' => 'catalog', 'label' => 'Catalogue PDF', 'href' => $scope !== '' ? '/api/v1/doc/catalog?category=' . rawurlencode($scope) : '/api/v1/doc/catalog', 'actor' => 'human', 'tone' => 'default'],
+                ['key' => 'price_list', 'label' => 'Price list PDF', 'href' => '/api/v1/doc/price-list', 'actor' => 'human', 'tone' => 'default'],
+            ])))
             ->meta(['capability' => 'products', 'ttl' => 60, 'permissions' => ['menu:products'], 'note' => $totalSkus > self::MAX_ROWS ? ('Showing first ' . self::MAX_ROWS . ' of ' . $totalSkus . ' SKUs; KPIs cover all.') : null]);
     }
 

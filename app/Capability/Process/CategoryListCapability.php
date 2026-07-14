@@ -43,6 +43,8 @@ final class CategoryListCapability implements ProcessCapability
                 'catalog'  => $n > 0
                     ? ['value' => 'Catalogue', 'href' => '/api/v1/doc/catalog?category=' . rawurlencode((string) $c->name), 'icon' => 'download']
                     : ['value' => ''],
+                // Clicking the row opens the Products list, server-filtered to this category (like the panel).
+                'link'     => $n > 0 ? 'scope:products:category:' . rawurlencode((string) $c->name) : null,
             ];
         }
 
