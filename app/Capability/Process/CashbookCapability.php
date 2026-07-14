@@ -93,6 +93,27 @@ final class CashbookCapability implements ProcessCapability
             'columns' => [['label' => 'Held by'], ['label' => 'USD', 'align' => 'right'], ['label' => 'UGX', 'align' => 'right'], ['label' => 'SSP', 'align' => 'right'], ['label' => 'Total (USD)', 'align' => 'right']],
             'rows' => $holderRows, 'empty' => 'No cash recorded yet — add an entry to get started', 'pageSize' => 20];
 
+        // --- "smart pick-list" of people the business actually deals with (team logins + anyone
+        //     who has ever held cash, e.g. Jayesh bhai). combo: = tap-to-pick OR type a new name. ---
+        $members = User::where('tenant_id', $t)->orderBy('name')->pluck('name')->map(fn ($n) => trim((string) $n))->filter()->values()->all();
+        $peopleList = collect(array_keys($holders))->merge($members)
+            ->map(fn ($n) => trim(str_replace('|', ' ', (string) $n)))
+            ->filter(fn ($n) => $n !== '' && strcasecmp($n, 'Unassigned') !== 0)
+            ->unique(fn ($n) => mb_strtolower($n))->values()->all();
+        if ($me !== '') { $peopleList = array_values(array_unique(array_merge([$me], $peopleList))); }
+        $supRaw = Supplier::where('tenant_id', $t)->orderBy('name')->pluck('name')->map(fn ($n) => trim(str_replace('|', ' ', (string) $n)))->filter()->all();
+        // Also remember informal payees (Mr Tomu, etc.) from past expense entries so they stay tap-able.
+        $pastPayees = OrderCost::where('tenant_id', $t)->where('stage', 'cash_out')
+            ->whereIn('category', ['Transport', 'Salary', 'Rent', 'Utilities', 'Expense', 'Drawing', 'Other', 'Local purchase'])
+            ->whereNotNull('note')->orderByDesc('id')->limit(300)->pluck('note')
+            ->map(fn ($n) => trim(str_replace('|', ' ', (string) $n)))
+            ->filter(fn ($n) => $n !== '' && mb_strlen($n) <= 40 && ! str_contains($n, '—') && stripos($n, 'handed to') === false && stripos($n, 'received from') === false)
+            ->all();
+        $payeeList = collect($peopleList)->merge($supRaw)->merge($pastPayees)->unique(fn ($n) => mb_strtolower($n))->values()->all();
+        $comboPeople = 'combo:' . (count($peopleList) ? implode('|', $peopleList) : ($me ?: 'Me'));
+        $comboPayee = 'combo:' . (count($payeeList) ? implode('|', $payeeList) : ($me ?: 'Me'));
+        $expCats = 'Transport|Salary|Rent|Utilities|Local purchase|Expense|Drawing|Other';
+
         // --- entries (with edit + delete per row) ---
         $entries = $scoped(OrderCost::where('tenant_id', $t)
             ->where(fn ($w) => $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status')))
@@ -111,18 +132,22 @@ final class CashbookCapability implements ProcessCapability
                 ? 'CB-' . str_pad((string) $c->id, 4, '0', STR_PAD_LEFT)
                 : ((string) ($c->order_no ?: strtoupper(substr((string) $c->stage, 0, 3)) . '-' . str_pad((string) $c->id, 4, '0', STR_PAD_LEFT)));
             $when = $c->created_at ? Carbon::parse($c->created_at) : null;
-            $simple = in_array($c->stage, ['cash_in', 'cash_out', 'funding', 'purchase', 'expense', 'drawing'], true);
+            // Editable/deletable: single-row cash movements incl. supplier payments (fix who paid, amount, etc.).
+            // Excluded: receipts (edit on the order screen so the balance stays in sync) and the paired
+            // conversion/transfer legs (deleting one leg alone would unbalance the pair).
+            $editable = in_array($c->stage, ['cash_in', 'cash_out', 'funding', 'purchase', 'expense', 'drawing', 'supplier_payment'], true)
+                && ! in_array(mb_strtolower((string) $c->category), ['conversion', 'transfer'], true);
+            $isSupPay = $c->stage === 'supplier_payment';
 
             $btns = [];
-            if ($canEdit && $simple) {
+            if ($canEdit && $editable) {
                 $btns[] = ['icon' => 'edit', 'title' => 'Edit entry', 'action' => [
-                    'key' => 'edit_cash', 'label' => 'Edit cash entry ' . $ref, 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook/' . $c->id . '/update', 'actor' => 'human', 'tone' => 'primary',
-                    'schema' => ['amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'category' => 'combo:' . self::CATEGORIES, 'holder' => 'text', 'note' => 'text'],
+                    'key' => 'edit_cash', 'label' => 'Edit ' . ($stageLabels[$c->stage] ?? 'entry') . ' ' . $ref, 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook/' . $c->id . '/update', 'actor' => 'human', 'tone' => 'primary',
+                    'schema' => ['amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'category' => 'combo:' . self::CATEGORIES, 'holder' => $comboPeople, 'note' => 'text'],
+                    'labels' => ['amount' => 'Amount', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => $isSupPay ? 'Paid by (whose cash)' : 'Held by', 'category' => 'Category', 'note' => 'Note'],
                     'prefill' => ['amount' => round($native, 2), 'currency' => $cur, 'rate_to_usd' => (float) $c->rate_to_usd, 'category' => (string) $c->category, 'holder' => (string) $c->holder, 'note' => (string) $c->note],
                     'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
                 ]];
-            }
-            if ($canEdit && $simple) {
                 $btns[] = ['icon' => 'trash', 'title' => 'Delete entry', 'tone' => 'danger', 'post' => '/papi/trade-cashbook/' . $c->id . '/delete',
                     'confirm' => 'Delete this ' . ($stageLabels[$c->stage] ?? $c->stage) . ' of ' . Money::fmt($native, $cur) . '?'];
             }
@@ -176,9 +201,11 @@ final class CashbookCapability implements ProcessCapability
             $payBtns = [];
             if ($canPay) {
                 $payBtns[] = ['icon' => 'dollar', 'title' => 'Pay ' . $pv['name'], 'tone' => 'primary', 'action' => [
-                    'key' => 'pay_supplier_row', 'label' => 'Pay ' . $pv['name'], 'method' => 'POST', 'endpoint' => '/papi/suppliers/' . $pv['id'] . '/pay', 'actor' => 'human', 'tone' => 'primary',
-                    'schema' => ['currency' => 'enum:UGX,USD,SSP', 'amount' => 'money', 'rate_to_usd' => 'number', 'note' => 'text'],
-                    'prefill' => ['currency' => $pv['currency'], 'amount' => $pv['owed'], 'rate_to_usd' => $rate, 'note' => 'Paid ' . $pv['name']],
+                    'key' => 'pay_supplier_row', 'label' => 'Pay ' . $pv['name'], 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'primary',
+                    'schema' => ['currency' => 'enum:UGX,USD,SSP', 'amount' => 'money', 'rate_to_usd' => 'number', 'holder' => $comboPeople, 'note' => 'text'],
+                    'labels' => ['amount' => 'Amount paid', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => 'Paid by (whose cash)', 'note' => 'Note'],
+                    'prefill' => ['currency' => $pv['currency'], 'amount' => $pv['owed'], 'rate_to_usd' => $rate, 'holder' => $me, 'note' => 'Paid ' . $pv['name']],
+                    'body' => ['dir' => 'out', 'category' => 'Supplier payment', 'supplier_id' => $pv['id']],
                     'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
                 ]];
             }
@@ -193,33 +220,12 @@ final class CashbookCapability implements ProcessCapability
             'rows' => $payRows, 'empty' => 'Nothing outstanding — you are square with every supplier 🎉', 'pageSize' => 25];
 
         // Supplier picker map for the header "Pay supplier" action (pay anyone, incl. advances not yet on account).
-        $supMap = []; $supNames = []; $seen = [];
+        $supIdMap = []; $supNames = []; $seen = [];
         foreach (Supplier::where('tenant_id', $t)->orderBy('name')->get(['id', 'name']) as $s) {
             $nm = trim(str_replace(',', ' ', (string) $s->name)); if ($nm === '') { continue; }
             $label = isset($seen[$nm]) ? ($nm . ' #' . $s->id) : $nm; $seen[$nm] = true;
-            $supNames[] = $label; $supMap[$label] = '/papi/suppliers/' . $s->id . '/pay';
+            $supNames[] = $label; $supIdMap[$label] = (int) $s->id;
         }
-
-        // --- "smart pick-list" of people the business actually deals with (team logins + anyone
-        //     who has ever held cash, e.g. Jayesh bhai). combo: = tap-to-pick OR type a new name. ---
-        $members = User::where('tenant_id', $t)->orderBy('name')->pluck('name')->map(fn ($n) => trim((string) $n))->filter()->values()->all();
-        $peopleList = collect(array_keys($holders))->merge($members)
-            ->map(fn ($n) => trim(str_replace('|', ' ', (string) $n)))
-            ->filter(fn ($n) => $n !== '' && strcasecmp($n, 'Unassigned') !== 0)
-            ->unique(fn ($n) => mb_strtolower($n))->values()->all();
-        if ($me !== '') { $peopleList = array_values(array_unique(array_merge([$me], $peopleList))); }
-        $supRaw = Supplier::where('tenant_id', $t)->orderBy('name')->pluck('name')->map(fn ($n) => trim(str_replace('|', ' ', (string) $n)))->filter()->all();
-        // Also remember informal payees (Mr Tomu, etc.) from past expense entries so they stay tap-able.
-        $pastPayees = OrderCost::where('tenant_id', $t)->where('stage', 'cash_out')
-            ->whereIn('category', ['Transport', 'Salary', 'Rent', 'Utilities', 'Expense', 'Drawing', 'Other', 'Local purchase'])
-            ->whereNotNull('note')->orderByDesc('id')->limit(300)->pluck('note')
-            ->map(fn ($n) => trim(str_replace('|', ' ', (string) $n)))
-            ->filter(fn ($n) => $n !== '' && mb_strlen($n) <= 40 && ! str_contains($n, '—') && stripos($n, 'handed to') === false && stripos($n, 'received from') === false)
-            ->all();
-        $payeeList = collect($peopleList)->merge($supRaw)->merge($pastPayees)->unique(fn ($n) => mb_strtolower($n))->values()->all();
-        $comboPeople = 'combo:' . (count($peopleList) ? implode('|', $peopleList) : ($me ?: 'Me'));
-        $comboPayee = 'combo:' . (count($payeeList) ? implode('|', $payeeList) : ($me ?: 'Me'));
-        $expCats = 'Transport|Salary|Rent|Utilities|Local purchase|Expense|Drawing|Other';
 
         // --- granular actions (kept in Quick actions for power users) ---
         $addCash = ['key' => 'add_cash', 'label' => 'Add cash entry', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'default',
@@ -237,11 +243,12 @@ final class CashbookCapability implements ProcessCapability
             'schema' => ['from_person' => $comboPeople, 'to_person' => $comboPeople, 'currency' => 'enum:UGX,USD,SSP', 'amount' => 'money', 'note' => 'text'],
             'labels' => ['from_person' => 'From (who gave)', 'to_person' => 'To (who received)', 'amount' => 'Amount', 'note' => 'Note'],
             'prefill' => ['from_person' => $peopleList[0], 'to_person' => $peopleList[1] ?? '', 'currency' => 'UGX']] : null;
-        $paySupplier = ($canPay && count($supNames)) ? ['key' => 'pay_supplier', 'label' => 'Pay supplier', 'method' => 'POST', 'endpoint' => $supMap[$supNames[0]], 'actor' => 'human', 'tone' => 'default',
-            'schema' => ['supplier' => 'enum:' . implode(',', $supNames), 'currency' => 'enum:UGX,USD,SSP', 'amount' => 'money', 'rate_to_usd' => 'number', 'note' => 'text'],
-            'labels' => ['supplier' => 'Supplier', 'amount' => 'Amount paid', 'rate_to_usd' => 'Rate (native per $1)', 'note' => 'Note'],
-            'prefill' => ['supplier' => $supNames[0], 'currency' => 'UGX', 'rate_to_usd' => (int) round($ugx)],
-            'pathMap' => ['field' => 'supplier', 'map' => $supMap, 'error' => 'Pick a supplier from the list'],
+        $paySupplier = ($canPay && count($supNames)) ? ['key' => 'pay_supplier', 'label' => 'Pay supplier', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['supplier' => 'enum:' . implode(',', $supNames), 'currency' => 'enum:UGX,USD,SSP', 'amount' => 'money', 'rate_to_usd' => 'number', 'holder' => $comboPeople, 'note' => 'text'],
+            'labels' => ['supplier' => 'Supplier', 'amount' => 'Amount paid', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => 'Paid by (whose cash)', 'note' => 'Note'],
+            'prefill' => ['supplier' => $supNames[0], 'currency' => 'UGX', 'rate_to_usd' => (int) round($ugx), 'holder' => $me],
+            'body' => ['dir' => 'out', 'category' => 'Supplier payment'],
+            'valueMap' => ['field' => 'supplier', 'into' => 'supplier_id', 'map' => $supIdMap, 'error' => 'Pick a supplier from the list'],
             'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]] : null;
 
         // --- guided recorder sub-actions (plain language; each fills only what its event needs) ---
