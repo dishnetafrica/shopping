@@ -153,6 +153,24 @@ final class CustomerListCapability implements ProcessCapability
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
+        if ($action === 'search') {
+            $q = trim((string) ($input['q'] ?? ''));
+            $digits = preg_replace('/[^0-9]/', '', $q);
+            $rows = CustomerProfile::where('tenant_id', $ctx->tenantId())
+                ->when($q !== '', fn ($qq) => $qq->where(fn ($w) => $w
+                    ->where('name', 'ilike', '%' . $q . '%')
+                    ->orWhere('contact_person', 'ilike', '%' . $q . '%')
+                    ->when($digits !== '', fn ($d) => $d->orWhere('phone', 'like', '%' . $digits . '%'))))
+                ->orderBy('name')->limit(20)->get();
+            $items = $rows->map(fn ($c) => [
+                'id' => (int) $c->id,
+                'name' => (string) ($c->name ?: $c->phone ?: 'Customer'),
+                'sub' => trim(implode(' · ', array_filter([(string) $c->contact_person, (string) $c->phone, trim(implode(', ', array_filter([(string) $c->city, (string) $c->country])))]))),
+            ])->all();
+
+            return ['ok' => true, 'items' => $items];
+        }
+
         if ($action === 'add_customer') {
             try {
                 $c = app(CustomerWriteService::class)->create($ctx->tenant, $input);

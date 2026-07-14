@@ -236,6 +236,12 @@ svg{display:block}
 .qb-tot{font-size:13px;color:var(--muted)}.qb-tot b{font-size:20px;color:var(--ink);margin-left:8px;font-variant-numeric:tabular-nums}
 .qb-wa{display:flex;align-items:center;gap:9px;margin-top:14px;font-size:13px;color:var(--ink-2)}
 .qb-wa input{width:16px;height:16px}
+.qb-custwrap{margin-bottom:14px}
+.qb-chip{display:flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid var(--brand);background:var(--brand-wash);border-radius:9px;font-size:13.5px;color:var(--brand-ink)}
+.qb-chip .ic{color:var(--brand)}
+.qb-chip b{color:var(--ink)}
+.qb-chipx{margin-left:auto;height:26px;padding:0 10px;border:1px solid var(--line);border-radius:6px;background:#fff;font-size:12px;font-weight:600;color:var(--ink-2)}
+.qb-chipx:hover{border-color:var(--brand);color:var(--brand-ink)}
 /* ---- list: grid totals + pagination + date range ---- */
 .chip input[type=date]{border:none;background:none;font:inherit;color:var(--ink);cursor:pointer}
 .pager{display:flex;align-items:center;gap:10px;justify-content:flex-end;padding:11px 16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);flex-wrap:wrap}
@@ -886,11 +892,12 @@ window.addEventListener('hashchange',()=>{ const h=parseHash(); if(h.key && (h.k
 let QBT=null;
 function quoteBuilder(a){
   const cur=(a.prefill&&a.prefill.currency)||'UGX';
-  window.QB={lines:[], cur:cur, a:a, _res:[]};
+  window.QB={lines:[], cur:cur, a:a, _res:[], _cres:[], customerId:(a.prefill&&a.prefill.id)||null, customerName:a.customer||'', pick:!!a.pickCustomer};
   const curOpts=(a.currencies||[cur]).map(c=>'<option'+(c===cur?' selected':'')+'>'+esc(c)+'</option>').join('');
   const m=document.getElementById('modal'); m.style.maxWidth='660px';
-  m.innerHTML='<div class="h">New quotation — '+esc(a.customer||'Customer')+'<button class="x" onclick="closeQB()">'+icon('x')+'</button></div>'+
-    '<div class="b">'+
+  const custBlock=a.pickCustomer?'<div class="qb-custwrap" id="qbcustwrap"></div>':'';
+  m.innerHTML='<div class="h">New quotation'+(a.customer?' — '+esc(a.customer):'')+'<button class="x" onclick="closeQB()">'+icon('x')+'</button></div>'+
+    '<div class="b">'+custBlock+
       '<div class="qb-pick"><input id="qbq" placeholder="Search products to add…" autocomplete="off" oninput="qbSearch()"><div class="qb-res" id="qbres"></div></div>'+
       '<div id="qblines"></div>'+
       '<div class="qb-bar"><label class="qb-cur">Currency <select id="qbcur" onchange="qbCur()">'+curOpts+'</select></label>'+
@@ -898,9 +905,29 @@ function quoteBuilder(a){
       '<label class="qb-wa"><input type="checkbox" id="qbwa"> Also send the PDF to the customer on WhatsApp</label>'+
     '</div>'+
     '<div class="f"><button class="btn" onclick="closeQB()">Cancel</button><button class="btn pri" id="qbok" onclick="qbSubmit()" disabled>Create quotation</button></div>';
-  document.getElementById('ov').classList.add('on'); qbRender();
-  setTimeout(()=>{ const q=document.getElementById('qbq'); if(q) q.focus(); },40);
+  document.getElementById('ov').classList.add('on'); if(a.pickCustomer) qbRenderCust(); qbRender();
+  setTimeout(()=>{ const f=document.getElementById(a.pickCustomer?'qbcq':'qbq'); if(f) f.focus(); },40);
 }
+function qbRenderCust(){
+  const el=document.getElementById('qbcustwrap'); if(!el) return;
+  if(window.QB.customerId){
+    el.innerHTML='<div class="qb-chip">'+icon('user','ic-sm')+'<b>'+esc(window.QB.customerName)+'</b><button class="qb-chipx" onclick="qbCustClear()">Change</button></div>';
+  } else {
+    el.innerHTML='<div class="qb-pick"><input id="qbcq" placeholder="Search a customer…" autocomplete="off" oninput="qbCustSearch()"><div class="qb-res" id="qbcres"></div></div>';
+  }
+}
+function qbCustClear(){ window.QB.customerId=null; window.QB.customerName=''; qbRenderCust(); qbTotal(); setTimeout(()=>{const f=document.getElementById('qbcq');if(f)f.focus();},30); }
+function qbCustSearch(){
+  const q=document.getElementById('qbcq').value.trim(); const box=document.getElementById('qbcres'); clearTimeout(QBT);
+  if(q.length<2){ box.innerHTML=''; box.classList.remove('on'); return; }
+  QBT=setTimeout(async()=>{
+    const res=await post(window.QB.a.customerSearch,{q}); const items=(res&&res.items)||[]; window.QB._cres=items;
+    box.innerHTML=items.length? items.map((it,i)=>'<div class="qb-opt" onclick="qbCustPick('+i+')"><div class="qb-on">'+esc(it.name)+'</div><div class="qb-op">'+esc(it.sub||'')+'</div></div>').join('')
+      : '<div class="qb-empty">No customer matches “'+esc(q)+'”</div>';
+    box.classList.add('on');
+  },220);
+}
+function qbCustPick(i){ const it=(window.QB._cres||[])[i]; if(!it) return; window.QB.customerId=it.id; window.QB.customerName=it.name; qbRenderCust(); qbTotal(); }
 function closeQB(){ const m=document.getElementById('modal'); if(m) m.style.maxWidth=''; closeM(); }
 function qbSearch(){
   const q=document.getElementById('qbq').value.trim(); const box=document.getElementById('qbres'); clearTimeout(QBT);
@@ -933,11 +960,13 @@ function qbRender(){
 }
 function qbTotal(){ let t=0; window.QB.lines.forEach((l,i)=>{ const a=l.qty*l.price; t+=a; const el=document.getElementById('qbamt'+i); if(el) el.textContent=curFmt(a,window.QB.cur); });
   const tot=document.getElementById('qbtot'); if(tot) tot.textContent=curFmt(t,window.QB.cur);
-  const ok=document.getElementById('qbok'); if(ok) ok.disabled=window.QB.lines.length===0;
+  const ok=document.getElementById('qbok'); if(ok) ok.disabled=window.QB.lines.length===0 || (window.QB.pick && !window.QB.customerId);
 }
 async function qbSubmit(){
   const a=window.QB.a; const ok=document.getElementById('qbok'); if(!window.QB.lines.length) return;
+  if(window.QB.pick && !window.QB.customerId){ toast('Choose a customer first', true); return; }
   const body={lines:window.QB.lines.map(l=>({name:l.name,qty:l.qty,price:l.price})), currency:window.QB.cur, send_whatsapp:document.getElementById('qbwa').checked};
+  if(window.QB.customerId) body.customer_id=window.QB.customerId;
   ok.disabled=true; ok.textContent='Creating…';
   const res=await post(a.endpoint,body); closeQB();
   if(res&&res.ok){ toast(res.message||('Quotation '+res.quote_no+' created')); if(res.url){ try{ window.open(res.url,'_blank'); }catch(e){} } refresh(); }

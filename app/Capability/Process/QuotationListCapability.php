@@ -6,7 +6,9 @@ use App\Capability\Contracts\CapabilityContext;
 use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\WorkspacePayload;
 use App\Capability\Support\Money;
+use App\Models\CustomerProfile;
 use App\Models\Quotation;
+use App\Services\Sales\QuotationWriteService;
 use Illuminate\Support\Carbon;
 
 /**
@@ -95,7 +97,13 @@ final class QuotationListCapability implements ProcessCapability
                 'dateKey' => 'created', 'dateLabel' => 'Created', 'currency' => $cur, 'pageSize' => 20,
                 'totals' => [['key' => 'value', 'label' => 'Total value', 'money' => true]],
             ])
-            ->actions([['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/quotations', 'actor' => 'human', 'tone' => 'default']])
+            ->actions([
+                ['key' => 'new_quotation', 'label' => 'New quotation', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/quotations/_/create_quotation',
+                 'actor' => 'human', 'tone' => 'primary', 'builder' => 'quotation', 'pickCustomer' => true,
+                 'customerSearch' => '/api/v1/workspace/customers/_/search', 'productSearch' => '/api/v1/workspace/products/_/search',
+                 'currencies' => array_values(array_unique([$cur, 'USD', 'UGX', 'SSP', 'KES'])), 'prefill' => ['currency' => $cur]],
+                ['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/quotations', 'actor' => 'human', 'tone' => 'default'],
+            ])
             ->meta(['capability' => 'quotations', 'ttl' => 60, 'permissions' => ['menu:orders'], 'note' => 'Prepared-by column omitted — not in the frozen quotations schema.']);
     }
 
@@ -106,6 +114,25 @@ final class QuotationListCapability implements ProcessCapability
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
+        if ($action === 'create_quotation') {
+            $c = CustomerProfile::where('tenant_id', $ctx->tenantId())->find((int) ($input['customer_id'] ?? 0));
+            if (! $c) {
+                return ['ok' => false, 'error' => 'no_customer', 'message' => 'Choose a customer for the quotation.'];
+            }
+            $lines = is_array($input['lines'] ?? null) ? $input['lines'] : [];
+            $res = app(QuotationWriteService::class)->createFor(
+                $ctx->tenant, (string) $c->phone, (string) $c->name, $lines,
+                isset($input['currency']) ? (string) $input['currency'] : null,
+                (bool) ($input['send_whatsapp'] ?? false),
+            );
+            if (! ($res['ok'] ?? false)) {
+                return $res;
+            }
+            $res['message'] = 'Quotation ' . $res['quote_no'] . ' created for ' . ($c->name ?: $c->phone) . ($res['sent'] ? ' and sent on WhatsApp' : '') . '.';
+
+            return $res;
+        }
+
         return ['ok' => false, 'error' => 'unknown_action'];
     }
 }
