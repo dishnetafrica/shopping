@@ -57,8 +57,9 @@ final class SettingsCapability implements ProcessCapability
         ];
         $editInvoicing = [
             'key' => 'edit_invoicing', 'label' => 'Invoice & tax', 'method' => 'POST', 'endpoint' => $ep . '/save_settings', 'actor' => 'human', 'tone' => 'default',
-            'schema' => ['invoice_title' => 'text', 'invoice_terms_days' => 'number', 'vat_rate' => 'number', 'bank_details' => 'text', 'invoice_footer' => 'text'],
-            'prefill' => ['invoice_title' => $s('invoice_title', 'INVOICE'), 'invoice_terms_days' => $s('invoice_terms_days', '0'), 'vat_rate' => $s('vat_rate', '0'), 'bank_details' => $s('bank_details'), 'invoice_footer' => $s('invoice_footer')],
+            'schema' => ['invoice_title' => 'text', 'invoice_terms_days' => 'number', 'vat_rate' => 'number', 'bank_details' => 'text', 'invoice_footer' => 'text', 'cashbook_digest_to' => 'text'],
+            'labels' => ['cashbook_digest_to' => 'Daily cashbook email (blank = off)'],
+            'prefill' => ['invoice_title' => $s('invoice_title', 'INVOICE'), 'invoice_terms_days' => $s('invoice_terms_days', '0'), 'vat_rate' => $s('vat_rate', '0'), 'bank_details' => $s('bank_details'), 'invoice_footer' => $s('invoice_footer'), 'cashbook_digest_to' => $s('cashbook_digest_to')],
         ];
         $editBot = [
             'key' => 'edit_bot', 'label' => 'WhatsApp bot', 'method' => 'POST', 'endpoint' => $ep . '/save_settings', 'actor' => 'human', 'tone' => 'default',
@@ -92,6 +93,7 @@ final class SettingsCapability implements ProcessCapability
             ['Payment terms', ($s('invoice_terms_days', '0') ?: '0') . ' days'],
             ['VAT rate', ($s('vat_rate', '0') ?: '0') . '%'],
             ['Bank details', $s('bank_details') ?: '—'],
+            ['Daily cashbook email', $s('cashbook_digest_to') ?: '— off —'],
         ]];
         // --- WhatsApp & bot ---
         $waStatus = $t->whatsapp_instance ? 'Connected' : 'Not connected';

@@ -34,6 +34,10 @@ Schedule::command('oke:parity')->dailyAt('02:00')->withoutOverlapping()->onOneSe
 // Order Engine — daily KPI line per tenant (shadow telemetry).
 Schedule::command('orders:observatory')->dailyAt('06:00')->withoutOverlapping()->onOneServer();
 
+// Morning cashbook digest — WhatsApp summary + emailed CSV of yesterday's cashbook to the owner.
+// Opt-in per tenant via the `cashbook_digest_to` setting (blank = off). East Africa local time.
+Schedule::command('cashbook:digest')->dailyAt('06:30')->timezone('Africa/Kampala')->withoutOverlapping()->onOneServer();
+
 // Customer delivery-confirmation nudge — 60+ min after Delivered, once, daytime only.
 Schedule::command('orders:delivery-reminders')->everyFifteenMinutes()->between('8:00', '21:00')->withoutOverlapping()->onOneServer();
 

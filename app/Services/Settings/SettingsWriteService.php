@@ -22,6 +22,7 @@ final class SettingsWriteService
     private const TEXT_KEYS = [
         'address', 'city', 'country', 'public_email', 'public_phone', 'tin', 'logo', 'tagline',
         'invoice_title', 'invoice_footer', 'bank_details', 'trading_as', 'owner_name',
+        'cashbook_digest_to', // daily cashbook digest recipient (blank = off)
         // WhatsApp bot configuration (read by the bot/AI engine).
         'bot_greeting', 'bot_fallback_text', 'bot_unreadable_text', 'bot_website_link',
         'ai_persona', 'business_hours', 'delivery_areas', 'faq', 'brand_knowledge', 'languages',
