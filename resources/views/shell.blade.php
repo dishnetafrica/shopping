@@ -858,8 +858,9 @@ function overviewCard(c){
 // Shared renderer for per-row action buttons (href opens; post fires a mutation then refreshes).
 function rowActBtnsHtml(buttons){ return (buttons||[]).map(bn=>{ const ic=icon(bn.icon||'dots','ic-sm'); const tn=bn.tone==='danger'?' dgr':''; const ttl=esc(bn.title||'');
   if(bn.href) return '<button class="rowbtn'+tn+'" title="'+ttl+'" onclick="event.stopPropagation();try{window.open(\''+esc(bn.href)+'\',\'_blank\')}catch(e){location.href=\''+esc(bn.href)+'\'}">'+ic+'</button>';
+  if(bn.action) return '<button class="rowbtn'+tn+'" title="'+ttl+'" onclick=\'event.stopPropagation();doAction('+JSON.stringify(bn.action).replace(/'/g,"&#39;")+')\'>'+ic+'</button>';
   return '<button class="rowbtn'+tn+'" title="'+ttl+'" onclick=\'event.stopPropagation();rowPost('+JSON.stringify({endpoint:bn.post,body:bn.body||{},confirm:bn.confirm||""}).replace(/'/g,"&#39;")+')\'>'+ic+'</button>'; }).join(''); }
-function cellBadge(cell){ if(cell&&typeof cell==='object'){ if(cell.buttons&&cell.buttons.length) return '<div class="rowacts">'+rowActBtnsHtml(cell.buttons)+'</div>'; if(cell.badge) return '<span class="badge '+toneBadge(cell.badge)+'"><span class="d"></span>'+esc(cell.value)+'</span>'; return esc(cell.value); } return esc(cell); }
+function cellBadge(cell){ if(cell&&typeof cell==='object'){ if(cell.buttons&&cell.buttons.length) return '<div class="rowacts">'+rowActBtnsHtml(cell.buttons)+'</div>'; if(cell.badge) return '<span class="badge '+toneBadge(cell.badge)+'"><span class="d"></span>'+esc(cell.value)+'</span>'; if(cell.tone){ const col=cell.tone==='danger'?'var(--danger)':(cell.tone==='ok'?'var(--brand-ink)':(cell.tone==='warn'?'var(--warn-ink,#b45309)':'inherit')); return '<span style="color:'+col+';font-weight:600">'+esc(cell.value)+'</span>'; } return esc(cell.value); } return esc(cell); }
 function hydrateCardTables(){ (window._CT||[]).forEach((t,i)=>cardTableRender(i)); }
 function ctText(cell){ return (cell&&typeof cell==='object')?(cell.value!=null?cell.value:''):(cell!=null?cell:''); }
 // Full render: draws the toolbar ONCE (so its inputs keep focus) + a body container the filters re-render into.
