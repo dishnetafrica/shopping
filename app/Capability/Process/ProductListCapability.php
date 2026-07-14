@@ -92,20 +92,28 @@ final class ProductListCapability implements ProcessCapability
             ->table($columns, $rows)
             ->actions([
                 ['key' => 'add_product', 'label' => 'New product', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/products/_/add_product', 'actor' => 'human', 'tone' => 'primary', 'schema' => $this->formSchema($t)],
-                ['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/products', 'actor' => 'human', 'tone' => 'default'],
+                ['key' => 'price_list', 'label' => 'Price list PDF', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/products/_/price_list', 'actor' => 'human', 'tone' => 'default'],
             ])
             ->meta(['capability' => 'products', 'ttl' => 60, 'permissions' => ['menu:products'], 'note' => $totalSkus > self::MAX_ROWS ? ('Showing first ' . self::MAX_ROWS . ' of ' . $totalSkus . ' SKUs; KPIs cover all.') : null]);
     }
 
-    /** Schema for the add/edit product form. Category is an enum populated from existing categories. */
+    /**
+     * Schema for the add/edit product form. Category is a type-or-pick combo whose suggestions are the
+     * UNION of the Category table and every category string actually used on products — so a product's
+     * own category is never missing from the list, and a brand-new category can be typed in freely.
+     */
     public static function formSchema(int $tenantId): array
     {
-        $cats = Category::where('tenant_id', $tenantId)->orderBy('name')->pluck('name')
-            ->filter(fn ($n) => trim((string) $n) !== '')->values()->all();
+        $fromTable = Category::where('tenant_id', $tenantId)->pluck('name');
+        $fromProducts = Product::where('tenant_id', $tenantId)->whereNotNull('category')->distinct()->pluck('category');
+        $cats = $fromTable->merge($fromProducts)
+            ->map(fn ($n) => trim((string) $n))
+            ->filter(fn ($n) => $n !== '')
+            ->unique()->sort()->values()->all();
 
         return array_filter([
             'name'       => 'text',
-            'category'   => $cats ? ('enum:' . implode(',', $cats)) : 'text',
+            'category'   => 'combo:' . implode('|', $cats),
             'price'      => 'money',
             'cost'       => 'money',
             'stock'      => 'number',
@@ -121,8 +129,39 @@ final class ProductListCapability implements ProcessCapability
         return ['products' => Product::where('tenant_id', $ctx->tenantId())->count()];
     }
 
+    /** Build the category-grouped price list and render it to a branded PDF (returned as base64). */
+    private function priceList(CapabilityContext $ctx): array
+    {
+        $products = Product::where('tenant_id', $ctx->tenantId())->where('active', true)
+            ->orderBy('category')->orderBy('name')->get();
+        if ($products->isEmpty()) {
+            return ['ok' => false, 'error' => 'empty', 'message' => 'No active products to build a price list from.'];
+        }
+        $cur = $ctx->baseCurrency();
+        $grouped = [];
+        foreach ($products as $p) {
+            $cat = trim((string) $p->category) ?: 'Uncategorised';
+            $grouped[$cat][] = ['name' => (string) $p->name, 'unit' => (string) ($p->unit_label ?: ''), 'moq' => $p->moq ? (int) $p->moq : null, 'price' => (float) $p->price];
+        }
+        ksort($grouped, SORT_NATURAL | SORT_FLAG_CASE);
+        $groups = [];
+        foreach ($grouped as $cat => $items) {
+            $groups[] = ['category' => $cat, 'items' => $items];
+        }
+        $doc = app(\App\Services\Catalog\PriceListRenderer::class)->pdf($ctx->tenant, $groups, $cur);
+        if (! $doc || ($doc['b64'] ?? '') === '') {
+            return ['ok' => false, 'error' => 'pdf_unavailable', 'message' => 'The PDF engine is not available on this server.'];
+        }
+
+        return ['ok' => true, 'pdf_b64' => $doc['b64'], 'filename' => $doc['fileName'], 'message' => 'Price list (' . count($groups) . ' categories) downloaded.'];
+    }
+
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
+        if ($action === 'price_list') {
+            return $this->priceList($ctx);
+        }
+
         if ($action === 'search') {
             $q = trim((string) ($input['q'] ?? ''));
             $rows = Product::where('tenant_id', $ctx->tenantId())

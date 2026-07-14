@@ -62,6 +62,11 @@ final class CategoryListCapability implements ProcessCapability
                 ['key' => 'uncat', 'label' => 'Uncategorised', 'value' => $uncategorised, 'tone' => $uncategorised > 0 ? 'warn' : 'ok', 'foot' => 'products with no category'],
             ])
             ->table($columns, $rows)
+            ->actions([
+                ['key' => 'add_category', 'label' => 'New category', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/categories/_/add_category',
+                 'actor' => 'human', 'tone' => 'primary', 'schema' => ['name' => 'text']],
+                ['key' => 'price_list', 'label' => 'Price list PDF', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/products/_/price_list', 'actor' => 'human', 'tone' => 'default'],
+            ])
             ->meta(['capability' => 'categories', 'ttl' => 120, 'permissions' => ['menu:products']]);
     }
 
@@ -72,6 +77,19 @@ final class CategoryListCapability implements ProcessCapability
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
+        if ($action === 'add_category') {
+            $name = trim((string) ($input['name'] ?? ''));
+            if ($name === '') {
+                return ['ok' => false, 'error' => 'name_required', 'message' => 'Enter a category name.'];
+            }
+            $c = Category::firstOrCreate(
+                ['tenant_id' => $ctx->tenantId(), 'name' => $name],
+                ['active' => true, 'sort' => 0],
+            );
+
+            return ['ok' => true, 'id' => (int) $c->id, 'message' => 'Category "' . $c->name . '" ' . ($c->wasRecentlyCreated ? 'added' : 'already exists') . '.'];
+        }
+
         return ['ok' => false, 'error' => 'unknown_action'];
     }
 }

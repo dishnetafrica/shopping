@@ -2,6 +2,7 @@
 
 namespace App\Services\Catalog;
 
+use App\Models\Category;
 use App\Models\Product;
 use App\Models\Tenant;
 
@@ -22,10 +23,11 @@ final class ProductWriteService
             throw new \InvalidArgumentException('name_and_price_required');
         }
 
-        return Product::create(array_merge([
+        $category = trim((string) ($d['category'] ?? ''));
+        $p = Product::create(array_merge([
             'tenant_id'  => (int) $t->id,
             'name'       => $name,
-            'category'   => trim((string) ($d['category'] ?? '')),
+            'category'   => $category,
             'keywords'   => trim((string) ($d['keywords'] ?? '')),
             'base_price' => $price,
             'price'      => $price,
@@ -36,6 +38,22 @@ final class ProductWriteService
             'unit_label' => trim((string) ($d['unit_label'] ?? '')) ?: null,
             'active'     => true,
         ], $this->photoColumns($d) ?: ['image_url' => trim((string) ($d['image'] ?? ''))]));
+        $this->ensureCategory($t, $category);
+
+        return $p;
+    }
+
+    /** Make sure a category typed on a product also exists as a Category record (so it lists + filters). */
+    public function ensureCategory(Tenant $t, string $name): void
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return;
+        }
+        Category::firstOrCreate(
+            ['tenant_id' => (int) $t->id, 'name' => $name],
+            ['active' => true, 'sort' => 0],
+        );
     }
 
     /**
@@ -96,6 +114,7 @@ final class ProductWriteService
             $p->unit_label = trim((string) $d['unit_label']) ?: null;
         }
         $p->save();
+        $this->ensureCategory($t, (string) $p->category);
 
         return $p;
     }

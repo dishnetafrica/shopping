@@ -254,6 +254,11 @@ svg{display:block}
 .gt-row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;font-size:13px;border-top:1px solid var(--line-2)}
 .gt-row:first-of-type{border-top:none}
 .gt-row span{color:var(--muted)}.gt-row b{font-variant-numeric:tabular-nums;font-size:14px}
+.cttool{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line-2)}
+.cttool .tsearch{position:relative;min-width:200px}
+.cttool .tsearch .ic{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--faint)}
+.cttool .tsearch input{height:34px;border:1px solid var(--line);border-radius:8px;padding:0 10px 0 32px;background:var(--surface-2);width:100%}
+.cttool .tsearch input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-wash);background:#fff}
 
 /* timeline */
 .tl{position:relative}
@@ -768,9 +773,10 @@ function overviewCard(c){
     return '<div class="card">'+head+'<div class="b"><dl class="dl">'+(c.rows||[]).map(r=>'<dt>'+esc(r[0])+'</dt><dd>'+esc(r[1])+'</dd>').join('')+'</dl></div></div>';
   }
   if(c.kind==='table'){
-    // Register the rows and paginate after render (record tab tables can be long).
+    // Register the rows; the toolbar (search / date range) + pagination render after the card is in the DOM.
     const idx=(window._CT=window._CT||[]).length;
-    window._CT.push({cols:c.columns||[], rows:c.rows||[], empty:c.empty||'Nothing here', page:1, ps:c.pageSize||10});
+    window._CT.push({cols:c.columns||[], rows:c.rows||[], empty:c.empty||'Nothing here', page:1, ps:c.pageSize||10,
+      searchable:c.searchable!==false, dateFilter:!!c.dateFilter, q:'', from:'', to:''});
     return '<div class="card">'+head+'<div id="ct_'+idx+'"></div></div>';
   }
   if(c.kind==='links'){
@@ -784,21 +790,46 @@ function overviewCard(c){
 }
 function cellBadge(cell){ if(cell&&typeof cell==='object'){ if(cell.badge) return '<span class="badge '+toneBadge(cell.badge)+'"><span class="d"></span>'+esc(cell.value)+'</span>'; return esc(cell.value); } return esc(cell); }
 function hydrateCardTables(){ (window._CT||[]).forEach((t,i)=>cardTableRender(i)); }
+function ctText(cell){ return (cell&&typeof cell==='object')?(cell.value!=null?cell.value:''):(cell!=null?cell:''); }
+// Full render: draws the toolbar ONCE (so its inputs keep focus) + a body container the filters re-render into.
 function cardTableRender(i){
   const t=(window._CT||[])[i]; const el=document.getElementById('ct_'+i); if(!t||!el) return;
-  if(!t.rows.length){ el.innerHTML='<div class="b">'+emptyState('doc',t.empty,'')+'</div>'; return; }
-  const ps=t.ps, pages=Math.max(1,Math.ceil(t.rows.length/ps)); if(t.page>pages) t.page=pages; if(t.page<1) t.page=1;
-  const start=(t.page-1)*ps, pageRows=t.rows.slice(start,start+ps);
+  const showSearch = t.searchable && t.rows.length>8;
+  let tb='';
+  if(showSearch || t.dateFilter){
+    tb='<div class="cttool">';
+    if(showSearch) tb+='<div class="tsearch"><svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input placeholder="Search…" value="'+esc(t.q||'')+'" oninput="cardTableSet('+i+',\'q\',this.value)"></div>';
+    if(t.dateFilter) tb+='<label class="chip">From <input type="date" value="'+esc(t.from||'')+'" onchange="cardTableSet('+i+',\'from\',this.value)"></label>'+
+      '<label class="chip">To <input type="date" value="'+esc(t.to||'')+'" onchange="cardTableSet('+i+',\'to\',this.value)"></label>'+
+      ((t.from||t.to)?'<button class="btn sm" onclick="cardTableClear('+i+')">Clear</button>':'');
+    tb+='</div>';
+  }
+  el.innerHTML=tb+'<div id="ctb_'+i+'"></div>';
+  cardTableBody(i);
+}
+// Light render: filter + paginate into the body container only (keeps toolbar focus).
+function cardTableBody(i){
+  const t=(window._CT||[])[i]; const el=document.getElementById('ctb_'+i); if(!t||!el) return;
+  let rows=t.rows.slice();
+  const q=(t.q||'').trim().toLowerCase();
+  if(q) rows=rows.filter(r=>(r.cells||[]).some(c=>String(ctText(c)).toLowerCase().includes(q)));
+  if(t.dateFilter){ const f=t.from?Math.floor(Date.parse(t.from)/1000):null; const to=t.to?Math.floor(Date.parse(t.to)/1000)+86399:null;
+    if(f!=null||to!=null) rows=rows.filter(r=>{ const s=Number(r.ts)||0; if(f!=null&&s<f) return false; if(to!=null&&s>to) return false; return true; }); }
+  if(!rows.length){ el.innerHTML='<div class="b">'+emptyState('doc',(q||t.from||t.to)?'No matching rows':t.empty,'')+'</div>'; return; }
+  const ps=t.ps, pages=Math.max(1,Math.ceil(rows.length/ps)); if(t.page>pages) t.page=pages; if(t.page<1) t.page=1;
+  const start=(t.page-1)*ps, pageRows=rows.slice(start,start+ps);
   const thead='<tr>'+t.cols.map(col=>'<th'+(col.align==='right'?' class="num"':'')+'>'+esc(col.label)+'</th>').join('')+'</tr>';
   const body=pageRows.map(r=>'<tr class="'+(r.link?'clk':'')+'"'+(r.link?' onclick="openLink(\''+esc(r.link)+'\')"':'')+'>'+
     r.cells.map((cell,ci)=>{ const al=t.cols[ci]&&t.cols[ci].align==='right'?' class="num"':''; return '<td'+al+'>'+cellBadge(cell)+'</td>'; }).join('')+'</tr>').join('');
   let h='<div style="overflow-x:auto"><table class="dtbl"><thead>'+thead+'</thead><tbody>'+body+'</tbody></table></div>';
-  if(t.rows.length>ps){ h+='<div class="pager"><span>'+(start+1)+'–'+Math.min(start+ps,t.rows.length)+' of '+fmtCount(t.rows.length)+'</span>'+
+  if(rows.length>ps){ h+='<div class="pager"><span>'+(start+1)+'–'+Math.min(start+ps,rows.length)+' of '+fmtCount(rows.length)+'</span>'+
     '<button onclick="cardTablePage('+i+',-1)"'+(t.page<=1?' disabled':'')+'>Prev</button><span>Page '+t.page+' / '+pages+'</span>'+
     '<button onclick="cardTablePage('+i+',1)"'+(t.page>=pages?' disabled':'')+'>Next</button></div>'; }
   el.innerHTML=h;
 }
-function cardTablePage(i,d){ const t=(window._CT||[])[i]; if(!t) return; t.page+=d; cardTableRender(i); }
+function cardTableSet(i,k,v){ const t=(window._CT||[])[i]; if(!t) return; t[k]=v; t.page=1; if(k==='from'||k==='to') cardTableRender(i); else cardTableBody(i); }
+function cardTableClear(i){ const t=(window._CT||[])[i]; if(!t) return; t.from=''; t.to=''; t.page=1; cardTableRender(i); }
+function cardTablePage(i,d){ const t=(window._CT||[])[i]; if(!t) return; t.page+=d; cardTableBody(i); }
 
 function timelineTab(events){
   if(!events||!events.length) return '<div class="card"><div class="b">'+emptyState('clock','No activity yet','This customer has no recorded activity.')+'</div></div>';
@@ -834,8 +865,16 @@ async function doAction(a){
   if(a.schema){ return formModal(a); }
   if(a.confirm && !window.confirm(a.confirm)) return;
   const res=await post(a.endpoint,{}); toast(res.ok?(res.message||'Done'):(res.message||res.error||'Error'), !res.ok);
-  if(res&&res.ok&&res.url){ try{ window.open(res.url,'_blank'); }catch(e){} }
+  if(res&&res.ok){ if(res.pdf_b64){ downloadB64(res.pdf_b64,res.filename||'document.pdf'); } else if(res.url){ try{ window.open(res.url,'_blank'); }catch(e){} } }
   refresh();
+}
+/* Turn a base64 payload into a real file download — avoids any dependency on the server's public URL/domain. */
+function downloadB64(b64,filename){
+  try{ const bin=atob(b64); const arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+    const blob=new Blob([arr],{type:'application/pdf'}); const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=filename||'document.pdf'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+  }catch(e){ toast('Could not open the PDF', true); }
 }
 window.GAL={};
 function formModal(a){
@@ -856,6 +895,10 @@ function formModal(a){
         '<span class="mut" id="up_'+k+'" style="font-size:12px"></span></div></div></div>'; }
     else if(String(type).startsWith('enum:')){ const opts=String(type).slice(5).split(',');
       fields+='<div class="fld"><label>'+lbl+'</label><select id="f_'+k+'">'+opts.map(o=>'<option'+(o===val?' selected':'')+'>'+esc(o)+'</option>').join('')+'</select></div>'; }
+    else if(String(type).startsWith('combo:')){ const opts=String(type).slice(6).split('|').filter(Boolean);
+      fields+='<div class="fld"><label>'+lbl+' <span class="mut" style="font-weight:400">(type a new one or pick existing)</span></label>'+
+        '<input id="f_'+k+'" list="dl_'+k+'" autocomplete="off" value="'+esc(val)+'" placeholder="Type or choose…">'+
+        '<datalist id="dl_'+k+'">'+opts.map(o=>'<option value="'+esc(o)+'"></option>').join('')+'</datalist></div>'; }
     else { const t=(type==='money'||type==='number')?'type="number" step="'+(type==='money'?'0.01':'1')+'"':''; const ph=type==='money'?'placeholder="0.00"':'';
       fields+='<div class="fld"><label>'+lbl+'</label><input id="f_'+k+'" '+t+' '+ph+' value="'+esc(val)+'"></div>'; }
   });
@@ -984,7 +1027,7 @@ async function qbSubmit(){
   if(window.QB.customerId) body.customer_id=window.QB.customerId;
   ok.disabled=true; ok.textContent='Creating…';
   const res=await post(a.endpoint,body); closeQB();
-  if(res&&res.ok){ toast(res.message||('Quotation '+res.quote_no+' created')); if(res.url){ try{ window.open(res.url,'_blank'); }catch(e){} } refresh(); }
+  if(res&&res.ok){ toast(res.message||('Quotation '+res.quote_no+' created')); if(res.pdf_b64){ downloadB64(res.pdf_b64,res.filename||'Quotation.pdf'); } else if(res.url){ try{ window.open(res.url,'_blank'); }catch(e){} } refresh(); }
   else { toast((res&&(res.message||res.error))||'Could not create quotation', true); }
 }
 
