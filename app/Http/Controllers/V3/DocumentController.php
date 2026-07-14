@@ -121,13 +121,14 @@ final class DocumentController extends Controller
             abort(401);
         }
         $svc = app(CashbookExport::class);
-        $data = $svc->collect($t, $r->user(), (string) $r->query('from', ''), (string) $r->query('to', ''));
+        $data = $svc->collect($t, $r->user(), (string) $r->query('from', ''), (string) $r->query('to', ''), (string) $r->query('currency', ''));
         $stamp = now()->format('Ymd-Hi');
+        $tag = ! empty($data['currency']) ? ('-' . $data['currency']) : '';
 
         if (strtolower((string) $r->query('format', 'pdf')) === 'csv') {
             return response($svc->csv($data), 200, [
                 'Content-Type' => 'text/csv; charset=UTF-8',
-                'Content-Disposition' => 'attachment; filename="Cashbook-' . $stamp . '.csv"',
+                'Content-Disposition' => 'attachment; filename="Cashbook' . $tag . '-' . $stamp . '.csv"',
             ]);
         }
 
@@ -138,7 +139,7 @@ final class DocumentController extends Controller
 
         return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="Cashbook-' . $stamp . '.pdf"',
+            'Content-Disposition' => 'inline; filename="Cashbook' . $tag . '-' . $stamp . '.pdf"',
         ]);
     }
 

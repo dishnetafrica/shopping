@@ -341,6 +341,13 @@ final class CashbookCapability implements ProcessCapability
         $exportCsv = ['key' => 'export_csv', 'label' => 'Download CSV (Excel)', 'href' => '/api/v1/doc/cashbook-export?format=csv', 'actor' => 'human', 'tone' => 'default'];
         $exportPdfMonth = ['key' => 'export_pdf_month', 'label' => 'PDF — this month', 'href' => '/api/v1/doc/cashbook-export?format=pdf&from=' . $mFrom . '&to=' . $mTo, 'actor' => 'human', 'tone' => 'default'];
         $exportCsvMonth = ['key' => 'export_csv_month', 'label' => 'CSV — this month', 'href' => '/api/v1/doc/cashbook-export?format=csv&from=' . $mFrom . '&to=' . $mTo, 'actor' => 'human', 'tone' => 'default'];
+        // Per-currency cash book (running balance) — one download per currency you actually hold/use.
+        $curExports = [];
+        foreach (self::CURRENCIES as $cc) {
+            if (abs($pos[$cc]['native']) < 0.01) { continue; }
+            $curExports[] = ['key' => 'export_' . strtolower($cc), 'label' => $cc . ' cash book (PDF)', 'href' => '/api/v1/doc/cashbook-export?format=pdf&currency=' . $cc, 'actor' => 'human', 'tone' => 'default'];
+            $curExports[] = ['key' => 'export_' . strtolower($cc) . '_csv', 'label' => $cc . ' cash book (CSV)', 'href' => '/api/v1/doc/cashbook-export?format=csv&currency=' . $cc, 'actor' => 'human', 'tone' => 'default'];
+        }
 
         $headerActions = array_values(array_filter([$record, $paySupplier]));
         $actions = array_values(array_filter([$record, $addCash, $fxExchange, $transfer, $paySupplier]));
@@ -362,7 +369,7 @@ final class CashbookCapability implements ProcessCapability
                 ['key' => 'payables', 'label' => 'Suppliers you owe', 'count' => count($payRows)],
             ])
             ->actions($headerActions)
-            ->more([$exportPdf, $exportCsv, $exportPdfMonth, $exportCsvMonth])
+            ->more(array_merge([$exportPdf, $exportCsv, $exportPdfMonth, $exportCsvMonth], $curExports))
             ->meta(['capability' => 'cashbook', 'ttl' => 15, 'layout' => 'record', 'listKey' => 'cashbook', 'permissions' => ['menu:finance']]);
     }
 
