@@ -47,8 +47,12 @@ final class CashbookExport
         };
 
         // --- position by currency and by person (frozen IN_STAGES sign rule) ---
-        $posRows = $byHolder($scoped(OrderCost::where('tenant_id', $t->id)->where('status', 'approved')))
-            ->select('currency', 'stage', 'holder', DB::raw('SUM(paid_native) as native'), DB::raw('SUM(paid_native / NULLIF(rate_to_usd,0)) as usd'))
+        // Same basis as the entries/books below (every live cash entry, native_amount) so the position
+        // reconciles to the running-balance cash books to the cent.
+        $posRows = $byHolder($scoped(OrderCost::where('tenant_id', $t->id)
+            ->where(fn ($w) => $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status'))
+            ->whereNotIn('status', ['void', 'rejected'])))
+            ->select('currency', 'stage', 'holder', DB::raw('SUM(native_amount) as native'), DB::raw('SUM(native_amount / NULLIF(rate_to_usd,0)) as usd'))
             ->groupBy('currency', 'stage', 'holder')->get();
 
         $pos = []; $holders = [];

@@ -47,8 +47,12 @@ final class CashbookCapability implements ProcessCapability
         $scoped = fn ($q) => $isOwner ? $q : $q->where(fn ($w) => $w->where('holder_user_id', $ctx->user->id)->orWhere('holder', $me));
 
         // --- cash position: per currency AND per holder (frozen IN_STAGES sign rule) ---
-        $posRows = $scoped(OrderCost::where('tenant_id', $t)->where('status', 'approved'))
-            ->select('currency', 'stage', 'holder', DB::raw('SUM(paid_native) as native'), DB::raw('SUM(paid_native / NULLIF(rate_to_usd,0)) as usd'))
+        // Same basis as the cash book & entries below (every live cash entry, native_amount) so the
+        // Cash-by-person totals ALWAYS reconcile to each person's cash book to the cent.
+        $posRows = $scoped(OrderCost::where('tenant_id', $t)
+            ->where(fn ($w) => $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status'))
+            ->whereNotIn('status', ['void', 'rejected']))
+            ->select('currency', 'stage', 'holder', DB::raw('SUM(native_amount) as native'), DB::raw('SUM(native_amount / NULLIF(rate_to_usd,0)) as usd'))
             ->groupBy('currency', 'stage', 'holder')->get();
 
         $pos = ['USD' => ['native' => 0.0, 'usd' => 0.0], 'UGX' => ['native' => 0.0, 'usd' => 0.0], 'SSP' => ['native' => 0.0, 'usd' => 0.0]];
@@ -128,7 +132,8 @@ final class CashbookCapability implements ProcessCapability
 
         // --- entries (with edit + delete per row) ---
         $entries = $scoped(OrderCost::where('tenant_id', $t)
-            ->where(fn ($w) => $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status')))
+            ->where(fn ($w) => $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status'))
+            ->whereNotIn('status', ['void', 'rejected']))
             ->orderByDesc('created_at')->orderByDesc('id')->limit(self::MAX_ROWS)->get();
 
         $stageLabels = ['cash_in' => 'Cash In', 'cash_out' => 'Cash Out', 'funding' => 'Funding', 'purchase' => 'Purchase',
