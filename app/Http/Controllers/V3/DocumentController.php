@@ -7,6 +7,7 @@ use App\Models\CustomerPayment;
 use App\Models\Product;
 use App\Services\Catalog\CatalogRenderer;
 use App\Services\Catalog\PriceListRenderer;
+use App\Services\Finance\CashbookExport;
 use App\Services\Finance\ReceiptRenderer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -109,6 +110,38 @@ final class DocumentController extends Controller
     }
 
     /** @param array{path?:string,b64?:string} $doc */
+    /**
+     * GET /api/v1/doc/cashbook-export?format=pdf|csv — cash position (by currency AND by person) + every entry.
+     * PDF is a printable statement; CSV opens straight in Excel. Scoped to the viewer (staff see only their own).
+     */
+    public function cashbookExport(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) {
+            abort(401);
+        }
+        $svc = app(CashbookExport::class);
+        $data = $svc->collect($t, $r->user());
+        $stamp = now()->format('Ymd-Hi');
+
+        if (strtolower((string) $r->query('format', 'pdf')) === 'csv') {
+            return response($svc->csv($data), 200, [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="Cashbook-' . $stamp . '.csv"',
+            ]);
+        }
+
+        $pdf = $svc->pdf($t, $data);
+        if (! $pdf) {
+            abort(404, 'PDF engine unavailable');
+        }
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="Cashbook-' . $stamp . '.pdf"',
+        ]);
+    }
+
     private function stream(array $doc, string $filename)
     {
         $disk = Storage::disk('public');
