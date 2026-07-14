@@ -68,6 +68,13 @@ final class InvoiceListCapability implements ProcessCapability
             $balLine   = $rc->line($balance, $icur, null, $date);
             $cons = fn ($amt) => $rc->consolidate([['amount' => $amt, 'currency' => $icur, 'date' => $date]])['amount'];
 
+            $isVoid = strtolower((string) $i->status) === 'void';
+            $rowBtns = [['icon' => 'download', 'title' => 'Download PDF', 'href' => '/papi/invoice-pdf?id=' . $i->id]];
+            if (! $isVoid) {
+                $rowBtns[] = ['icon' => 'send', 'title' => 'Send on WhatsApp', 'post' => '/papi/invoice-send', 'body' => ['id' => (int) $i->id], 'confirm' => 'Send invoice ' . $i->invoice_no . ' to the customer on WhatsApp?'];
+                $rowBtns[] = ['icon' => 'ban', 'title' => 'Void invoice', 'tone' => 'danger', 'post' => '/papi/invoice-void', 'body' => ['id' => (int) $i->id], 'confirm' => 'Void invoice ' . $i->invoice_no . '? It stays on record but is marked void.'];
+            }
+
             $rows[] = [
                 'invoice'  => (string) $i->invoice_no,
                 'customer' => ['value' => (string) ($i->customer_name ?: 'Customer'), 'sub' => (string) ($i->customer_phone ?: ''), 'avatar' => true],
@@ -79,6 +86,7 @@ final class InvoiceListCapability implements ProcessCapability
                 'issued'   => ['value' => $issued ? $issued->format('d M Y') : '—', 'sort' => $issued ? $issued->timestamp : 0],
                 'due'      => ['value' => $due ? $due->format('d M Y') : '—', 'sort' => $due ? $due->timestamp : 0],
                 'status'   => ['value' => $status, 'badge' => $badge],
+                'act'      => ['buttons' => $rowBtns],
                 'link'     => '/api/v1/workspace/invoice/' . $i->id,
             ];
         }
@@ -97,6 +105,7 @@ final class InvoiceListCapability implements ProcessCapability
             ['key' => 'issued',   'label' => 'Created',   'sortable' => true],
             ['key' => 'due',      'label' => 'Due date',  'sortable' => true],
             ['key' => 'status',   'label' => 'Status',    'type' => 'badge', 'sortable' => true],
+            ['key' => 'act',      'label' => '',          'type' => 'action', 'sortable' => false],
         ];
 
         return (new WorkspacePayload)

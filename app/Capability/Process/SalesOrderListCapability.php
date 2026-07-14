@@ -42,6 +42,12 @@ final class SalesOrderListCapability implements ProcessCapability
             $label = $isDelivered ? 'Delivered' : ucfirst($status ?: 'Open');
             $badge = $isDelivered ? 'ok' : (in_array($status, self::CLOSED, true) ? 'danger' : (in_array($status, ['new', 'pending'], true) ? 'info' : 'warn'));
 
+            $canCancel = ! $isDelivered && ! in_array($status, self::CLOSED, true);
+            $rowBtns = [];
+            if ($canCancel) {
+                $rowBtns[] = ['icon' => 'ban', 'title' => 'Cancel order', 'tone' => 'danger', 'post' => '/api/v1/workspace/salesOrder/' . $o->id . '/cancel_order', 'confirm' => 'Cancel Order ' . $o->order_no . '? Stock is released and the order is closed.'];
+            }
+
             $rows[] = [
                 'order'    => (string) $o->order_no,
                 'customer' => ['value' => (string) ($o->customer_name ?: 'Customer'), 'sub' => (string) ($o->customer_phone ?: ''), 'avatar' => true],
@@ -49,6 +55,7 @@ final class SalesOrderListCapability implements ProcessCapability
                 'total'    => ['value' => Money::fmt((float) $o->total, (string) ($o->sell_currency ?: $cur)), 'sort' => (float) $o->total],
                 'status'   => ['value' => $label, 'badge' => $badge],
                 'created'  => ['value' => $created ? $created->format('d M Y') : '—', 'sort' => $created ? $created->timestamp : 0],
+                'act'      => ['buttons' => $rowBtns],
                 'link'     => '/api/v1/workspace/salesOrder/' . $o->id,
             ];
         }
@@ -60,6 +67,7 @@ final class SalesOrderListCapability implements ProcessCapability
             ['key' => 'total',    'label' => 'Total',    'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'status',   'label' => 'Status',   'type' => 'badge', 'sortable' => true],
             ['key' => 'created',  'label' => 'Created',  'sortable' => true],
+            ['key' => 'act',      'label' => '',         'type' => 'action', 'sortable' => false],
         ];
 
         return (new WorkspacePayload)

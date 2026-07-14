@@ -96,6 +96,10 @@ svg{display:block}
 .btn.ai{border-style:dashed;border-color:#c9d3f0;color:var(--accent)}
 .btn.ai:hover{background:var(--accent-wash);border-color:#b9c4ef}
 .btn.sm{height:31px;padding:0 11px;font-size:12.5px}
+.rowacts{display:flex;gap:6px;align-items:center}
+.rowbtn{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);transition:.12s;cursor:pointer}
+.rowbtn:hover{background:var(--line-2);color:var(--ink);border-color:#d8dce3}
+.rowbtn.dgr{color:var(--danger)}.rowbtn.dgr:hover{background:var(--danger-wash);border-color:#f3c9c9}
 .btn.danger{color:var(--danger)}.btn.danger:hover{background:var(--danger-wash);border-color:#f3c9c9}
 
 /* ================= CARDS / KPI ================= */
@@ -472,6 +476,8 @@ const P = {
   doc:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6',
   clock:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2', bolt:'M13 2 3 14h9l-1 8 10-12h-9z',
   check:'M20 6 9 17l-5-5', chev:'m9 18 6-6-6-6',
+  trash:'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
+  ban:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM5 5l14 14',
   trend:'M23 6l-9.5 9.5-5-5L1 18M17 6h6v6',
   book:'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z',
   phone:'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.94.36 1.86.7 2.73a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.35-1.35a2 2 0 0 1 2.11-.45c.87.34 1.79.57 2.73.7A2 2 0 0 1 22 16.92z',
@@ -918,6 +924,14 @@ async function doAction(a){
   if(res&&res.ok){ if(res.pdf_b64){ downloadB64(res.pdf_b64,res.filename||'document.pdf'); } else if(res.url){ try{ window.open(res.url,'_blank'); }catch(e){} } }
   refresh();
 }
+/* Per-row list action: confirm (optional) → POST → toast → refresh the list. */
+async function rowPost(o){
+  if(!o||!o.endpoint) return;
+  if(o.confirm && !window.confirm(o.confirm)) return;
+  const res=await post(o.endpoint,o.body||{});
+  toast(res.ok?(res.message||'Done'):(res.message||res.error||'Error'), !res.ok);
+  refresh();
+}
 /* Turn a base64 payload into a real file download — avoids any dependency on the server's public URL/domain. */
 function downloadB64(b64,filename){
   try{ const bin=atob(b64); const arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
@@ -1192,7 +1206,16 @@ function cellHtml(c,col){
   if(col.type==='strong'){ return '<td class="prim'+align+'">'+esc(cellVal(c))+'</td>'; }
   if(col.type==='badge'){ const v=cellVal(c), tone=(c&&c.badge)||'default';
     return '<td>'+(v?'<span class="badge '+toneBadge(tone)+'"><span class="d"></span>'+esc(v)+'</span>':'—')+'</td>'; }
-  if(col.type==='action'){ const href=(c&&c.href)||''; const label=cellVal(c)||'Open';
+  if(col.type==='action'){
+    // Multiple per-row icon buttons (href opens, post fires a mutation then refreshes).
+    if(c && c.buttons && c.buttons.length){
+      const bs=c.buttons.map(bn=>{ const ic=icon(bn.icon||'dots','ic-sm'); const tn=bn.tone==='danger'?' dgr':''; const ttl=esc(bn.title||'');
+        if(bn.href) return '<button class="rowbtn'+tn+'" title="'+ttl+'" onclick="event.stopPropagation();try{window.open(\''+esc(bn.href)+'\',\'_blank\')}catch(e){location.href=\''+esc(bn.href)+'\'}">'+ic+'</button>';
+        return '<button class="rowbtn'+tn+'" title="'+ttl+'" onclick=\'event.stopPropagation();rowPost('+JSON.stringify({endpoint:bn.post,body:bn.body||{},confirm:bn.confirm||""}).replace(/'/g,"&#39;")+')\'>'+ic+'</button>';
+      }).join('');
+      return '<td><div class="rowacts">'+bs+'</div></td>';
+    }
+    const href=(c&&c.href)||''; const label=cellVal(c)||'Open';
     return '<td>'+(href?'<button class="btn sm" onclick="event.stopPropagation();try{window.open(\''+esc(href)+'\',\'_blank\')}catch(e){location.href=\''+esc(href)+'\'}">'+icon((c&&c.icon)||'download','ic-sm')+esc(label)+'</button>':'—')+'</td>'; }
   const tone=(c&&c.tone)?(' '+toneCls(c.tone)):'';
   return '<td class="'+align+tone+'">'+esc(cellVal(c))+'</td>';

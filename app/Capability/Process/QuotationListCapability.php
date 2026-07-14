@@ -57,6 +57,11 @@ final class QuotationListCapability implements ProcessCapability
             $valid = $q->valid_until ? Carbon::parse($q->valid_until) : null;
             $created = $q->created_at ? Carbon::parse($q->created_at) : null;
 
+            $rowBtns = [['icon' => 'download', 'title' => 'Download PDF', 'href' => '/papi/quotation-pdf?id=' . $q->id]];
+            if ($status !== 'converted') {
+                $rowBtns[] = ['icon' => 'trash', 'title' => 'Archive quotation', 'tone' => 'danger', 'post' => '/papi/quotation-delete', 'body' => ['id' => (int) $q->id], 'confirm' => 'Archive quotation ' . $q->quote_no . '? It is hidden from the active list but kept for records.'];
+            }
+
             $rows[] = [
                 'quote'    => (string) $q->quote_no,
                 'customer' => ['value' => (string) ($q->customer_name ?: 'Customer'), 'sub' => (string) ($q->customer_phone ?: ''), 'avatar' => true],
@@ -65,6 +70,7 @@ final class QuotationListCapability implements ProcessCapability
                 'valid'    => ['value' => $valid ? $valid->format('d M Y') : '—', 'sort' => $valid ? $valid->timestamp : 0],
                 'status'   => ['value' => $label, 'badge' => $badge],
                 'created'  => ['value' => $created ? $created->format('d M Y') : '—', 'sort' => $created ? $created->timestamp : 0],
+                'act'      => ['buttons' => $rowBtns],
                 'link'     => $q->order_id ? '/api/v1/workspace/salesOrder/' . $q->order_id : '/api/v1/workspace/quotation/' . $q->id,
             ];
         }
@@ -80,6 +86,7 @@ final class QuotationListCapability implements ProcessCapability
             ['key' => 'valid',    'label' => 'Valid until', 'sortable' => true],
             ['key' => 'status',   'label' => 'Status',     'type' => 'badge', 'sortable' => true],
             ['key' => 'created',  'label' => 'Created',    'sortable' => true],
+            ['key' => 'act',      'label' => '',           'type' => 'action', 'sortable' => false],
         ];
 
         return (new WorkspacePayload)
