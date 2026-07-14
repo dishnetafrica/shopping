@@ -3,6 +3,7 @@
 namespace App\Capability\Registry;
 
 use App\Capability\Object\CustomerCapability;
+use App\Capability\Process\AdsCapability;
 use App\Capability\Object\InvoiceCapability;
 use App\Capability\Object\PaymentCapability;
 use App\Capability\Object\ProductCapability;
@@ -92,6 +93,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register($purchase, new CapabilityManifest(key: 'purchase.process', type: 'process', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/purchase.process'));
         $r->register(new FinanceCapability($money), new CapabilityManifest(key: 'finance', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/finance'));
         $r->register(new CashbookCapability(), new CapabilityManifest(key: 'cashbook', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/cashbook'));
+        $r->register(new AdsCapability(), new CapabilityManifest(key: 'ads', type: 'process', owner: 'management', permission: '', api: '/api/v1/workspace/ads'));
         $r->register($warehouse, new CapabilityManifest(key: 'warehouse', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/warehouse'));
         $r->register($dispatch, new CapabilityManifest(key: 'dispatch', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/dispatch'));
 
