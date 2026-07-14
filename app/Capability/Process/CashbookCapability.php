@@ -227,10 +227,10 @@ final class CashbookCapability implements ProcessCapability
             'labels' => ['dir' => 'In or out', 'native_amount' => 'Amount', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => 'Held by', 'category' => 'Category', 'note' => 'Note'],
             'prefill' => ['dir' => 'in', 'currency' => 'UGX', 'rate_to_usd' => (int) round($ugx), 'holder' => $me],
             'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]];
-        $fxExchange = ['key' => 'fx_exchange', 'label' => 'Currency exchange', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook/convert', 'actor' => 'human', 'tone' => 'default',
-            'schema' => ['from_amount' => 'money', 'from_currency' => 'enum:USD,UGX,SSP', 'to_currency' => 'enum:UGX,USD,SSP', 'rate' => 'number', 'holder' => $comboPeople, 'note' => 'text'],
-            'labels' => ['from_amount' => 'Amount to convert', 'from_currency' => 'From', 'to_currency' => 'To', 'rate' => 'Rate', 'holder' => 'Whose cash is converted (out & back in to them)', 'note' => 'Note'],
-            'prefill' => ['from_currency' => 'USD', 'to_currency' => 'UGX', 'rate' => (int) round($ugx), 'holder' => $me],
+        $fxExchange = ['key' => 'fx_exchange', 'label' => 'Currency exchange', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook/convert', 'actor' => 'human', 'tone' => 'default', 'flow' => 'convert',
+            'schema' => ['from_amount' => 'money', 'from_currency' => 'enum:USD,UGX,SSP', 'to_currency' => 'enum:UGX,USD,SSP', 'rate' => 'number', 'holder' => $comboPeople, 'receiver' => $comboPeople, 'note' => 'text'],
+            'labels' => ['from_amount' => 'Amount to convert', 'from_currency' => 'From', 'to_currency' => 'To', 'rate' => 'Rate', 'holder' => 'Whose cash goes out (spends the From)', 'receiver' => 'Who gets the converted money (blank = same person)', 'note' => 'Note'],
+            'prefill' => ['from_currency' => 'USD', 'to_currency' => 'UGX', 'rate' => (int) round($ugx), 'holder' => $me, 'receiver' => ''],
             'autoRate' => ['field' => 'rate', 'source' => 'to_currency', 'map' => $rateMap],
             'preview' => ['left' => 'from_amount', 'right' => 'rate', 'curField' => 'to_currency', 'label' => 'You will get']];
         $transfer = count($peopleList) >= 2 ? ['key' => 'cash_transfer', 'label' => 'Transfer cash', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook/transfer', 'actor' => 'human', 'tone' => 'default',

@@ -1040,6 +1040,21 @@ function formModal(a){
     if(a.valueMap && a.valueMap.field && a.valueMap.map){ const sel=body[a.valueMap.field]; const mapped=a.valueMap.map[sel];
       if(mapped===undefined || mapped===null){ toast(a.valueMap.error||'Please pick a valid option from the list',true); return; }
       const into=a.valueMap.into||a.valueMap.field; body[into]=mapped; if(into!==a.valueMap.field) delete body[a.valueMap.field]; }
+    // flow:'convert' — one person's cash is converted; if a different receiver is named, the converted
+    // amount is then handed to them (convert under source, then transfer), so both people's balances land right.
+    if(a.flow==='convert'){
+      closeM();
+      const fromAmt=parseFloat(body.from_amount)||0, from=body.from_currency, to=body.to_currency, rate=parseFloat(body.rate)||0, src=(body.holder||'').trim(), rcv=(body.receiver||'').trim();
+      if(fromAmt<=0||rate<=0||!src){ toast('Enter the amount, rate and whose cash is converted',true); return; }
+      const toAmt=Math.round(fromAmt*rate*100)/100;
+      const r1=await post('/papi/trade-cashbook/convert',{from_currency:from,to_currency:to,from_amount:fromAmt,rate:rate,holder:src,note:body.note||''});
+      if(!r1||!r1.ok){ toast((r1&&(r1.message||r1.error))||'Conversion failed',true); refresh(); return; }
+      if(rcv && rcv.toLowerCase()!==src.toLowerCase()){
+        const r2=await post('/papi/trade-cashbook/transfer',{from_person:src,to_person:rcv,currency:to,amount:toAmt,note:'Converted '+from+' → '+to+', handed to '+rcv});
+        toast((r2&&r2.ok)?(src+' converted '+from+' '+fromAmt.toLocaleString()+' → '+toAmt.toLocaleString()+' '+to+', handed to '+rcv):('Converted, but handing to '+rcv+' failed — use "Moved cash between people"'), !(r2&&r2.ok));
+      } else { toast(src+' converted '+from+' '+fromAmt.toLocaleString()+' → '+toAmt.toLocaleString()+' '+to, false); }
+      refresh(); return;
+    }
     closeM(); const res=await post(ep,body);
     // onResult:'payment' — surface the customer's remaining balance right here instead of a generic "Saved".
     let msg=res.message;
