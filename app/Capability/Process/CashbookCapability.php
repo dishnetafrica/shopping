@@ -335,8 +335,12 @@ final class CashbookCapability implements ProcessCapability
         if ($transfer) { $tiles[] = ['icon' => 'chev', 'title' => 'Moved cash between people', 'sub' => 'Hand cash from one person to another', 'tone' => 'move', 'action' => array_merge($transfer, ['label' => 'Move cash between people'])]; }
 
         $record = ['key' => 'record_activity', 'label' => 'Record activity', 'actor' => 'human', 'tone' => 'primary', 'chooser' => $tiles];
+        $mFrom = now()->startOfMonth()->toDateString();
+        $mTo = now()->endOfMonth()->toDateString();
         $exportPdf = ['key' => 'export_pdf', 'label' => 'Download PDF statement', 'href' => '/api/v1/doc/cashbook-export?format=pdf', 'actor' => 'human', 'tone' => 'default'];
         $exportCsv = ['key' => 'export_csv', 'label' => 'Download CSV (Excel)', 'href' => '/api/v1/doc/cashbook-export?format=csv', 'actor' => 'human', 'tone' => 'default'];
+        $exportPdfMonth = ['key' => 'export_pdf_month', 'label' => 'PDF — this month', 'href' => '/api/v1/doc/cashbook-export?format=pdf&from=' . $mFrom . '&to=' . $mTo, 'actor' => 'human', 'tone' => 'default'];
+        $exportCsvMonth = ['key' => 'export_csv_month', 'label' => 'CSV — this month', 'href' => '/api/v1/doc/cashbook-export?format=csv&from=' . $mFrom . '&to=' . $mTo, 'actor' => 'human', 'tone' => 'default'];
 
         $headerActions = array_values(array_filter([$record, $paySupplier]));
         $actions = array_values(array_filter([$record, $addCash, $fxExchange, $transfer, $paySupplier]));
@@ -358,7 +362,7 @@ final class CashbookCapability implements ProcessCapability
                 ['key' => 'payables', 'label' => 'Suppliers you owe', 'count' => count($payRows)],
             ])
             ->actions($headerActions)
-            ->more([$exportPdf, $exportCsv])
+            ->more([$exportPdf, $exportCsv, $exportPdfMonth, $exportCsvMonth])
             ->meta(['capability' => 'cashbook', 'ttl' => 15, 'layout' => 'record', 'listKey' => 'cashbook', 'permissions' => ['menu:finance']]);
     }
 

@@ -25,8 +25,12 @@ final class CashbookExport
         'customer_payment' => 'Receipt', 'drawing' => 'Drawing', 'supplier_payment' => 'Supplier Pay', 'expense' => 'Expense',
     ];
 
-    /** Gather the position + holders + entries, scoped like the screen (staff see only their own). */
-    public function collect(Tenant $t, ?User $u = null): array
+    /**
+     * Gather the position + holders + entries, scoped like the screen (staff see only their own).
+     * Optional $from / $to (Y-m-d) filter the ENTRIES to a period and add an in/out movement summary;
+     * the cash position always reflects the current live balance.
+     */
+    public function collect(Tenant $t, ?User $u = null, ?string $from = null, ?string $to = null): array
     {
         $fx = Fx::forTenant($t);
         $rate = ['USD' => 1.0, 'UGX' => (float) $fx->ratePerUsd('UGX'), 'SSP' => (float) $fx->ratePerUsd('SSP')];
@@ -60,11 +64,14 @@ final class CashbookExport
         $holders = array_filter($holders, fn ($b) => abs($b['USD']) > 0.01 || abs($b['UGX']) > 0.01 || abs($b['SSP']) > 0.01);
         uasort($holders, fn ($a, $b) => $b['usd'] <=> $a['usd']);
 
-        // --- entries (cash rows only, newest first) ---
-        $entries = $scoped(OrderCost::where('tenant_id', $t->id)
+        // --- entries (cash rows only, newest first; optionally within a date period) ---
+        $from = $this->cleanDate($from); $to = $this->cleanDate($to);
+        $eq = $scoped(OrderCost::where('tenant_id', $t->id)
             ->where(fn ($w) => $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status'))
-            ->whereNotIn('status', ['void', 'rejected']))
-            ->orderByDesc('created_at')->orderByDesc('id')->limit(self::MAX_ROWS)->get();
+            ->whereNotIn('status', ['void', 'rejected']));
+        if ($from) { $eq->whereDate('created_at', '>=', $from); }
+        if ($to) { $eq->whereDate('created_at', '<=', $to); }
+        $entries = $eq->orderByDesc('created_at')->orderByDesc('id')->limit(self::MAX_ROWS)->get();
 
         $rows = [];
         foreach ($entries as $c) {
@@ -87,16 +94,41 @@ final class CashbookExport
             ];
         }
 
+        // --- period movement (in / out / net per currency) over the filtered entries ---
+        $period = null;
+        if ($from || $to) {
+            $mv = [];
+            foreach (self::CURRENCIES as $c) { $mv[$c] = ['in' => 0.0, 'out' => 0.0, 'net' => 0.0, 'usd' => 0.0]; }
+            foreach ($rows as $r) {
+                $c = $r['currency']; if (! isset($mv[$c])) { continue; }
+                if ($r['dir'] === 'In') { $mv[$c]['in'] += $r['native']; } else { $mv[$c]['out'] += $r['native']; }
+                $mv[$c]['net'] += $r['signed']; $mv[$c]['usd'] += $r['usd'];
+            }
+            $period = [
+                'from' => $from ?: '…', 'to' => $to ?: '…',
+                'label' => ($from ?: 'start') . ' → ' . ($to ?: 'today'),
+                'movement' => $mv,
+                'netUsd' => round(array_sum(array_map(fn ($m) => $m['usd'], $mv)), 2),
+            ];
+        }
+
         return [
             'business' => (string) ($t->name ?: 'Cashbook'),
             'generated' => now()->format('d M Y, H:i'),
             'scope' => $isOwner ? 'All cash' : ('My cash — ' . $me),
+            'period' => $period,
             'rate' => $rate,
             'pos' => $pos,
             'combinedUsd' => $combinedUsd,
             'holders' => $holders,
             'rows' => $rows,
         ];
+    }
+
+    private function cleanDate(?string $d): ?string
+    {
+        $d = trim((string) $d);
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) ? $d : null;
     }
 
     /** CSV: summary blocks (by currency, by person) then every entry — opens directly in Excel. */
@@ -113,9 +145,21 @@ final class CashbookExport
 
         $line([$d['business'] . ' — Cashbook']);
         $line(['Generated', $d['generated'], $d['scope']]);
+        if (! empty($d['period'])) { $line(['Period', $d['period']['label']]); }
         $line([]);
 
-        $line(['CASH POSITION BY CURRENCY']);
+        if (! empty($d['period'])) {
+            $line(['MOVEMENT IN PERIOD (' . $d['period']['label'] . ')']);
+            $line(['Currency', 'In', 'Out', 'Net', 'Net USD']);
+            foreach (self::CURRENCIES as $c) {
+                $m = $d['period']['movement'][$c];
+                $line([$c, $this->num($m['in']), $this->num($m['out']), $this->num($m['net']), $this->num($m['usd'])]);
+            }
+            $line(['Net (USD)', '', '', '', $this->num($d['period']['netUsd'])]);
+            $line([]);
+        }
+
+        $line(['CASH POSITION BY CURRENCY (current)']);
         $line(['Currency', 'Amount', 'USD value']);
         foreach (self::CURRENCIES as $c) {
             $line([$c, $this->num($d['pos'][$c]['native']), $this->num($d['pos'][$c]['usd'])]);
@@ -186,6 +230,23 @@ final class CashbookExport
         }
         if ($entryRows === '') { $entryRows = '<tr><td colspan="7" class="mut">No entries</td></tr>'; }
 
+        $periodBlock = '';
+        if (! empty($d['period'])) {
+            $mvRows = '';
+            foreach (self::CURRENCIES as $c) {
+                $m = $d['period']['movement'][$c];
+                $mvRows .= '<tr><td>' . $c . '</td><td class="r in">' . $e($money($m['in'], $c)) . '</td><td class="r out">'
+                    . $e($money($m['out'], $c)) . '</td><td class="r">' . $e($money($m['net'], $c)) . '</td><td class="r">'
+                    . $e($money($m['usd'], 'USD')) . '</td></tr>';
+            }
+            $mvRows .= '<tr class="tot"><td>Net (USD)</td><td class="r"></td><td class="r"></td><td class="r"></td><td class="r">'
+                . $e($money($d['period']['netUsd'], 'USD')) . '</td></tr>';
+            $periodBlock = '<h2>Movement in period (' . $e($d['period']['label']) . ')</h2>'
+                . '<table><thead><tr><th>Currency</th><th class="r">In</th><th class="r">Out</th><th class="r">Net</th><th class="r">Net USD</th></tr></thead>'
+                . '<tbody>' . $mvRows . '</tbody></table>';
+        }
+        $periodSub = ! empty($d['period']) ? (' &nbsp;·&nbsp; Period: ' . $e($d['period']['label'])) : '';
+
         return '<!doctype html><html><head><meta charset="utf-8"><style>
             * { font-family: DejaVu Sans, sans-serif; }
             body { color: #1f2933; font-size: 11px; }
@@ -203,9 +264,11 @@ final class CashbookExport
             .foot { margin-top: 18px; color: #9ca3af; font-size: 9px; text-align: center; }
         </style></head><body>
             <h1>' . $e($d['business']) . ' — Cashbook</h1>
-            <div class="sub">' . $e($d['generated']) . ' &nbsp;·&nbsp; ' . $e($d['scope']) . '</div>
+            <div class="sub">' . $e($d['generated']) . ' &nbsp;·&nbsp; ' . $e($d['scope']) . $periodSub . '</div>
 
-            <h2>Cash position by currency</h2>
+            ' . $periodBlock . '
+
+            <h2>Cash position by currency (current)</h2>
             <table><thead><tr><th>Currency</th><th class="r">Amount</th><th class="r">USD value</th></tr></thead>
             <tbody>' . $curRows . '</tbody></table>
 
@@ -213,7 +276,7 @@ final class CashbookExport
             <table><thead><tr><th>Held by</th><th class="r">USD</th><th class="r">UGX</th><th class="r">SSP</th><th class="r">Total (USD)</th></tr></thead>
             <tbody>' . $holderRows . '</tbody></table>
 
-            <h2>All cash entries (' . count($d['rows']) . ')</h2>
+            <h2>' . (! empty($d['period']) ? 'Entries in period' : 'All cash entries') . ' (' . count($d['rows']) . ')</h2>
             <table><thead><tr><th>When</th><th>Ref</th><th>Category</th><th>Held by</th><th>In/Out</th><th class="r">Amount</th><th class="r">USD</th></tr></thead>
             <tbody>' . $entryRows . '</tbody></table>
 

@@ -121,7 +121,7 @@ final class DocumentController extends Controller
             abort(401);
         }
         $svc = app(CashbookExport::class);
-        $data = $svc->collect($t, $r->user());
+        $data = $svc->collect($t, $r->user(), (string) $r->query('from', ''), (string) $r->query('to', ''));
         $stamp = now()->format('Ymd-Hi');
 
         if (strtolower((string) $r->query('format', 'pdf')) === 'csv') {

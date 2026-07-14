@@ -31,6 +31,10 @@ final class FinanceCapability implements ProcessCapability
                 new Financial('payable', 'Payable', $m['payable'], 'USD', 'warn'),
                 new Financial('runway', 'Runway', $m['runway'] ?? '∞', null, ($m['runway'] !== null && $m['runway'] < 14) ? 'warn' : 'ok', 'days'),
             ])
+            ->actions([
+                ['key' => 'export_pdf', 'label' => 'Cashbook PDF', 'href' => '/api/v1/doc/cashbook-export?format=pdf', 'actor' => 'human', 'tone' => 'default'],
+                ['key' => 'export_csv', 'label' => 'Cashbook CSV (Excel)', 'href' => '/api/v1/doc/cashbook-export?format=csv', 'actor' => 'human', 'tone' => 'default'],
+            ])
             ->meta(['capability' => 'finance', 'ttl' => 120, 'permissions' => ['menu:finance']]);
     }
 
