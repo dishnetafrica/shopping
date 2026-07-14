@@ -110,21 +110,24 @@ final class PurchaseProcessCapability implements ProcessCapability
                 $btns[] = ['icon' => 'trash', 'title' => 'Delete purchase', 'tone' => 'danger', 'post' => '/papi/order-costs/' . $c->id . '/delete', 'confirm' => 'Delete purchase ' . $ref . '? (voided, kept in the audit trail)'];
             }
 
-            $payCell = $voided
-                ? ['value' => 'Void', 'badge' => 'default']
+            [$payCell, $payKind] = $voided
+                ? [['value' => 'Void', 'badge' => 'default'], 'Void']
                 : ($isCredit
                     ? ($outstanding > 0
-                        ? ['value' => 'Owe ' . Money::fmt($outstanding, $ccur), 'badge' => 'warn', 'sort' => $outstanding]
-                        : ['value' => 'Credit · paid', 'badge' => 'ok', 'sort' => 0])
-                    : ['value' => 'Cash', 'badge' => 'ok', 'sort' => 0]);
+                        ? [['value' => 'Owe ' . Money::fmt($outstanding, $ccur), 'badge' => 'warn', 'sort' => $outstanding], 'Credit — owing']
+                        : [['value' => 'Credit · paid', 'badge' => 'ok', 'sort' => 0], 'Credit — paid'])
+                    : [['value' => 'Cash', 'badge' => 'ok', 'sort' => 0], 'Cash']);
 
             $rows[] = [
                 'date'     => ['value' => $when ? $when->format('d M Y') : '—', 'sort' => $when ? $when->timestamp : 0],
                 'supplier' => ['value' => $supName, 'sub' => $ref, 'avatar' => true],
                 'item'     => (string) ($c->note ?: ucfirst((string) $c->stage)),
-                'amount'   => ['value' => ($voided ? '(void) ' : '') . Money::fmt($native, $ccur), 'sub' => Money::fmt($usd, 'USD'), 'tone' => $voided ? '' : 'danger', 'sort' => $usd],
+                'amount'   => ['value' => ($voided ? '(void) ' : '') . Money::fmt($native, $ccur), 'sub' => Money::fmt($usd, 'USD'), 'tone' => $voided ? '' : 'danger', 'sort' => $voided ? 0 : $usd],
                 'pay'      => $payCell,
                 'act'      => ['buttons' => $btns],
+                // hidden fields powering the filter chips (not shown as columns)
+                'currency' => $ccur,
+                'paykind'  => $payKind,
                 'link'     => $c->supplier_id ? ('/api/v1/workspace/supplier/' . $c->supplier_id) : null,
             ];
         }
@@ -149,6 +152,9 @@ final class PurchaseProcessCapability implements ProcessCapability
 
         $unpaid = collect($rows)->filter(fn ($r) => ($r['pay']['badge'] ?? '') === 'warn')->count();
 
+        $exportPdf = ['key' => 'export_pdf', 'label' => 'Export PDF', 'href' => '/api/v1/doc/purchases-export?format=pdf', 'actor' => 'human', 'tone' => 'default'];
+        $exportCsv = ['key' => 'export_csv', 'label' => 'Export CSV', 'href' => '/api/v1/doc/purchases-export?format=csv', 'actor' => 'human', 'tone' => 'default'];
+
         return (new WorkspacePayload)
             ->object([
                 'type' => 'process:purchase', 'title' => 'Purchasing',
@@ -160,8 +166,15 @@ final class PurchaseProcessCapability implements ProcessCapability
                 ['key' => 'month', 'label' => 'This month', 'value' => Money::fmt(round($monthSpendUsd, 2), 'USD'), 'foot' => 'purchased since ' . $monthStart->format('d M')],
                 ['key' => 'total', 'label' => 'Total (shown)', 'value' => Money::fmt(round($totalSpendUsd, 2), 'USD'), 'foot' => 'last ' . self::MAX_ROWS . ' purchases'],
             ])
-            ->table($columns, $rows)
-            ->actions($canEdit ? [$recordPurchase] : [])
+            ->table($columns, $rows,
+                [
+                    ['key' => 'supplier', 'label' => 'Supplier'],
+                    ['key' => 'currency', 'label' => 'Currency'],
+                    ['key' => 'paykind', 'label' => 'Status'],
+                ],
+                ['dateKey' => 'date', 'dateLabel' => 'Date', 'currency' => 'USD', 'pageSize' => 25,
+                    'totals' => [['key' => 'amount', 'label' => 'Total (USD)', 'money' => true]]])
+            ->actions($canEdit ? [$recordPurchase, $exportPdf, $exportCsv] : [$exportPdf, $exportCsv])
             ->meta(['capability' => 'purchase.process', 'ttl' => 30, 'permissions' => ['menu:purchases']]);
     }
 

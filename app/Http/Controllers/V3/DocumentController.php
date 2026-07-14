@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Services\Catalog\CatalogRenderer;
 use App\Services\Catalog\PriceListRenderer;
 use App\Services\Finance\CashbookExport;
+use App\Services\Finance\PurchasesExport;
 use App\Services\Finance\ReceiptRenderer;
 use App\Services\Finance\SupplierStatement;
 use Illuminate\Http\Request;
@@ -143,6 +144,44 @@ final class DocumentController extends Controller
         return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="Cashbook' . $tag . '-' . $stamp . '.pdf"',
+        ]);
+    }
+
+    /**
+     * GET /api/v1/doc/purchases-export?format=pdf|csv — purchases register across all suppliers.
+     * Optional ?from=&to=&currency=&supplier_id= scope it (same filters as the Purchasing screen).
+     */
+    public function purchasesExport(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) {
+            abort(401);
+        }
+        $svc = app(PurchasesExport::class);
+        $data = $svc->collect($t, [
+            'from' => (string) $r->query('from', ''),
+            'to' => (string) $r->query('to', ''),
+            'currency' => (string) $r->query('currency', ''),
+            'supplier_id' => (int) $r->query('supplier_id', 0),
+        ]);
+        $stamp = now()->format('Ymd-Hi');
+        $tag = ($data['currency'] ? ('-' . $data['currency']) : '') . ($data['supplier'] ? ('-' . preg_replace('/[^A-Za-z0-9]+/', '', $data['supplier'])) : '');
+
+        if (strtolower((string) $r->query('format', 'pdf')) === 'csv') {
+            return response($svc->csv($data), 200, [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="Purchases' . $tag . '-' . $stamp . '.csv"',
+            ]);
+        }
+
+        $pdf = $svc->pdf($t, $data);
+        if (! $pdf) {
+            abort(404, 'PDF engine unavailable');
+        }
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="Purchases' . $tag . '-' . $stamp . '.pdf"',
         ]);
     }
 
