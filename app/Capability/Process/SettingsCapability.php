@@ -111,19 +111,33 @@ final class SettingsCapability implements ProcessCapability
             ['Website link', $s('bot_website_link') ?: '—'],
         ]];
 
-        // --- team (read-only; membership is managed in the seller panel) ---
+        // --- team: list live members, add/remove via the panel's proven owner-gated staff endpoints ---
+        $meId = (int) $ctx->user->id;
         $members = User::where('tenant_id', $t->id)->orderBy('name')->limit(50)->get();
-        $teamRows = $members->map(fn ($u) => ['cells' => [
-            (string) ($u->name ?: $u->email ?: 'Member'),
-            ucfirst((string) ($u->role ?: 'user')),
-            (string) ($u->email ?: '—'),
-        ], 'link' => null])->all();
+        $teamRows = $members->map(function ($u) use ($meId) {
+            $isMe = (int) $u->id === $meId;
+            $btns = $isMe ? [] : [['icon' => 'trash', 'title' => 'Remove member', 'tone' => 'danger', 'post' => '/papi/staff/delete', 'body' => ['id' => (int) $u->id], 'confirm' => 'Remove ' . ($u->name ?: $u->email) . ' from the team? Their login is deleted.']];
+
+            return ['cells' => [
+                (string) ($u->name ?: $u->email ?: 'Member') . ($isMe ? ' (you)' : ''),
+                ucfirst(str_replace('_', ' ', (string) ($u->role ?: 'user'))),
+                (string) ($u->email ?: '—'),
+                ['buttons' => $btns],
+            ], 'link' => null];
+        })->all();
         $teamCard = ['kind' => 'table', 'title' => 'Team members', 'sub' => $members->count() . ' total',
-            'columns' => [['label' => 'Member'], ['label' => 'Role'], ['label' => 'Email']],
+            'columns' => [['label' => 'Member'], ['label' => 'Role'], ['label' => 'Email'], ['label' => '', 'align' => 'right']],
             'rows' => $teamRows, 'empty' => 'No team members yet'];
-        $teamNote = ['kind' => 'dl', 'title' => 'Managing your team', 'rows' => [
-            ['Add / remove members', 'Use the seller panel → Staff (roles, passwords and permissions)'],
-            ['Members', (string) $members->count()],
+
+        $addMember = [
+            'key' => 'add_member', 'label' => 'Add member', 'method' => 'POST', 'endpoint' => '/papi/staff/add', 'actor' => 'human', 'tone' => 'primary',
+            'schema' => ['name' => 'text', 'email' => 'text', 'phone' => 'text', 'role' => 'enum:sales,manager,staff,purchaser,product_staff,field', 'password' => 'text'],
+            'prefill' => ['role' => 'sales'],
+        ];
+        $teamNote = ['kind' => 'dl', 'title' => 'About team logins', 'rows' => [
+            ['Sign in', 'By email + password, or WhatsApp number (OTP)'],
+            ['Requirements', 'Name, a valid email, and either a WhatsApp number or a 6+ character password'],
+            ['Note', 'Only owners can add or remove members'],
         ]];
 
         $help = ['kind' => 'links', 'title' => 'How reporting currency works', 'items' => [
@@ -148,7 +162,7 @@ final class SettingsCapability implements ProcessCapability
                 ['key' => 'mode', 'label' => 'Report mode', 'value' => $mode === 'original' ? 'Original' : 'Consolidated'],
                 ['key' => 'terms', 'label' => 'Payment terms', 'value' => ($s('invoice_terms_days', '0') ?: '0') . ' days'],
             ])
-            ->quickActions([$editProfile, $editCurrency, $editRates, $editInvoicing, $editBot])
+            ->quickActions([$editProfile, $editCurrency, $editRates, $editInvoicing, $editBot, $addMember])
             ->overviewCards([$profileCard, $currencyCard, $invoiceCard])
             ->tabSections([
                 'business' => [$profileCard],
@@ -166,7 +180,7 @@ final class SettingsCapability implements ProcessCapability
                 ['key' => 'team', 'label' => 'Team', 'count' => $members->count()],
             ])
             ->actions([$editProfile])
-            ->more([$editCurrency, $editRates, $editInvoicing, $editBot])
+            ->more([$editCurrency, $editRates, $editInvoicing, $editBot, $addMember])
             ->meta(['capability' => 'settings', 'ttl' => 20, 'layout' => 'record', 'listKey' => 'settings', 'permissions' => []]);
     }
 
