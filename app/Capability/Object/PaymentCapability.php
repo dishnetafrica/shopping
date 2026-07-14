@@ -36,8 +36,9 @@ final class PaymentCapability implements ObjectCapability
         $ep = '/api/v1/workspace/payment/' . $p->id;
 
         $inv = $p->invoice_no ? Invoice::where('tenant_id', $ctx->tenantId())->where('invoice_no', $p->invoice_no)->first() : null;
-        $profile = CustomerProfile::where('tenant_id', $ctx->tenantId())
-            ->whereRaw("regexp_replace(coalesce(phone,''),'[^0-9]','','g') = ?", [preg_replace('/[^0-9]/', '', (string) $p->customer_phone)])->first();
+        $pPhone = preg_replace('/[^0-9]/', '', (string) $p->customer_phone);
+        $profile = $pPhone === '' ? null : CustomerProfile::where('tenant_id', $ctx->tenantId())
+            ->whereRaw("regexp_replace(coalesce(phone,''),'[^0-9]','','g') = ?", [$pPhone])->first();
         $method = ucwords(str_replace('_', ' ', (string) ($p->method ?: 'cash')));
         $when = $p->created_at ? Carbon::parse($p->created_at) : null;
 

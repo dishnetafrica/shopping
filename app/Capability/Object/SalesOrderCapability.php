@@ -58,9 +58,10 @@ final class SalesOrderCapability implements ObjectCapability
         }
         $grossPct = ($costKnown && $total > 0) ? round(($total - $cogs) / $total * 100, 1) : null;
 
-        // Customer link (profile lookup by phone, if saved).
-        $profile = CustomerProfile::where('tenant_id', $ctx->tenantId())
-            ->whereRaw("regexp_replace(coalesce(phone,''),'[^0-9]','','g') = ?", [preg_replace('/[^0-9]/', '', (string) $o->customer_phone)])->first();
+        // Customer link (profile lookup by phone, if saved). Blank phone → no match (never a stray one).
+        $oPhone = preg_replace('/[^0-9]/', '', (string) $o->customer_phone);
+        $profile = $oPhone === '' ? null : CustomerProfile::where('tenant_id', $ctx->tenantId())
+            ->whereRaw("regexp_replace(coalesce(phone,''),'[^0-9]','','g') = ?", [$oPhone])->first();
 
         // --- pipeline ---
         $st = fn ($done, $now) => $done ? 'done' : ($now ? 'now' : 'wait');

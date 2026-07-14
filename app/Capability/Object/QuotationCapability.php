@@ -46,8 +46,9 @@ final class QuotationCapability implements ObjectCapability
         $converted = (bool) $q->order_id;
         $canConvert = ! $converted && in_array($status, self::OPEN, true);
 
-        $profile = CustomerProfile::where('tenant_id', $ctx->tenantId())
-            ->whereRaw("regexp_replace(coalesce(phone,''),'[^0-9]','','g') = ?", [preg_replace('/[^0-9]/', '', (string) $q->customer_phone)])->first();
+        $qPhone = preg_replace('/[^0-9]/', '', (string) $q->customer_phone);
+        $profile = $qPhone === '' ? null : CustomerProfile::where('tenant_id', $ctx->tenantId())
+            ->whereRaw("regexp_replace(coalesce(phone,''),'[^0-9]','','g') = ?", [$qPhone])->first();
 
         // --- line items ---
         $lineRows = $q->items->map(function ($it) use ($fmt) {

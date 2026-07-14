@@ -24,9 +24,13 @@ final class CustomerInsight
         $digits = preg_replace('/[^0-9]/', '', (string) $c->phone);
         $now = Carbon::now();
 
+        // A blank phone must match NOTHING (an empty regexp target would otherwise match every
+        // phone-less record in the tenant and wrongly attribute them to this customer).
+        $byPhone = fn ($q) => $digits === '' ? $q->whereRaw('1=0')
+            : $q->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [$digits]);
+
         // --- orders: lifetime spend, count, last order ---
-        $orders = Order::where('tenant_id', $t)
-            ->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [$digits])
+        $orders = $byPhone(Order::where('tenant_id', $t))
             ->get(['total', 'created_at']);
         $orderCount = $orders->count();
         $spend = (float) $orders->sum(fn ($o) => (float) $o->total);
@@ -34,8 +38,7 @@ final class CustomerInsight
         $avgOrder = $orderCount > 0 ? $spend / $orderCount : 0.0;
 
         // --- invoices: exposure, overdue, aging, on-time, typical pay delay ---
-        $invoices = Invoice::where('tenant_id', $t)
-            ->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [$digits])
+        $invoices = $byPhone(Invoice::where('tenant_id', $t))
             ->where('status', '!=', 'void')
             ->get();
 
@@ -128,18 +131,20 @@ final class CustomerInsight
     {
         $t = $ctx->tenantId();
         $digits = preg_replace('/[^0-9]/', '', (string) $c->phone);
+        if ($digits === '') {
+            return ['rows' => [], 'balance' => 0.0];
+        }
+        $byPhone = fn ($q) => $q->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [$digits]);
 
         $rows = [];
-        Invoice::where('tenant_id', $t)
-            ->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [$digits])
+        $byPhone(Invoice::where('tenant_id', $t))
             ->where('status', '!=', 'void')->get()
             ->each(function ($i) use (&$rows) {
                 $rows[] = ['t' => $i->issued_at ? Carbon::parse($i->issued_at) : Carbon::parse($i->created_at),
                     'detail' => 'Invoice ' . $i->invoice_no, 'dr' => (float) $i->total, 'cr' => 0.0,
                     'link' => '/api/v1/workspace/invoice/' . $i->id];
             });
-        CustomerPayment::where('tenant_id', $t)
-            ->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [$digits])->get()
+        $byPhone(CustomerPayment::where('tenant_id', $t))->get()
             ->each(function ($p) use (&$rows) {
                 $rows[] = ['t' => Carbon::parse($p->created_at), 'detail' => 'Payment · ' . ($p->method ?: 'cash'),
                     'dr' => 0.0, 'cr' => (float) $p->amount, 'link' => null];

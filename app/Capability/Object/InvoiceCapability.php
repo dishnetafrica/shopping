@@ -47,8 +47,9 @@ final class InvoiceCapability implements ObjectCapability
 
         $order = $i->order_id ? Order::where('tenant_id', $ctx->tenantId())->find($i->order_id) : null;
         $delivered = $order && $order->delivered_at !== null;
-        $profile = CustomerProfile::where('tenant_id', $ctx->tenantId())
-            ->whereRaw("regexp_replace(coalesce(phone,''),'[^0-9]','','g') = ?", [preg_replace('/[^0-9]/', '', (string) $i->customer_phone)])->first();
+        $iPhone = preg_replace('/[^0-9]/', '', (string) $i->customer_phone);
+        $profile = $iPhone === '' ? null : CustomerProfile::where('tenant_id', $ctx->tenantId())
+            ->whereRaw("regexp_replace(coalesce(phone,''),'[^0-9]','','g') = ?", [$iPhone])->first();
 
         $pays = CustomerPayment::where('tenant_id', $ctx->tenantId())
             ->where('invoice_no', $i->invoice_no)->orderByDesc('created_at')->limit(50)->get();

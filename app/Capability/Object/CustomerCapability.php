@@ -125,7 +125,11 @@ final class CustomerCapability implements ObjectCapability
         ];
 
         // --- the customer's full sales trail, each as its own UCRM-style tab (a table) ---
-        $phoneWhere = fn ($q) => $q->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [preg_replace('/[^0-9]/', '', $phone)]);
+        // A blank phone matches NOTHING (an empty regexp target would otherwise sweep in every
+        // phone-less record in the tenant).
+        $digits = preg_replace('/[^0-9]/', '', $phone);
+        $phoneWhere = fn ($q) => $digits === '' ? $q->whereRaw('1=0')
+            : $q->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [$digits]);
         $badgeCell = fn ($badge, $label) => ['badge' => $badge, 'value' => $label];
 
         $quotes = $phoneWhere(Quotation::where('tenant_id', $ctx->tenantId()))->orderByDesc('created_at')->limit(25)->get();
@@ -138,6 +142,7 @@ final class CustomerCapability implements ObjectCapability
                 $q->valid_until ? Carbon::parse($q->valid_until)->format('d M Y') : '—',
                 Money::fmt((float) $q->total, (string) ($q->currency ?: $cur)),
                 $badgeCell($badge, ucfirst($s ?: 'draft'))],
+                'ts' => $q->created_at ? Carbon::parse($q->created_at)->timestamp : 0,
                 'link' => $q->order_id ? '/api/v1/workspace/salesOrder/' . $q->order_id : '/api/v1/workspace/quotation/' . $q->id];
         })->all();
 
@@ -150,6 +155,7 @@ final class CustomerCapability implements ObjectCapability
             return ['cells' => ['Order ' . $o->order_no,
                 $o->created_at ? Carbon::parse($o->created_at)->format('d M Y') : '—',
                 $fmt($o->total), $badgeCell($badge, $delivered ? 'Delivered' : ucfirst($s ?: 'pending'))],
+                'ts' => $o->created_at ? Carbon::parse($o->created_at)->timestamp : 0,
                 'link' => '/api/v1/workspace/salesOrder/' . $o->id];
         })->all();
 
@@ -165,6 +171,7 @@ final class CustomerCapability implements ObjectCapability
                 $i->issued_at ? Carbon::parse($i->issued_at)->format('d M Y') : '—',
                 $i->due_at ? Carbon::parse($i->due_at)->format('d M Y') : '—',
                 $fmt($i->total), $paid ? '—' : $fmt($bal), $badgeCell($badge, $status)],
+                'ts' => $i->issued_at ? Carbon::parse($i->issued_at)->timestamp : ($i->created_at ? Carbon::parse($i->created_at)->timestamp : 0),
                 'link' => '/api/v1/workspace/invoice/' . $i->id];
         })->all();
 
@@ -175,7 +182,7 @@ final class CustomerCapability implements ObjectCapability
             ucwords(str_replace('_', ' ', (string) ($p->method ?: 'cash'))),
             (string) ($p->reference ?: '—'),
             Money::fmt((float) $p->amount, (string) ($p->currency ?: $cur)),
-        ], 'link' => '/api/v1/workspace/payment/' . $p->id])->all();
+        ], 'ts' => $p->created_at ? Carbon::parse($p->created_at)->timestamp : 0, 'link' => '/api/v1/workspace/payment/' . $p->id])->all();
 
         $creditNotes = $phoneWhere(\App\Models\CreditNote::where('tenant_id', $ctx->tenantId()))->orderByDesc('issued_at')->limit(25)->get();
         $cnRows = $creditNotes->map(fn ($n) => ['cells' => [
@@ -186,16 +193,16 @@ final class CustomerCapability implements ObjectCapability
         ], 'link' => null])->all();
 
         $tabSections = [
-            'quotations' => [['kind' => 'table', 'title' => 'Quotations', 'sub' => $quotes->count() . ' total',
+            'quotations' => [['kind' => 'table', 'title' => 'Quotations', 'sub' => $quotes->count() . ' total', 'searchable' => true, 'dateFilter' => true,
                 'columns' => [['label' => 'Quote #'], ['label' => 'Created'], ['label' => 'Valid to'], ['label' => 'Value', 'align' => 'right'], ['label' => 'Status']],
                 'rows' => $quoteRows, 'empty' => 'No quotations yet — use “New quotation” above']],
-            'orders' => [['kind' => 'table', 'title' => 'Sales orders', 'sub' => $orders->count() . ' total',
+            'orders' => [['kind' => 'table', 'title' => 'Sales orders', 'sub' => $orders->count() . ' total', 'searchable' => true, 'dateFilter' => true,
                 'columns' => [['label' => 'Order'], ['label' => 'Created'], ['label' => 'Total', 'align' => 'right'], ['label' => 'Status']],
                 'rows' => $orderRows, 'empty' => 'No orders yet']],
-            'invoices' => [['kind' => 'table', 'title' => 'Invoices', 'sub' => $allInv->count() . ' total',
+            'invoices' => [['kind' => 'table', 'title' => 'Invoices', 'sub' => $allInv->count() . ' total', 'searchable' => true, 'dateFilter' => true,
                 'columns' => [['label' => 'Invoice #'], ['label' => 'Created'], ['label' => 'Due'], ['label' => 'Total', 'align' => 'right'], ['label' => 'Amount due', 'align' => 'right'], ['label' => 'Status']],
                 'rows' => $invRows, 'empty' => 'No invoices yet']],
-            'payments' => [['kind' => 'table', 'title' => 'Payments', 'sub' => $pays->count() . ' total',
+            'payments' => [['kind' => 'table', 'title' => 'Payments', 'sub' => $pays->count() . ' total', 'searchable' => true, 'dateFilter' => true,
                 'columns' => [['label' => 'Receipt #'], ['label' => 'Date'], ['label' => 'Method'], ['label' => 'Reference'], ['label' => 'Amount', 'align' => 'right']],
                 'rows' => $payRows, 'empty' => 'No payments yet']],
         ];
@@ -240,6 +247,9 @@ final class CustomerCapability implements ObjectCapability
             $nbaAction = $newQuote;
         }
 
+        // Timeline is phone-keyed too — skip the frozen lookup when there is no phone.
+        $timelineEvents = $digits === '' ? [] : $this->timeline->forPhone($ctx, $phone);
+
         return (new WorkspacePayload)
             ->object([
                 'type' => 'customer', 'id' => (string) $c->id, 'ref' => (string) $c->name,
@@ -266,7 +276,7 @@ final class CustomerCapability implements ObjectCapability
             ->overviewCards($overviewCards)
             ->tabSections($tabSections)
             ->financialsCards($financialsCards)
-            ->timeline($this->timeline->forPhone($ctx, $phone))
+            ->timeline($timelineEvents)
             ->statement($stmtRows, 'Balance due', $fmt($stmt['balance']))
             ->documents([])
             ->tabs([
@@ -276,7 +286,7 @@ final class CustomerCapability implements ObjectCapability
                 ['key' => 'invoices', 'label' => 'Invoices', 'count' => $allInv->count()],
                 ['key' => 'payments', 'label' => 'Payments', 'count' => $pays->count()],
                 ['key' => 'financials', 'label' => 'Account statement'],
-                ['key' => 'timeline', 'label' => 'Timeline', 'count' => count($this->timeline->forPhone($ctx, $phone))],
+                ['key' => 'timeline', 'label' => 'Timeline', 'count' => count($timelineEvents)],
             ])
             ->actions([$primary])
             ->more([$editAction, $reminder, $setFollow, $assignRep])
