@@ -229,7 +229,7 @@ final class CashbookCapability implements ProcessCapability
             'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]];
         $fxExchange = ['key' => 'fx_exchange', 'label' => 'Currency exchange', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook/convert', 'actor' => 'human', 'tone' => 'default',
             'schema' => ['from_amount' => 'money', 'from_currency' => 'enum:USD,UGX,SSP', 'to_currency' => 'enum:UGX,USD,SSP', 'rate' => 'number', 'holder' => $comboPeople, 'note' => 'text'],
-            'labels' => ['from_amount' => 'Amount to convert', 'from_currency' => 'From', 'to_currency' => 'To', 'rate' => 'Rate', 'holder' => 'Held by', 'note' => 'Note'],
+            'labels' => ['from_amount' => 'Amount to convert', 'from_currency' => 'From', 'to_currency' => 'To', 'rate' => 'Rate', 'holder' => 'Whose cash is converted (out & back in to them)', 'note' => 'Note'],
             'prefill' => ['from_currency' => 'USD', 'to_currency' => 'UGX', 'rate' => (int) round($ugx), 'holder' => $me],
             'autoRate' => ['field' => 'rate', 'source' => 'to_currency', 'map' => $rateMap],
             'preview' => ['left' => 'from_amount', 'right' => 'rate', 'curField' => 'to_currency', 'label' => 'You will get']];
@@ -303,6 +303,18 @@ final class CashbookCapability implements ProcessCapability
             'columns' => [['label' => 'Customer'], ['label' => 'Owed', 'align' => 'right'], ['label' => '', 'align' => 'right']],
             'rows' => $recvRows, 'empty' => 'Everyone has paid up — nothing outstanding 🎉', 'pageSize' => 25];
 
+        // --- Working capital = cash on hand + what customers owe you − what you owe suppliers.
+        //     Built from the SAME figures as the three tabs above, so it always reconciles. ---
+        $recvUsd = 0.0;
+        foreach ($recvAgg as $rv) { $rr = $rateMap[$rv['currency']] ?? 1; if ($rr > 0) { $recvUsd += $rv['owed'] / $rr; } }
+        $payUsd = 0.0;
+        foreach ($payables as $pv) { $rr = $rateMap[$pv['currency']] ?? 1; if ($rr > 0) { $payUsd += $pv['owed'] / $rr; } }
+        $recvUsd = round($recvUsd, 2); $payUsd = round($payUsd, 2);
+        $workingCapital = round($combinedUsd + $recvUsd - $payUsd, 2);
+        $financials[] = ['key' => 'working_capital', 'label' => 'Working capital', 'value' => Money::fmt($workingCapital, 'USD'),
+            'tone' => $workingCapital < -0.01 ? 'danger' : 'ok',
+            'foot' => 'cash ' . Money::fmt($combinedUsd, 'USD') . ' + owed to you ' . Money::fmt($recvUsd, 'USD') . ' − you owe ' . Money::fmt($payUsd, 'USD')];
+
         $tiles = [];
         $tiles[] = ['icon' => 'download', 'title' => 'Money received', 'sub' => 'Cash in — funding, or from an agent', 'tone' => 'in', 'action' => $evReceived];
         $tiles[] = ['icon' => 'user', 'title' => 'Customer paid', 'sub' => 'Against their order — shows remaining balance', 'tone' => 'in', 'action' => $customerPaid];
@@ -321,9 +333,9 @@ final class CashbookCapability implements ProcessCapability
             ->object(['type' => 'process:cashbook', 'title' => 'Cashbook', 'subtitle' => $isOwner ? 'Cash position, who holds what, and every movement' : 'My cash'])
             ->headline(Money::fmt($combinedUsd, 'USD'), 'combined cash (USD)', $combinedUsd < -0.01 ? 'danger' : 'ok')
             ->brief(new Brief('low',
-                'You hold ' . Money::fmt(round($pos['UGX']['native'], 2), 'UGX') . ', ' . Money::fmt(round($pos['USD']['native'], 2), 'USD') . ' and ' . Money::fmt(round($pos['SSP']['native'], 2), 'SSP') . '.',
+                'You hold ' . Money::fmt(round($pos['UGX']['native'], 2), 'UGX') . ', ' . Money::fmt(round($pos['USD']['native'], 2), 'USD') . ' and ' . Money::fmt(round($pos['SSP']['native'], 2), 'SSP') . '. Working capital ' . Money::fmt($workingCapital, 'USD') . ' (cash + owed to you − you owe).',
                 'Tap "Record activity" and pick what happened — money received, converted, paid to a supplier or person, or handed between people. Every entry updates the position instantly.',
-                ['tone' => 'info', 'label' => count($holderRows) . ' holding cash']))
+                ['tone' => 'info', 'label' => 'WC ' . Money::fmt($workingCapital, 'USD')]))
             ->financials($financials)
             ->quickActions($actions)
             ->tabSections(['holders' => [$holderCard], 'entries' => [$entriesCard], 'receivables' => [$receivablesCard], 'payables' => [$payablesCard]])
