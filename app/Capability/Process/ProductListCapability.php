@@ -92,6 +92,7 @@ final class ProductListCapability implements ProcessCapability
             ->table($columns, $rows)
             ->actions([
                 ['key' => 'add_product', 'label' => 'New product', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/products/_/add_product', 'actor' => 'human', 'tone' => 'primary', 'schema' => $this->formSchema($t)],
+                ['key' => 'catalog', 'label' => 'Catalogue PDF', 'href' => '/api/v1/doc/catalog', 'actor' => 'human', 'tone' => 'default'],
                 ['key' => 'price_list', 'label' => 'Price list PDF', 'href' => '/api/v1/doc/price-list', 'actor' => 'human', 'tone' => 'default'],
             ])
             ->meta(['capability' => 'products', 'ttl' => 60, 'permissions' => ['menu:products'], 'note' => $totalSkus > self::MAX_ROWS ? ('Showing first ' . self::MAX_ROWS . ' of ' . $totalSkus . ' SKUs; KPIs cover all.') : null]);

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\V3;
 use App\Http\Controllers\Controller;
 use App\Models\CustomerPayment;
 use App\Models\Product;
+use App\Services\Catalog\CatalogRenderer;
 use App\Services\Catalog\PriceListRenderer;
 use App\Services\Finance\ReceiptRenderer;
 use Illuminate\Http\Request;
@@ -55,6 +56,51 @@ final class DocumentController extends Controller
             $groups[] = ['category' => $cat, 'items' => $items];
         }
         $doc = app(PriceListRenderer::class)->pdf($t, $groups, $cur);
+        if (! $doc) {
+            abort(404, 'PDF engine unavailable');
+        }
+
+        return $this->stream($doc, $doc['fileName']);
+    }
+
+    /**
+     * GET /api/v1/doc/catalog — photo-first product catalogue, one category per page.
+     * Optional ?category=Name streams just that category (e.g. to WhatsApp one section to a shop).
+     */
+    public function catalog(Request $r)
+    {
+        $t = $r->user()->tenant;
+        $one = trim((string) $r->query('category', ''));
+
+        $q = Product::where('tenant_id', $t->id)->where('active', true);
+        if ($one !== '') {
+            $q->whereRaw('LOWER(COALESCE(category, \'\')) = ?', [mb_strtolower($one)]);
+        }
+        $products = $q->orderBy('category')->orderBy('name')->get();
+        if ($products->isEmpty()) {
+            abort(404, 'No active products' . ($one !== '' ? ' in ' . $one : ''));
+        }
+
+        $cur = (string) ($t->setting('currency', 'UGX') ?: 'UGX');
+        $grouped = [];
+        foreach ($products as $p) {
+            $cat = trim((string) $p->category) ?: 'Uncategorised';
+            $grouped[$cat][] = [
+                'name' => (string) $p->name,
+                'unit' => (string) ($p->unit_label ?: ''),
+                'moq' => $p->moq ? (int) $p->moq : null,
+                'price' => (float) $p->price,
+                'sku' => (string) ($p->sku ?: ''),
+                'image' => (string) ($p->image_url ?: ''),
+            ];
+        }
+        ksort($grouped, SORT_NATURAL | SORT_FLAG_CASE);
+        $groups = [];
+        foreach ($grouped as $cat => $items) {
+            $groups[] = ['category' => $cat, 'items' => $items];
+        }
+
+        $doc = app(CatalogRenderer::class)->pdf($t, $groups, $cur, true);
         if (! $doc) {
             abort(404, 'PDF engine unavailable');
         }

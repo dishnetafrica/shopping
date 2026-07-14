@@ -65,6 +65,7 @@ final class CategoryListCapability implements ProcessCapability
             ->actions([
                 ['key' => 'add_category', 'label' => 'New category', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/categories/_/add_category',
                  'actor' => 'human', 'tone' => 'primary', 'schema' => ['name' => 'text']],
+                ['key' => 'catalog', 'label' => 'Catalogue PDF', 'href' => '/api/v1/doc/catalog', 'actor' => 'human', 'tone' => 'default'],
                 ['key' => 'price_list', 'label' => 'Price list PDF', 'href' => '/api/v1/doc/price-list', 'actor' => 'human', 'tone' => 'default'],
             ])
             ->meta(['capability' => 'categories', 'ttl' => 120, 'permissions' => ['menu:products']]);
