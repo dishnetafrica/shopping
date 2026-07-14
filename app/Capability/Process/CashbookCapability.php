@@ -170,13 +170,14 @@ final class CashbookCapability implements ProcessCapability
 
         // --- Company account (USD): every transaction valued in USD, one running USD balance (chronological).
         //     This is the accounting view for the bookkeeper — where the company really stands in one currency. ---
-        $compAsc = []; $rbal = 0.0;
+        $compAsc = []; $rbal = 0.0; $compIn = 0.0; $compOut = 0.0;
         foreach (array_reverse($entries->all()) as $c) {   // oldest → newest so the balance accumulates correctly
             $isIn = in_array($c->stage, CashService::IN_STAGES, true);
             $ccur = (string) $c->currency;
             $cnat = (float) $c->native_amount;
             $cusd = (float) $c->usd_amount;
             $rbal += ($isIn ? 1 : -1) * $cusd;
+            if ($isIn) { $compIn += $cusd; } else { $compOut += $cusd; }
             $cref = in_array($c->stage, ['cash_in', 'cash_out'], true)
                 ? 'CB-' . str_pad((string) $c->id, 4, '0', STR_PAD_LEFT)
                 : ((string) ($c->order_no ?: strtoupper(substr((string) $c->stage, 0, 3)) . '-' . str_pad((string) $c->id, 4, '0', STR_PAD_LEFT)));
@@ -192,7 +193,7 @@ final class CashbookCapability implements ProcessCapability
             ], 'ts' => $cwhen ? $cwhen->timestamp : 0, 'link' => null];
         }
         $companyRows = array_reverse($compAsc);   // newest first for display; each row shows the balance AFTER it
-        $companyCard = ['kind' => 'table', 'title' => 'Company account — USD', 'sub' => 'every transaction in USD · running balance ' . Money::fmt(round($rbal, 2), 'USD'), 'searchable' => true, 'dateFilter' => true,
+        $companyCard = ['kind' => 'table', 'title' => 'Company account — USD', 'sub' => 'in ' . Money::fmt(round($compIn, 2), 'USD') . ' · out ' . Money::fmt(round($compOut, 2), 'USD') . ' · balance ' . Money::fmt(round($rbal, 2), 'USD'), 'searchable' => true, 'dateFilter' => true,
             'columns' => [['label' => 'When'], ['label' => 'Ref'], ['label' => 'Description'], ['label' => 'Held by'], ['label' => 'Original', 'align' => 'right'], ['label' => 'In/Out (USD)', 'align' => 'right'], ['label' => 'Balance (USD)', 'align' => 'right']],
             'rows' => $companyRows, 'empty' => 'No transactions yet', 'pageSize' => 25];
 
@@ -373,6 +374,8 @@ final class CashbookCapability implements ProcessCapability
         // Company account book (consolidated USD) — the bookkeeper's ledger of every transaction in USD.
         $exportCompanyPdf = ['key' => 'export_company_pdf', 'label' => 'Company book — USD (PDF)', 'href' => '/api/v1/doc/cashbook-export?format=pdf&view=company', 'actor' => 'human', 'tone' => 'default'];
         $exportCompanyCsv = ['key' => 'export_company_csv', 'label' => 'Company book — USD (CSV)', 'href' => '/api/v1/doc/cashbook-export?format=csv&view=company', 'actor' => 'human', 'tone' => 'default'];
+        $exportCompanyMonthPdf = ['key' => 'export_company_month_pdf', 'label' => 'Company book — this month (PDF)', 'href' => '/api/v1/doc/cashbook-export?format=pdf&view=company&from=' . $mFrom . '&to=' . $mTo, 'actor' => 'human', 'tone' => 'default'];
+        $exportCompanyMonthCsv = ['key' => 'export_company_month_csv', 'label' => 'Company book — this month (CSV)', 'href' => '/api/v1/doc/cashbook-export?format=csv&view=company&from=' . $mFrom . '&to=' . $mTo, 'actor' => 'human', 'tone' => 'default'];
         // Per-currency cash book (running balance) — one download per currency you actually hold/use.
         $curExports = [];
         foreach (self::CURRENCIES as $cc) {
@@ -402,7 +405,7 @@ final class CashbookCapability implements ProcessCapability
                 ['key' => 'payables', 'label' => 'Suppliers you owe', 'count' => count($payRows)],
             ])
             ->actions($headerActions)
-            ->more(array_merge([$exportCompanyPdf, $exportCompanyCsv, $exportPdf, $exportCsv, $exportPdfMonth, $exportCsvMonth], $curExports))
+            ->more(array_merge([$exportCompanyPdf, $exportCompanyCsv, $exportCompanyMonthPdf, $exportCompanyMonthCsv, $exportPdf, $exportCsv, $exportPdfMonth, $exportCsvMonth], $curExports))
             ->meta(['capability' => 'cashbook', 'ttl' => 15, 'layout' => 'record', 'listKey' => 'cashbook', 'permissions' => ['menu:finance']]);
     }
 
