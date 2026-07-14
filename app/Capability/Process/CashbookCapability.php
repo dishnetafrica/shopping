@@ -156,6 +156,7 @@ final class CashbookCapability implements ProcessCapability
                 $when ? $when->format('d M H:i') : '—',
                 $ref,
                 (string) ($c->category ?: ($stageLabels[$c->stage] ?? ucfirst(str_replace('_', ' ', (string) $c->stage)))),
+                (string) ($c->note ?: '—'),
                 (string) ($c->holder ?: '—'),
                 ['value' => $isIn ? 'In' : 'Out', 'badge' => $isIn ? 'ok' : 'danger'],
                 ['value' => ($isIn ? '+' : '−') . Money::fmt($native, $cur), 'tone' => $isIn ? 'ok' : 'danger'],
@@ -164,7 +165,7 @@ final class CashbookCapability implements ProcessCapability
             ], 'ts' => $when ? $when->timestamp : 0, 'link' => null];
         }
         $entriesCard = ['kind' => 'table', 'title' => 'All cash entries', 'sub' => count($entryRows) . ' recent', 'searchable' => true, 'dateFilter' => true,
-            'columns' => [['label' => 'When'], ['label' => 'Ref'], ['label' => 'Category'], ['label' => 'Held by'], ['label' => 'In/Out'], ['label' => 'Amount', 'align' => 'right'], ['label' => 'USD', 'align' => 'right'], ['label' => '', 'align' => 'right']],
+            'columns' => [['label' => 'When'], ['label' => 'Ref'], ['label' => 'Category'], ['label' => 'Note'], ['label' => 'Held by'], ['label' => 'In/Out'], ['label' => 'Amount', 'align' => 'right'], ['label' => 'USD', 'align' => 'right'], ['label' => '', 'align' => 'right']],
             'rows' => $entryRows, 'empty' => 'No cash entries yet', 'pageSize' => 25];
 
         // --- payables: who you still owe (same read as the panel debt screen: credit purchases + openings − supplier payments) ---

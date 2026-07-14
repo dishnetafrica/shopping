@@ -57,22 +57,39 @@ final class CashbookDigestCommand extends Command
                 continue;
             }
 
-            // --- WhatsApp: a text summary + the PDF statement as a document (no SMTP needed) ---
+            // --- WhatsApp: a text summary + the PDF statement + a per-currency cash book for each
+            //     currency that moved yesterday, all as documents (no SMTP needed) ---
             $text = $this->summaryText($t, $data, $date);
             $numbers = method_exists($t, 'ownerAlertNumbers') ? $t->ownerAlertNumbers() : [];
             $instance = $t->whatsapp_instance ?? null;
             if ($instance && $numbers) {
                 $gw = $wa->forTenant($t);
-                // Build the PDF once and hand it to WhatsApp as base64 (same path as PDF quotations).
-                $pdfB64 = null;
-                try { $pdf = $export->pdf($t, $data); $pdfB64 = $pdf ? base64_encode($pdf) : null; }
-                catch (\Throwable $e) { $pdfB64 = null; }
-                $canDoc = $pdfB64 && method_exists($gw, 'sendDocument');
+                $canDoc = method_exists($gw, 'sendDocument');
+                $docs = [];   // [b64, fileName, caption]
+
+                // combined statement
+                try {
+                    $pdf = $export->pdf($t, $data);
+                    if ($pdf) { $docs[] = [base64_encode($pdf), 'Cashbook-' . $date . '.pdf', '🧾 Cashbook ' . $date . ' — full statement']; }
+                } catch (\Throwable $e) { /* skip */ }
+
+                // one running-balance book per currency that had movement yesterday
+                foreach (['USD', 'UGX', 'SSP'] as $cc) {
+                    try {
+                        $cd = $export->collect($t, null, $date, $date, $cc);
+                        if (empty($cd['book']['entries'])) { continue; } // no movement in this currency yesterday
+                        $cpdf = $export->pdf($t, $cd);
+                        if ($cpdf) { $docs[] = [base64_encode($cpdf), $cc . '-Cashbook-' . $date . '.pdf', '📘 ' . $cc . ' cash book ' . $date . ' (running balance)']; }
+                    } catch (\Throwable $e) { /* skip this currency */ }
+                }
+
                 foreach ($numbers as $n) {
                     try {
                         $gw->sendText($instance, $n, $text);
                         if ($canDoc) {
-                            $gw->sendDocument($instance, $n, $pdfB64, 'Cashbook-' . $date . '.pdf', '🧾 Cashbook ' . $date . ' — full statement (PDF)');
+                            foreach ($docs as $doc) {
+                                $gw->sendDocument($instance, $n, $doc[0], $doc[1], $doc[2]);
+                            }
                         }
                     } catch (\Throwable $e) {
                         Log::warning('cashbook:digest WA failed', ['tenant' => $t->id, 'to' => $n, 'err' => $e->getMessage()]);
