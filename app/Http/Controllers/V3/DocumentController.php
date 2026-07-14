@@ -9,6 +9,7 @@ use App\Services\Catalog\CatalogRenderer;
 use App\Services\Catalog\PriceListRenderer;
 use App\Services\Finance\CashbookExport;
 use App\Services\Finance\ReceiptRenderer;
+use App\Services\Finance\SupplierStatement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -142,6 +143,29 @@ final class DocumentController extends Controller
         return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="Cashbook' . $tag . '-' . $stamp . '.pdf"',
+        ]);
+    }
+
+    /** GET /api/v1/doc/supplier-statement?id=X — payables statement (charges, payments, running balance owed). */
+    public function supplierStatement(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) {
+            abort(401);
+        }
+        $svc = app(SupplierStatement::class);
+        $data = $svc->collect($t, (int) $r->query('id', 0));
+        if (! $data) {
+            abort(404, 'Supplier not found');
+        }
+        $pdf = $svc->pdf($t, $data);
+        if (! $pdf) {
+            abort(404, 'PDF engine unavailable');
+        }
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="Statement-' . preg_replace('/[^A-Za-z0-9]+/', '', $data['supplier']) . '-' . now()->format('Ymd') . '.pdf"',
         ]);
     }
 

@@ -48,15 +48,27 @@ final class SupplierListCapability implements ProcessCapability
             $totalPayable += $owed;
             if ($owed > 0) { $withBalance++; }
 
+            $canEdit = $ctx->can('menu:purchases');
+            $rowBtns = [];
+            if ($canEdit) {
+                $rowBtns[] = ['icon' => 'edit', 'title' => 'Edit ' . $s->name, 'action' => [
+                    'key' => 'edit_supplier', 'label' => 'Edit ' . $s->name, 'method' => 'POST', 'endpoint' => '/papi/suppliers/' . $s->id, 'actor' => 'human', 'tone' => 'primary',
+                    'schema' => ['name' => 'text', 'contact_name' => 'text', 'phone' => 'text', 'email' => 'text', 'tax_number' => 'text', 'pay_term_days' => 'number', 'opening_balance' => 'money', 'opening_currency' => 'enum:,UGX,USD,SSP', 'address' => 'text'],
+                    'labels' => ['name' => 'Business name', 'contact_name' => 'Contact person', 'pay_term_days' => 'Pay term (credit days)', 'opening_balance' => 'Opening balance owed', 'opening_currency' => 'Opening currency'],
+                    'prefill' => ['name' => (string) ($s->business_name ?: $s->name), 'contact_name' => (string) $s->contact_name, 'phone' => (string) $s->phone, 'email' => (string) $s->email, 'tax_number' => (string) $s->tax_number, 'pay_term_days' => $s->pay_term_days, 'opening_balance' => $s->opening_balance, 'opening_currency' => (string) $s->opening_currency, 'address' => (string) $s->address],
+                ]];
+                $rowBtns[] = ['icon' => 'trash', 'title' => 'Delete', 'tone' => 'danger', 'post' => '/papi/suppliers/' . $s->id . '/delete', 'confirm' => 'Delete supplier ' . $s->name . '? (kept & deactivated if it has history)'];
+            }
+
             $rows[] = [
                 'supplier' => ['value' => (string) ($s->name ?: $s->business_name ?: 'Supplier'), 'sub' => (string) ($s->contact_name ?: ''), 'avatar' => true],
                 'contact'  => (string) ($s->phone ?: $s->email ?: '—'),
                 'terms'    => $s->pay_term_days ? ('Net ' . $s->pay_term_days) : 'Cash',
-                'pos'      => $pos,
                 'owed'     => $owed > 0
                     ? ['value' => Money::fmt($owed, (string) ($s->opening_currency ?: $cur)), 'tone' => 'warn', 'sort' => $owed]
                     : ['value' => '—', 'sort' => 0],
                 'status'   => ['value' => $isActive ? 'Active' : 'Inactive', 'badge' => $isActive ? 'ok' : 'default'],
+                'act'      => ['buttons' => $rowBtns],
                 'link'     => '/api/v1/workspace/supplier/' . $s->id,
             ];
         }
@@ -65,9 +77,9 @@ final class SupplierListCapability implements ProcessCapability
             ['key' => 'supplier', 'label' => 'Supplier', 'type' => 'avatar', 'sortable' => true],
             ['key' => 'contact',  'label' => 'Contact',  'sortable' => true],
             ['key' => 'terms',    'label' => 'Terms',    'sortable' => true],
-            ['key' => 'pos',      'label' => 'Open POs', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'owed',     'label' => 'Owed',     'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'status',   'label' => 'Status',   'type' => 'badge', 'sortable' => true],
+            ['key' => 'act',      'label' => '', 'type' => 'action', 'align' => 'right'],
         ];
 
         return (new WorkspacePayload)
@@ -82,7 +94,12 @@ final class SupplierListCapability implements ProcessCapability
                 ['key' => 'active', 'label' => 'Active', 'value' => $active, 'tone' => 'ok', 'foot' => 'currently trading'],
             ])
             ->table($columns, $rows)
-            ->actions([['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/suppliers', 'actor' => 'human', 'tone' => 'default']])
+            ->actions([[
+                'key' => 'add_supplier', 'label' => 'Add supplier', 'method' => 'POST', 'endpoint' => '/papi/suppliers', 'actor' => 'human', 'tone' => 'primary',
+                'schema' => ['name' => 'text', 'contact_name' => 'text', 'phone' => 'text', 'email' => 'text', 'tax_number' => 'text', 'pay_term_days' => 'number', 'opening_balance' => 'money', 'opening_currency' => 'enum:,UGX,USD,SSP', 'address' => 'text'],
+                'labels' => ['name' => 'Business name', 'contact_name' => 'Contact person', 'pay_term_days' => 'Pay term (credit days)', 'opening_balance' => 'Opening balance owed', 'opening_currency' => 'Opening currency'],
+                'prefill' => ['opening_currency' => ''],
+            ]])
             ->meta(['capability' => 'suppliers', 'ttl' => 60, 'permissions' => ['menu:purchases']]);
     }
 
