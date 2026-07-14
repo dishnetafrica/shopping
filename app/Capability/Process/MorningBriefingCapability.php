@@ -22,6 +22,7 @@ final class MorningBriefingCapability implements ProcessCapability
         private WarehouseCapability $warehouse,
         private DispatchCapability $dispatch,
         private MoneyTimingCapability $money,
+        private ?AdsCapability $ads = null,
     ) {}
 
     public function key(): string { return 'briefing'; }
@@ -36,7 +37,10 @@ final class MorningBriefingCapability implements ProcessCapability
         $war = $this->warehouse->summary($ctx);
         $dis = $this->dispatch->summary($ctx);
         $cash = $this->money->position($ctx);
+        $ad = $this->ads ? $this->ads->summary($ctx) : ['enabled' => true, 'arrivals7d' => 0];
         $cur = $ctx->baseCurrency();
+
+        $adArrivals = (int) ($ad['arrivals7d'] ?? 0);
 
         $metrics = [
             ['label' => 'Cash on hand', 'value' => Money::fmt($cash['cash'], 'USD'), 'tone' => 'ok'],
@@ -46,6 +50,7 @@ final class MorningBriefingCapability implements ProcessCapability
             ['label' => 'Payable', 'value' => Money::fmt($pur['payable'], $cur), 'tone' => 'warn'],
             ['label' => 'Reorder', 'value' => (string) $war['reorder'], 'tone' => 'warn'],
             ['label' => 'Deliveries', 'value' => (string) $dis['inTransit'], 'tone' => 'default'],
+            ['label' => 'Ad arrivals (7d)', 'value' => (string) $adArrivals, 'tone' => $adArrivals > 0 ? 'ok' : 'default'],
         ];
 
         $plan = [];
@@ -60,6 +65,12 @@ final class MorningBriefingCapability implements ProcessCapability
         }
         if ($pur['payable'] > 0) {
             $plan[] = new ActionSpec('pay', 'Review ' . Money::fmt($pur['payable'], $cur) . ' in supplier bills', '/api/v1/workspace/purchase.process', 'GET', 'human');
+        }
+        if ($adArrivals > 0) {
+            $adEnabled = (bool) ($ad['enabled'] ?? true);
+            $plan[] = $adEnabled
+                ? new ActionSpec('ads', $adArrivals . ' customer' . ($adArrivals === 1 ? '' : 's') . ' arrived from ads this week — follow up', '/api/v1/workspace/ads', 'GET', 'human')
+                : new ActionSpec('ads', $adArrivals . ' arrived from ads but ad understanding is OFF — turn it on', '/api/v1/workspace/ads', 'GET', 'human', 'primary');
         }
 
         return (new WorkspacePayload)

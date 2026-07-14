@@ -79,6 +79,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $purchase = new PurchaseProcessCapability();
         $warehouse = new WarehouseCapability($stock);
         $dispatch = new DispatchCapability();
+        $ads = new AdsCapability();
 
         $r->register($collections, new CapabilityManifest(key: 'collections', type: 'process', owner: 'accounts', dependsOn: ['statement'], events: ['consumes' => ['PaymentRecorded'], 'emits' => ['RemindersSent']], permission: 'menu:finance', commands: [['key' => 'bulk_remind', 'actor' => 'human']], api: '/api/v1/workspace/collections'));
         $r->register($sales, new CapabilityManifest(key: 'sales.process', type: 'process', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/sales.process'));
@@ -93,7 +94,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register($purchase, new CapabilityManifest(key: 'purchase.process', type: 'process', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/purchase.process'));
         $r->register(new FinanceCapability($money), new CapabilityManifest(key: 'finance', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/finance'));
         $r->register(new CashbookCapability(), new CapabilityManifest(key: 'cashbook', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/cashbook'));
-        $r->register(new AdsCapability(), new CapabilityManifest(key: 'ads', type: 'process', owner: 'management', permission: '', api: '/api/v1/workspace/ads'));
+        $r->register($ads, new CapabilityManifest(key: 'ads', type: 'process', owner: 'management', permission: '', api: '/api/v1/workspace/ads'));
         $r->register($warehouse, new CapabilityManifest(key: 'warehouse', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/warehouse'));
         $r->register($dispatch, new CapabilityManifest(key: 'dispatch', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/dispatch'));
 
@@ -105,7 +106,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
             dependsOn: ['collections', 'sales.process', 'purchase.process', 'warehouse', 'dispatch'],
             permission: '', api: '/api/v1/workspace/worklist',
         ));
-        $r->register(new MorningBriefingCapability($collections, $sales, $purchase, $warehouse, $dispatch, $money), new CapabilityManifest(
+        $r->register(new MorningBriefingCapability($collections, $sales, $purchase, $warehouse, $dispatch, $money, $ads), new CapabilityManifest(
             key: 'briefing', type: 'process', owner: 'management',
             dependsOn: ['collections', 'sales.process', 'purchase.process', 'warehouse', 'dispatch'],
             events: ['emits' => ['BriefingGenerated']],
