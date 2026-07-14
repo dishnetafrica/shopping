@@ -6,6 +6,7 @@ use App\Capability\Contracts\CapabilityContext;
 use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\Brief;
 use App\Capability\Dto\WorkspacePayload;
+use App\Models\User;
 use App\Services\Money\Fx;
 use App\Services\Money\ReportingCurrency;
 use App\Services\Settings\SettingsWriteService;
@@ -59,6 +60,11 @@ final class SettingsCapability implements ProcessCapability
             'schema' => ['invoice_title' => 'text', 'invoice_terms_days' => 'number', 'vat_rate' => 'number', 'bank_details' => 'text', 'invoice_footer' => 'text'],
             'prefill' => ['invoice_title' => $s('invoice_title', 'INVOICE'), 'invoice_terms_days' => $s('invoice_terms_days', '0'), 'vat_rate' => $s('vat_rate', '0'), 'bank_details' => $s('bank_details'), 'invoice_footer' => $s('invoice_footer')],
         ];
+        $editBot = [
+            'key' => 'edit_bot', 'label' => 'WhatsApp bot', 'method' => 'POST', 'endpoint' => $ep . '/save_settings', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['bot_greeting' => 'text', 'bot_fallback_text' => 'text', 'ai_persona' => 'text', 'business_hours' => 'text', 'delivery_areas' => 'text', 'bot_website_link' => 'text', 'faq' => 'text'],
+            'prefill' => ['bot_greeting' => $s('bot_greeting'), 'bot_fallback_text' => $s('bot_fallback_text'), 'ai_persona' => $s('ai_persona'), 'business_hours' => $s('business_hours'), 'delivery_areas' => $s('delivery_areas'), 'bot_website_link' => $s('bot_website_link'), 'faq' => $s('faq')],
+        ];
 
         // --- display cards ---
         $profileCard = ['kind' => 'dl', 'title' => 'Business profile', 'rows' => [
@@ -87,6 +93,39 @@ final class SettingsCapability implements ProcessCapability
             ['VAT rate', ($s('vat_rate', '0') ?: '0') . '%'],
             ['Bank details', $s('bank_details') ?: '—'],
         ]];
+        // --- WhatsApp & bot ---
+        $waStatus = $t->whatsapp_instance ? 'Connected' : 'Not connected';
+        $connCard = ['kind' => 'dl', 'title' => 'WhatsApp connection', 'rows' => [
+            ['Number', (string) ($t->whatsapp_number ?: '—')],
+            ['Driver', (string) ($t->whatsapp_driver ?: '—')],
+            ['Instance', (string) ($t->whatsapp_instance ?: '—')],
+            ['Status', $waStatus],
+        ]];
+        $trunc = fn (string $v, int $n = 60) => $v === '' ? '—' : (mb_strlen($v) > $n ? mb_substr($v, 0, $n) . '…' : $v);
+        $botCard = ['kind' => 'dl', 'title' => 'Bot messages', 'rows' => [
+            ['Greeting', $trunc($s('bot_greeting'))],
+            ['Fallback reply', $trunc($s('bot_fallback_text'))],
+            ['AI persona', $trunc($s('ai_persona'))],
+            ['Business hours', $s('business_hours') ?: '—'],
+            ['Delivery areas', $trunc($s('delivery_areas'))],
+            ['Website link', $s('bot_website_link') ?: '—'],
+        ]];
+
+        // --- team (read-only; membership is managed in the seller panel) ---
+        $members = User::where('tenant_id', $t->id)->orderBy('name')->limit(50)->get();
+        $teamRows = $members->map(fn ($u) => ['cells' => [
+            (string) ($u->name ?: $u->email ?: 'Member'),
+            ucfirst((string) ($u->role ?: 'user')),
+            (string) ($u->email ?: '—'),
+        ], 'link' => null])->all();
+        $teamCard = ['kind' => 'table', 'title' => 'Team members', 'sub' => $members->count() . ' total',
+            'columns' => [['label' => 'Member'], ['label' => 'Role'], ['label' => 'Email']],
+            'rows' => $teamRows, 'empty' => 'No team members yet'];
+        $teamNote = ['kind' => 'dl', 'title' => 'Managing your team', 'rows' => [
+            ['Add / remove members', 'Use the seller panel → Staff (roles, passwords and permissions)'],
+            ['Members', (string) $members->count()],
+        ]];
+
         $help = ['kind' => 'links', 'title' => 'How reporting currency works', 'items' => [
             ['icon' => 'dollar', 'color' => '#16a34a', 'title' => 'Consolidated', 'sub' => 'Every figure is converted to your base currency so totals add up.', 'right' => ''],
             ['icon' => 'tag', 'color' => '#2563eb', 'title' => 'Original', 'sub' => 'Each figure stays in its own currency; KPI tiles still consolidate.', 'right' => ''],
@@ -109,21 +148,25 @@ final class SettingsCapability implements ProcessCapability
                 ['key' => 'mode', 'label' => 'Report mode', 'value' => $mode === 'original' ? 'Original' : 'Consolidated'],
                 ['key' => 'terms', 'label' => 'Payment terms', 'value' => ($s('invoice_terms_days', '0') ?: '0') . ' days'],
             ])
-            ->quickActions([$editProfile, $editCurrency, $editRates, $editInvoicing])
+            ->quickActions([$editProfile, $editCurrency, $editRates, $editInvoicing, $editBot])
             ->overviewCards([$profileCard, $currencyCard, $invoiceCard])
             ->tabSections([
                 'business' => [$profileCard],
                 'currency' => [$currencyCard, $ratesCard, $help],
                 'invoicing' => [$invoiceCard],
+                'whatsapp' => [$connCard, $botCard],
+                'team' => [$teamCard, $teamNote],
             ])
             ->tabs([
                 ['key' => 'overview', 'label' => 'Overview'],
                 ['key' => 'business', 'label' => 'Business profile'],
                 ['key' => 'currency', 'label' => 'Currency & rates'],
                 ['key' => 'invoicing', 'label' => 'Invoice & tax'],
+                ['key' => 'whatsapp', 'label' => 'WhatsApp & bot'],
+                ['key' => 'team', 'label' => 'Team', 'count' => $members->count()],
             ])
             ->actions([$editProfile])
-            ->more([$editCurrency, $editRates, $editInvoicing])
+            ->more([$editCurrency, $editRates, $editInvoicing, $editBot])
             ->meta(['capability' => 'settings', 'ttl' => 20, 'layout' => 'record', 'listKey' => 'settings', 'permissions' => []]);
     }
 
