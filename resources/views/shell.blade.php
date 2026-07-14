@@ -1163,6 +1163,8 @@ function cellHtml(c,col){
   if(col.type==='strong'){ return '<td class="prim'+align+'">'+esc(cellVal(c))+'</td>'; }
   if(col.type==='badge'){ const v=cellVal(c), tone=(c&&c.badge)||'default';
     return '<td>'+(v?'<span class="badge '+toneBadge(tone)+'"><span class="d"></span>'+esc(v)+'</span>':'—')+'</td>'; }
+  if(col.type==='action'){ const href=(c&&c.href)||''; const label=cellVal(c)||'Open';
+    return '<td>'+(href?'<button class="btn sm" onclick="event.stopPropagation();try{window.open(\''+esc(href)+'\',\'_blank\')}catch(e){location.href=\''+esc(href)+'\'}">'+icon((c&&c.icon)||'download','ic-sm')+esc(label)+'</button>':'—')+'</td>'; }
   const tone=(c&&c.tone)?(' '+toneCls(c.tone)):'';
   return '<td class="'+align+tone+'">'+esc(cellVal(c))+'</td>';
 }

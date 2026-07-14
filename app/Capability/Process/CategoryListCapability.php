@@ -40,6 +40,9 @@ final class CategoryListCapability implements ProcessCapability
                 'category' => ['value' => (string) $c->name, 'image' => (string) ($c->image_url ?: ''), 'avatar' => true],
                 'products' => $n,
                 'status'   => ['value' => $isActive ? 'Active' : 'Hidden', 'badge' => $isActive ? 'ok' : 'default'],
+                'catalog'  => $n > 0
+                    ? ['value' => 'Catalogue', 'href' => '/api/v1/doc/catalog?category=' . rawurlencode((string) $c->name), 'icon' => 'download']
+                    : ['value' => ''],
             ];
         }
 
@@ -49,6 +52,7 @@ final class CategoryListCapability implements ProcessCapability
             ['key' => 'category', 'label' => 'Category', 'type' => 'avatar', 'sortable' => true],
             ['key' => 'products', 'label' => 'Products', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'status',   'label' => 'Status',   'type' => 'badge', 'sortable' => true],
+            ['key' => 'catalog',  'label' => 'Catalogue', 'type' => 'action', 'sortable' => false],
         ];
 
         return (new WorkspacePayload)
