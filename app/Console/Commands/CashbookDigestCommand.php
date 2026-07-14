@@ -7,6 +7,7 @@ use App\Services\Finance\CashbookExport;
 use App\Services\WhatsApp\WhatsAppManager;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -59,7 +60,8 @@ final class CashbookDigestCommand extends Command
 
             // --- WhatsApp: a text summary + the PDF statement + a per-currency cash book for each
             //     currency that moved yesterday, all as documents (no SMTP needed) ---
-            $text = $this->summaryText($t, $data, $date);
+            $ad = $this->adStats($t, $date, $offset);
+            $text = $this->summaryText($t, $data, $date, $ad);
             $numbers = method_exists($t, 'ownerAlertNumbers') ? $t->ownerAlertNumbers() : [];
             $instance = $t->whatsapp_instance ?? null;
             if ($instance && $numbers) {
@@ -127,8 +129,28 @@ final class CashbookDigestCommand extends Command
         return self::SUCCESS;
     }
 
+    /**
+     * Facebook-ad arrivals for the reported (tenant-local) day and the trailing 7 days, read from the
+     * bot_events trace. Returns [] if the table is absent — the digest then simply omits the ad line.
+     */
+    private function adStats(Tenant $t, string $date, int $offset): array
+    {
+        try {
+            $startUtc = Carbon::parse($date . ' 00:00:00')->subHours($offset);
+            $endUtc = Carbon::parse($date . ' 23:59:59')->subHours($offset);
+            $day = (int) DB::table('bot_events')->where('tenant_id', $t->id)->where('stage', 'ad_referral')
+                ->whereBetween('created_at', [$startUtc, $endUtc])->count();
+            $week = (int) DB::table('bot_events')->where('tenant_id', $t->id)->where('stage', 'ad_referral')
+                ->where('created_at', '>=', $endUtc->copy()->subDays(7))->count();
+
+            return ['day' => $day, 'week' => $week, 'enabled' => (bool) $t->setting('bot_ad_awareness', true)];
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
     /** Concise WhatsApp text: current cash, yesterday's in/out per currency, and who holds what. */
-    private function summaryText(Tenant $t, array $data, string $date): string
+    private function summaryText(Tenant $t, array $data, string $date, array $ad = []): string
     {
         $money = function (float $v, string $c) {
             $n = number_format($v, $c === 'USD' ? 2 : 0);
@@ -164,6 +186,15 @@ final class CashbookDigestCommand extends Command
                     if (abs($b[$c]) > 0.01) { $parts[] = $money($b[$c], $c); }
                 }
                 if ($parts) { $lines[] = '• ' . $name . ': ' . implode(', ', $parts) . ' (~' . $money($b['usd'], 'USD') . ')'; }
+            }
+        }
+
+        // Facebook-ad arrivals (only when there's been traffic in the trailing week)
+        if (! empty($ad) && (int) ($ad['week'] ?? 0) > 0) {
+            $lines[] = '';
+            $lines[] = '*📣 Facebook ads:* ' . (int) ($ad['day'] ?? 0) . ' yesterday · ' . (int) ($ad['week'] ?? 0) . ' in 7 days';
+            if (empty($ad['enabled'])) {
+                $lines[] = '⚠️ Ad understanding is OFF — turn it on: app → Facebook Ads.';
             }
         }
 
