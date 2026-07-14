@@ -944,8 +944,24 @@ function docsTab(docs){
 
 function actBtn(a){ const cls=a.actor==='ai'?'btn ai':('btn'+(a.tone==='primary'?' pri':(a.tone==='danger'?' danger':'')));
   return '<button class="'+cls+'" onclick=\'doAction('+JSON.stringify(a).replace(/'/g,"&#39;")+')\'>'+(a.actor==='ai'?'✦ ':'')+esc(a.label)+'</button>'; }
+/* Append the live table scope (date range + active filter chips) to an export href so a download
+   always matches exactly what the user is looking at. exportScope maps TBL filter keys → query params. */
+function withScope(a){
+  let url=a.href; const es=a.exportScope; if(!es) return url;
+  const params=[]; const add=(k,v)=>{ if(v!=null&&v!=='') params.push(encodeURIComponent(k)+'='+encodeURIComponent(v)); };
+  if(typeof TBL!=='undefined' && TBL){
+    if(es.dateFrom && TBL.from) add(es.dateFrom, TBL.from);
+    if(es.dateTo && TBL.to) add(es.dateTo, TBL.to);
+    const fv=TBL.fval||{};
+    Object.keys(es.filters||{}).forEach(k=>{ const sel=fv[k]; if(!sel||sel==='All') return; const spec=es.filters[k];
+      if(typeof spec==='string'){ add(spec, sel); }
+      else if(spec&&spec.param){ const v=spec.map?spec.map[sel]:sel; add(spec.param, v); } });
+  }
+  if(params.length) url += (url.indexOf('?')<0?'?':'&')+params.join('&');
+  return url;
+}
 async function doAction(a){
-  if(a.href){ try{ window.open(a.href,'_blank'); }catch(e){ location.href=a.href; } return; }
+  if(a.href){ const u=withScope(a); try{ window.open(u,'_blank'); }catch(e){ location.href=u; } return; }
   if(a.chooser){ return chooserModal(a); }
   if((a.method||'POST')==='GET'){ const h=apiToHash(a.endpoint); if(h){ route(h.key,h.id); } return; }
   if(a.builder==='quotation'){ return quoteBuilder(a); }

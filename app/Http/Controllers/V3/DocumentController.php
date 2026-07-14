@@ -163,6 +163,7 @@ final class DocumentController extends Controller
             'to' => (string) $r->query('to', ''),
             'currency' => (string) $r->query('currency', ''),
             'supplier_id' => (int) $r->query('supplier_id', 0),
+            'pay' => (string) $r->query('pay', ''),
         ]);
         $stamp = now()->format('Ymd-Hi');
         $tag = ($data['currency'] ? ('-' . $data['currency']) : '') . ($data['supplier'] ? ('-' . preg_replace('/[^A-Za-z0-9]+/', '', $data['supplier'])) : '');

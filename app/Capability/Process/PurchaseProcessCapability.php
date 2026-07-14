@@ -152,8 +152,18 @@ final class PurchaseProcessCapability implements ProcessCapability
 
         $unpaid = collect($rows)->filter(fn ($r) => ($r['pay']['badge'] ?? '') === 'warn')->count();
 
-        $exportPdf = ['key' => 'export_pdf', 'label' => 'Export PDF', 'href' => '/api/v1/doc/purchases-export?format=pdf', 'actor' => 'human', 'tone' => 'default'];
-        $exportCsv = ['key' => 'export_csv', 'label' => 'Export CSV', 'href' => '/api/v1/doc/purchases-export?format=csv', 'actor' => 'human', 'tone' => 'default'];
+        // export scope: translate the live table filters (date range + Supplier/Currency/Status chips) into
+        // matching query params so a download is exactly what the user is looking at on screen.
+        $exportScope = [
+            'dateFrom' => 'from', 'dateTo' => 'to',
+            'filters' => [
+                'currency' => 'currency',
+                'supplier' => ['param' => 'supplier_id', 'map' => $supMap],
+                'paykind' => ['param' => 'pay', 'map' => ['Credit — owing' => 'owing', 'Credit — paid' => 'paid', 'Cash' => 'cash', 'Void' => 'void']],
+            ],
+        ];
+        $exportPdf = ['key' => 'export_pdf', 'label' => 'Export PDF', 'href' => '/api/v1/doc/purchases-export?format=pdf', 'actor' => 'human', 'tone' => 'default', 'exportScope' => $exportScope];
+        $exportCsv = ['key' => 'export_csv', 'label' => 'Export CSV', 'href' => '/api/v1/doc/purchases-export?format=csv', 'actor' => 'human', 'tone' => 'default', 'exportScope' => $exportScope];
 
         return (new WorkspacePayload)
             ->object([

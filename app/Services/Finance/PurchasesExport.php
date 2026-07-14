@@ -15,7 +15,7 @@ use Illuminate\Support\Carbon;
 final class PurchasesExport
 {
     /**
-     * @param array{from?:string,to?:string,currency?:string,supplier_id?:int} $f
+     * @param array{from?:string,to?:string,currency?:string,supplier_id?:int,pay?:string} $f
      */
     public function collect(Tenant $t, array $f = []): array
     {
@@ -26,11 +26,16 @@ final class PurchasesExport
         $to = trim((string) ($f['to'] ?? ''));
         $currency = strtoupper(trim((string) ($f['currency'] ?? '')));
         $supplierId = (int) ($f['supplier_id'] ?? 0);
+        $pay = strtolower(trim((string) ($f['pay'] ?? '')));
 
         if ($from !== '') { $q->where('created_at', '>=', Carbon::parse($from)->startOfDay()); }
         if ($to !== '') { $q->where('created_at', '<=', Carbon::parse($to)->endOfDay()); }
         if ($currency !== '') { $q->where('currency', $currency); }
         if ($supplierId > 0) { $q->where('supplier_id', $supplierId); }
+        // pay: owing = credit not fully paid · paid = credit fully paid · cash = paid at purchase
+        if ($pay === 'cash') { $q->where('pay_status', '!=', 'credit'); }
+        elseif ($pay === 'owing') { $q->where('pay_status', 'credit')->whereRaw('COALESCE(paid_native,0) < native_amount'); }
+        elseif ($pay === 'paid') { $q->where('pay_status', 'credit')->whereRaw('COALESCE(paid_native,0) >= native_amount'); }
 
         $items = $q->orderBy('created_at')->orderBy('id')
             ->get(['id', 'order_no', 'note', 'currency', 'native_amount', 'usd_amount', 'rate_to_usd', 'pay_status', 'paid_native', 'supplier_id', 'supplier_name', 'created_at']);
@@ -67,6 +72,7 @@ final class PurchasesExport
             'business' => (string) ($t->name ?: 'Company'),
             'generated' => now()->format('d M Y, H:i'),
             'from' => $from, 'to' => $to, 'currency' => $currency, 'supplier' => $supName,
+            'pay' => $pay ? ucfirst($pay) : '',
             'count' => count($rows),
             'totalUsd' => round($totalUsd, 2),
             'owedUsd' => round($owedUsd, 2),
@@ -83,6 +89,7 @@ final class PurchasesExport
             $d['from'] || $d['to'] ? ('Period: ' . ($d['from'] ?: '…') . ' to ' . ($d['to'] ?: '…')) : '',
             $d['currency'] ? ('Currency: ' . $d['currency']) : '',
             $d['supplier'] ? ('Supplier: ' . $d['supplier']) : '',
+            ! empty($d['pay']) ? ('Pay: ' . $d['pay']) : '',
         ]);
         fputcsv($out, [$d['business'] . ' — Purchases register']);
         fputcsv($out, [implode('  ·  ', $scope) ?: 'All purchases', 'Generated ' . $d['generated']]);
@@ -125,6 +132,7 @@ final class PurchasesExport
             $d['from'] || $d['to'] ? ('Period ' . ($d['from'] ?: '…') . ' → ' . ($d['to'] ?: '…')) : '',
             $d['currency'] ? ('Currency ' . $d['currency']) : '',
             $d['supplier'] ? ('Supplier ' . $d['supplier']) : '',
+            ! empty($d['pay']) ? ('Pay ' . $d['pay']) : '',
         ]);
 
         $rows = '';
