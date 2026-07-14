@@ -17,6 +17,7 @@ final class WorkspaceController
     public function index(Request $request, CapabilityRegistry $registry)
     {
         $ctx = CapabilityContext::fromUser($request->user());
+        $ctx->displayOverride = $request->query('cur');
         $caps = [];
         foreach ($registry->all() as $m) {
             if (! $ctx->can($m->permission)) {
@@ -34,10 +35,21 @@ final class WorkspaceController
             }
         }
 
+        // Currency & reporting: the shell renders a global report-currency selector from this.
+        $override = strtolower(trim((string) $request->query('cur')));
+        $currency = [
+            'base' => $ctx->baseCurrency(),
+            'mode' => $ctx->reportMode(),
+            'display' => $ctx->displayCurrency(),           // null => original
+            'override' => $override !== '' ? $override : null,
+            'options' => ['base', 'original', 'USD', 'UGX', 'SSP'],
+        ];
+
         return response()->json([
             'ok' => true,
             'user' => ['name' => (string) ($request->user()->name ?? 'User'), 'role' => $ctx->role, 'org' => (string) ($ctx->tenant->name ?? '')],
             'counts' => $counts,
+            'currency' => $currency,
             'capabilities' => $caps,
         ]);
     }
@@ -49,6 +61,7 @@ final class WorkspaceController
         }
         $cap = $registry->get($type);
         $ctx = CapabilityContext::fromUser($request->user());
+        $ctx->displayOverride = $request->query('cur');
 
         if (! $ctx->can($cap->permission())) {
             return response()->json(['ok' => false, 'error' => 'forbidden'], 403);

@@ -17,6 +17,7 @@ final class CommandController
             return response()->json(['ok' => false, 'error' => 'unknown_capability'], 404);
         }
         $ctx = CapabilityContext::fromUser($request->user());
+        $ctx->displayOverride = $request->query('cur');
         $permission = $registry->manifest($type)->permission;
         $command = new HumanCommand($action, $permission);
         $input = $request->all() + ['customer_id' => $id, 'id' => $id];

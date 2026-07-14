@@ -7,6 +7,7 @@ use App\Models\CustomerProfile;
 use App\Models\CustomerPayment;
 use App\Models\Invoice;
 use App\Models\Order;
+use App\Services\Money\ReportingCurrency;
 use Illuminate\Support\Carbon;
 
 /**
@@ -24,16 +25,22 @@ final class CustomerInsight
         $digits = preg_replace('/[^0-9]/', '', (string) $c->phone);
         $now = Carbon::now();
 
+        // All money metrics are consolidated into ONE currency (the report/base currency) so a
+        // customer trading in mixed currencies never has UGX + USD naively summed into a wrong total.
+        $rc = ReportingCurrency::forContext($ctx);
+        $base = $rc->consolidationCurrency();
+        $toBase = fn (float $amt, ?string $curc, ?string $date) => $rc->consolidate([[ 'amount' => $amt, 'currency' => $curc ?: $base, 'date' => $date ]])['amount'];
+
         // A blank phone must match NOTHING (an empty regexp target would otherwise match every
         // phone-less record in the tenant and wrongly attribute them to this customer).
         $byPhone = fn ($q) => $digits === '' ? $q->whereRaw('1=0')
             : $q->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [$digits]);
 
-        // --- orders: lifetime spend, count, last order ---
+        // --- orders: lifetime spend, count, last order (each order in its own sell currency) ---
         $orders = $byPhone(Order::where('tenant_id', $t))
-            ->get(['total', 'created_at']);
+            ->get(['total', 'sell_currency', 'created_at']);
         $orderCount = $orders->count();
-        $spend = (float) $orders->sum(fn ($o) => (float) $o->total);
+        $spend = (float) $orders->sum(fn ($o) => $toBase((float) $o->total, (string) ($o->sell_currency ?: $base), $o->created_at ? Carbon::parse($o->created_at)->format('Y-m-d') : null));
         $lastOrderAt = $orders->max('created_at') ? Carbon::parse($orders->max('created_at')) : null;
         $avgOrder = $orderCount > 0 ? $spend / $orderCount : 0.0;
 
@@ -47,7 +54,8 @@ final class CustomerInsight
         $settled = 0; $onTime = 0; $paySum = 0; $payN = 0;
 
         foreach ($invoices as $inv) {
-            $bal = (float) $inv->balance;
+            $idate = $inv->issued_at ? Carbon::parse($inv->issued_at)->format('Y-m-d') : null;
+            $bal = $toBase((float) $inv->balance, (string) ($inv->currency ?: $base), $idate);
             $due = $inv->due_at ? Carbon::parse($inv->due_at) : null;
             if ($bal > 0.01) {
                 $exposure += $bal;
@@ -72,8 +80,8 @@ final class CustomerInsight
         $onTimePct = $settled > 0 ? (int) round($onTime / $settled * 100) : null;
         $paysInDays = $payN > 0 ? (int) round($paySum / $payN) : null;
 
-        // --- credit usage ---
-        $credit = $c->credit_limit !== null ? (float) $c->credit_limit : null;
+        // --- credit usage (credit_limit is stored in the tenant's base currency; show it consolidated) ---
+        $credit = $c->credit_limit !== null ? $toBase((float) $c->credit_limit, $ctx->baseCurrency(), null) : null;
         $util = ($credit && $credit > 0) ? $exposure / $credit : 0.0;
         $creditAvail = ($credit && $credit > 0) ? max(0.0, $credit - $exposure) : null;
         $canSell = ! ($credit && $credit > 0 && $exposure >= $credit);
@@ -99,6 +107,7 @@ final class CustomerInsight
         $creditRisk = $health >= 75 ? 'Low' : ($health >= 50 ? 'Medium' : 'High');
 
         return [
+            'currency' => $base,
             'status' => $status,
             'spend' => round($spend, 2),
             'orders' => $orderCount,
@@ -125,14 +134,23 @@ final class CustomerInsight
 
     /**
      * A statement (debit/credit/running balance) built from the same ledgers, newest maths last.
-     * @return array{rows:array<int,array<string,mixed>>,balance:float}
+     * Every entry is consolidated into one currency so the running balance is meaningful; the
+     * per-line debit/credit TEXT follows the report mode (native in Original, consolidated otherwise).
+     *
+     * Each returned row carries: date, detail, drText, crText, balanceText (display strings) plus
+     * numeric dr/cr/balance (consolidated) and currency (the consolidation currency), and link.
+     *
+     * @return array{rows:array<int,array<string,mixed>>,balance:float,balanceText:string,currency:string}
      */
     public function statement(CapabilityContext $ctx, CustomerProfile $c): array
     {
+        $rc = ReportingCurrency::forContext($ctx);
+        $base = $rc->consolidationCurrency();
+
         $t = $ctx->tenantId();
         $digits = preg_replace('/[^0-9]/', '', (string) $c->phone);
         if ($digits === '') {
-            return ['rows' => [], 'balance' => 0.0];
+            return ['rows' => [], 'balance' => 0.0, 'balanceText' => \App\Capability\Support\Money::fmt(0, $base), 'currency' => $base];
         }
         $byPhone = fn ($q) => $q->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [$digits]);
 
@@ -141,23 +159,36 @@ final class CustomerInsight
             ->where('status', '!=', 'void')->get()
             ->each(function ($i) use (&$rows) {
                 $rows[] = ['t' => $i->issued_at ? Carbon::parse($i->issued_at) : Carbon::parse($i->created_at),
-                    'detail' => 'Invoice ' . $i->invoice_no, 'dr' => (float) $i->total, 'cr' => 0.0,
+                    'detail' => 'Invoice ' . $i->invoice_no, 'amt' => (float) $i->total, 'side' => 'dr',
+                    'cur' => (string) ($i->currency ?: $base), 'usd' => null,
                     'link' => '/api/v1/workspace/invoice/' . $i->id];
             });
         $byPhone(CustomerPayment::where('tenant_id', $t))->get()
-            ->each(function ($p) use (&$rows) {
+            ->each(function ($p) use (&$rows, $base) {
                 $rows[] = ['t' => Carbon::parse($p->created_at), 'detail' => 'Payment · ' . ($p->method ?: 'cash'),
-                    'dr' => 0.0, 'cr' => (float) $p->amount, 'link' => null];
+                    'amt' => (float) $p->amount, 'side' => 'cr',
+                    'cur' => (string) ($p->currency ?: $base), 'usd' => (float) ($p->usd_amount ?? 0) ?: null,
+                    'link' => null];
             });
 
         usort($rows, fn ($a, $b) => $a['t']->timestamp <=> $b['t']->timestamp);
         $bal = 0.0; $out = [];
         foreach ($rows as $r) {
-            $bal += $r['dr'] - $r['cr'];
-            $out[] = ['date' => $r['t']->format('d M Y'), 'detail' => $r['detail'],
-                'dr' => $r['dr'], 'cr' => $r['cr'], 'balance' => round($bal, 2), 'link' => $r['link']];
+            $date = $r['t']->format('Y-m-d');
+            $consol = $rc->consolidate([[ 'amount' => $r['amt'], 'currency' => $r['cur'], 'usd' => $r['usd'], 'date' => $date ]])['amount'];
+            $line = $rc->line($r['amt'], $r['cur'], $r['usd'], $date);   // native in Original, else consolidated
+            $isDr = $r['side'] === 'dr';
+            $bal += $isDr ? $consol : -$consol;
+
+            $out[] = [
+                'date' => $r['t']->format('d M Y'), 'detail' => $r['detail'],
+                'drText' => $isDr ? $line['text'] : '', 'crText' => $isDr ? '' : $line['text'],
+                'balanceText' => \App\Capability\Support\Money::fmt(round($bal, 2), $base),
+                'dr' => $isDr ? $consol : 0.0, 'cr' => $isDr ? 0.0 : $consol,
+                'balance' => round($bal, 2), 'currency' => $base, 'link' => $r['link'],
+            ];
         }
 
-        return ['rows' => $out, 'balance' => round($bal, 2)];
+        return ['rows' => $out, 'balance' => round($bal, 2), 'balanceText' => \App\Capability\Support\Money::fmt(round($bal, 2), $base), 'currency' => $base];
     }
 }

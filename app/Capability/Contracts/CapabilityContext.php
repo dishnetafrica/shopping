@@ -18,6 +18,13 @@ final class CapabilityContext
         public readonly array $permissions = [],
     ) {}
 
+    /**
+     * Per-request report-currency override (?cur=base|original|USD|UGX|SSP), set by the transport
+     * layer. Null means "use the tenant's report_currency_mode". Mutable by design: it is request
+     * state, not identity, so it lives outside the readonly constructor.
+     */
+    public ?string $displayOverride = null;
+
     public static function fromUser(User $user): self
     {
         $menus = method_exists($user, 'effectiveMenus') ? (array) $user->effectiveMenus() : [];
@@ -43,6 +50,41 @@ final class CapabilityContext
         $cur = method_exists($this->tenant, 'setting') ? $this->tenant->setting('currency') : null;
 
         return strtoupper((string) ($cur ?: 'UGX'));
+    }
+
+    /**
+     * The tenant's report currency mode: 'base' (consolidate to base currency, default) or
+     * 'original' (preserve each transaction's native currency).
+     */
+    public function reportMode(): string
+    {
+        $m = method_exists($this->tenant, 'setting') ? $this->tenant->setting('report_currency_mode') : null;
+        $m = strtolower((string) ($m ?: 'base'));
+
+        return $m === 'original' ? 'original' : 'base';
+    }
+
+    /**
+     * The effective single display currency after applying any request override, for headline
+     * totals. Returns null when the effective mode is "original" (no single display currency).
+     */
+    public function displayCurrency(): ?string
+    {
+        $ov = strtolower(trim((string) $this->displayOverride));
+        if ($ov === 'original') {
+            return null;
+        }
+        if ($ov !== '' && $ov !== 'base') {
+            $up = strtoupper($ov);
+            if (in_array($up, ['USD', 'UGX', 'SSP'], true)) {
+                return $up;
+            }
+        }
+        if ($ov === '' && $this->reportMode() === 'original') {
+            return null;
+        }
+
+        return $this->baseCurrency();
     }
 
     public function can(string $permission): bool

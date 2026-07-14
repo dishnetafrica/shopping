@@ -48,8 +48,10 @@ final class CustomerCapability implements ObjectCapability
     {
         $c = CustomerProfile::where('tenant_id', $ctx->tenantId())->findOrFail((int) $id);
         $phone = (string) $c->phone;
-        $cur = $ctx->baseCurrency();
         $ins = app(CustomerInsight::class)->for($ctx, $c);
+        // Headline/KPI money follows the report/base currency (always one currency), so the top-bar
+        // report-currency selector reflows the whole 360 consistently.
+        $cur = (string) ($ins['currency'] ?? $ctx->baseCurrency());
 
         $balance = (float) $ins['balance'];
         $endpoint = '/api/v1/workspace/customer/' . $c->id;
@@ -231,8 +233,8 @@ final class CustomerCapability implements ObjectCapability
         $stmt = app(CustomerInsight::class)->statement($ctx, $c);
         $stmtRows = array_map(fn ($r) => [
             'date' => $r['date'], 'detail' => $r['detail'],
-            'debit' => $r['dr'] > 0 ? $fmt($r['dr']) : '', 'credit' => $r['cr'] > 0 ? $fmt($r['cr']) : '',
-            'balance' => $fmt($r['balance']), 'link' => $r['link'],
+            'debit' => $r['drText'] ?? '', 'credit' => $r['crText'] ?? '',
+            'balance' => $r['balanceText'] ?? '', 'link' => $r['link'],
         ], $stmt['rows']);
 
         // --- next best action ---

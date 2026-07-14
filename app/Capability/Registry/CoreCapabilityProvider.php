@@ -23,6 +23,7 @@ use App\Capability\Process\MorningBriefingCapability;
 use App\Capability\Process\PurchaseProcessCapability;
 use App\Capability\Process\SalesOrderListCapability;
 use App\Capability\Process\SalesProcessCapability;
+use App\Capability\Process\SettingsCapability;
 use App\Capability\Process\SetupCapability;
 use App\Capability\Process\SupplierListCapability;
 use App\Capability\Process\WarehouseCapability;
@@ -93,6 +94,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register($dispatch, new CapabilityManifest(key: 'dispatch', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/dispatch'));
 
         $r->register(new SetupCapability(), new CapabilityManifest(key: 'setup', type: 'process', owner: 'management', permission: '', api: '/api/v1/workspace/setup'));
+        $r->register(new SettingsCapability(), new CapabilityManifest(key: 'settings', type: 'process', owner: 'management', permission: '', api: '/api/v1/workspace/settings'));
 
         $r->register(new WorklistCapability($collections, $sales, $purchase, $warehouse, $dispatch), new CapabilityManifest(
             key: 'worklist', type: 'process', owner: 'management',

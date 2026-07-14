@@ -66,6 +66,11 @@ svg{display:block}
 .sp{flex:1}
 .tbtn{width:37px;height:37px;border-radius:8px;display:grid;place-items:center;color:var(--ink-2);transition:.12s}
 .tbtn:hover{background:var(--line-2);color:var(--ink)}
+.curpick{display:flex;align-items:center;gap:6px;height:34px;padding:0 4px 0 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--ink-2);font-size:12.5px}
+.curpick .cl{display:flex;align-items:center;gap:5px;font-weight:600;color:var(--ink)}
+.curpick .cl svg{color:var(--brand)}
+.curpick select{border:none;background:transparent;font:inherit;font-weight:600;color:var(--ink);cursor:pointer;padding:0 2px;height:32px}
+.curpick select:focus{outline:none}
 .view{flex:1;overflow-y:auto;scroll-behavior:smooth}
 .wrap{padding:24px 28px 60px;max-width:1320px;margin:0 auto}
 
@@ -408,6 +413,7 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
         <input id="search" placeholder="Open a record…  e.g. customer 5">
       </div>
       <div class="sp"></div>
+      <div class="curpick" id="curpick" title="How money is shown across reports"></div>
       <button class="tbtn" onclick="refresh()" title="Refresh"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
     </header>
     <main class="view"><div class="wrap" id="view"></div></main>
@@ -422,16 +428,17 @@ const LABELS = { setup:'Get started', briefing:'Morning Briefing', worklist:'My 
   salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance',
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
-  salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement' };
+  salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Currency & Reporting' };
 const GROUPS = [ ['Overview',['setup','briefing','worklist']],
   ['Sales',['customers','salesOrders','quotations','invoices','payments','collections']],
   ['Inventory',['products','categories','purchase.process','suppliers']],
   ['Operations',['warehouse','dispatch']],
-  ['Finance',['finance']] ];
+  ['Finance',['finance']],
+  ['Settings',['settings']] ];
 // Which nav key reads which count from the catalog's counts map.
 const NAVCOUNT = { customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['setup','briefing','worklist','customers','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','collections','finance','warehouse','dispatch']);
+const READY = new Set(['setup','briefing','worklist','customers','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','collections','finance','warehouse','dispatch','settings']);
 // Dedicated list views still pending — none; kept for future additions.
 const SOON = {};
 function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:1)+'k' : String(n); }
@@ -440,6 +447,7 @@ function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:
 const P = {
   setup:'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
   briefing:'M12 3v18M3 12h18', worklist:'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01',
+  settings:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
   collections:'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
   finance:'M3 3v18h18M7 14l4-4 3 3 5-6', 'sales.process':'M3 3v18h18M18 9l-6 6-4-4-3 3',
   'purchase.process':'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
@@ -492,13 +500,15 @@ let CUR = { key:null, id:null };
 let REC_TAB = 'overview';   // active tab in the record shell
 let LAST_REC = null;        // last record payload, so tab switches re-render without a refetch
 
+// Append the active report-currency override (?cur=) so every workspace + command call is consistent.
+function withCur(u){ const c=CFG.cur; if(!c) return u; return u+(u.indexOf('?')<0?'?':'&')+'cur='+encodeURIComponent(c); }
 async function api(path){
-  const r = await fetch(CFG.base+path, { credentials:'include', headers:{ 'Accept':'application/json','X-Requested-With':'XMLHttpRequest' } });
+  const r = await fetch(withCur(CFG.base+path), { credentials:'include', headers:{ 'Accept':'application/json','X-Requested-With':'XMLHttpRequest' } });
   if(!r.ok && r.status!==200){ return { _error:r.status }; }
   return r.json();
 }
 async function post(endpoint, body){
-  const r = await fetch(endpoint, { method:'POST', credentials:'include',
+  const r = await fetch(withCur(endpoint), { method:'POST', credentials:'include',
     headers:{ 'Accept':'application/json','X-Requested-With':'XMLHttpRequest','X-CSRF-TOKEN':CFG.csrf,'Content-Type':'application/json' },
     body: JSON.stringify(body||{}) });
   return r.json();
@@ -523,6 +533,8 @@ async function boot(){
   const cat = await api('/');
   CFG.user = cat.user || CFG.user;
   CFG.counts = cat.counts || {};
+  CFG.currency = cat.currency || { base:'UGX', mode:'base', options:['base','original','USD','UGX','SSP'] };
+  initCur();
   const nm = CFG.user.name||'User';
   document.getElementById('unm').textContent = nm;
   document.getElementById('url').textContent = (CFG.user.role||'') + (CFG.user.org ? ' · ' + CFG.user.org : '');
@@ -559,6 +571,32 @@ function renderNav(caps){
   document.getElementById('nav').innerHTML=html;
 }
 function setActive(key){ document.querySelectorAll('.nitem').forEach(n=>n.classList.toggle('on', n.dataset.key===key)); }
+
+/* ---- global report-currency selector ---- */
+const CUR_LABELS = { base:'Base currency', original:'Original currency', USD:'USD', UGX:'UGX', SSP:'SSP' };
+function initCur(){
+  // Session-persistent override; falls back to the tenant's configured mode.
+  let saved=null; try{ saved=localStorage.getItem('v3cur'); }catch(e){}
+  const c=CFG.currency||{};
+  CFG.cur = saved || (c.override || (c.mode==='original'?'original':'base'));
+  renderCurpick();
+}
+function renderCurpick(){
+  const el=document.getElementById('curpick'); if(!el) return;
+  const c=CFG.currency||{}; const opts=c.options||['base','original','USD','UGX','SSP'];
+  const cur=CFG.cur||'base';
+  const label=(k)=> k==='base' ? ('Base ('+(c.base||'UGX')+')') : (CUR_LABELS[k]||k);
+  el.innerHTML='<span class="cl">'+icon('dollar','ic-sm')+'Reports</span>'+
+    '<select id="curSel" onchange="setCur(this.value)">'+
+    opts.map(o=>'<option value="'+o+'"'+(o===cur?' selected':'')+'>'+esc(label(o))+'</option>').join('')+
+    '</select>';
+}
+function setCur(v){
+  CFG.cur=v; try{ localStorage.setItem('v3cur', v); }catch(e){}
+  renderCurpick();   // keep the top-bar selector reflecting the active choice across navigation
+  // Sidebar catalog counts are currency-independent; just reload the current view.
+  if(CUR && CUR.key){ route(CUR.key, CUR.id); }
+}
 
 async function route(key, id){
   CUR={key,id}; REC_TAB='overview'; location.hash='#/'+key+(id?'/'+id:''); setActive(key);

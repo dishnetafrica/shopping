@@ -7,6 +7,7 @@ use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\WorkspacePayload;
 use App\Capability\Support\Money;
 use App\Models\Invoice;
+use App\Services\Money\ReportingCurrency;
 use Illuminate\Support\Carbon;
 
 /**
@@ -24,7 +25,8 @@ final class InvoiceListCapability implements ProcessCapability
     public function project(CapabilityContext $ctx): WorkspacePayload
     {
         $t = $ctx->tenantId();
-        $cur = $ctx->baseCurrency();
+        $rc = ReportingCurrency::forContext($ctx);
+        $cur = $rc->consolidationCurrency();   // KPI tiles + grid totals are always ONE currency
         $now = Carbon::now();
 
         $invoices = Invoice::where('tenant_id', $t)
@@ -33,21 +35,25 @@ final class InvoiceListCapability implements ProcessCapability
             ->limit(self::MAX_ROWS)
             ->get();
 
-        $outstanding = 0.0; $overdue = 0.0; $overdueCount = 0; $paid30 = 0.0;
-        $payDaysSum = 0.0; $payDaysN = 0;
+        // KPI accumulators are collected as {amount,currency,date} rows and consolidated at the end,
+        // so mixed-currency invoices never get naively added into one wrong number.
+        $outRows = []; $ovRows = []; $paid30Rows = [];
+        $overdueCount = 0; $payDaysSum = 0.0; $payDaysN = 0;
         $rows = [];
 
         foreach ($invoices as $i) {
+            $icur = (string) ($i->currency ?: $cur);
             $total = (float) $i->total;
             $paid = (float) $i->amount_paid;
             $balance = (float) $i->balance;
             $due = $i->due_at ? Carbon::parse($i->due_at) : null;
             $issued = $i->issued_at ? Carbon::parse($i->issued_at) : null;
+            $date = $issued ? $issued->format('Y-m-d') : null;
             $isOverdue = $balance > 0.01 && $due && $due->isPast();
 
-            $outstanding += max(0, $balance);
-            if ($isOverdue) { $overdue += $balance; $overdueCount++; }
-            if ($issued && $issued->gte($now->copy()->subDays(30))) { $paid30 += $paid; }
+            if ($balance > 0.01) { $outRows[] = ['amount' => $balance, 'currency' => $icur, 'date' => $date]; }
+            if ($isOverdue) { $ovRows[] = ['amount' => $balance, 'currency' => $icur, 'date' => $date]; $overdueCount++; }
+            if ($issued && $issued->gte($now->copy()->subDays(30))) { $paid30Rows[] = ['amount' => $paid, 'currency' => $icur, 'date' => $date]; }
 
             $status = $balance <= 0.01 ? 'Paid' : ($isOverdue ? 'Overdue' : ($paid > 0.01 ? 'Partial' : 'Open'));
             if ($status === 'Paid' && $issued && $i->updated_at) {
@@ -55,13 +61,20 @@ final class InvoiceListCapability implements ProcessCapability
             }
             $badge = $status === 'Paid' ? 'ok' : ($status === 'Overdue' ? 'danger' : ($status === 'Partial' ? 'warn' : 'default'));
 
+            // Displayed text follows the report mode (native in Original, converted otherwise);
+            // the hidden 'sort' is always the consolidated figure so column sort + footer totals are one currency.
+            $totalLine = $rc->line($total, $icur, null, $date);
+            $paidLine  = $rc->line($paid, $icur, null, $date);
+            $balLine   = $rc->line($balance, $icur, null, $date);
+            $cons = fn ($amt) => $rc->consolidate([['amount' => $amt, 'currency' => $icur, 'date' => $date]])['amount'];
+
             $rows[] = [
                 'invoice'  => (string) $i->invoice_no,
                 'customer' => ['value' => (string) ($i->customer_name ?: 'Customer'), 'sub' => (string) ($i->customer_phone ?: ''), 'avatar' => true],
-                'total'    => ['value' => Money::fmt($total, (string) ($i->currency ?: $cur)), 'sort' => $total],
-                'paid'     => ['value' => Money::fmt($paid, (string) ($i->currency ?: $cur)), 'tone' => $paid > 0 ? 'ok' : '', 'sort' => $paid],
+                'total'    => ['value' => $totalLine['text'], 'sort' => $cons($total)],
+                'paid'     => ['value' => $paidLine['text'], 'tone' => $paid > 0 ? 'ok' : '', 'sort' => $cons($paid)],
                 'balance'  => $balance > 0.01
-                    ? ['value' => Money::fmt($balance, (string) ($i->currency ?: $cur)), 'tone' => 'danger', 'sort' => $balance]
+                    ? ['value' => $balLine['text'], 'tone' => 'danger', 'sort' => $cons($balance)]
                     : ['value' => '—', 'sort' => 0],
                 'issued'   => ['value' => $issued ? $issued->format('d M Y') : '—', 'sort' => $issued ? $issued->timestamp : 0],
                 'due'      => ['value' => $due ? $due->format('d M Y') : '—', 'sort' => $due ? $due->timestamp : 0],
@@ -70,6 +83,9 @@ final class InvoiceListCapability implements ProcessCapability
             ];
         }
 
+        $outstanding = $rc->consolidate($outRows)['amount'];
+        $overdue = $rc->consolidate($ovRows)['amount'];
+        $paid30 = $rc->consolidate($paid30Rows)['amount'];
         $avgDays = $payDaysN > 0 ? (int) round($payDaysSum / $payDaysN) : 0;
 
         $columns = [
@@ -86,7 +102,7 @@ final class InvoiceListCapability implements ProcessCapability
         return (new WorkspacePayload)
             ->object([
                 'type' => 'list:invoices', 'title' => 'Invoices',
-                'subtitle' => number_format($invoices->count()) . ' invoices · ' . Money::fmt($outstanding, $cur) . ' outstanding · ' . Money::fmt($overdue, $cur) . ' overdue',
+                'subtitle' => number_format($invoices->count()) . ' invoices · ' . Money::fmt($outstanding, $cur) . ' outstanding · ' . Money::fmt($overdue, $cur) . ' overdue · ' . $rc->modeLabel(),
             ])
             ->financials([
                 ['key' => 'outstanding', 'label' => 'Outstanding', 'value' => Money::fmt($outstanding, $cur), 'tone' => $outstanding > 0 ? 'warn' : 'ok', 'foot' => 'all open invoices'],
