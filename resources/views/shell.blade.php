@@ -444,13 +444,13 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 
 <script>
 const CFG = { base:'/api/v1/workspace', csrf: document.querySelector('meta[name=csrf-token]').content, user: @json(['name'=>'']) };
-const LABELS = { setup:'Get started', briefing:'Morning Briefing', worklist:'My Work', customers:'Customers', collections:'Collections',
+const LABELS = { setup:'Get started', briefing:'Morning Briefing', worklist:'My Work', customers:'Customers', leads:'Leads', collections:'Collections',
   salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance',
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
   salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings', ads:'Facebook Ads' };
 const GROUPS = [ ['Overview',['setup','briefing','worklist']],
-  ['Sales',['customers','salesOrders','quotations','invoices','payments','collections']],
+  ['Sales',['customers','leads','salesOrders','quotations','invoices','payments','collections']],
   ['Inventory',['products','categories','purchase.process','suppliers']],
   ['Operations',['warehouse','dispatch']],
   ['Finance',['finance','cashbook']],
@@ -459,7 +459,7 @@ const GROUPS = [ ['Overview',['setup','briefing','worklist']],
 // Which nav key reads which count from the catalog's counts map.
 const NAVCOUNT = { customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['setup','briefing','worklist','customers','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','collections','finance','warehouse','dispatch','settings','cashbook','ads']);
+const READY = new Set(['setup','briefing','worklist','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','collections','finance','warehouse','dispatch','settings','cashbook','ads']);
 // Dedicated list views still pending — none; kept for future additions.
 const SOON = {};
 function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:1)+'k' : String(n); }
@@ -488,6 +488,7 @@ const P = {
   products:'M12 2 2 7l10 5 10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
   categories:'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
   ads:'M11 5 6 9H2v6h4l5 4V5zM19 12a7 7 0 0 0-2-4.9M15.5 8.5a3 3 0 0 1 0 5',
+  leads:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8M19 8v6M22 11h-6',
   salesOrder:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
   salesOrders:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
   purchaseOrder:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
@@ -536,6 +537,14 @@ async function post(endpoint, body){
   const r = await fetch(withCur(endpoint), { method:'POST', credentials:'include',
     headers:{ 'Accept':'application/json','X-Requested-With':'XMLHttpRequest','X-CSRF-TOKEN':CFG.csrf,'Content-Type':'application/json' },
     body: JSON.stringify(body||{}) });
+  return r.json();
+}
+// GET-with-query write, for reusing legacy panel endpoints that read $request->query() (e.g. /papi/lead-save).
+// No body/JSON — every field goes on the query string, exactly like the panel does.
+async function getQuery(endpoint, body){
+  const parts=[]; Object.entries(body||{}).forEach(([k,v])=>{ if(v!=null && v!=='') parts.push(encodeURIComponent(k)+'='+encodeURIComponent(v)); });
+  const url = endpoint + (parts.length ? ((endpoint.indexOf('?')<0?'?':'&')+parts.join('&')) : '');
+  const r = await fetch(withCur(url), { credentials:'include', headers:{ 'Accept':'application/json','X-Requested-With':'XMLHttpRequest' } });
   return r.json();
 }
 function toast(m,err){ const t=document.createElement('div'); t.className='toast'+(err?' err':'');
@@ -965,6 +974,14 @@ function withScope(a){
 async function doAction(a){
   if(a.href){ const u=withScope(a); try{ window.open(u,'_blank'); }catch(e){ location.href=u; } return; }
   if(a.chooser){ return chooserModal(a); }
+  // queryWrite: reuse a legacy panel GET endpoint. With a schema → open the form (submit builds the
+  // query string); without → an optional confirm then a direct GET-query write, then refresh.
+  if(a.queryWrite){
+    if(a.schema){ return formModal(a); }
+    if(a.confirm && !window.confirm(a.confirm)) return;
+    const res=await getQuery(a.endpoint, a.body||{});
+    toast(res&&res.ok?(res.message||'Done'):((res&&(res.message||res.error))||'Error'), !(res&&res.ok)); refresh(); return;
+  }
   if((a.method||'POST')==='GET'){ const h=apiToHash(a.endpoint); if(h){ route(h.key,h.id); } return; }
   if(a.builder==='quotation'){ return quoteBuilder(a); }
   if(a.schema){ return formModal(a); }
@@ -1085,6 +1102,8 @@ function formModal(a){
       } else { toast(src+' converted '+from+' '+fromAmt.toLocaleString()+' → '+toAmt.toLocaleString()+' '+to, false); }
       refresh(); return;
     }
+    // queryWrite: submit the form as a GET query-string write to a legacy panel endpoint.
+    if(a.queryWrite){ closeM(); const res=await getQuery(ep, body); toast(res&&res.ok?(res.message||'Saved'):((res&&(res.message||res.error))||'Error'), !(res&&res.ok)); refresh(); return; }
     closeM(); const res=await post(ep,body);
     // onResult:'payment' — surface the customer's remaining balance right here instead of a generic "Saved".
     let msg=res.message;

@@ -17,6 +17,7 @@ use App\Capability\Process\CollectionsCapability;
 use App\Capability\Process\CustomerListCapability;
 use App\Capability\Process\DispatchCapability;
 use App\Capability\Process\InvoiceListCapability;
+use App\Capability\Process\LeadListCapability;
 use App\Capability\Process\PaymentListCapability;
 use App\Capability\Process\ProductListCapability;
 use App\Capability\Process\QuotationListCapability;
@@ -84,6 +85,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register($collections, new CapabilityManifest(key: 'collections', type: 'process', owner: 'accounts', dependsOn: ['statement'], events: ['consumes' => ['PaymentRecorded'], 'emits' => ['RemindersSent']], permission: 'menu:finance', commands: [['key' => 'bulk_remind', 'actor' => 'human']], api: '/api/v1/workspace/collections'));
         $r->register($sales, new CapabilityManifest(key: 'sales.process', type: 'process', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/sales.process'));
         $r->register(new CustomerListCapability(), new CapabilityManifest(key: 'customers', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/customers'));
+        $r->register(new LeadListCapability(), new CapabilityManifest(key: 'leads', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/leads'));
         $r->register(new QuotationListCapability(), new CapabilityManifest(key: 'quotations', type: 'process', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/quotations'));
         $r->register(new InvoiceListCapability(), new CapabilityManifest(key: 'invoices', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/invoices'));
         $r->register(new SalesOrderListCapability(), new CapabilityManifest(key: 'salesOrders', type: 'process', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/salesOrders'));
