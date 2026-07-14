@@ -599,6 +599,9 @@ function setCur(v){
 }
 
 async function route(key, id){
+  // Normalise id to null (not undefined) so the hashchange guard (which compares against parseHash's
+  // null id) doesn't fire a spurious second route that re-renders and wipes a just-applied filter.
+  id = id != null ? id : null;
   CUR={key,id}; REC_TAB='overview'; location.hash='#/'+key+(id?'/'+id:''); setActive(key);
   if(SOON[key] && !id){ renderSoon(key); return; }
   document.getElementById('view').innerHTML=skeleton();
@@ -723,7 +726,15 @@ function qrow(r){ const link=r.link?(' onclick="openLink(\''+esc(r.link)+'\')"')
     '<div class="m"><div class="t">'+esc(r.label||r.type)+(r.count!=null?' <span style="color:var(--muted);font-weight:500">('+r.count+')</span>':'')+'</div>'+
     (r.sublabel&&!right?'<div class="s">'+esc(r.sublabel)+'</div>':'')+'</div>'+
     (right?'<div class="r">'+esc(right)+'</div>':'')+'<div class="chev">'+icon('chev','ic-sm')+'</div></div>'; }
-function openLink(apiPath){ const h=apiToHash(apiPath); if(h) route(h.key, h.id); }
+// A row can navigate to a LIST pre-filtered: link = "filter:<listKey>:<colKey>:<urlEncodedValue>".
+// Used e.g. by a category card to open Products already filtered to that category (like the panel).
+let PENDING_FILTER=null;
+function openLink(apiPath){
+  if(apiPath && apiPath.indexOf('filter:')===0){
+    const p=apiPath.split(':'); PENDING_FILTER={ key:p[2], val:decodeURIComponent(p[3]||'') }; route(p[1]); return;
+  }
+  const h=apiToHash(apiPath); if(h) route(h.key, h.id);
+}
 
 /* ============ record shell (tabbed 360: answers · health · KPIs · NBA · tabs) ============ */
 const ACTICON={record_payment:'card',log_contact:'phone',log_whatsapp:'mail',edit_customer:'edit',update_customer:'edit',send_reminder:'bell',set_followup:'bell',assign_rep:'user',new_quotation:'quotations',open_invoice:'invoice',open_customer:'user',open_order:'cart',receipt_pdf:'download',quotation_pdf:'download',invoice_pdf:'download',send_receipt:'send',mark_delivered:'truck',create_invoice:'invoice'};
@@ -1082,6 +1093,8 @@ function renderList(p){
   TBL = { cols:tb.columns||[], rows:tb.rows||[], filters:tb.filters||[], fval:{}, sort:null, dir:1, q:'',
     dateKey:tb.dateKey||null, dateLabel:tb.dateLabel||'Created', totals:tb.totals||[], from:'', to:'', page:1,
     pageSize:tb.pageSize||15, cur:tb.currency||'UGX' };
+  // A drill-through from another screen (e.g. a category card) pre-applies its filter here.
+  if(PENDING_FILTER){ TBL.fval[PENDING_FILTER.key]=PENDING_FILTER.val; PENDING_FILTER=null; }
   let h='<div class="crumb">'+(LABELS[cap]||cap)+'</div>';
   h+='<div class="lhead"><div><h1 class="ltitle">'+esc(o.title||'')+'</h1>'+(o.subtitle?'<div class="lsub">'+esc(o.subtitle)+'</div>':'')+'</div>'+
      '<div class="acts inl">'+(p.actions||[]).map(actBtn).join('')+
