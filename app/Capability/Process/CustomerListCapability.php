@@ -165,6 +165,7 @@ final class CustomerListCapability implements ProcessCapability
             $items = $rows->map(fn ($c) => [
                 'id' => (int) $c->id,
                 'name' => (string) ($c->name ?: $c->phone ?: 'Customer'),
+                'phone' => (string) ($c->phone ?? ''),
                 'sub' => trim(implode(' · ', array_filter([(string) $c->contact_person, (string) $c->phone, trim(implode(', ', array_filter([(string) $c->city, (string) $c->country])))]))),
             ])->all();
 

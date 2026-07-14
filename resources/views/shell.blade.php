@@ -1015,14 +1015,17 @@ let QBT=null;
 function quoteBuilder(a){
   const cur=(a.prefill&&a.prefill.currency)||'UGX';
   const edit=!!a.edit;
+  const invoice=!!a.invoice;
   // Edit mode pre-loads the quotation's existing lines so they can be changed/removed.
   const seed=(a.lines||[]).map(l=>({name:String(l.name||''),unit:String(l.unit||l.unit_label||''),qty:Math.max(1,parseInt(l.qty||1,10)||1),price:Math.max(0,parseFloat(l.price!=null?l.price:l.unit_price)||0)}));
-  window.QB={lines:seed, cur:cur, a:a, edit:edit, _res:[], _cres:[], customerId:(a.prefill&&a.prefill.id)||null, customerName:a.customer||'', pick:!!a.pickCustomer};
+  window.QB={lines:seed, cur:cur, a:a, edit:edit, invoice:invoice, _res:[], _cres:[], customerId:(a.prefill&&a.prefill.id)||null, customerName:a.customer||'', customerPhone:(a.prefill&&a.prefill.phone)||'', pick:!!a.pickCustomer};
   const curOpts=(a.currencies||[cur]).map(c=>'<option'+(c===cur?' selected':'')+'>'+esc(c)+'</option>').join('');
   const m=document.getElementById('modal'); m.style.maxWidth='660px';
   const custBlock=a.pickCustomer?'<div class="qb-custwrap" id="qbcustwrap"></div>':'';
-  const title=edit?('Edit quotation'+(a.customer?' — '+esc(a.customer):'')):('New quotation'+(a.customer?' — '+esc(a.customer):''));
-  const waBlock=edit?'':'<label class="qb-wa"><input type="checkbox" id="qbwa"> Also send the PDF to the customer on WhatsApp</label>';
+  const noun=invoice?'invoice':'quotation';
+  const title=(edit?'Edit ':'New ')+noun+(a.customer?' — '+esc(a.customer):'');
+  const okLabel=edit?'Save changes':('Create '+noun);
+  const waBlock=(edit||invoice)?'':'<label class="qb-wa"><input type="checkbox" id="qbwa"> Also send the PDF to the customer on WhatsApp</label>';
   m.innerHTML='<div class="h">'+title+'<button class="x" onclick="closeQB()">'+icon('x')+'</button></div>'+
     '<div class="b">'+custBlock+
       '<div class="qb-pick"><input id="qbq" placeholder="Search products to add…" autocomplete="off" oninput="qbSearch()"><div class="qb-res" id="qbres"></div></div>'+
@@ -1031,7 +1034,7 @@ function quoteBuilder(a){
         '<div class="qb-tot">Total <b id="qbtot">'+esc(curFmt(0,cur))+'</b></div></div>'+
       waBlock+
     '</div>'+
-    '<div class="f"><button class="btn" onclick="closeQB()">Cancel</button><button class="btn pri" id="qbok" onclick="qbSubmit()"'+(seed.length?'':' disabled')+'>'+(edit?'Save changes':'Create quotation')+'</button></div>';
+    '<div class="f"><button class="btn" onclick="closeQB()">Cancel</button><button class="btn pri" id="qbok" onclick="qbSubmit()"'+(seed.length?'':' disabled')+'>'+esc(okLabel)+'</button></div>';
   document.getElementById('ov').classList.add('on'); if(a.pickCustomer) qbRenderCust(); qbRender();
   setTimeout(()=>{ const f=document.getElementById(a.pickCustomer?'qbcq':'qbq'); if(f) f.focus(); },40);
 }
@@ -1054,7 +1057,7 @@ function qbCustSearch(){
     box.classList.add('on');
   },220);
 }
-function qbCustPick(i){ const it=(window.QB._cres||[])[i]; if(!it) return; window.QB.customerId=it.id; window.QB.customerName=it.name; qbRenderCust(); qbTotal(); }
+function qbCustPick(i){ const it=(window.QB._cres||[])[i]; if(!it) return; window.QB.customerId=it.id; window.QB.customerName=it.name; window.QB.customerPhone=it.phone||''; qbRenderCust(); qbTotal(); }
 function closeQB(){ const m=document.getElementById('modal'); if(m) m.style.maxWidth=''; closeM(); }
 function qbSearch(){
   const q=document.getElementById('qbq').value.trim(); const box=document.getElementById('qbres'); clearTimeout(QBT);
@@ -1092,6 +1095,17 @@ function qbTotal(){ let t=0; window.QB.lines.forEach((l,i)=>{ const a=l.qty*l.pr
 async function qbSubmit(){
   const a=window.QB.a; const ok=document.getElementById('qbok'); if(!window.QB.lines.length) return;
   if(window.QB.pick && !window.QB.customerId){ toast('Choose a customer first', true); return; }
+  if(window.QB.invoice){
+    // Issue a numbered invoice via the panel's proven /papi/invoice-issue (customer + line items).
+    const body={ customer:window.QB.customerName||'', phone:window.QB.customerPhone||'', currency:window.QB.cur,
+      lines:JSON.stringify(window.QB.lines.map(l=>({name:l.name,qty:l.qty,unit:l.price,uom:l.unit||''}))) };
+    ok.disabled=true; ok.textContent='Issuing…';
+    const res=await post(a.endpoint,body); closeQB();
+    if(res&&res.ok){ toast('Invoice '+(res.invoice_no||'')+' created'+(res.already?' (already existed)':''));
+      if(res.pdf){ try{ window.open(res.pdf,'_blank'); }catch(e){} } refresh(); }
+    else { toast((res&&(res.message||res.error))||'Could not create the invoice', true); }
+    return;
+  }
   if(window.QB.edit){
     // Edit → reuse the panel's proven quotation-update endpoint (rebuilds the PDF, keeps the number).
     const pf=a.prefill||{};

@@ -126,7 +126,13 @@ final class InvoiceListCapability implements ProcessCapability
                     ['key' => 'balance', 'label' => 'Amount due', 'money' => true],
                 ],
             ])
-            ->actions([['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/invoices', 'actor' => 'human', 'tone' => 'default']])
+            ->actions([
+                ['key' => 'new_invoice', 'label' => 'New invoice', 'method' => 'POST', 'endpoint' => '/papi/invoice-issue',
+                 'actor' => 'human', 'tone' => 'primary', 'builder' => 'quotation', 'invoice' => true, 'pickCustomer' => true,
+                 'customerSearch' => '/api/v1/workspace/customers/_/search', 'productSearch' => '/api/v1/workspace/products/_/search',
+                 'currencies' => array_values(array_unique([$cur, 'USD', 'UGX', 'SSP'])), 'prefill' => ['currency' => $cur]],
+                ['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/invoices', 'actor' => 'human', 'tone' => 'default'],
+            ])
             ->meta(['capability' => 'invoices', 'ttl' => 60, 'permissions' => ['menu:finance']]);
     }
 
