@@ -951,7 +951,8 @@ async function doAction(a){
   if(a.builder==='quotation'){ return quoteBuilder(a); }
   if(a.schema){ return formModal(a); }
   if(a.confirm && !window.confirm(a.confirm)) return;
-  const res=await post(a.endpoint,a.body||{}); toast(res.ok?(res.message||'Done'):(res.message||res.error||'Error'), !res.ok);
+  const ep=a.endpoint||a.post; if(!ep){ return; }   // accept `post:` (menu/row delete actions) as well as `endpoint:`
+  const res=await post(ep,a.body||{}); toast(res.ok?(res.message||'Done'):(res.message||res.error||'Error'), !res.ok);
   if(res&&res.ok){ if(res.pdf_b64){ downloadB64(res.pdf_b64,res.filename||'document.pdf'); } else if(res.url){ try{ window.open(res.url,'_blank'); }catch(e){} } }
   refresh();
 }

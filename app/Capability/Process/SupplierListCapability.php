@@ -8,6 +8,8 @@ use App\Capability\Dto\WorkspacePayload;
 use App\Capability\Support\Money;
 use App\Models\OrderCost;
 use App\Models\Supplier;
+use App\Models\User;
+use App\Services\Money\Fx;
 
 /**
  * Suppliers directory — list workspace. Payable owed and open-PO count per supplier come from ONE
@@ -37,6 +39,14 @@ final class SupplierListCapability implements ProcessCapability
 
         $suppliers = Supplier::where('tenant_id', $t)->orderBy('name')->limit(self::MAX_ROWS)->get();
 
+        // people pick-list + rates for the quick "record bill" / "pay" row actions
+        $fx = Fx::forTenant($ctx->tenant);
+        $rateMap = ['USD' => 1, 'UGX' => (int) round($fx->ratePerUsd('UGX')), 'SSP' => (int) round($fx->ratePerUsd('SSP'))];
+        $me = (string) ($ctx->user->name ?? '');
+        $members = User::where('tenant_id', $t)->orderBy('name')->pluck('name')->map(fn ($n) => trim((string) $n))->filter()->unique()->values()->all();
+        if ($me !== '') { $members = array_values(array_unique(array_merge([$me], $members))); }
+        $comboPeople = 'combo:' . (count($members) ? implode('|', $members) : ($me ?: 'Me'));
+
         $totalPayable = 0.0; $active = 0; $withBalance = 0;
         $rows = [];
         foreach ($suppliers as $s) {
@@ -49,8 +59,28 @@ final class SupplierListCapability implements ProcessCapability
             if ($owed > 0) { $withBalance++; }
 
             $canEdit = $ctx->can('menu:purchases');
+            $scur = (string) ($s->opening_currency ?: $cur);
+            $srate = $rateMap[$scur] ?? 1;
             $rowBtns = [];
             if ($canEdit) {
+                $rowBtns[] = ['icon' => 'cart', 'title' => 'Record bill from ' . $s->name, 'action' => [
+                    'key' => 'record_bill', 'label' => 'Record purchase — ' . $s->name, 'method' => 'POST', 'endpoint' => '/papi/order-costs', 'actor' => 'human', 'tone' => 'primary',
+                    'schema' => ['native_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'pay_status' => 'enum:credit,cash', 'note' => 'text', 'holder' => $comboPeople],
+                    'labels' => ['native_amount' => 'Bill amount', 'rate_to_usd' => 'Rate (native per $1)', 'pay_status' => 'Credit (owe) or cash (paid now)', 'note' => 'Item / description', 'holder' => 'Paid by (if cash)'],
+                    'prefill' => ['currency' => $scur, 'rate_to_usd' => $srate, 'pay_status' => 'credit', 'holder' => $me],
+                    'body' => ['stage' => 'purchase', 'supplier_id' => $s->id],
+                    'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
+                    'autoNote' => ['template' => 'Purchase from ' . $s->name, 'watch' => []],
+                ]];
+                $rowBtns[] = ['icon' => 'dollar', 'title' => 'Pay ' . $s->name, 'action' => [
+                    'key' => 'pay_supplier', 'label' => 'Pay ' . $s->name, 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'primary',
+                    'schema' => ['amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'holder' => $comboPeople, 'note' => 'text'],
+                    'labels' => ['amount' => 'Amount paid', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => 'Paid by (whose cash)'],
+                    'prefill' => ['currency' => $scur, 'rate_to_usd' => $srate, 'holder' => $me],
+                    'body' => ['dir' => 'out', 'category' => 'Supplier payment', 'supplier_id' => $s->id],
+                    'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
+                    'autoNote' => ['template' => 'Paid ' . $s->name, 'watch' => []],
+                ]];
                 $rowBtns[] = ['icon' => 'edit', 'title' => 'Edit ' . $s->name, 'action' => [
                     'key' => 'edit_supplier', 'label' => 'Edit ' . $s->name, 'method' => 'POST', 'endpoint' => '/papi/suppliers/' . $s->id, 'actor' => 'human', 'tone' => 'primary',
                     'schema' => ['name' => 'text', 'contact_name' => 'text', 'phone' => 'text', 'email' => 'text', 'tax_number' => 'text', 'pay_term_days' => 'number', 'opening_balance' => 'money', 'opening_currency' => 'enum:,UGX,USD,SSP', 'address' => 'text'],

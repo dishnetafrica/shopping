@@ -10,8 +10,10 @@ use App\Capability\Support\Money;
 use App\Models\OrderCost;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Services\Finance\SupplierStatement;
 use App\Services\Money\Fx;
 use App\Services\Purchasing\SupplierPaymentService;
+use App\Services\WhatsApp\WhatsAppManager;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -147,11 +149,13 @@ final class SupplierCapability implements ObjectCapability
             'prefill' => ['name' => (string) ($s->business_name ?: $s->name), 'contact_name' => (string) $s->contact_name, 'phone' => (string) $s->phone, 'email' => (string) $s->email, 'tax_number' => (string) $s->tax_number, 'pay_term_days' => $s->pay_term_days, 'opening_balance' => $s->opening_balance, 'opening_currency' => (string) $s->opening_currency, 'address' => (string) $s->address],
             'body' => ['business_name' => (string) ($s->business_name ?: $s->name)]];
         $statement = ['key' => 'statement', 'label' => 'View statement', 'href' => '/api/v1/doc/supplier-statement?id=' . $s->id, 'actor' => 'human', 'tone' => 'default'];
+        $sendStatement = ['key' => 'send_statement', 'label' => 'Send statement (WhatsApp)', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/supplier/' . $s->id . '/send_statement', 'actor' => 'human', 'tone' => 'default',
+            'confirm' => 'Send ' . $s->name . '\'s statement as a WhatsApp document to ' . ($s->phone ? $s->phone : 'the owner number') . '?'];
         $deleteSup = ['key' => 'delete_supplier', 'label' => 'Delete supplier', 'tone' => 'danger', 'post' => '/papi/suppliers/' . $s->id . '/delete', 'confirm' => 'Delete supplier ' . $s->name . '? (kept & deactivated if it has history)'];
 
         $header = $canEdit ? [$recordBill, $paySupplier] : [];
         $quick = $canEdit ? [$recordBill, $paySupplier, $statement, $editSupplier] : [$statement];
-        $more = $canEdit ? [$statement, $editSupplier, $deleteSup] : [$statement];
+        $more = $canEdit ? [$statement, $sendStatement, $editSupplier, $deleteSup] : [$statement];
 
         return (new WorkspacePayload)
             ->object([
@@ -189,8 +193,41 @@ final class SupplierCapability implements ObjectCapability
     {
         return match ($action) {
             'record_supplier_payment' => $this->recordPayment($ctx, $input),
+            'send_statement' => $this->sendStatement($ctx, $input),
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
+    }
+
+    /** Generate the supplier's payables statement PDF and send it as a WhatsApp document. */
+    private function sendStatement(CapabilityContext $ctx, array $input): array
+    {
+        $t = $ctx->tenant;
+        $s = Supplier::where('tenant_id', $ctx->tenantId())->find((int) ($input['id'] ?? 0));
+        if (! $s) { return ['ok' => false, 'error' => 'not_found']; }
+
+        $svc = app(SupplierStatement::class);
+        $data = $svc->collect($t, $s->id);
+        $pdf = $data ? $svc->pdf($t, $data) : null;
+        if (! $pdf) { return ['ok' => false, 'message' => 'Could not build the statement PDF.']; }
+
+        $gw = app(WhatsAppManager::class)->forTenant($t);
+        if (! method_exists($gw, 'sendDocument')) { return ['ok' => false, 'message' => 'WhatsApp document sending is not available on this connection.']; }
+        $instance = $t->whatsapp_instance ?? null;
+        $supPhone = preg_replace('/[^0-9]/', '', (string) $s->phone);
+        $target = $supPhone !== '' ? $supPhone : null;
+        $toWho = $target ? $s->name : 'the owner';
+        if (! $target && method_exists($t, 'ownerAlertNumbers')) { $nums = $t->ownerAlertNumbers(); $target = $nums[0] ?? null; }
+        if (! $instance || ! $target) { return ['ok' => false, 'message' => 'No WhatsApp number to send to — add a phone to this supplier or set an owner alert number.']; }
+
+        try {
+            $gw->sendDocument($instance, $target, base64_encode($pdf),
+                'Statement-' . preg_replace('/[^A-Za-z0-9]+/', '', $data['supplier']) . '.pdf',
+                '📄 Statement — ' . $s->name . '. Balance owed $' . number_format((float) $data['closing'], 2) . '.');
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'message' => 'WhatsApp send failed — try again shortly.'];
+        }
+
+        return ['ok' => true, 'message' => 'Statement sent on WhatsApp to ' . $toWho . '.'];
     }
 
     /** Delegates to the frozen-mirroring SupplierPaymentService — books a supplier_payment row. */
