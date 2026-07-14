@@ -993,7 +993,12 @@ function formModal(a){
   }
   document.getElementById('mok').onclick=async()=>{ const body=Object.assign({}, a.body||{});
     Object.entries(a.schema).forEach(([k,type])=>{ if(type==='gallery'){ body[k]=window.GAL[k]||[]; } else { const el=document.getElementById('f_'+k); if(el) body[k]=el.value; } });
-    closeM(); const res=await post(a.endpoint,body); toast(res.ok?(res.message||'Saved'):(res.message||res.error||'Error'), !res.ok); refresh(); };
+    // pathMap: resolve the target URL from a picked field value (e.g. supplier name → /papi/suppliers/{id}/pay).
+    let ep=a.endpoint;
+    if(a.pathMap && a.pathMap.field && a.pathMap.map){ const sel=body[a.pathMap.field]; const mapped=a.pathMap.map[sel];
+      if(!mapped){ toast(a.pathMap.error||'Please choose a valid option',true); return; }
+      ep=mapped; delete body[a.pathMap.field]; }
+    closeM(); const res=await post(ep,body); toast(res.ok?(res.message||'Saved'):(res.message||res.error||'Error'), !res.ok); refresh(); };
 }
 function renderGal(k){
   const el=document.getElementById('gal_'+k); if(!el) return; const urls=window.GAL[k]||[];

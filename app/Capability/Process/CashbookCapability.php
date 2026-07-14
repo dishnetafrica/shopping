@@ -8,6 +8,7 @@ use App\Capability\Dto\Brief;
 use App\Capability\Dto\WorkspacePayload;
 use App\Capability\Support\Money;
 use App\Models\OrderCost;
+use App\Models\Supplier;
 use App\Models\User;
 use App\Services\Money\CashService;
 use App\Services\Money\Fx;
@@ -140,6 +141,64 @@ final class CashbookCapability implements ProcessCapability
             'columns' => [['label' => 'When'], ['label' => 'Ref'], ['label' => 'Category'], ['label' => 'Held by'], ['label' => 'In/Out'], ['label' => 'Amount', 'align' => 'right'], ['label' => 'USD', 'align' => 'right'], ['label' => '', 'align' => 'right']],
             'rows' => $entryRows, 'empty' => 'No cash entries yet', 'pageSize' => 25];
 
+        // --- payables: who you still owe (same read as the panel debt screen: credit purchases + openings − supplier payments) ---
+        $canPay = $isOwner || $ctx->can('menu:purchases');
+        $credit = OrderCost::where('tenant_id', $t)->whereNotNull('supplier_id')
+            ->where('pay_status', 'credit')->whereNotIn('status', ['rejected', 'void'])
+            ->select('supplier_id', 'supplier_name', 'currency', DB::raw('SUM(native_amount) as owed'))
+            ->groupBy('supplier_id', 'supplier_name', 'currency')->get();
+        $paidRows = OrderCost::where('tenant_id', $t)->whereNotNull('supplier_id')
+            ->where('stage', 'supplier_payment')->whereNotIn('status', ['rejected', 'void'])
+            ->select('supplier_id', 'currency', DB::raw('SUM(native_amount) as paid'))
+            ->groupBy('supplier_id', 'currency')->get();
+        $paidMap = [];
+        foreach ($paidRows as $p) { $paidMap[$p->supplier_id . '|' . $p->currency] = (float) $p->paid; }
+
+        $payables = [];   // supplier_id|currency => ['id','name','currency','owed']
+        foreach (Supplier::where('tenant_id', $t)->whereNotNull('opening_balance')->where('opening_balance', '>', 0)->get(['id', 'name', 'opening_balance', 'opening_currency']) as $s) {
+            $ocur = strtoupper((string) ($s->opening_currency ?: 'USD'));
+            $owed = (float) $s->opening_balance - ($paidMap[$s->id . '|' . $ocur] ?? 0);
+            if ($owed > 0.005) { $payables[$s->id . '|' . $ocur] = ['id' => $s->id, 'name' => (string) $s->name, 'currency' => $ocur, 'owed' => round($owed, 2)]; }
+        }
+        foreach ($credit as $c) {
+            $owed = (float) $c->owed - ($paidMap[$c->supplier_id . '|' . $c->currency] ?? 0);
+            if ($owed <= 0.005) { continue; }
+            $k = $c->supplier_id . '|' . $c->currency;
+            $payables[$k] = ['id' => $c->supplier_id, 'name' => (string) $c->supplier_name, 'currency' => (string) $c->currency, 'owed' => round((($payables[$k]['owed'] ?? 0) + $owed), 2)];
+        }
+        $payables = array_values($payables);
+        usort($payables, fn ($a, $b) => $b['owed'] <=> $a['owed']);
+
+        $payRows = [];
+        foreach ($payables as $pv) {
+            $rate = $rateMap[$pv['currency']] ?? (int) round($fx->ratePerUsd($pv['currency']));
+            $payBtns = [];
+            if ($canPay) {
+                $payBtns[] = ['icon' => 'dollar', 'title' => 'Pay ' . $pv['name'], 'tone' => 'primary', 'action' => [
+                    'key' => 'pay_supplier_row', 'label' => 'Pay ' . $pv['name'], 'method' => 'POST', 'endpoint' => '/papi/suppliers/' . $pv['id'] . '/pay', 'actor' => 'human', 'tone' => 'primary',
+                    'schema' => ['currency' => 'enum:UGX,USD,SSP', 'amount' => 'money', 'rate_to_usd' => 'number', 'note' => 'text'],
+                    'prefill' => ['currency' => $pv['currency'], 'amount' => $pv['owed'], 'rate_to_usd' => $rate, 'note' => 'Paid ' . $pv['name']],
+                    'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
+                ]];
+            }
+            $payRows[] = ['cells' => [
+                $pv['name'],
+                ['value' => Money::fmt($pv['owed'], $pv['currency']), 'tone' => 'danger'],
+                ['buttons' => $payBtns],
+            ], 'usd' => 0, 'link' => null];
+        }
+        $payablesCard = ['kind' => 'table', 'title' => 'Suppliers you owe', 'sub' => count($payRows) . ' with an open balance', 'searchable' => true,
+            'columns' => [['label' => 'Supplier'], ['label' => 'Owed', 'align' => 'right'], ['label' => '', 'align' => 'right']],
+            'rows' => $payRows, 'empty' => 'Nothing outstanding — you are square with every supplier 🎉', 'pageSize' => 25];
+
+        // Supplier picker map for the header "Pay supplier" action (pay anyone, incl. advances not yet on account).
+        $supMap = []; $supNames = []; $seen = [];
+        foreach (Supplier::where('tenant_id', $t)->orderBy('name')->get(['id', 'name']) as $s) {
+            $nm = trim(str_replace(',', ' ', (string) $s->name)); if ($nm === '') { continue; }
+            $label = isset($seen[$nm]) ? ($nm . ' #' . $s->id) : $nm; $seen[$nm] = true;
+            $supNames[] = $label; $supMap[$label] = '/papi/suppliers/' . $s->id . '/pay';
+        }
+
         // --- actions (in/out, exchange, transfer) ---
         $addCash = ['key' => 'add_cash', 'label' => 'Add cash entry', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'primary',
             'schema' => ['dir' => 'enum:in,out', 'currency' => 'enum:UGX,USD,SSP', 'native_amount' => 'money', 'rate_to_usd' => 'number', 'category' => 'combo:' . self::CATEGORIES, 'holder' => 'text', 'note' => 'text'],
@@ -152,9 +211,14 @@ final class CashbookCapability implements ProcessCapability
         $transfer = count($members) >= 2 ? ['key' => 'cash_transfer', 'label' => 'Transfer cash', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook/transfer', 'actor' => 'human', 'tone' => 'default',
             'schema' => ['from_person' => 'enum:' . implode(',', $members), 'to_person' => 'enum:' . implode(',', $members), 'currency' => 'enum:UGX,USD,SSP', 'amount' => 'money', 'note' => 'text'],
             'prefill' => ['from_person' => $members[0], 'to_person' => $members[1]]] : null;
+        $paySupplier = ($canPay && count($supNames)) ? ['key' => 'pay_supplier', 'label' => 'Pay supplier', 'method' => 'POST', 'endpoint' => $supMap[$supNames[0]], 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['supplier' => 'enum:' . implode(',', $supNames), 'currency' => 'enum:UGX,USD,SSP', 'amount' => 'money', 'rate_to_usd' => 'number', 'note' => 'text'],
+            'prefill' => ['supplier' => $supNames[0], 'currency' => 'UGX', 'rate_to_usd' => (int) round($ugx)],
+            'pathMap' => ['field' => 'supplier', 'map' => $supMap, 'error' => 'Pick a supplier from the list'],
+            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]] : null;
         $exportAct = ['key' => 'export', 'label' => 'Export', 'href' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'default'];
 
-        $actions = array_values(array_filter([$addCash, $fxExchange, $transfer]));
+        $actions = array_values(array_filter([$addCash, $fxExchange, $transfer, $paySupplier]));
 
         return (new WorkspacePayload)
             ->object(['type' => 'process:cashbook', 'title' => 'Cashbook', 'subtitle' => $isOwner ? 'Cash position, who holds what, and every movement' : 'My cash'])
@@ -165,10 +229,11 @@ final class CashbookCapability implements ProcessCapability
                 ['tone' => 'info', 'label' => count($holderRows) . ' holding cash']))
             ->financials($financials)
             ->quickActions($actions)
-            ->tabSections(['holders' => [$holderCard], 'entries' => [$entriesCard]])
+            ->tabSections(['holders' => [$holderCard], 'entries' => [$entriesCard], 'payables' => [$payablesCard]])
             ->tabs([
                 ['key' => 'holders', 'label' => 'Cash by person', 'count' => count($holderRows)],
                 ['key' => 'entries', 'label' => 'All entries', 'count' => count($entryRows)],
+                ['key' => 'payables', 'label' => 'Suppliers you owe', 'count' => count($payRows)],
             ])
             ->actions($actions)
             ->more([$exportAct])
