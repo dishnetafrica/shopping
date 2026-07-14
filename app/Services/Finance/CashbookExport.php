@@ -30,10 +30,12 @@ final class CashbookExport
      * Optional $from / $to (Y-m-d) filter the ENTRIES to a period and add an in/out movement summary;
      * the cash position always reflects the current live balance.
      */
-    public function collect(Tenant $t, ?User $u = null, ?string $from = null, ?string $to = null, ?string $currency = null, bool $company = false): array
+    public function collect(Tenant $t, ?User $u = null, ?string $from = null, ?string $to = null, ?string $currency = null, bool $company = false, ?string $holder = null): array
     {
         $currency = in_array(strtoupper((string) $currency), self::CURRENCIES, true) ? strtoupper($currency) : null;
         if ($company) { $currency = null; } // company book consolidates ALL currencies into USD
+        $holder = trim((string) $holder) !== '' ? trim((string) $holder) : null;
+        $byHolder = fn ($q) => $holder ? $q->where('holder', $holder) : $q;   // person-wise filter
         $fx = Fx::forTenant($t);
         $rate = ['USD' => 1.0, 'UGX' => (float) $fx->ratePerUsd('UGX'), 'SSP' => (float) $fx->ratePerUsd('SSP')];
         $isOwner = $u && method_exists($u, 'isOwnerLike') ? $u->isOwnerLike() : true;
@@ -45,7 +47,7 @@ final class CashbookExport
         };
 
         // --- position by currency and by person (frozen IN_STAGES sign rule) ---
-        $posRows = $scoped(OrderCost::where('tenant_id', $t->id)->where('status', 'approved'))
+        $posRows = $byHolder($scoped(OrderCost::where('tenant_id', $t->id)->where('status', 'approved')))
             ->select('currency', 'stage', 'holder', DB::raw('SUM(paid_native) as native'), DB::raw('SUM(paid_native / NULLIF(rate_to_usd,0)) as usd'))
             ->groupBy('currency', 'stage', 'holder')->get();
 
@@ -74,6 +76,7 @@ final class CashbookExport
         if ($from) { $eq->whereDate('created_at', '>=', $from); }
         if ($to) { $eq->whereDate('created_at', '<=', $to); }
         if ($currency) { $eq->where('currency', $currency); }
+        if ($holder) { $eq->where('holder', $holder); }
         $entries = $eq->orderByDesc('created_at')->orderByDesc('id')->limit(self::MAX_ROWS)->get();
 
         $rows = [];
@@ -119,9 +122,9 @@ final class CashbookExport
         $book = null;
         if ($currency) {
             $inSql = "CASE WHEN stage IN ('funding','cash_in','customer_payment') THEN native_amount ELSE -native_amount END";
-            $openQ = $scoped(OrderCost::where('tenant_id', $t->id)->where('currency', $currency)
+            $openQ = $byHolder($scoped(OrderCost::where('tenant_id', $t->id)->where('currency', $currency)
                 ->where(fn ($w) => $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status'))
-                ->whereNotIn('status', ['void', 'rejected']));
+                ->whereNotIn('status', ['void', 'rejected'])));
             if ($from) { $openQ->whereDate('created_at', '<', $from); } else { $openQ->whereRaw('1=0'); }
             $opening = (float) $openQ->selectRaw("COALESCE(SUM($inSql),0) as bal")->value('bal');
 
@@ -137,9 +140,9 @@ final class CashbookExport
         $companyBook = null;
         if ($company) {
             $inSql = "CASE WHEN stage IN ('funding','cash_in','customer_payment') THEN usd_amount ELSE -usd_amount END";
-            $openQ = $scoped(OrderCost::where('tenant_id', $t->id)
+            $openQ = $byHolder($scoped(OrderCost::where('tenant_id', $t->id)
                 ->where(fn ($w) => $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status'))
-                ->whereNotIn('status', ['void', 'rejected']));
+                ->whereNotIn('status', ['void', 'rejected'])));
             if ($from) { $openQ->whereDate('created_at', '<', $from); } else { $openQ->whereRaw('1=0'); }
             $openingUsd = (float) $openQ->selectRaw("COALESCE(SUM($inSql),0) as bal")->value('bal');
 
@@ -156,7 +159,8 @@ final class CashbookExport
         return [
             'business' => (string) ($t->name ?: 'Cashbook'),
             'generated' => now()->format('d M Y, H:i'),
-            'scope' => $isOwner ? 'All cash' : ('My cash — ' . $me),
+            'scope' => $holder ? ('Held by ' . $holder) : ($isOwner ? 'All cash' : ('My cash — ' . $me)),
+            'holder' => $holder,
             'currency' => $currency,
             'book' => $book,
             'company' => $companyBook,
@@ -418,7 +422,7 @@ final class CashbookExport
             .in { color: #15803d; } .out { color: #b91c1c; }
             .foot { margin-top: 16px; color: #9ca3af; font-size: 9px; text-align: center; }
         </style></head><body>
-            <h1>' . $e($d['business']) . ' — Company Account Cash Book (USD)</h1>
+            <h1>' . $e($d['business']) . ' — ' . (! empty($d['holder']) ? $e($d['holder']) . ' — ' : '') . 'Company Account Cash Book (USD)</h1>
             <div class="sub">' . $e($d['generated']) . ' &nbsp;·&nbsp; ' . $e($d['scope']) . $periodSub . ' &nbsp;·&nbsp; every transaction in USD, one running balance</div>
             <table><thead><tr><th>Date</th><th>Ref</th><th>Description</th><th>Held by</th><th class="r">Original</th><th class="r">In (USD)</th><th class="r">Out (USD)</th><th class="r">Balance</th></tr></thead>
             <tbody>' . $rows . '</tbody></table>
@@ -468,7 +472,7 @@ final class CashbookExport
             .in { color: #15803d; } .out { color: #b91c1c; }
             .foot { margin-top: 18px; color: #9ca3af; font-size: 9px; text-align: center; }
         </style></head><body>
-            <h1>' . $e($d['business']) . ' — ' . $e($c) . ' Cashbook</h1>
+            <h1>' . $e($d['business']) . ' — ' . (! empty($d['holder']) ? $e($d['holder']) . ' — ' : '') . $e($c) . ' Cashbook</h1>
             <div class="sub">' . $e($d['generated']) . ' &nbsp;·&nbsp; ' . $e($d['scope']) . $periodSub . '</div>
             <table><thead><tr><th>Date</th><th>Ref</th><th>Category</th><th>Held by</th><th class="r">In</th><th class="r">Out</th><th class="r">Balance</th></tr></thead>
             <tbody>' . $rows . '</tbody></table>

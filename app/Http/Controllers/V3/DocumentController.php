@@ -122,9 +122,10 @@ final class DocumentController extends Controller
         }
         $svc = app(CashbookExport::class);
         $company = strtolower((string) $r->query('view', '')) === 'company';
-        $data = $svc->collect($t, $r->user(), (string) $r->query('from', ''), (string) $r->query('to', ''), (string) $r->query('currency', ''), $company);
+        $data = $svc->collect($t, $r->user(), (string) $r->query('from', ''), (string) $r->query('to', ''), (string) $r->query('currency', ''), $company, (string) $r->query('holder', ''));
         $stamp = now()->format('Ymd-Hi');
-        $tag = $company ? '-Company-USD' : (! empty($data['currency']) ? ('-' . $data['currency']) : '');
+        $who = ! empty($data['holder']) ? ('-' . preg_replace('/[^A-Za-z0-9]+/', '', $data['holder'])) : '';
+        $tag = $who . ($company ? '-Company-USD' : (! empty($data['currency']) ? ('-' . $data['currency']) : ''));
 
         if (strtolower((string) $r->query('format', 'pdf')) === 'csv') {
             return response($svc->csv($data), 200, [

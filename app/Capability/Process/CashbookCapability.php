@@ -76,21 +76,33 @@ final class CashbookCapability implements ProcessCapability
         }
         $financials[] = ['key' => 'combined', 'label' => 'Combined (USD)', 'value' => Money::fmt($combinedUsd, 'USD'), 'tone' => $combinedUsd < -0.01 ? 'danger' : 'ok', 'foot' => 'all currencies'];
 
-        // --- "Cash by person" table (who holds what) ---
+        // --- "Cash by person" table (who holds what) — each row exports that person's cash book ---
         $holderRows = [];
         foreach ($holders as $h => $bal) {
             if (abs($bal['USD']) < 0.01 && abs($bal['UGX']) < 0.01 && abs($bal['SSP']) < 0.01) { continue; }
+            $enc = rawurlencode($h);
+            $tiles = [];
+            foreach (self::CURRENCIES as $cc) {
+                if (abs($bal[$cc]) < 0.01) { continue; }
+                $tiles[] = ['icon' => 'download', 'title' => $h . ' — ' . $cc . ' cash book (PDF)', 'sub' => 'running ' . $cc . ' balance', 'tone' => 'move', 'action' => ['href' => '/api/v1/doc/cashbook-export?format=pdf&holder=' . $enc . '&currency=' . $cc]];
+                $tiles[] = ['icon' => 'doc', 'title' => $h . ' — ' . $cc . ' cash book (CSV)', 'sub' => 'open in Excel', 'action' => ['href' => '/api/v1/doc/cashbook-export?format=csv&holder=' . $enc . '&currency=' . $cc]];
+            }
+            $tiles[] = ['icon' => 'download', 'title' => $h . ' — all currencies in USD (PDF)', 'sub' => 'one running USD balance', 'tone' => 'in', 'action' => ['href' => '/api/v1/doc/cashbook-export?format=pdf&view=company&holder=' . $enc]];
+            $tiles[] = ['icon' => 'doc', 'title' => $h . ' — all currencies in USD (CSV)', 'action' => ['href' => '/api/v1/doc/cashbook-export?format=csv&view=company&holder=' . $enc]];
+            $exportBtn = ['icon' => 'download', 'title' => 'Export ' . $h . '\'s cash book', 'action' => ['key' => 'person_book', 'label' => $h . ' — cash book', 'chooser' => $tiles]];
+
             $holderRows[] = ['cells' => [
                 $h,
                 ['value' => Money::fmt(round($bal['USD'], 2), 'USD'), 'tone' => $bal['USD'] < -0.01 ? 'danger' : ''],
                 ['value' => Money::fmt(round($bal['UGX'], 2), 'UGX'), 'tone' => $bal['UGX'] < -0.01 ? 'danger' : ''],
                 ['value' => Money::fmt(round($bal['SSP'], 2), 'SSP'), 'tone' => $bal['SSP'] < -0.01 ? 'danger' : ''],
                 ['value' => Money::fmt(round($bal['usd'], 2), 'USD'), 'tone' => $bal['usd'] < -0.01 ? 'danger' : 'ok'],
+                ['buttons' => [$exportBtn]],
             ], 'usd' => round($bal['usd'], 2), 'link' => null];
         }
         usort($holderRows, fn ($a, $b) => $b['usd'] <=> $a['usd']);
-        $holderCard = ['kind' => 'table', 'title' => 'Cash by person', 'sub' => count($holderRows) . ' holding cash', 'searchable' => true,
-            'columns' => [['label' => 'Held by'], ['label' => 'USD', 'align' => 'right'], ['label' => 'UGX', 'align' => 'right'], ['label' => 'SSP', 'align' => 'right'], ['label' => 'Total (USD)', 'align' => 'right']],
+        $holderCard = ['kind' => 'table', 'title' => 'Cash by person', 'sub' => count($holderRows) . ' holding cash — tap ⤓ to export a person\'s cash book', 'searchable' => true,
+            'columns' => [['label' => 'Held by'], ['label' => 'USD', 'align' => 'right'], ['label' => 'UGX', 'align' => 'right'], ['label' => 'SSP', 'align' => 'right'], ['label' => 'Total (USD)', 'align' => 'right'], ['label' => '', 'align' => 'right']],
             'rows' => $holderRows, 'empty' => 'No cash recorded yet — add an entry to get started', 'pageSize' => 20];
 
         // --- "smart pick-list" of people the business actually deals with (team logins + anyone
@@ -143,9 +155,9 @@ final class CashbookCapability implements ProcessCapability
             if ($canEdit && $editable) {
                 $btns[] = ['icon' => 'edit', 'title' => 'Edit entry', 'action' => [
                     'key' => 'edit_cash', 'label' => 'Edit ' . ($stageLabels[$c->stage] ?? 'entry') . ' ' . $ref, 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook/' . $c->id . '/update', 'actor' => 'human', 'tone' => 'primary',
-                    'schema' => ['amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'category' => 'combo:' . self::CATEGORIES, 'holder' => $comboPeople, 'note' => 'text'],
-                    'labels' => ['amount' => 'Amount', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => $isSupPay ? 'Paid by (whose cash)' : 'Held by', 'category' => 'Category', 'note' => 'Note'],
-                    'prefill' => ['amount' => round($native, 2), 'currency' => $cur, 'rate_to_usd' => (float) $c->rate_to_usd, 'category' => (string) $c->category, 'holder' => (string) $c->holder, 'note' => (string) $c->note],
+                    'schema' => ['amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'category' => 'combo:' . self::CATEGORIES, 'holder' => $comboPeople, 'note' => 'text', 'created_date' => 'text'],
+                    'labels' => ['amount' => 'Amount', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => $isSupPay ? 'Paid by (whose cash)' : 'Held by', 'category' => 'Category', 'note' => 'Note', 'created_date' => 'Date & time (fix ordering; YYYY-MM-DD HH:MM)'],
+                    'prefill' => ['amount' => round($native, 2), 'currency' => $cur, 'rate_to_usd' => (float) $c->rate_to_usd, 'category' => (string) $c->category, 'holder' => (string) $c->holder, 'note' => (string) $c->note, 'created_date' => $when ? $when->format('Y-m-d H:i') : ''],
                     'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
                 ]];
                 $btns[] = ['icon' => 'trash', 'title' => 'Delete entry', 'tone' => 'danger', 'post' => '/papi/trade-cashbook/' . $c->id . '/delete',
