@@ -112,6 +112,37 @@ final class QuotationCapability implements ObjectCapability
             ['key' => 'status', 'label' => 'Status', 'value' => ucfirst($status ?: 'draft')],
         ];
 
+        // --- CRUD actions (reuse the panel's proven /papi endpoints; no engine changes) ---
+        $isOpen = ! $converted && in_array($status, ['sent', 'pending', 'draft'], true);
+        $canEdit = ! $converted && $status !== 'accepted';
+
+        $editLines = $q->items->map(fn ($it) => [
+            'name' => (string) $it->name, 'unit' => (string) ($it->unit_label ?? ''),
+            'qty' => (int) $it->qty, 'price' => (float) $it->unit_price,
+        ])->values()->all();
+        $editQuote = ($canEdit && $editLines) ? [
+            'key' => 'edit_quotation', 'label' => 'Edit quotation', 'method' => 'POST', 'endpoint' => '/papi/quotation-update',
+            'actor' => 'human', 'tone' => 'default', 'builder' => 'quotation', 'edit' => true,
+            'productSearch' => '/api/v1/workspace/products/_/search',
+            'currencies' => array_values(array_unique([$cur, 'USD', 'UGX', 'SSP'])),
+            'customer' => (string) ($q->customer_name ?: 'Customer'), 'lines' => $editLines,
+            'prefill' => ['id' => (int) $q->id, 'currency' => $cur, 'name' => (string) $q->customer_name, 'phone' => (string) $q->customer_phone],
+        ] : null;
+
+        $sBody = fn (string $s) => ['id' => (int) $q->id, 'status' => $s];
+        $accept  = $isOpen ? ['key' => 'quote_accept', 'label' => 'Mark accepted', 'method' => 'POST', 'endpoint' => '/papi/quotation-status', 'actor' => 'human', 'tone' => 'default', 'body' => $sBody('accepted')] : null;
+        $decline = $isOpen ? ['key' => 'quote_decline', 'label' => 'Mark declined', 'method' => 'POST', 'endpoint' => '/papi/quotation-status', 'actor' => 'human', 'tone' => 'default', 'body' => $sBody('declined'), 'confirm' => 'Mark quotation ' . $q->quote_no . ' as declined?'] : null;
+        $expire  = $isOpen ? ['key' => 'quote_expire', 'label' => 'Mark expired', 'method' => 'POST', 'endpoint' => '/papi/quotation-status', 'actor' => 'human', 'tone' => 'default', 'body' => $sBody('expired')] : null;
+        $resend  = ($qPhone !== '' && ! $converted) ? ['key' => 'quote_resend', 'label' => 'Resend to customer', 'method' => 'POST', 'endpoint' => '/papi/quotation-resend', 'actor' => 'human', 'tone' => 'default', 'body' => ['id' => (int) $q->id], 'confirm' => 'Resend quotation ' . $q->quote_no . ' to ' . ($q->customer_name ?: 'the customer') . ' on WhatsApp?'] : null;
+        $archive = ! $converted ? ['key' => 'quote_archive', 'label' => 'Archive quotation', 'method' => 'POST', 'endpoint' => '/papi/quotation-delete', 'actor' => 'human', 'tone' => 'danger', 'body' => ['id' => (int) $q->id], 'confirm' => 'Archive quotation ' . $q->quote_no . '? It is hidden from the active list but kept for records.'] : null;
+
+        $headerActions = array_values(array_filter([$primary, $editQuote]));
+        $moreActions = array_values(array_filter([
+            $downloadPdf === $primary ? null : $downloadPdf,
+            $accept, $decline, $resend, $expire, $openCustomer, $archive,
+        ]));
+        $quickActions = array_values(array_filter([$downloadPdf, $canConvert ? $convert : null, $editQuote, $resend, $openOrder, $openCustomer]));
+
         return (new WorkspacePayload)
             ->object([
                 'type' => 'quotation', 'id' => (string) $q->id, 'ref' => (string) $q->quote_no,
@@ -127,7 +158,7 @@ final class QuotationCapability implements ObjectCapability
                     : ($converted ? 'This quotation became a sales order. Open the order to continue.' : 'Download the PDF to share this quotation with the customer.'),
                 $primary,
             )
-            ->quickActions(array_values(array_filter([$downloadPdf, $canConvert ? $convert : null, $openOrder, $openCustomer])))
+            ->quickActions($quickActions)
             ->pipeline($pipeline)
             ->overviewCards($overviewCards)
             ->documents($docs)
@@ -135,8 +166,8 @@ final class QuotationCapability implements ObjectCapability
                 ['key' => 'overview', 'label' => 'Overview'],
                 ['key' => 'documents', 'label' => 'Documents', 'count' => count($docs)],
             ])
-            ->actions(array_values(array_filter([$primary])))
-            ->more(array_values(array_filter([$downloadPdf === $primary ? null : $downloadPdf, $openCustomer])))
+            ->actions($headerActions)
+            ->more($moreActions)
             ->meta(['capability' => 'quotation', 'ttl' => 30, 'layout' => 'record', 'listKey' => 'quotations', 'permissions' => ['menu:orders']]);
     }
 

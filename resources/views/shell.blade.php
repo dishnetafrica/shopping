@@ -914,7 +914,7 @@ async function doAction(a){
   if(a.builder==='quotation'){ return quoteBuilder(a); }
   if(a.schema){ return formModal(a); }
   if(a.confirm && !window.confirm(a.confirm)) return;
-  const res=await post(a.endpoint,{}); toast(res.ok?(res.message||'Done'):(res.message||res.error||'Error'), !res.ok);
+  const res=await post(a.endpoint,a.body||{}); toast(res.ok?(res.message||'Done'):(res.message||res.error||'Error'), !res.ok);
   if(res&&res.ok){ if(res.pdf_b64){ downloadB64(res.pdf_b64,res.filename||'document.pdf'); } else if(res.url){ try{ window.open(res.url,'_blank'); }catch(e){} } }
   refresh();
 }
@@ -955,7 +955,7 @@ function formModal(a){
   document.getElementById('modal').innerHTML='<div class="h">'+esc(a.label)+'<button class="x" onclick="closeM()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><div class="b">'+fields+'</div><div class="f"><button class="btn" onclick="closeM()">Cancel</button><button class="btn pri" id="mok">Save</button></div>';
   document.getElementById('ov').classList.add('on');
   Object.entries(a.schema).forEach(([k,type])=>{ if(type==='gallery') renderGal(k); });
-  document.getElementById('mok').onclick=async()=>{ const body={};
+  document.getElementById('mok').onclick=async()=>{ const body=Object.assign({}, a.body||{});
     Object.entries(a.schema).forEach(([k,type])=>{ if(type==='gallery'){ body[k]=window.GAL[k]||[]; } else { const el=document.getElementById('f_'+k); if(el) body[k]=el.value; } });
     closeM(); const res=await post(a.endpoint,body); toast(res.ok?(res.message||'Saved'):(res.message||res.error||'Error'), !res.ok); refresh(); };
 }
@@ -1000,19 +1000,24 @@ window.addEventListener('hashchange',()=>{ const h=parseHash(); if(h.key && (h.k
 let QBT=null;
 function quoteBuilder(a){
   const cur=(a.prefill&&a.prefill.currency)||'UGX';
-  window.QB={lines:[], cur:cur, a:a, _res:[], _cres:[], customerId:(a.prefill&&a.prefill.id)||null, customerName:a.customer||'', pick:!!a.pickCustomer};
+  const edit=!!a.edit;
+  // Edit mode pre-loads the quotation's existing lines so they can be changed/removed.
+  const seed=(a.lines||[]).map(l=>({name:String(l.name||''),unit:String(l.unit||l.unit_label||''),qty:Math.max(1,parseInt(l.qty||1,10)||1),price:Math.max(0,parseFloat(l.price!=null?l.price:l.unit_price)||0)}));
+  window.QB={lines:seed, cur:cur, a:a, edit:edit, _res:[], _cres:[], customerId:(a.prefill&&a.prefill.id)||null, customerName:a.customer||'', pick:!!a.pickCustomer};
   const curOpts=(a.currencies||[cur]).map(c=>'<option'+(c===cur?' selected':'')+'>'+esc(c)+'</option>').join('');
   const m=document.getElementById('modal'); m.style.maxWidth='660px';
   const custBlock=a.pickCustomer?'<div class="qb-custwrap" id="qbcustwrap"></div>':'';
-  m.innerHTML='<div class="h">New quotation'+(a.customer?' — '+esc(a.customer):'')+'<button class="x" onclick="closeQB()">'+icon('x')+'</button></div>'+
+  const title=edit?('Edit quotation'+(a.customer?' — '+esc(a.customer):'')):('New quotation'+(a.customer?' — '+esc(a.customer):''));
+  const waBlock=edit?'':'<label class="qb-wa"><input type="checkbox" id="qbwa"> Also send the PDF to the customer on WhatsApp</label>';
+  m.innerHTML='<div class="h">'+title+'<button class="x" onclick="closeQB()">'+icon('x')+'</button></div>'+
     '<div class="b">'+custBlock+
       '<div class="qb-pick"><input id="qbq" placeholder="Search products to add…" autocomplete="off" oninput="qbSearch()"><div class="qb-res" id="qbres"></div></div>'+
       '<div id="qblines"></div>'+
       '<div class="qb-bar"><label class="qb-cur">Currency <select id="qbcur" onchange="qbCur()">'+curOpts+'</select></label>'+
         '<div class="qb-tot">Total <b id="qbtot">'+esc(curFmt(0,cur))+'</b></div></div>'+
-      '<label class="qb-wa"><input type="checkbox" id="qbwa"> Also send the PDF to the customer on WhatsApp</label>'+
+      waBlock+
     '</div>'+
-    '<div class="f"><button class="btn" onclick="closeQB()">Cancel</button><button class="btn pri" id="qbok" onclick="qbSubmit()" disabled>Create quotation</button></div>';
+    '<div class="f"><button class="btn" onclick="closeQB()">Cancel</button><button class="btn pri" id="qbok" onclick="qbSubmit()"'+(seed.length?'':' disabled')+'>'+(edit?'Save changes':'Create quotation')+'</button></div>';
   document.getElementById('ov').classList.add('on'); if(a.pickCustomer) qbRenderCust(); qbRender();
   setTimeout(()=>{ const f=document.getElementById(a.pickCustomer?'qbcq':'qbq'); if(f) f.focus(); },40);
 }
@@ -1073,6 +1078,17 @@ function qbTotal(){ let t=0; window.QB.lines.forEach((l,i)=>{ const a=l.qty*l.pr
 async function qbSubmit(){
   const a=window.QB.a; const ok=document.getElementById('qbok'); if(!window.QB.lines.length) return;
   if(window.QB.pick && !window.QB.customerId){ toast('Choose a customer first', true); return; }
+  if(window.QB.edit){
+    // Edit → reuse the panel's proven quotation-update endpoint (rebuilds the PDF, keeps the number).
+    const pf=a.prefill||{};
+    const body={ id:pf.id, currency:window.QB.cur, name:a.customer||pf.name||'', phone:pf.phone||'',
+      items:JSON.stringify(window.QB.lines.map(l=>({name:l.name,qty:l.qty,unit_price:l.price,unit_label:l.unit||''}))) };
+    ok.disabled=true; ok.textContent='Saving…';
+    const res=await post(a.endpoint,body); closeQB();
+    if(res&&res.ok){ toast(res.message||'Quotation updated'); refresh(); }
+    else { toast((res&&(res.message||res.error))||'Could not update quotation', true); }
+    return;
+  }
   const body={lines:window.QB.lines.map(l=>({name:l.name,qty:l.qty,price:l.price})), currency:window.QB.cur, send_whatsapp:document.getElementById('qbwa').checked};
   if(window.QB.customerId) body.customer_id=window.QB.customerId;
   ok.disabled=true; ok.textContent='Creating…';

@@ -61,14 +61,18 @@ final class InvoiceCapability implements ObjectCapability
             'schema' => ['amount' => 'money', 'method' => 'enum:cash,mobile_money,bank,cheque', 'reference' => 'text'],
             'prefill' => ['id' => (int) $i->id, 'amount' => round($balance, 2), 'method' => 'cash'],
         ];
-        $reminder = ['key' => 'send_reminder', 'label' => 'Send reminder', 'method' => 'POST', 'endpoint' => $ep . '/send_reminder', 'actor' => 'human', 'tone' => 'default', 'confirm' => 'Send a payment reminder for ' . $i->invoice_no . '?'];
+        $isVoid = strtolower((string) $i->status) === 'void';
+        // Real WhatsApp send via the panel's proven endpoint (replaces the old no-op "Send reminder" stub).
+        $sendInvoice = ! $isVoid ? ['key' => 'send_invoice', 'label' => 'Send on WhatsApp', 'method' => 'POST', 'endpoint' => '/papi/invoice-send', 'actor' => 'human', 'tone' => 'default', 'body' => ['id' => (int) $i->id], 'confirm' => 'Send invoice ' . $i->invoice_no . ' to ' . ($i->customer_name ?: 'the customer') . ' on WhatsApp?'] : null;
+        // Void (kept for records) via the panel's owner/manager-gated endpoint.
+        $voidInvoice = ! $isVoid ? ['key' => 'void_invoice', 'label' => 'Void invoice', 'method' => 'POST', 'endpoint' => '/papi/invoice-void', 'actor' => 'human', 'tone' => 'danger', 'body' => ['id' => (int) $i->id], 'confirm' => 'Void invoice ' . $i->invoice_no . '? It stays on record but is marked void and excluded from balances.'] : null;
         // Download via the panel's proven streaming route (same session, correct headers).
         $downloadPdf = ['key' => 'invoice_pdf', 'label' => 'Download PDF', 'href' => '/papi/invoice-pdf?id=' . $i->id, 'actor' => 'human', 'tone' => 'default'];
         $openCustomer = $profile ? ['key' => 'open_customer', 'label' => 'Open customer', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customer/' . $profile->id, 'actor' => 'human', 'tone' => 'default'] : null;
         $openOrder = $order ? ['key' => 'open_order', 'label' => 'Open order', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/salesOrder/' . $order->id, 'actor' => 'human', 'tone' => 'default'] : null;
 
-        $primary = $balance > 0.01 ? $recordPay : ($downloadPdf);
-        $quick = array_values(array_filter([$balance > 0.01 ? $recordPay : null, $downloadPdf, $reminder, $openOrder, $openCustomer]));
+        $primary = (! $isVoid && $balance > 0.01) ? $recordPay : $downloadPdf;
+        $quick = array_values(array_filter([(! $isVoid && $balance > 0.01) ? $recordPay : null, $downloadPdf, $sendInvoice, $openOrder, $openCustomer]));
 
         // --- pipeline ---
         $st = fn ($done, $now) => $done ? 'done' : ($now ? 'now' : 'wait');
@@ -145,7 +149,7 @@ final class InvoiceCapability implements ObjectCapability
         ];
 
         $nbaText = $balance > 0.01
-            ? (($overdue ? 'Overdue by ' . $daysOver . ' days. ' : '') . $fmt($balance) . ' outstanding from ' . ($i->customer_name ?: 'the customer') . '. Record a payment or send a reminder.')
+            ? (($overdue ? 'Overdue by ' . $daysOver . ' days. ' : '') . $fmt($balance) . ' outstanding from ' . ($i->customer_name ?: 'the customer') . '. Record a payment or send the invoice on WhatsApp.')
             : 'Fully paid — nothing outstanding on this invoice.';
 
         return (new WorkspacePayload)
@@ -177,7 +181,7 @@ final class InvoiceCapability implements ObjectCapability
                 ['key' => 'documents', 'label' => 'Documents', 'count' => count($docs)],
             ])
             ->actions(array_values(array_filter([$primary])))
-            ->more(array_values(array_filter([$primary === $downloadPdf ? null : $downloadPdf, $reminder, $openOrder, $openCustomer])))
+            ->more(array_values(array_filter([$primary === $downloadPdf ? null : $downloadPdf, $sendInvoice, $openOrder, $openCustomer, $voidInvoice])))
             ->meta(['capability' => 'invoice', 'ttl' => 30, 'layout' => 'record', 'listKey' => 'invoices', 'permissions' => ['menu:finance']]);
     }
 
@@ -200,7 +204,6 @@ final class InvoiceCapability implements ObjectCapability
     {
         return match ($action) {
             'record_payment' => $this->recordPayment($ctx, $input),
-            'send_reminder' => ['ok' => true, 'sent' => true, 'message' => 'Reminder sent.'],
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
     }

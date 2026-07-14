@@ -97,10 +97,22 @@ final class SalesOrderCapability implements ObjectCapability
             $nbaAction = $primary;
         }
 
+        // --- CRUD actions ---
+        // Order status change goes through a v3 command (the panel's update-status route is GET-only);
+        // the model save still fires the OrderObserver, so customer status notifications are preserved.
+        $statusChoices = ['New', 'Accepted', 'Preparing', 'Ready', 'Dispatched', 'Delivered', 'Cancelled'];
+        $changeStatus = ['key' => 'change_status', 'label' => 'Change status', 'method' => 'POST', 'endpoint' => $ep . '/change_status', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['status' => 'enum:' . implode(',', $statusChoices)], 'prefill' => ['id' => (int) $o->id, 'status' => (string) $o->status]];
+        $cancelOrder = ! $cancelled ? ['key' => 'cancel_order', 'label' => 'Cancel order', 'method' => 'POST', 'endpoint' => $ep . '/cancel_order', 'actor' => 'human', 'tone' => 'danger', 'confirm' => 'Cancel Order ' . $o->order_no . '? Stock is released and the order is closed.'] : null;
+        // Record a payment against the order via the panel's proven /papi/record-payment endpoint.
+        $recordPayment = ! $cancelled ? ['key' => 'record_payment', 'label' => 'Record payment', 'method' => 'POST', 'endpoint' => '/papi/record-payment', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['amount' => 'money', 'method' => 'enum:cash,mobile_money,bank,cheque', 'note' => 'text'], 'body' => ['order' => (int) $o->id],
+            'prefill' => ['amount' => $balance > 0 ? round($balance, 2) : '', 'method' => 'cash']] : null;
+
         $quick = array_values(array_filter([
             (! $delivered && ! $cancelled) ? $markDelivered : null,
             ($delivered && ! $inv) ? $createInvoice : null,
-            $openInvoice, $openCustomer,
+            $openInvoice, $recordPayment, $changeStatus, $openCustomer,
         ]));
 
         // --- overview cards ---
@@ -176,7 +188,7 @@ final class SalesOrderCapability implements ObjectCapability
                 ['key' => 'documents', 'label' => 'Documents'],
             ])
             ->actions(array_values(array_filter([$primary])))
-            ->more(array_values(array_filter([$openCustomer, $openInvoice])))
+            ->more(array_values(array_filter([$changeStatus, $recordPayment, $openCustomer, $openInvoice, $cancelOrder])))
             ->meta(['capability' => 'salesOrder', 'ttl' => 30, 'layout' => 'record', 'listKey' => 'salesOrders', 'permissions' => ['menu:orders']]);
     }
 
@@ -203,8 +215,45 @@ final class SalesOrderCapability implements ObjectCapability
         return match ($action) {
             'mark_delivered' => $this->markDelivered($ctx, $input),
             'create_invoice' => $this->createInvoice($ctx, $input),
+            'change_status' => $this->changeStatus($ctx, $input),
+            'cancel_order' => $this->cancelOrder($ctx, $input),
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
+    }
+
+    /** Set the order status (validated). The model save fires the OrderObserver — same path the panel uses. */
+    private function changeStatus(CapabilityContext $ctx, array $input): array
+    {
+        $o = Order::where('tenant_id', $ctx->tenantId())->findOrFail((int) ($input['id'] ?? 0));
+        $status = trim((string) ($input['status'] ?? ''));
+        $allowed = ['New', 'Accepted', 'Preparing', 'Ready', 'Dispatched', 'Delivered', 'Customer confirmed', 'Cancelled', 'Rejected'];
+        if (! in_array($status, $allowed, true)) {
+            return ['ok' => false, 'error' => 'bad_status', 'message' => 'Unknown order status.'];
+        }
+        if ($status === $o->status) {
+            return ['ok' => true, 'message' => 'Order is already ' . $status . '.'];
+        }
+        $o->status = $status;
+        $o->save();
+
+        return ['ok' => true, 'message' => 'Order ' . $o->order_no . ' set to ' . $status . '.'];
+    }
+
+    /** Cancel an order (reversible status flip). Blocked once it carries a live invoice — void that first. */
+    private function cancelOrder(CapabilityContext $ctx, array $input): array
+    {
+        $o = Order::where('tenant_id', $ctx->tenantId())->findOrFail((int) ($input['id'] ?? 0));
+        if (in_array(strtolower((string) $o->status), ['cancelled', 'canceled', 'rejected'], true)) {
+            return ['ok' => true, 'message' => 'Order already cancelled.'];
+        }
+        $hasInvoice = Invoice::where('tenant_id', $ctx->tenantId())->where('order_id', $o->id)->where('status', '!=', 'void')->exists();
+        if ($hasInvoice) {
+            return ['ok' => false, 'error' => 'invoiced', 'message' => 'This order is invoiced — void the invoice before cancelling.'];
+        }
+        $o->status = 'Cancelled';
+        $o->save();
+
+        return ['ok' => true, 'message' => 'Order ' . $o->order_no . ' cancelled.'];
     }
 
     private function markDelivered(CapabilityContext $ctx, array $input): array
