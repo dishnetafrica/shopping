@@ -56,6 +56,12 @@ final class CustomerCapability implements ObjectCapability
         $balance = (float) $ins['balance'];
         $endpoint = '/api/v1/workspace/customer/' . $c->id;
         $fmt = fn ($v) => Money::fmt((float) $v, $cur);
+        // Convert each record's OWN-currency amount to the report display currency. Orders with no
+        // currency tag are treated as the engine's local currency (UGX), not the display base — so a
+        // converted UGX order total no longer prints with a '$'.
+        $rc = \App\Services\Money\ReportingCurrency::forContext($ctx);
+        $native = $ctx->nativeCurrency();
+        $disp = fn ($v, $recCur = null, $date = null) => $rc->text((float) $v, $recCur ?: $native, null, $date);
         $statusBadge = $ins['status'];
 
         // --- assistant brief (existing knowledge-graph reasoning) ---
@@ -135,44 +141,46 @@ final class CustomerCapability implements ObjectCapability
         $badgeCell = fn ($badge, $label) => ['badge' => $badge, 'value' => $label];
 
         $quotes = $phoneWhere(Quotation::where('tenant_id', $ctx->tenantId()))->orderByDesc('created_at')->limit(25)->get();
-        $quoteRows = $quotes->map(function ($q) use ($cur, $badgeCell) {
+        $quoteRows = $quotes->map(function ($q) use ($disp, $badgeCell) {
             $s = strtolower((string) $q->status);
             $badge = in_array($s, ['accepted', 'converted'], true) ? 'ok' : ($s === 'declined' ? 'danger' : ($s === 'sent' ? 'info' : 'default'));
 
             return ['cells' => [(string) $q->quote_no,
                 $q->created_at ? Carbon::parse($q->created_at)->format('d M Y') : '—',
                 $q->valid_until ? Carbon::parse($q->valid_until)->format('d M Y') : '—',
-                Money::fmt((float) $q->total, (string) ($q->currency ?: $cur)),
+                $disp($q->total, (string) $q->currency, $q->created_at ? Carbon::parse($q->created_at)->format('Y-m-d') : null),
                 $badgeCell($badge, ucfirst($s ?: 'draft'))],
                 'ts' => $q->created_at ? Carbon::parse($q->created_at)->timestamp : 0,
                 'link' => $q->order_id ? '/api/v1/workspace/salesOrder/' . $q->order_id : '/api/v1/workspace/quotation/' . $q->id];
         })->all();
 
         $orders = $phoneWhere(Order::where('tenant_id', $ctx->tenantId()))->orderByDesc('created_at')->limit(25)->get();
-        $orderRows = $orders->map(function ($o) use ($fmt, $badgeCell) {
+        $orderRows = $orders->map(function ($o) use ($disp, $badgeCell) {
             $s = strtolower((string) $o->status);
             $delivered = $o->delivered_at !== null;
             $badge = ($delivered || in_array($s, ['delivered', 'complete', 'completed', 'paid'], true)) ? 'ok' : (in_array($s, ['cancelled', 'canceled', 'rejected'], true) ? 'danger' : 'info');
 
             return ['cells' => ['Order ' . $o->order_no,
                 $o->created_at ? Carbon::parse($o->created_at)->format('d M Y') : '—',
-                $fmt($o->total), $badgeCell($badge, $delivered ? 'Delivered' : ucfirst($s ?: 'pending'))],
+                $disp($o->total, (string) $o->sell_currency, $o->created_at ? Carbon::parse($o->created_at)->format('Y-m-d') : null), $badgeCell($badge, $delivered ? 'Delivered' : ucfirst($s ?: 'pending'))],
                 'ts' => $o->created_at ? Carbon::parse($o->created_at)->timestamp : 0,
                 'link' => '/api/v1/workspace/salesOrder/' . $o->id];
         })->all();
 
         $allInv = $phoneWhere(Invoice::where('tenant_id', $ctx->tenantId()))->where('status', '!=', 'void')->orderByDesc('issued_at')->limit(25)->get();
-        $invRows = $allInv->map(function ($i) use ($fmt, $badgeCell) {
+        $invRows = $allInv->map(function ($i) use ($disp, $native, $badgeCell) {
             $bal = (float) $i->balance;
             $paid = $bal <= 0.01;
             $overdue = $i->due_at && Carbon::parse($i->due_at)->isPast() && ! $paid;
             $status = $paid ? 'Paid' : ($overdue ? 'Overdue' : ((float) $i->amount_paid > 0 ? 'Part-paid' : 'Unpaid'));
             $badge = $paid ? 'ok' : ($overdue ? 'danger' : 'warn');
+            $icur = (string) ($i->currency ?: $native);
+            $idate = $i->issued_at ? Carbon::parse($i->issued_at)->format('Y-m-d') : null;
 
             return ['cells' => [(string) $i->invoice_no,
                 $i->issued_at ? Carbon::parse($i->issued_at)->format('d M Y') : '—',
                 $i->due_at ? Carbon::parse($i->due_at)->format('d M Y') : '—',
-                $fmt($i->total), $paid ? '—' : $fmt($bal), $badgeCell($badge, $status)],
+                $disp($i->total, $icur, $idate), $paid ? '—' : $disp($bal, $icur, $idate), $badgeCell($badge, $status)],
                 'ts' => $i->issued_at ? Carbon::parse($i->issued_at)->timestamp : ($i->created_at ? Carbon::parse($i->created_at)->timestamp : 0),
                 'link' => '/api/v1/workspace/invoice/' . $i->id];
         })->all();
@@ -183,7 +191,7 @@ final class CustomerCapability implements ObjectCapability
             $p->created_at ? Carbon::parse($p->created_at)->format('d M Y') : '—',
             ucwords(str_replace('_', ' ', (string) ($p->method ?: 'cash'))),
             (string) ($p->reference ?: '—'),
-            Money::fmt((float) $p->amount, (string) ($p->currency ?: $cur)),
+            $disp($p->amount, (string) $p->currency, $p->created_at ? Carbon::parse($p->created_at)->format('Y-m-d') : null),
         ], 'ts' => $p->created_at ? Carbon::parse($p->created_at)->timestamp : 0, 'link' => '/api/v1/workspace/payment/' . $p->id])->all();
 
         $creditNotes = $phoneWhere(\App\Models\CreditNote::where('tenant_id', $ctx->tenantId()))->orderByDesc('issued_at')->limit(25)->get();
@@ -191,7 +199,7 @@ final class CustomerCapability implements ObjectCapability
             (string) $n->credit_note_no,
             $n->issued_at ? Carbon::parse($n->issued_at)->format('d M Y') : '—',
             (string) ($n->invoice_no ?: '—'),
-            Money::fmt((float) $n->total, (string) ($n->currency ?: $cur)),
+            $disp($n->total, (string) $n->currency, $n->issued_at ? Carbon::parse($n->issued_at)->format('Y-m-d') : null),
         ], 'link' => null])->all();
 
         $tabSections = [

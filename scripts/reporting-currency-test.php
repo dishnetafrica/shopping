@@ -57,5 +57,10 @@ $assert($near($usd->line(3655, 'UGX')['amount'], 1.0) && $usd->displayCurrency()
 $eur = $rc->line(100, 'EUR');
 $assert($near($eur['amount'], 100.0), 'EUR with no USD stays 100 (never corrupted)');
 
+
+// Regression: a converted UGX order total (770 x 3655) viewed in USD must read back as ~$770, not $2.8M.
+$usd2=ReportingCurrency::forTenant(null,'USD');
+$assert($near($usd2->line(2814350,'UGX')['amount'],770.0),'UGX 2,814,350 -> ~$770 in USD view (converted-order fix)');
+
 echo $fail === 0 ? "\nREPORTING-CURRENCY PASS\n" : "\nREPORTING-CURRENCY FAILED ($fail)\n";
 exit($fail === 0 ? 0 : 1);

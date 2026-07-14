@@ -34,8 +34,14 @@ final class SalesOrderCapability implements ObjectCapability
     {
         $o = Order::where('tenant_id', $ctx->tenantId())->findOrFail((int) $id);
         $inv = Invoice::where('tenant_id', $ctx->tenantId())->where('order_id', $o->id)->where('status', '!=', 'void')->first();
-        $cur = (string) ($o->sell_currency ?: $ctx->baseCurrency());
-        $fmt = fn ($v) => Money::fmt((float) $v, $cur);
+        // The order's native currency: its own sell_currency, else the engine's local currency (UGX on
+        // a converted basis) — NOT the display base, so a converted UGX total isn't mislabelled as USD.
+        $rc = \App\Services\Money\ReportingCurrency::forContext($ctx);
+        $ocur = (string) ($o->sell_currency ?: $ctx->nativeCurrency());
+        $odate = $o->created_at ? Carbon::parse($o->created_at)->format('Y-m-d') : null;
+        $cur = $rc->isOriginal() ? $ocur : $rc->consolidationCurrency();
+        // Format any order amount by converting from its native currency to the report display currency.
+        $fmt = fn ($v) => $rc->text((float) $v, $ocur, null, $odate);
         $ep = '/api/v1/workspace/salesOrder/' . $o->id;
 
         $cancelled = in_array(strtolower((string) $o->status), ['cancelled', 'canceled', 'rejected'], true);

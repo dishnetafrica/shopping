@@ -29,7 +29,10 @@ final class CustomerInsight
         // customer trading in mixed currencies never has UGX + USD naively summed into a wrong total.
         $rc = ReportingCurrency::forContext($ctx);
         $base = $rc->consolidationCurrency();
-        $toBase = fn (float $amt, ?string $curc, ?string $date) => $rc->consolidate([[ 'amount' => $amt, 'currency' => $curc ?: $base, 'date' => $date ]])['amount'];
+        // Orders/invoices with no currency tag are in the engine's LOCAL currency (UGX on a converted
+        // basis), NOT the display base — otherwise a UGX total gets consolidated as if it were USD.
+        $native = $ctx->nativeCurrency();
+        $toBase = fn (float $amt, ?string $curc, ?string $date) => $rc->consolidate([[ 'amount' => $amt, 'currency' => $curc ?: $native, 'date' => $date ]])['amount'];
 
         // A blank phone must match NOTHING (an empty regexp target would otherwise match every
         // phone-less record in the tenant and wrongly attribute them to this customer).
@@ -40,7 +43,7 @@ final class CustomerInsight
         $orders = $byPhone(Order::where('tenant_id', $t))
             ->get(['total', 'sell_currency', 'created_at']);
         $orderCount = $orders->count();
-        $spend = (float) $orders->sum(fn ($o) => $toBase((float) $o->total, (string) ($o->sell_currency ?: $base), $o->created_at ? Carbon::parse($o->created_at)->format('Y-m-d') : null));
+        $spend = (float) $orders->sum(fn ($o) => $toBase((float) $o->total, (string) ($o->sell_currency ?: $native), $o->created_at ? Carbon::parse($o->created_at)->format('Y-m-d') : null));
         $lastOrderAt = $orders->max('created_at') ? Carbon::parse($orders->max('created_at')) : null;
         $avgOrder = $orderCount > 0 ? $spend / $orderCount : 0.0;
 

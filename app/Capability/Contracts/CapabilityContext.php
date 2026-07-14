@@ -53,6 +53,28 @@ final class CapabilityContext
     }
 
     /**
+     * The currency the ENGINE actually stores order/invoice amounts in when the record carries no
+     * explicit currency of its own. This is NOT the same as the display base: on a "converted basis"
+     * tenant the catalogue and orders are denominated in the LOCAL currency (UGX) while USD is only a
+     * display layer — so a USD quote converts to a UGX order that is saved WITHOUT a currency tag.
+     * Treating those amounts as base-currency (e.g. USD) mislabels a UGX total as dollars.
+     *
+     *   - native basis (currency_basis=native)  → base currency (prices really are in the base).
+     *   - converted basis + USD base             → UGX (the local currency the engine converts into).
+     *   - converted basis + UGX/SSP base         → the base (amounts already are that local currency).
+     */
+    public function nativeCurrency(): string
+    {
+        $basis = method_exists($this->tenant, 'setting') ? strtolower((string) $this->tenant->setting('currency_basis', '')) : '';
+        $base = $this->baseCurrency();
+        if ($basis === 'native') {
+            return $base;
+        }
+
+        return $base === 'USD' ? 'UGX' : $base;
+    }
+
+    /**
      * The tenant's report currency mode: 'base' (consolidate to base currency, default) or
      * 'original' (preserve each transaction's native currency).
      */
