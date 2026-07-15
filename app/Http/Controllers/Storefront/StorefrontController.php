@@ -411,6 +411,38 @@ class StorefrontController extends Controller
             return response()->json(['ok' => false, 'error' => 'Your cart is empty.'], 422);
         }
 
+        // --- Segment-aware credit guard (Phase 1, fail-open) ---------------------------------
+        // Wholesale / institutional customers may order on credit. We HARD-block only when the
+        // account is already over its limit (canSell=false — a currency-safe check straight from
+        // CustomerInsight); an order that would merely push over the limit is allowed but flagged
+        // for staff. Anything uncertain or erroring → allow the order (fail open): a wrongly blocked
+        // sale is worse than one that staff review in the panel, where they have full control.
+        $orderTotal = $r->filled('total') ? (float) $r->input('total') : $calcTotal;
+        $onCredit = filter_var($r->input('on_credit', false), FILTER_VALIDATE_BOOLEAN)
+            || stripos((string) $r->input('payment', ''), 'credit') !== false;
+        $creditNote = '';
+        if ($onCredit) {
+            try {
+                $buyer = app(\App\Services\Storefront\BuyerContext::class)->for($tenant, $phone);
+                $cr = is_array($buyer['credit'] ?? null) ? $buyer['credit'] : null;
+                if (in_array($buyer['mode'] ?? 'retail', ['wholesale', 'institutional'], true) && $cr) {
+                    if (($cr['canSell'] ?? true) === false) {
+                        return response()->json([
+                            'ok' => false, 'error' => 'credit_blocked',
+                            'message' => 'Your account is over its credit limit. Please settle your balance to order on credit, or choose cash / mobile money.',
+                        ], 422);
+                    }
+                    $avail = $cr['available'] ?? null;
+                    if ($avail !== null
+                        && strtoupper($this->currency($tenant)) === strtoupper((string) ($cr['currency'] ?? ''))
+                        && $orderTotal > (float) $avail) {
+                        $creditNote = 'Credit review: order exceeds available credit ('
+                            . number_format((float) $avail) . ' ' . $cr['currency'] . ').';
+                    }
+                }
+            } catch (\Throwable $e) { /* fail open */ }
+        }
+
         // Special instructions / change request (e.g. "in the thali remove dal & add kadhi").
         $note = trim((string) $r->input('note', ''));
         $note = mb_substr(preg_replace('/\s+/', ' ', $note), 0, 300);
@@ -421,6 +453,9 @@ class StorefrontController extends Controller
             }
             unset($cl);
             $itemsText .= '  |  Note: ' . $note;             // always visible on the order + alerts
+        }
+        if ($creditNote !== '') {
+            $itemsText .= '  |  ⚠ ' . $creditNote;           // flag over-available credit for staff review
         }
         // Address + optional map pin go into one human-readable location string for the rider.
         $location = trim((string) $r->input('location', ''));
@@ -451,6 +486,7 @@ class StorefrontController extends Controller
         if ($note !== '') $o->notes = $note;             // shows on the Kitchen Board ticket
         $o->total          = $r->filled('total') ? (float) $r->input('total') : $calcTotal;
         if ($pay = trim((string) $r->input('payment', ''))) $o->payment = $pay;
+        elseif ($onCredit) $o->payment = 'Credit';
         if ($location !== '') $o->location = $location;
         $o->save(); // OrderObserver: assigns order_no + track_token, dispatches NotifyOwnerNewOrder
 

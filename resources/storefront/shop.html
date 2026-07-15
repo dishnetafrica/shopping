@@ -288,10 +288,27 @@ var STORE_KEY='cb_cart_'+(SHOP.slug||'shop'), DELV_KEY='cb_delv_'+(SHOP.slug||'s
 var CUST_KEY='cb_cust_'+(SHOP.slug||'shop'), LAST_KEY='cb_last_'+(SHOP.slug||'shop');
 var CUST=null, LASTORDER=null;
 var AUTH_KEY='cb_tok_'+(SHOP.slug||'shop'), AUTHTOK=null, MYORDERS=null, MYSTMT=null;
-function loadCust(){try{CUST=JSON.parse(localStorage.getItem(CUST_KEY)||'null');}catch(e){CUST=null;} try{LASTORDER=JSON.parse(localStorage.getItem(LAST_KEY)||'null');}catch(e){LASTORDER=null;} try{AUTHTOK=localStorage.getItem(AUTH_KEY)||null;}catch(e){AUTHTOK=null;} if(AUTHTOK)loadMyOrders();}
+function loadCust(){loadWMode();try{CUST=JSON.parse(localStorage.getItem(CUST_KEY)||'null');}catch(e){CUST=null;} try{LASTORDER=JSON.parse(localStorage.getItem(LAST_KEY)||'null');}catch(e){LASTORDER=null;} try{AUTHTOK=localStorage.getItem(AUTH_KEY)||null;}catch(e){AUTHTOK=null;} if(AUTHTOK)loadMyOrders();}
 function saveCust(c){CUST=c;try{localStorage.setItem(CUST_KEY,JSON.stringify(c));}catch(e){}}
 function saveLast(items){LASTORDER={items:items,at:Date.now()};try{localStorage.setItem(LAST_KEY,JSON.stringify(LASTORDER));}catch(e){}}
 function forgetCust(){CUST=null;try{localStorage.removeItem(CUST_KEY);}catch(e){} render();}
+/* --- Segment-aware storefront (Phase 1): buyer mode + wholesale/carton face + credit ------- */
+var BUYER={mode:'retail',segment:null,credit:null};
+var WMODE_KEY='cb_wmode_'+(SHOP.slug||'shop'), WMODE=false, WMODE_SET=false;
+function loadWMode(){try{var v=localStorage.getItem(WMODE_KEY);if(v==='1'){WMODE=true;WMODE_SET=true;}else if(v==='0'){WMODE=false;WMODE_SET=true;}}catch(e){} if(!WMODE_SET&&/(^|[?&])mode=wholesale/.test(location.search)){WMODE=true;}}
+function isWholesaleBuyer(){return BUYER.mode==='wholesale'||BUYER.mode==='institutional';}
+function applyBuyer(b){ if(!b||typeof b!=='object')return; BUYER={mode:b.mode||'retail',segment:b.segment||null,credit:b.credit||null}; if(!WMODE_SET&&isWholesaleBuyer())WMODE=true; }
+function setWMode(on){WMODE=!!on;WMODE_SET=true;try{localStorage.setItem(WMODE_KEY,WMODE?'1':'0');}catch(e){}render();try{bar();}catch(e){}}
+function wsBar(){
+  if(!(isWholesaleBuyer()||WMODE))return '';
+  var cr=BUYER.credit,credit='';
+  if(cr&&cr.limit){credit=' &middot; Credit '+esc(cr.currency||'')+' '+(Number(cr.available||0)).toLocaleString('en-US')+'/'+(Number(cr.limit||0)).toLocaleString('en-US')+(cr.canSell===false?' <b style="color:#ffd2cc">(over limit)</b>':'');}
+  return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:'+(WMODE?'#0C2C6B':'#eef2fb')+';color:'+(WMODE?'#fff':'#103A8C')+';border-radius:12px;padding:9px 12px;margin:4px 0 10px;font-size:13px">'+
+    '<div><b>'+(WMODE?'Wholesale / carton pricing':'Retail pricing')+'</b>'+(BUYER.segment?(' &middot; '+esc(BUYER.segment)):'')+credit+'</div>'+
+    '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600"><input type="checkbox"'+(WMODE?' checked':'')+' onchange="setWMode(this.checked)" style="width:16px;height:16px"> Wholesale</label>'+
+    '</div>';
+}
+function creditOptionHtml(){ return (isWholesaleBuyer()&&BUYER.credit&&BUYER.credit.limit)?'<option>Credit (account)</option>':''; }
 function ugx(n){return CUR+' '+(Number(n)||0).toLocaleString('en-US');}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function jk(s){return JSON.stringify(String(s)).replace(/"/g,'&quot;');}
@@ -572,7 +589,7 @@ function specChipsFor(p){
   return res;
 }
 /* wholesale unit helpers — render nothing unless the product opts in */
-function packLine(p){ if(!p.unit && !p.packSize) return ''; var t=p.unit?cap(p.unit):'Pack'; if(p.packSize)t+=' · '+p.packSize+' pcs'; return '<div class="packlbl">'+esc(t)+'</div>'; }
+function packLine(p){ if(!p.unit && !p.packSize) return ''; if(WMODE && p.packSize){ return '<div class="packlbl">Carton of '+p.packSize+(p.unit?(' '+esc(p.unit)):' pcs')+'</div>'; } var t=p.unit?cap(p.unit):'Pack'; if(p.packSize)t+=' · '+p.packSize+' pcs'; return '<div class="packlbl">'+esc(t)+'</div>'; }
 function perPiece(p){ if(!p.packSize||p.packSize<2) return ''; return '<div class="unit">\u2248 '+ugx(Math.round(p.price/p.packSize))+' / pc</div>'; }
 function moqLine(p){ var m=minq(p); if(m<=1) return ''; return '<div class="moqlbl">Min order: '+m+' '+esc(p.unit?(m>1?plur(p.unit):p.unit):'units')+'</div>'; }
 function cap(s){return s?s.charAt(0).toUpperCase()+s.slice(1):s;}
@@ -690,7 +707,7 @@ async function verifyCode(phone){
   var b=$('loVerBtn');b.disabled=true;b.textContent='Checking\u2026';
   try{var r=await fetch(authBase()+'/auth/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:phone,code:code})});var d=await r.json();
     if(d&&d.ok&&d.token){AUTHTOK=d.token;try{localStorage.setItem(AUTH_KEY,d.token);}catch(e){}
-      var pr=d.profile||{};saveCust({name:pr.name||'',phone:pr.phone||phone,addr:pr.address||''});
+      var pr=d.profile||{};saveCust({name:pr.name||'',phone:pr.phone||phone,addr:pr.address||''});applyBuyer(pr.buyer);
       await loadMyOrders();closeSheet();render();toast('Logged in');}
     else{alert((d&&d.error)||'Wrong code');b.disabled=false;b.textContent='Verify & log in';}
   }catch(e){alert('Network error');b.disabled=false;b.textContent='Verify & log in';}
@@ -700,7 +717,7 @@ async function loadMyOrders(){
   try{var r=await fetch(authBase()+'/account/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:AUTHTOK})});
     if(r.status===401){logoutCust();return;}
     var d=await r.json();
-    if(d&&d.ok){MYORDERS=d.orders||[];MYSTMT=d.statement||null;var pr=d.profile||{};if(pr.name||pr.address)saveCust({name:pr.name||(CUST&&CUST.name)||'',phone:pr.phone||(CUST&&CUST.phone)||'',addr:pr.address||(CUST&&CUST.addr)||''});
+    if(d&&d.ok){MYORDERS=d.orders||[];MYSTMT=d.statement||null;var pr=d.profile||{};applyBuyer(pr.buyer);if(pr.name||pr.address)saveCust({name:pr.name||(CUST&&CUST.name)||'',phone:pr.phone||(CUST&&CUST.phone)||'',addr:pr.address||(CUST&&CUST.addr)||''});
       if(MYORDERS.length&&MYORDERS[0].items&&MYORDERS[0].items.length)saveLast(MYORDERS[0].items);render();}
   }catch(e){}
 }
@@ -826,13 +843,13 @@ function render(){
   var q=Q.trim().toLowerCase();
   if(q){
     var res=PRODUCTS.filter(function(p){return (p.name+' '+p.brand+' '+p.category+' '+p.keywords).toLowerCase().indexOf(q)>=0;});
-    c.innerHTML='<div class="backbar"><button onclick="goHome()">‹ Home</button><b>Search</b></div><div class="section-title">Results for “'+esc(Q)+'”</div>'+(res.length?gridG(res.slice(0,80)):'<div class="empty">No products match “'+esc(Q)+'”.</div>');
+    c.innerHTML=wsBar()+'<div class="backbar"><button onclick="goHome()">‹ Home</button><b>Search</b></div><div class="section-title">Results for “'+esc(Q)+'”</div>'+(res.length?gridG(res.slice(0,80)):'<div class="empty">No products match “'+esc(Q)+'”.</div>');
     return;
   }
   if(CAT==='all'){
-    if(useDepartments()){c.innerHTML=groceryHome();return;}
-    if(useRestaurantMenus()){c.innerHTML=welcomeBanner()+comboStrip()+restaurantHome();return;}
-    c.innerHTML=welcomeBanner()+thaliBanner()+comboStrip()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){return catTile(cat.name,i);}).join('')+'</div>';
+    if(useDepartments()){c.innerHTML=wsBar()+groceryHome();return;}
+    if(useRestaurantMenus()){c.innerHTML=wsBar()+welcomeBanner()+comboStrip()+restaurantHome();return;}
+    c.innerHTML=wsBar()+welcomeBanner()+thaliBanner()+comboStrip()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){return catTile(cat.name,i);}).join('')+'</div>';
     return;
   }
   var list=PRODUCTS.filter(function(p){return p.category===CAT;});
@@ -841,7 +858,7 @@ function render(){
   var rm=(!dp&&useRestaurantMenus())?(menuOfCat(CAT)||'Menu'):'';
   var back=dp?('‹ '+esc(dp.name)):(rm?('‹ '+esc(rm)):'‹ Categories');
   var chips=dp?('<div class="subchips">'+dp.subs.map(function(s){return '<button class="subchip'+(s===CAT?' on':'')+'" onclick="setCat('+jk(s)+')">'+esc(s)+'</button>';}).join('')+'</div>'):'';
-  c.innerHTML=tb+'<div class="backbar"><button onclick="setCat(\'all\')">'+back+'</button><b>'+esc(CAT)+'</b></div>'+chips+
+  c.innerHTML=wsBar()+tb+'<div class="backbar"><button onclick="setCat(\'all\')">'+back+'</button><b>'+esc(CAT)+'</b></div>'+chips+
     '<div class="meta">'+groupProducts(list).length+' item'+(groupProducts(list).length===1?'':'s')+'</div>'+gridG(list.slice(0,150));
 }
 
@@ -991,7 +1008,8 @@ function openCheckout(){
     '<div class="field"><label>Delivery location (GPS pin)</label>'+
     '<button type="button" class="locbtn" id="locBtn" onclick="captureLoc()">📍 Share my current location</button>'+
     '<div id="locMsg" class="locmsg">Optional — sends an exact map pin so the rider finds you fast.</div></div>')+
-    '<div class="field"><label>Payment</label><select id="coPay"><option>'+(IS_PICKUP?'Cash on pickup':'Cash on delivery')+'</option><option>Mobile money</option></select></div>'+
+    '<div class="field"><label>Payment</label><select id="coPay"><option>'+(IS_PICKUP?'Cash on pickup':'Cash on delivery')+'</option><option>Mobile money</option>'+creditOptionHtml()+'</select>'+
+      ((isWholesaleBuyer()&&BUYER.credit&&BUYER.credit.limit)?('<div class="note">Credit available: '+esc(BUYER.credit.currency||'')+' '+(Number(BUYER.credit.available||0)).toLocaleString('en-US')+(BUYER.credit.canSell===false?' — account over limit, credit orders are paused':'')+'</div>'):'')+'</div>'+
     '<div class="field"><label>Schedule for later <span style="color:#98a2b3;font-weight:400">(optional — leave blank to '+(IS_PICKUP?'collect now':'deliver now')+')</span></label><input id="coWhen" type="datetime-local"></div>'+
     '<div class="totrow g"><span>Total ('+cartCount()+' items)</span><span>'+ugx(cartTotal())+'</span></div>'+
     '<button class="place" id="placeBtn" onclick="placeOrder()">Place order</button>'+
@@ -1018,7 +1036,8 @@ async function placeOrder(){
   if(!name){alert('Please enter your name');return;}
   if(phone.length<7){alert('Please enter your WhatsApp number');return;}
   if(!IS_PICKUP && !addr && !GEO){alert('Please enter your delivery address or share your location');return;}
-  var payload={name:name,phone:phone,location:addr,payment:pay,note:note,when:when,items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal(),channel:'web'};
+  var onCredit=/credit/i.test(pay);
+  var payload={name:name,phone:phone,location:addr,payment:pay,note:note,when:when,on_credit:onCredit?1:0,items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal(),channel:'web'};
   if(GEO){payload.geo=GEO.lat+','+GEO.lng;payload.maps_url=mapsUrl(GEO);}
   var btn=$('placeBtn');btn.disabled=true;btn.textContent='Placing…';
   try{
@@ -1031,7 +1050,7 @@ async function placeOrder(){
         (WA_NUMBER?'<a class="place" style="display:block;text-decoration:none;text-align:center" href="https://wa.me/'+WA_NUMBER+'?text='+encodeURIComponent('Hi '+shopName+', I just placed order '+(d.order_no||'')+' on the website. Please confirm and arrange delivery.')+'">Confirm on WhatsApp</a>':'')+
         (d.track_url?'<a class="place" style="display:block;text-decoration:none;text-align:center;background:#fff;color:var(--green-d);border:1px solid var(--line)" href="'+esc(d.track_url)+'">Track my order</a>':'')+
         '<button class="place" style="background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="closeSheet()">Done</button></div></div>';
-    }else{alert((d&&d.error)?d.error:'Could not place order. Please try again.');btn.disabled=false;btn.textContent='Place order';}
+    }else{alert((d&&d.message)?d.message:((d&&d.error)?d.error:'Could not place order. Please try again.'));btn.disabled=false;btn.textContent='Place order';}
   }catch(e){alert('Network error — please try again.');btn.disabled=false;btn.textContent='Place order';}
 }
 

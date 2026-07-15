@@ -207,10 +207,20 @@ class CustomerAuthController extends Controller
         $c = CustomerProfile::where('phone', $phone)->first();
         // Fall back to the most recent order's name/location if no profile row yet.
         $last = Order::where('customer_phone', $phone)->orderByDesc('id')->first();
+
+        // Segment-aware buyer context (mode + credit snapshot) — lets the storefront render the
+        // wholesale/carton face and show available credit to a logged-in wholesale customer.
+        // Best-effort: a failure here must never break login / my-orders.
+        $buyer = ['mode' => 'retail', 'segment' => null, 'credit' => null];
+        try {
+            $buyer = app(\App\Services\Storefront\BuyerContext::class)->for($tenant, $phone);
+        } catch (\Throwable $e) { /* retail default */ }
+
         return [
             'phone'   => $phone,
             'name'    => (string) ($c->name ?? ($last->customer_name ?? '')),
             'address' => (string) ($c->address ?? ''),
+            'buyer'   => $buyer,
         ];
     }
 
