@@ -33,7 +33,15 @@ final class DemandPlanCapability implements ObjectCapability
         $lines = DemandPlanLine::where('tenant_id', $t)->where('demand_plan_id', $plan->id)->orderBy('name')->get();
 
         $canEdit = $ctx->can('menu:purchases');
-        $isOpen = ! in_array($plan->status, ['completed', 'cancelled'], true);
+        // A plan is "open" (actionable) until every line has been RECEIVED in Juba — not merely purchased.
+        // Counting only purchase status used to flip the plan to "completed" the moment buying hit 100%,
+        // which hid ALL the pack/send/receive buttons and dead-ended the buy→load→receive flow. Deriving
+        // openness from real remaining work also self-heals plans that were closed too early.
+        $openLines = $this->openLineCount($ctx, (int) $plan->id);
+        $hasAnyLine = DemandPlanLine::where('tenant_id', $ctx->tenantId())->where('demand_plan_id', $plan->id)->exists();
+        $isOpen = $plan->status !== 'cancelled' && ($plan->status === 'draft' || ! $hasAnyLine || $openLines > 0);
+        // Correct a prematurely-stored "completed" status for display; the next write persists the fix.
+        $displayStatus = ($plan->status === 'completed' && $openLines > 0) ? 'in_procurement' : (string) $plan->status;
         $endpoint = '/api/v1/workspace/demandPlan/' . $plan->id;
         // Stock is real on-hand from the receipts ledger (0 until goods are received) — never the fake
         // catalog number. Ashish confirms any pre-existing opening stock per line.
@@ -246,7 +254,7 @@ final class DemandPlanCapability implements ObjectCapability
                     (string) $plan->title,
                     $shipment ? ('Shipment ' . $shipment->shipment_number . ' · ' . ucfirst(str_replace('_', ' ', (string) $shipment->status))) : ($plan->shipment_ref ? ('Shipment ' . $plan->shipment_ref) : ''),
                 ]))),
-                'status' => $this->planLabel((string) $plan->status),
+                'status' => $this->planLabel($displayStatus),
             ])
             ->headline($pct . '% purchased', $lines->count() . ' products · ' . $this->qty($totRequested) . ' required · ' . $this->qty($totSent) . ' sent', $pct >= 100 ? 'ok' : ($pct > 0 ? 'warn' : 'default'))
             ->financials([
@@ -512,6 +520,8 @@ final class DemandPlanCapability implements ObjectCapability
         if (array_key_exists('remarks', $in) && trim((string) $in['remarks']) !== '') { $l->remarks = trim((string) $in['remarks']); }
         $l->packed_at = now();
         $l->save();
+        $plan = DemandPlan::where('tenant_id', $ctx->tenantId())->find($l->demand_plan_id);
+        if ($plan) { $this->advancePlan($ctx, $plan); }   // keep status honest (reopen if closed too early)
 
         $extra = [];
         if ((float) $l->qty_missing > 0) { $extra[] = $this->qty($l->qty_missing) . ' missing'; }
@@ -532,6 +542,8 @@ final class DemandPlanCapability implements ObjectCapability
             $l->sent_at = now();
             $l->save();
             $this->syncConsignmentSent($ctx, $l);
+            $plan = DemandPlan::where('tenant_id', $ctx->tenantId())->find($l->demand_plan_id);
+            if ($plan) { $this->advancePlan($ctx, $plan); }   // keep status honest (reopen if closed too early)
         }
 
         return ['ok' => true, 'message' => 'Loaded ' . $this->qty($l->qty_sent) . ' of ' . $l->name . ' onto transport.'];
@@ -551,15 +563,30 @@ final class DemandPlanCapability implements ObjectCapability
     /** Advance the plan: first activity flips draft/submitted → in_procurement; all resolved → completed. */
     private function advancePlan(CapabilityContext $ctx, DemandPlan $plan): void
     {
-        if (in_array($plan->status, ['completed', 'cancelled'], true)) { return; }
+        if ($plan->status === 'cancelled') { return; }
         if ($plan->status === 'draft' || $plan->status === 'submitted') {
             $plan->status = 'in_procurement';
             if ($plan->submitted_at === null) { $plan->submitted_at = now(); }
         }
-        $open = DemandPlanLine::where('tenant_id', $ctx->tenantId())->where('demand_plan_id', $plan->id)
-            ->whereIn('line_status', ['pending', 'partial'])->count();
-        if ($open === 0 && $plan->status !== 'draft') { $plan->status = 'completed'; }
+        // Complete ONLY when every line is received (or not-available) — purchasing alone is not "done".
+        $open = $this->openLineCount($ctx, (int) $plan->id);
+        if ($open === 0 && $plan->status !== 'draft') {
+            $plan->status = 'completed';
+        } elseif ($open > 0 && $plan->status === 'completed') {
+            $plan->status = 'in_procurement';   // reopen a plan that was closed before fulfilment finished
+        }
         $plan->save();
+    }
+
+    /** Lines still needing work: not fully purchased yet, or purchased but not fully received in Juba. */
+    private function openLineCount(CapabilityContext $ctx, int $planId): int
+    {
+        return DemandPlanLine::where('tenant_id', $ctx->tenantId())
+            ->where('demand_plan_id', $planId)
+            ->where(function ($q) {
+                $q->whereIn('line_status', ['pending', 'partial'])
+                  ->orWhereRaw("coalesce(line_status,'') <> 'not_available' and coalesce(received_qty,0) < coalesce(qty_purchased,0)");
+            })->count();
     }
 
     /**
@@ -714,18 +741,9 @@ final class DemandPlanCapability implements ObjectCapability
         if ($status !== 'not_available' && $status === '') { $l->line_status = $l->deriveStatus(); }
         $l->save();
 
-        // Move the plan forward: first purchase flips it to in_procurement; all lines resolved → completed.
+        // Move the plan forward: first purchase flips it to in_procurement; completion waits for receipt.
         $plan = DemandPlan::where('tenant_id', $ctx->tenantId())->find($l->demand_plan_id);
-        if ($plan && ! in_array($plan->status, ['completed', 'cancelled'], true)) {
-            if ($plan->status === 'draft' || $plan->status === 'submitted') {
-                $plan->status = 'in_procurement';
-                if ($plan->submitted_at === null) { $plan->submitted_at = now(); }
-            }
-            $open = DemandPlanLine::where('tenant_id', $ctx->tenantId())->where('demand_plan_id', $plan->id)
-                ->whereIn('line_status', ['pending', 'partial'])->count();
-            if ($open === 0) { $plan->status = 'completed'; }
-            $plan->save();
-        }
+        if ($plan) { $this->advancePlan($ctx, $plan); }
 
         // One-step cost trail: if a bill amount was entered, book the supplier cost now (who paid / credit).
         $billAmount = round((float) preg_replace('/[^0-9.]/', '', (string) ($in['bill_amount'] ?? '')), 2);
@@ -761,6 +779,10 @@ final class DemandPlanCapability implements ObjectCapability
         $newTotal = array_key_exists('received_qty', $in) && $in['received_qty'] !== '' ? (float) $in['received_qty'] : (float) $l->received_qty;
         $delta = $this->receiveTo($ctx, $l, $newTotal);   // posts the delta to the Juba ledger + syncs the shipment
         $intoStock = $l->product_id && $delta > 0.0001;
+
+        // Receipt is the end of the buy→load→receive flow — advance/complete the plan when all lines land.
+        $plan = DemandPlan::where('tenant_id', $ctx->tenantId())->find($l->demand_plan_id);
+        if ($plan) { $this->advancePlan($ctx, $plan); }
 
         return ['ok' => true, 'message' => 'Received ' . $this->qty($l->received_qty) . ' of ' . $l->name . ($intoStock ? ' — added to Juba stock.' : ($l->product_id ? '.' : ' (ad-hoc line — not linked to a product, so not added to stock).'))];
     }
