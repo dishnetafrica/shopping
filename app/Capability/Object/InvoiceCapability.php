@@ -231,11 +231,25 @@ final class InvoiceCapability implements ObjectCapability
             return ['ok' => false, 'error' => 'not_found'];
         }
         try {
+            $cur = \App\Services\Money\SalesBaseCurrency::txnCurrency($i, $ctx->tenant);
+            $fx = Fx::forTenant($ctx->tenant);
+            $before = ['total' => (float) $i->total, 'amount_paid' => (float) $i->amount_paid, 'balance' => (float) $i->balance, 'status' => (string) $i->status];
+
             app(\App\Services\Invoicing\InvoiceService::class)->syncPaidFromPayments($i);
             $i->refresh();
 
-            return ['ok' => true, 'balance' => (float) $i->balance, 'amount_paid' => (float) $i->amount_paid, 'status' => (string) $i->status,
-                'message' => 'Balance re-synced: ' . Money::fmt((float) $i->balance, \App\Services\Money\SalesBaseCurrency::txnCurrency($i, $ctx->tenant)) . ' due.'];
+            // Diagnostic: this block proves whether the currency-aware fix is live. `reconciled_in`
+            // MUST be the invoice's TRUE currency (UGX here) — if it shows USD, the InvoiceService fix
+            // is not deployed and the balance won't clear.
+            return [
+                'ok' => true,
+                'reconciled_in' => $cur,
+                'rate_per_usd' => round($fx->ratePerUsd($cur), 4),
+                'before' => $before,
+                'after' => ['total' => (float) $i->total, 'amount_paid' => (float) $i->amount_paid, 'balance' => (float) $i->balance, 'status' => (string) $i->status],
+                'cleared' => (float) $i->balance <= 0.5,
+                'message' => 'Reconciled in ' . $cur . ' — balance ' . number_format((float) $i->balance, 2) . ' ' . $cur . ' (' . (string) $i->status . ').',
+            ];
         } catch (\Throwable $e) {
             return ['ok' => false, 'error' => 'resync_failed', 'message' => $e->getMessage()];
         }
