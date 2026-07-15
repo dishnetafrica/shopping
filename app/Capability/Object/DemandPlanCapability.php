@@ -35,6 +35,9 @@ final class DemandPlanCapability implements ObjectCapability
         $canEdit = $ctx->can('menu:purchases');
         $isOpen = ! in_array($plan->status, ['completed', 'cancelled'], true);
         $endpoint = '/api/v1/workspace/demandPlan/' . $plan->id;
+        // When the real stock ledger isn't in use, the "Stock" figures are unconfirmed — say so plainly.
+        $ledgerOn = \App\Services\Inventory\StockLedger::readsFromLedger($ctx->tenant);
+        $stockNote = $ledgerOn ? 'stock from ledger (live)' : 'stock not tracked — confirm each line';
 
         // supplier pick-list for the procurement form
         $suppliers = Supplier::where('tenant_id', $t)->orderBy('name')->pluck('name')->map(fn ($n) => trim((string) $n))->filter()->unique()->values()->all();
@@ -137,7 +140,7 @@ final class DemandPlanCapability implements ObjectCapability
             ])
             ->tabs([['key' => 'lines', 'label' => 'Lines', 'count' => $lines->count()]])
             ->tabSections(['lines' => [[
-                'kind' => 'table', 'title' => 'Procurement lines', 'sub' => $this->planLabel((string) $plan->status),
+                'kind' => 'table', 'title' => 'Procurement lines', 'sub' => $this->planLabel((string) $plan->status) . ' · ' . $stockNote,
                 'searchable' => true, 'columns' => $columns, 'rows' => $rows,
                 'empty' => 'No lines yet — use “Add product”, or create the plan with auto-suggest on.',
             ]]])
@@ -220,6 +223,9 @@ final class DemandPlanCapability implements ObjectCapability
         if (array_key_exists('current_stock', $in)) { $l->current_stock = round((float) $in['current_stock'], 3); }
         if (array_key_exists('expected_sales', $in)) { $l->expected_sales = round((float) $in['expected_sales'], 3); }
         if (array_key_exists('requested_qty', $in)) { $l->requested_qty = round((float) $in['requested_qty'], 3); }
+        // Recompute the suggestion from the confirmed figures so "Suggested" stays a live reference:
+        // suggested = expected sales − real stock on hand − already in transit (never below zero).
+        $l->suggested_qty = max(0.0, round((float) $l->expected_sales - (float) $l->current_stock - (float) $l->in_transit, 3));
         $l->line_status = $l->deriveStatus();
         $l->save();
 

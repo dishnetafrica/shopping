@@ -34,8 +34,14 @@ final class DemandSuggestion
     {
         $tid = $this->tenant->id;
 
-        $kampala = $this->safeMap(fn () => StockLedger::forTenant($this->tenant)->onHandMap(StockLedger::LOC_KAMPALA));
-        $juba    = $this->safeMap(fn () => StockLedger::forTenant($this->tenant)->onHandMap(StockLedger::LOC_JUBA));
+        // CRITICAL: products.stock is a CATALOG availability flag (site display + bot ranking), NOT real
+        // inventory — it is never decremented by sales. Only the StockLedger holds true on-hand, and only
+        // when the tenant runs it (stock_v2 + stock_ledger). So we read real stock ONLY from the ledger;
+        // if it isn't in use, current stock is treated as unknown (0) for the person to confirm per line,
+        // rather than seeding the plan with a misleading catalog number.
+        $ledgerOn = StockLedger::readsFromLedger($this->tenant);
+        $kampala = $ledgerOn ? $this->safeMap(fn () => StockLedger::forTenant($this->tenant)->onHandMap(StockLedger::LOC_KAMPALA)) : [];
+        $juba    = $ledgerOn ? $this->safeMap(fn () => StockLedger::forTenant($this->tenant)->onHandMap(StockLedger::LOC_JUBA)) : [];
         $transit = $this->inTransitMap($tid);
         $sales   = $this->salesMap($tid);
 
@@ -49,9 +55,10 @@ final class DemandSuggestion
         $lines = [];
         foreach ($products as $p) {
             $pid = (int) $p->id;
-            // Prefer the ledger; fall back to the legacy per-product stock cache for Kampala.
-            $stockK = array_key_exists($pid, $kampala) ? $kampala[$pid] : (float) ($p->stock ?? 0);
-            $stockJ = (float) ($juba[$pid] ?? 0);
+            // Real on-hand from the ledger only; 0 (unknown) when the ledger isn't in use — never the
+            // catalog cache. Ashish confirms the real count per line, and the suggestion recomputes.
+            $stockK = $ledgerOn ? (float) ($kampala[$pid] ?? 0) : 0.0;
+            $stockJ = $ledgerOn ? (float) ($juba[$pid] ?? 0) : 0.0;
             $current = round($stockK + $stockJ, 3);
             $inTransit = round((float) ($transit[$pid] ?? 0), 3);
             $expected = round((float) ($sales[$pid] ?? 0), 3);
