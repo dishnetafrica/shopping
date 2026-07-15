@@ -314,6 +314,21 @@ body{padding-bottom:calc(var(--nav-h) + 14px + var(--safe-b))}
   pointer-events:none;transition:opacity .25s,transform .25s;max-width:88%;text-align:center;box-shadow:var(--shadow-md)}
 .cbtoast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
+/* ---- V2 category filters & sort (Increment 4) ---- */
+.filterbar{position:sticky;top:120px;z-index:22;background:var(--bg);display:flex;gap:8px;overflow-x:auto;padding:9px 12px;-webkit-overflow-scrolling:touch;border-bottom:1px solid var(--line)}
+.filterbar::-webkit-scrollbar{display:none}
+.fchip{flex:none;border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:8px 14px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;min-height:38px;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.fchip.on{border-color:var(--green);background:#f1f9f4;color:var(--green-d)}
+.fcount{background:var(--green);color:#fff;border-radius:999px;min-width:18px;height:18px;font-size:11px;display:inline-grid;place-items:center;padding:0 4px;font-weight:800}
+.brandstrip{display:flex;gap:8px;overflow-x:auto;padding:4px 12px 8px;-webkit-overflow-scrolling:touch}
+.brandstrip::-webkit-scrollbar{display:none}
+.brandchip{flex:none;border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer}
+.brandchip.on{border-color:var(--green);background:#f1f9f4;color:var(--green-d)}
+.fsec{border-bottom:1px solid var(--line);padding:12px 0}
+.fsh{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:8px}
+.frow{display:flex;align-items:center;justify-content:space-between;padding:10px 2px;font-size:14.5px;cursor:pointer}
+.frow input{width:20px;height:20px}
+
 </style>
 </head>
 <body>
@@ -566,7 +581,7 @@ async function load(){
   }
 }
 
-function setCat(c){CAT=c;Q='';if($('q'))$('q').value='';render();window.scrollTo(0,0);}
+function setCat(c){CAT=c;Q='';if($('q'))$('q').value='';_catShown=24;render();window.scrollTo(0,0);}
 /* Deep-link from the brand site: ?add=<product> drops it in the cart (MOQ-aware) & opens checkout;
    ?cat=<category> jumps straight to that aisle. URL is cleaned so a refresh won't re-add. */
 function applyQuickOrder(){
@@ -606,7 +621,7 @@ function loadRSearch(){try{RSEARCH=JSON.parse(localStorage.getItem(RSRCH_KEY)||'
 function pushRSearch(v){ v=(v||'').trim(); if(!v)return; RSEARCH=RSEARCH.filter(function(x){return x.toLowerCase()!==v.toLowerCase();}); RSEARCH.unshift(v); RSEARCH=RSEARCH.slice(0,8); try{localStorage.setItem(RSRCH_KEY,JSON.stringify(RSEARCH));}catch(e){} }
 function searchOpen(){ var o=$('searchOverlay'); if(!o)return; closeSheet(); o.classList.add('show'); document.body.style.overflow='hidden'; var sq=$('sq'); if(sq)sq.value=Q||''; searchRender(Q||''); setTimeout(function(){ if(sq)sq.focus(); },60); }
 function searchClose(){ var o=$('searchOverlay'); if(o)o.classList.remove('show'); document.body.style.overflow=''; }
-function searchSubmit(v){ v=(v==null?(($('sq')&&$('sq').value)||''):v).trim(); searchClose(); if($('q'))$('q').value=v; Q=v; if(v)pushRSearch(v); render(); window.scrollTo(0,0); }
+function searchSubmit(v){ v=(v==null?(($('sq')&&$('sq').value)||''):v).trim(); searchClose(); if($('q'))$('q').value=v; Q=v; _catShown=24; if(v)pushRSearch(v); render(); window.scrollTo(0,0); }
 function searchPickCat(c){ searchClose(); if($('q'))$('q').value=''; Q=''; setCat(c); }
 function searchOpenProduct(id,name){ searchClose(); if(id){ goDetail(id); } else { searchSubmit(name); } }
 function toast(msg){ try{ var t=$('cbToast'); if(!t){ t=document.createElement('div'); t.id='cbToast'; t.className='cbtoast'; t.setAttribute('role','status'); t.setAttribute('aria-live','polite'); document.body.appendChild(t); } t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(function(){ t.classList.remove('show'); }, 2200); }catch(e){} }
@@ -1178,6 +1193,63 @@ function groceryHome(){
   }).join('');
 }
 
+/* ================= Storefront V2 — filter & sort engine (Increment 4) ================= */
+var FSORT='pop', FINSTOCK=false, FBULK=false, FBRANDS={}, FPMAX=0, _catShown=24;
+function activeFilterCount(){ var n=0; if(FINSTOCK)n++; if(FBULK)n++; n+=Object.keys(FBRANDS).length; if(FPMAX>0)n++; return n; }
+function resetFilters(){ FSORT='pop'; FINSTOCK=false; FBULK=false; FBRANDS={}; FPMAX=0; }
+function applyFilters(list){
+  var out=list.filter(function(p){
+    if(FINSTOCK && oosOf(p)) return false;
+    if(FBULK && !(p.packSize && p.packSize>=2)) return false;
+    if(FPMAX>0 && p.price>FPMAX) return false;
+    if(Object.keys(FBRANDS).length && !FBRANDS[(p.brand||'').toLowerCase()]) return false;
+    return true;
+  });
+  out.sort(function(a,b){
+    if(FSORT==='plow') return a.price-b.price;
+    if(FSORT==='phigh') return b.price-a.price;
+    if(FSORT==='new') return (b.createdAt||b.id||0)-(a.createdAt||a.id||0);
+    return (b.popularity||0)-(a.popularity||0);
+  });
+  return out;
+}
+function sortLabel(){ return ({pop:'Popular',plow:'Price ↑',phigh:'Price ↓',new:'Newest'})[FSORT]||'Popular'; }
+function filterBar(){
+  var sorts=[['pop','Popular'],['plow','Price ↑'],['phigh','Price ↓'],['new','New']];
+  var chips=sorts.map(function(s){return '<button class="fchip'+(FSORT===s[0]?' on':'')+'" onclick="setSort('+jk(s[0])+')">'+s[1]+'</button>';}).join('');
+  var fc=activeFilterCount();
+  return '<div class="filterbar"><button class="fchip" onclick="openFilters()">⚙ Filters'+(fc?(' <span class="fcount">'+fc+'</span>'):'')+'</button>'
+    +'<button class="fchip'+(FINSTOCK?' on':'')+'" onclick="toggleInstock()">In stock</button>'+chips+'</div>';
+}
+function setSort(s){ FSORT=s; render(); }
+function toggleInstock(){ FINSTOCK=!FINSTOCK; _catShown=24; render(); }
+function curCatList(){ return PRODUCTS.filter(function(p){return p.category===CAT;}); }
+function currentList(){ var ql=Q.trim().toLowerCase();
+  if(ql) return PRODUCTS.filter(function(p){return (p.name+' '+p.brand+' '+p.category+' '+p.keywords).toLowerCase().indexOf(ql)>=0;});
+  if(CAT!=='all') return curCatList(); return []; }
+function catBrands(list){ var seen={},b=[]; list.forEach(function(p){var br=p.brand||'';if(br&&!seen[br.toLowerCase()]){seen[br.toLowerCase()]=1;b.push(br);}}); return b; }
+function featuredBrands(list){ var b=catBrands(list); if(b.length<2)return '';
+  return '<div class="sgroup" style="padding-left:14px">Featured brands</div><div class="brandstrip">'+b.slice(0,12).map(function(br){return '<button class="brandchip'+(FBRANDS[br.toLowerCase()]?' on':'')+'" onclick="toggleBrand('+jk(br)+')">'+esc(br)+'</button>';}).join('')+'</div>'; }
+function toggleBrand(br){ br=br.toLowerCase(); if(FBRANDS[br])delete FBRANDS[br]; else FBRANDS[br]=1; _catShown=24; render(); }
+function filterBrandChk(b,on){ if(on)FBRANDS[b]=1; else delete FBRANDS[b]; }
+function openFilters(){
+  var list=currentList(), brands=catBrands(list);
+  var prices=list.map(function(p){return p.price;}).filter(function(x){return x>0;});
+  var pmax=prices.length?Math.max.apply(null,prices):0, buckets=[];
+  if(pmax>0){ [0.25,0.5,0.75].forEach(function(f){ var v=Math.ceil(pmax*f/500)*500; if(v>0 && buckets.indexOf(v)<0)buckets.push(v); }); }
+  var html='<div style="padding:2px 0">';
+  html+='<div class="fsec"><div class="fsh">Availability</div>'
+    +'<label class="frow"><span>In stock only</span><input type="checkbox" '+(FINSTOCK?'checked':'')+' onchange="FINSTOCK=this.checked"></label>'
+    +'<label class="frow"><span>Bulk / carton</span><input type="checkbox" '+(FBULK?'checked':'')+' onchange="FBULK=this.checked"></label></div>';
+  if(brands.length){ html+='<div class="fsec"><div class="fsh">Brand</div>'+brands.slice(0,20).map(function(br){var b=br.toLowerCase();return '<label class="frow"><span>'+esc(br)+'</span><input type="checkbox" '+(FBRANDS[b]?'checked':'')+' onchange="filterBrandChk('+jk(b)+',this.checked)"></label>';}).join('')+'</div>'; }
+  if(buckets.length){ html+='<div class="fsec"><div class="fsh">Max price</div><div class="schips" style="padding:0 0 2px">'+buckets.map(function(v){return '<button class="schip'+(FPMAX===v?' on':'')+'" onclick="FPMAX='+v+';openFilters()">Under '+ugx(v)+'</button>';}).join('')+(FPMAX?'<button class="schip" onclick="FPMAX=0;openFilters()">Any price</button>':'')+'</div></div>'; }
+  html+='</div>';
+  $('sheetTitle').textContent='Filters';
+  $('sheetBody').innerHTML=html+'<div style="display:flex;gap:10px;margin-top:10px"><button class="place" style="flex:1;background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="resetFilters();closeSheet();render()">Clear all</button><button class="place" style="flex:2" onclick="_catShown=24;closeSheet();render()">Show results</button></div>';
+  $('sheet').classList.add('show');
+}
+function growGrid(){ var wrap=$('catgridwrap'); if(!wrap)return; var full=applyFilters(currentList()); if(_catShown>=full.length){var lm=$('loadmore');if(lm)lm.remove();return;} _catShown+=24; wrap.innerHTML=gridG(full.slice(0,_catShown)); if(_catShown<full.length){ if(!$('loadmore')){var d=document.createElement('div');d.id='loadmore';d.style.height='1px';wrap.parentNode.insertBefore(d,wrap.nextSibling);} } else { var l=$('loadmore'); if(l)l.remove(); } }
+
 function render(){
   var c=$('content');
   var hb=$('hback');if(hb)hb.style.display=(CAT!=='all'||Q)?'grid':'none';
@@ -1185,7 +1257,15 @@ function render(){
   var q=Q.trim().toLowerCase();
   if(q){
     var res=PRODUCTS.filter(function(p){return (p.name+' '+p.brand+' '+p.category+' '+p.keywords).toLowerCase().indexOf(q)>=0;});
-    c.innerHTML=wsBar()+'<div class="backbar"><button onclick="goHome()">‹ Home</button><b>Search</b></div><div class="section-title">Results for “'+esc(Q)+'”</div>'+(res.length?gridG(res.slice(0,80)):'<div class="empty">No products match “'+esc(Q)+'”.</div>');
+    if(!res.length){
+      var wa=SHOP.waNumber?('https://wa.me/'+SHOP.waNumber+'?text='+encodeURIComponent('Hi, do you have: '+Q+'?')):'#';
+      c.innerHTML=wsBar()+'<div class="backbar"><button onclick="goHome()">‹ Home</button><b>Search</b></div><div class="szero" style="padding-top:40px">No products match “'+esc(Q)+'”.<br>We may still have it — ask us.<br><a class="wa" href="'+wa+'" target="_blank" rel="noopener">Request “'+esc(Q)+'” on WhatsApp</a></div>';
+      return;
+    }
+    var fres=applyFilters(res), sh=fres.slice(0,_catShown), mo=fres.length>_catShown?'<div id="loadmore" style="height:1px"></div>':'';
+    c.innerHTML=wsBar()+'<div class="backbar"><button onclick="goHome()">‹ Home</button><b>Search</b></div><div class="section-title">Results for “'+esc(Q)+'”</div>'
+      +filterBar()+'<div class="meta">'+fres.length+' product'+(fres.length===1?'':'s')+' · '+sortLabel()+'</div>'
+      +'<div id="catgridwrap">'+(sh.length?gridG(sh):'<div class="empty">No products match these filters.</div>')+'</div>'+mo;
     return;
   }
   if(CAT==='all'){
@@ -1200,8 +1280,10 @@ function render(){
   var rm=(!dp&&useRestaurantMenus())?(menuOfCat(CAT)||'Menu'):'';
   var back=dp?('‹ '+esc(dp.name)):(rm?('‹ '+esc(rm)):'‹ Categories');
   var chips=dp?('<div class="subchips">'+dp.subs.map(function(s){return '<button class="subchip'+(s===CAT?' on':'')+'" onclick="setCat('+jk(s)+')">'+esc(s)+'</button>';}).join('')+'</div>'):'';
-  c.innerHTML=wsBar()+tb+'<div class="backbar"><button onclick="setCat(\'all\')">'+back+'</button><b>'+esc(CAT)+'</b></div>'+chips+
-    '<div class="meta">'+groupProducts(list).length+' item'+(groupProducts(list).length===1?'':'s')+'</div>'+gridG(list.slice(0,150));
+  var flist=applyFilters(list), shown=flist.slice(0,_catShown), more=flist.length>_catShown?'<div id="loadmore" style="height:1px"></div>':'';
+  c.innerHTML=wsBar()+tb+'<div class="backbar"><button onclick="setCat(\'all\')">'+back+'</button><b>'+esc(CAT)+'</b></div>'+chips+featuredBrands(list)+filterBar()
+    +'<div class="meta">'+flist.length+' product'+(flist.length===1?'':'s')+' · '+sortLabel()+'</div>'
+    +'<div id="catgridwrap">'+(shown.length?gridG(shown):'<div class="empty">No products match these filters. <button class="fchip" style="margin-top:8px" onclick="resetFilters();render()">Clear filters</button></div>')+'</div>'+more;
 }
 
 function prod(key){return PRODUCTS.find(function(p){return p.name===key;});}
@@ -1413,6 +1495,8 @@ if($('sq')){
   $('sq').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); searchSubmit(this.value); } });
 }
 document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ var o=$('searchOverlay'); if(o&&o.classList.contains('show')) searchClose(); } });
+/* Infinite scroll: grow the category/search grid as the sentinel nears the viewport. */
+window.addEventListener('scroll',function(){ var lm=$('loadmore'); if(!lm)return; if(lm.getBoundingClientRect().top < window.innerHeight+320){ growGrid(); } },{passive:true});
 loadCart(); loadCust(); loadWish(); loadRSearch(); bar(); restoreDelv(); if($('content'))$('content').innerHTML=skeletonGrid(8); load();
 </script>
 <div id="detail" class="detail" aria-hidden="true"></div>
