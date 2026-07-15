@@ -229,7 +229,9 @@ final class InvoiceCapability implements ObjectCapability
         if (! $i) {
             return ['ok' => false, 'error' => 'not_found'];
         }
-        $cur = strtoupper((string) ($in['currency'] ?? $i->currency ?: 'USD'));
+        // The invoice's own currency tag is unreliable; the amount is recorded in the invoice's TRUE
+        // transaction currency (derived from the linked order) unless the caller passes one explicitly.
+        $cur = strtoupper((string) ($in['currency'] ?? '')) ?: \App\Services\Money\SalesBaseCurrency::txnCurrency($i, $ctx->tenant);
         $amount = round((float) ($in['amount'] ?? 0), 2);
         if ($amount <= 0) {
             return ['ok' => false, 'error' => 'bad_amount', 'message' => 'Enter an amount greater than zero.'];

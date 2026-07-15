@@ -61,9 +61,11 @@ final class CustomerInsight
 
         foreach ($invoices as $inv) {
             $idate = $inv->issued_at ? Carbon::parse($inv->issued_at)->format('Y-m-d') : null;
-            // Untagged invoices are in the engine's LOCAL currency (UGX on a converted basis), NOT the
-            // display base — falling back to $base would show a UGX balance with a '$' (e.g. $603,075).
-            $bal = $toBase((float) $inv->balance, (string) ($inv->currency ?: $native), $idate);
+            // The invoice `currency` tag is UNRELIABLE — the issuer stamps the tenant base (e.g. USD) even
+            // on local-currency amounts, so `?: $native` never fires and a UGX 603,075 balance shows as
+            // $603,075. Derive the TRUE transaction currency from the linked order instead.
+            $icur = \App\Services\Money\SalesBaseCurrency::txnCurrency($inv, $ctx->tenant);
+            $bal = $toBase((float) $inv->balance, $icur, $idate);
             $due = $inv->due_at ? Carbon::parse($inv->due_at) : null;
             if ($bal > 0.01) {
                 $exposure += $bal;
@@ -166,12 +168,15 @@ final class CustomerInsight
         $byPhone = fn ($q) => $q->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [$digits]);
 
         $rows = [];
+        $tenant = $ctx->tenant;
         $byPhone(Invoice::where('tenant_id', $t))
             ->where('status', '!=', 'void')->get()
-            ->each(function ($i) use (&$rows, $native) {
+            ->each(function ($i) use (&$rows, $native, $tenant) {
+                // Derive the invoice's true currency from its order — the stored tag is unreliable.
+                $icur = \App\Services\Money\SalesBaseCurrency::txnCurrency($i, $tenant);
                 $rows[] = ['t' => $i->issued_at ? Carbon::parse($i->issued_at) : Carbon::parse($i->created_at),
                     'detail' => 'Invoice ' . $i->invoice_no, 'amt' => (float) $i->total, 'side' => 'dr',
-                    'cur' => (string) ($i->currency ?: $native), 'usd' => null,
+                    'cur' => $icur, 'usd' => null,
                     'link' => '/api/v1/workspace/invoice/' . $i->id];
             });
         $byPhone(CustomerPayment::where('tenant_id', $t))->get()

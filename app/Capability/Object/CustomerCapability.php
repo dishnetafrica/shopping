@@ -181,7 +181,7 @@ final class CustomerCapability implements ObjectCapability
             $overdue = $i->due_at && Carbon::parse($i->due_at)->isPast() && ! $paid;
             $status = $paid ? 'Paid' : ($overdue ? 'Overdue' : ((float) $i->amount_paid > 0 ? 'Part-paid' : 'Unpaid'));
             $badge = $paid ? 'ok' : ($overdue ? 'danger' : 'warn');
-            $icur = (string) ($i->currency ?: $native);
+            $icur = \App\Services\Money\SalesBaseCurrency::txnCurrency($i, $ctx->tenant);   // invoice tag is unreliable
             $idate = $i->issued_at ? Carbon::parse($i->issued_at)->format('Y-m-d') : null;
 
             return ['cells' => [(string) $i->invoice_no,

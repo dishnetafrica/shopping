@@ -22,7 +22,10 @@ final class CollectionsCapability implements ProcessCapability
     {
         $rc = \App\Services\Money\ReportingCurrency::forContext($ctx);
         $native = $ctx->nativeCurrency();
-        $icur = fn ($i) => (string) ($i->currency ?: $native);
+        $tenant = $ctx->tenant;
+        // The invoice `currency` tag is unreliable (issuer stamps the base); derive the real currency
+        // from the linked order so a UGX overdue balance isn't consolidated as if it were USD.
+        $icur = fn ($i) => \App\Services\Money\SalesBaseCurrency::txnCurrency($i, $tenant);
         $idate = fn ($i) => $i->due_at ? \Illuminate\Support\Carbon::parse($i->due_at)->toDateString() : null;
 
         $rows = $this->overdue($ctx);
@@ -47,10 +50,11 @@ final class CollectionsCapability implements ProcessCapability
     {
         $rc = \App\Services\Money\ReportingCurrency::forContext($ctx);
         $native = $ctx->nativeCurrency();
+        $tenant = $ctx->tenant;
         $rows = $this->overdue($ctx);
         $exposure = $rc->consolidate($rows->map(fn ($i) => [
             'amount' => (float) $i->balance,
-            'currency' => (string) ($i->currency ?: $native),
+            'currency' => \App\Services\Money\SalesBaseCurrency::txnCurrency($i, $tenant),
             'date' => $i->due_at ? \Illuminate\Support\Carbon::parse($i->due_at)->toDateString() : null,
         ])->all())['amount'];
 
