@@ -369,7 +369,7 @@ table.tot tr.grand td { background:#0C831F; color:#fff; font-size:13.5px; font-w
 .abox { border:1px dashed #b7c0b9; border-radius:10px; height:88px; padding:9px 11px; }
 .abox .t { font-size:8.5px; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; font-weight:bold; }
 .foot { position:fixed; bottom:-40px; left:0; right:0; text-align:center; font-size:8.5px; color:#8a8f8a; border-top:1px solid #e6e9e6; padding-top:6px; }
-.pageno:after { content: "Page " counter(page) " of " counter(pages); }
+.pageno:after { content: "Page " counter(page); }
 </style></head><body>
 <div class="foot">{$company} · Quotation {$no}{$tinLineHtml} · <span class="pageno"></span></div>
 <table width="100%"><tr>
