@@ -61,7 +61,9 @@ final class CustomerInsight
 
         foreach ($invoices as $inv) {
             $idate = $inv->issued_at ? Carbon::parse($inv->issued_at)->format('Y-m-d') : null;
-            $bal = $toBase((float) $inv->balance, (string) ($inv->currency ?: $base), $idate);
+            // Untagged invoices are in the engine's LOCAL currency (UGX on a converted basis), NOT the
+            // display base — falling back to $base would show a UGX balance with a '$' (e.g. $603,075).
+            $bal = $toBase((float) $inv->balance, (string) ($inv->currency ?: $native), $idate);
             $due = $inv->due_at ? Carbon::parse($inv->due_at) : null;
             if ($bal > 0.01) {
                 $exposure += $bal;
@@ -152,6 +154,9 @@ final class CustomerInsight
     {
         $rc = ReportingCurrency::forContext($ctx);
         $base = $rc->consolidationCurrency();
+        // Untagged invoices/payments are in the engine's LOCAL currency (UGX on a converted basis),
+        // NOT the display base — using $base as the fallback would show a UGX amount with a '$'.
+        $native = $ctx->nativeCurrency();
 
         $t = $ctx->tenantId();
         $digits = preg_replace('/[^0-9]/', '', (string) $c->phone);
@@ -163,17 +168,17 @@ final class CustomerInsight
         $rows = [];
         $byPhone(Invoice::where('tenant_id', $t))
             ->where('status', '!=', 'void')->get()
-            ->each(function ($i) use (&$rows) {
+            ->each(function ($i) use (&$rows, $native) {
                 $rows[] = ['t' => $i->issued_at ? Carbon::parse($i->issued_at) : Carbon::parse($i->created_at),
                     'detail' => 'Invoice ' . $i->invoice_no, 'amt' => (float) $i->total, 'side' => 'dr',
-                    'cur' => (string) ($i->currency ?: $base), 'usd' => null,
+                    'cur' => (string) ($i->currency ?: $native), 'usd' => null,
                     'link' => '/api/v1/workspace/invoice/' . $i->id];
             });
         $byPhone(CustomerPayment::where('tenant_id', $t))->get()
-            ->each(function ($p) use (&$rows, $base) {
+            ->each(function ($p) use (&$rows, $native) {
                 $rows[] = ['t' => Carbon::parse($p->created_at), 'detail' => 'Payment · ' . ($p->method ?: 'cash'),
                     'amt' => (float) $p->amount, 'side' => 'cr',
-                    'cur' => (string) ($p->currency ?: $base), 'usd' => (float) ($p->usd_amount ?? 0) ?: null,
+                    'cur' => (string) ($p->currency ?: $native), 'usd' => (float) ($p->usd_amount ?? 0) ?: null,
                     'link' => null];
             });
 

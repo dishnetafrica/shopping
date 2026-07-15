@@ -111,8 +111,13 @@ final class SalesOrderCapability implements ObjectCapability
             'schema' => ['status' => 'enum:' . implode(',', $statusChoices)], 'prefill' => ['id' => (int) $o->id, 'status' => (string) $o->status]];
         $cancelOrder = ! $cancelled ? ['key' => 'cancel_order', 'label' => 'Cancel order', 'method' => 'POST', 'endpoint' => $ep . '/cancel_order', 'actor' => 'human', 'tone' => 'danger', 'confirm' => 'Cancel Order ' . $o->order_no . '? Stock is released and the order is closed.'] : null;
         // Record a payment against the order via the panel's proven /papi/record-payment endpoint.
+        // That endpoint records the amount in the order's NATIVE currency (it adds straight into
+        // amount_paid), so the field is labelled + prefilled in that currency — NOT the USD display
+        // figure — otherwise a customer would enter 165 (USD) and record 165 UGX by mistake.
+        $usdHint = $balance > 0 && $ocur !== 'USD' ? ('  (≈ ' . $fmt($balance) . ')') : '';
         $recordPayment = ! $cancelled ? ['key' => 'record_payment', 'label' => 'Record payment', 'method' => 'POST', 'endpoint' => '/papi/record-payment', 'actor' => 'human', 'tone' => 'default',
             'schema' => ['amount' => 'money', 'method' => 'enum:cash,mobile_money,bank,cheque', 'note' => 'text'], 'body' => ['order' => (int) $o->id],
+            'labels' => ['amount' => 'Amount in ' . $ocur . $usdHint],
             'prefill' => ['amount' => $balance > 0 ? round($balance, 2) : '', 'method' => 'cash']] : null;
 
         $quick = array_values(array_filter([
