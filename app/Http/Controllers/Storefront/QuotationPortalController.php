@@ -140,7 +140,7 @@ class QuotationPortalController extends Controller
             'valid_until'  => optional($q->valid_until)->toDateString(),
             'is_open'      => $q->isOpen(),
             'is_converted' => $q->isConverted(),
-            'editable'     => $q->isOpen() && ! $q->isConverted(),
+            'editable'     => $q->isEditable(),
             'revision'     => (int) ($q->current_rev ?: 1),
             'revisions'    => $revs,
             'latest_changes' => $latestChanges,
@@ -292,7 +292,7 @@ class QuotationPortalController extends Controller
     {
         [$tenant, $base, $q] = $this->resolve($shop, $token);
 
-        if (! $q->isOpen() || $q->isConverted()) {
+        if (! $q->isEditable()) {
             return response()->json(['ok' => false, 'error' => 'This quotation is locked and can no longer be edited.'], 409);
         }
 

@@ -126,7 +126,7 @@ final class QuotationCapability implements ObjectCapability
             'qty' => (int) $it->qty, 'price' => (float) $it->unit_price,
         ])->values()->all();
         $editQuote = ($canEdit && $editLines) ? [
-            'key' => 'edit_quotation', 'label' => 'Edit quotation', 'method' => 'POST', 'endpoint' => '/papi/quotation-update',
+            'key' => 'edit_quotation', 'label' => 'Revise quotation', 'method' => 'POST', 'endpoint' => '/papi/quotation-revise',
             'actor' => 'human', 'tone' => 'default', 'builder' => 'quotation', 'edit' => true,
             'productSearch' => '/api/v1/workspace/products/_/search',
             'currencies' => array_values(array_unique([$cur, 'USD', 'UGX', 'SSP'])),
@@ -152,7 +152,7 @@ final class QuotationCapability implements ObjectCapability
             ->object([
                 'type' => 'quotation', 'id' => (string) $q->id, 'ref' => (string) $q->quote_no,
                 'title' => 'Quote ' . $q->quote_no,
-                'subtitle' => trim('For ' . ($q->customer_name ?: $q->customer_phone ?: 'customer') . ($created ? ' · ' . $created->format('d M Y') : '')),
+                'subtitle' => trim('For ' . ($q->customer_name ?: $q->customer_phone ?: 'customer') . ($created ? ' · ' . $created->format('d M Y') : '') . ((int) $q->current_rev > 1 ? ' · Revision ' . (int) $q->current_rev : '')),
                 'status' => $converted ? 'converted' : $status,
             ])
             ->headline($fmt($q->total), $converted ? 'converted to order' : 'quotation total', $converted ? 'ok' : 'default')

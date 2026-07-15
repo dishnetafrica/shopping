@@ -74,6 +74,12 @@ class Quotation extends Model
         return ! in_array($this->status, ['converted', 'declined', 'expired', 'archived'], true);
     }
 
+    /** Editable = open AND not yet approved/converted (an accepted quote is agreed, so it's locked). */
+    public function isEditable(): bool
+    {
+        return $this->isOpen() && $this->status !== 'accepted';
+    }
+
     /** Build the customer portal URL for a given storefront base ('' on a custom domain, '/{slug}' on the platform). */
     public function portalUrl(string $base = ''): string
     {

@@ -28,15 +28,63 @@ class QuotationReviseService
         return $this->apply($t, $q, $ops, 'customer', null, null, $comment, 'customer_revised');
     }
 
-    /** Sales edit → new revision. Additionally allows: price, discount, remarks. */
+    /** Sales edit via ops → new revision. Additionally allows: price, discount, remarks. */
     public function applySalesChange(Tenant $t, Quotation $q, array $ops, ?int $actorId, ?string $actorName, ?string $comment = null): array
     {
         return $this->apply($t, $q, $ops, 'sales', $actorId, $actorName, $comment, 'revised');
     }
 
+    /**
+     * Sales edit via a FULL edited line set (the shape the panel edit form already posts) → new
+     * revision. The given lines become the new state; the diff vs the current revision is computed
+     * automatically. This lets the existing panel editor create immutable revisions instead of
+     * overwriting. $lines: [{name, qty, price|unit_price, disc?, unit?, image?}].
+     */
+    public function applySalesLines(Tenant $t, Quotation $q, array $lines, ?string $remarks, ?int $actorId, ?string $actorName, ?string $comment = null): array
+    {
+        if (! $q->isEditable()) {
+            return ['ok' => false, 'error' => 'This quotation is locked and can no longer be edited.'];
+        }
+        $this->ensureBaseline($t, $q);
+        $prev = $this->currentLines($q);
+
+        // Normalise the posted lines (carry over image/unit from the current set when omitted).
+        $prevByName = [];
+        foreach ($prev as $l) {
+            $prevByName[mb_strtolower($l['name'])] = $l;
+        }
+        $newLines = [];
+        foreach ($lines as $l) {
+            $name = trim((string) ($l['name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $cur = $prevByName[mb_strtolower($name)] ?? [];
+            $newLines[] = [
+                'name'    => $name,
+                'brand'   => (string) ($l['brand'] ?? $cur['brand'] ?? ''),
+                'variant' => (string) ($l['variant'] ?? $cur['variant'] ?? ''),
+                'unit'    => (string) ($l['unit'] ?? $l['unit_label'] ?? $cur['unit'] ?? ''),
+                'qty'     => max(1, (int) ($l['qty'] ?? 1)),
+                'price'   => max(0, (float) ($l['price'] ?? $l['unit_price'] ?? $cur['price'] ?? 0)),
+                'image'   => (string) ($l['image'] ?? $cur['image'] ?? ''),
+                'disc'    => max(0.0, min(100.0, (float) ($l['disc'] ?? $cur['disc'] ?? 0))),
+            ];
+        }
+        if (! $newLines) {
+            return ['ok' => false, 'error' => 'A quotation must keep at least one product line.'];
+        }
+        $meta = ['requests' => []];
+        if ($remarks !== null && trim($remarks) !== '') {
+            $meta['remarks'] = mb_substr(trim($remarks), 0, 800);
+        }
+
+        return $this->commit($t, $q, $prev, $newLines, $meta, 'sales', $actorId, $actorName, $comment, 'revised');
+    }
+
     private function apply(Tenant $t, Quotation $q, array $ops, string $actorType, ?int $actorId, ?string $actorName, ?string $comment, string $newStatus): array
     {
-        if (! $q->isOpen()) {
+        if (! $q->isEditable()) {
             return ['ok' => false, 'error' => 'This quotation is locked and can no longer be edited.'];
         }
 
@@ -52,6 +100,12 @@ class QuotationReviseService
             return ['ok' => false, 'error' => 'A quotation must keep at least one product line.'];
         }
 
+        return $this->commit($t, $q, $prev, $lines, $meta, $actorType, $actorId, $actorName, $comment, $newStatus);
+    }
+
+    /** Shared commit: reprice via the frozen engine, diff, write the immutable revision, sync the projection. */
+    private function commit(Tenant $t, Quotation $q, array $prev, array $lines, array $meta, string $actorType, ?int $actorId, ?string $actorName, ?string $comment, string $newStatus): array
+    {
         // Regenerate the PDF + authoritative total through the frozen engine (keeps PDF == portal).
         [$doc, $subtotal] = $this->render($t, $q, $lines);
         $grand = (float) ($doc['total'] ?? $subtotal);
@@ -60,7 +114,7 @@ class QuotationReviseService
         if ($comment !== null && trim($comment) !== '') {
             $summary[] = ['type' => 'comment', 'by' => $actorType, 'text' => mb_substr(trim($comment), 0, 500)];
         }
-        foreach ($meta['requests'] as $req) {
+        foreach (($meta['requests'] ?? []) as $req) {
             $summary[] = ['type' => 'request', 'by' => 'customer', 'text' => $req];
         }
         if (isset($meta['remarks'])) {

@@ -380,6 +380,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         Route::match(['get', 'post'], 'quotation-convert', [PanelApiController::class, 'quotationConvert']);
         Route::get('quotation-show', [PanelApiController::class, 'quotationShow']);
         Route::match(['get', 'post'], 'quotation-update', [PanelApiController::class, 'quotationUpdate']);
+        // Sales-side edit that creates an immutable revision (instead of overwriting) + notifies the customer.
+        Route::post('quotation-revise', [\App\Http\Controllers\Panel\QuotationReviseController::class, 'revise']);
         Route::match(['get', 'post'], 'quotation-delete', [PanelApiController::class, 'quotationDelete']);
         Route::get('update-product', [PanelApiController::class, 'updateProduct']);
         Route::get('delete-product', [PanelApiController::class, 'deleteProduct']);
