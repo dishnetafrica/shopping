@@ -87,6 +87,7 @@ final class CustomerListCapability implements ProcessCapability
             $location = trim(implode(', ', array_filter([(string) $c->city, (string) $c->country]))) ?: (string) ($c->address ?: '—');
 
             $rows[] = [
+                'id'         => ['value' => (string) $c->id, 'sort' => (int) $c->id],
                 'customer'   => ['value' => (string) ($c->name ?: 'Unnamed'), 'sub' => (string) ($c->contact_person ?: $c->phone ?: ''), 'avatar' => true],
                 'location'   => $location,
                 'segment'    => ['value' => (string) ($c->segment ?: '—'), 'badge' => $c->segment ? 'accent' : 'default'],
@@ -108,6 +109,7 @@ final class CustomerListCapability implements ProcessCapability
         $avgOrder = $totalOrders > 0 ? $totalSpend / $totalOrders : 0.0;
 
         $columns = [
+            ['key' => 'id',         'label' => 'ID',         'type' => 'num', 'sortable' => true],
             ['key' => 'customer',   'label' => 'Customer',   'type' => 'avatar', 'sortable' => true],
             ['key' => 'location',   'label' => 'Location',   'sortable' => true],
             ['key' => 'segment',    'label' => 'Segment',    'type' => 'badge', 'sortable' => true],
