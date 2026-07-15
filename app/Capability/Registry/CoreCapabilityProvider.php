@@ -3,7 +3,9 @@
 namespace App\Capability\Registry;
 
 use App\Capability\Object\CustomerCapability;
+use App\Capability\Object\DemandPlanCapability;
 use App\Capability\Process\AdsCapability;
+use App\Capability\Process\DemandPlanListCapability;
 use App\Capability\Object\InvoiceCapability;
 use App\Capability\Object\PaymentCapability;
 use App\Capability\Object\ProductCapability;
@@ -73,6 +75,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register(new ProductCapability($reco), new CapabilityManifest(key: 'product', type: 'object', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/product/{id}'));
         $r->register(new SalesOrderCapability(), new CapabilityManifest(key: 'salesOrder', type: 'object', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/salesOrder/{id}'));
         $r->register(new PurchaseOrderCapability(), new CapabilityManifest(key: 'purchaseOrder', type: 'object', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/purchaseOrder/{id}'));
+        $r->register(new DemandPlanCapability(), new CapabilityManifest(key: 'demandPlan', type: 'object', owner: 'purchasing', permission: 'menu:purchases', commands: [['key' => 'submit', 'actor' => 'human'], ['key' => 'record_procurement', 'actor' => 'human']], api: '/api/v1/workspace/demandPlan/{id}'));
         $r->register(new QuotationCapability(), new CapabilityManifest(key: 'quotation', type: 'object', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/quotation/{id}'));
 
         // --- process capabilities ---
@@ -95,6 +98,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register(new SupplierListCapability(), new CapabilityManifest(key: 'suppliers', type: 'process', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/suppliers'));
         $r->register(new CategoryListCapability(), new CapabilityManifest(key: 'categories', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/categories'));
         $r->register($purchase, new CapabilityManifest(key: 'purchase.process', type: 'process', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/purchase.process'));
+        $r->register(new DemandPlanListCapability(), new CapabilityManifest(key: 'demand.plans', type: 'process', owner: 'purchasing', permission: 'menu:purchases', commands: [['key' => 'create_plan', 'actor' => 'human']], api: '/api/v1/workspace/demand.plans'));
         $r->register(new FinanceCapability($money), new CapabilityManifest(key: 'finance', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/finance'));
         $r->register(new CashbookCapability(), new CapabilityManifest(key: 'cashbook', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/cashbook'));
         $r->register($ads, new CapabilityManifest(key: 'ads', type: 'process', owner: 'management', permission: '', api: '/api/v1/workspace/ads'));
