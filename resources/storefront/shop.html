@@ -309,6 +309,23 @@ function wsBar(){
     '</div>';
 }
 function creditOptionHtml(){ return (isWholesaleBuyer()&&BUYER.credit&&BUYER.credit.limit)?'<option>Credit (account)</option>':''; }
+/* --- Buy Again: personalized rail from the logged-in customer's own order history --------- */
+var BUYAGAIN=[];
+function buyAgainRail(){
+  if(!AUTHTOK || !BUYAGAIN || !BUYAGAIN.length || !PRODUCTS.length) return '';
+  var seen={}, items=[];
+  BUYAGAIN.forEach(function(b){
+    var p=null;
+    if(b.id!=null) p=PRODUCTS.find(function(x){return x.id===b.id;});
+    if(!p && b.name) p=prod(b.name);
+    if(p && !seen[p.name]){ seen[p.name]=1; items.push(p); }
+  });
+  if(!items.length) return '';
+  items=items.slice(0,12);
+  var cards=items.map(function(p){return '<div style="flex:0 0 152px;max-width:152px">'+prodCard(p)+'</div>';}).join('');
+  return '<div class="section-title">Buy again</div>'+
+    '<div style="display:flex;gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 2px 12px;margin-bottom:4px">'+cards+'</div>';
+}
 function ugx(n){return CUR+' '+(Number(n)||0).toLocaleString('en-US');}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function jk(s){return JSON.stringify(String(s)).replace(/"/g,'&quot;');}
@@ -717,11 +734,11 @@ async function loadMyOrders(){
   try{var r=await fetch(authBase()+'/account/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:AUTHTOK})});
     if(r.status===401){logoutCust();return;}
     var d=await r.json();
-    if(d&&d.ok){MYORDERS=d.orders||[];MYSTMT=d.statement||null;var pr=d.profile||{};applyBuyer(pr.buyer);if(pr.name||pr.address)saveCust({name:pr.name||(CUST&&CUST.name)||'',phone:pr.phone||(CUST&&CUST.phone)||'',addr:pr.address||(CUST&&CUST.addr)||''});
+    if(d&&d.ok){MYORDERS=d.orders||[];MYSTMT=d.statement||null;BUYAGAIN=d.buy_again||[];var pr=d.profile||{};applyBuyer(pr.buyer);if(pr.name||pr.address)saveCust({name:pr.name||(CUST&&CUST.name)||'',phone:pr.phone||(CUST&&CUST.phone)||'',addr:pr.address||(CUST&&CUST.addr)||''});
       if(MYORDERS.length&&MYORDERS[0].items&&MYORDERS[0].items.length)saveLast(MYORDERS[0].items);render();}
   }catch(e){}
 }
-function logoutCust(){AUTHTOK=null;MYORDERS=null;MYSTMT=null;try{localStorage.removeItem(AUTH_KEY);}catch(e){}forgetCust();}
+function logoutCust(){AUTHTOK=null;MYORDERS=null;MYSTMT=null;BUYAGAIN=[];try{localStorage.removeItem(AUTH_KEY);}catch(e){}forgetCust();}
 function openMyOrders(){
   if(!AUTHTOK){openLogin();return;}
   if(!MYORDERS){loadMyOrders().then(openMyOrders);return;}
@@ -847,9 +864,9 @@ function render(){
     return;
   }
   if(CAT==='all'){
-    if(useDepartments()){c.innerHTML=wsBar()+groceryHome();return;}
-    if(useRestaurantMenus()){c.innerHTML=wsBar()+welcomeBanner()+comboStrip()+restaurantHome();return;}
-    c.innerHTML=wsBar()+welcomeBanner()+thaliBanner()+comboStrip()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){return catTile(cat.name,i);}).join('')+'</div>';
+    if(useDepartments()){c.innerHTML=wsBar()+buyAgainRail()+groceryHome();return;}
+    if(useRestaurantMenus()){c.innerHTML=wsBar()+buyAgainRail()+welcomeBanner()+comboStrip()+restaurantHome();return;}
+    c.innerHTML=wsBar()+buyAgainRail()+welcomeBanner()+thaliBanner()+comboStrip()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){return catTile(cat.name,i);}).join('')+'</div>';
     return;
   }
   var list=PRODUCTS.filter(function(p){return p.category===CAT;});

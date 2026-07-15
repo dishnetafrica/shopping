@@ -151,11 +151,18 @@ class CustomerAuthController extends Controller
             $statement = app(\App\Services\Invoicing\StatementService::class)->for($tenant, $phone);
         } catch (\Throwable $e) { /* self-service statement is best-effort */ }
 
+        // Personalized "Buy again" — the customer's most-repurchased products (best-effort).
+        $buyAgain = [];
+        try {
+            $buyAgain = app(\App\Services\Storefront\BuyAgain::class)->for($tenant->id, $phone);
+        } catch (\Throwable $e) { /* rail is optional */ }
+
         return response()->json([
             'ok'        => true,
             'profile'   => $this->profileFor($tenant, $phone),
             'orders'    => $orders,
             'statement' => $statement,
+            'buy_again' => $buyAgain,
         ]);
     }
 
