@@ -313,9 +313,7 @@
 
       <div class="navsec">Catalog &amp; Sales</div>
       <a class="nav" data-page="products"><span class="i">📦</span> Products</a>
-      <a class="nav" data-page="category"><span class="i">🗂</span> Category</a>
-      <a class="nav" data-page="banners"><span class="i">🏷️</span> Shop for Every Need</a>
-      <a class="nav" data-page="kits"><span class="i">🎁</span> Ready-made Kits</a>
+      <a class="nav" data-page="storefront"><span class="i">🏪</span> Storefront</a>
       <a class="nav" data-page="quotations"><span class="i">📄</span> Quotations</a>
       <a class="nav" data-feature="pos" data-page="pos"><span class="i">🧾</span> POS</a>
       <a class="nav" data-page="customers"><span class="i">👥</span> Customers</a>
@@ -638,8 +636,11 @@
         <div class="card" style="margin-bottom:14px"><div class="head">Gallery usage <a href="#" class="anCsv" data-r="gallery_usage" style="margin-left:auto;font-size:12px;font-weight:700;color:var(--green,#0C831F)">⤓ CSV</a></div><div class="body" id="anGallery" style="overflow-x:auto"></div></div>
         <div class="card" style="margin-bottom:14px"><div class="head">Fresh product performance <a href="#" class="anCsv" data-r="fresh" style="margin-left:auto;font-size:12px;font-weight:700;color:var(--green,#0C831F)">⤓ CSV</a></div><div class="body" id="anFresh" style="overflow-x:auto"></div></div>
       </div>
+      <div id="pageStorefront" class="hide">
+        <div class="crumb">Home / <b>Storefront</b></div>
+        <div id="storeTabs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>
+      </div>
       <div id="pageCategory" class="hide">
-        <div class="crumb">Home / <b>Categories</b></div>
         <div class="card">
           <div class="head">Categories <button type="button" class="btn" onclick="catAdd()" style="margin-left:12px;padding:5px 12px;font-size:13px">+ Add category</button> <span class="count" id="catCount" style="margin-left:auto"></span></div>
           <div class="body"><div class="pgrid" id="catGrid"></div>
@@ -648,7 +649,6 @@
       </div>
 
       <div id="pageBanners" class="hide">
-        <div class="crumb">Home / <b>Shop for Every Need</b></div>
         <div class="card">
           <div class="head">Shop for Every Need
             <span class="count" style="margin-left:auto"><label style="font-weight:600;font-size:13px;cursor:pointer"><input type="checkbox" id="bzEnabled" onchange="bzSet('enabled',this.checked)"> Show on storefront</label></span>
@@ -670,7 +670,6 @@
       </div>
 
       <div id="pageKits" class="hide">
-        <div class="crumb">Home / <b>Ready-made Kits</b></div>
         <div class="card">
           <div class="head">Ready-made Kits <span class="count" style="margin-left:auto"></span></div>
           <div class="body">
@@ -2330,9 +2329,11 @@ function showPage(p){
   $('pageReports').classList.toggle('hide',p!=='reports');
   $('pageAnalytics').classList.toggle('hide',p!=='analytics');
   $('pageProducts').classList.toggle('hide',p!=='products');
-  $('pageCategory').classList.toggle('hide',p!=='category');
-  $('pageBanners').classList.toggle('hide',p!=='banners');
-  $('pageKits').classList.toggle('hide',p!=='kits');
+  // Storefront is one tabbed section over three editors (Categories · Shop for Every Need · Kits).
+  var _storePages={storefront:1,category:1,banners:1,kits:1};
+  var _isStore=!!_storePages[p];
+  $('pageStorefront').classList.toggle('hide',!_isStore);
+  if(!_isStore){ $('pageCategory').classList.add('hide'); $('pageBanners').classList.add('hide'); $('pageKits').classList.add('hide'); }
   $('pageThali').classList.toggle('hide',p!=='thali');
   $('pageRiders').classList.toggle('hide',p!=='riders');
   $('pageReturns').classList.toggle('hide',p!=='returns');
@@ -2348,12 +2349,13 @@ function showPage(p){
   $('pageSubscription').classList.toggle('hide',p!=='subscription');
   $('pageShipments').classList.toggle('hide',p!=='shipments');
   if(p==='orders'){$('detailView').classList.add('hide');$('listView').classList.remove('hide');}
-  document.querySelectorAll('.side a.nav').forEach(function(a){a.classList.toggle('on',a.dataset.page===p);});
-  var T={dash:'Dashboard',pos:'POS',reports:'Reports',analytics:'Analytics',products:'Products',category:'Categories',banners:'Shop for Every Need',kits:'Ready-made Kits',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription',activity:'Activity Inbox',brain:'Business Brain',shipments:'Logistics',quotations:'Quotations'};
+  var _navP=_isStore?'storefront':p;
+  document.querySelectorAll('.side a.nav').forEach(function(a){a.classList.toggle('on',a.dataset.page===_navP);});
+  var T={dash:'Dashboard',pos:'POS',reports:'Reports',analytics:'Analytics',products:'Products',storefront:'Storefront',category:'Storefront',banners:'Storefront',kits:'Storefront',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription',activity:'Activity Inbox',brain:'Business Brain',shipments:'Logistics',quotations:'Quotations'};
   $('pageTitle').textContent=T[p]||'Orders';
   if(p==='dash')renderDash(); else if(p==='pos')posInit(); else if(p==='reports')reportsInit(); else if(p==='analytics')analyticsInit();
   else if(p==='kitchen')kitchenInit();
-  else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='banners')bannersInit(); else if(p==='kits')kitsInit(); else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='activity')activityInit(); else if(p==='brain')brainInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else if(p==='shipments')shipmentsInit(); else if(p==='quotations')quotesInit(); else renderList();
+  else if(p==='products')pmInit(); else if(_isStore){ storefrontOpen(p); } else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='activity')activityInit(); else if(p==='brain')brainInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else if(p==='shipments')shipmentsInit(); else if(p==='quotations')quotesInit(); else renderList();
   closeSide(); window.scrollTo(0,0);
 }
 // Deep-link from the Today screen: /panel#orders opens that section on load (and on hash change).
@@ -3681,6 +3683,26 @@ function bindCatPhoto(){
   };
 }
 function openCat(i){var c=_cats[i];pmCatFilter=(c==='Uncategorised'?'':c);pmQuery='';showPage('products');}
+
+/* ================= Storefront (tabbed: Categories · Shop for Every Need · Kits) ================= */
+var _storeTab='category';
+function storefrontOpen(p){ if(p==='category'||p==='banners'||p==='kits')_storeTab=p; storefrontShow(); }
+function storeTabsHtml(){
+  var tabs=[['category','🗂 Categories'],['banners','🏷️ Shop for Every Need'],['kits','🎁 Ready-made Kits']];
+  return tabs.map(function(t){var on=_storeTab===t[0];
+    return '<button type="button" onclick="switchStoreTab(\''+t[0]+'\')" style="border:0;background:'+(on?'#0b7a3b':'#eef2f5')+';color:'+(on?'#fff':'#5b6b7b')+';font-weight:800;font-size:13px;padding:9px 16px;border-radius:10px;cursor:pointer">'+t[1]+'</button>';
+  }).join('');
+}
+function storefrontShow(){
+  if($('storeTabs'))$('storeTabs').innerHTML=storeTabsHtml();
+  $('pageCategory').classList.toggle('hide',_storeTab!=='category');
+  $('pageBanners').classList.toggle('hide',_storeTab!=='banners');
+  $('pageKits').classList.toggle('hide',_storeTab!=='kits');
+  if(_storeTab==='category'){ loadCatImages().then(renderCategories); }
+  else if(_storeTab==='banners'){ bannersInit(); }
+  else if(_storeTab==='kits'){ kitsInit(); }
+}
+function switchStoreTab(t){ _storeTab=t; storefrontShow(); }
 
 /* ================= Business Banners editor ================= */
 var BZCFG={enabled:false,title:'',autoscroll:5,'default':'',businesses:[]};
