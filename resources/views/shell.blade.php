@@ -600,11 +600,19 @@ function toneBadge(t){ const m={danger:'b-danger',warn:'b-warn',ok:'b-ok',info:'
 function statusBadge(s){ if(!s) return ''; const map={overdue:'b-danger',out:'b-danger',blocked:'b-danger',partial:'b-warn',low:'b-warn',draft:'b-default',pending:'b-warn',active:'b-ok',paid:'b-ok','in':'b-ok',received:'b-ok',delivered:'b-ok',inactive:'b-default',dormant:'b-warn',prospect:'b-info','new':'b-info'};
   return '<span class="badge '+(map[s]||'b-default')+'"><span class="d"></span>'+esc(s)+'</span>'; }
 function apiToHash(p){ if(!p) return null; const i=p.indexOf('/workspace/'); if(i<0) return null; const parts=p.slice(i+11).split('/'); return { key:parts[0], id:parts[1]||null, action:parts[2]||null }; }
+// Minor-unit precision, mirroring \App\Services\Pricing::decimalsForCurrency on the server:
+// zero-decimal currencies (UGX/SSP + the East-African/ISO set) stay whole; USD/EUR keep 2 so
+// real cent prices ($1.02, $0.50) survive display instead of rounding to "$1"/"$0".
+function curDec(cur){ const zero=['UGX','KES','TZS','RWF','BIF','SSP','JPY','KRW','VND','XAF','XOF','GNF','MGA','CLP','PYG','ISK','KMF','XPF'];
+  return zero.includes(String(cur||'UGX').toUpperCase())?0:2; }
 function fval(f){ let v=f.value; if(f.format==='pct') return v+'%';
   if(f.currency && typeof v==='number'){ const sym=f.currency==='USD'?'$':''; const suf=f.currency==='USD'?'':(' '+f.currency);
-    return (sym?sym:'')+Number(v).toLocaleString(undefined,{maximumFractionDigits:0})+(sym?'':suf).replace(/^ /,' '); }
+    const d=curDec(f.currency);
+    return (sym?sym:'')+Number(v).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d})+(sym?'':suf).replace(/^ /,' '); }
   return v; }
-function curFmt(v,cur){ cur=cur||'UGX'; if(cur==='USD') return '$'+Number(v).toLocaleString(); return Number(v).toLocaleString()+' '+cur; }
+function curFmt(v,cur){ cur=cur||'UGX'; const d=curDec(cur);
+  const n=Number(v).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+  return cur==='USD' ? '$'+n : n+' '+cur; }
 
 async function boot(){
   document.getElementById('view').innerHTML = skeleton();
