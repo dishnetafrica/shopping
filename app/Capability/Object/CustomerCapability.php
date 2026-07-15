@@ -95,7 +95,7 @@ final class CustomerCapability implements ObjectCapability
         $assignRep = ['key' => 'assign_rep', 'label' => 'Assign rep', 'method' => 'POST', 'endpoint' => $endpoint . '/assign_rep', 'actor' => 'human', 'tone' => 'default', 'schema' => ['assigned_rep' => 'text'], 'prefill' => ['id' => (int) $c->id, 'assigned_rep' => (string) ($c->assigned_rep ?? '')]];
         // Statement: download the PDF (GET href → doc endpoint) and send it to the customer on WhatsApp
         // (POST → frozen StatementMessenger). Both need a phone; hidden for phone-less prospects.
-        $hasPhone = $digits !== '';
+        $hasPhone = preg_replace('/[^0-9]/', '', (string) $phone) !== '';   // $digits isn't computed until later
         $dlStatement = ['key' => 'statement_pdf', 'label' => 'Download statement (PDF)', 'href' => '/api/v1/doc/customer-statement?phone=' . rawurlencode($phone)];
         $sendStatement = ['key' => 'send_statement', 'label' => 'Send statement on WhatsApp', 'method' => 'POST', 'endpoint' => $endpoint . '/send_statement', 'actor' => 'human', 'tone' => 'default', 'confirm' => 'Send the account statement to ' . ($c->name ?: 'this customer') . ' on WhatsApp?'];
         $newQuote = [
