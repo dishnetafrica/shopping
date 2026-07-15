@@ -487,19 +487,19 @@ const LABELS = { setup:'Get started', briefing:'Morning Briefing', worklist:'My 
   salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance',
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', 'procurement.hub':'Procurement Hub', 'demand.plans':'Demand Plans', 'juba.stock':'Juba Stock', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
-  salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings', ads:'Facebook Ads', campaigns:'Campaigns' };
+  salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings', ads:'Facebook Ads', campaigns:'Campaigns', 'storefront.insights':'Storefront Insights' };
 const GROUPS = [ ['Overview',['setup','briefing','worklist']],
   ['Sales',['customers','leads','salesOrders','quotations','invoices','payments','collections']],
   ['Inventory',['products','categories','purchase.process','suppliers']],
   ['Procurement',['procurement.hub','demand.plans','juba.stock']],
   ['Operations',['warehouse','dispatch']],
   ['Finance',['finance','cashbook']],
-  ['Marketing',['ads','campaigns']],
+  ['Marketing',['ads','campaigns','storefront.insights']],
   ['Settings',['settings']] ];
 // Which nav key reads which count from the catalog's counts map.
 const NAVCOUNT = { customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['setup','briefing','worklist','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','warehouse','dispatch','settings','cashbook','ads','campaigns']);
+const READY = new Set(['setup','briefing','worklist','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','warehouse','dispatch','settings','cashbook','ads','campaigns','storefront.insights']);
 // Dedicated list views still pending — none; kept for future additions.
 const SOON = {};
 function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:1)+'k' : String(n); }
@@ -533,6 +533,7 @@ const P = {
   ads:'M11 5 6 9H2v6h4l5 4V5zM19 12a7 7 0 0 0-2-4.9M15.5 8.5a3 3 0 0 1 0 5',
   leads:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8M19 8v6M22 11h-6',
   campaigns:'M22 2 11 13M22 2l-7 20-4-9-9-4z',
+  'storefront.insights':'M3 3v18h18M7 15l3-4 3 3 4-6',
   salesOrder:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
   salesOrders:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
   purchaseOrder:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
