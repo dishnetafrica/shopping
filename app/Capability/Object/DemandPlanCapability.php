@@ -180,7 +180,12 @@ final class DemandPlanCapability implements ObjectCapability
             ->object([
                 'type' => 'demandPlan', 'id' => (string) $plan->id, 'ref' => (string) ($plan->plan_no ?: $plan->id),
                 'title' => (string) ($plan->plan_no ?: ('Plan ' . $plan->id)),
-                'subtitle' => trim(implode(' · ', array_filter([(string) $plan->title, $shipment ? ('Shipment ' . $shipment->shipment_number . ' · ' . ucfirst(str_replace('_', ' ', (string) $shipment->status))) : ($plan->shipment_ref ? ('Shipment ' . $plan->shipment_ref) : '')]))),
+                'subtitle' => trim(implode(' · ', array_filter([
+                    $plan->plan_date ? Carbon::parse($plan->plan_date)->format('D d M Y') : '',
+                    $plan->transport_mode ? ('by ' . ucfirst((string) $plan->transport_mode)) : '',
+                    (string) $plan->title,
+                    $shipment ? ('Shipment ' . $shipment->shipment_number . ' · ' . ucfirst(str_replace('_', ' ', (string) $shipment->status))) : ($plan->shipment_ref ? ('Shipment ' . $plan->shipment_ref) : ''),
+                ]))),
                 'status' => $this->planLabel((string) $plan->status),
             ])
             ->headline($pct . '% purchased', $lines->count() . ' lines · ' . $this->qty($totRequested) . ' required', $pct >= 100 ? 'ok' : ($pct > 0 ? 'warn' : 'default'))
@@ -429,8 +434,9 @@ final class DemandPlanCapability implements ObjectCapability
                     'shipment_number'  => trim((string) $plan->shipment_ref) ?: null,
                     'origin_city'      => 'Kampala',
                     'destination_city' => 'Juba',
+                    'transport_company'=> $plan->transport_mode ? ucfirst((string) $plan->transport_mode) : null,
                     'actor_name'       => (string) ($ctx->user->name ?? 'owner'),
-                    'notes'            => 'From demand plan ' . ($plan->plan_no ?: $plan->id),
+                    'notes'            => 'From demand plan ' . ($plan->plan_no ?: $plan->id) . ($plan->plan_date ? (' · ' . Carbon::parse($plan->plan_date)->format('d M Y')) : ''),
                 ]);
             } catch (\Throwable $e) {
                 return ['ok' => false, 'error' => 'shipment_failed', 'message' => 'Could not create the shipment: ' . $e->getMessage()];

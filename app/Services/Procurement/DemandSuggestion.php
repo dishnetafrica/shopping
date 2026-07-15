@@ -18,11 +18,11 @@ use Illuminate\Support\Facades\DB;
  */
 final class DemandSuggestion
 {
-    public function __construct(private Tenant $tenant, private int $salesWindowDays = 30) {}
+    public function __construct(private Tenant $tenant, private int $salesWindowDays = 30, private int $coverDays = 1) {}
 
-    public static function forTenant(Tenant $t, int $salesWindowDays = 30): self
+    public static function forTenant(Tenant $t, int $salesWindowDays = 30, int $coverDays = 1): self
     {
-        return new self($t, $salesWindowDays);
+        return new self($t, max(1, $salesWindowDays), max(1, $coverDays));
     }
 
     /**
@@ -58,7 +58,9 @@ final class DemandSuggestion
             $stockJ = (float) ($juba[$pid] ?? 0);
             $current = round($stockK + $stockJ, 3);
             $inTransit = round((float) ($transit[$pid] ?? 0), 3);
-            $expected = round((float) ($sales[$pid] ?? 0), 3);
+            // Scale window sales to a DAILY rate × days covered, so a daily plan asks for ~one day's
+            // demand rather than a whole month's.
+            $expected = round((float) ($sales[$pid] ?? 0) / $this->salesWindowDays * $this->coverDays, 3);
 
             $need = $expected - $current - $inTransit;
             $suggested = $need > 0 ? $this->roundUpToPack($need, (float) ($p->pack_size ?? 0), (float) ($p->moq ?? 0)) : 0.0;

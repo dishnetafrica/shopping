@@ -12,10 +12,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class DemandPlan extends Model
 {
     protected $fillable = [
-        'tenant_id', 'plan_no', 'title', 'shipment_ref', 'shipment_id', 'status', 'created_by', 'notes', 'submitted_at',
+        'tenant_id', 'plan_no', 'title', 'plan_date', 'transport_mode', 'cover_days',
+        'shipment_ref', 'shipment_id', 'status', 'created_by', 'notes', 'submitted_at',
     ];
 
     protected $casts = [
+        'plan_date' => 'date',
+        'cover_days' => 'integer',
         'submitted_at' => 'datetime',
     ];
 

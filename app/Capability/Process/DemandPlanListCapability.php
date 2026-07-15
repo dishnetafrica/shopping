@@ -30,7 +30,7 @@ final class DemandPlanListCapability implements ProcessCapability
 
         $plans = DemandPlan::where('tenant_id', $t)
             ->withCount('lines')
-            ->orderByDesc('id')->limit(self::MAX_ROWS)->get();
+            ->orderByRaw('plan_date DESC NULLS LAST')->orderByDesc('id')->limit(self::MAX_ROWS)->get();
 
         // one grouped query for per-plan procurement progress (requested vs purchased)
         $progress = DemandPlanLine::where('tenant_id', $t)
@@ -54,24 +54,27 @@ final class DemandPlanListCapability implements ProcessCapability
             if ($status === 'in_procurement') { $inProc++; }
             if ($status === 'completed') { $completed++; }
 
+            $pdate = $p->plan_date ? Carbon::parse($p->plan_date) : null;
             $rows[] = [
+                'day'      => ['value' => $pdate ? $pdate->format('D, d M') : ($p->created_at ? Carbon::parse($p->created_at)->format('d M Y') : '—'), 'sort' => $pdate ? $pdate->timestamp : ($p->created_at ? Carbon::parse($p->created_at)->timestamp : 0)],
                 'plan'     => ['value' => (string) ($p->plan_no ?: ('DP-' . $p->id)), 'sub' => (string) ($p->title ?: ''), 'avatar' => false],
+                'transport'=> ['value' => $this->transportLabel((string) $p->transport_mode), 'badge' => $p->transport_mode ? 'accent' : 'default'],
                 'shipment' => (string) ($p->shipment_ref ?: '—'),
                 'lines'    => ['value' => (string) $p->lines_count, 'sort' => (int) $p->lines_count],
                 'progress' => ['value' => $pct . '%', 'sort' => $pct, 'tone' => $pct >= 100 ? 'ok' : ($pct > 0 ? 'warn' : 'default')],
                 'status'   => ['value' => $this->statusLabel($status), 'badge' => $this->statusBadge($status)],
-                'created'  => ['value' => $p->created_at ? Carbon::parse($p->created_at)->format('d M Y') : '—', 'sort' => $p->created_at ? Carbon::parse($p->created_at)->timestamp : 0],
                 'link'     => '/api/v1/workspace/demandPlan/' . $p->id,
             ];
         }
 
         $columns = [
+            ['key' => 'day',      'label' => 'Day',      'sortable' => true],
             ['key' => 'plan',     'label' => 'Plan',     'type' => 'avatar', 'sortable' => true],
+            ['key' => 'transport','label' => 'Transport','type' => 'badge', 'sortable' => true],
             ['key' => 'shipment', 'label' => 'Shipment', 'sortable' => true],
             ['key' => 'lines',    'label' => 'Lines',    'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'progress', 'label' => 'Purchased', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'status',   'label' => 'Status',   'type' => 'badge', 'sortable' => true],
-            ['key' => 'created',  'label' => 'Created',  'align' => 'right', 'sortable' => true],
         ];
 
         return (new WorkspacePayload)
@@ -84,11 +87,11 @@ final class DemandPlanListCapability implements ProcessCapability
             ])
             ->table($columns, $rows, [['key' => 'status', 'label' => 'Status']])
             ->actions([[
-                'key' => 'create_plan', 'label' => 'New demand plan', 'method' => 'POST',
+                'key' => 'create_plan', 'label' => 'New daily request', 'method' => 'POST',
                 'endpoint' => '/api/v1/workspace/demand.plans/_/create_plan', 'actor' => 'human', 'tone' => 'primary',
-                'schema' => ['title' => 'text', 'shipment_ref' => 'text', 'autofill' => 'enum:Yes — suggest quantities,No — start empty'],
-                'labels' => ['title' => 'Plan title (e.g. Juba shipment — Aug wk1)', 'shipment_ref' => 'Shipment ref (optional, e.g. SJ-2026-015)', 'autofill' => 'Auto-suggest lines from stock & sales?'],
-                'prefill' => ['autofill' => 'Yes — suggest quantities'],
+                'schema' => ['plan_date' => 'text', 'transport_mode' => 'enum:bus,lorry', 'cover_days' => 'number', 'title' => 'text', 'shipment_ref' => 'text', 'autofill' => 'enum:Yes — suggest quantities,No — start empty'],
+                'labels' => ['plan_date' => 'Dispatch date (YYYY-MM-DD)', 'transport_mode' => 'Sending by', 'cover_days' => 'Days of demand to cover (1 = today only)', 'title' => 'Title (optional — auto from date & transport)', 'shipment_ref' => 'Shipment ref (optional, e.g. SJ-2026-015)', 'autofill' => 'Auto-suggest quantities from stock & sales?'],
+                'prefill' => ['plan_date' => now()->format('Y-m-d'), 'transport_mode' => 'bus', 'cover_days' => 1, 'autofill' => 'Yes — suggest quantities'],
             ]])
             ->meta(['capability' => 'demand.plans', 'ttl' => 30, 'permissions' => ['menu:purchases']]);
     }
@@ -119,20 +122,33 @@ final class DemandPlanListCapability implements ProcessCapability
         $t = $ctx->tenantId();
         $autofill = stripos((string) ($in['autofill'] ?? 'Yes'), 'yes') !== false;
 
+        // Day-wise: dispatch date, transport mode, and how many days of demand to cover.
+        $planDate = now();
+        $rawDate = trim((string) ($in['plan_date'] ?? ''));
+        if ($rawDate !== '') {
+            try { $planDate = Carbon::parse($rawDate); } catch (\Throwable $e) { $planDate = now(); }
+        }
+        $mode = strtolower(trim((string) ($in['transport_mode'] ?? 'bus')));
+        $mode = in_array($mode, ['bus', 'lorry'], true) ? $mode : 'bus';
+        $coverDays = max(1, (int) round((float) ($in['cover_days'] ?? 1)));
+
         $plan = new DemandPlan();
         $plan->tenant_id = $t;
-        $plan->title = trim((string) ($in['title'] ?? '')) ?: ('Demand plan ' . now()->format('d M Y'));
+        $plan->plan_date = $planDate->toDateString();
+        $plan->transport_mode = $mode;
+        $plan->cover_days = $coverDays;
+        $plan->title = trim((string) ($in['title'] ?? '')) ?: ('Juba — ' . $planDate->format('D d M') . ' (' . $this->transportLabel($mode) . ')');
         $plan->shipment_ref = trim((string) ($in['shipment_ref'] ?? '')) ?: null;
         $plan->status = 'draft';
         $plan->created_by = (string) ($ctx->user->name ?? '');
         $plan->save();
-        $plan->plan_no = 'DP-' . now()->format('Y') . '-' . str_pad((string) $plan->id, 4, '0', STR_PAD_LEFT);
+        $plan->plan_no = 'DP-' . $planDate->format('Y') . '-' . str_pad((string) $plan->id, 4, '0', STR_PAD_LEFT);
         $plan->save();
 
         $added = 0;
         if ($autofill) {
             try {
-                foreach (DemandSuggestion::forTenant($ctx->tenant)->suggestLines(60) as $l) {
+                foreach (DemandSuggestion::forTenant($ctx->tenant, 30, $coverDays)->suggestLines(60) as $l) {
                     DemandPlanLine::create([
                         'tenant_id'      => $t,
                         'demand_plan_id' => $plan->id,
@@ -153,6 +169,15 @@ final class DemandPlanListCapability implements ProcessCapability
         }
 
         return ['ok' => true, 'id' => $plan->id, 'message' => 'Created ' . $plan->plan_no . ($added ? (' with ' . $added . ' suggested lines.') : '. Add products to it.')];
+    }
+
+    private function transportLabel(string $m): string
+    {
+        return match (strtolower($m)) {
+            'bus' => 'Bus',
+            'lorry' => 'Lorry',
+            default => $m !== '' ? ucfirst($m) : '—',
+        };
     }
 
     private function statusLabel(string $s): string
