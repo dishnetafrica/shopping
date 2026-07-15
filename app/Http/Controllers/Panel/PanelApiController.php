@@ -2135,6 +2135,10 @@ class PanelApiController extends Controller
         $col = function ($names) use ($header) { foreach ($names as $n) { $i = array_search($n, $header, true); if ($i !== false) return $i; } return null; };
         $iName = $col(['product name', 'name']); $iCat = $col(['category']); $iPrice = $col(['price ugx', 'price']);
         $iStock = $col(['stock']); $iKw = $col(['keywords']); $iImg = $col(['image', 'photo']);
+        // These columns are written by the export but were previously ignored on import, so a
+        // round-trip (export → re-import) silently lost Cost, SKU, Unit, Pack Size and MOQ.
+        $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
+        $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
         if ($iName === null) { $za->close(); @unlink($tmp); return response()->json(['ok' => false, 'error' => 'csv_no_name'], 422); }
 
         $created = $dup = $noImg = $forbidden = 0; $samples = []; $catsSeen = [];
@@ -2149,6 +2153,11 @@ class PanelApiController extends Controller
             $price = $iPrice !== null ? (float) preg_replace('/[^0-9.]/', '', (string) ($c[$iPrice] ?? '')) : 0;
             $stock = $iStock !== null ? (int) preg_replace('/[^0-9-]/', '', (string) ($c[$iStock] ?? '')) : 0;
             $kw    = $iKw !== null ? trim((string) ($c[$iKw] ?? '')) : '';
+            $sku   = $iSku !== null ? trim((string) ($c[$iSku] ?? '')) : '';
+            $cost  = $iCost !== null ? (float) preg_replace('/[^0-9.]/', '', (string) ($c[$iCost] ?? '')) : 0;
+            $unit  = $iUnit !== null ? trim((string) ($c[$iUnit] ?? '')) : '';
+            $pack  = $iPack !== null ? (int) preg_replace('/[^0-9]/', '', (string) ($c[$iPack] ?? '')) : 0;
+            $moq   = $iMoq !== null ? (int) preg_replace('/[^0-9]/', '', (string) ($c[$iMoq] ?? '')) : 0;
             $imgRaw  = $iImg !== null ? trim((string) ($c[$iImg] ?? '')) : '';
             $imgName = basename(strtolower($imgRaw));
             $isUrl   = (bool) preg_match('#^https?://#i', $imgRaw);
@@ -2195,6 +2204,9 @@ class PanelApiController extends Controller
             if ($apply) {
                 Product::create([
                     'tenant_id'  => $t->id, 'name' => $name, 'category' => $cat, 'keywords' => $kw,
+                    'sku'        => ($sku ?: null), 'cost_price' => ($cost > 0 ? $cost : null),
+                    'unit_label' => ($unit ?: null),
+                    'pack_size'  => ($pack > 0 ? $pack : null), 'moq' => ($moq > 0 ? $moq : null),
                     'base_price' => $price, 'price' => $price, 'stock' => $stock, 'image_url' => $url,
                     'active'     => $price > 0,
                 ]);
@@ -2251,6 +2263,7 @@ class PanelApiController extends Controller
         $iName = $col(['product name', 'name']); $iCat = $col(['category']); $iPrice = $col(['price ugx', 'price']);
         $iStock = $col(['stock']); $iKw = $col(['keywords']); $iImg = $col(['image', 'photo']);
         $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
+        $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
         if ($iName === null) return response()->json(['ok' => false, 'error' => 'csv_no_name'], 422);
 
         $created = $dup = $noImg = $forbidden = 0; $samples = []; $catsSeen = [];
@@ -2267,6 +2280,9 @@ class PanelApiController extends Controller
             $stock = $iStock !== null ? (int) preg_replace('/[^0-9-]/', '', (string) ($c[$iStock] ?? '')) : 0;
             $kw    = $iKw !== null ? trim((string) ($c[$iKw] ?? '')) : '';
             $sku   = $iSku !== null ? trim((string) ($c[$iSku] ?? '')) : '';
+            $unit  = $iUnit !== null ? trim((string) ($c[$iUnit] ?? '')) : '';
+            $pack  = $iPack !== null ? (int) preg_replace('/[^0-9]/', '', (string) ($c[$iPack] ?? '')) : 0;
+            $moq   = $iMoq !== null ? (int) preg_replace('/[^0-9]/', '', (string) ($c[$iMoq] ?? '')) : 0;
             $imgRaw = $iImg !== null ? trim((string) ($c[$iImg] ?? '')) : '';
             $isUrl  = (bool) preg_match('#^https?://#i', $imgRaw);
 
@@ -2289,6 +2305,7 @@ class PanelApiController extends Controller
             if ($apply) {
                 Product::create([
                     'tenant_id' => $t->id, 'name' => $name, 'category' => $cat, 'keywords' => $kw, 'sku' => ($sku ?: null),
+                    'unit_label' => ($unit ?: null), 'pack_size' => ($pack > 0 ? $pack : null), 'moq' => ($moq > 0 ? $moq : null),
                     'base_price' => $price, 'price' => $price, 'cost_price' => ($cost > 0 ? $cost : null),
                     'stock' => $stock, 'image_url' => $url, 'active' => $price > 0,
                 ]);
