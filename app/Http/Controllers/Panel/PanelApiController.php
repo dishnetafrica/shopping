@@ -106,7 +106,7 @@ class PanelApiController extends Controller
             return [
                 'Product Name' => (string) $p->name,
                 'Variant'      => '',
-                'Brand'        => '',
+                'Brand'        => (string) ($p->brand ?? ''),
                 'Category'     => (string) ($p->category ?? ''),
                 'Keywords'     => (string) ($p->keywords ?? ''),
                 'Price_UGX'    => (float) ($p->base_price ?? $p->price ?? 0),
@@ -2139,6 +2139,7 @@ class PanelApiController extends Controller
         // round-trip (export → re-import) silently lost Cost, SKU, Unit, Pack Size and MOQ.
         $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
         $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
+        $iBrand = $col(['brand']);
         if ($iName === null) { $za->close(); @unlink($tmp); return response()->json(['ok' => false, 'error' => 'csv_no_name'], 422); }
 
         $created = $dup = $noImg = $forbidden = 0; $samples = []; $catsSeen = [];
@@ -2154,6 +2155,7 @@ class PanelApiController extends Controller
             $stock = $iStock !== null ? (int) preg_replace('/[^0-9-]/', '', (string) ($c[$iStock] ?? '')) : 0;
             $kw    = $iKw !== null ? trim((string) ($c[$iKw] ?? '')) : '';
             $sku   = $iSku !== null ? trim((string) ($c[$iSku] ?? '')) : '';
+            $brand = $iBrand !== null ? trim((string) ($c[$iBrand] ?? '')) : '';
             $cost  = $iCost !== null ? (float) preg_replace('/[^0-9.]/', '', (string) ($c[$iCost] ?? '')) : 0;
             $unit  = $iUnit !== null ? trim((string) ($c[$iUnit] ?? '')) : '';
             $pack  = $iPack !== null ? (int) preg_replace('/[^0-9]/', '', (string) ($c[$iPack] ?? '')) : 0;
@@ -2203,7 +2205,7 @@ class PanelApiController extends Controller
 
             if ($apply) {
                 Product::create([
-                    'tenant_id'  => $t->id, 'name' => $name, 'category' => $cat, 'keywords' => $kw,
+                    'tenant_id'  => $t->id, 'name' => $name, 'category' => $cat, 'brand' => ($brand ?: null), 'keywords' => $kw,
                     'sku'        => ($sku ?: null), 'cost_price' => ($cost > 0 ? $cost : null),
                     'unit_label' => ($unit ?: null),
                     'pack_size'  => ($pack > 0 ? $pack : null), 'moq' => ($moq > 0 ? $moq : null),
@@ -2264,6 +2266,7 @@ class PanelApiController extends Controller
         $iStock = $col(['stock']); $iKw = $col(['keywords']); $iImg = $col(['image', 'photo']);
         $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
         $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
+        $iBrand = $col(['brand']);
         if ($iName === null) return response()->json(['ok' => false, 'error' => 'csv_no_name'], 422);
 
         $created = $dup = $noImg = $forbidden = 0; $samples = []; $catsSeen = [];
@@ -2280,6 +2283,7 @@ class PanelApiController extends Controller
             $stock = $iStock !== null ? (int) preg_replace('/[^0-9-]/', '', (string) ($c[$iStock] ?? '')) : 0;
             $kw    = $iKw !== null ? trim((string) ($c[$iKw] ?? '')) : '';
             $sku   = $iSku !== null ? trim((string) ($c[$iSku] ?? '')) : '';
+            $brand = $iBrand !== null ? trim((string) ($c[$iBrand] ?? '')) : '';
             $unit  = $iUnit !== null ? trim((string) ($c[$iUnit] ?? '')) : '';
             $pack  = $iPack !== null ? (int) preg_replace('/[^0-9]/', '', (string) ($c[$iPack] ?? '')) : 0;
             $moq   = $iMoq !== null ? (int) preg_replace('/[^0-9]/', '', (string) ($c[$iMoq] ?? '')) : 0;
@@ -2304,7 +2308,7 @@ class PanelApiController extends Controller
 
             if ($apply) {
                 Product::create([
-                    'tenant_id' => $t->id, 'name' => $name, 'category' => $cat, 'keywords' => $kw, 'sku' => ($sku ?: null),
+                    'tenant_id' => $t->id, 'name' => $name, 'category' => $cat, 'brand' => ($brand ?: null), 'keywords' => $kw, 'sku' => ($sku ?: null),
                     'unit_label' => ($unit ?: null), 'pack_size' => ($pack > 0 ? $pack : null), 'moq' => ($moq > 0 ? $moq : null),
                     'base_price' => $price, 'price' => $price, 'cost_price' => ($cost > 0 ? $cost : null),
                     'stock' => $stock, 'image_url' => $url, 'active' => $price > 0,
