@@ -177,6 +177,14 @@ final class DemandPlanCapability implements ObjectCapability
             'key' => $key, 'label' => $label, 'method' => 'POST', 'endpoint' => $endpoint . '/' . $key,
             'actor' => 'human', 'tone' => $tone, 'schema' => $bulkSchema, 'labels' => $bulkLabels, 'prefill' => $pref,
         ];
+        // Purchases carry a required supplier (pick an existing one or type a new one to add it).
+        $mkBulkPurchased = fn (string $label, string $tone = 'default') => [
+            'key' => 'bulk_purchased', 'label' => $label, 'method' => 'POST', 'endpoint' => $endpoint . '/bulk_purchased',
+            'actor' => 'human', 'tone' => $tone,
+            'schema' => ['supplier' => $supplierCombo] + $bulkSchema,
+            'labels' => ['supplier' => 'Supplier (required — pick or type a new one)'] + $bulkLabels,
+            'prefill' => ['supplier' => ''] + $prefPur,
+        ];
         $addLine = ['key' => 'add_line', 'label' => 'Add product', 'method' => 'POST', 'endpoint' => $endpoint . '/add_line', 'actor' => 'human', 'tone' => 'default',
             'schema' => ['name' => $productCombo, 'requested_qty' => 'number'],
             'labels' => ['name' => 'Product (pick from catalogue, or type a new item)', 'requested_qty' => 'Required quantity'], 'prefill' => []];
@@ -190,13 +198,13 @@ final class DemandPlanCapability implements ObjectCapability
                 $headerActions[] = $submit;
                 $headerActions[] = $addLine;
             } else {
-                if ($hasLines) { $headerActions[] = $mkBulk('bulk_purchased', 'Record purchases (all)', $prefPur, 'primary'); }
+                if ($hasLines) { $headerActions[] = $mkBulkPurchased('Record purchases (all)', 'primary'); }
                 if ($purchasableUnallocated > 0 || $shipment) { $headerActions[] = $allocate; }
                 $headerActions[] = $addLine;
             }
             if ($hasLines) {
                 $more[] = $mkBulk('bulk_required', 'Set required — all products', $prefReq);
-                $more[] = $mkBulk('bulk_purchased', 'Record purchases — all', $prefPur);
+                $more[] = $mkBulkPurchased('Record purchases — all');
                 $more[] = $mkBulk('bulk_sent', 'Record sent / loaded — all', $prefSent);
                 $more[] = $mkBulk('bulk_receive', 'Receive in Juba — all', $prefRecv);
             }
@@ -265,7 +273,7 @@ final class DemandPlanCapability implements ObjectCapability
             'allocate_shipment' => $this->allocateShipment($ctx, $input),
             'remove_line' => $this->removeLine($ctx, $input),
             'bulk_required'  => $this->bulkSet($ctx, $input, 'requested_qty'),
-            'bulk_purchased' => $this->bulkSet($ctx, $input, 'qty_purchased'),
+            'bulk_purchased' => $this->bulkPurchased($ctx, $input),
             'bulk_sent'      => $this->bulkSet($ctx, $input, 'qty_sent'),
             'bulk_receive'   => $this->bulkSet($ctx, $input, 'received_qty'),
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
@@ -326,6 +334,85 @@ final class DemandPlanCapability implements ObjectCapability
         } elseif ($field === 'received_qty') {
             $this->receiveTo($ctx, $l, $val);
         }
+    }
+
+    /**
+     * Bulk purchase entry with supplier enforcement. The batch names ONE supplier (find-or-create),
+     * applied only to the lines whose quantity actually changed this submission — so a previously-bought
+     * line from a different supplier is never re-tagged. A purchase with no supplier is refused.
+     */
+    private function bulkPurchased(CapabilityContext $ctx, array $in): array
+    {
+        $plan = $this->plan($ctx, $in);
+        if (! $plan) {
+            return ['ok' => false, 'error' => 'not_found'];
+        }
+        $t = $ctx->tenantId();
+
+        $wanted = [];
+        foreach ($in as $k => $v) {
+            if (! is_string($k) || strncmp($k, 'q_', 2) !== 0) { continue; }
+            if ($v === '' || $v === null) { continue; }
+            $lid = (int) substr($k, 2);
+            if ($lid > 0) { $wanted[$lid] = max(0.0, round((float) $v, 3)); }
+        }
+        if (! $wanted) {
+            return ['ok' => false, 'error' => 'nothing', 'message' => 'Enter at least one quantity.'];
+        }
+
+        $lines = DemandPlanLine::where('tenant_id', $t)->where('demand_plan_id', $plan->id)
+            ->whereIn('id', array_keys($wanted))->get()->keyBy('id');
+
+        // Which lines are actually changing, and does any of them become a positive purchase?
+        $needSupplier = false;
+        foreach ($wanted as $lid => $val) {
+            $l = $lines[$lid] ?? null;
+            if (! $l) { continue; }
+            if (abs($val - (float) $l->qty_purchased) < 0.0001) { continue; }
+            if ($val > 0) { $needSupplier = true; }
+        }
+        $supplierName = trim((string) ($in['supplier'] ?? ''));
+        if ($needSupplier && $supplierName === '') {
+            return ['ok' => false, 'error' => 'supplier_required', 'message' => 'Select or add a supplier for the purchase.'];
+        }
+        $sup = $supplierName !== '' ? $this->resolveSupplier($ctx, $supplierName) : null;
+
+        $n = 0;
+        foreach ($wanted as $lid => $val) {
+            $l = $lines[$lid] ?? null;
+            if (! $l) { continue; }
+            if (abs($val - (float) $l->qty_purchased) < 0.0001) { continue; }   // unchanged → leave supplier intact
+            $l->qty_purchased = $val;
+            if ($val > 0 && $sup) { $l->supplier_id = (int) $sup->id; $l->supplier_name = (string) $sup->name; }
+            $l->line_status = $l->deriveStatus();
+            $l->save();
+            $n++;
+        }
+        $this->advancePlan($ctx, $plan);
+
+        return ['ok' => true, 'message' => 'Recorded purchases for ' . $n . ' product(s)' . ($sup ? ' from ' . $sup->name : '') . '.'];
+    }
+
+    /** Find a supplier by name, or create it inline (so a supplier can be added from the purchase screen). */
+    private function resolveSupplier(CapabilityContext $ctx, string $name): ?Supplier
+    {
+        $name = trim($name);
+        if ($name === '') { return null; }
+        $t = $ctx->tenantId();
+        $sup = Supplier::where('tenant_id', $t)->whereRaw('lower(name) = ?', [mb_strtolower($name)])->first();
+        if (! $sup) {
+            try {
+                $sup = new Supplier();
+                $sup->tenant_id = $t;
+                $sup->name = $name;
+                $sup->active = true;
+                $sup->save();
+            } catch (\Throwable $e) {
+                return null;
+            }
+        }
+
+        return $sup;
     }
 
     /** Record how much of a line was loaded onto today's transport (single line). */
@@ -496,13 +583,19 @@ final class DemandPlanCapability implements ObjectCapability
         if (! $l) {
             return ['ok' => false, 'error' => 'not_found'];
         }
+        $newPurchased = array_key_exists('qty_purchased', $in) ? max(0.0, round((float) $in['qty_purchased'], 3)) : (float) $l->qty_purchased;
+        $status = (string) ($in['line_status'] ?? '');
+        $supplierName = trim((string) ($in['supplier'] ?? '')) ?: (string) ($l->supplier_name ?? '');
+        // A purchase must name a supplier (unless the item is being marked "not available").
+        if ($newPurchased > 0 && $status !== 'not_available' && $supplierName === '') {
+            return ['ok' => false, 'error' => 'supplier_required', 'message' => 'Select or add a supplier before recording a purchase.'];
+        }
         if (array_key_exists('qty_available', $in) && $in['qty_available'] !== '') { $l->qty_available = round((float) $in['qty_available'], 3); }
-        if (array_key_exists('qty_purchased', $in)) { $l->qty_purchased = round((float) $in['qty_purchased'], 3); }
-        $supplier = trim((string) ($in['supplier'] ?? ''));
-        if ($supplier !== '') {
-            $l->supplier_name = $supplier;
-            $sup = Supplier::where('tenant_id', $ctx->tenantId())->whereRaw('lower(name) = ?', [mb_strtolower($supplier)])->first();
+        $l->qty_purchased = $newPurchased;
+        if ($supplierName !== '') {
+            $sup = $this->resolveSupplier($ctx, $supplierName);   // find or create — add a supplier inline
             $l->supplier_id = $sup ? (int) $sup->id : null;
+            $l->supplier_name = $sup ? (string) $sup->name : $supplierName;
         }
         $eta = trim((string) ($in['expected_delivery'] ?? ''));
         if ($eta !== '') {
