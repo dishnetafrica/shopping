@@ -34,11 +34,12 @@ final class InvoiceCapability implements ObjectCapability
     public function forId(CapabilityContext $ctx, string $id): WorkspacePayload
     {
         $i = Invoice::where('tenant_id', $ctx->tenantId())->findOrFail((int) $id);
-        // Currency-aware: the invoice is in its OWN currency (native/UGX when untagged, NOT the USD
-        // display base). Convert to the report currency so a UGX balance never prints with a '$'.
+        // Currency-aware. The invoice's own `currency` tag is UNRELIABLE — the issuer stamps it with the
+        // tenant base (e.g. USD) even though the amounts are the local operating currency (UGX). Derive
+        // the TRUE transaction currency from the linked order, so a UGX balance never prints with a '$'.
         $rc = \App\Services\Money\ReportingCurrency::forContext($ctx);
         $native = $ctx->nativeCurrency();
-        $cur = (string) ($i->currency ?: $native);
+        $cur = \App\Services\Money\SalesBaseCurrency::txnCurrency($i, $ctx->tenant);
         $idate = $i->issued_at ? Carbon::parse($i->issued_at)->format('Y-m-d') : null;
         $fmt = fn ($v) => $rc->text((float) $v, $cur, null, $idate);
         $ep = '/api/v1/workspace/invoice/' . $i->id;

@@ -27,6 +27,9 @@ final class InvoiceListCapability implements ProcessCapability
         $t = $ctx->tenantId();
         $rc = ReportingCurrency::forContext($ctx);
         $cur = $rc->consolidationCurrency();   // KPI tiles + grid totals are always ONE currency
+        // Invoice `currency` tags are unreliable (the issuer stamps the tenant base even on local-currency
+        // amounts), so treat invoice amounts as the local operating currency for conversion.
+        $native = \App\Services\Money\SalesBaseCurrency::nativeCurrency($ctx->tenant);
         $now = Carbon::now();
 
         $invoices = Invoice::where('tenant_id', $t)
@@ -42,7 +45,7 @@ final class InvoiceListCapability implements ProcessCapability
         $rows = [];
 
         foreach ($invoices as $i) {
-            $icur = (string) ($i->currency ?: $cur);
+            $icur = $native;   // amounts are in the local operating currency, not the (unreliable) tag
             $total = (float) $i->total;
             $paid = (float) $i->amount_paid;
             $balance = (float) $i->balance;

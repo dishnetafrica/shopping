@@ -31,6 +31,13 @@ final class CapabilityServiceProvider extends ServiceProvider
     {
         $this->loadViewsFrom(resource_path('views'), 'app');
 
+        // Base-currency ledger: forward-stamp rate_to_usd + usd_amount on sales documents as they save,
+        // so every new order/invoice/quotation carries its USD base amount (additive; never mutates the
+        // transaction). Existing rows are filled by `php artisan sales:backfill-base-currency --commit`.
+        \App\Models\Order::observe(\App\Observers\SalesBaseCurrencyObserver::class);
+        \App\Models\Invoice::observe(\App\Observers\SalesBaseCurrencyObserver::class);
+        \App\Models\Quotation::observe(\App\Observers\SalesBaseCurrencyObserver::class);
+
         Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () {
             // The new shell (SPA). Hash-routed, so one entry point serves every workspace.
             Route::get('/v3/{path?}', fn () => view('shell'))->where('path', '.*');
