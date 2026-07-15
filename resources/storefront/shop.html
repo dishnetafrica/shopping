@@ -699,6 +699,39 @@ button{ -webkit-tap-highlight-color:transparent }
   .dcempty{ padding:26px 16px; text-align:center; color:var(--muted); font-size:13px; font-weight:600 }
   .dcempty .em{ font-size:26px; display:block; margin-bottom:8px }
 }
+
+/* Keyboard-navigation hint bar is hidden on mobile (touch has no arrow keys). */
+.skbhint{ display:none }
+
+/* =====================================================================
+   DESKTOP LAYER — Phase 4: keyboard-first search (>=1024px only)
+   The existing full-screen search overlay becomes an anchored command
+   palette; arrow keys move a highlight, Enter quick-adds the product,
+   Esc closes. Same search logic (searchRender/_srow/cartAdd) — desktop
+   changes presentation + adds key handling. Mobile overlay untouched.
+   ===================================================================== */
+@media(min-width:1024px){
+  .soverlay{ background:rgba(17,24,20,.34) }        /* dim the page behind the palette */
+  .soverlay.show{ align-items:center }               /* centre the panel */
+  .shdr{ width:min(760px,92vw); margin-top:70px; background:#fff; border:1px solid var(--line);
+    border-bottom:0; border-radius:16px 16px 0 0; padding:12px 14px; box-shadow:0 -1px 0 rgba(0,0,0,0) }
+  .shdr .sinput{ height:46px }
+  .shdr .sback{ display:none }                       /* Esc / scrim close instead */
+  .soverlay .sic{ display:none }                     /* voice/scan not for desktop typing */
+  .sbody{ width:min(760px,92vw); flex:none; background:#fff; border:1px solid var(--line);
+    border-top:0; border-radius:0 0 16px 16px; max-height:min(64vh,540px);
+    box-shadow:0 28px 74px rgba(16,24,40,.26); padding:6px 0 4px }
+  .srow{ padding:9px 16px }
+  .srow.kbhl{ background:#EAF6EC }                    /* current keyboard highlight */
+  .srow.kbhl .sadd{ background:var(--green); color:#fff }
+  .skbhint{ display:flex; gap:18px; width:min(760px,92vw); background:#fff; border:1px solid var(--line);
+    border-top:1px solid var(--line); border-radius:0 0 16px 16px; margin-top:-4px;
+    padding:9px 16px 11px; font-size:11.5px; color:var(--muted); box-shadow:0 28px 74px rgba(16,24,40,.26) }
+  .skbhint .k{ font-weight:800; color:var(--ink); background:#F1F3F1; border:1px solid var(--line);
+    border-radius:5px; padding:1px 6px; font-size:11px; margin-right:5px }
+  /* round only the hint's bottom; sbody square-bottom when hint present */
+  .soverlay.show .sbody{ border-radius:0 }
+}
 </style>
 </head>
 <body>
@@ -775,6 +808,7 @@ button{ -webkit-tap-highlight-color:transparent }
     <button class="sic" onclick="barcodeSearch()" aria-label="Scan barcode">📷</button>
   </div>
   <div class="sbody" id="sqBody"></div>
+  <div class="skbhint"><span><span class="k">↑</span><span class="k">↓</span> Navigate</span><span><span class="k">Enter</span> Add to order</span><span><span class="k">Esc</span> Close</span></div>
 </div>
 
 <script>
@@ -1985,9 +2019,35 @@ async function placeOrder(){
 })();
 
 /* V2 search overlay wiring (the main #q is now a trigger; typing happens in #sq). */
+/* Phase 4: keyboard-first search. A highlight walks the result rows; Enter
+   quick-adds the highlighted product (keeping the palette open so the buyer
+   keeps typing the next item) or triggers a brand/category/"see-all" row.
+   On mobile no arrows are pressed, so _skb stays -1 and Enter → searchSubmit,
+   exactly as before — mobile behaviour is preserved. */
+var _skb=-1;
+function _srows(){ var b=$('sqBody'); return b?Array.prototype.slice.call(b.querySelectorAll('.srow')):[]; }
+function _skbSet(i){ var rows=_srows(); if(!rows.length){ _skb=-1; return; }
+  rows.forEach(function(r){ r.classList.remove('kbhl'); });
+  if(i<0)i=rows.length-1; if(i>=rows.length)i=0; _skb=i;
+  rows[i].classList.add('kbhl'); try{ rows[i].scrollIntoView({block:'nearest'}); }catch(e){} }
 if($('sq')){
-  $('sq').addEventListener('input',function(){ searchRender(this.value); });
-  $('sq').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); searchSubmit(this.value); } });
+  $('sq').addEventListener('input',function(){ searchRender(this.value); _skb=-1; });
+  $('sq').addEventListener('keydown',function(e){
+    var rows=_srows();
+    if(e.key==='ArrowDown'){ e.preventDefault(); if(rows.length)_skbSet(_skb+1); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); if(rows.length)_skbSet(_skb-1); }
+    else if(e.key==='Enter'){ e.preventDefault();
+      if(_skb>=0 && rows[_skb]){ var row=rows[_skb], add=row.querySelector('.sadd');
+        if(add){ add.click(); toast('Added to your order','ok'); }   /* quick add, palette stays open */
+        else { row.click(); } }
+      else { searchSubmit(this.value); } }
+    else if(e.key==='Escape'){ e.preventDefault(); searchClose(); }
+  });
+}
+/* Desktop: click the dimmed page (scrim) to dismiss the search palette. Mobile
+   overlay is full-bleed with no scrim, so this is gated to desktop and is a no-op there. */
+if($('searchOverlay')){
+  $('searchOverlay').addEventListener('click',function(e){ if(e.target===this && _desktop()) searchClose(); });
 }
 document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ var o=$('searchOverlay'); if(o&&o.classList.contains('show')){ searchClose(); return; } var sh=$('sheet'); if(sh&&sh.classList.contains('show')) closeSheet(); } });
 /* Infinite scroll: grow the category/search grid as the sentinel nears the viewport. */
