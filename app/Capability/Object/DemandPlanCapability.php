@@ -35,9 +35,9 @@ final class DemandPlanCapability implements ObjectCapability
         $canEdit = $ctx->can('menu:purchases');
         $isOpen = ! in_array($plan->status, ['completed', 'cancelled'], true);
         $endpoint = '/api/v1/workspace/demandPlan/' . $plan->id;
-        // When the real stock ledger isn't in use, the "Stock" figures are unconfirmed — say so plainly.
-        $ledgerOn = \App\Services\Inventory\StockLedger::readsFromLedger($ctx->tenant);
-        $stockNote = $ledgerOn ? 'stock from ledger (live)' : 'stock not tracked — confirm each line';
+        // Stock is real on-hand from the receipts ledger (0 until goods are received) — never the fake
+        // catalog number. Ashish confirms any pre-existing opening stock per line.
+        $stockNote = 'stock = on-hand from receipts ledger — confirm opening stock per line';
 
         // supplier pick-list for the procurement form
         $suppliers = Supplier::where('tenant_id', $t)->orderBy('name')->pluck('name')->map(fn ($n) => trim((string) $n))->filter()->unique()->values()->all();
@@ -72,6 +72,15 @@ final class DemandPlanCapability implements ObjectCapability
                     'prefill' => ['qty_purchased' => $got, 'qty_available' => $l->qty_available !== null ? (float) $l->qty_available : '', 'supplier' => (string) ($l->supplier_name ?: ''), 'expected_delivery' => $l->expected_delivery ? Carbon::parse($l->expected_delivery)->format('Y-m-d') : '', 'line_status' => $st, 'remarks' => (string) ($l->remarks ?: '')],
                     'body' => ['line_id' => $l->id],
                 ]];
+                if ((float) $l->qty_purchased > 0) {
+                    $btns[] = ['icon' => 'download', 'title' => 'Receive in Juba', 'action' => [
+                        'key' => 'receive_goods', 'label' => 'Receive in Juba — ' . $l->name, 'method' => 'POST', 'endpoint' => $endpoint . '/receive_goods', 'actor' => 'human', 'tone' => 'primary',
+                        'schema' => ['received_qty' => 'number', 'damaged_qty' => 'number', 'remarks' => 'text'],
+                        'labels' => ['received_qty' => 'Total received in Juba', 'damaged_qty' => 'Damaged (of received)', 'remarks' => 'Note'],
+                        'prefill' => ['received_qty' => (float) $l->received_qty, 'damaged_qty' => (float) $l->damaged_qty, 'remarks' => (string) ($l->remarks ?: '')],
+                        'body' => ['line_id' => $l->id],
+                    ]];
+                }
                 $btns[] = ['icon' => 'trash', 'title' => 'Remove line', 'tone' => 'danger', 'post' => $endpoint . '/remove_line', 'body' => ['line_id' => $l->id], 'confirm' => 'Remove ' . $l->name . ' from this plan?'];
             }
 
@@ -84,6 +93,7 @@ final class DemandPlanCapability implements ObjectCapability
                 'suggested'=> ['value' => $this->qty($l->suggested_qty), 'sort' => (float) $l->suggested_qty],
                 'requested'=> ['value' => $this->qty($req), 'sort' => $req],
                 'purchased'=> ['value' => $got > 0 ? $this->qty($got) : '—', 'sort' => $got, 'tone' => ($got >= $req && $req > 0) ? 'ok' : ($got > 0 ? 'warn' : 'default')],
+                'received' => ['value' => (float) $l->received_qty > 0 ? $this->qty($l->received_qty) : '—', 'sort' => (float) $l->received_qty, 'tone' => ((float) $l->received_qty >= $got && $got > 0) ? 'ok' : ((float) $l->received_qty > 0 ? 'warn' : 'default')],
                 'shortfall'=> ['value' => $shortfall > 0 && $st !== 'not_available' ? $this->qty($shortfall) : '—', 'sort' => $shortfall, 'tone' => $shortfall > 0 && $st !== 'not_available' ? 'danger' : 'default'],
                 'supplier' => (string) ($l->supplier_name ?: '—'),
                 'status'   => ['value' => $this->lineLabel($st), 'badge' => $this->lineBadge($st)],
@@ -99,6 +109,7 @@ final class DemandPlanCapability implements ObjectCapability
             ['key' => 'suggested','label' => 'Suggested', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'requested','label' => 'Required', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'purchased','label' => 'Purchased', 'align' => 'right', 'type' => 'num', 'sortable' => true],
+            ['key' => 'received', 'label' => 'Received', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'shortfall','label' => 'Short', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'supplier', 'label' => 'Supplier', 'sortable' => true],
             ['key' => 'status',   'label' => 'Status', 'type' => 'badge', 'sortable' => true],
@@ -162,6 +173,7 @@ final class DemandPlanCapability implements ObjectCapability
             'add_line' => $this->addLine($ctx, $input),
             'edit_line' => $this->editLine($ctx, $input),
             'record_procurement' => $this->recordProcurement($ctx, $input),
+            'receive_goods' => $this->receiveGoods($ctx, $input),
             'remove_line' => $this->removeLine($ctx, $input),
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
@@ -272,6 +284,49 @@ final class DemandPlanCapability implements ObjectCapability
         }
 
         return ['ok' => true, 'message' => 'Recorded procurement for ' . $l->name . ' (' . $this->lineLabel($l->line_status) . ').'];
+    }
+
+    /**
+     * Goods receipt in Juba — records the received quantity AND builds the REAL stock ledger (Juba IN).
+     * Only the delta since the last receipt is posted, only for catalogue products, only positive
+     * arrivals; the ledger write is best-effort so a receipt is never lost to a ledger hiccup.
+     */
+    private function receiveGoods(CapabilityContext $ctx, array $in): array
+    {
+        $l = $this->line($ctx, $in);
+        if (! $l) {
+            return ['ok' => false, 'error' => 'not_found'];
+        }
+        $prev = (float) $l->received_qty;
+        $now = array_key_exists('received_qty', $in) && $in['received_qty'] !== '' ? max(0.0, round((float) $in['received_qty'], 3)) : $prev;
+        $delta = round($now - $prev, 3);
+
+        $l->received_qty = $now;
+        if (array_key_exists('damaged_qty', $in) && $in['damaged_qty'] !== '') { $l->damaged_qty = max(0.0, round((float) $in['damaged_qty'], 3)); }
+        if (array_key_exists('remarks', $in) && trim((string) $in['remarks']) !== '') { $l->remarks = trim((string) $in['remarks']); }
+        $l->received_at = now();
+        $l->save();
+
+        $intoStock = false;
+        if ($l->product_id && $delta > 0.0001) {
+            try {
+                \App\Services\Inventory\StockLedger::forTenant($ctx->tenant)->receive([
+                    'product_id' => (int) $l->product_id,
+                    'sku'        => null,
+                    'location'   => \App\Services\Inventory\StockLedger::LOC_JUBA,
+                    'qty'        => $delta,
+                    'ref_type'   => 'procurement_receive',
+                    'ref_id'     => (int) $l->id,
+                    'note'       => 'Received in Juba: ' . $l->name,
+                    'created_by' => (string) ($ctx->user->name ?? ''),
+                ]);
+                $intoStock = true;
+            } catch (\Throwable $e) {
+                // never lose the receipt record over a ledger error
+            }
+        }
+
+        return ['ok' => true, 'message' => 'Received ' . $this->qty($now) . ' of ' . $l->name . ($intoStock ? ' — added to Juba stock.' : ($l->product_id ? '.' : ' (ad-hoc line — not linked to a product, so not added to stock).'))];
     }
 
     private function removeLine(CapabilityContext $ctx, array $in): array

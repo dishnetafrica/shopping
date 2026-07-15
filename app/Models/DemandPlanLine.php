@@ -12,7 +12,7 @@ class DemandPlanLine extends Model
         'tenant_id', 'demand_plan_id', 'product_id', 'name',
         'current_stock', 'in_transit', 'expected_sales', 'suggested_qty', 'requested_qty',
         'qty_available', 'qty_purchased', 'supplier_id', 'supplier_name', 'expected_delivery',
-        'remarks', 'line_status',
+        'remarks', 'line_status', 'received_qty', 'damaged_qty', 'received_at',
     ];
 
     protected $casts = [
@@ -23,7 +23,10 @@ class DemandPlanLine extends Model
         'requested_qty'  => 'decimal:3',
         'qty_available'  => 'decimal:3',
         'qty_purchased'  => 'decimal:3',
+        'received_qty'   => 'decimal:3',
+        'damaged_qty'    => 'decimal:3',
         'expected_delivery' => 'date',
+        'received_at'    => 'datetime',
     ];
 
     public function plan(): BelongsTo
