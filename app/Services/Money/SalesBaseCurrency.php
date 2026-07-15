@@ -66,12 +66,16 @@ final class SalesBaseCurrency
             return $rateable($c) ? $c : $native;
         }
         if ($doc instanceof Invoice) {
-            if ($doc->order_id) {
-                $o = Order::where('tenant_id', $t->id)->find($doc->order_id);
-                if ($o) {
-                    $c = strtoupper((string) ($o->sell_currency ?? ''));
-                    if ($rateable($c)) { return $c; }
+            try {
+                if ($doc->order_id) {
+                    $o = Order::where('tenant_id', $t->id)->find($doc->order_id);
+                    if ($o) {
+                        $c = strtoupper((string) ($o->sell_currency ?? ''));
+                        if ($rateable($c)) { return $c; }
+                    }
                 }
+            } catch (\Throwable $e) {
+                // Never let a currency lookup break a read path — fall back to the local currency.
             }
 
             return $native;

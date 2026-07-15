@@ -175,13 +175,14 @@ final class CustomerCapability implements ObjectCapability
         })->all();
 
         $allInv = $phoneWhere(Invoice::where('tenant_id', $ctx->tenantId()))->where('status', '!=', 'void')->orderByDesc('issued_at')->limit(25)->get();
-        $invRows = $allInv->map(function ($i) use ($disp, $native, $badgeCell) {
+        $invTenant = $ctx->tenant;   // capture for the closure — $ctx itself is not in the closure scope
+        $invRows = $allInv->map(function ($i) use ($disp, $native, $badgeCell, $invTenant) {
             $bal = (float) $i->balance;
             $paid = $bal <= 0.01;
             $overdue = $i->due_at && Carbon::parse($i->due_at)->isPast() && ! $paid;
             $status = $paid ? 'Paid' : ($overdue ? 'Overdue' : ((float) $i->amount_paid > 0 ? 'Part-paid' : 'Unpaid'));
             $badge = $paid ? 'ok' : ($overdue ? 'danger' : 'warn');
-            $icur = \App\Services\Money\SalesBaseCurrency::txnCurrency($i, $ctx->tenant);   // invoice tag is unreliable
+            $icur = \App\Services\Money\SalesBaseCurrency::txnCurrency($i, $invTenant);   // invoice tag is unreliable
             $idate = $i->issued_at ? Carbon::parse($i->issued_at)->format('Y-m-d') : null;
 
             return ['cells' => [(string) $i->invoice_no,
