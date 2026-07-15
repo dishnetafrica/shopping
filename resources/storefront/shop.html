@@ -199,6 +199,62 @@
 .rpr{font-size:14px;font-weight:700}
 @media(max-width:640px){.dname{font-size:19px}.dgal{max-width:none}}
 
+/* ==================================================================================
+   STOREFRONT V2 — Premium foundation (Increment 1)
+   Additive only: design tokens, skeleton loaders, persistent bottom navigation,
+   fly-to-cart + badge motion, reduced-motion + larger touch targets.
+   No existing rule is removed; these layer on top.
+   ================================================================================== */
+:root{
+  --radius:12px; --radius-lg:16px;
+  --shadow-sm:0 1px 3px rgba(16,24,40,.06);
+  --shadow-md:0 6px 20px rgba(16,24,40,.12);
+  --nav-h:60px; --safe-b:env(safe-area-inset-bottom,0px);
+}
+/* Room for the persistent bottom nav (replaces the old 88px cart-bar allowance). */
+body{padding-bottom:calc(var(--nav-h) + 14px + var(--safe-b))}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+
+/* ---- Skeleton loaders: content-shaped placeholders in <100ms (perceived speed) ---- */
+.skgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 12px}
+@media(min-width:560px){.skgrid{grid-template-columns:1fr 1fr 1fr}}
+.sk{border:1px solid var(--line);border-radius:13px;overflow:hidden;background:#fff}
+.sk .a{aspect-ratio:1/1;background:#eef0f2}
+.sk .b{height:12px;margin:10px 10px 0;border-radius:6px;background:#eef0f2}
+.sk .b.w70{width:70%} .sk .b.w45{width:45%} .sk .b.last{margin-bottom:12px}
+.shimmer{position:relative;overflow:hidden}
+.shimmer::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.65),transparent);animation:sk-sh 1.25s infinite}
+@keyframes sk-sh{100%{transform:translateX(100%)}}
+
+/* ---- Persistent bottom navigation (the thumb-zone spine) ---- */
+.btmnav{position:fixed;left:0;right:0;bottom:0;z-index:45;height:calc(var(--nav-h) + var(--safe-b));
+  padding-bottom:var(--safe-b);background:#fff;border-top:1px solid var(--line);display:flex;box-shadow:0 -2px 12px rgba(16,24,40,.06)}
+.btmnav button{flex:1;border:0;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;color:var(--muted);font-size:10.5px;font-weight:700;cursor:pointer;min-height:44px;position:relative;padding:0}
+.btmnav button.on{color:var(--green-d)}
+.btmnav button:active{background:#f6f7f9}
+.btmnav svg{width:22px;height:22px;stroke-width:2}
+.btmnav .nbadge{position:absolute;top:6px;left:calc(50% + 5px);min-width:16px;height:16px;padding:0 4px;border-radius:9px;
+  background:var(--red);color:#fff;font-size:10px;font-weight:800;line-height:16px;text-align:center;display:none}
+.btmnav .nbadge.show{display:block}
+.btmnav button.bump svg{animation:cart-bump .35s ease}
+@keyframes cart-bump{0%,100%{transform:scale(1)}40%{transform:scale(1.3)}}
+
+/* ---- Floating cart CTA now sits ABOVE the nav (grocery-app pattern) ---- */
+.cartbar{left:10px;right:10px;bottom:calc(var(--nav-h) + 10px + var(--safe-b));width:auto;border-radius:14px;box-shadow:var(--shadow-md)}
+
+/* ---- Fly-to-cart dot (the dopamine hit; skipped under reduced-motion) ---- */
+.flydot{position:fixed;z-index:60;width:16px;height:16px;border-radius:50%;background:var(--green);pointer-events:none;
+  box-shadow:var(--shadow-md);transition:transform .55s cubic-bezier(.5,-.35,.35,1.25),opacity .55s ease;will-change:transform,opacity}
+
+/* ---- Accessibility: guarantee thumb-friendly targets + visible focus ---- */
+.pc .add,.stp button,.btmnav button,.uacct,.hback{min-height:44px}
+.stp button{min-width:36px}
+:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+
 </style>
 </head>
 <body>
@@ -216,7 +272,7 @@
 <div class="delv" id="delvBar" onclick="askLocation()"><span class="ico">📍</span><span class="txt">Set your location for delivery time</span><span class="chg">›</span></div>
 
 <div class="searchwrap"><input id="q" class="search" placeholder="Search products… (e.g. sugar, atta, oil)"></div>
-<div id="content"><div class="empty">Loading products…</div></div>
+<div id="content"><div class="skgrid"><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div></div></div>
 
 <div id="footer"><span id="footName">Shop</span><br>
 <a href="#" onclick="event.preventDefault();showFaq()">How to order &amp; FAQ</a> · <a id="staffLink" href="#">Staff login</a></div>
@@ -225,6 +281,20 @@
   <div><div class="l" id="cartCount">0 items</div><div class="n" id="cartTotal">0</div></div>
   <button onclick="openCart()">View cart →</button>
 </div>
+
+<nav class="btmnav" id="btmnav" aria-label="Primary">
+  <button id="navHome" class="on" onclick="navGo('home')" aria-label="Home">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Home</button>
+  <button id="navCats" onclick="navGo('categories')" aria-label="Categories">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Categories</button>
+  <button id="navSearch" onclick="navGo('search')" aria-label="Search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Search</button>
+  <button id="navCart" onclick="navGo('cart')" aria-label="Cart">
+    <span class="nbadge" id="navCartBadge">0</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l2.4 12.2a1 1 0 0 0 1 .8h9.2a1 1 0 0 0 1-.8L21 8H6"/><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/></svg>Cart</button>
+  <button id="navAcct" onclick="navGo('account')" aria-label="Account">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.5 3.6-6 8-6s8 2.5 8 6"/></svg>Account</button>
+</nav>
 
 <div class="sheet" id="sheet">
   <div class="sheetcard">
@@ -435,8 +505,43 @@ function applyQuickOrder(){
     if((add||cat)&&window.history&&history.replaceState)history.replaceState(null,'',location.pathname);
   }catch(e){}
 }
-function goHome(){CAT='all';Q='';if($('q'))$('q').value='';closeSheet();render();window.scrollTo(0,0);}
+function goHome(){CAT='all';Q='';if($('q'))$('q').value='';closeSheet();render();window.scrollTo(0,0);setNav('navHome');}
 function navBack(){goHome();}
+
+/* ================= Storefront V2 — bottom nav · skeletons · fly-to-cart ================= */
+function setNav(id){['navHome','navCats','navSearch','navCart','navAcct'].forEach(function(k){var b=$(k);if(b)b.classList.toggle('on',k===id);});}
+function navGo(tab){
+  if(tab==='home'){ goHome(); return; }
+  if(tab==='categories'){ setNav('navCats'); showCategories(); return; }
+  if(tab==='search'){ focusSearch(); return; }          // transient focus, keeps view highlight
+  if(tab==='cart'){ openCart(); return; }                // sheet overlay
+  if(tab==='account'){ openLogin(); return; }            // sheet overlay
+}
+function showCategories(){ CAT='all'; Q=''; if($('q'))$('q').value=''; closeSheet(); render();
+  var el=document.querySelector('.catgrid')||document.querySelector('.section-title');
+  if(el){ el.scrollIntoView({behavior:'smooth',block:'start'}); } else { window.scrollTo(0,0); } }
+function focusSearch(){ closeSheet(); window.scrollTo({top:0,behavior:'smooth'}); var q=$('q'); if(q){ setTimeout(function(){ q.focus(); }, 250); } }
+
+/* Skeleton grid — content-shaped placeholders so the screen looks populated in <100ms. */
+function skeletonGrid(n){ n=n||8; var s=''; for(var i=0;i<n;i++){ s+='<div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div>'; } return '<div class="skgrid">'+s+'</div>'; }
+
+/* Fly-to-cart: a dot launches from the last-tapped control to the cart nav icon, badge bumps,
+   light haptic. Skipped under reduced-motion. Purely visual — never touches cart/checkout logic. */
+var _lastTap={x:window.innerWidth/2,y:window.innerHeight/2};
+document.addEventListener('pointerdown',function(e){ _lastTap={x:e.clientX,y:e.clientY}; },{passive:true});
+function reducedMotion(){ try{ return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){ return false; } }
+function flyToCart(){
+  var cart=$('navCart');
+  if(cart){ cart.classList.remove('bump'); void cart.offsetWidth; cart.classList.add('bump'); }
+  try{ if(navigator.vibrate) navigator.vibrate(8); }catch(e){}
+  if(reducedMotion()||!cart) return;
+  var r=cart.getBoundingClientRect(), tx=r.left+r.width/2, ty=r.top+r.height/2;
+  var dot=document.createElement('div'); dot.className='flydot';
+  dot.style.left=(_lastTap.x-8)+'px'; dot.style.top=(_lastTap.y-8)+'px';
+  document.body.appendChild(dot);
+  requestAnimationFrame(function(){ dot.style.transform='translate('+(tx-_lastTap.x)+'px,'+(ty-_lastTap.y)+'px) scale(.3)'; dot.style.opacity='0.2'; });
+  setTimeout(function(){ if(dot.parentNode) dot.parentNode.removeChild(dot); }, 600);
+}
 
 /* ---------------- help / FAQ ---------------- */
 var FAQ_DATA=[
@@ -615,7 +720,7 @@ function openVariantPicker(key){
   $('sheet').classList.add('show');
 }
 function vpStep(name,key,d){if(d>0)cartAdd(name);else cartSub(name);openVariantPicker(key);}
-function cartAdd(name){var p=prod(name);if(!p||oosOf(p))return;if(!CART[name]){CART[name]={name:p.name,price:p.price,qty:0};track('add',p.id);}CART[name].qty++;saveCart();render();bar();}
+function cartAdd(name){var p=prod(name);if(!p||oosOf(p))return;flyToCart();if(!CART[name]){CART[name]={name:p.name,price:p.price,qty:0};track('add',p.id);}CART[name].qty++;saveCart();render();bar();}
 function cartSub(name){if(!CART[name])return;CART[name].qty--;if(CART[name].qty<=0)delete CART[name];saveCart();render();bar();}
 function vpick(key,i){VSEL[key]=i;render();}
 function gridG(list){var arr=groupProducts(list);arr.forEach(function(g){GROUPS[g.category+"|"+g.base.toLowerCase()]=g;});return '<div class="grid">'+arr.map(variantCard).join('')+'</div>';}
@@ -897,7 +1002,7 @@ function groceryHome(){
 function render(){
   var c=$('content');
   var hb=$('hback');if(hb)hb.style.display=(CAT!=='all'||Q)?'grid':'none';
-  if(!PRODUCTS.length){c.innerHTML='<div class="empty">Loading products…</div>';return;}
+  if(!PRODUCTS.length){c.innerHTML=skeletonGrid(8);return;}
   var q=Q.trim().toLowerCase();
   if(q){
     var res=PRODUCTS.filter(function(p){return (p.name+' '+p.brand+' '+p.category+' '+p.keywords).toLowerCase().indexOf(q)>=0;});
@@ -1025,12 +1130,12 @@ function renderDetail(d){
   $('detail').scrollTop=0;
 }
 
-function inc(key){var p=prod(key);if(!p||oosOf(p))return;if(!CART[key]){CART[key]={name:p.name,price:p.price,qty:minq(p)};track('add',p.id);}else{CART[key].qty++;}saveCart();render();bar();if($('sheet').classList.contains('show'))openCart();}
+function inc(key){var p=prod(key);if(!p||oosOf(p))return;flyToCart();if(!CART[key]){CART[key]={name:p.name,price:p.price,qty:minq(p)};track('add',p.id);}else{CART[key].qty++;}saveCart();render();bar();if($('sheet').classList.contains('show'))openCart();}
 function dec(key){if(!CART[key])return;var p=prod(key);CART[key].qty--;if(CART[key].qty<minq(p)){delete CART[key];}saveCart();render();bar();if($('sheet').classList.contains('show'))openCart();}
 function cartItems(){return Object.keys(CART).map(function(k){return CART[k];});}
 function cartCount(){return cartItems().reduce(function(s,i){return s+i.qty;},0);}
 function cartTotal(){return cartItems().reduce(function(s,i){return s+i.price*i.qty;},0);}
-function bar(){var n=cartCount();$('cartbar').classList.toggle('show',n>0);$('cartCount').textContent=n+(n===1?' item':' items');$('cartTotal').textContent=ugx(cartTotal());}
+function bar(){var n=cartCount();$('cartbar').classList.toggle('show',n>0);$('cartCount').textContent=n+(n===1?' item':' items');$('cartTotal').textContent=ugx(cartTotal());var nb=$('navCartBadge');if(nb){nb.textContent=n>99?'99+':n;nb.classList.toggle('show',n>0);}}
 function saveCart(){try{localStorage.setItem(STORE_KEY,JSON.stringify(CART));}catch(e){}}
 function loadCart(){try{CART=JSON.parse(localStorage.getItem(STORE_KEY)||'{}')||{};}catch(e){CART={};}}
 function bump(key,d){if(!CART[key])return;var p=prod(key);CART[key].qty+=d;if(CART[key].qty<minq(p)){delete CART[key];}saveCart();render();bar();if($('sheet').classList.contains('show'))openCart();}
@@ -1124,7 +1229,7 @@ async function placeOrder(){
 })();
 
 $('q').addEventListener('input',function(){Q=this.value;render();});
-loadCart(); loadCust(); bar(); restoreDelv(); load();
+loadCart(); loadCust(); bar(); restoreDelv(); if($('content'))$('content').innerHTML=skeletonGrid(8); load();
 </script>
 <div id="detail" class="detail" aria-hidden="true"></div>
 </body>
