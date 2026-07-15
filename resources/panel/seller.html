@@ -315,6 +315,7 @@
       <a class="nav" data-page="products"><span class="i">📦</span> Products</a>
       <a class="nav" data-page="category"><span class="i">🗂</span> Category</a>
       <a class="nav" data-page="banners"><span class="i">🏷️</span> Shop for Every Need</a>
+      <a class="nav" data-page="kits"><span class="i">🎁</span> Ready-made Kits</a>
       <a class="nav" data-page="quotations"><span class="i">📄</span> Quotations</a>
       <a class="nav" data-feature="pos" data-page="pos"><span class="i">🧾</span> POS</a>
       <a class="nav" data-page="customers"><span class="i">👥</span> Customers</a>
@@ -666,6 +667,21 @@
           </div>
         </div>
         <input type="file" id="bzPhotoFile" accept="image/*" style="display:none">
+      </div>
+
+      <div id="pageKits" class="hide">
+        <div class="crumb">Home / <b>Ready-made Kits</b></div>
+        <div class="card">
+          <div class="head">Ready-made Kits <span class="count" style="margin-left:auto"></span></div>
+          <div class="body">
+            <p style="color:#5b6b7b;font-size:13px;margin:0 0 12px">A kit is a curated bundle (e.g. "Restaurant Starter Kit" — foil + cling + containers + gloves + tissue) a customer drops into a quotation in <b>one tap</b>. It makes a set feel like a hero product, lifts average quote value, and reuses the quotation engine — no new checkout. Add the products by name (each line respects that product's MOQ). A kit shows in the collection you assign it to, or in every collection if left blank.</p>
+            <div style="display:flex;gap:10px;margin-bottom:14px"><button type="button" class="btn" onclick="kitSave()" style="margin-left:auto">Save kits</button></div>
+            <div id="kitList"></div>
+            <button type="button" class="btn ghost" onclick="kitAdd()" style="margin-top:12px">+ Add kit</button>
+          </div>
+        </div>
+        <input type="file" id="kitPhotoFile" accept="image/*" style="display:none">
+        <datalist id="kitProdNames"></datalist>
       </div>
       <!-- ============ DAILY THALI ============ -->
       <div id="pageThali" class="hide">
@@ -1273,6 +1289,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   catImages:'/papi/category-images',catImageSave:'/papi/category-image-save',
   catCreate:'/papi/category-create',catRename:'/papi/category-rename',catDelete:'/papi/category-delete',catReorder:'/papi/category-reorder',
   bannersGet:'/papi/business-banners',bannersSave:'/papi/business-banners-save',
+  kitsGet:'/papi/kits',kitsSave:'/papi/kits-save',
   prodOrder:'/papi/product-order',
   prodBulkMeta:'/papi/product-bulk-meta',
   stockSync:'/papi/stock-sync',
@@ -2315,6 +2332,7 @@ function showPage(p){
   $('pageProducts').classList.toggle('hide',p!=='products');
   $('pageCategory').classList.toggle('hide',p!=='category');
   $('pageBanners').classList.toggle('hide',p!=='banners');
+  $('pageKits').classList.toggle('hide',p!=='kits');
   $('pageThali').classList.toggle('hide',p!=='thali');
   $('pageRiders').classList.toggle('hide',p!=='riders');
   $('pageReturns').classList.toggle('hide',p!=='returns');
@@ -2331,11 +2349,11 @@ function showPage(p){
   $('pageShipments').classList.toggle('hide',p!=='shipments');
   if(p==='orders'){$('detailView').classList.add('hide');$('listView').classList.remove('hide');}
   document.querySelectorAll('.side a.nav').forEach(function(a){a.classList.toggle('on',a.dataset.page===p);});
-  var T={dash:'Dashboard',pos:'POS',reports:'Reports',analytics:'Analytics',products:'Products',category:'Categories',banners:'Shop for Every Need',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription',activity:'Activity Inbox',brain:'Business Brain',shipments:'Logistics',quotations:'Quotations'};
+  var T={dash:'Dashboard',pos:'POS',reports:'Reports',analytics:'Analytics',products:'Products',category:'Categories',banners:'Shop for Every Need',kits:'Ready-made Kits',thali:'Daily Thali',riders:'Riders',returns:'Returns',orders:'Orders',kitchen:'Kitchen',dispatch:'Dispatch',customers:'Customers',settings:'Settings',help:'Help & Guide',deliveryZones:'Delivery Zones',profile:'Profile',security:'Security',orderNotifs:'Order Notifications',smartDefaults:'Smart Defaults',subscription:'Subscription',activity:'Activity Inbox',brain:'Business Brain',shipments:'Logistics',quotations:'Quotations'};
   $('pageTitle').textContent=T[p]||'Orders';
   if(p==='dash')renderDash(); else if(p==='pos')posInit(); else if(p==='reports')reportsInit(); else if(p==='analytics')analyticsInit();
   else if(p==='kitchen')kitchenInit();
-  else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='banners')bannersInit(); else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='activity')activityInit(); else if(p==='brain')brainInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else if(p==='shipments')shipmentsInit(); else if(p==='quotations')quotesInit(); else renderList();
+  else if(p==='products')pmInit(); else if(p==='category'){loadCatImages().then(renderCategories);} else if(p==='banners')bannersInit(); else if(p==='kits')kitsInit(); else if(p==='thali')thaliInit(); else if(p==='riders')ridersInit(); else if(p==='returns')returnsInit(); else if(p==='activity')activityInit(); else if(p==='brain')brainInit(); else if(p==='dispatch'){renderDispatchBoard();loadDeliveries().then(renderDeliveriesBoard);} else if(p==='customers')custInit(); else if(p==='settings')settingsInit(); else if(p==='deliveryZones')zonesInit(); else if(p==='profile')profileInit(); else if(p==='security')securityInit(); else if(p==='orderNotifs')notifsInit(); else if(p==='smartDefaults')defsInit(); else if(p==='subscription'){} else if(p==='help'){} else if(p==='shipments')shipmentsInit(); else if(p==='quotations')quotesInit(); else renderList();
   closeSide(); window.scrollTo(0,0);
 }
 // Deep-link from the Today screen: /panel#orders opens that section on load (and on hash change).
@@ -3822,6 +3840,86 @@ function bzLoadStarter(){
       collections:[col('Pantry & Snacks','Snacks & Namkeen'),col('Cleaning & Tissue','Cleaning & Hygiene')],bestsellers:'auto'}
   ];
   bzRender();toast('Starter loaded — review, add photos, then Save');
+}
+
+/* ================= Ready-made Kits editor ================= */
+var KITCFG=[], KIT_COLLS=[], _kitPhoto=null;
+function kitsInit(){
+  // product names (for the datalist) + collection options (from the banners config)
+  fetch(EP.products+'?token='+encodeURIComponent(token),{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
+    var rows=Array.isArray(d.products)?d.products:[];
+    $('kitProdNames').innerHTML=rows.map(function(p){return '<option value="'+bzEsc(p['Product Name']||'')+'">';}).join('');
+  }).catch(function(){});
+  fetch(EP.bannersGet+'?token='+encodeURIComponent(token)).then(function(r){return r.json();}).then(function(d){
+    var bs=(d&&d.config&&d.config.businesses)||[];KIT_COLLS=bs.map(function(b){return {id:b.id,label:b.label||b.id};});
+  }).catch(function(){KIT_COLLS=[];}).finally(function(){
+    fetch(EP.kitsGet+'?token='+encodeURIComponent(token)).then(function(r){return r.json();}).then(function(d){
+      KITCFG=(d&&Array.isArray(d.kits))?d.kits:[];kitRender();
+    }).catch(function(){KITCFG=[];kitRender();});
+  });
+  var f=$('kitPhotoFile'); if(f&&!f._bound){f._bound=true; f.onchange=kitPhotoPicked;}
+}
+function kitRender(){
+  var root=$('kitList'); if(!KITCFG.length){root.innerHTML='<div style="color:#5b6b7b;font-size:13px;padding:10px 0">No kits yet. Add one — e.g. a "Restaurant Starter Kit".</div>';return;}
+  root.innerHTML=KITCFG.map(function(k,ki){return kitCardEd(k,ki);}).join('');
+}
+function kitColOpts(sel){ return '<option value="">Every collection</option>'+KIT_COLLS.map(function(c){return '<option value="'+bzEsc(c.id)+'"'+(sel===c.id?' selected':'')+'>'+bzEsc(c.label)+'</option>';}).join(''); }
+function kitCardEd(k,ki){
+  var lines=(k.lines||[]).map(function(l,li){return kitLineRow(l,ki,li);}).join('');
+  var img=k.image_url?('<img src="'+bzEsc(k.image_url)+'" style="width:70px;height:52px;object-fit:cover;border-radius:8px">'):('<div style="width:70px;height:52px;border-radius:8px;background:#eef2f5;display:flex;align-items:center;justify-content:center;color:#8aa3bd;font-size:10px">photo</div>');
+  return '<div class="card" style="margin-bottom:14px;border:1px solid #e5eaef">'
+    +'<div class="head" style="gap:10px">'
+      +'<input value="'+bzEsc(k.label||'')+'" placeholder="Kit name (Restaurant Starter Kit)" onchange="kitUpd('+ki+',\'label\',this.value)" style="font-weight:700;max-width:240px">'
+      +'<label style="font-weight:600;font-size:12px;margin-left:6px"><input type="checkbox" '+(k.active!==false?'checked':'')+' onchange="kitUpd('+ki+',\'active\',this.checked)"> Active</label>'
+      +'<button type="button" class="btn ghost" style="margin-left:auto;padding:4px 10px;font-size:12px" onclick="kitDel('+ki+')">Remove</button>'
+    +'</div>'
+    +'<div class="body">'
+      +'<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">'
+        +'<div style="text-align:center">'+img+'<div style="margin-top:4px"><button type="button" class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="kitPickPhoto('+ki+')">Photo</button>'+(k.image_url?' <button type="button" class="btn ghost" style="padding:3px 6px;font-size:11px" onclick="kitClearPhoto('+ki+')">✕</button>':'')+'</div></div>'
+        +'<div class="mfield" style="margin:0;flex:1;min-width:180px"><label>Description</label><input value="'+bzEsc(k.desc||'')+'" placeholder="Everything to get started" onchange="kitUpd('+ki+',\'desc\',this.value)"></div>'
+        +'<div class="mfield" style="margin:0"><label>Show in collection</label><select onchange="kitUpd('+ki+',\'collection\',this.value)">'+kitColOpts(k.collection||'')+'</select></div>'
+        +'<div class="mfield" style="margin:0"><label>Button label</label><input value="'+bzEsc(k.cta_label||'')+'" placeholder="Add kit to quote" onchange="kitUpd('+ki+',\'cta_label\',this.value)" style="width:150px"></div>'
+      +'</div>'
+      +'<div style="font-weight:700;font-size:13px;margin:4px 0 8px">Products in this kit</div>'+lines
+      +'<button type="button" class="btn ghost" style="padding:4px 10px;font-size:12px;margin-top:6px" onclick="kitAddLine('+ki+')">+ Add product</button>'
+    +'</div></div>';
+}
+function kitLineRow(l,ki,li){
+  return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">'
+    +'<input list="kitProdNames" value="'+bzEsc(l.name||'')+'" placeholder="Product name (must match catalogue)" onchange="kitLine('+ki+','+li+',\'name\',this.value)" style="flex:1;min-width:200px">'
+    +'<input type="number" min="1" value="'+(parseInt(l.qty,10)||1)+'" onchange="kitLine('+ki+','+li+',\'qty\',this.value)" style="width:80px" title="Quantity">'
+    +'<button type="button" class="btn ghost" style="padding:3px 8px;font-size:11px" onclick="kitDelLine('+ki+','+li+')">✕</button>'
+  +'</div>';
+}
+function kitK(ki){return KITCFG[ki];}
+function kitUpd(ki,k,v){var it=kitK(ki);if(it)it[k]=v;}
+function kitLine(ki,li,k,v){var it=kitK(ki);if(!it||!it.lines||!it.lines[li])return; it.lines[li][k]=(k==='qty')?Math.max(1,parseInt(v,10)||1):v;}
+function kitAdd(){KITCFG.push({id:'kit'+(KITCFG.length+1)+'_'+Math.random().toString(36).slice(2,6),label:'New Kit',desc:'',image_url:'',active:true,collection:'',cta_label:'Add kit to quote',lines:[{name:'',qty:1}]});kitRender();}
+function kitDel(ki){if(!confirm('Remove this kit?'))return;KITCFG.splice(ki,1);kitRender();}
+function kitAddLine(ki){var it=kitK(ki);if(!it)return;it.lines=it.lines||[];it.lines.push({name:'',qty:1});kitRender();}
+function kitDelLine(ki,li){var it=kitK(ki);if(!it||!it.lines)return;it.lines.splice(li,1);kitRender();}
+function kitPickPhoto(ki){_kitPhoto=ki;var f=$('kitPhotoFile');if(f){f.value='';f.click();}}
+function kitClearPhoto(ki){var it=kitK(ki);if(it){it.image_url='';kitRender();}}
+async function kitPhotoPicked(){
+  var f=$('kitPhotoFile');var file=f&&f.files&&f.files[0];if(!file||_kitPhoto==null)return;
+  toast('Uploading photo…');
+  var data=await shrinkImage(file,1400,.82); if(!data){toast('Could not read image');return;}
+  try{
+    var up=await fetch(EP.uploadImage+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:(file.name||'kit')+'.jpg',data:data})});
+    var d=await up.json();
+    if(d&&d.ok&&d.url){var it=kitK(_kitPhoto);if(it){it.image_url=d.url;kitRender();toast('Photo added');}}
+    else toast('Upload failed — try a smaller image');
+  }catch(e){toast('Upload failed');}
+}
+async function kitSave(){
+  // drop empty lines client-side so the saved kit is clean
+  KITCFG.forEach(function(k){k.lines=(k.lines||[]).filter(function(l){return l.name&&String(l.name).trim();});});
+  try{
+    var r=await fetch(EP.kitsSave+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kits:KITCFG})});
+    var d=await r.json();
+    if(d&&d.ok){if(Array.isArray(d.kits))KITCFG=d.kits;kitRender();toast('Kits saved');}
+    else toast('Could not save');
+  }catch(e){toast('Could not save');}
 }
 function catAdd(){
   $('modalTitle').textContent='Add category';

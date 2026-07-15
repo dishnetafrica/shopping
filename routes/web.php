@@ -390,6 +390,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         // Business-Type banners (Shop by Business merchandising) — read + save config.
         Route::get('business-banners', [PanelApiController::class, 'bannersGet']);
         Route::post('business-banners-save', [PanelApiController::class, 'bannersSave']);
+        // Ready-made Kits (curated bundles → one-tap quotation) — read + save.
+        Route::get('kits', [PanelApiController::class, 'kitsGet']);
+        Route::post('kits-save', [PanelApiController::class, 'kitsSave']);
         Route::get('update-product', [PanelApiController::class, 'updateProduct']);
         Route::get('delete-product', [PanelApiController::class, 'deleteProduct']);
         Route::get('add-product',    [PanelApiController::class, 'addProduct']);

@@ -343,6 +343,8 @@ class StorefrontController extends Controller
                 // Business-type merchandising banners (Shop by Business). Empty object when unset —
                 // the storefront then renders nothing new (fully backward compatible).
                 'business_banners' => (object) ($tenant->setting('business_banners', []) ?: []),
+                // Ready-made Kits — curated bundles a customer adds to a quotation in one tap.
+                'kits' => array_values((array) ($tenant->setting('kits', []) ?: [])),
                 'thali' => $this->todayThali($tenant),
                 'vertical' => \App\Support\Vertical::of($tenant),
                 'trending' => $this->trendingIds($tenant),

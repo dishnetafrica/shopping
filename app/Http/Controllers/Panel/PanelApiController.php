@@ -2698,6 +2698,50 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true, 'config' => (object) $cfg]);
     }
 
+    /** Read the Ready-made Kits config (curated bundles → one-tap quotation). */
+    public function kitsGet(Request $r)
+    {
+        $t = $r->user()->tenant;
+        $kits = $t->setting('kits', []);
+        if (! is_array($kits)) $kits = [];
+        return response()->json(['ok' => true, 'kits' => array_values($kits)]);
+    }
+
+    /** Save Kits. Whitelists & size-caps every field. Line products are matched by name on the storefront. */
+    public function kitsSave(Request $r)
+    {
+        $t  = $r->user()->tenant;
+        $in = $r->input('kits', []);
+        if (is_string($in)) { $in = json_decode($in, true); }
+        if (! is_array($in)) $in = [];
+
+        $str = fn ($v, $max = 200) => mb_substr(trim((string) ($v ?? '')), 0, $max);
+        $kits = [];
+        foreach (array_slice($in, 0, 40) as $k) {
+            if (! is_array($k)) continue;
+            $lines = [];
+            foreach (array_slice((array) ($k['lines'] ?? []), 0, 60) as $ln) {
+                if (! is_array($ln)) continue;
+                $name = $str($ln['name'] ?? '', 200);
+                if ($name === '') continue;
+                $lines[] = ['name' => $name, 'qty' => max(1, min(100000, (int) ($ln['qty'] ?? 1)))];
+            }
+            $kits[] = [
+                'id'         => $str($k['id'] ?? '', 40) ?: \Illuminate\Support\Str::slug($str($k['label'] ?? 'kit', 40)) . substr(md5($str($k['label'] ?? '') . count($kits)), 0, 4),
+                'label'      => $str($k['label'] ?? '', 80),
+                'desc'       => $str($k['desc'] ?? '', 200),
+                'image_url'  => $str($k['image_url'] ?? '', 500),
+                'active'     => (bool) ($k['active'] ?? true),
+                'collection' => $str($k['collection'] ?? '', 40),
+                'cta_label'  => $str($k['cta_label'] ?? '', 40),
+                'lines'      => $lines,
+            ];
+        }
+        $t->putSetting('kits', $kits);
+        $this->catFlush($t);
+        return response()->json(['ok' => true, 'kits' => $kits]);
+    }
+
     /** Create an (initially empty) category so it shows as a tile before any product uses it. */
     public function categoryCreate(Request $r)
     {

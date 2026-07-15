@@ -964,6 +964,17 @@ button{ -webkit-tap-highlight-color:transparent }
   .bizdots{position:absolute;bottom:16px;left:44px;padding:0;z-index:2}
 }
 @media(prefers-reduced-motion: reduce){ .biztrack{transition:none} }
+/* Ready-made Kits */
+.kitrow{display:flex;gap:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 12px 12px}
+.kitrow::-webkit-scrollbar{height:0}
+.kitcard{flex:0 0 264px;width:264px;min-height:132px;border-radius:15px;position:relative;overflow:hidden;color:#fff;background-size:cover;background-position:center;box-shadow:0 5px 14px rgba(15,35,64,.12)}
+.kitcard .ov{position:absolute;inset:0;background:linear-gradient(110deg,rgba(0,0,0,.68),rgba(0,0,0,.34))}
+.kitcard .kbd{position:relative;z-index:1;padding:14px}
+.kitcard .kbd b{font-size:15px;display:block;line-height:1.16}
+.kitcard .kbd small{font-size:11.5px;opacity:.92;display:block;margin-top:3px;line-height:1.25}
+.kitcard .kmeta{font-size:11.5px;font-weight:700;margin:9px 0 10px;opacity:.95}
+.kitcard .kbtn{background:#f4b400;color:#3a2c00;border:0;font-weight:800;font-size:12.5px;padding:9px 15px;border-radius:10px;cursor:pointer}
+@media(min-width:1024px){ .kitrow{padding-left:0;padding-right:0} .kitcard{flex:0 0 300px;width:300px} }
 </style>
 </head>
 <body>
@@ -1182,7 +1193,7 @@ function homeRails(){ return buyAgainRail()+recentlyViewedRail()+trendingRail()+
    so tenants without a config see no change. Auto-scrolls, pauses on hover/touch, swipes, and
    respects reduced-motion. Selecting a business re-merchandises collections + best-sellers; the
    CTA / collections drill into a business-filtered product grid (reusing the normal grid). */
-var BANNERS=null, BIZSEL='', _bizSlide=0, _bizTimer=null, BIZVIEW='', _bizOrder=null;
+var BANNERS=null, BIZSEL='', _bizSlide=0, _bizTimer=null, BIZVIEW='', _bizOrder=null, KITS=[];
 var BIZ_ICO={
  hotels:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 21V6l8-3 8 3v15"/><path d="M9 21v-5h6v5"/><path d="M8 9h.4M12 9h.4M16 9h.4"/></svg>',
  restaurants:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3v7a2 2 0 0 0 4 0V3M8 10v11"/><path d="M16 3c-1.5 0-2.5 2-2.5 5S15 13 16 13v8"/></svg>',
@@ -1272,9 +1283,30 @@ function businessBanners(){
   if(Array.isArray(bs)&&bs.length){ bs.forEach(function(nm){var p=prod(nm)||PRODUCTS.filter(function(x){return x.name.toLowerCase()===String(nm).toLowerCase();})[0]; if(sellableRail(p))items.push(p);}); }
   if(!items.length){ items=bizProducts(biz).filter(sellableRail).slice().sort(function(a,b){return (b.popularity||0)-(a.popularity||0);}); }
   var best=items.length>=3?railHtml('Best sellers for '+biz.label, items):'';
-  return '<div class="bizwrap">'+selBlock+hero+coll+best+'</div>';
+  var kitsHtml=kitsFor(biz.id).map(kitCard).filter(Boolean).join('');
+  var kitsBlock=kitsHtml?('<div class="section-title">Ready-made kits — add to your quote in one tap</div><div class="kitrow">'+kitsHtml+'</div>'):'';
+  return '<div class="bizwrap">'+selBlock+hero+coll+best+kitsBlock+'</div>';
 }
 function pickBiz(id){ BIZSEL=id; rememberBiz(id); bumpBizFreq(id); _bizSlide=0; render(); }
+/* Ready-made Kits: a curated bundle a customer drops into a quotation in one tap. Products are
+   matched from the catalogue by name; each line honours the product's MOQ. */
+function kitsFor(bizId){ return (KITS||[]).filter(function(k){return k && k.active!==false && (!k.collection || k.collection===bizId);}); }
+function kitResolve(kit){ var out=[],miss=0; (kit.lines||[]).forEach(function(l){
+  var p=prod(l.name)||PRODUCTS.filter(function(x){return x.name.toLowerCase()===String(l.name||'').toLowerCase();})[0];
+  if(p&&!oosOf(p)){ out.push({p:p,qty:Math.max(Number(l.qty)||1, minq(p))}); } else miss++; });
+  return {lines:out,miss:miss}; }
+function kitTotal(r){ return r.lines.reduce(function(s,x){return s+x.p.price*x.qty;},0); }
+function kitCard(k){ var r=kitResolve(k); if(r.lines.length<2) return '';   // a "kit" needs ≥2 available items
+  var bg=k.image_url?('background-image:url("'+encodeURI(k.image_url)+'")'):'background:linear-gradient(135deg,#123a2a,#0b7a3b)';
+  return '<div class="kitcard" style="'+bg+'"><span class="ov"></span><div class="kbd">'
+    +'<b>'+esc(k.label||'Kit')+'</b>'+(k.desc?'<small>'+esc(k.desc)+'</small>':'')
+    +'<div class="kmeta">'+r.lines.length+' items · '+ugx(kitTotal(r))+'</div>'
+    +'<button class="kbtn" onclick="addKit('+jk(k.id)+')">'+esc(k.cta_label||'Add kit to quote')+' →</button>'
+    +'</div></div>'; }
+function addKit(id){ var k=(KITS||[]).filter(function(x){return x.id===id;})[0]; if(!k)return;
+  var r=kitResolve(k); if(!r.lines.length)return;
+  r.lines.forEach(function(x){ if(!CART[x.p.name])CART[x.p.name]={name:x.p.name,price:x.p.price,qty:0}; CART[x.p.name].qty+=x.qty; try{track('add',x.p.id);}catch(e){} });
+  saveCart(); flyToCart(); render(); bar(); openCheckout(); }
 function bizCta(id,cta){ cta=String(cta||'');
   if(cta.indexOf('cat:')===0){ setCat(cta.slice(4)); return; }
   if(cta.indexOf('url:')===0){ try{location.href=cta.slice(4);}catch(e){} return; }
@@ -1336,6 +1368,7 @@ async function load(){
       if(d.settings.category_groups)CATGROUPS=d.settings.category_groups||{};
       if(d.settings.category_order)CATORDER=(d.settings.category_order||[]).map(String);
       if(d.settings.business_banners)BANNERS=d.settings.business_banners||null;
+      if(d.settings.kits)KITS=Array.isArray(d.settings.kits)?d.settings.kits:[];
       if(d.settings.trending)TRENDING=(d.settings.trending||[]).map(Number);
       var faqCustom=(Array.isArray(d.settings.faq)&&d.settings.faq.length);
       if(faqCustom)FAQ_DATA=d.settings.faq;
