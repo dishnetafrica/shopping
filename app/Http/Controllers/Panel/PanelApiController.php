@@ -2133,7 +2133,7 @@ class PanelApiController extends Controller
         $lines  = preg_split('/\r\n|\r|\n/', trim($csv));
         $header = array_map(fn ($h) => strtolower(trim($h)), str_getcsv((string) array_shift($lines)));
         $col = function ($names) use ($header) { foreach ($names as $n) { $i = array_search($n, $header, true); if ($i !== false) return $i; } return null; };
-        $iName = $col(['product name', 'name']); $iCat = $col(['category']); $iPrice = $col(['price ugx', 'price']);
+        $iName = $col(['product name', 'name']); $iCat = $col(['category']); $iPrice = $col(['price ugx', 'price usd', 'price (usd)', 'price']);
         $iStock = $col(['stock']); $iKw = $col(['keywords']); $iImg = $col(['image', 'photo']);
         // These columns are written by the export but were previously ignored on import, so a
         // round-trip (export → re-import) silently lost Cost, SKU, Unit, Pack Size and MOQ.
@@ -2262,7 +2262,7 @@ class PanelApiController extends Controller
         $lines  = preg_split('/\r\n|\r|\n/', trim($csv));
         $header = array_map(fn ($h) => strtolower(trim($h)), str_getcsv((string) array_shift($lines)));
         $col = function ($names) use ($header) { foreach ($names as $n) { $i = array_search($n, $header, true); if ($i !== false) return $i; } return null; };
-        $iName = $col(['product name', 'name']); $iCat = $col(['category']); $iPrice = $col(['price ugx', 'price']);
+        $iName = $col(['product name', 'name']); $iCat = $col(['category']); $iPrice = $col(['price ugx', 'price usd', 'price (usd)', 'price']);
         $iStock = $col(['stock']); $iKw = $col(['keywords']); $iImg = $col(['image', 'photo']);
         $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
         $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
