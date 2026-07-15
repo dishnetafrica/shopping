@@ -486,6 +486,57 @@ button{ -webkit-tap-highlight-color:transparent }
 /* ---- Empty states ---- */
 .empty{ color:#8A909A; font-size:14px }
 
+/* ==================================================================================
+   STOREFRONT V3 — Product detail + variant picker + modifiers, brought to the system
+   ================================================================================== */
+/* Detail header (its own sticky search) */
+.dhdr{ border-bottom:0; box-shadow:0 1px 0 rgba(16,24,40,.05); padding:9px 0 11px }
+.dhdr .dback{ border-color:var(--line); border-radius:11px; width:40px; height:44px }
+.dhdr .dsearch{ height:44px; background:#F4F5F7; border:1px solid #E3E6EA; border-radius:12px; padding:0 14px; font-size:15px }
+/* Gallery */
+.dgal>img,.dnoimg{ background:linear-gradient(180deg,#FBFCFD,#F2F4F7); border:1px solid #EEF0F3; border-radius:18px }
+.dth{ border-color:#E5E8EC; border-radius:11px; background:linear-gradient(180deg,#FBFCFD,#F2F4F7) }
+.dth.on{ border-color:var(--green); border-width:2px }
+/* Info */
+.dcat{ color:var(--muted); letter-spacing:.06em; font-weight:700; font-size:11.5px }
+.dname{ font-size:21px; font-weight:800; letter-spacing:-.02em; margin:6px 0 8px }
+.dprice{ font-size:26px; font-weight:800; letter-spacing:-.02em }
+.doff{ background:#EAF7EE; color:var(--green-d); font-weight:800 }
+/* Buy controls (also used in the sticky bar) */
+.dstepwrap{ margin:0 }
+.dadd{ background:var(--green); border-radius:13px; font-weight:800; box-shadow:0 3px 10px rgba(12,131,31,.24); transition:transform .1s ease }
+.dadd:active{ transform:scale(.97) }
+.dstp{ border:1.5px solid var(--green); border-radius:13px }
+.dstp button{ transition:background .12s ease } .dstp button:active{ background:var(--green-d) }
+/* Sticky bottom buy bar (premium PDP pattern) */
+.dbuybar{ position:fixed; left:0; right:0; bottom:0; z-index:6; background:#fff; border-top:1px solid var(--line);
+  box-shadow:0 -6px 22px rgba(16,24,40,.10); display:flex; align-items:center; justify-content:space-between; gap:14px;
+  padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px)) }
+.dbuybar .dbp{ font-size:21px; font-weight:800; letter-spacing:-.02em } .dbuybar .dbsub{ font-size:12px; color:var(--muted) }
+.dbuybar #dstepwrap{ flex:none }
+/* Sections + reco rails */
+.dsec{ border-top-color:var(--line); margin-top:24px } .dsech{ font-size:16px; font-weight:800; letter-spacing:-.01em }
+.dtext{ color:#4B5563 }
+.dwrow{ border-top-color:#F1F3F5 } .dwico{ background:#EAF7EE; color:var(--green-d) }
+.drailh{ font-size:16px; font-weight:800; letter-spacing:-.01em }
+.rcard{ border:1px solid #EEF0F3; border-radius:14px; box-shadow:var(--shadow-card); transition:box-shadow .2s,transform .12s }
+.rcard:active{ transform:scale(.98) } @media(hover:hover){ .rcard:hover{ box-shadow:var(--shadow-lift) } }
+.rimg{ background:linear-gradient(180deg,#FBFCFD,#F2F4F7); border-radius:11px }
+.rnm{ color:#374151 } .rpr{ font-size:15px; font-weight:800; letter-spacing:-.01em }
+
+/* Variant picker sheet */
+.vlist{ gap:10px } .vrow{ border:1px solid #EEF0F3; border-radius:14px; box-shadow:var(--shadow-card); padding:10px 12px }
+.vth{ background:linear-gradient(180deg,#FBFCFD,#F2F4F7); border-color:#EEF0F3; border-radius:12px }
+.vsz{ font-weight:700 } .vpr{ font-weight:800; letter-spacing:-.01em }
+.stp.sm{ border-width:1.5px; border-radius:11px } .stp.sm button{ width:34px; height:34px; transition:background .12s } .stp.sm button:active{ background:var(--green-d) }
+.add.sm{ border:1.5px solid var(--green); background:#fff; color:var(--green-d); text-transform:uppercase; letter-spacing:.03em; font-weight:800; border-radius:10px; padding:8px 14px; min-height:38px }
+
+/* Modifier (customize) sheet */
+.mgrp{ margin-bottom:14px } .mgh{ font-size:14px; font-weight:800; letter-spacing:-.01em; margin-bottom:8px }
+.mgh .req{ font-size:11px; font-weight:700; color:#B4232A; background:#FDECEC; border-radius:6px; padding:2px 7px; text-transform:uppercase; letter-spacing:.03em }
+.mopt{ display:flex; align-items:center; justify-content:space-between; border:1.5px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:8px; font-size:14.5px; cursor:pointer; box-shadow:var(--shadow-card) }
+.mopt.on{ border-color:var(--green); background:#F1F9F4; color:var(--green-d) }
+
 </style>
 </head>
 <body>
@@ -1538,13 +1589,13 @@ function renderDetail(d){
     +detailHeader()
     +'<div class="dtop"><div class="dgal">'+main+thumbs+'</div>'
       +'<div class="dinfo"><div class="dcat">'+esc(p.category||'')+'</div><div class="dname">'+esc(p.name)+'</div>'
-      +pack+moq+'<div class="dprice">'+ugx(p.price)+' '+mrp+' '+off+'</div>'
-      +'<div id="dstepwrap" class="dstepwrap">'+detailStepper(p)+'</div></div></div>'
+      +pack+moq+'<div class="dprice">'+ugx(p.price)+' '+mrp+' '+off+'</div></div></div>'
     +desc+why
     +recoRail('Similar products', d.similar)
     +recoRail('Top in '+(p.category||'this category'), d.top_in_category)
     +recoRail('People also bought', d.also_bought)
-    +'</div>';
+    +'</div>'
+    +'<div class="dbuybar"><div class="dbprice"><div class="dbp">'+ugx(p.price)+'</div>'+(bits.length?('<div class="dbsub">'+bits.join(' · ')+'</div>'):'')+'</div><div id="dstepwrap" class="dstepwrap">'+detailStepper(p)+'</div></div>';
   $('detail').scrollTop=0;
 }
 
