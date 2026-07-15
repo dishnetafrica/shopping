@@ -49,6 +49,20 @@ final class DemandPlanCapability implements ObjectCapability
             ->map(fn ($n) => str_replace('|', ' ', trim((string) $n)))->filter()->unique()->values()->all();
         $productCombo = 'combo:' . (count($productNames) ? implode('|', $productNames) : 'Product');
 
+        // people pick-list + rates for booking the purchase into the books (/papi/order-costs).
+        $me = trim((string) ($ctx->user->name ?? ''));
+        $members = \App\Models\User::where('tenant_id', $t)->orderBy('name')->pluck('name')->map(fn ($n) => trim((string) $n))->filter()->unique()->values()->all();
+        if ($me !== '') { $members = array_values(array_unique(array_merge([$me], $members))); }
+        $comboPeople = 'combo:' . (count($members) ? implode('|', $members) : ($me ?: 'Me'));
+        $fx = \App\Services\Money\Fx::forTenant($ctx->tenant);
+        $rateMap = ['USD' => 1, 'UGX' => (int) round($fx->ratePerUsd('UGX')), 'SSP' => (int) round($fx->ratePerUsd('SSP'))];
+        $defCur = $ctx->nativeCurrency();
+        $defRate = $rateMap[$defCur] ?? 1;
+
+        // linked shipment (Phase 2 — the plan's goods belong to one Shipment)
+        $shipment = $plan->shipment_id ? \App\Models\Shipment::where('tenant_id', $t)->find($plan->shipment_id) : null;
+        $purchasableUnallocated = $lines->filter(fn ($l) => (float) $l->qty_purchased > 0 && $l->product_id && ! $l->consignment_id)->count();
+
         $totRequested = 0.0; $totPurchased = 0.0; $pending = 0; $partial = 0; $purchased = 0; $notAvail = 0;
         $rows = [];
         foreach ($lines as $l) {
@@ -85,6 +99,20 @@ final class DemandPlanCapability implements ObjectCapability
                         'labels' => ['received_qty' => 'Total received in Juba', 'damaged_qty' => 'Damaged (of received)', 'remarks' => 'Note'],
                         'prefill' => ['received_qty' => (float) $l->received_qty, 'damaged_qty' => (float) $l->damaged_qty, 'remarks' => (string) ($l->remarks ?: '')],
                         'body' => ['line_id' => $l->id],
+                    ]];
+                }
+                if ((float) $l->qty_purchased > 0) {
+                    // Book the actual purchase into the books (supplier payable / cashbook) via the FROZEN
+                    // /papi/order-costs endpoint — same proven path the Suppliers & Purchasing screens use.
+                    $body = ['stage' => 'purchase', 'product_id' => (int) $l->product_id, 'qty' => (float) $l->qty_purchased];
+                    if ($l->supplier_id) { $body['supplier_id'] = (int) $l->supplier_id; }
+                    $btns[] = ['icon' => 'dollar', 'title' => 'Record bill (book the cost)', 'action' => [
+                        'key' => 'record_bill', 'label' => 'Record bill — ' . $l->name, 'method' => 'POST', 'endpoint' => '/papi/order-costs', 'actor' => 'human', 'tone' => 'primary',
+                        'schema' => ['native_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'pay_status' => 'enum:credit,cash', 'note' => 'text', 'holder' => $comboPeople],
+                        'labels' => ['native_amount' => 'Bill amount', 'rate_to_usd' => 'Rate (native per $1)', 'pay_status' => 'Credit (owe) or cash (paid now)', 'note' => 'Item / description', 'holder' => 'Paid by (if cash)'],
+                        'prefill' => ['currency' => $defCur, 'rate_to_usd' => $defRate, 'pay_status' => 'credit', 'note' => $l->name . ' × ' . $this->qty($l->qty_purchased), 'holder' => $me],
+                        'body' => $body,
+                        'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
                     ]];
                 }
                 $btns[] = ['icon' => 'trash', 'title' => 'Remove line', 'tone' => 'danger', 'post' => $endpoint . '/remove_line', 'body' => ['line_id' => $l->id], 'confirm' => 'Remove ' . $l->name . ' from this plan?'];
@@ -135,6 +163,12 @@ final class DemandPlanCapability implements ObjectCapability
                     'schema' => ['name' => $productCombo, 'requested_qty' => 'number'],
                     'labels' => ['name' => 'Product (pick from catalogue, or type a new item)', 'requested_qty' => 'Required quantity'], 'prefill' => []];
             }
+            if ($isOpen && ($purchasableUnallocated > 0 || $shipment)) {
+                $headerActions[] = ['key' => 'allocate_shipment',
+                    'label' => $shipment ? ('Update shipment ' . $shipment->shipment_number) : 'Create shipment',
+                    'method' => 'POST', 'endpoint' => $endpoint . '/allocate_shipment', 'actor' => 'human', 'tone' => 'default',
+                    'confirm' => $shipment ? ('Push purchased items onto shipment ' . $shipment->shipment_number . '?') : 'Create a Kampala → Juba shipment from the purchased items?'];
+            }
         }
         $more = [];
         if ($canEdit && $isOpen) {
@@ -146,7 +180,7 @@ final class DemandPlanCapability implements ObjectCapability
             ->object([
                 'type' => 'demandPlan', 'id' => (string) $plan->id, 'ref' => (string) ($plan->plan_no ?: $plan->id),
                 'title' => (string) ($plan->plan_no ?: ('Plan ' . $plan->id)),
-                'subtitle' => trim(implode(' · ', array_filter([(string) $plan->title, $plan->shipment_ref ? ('Shipment ' . $plan->shipment_ref) : '']))),
+                'subtitle' => trim(implode(' · ', array_filter([(string) $plan->title, $shipment ? ('Shipment ' . $shipment->shipment_number . ' · ' . ucfirst(str_replace('_', ' ', (string) $shipment->status))) : ($plan->shipment_ref ? ('Shipment ' . $plan->shipment_ref) : '')]))),
                 'status' => $this->planLabel((string) $plan->status),
             ])
             ->headline($pct . '% purchased', $lines->count() . ' lines · ' . $this->qty($totRequested) . ' required', $pct >= 100 ? 'ok' : ($pct > 0 ? 'warn' : 'default'))
@@ -155,6 +189,7 @@ final class DemandPlanCapability implements ObjectCapability
                 ['key' => 'pending', 'label' => 'To buy', 'value' => $pending + $partial, 'tone' => ($pending + $partial) > 0 ? 'warn' : 'ok', 'foot' => 'pending / partial'],
                 ['key' => 'purchased', 'label' => 'Purchased', 'value' => $purchased, 'tone' => 'ok', 'foot' => 'lines fully bought'],
                 ['key' => 'notavail', 'label' => 'Not available', 'value' => $notAvail, 'tone' => $notAvail > 0 ? 'danger' : 'ok', 'foot' => 'sourcing gap'],
+                ['key' => 'shipment', 'label' => 'Shipment', 'value' => $shipment ? (string) $shipment->shipment_number : '—', 'tone' => $shipment ? 'ok' : 'default', 'foot' => $shipment ? ucfirst(str_replace('_', ' ', (string) $shipment->status)) : 'not allocated yet'],
             ])
             ->tabs([['key' => 'lines', 'label' => 'Lines', 'count' => $lines->count()]])
             ->tabSections(['lines' => [[
@@ -181,6 +216,7 @@ final class DemandPlanCapability implements ObjectCapability
             'edit_line' => $this->editLine($ctx, $input),
             'record_procurement' => $this->recordProcurement($ctx, $input),
             'receive_goods' => $this->receiveGoods($ctx, $input),
+            'allocate_shipment' => $this->allocateShipment($ctx, $input),
             'remove_line' => $this->removeLine($ctx, $input),
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
@@ -353,7 +389,89 @@ final class DemandPlanCapability implements ObjectCapability
             }
         }
 
+        // Keep the shipment manifest in sync (display only — the ledger is written once, above).
+        if ($l->consignment_id) {
+            try {
+                $cs = \App\Models\ConsignmentStock::where('tenant_id', $ctx->tenantId())->find((int) $l->consignment_id);
+                if ($cs) { $cs->qty_received = (float) $l->received_qty; $cs->save(); }
+            } catch (\Throwable $e) {
+            }
+        }
+
         return ['ok' => true, 'message' => 'Received ' . $this->qty($now) . ' of ' . $l->name . ($intoStock ? ' — added to Juba stock.' : ($l->product_id ? '.' : ' (ad-hoc line — not linked to a product, so not added to stock).'))];
+    }
+
+    /**
+     * Allocate the plan's purchased lines to a Kampala → Juba Shipment (the central object). Creates the
+     * shipment via the frozen ShipmentService (packed state, auto-numbered) the first time, then pushes
+     * each purchased catalogue line onto it as ConsignmentStock (qty_requested / qty_sent). Idempotent:
+     * a line already on the shipment is updated, not duplicated.
+     */
+    private function allocateShipment(CapabilityContext $ctx, array $in): array
+    {
+        $plan = $this->plan($ctx, $in);
+        if (! $plan) {
+            return ['ok' => false, 'error' => 'not_found'];
+        }
+        $t = $ctx->tenantId();
+        $lines = DemandPlanLine::where('tenant_id', $t)->where('demand_plan_id', $plan->id)
+            ->where('qty_purchased', '>', 0)->whereNotNull('product_id')->get();
+        if ($lines->isEmpty()) {
+            return ['ok' => false, 'error' => 'nothing_to_ship', 'message' => 'No purchased catalogue products to ship yet.'];
+        }
+
+        // Get or create the shipment (reuse the frozen ShipmentService so numbering + custody are correct).
+        $ship = $plan->shipment_id ? \App\Models\Shipment::where('tenant_id', $t)->find($plan->shipment_id) : null;
+        if (! $ship) {
+            try {
+                $ship = app(\App\Services\Logistics\ShipmentService::class)->create([
+                    'tenant_id'        => $t,
+                    'shipment_number'  => trim((string) $plan->shipment_ref) ?: null,
+                    'origin_city'      => 'Kampala',
+                    'destination_city' => 'Juba',
+                    'actor_name'       => (string) ($ctx->user->name ?? 'owner'),
+                    'notes'            => 'From demand plan ' . ($plan->plan_no ?: $plan->id),
+                ]);
+            } catch (\Throwable $e) {
+                return ['ok' => false, 'error' => 'shipment_failed', 'message' => 'Could not create the shipment: ' . $e->getMessage()];
+            }
+            $plan->shipment_id = $ship->id;
+            if (! $plan->shipment_ref) { $plan->shipment_ref = $ship->shipment_number; }
+            $plan->save();
+        }
+
+        $added = 0; $updated = 0;
+        foreach ($lines as $l) {
+            $prod = \App\Models\Product::where('tenant_id', $t)->find((int) $l->product_id);
+            $unitCost = $prod && $prod->cost_price !== null ? (float) $prod->cost_price : null;
+            $unitPrice = $prod ? (float) $prod->price : null;
+
+            if ($l->consignment_id) {
+                $cs = \App\Models\ConsignmentStock::where('tenant_id', $t)->find((int) $l->consignment_id);
+                if ($cs) {
+                    $cs->qty_requested = (float) $l->requested_qty;
+                    $cs->qty_sent = (float) $l->qty_purchased;
+                    $cs->qty_received = (float) $l->received_qty;
+                    $cs->save();
+                    $updated++;
+                    continue;
+                }
+            }
+
+            $cs = \App\Models\ConsignmentStock::create([
+                'tenant_id' => $t, 'shipment_id' => $ship->id, 'product_id' => (int) $l->product_id, 'name' => (string) $l->name,
+                'qty_requested' => (float) $l->requested_qty, 'qty_sent' => (float) $l->qty_purchased,
+                'qty_received' => (float) $l->received_qty, 'qty_sold' => 0,
+                'unit_cost' => $unitCost, 'unit_price' => $unitPrice,
+                'note' => 'From demand plan ' . ($plan->plan_no ?: $plan->id),
+            ]);
+            $l->shipment_id = $ship->id;
+            $l->consignment_id = $cs->id;
+            $l->save();
+            $added++;
+        }
+
+        return ['ok' => true, 'message' => 'Shipment ' . $ship->shipment_number . ' — ' . $added . ' item(s) added' . ($updated ? (', ' . $updated . ' updated') : '') . '. Manage dispatch in Consignments.'];
     }
 
     private function removeLine(CapabilityContext $ctx, array $in): array

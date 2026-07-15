@@ -13,6 +13,7 @@ class DemandPlanLine extends Model
         'current_stock', 'in_transit', 'expected_sales', 'suggested_qty', 'requested_qty',
         'qty_available', 'qty_purchased', 'supplier_id', 'supplier_name', 'expected_delivery',
         'remarks', 'line_status', 'received_qty', 'damaged_qty', 'received_at',
+        'shipment_id', 'consignment_id',
     ];
 
     protected $casts = [
