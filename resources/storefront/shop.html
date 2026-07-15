@@ -841,6 +841,63 @@ button{ -webkit-tap-highlight-color:transparent }
   .ordtot{ font-size:13.5px } .ordn{ display:inline; color:var(--muted); font-weight:600 }
   .ordre{ justify-self:end }
 }
+
+/* Quick Order / shortcuts panel (used only from desktop entry points). */
+.qopanel{ padding:2px 0 4px }
+.qosec{ padding:8px 0 14px; border-bottom:1px solid var(--line) }
+.qosec:last-child{ border-bottom:0 }
+.qoh{ font-size:14px; font-weight:800; margin-bottom:6px }
+.qohint{ font-size:12.5px; color:var(--muted); margin-bottom:8px; line-height:1.45 }
+.qohint code{ background:#F1F3F1; border-radius:5px; padding:1px 6px; font-size:12px; color:var(--ink) }
+.qotext{ width:100%; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:14px;
+  font-family:ui-monospace,Menlo,Consolas,monospace; resize:vertical; outline:none }
+.qotext:focus{ border-color:var(--green) }
+.qorow{ display:flex; gap:8px; margin-top:8px; align-items:center }
+.qoinput{ flex:1; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:14px; outline:none }
+.qoinput:focus{ border-color:var(--green) }
+.qobtn{ margin-top:10px; width:100%; border:0; background:var(--green); color:#fff; font-weight:800; font-size:14px; padding:12px; border-radius:11px; cursor:pointer }
+.qobtn:hover{ background:var(--green-d) }
+.qobtn2{ border:1px solid var(--green); background:#fff; color:var(--green-d); font-weight:800; font-size:13px; padding:10px 16px; border-radius:10px; cursor:pointer; white-space:nowrap }
+.qobtn2:hover{ background:#F1F9F4 }
+.qprhd{ font-size:12.5px; font-weight:800; color:var(--muted); margin:12px 0 6px }
+.qpr{ display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:9px; font-size:13px; margin-bottom:4px }
+.qpr .qpi{ flex:1; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.qpr .qpq{ font-weight:800; flex:none } .qpr .qps{ flex:none; color:var(--muted); font-weight:700 }
+.qpr.ok{ background:#F4FBF5 } .qpr.ok .qps{ color:var(--green-d) }
+.qpr.amb{ background:#FFF7EC } .qpr.amb .qps{ color:var(--amber) }
+.qpr.no{ background:#FDF1F1 } .qpr.no .qps{ color:var(--red) }
+.qpr .qpx{ color:var(--red); font-weight:700 }
+.qotpl{ display:flex; align-items:center; justify-content:space-between; gap:10px; border:1px solid var(--line); border-radius:11px; padding:10px 12px; margin-bottom:8px }
+.qotn b{ font-size:13.5px; display:block } .qotn span{ font-size:12px; color:var(--muted) }
+.qotb{ display:flex; gap:6px; flex:none }
+.qold{ border:1px solid var(--green); background:#fff; color:var(--green-d); font-weight:800; border-radius:9px; padding:7px 14px; font-size:13px; cursor:pointer }
+.qold:hover{ background:#F1F9F4 }
+.qodel{ border:1px solid var(--line); background:#fff; color:var(--muted); border-radius:9px; width:34px; font-size:14px; cursor:pointer }
+.qoempty{ font-size:13px; color:var(--muted); padding:6px 2px }
+.ksrow{ display:flex; align-items:center; gap:10px; padding:9px 2px; border-bottom:1px solid var(--line); font-size:13.5px }
+.ksrow:last-child{ border-bottom:0 }
+.ksk{ font-weight:800; background:#F1F3F1; border:1px solid var(--line); border-radius:6px; padding:2px 9px; font-size:12.5px; flex:none }
+
+/* =====================================================================
+   DESKTOP LAYER — Phase 7 (P2): Quick-order entry, templates, compact
+   density, shortcuts (>=1024px only).
+   ===================================================================== */
+@media(min-width:1024px){
+  .sheetcard:has(.qopanel){ max-width:660px }
+  .dbulk button{ width:calc(100% - 12px); margin:0 6px; border:1px solid var(--green); background:#F1F9F4;
+    color:var(--green-d); font-weight:800; font-size:13px; padding:10px; border-radius:10px; cursor:pointer; text-align:left }
+  .dbulk button:hover{ background:#E4F4E8 }
+  .ddsw{ display:flex; gap:6px; padding:6px 6px 0 }
+  .ddsw button{ flex:1; border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer;
+    font-size:12px; font-weight:700; padding:7px 6px; border-radius:9px }
+  .ddsw button.on{ border-color:var(--green); background:#F1F9F4; color:var(--green-d) }
+  /* Compact density: smaller cards, more per row. */
+  body.ddense #content .grid{ grid-template-columns:repeat(auto-fill,minmax(156px,1fr)); gap:12px }
+  body.ddense #content .pc .bd{ padding:7px 8px 9px }
+  body.ddense #content .pc .nm{ font-size:12px; min-height:29px }
+  body.ddense #content .pc .dsc{ display:none }
+  body.ddense #content .pc .pr{ font-size:13.5px }
+}
 </style>
 </head>
 <body>
@@ -1455,6 +1512,112 @@ function opadKey(e,inp){
   else if(e.key==='ArrowUp'){ e.preventDefault(); _opadFocus(inp,-1); }
 }
 
+/* ================= Phase 7 (P2) — power-buyer tools, desktop only =================
+   Quick Order (paste from Excel / SKU list), saved order templates (localStorage),
+   compact density, keyboard shortcuts. All additive; matching is client-side against
+   the already-loaded PRODUCTS; no backend calls, no new APIs. */
+
+/* Parse pasted lines: "name, qty" | "name<TAB>qty" (Excel) | "name x5" | "name 5" | "5 x name". */
+function parseOrderLines(text){
+  return String(text||'').split(/\r?\n/).map(function(s){return s.trim();}).filter(Boolean).map(function(line){
+    var name=line, qty=null, m;
+    var parts=line.split(/\s*[,\t]\s*/);
+    if(parts.length>=2 && /^\d+$/.test(parts[parts.length-1])){ qty=parseInt(parts.pop(),10); name=parts.join(', '); }
+    else if((m=line.match(/^(\d+)\s*[x×]\s*(.+)$/i))){ qty=parseInt(m[1],10); name=m[2].trim(); }
+    else if((m=line.match(/^(.*?)\s*[x×]\s*(\d+)$/i))){ name=m[1].trim(); qty=parseInt(m[2],10); }
+    else if((m=line.match(/^(.*?)\s+(\d{1,5})$/))){ name=m[1].trim(); qty=parseInt(m[2],10); }
+    return {raw:line, name:name, qty:qty};
+  });
+}
+/* Match a typed name to a product: exact → unique prefix → unique contains → ambiguous. */
+function matchProduct(name){
+  var q=String(name||'').toLowerCase().trim(); if(!q)return null;
+  var ex=PRODUCTS.filter(function(p){return p.name.toLowerCase()===q;}); if(ex.length)return {p:ex[0]};
+  var pre=PRODUCTS.filter(function(p){return p.name.toLowerCase().indexOf(q)===0;}); if(pre.length===1)return {p:pre[0]};
+  var ct=PRODUCTS.filter(function(p){return p.name.toLowerCase().indexOf(q)>=0;});
+  if(ct.length===1)return {p:ct[0]}; if(ct.length>1)return {ambiguous:ct};
+  return null;
+}
+var _QOR=[];
+var TPL_KEY='cb_tpl_'+(SHOP.slug||SHOP.shopName||'shop');
+function loadTemplates(){ try{ return JSON.parse(localStorage.getItem(TPL_KEY)||'[]')||[]; }catch(e){ return []; } }
+function saveTemplates(a){ try{ localStorage.setItem(TPL_KEY,JSON.stringify(a)); }catch(e){} }
+function saveCurrentAsTemplate(name){
+  var items=cartItems().map(function(i){return {name:i.name,qty:i.qty};});
+  if(!items.length){ toast('Your order is empty — add items first','err'); return; }
+  name=String(name||'').trim()||('Template '+(loadTemplates().length+1));
+  var a=loadTemplates(); a.unshift({name:name,items:items}); saveTemplates(a);
+  toast('Saved “'+name+'”','ok'); openQuickOrder();
+}
+function loadTemplate(i){ var a=loadTemplates(),t=a[i]; if(!t)return; closeSheet(); reorderItems(t.items); }
+function deleteTemplate(i){ var a=loadTemplates(); a.splice(i,1); saveTemplates(a); openQuickOrder(); }
+
+function openQuickOrder(){
+  $('sheetTitle').textContent='Quick order';
+  var tpls=loadTemplates();
+  var tplHtml = tpls.length ? tpls.map(function(t,i){
+    var n=t.items.reduce(function(s,x){return s+(x.qty||0);},0);
+    return '<div class="qotpl"><div class="qotn"><b>'+esc(t.name)+'</b><span>'+t.items.length+' lines · '+n+' items</span></div>'
+      +'<div class="qotb"><button class="qold" onclick="loadTemplate('+i+')">Load</button><button class="qodel" onclick="deleteTemplate('+i+')" aria-label="Delete template">✕</button></div></div>';
+  }).join('') : '<div class="qoempty">No saved templates yet. Build an order, then save it below to reuse next time.</div>';
+  var h='<div class="qopanel">'
+    +'<div class="qosec"><div class="qoh">Paste your order list</div>'
+    +'<div class="qohint">One product per line. Put the quantity after a comma, a tab (straight from Excel), or a space — e.g. <code>Sunflower Oil 20L, 5</code></div>'
+    +'<textarea id="qoText" class="qotext" rows="6" placeholder="Sunflower Oil 20L, 5&#10;UHT Milk 1L x12, 12&#10;Sugar 50kg 3"></textarea>'
+    +'<div class="qorow"><button class="qobtn2" onclick="quickOrderPreview()">Preview matches</button></div>'
+    +'<div id="qoPrev"></div></div>'
+    +'<div class="qosec"><div class="qoh">Save current order as a template</div>'
+    +'<div class="qorow"><input id="qoTplName" class="qoinput" placeholder="e.g. Weekly kitchen order"><button class="qobtn2" onclick="saveCurrentAsTemplate(($(\'qoTplName\')||{}).value)">Save</button></div></div>'
+    +'<div class="qosec"><div class="qoh">Your templates</div>'+tplHtml+'</div></div>';
+  $('sheetBody').innerHTML=h+'<div class="cartfoot"><button class="place" style="background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="closeSheet()">Close</button></div>';
+  $('sheet').classList.add('show');
+}
+function quickOrderPreview(){
+  var lines=parseOrderLines(($('qoText')||{}).value||'');
+  _QOR=lines.map(function(l){ return {raw:l.raw, name:l.name, qty:l.qty, match:(l.name?matchProduct(l.name):null)}; });
+  var matched=0, rows=_QOR.map(function(r){
+    if(r.match&&r.match.p){ matched++; var p=r.match.p, mq=minq(p), q=r.qty||mq; if(q<mq)q=mq;
+      return '<div class="qpr ok"><span class="qpi">'+esc(p.name)+(oosOf(p)?' <span class="qpx">(out of stock)</span>':'')+'</span><span class="qpq">×'+q+'</span><span class="qps">'+ugx(p.price*q)+'</span></div>'; }
+    if(r.match&&r.match.ambiguous){ return '<div class="qpr amb"><span class="qpi">'+esc(r.name)+'</span><span class="qps">'+r.match.ambiguous.length+' matches — be more specific</span></div>'; }
+    return '<div class="qpr no"><span class="qpi">'+esc(r.raw)+'</span><span class="qps">no match</span></div>';
+  }).join('');
+  $('qoPrev').innerHTML='<div class="qprhd">'+matched+' of '+_QOR.length+' line'+(_QOR.length===1?'':'s')+' matched</div>'+rows
+    +(matched?'<button class="qobtn" onclick="quickOrderApply()">Add '+matched+' item'+(matched===1?'':'s')+' to order</button>':'');
+}
+function quickOrderApply(){
+  var n=0; _QOR.forEach(function(r){ if(r.match&&r.match.p){ var p=r.match.p; if(oosOf(p))return; var mq=minq(p), q=r.qty||mq; if(q<mq)q=mq;
+    if(!CART[p.name])CART[p.name]={name:p.name,price:p.price,qty:0}; CART[p.name].qty=q; n++; } });
+  saveCart(); render(); bar(); closeSheet();
+  toast('Added '+n+' item'+(n===1?'':'s')+' to your order','ok');
+  if(_desktop())openCart();
+}
+
+/* Compact density — smaller cards, more per row. CSS-only via a body class. */
+var DDENSE=false;
+function setDense(v){ DDENSE=!!v; document.body.classList.toggle('ddense',DDENSE); if(typeof syncDesktopSide==='function')syncDesktopSide(); }
+
+/* Keyboard shortcuts (desktop): "/" search, "?" help. Never fires while typing. */
+function openShortcuts(){
+  $('sheetTitle').textContent='Keyboard shortcuts';
+  $('sheetBody').innerHTML='<div class="qopanel">'
+    +'<div class="ksrow"><span class="ksk">/</span><span>Open search</span></div>'
+    +'<div class="ksrow"><span class="ksk">↑</span><span class="ksk">↓</span><span>Move through search results</span></div>'
+    +'<div class="ksrow"><span class="ksk">Enter</span><span>Add highlighted result · commit a quantity in the Order Pad</span></div>'
+    +'<div class="ksrow"><span class="ksk">Esc</span><span>Close search or dialog</span></div>'
+    +'<div class="ksrow"><span class="ksk">?</span><span>Show this help</span></div></div>'
+    +'<div class="cartfoot"><button class="place" style="background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="closeSheet()">Close</button></div>';
+  $('sheet').classList.add('show');
+}
+document.addEventListener('keydown',function(e){
+  if(!_desktop())return;
+  var t=e.target, tag=(t&&t.tagName||'').toLowerCase();
+  if(tag==='input'||tag==='textarea'||tag==='select'||(t&&t.isContentEditable))return;
+  if($('searchOverlay')&&$('searchOverlay').classList.contains('show'))return;
+  if($('sheet')&&$('sheet').classList.contains('show'))return;
+  if(e.key==='/'){ e.preventDefault(); searchOpen(); }
+  else if(e.key==='?'){ e.preventDefault(); openShortcuts(); }
+});
+
 function oosOf(p){ return !!(p && p.stock!=null && p.stock<=0); }
 
 /* ---------- Wishlist (local, no backend) ---------- */
@@ -1844,7 +2007,9 @@ function syncDesktopSide(){
   var side=$('dside'); if(!side||!_desktop())return;
   var hasQ=!!(Q&&Q.trim().length), isList=(CAT&&CAT!=='all')||hasQ;
   var h='';
-  if(isList){ h+='<div class="dsh">View</div><div class="dviewsw"><button class="'+(DVIEW==='grid'?'on':'')+'" onclick="setView(\'grid\')">▦ Grid</button><button class="'+(DVIEW==='list'?'on':'')+'" onclick="setView(\'list\')">☰ Order Pad</button></div>'; }
+  h+='<div class="dsh">Bulk order</div><div class="dbulk"><button onclick="openQuickOrder()">⚡ Quick order · paste list</button></div>';
+  if(isList){ h+='<div class="dsh">View</div><div class="dviewsw"><button class="'+(DVIEW==='grid'?'on':'')+'" onclick="setView(\'grid\')">▦ Grid</button><button class="'+(DVIEW==='list'?'on':'')+'" onclick="setView(\'list\')">☰ Order Pad</button></div>';
+    if(DVIEW==='grid'){ h+='<div class="ddsw"><button class="'+(!DDENSE?'on':'')+'" onclick="setDense(false)">Comfortable</button><button class="'+(DDENSE?'on':'')+'" onclick="setDense(true)">Compact</button></div>'; } }
   h+='<div class="dsh">Departments</div><div class="dcatlist">';
   h+='<button class="dcat'+((CAT==='all'&&!hasQ)?' on':'')+'" onclick="setCat(\'all\')"><span>All products</span></button>';
   (CATS||[]).forEach(function(c){ h+='<button class="dcat'+(CAT===c.name?' on':'')+'" onclick="setCat('+jk(c.name)+')"><span>'+esc(c.name)+'</span><span class="dct">'+(c.count||0)+'</span></button>'; });
