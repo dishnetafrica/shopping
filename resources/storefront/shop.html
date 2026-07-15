@@ -279,6 +279,41 @@ body{padding-bottom:calc(var(--nav-h) + 14px + var(--safe-b))}
 .cmpcol .cp{font-size:15px;font-weight:800;margin:6px 0}
 .cmprow{font-size:12px;color:var(--muted);margin-top:3px}
 
+/* ---- V2 premium search (Increment 3): trigger bar + full-screen overlay ---- */
+.searchbar{display:flex;align-items:center;gap:8px;background:#F4F4F6;border:1px solid var(--line);border-radius:12px;padding:0 10px;height:46px;cursor:text}
+.searchbar .sicon{width:18px;height:18px;color:var(--muted);flex:none}
+.searchbar input{flex:1;border:0;background:none;font-size:15px;color:var(--ink);outline:none;height:100%;cursor:text}
+.searchbar .sqbtn{border:0;background:none;font-size:17px;width:36px;height:36px;display:grid;place-items:center;cursor:pointer;flex:none}
+.soverlay{position:fixed;inset:0;z-index:55;background:#fff;display:none;flex-direction:column}
+.soverlay.show{display:flex}
+.shdr{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.shdr .sback{border:0;background:none;font-size:26px;line-height:1;color:var(--ink);width:36px;height:44px;cursor:pointer;padding:0}
+.shdr .sinput{flex:1;display:flex;align-items:center;gap:8px;background:#F4F4F6;border-radius:12px;padding:0 12px;height:44px}
+.shdr .sinput svg{width:18px;height:18px;color:var(--muted);flex:none}
+.shdr .sinput input{flex:1;border:0;background:none;font-size:15px;outline:none;color:var(--ink)}
+.shdr .sic{border:1px solid var(--line);background:#fff;border-radius:10px;height:44px;min-width:42px;display:grid;place-items:center;color:var(--green-d);cursor:pointer;font-size:17px;flex:none}
+.sbody{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:4px 0 24px}
+.sgroup{padding:14px 14px 4px;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.srow{display:flex;align-items:center;gap:11px;padding:10px 14px;cursor:pointer}
+.srow:active{background:#f6f7f9}
+.srow .sthumb{width:40px;height:40px;border-radius:8px;background:var(--tile);display:grid;place-items:center;flex:none;overflow:hidden;font-size:19px}
+.srow .sthumb img{width:100%;height:100%;object-fit:cover}
+.srow .sthumb svg{width:22px;height:22px}
+.srow .smeta{flex:1;min-width:0}
+.srow .st{font-size:14px;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srow .ss{font-size:12px;color:var(--muted)}
+.srow .sadd{border:1px solid var(--green);color:var(--green);background:#fff;border-radius:9px;padding:8px 15px;font-weight:800;font-size:13px;flex:none;min-height:40px}
+.schips{display:flex;flex-wrap:wrap;gap:8px;padding:8px 14px}
+.schip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink)}
+.szero{text-align:center;padding:34px 22px;color:var(--muted);font-size:14px;line-height:1.5}
+.szero .wa{display:inline-block;margin-top:14px;background:var(--green);color:#fff;border-radius:10px;padding:12px 18px;font-weight:800;text-decoration:none}
+
+/* ---- V2 toast (success/info feedback; also fixes previously-undefined toast() calls) ---- */
+.cbtoast{position:fixed;left:50%;bottom:calc(var(--nav-h) + 24px + var(--safe-b));transform:translateX(-50%) translateY(10px);
+  background:#111;color:#fff;padding:11px 18px;border-radius:12px;font-size:13.5px;font-weight:600;z-index:70;opacity:0;
+  pointer-events:none;transition:opacity .25s,transform .25s;max-width:88%;text-align:center;box-shadow:var(--shadow-md)}
+.cbtoast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
 </style>
 </head>
 <body>
@@ -295,7 +330,12 @@ body{padding-bottom:calc(var(--nav-h) + 14px + var(--safe-b))}
 
 <div class="delv" id="delvBar" onclick="askLocation()"><span class="ico">📍</span><span class="txt">Set your location for delivery time</span><span class="chg">›</span></div>
 
-<div class="searchwrap"><input id="q" class="search" placeholder="Search products… (e.g. sugar, atta, oil)"></div>
+<div class="searchwrap"><div class="searchbar" onclick="searchOpen()">
+  <svg class="sicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+  <input id="q" readonly placeholder="Search products, brands…" aria-label="Search" onfocus="searchOpen()">
+  <button class="sqbtn" onclick="event.stopPropagation();voiceSearch()" aria-label="Voice search">🎤</button>
+  <button class="sqbtn" onclick="event.stopPropagation();barcodeSearch()" aria-label="Scan barcode">📷</button>
+</div></div>
 <div id="content"><div class="skgrid"><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div></div></div>
 
 <div id="footer"><span id="footName">Shop</span><br>
@@ -325,6 +365,19 @@ body{padding-bottom:calc(var(--nav-h) + 14px + var(--safe-b))}
     <div class="sheethd"><b id="sheetTitle">Your cart</b><button class="x" onclick="closeSheet()">×</button></div>
     <div class="sheetbody" id="sheetBody"></div>
   </div>
+</div>
+
+<div class="soverlay" id="searchOverlay">
+  <div class="shdr">
+    <button class="sback" onclick="searchClose()" aria-label="Back">‹</button>
+    <div class="sinput">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="sq" placeholder="Search products, brands…" autocomplete="off" enterkeyhint="search" aria-label="Search products">
+    </div>
+    <button class="sic" onclick="voiceSearch()" aria-label="Voice search">🎤</button>
+    <button class="sic" onclick="barcodeSearch()" aria-label="Scan barcode">📷</button>
+  </div>
+  <div class="sbody" id="sqBody"></div>
 </div>
 
 <script>
@@ -545,7 +598,52 @@ function navGo(tab){
 function showCategories(){ CAT='all'; Q=''; if($('q'))$('q').value=''; closeSheet(); render();
   var el=document.querySelector('.catgrid')||document.querySelector('.section-title');
   if(el){ el.scrollIntoView({behavior:'smooth',block:'start'}); } else { window.scrollTo(0,0); } }
-function focusSearch(){ closeSheet(); window.scrollTo({top:0,behavior:'smooth'}); var q=$('q'); if(q){ setTimeout(function(){ q.focus(); }, 250); } }
+function focusSearch(){ searchOpen(); }
+
+/* ================= Storefront V2 — premium search overlay (Increment 3) ================= */
+var RSRCH_KEY='cb_rsearch_'+(SHOP.slug||'shop'), RSEARCH=[];
+function loadRSearch(){try{RSEARCH=JSON.parse(localStorage.getItem(RSRCH_KEY)||'[]')||[];}catch(e){RSEARCH=[];}}
+function pushRSearch(v){ v=(v||'').trim(); if(!v)return; RSEARCH=RSEARCH.filter(function(x){return x.toLowerCase()!==v.toLowerCase();}); RSEARCH.unshift(v); RSEARCH=RSEARCH.slice(0,8); try{localStorage.setItem(RSRCH_KEY,JSON.stringify(RSEARCH));}catch(e){} }
+function searchOpen(){ var o=$('searchOverlay'); if(!o)return; closeSheet(); o.classList.add('show'); document.body.style.overflow='hidden'; var sq=$('sq'); if(sq)sq.value=Q||''; searchRender(Q||''); setTimeout(function(){ if(sq)sq.focus(); },60); }
+function searchClose(){ var o=$('searchOverlay'); if(o)o.classList.remove('show'); document.body.style.overflow=''; }
+function searchSubmit(v){ v=(v==null?(($('sq')&&$('sq').value)||''):v).trim(); searchClose(); if($('q'))$('q').value=v; Q=v; if(v)pushRSearch(v); render(); window.scrollTo(0,0); }
+function searchPickCat(c){ searchClose(); if($('q'))$('q').value=''; Q=''; setCat(c); }
+function searchOpenProduct(id,name){ searchClose(); if(id){ goDetail(id); } else { searchSubmit(name); } }
+function toast(msg){ try{ var t=$('cbToast'); if(!t){ t=document.createElement('div'); t.id='cbToast'; t.className='cbtoast'; t.setAttribute('role','status'); t.setAttribute('aria-live','polite'); document.body.appendChild(t); } t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(function(){ t.classList.remove('show'); }, 2200); }catch(e){} }
+function voiceSearch(){ toast('Voice search is coming soon'); }
+function barcodeSearch(){ toast('Barcode scan is coming soon'); }
+function _srow(p){ var add=oosOf(p)?'':('<button class="sadd" onclick="event.stopPropagation();cartAdd('+jk(p.name)+')">Add</button>');
+  return '<div class="srow" onclick="searchOpenProduct('+(p.id||0)+','+jk(p.name)+')"><div class="sthumb">'+(p.image?'<img src="'+esc(p.image)+'" loading="lazy">':catIcon(p.category))+'</div><div class="smeta"><div class="st">'+esc(p.name)+'</div><div class="ss">'+ugx(p.price)+'</div></div>'+add+'</div>'; }
+function searchRender(q){
+  q=(q||'').trim(); var b=$('sqBody'); if(!b)return;
+  if(q.length<1){ b.innerHTML=searchDefault(); return; }
+  var ql=q.toLowerCase(), seenB={}, brands=[], seenC={}, cats=[];
+  PRODUCTS.forEach(function(p){
+    var br=p.brand||''; if(br && br.toLowerCase().indexOf(ql)>=0 && !seenB[br.toLowerCase()]){ seenB[br.toLowerCase()]=1; brands.push(br); }
+    var c=p.category||''; if(c && c.toLowerCase().indexOf(ql)>=0 && !seenC[c.toLowerCase()]){ seenC[c.toLowerCase()]=1; cats.push(c); }
+  });
+  var prods=PRODUCTS.filter(function(p){ return !p.poa && (p.name+' '+p.brand+' '+p.keywords).toLowerCase().indexOf(ql)>=0; });
+  var html='';
+  if(brands.length){ html+='<div class="sgroup">Brands</div>'+brands.slice(0,4).map(function(br){return '<div class="srow" onclick="searchSubmit('+jk(br)+')"><div class="sthumb">🏷️</div><div class="smeta"><div class="st">'+esc(br)+'</div><div class="ss">Brand</div></div></div>';}).join(''); }
+  if(cats.length){ html+='<div class="sgroup">Categories</div>'+cats.slice(0,4).map(function(c){return '<div class="srow" onclick="searchPickCat('+jk(c)+')"><div class="sthumb">'+catIcon(c)+'</div><div class="smeta"><div class="st">'+esc(c)+'</div><div class="ss">Category</div></div></div>';}).join(''); }
+  if(prods.length){ html+='<div class="sgroup">Products</div>'+prods.slice(0,6).map(_srow).join('')
+    +'<div class="srow" onclick="searchSubmit('+jk(q)+')" style="color:var(--green-d);font-weight:700"><div class="sthumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></div><div class="smeta"><div class="st">See all results for “'+esc(q)+'”</div></div></div>'; }
+  b.innerHTML = html || searchZero(q);
+}
+function searchDefault(){
+  var html='';
+  if(RSEARCH.length){ html+='<div class="sgroup">Recent</div><div class="schips">'+RSEARCH.map(function(v){return '<button class="schip" onclick="searchSubmit('+jk(v)+')">'+esc(v)+'</button>';}).join('')+'</div>'; }
+  var cats=(CATS||[]).slice(0,10).map(function(c){return '<button class="schip" onclick="searchPickCat('+jk(c.name)+')">'+esc(c.name)+'</button>';}).join('');
+  if(cats) html+='<div class="sgroup">Popular categories</div><div class="schips">'+cats+'</div>';
+  var best=PRODUCTS.filter(function(p){return !p.poa && !oosOf(p);}).slice().sort(function(a,b){return (b.popularity||0)-(a.popularity||0);}).slice(0,6);
+  if(best.length){ html+='<div class="sgroup">Trending</div>'+best.map(_srow).join(''); }
+  return html || '<div class="szero">Start typing to find products.</div>';
+}
+function searchZero(q){
+  var wa=SHOP.waNumber?('https://wa.me/'+SHOP.waNumber+'?text='+encodeURIComponent('Hi, do you have: '+q+'?')):'#';
+  return '<div class="szero">No matches for “'+esc(q)+'”.<br>We may still have it — just ask us.'
+    + '<br><a class="wa" href="'+wa+'" target="_blank" rel="noopener">Request “'+esc(q)+'” on WhatsApp</a></div>';
+}
 
 /* Skeleton grid — content-shaped placeholders so the screen looks populated in <100ms. */
 function skeletonGrid(n){ n=n||8; var s=''; for(var i=0;i<n;i++){ s+='<div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div>'; } return '<div class="skgrid">'+s+'</div>'; }
@@ -1146,7 +1244,7 @@ function detailSearch(){
   var v=($('dq')&&$('dq').value)||'';
   closeDetailUI();
   try{ if(/^#p\d+/.test(location.hash)) history.replaceState(null,'',location.pathname+location.search); }catch(e){}
-  var q=$('q'); if(q){ q.value=v; q.dispatchEvent(new Event('input',{bubbles:true})); try{ window.scrollTo(0,0); q.focus(); }catch(e){} }
+  searchSubmit(v);
 }
 function goDetail(id){ if(location.hash!=='#p'+id){ location.hash='p'+id; } else { openDetail(id); } }
 function closeDetail(){ if(/^#p\d+/.test(location.hash)) history.back(); else closeDetailUI(); }
@@ -1309,8 +1407,13 @@ async function placeOrder(){
   var sl=$('staffLink'); if(sl)sl.href=ADMIN_URL;
 })();
 
-$('q').addEventListener('input',function(){Q=this.value;render();});
-loadCart(); loadCust(); loadWish(); bar(); restoreDelv(); if($('content'))$('content').innerHTML=skeletonGrid(8); load();
+/* V2 search overlay wiring (the main #q is now a trigger; typing happens in #sq). */
+if($('sq')){
+  $('sq').addEventListener('input',function(){ searchRender(this.value); });
+  $('sq').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); searchSubmit(this.value); } });
+}
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ var o=$('searchOverlay'); if(o&&o.classList.contains('show')) searchClose(); } });
+loadCart(); loadCust(); loadWish(); loadRSearch(); bar(); restoreDelv(); if($('content'))$('content').innerHTML=skeletonGrid(8); load();
 </script>
 <div id="detail" class="detail" aria-hidden="true"></div>
 </body>
