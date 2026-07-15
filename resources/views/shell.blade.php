@@ -1141,6 +1141,13 @@ function formModal(a){
     if(a.valueMap && a.valueMap.field && a.valueMap.map){ const sel=body[a.valueMap.field]; const mapped=a.valueMap.map[sel];
       if(mapped===undefined || mapped===null){ toast(a.valueMap.error||'Please pick a valid option from the list',true); return; }
       const into=a.valueMap.into||a.valueMap.field; body[into]=mapped; if(into!==a.valueMap.field) delete body[a.valueMap.field]; }
+    // submitConvert: the user enters the amount in the DISPLAY currency (e.g. USD); multiply by the
+    // factor to the record's NATIVE currency (e.g. UGX) before posting, so the endpoint keeps its
+    // native-currency contract while the user thinks in the report currency they see everywhere else.
+    if(a.submitConvert && a.submitConvert.field && a.submitConvert.factor){
+      const f=a.submitConvert.field; const v=parseFloat(body[f]);
+      if(!isNaN(v)) body[f]=Math.round(v*a.submitConvert.factor*100)/100;
+    }
     // flow:'convert' — one person's cash is converted; if a different receiver is named, the converted
     // amount is then handed to them (convert under source, then transfer), so both people's balances land right.
     if(a.flow==='convert'){

@@ -111,14 +111,22 @@ final class SalesOrderCapability implements ObjectCapability
             'schema' => ['status' => 'enum:' . implode(',', $statusChoices)], 'prefill' => ['id' => (int) $o->id, 'status' => (string) $o->status]];
         $cancelOrder = ! $cancelled ? ['key' => 'cancel_order', 'label' => 'Cancel order', 'method' => 'POST', 'endpoint' => $ep . '/cancel_order', 'actor' => 'human', 'tone' => 'danger', 'confirm' => 'Cancel Order ' . $o->order_no . '? Stock is released and the order is closed.'] : null;
         // Record a payment against the order via the panel's proven /papi/record-payment endpoint.
-        // That endpoint records the amount in the order's NATIVE currency (it adds straight into
-        // amount_paid), so the field is labelled + prefilled in that currency — NOT the USD display
-        // figure — otherwise a customer would enter 165 (USD) and record 165 UGX by mistake.
-        $usdHint = $balance > 0 && $ocur !== 'USD' ? ('  (≈ ' . $fmt($balance) . ')') : '';
-        $recordPayment = ! $cancelled ? ['key' => 'record_payment', 'label' => 'Record payment', 'method' => 'POST', 'endpoint' => '/papi/record-payment', 'actor' => 'human', 'tone' => 'default',
+        // The /papi/record-payment endpoint records the amount in the order's NATIVE currency (it adds
+        // straight into amount_paid). To keep the user in the report currency (USD) they see everywhere,
+        // the field is entered + prefilled in the DISPLAY currency and the shell multiplies it back to
+        // the order's native currency on submit (submitConvert). So the user types 165 (USD) and the
+        // endpoint correctly receives ~603,075 (UGX) — no one has to think in the local currency.
+        $dispCur = $rc->consolidationCurrency();
+        $dispBalance = $balance > 0 ? round((float) $rc->consolidate([['amount' => $balance, 'currency' => $ocur, 'date' => $odate]])['amount'], 2) : 0.0;
+        $needConv = strtoupper($ocur) !== strtoupper($dispCur) && $dispBalance > 0;
+        $factor = $needConv ? round($balance / $dispBalance, 6) : 1.0;   // native units per 1 display unit
+        $recordPayment = ! $cancelled ? array_filter([
+            'key' => 'record_payment', 'label' => 'Record payment', 'method' => 'POST', 'endpoint' => '/papi/record-payment', 'actor' => 'human', 'tone' => 'default',
             'schema' => ['amount' => 'money', 'method' => 'enum:cash,mobile_money,bank,cheque', 'note' => 'text'], 'body' => ['order' => (int) $o->id],
-            'labels' => ['amount' => 'Amount in ' . $ocur . $usdHint],
-            'prefill' => ['amount' => $balance > 0 ? round($balance, 2) : '', 'method' => 'cash']] : null;
+            'labels' => ['amount' => 'Amount (' . $dispCur . ')'],
+            'prefill' => ['amount' => $dispBalance > 0 ? $dispBalance : '', 'method' => 'cash'],
+            'submitConvert' => $needConv ? ['field' => 'amount', 'factor' => $factor] : null,
+        ], fn ($v) => $v !== null) : null;
 
         $quick = array_values(array_filter([
             (! $delivered && ! $cancelled) ? $markDelivered : null,
