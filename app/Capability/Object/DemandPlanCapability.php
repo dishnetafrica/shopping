@@ -85,7 +85,9 @@ final class DemandPlanCapability implements ObjectCapability
             $bk = 'q_' . $l->id;
             $bulkSchema[$bk] = 'number';
             $bulkLabels[$bk] = mb_strlen((string) $l->name) > 44 ? (mb_substr((string) $l->name, 0, 44) . '…') : (string) $l->name;
-            $prefReq[$bk] = $req; $prefPur[$bk] = $got; $prefSent[$bk] = $sent > 0 ? $sent : $got; $prefRecv[$bk] = $recv;
+            // Default purchase entry to the REQUIRED qty (so Jayesh confirms most, only zeroes misses);
+            // once something is bought, show what was recorded.
+            $prefReq[$bk] = $req; $prefPur[$bk] = $got > 0 ? $got : $req; $prefSent[$bk] = $sent > 0 ? $sent : $got; $prefRecv[$bk] = $recv;
 
             $nameCell = ['value' => (string) $l->name . ($l->product_id ? '' : ' (ad-hoc)')];
             $statusCell = ['value' => $this->lineLabel($st), 'badge' => $this->lineBadge($st)];
@@ -177,13 +179,15 @@ final class DemandPlanCapability implements ObjectCapability
             'key' => $key, 'label' => $label, 'method' => 'POST', 'endpoint' => $endpoint . '/' . $key,
             'actor' => 'human', 'tone' => $tone, 'schema' => $bulkSchema, 'labels' => $bulkLabels, 'prefill' => $pref,
         ];
-        // Purchases carry a required supplier (pick an existing one or type a new one to add it).
+        // Purchases carry a required supplier (pick existing or type a new one) and an OPTIONAL total bill
+        // amount that books the supplier cost in the same step (via the frozen order_costs path).
         $mkBulkPurchased = fn (string $label, string $tone = 'default') => [
             'key' => 'bulk_purchased', 'label' => $label, 'method' => 'POST', 'endpoint' => $endpoint . '/bulk_purchased',
             'actor' => 'human', 'tone' => $tone,
-            'schema' => ['supplier' => $supplierCombo] + $bulkSchema,
-            'labels' => ['supplier' => 'Supplier (required — pick or type a new one)'] + $bulkLabels,
-            'prefill' => ['supplier' => ''] + $prefPur,
+            'schema' => ['supplier' => $supplierCombo, 'bill_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'pay_status' => 'enum:credit,cash'] + $bulkSchema,
+            'labels' => ['supplier' => 'Supplier (required — pick or type a new one)', 'bill_amount' => 'Total bill amount (optional — books the cost)', 'currency' => 'Currency', 'rate_to_usd' => 'Rate (native per $1)', 'pay_status' => 'Credit (owe) or paid cash now'] + $bulkLabels,
+            'prefill' => ['supplier' => '', 'bill_amount' => '', 'currency' => $defCur, 'rate_to_usd' => $defRate, 'pay_status' => 'credit'] + $prefPur,
+            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
         ];
         $addLine = ['key' => 'add_line', 'label' => 'Add product', 'method' => 'POST', 'endpoint' => $endpoint . '/add_line', 'actor' => 'human', 'tone' => 'default',
             'schema' => ['name' => $productCombo, 'requested_qty' => 'number'],
@@ -390,7 +394,55 @@ final class DemandPlanCapability implements ObjectCapability
         }
         $this->advancePlan($ctx, $plan);
 
-        return ['ok' => true, 'message' => 'Recorded purchases for ' . $n . ' product(s)' . ($sup ? ' from ' . $sup->name : '') . '.'];
+        // One-step cost trail: if a total bill amount was entered, book the supplier cost now.
+        $billAmount = round((float) preg_replace('/[^0-9.]/', '', (string) ($in['bill_amount'] ?? '')), 2);
+        $booked = false;
+        if ($billAmount > 0 && $sup) {
+            $cur = strtoupper((string) ($in['currency'] ?? '')) ?: $ctx->nativeCurrency();
+            $rate = (float) ($in['rate_to_usd'] ?? 0);
+            $payStatus = strtolower((string) ($in['pay_status'] ?? 'credit')) === 'cash' ? 'cash' : 'credit';
+            $booked = $this->bookBill($ctx, $sup, $billAmount, $cur, $rate, $payStatus, 'Purchase — ' . ($plan->plan_no ?: $plan->id) . ($sup ? (' · ' . $sup->name) : ''));
+        }
+
+        $msg = 'Recorded purchases for ' . $n . ' product(s)' . ($sup ? ' from ' . $sup->name : '') . '.';
+        if ($billAmount > 0) { $msg .= $booked ? (' Bill of ' . $this->qty($billAmount) . ' booked.') : ' (Bill could not be booked — record it from the line.)'; }
+
+        return ['ok' => true, 'message' => $msg];
+    }
+
+    /**
+     * Book a supplier purchase cost, mirroring the frozen /papi/order-costs write exactly (OrderCost is
+     * the proven write path — there is no service layer). Best-effort: a booking hiccup never blocks the
+     * quantity update. Cash bills credit the operator's cashbook; credit bills add to supplier payables.
+     */
+    private function bookBill(CapabilityContext $ctx, Supplier $sup, float $native, string $cur, float $rate, string $payStatus, string $note): bool
+    {
+        try {
+            $cur = strtoupper(trim($cur)) ?: 'UGX';
+            if ($rate <= 0) {
+                $rate = $cur === 'USD' ? 1.0 : (float) \App\Services\Money\Fx::forTenant($ctx->tenant)->ratePerUsd($cur);
+            }
+            if ($rate <= 0) { $rate = 1.0; }
+            $user = $ctx->user;
+            $ownerLike = (method_exists($user, 'isOwnerLike') && $user->isOwnerLike()) || in_array((string) ($user->role ?? ''), ['manager'], true);
+
+            \App\Models\OrderCost::create([
+                'tenant_id' => $ctx->tenantId(), 'order_id' => null, 'order_no' => null,
+                'supplier_id' => (int) $sup->id, 'supplier_name' => (string) $sup->name,
+                'stage' => 'purchase',
+                'pay_status' => $payStatus, 'paid_native' => $payStatus === 'credit' ? 0 : $native,
+                'currency' => $cur, 'native_amount' => $native, 'rate_to_usd' => $rate,
+                'usd_amount' => \App\Models\OrderCost::toUsd($native, $rate),
+                'holder' => (string) ($user->name ?? ''), 'holder_user_id' => (int) $user->id,
+                'receipt_path' => null, 'note' => $note,
+                'status' => $ownerLike ? 'approved' : ((bool) $ctx->tenant->setting('cost_approval', true) ? 'pending' : 'approved'),
+                'created_by' => (string) ($user->name ?? ''),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     /** Find a supplier by name, or create it inline (so a supplier can be added from the purchase screen). */
