@@ -40,7 +40,10 @@ final class CustomerInsight
             : $q->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [$digits]);
 
         // --- orders: lifetime spend, count, last order (each order in its own sell currency) ---
+        // Cancelled / rejected / void orders are not sales — exclude them so a cancelled order does not
+        // inflate lifetime spend or the order count (matches the customers-list aggregate).
         $orders = $byPhone(Order::where('tenant_id', $t))
+            ->whereRaw("lower(coalesce(status,'')) not in ('cancelled','rejected','void')")
             ->get(['total', 'sell_currency', 'created_at']);
         $orderCount = $orders->count();
         $spend = (float) $orders->sum(fn ($o) => $toBase((float) $o->total, (string) ($o->sell_currency ?: $native), $o->created_at ? Carbon::parse($o->created_at)->format('Y-m-d') : null));
