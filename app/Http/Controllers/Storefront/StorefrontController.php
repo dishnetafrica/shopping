@@ -324,6 +324,7 @@ class StorefrontController extends Controller
                 'category_groups' => (object) ($tenant->setting('category_groups', []) ?: []),
                 'thali' => $this->todayThali($tenant),
                 'vertical' => \App\Support\Vertical::of($tenant),
+                'trending' => $this->trendingIds($tenant),
             ],
         ])->header('Cache-Control', 'no-store');
     }
@@ -516,6 +517,66 @@ class StorefrontController extends Controller
             'order_no'  => (string) $o->order_no,
             'track_url' => $o->track_token ? url('/papi/track?o=' . $o->id . '&t=' . $o->track_token) : null,
         ]);
+    }
+
+    /**
+     * Record a storefront interaction (view / add / checkout) into the shared product_events log.
+     * Fire-and-forget from the shop; never throws (ProductEvents swallows errors), lightly IP-throttled
+     * so a misbehaving client can't flood the table. This is the live signal behind the Trending rail
+     * and the future storefront BI dashboards — additive, no engine writes.
+     */
+    public function recordEvent(Request $r, ?string $shop = null)
+    {
+        [$tenant] = $this->resolveShop($shop);
+
+        $ipKey = 'sfevt:' . $tenant->id . ':' . $r->ip();
+        if (\Illuminate\Support\Facades\RateLimiter::tooManyAttempts($ipKey, 600)) {
+            return response()->json(['ok' => true])->header('Cache-Control', 'no-store'); // silently drop
+        }
+        \Illuminate\Support\Facades\RateLimiter::hit($ipKey, 60);
+
+        $event = strtolower(trim((string) $r->input('event', 'view')));
+        if (! in_array($event, ['view', 'add', 'gallery', 'checkout'], true)) {
+            $event = 'view';
+        }
+
+        $ids = $r->input('product_ids');
+        if (is_array($ids)) {
+            \App\Support\ProductEvents::logMany($tenant->id, array_map('intval', $ids), $event);
+        } else {
+            $pid = (int) $r->input('product_id', 0);
+            \App\Support\ProductEvents::log($tenant->id, $pid ?: null, $event);
+        }
+
+        return response()->json(['ok' => true])->header('Cache-Control', 'no-store');
+    }
+
+    /**
+     * Product ids trending in the shop over the last few days, weighted (add/checkout beat a view).
+     * Cached briefly so the home rail is fresh but the aggregate doesn't run on every catalogue load.
+     *
+     * @return array<int,int>
+     */
+    private function trendingIds(Tenant $tenant): array
+    {
+        try {
+            return \Illuminate\Support\Facades\Cache::remember('trending:' . $tenant->id, now()->addMinutes(10), function () use ($tenant) {
+                return \Illuminate\Support\Facades\DB::table('product_events')
+                    ->where('tenant_id', $tenant->id)
+                    ->where('created_at', '>=', now()->subDays(3))
+                    ->whereNotNull('product_id')
+                    ->whereIn('event', ['view', 'add', 'checkout'])
+                    ->select('product_id', \Illuminate\Support\Facades\DB::raw("sum(case event when 'checkout' then 5 when 'add' then 3 else 1 end) as score"))
+                    ->groupBy('product_id')
+                    ->orderByDesc('score')
+                    ->limit(12)
+                    ->pluck('product_id')
+                    ->map(fn ($x) => (int) $x)
+                    ->all();
+            });
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     private function resolveTheme($tenant): array

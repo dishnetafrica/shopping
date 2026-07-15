@@ -265,7 +265,15 @@ applyTheme();
 var CUR  = SHOP.currency || 'UGX';
 var CATALOGUE_URL = SHOP.catalogueUrl || (location.pathname.replace(/\/+$/,'') + '/catalogue');
 var SUBMIT_URL    = SHOP.orderUrl     || (location.pathname.replace(/\/+$/,'') + '/order');
+var EVENT_URL     = (SUBMIT_URL||'').replace(/\/order$/,'/event');
 var ADMIN_URL     = SHOP.panelUrl     || '/panel';
+/* Fire-and-forget storefront analytics → product_events (powers the Trending rail + BI). */
+var VIEWED_SESS={}, TRENDING=[];
+function track(ev,id){ try{
+  var body; if(Array.isArray(id)){ if(!id.length)return; body={event:ev,product_ids:id}; } else { if(id==null)return; id=Number(id); if(!id)return; body={event:ev,product_id:id}; }
+  fetch(EVENT_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),keepalive:true}).catch(function(){});
+}catch(e){} }
+function trackView(id){ id=Number(id); if(!id||VIEWED_SESS[id])return; VIEWED_SESS[id]=1; track('view',id); }
 var WA_NUMBER     = String(SHOP.waNumber || '').replace(/[^0-9]/g,''); // shop's public WhatsApp (digits only)
 /* ---- delivery time bands (overridden by the feed's settings when provided) ---- */
 var DELIVERY = Object.assign({
@@ -351,7 +359,12 @@ function newArrivalsRail(){
   var pool=PRODUCTS.filter(sellableRail).slice().sort(function(a,b){return (b.createdAt||b.id||0)-(a.createdAt||a.id||0);});
   return pool.length>=4 ? railHtml('New arrivals', pool) : '';
 }
-function homeRails(){ return buyAgainRail()+recentlyViewedRail()+popularRail()+newArrivalsRail(); }
+function trendingRail(){
+  if(!PRODUCTS.length || !TRENDING.length) return '';
+  var items=[]; TRENDING.forEach(function(id){ var p=PRODUCTS.find(function(x){return x.id===id;}); if(sellableRail(p)) items.push(p); });
+  return items.length>=3 ? railHtml('Trending today', items) : '';
+}
+function homeRails(){ return buyAgainRail()+recentlyViewedRail()+trendingRail()+popularRail()+newArrivalsRail(); }
 function ugx(n){return CUR+' '+(Number(n)||0).toLocaleString('en-US');}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function jk(s){return JSON.stringify(String(s)).replace(/"/g,'&quot;');}
@@ -381,6 +394,7 @@ async function load(){
       if(d.settings.currency)CUR=String(d.settings.currency);
       if(d.settings.category_images)CAT_IMG=d.settings.category_images||{}; if(d.settings.thali)THALI=d.settings.thali;
       if(d.settings.category_groups)CATGROUPS=d.settings.category_groups||{};
+      if(d.settings.trending)TRENDING=(d.settings.trending||[]).map(Number);
       var faqCustom=(Array.isArray(d.settings.faq)&&d.settings.faq.length);
       if(faqCustom)FAQ_DATA=d.settings.faq;
       if(d.settings.vertical){VERTICAL=String(d.settings.vertical);IS_PICKUP=(VERTICAL==='snacks');applyVertical();}
@@ -601,7 +615,7 @@ function openVariantPicker(key){
   $('sheet').classList.add('show');
 }
 function vpStep(name,key,d){if(d>0)cartAdd(name);else cartSub(name);openVariantPicker(key);}
-function cartAdd(name){var p=prod(name);if(!p||oosOf(p))return;if(!CART[name])CART[name]={name:p.name,price:p.price,qty:0};CART[name].qty++;saveCart();render();bar();}
+function cartAdd(name){var p=prod(name);if(!p||oosOf(p))return;if(!CART[name]){CART[name]={name:p.name,price:p.price,qty:0};track('add',p.id);}CART[name].qty++;saveCart();render();bar();}
 function cartSub(name){if(!CART[name])return;CART[name].qty--;if(CART[name].qty<=0)delete CART[name];saveCart();render();bar();}
 function vpick(key,i){VSEL[key]=i;render();}
 function gridG(list){var arr=groupProducts(list);arr.forEach(function(g){GROUPS[g.category+"|"+g.base.toLowerCase()]=g;});return '<div class="grid">'+arr.map(variantCard).join('')+'</div>';}
@@ -957,6 +971,7 @@ window.addEventListener('hashchange',handleHash);
 async function openDetail(id){
   id=String(id); var el=$('detail'); if(!el)return;
   pushRecent(id);   // remember for the "Recently viewed" home rail
+  trackView(id);    // storefront analytics → Trending / BI
   el.classList.add('show'); document.body.style.overflow='hidden'; el.scrollTop=0;
   el.innerHTML='<div class="dwrap">'+detailHeader()+'<div class="dload">Loading\u2026</div></div>';
   try{
@@ -1010,7 +1025,7 @@ function renderDetail(d){
   $('detail').scrollTop=0;
 }
 
-function inc(key){var p=prod(key);if(!p||oosOf(p))return;if(!CART[key]){CART[key]={name:p.name,price:p.price,qty:minq(p)};}else{CART[key].qty++;}saveCart();render();bar();if($('sheet').classList.contains('show'))openCart();}
+function inc(key){var p=prod(key);if(!p||oosOf(p))return;if(!CART[key]){CART[key]={name:p.name,price:p.price,qty:minq(p)};track('add',p.id);}else{CART[key].qty++;}saveCart();render();bar();if($('sheet').classList.contains('show'))openCart();}
 function dec(key){if(!CART[key])return;var p=prod(key);CART[key].qty--;if(CART[key].qty<minq(p)){delete CART[key];}saveCart();render();bar();if($('sheet').classList.contains('show'))openCart();}
 function cartItems(){return Object.keys(CART).map(function(k){return CART[k];});}
 function cartCount(){return cartItems().reduce(function(s,i){return s+i.qty;},0);}
@@ -1088,7 +1103,7 @@ async function placeOrder(){
   try{
     var r=await fetch(SUBMIT_URL,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)});
     var d=await r.json();
-    if(d&&d.ok){saveCust({name:name,phone:phone,addr:addr});saveLast(payload.items);CART={};saveCart();bar();render();$('sheetTitle').textContent='Order placed';
+    if(d&&d.ok){track('checkout',payload.items.map(function(i){var p=prod(i.name);return p?p.id:null;}).filter(Boolean));saveCust({name:name,phone:phone,addr:addr});saveLast(payload.items);CART={};saveCart();bar();render();$('sheetTitle').textContent='Order placed';
       var shopName=SHOP.name||'us';
       $('sheetBody').innerHTML='<div class="ok"><div class="big">🙏</div><h2>Order placed!</h2><p>Tap below to confirm your order on WhatsApp — our team will arrange delivery.</p>'+
         (d.order_no?'<div class="ono">'+esc(d.order_no)+'</div>':'')+'<div style="margin-top:18px">'+
