@@ -397,6 +397,95 @@ body{padding-bottom:calc(var(--nav-h) + 14px + var(--safe-b))}
 .cbtoast.err{background:#B4232A}
 .cbtoast.ok{background:var(--green)}
 
+/* ==================================================================================
+   STOREFRONT V3 — Premium polish layer (last in the cascade; refines every component)
+   Depth · typography · spacing · elevation · tactile feedback · signature touches.
+   Pure presentation. No structural or logic change.
+   ================================================================================== */
+:root{ --bg:#F4F5F7; --card:#FFFFFF; --line:#EAECEF; --ink:#16181D; --muted:#6B7280;
+  --shadow-card:0 1px 2px rgba(16,24,40,.05); --shadow-lift:0 8px 24px rgba(16,24,40,.10); }
+html{ -webkit-text-size-adjust:100% }
+body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; letter-spacing:-.005em }
+/* surfaces that must stay white on the new gray app background */
+.top,.btmnav,.sheetcard,.soverlay,.searchbar{ background:#fff }
+
+/* ---- Header ---- */
+.top{ padding:12px 14px; border-bottom:0; box-shadow:0 1px 0 rgba(16,24,40,.05) }
+.top .lg{ border-radius:11px; box-shadow:0 2px 6px rgba(12,131,31,.25) }
+.top b{ letter-spacing:-.01em }
+
+/* ---- Search bar ---- */
+.searchbar{ height:48px; border-color:#E3E6EA; box-shadow:0 1px 2px rgba(16,24,40,.03) }
+.searchbar input::placeholder{ color:#9AA1AB }
+
+/* ---- Section titles ---- */
+.section-title{ font-size:16px; font-weight:800; letter-spacing:-.02em; padding:16px 14px 9px }
+.sgroup{ letter-spacing:.06em }
+
+/* ---- Category tiles ---- */
+.cat .ci{ border-radius:18px; box-shadow:var(--shadow-card) }
+.cat .nm{ font-size:12px; font-weight:600; color:#374151 }
+
+/* ---- Product cards ---- */
+.pc{ border:1px solid #EEF0F3; border-radius:16px; box-shadow:var(--shadow-card); transition:box-shadow .2s ease }
+.pc .img{ background:linear-gradient(180deg,#FBFCFD,#F2F4F7); border-bottom:0; transition:transform .12s ease }
+.pc .img:active{ transform:scale(.98) }
+.pc .bd{ padding:9px 10px 11px; gap:5px }
+.pc .nm{ font-size:12.5px; font-weight:600; color:#1F2937; letter-spacing:-.005em }
+.pc .prrow .pr,.pc .pr{ font-size:17px; font-weight:800; letter-spacing:-.02em }
+.pc .add{ margin-top:auto; border:1.5px solid var(--green); background:#fff; color:var(--green-d);
+  text-transform:uppercase; letter-spacing:.04em; font-size:12.5px; font-weight:800; border-radius:11px;
+  padding:9px; transition:transform .1s ease, background .15s ease }
+.pc .add:active{ transform:scale(.95); background:#EAF7EE }
+.pc .stp{ border:1.5px solid var(--green); border-radius:11px }
+.pc .stp button{ width:36px; height:36px; transition:background .12s ease }
+.pc .stp button:active{ background:var(--green-d) }
+@media(hover:hover){ .pc:hover{ box-shadow:var(--shadow-lift) } .pc:hover .img{ transform:scale(1.02) } }
+
+/* ---- Home rail cards keep the same premium card ---- */
+.xcard,.cmpcol{ box-shadow:var(--shadow-card); border-color:#EEF0F3 }
+
+/* ---- Buttons ---- */
+.place{ border-radius:13px; font-size:15px; letter-spacing:.01em; box-shadow:0 3px 10px rgba(12,131,31,.22);
+  transition:transform .1s ease, box-shadow .2s ease; min-height:50px }
+.place:active{ transform:scale(.985) }
+button{ -webkit-tap-highlight-color:transparent }
+
+/* ---- Bottom navigation: active indicator + weight ---- */
+.btmnav{ box-shadow:0 -1px 0 rgba(16,24,40,.05) }
+.btmnav button{ transition:color .15s ease }
+.btmnav button.on{ font-weight:800 }
+.btmnav button.on::before{ content:""; position:absolute; top:0; left:50%; transform:translateX(-50%);
+  width:26px; height:3px; border-radius:0 0 4px 4px; background:var(--green) }
+.btmnav button svg{ transition:transform .12s ease }
+.btmnav button:active svg{ transform:scale(.88) }
+
+/* ---- Bottom sheet: grabber handle + softer backdrop ---- */
+.sheet{ background:rgba(16,24,40,.48) }
+@supports (backdrop-filter:blur(2px)){ .sheet{ backdrop-filter:blur(3px) } }
+.sheetcard{ border-radius:22px 22px 0 0; box-shadow:0 -8px 30px rgba(16,24,40,.16) }
+.sheethd{ position:relative; padding-top:19px }
+.sheethd::before{ content:""; position:absolute; top:8px; left:50%; transform:translateX(-50%);
+  width:38px; height:4px; border-radius:99px; background:#DCE0E6 }
+.sheethd b{ font-size:17px; letter-spacing:-.01em }
+.sheethd .x{ width:34px; height:34px; border-radius:50%; background:#F2F4F7; border:0; font-size:20px; color:#4B5563 }
+
+/* ---- Floating cart CTA: premium lift ---- */
+.cartbar{ box-shadow:0 8px 24px rgba(12,131,31,.30); border-radius:16px }
+
+/* ---- Chips / filters: crisper ---- */
+.fchip,.schip,.brandchip,.subchip{ box-shadow:0 1px 1px rgba(16,24,40,.03) }
+.paytile{ box-shadow:var(--shadow-card) }
+
+/* ---- Skeleton: softer, calmer ---- */
+.sk{ border-color:#EEF0F3 } .sk .a,.sk .b{ background:#EEF1F4 }
+
+/* ---- Delivery bar ---- */
+.delv{ background:#F0F7F2; border-bottom:0; box-shadow:0 1px 0 rgba(16,24,40,.04); font-weight:600 }
+
+/* ---- Empty states ---- */
+.empty{ color:#8A909A; font-size:14px }
+
 </style>
 </head>
 <body>
