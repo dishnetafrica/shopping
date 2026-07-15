@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quotation</title>
+<style>
+  :root{--green:#0C831F;--green-d:#0A6E1A;--ink:#1F2421;--muted:#6B7280;--line:#E7ECE8;--bg:#F4F6F4;--card:#fff;--amber:#B4770A;--red:#B4232A}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.45}
+  a{color:inherit}
+  .wrap{max-width:920px;margin:0 auto;padding:16px 16px 60px}
+  .top{display:flex;align-items:center;gap:13px;padding:16px 0 14px}
+  .lg{width:46px;height:46px;border-radius:11px;background:var(--green);color:#fff;display:grid;place-items:center;font-weight:800;font-size:18px;flex:none;overflow:hidden}
+  .lg img{width:100%;height:100%;object-fit:cover}
+  .top .co{font-size:17px;font-weight:800;line-height:1.15}
+  .top .qn{font-size:12.5px;color:var(--muted);font-weight:600;margin-top:1px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 1px 2px rgba(16,24,40,.04);margin-bottom:14px;overflow:hidden}
+  .hd{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line)}
+  .hd .t{font-size:15px;font-weight:800}
+  .badge{font-size:11.5px;font-weight:800;padding:5px 11px;border-radius:999px;letter-spacing:.02em;white-space:nowrap}
+  .badge.sent{background:#FFF6E6;color:var(--amber)} .badge.accepted,.badge.converted{background:#EAF6EC;color:var(--green-d)}
+  .badge.declined,.badge.expired{background:#FDECEC;color:var(--red)}
+  .meta{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line)}
+  .meta .m{background:#fff;padding:13px 18px}
+  .meta .k{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .meta .v{font-size:14px;font-weight:700;margin-top:3px}
+  @media(max-width:560px){.meta{grid-template-columns:1fr 1fr}}
+  .items{padding:6px 0}
+  .it{display:grid;grid-template-columns:52px 1fr auto;gap:13px;align-items:center;padding:11px 18px;border-bottom:1px solid var(--line)}
+  .it:last-child{border-bottom:0}
+  .it .th{width:52px;height:52px;border-radius:10px;background:#EEF2ED;display:grid;place-items:center;overflow:hidden;flex:none}
+  .it .th img{width:100%;height:100%;object-fit:contain;padding:4px}
+  .it .th .ph{font-size:20px;color:#9CB2A0}
+  .it .nm{font-size:14px;font-weight:700;line-height:1.3}
+  .it .sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .it .rt{text-align:right}
+  .it .lt{font-size:14.5px;font-weight:800;white-space:nowrap}
+  .it .qp{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap}
+  .tot{padding:8px 18px 16px}
+  .tr{display:flex;justify-content:space-between;padding:6px 0;font-size:14px}
+  .tr .l{color:var(--muted);font-weight:600}
+  .tr.grand{border-top:1px solid var(--line);margin-top:6px;padding-top:12px;font-size:19px;font-weight:900}
+  .remarks{padding:14px 18px;font-size:13.5px;color:var(--ink)}
+  .remarks .k{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+  .tl{padding:8px 18px 16px}
+  .tlrow{display:flex;gap:12px;align-items:flex-start;padding:7px 0}
+  .tlrow .dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--line);flex:none;margin-top:2px}
+  .tlrow.done .dot{background:var(--green);border-color:var(--green)}
+  .tlrow .tt{font-size:13.5px;font-weight:700}
+  .tlrow.done .tt{color:var(--ink)} .tlrow .tt{color:var(--muted)}
+  .tlrow .ta{font-size:11.5px;color:var(--muted)}
+  .actions{position:sticky;bottom:0;background:linear-gradient(180deg,rgba(244,246,244,0),var(--bg) 26%);padding:14px 0 8px}
+  .btnrow{display:flex;flex-wrap:wrap;gap:10px}
+  .btn{flex:1 1 auto;min-width:140px;border:0;border-radius:12px;padding:14px;font-size:14.5px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+  .btn.primary{background:var(--green);color:#fff}.btn.primary:hover{background:var(--green-d)}
+  .btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}.btn.ghost:hover{background:#F2F5F2}
+  .btn.wa{background:#25D366;color:#fff}
+  .btn:disabled{opacity:.55;cursor:default}
+  .hint{font-size:12px;color:var(--muted);text-align:center;margin-top:10px}
+  .loading,.err{padding:60px 20px;text-align:center;color:var(--muted)}
+  .spin{width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--green);border-radius:50%;margin:0 auto 14px;animation:sp .8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(12px);background:#1F2421;color:#fff;padding:12px 18px;border-radius:12px;font-size:13.5px;font-weight:700;opacity:0;pointer-events:none;transition:.25s;z-index:50;max-width:88%;text-align:center}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.ok{background:var(--green-d)} .toast.err{background:var(--red)}
+  .modal{position:fixed;inset:0;background:rgba(16,24,40,.45);display:none;align-items:center;justify-content:center;z-index:40;padding:18px}
+  .modal.show{display:flex}
+  .msheet{background:#fff;border-radius:16px;max-width:400px;width:100%;padding:20px}
+  .msheet h3{margin:0 0 4px;font-size:16px} .msheet p{margin:0 0 14px;font-size:13px;color:var(--muted)}
+  .msheet input{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:14px;margin-bottom:12px;outline:none}
+  .msheet input:focus{border-color:var(--green)}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <div class="loading" id="load"><div class="spin"></div>Loading your quotation…</div>
+</div>
+<div class="toast" id="toast"></div>
+<div class="modal" id="shareModal">
+  <div class="msheet">
+    <h3 id="shareTitle">Share quotation</h3>
+    <p id="shareHint"></p>
+    <input id="shareTo" placeholder="">
+    <div class="btnrow">
+      <button class="btn ghost" onclick="closeShare()">Cancel</button>
+      <button class="btn primary" id="shareSend" onclick="doShare()">Send</button>
+    </div>
+  </div>
+</div>
+<script>
+var CFG = __QUOTE_CONFIG__;
+var Q = null;
+function $(id){return document.getElementById(id);}
+function money(n){ n=Number(n)||0; var cur=String((Q&&Q.currency)||CFG.currency||'UGX').toUpperCase();
+  var zero=['UGX','KES','TZS','RWF','BIF','SSP','JPY','KRW','VND','XAF','XOF','GNF','MGA','CLP','PYG','ISK','KMF','XPF'];
+  var d=zero.indexOf(cur)>=0?0:2;
+  var s=n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+  return cur==='USD'?('$'+s):(cur+' '+s); }
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fdate(s){ if(!s)return '—'; try{var d=new Date(s+'T00:00:00');return d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});}catch(e){return s;} }
+function ftime(s){ if(!s)return ''; try{return new Date(s).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
+function toast(m,t){var el=$('toast');el.textContent=m;el.className='toast show'+(t?(' '+t):'');clearTimeout(el._h);el._h=setTimeout(function(){el.className='toast';},2600);}
+
+function load(){
+  fetch(CFG.dataUrl,{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
+    if(!d||!d.ok){throw 0;} Q=d; render();
+  }).catch(function(){ $('wrap').innerHTML='<div class="err">Sorry, we couldn’t load this quotation.<br>Please check the link or contact us on WhatsApp.</div>'; });
+}
+
+function render(){
+  var badge='<span class="badge '+esc(Q.status)+'">'+esc(Q.status_label||Q.status)+'</span>';
+  var logo=CFG.logo?('<img alt="" src="'+esc(CFG.logo)+'">'):esc((CFG.company||'FS').slice(0,2).toUpperCase());
+  var itemsHtml=(Q.items||[]).map(function(it){
+    var sub=[it.brand,it.variant,it.unit].filter(Boolean).join(' · ');
+    var th=it.image?('<img alt="" src="'+esc(it.image)+'">'):'<span class="ph">📦</span>';
+    return '<div class="it"><div class="th">'+th+'</div>'
+      +'<div><div class="nm">'+esc(it.name)+'</div>'+(sub?('<div class="sub">'+esc(sub)+'</div>'):'')+'</div>'
+      +'<div class="rt"><div class="lt">'+money(it.line_total)+'</div><div class="qp">'+it.qty+' × '+money(it.unit_price)+'</div></div></div>';
+  }).join('');
+  var t=Q.totals||{};
+  var totRows='<div class="tr"><span class="l">Subtotal</span><span>'+money(t.subtotal)+'</span></div>';
+  if(t.discount>0) totRows+='<div class="tr"><span class="l">Discount</span><span>-'+money(t.discount)+'</span></div>';
+  if(t.tax>0) totRows+='<div class="tr"><span class="l">Tax</span><span>'+money(t.tax)+'</span></div>';
+  if(t.freight>0) totRows+='<div class="tr"><span class="l">Freight</span><span>'+money(t.freight)+'</span></div>';
+  totRows+='<div class="tr grand"><span>Grand Total</span><span>'+money(t.grand)+'</span></div>';
+
+  var tl=(Q.timeline||[]).map(function(s){
+    return '<div class="tlrow'+(s.done?' done':'')+'"><div class="dot"></div><div><div class="tt">'+esc(s.label)+'</div>'+(s.at?('<div class="ta">'+ftime(s.at)+'</div>'):'')+'</div></div>';
+  }).join('');
+
+  var respHint = Q.status==='converted' ? 'Approved' : (Q.status==='sent' ? 'Our sales team typically responds within a few hours' : '');
+  var cust=Q.customer||{};
+
+  var locked = !Q.is_open || Q.is_converted;
+  var approveBtn = Q.is_converted
+    ? '<button class="btn primary" disabled>✓ Approved — Order '+esc(Q.order_no||'')+'</button>'
+    : '<button class="btn primary" id="approveBtn" onclick="approve()">✓ Approve Quotation</button>';
+
+  $('wrap').innerHTML =
+    '<div class="top"><div class="lg">'+logo+'</div><div><div class="co">'+esc(CFG.company||'')+'</div><div class="qn">Quotation '+esc(Q.quote_no)+'</div></div></div>'
+    + '<div class="card"><div class="hd"><div class="t">Quotation '+esc(Q.quote_no)+'</div>'+badge+'</div>'
+      + '<div class="meta">'
+        + m('Valid Until', fdate(Q.valid_until))
+        + m('Sales Representative', esc(Q.sales_rep||'Our sales team'))
+        + m('Revision', 'Revision '+(Q.revision||1))
+        + m('Currency', esc(Q.currency))
+        + m('Deliver To', esc(cust.address||'To be confirmed'))
+        + m('For', esc(cust.name||''))
+      + '</div></div>'
+    + '<div class="card"><div class="hd"><div class="t">Items</div><div class="qn">'+(Q.items||[]).length+' line'+((Q.items||[]).length===1?'':'s')+'</div></div>'
+      + '<div class="items">'+itemsHtml+'</div>'
+      + '<div class="tot">'+totRows+'</div></div>'
+    + (Q.remarks?('<div class="card"><div class="remarks"><div class="k">Remarks</div>'+esc(Q.remarks)+'</div></div>'):'')
+    + '<div class="card"><div class="hd"><div class="t">Timeline</div>'+(respHint?('<div class="qn">'+esc(respHint)+'</div>'):'')+'</div><div class="tl">'+tl+'</div></div>'
+    + '<div class="actions"><div class="btnrow">'
+      + '<a class="btn ghost" href="'+esc(Q.pdf_url||CFG.pdfUrl)+'" target="_blank" rel="noopener">⬇ Download PDF</a>'
+      + '<button class="btn ghost" onclick="window.print()">🖨 Print</button>'
+      + '<button class="btn wa" onclick="openShare(\'whatsapp\')">Share on WhatsApp</button>'
+      + '<button class="btn ghost" onclick="openShare(\'email\')">Share by Email</button>'
+      + '</div><div class="btnrow" style="margin-top:10px">'
+      + (locked?'':'<button class="btn ghost" onclick="requestChanges()">✎ Request Changes</button>')
+      + approveBtn
+      + '</div>'
+      + '<div class="hint"><a href="'+esc(Q.shop_url||CFG.shopUrl)+'">← Continue shopping</a></div>'
+      + '</div>';
+}
+function m(k,v){return '<div class="m"><div class="k">'+k+'</div><div class="v">'+(v||'—')+'</div></div>';}
+
+function approve(){
+  var b=$('approveBtn'); if(b){b.disabled=true;b.textContent='Approving…';}
+  fetch(CFG.base+'/q/'+CFG.token+'/approve',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:'{}'})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d&&d.ok){ toast('Approved — Sales Order '+(d.order_no||'')+' created','ok'); load(); }
+      else{ toast(d&&d.error?d.error:'Could not approve right now','err'); if(b){b.disabled=false;b.textContent='✓ Approve Quotation';} }
+    }).catch(function(){ toast('Network error — please try again','err'); if(b){b.disabled=false;b.textContent='✓ Approve Quotation';} });
+}
+function requestChanges(){
+  // Q1: route change requests to the sales team on WhatsApp (in-portal editing arrives in the next phase).
+  var wa=CFG.waNumber?('https://wa.me/'+CFG.waNumber+'?text='+encodeURIComponent('Hello, I would like to request changes to quotation '+Q.quote_no+': ')):null;
+  if(wa) window.open(wa,'_blank','noopener'); else toast('Please contact our sales team to request changes','');
+}
+var _shareChannel='whatsapp';
+function openShare(ch){ _shareChannel=ch; var m=$('shareModal');
+  $('shareTitle').textContent = ch==='email'?'Share by Email':'Share on WhatsApp';
+  $('shareHint').textContent = ch==='email'?'We’ll email the quotation PDF to this address.':'We’ll send the quotation to this WhatsApp number.';
+  var inp=$('shareTo'); inp.type = ch==='email'?'email':'tel';
+  inp.placeholder = ch==='email'?'name@company.com':'WhatsApp number (or leave blank for yours)';
+  inp.value=''; m.classList.add('show'); setTimeout(function(){inp.focus();},50);
+}
+function closeShare(){ $('shareModal').classList.remove('show'); }
+function doShare(){
+  var to=$('shareTo').value.trim(); var b=$('shareSend'); b.disabled=true;b.textContent='Sending…';
+  fetch(CFG.base+'/q/'+CFG.token+'/share',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({channel:_shareChannel,to:to})})
+    .then(function(r){return r.json();}).then(function(d){
+      b.disabled=false;b.textContent='Send';
+      if(d&&d.ok){ closeShare(); toast('Quotation sent','ok'); }
+      else{ toast(d&&d.error?d.error:'Could not send','err'); }
+    }).catch(function(){ b.disabled=false;b.textContent='Send'; toast('Network error','err'); });
+}
+load();
+</script>
+</body>
+</html>

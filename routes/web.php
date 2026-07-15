@@ -491,9 +491,10 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
 | also excludes reserved single-segment paths via a negative lookahead, so
 | even if route order changed, /app & /admin would fall through to Filament.
 */
-$shopSlug = '(?!(app|admin|panel|papi|api|storage|livewire|build|vendor|up|login|logout|register|start)$)[a-z0-9][a-z0-9\-]*';
+$shopSlug = '(?!(app|admin|panel|papi|api|storage|livewire|build|vendor|up|login|logout|register|start|q|quote)$)[a-z0-9][a-z0-9\-]*';
+$qToken   = '[a-z0-9]{40}';
 
-Route::middleware('web')->group(function () {
+Route::middleware('web')->group(function () use ($qToken) {
     // Custom-domain storefront: the SAME shop served at the ROOT of the tenant's own domain
     // (e.g. https://familyshoppers.net/), resolved by Host. shop=null → the controller resolves by
     // custom_domain. Registered before the slug routes so single-segment paths bind here; on the
@@ -502,6 +503,13 @@ Route::middleware('web')->group(function () {
     Route::get('/shop',            [\App\Http\Controllers\Storefront\StorefrontController::class, 'show']);
     Route::get('/catalogue',       [\App\Http\Controllers\Storefront\StorefrontController::class, 'catalogue']);
     Route::post('/order',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'placeOrder']);
+    // Quotation-first flow (B2B): submit cart -> instant Quotation + public portal.
+    Route::post('/quote',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'requestQuote']);
+    Route::get('/q/{token}',         [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'show'])->where('token', $qToken);
+    Route::get('/q/{token}/data',    [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'data'])->where('token', $qToken);
+    Route::get('/q/{token}/pdf',     [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'pdf'])->where('token', $qToken);
+    Route::post('/q/{token}/share',  [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'share'])->where('token', $qToken);
+    Route::post('/q/{token}/approve',[\App\Http\Controllers\Storefront\QuotationPortalController::class, 'approve'])->where('token', $qToken);
     Route::post('/event',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'recordEvent']);
     Route::post('/auth/request',   [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'request']);
     Route::post('/auth/verify',    [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'verify']);
@@ -509,7 +517,7 @@ Route::middleware('web')->group(function () {
     Route::post('/account/profile',[\App\Http\Controllers\Storefront\CustomerAuthController::class, 'saveProfile']);
 });
 
-Route::middleware('web')->group(function () use ($shopSlug) {
+Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::get('/{shop}/product/{product}', [\App\Http\Controllers\Storefront\StorefrontProductController::class, 'show'])->where('shop', $shopSlug)->where('product', '[0-9]+');
     Route::get('/{shop}',           [\App\Http\Controllers\Storefront\StorefrontController::class, 'landing'])->where('shop', $shopSlug);
     Route::get('/{shop}/shop',      [\App\Http\Controllers\Storefront\StorefrontController::class, 'show'])->where('shop', $shopSlug);

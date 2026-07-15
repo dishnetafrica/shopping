@@ -127,6 +127,7 @@ class StorefrontController extends Controller
             'city'         => (string) $tenant->setting('city', ''),
             'catalogueUrl' => $base . '/catalogue',
             'orderUrl'     => $base . '/order',
+            'quoteUrl'     => $base . '/quote',
             'panelUrl'     => url('/panel'),
             'branches'     => $this->branches($tenant),
             'delivery'     => (object) ($tenant->setting('delivery', []) ?: []),
@@ -516,6 +517,89 @@ class StorefrontController extends Controller
             'ok'        => true,
             'order_no'  => (string) $o->order_no,
             'track_url' => $o->track_token ? url('/papi/track?o=' . $o->id . '&t=' . $o->track_token) : null,
+        ]);
+    }
+
+    /**
+     * Quotation-first submit: turn the storefront cart into a professional Quotation (NOT an Order).
+     *
+     * This is the B2B trading flow — the customer receives a quotation instantly, then collaborates
+     * on it and approves it, at which point it converts to a Sales Order. It is a pure sibling of
+     * placeOrder() and reuses the FROZEN quotation engine end to end:
+     *   QuotationWriteService::createFor()  → OrderCalculator pricing + branded PDF (QuotationService)
+     *                                         + persists Quotation/QuotationItem + WhatsApp send.
+     * No quotation logic, pricing, numbering or PDF code is duplicated here.
+     */
+    public function requestQuote(Request $r, ?string $shop = null)
+    {
+        [$tenant, $base] = $this->resolveShop($shop);
+
+        $name  = trim((string) $r->input('name', ''));
+        $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));
+        $items = $r->input('items', []);
+
+        if ($name === '' || strlen($phone) < 7 || ! is_array($items) || ! count($items)) {
+            return response()->json(['ok' => false, 'error' => 'Please add items and your name + WhatsApp number.'], 422);
+        }
+
+        // Map the storefront cart to the line shape the frozen engine expects ({name, qty, price}).
+        $lines = [];
+        foreach ($items as $it) {
+            $pname = trim((string) ($it['name'] ?? ''));
+            if ($pname === '') {
+                continue;
+            }
+            $lines[] = [
+                'name'  => $pname,
+                'qty'   => max(1, (int) ($it['qty'] ?? 1)),
+                'price' => (isset($it['price']) && $it['price'] !== '' && $it['price'] !== null) ? (float) $it['price'] : null,
+            ];
+        }
+        if (! $lines) {
+            return response()->json(['ok' => false, 'error' => 'Your cart is empty.'], 422);
+        }
+
+        // Reuse the frozen engine: prices, renders the branded PDF, persists, sends WhatsApp.
+        $res = app(\App\Services\Sales\QuotationWriteService::class)
+            ->createFor($tenant, $phone, $name, $lines, $this->currency($tenant), true);
+
+        if (! ($res['ok'] ?? false) || empty($res['id'])) {
+            return response()->json([
+                'ok'    => false,
+                'error' => (string) ($res['message'] ?? 'Could not create the quotation. Please try again shortly.'),
+            ], 422);
+        }
+
+        // Stamp storefront extras (delivery address, note, source) onto the persisted record and
+        // read back the public portal token (auto-assigned by the Quotation model on create).
+        $q = \App\Models\Quotation::find($res['id']);
+        if ($q) {
+            $location = trim((string) $r->input('location', ''));
+            if ($maps = trim((string) $r->input('maps_url', ''))) {
+                $location = $location !== '' ? ($location . ' — ' . $maps) : $maps;
+            }
+            $note  = mb_substr(trim((string) $r->input('note', '')), 0, 300);
+            $dirty = false;
+            if ($location !== '' && (string) $q->delivery_address === '') { $q->delivery_address = $location; $dirty = true; }
+            if ($note !== '' && (string) $q->remarks === '')             { $q->remarks = $note; $dirty = true; }
+            if ((string) $q->source !== 'web')                            { $q->source = 'web'; $dirty = true; }
+            if ($dirty) {
+                $q->save();
+            }
+        }
+
+        $token = $q?->public_token;
+
+        return response()->json([
+            'ok'          => true,
+            'quote_no'    => (string) $res['quote_no'],
+            'id'          => $res['id'],
+            'total'       => (float) ($res['total'] ?? 0),
+            'currency'    => (string) ($res['currency'] ?? $this->currency($tenant)),
+            'valid_until' => optional($q?->valid_until)->toDateString(),
+            'portal_url'  => $token ? url(rtrim($base, '/') . '/q/' . $token) : null,
+            'pdf_url'     => $token ? url(rtrim($base, '/') . '/q/' . $token . '/pdf') : null,
+            'sent'        => (bool) ($res['sent'] ?? false),
         ]);
     }
 

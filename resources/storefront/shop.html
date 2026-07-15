@@ -1009,6 +1009,7 @@ applyTheme();
 var CUR  = SHOP.currency || 'UGX';
 var CATALOGUE_URL = SHOP.catalogueUrl || (location.pathname.replace(/\/+$/,'') + '/catalogue');
 var SUBMIT_URL    = SHOP.orderUrl     || (location.pathname.replace(/\/+$/,'') + '/order');
+var QUOTE_URL     = SHOP.quoteUrl     || (location.pathname.replace(/\/+$/,'') + '/quote');
 var EVENT_URL     = (SUBMIT_URL||'').replace(/\/order$/,'/event');
 var ADMIN_URL     = SHOP.panelUrl     || '/panel';
 /* Fire-and-forget storefront analytics → product_events (powers the Trending rail + BI). */
@@ -2276,7 +2277,7 @@ function editDetails(){ var a=$('coSum'), b=$('coFields'); if(a)a.style.display=
 function toggleEl(id){ var e=$(id); if(e)e.style.display=(e.style.display==='none'?'block':'none'); }
 function pickPay(btn,val){ var t=btn.parentNode.querySelectorAll('.paytile'); for(var i=0;i<t.length;i++)t[i].classList.remove('on'); btn.classList.add('on'); var inp=$('coPay'); if(inp)inp.value=val; }
 function openCheckout(){
-  $('sheetTitle').textContent='Checkout';
+  $('sheetTitle').textContent='Request Quotation';
   var name=(CUST&&CUST.name)||qp('n')||'', phone=(CUST&&CUST.phone)||qp('c')||'', addr=(CUST&&CUST.addr)||'';
   var saved=!!(name && phone && (IS_PICKUP || addr));
   var de=deliveryEstimateText(), sub=cartTotal();
@@ -2300,17 +2301,18 @@ function openCheckout(){
     +'<div id="coNoteWrap" style="display:none"><textarea id="coNote" rows="2" placeholder="e.g. leave at gate, call on arrival"></textarea></div>'
     +'<button class="colink" onclick="toggleEl(\'coWhenWrap\')">+ Schedule for later</button>'
     +'<div id="coWhenWrap" style="display:none"><input id="coWhen" type="datetime-local"></div></div>';
+  /* Quotation-first: this is a Quotation request, not a payment. The bill shows an
+     estimated total; final pricing (discounts, VAT, freight) is confirmed on the quotation. */
   var bill='<div class="billbox"><div class="billrow"><span>Items ('+cartCount()+')</span><span>'+ugx(sub)+'</span></div>'
-    +'<div class="billrow"><span>Delivery</span><span class="mut">'+(de?esc(de):'set your location')+'</span></div>'
-    +'<div class="billrow tot"><span>To pay</span><span>'+ugx(sub)+'<span class="plusdel"> + delivery</span></span></div></div>';
-  /* Phase 6: on desktop these two columns sit side by side (details left, a
-     sticky bill+place-order right). On mobile .cocols/.cocol-* are plain blocks,
-     so the vertical order is unchanged and the layout is identical. All field
-     IDs and placeOrder() are untouched — the order path is byte-for-byte the same. */
-  var coLeft='<div class="cocol-l">'+details+paytiles+extras+'</div>';
+    +'<div class="billrow tot"><span>Estimated total</span><span>'+ugx(sub)+'</span></div>'
+    +'<div class="billrow"><span class="mut" style="max-width:100%;text-align:left;font-size:12px">Your professional quotation is generated instantly. No payment now.</span></div></div>';
+  /* Desktop: two columns (details left, sticky bill + Request-Quotation button right). On mobile
+     .cocols/.cocol-* are plain blocks, so the vertical order is unchanged. Payment tiles are
+     omitted — a quotation collects no payment. requestQuotation() reuses the same field IDs. */
+  var coLeft='<div class="cocol-l">'+details+extras+'</div>';
   var coRight='<div class="cocol-r">'+bill
-    +'<div class="trustrow">You only pay when you receive · we message you on WhatsApp at every step</div>'
-    +'<div class="cartfoot"><button class="place" id="placeBtn" onclick="placeOrder()">Place order · '+ugx(sub)+'</button>'
+    +'<div class="trustrow">Instant professional quotation · share by WhatsApp, email or PDF · approve online when ready</div>'
+    +'<div class="cartfoot"><button class="place" id="placeBtn" onclick="requestQuotation()">Request Quotation · '+ugx(sub)+'</button>'
     +'<button class="colink" style="text-align:center;width:100%;margin-top:6px" onclick="openCart()">Back to cart</button></div></div>';
   $('sheetBody').innerHTML='<div class="cocols">'+coLeft+coRight+'</div>';
   $('sheet').classList.add('show');
@@ -2356,6 +2358,38 @@ async function placeOrder(){
         '<button class="place" style="background:#fff;color:var(--ink);border:1px solid var(--line);margin-top:8px" onclick="goHome();closeSheet()">Continue shopping</button></div></div>';
     }else{toast((d&&d.message)?d.message:((d&&d.error)?d.error:'Could not place order. Please try again.'),'err');btn.disabled=false;btn.textContent='Place order';}
   }catch(e){toast('Network error — please try again.','err');btn.disabled=false;btn.textContent='Place order';}
+}
+
+/* Quotation-first submit: turn the cart into a professional Quotation instantly (B2B trading flow).
+   Reuses the same checkout fields; posts to /quote; shows the quotation + portal link. */
+async function requestQuotation(){
+  var name=($('coName')&&$('coName').value||'').trim(), phone=($('coPhone')&&$('coPhone').value||'').replace(/[^0-9]/g,''), addr=($('coAddr')&&$('coAddr').value||'').trim(), note=(($('coNote')||{}).value||'').trim();
+  if(!name){toast('Please enter your name','err');return;}
+  if(phone.length<7){toast('Please enter your WhatsApp number','err');return;}
+  var payload={name:name,phone:phone,location:addr,note:note,items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal()};
+  if(GEO){payload.maps_url=mapsUrl(GEO);}
+  var btn=$('placeBtn');if(btn){btn.disabled=true;btn.textContent='Preparing your quotation…';}
+  try{
+    var r=await fetch(QUOTE_URL,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)});
+    var d=await r.json();
+    if(d&&d.ok){
+      track('checkout',payload.items.map(function(i){var p=prod(i.name);return p?p.id:null;}).filter(Boolean));
+      saveCust({name:name,phone:phone,addr:addr}); saveLast(payload.items);
+      CART={};saveCart();bar();render();
+      $('sheetTitle').textContent='Quotation ready';
+      try{ toast('Quotation created'); if(navigator.vibrate)navigator.vibrate([10,30,10]); }catch(e){}
+      var validTxt=''; if(d.valid_until){ try{ validTxt='Valid until '+new Date(d.valid_until+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})+'. '; }catch(e){} }
+      var totTxt = d.total ? (String(d.currency||CUR)+' '+Number(d.total).toLocaleString('en-US')) : '';
+      $('sheetBody').innerHTML='<div class="ok2"><div class="okcheck">✓</div><h2>Your quotation is ready</h2>'+
+        '<div class="okno">'+esc(d.quote_no||'')+'</div>'+
+        (totTxt?'<div style="font-size:22px;font-weight:900;margin:6px 0 2px">'+esc(totTxt)+'</div>':'')+
+        '<p class="okmsg">'+validTxt+(d.sent?'We’ve sent it to your WhatsApp too. ':'')+'Open it online to review, share or approve.</p>'+
+        '<div style="margin-top:18px">'+
+        (d.portal_url?'<a class="place" style="display:block;text-decoration:none;text-align:center" href="'+esc(d.portal_url)+'">View my quotation →</a>':'')+
+        (d.pdf_url?'<a class="place" style="display:block;text-decoration:none;text-align:center;background:#fff;color:var(--green-d);border:1px solid var(--line);margin-top:8px" href="'+esc(d.pdf_url)+'" target="_blank" rel="noopener">⬇ Download PDF</a>':'')+
+        '<button class="place" style="background:#fff;color:var(--ink);border:1px solid var(--line);margin-top:8px" onclick="goHome();closeSheet()">Continue shopping</button></div></div>';
+    }else{toast((d&&d.message)?d.message:((d&&d.error)?d.error:'Could not create the quotation. Please try again.'),'err');if(btn){btn.disabled=false;btn.textContent='Request Quotation';}}
+  }catch(e){toast('Network error — please try again.','err');if(btn){btn.disabled=false;btn.textContent='Request Quotation';}}
 }
 
 /* ---- brand the shell from the injected config ---- */
