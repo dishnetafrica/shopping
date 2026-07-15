@@ -53,6 +53,10 @@ Schedule::command('bot:lead-followup')->everyFiveMinutes()->between('8:00', '20:
 // Sourcing: keep nudging the buyer (Jayesh) for unpriced requests until he replies the price.
 Schedule::command('sourcing:remind')->hourly()->between('8:00', '20:00')->withoutOverlapping()->onOneServer();
 
+// Storefront weekly digest — funnel + zero-result searches (unmet demand) to the owner.
+// Opt-in per tenant via the `storefront_gaps_digest` setting (blank = off). Monday morning, EAT.
+Schedule::command('storefront:gaps-digest')->weeklyOn(1, '08:00')->timezone('Africa/Kampala')->withoutOverlapping()->onOneServer();
+
 // Virtual salesperson: enquiry follow-up cadence + reorder reminders (opt-in per tenant).
 // Pinned to East Africa Time so "9am–7pm" is local (Kampala/Juba), regardless of server TZ.
 Schedule::command('bot:sales-cadence')->hourly()->between('9:00', '19:00')->timezone('Africa/Kampala')->withoutOverlapping()->onOneServer();
