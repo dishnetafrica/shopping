@@ -1035,7 +1035,7 @@ var GEO  = null;                               // captured delivery GPS pin {lat
 /* ===================================================================================== */
 
 var $=function(id){return document.getElementById(id);};
-var PRODUCTS=[], CATS=[], CART={}, CAT='all', Q='', CAT_IMG={}, THALI=null, VSEL={}, GROUPS={}, CATGROUPS={}, MENUTAB='';
+var PRODUCTS=[], CATS=[], CART={}, CAT='all', Q='', CAT_IMG={}, THALI=null, VSEL={}, GROUPS={}, CATGROUPS={}, CATORDER=[], MENUTAB='';
 var TINTS=['#EEF2FB','#FDEEF3','#EAF6EF','#FFF4E6','#F1EEFB','#E9F5F9','#FCEEEA','#EEF7F0'];
 var STORE_KEY='cb_cart_'+(SHOP.slug||'shop'), DELV_KEY='cb_delv_'+(SHOP.slug||'shop');
 var CUST_KEY='cb_cust_'+(SHOP.slug||'shop'), LAST_KEY='cb_last_'+(SHOP.slug||'shop');
@@ -1146,6 +1146,7 @@ async function load(){
       if(d.settings.currency)CUR=String(d.settings.currency);
       if(d.settings.category_images)CAT_IMG=d.settings.category_images||{}; if(d.settings.thali)THALI=d.settings.thali;
       if(d.settings.category_groups)CATGROUPS=d.settings.category_groups||{};
+      if(d.settings.category_order)CATORDER=(d.settings.category_order||[]).map(String);
       if(d.settings.trending)TRENDING=(d.settings.trending||[]).map(Number);
       var faqCustom=(Array.isArray(d.settings.faq)&&d.settings.faq.length);
       if(faqCustom)FAQ_DATA=d.settings.faq;
@@ -1161,7 +1162,12 @@ async function load(){
     }
     var map={};
     PRODUCTS.forEach(function(p){ var c=p.category||'Other'; if(!map[c])map[c]={name:c,img:'',count:0}; map[c].count++; if(!map[c].img&&p.image)map[c].img=p.image; });
-    CATS=Object.keys(map).map(function(k){return map[k];}).sort(function(a,b){return b.count-a.count;});
+    var _ordIx=function(n){var i=CATORDER.indexOf(n);return i<0?9999:i;};
+    CATS=Object.keys(map).map(function(k){return map[k];}).sort(function(a,b){
+      var ia=_ordIx(a.name), ib=_ordIx(b.name);
+      if(ia!==ib)return ia-ib;          // department order from the catalogue (food-first) when configured
+      return b.count-a.count;           // otherwise fall back to product count (original behaviour)
+    });
     render();
     applyQuickOrder();
     handleHash();

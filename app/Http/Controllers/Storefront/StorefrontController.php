@@ -323,6 +323,8 @@ class StorefrontController extends Controller
                 'delivery' => (object) ($tenant->setting('delivery', []) ?: []),
                 'category_images' => (object) $this->categoryImages($tenant, $rows),
                 'category_groups' => (object) ($tenant->setting('category_groups', []) ?: []),
+                'category_order' => \App\Models\Category::where('tenant_id', $tenant->id)
+                    ->orderBy('sort')->orderBy('name')->pluck('name')->all(),
                 'thali' => $this->todayThali($tenant),
                 'vertical' => \App\Support\Vertical::of($tenant),
                 'trending' => $this->trendingIds($tenant),
