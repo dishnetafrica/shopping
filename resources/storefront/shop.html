@@ -783,6 +783,64 @@ button{ -webkit-tap-highlight-color:transparent }
   .opoosn{ color:var(--muted); font-weight:700 }
   .oplt{ font-size:14px; font-weight:800; text-align:right; white-space:nowrap }
 }
+
+/* Phase 6 base: order-history rows as classes (previously inline styles).
+   These reproduce the exact mobile look so the phone view is unchanged; the
+   header row and per-line item count are desktop-only. */
+.ordhd{ display:none }
+.ordn{ display:none }
+.ordcard{ border:1px solid var(--line); border-radius:11px; padding:11px; margin-bottom:10px }
+.ordtop{ display:flex; justify-content:space-between }
+.ordst{ color:var(--muted); font-size:12px }
+.orditems{ font-size:12px; color:var(--muted); margin:4px 0 }
+.ordbot{ display:flex; justify-content:space-between; align-items:center }
+.ordtot{ font-weight:700 }
+.ordre{ border:1px solid var(--green); background:#fff; color:var(--green-d); font-weight:700;
+  border-radius:9px; padding:6px 12px; font-size:13px; cursor:pointer }
+
+/* =====================================================================
+   DESKTOP LAYER — Phase 6: two-column PDP, two-column checkout, orders
+   table (>=1024px only). Sheets become centred, width-constrained modals;
+   checkout puts details left / sticky bill right; orders become a table
+   with one-click reorder. Mobile untouched (rules inside the media query;
+   base order-card rules above match the old inline look).
+   ===================================================================== */
+@media(min-width:1024px){
+  /* Sheets: centred, constrained modals instead of full-bleed bottom sheets. */
+  .sheet.show{ display:flex; align-items:flex-end; justify-content:center }
+  .sheetcard{ position:relative; left:auto; right:auto; width:100%; max-width:600px; margin:0 auto;
+    max-height:92vh; border-radius:20px 20px 0 0 }
+  .sheetcard:has(.cocols){ max-width:940px }     /* checkout, two columns */
+  .sheetcard:has(.ordlist){ max-width:780px }     /* orders table */
+
+  /* Two-column checkout. */
+  .cocols{ display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:22px; align-items:start }
+  .cocol-r{ position:sticky; top:2px }
+  .cocol-r .cartfoot{ position:static; padding:12px 0 0; box-shadow:none; border:0 }
+
+  /* Two-column product page: sticky gallery, roomy info, centred buy bar. */
+  .dwrap{ max-width:1080px; padding-bottom:112px }
+  .dtop{ flex-wrap:nowrap; align-items:flex-start; gap:34px }
+  .dgal{ position:sticky; top:16px; align-self:flex-start; flex:0 0 460px; max-width:460px }
+  .dinfo{ flex:1 1 auto }
+  .dbuybar{ padding-left:max(18px,calc((100% - 1048px)/2)); padding-right:max(18px,calc((100% - 1048px)/2)) }
+
+  /* Orders table. */
+  .ordlist{ border:1px solid var(--line); border-radius:12px; overflow:hidden }
+  .ordhd{ display:grid; grid-template-columns:150px minmax(0,1fr) 190px 116px; gap:14px; align-items:center;
+    padding:11px 14px; background:#FAFBFA; border-bottom:1px solid var(--line);
+    font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--muted) }
+  .ordcard{ border:0; border-bottom:1px solid var(--line); border-radius:0; margin:0; padding:12px 14px;
+    display:grid; grid-template-columns:150px minmax(0,1fr) 190px 116px; gap:14px; align-items:center }
+  .ordcard:last-child{ border-bottom:0 }
+  .ordcard:hover{ background:#FAFBFA }
+  .ordtop{ display:block }
+  .ordtop b{ font-size:13.5px } .ordst{ display:block; margin-top:2px }
+  .orditems{ margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .ordbot{ display:contents }
+  .ordtot{ font-size:13.5px } .ordn{ display:inline; color:var(--muted); font-weight:600 }
+  .ordre{ justify-self:end }
+}
 </style>
 </head>
 <body>
@@ -1619,14 +1677,20 @@ function openMyOrders(){
   $('sheetTitle').textContent='My account';
   var stmtHtml=renderMyStatement();
   if(!MYORDERS.length){$('sheetBody').innerHTML=stmtHtml+'<div class="empty">No past orders yet.</div><button class="place" style="background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="closeSheet()">Close</button>';$('sheet').classList.add('show');return;}
-  var html=stmtHtml+MYORDERS.map(function(o,i){
+  /* Phase 6: class-based markup. Base CSS reproduces the previous inline look
+     (mobile unchanged); on desktop .ordlist becomes a sortable-looking table
+     with a one-click Reorder per row (reorderFrom adds all items from a past
+     order \u2014 the highest-frequency B2B action). */
+  var cards=MYORDERS.map(function(o,i){
     var items=(o.items||[]).map(function(it){return it.qty+'\u00D7 '+it.name;}).join(', ');
-    return '<div style="border:1px solid var(--line);border-radius:11px;padding:11px;margin-bottom:10px">'+
-      '<div style="display:flex;justify-content:space-between"><b>'+esc(o.order_no||('Order '+(i+1)))+'</b><span style="color:var(--muted);font-size:12px">'+esc(o.status||'')+'</span></div>'+
-      '<div style="font-size:12px;color:var(--muted);margin:4px 0">'+esc(items)+'</div>'+
-      '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">'+ugx(o.total||0)+'</span>'+
-      '<button onclick="reorderFrom('+i+')" style="border:1px solid var(--green);background:#fff;color:var(--green-d);font-weight:700;border-radius:9px;padding:6px 12px;font-size:13px">\u21BB Reorder</button></div></div>';
+    var n=(o.items||[]).reduce(function(s,it){return s+(it.qty||0);},0);
+    return '<div class="ordcard">'+
+      '<div class="ordtop"><b>'+esc(o.order_no||('Order '+(i+1)))+'</b><span class="ordst">'+esc(o.status||'')+'</span></div>'+
+      '<div class="orditems" title="'+esc(items)+'">'+esc(items)+'</div>'+
+      '<div class="ordbot"><span class="ordtot">'+ugx(o.total||0)+'<span class="ordn"> \u00B7 '+n+' item'+(n===1?'':'s')+'</span></span>'+
+      '<button class="ordre" onclick="reorderFrom('+i+')">\u21BB Reorder</button></div></div>';
   }).join('');
+  var html=stmtHtml+'<div class="ordlist"><div class="ordhd"><div>Order</div><div>Items</div><div>Total</div><div></div></div>'+cards+'</div>';
   $('sheetBody').innerHTML=html+'<button class="place" style="background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="closeSheet()">Close</button>';
   $('sheet').classList.add('show');
 }
@@ -2074,10 +2138,16 @@ function openCheckout(){
   var bill='<div class="billbox"><div class="billrow"><span>Items ('+cartCount()+')</span><span>'+ugx(sub)+'</span></div>'
     +'<div class="billrow"><span>Delivery</span><span class="mut">'+(de?esc(de):'set your location')+'</span></div>'
     +'<div class="billrow tot"><span>To pay</span><span>'+ugx(sub)+'<span class="plusdel"> + delivery</span></span></div></div>';
-  $('sheetBody').innerHTML=details+paytiles+extras+bill
+  /* Phase 6: on desktop these two columns sit side by side (details left, a
+     sticky bill+place-order right). On mobile .cocols/.cocol-* are plain blocks,
+     so the vertical order is unchanged and the layout is identical. All field
+     IDs and placeOrder() are untouched — the order path is byte-for-byte the same. */
+  var coLeft='<div class="cocol-l">'+details+paytiles+extras+'</div>';
+  var coRight='<div class="cocol-r">'+bill
     +'<div class="trustrow">You only pay when you receive · we message you on WhatsApp at every step</div>'
     +'<div class="cartfoot"><button class="place" id="placeBtn" onclick="placeOrder()">Place order · '+ugx(sub)+'</button>'
-    +'<button class="colink" style="text-align:center;width:100%;margin-top:6px" onclick="openCart()">Back to cart</button></div>';
+    +'<button class="colink" style="text-align:center;width:100%;margin-top:6px" onclick="openCart()">Back to cart</button></div></div>';
+  $('sheetBody').innerHTML='<div class="cocols">'+coLeft+coRight+'</div>';
   $('sheet').classList.add('show');
   renderLocMsg();
 }
