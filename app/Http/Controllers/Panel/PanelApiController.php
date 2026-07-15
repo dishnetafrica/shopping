@@ -2095,7 +2095,15 @@ class PanelApiController extends Controller
         $tmp = tempnam(sys_get_temp_dir(), 'imp');
         file_put_contents($tmp, $bin);
         $za = new \ZipArchive();
-        if ($za->open($tmp) !== true) { @unlink($tmp); return response()->json(['ok' => false, 'error' => 'bad_zip'], 422); }
+        if ($za->open($tmp) !== true) {
+            @unlink($tmp);
+            // Not a ZIP — accept a plain CSV upload as a CSV-only import (images only via a URL column).
+            if (stripos((string) substr($bin, 0, 4000), 'name') !== false && (str_contains($bin, ',') || str_contains($bin, ';'))) {
+                return $this->productsImportCsvOnly($r, $t, (string) $bin);
+            }
+
+            return response()->json(['ok' => false, 'error' => 'bad_zip'], 422);
+        }
 
         $csv = ''; $imgIndex = [];
         for ($i = 0; $i < $za->numFiles; $i++) {
@@ -2210,6 +2218,96 @@ class PanelApiController extends Controller
             'replace' => $replace, 'existing' => $existing,
             'archived' => ($apply && $replace) ? $archived : ($replace ? $existing : 0),
             'categories' => count($catsSeen),
+        ]);
+    }
+
+    /**
+     * CSV-only catalogue import (no ZIP). Same columns as the ZIP import (Product Name, Category, Price,
+     * Stock, Keywords, Image) plus optional SKU and Cost. Images only via a URL in the Image column
+     * (local files need the ZIP import). dry-run unless apply=1. Reached from productsImport when the
+     * uploaded file is a CSV rather than a ZIP.
+     */
+    private function productsImportCsvOnly(Request $r, $t, string $csv)
+    {
+        $apply = (int) $r->input('apply', 0) === 1;
+        $replace = (int) $r->input('replace', 0) === 1;
+        if ($replace) {
+            if (! $r->user()->isOwnerLike()) return response()->json(['ok' => false, 'error' => 'replace_forbidden'], 403);
+            if ((string) $r->input('confirm', '') !== 'RESTART') return response()->json(['ok' => false, 'error' => 'confirm_required'], 422);
+        }
+        $existing = Product::where('tenant_id', $t->id)->whereNull('archived_at')->count();
+        $archived = 0;
+        if ($apply && $replace) {
+            $archived = Product::where('tenant_id', $t->id)->whereNull('archived_at')->update(['active' => false, 'archived_at' => now()]);
+        }
+        $scope = $r->user()->categoryScope();
+
+        $lines  = preg_split('/\r\n|\r|\n/', trim($csv));
+        $header = array_map(fn ($h) => strtolower(trim($h)), str_getcsv((string) array_shift($lines)));
+        $col = function ($names) use ($header) { foreach ($names as $n) { $i = array_search($n, $header, true); if ($i !== false) return $i; } return null; };
+        $iName = $col(['product name', 'name']); $iCat = $col(['category']); $iPrice = $col(['price ugx', 'price']);
+        $iStock = $col(['stock']); $iKw = $col(['keywords']); $iImg = $col(['image', 'photo']);
+        $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
+        if ($iName === null) return response()->json(['ok' => false, 'error' => 'csv_no_name'], 422);
+
+        $created = $dup = $noImg = $forbidden = 0; $samples = []; $catsSeen = [];
+        foreach ($lines as $ln) {
+            if (trim($ln) === '') continue;
+            $c = str_getcsv($ln);
+            $name = trim((string) ($c[$iName] ?? '')); if ($name === '') continue;
+            $cat  = $iCat !== null ? trim((string) ($c[$iCat] ?? '')) : '';
+            if (is_array($scope) && ! in_array($cat, $scope, true)) { $forbidden++; continue; }
+            if (! $replace && Product::where('tenant_id', $t->id)->whereNull('archived_at')->whereRaw('lower(name) = ?', [mb_strtolower($name)])->exists()) { $dup++; continue; }
+
+            $price = $iPrice !== null ? (float) preg_replace('/[^0-9.]/', '', (string) ($c[$iPrice] ?? '')) : 0;
+            $cost  = $iCost !== null ? (float) preg_replace('/[^0-9.]/', '', (string) ($c[$iCost] ?? '')) : 0;
+            $stock = $iStock !== null ? (int) preg_replace('/[^0-9-]/', '', (string) ($c[$iStock] ?? '')) : 0;
+            $kw    = $iKw !== null ? trim((string) ($c[$iKw] ?? '')) : '';
+            $sku   = $iSku !== null ? trim((string) ($c[$iSku] ?? '')) : '';
+            $imgRaw = $iImg !== null ? trim((string) ($c[$iImg] ?? '')) : '';
+            $isUrl  = (bool) preg_match('#^https?://#i', $imgRaw);
+
+            $url = '';
+            if ($isUrl && $apply) {
+                try {
+                    $resp = \Illuminate\Support\Facades\Http::timeout(25)->withHeaders(['User-Agent' => 'Mozilla/5.0'])->get($imgRaw);
+                    if ($resp->successful()) {
+                        $ct = strtolower((string) $resp->header('Content-Type')); $body = $resp->body();
+                        if ($body !== '' && str_contains($ct, 'image')) {
+                            $ext = str_contains($ct, 'png') ? 'png' : (str_contains($ct, 'webp') ? 'webp' : 'jpg');
+                            $path = 'products/' . $t->id . '/' . uniqid('imp_', true) . '.' . $ext;
+                            Storage::disk('public')->put($path, $body); $url = url(Storage::url($path));
+                        }
+                    }
+                } catch (\Throwable $e) {}
+                if ($url === '') $noImg++;
+            } elseif ($imgRaw !== '') { $noImg++; }
+
+            if ($apply) {
+                Product::create([
+                    'tenant_id' => $t->id, 'name' => $name, 'category' => $cat, 'keywords' => $kw, 'sku' => ($sku ?: null),
+                    'base_price' => $price, 'price' => $price, 'cost_price' => ($cost > 0 ? $cost : null),
+                    'stock' => $stock, 'image_url' => $url, 'active' => $price > 0,
+                ]);
+            }
+            $created++;
+            if ($cat !== '') $catsSeen[$cat] = 1;
+            if (count($samples) < 8) $samples[] = $name;
+        }
+
+        if ($apply && $catsSeen) {
+            $sort = (int) (\App\Models\Category::where('tenant_id', $t->id)->max('sort')) + 1;
+            foreach (array_keys($catsSeen) as $cn) {
+                try { \App\Models\Category::firstOrCreate(['tenant_id' => $t->id, 'name' => $cn], ['active' => true, 'sort' => $sort++]); } catch (\Throwable $e) {}
+            }
+        }
+
+        return response()->json([
+            'ok' => true, 'apply' => $apply, 'created' => $created, 'duplicates' => $dup,
+            'missing_image' => $noImg, 'forbidden_category' => $forbidden, 'samples' => $samples,
+            'replace' => $replace, 'existing' => $existing,
+            'archived' => ($apply && $replace) ? $archived : ($replace ? $existing : 0),
+            'categories' => count($catsSeen), 'mode' => 'csv',
         ]);
     }
 

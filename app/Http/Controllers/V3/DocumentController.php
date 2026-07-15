@@ -258,6 +258,41 @@ final class DocumentController extends Controller
         ]);
     }
 
+    /** GET /api/v1/doc/products-export?format=csv|zip|photos — export the catalogue. */
+    public function productsExport(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) {
+            abort(401);
+        }
+        if (! $r->user()->canMenu('products')) {
+            abort(403);
+        }
+        $svc = app(\App\Services\Catalog\CatalogExport::class);
+        $format = strtolower((string) $r->query('format', 'csv'));
+        $stamp = now()->format('Ymd');
+        $base = 'Catalogue-' . preg_replace('/[^A-Za-z0-9]+/', '', (string) ($t->name ?: 'catalog')) . '-' . $stamp;
+
+        if ($format === 'zip') {
+            $bytes = $svc->zip($t, true);
+            if (! $bytes) { abort(404, 'ZIP engine unavailable'); }
+
+            return response($bytes, 200, ['Content-Type' => 'application/zip', 'Content-Disposition' => 'attachment; filename="' . $base . '.zip"']);
+        }
+        if ($format === 'photos') {
+            $bytes = $svc->photosZip($t);
+            if (! $bytes) { abort(404, 'No product photos to export'); }
+
+            return response($bytes, 200, ['Content-Type' => 'application/zip', 'Content-Disposition' => 'attachment; filename="' . $base . '-photos.zip"']);
+        }
+
+        // default: CSV
+        return response($svc->csv($t, false), 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $base . '.csv"',
+        ]);
+    }
+
     private function stream(array $doc, string $filename)
     {
         $disk = Storage::disk('public');
