@@ -2609,6 +2609,95 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /** Read the Business-Type banners config (Shop by Business merchandising). */
+    public function bannersGet(Request $r)
+    {
+        $t = $r->user()->tenant;
+        $cfg = $t->setting('business_banners', []);
+        if (! is_array($cfg)) $cfg = [];
+        return response()->json(['ok' => true, 'config' => (object) $cfg]);
+    }
+
+    /**
+     * Save the Business-Type banners config. Whitelists & size-caps every field so the storefront
+     * only ever reads a well-formed structure. Photos are already-uploaded URLs (via /papi/upload-image)
+     * — this endpoint stores the URL only, it does not handle file bytes.
+     */
+    public function bannersSave(Request $r)
+    {
+        $t   = $r->user()->tenant;
+        $in  = $r->input('config', []);
+        if (is_string($in)) { $in = json_decode($in, true); }
+        if (! is_array($in)) $in = [];
+
+        $str  = fn ($v, $max = 200) => mb_substr(trim((string) ($v ?? '')), 0, $max);
+        $arrS = function ($v, $maxItems, $maxLen) use ($str) {
+            if (! is_array($v)) return [];
+            return array_values(array_filter(array_map(fn ($x) => $str($x, $maxLen), array_slice($v, 0, $maxItems)), fn ($x) => $x !== ''));
+        };
+
+        $businesses = [];
+        foreach (array_slice((array) ($in['businesses'] ?? []), 0, 12) as $b) {
+            if (! is_array($b)) continue;
+            $slides = [];
+            foreach (array_slice((array) ($b['slides'] ?? []), 0, 5) as $s) {
+                if (! is_array($s)) continue;
+                $slides[] = [
+                    'kick'      => $str($s['kick'] ?? '', 40),
+                    'title'     => $str($s['title'] ?? '', 160),
+                    'points'    => $arrS($s['points'] ?? [], 5, 80),
+                    'cta_label' => $str($s['cta_label'] ?? '', 40),
+                    'cta'       => $str($s['cta'] ?? '', 120),
+                    'gold'      => (bool) ($s['gold'] ?? false),
+                    'image_url' => $str($s['image_url'] ?? '', 500),
+                    'theme'     => $str($s['theme'] ?? '', 80),
+                ];
+            }
+            $collections = [];
+            foreach (array_slice((array) ($b['collections'] ?? []), 0, 10) as $c) {
+                if (! is_array($c)) continue;
+                $collections[] = [
+                    'label'     => $str($c['label'] ?? '', 60),
+                    'cat'       => $str($c['cat'] ?? '', 80),
+                    'keywords'  => $str($c['keywords'] ?? '', 160),
+                    'icon'      => $str($c['icon'] ?? '', 20),
+                    'image_url' => $str($c['image_url'] ?? '', 500),
+                ];
+            }
+            $best = $b['bestsellers'] ?? 'auto';
+            $best = is_array($best) ? $arrS($best, 12, 120) : $str($best, 20);
+
+            $businesses[] = [
+                'id'          => $str($b['id'] ?? '', 40) ?: \Illuminate\Support\Str::slug($str($b['label'] ?? 'biz', 40)),
+                'label'       => $str($b['label'] ?? '', 40),
+                'sub'         => $str($b['sub'] ?? '', 80),
+                'icon'        => $str($b['icon'] ?? '', 20),
+                'active'      => (bool) ($b['active'] ?? true),
+                'card_image'  => $str($b['card_image'] ?? '', 500),
+                'match'       => [
+                    'categories' => $arrS(($b['match']['categories'] ?? []), 40, 80),
+                    'keywords'   => $arrS(($b['match']['keywords'] ?? []), 60, 60),
+                    'bulk'       => (bool) ($b['match']['bulk'] ?? false),
+                ],
+                'slides'      => $slides,
+                'collections' => $collections,
+                'bestsellers' => $best,
+            ];
+        }
+
+        $cfg = [
+            'enabled'    => (bool) ($in['enabled'] ?? false),
+            'title'      => $str($in['title'] ?? '', 60),
+            'autoscroll' => max(0, min(30, (int) ($in['autoscroll'] ?? 5))),
+            'default'    => $str($in['default'] ?? '', 40),
+            'businesses' => $businesses,
+        ];
+
+        $t->putSetting('business_banners', $cfg);
+        $this->catFlush($t);
+        return response()->json(['ok' => true, 'config' => (object) $cfg]);
+    }
+
     /** Create an (initially empty) category so it shows as a tile before any product uses it. */
     public function categoryCreate(Request $r)
     {

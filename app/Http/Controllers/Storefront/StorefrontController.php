@@ -340,6 +340,9 @@ class StorefrontController extends Controller
                 'category_order' => \App\Models\Category::where('tenant_id', $tenant->id)
                     ->where('active', true)
                     ->orderBy('sort')->orderBy('name')->pluck('name')->all(),
+                // Business-type merchandising banners (Shop by Business). Empty object when unset —
+                // the storefront then renders nothing new (fully backward compatible).
+                'business_banners' => (object) ($tenant->setting('business_banners', []) ?: []),
                 'thali' => $this->todayThali($tenant),
                 'vertical' => \App\Support\Vertical::of($tenant),
                 'trending' => $this->trendingIds($tenant),

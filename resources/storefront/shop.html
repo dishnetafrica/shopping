@@ -898,6 +898,72 @@ button{ -webkit-tap-highlight-color:transparent }
   body.ddense #content .pc .dsc{ display:none }
   body.ddense #content .pc .pr{ font-size:13.5px }
 }
+/* ---------------- Shop by Business banners (merchandising) ---------------- */
+.bizwrap{margin:0 0 14px}
+.bizsel{display:flex;gap:9px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:8px 12px 10px}
+.bizsel::-webkit-scrollbar{height:0}
+.bizpill{flex:0 0 auto;text-align:center;cursor:pointer;width:70px}
+.bizpill .ic{width:60px;height:52px;border-radius:14px;border:1px solid #e5eaef;background:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 5px;color:#6b7885}
+.bizpill .ic svg{width:24px;height:24px}
+.bizpill small{font-size:10.5px;color:#6b7885;font-weight:700;display:block;line-height:1.15}
+.bizpill.on .ic{background:#0b7a3b;border-color:#0b7a3b;color:#fff;box-shadow:0 6px 14px rgba(11,122,59,.3)}
+.bizpill.on small{color:#0b7a3b;font-weight:800}
+.bizhero{margin:0 12px;border-radius:16px;overflow:hidden;position:relative}
+.biztrack{display:flex;transition:transform .45s cubic-bezier(.4,0,.2,1)}
+.bizslide{flex:0 0 100%;min-height:230px;position:relative;color:#fff;background-size:cover;background-position:center}
+.bizslide:after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,rgba(0,0,0,.68) 8%,rgba(0,0,0,.32) 58%,rgba(0,0,0,.12))}
+.bizslide .bztxt{position:relative;z-index:1;padding:18px;min-height:230px;display:flex;flex-direction:column;justify-content:flex-end}
+.bizslide .kick{align-self:flex-start;background:rgba(255,255,255,.9);color:#172029;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:4px 10px;border-radius:7px;margin-bottom:10px}
+.bizslide h2{font-size:23px;line-height:1.14;letter-spacing:-.02em;margin:0;color:#fff}
+.bizslide h2 b{color:#f4b400;font-weight:800}
+.bizslide ul{list-style:none;padding:0;margin:11px 0 14px}
+.bizslide ul li{font-size:12px;margin:5px 0;display:flex;align-items:center;gap:7px;color:#eef4ee}
+.bizslide ul li:before{content:"✓";color:#7ee6a6;font-weight:900}
+.bizslide .cta{align-self:flex-start;background:#12934a;color:#fff;font-weight:800;font-size:13px;padding:11px 18px;border-radius:11px;border:0;display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.bizslide .cta.gold{background:#f4b400;color:#3a2c00}
+.bizarw{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.92);border:0;align-items:center;justify-content:center;cursor:pointer;z-index:5;font-size:16px;color:#172029;display:none;box-shadow:0 3px 10px rgba(0,0,0,.2)}
+.bizhero:hover .bizarw{display:flex}
+.bizarw.l{left:12px}.bizarw.r{right:12px}
+.bizdots{display:flex;gap:6px;justify-content:center;padding:9px 0 2px}
+.bizdots i{width:7px;height:7px;border-radius:999px;background:#cfd8e0;cursor:pointer;transition:.2s}
+.bizdots i.on{background:#0b7a3b;width:20px}
+.bizcollrow{display:flex;gap:11px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 12px 10px}
+.bizcollrow::-webkit-scrollbar{height:0}
+.bizcoll{flex:0 0 128px;width:128px;cursor:pointer}
+.bizcoll .im{height:92px;border-radius:12px;background:linear-gradient(135deg,#f2f6fa,#e6eef6);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;color:#aeb9c6;margin-bottom:7px}
+.bizcoll .im svg{width:38px;height:38px}
+.bizcoll b{font-size:12.5px;line-height:1.2;display:block}
+/* Shop for Every Need — premium collection cards */
+.needrow{display:flex;gap:11px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 12px 12px}
+.needrow::-webkit-scrollbar{height:0}
+.needcard{flex:0 0 158px;width:158px;height:150px;border-radius:15px;position:relative;overflow:hidden;cursor:pointer;color:#fff;background-size:cover;background-position:center;box-shadow:0 5px 14px rgba(15,35,64,.12);display:flex;flex-direction:column;justify-content:flex-end;padding:12px}
+.needcard .ov{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.05) 30%,rgba(0,0,0,.62))}
+.needcard .nic{position:absolute;top:10px;left:11px;z-index:1;width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;color:#fff}
+.needcard .nic svg{width:18px;height:18px}
+.needcard .ntx{position:relative;z-index:1}
+.needcard .ntx b{font-size:13.5px;line-height:1.16;display:block}
+.needcard .ntx small{font-size:10.5px;opacity:.9;display:block;margin-top:2px;line-height:1.2}
+.needcard .ntx .arw{font-size:11px;font-weight:800;margin-top:7px;display:inline-block}
+.needcard.on{outline:3px solid #0b7a3b;outline-offset:-3px}
+.needcard.on:before{content:"✓";position:absolute;top:9px;right:10px;z-index:2;background:#0b7a3b;color:#fff;width:20px;height:20px;border-radius:50%;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
+@media(min-width:1024px){
+  .needrow{display:grid;grid-template-columns:repeat(auto-fill,minmax(184px,1fr));gap:14px;padding:2px 0 14px;overflow:visible}
+  .needcard{flex:none;width:auto;height:172px}
+  .needcard .ntx b{font-size:15px}
+  .needcard .ntx small{font-size:11.5px}
+}
+@media(min-width:1024px){
+  .bizhero{margin:0}
+  .bizslide{min-height:330px}
+  .bizslide .bztxt{padding:44px;min-height:330px;max-width:620px}
+  .bizslide h2{font-size:34px;max-width:560px}
+  .bizslide .kick{font-size:11px}
+  .bizslide ul li{font-size:14px}
+  .bizsel{padding:12px 0}
+  .bizcollrow{padding-left:0;padding-right:0}
+  .bizdots{position:absolute;bottom:16px;left:44px;padding:0;z-index:2}
+}
+@media(prefers-reduced-motion: reduce){ .biztrack{transition:none} }
 </style>
 </head>
 <body>
@@ -1110,6 +1176,128 @@ function trendingRail(){
   return items.length>=3 ? railHtml('Trending today', items) : '';
 }
 function homeRails(){ return buyAgainRail()+recentlyViewedRail()+trendingRail()+popularRail()+newArrivalsRail(); }
+
+/* ---------------- Shop by Business banners (merchandising) ----------------
+   Config comes from the catalogue feed (settings.business_banners). Renders only when enabled,
+   so tenants without a config see no change. Auto-scrolls, pauses on hover/touch, swipes, and
+   respects reduced-motion. Selecting a business re-merchandises collections + best-sellers; the
+   CTA / collections drill into a business-filtered product grid (reusing the normal grid). */
+var BANNERS=null, BIZSEL='', _bizSlide=0, _bizTimer=null, BIZVIEW='', _bizOrder=null;
+var BIZ_ICO={
+ hotels:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 21V6l8-3 8 3v15"/><path d="M9 21v-5h6v5"/><path d="M8 9h.4M12 9h.4M16 9h.4"/></svg>',
+ restaurants:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3v7a2 2 0 0 0 4 0V3M8 10v11"/><path d="M16 3c-1.5 0-2.5 2-2.5 5S15 13 16 13v8"/></svg>',
+ supermarkets:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 4h2l2.2 11h10L20 7H6"/><circle cx="9" cy="19" r="1.2"/><circle cx="17" cy="19" r="1.2"/></svg>',
+ wholesale:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/></svg>',
+ catering:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 16h16"/><path d="M6 16a6 6 0 0 1 12 0"/><path d="M12 10V7"/><circle cx="12" cy="6" r="1"/></svg>',
+ offices:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M9 7h.4M13 7h.4M9 11h.4M13 11h.4M9 15h.4M13 15h.4"/></svg>',
+ bakeries:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 14a7 7 0 0 1 14 0v3H5z"/><path d="M8 14c0-2 1-4 4-4s4 2 4 4"/></svg>',
+ cleaning:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 21V10h5v11"/><path d="M13 13h4l2 8H13"/><path d="M8 10V5h3l1-3"/></svg>',
+ home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/><path d="M10 20v-6h4v6"/></svg>',
+ retail:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 8l1-4h14l1 4"/><path d="M4 8h16v3a2 2 0 0 1-4 0 2 2 0 0 1-4 0 2 2 0 0 1-4 0 2 2 0 0 1-4 0z"/><path d="M5 11v9h14v-9"/></svg>',
+ shop:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 9h16l-1 11H5z"/><path d="M9 9a3 3 0 0 1 6 0"/></svg>'
+};
+function bizIcon(k){return BIZ_ICO[k]||BIZ_ICO.shop;}
+function bizReduce(){ try{return window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(e){return false;} }
+function activeBiz(){ if(!BANNERS||!BANNERS.enabled)return []; return (BANNERS.businesses||[]).filter(function(x){return x && x.id && x.active!==false;}); }
+function bizRemembered(){ try{return localStorage.getItem('cb_biz_'+(SHOP.slug||'shop'))||'';}catch(e){return '';} }
+function rememberBiz(id){ try{localStorage.setItem('cb_biz_'+(SHOP.slug||'shop'),id);}catch(e){} }
+/* Gentle, opt-out-free personalization: count how often a shopper opens each collection on this
+   device, and order the cards most-used first on the NEXT visit (never reshuffles mid-session, so
+   cards don't jump under the finger). Nothing is hidden — every collection stays one tap away. */
+function bizFreq(){ try{return JSON.parse(localStorage.getItem('cb_bizfreq_'+(SHOP.slug||'shop'))||'{}')||{};}catch(e){return {};} }
+function bumpBizFreq(id){ try{var f=bizFreq(); f[id]=(f[id]||0)+1; localStorage.setItem('cb_bizfreq_'+(SHOP.slug||'shop'),JSON.stringify(f)); }catch(e){} }
+function orderedBiz(){
+  var list=activeBiz(); if(!list.length)return [];
+  if(!_bizOrder){ var f=bizFreq();
+    _bizOrder=list.map(function(b,i){return {id:b.id,i:i,c:f[b.id]||0};})
+      .sort(function(a,b){return (b.c-a.c)||(a.i-b.i);}).map(function(x){return x.id;}); }
+  var byId={}; list.forEach(function(b){byId[b.id]=b;}); var out=[];
+  _bizOrder.forEach(function(id){ if(byId[id]){out.push(byId[id]);delete byId[id];} });
+  list.forEach(function(b){ if(byId[b.id])out.push(b); });   // any newly-added collections
+  return out;
+}
+function currentBiz(){ var list=orderedBiz(); if(!list.length)return null;
+  if(BIZSEL){ var s=list.filter(function(x){return x.id===BIZSEL;})[0]; if(s)return s; }
+  var f=bizFreq();
+  if(!Object.keys(f).length){ var want=(BANNERS&&BANNERS['default'])||bizRemembered();
+    if(want){ var d=list.filter(function(x){return x.id===want;})[0]; if(d)return d; } }
+  return list[0]; }   // ordered most-used-first for returning shoppers
+function bizMatch(p,biz){ if(!p||!biz)return false; var m=biz.match||{};
+  if(m.bulk && ((Number(p.packSize)||0)>1 || (Number(p.moq)||0)>1)) return true;
+  var cats=(m.categories||[]).map(function(s){return String(s).toLowerCase();});
+  if(cats.length&&cats.indexOf(String(p.category||'').toLowerCase())>=0)return true;
+  var kws=m.keywords||[]; if(kws.length){ var hay=(p.name+' '+p.keywords+' '+p.category+' '+p.brand).toLowerCase();
+    for(var i=0;i<kws.length;i++){ if(String(kws[i])&&hay.indexOf(String(kws[i]).toLowerCase())>=0)return true; } }
+  return false; }
+function bizProducts(biz){ return PRODUCTS.filter(function(p){return bizMatch(p,biz);}); }
+function bizTitle(t){ return esc(String(t||'')).replace(/\*(.+?)\*/g,'<b>$1</b>'); }
+
+function businessBanners(){
+  var list=orderedBiz(); if(!list.length) return '';
+  var biz=currentBiz(); if(!biz) return '';
+  var slides=(biz.slides&&biz.slides.length)?biz.slides:[{title:biz.label,cta_label:'Shop '+biz.label}];
+  if(_bizSlide>=slides.length||_bizSlide<0)_bizSlide=0;
+  var title=(BANNERS&&BANNERS.title)||'Shop for Every Need';
+  var sel=list.map(function(b){
+    var im=b.card_image||(b.slides&&b.slides[0]&&b.slides[0].image_url)||'';
+    var th=(b.slides&&b.slides[0]&&b.slides[0].theme)||'linear-gradient(135deg,#123a2a,#0b5c46)';
+    var style=im?('background-image:url("'+encodeURI(im)+'")'):('background:'+th);
+    return '<div class="needcard'+(b.id===biz.id?' on':'')+'" style="'+style+'" onclick="pickBiz('+jk(b.id)+')">'
+      +'<span class="ov"></span><span class="nic">'+bizIcon(b.icon||b.id)+'</span>'
+      +'<div class="ntx"><b>'+esc(b.label)+'</b>'+(b.sub?'<small>'+esc(b.sub)+'</small>':'')+'<span class="arw">Browse →</span></div></div>';
+  }).join('');
+  var selBlock='<div class="section-title">'+esc(title)+'</div><div class="needrow">'+sel+'</div>';
+  var track=slides.map(function(s){
+    var bg=s.image_url?('background-image:url("'+encodeURI(s.image_url)+'")'):(s.theme?('background:'+s.theme):'background:linear-gradient(135deg,#123a2a,#0b5c46)');
+    var pts=(s.points||[]).map(function(p){return '<li>'+esc(p)+'</li>';}).join('');
+    return '<div class="bizslide" style="'+bg+'"><div class="bztxt">'
+      +(s.kick?'<span class="kick">'+esc(s.kick)+'</span>':'')
+      +'<h2>'+bizTitle(s.title||biz.label)+'</h2>'+(pts?'<ul>'+pts+'</ul>':'')
+      +'<button class="cta'+(s.gold?' gold':'')+'" onclick="bizCta('+jk(biz.id)+','+jk(s.cta||'')+')">'+esc(s.cta_label||('Shop '+biz.label))+' →</button>'
+      +'</div></div>';
+  }).join('');
+  var multi=slides.length>1;
+  var dots=multi?('<div class="bizdots" id="bizDots">'+slides.map(function(_,i){return '<i class="'+(i===_bizSlide?'on':'')+'" onclick="bizGo('+i+')"></i>';}).join('')+'</div>'):'';
+  var arrows=multi?'<button class="bizarw l" onclick="bizPrev()" aria-label="Previous">‹</button><button class="bizarw r" onclick="bizNext()" aria-label="Next">›</button>':'';
+  var hero='<div class="bizhero" id="bizHero"><div class="biztrack" id="bizTrack" style="transform:translateX(-'+(_bizSlide*100)+'%)">'+track+'</div>'+arrows+'</div>'+dots;
+  var coll='';
+  if(biz.collections&&biz.collections.length){
+    var cc=biz.collections.map(function(c){
+      var im=c.image_url?('<div class="im" style="background-image:url(\''+encodeURI(c.image_url)+'\')"></div>'):('<div class="im">'+bizIcon(c.icon||'shop')+'</div>');
+      return '<div class="bizcoll" onclick="bizColl('+jk(biz.id)+','+jk(c.cat||'')+','+jk(c.keywords||'')+')">'+im+'<b>'+esc(c.label)+'</b></div>';
+    }).join('');
+    coll='<div class="section-title">Popular collections for '+esc(biz.label)+'</div><div class="bizcollrow">'+cc+'</div>';
+  }
+  var items=[], bs=biz.bestsellers;
+  if(Array.isArray(bs)&&bs.length){ bs.forEach(function(nm){var p=prod(nm)||PRODUCTS.filter(function(x){return x.name.toLowerCase()===String(nm).toLowerCase();})[0]; if(sellableRail(p))items.push(p);}); }
+  if(!items.length){ items=bizProducts(biz).filter(sellableRail).slice().sort(function(a,b){return (b.popularity||0)-(a.popularity||0);}); }
+  var best=items.length>=3?railHtml('Best sellers for '+biz.label, items):'';
+  return '<div class="bizwrap">'+selBlock+hero+coll+best+'</div>';
+}
+function pickBiz(id){ BIZSEL=id; rememberBiz(id); bumpBizFreq(id); _bizSlide=0; render(); }
+function bizCta(id,cta){ cta=String(cta||'');
+  if(cta.indexOf('cat:')===0){ setCat(cta.slice(4)); return; }
+  if(cta.indexOf('url:')===0){ try{location.href=cta.slice(4);}catch(e){} return; }
+  bizShop(id); }
+function bizColl(id,cat,kw){ if(cat){ setCat(cat); return; } if(kw){ Q=String(kw); if($('q'))$('q').value=Q; CAT='all'; BIZVIEW=''; _catShown=24; render(); window.scrollTo(0,0); return; } bizShop(id); }
+function bizShop(id){ BIZVIEW=id; Q=''; if($('q'))$('q').value=''; CAT='all'; _catShown=24; render(); window.scrollTo(0,0); }
+function bizClose(){ BIZVIEW=''; render(); window.scrollTo(0,0); }
+function updateBizSlide(){ var t=$('bizTrack'); if(t)t.style.transform='translateX(-'+(_bizSlide*100)+'%)'; var d=$('bizDots'); if(d){var ch=d.children; for(var i=0;i<ch.length;i++)ch[i].className=(i===_bizSlide?'on':'');} }
+function bizN(){ var b=currentBiz(); return b&&b.slides?b.slides.length:1; }
+function bizNext(){ var n=bizN()||1; _bizSlide=(_bizSlide+1)%n; updateBizSlide(); }
+function bizPrev(){ var n=bizN()||1; _bizSlide=(_bizSlide-1+n)%n; updateBizSlide(); }
+function bizGo(i){ _bizSlide=i; updateBizSlide(); bizRestart(); }
+function bizStop(){ if(_bizTimer){clearInterval(_bizTimer);_bizTimer=null;} }
+function bizStart(){ bizStop(); if(bizReduce())return; if(bizN()<2)return; var sec=(BANNERS&&BANNERS.autoscroll!=null)?Number(BANNERS.autoscroll):5; if(!(sec>0))return; _bizTimer=setInterval(bizNext,sec*1000); }
+function bizRestart(){ bizStop(); bizStart(); }
+function bizInit(){ bizStop(); var hero=$('bizHero'); if(!hero)return;
+  var x0=null;
+  hero.addEventListener('pointerdown',function(e){bizStop();x0=e.clientX;});
+  hero.addEventListener('pointerup',function(e){ if(x0!=null){var dx=e.clientX-x0; if(dx<-40)bizNext(); else if(dx>40)bizPrev();} x0=null; bizStart(); });
+  hero.addEventListener('mouseenter',bizStop);
+  hero.addEventListener('mouseleave',bizStart);
+  bizStart();
+}
 /* Currency-aware price format. Zero-decimal currencies (UGX/SSP/…) stay whole; USD/EUR keep 2
    and use the $ symbol. Output is byte-identical to before for a UGX shop; correct for others. */
 function ugx(n){ n=Number(n)||0; var cur=String(CUR||'UGX').toUpperCase();
@@ -1147,6 +1335,7 @@ async function load(){
       if(d.settings.category_images)CAT_IMG=d.settings.category_images||{}; if(d.settings.thali)THALI=d.settings.thali;
       if(d.settings.category_groups)CATGROUPS=d.settings.category_groups||{};
       if(d.settings.category_order)CATORDER=(d.settings.category_order||[]).map(String);
+      if(d.settings.business_banners)BANNERS=d.settings.business_banners||null;
       if(d.settings.trending)TRENDING=(d.settings.trending||[]).map(Number);
       var faqCustom=(Array.isArray(d.settings.faq)&&d.settings.faq.length);
       if(faqCustom)FAQ_DATA=d.settings.faq;
@@ -1176,7 +1365,7 @@ async function load(){
   }
 }
 
-function setCat(c){CAT=c;Q='';if($('q'))$('q').value='';_catShown=24;render();window.scrollTo(0,0);}
+function setCat(c){CAT=c;Q='';BIZVIEW='';if($('q'))$('q').value='';_catShown=24;render();window.scrollTo(0,0);}
 /* Deep-link from the brand site: ?add=<product> drops it in the cart (MOQ-aware) & opens checkout;
    ?cat=<category> jumps straight to that aisle. URL is cleaned so a refresh won't re-add. */
 function applyQuickOrder(){
@@ -1193,7 +1382,7 @@ function applyQuickOrder(){
     if((add||cat)&&window.history&&history.replaceState)history.replaceState(null,'',location.pathname);
   }catch(e){}
 }
-function goHome(){CAT='all';Q='';if($('q'))$('q').value='';closeSheet();render();window.scrollTo(0,0);setNav('navHome');}
+function goHome(){CAT='all';Q='';BIZVIEW='';if($('q'))$('q').value='';closeSheet();render();window.scrollTo(0,0);setNav('navHome');}
 function navBack(){goHome();}
 
 /* ================= Storefront V2 — bottom nav · skeletons · fly-to-cart ================= */
@@ -2090,9 +2279,23 @@ function render(){
     return;
   }
   if(CAT==='all'){
-    if(useDepartments()){c.innerHTML=wsBar()+homeRails()+groceryHome();return;}
-    if(useRestaurantMenus()){c.innerHTML=wsBar()+homeRails()+welcomeBanner()+comboStrip()+restaurantHome();return;}
-    c.innerHTML=wsBar()+homeRails()+welcomeBanner()+thaliBanner()+comboStrip()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){return catTile(cat.name,i);}).join('')+'</div>';
+    // Business-collection browse (from a banner CTA / collection tap) — a product grid, reusing filters.
+    if(BIZVIEW){
+      var vbiz=activeBiz().filter(function(x){return x.id===BIZVIEW;})[0];
+      if(vbiz){
+        var vlist=applyFilters(bizProducts(vbiz));
+        c.innerHTML=wsBar()+'<div class="backbar"><button onclick="bizClose()">‹ Home</button><b>'+esc(vbiz.label)+'</b></div>'+featuredBrands(bizProducts(vbiz))+filterBar()
+          +'<div class="meta">'+vlist.length+' product'+(vlist.length===1?'':'s')+' · '+sortLabel()+'</div>'
+          +'<div id="catgridwrap">'+(vlist.length?gridG(vlist):'<div class="empty">No products in this collection yet.</div>')+'</div>';
+        return;
+      }
+      BIZVIEW='';
+    }
+    var bb=businessBanners();
+    if(useDepartments()){c.innerHTML=wsBar()+bb+homeRails()+groceryHome();bizInit();return;}
+    if(useRestaurantMenus()){c.innerHTML=wsBar()+bb+homeRails()+welcomeBanner()+comboStrip()+restaurantHome();bizInit();return;}
+    c.innerHTML=wsBar()+bb+homeRails()+welcomeBanner()+thaliBanner()+comboStrip()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){return catTile(cat.name,i);}).join('')+'</div>';
+    bizInit();
     return;
   }
   var list=PRODUCTS.filter(function(p){return p.category===CAT;});
