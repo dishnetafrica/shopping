@@ -43,6 +43,12 @@ final class DemandPlanCapability implements ObjectCapability
         $suppliers = Supplier::where('tenant_id', $t)->orderBy('name')->pluck('name')->map(fn ($n) => trim((string) $n))->filter()->unique()->values()->all();
         $supplierCombo = 'combo:' . (count($suppliers) ? implode('|', $suppliers) : 'Supplier');
 
+        // product pick-list so "Add product" selects from the real catalogue (pipe-separated combo).
+        $productNames = \App\Models\Product::where('tenant_id', $t)->whereNull('archived_at')
+            ->orderBy('name')->limit(1000)->pluck('name')
+            ->map(fn ($n) => str_replace('|', ' ', trim((string) $n)))->filter()->unique()->values()->all();
+        $productCombo = 'combo:' . (count($productNames) ? implode('|', $productNames) : 'Product');
+
         $totRequested = 0.0; $totPurchased = 0.0; $pending = 0; $partial = 0; $purchased = 0; $notAvail = 0;
         $rows = [];
         foreach ($lines as $l) {
@@ -126,7 +132,8 @@ final class DemandPlanCapability implements ObjectCapability
             }
             if ($isOpen) {
                 $headerActions[] = ['key' => 'add_line', 'label' => 'Add product', 'method' => 'POST', 'endpoint' => $endpoint . '/add_line', 'actor' => 'human', 'tone' => 'default',
-                    'schema' => ['name' => 'text', 'requested_qty' => 'number'], 'labels' => ['name' => 'Product / item name', 'requested_qty' => 'Required quantity'], 'prefill' => []];
+                    'schema' => ['name' => $productCombo, 'requested_qty' => 'number'],
+                    'labels' => ['name' => 'Product (pick from catalogue, or type a new item)', 'requested_qty' => 'Required quantity'], 'prefill' => []];
             }
         }
         $more = [];
@@ -215,15 +222,35 @@ final class DemandPlanCapability implements ObjectCapability
         }
         $name = trim((string) ($in['name'] ?? ''));
         if ($name === '') {
-            return ['ok' => false, 'error' => 'bad_input', 'message' => 'Enter a product name.'];
+            return ['ok' => false, 'error' => 'bad_input', 'message' => 'Pick a product or enter an item name.'];
         }
+        $tid = $ctx->tenantId();
+
+        // Resolve to a real catalogue product when the name matches — so this line links to a product
+        // (its receipts feed the stock ledger) and we can seed its real current on-hand.
+        $pid = null; $current = 0.0;
+        $prod = \App\Models\Product::where('tenant_id', $tid)->whereRaw('lower(name) = ?', [mb_strtolower($name)])->first();
+        if ($prod) {
+            $pid = (int) $prod->id;
+            $name = (string) $prod->name;
+            try {
+                $sl = \App\Services\Inventory\StockLedger::forTenant($ctx->tenant);
+                $current = round((float) $sl->onHandFor($pid, null, \App\Services\Inventory\StockLedger::LOC_JUBA)
+                    + (float) $sl->onHandFor($pid, null, \App\Services\Inventory\StockLedger::LOC_KAMPALA), 3);
+            } catch (\Throwable $e) {
+                $current = 0.0;
+            }
+        }
+
         DemandPlanLine::create([
-            'tenant_id' => $ctx->tenantId(), 'demand_plan_id' => $plan->id,
-            'name' => $name, 'requested_qty' => round((float) ($in['requested_qty'] ?? 0), 3),
+            'tenant_id' => $tid, 'demand_plan_id' => $plan->id,
+            'product_id' => $pid, 'name' => $name,
+            'current_stock' => $current,
+            'requested_qty' => round((float) ($in['requested_qty'] ?? 0), 3),
             'line_status' => 'pending',
         ]);
 
-        return ['ok' => true, 'message' => 'Added ' . $name . '.'];
+        return ['ok' => true, 'message' => 'Added ' . $name . ($pid ? ' (catalogue product).' : ' (ad-hoc item).')];
     }
 
     private function editLine(CapabilityContext $ctx, array $in): array

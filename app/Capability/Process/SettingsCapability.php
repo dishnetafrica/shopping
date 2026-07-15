@@ -67,6 +67,21 @@ final class SettingsCapability implements ProcessCapability
             'prefill' => ['bot_greeting' => $s('bot_greeting'), 'bot_fallback_text' => $s('bot_fallback_text'), 'ai_persona' => $s('ai_persona'), 'business_hours' => $s('business_hours'), 'delivery_areas' => $s('delivery_areas'), 'bot_website_link' => $s('bot_website_link'), 'faq' => $s('faq')],
         ];
 
+        // --- stock tracking (the real-inventory switch) ---
+        $ledgerOn = (bool) $t->setting('stock_ledger', false);
+        $liveStockOn = (bool) $t->setting('stock_v2', false);
+        $editStock = [
+            'key' => 'edit_stock', 'label' => 'Stock tracking', 'method' => 'POST', 'endpoint' => $ep . '/save_settings', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['stock_ledger' => 'enum:off,on', 'stock_v2' => 'enum:off,on'],
+            'labels' => ['stock_ledger' => 'Track real stock (record receipts & sales in the ledger)', 'stock_v2' => 'Show real stock on site & bot (only after counts are trusted)'],
+            'prefill' => ['stock_ledger' => $ledgerOn ? 'on' : 'off', 'stock_v2' => $liveStockOn ? 'on' : 'off'],
+        ];
+        $stockCard = ['kind' => 'dl', 'title' => 'Stock tracking', 'rows' => [
+            ['Real stock ledger', $ledgerOn ? 'On — receipts & Juba sales recorded' : 'Off — no real inventory yet'],
+            ['Live stock on site/bot', $liveStockOn ? 'On — reads true on-hand' : 'Off — uses catalog availability flag'],
+            ['Guidance', $ledgerOn ? ($liveStockOn ? 'Fully live.' : 'Building up — switch on “live stock” once your on-hand counts are trusted.') : 'Turn the ledger on to start accumulating real stock from goods receipts.'],
+        ]];
+
         // --- display cards ---
         $profileCard = ['kind' => 'dl', 'title' => 'Business profile', 'rows' => [
             ['Business name', $name],
@@ -170,6 +185,7 @@ final class SettingsCapability implements ProcessCapability
                 'business' => [$profileCard],
                 'currency' => [$currencyCard, $ratesCard, $help],
                 'invoicing' => [$invoiceCard],
+                'inventory' => [$stockCard],
                 'whatsapp' => [$connCard, $botCard],
                 'team' => [$teamCard, $teamNote],
             ])
@@ -178,11 +194,12 @@ final class SettingsCapability implements ProcessCapability
                 ['key' => 'business', 'label' => 'Business profile'],
                 ['key' => 'currency', 'label' => 'Currency & rates'],
                 ['key' => 'invoicing', 'label' => 'Invoice & tax'],
+                ['key' => 'inventory', 'label' => 'Stock tracking'],
                 ['key' => 'whatsapp', 'label' => 'WhatsApp & bot'],
                 ['key' => 'team', 'label' => 'Team', 'count' => $members->count()],
             ])
             ->actions([$editProfile])
-            ->more([$editCurrency, $editRates, $editInvoicing, $editBot, $addMember])
+            ->more([$editStock, $editCurrency, $editRates, $editInvoicing, $editBot, $addMember])
             ->meta(['capability' => 'settings', 'ttl' => 20, 'layout' => 'record', 'listKey' => 'settings', 'permissions' => []]);
     }
 

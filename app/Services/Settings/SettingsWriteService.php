@@ -36,6 +36,12 @@ final class SettingsWriteService
         'vat_rate' => ['float', 0.0],
     ];
 
+    /** On/off toggle settings (stored as booleans). */
+    private const BOOL_KEYS = [
+        'stock_ledger',  // write the real stock ledger (record receipts & sales)
+        'stock_v2',      // read on-hand from the ledger on site/bot (needs the ledger seeded first)
+    ];
+
     /**
      * Apply any subset of the settings. Absent keys are left untouched, so a form that edits one section
      * never disturbs another. Returns the applied summary.
@@ -92,6 +98,16 @@ final class SettingsWriteService
                 }
                 $tenant->putSetting($k, $type === 'int' ? (int) round($raw) : $raw);
                 $changed[] = str_replace('_', ' ', $k);
+            }
+        }
+
+        // Boolean toggles (accept on/off/yes/no/1/0/true/false).
+        foreach (self::BOOL_KEYS as $k) {
+            if (array_key_exists($k, $input)) {
+                $v = $input[$k];
+                $on = $v === true || $v === 1 || in_array(strtolower(trim((string) $v)), ['1', 'true', 'on', 'yes', 'enabled'], true);
+                $tenant->putSetting($k, $on);
+                $changed[] = str_replace('_', ' ', $k) . ' → ' . ($on ? 'on' : 'off');
             }
         }
 
