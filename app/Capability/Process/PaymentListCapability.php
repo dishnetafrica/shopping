@@ -52,6 +52,7 @@ final class PaymentListCapability implements ProcessCapability
             $rows[] = [
                 'receipt'  => (string) ($p->receipt_no ?: ('PAY-' . $p->id)),
                 'customer' => ['value' => (string) ($p->customer_name ?: 'Customer'), 'sub' => (string) ($p->customer_phone ?: ''), 'avatar' => true],
+                'received' => (string) ($p->holder ?: $p->created_by ?: '—'),   // who took the cash
                 'method'   => ['value' => ucfirst($method), 'badge' => 'info'],
                 'applied'  => (string) $appliedTo,
                 'amount'   => ['value' => $line['text'], 'tone' => 'ok', 'sort' => (float) $line['amount']],
@@ -63,6 +64,7 @@ final class PaymentListCapability implements ProcessCapability
         $columns = [
             ['key' => 'receipt',  'label' => 'Receipt #', 'type' => 'strong', 'sortable' => true],
             ['key' => 'customer', 'label' => 'Customer',  'type' => 'avatar', 'sortable' => true],
+            ['key' => 'received', 'label' => 'Received by', 'sortable' => true],
             ['key' => 'method',   'label' => 'Method',    'type' => 'badge', 'sortable' => true],
             ['key' => 'applied',  'label' => 'Applied to', 'sortable' => true],
             ['key' => 'amount',   'label' => 'Amount',    'align' => 'right', 'type' => 'num', 'sortable' => true],
@@ -80,7 +82,7 @@ final class PaymentListCapability implements ProcessCapability
                 ['key' => 'month', 'label' => 'This month', 'value' => $rc->fmtConsolidated($monthTotal), 'tone' => 'ok', 'foot' => 'received this month'],
                 ['key' => 'avg', 'label' => 'Avg. payment', 'value' => $rc->fmtConsolidated($avg), 'foot' => 'per receipt'],
             ])
-            ->table($columns, $rows)
+            ->table($columns, $rows, [['key' => 'received', 'label' => 'Received by'], ['key' => 'method', 'label' => 'Method']])
             ->actions([['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/payments', 'actor' => 'human', 'tone' => 'default']])
             ->meta(['capability' => 'payments', 'ttl' => 60, 'permissions' => ['menu:finance']]);
     }

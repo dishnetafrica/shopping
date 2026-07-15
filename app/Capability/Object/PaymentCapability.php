@@ -69,7 +69,9 @@ final class PaymentCapability implements ObjectCapability
                 ['Method', $method],
                 ['Reference', (string) ($p->reference ?: '—')],
                 ['Allocated to', $p->invoice_no ? ('Invoice ' . $p->invoice_no) : ($p->order_no ? ('Order ' . $p->order_no) : 'Account')],
-                ['Received by', (string) ($p->created_by ?: $p->holder ?: '—')],
+                // Received by = who took the cash (holder); Entered by = who keyed it in (created_by).
+                ['Received by', (string) ($p->holder ?: $p->created_by ?: '—')],
+                ($p->created_by && $p->created_by !== $p->holder) ? ['Entered by', (string) $p->created_by] : null,
                 $when ? ['Date', $when->format('d M Y, H:i')] : null,
                 ((float) $p->usd_amount > 0 && $cur !== 'USD') ? ['USD equivalent', Money::fmt((float) $p->usd_amount, 'USD')] : null,
             ]))],

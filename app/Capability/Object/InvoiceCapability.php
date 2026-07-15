@@ -124,6 +124,7 @@ final class InvoiceCapability implements ObjectCapability
         $payRows = $pays->map(fn ($p) => [
             'cells' => [
                 (string) ($p->receipt_no ?: '—'),
+                (string) ($p->holder ?: $p->created_by ?: '—'),   // who received the cash
                 ucfirst((string) ($p->method ?: 'cash')),
                 (string) ($p->reference ?: '—'),
                 ['value' => $rc->text((float) $p->amount, (string) ($p->currency ?: $native), (float) ($p->usd_amount ?? 0) ?: null, $p->created_at ? Carbon::parse($p->created_at)->format('Y-m-d') : null), 'align' => 'right'],
@@ -132,7 +133,7 @@ final class InvoiceCapability implements ObjectCapability
         ])->all();
         $financialsCards = [[
             'kind' => 'table', 'title' => 'Payment allocation', 'sub' => $pays->count() . ' payment' . ($pays->count() === 1 ? '' : 's'),
-            'columns' => [['label' => 'Receipt'], ['label' => 'Method'], ['label' => 'Reference'], ['label' => 'Amount', 'align' => 'right'], ['label' => 'Date']],
+            'columns' => [['label' => 'Receipt'], ['label' => 'Received by'], ['label' => 'Method'], ['label' => 'Reference'], ['label' => 'Amount', 'align' => 'right'], ['label' => 'Date']],
             'rows' => $payRows, 'empty' => 'No payments recorded yet',
         ]];
 
