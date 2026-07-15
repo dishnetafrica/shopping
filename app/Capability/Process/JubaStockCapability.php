@@ -116,16 +116,15 @@ final class JubaStockCapability implements ProcessCapability
         });
     }
 
-    /** Purchased on a plan line but not yet allocated to a shipment. @return array<int,float> */
+    /** Purchased on a plan line but not yet loaded/sent (bought − sent, floored at 0). @return array<int,float> */
     private function purchasedToSendMap(int $tid): array
     {
         return $this->safeMap(function () use ($tid) {
             $rows = DB::table('demand_plan_lines')
                 ->where('tenant_id', $tid)
-                ->whereNull('consignment_id')
                 ->where('qty_purchased', '>', 0)
                 ->whereNotNull('product_id')
-                ->select('product_id', DB::raw('SUM(qty_purchased) as qty'))
+                ->select('product_id', DB::raw('SUM(GREATEST(qty_purchased - qty_sent, 0)) as qty'))
                 ->groupBy('product_id')->get();
             $map = [];
             foreach ($rows as $r) { $map[(int) $r->product_id] = max(0.0, (float) $r->qty); }
