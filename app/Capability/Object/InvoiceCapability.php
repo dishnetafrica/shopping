@@ -34,8 +34,13 @@ final class InvoiceCapability implements ObjectCapability
     public function forId(CapabilityContext $ctx, string $id): WorkspacePayload
     {
         $i = Invoice::where('tenant_id', $ctx->tenantId())->findOrFail((int) $id);
-        $cur = (string) ($i->currency ?: $ctx->baseCurrency());
-        $fmt = fn ($v) => Money::fmt((float) $v, $cur);
+        // Currency-aware: the invoice is in its OWN currency (native/UGX when untagged, NOT the USD
+        // display base). Convert to the report currency so a UGX balance never prints with a '$'.
+        $rc = \App\Services\Money\ReportingCurrency::forContext($ctx);
+        $native = $ctx->nativeCurrency();
+        $cur = (string) ($i->currency ?: $native);
+        $idate = $i->issued_at ? Carbon::parse($i->issued_at)->format('Y-m-d') : null;
+        $fmt = fn ($v) => $rc->text((float) $v, $cur, null, $idate);
         $ep = '/api/v1/workspace/invoice/' . $i->id;
 
         $total = (float) $i->total;
@@ -114,7 +119,7 @@ final class InvoiceCapability implements ObjectCapability
                 (string) ($p->receipt_no ?: '—'),
                 ucfirst((string) ($p->method ?: 'cash')),
                 (string) ($p->reference ?: '—'),
-                ['value' => Money::fmt((float) $p->amount, (string) ($p->currency ?: $cur)), 'align' => 'right'],
+                ['value' => $rc->text((float) $p->amount, (string) ($p->currency ?: $native), (float) ($p->usd_amount ?? 0) ?: null, $p->created_at ? Carbon::parse($p->created_at)->format('Y-m-d') : null), 'align' => 'right'],
                 $p->created_at ? Carbon::parse($p->created_at)->format('d M Y') : '—',
             ], 'link' => null,
         ])->all();
@@ -128,7 +133,7 @@ final class InvoiceCapability implements ObjectCapability
         $tl = [];
         $tl[] = ['title' => 'Invoice ' . $i->invoice_no . ' issued', 'at' => $i->issued_at ? Carbon::parse($i->issued_at)->format('d M Y') : Carbon::parse($i->created_at)->format('d M Y'), 'actor' => $order ? ('from order ' . $order->order_no) : ''];
         foreach ($pays as $p) {
-            $tl[] = ['title' => 'Payment received · ' . Money::fmt((float) $p->amount, (string) ($p->currency ?: $cur)), 'at' => $p->created_at ? Carbon::parse($p->created_at)->format('d M Y') : '', 'actor' => (string) ($p->method ?: '')];
+            $tl[] = ['title' => 'Payment received · ' . $rc->text((float) $p->amount, (string) ($p->currency ?: $native), (float) ($p->usd_amount ?? 0) ?: null, $p->created_at ? Carbon::parse($p->created_at)->format('Y-m-d') : null), 'at' => $p->created_at ? Carbon::parse($p->created_at)->format('d M Y') : '', 'actor' => (string) ($p->method ?: '')];
         }
         if ($overdue) {
             $tl[] = ['title' => 'Became overdue', 'at' => $due->format('d M Y'), 'actor' => $daysOver . ' days past due'];

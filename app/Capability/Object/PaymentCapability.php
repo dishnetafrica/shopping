@@ -31,8 +31,13 @@ final class PaymentCapability implements ObjectCapability
     public function forId(CapabilityContext $ctx, string $id): WorkspacePayload
     {
         $p = CustomerPayment::where('tenant_id', $ctx->tenantId())->findOrFail((int) $id);
-        $cur = (string) ($p->currency ?: $ctx->baseCurrency());
-        $fmt = fn ($v) => Money::fmt((float) $v, $cur);
+        // Currency-aware: the payment is in its OWN currency (native/UGX when untagged, NOT the USD
+        // display base). Convert to the report currency so a UGX amount never prints with a '$'.
+        $rc = \App\Services\Money\ReportingCurrency::forContext($ctx);
+        $native = $ctx->nativeCurrency();
+        $cur = (string) ($p->currency ?: $native);
+        $pdate = $p->created_at ? Carbon::parse($p->created_at)->format('Y-m-d') : null;
+        $fmt = fn ($v) => $rc->text((float) $v, $cur, null, $pdate);
         $ep = '/api/v1/workspace/payment/' . $p->id;
 
         $inv = $p->invoice_no ? Invoice::where('tenant_id', $ctx->tenantId())->where('invoice_no', $p->invoice_no)->first() : null;

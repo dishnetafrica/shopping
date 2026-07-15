@@ -37,8 +37,13 @@ final class QuotationCapability implements ObjectCapability
         if (! $q) {
             return (new WorkspacePayload)->object(['type' => 'quotation', 'title' => 'Quotation not found'])->meta(['capability' => 'quotation']);
         }
-        $cur = (string) ($q->currency ?: $ctx->baseCurrency());
-        $fmt = fn ($v) => Money::fmt((float) $v, $cur);
+        // Currency-aware: the quote is in its OWN currency (native/UGX when untagged, NOT the USD
+        // display base). Convert to the report currency so a UGX total never prints with a '$'.
+        $rc = \App\Services\Money\ReportingCurrency::forContext($ctx);
+        $native = $ctx->nativeCurrency();
+        $cur = (string) ($q->currency ?: $native);
+        $qdate = $q->created_at ? Carbon::parse($q->created_at)->format('Y-m-d') : null;
+        $fmt = fn ($v) => $rc->text((float) $v, $cur, null, $qdate);
         $status = strtolower((string) $q->status);
         $valid = $q->valid_until ? Carbon::parse($q->valid_until) : null;
         $created = $q->created_at ? Carbon::parse($q->created_at) : null;
@@ -239,7 +244,7 @@ final class QuotationCapability implements ObjectCapability
 
         if ($lines) {
             $doc = app(QuotationService::class)->generate($ctx->tenant, (string) $q->customer_phone, (string) $q->customer_name,
-                ['lines' => $lines, 'currency' => (string) ($q->currency ?: $ctx->baseCurrency()), 'total' => (float) $q->total], (string) $q->quote_no);
+                ['lines' => $lines, 'currency' => (string) ($q->currency ?: $ctx->nativeCurrency()), 'total' => (float) $q->total], (string) $q->quote_no);
             if ($doc && ($doc['b64'] ?? '') !== '') {
                 if (! $q->pdf_path && ($doc['path'] ?? '') !== '') { $q->pdf_path = $doc['path']; $q->save(); }
 
