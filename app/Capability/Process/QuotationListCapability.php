@@ -29,7 +29,10 @@ final class QuotationListCapability implements ProcessCapability
     public function project(CapabilityContext $ctx): WorkspacePayload
     {
         $t = $ctx->tenantId();
-        $cur = $ctx->baseCurrency();
+        // Each quote is in its own currency; consolidate the KPI + grid totals to the report currency.
+        $rc = \App\Services\Money\ReportingCurrency::forContext($ctx);
+        $native = $ctx->nativeCurrency();
+        $cur = $rc->consolidationCurrency();
 
         $quotes = Quotation::where('tenant_id', $t)
             ->withCount('items')
@@ -37,12 +40,14 @@ final class QuotationListCapability implements ProcessCapability
             ->limit(self::MAX_ROWS)
             ->get();
 
-        $awaiting = 0; $accepted = 0; $converted = 0; $openValue = 0.0;
+        $awaiting = 0; $accepted = 0; $converted = 0; $openRows = [];
         $rows = [];
 
         foreach ($quotes as $q) {
             $status = strtolower((string) $q->status);
-            if ($status === 'sent') { $awaiting++; $openValue += (float) $q->total; }
+            $qcur = (string) ($q->currency ?: $native);
+            $qdate = $q->created_at ? Carbon::parse($q->created_at)->toDateString() : null;
+            if ($status === 'sent') { $awaiting++; $openRows[] = ['amount' => (float) $q->total, 'currency' => $qcur, 'date' => $qdate]; }
             if (in_array($status, ['accepted', 'converted'], true)) { $accepted++; }
             if ($status === 'converted') { $converted++; }
 
@@ -66,7 +71,7 @@ final class QuotationListCapability implements ProcessCapability
                 'quote'    => (string) $q->quote_no,
                 'customer' => ['value' => (string) ($q->customer_name ?: 'Customer'), 'sub' => (string) ($q->customer_phone ?: ''), 'avatar' => true],
                 'items'    => (int) ($q->items_count ?? 0),
-                'value'    => ['value' => Money::fmt((float) $q->total, (string) ($q->currency ?: $cur)), 'sort' => (float) $q->total],
+                'value'    => ['value' => $rc->line((float) $q->total, $qcur, null, $qdate)['text'], 'sort' => (float) $rc->consolidate([['amount' => (float) $q->total, 'currency' => $qcur, 'date' => $qdate]])['amount']],
                 'valid'    => ['value' => $valid ? $valid->format('d M Y') : '—', 'sort' => $valid ? $valid->timestamp : 0],
                 'status'   => ['value' => $label, 'badge' => $badge],
                 'created'  => ['value' => $created ? $created->format('d M Y') : '—', 'sort' => $created ? $created->timestamp : 0],
@@ -98,7 +103,7 @@ final class QuotationListCapability implements ProcessCapability
                 ['key' => 'awaiting', 'label' => 'Awaiting reply', 'value' => $awaiting, 'tone' => $awaiting > 0 ? 'warn' : 'ok', 'foot' => 'sent, no reply'],
                 ['key' => 'accepted', 'label' => 'Accepted', 'value' => $accepted, 'tone' => 'ok', 'foot' => 'accepted or converted'],
                 ['key' => 'conversion', 'label' => 'Conversion rate', 'value' => $conv, 'format' => 'pct', 'foot' => $converted . ' converted to orders'],
-                ['key' => 'openvalue', 'label' => 'Open value', 'value' => Money::fmt($openValue, $cur), 'foot' => 'awaiting reply'],
+                ['key' => 'openvalue', 'label' => 'Open value', 'value' => $rc->totalText($openRows), 'foot' => 'awaiting reply'],
             ])
             ->table($columns, $rows, [], [
                 'dateKey' => 'created', 'dateLabel' => 'Created', 'currency' => $cur, 'pageSize' => 20,

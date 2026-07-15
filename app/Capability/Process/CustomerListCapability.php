@@ -30,18 +30,24 @@ final class CustomerListCapability implements ProcessCapability
     public function project(CapabilityContext $ctx): WorkspacePayload
     {
         $t = $ctx->tenantId();
-        $cur = $ctx->baseCurrency();
+        // Currency-aware reporting: order totals are stored in each order's OWN currency (sell_currency,
+        // falling back to the engine's native currency for untagged rows) — NOT the display base. We must
+        // convert each to the report currency before summing, or a UGX/SSP total prints with a '$'.
+        $rc = \App\Services\Money\ReportingCurrency::forContext($ctx);
+        $native = $ctx->nativeCurrency();
 
-        // One grouped pass over orders, keyed by normalised phone.
+        // One grouped pass over orders, keyed by normalised phone AND the order's currency, so a
+        // mixed-currency history consolidates correctly instead of adding UGX to USD to SSP.
         $agg = Order::where('tenant_id', $t)
             ->selectRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') as p")
+            ->selectRaw("upper(coalesce(nullif(sell_currency,''), ?)) as cur", [$native])
             ->selectRaw('count(*) as orders')
             ->selectRaw('coalesce(sum(total),0) as spend')
-            ->selectRaw('coalesce(sum(total - amount_paid),0) as balance')
+            ->selectRaw('coalesce(sum(greatest(total - amount_paid, 0)),0) as balance')
             ->selectRaw('max(created_at) as last_at')
-            ->groupBy('p')
+            ->groupBy('p', 'cur')
             ->get()
-            ->keyBy('p');
+            ->groupBy('p');
 
         $customers = CustomerProfile::where('tenant_id', $t)
             ->orderBy('name')
@@ -58,12 +64,14 @@ final class CustomerListCapability implements ProcessCapability
 
         foreach ($customers as $c) {
             $phone = preg_replace('/[^0-9]/', '', (string) $c->phone);
-            $a = $phone !== '' ? ($agg[$phone] ?? null) : null;
+            $curRows = ($phone !== '' && isset($agg[$phone])) ? $agg[$phone] : collect();
 
-            $orders = (int) ($a->orders ?? 0);
-            $spend = (float) ($a->spend ?? 0);
-            $balance = max(0.0, (float) ($a->balance ?? 0));
-            $lastAt = ($a && $a->last_at) ? Carbon::parse($a->last_at) : null;
+            $orders = (int) $curRows->sum('orders');
+            // Consolidate each currency bucket into the report display currency, then sum.
+            $spend = (float) $rc->consolidate($curRows->map(fn ($r) => ['amount' => (float) $r->spend, 'currency' => (string) $r->cur])->all())['amount'];
+            $balance = max(0.0, (float) $rc->consolidate($curRows->map(fn ($r) => ['amount' => (float) $r->balance, 'currency' => (string) $r->cur])->all())['amount']);
+            $lastTs = (int) $curRows->max(fn ($r) => $r->last_at ? Carbon::parse($r->last_at)->timestamp : 0);
+            $lastAt = $lastTs > 0 ? Carbon::createFromTimestamp($lastTs) : null;
 
             $totalSpend += $spend;
             $totalOrders += $orders;
@@ -80,9 +88,9 @@ final class CustomerListCapability implements ProcessCapability
                 'location'   => $location,
                 'segment'    => ['value' => (string) ($c->segment ?: '—'), 'badge' => $c->segment ? 'accent' : 'default'],
                 'orders'     => $orders,
-                'spend'      => ['value' => Money::fmt($spend, $cur), 'sort' => $spend],
+                'spend'      => ['value' => $rc->fmtConsolidated($spend), 'sort' => $spend],
                 'balance'    => $balance > 0
-                    ? ['value' => Money::fmt($balance, $cur), 'tone' => 'danger', 'sort' => $balance]
+                    ? ['value' => $rc->fmtConsolidated($balance), 'tone' => 'danger', 'sort' => $balance]
                     : ['value' => '—', 'sort' => 0],
                 'status'     => ['value' => $status, 'badge' => $status === 'Active' ? 'ok' : ($status === 'Dormant' ? 'warn' : 'default')],
                 'last_order' => ['value' => $lastAt ? $lastAt->diffForHumans(null, true) . ' ago' : 'never', 'sort' => $lastAt ? $lastAt->timestamp : 0],
@@ -115,13 +123,13 @@ final class CustomerListCapability implements ProcessCapability
         return (new WorkspacePayload)
             ->object([
                 'type' => 'list:customers', 'title' => 'Customers',
-                'subtitle' => number_format($total) . ' total · ' . number_format($activeCount) . ' active · ' . Money::fmt($outstanding, $cur) . ' outstanding',
+                'subtitle' => number_format($total) . ' total · ' . number_format($activeCount) . ' active · ' . $rc->fmtConsolidated($outstanding) . ' outstanding',
             ])
             ->financials([
                 ['key' => 'total', 'label' => 'Total customers', 'value' => $total, 'foot' => number_format($activeCount) . ' active'],
                 ['key' => 'new', 'label' => 'New this month', 'value' => $newThisMonth, 'tone' => 'ok', 'foot' => 'this calendar month'],
-                ['key' => 'outstanding', 'label' => 'Outstanding balance', 'value' => Money::fmt($outstanding, $cur), 'tone' => $outstanding > 0 ? 'warn' : 'ok', 'foot' => 'across ' . $accountsOwing . ' accounts'],
-                ['key' => 'avg', 'label' => 'Avg. order value', 'value' => Money::fmt($avgOrder, $cur), 'foot' => number_format($totalOrders) . ' orders'],
+                ['key' => 'outstanding', 'label' => 'Outstanding balance', 'value' => $rc->fmtConsolidated($outstanding), 'tone' => $outstanding > 0 ? 'warn' : 'ok', 'foot' => 'across ' . $accountsOwing . ' accounts'],
+                ['key' => 'avg', 'label' => 'Avg. order value', 'value' => $rc->fmtConsolidated($avgOrder), 'foot' => number_format($totalOrders) . ' orders'],
             ])
             ->table($columns, $rows, $filters)
             ->actions([

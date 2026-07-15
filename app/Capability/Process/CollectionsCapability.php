@@ -20,18 +20,24 @@ final class CollectionsCapability implements ProcessCapability
 
     public function project(CapabilityContext $ctx): WorkspacePayload
     {
+        $rc = \App\Services\Money\ReportingCurrency::forContext($ctx);
+        $native = $ctx->nativeCurrency();
+        $icur = fn ($i) => (string) ($i->currency ?: $native);
+        $idate = fn ($i) => $i->due_at ? \Illuminate\Support\Carbon::parse($i->due_at)->toDateString() : null;
+
         $rows = $this->overdue($ctx);
-        $exposure = (float) $rows->sum(fn ($i) => (float) $i->balance);
+        $exposureRows = $rows->map(fn ($i) => ['amount' => (float) $i->balance, 'currency' => $icur($i), 'date' => $idate($i)])->all();
+        $exposure = (float) $rc->consolidate($exposureRows)['amount'];
 
         $related = $rows->take(20)->map(fn ($i) => (new Related(
             'overdue', 'invoice', (string) $i->id, (string) $i->customer_name,
-            'due ' . optional($i->due_at)->format('d M Y') . ' · ' . Money::fmt((float) $i->balance, (string) ($i->currency ?: $ctx->baseCurrency())),
+            'due ' . optional($i->due_at)->format('d M Y') . ' · ' . $rc->line((float) $i->balance, $icur($i), null, $idate($i))['text'],
             null, '/api/v1/workspace/invoice/' . $i->id,
         ))->toArray())->values()->all();
 
         return (new WorkspacePayload)
             ->object(['type' => 'process:collections', 'title' => 'Collections', 'status' => $rows->count() . ' overdue'])
-            ->headline(Money::fmt($exposure, $ctx->baseCurrency()), 'total overdue', $exposure > 0 ? 'danger' : 'ok')
+            ->headline($rc->fmtConsolidated($exposure), 'total overdue', $exposure > 0 ? 'danger' : 'ok')
             ->related($related)
             ->actions([new ActionSpec('bulk_remind', 'Send reminders', '/api/v1/workspace/collections/_/bulk_remind', 'POST', 'human', 'primary')])
             ->meta(['capability' => 'collections', 'ttl' => 30, 'permissions' => ['menu:finance']]);
@@ -39,11 +45,18 @@ final class CollectionsCapability implements ProcessCapability
 
     public function summary(CapabilityContext $ctx, array $scope = []): array
     {
+        $rc = \App\Services\Money\ReportingCurrency::forContext($ctx);
+        $native = $ctx->nativeCurrency();
         $rows = $this->overdue($ctx);
+        $exposure = $rc->consolidate($rows->map(fn ($i) => [
+            'amount' => (float) $i->balance,
+            'currency' => (string) ($i->currency ?: $native),
+            'date' => $i->due_at ? \Illuminate\Support\Carbon::parse($i->due_at)->toDateString() : null,
+        ])->all())['amount'];
 
         return [
             'overdueCount' => $rows->count(),
-            'exposure' => round((float) $rows->sum(fn ($i) => (float) $i->balance), 2),
+            'exposure' => round((float) $exposure, 2),
         ];
     }
 
