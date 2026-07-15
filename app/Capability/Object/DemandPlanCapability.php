@@ -119,35 +119,36 @@ final class DemandPlanCapability implements ObjectCapability
             }
 
             $shortfall = max(0.0, $req - $got);
-            $rows[] = [
-                'product'  => ['value' => (string) $l->name, 'sub' => $l->product_id ? ('#' . $l->product_id) : 'ad-hoc', 'avatar' => false],
-                'current'  => ['value' => $this->qty($l->current_stock), 'sort' => (float) $l->current_stock],
-                'transit'  => ['value' => (float) $l->in_transit > 0 ? $this->qty($l->in_transit) : '—', 'sort' => (float) $l->in_transit],
-                'expected' => ['value' => $this->qty($l->expected_sales), 'sort' => (float) $l->expected_sales],
-                'suggested'=> ['value' => $this->qty($l->suggested_qty), 'sort' => (float) $l->suggested_qty],
-                'requested'=> ['value' => $this->qty($req), 'sort' => $req],
-                'purchased'=> ['value' => $got > 0 ? $this->qty($got) : '—', 'sort' => $got, 'tone' => ($got >= $req && $req > 0) ? 'ok' : ($got > 0 ? 'warn' : 'default')],
-                'received' => ['value' => (float) $l->received_qty > 0 ? $this->qty($l->received_qty) : '—', 'sort' => (float) $l->received_qty, 'tone' => ((float) $l->received_qty >= $got && $got > 0) ? 'ok' : ((float) $l->received_qty > 0 ? 'warn' : 'default')],
-                'shortfall'=> ['value' => $shortfall > 0 && $st !== 'not_available' ? $this->qty($shortfall) : '—', 'sort' => $shortfall, 'tone' => $shortfall > 0 && $st !== 'not_available' ? 'danger' : 'default'],
-                'supplier' => (string) ($l->supplier_name ?: '—'),
-                'status'   => ['value' => $this->lineLabel($st), 'badge' => $this->lineBadge($st)],
-                'act'      => ['buttons' => $btns],
-            ];
+            // Card tables render POSITIONAL cells (r.cells[]), not keyed rows — must match column order.
+            $rows[] = ['cells' => [
+                ['value' => (string) $l->name . ($l->product_id ? '' : ' (ad-hoc)')],
+                ['value' => $this->qty($l->current_stock)],
+                ['value' => (float) $l->in_transit > 0 ? $this->qty($l->in_transit) : '—'],
+                ['value' => $this->qty($l->expected_sales)],
+                ['value' => $this->qty($l->suggested_qty)],
+                ['value' => $this->qty($req)],
+                ['value' => $got > 0 ? $this->qty($got) : '—', 'tone' => ($got >= $req && $req > 0) ? 'ok' : ($got > 0 ? 'warn' : null)],
+                ['value' => (float) $l->received_qty > 0 ? $this->qty($l->received_qty) : '—', 'tone' => ((float) $l->received_qty >= $got && $got > 0) ? 'ok' : ((float) $l->received_qty > 0 ? 'warn' : null)],
+                ['value' => $shortfall > 0 && $st !== 'not_available' ? $this->qty($shortfall) : '—', 'tone' => $shortfall > 0 && $st !== 'not_available' ? 'danger' : null],
+                ['value' => (string) ($l->supplier_name ?: '—')],
+                ['value' => $this->lineLabel($st), 'badge' => $this->lineBadge($st)],
+                ['buttons' => $btns],
+            ]];
         }
 
         $columns = [
-            ['key' => 'product',  'label' => 'Product', 'type' => 'avatar', 'sortable' => true],
-            ['key' => 'current',  'label' => 'Stock', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'transit',  'label' => 'In transit', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'expected', 'label' => 'Expected', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'suggested','label' => 'Suggested', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'requested','label' => 'Required', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'purchased','label' => 'Purchased', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'received', 'label' => 'Received', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'shortfall','label' => 'Short', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'supplier', 'label' => 'Supplier', 'sortable' => true],
-            ['key' => 'status',   'label' => 'Status', 'type' => 'badge', 'sortable' => true],
-            ['key' => 'act',      'label' => '', 'type' => 'action', 'align' => 'right'],
+            ['label' => 'Product'],
+            ['label' => 'Stock', 'align' => 'right'],
+            ['label' => 'In transit', 'align' => 'right'],
+            ['label' => 'Expected', 'align' => 'right'],
+            ['label' => 'Suggested', 'align' => 'right'],
+            ['label' => 'Required', 'align' => 'right'],
+            ['label' => 'Purchased', 'align' => 'right'],
+            ['label' => 'Received', 'align' => 'right'],
+            ['label' => 'Short', 'align' => 'right'],
+            ['label' => 'Supplier'],
+            ['label' => 'Status'],
+            ['label' => ''],
         ];
 
         $pct = $totRequested > 0 ? (int) round(min(100, max(0, $totPurchased / $totRequested * 100))) : 0;

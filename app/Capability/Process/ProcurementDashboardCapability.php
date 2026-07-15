@@ -60,15 +60,15 @@ final class ProcurementDashboardCapability implements ProcessCapability
             $got = (float) ($a->got ?? 0);
             $pct = $req > 0 ? (int) round(min(100, max(0, $got / $req * 100))) : 0;
             $toBuy = (int) (($a->pending ?? 0) + ($a->partial ?? 0));
-            $prRows[] = [
-                'plan'     => ['value' => (string) ($p->plan_no ?: ('DP-' . $p->id)), 'sub' => (string) ($p->title ?: ''), 'avatar' => false],
-                'shipment' => (string) ($p->shipment_ref ?: '—'),
-                'lines'    => ['value' => (string) (int) ($a->lines ?? 0), 'sort' => (int) ($a->lines ?? 0)],
-                'tobuy'    => ['value' => $toBuy > 0 ? (string) $toBuy : '—', 'sort' => $toBuy, 'tone' => $toBuy > 0 ? 'warn' : 'ok'],
-                'pct'      => ['value' => $pct . '%', 'sort' => $pct, 'tone' => $pct >= 100 ? 'ok' : ($pct > 0 ? 'warn' : 'default')],
-                'status'   => ['value' => $this->planLabel((string) $p->status), 'badge' => $this->planBadge((string) $p->status)],
-                'link'     => '/api/v1/workspace/demandPlan/' . $p->id,
-            ];
+            $prRows[] = ['cells' => [
+                ['value' => (string) ($p->plan_no ?: ('DP-' . $p->id))],
+                ['value' => (string) ($p->title ?: '—')],
+                ['value' => (string) ($p->shipment_ref ?: '—')],
+                ['value' => (string) (int) ($a->lines ?? 0)],
+                ['value' => $toBuy > 0 ? (string) $toBuy : '—', 'tone' => $toBuy > 0 ? 'warn' : null],
+                ['value' => $pct . '%', 'tone' => $pct >= 100 ? 'ok' : ($pct > 0 ? 'warn' : null)],
+                ['value' => $this->planLabel((string) $p->status), 'badge' => $this->planBadge((string) $p->status)],
+            ], 'link' => '/api/v1/workspace/demandPlan/' . $p->id];
         }
 
         // --- shipments (Kampala → Juba leg) ---
@@ -85,30 +85,33 @@ final class ProcurementDashboardCapability implements ProcessCapability
             $sentBoxes += (int) ($s->boxes_sent ?? 0);
             $recvBoxes += (int) ($s->boxes_received ?? 0);
 
-            $shipRows[] = [
-                'ship'    => ['value' => (string) ($s->shipment_number ?: ('SH-' . $s->id)), 'sub' => (string) ($s->transport_company ?: ''), 'avatar' => false],
-                'dest'    => (string) ($s->destination_city ?: 'Juba'),
-                'state'   => ['value' => $transit ? 'In transit' : $this->prepLabel($s), 'badge' => $transit ? 'warn' : 'default'],
-                'boxes'   => ['value' => (int) ($s->boxes_sent ?? 0) . ($transit && $s->boxes_received ? (' · ' . (int) $s->boxes_received . ' recv') : ''), 'sort' => (int) ($s->boxes_sent ?? 0)],
-                'departed'=> ['value' => $s->departed_at ? Carbon::parse($s->departed_at)->format('d M') : '—', 'sort' => $s->departed_at ? Carbon::parse($s->departed_at)->timestamp : 0],
-            ];
+            $shipRows[] = ['cells' => [
+                ['value' => (string) ($s->shipment_number ?: ('SH-' . $s->id))],
+                ['value' => (string) ($s->transport_company ?: '—')],
+                ['value' => (string) ($s->destination_city ?: 'Juba')],
+                ['value' => $transit ? 'In transit' : $this->prepLabel($s), 'badge' => $transit ? 'warn' : 'default'],
+                ['value' => (int) ($s->boxes_sent ?? 0) . ($transit && $s->boxes_received ? (' · ' . (int) $s->boxes_received . ' recv') : '')],
+                ['value' => $s->departed_at ? Carbon::parse($s->departed_at)->format('d M') : '—'],
+            ]];
         }
         $shipPct = $sentBoxes > 0 ? (int) round(min(100, max(0, $recvBoxes / $sentBoxes * 100))) : 0;
 
         $prCols = [
-            ['key' => 'plan',     'label' => 'Request', 'type' => 'avatar', 'sortable' => true],
-            ['key' => 'shipment', 'label' => 'Shipment', 'sortable' => true],
-            ['key' => 'lines',    'label' => 'Lines', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'tobuy',    'label' => 'To buy', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'pct',      'label' => 'Purchased', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'status',   'label' => 'Status', 'type' => 'badge', 'sortable' => true],
+            ['label' => 'Request'],
+            ['label' => 'Title'],
+            ['label' => 'Shipment'],
+            ['label' => 'Lines', 'align' => 'right'],
+            ['label' => 'To buy', 'align' => 'right'],
+            ['label' => 'Purchased', 'align' => 'right'],
+            ['label' => 'Status'],
         ];
         $shipCols = [
-            ['key' => 'ship',     'label' => 'Shipment', 'type' => 'avatar', 'sortable' => true],
-            ['key' => 'dest',     'label' => 'Destination', 'sortable' => true],
-            ['key' => 'state',    'label' => 'Status', 'type' => 'badge', 'sortable' => true],
-            ['key' => 'boxes',    'label' => 'Boxes', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'departed', 'label' => 'Departed', 'align' => 'right', 'sortable' => true],
+            ['label' => 'Shipment'],
+            ['label' => 'Transport'],
+            ['label' => 'Destination'],
+            ['label' => 'Status'],
+            ['label' => 'Boxes', 'align' => 'right'],
+            ['label' => 'Departed', 'align' => 'right'],
         ];
 
         return (new WorkspacePayload)
