@@ -384,6 +384,19 @@ body{padding-bottom:calc(var(--nav-h) + 14px + var(--safe-b))}
 .ok2 .okno{font-weight:800;font-size:15px;color:var(--green-d);margin-top:6px;letter-spacing:.02em}
 .ok2 .okmsg{color:var(--muted);font-size:13.5px;line-height:1.55;margin:10px 16px 0}
 
+/* ---- V2 motion & polish (Increment 7) — all gated on no-reduced-motion ---- */
+@media (prefers-reduced-motion: no-preference){
+  .sheet.show .sheetcard{animation:sheetUp .28s cubic-bezier(.2,.8,.2,1)}
+  .soverlay.show{animation:ovfade .2s ease}
+  #detail.show{animation:ovfade .22s ease}
+  .pc .img img{animation:imgin .4s ease}
+}
+@keyframes sheetUp{from{transform:translateY(30px);opacity:.5}to{transform:translateY(0);opacity:1}}
+@keyframes ovfade{from{opacity:0}to{opacity:1}}
+@keyframes imgin{from{opacity:.25}to{opacity:1}}
+.cbtoast.err{background:#B4232A}
+.cbtoast.ok{background:var(--green)}
+
 </style>
 </head>
 <body>
@@ -430,9 +443,9 @@ body{padding-bottom:calc(var(--nav-h) + 14px + var(--safe-b))}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.5 3.6-6 8-6s8 2.5 8 6"/></svg>Account</button>
 </nav>
 
-<div class="sheet" id="sheet">
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
   <div class="sheetcard">
-    <div class="sheethd"><b id="sheetTitle">Your cart</b><button class="x" onclick="closeSheet()">×</button></div>
+    <div class="sheethd"><b id="sheetTitle">Your cart</b><button class="x" onclick="closeSheet()" aria-label="Close">×</button></div>
     <div class="sheetbody" id="sheetBody"></div>
   </div>
 </div>
@@ -679,7 +692,7 @@ function searchClose(){ var o=$('searchOverlay'); if(o)o.classList.remove('show'
 function searchSubmit(v){ v=(v==null?(($('sq')&&$('sq').value)||''):v).trim(); searchClose(); if($('q'))$('q').value=v; Q=v; _catShown=24; if(v)pushRSearch(v); render(); window.scrollTo(0,0); }
 function searchPickCat(c){ searchClose(); if($('q'))$('q').value=''; Q=''; setCat(c); }
 function searchOpenProduct(id,name){ searchClose(); if(id){ goDetail(id); } else { searchSubmit(name); } }
-function toast(msg){ try{ var t=$('cbToast'); if(!t){ t=document.createElement('div'); t.id='cbToast'; t.className='cbtoast'; t.setAttribute('role','status'); t.setAttribute('aria-live','polite'); document.body.appendChild(t); } t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(function(){ t.classList.remove('show'); }, 2200); }catch(e){} }
+function toast(msg,type){ try{ var t=$('cbToast'); if(!t){ t=document.createElement('div'); t.id='cbToast'; t.setAttribute('role','status'); t.setAttribute('aria-live','polite'); document.body.appendChild(t); } t.className='cbtoast'+(type?(' '+type):''); t.textContent=msg; void t.offsetWidth; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(function(){ t.classList.remove('show'); }, 2400); }catch(e){} }
 function voiceSearch(){ toast('Voice search is coming soon'); }
 function barcodeSearch(){ toast('Barcode scan is coming soon'); }
 function _srow(p){ var add=oosOf(p)?'':('<button class="sadd" onclick="event.stopPropagation();cartAdd('+jk(p.name)+')">Add</button>');
@@ -1564,9 +1577,9 @@ function captureLoc(){
 }
 async function placeOrder(){
   var name=($('coName').value||'').trim(), phone=($('coPhone').value||'').replace(/[^0-9]/g,''), addr=($('coAddr').value||'').trim(), pay=$('coPay').value, note=(($('coNote')||{}).value||'').trim(), when=(($('coWhen')||{}).value||'').trim();
-  if(!name){alert('Please enter your name');return;}
-  if(phone.length<7){alert('Please enter your WhatsApp number');return;}
-  if(!IS_PICKUP && !addr && !GEO){alert('Please enter your delivery address or share your location');return;}
+  if(!name){toast('Please enter your name','err');return;}
+  if(phone.length<7){toast('Please enter your WhatsApp number','err');return;}
+  if(!IS_PICKUP && !addr && !GEO){toast('Add your delivery address or share your location','err');return;}
   var onCredit=/credit/i.test(pay);
   var payload={name:name,phone:phone,location:addr,payment:pay,note:note,when:when,on_credit:onCredit?1:0,items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal(),channel:'web'};
   if(GEO){payload.geo=GEO.lat+','+GEO.lng;payload.maps_url=mapsUrl(GEO);}
@@ -1585,8 +1598,8 @@ async function placeOrder(){
         (d.track_url?'<a class="place" style="display:block;text-decoration:none;text-align:center" href="'+esc(d.track_url)+'">Track my order</a>':'')+
         (WA_NUMBER?'<a class="place" style="display:block;text-decoration:none;text-align:center;background:#fff;color:var(--green-d);border:1px solid var(--line);margin-top:8px" href="https://wa.me/'+WA_NUMBER+'?text='+encodeURIComponent('Hi '+shopName+', about my order '+(d.order_no||''))+'">Message us on WhatsApp</a>':'')+
         '<button class="place" style="background:#fff;color:var(--ink);border:1px solid var(--line);margin-top:8px" onclick="goHome();closeSheet()">Continue shopping</button></div></div>';
-    }else{alert((d&&d.message)?d.message:((d&&d.error)?d.error:'Could not place order. Please try again.'));btn.disabled=false;btn.textContent='Place order';}
-  }catch(e){alert('Network error — please try again.');btn.disabled=false;btn.textContent='Place order';}
+    }else{toast((d&&d.message)?d.message:((d&&d.error)?d.error:'Could not place order. Please try again.'),'err');btn.disabled=false;btn.textContent='Place order';}
+  }catch(e){toast('Network error — please try again.','err');btn.disabled=false;btn.textContent='Place order';}
 }
 
 /* ---- brand the shell from the injected config ---- */
@@ -1603,7 +1616,7 @@ if($('sq')){
   $('sq').addEventListener('input',function(){ searchRender(this.value); });
   $('sq').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); searchSubmit(this.value); } });
 }
-document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ var o=$('searchOverlay'); if(o&&o.classList.contains('show')) searchClose(); } });
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ var o=$('searchOverlay'); if(o&&o.classList.contains('show')){ searchClose(); return; } var sh=$('sheet'); if(sh&&sh.classList.contains('show')) closeSheet(); } });
 /* Infinite scroll: grow the category/search grid as the sentinel nears the viewport. */
 window.addEventListener('scroll',function(){ var lm=$('loadmore'); if(!lm)return; if(lm.getBoundingClientRect().top < window.innerHeight+320){ growGrid(); } },{passive:true});
 loadCart(); loadCust(); loadWish(); loadRSearch(); bar(); restoreDelv(); if($('content'))$('content').innerHTML=skeletonGrid(8); load();
