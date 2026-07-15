@@ -255,6 +255,30 @@ body{padding-bottom:calc(var(--nav-h) + 14px + var(--safe-b))}
 .stp button{min-width:36px}
 :focus-visible{outline:2px solid var(--green);outline-offset:2px}
 
+/* ---- V2 product card (Increment 2): price hero · smart badges · wishlist · compare ---- */
+.pc .img{position:relative}
+.cardbadges{position:absolute;top:6px;left:6px;display:flex;flex-direction:column;gap:4px;z-index:2}
+.cbadge{font-size:9.5px;font-weight:800;letter-spacing:.02em;padding:3px 6px;border-radius:6px;color:#fff;line-height:1;text-transform:uppercase}
+.cbadge.disc{background:var(--red)} .cbadge.hot{background:var(--green)} .cbadge.new{background:#2563EB}
+.cardbtns{position:absolute;top:6px;right:6px;display:flex;flex-direction:column;gap:6px;z-index:2}
+.cardbtns button{width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:rgba(255,255,255,.94);display:grid;place-items:center;cursor:pointer;color:#8a8f98;box-shadow:var(--shadow-sm);padding:0}
+.cardbtns button svg{width:16px;height:16px}
+.cardbtns .wish.on{color:var(--red);border-color:var(--red)} .cardbtns .wish.on svg{fill:var(--red)}
+.cardbtns .cmp.on{color:var(--green-d);border-color:var(--green)}
+.pc .prrow{display:flex;align-items:baseline;gap:6px;margin-top:3px}
+.pc .prrow .pr{font-size:16px;font-weight:800;color:var(--ink)}
+.pc .was{font-size:12px;color:var(--muted);text-decoration:line-through}
+.pc .lowstk{font-size:11px;font-weight:700;color:var(--amber);margin-top:3px}
+.cmpbar{position:fixed;left:10px;right:10px;bottom:calc(var(--nav-h) + 10px + var(--safe-b));z-index:46;background:#111;color:#fff;border-radius:14px;padding:11px 14px;display:none;align-items:center;gap:10px;box-shadow:var(--shadow-md)}
+.cmpbar span{flex:1;font-weight:700;font-size:14px}
+.cmpbar button{border:0;background:#fff;color:#111;font-weight:800;border-radius:9px;padding:8px 14px;font-size:13px;cursor:pointer}
+.cmpbar button.x{background:transparent;color:#fff;padding:8px 6px}
+.cmpcols{display:flex;gap:10px;overflow-x:auto;padding:4px 0 10px;-webkit-overflow-scrolling:touch}
+.cmpcol{flex:0 0 46%;max-width:46%;border:1px solid var(--line);border-radius:12px;padding:10px}
+.cmpcol .cn{font-weight:700;font-size:13px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:34px}
+.cmpcol .cp{font-size:15px;font-weight:800;margin:6px 0}
+.cmprow{font-size:12px;color:var(--muted);margin-top:3px}
+
 </style>
 </head>
 <body>
@@ -460,6 +484,7 @@ async function load(){
     var r=await fetch(CATALOGUE_URL,{cache:'no-store'});
     var d=await r.json();
     PRODUCTS=(Array.isArray(d.products)?d.products:[]).map(mapProduct).filter(function(p){return p.name && (p.price>0 || p.poa);});
+    _popThresh=null;   // recompute bestseller threshold for the fresh catalogue
     if(d.settings){var ph=String(d.settings.waNumber||d.settings.storePhone||'').replace(/[^0-9]/g,'');if(ph)WA_NUMBER=ph;
       if(d.settings.currency)CUR=String(d.settings.currency);
       if(d.settings.category_images)CAT_IMG=d.settings.category_images||{}; if(d.settings.thali)THALI=d.settings.thali;
@@ -726,17 +751,73 @@ function vpick(key,i){VSEL[key]=i;render();}
 function gridG(list){var arr=groupProducts(list);arr.forEach(function(g){GROUPS[g.category+"|"+g.base.toLowerCase()]=g;});return '<div class="grid">'+arr.map(variantCard).join('')+'</div>';}
 
 function oosOf(p){ return !!(p && p.stock!=null && p.stock<=0); }
+
+/* ---------- Wishlist (local, no backend) ---------- */
+var WISH_KEY='cb_wish_'+(SHOP.slug||'shop'), WISH={};
+function loadWish(){try{(JSON.parse(localStorage.getItem(WISH_KEY)||'[]')||[]).forEach(function(id){WISH[Number(id)]=1;});}catch(e){}}
+function saveWish(){try{localStorage.setItem(WISH_KEY,JSON.stringify(Object.keys(WISH).map(Number)));}catch(e){}}
+function isWished(id){return id!=null && !!WISH[Number(id)];}
+function toggleWish(id,btn,ev){ if(ev)ev.stopPropagation(); id=Number(id); if(WISH[id]){delete WISH[id];} else {WISH[id]=1; try{if(navigator.vibrate)navigator.vibrate(6);}catch(e){}} saveWish(); if(btn){btn.classList.toggle('on',!!WISH[id]); btn.setAttribute('aria-pressed',WISH[id]?'true':'false');} }
+
+/* ---------- Compare (local, up to 4) ---------- */
+var CMP={};
+function toggleCompare(id,btn,ev){ if(ev)ev.stopPropagation(); id=Number(id);
+  if(CMP[id]){delete CMP[id];} else { if(Object.keys(CMP).length>=4){ try{toast('Compare up to 4 items');}catch(e){} return; } CMP[id]=1; }
+  if(btn)btn.classList.toggle('on',!!CMP[id]); renderCmpBar(); }
+function clearCompare(){ CMP={}; renderCmpBar(); render(); }
+function renderCmpBar(){ var n=Object.keys(CMP).length; var bar=$('cmpbar');
+  if(!bar){ if(n<2)return; bar=document.createElement('div'); bar.id='cmpbar'; bar.className='cmpbar'; document.body.appendChild(bar); }
+  bar.style.display=n>=2?'flex':'none';
+  bar.innerHTML='<span>Compare '+n+' item'+(n===1?'':'s')+'</span><button onclick="openCompare()">Compare →</button><button class="x" aria-label="Clear" onclick="clearCompare()">✕</button>'; }
+function openCompare(){
+  var items=Object.keys(CMP).map(Number).map(function(id){return PRODUCTS.find(function(x){return x.id===id;});}).filter(Boolean);
+  if(!items.length)return;
+  $('sheetTitle').textContent='Compare';
+  var cols=items.map(function(p){
+    var pp=(p.packSize&&p.packSize>=2)?('<div class="cmprow">≈ '+ugx(Math.round(p.price/p.packSize))+' / pc</div>'):'';
+    var pack=(p.packSize)?('<div class="cmprow">'+(WMODE?('Carton of '+p.packSize):('Pack · '+p.packSize+' pcs'))+'</div>'):'';
+    var stk=(p.stock!=null)?('<div class="cmprow">'+(p.stock<=0?'Out of stock':(p.stock<=5?('Only '+p.stock+' left'):'In stock'))+'</div>'):'';
+    var add=oosOf(p)?'<button class="add" disabled>Out of stock</button>':('<button class="add" onclick="cartAdd('+jk(p.name)+')">Add</button>');
+    return '<div class="cmpcol"><div class="cn">'+esc(p.name)+'</div><div class="cp">'+ugx(p.price)+'</div>'+pp+pack+stk+'<div style="margin-top:8px">'+add+'</div></div>';
+  }).join('');
+  $('sheetBody').innerHTML='<div class="cmpcols">'+cols+'</div><button class="place" style="background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="closeSheet()">Close</button>';
+  $('sheet').classList.add('show');
+}
+
+/* ---------- Smart badges (honest — real data only, never fabricated) ---------- */
+var _popThresh=null;
+function bestThresh(){ if(_popThresh!==null)return _popThresh;
+  var ps=PRODUCTS.map(function(p){return p.popularity||0;}).filter(function(x){return x>0;}).sort(function(a,b){return b-a;});
+  _popThresh = ps.length>=6 ? ps[Math.floor(ps.length*0.15)] : Infinity; return _popThresh; }
+function isBestseller(p){ var t=bestThresh(); return t!==Infinity && (p.popularity||0)>0 && (p.popularity||0)>=t; }
+function isNew(p){ if(!p.createdAt)return false; var days=(Date.now()/1000 - p.createdAt)/86400; return days>=0 && days<=30; }
+function cardBadges(p){
+  var b='';
+  if(p.oldPrice && p.oldPrice>p.price){ var d=Math.round((1-p.price/p.oldPrice)*100); if(d>0)b='<span class="cbadge disc">-'+d+'%</span>'; }
+  else if(isBestseller(p)) b='<span class="cbadge hot">Bestseller</span>';
+  else if(isNew(p)) b='<span class="cbadge new">New</span>';
+  return b?('<div class="cardbadges">'+b+'</div>'):'';
+}
+function lowStockLine(p){ return (p.stock!=null && p.stock>0 && p.stock<=5) ? '<div class="lowstk">Only '+p.stock+' left</div>' : ''; }
+var HEART_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-.9-1a5.5 5.5 0 1 0-7.8 7.8l.9 1L12 21l7.8-7.6.9-1a5.5 5.5 0 0 0 0-7.8z"/></svg>';
+var CMP_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h11M7 4 4 7l3 3M20 17H9M17 14l3 3-3 3"/></svg>';
+
 function prodCard(p){
   if(p.poa)return poaCard(p.name,p.category,p.image,packLine(p));
   var key=p.name, inCart=CART[key];
   var ic=catIcon(p.category);
   var dopen=p.id?(' onclick="goDetail('+jk(p.id)+')" style="cursor:pointer"'):'';
-  var img='<div class="img"'+dopen+'>'+ic+(p.image?'<img src="'+esc(p.image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+'</div>';
+  var btns=p.id?('<div class="cardbtns">'+
+      '<button class="wish'+(isWished(p.id)?' on':'')+'" aria-label="Save to wishlist" aria-pressed="'+(isWished(p.id)?'true':'false')+'" onclick="toggleWish('+p.id+',this,event)">'+HEART_SVG+'</button>'+
+      '<button class="cmp'+(CMP[p.id]?' on':'')+'" aria-label="Compare" onclick="toggleCompare('+p.id+',this,event)">'+CMP_SVG+'</button>'+
+    '</div>'):'';
+  var img='<div class="img"'+dopen+'>'+cardBadges(p)+btns+ic+(p.image?'<img src="'+esc(p.image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+'</div>';
   var hasMods=p.modifiers&&p.modifiers.length;
   var chips=THEME.specChips?specChipsFor(p):[];
   var chipsHtml=chips.length?('<div class="chips">'+chips.map(function(c){return '<span class="chip">'+esc(c)+'</span>';}).join('')+'</div>'):'';
+  var was=(p.oldPrice&&p.oldPrice>p.price)?('<span class="was">'+ugx(p.oldPrice)+'</span>'):'';
   var ctrl=oosOf(p)?('<button class="add" disabled>Out of stock</button>'):(hasMods?('<button class="add" onclick="customize('+jk(key)+')">Add</button>'):(inCart?('<div class="stp"><button onclick="dec('+jk(key)+')">−</button><span>'+inCart.qty+'</span><button onclick="inc('+jk(key)+')">+</button></div>'):('<button class="add" onclick="inc('+jk(key)+')">Add</button>')));
-  return '<div class="pc">'+img+'<div class="bd">'+chipsHtml+'<div class="nm"'+dopen+'>'+esc(p.name)+'</div>'+(p.desc?'<div class="dsc">'+esc(p.desc)+'</div>':'')+packLine(p)+'<div class="pr">'+ugx(p.price)+'</div>'+perPiece(p)+moqLine(p)+ctrl+'</div></div>';
+  return '<div class="pc">'+img+'<div class="bd">'+chipsHtml+'<div class="nm"'+dopen+'>'+esc(p.name)+'</div>'+(p.desc?'<div class="dsc">'+esc(p.desc)+'</div>':'')+packLine(p)+'<div class="prrow"><span class="pr">'+ugx(p.price)+'</span>'+was+'</div>'+perPiece(p)+lowStockLine(p)+moqLine(p)+ctrl+'</div></div>';
 }
 /* derive up to 3 spec chips from the product name + keywords (paper/tissue vernacular) */
 function specChipsFor(p){
@@ -1229,7 +1310,7 @@ async function placeOrder(){
 })();
 
 $('q').addEventListener('input',function(){Q=this.value;render();});
-loadCart(); loadCust(); bar(); restoreDelv(); if($('content'))$('content').innerHTML=skeletonGrid(8); load();
+loadCart(); loadCust(); loadWish(); bar(); restoreDelv(); if($('content'))$('content').innerHTML=skeletonGrid(8); load();
 </script>
 <div id="detail" class="detail" aria-hidden="true"></div>
 </body>
