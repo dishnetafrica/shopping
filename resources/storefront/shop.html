@@ -735,7 +735,13 @@ function trendingRail(){
   return items.length>=3 ? railHtml('Trending today', items) : '';
 }
 function homeRails(){ return buyAgainRail()+recentlyViewedRail()+trendingRail()+popularRail()+newArrivalsRail(); }
-function ugx(n){return CUR+' '+(Number(n)||0).toLocaleString('en-US');}
+/* Currency-aware price format. Zero-decimal currencies (UGX/SSP/…) stay whole; USD/EUR keep 2
+   and use the $ symbol. Output is byte-identical to before for a UGX shop; correct for others. */
+function ugx(n){ n=Number(n)||0; var cur=String(CUR||'UGX').toUpperCase();
+  var zero=['UGX','KES','TZS','RWF','BIF','SSP','JPY','KRW','VND','XAF','XOF','GNF','MGA','CLP','PYG','ISK','KMF','XPF'];
+  var d=zero.indexOf(cur)>=0?0:2;
+  var s=n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+  return cur==='USD' ? ('$'+s) : (CUR+' '+s); }
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function jk(s){return JSON.stringify(String(s)).replace(/"/g,'&quot;');}
 function num(v){return Number(String(v==null?'':v).replace(/[^0-9.]/g,''))||0;}
@@ -836,7 +842,7 @@ function toast(msg,type){ try{ var t=$('cbToast'); if(!t){ t=document.createElem
 function voiceSearch(){ toast('Voice search is coming soon'); }
 function barcodeSearch(){ toast('Barcode scan is coming soon'); }
 function _srow(p){ var add=oosOf(p)?'':('<button class="sadd" onclick="event.stopPropagation();cartAdd('+jk(p.name)+')">Add</button>');
-  return '<div class="srow" onclick="searchOpenProduct('+(p.id||0)+','+jk(p.name)+')"><div class="sthumb">'+(p.image?'<img src="'+esc(p.image)+'" loading="lazy">':catIcon(p.category))+'</div><div class="smeta"><div class="st">'+esc(p.name)+'</div><div class="ss">'+ugx(p.price)+'</div></div>'+add+'</div>'; }
+  return '<div class="srow" onclick="searchOpenProduct('+(p.id||0)+','+jk(p.name)+')"><div class="sthumb">'+(p.image?'<img alt="" src="'+esc(p.image)+'" loading="lazy">':catIcon(p.category))+'</div><div class="smeta"><div class="st">'+esc(p.name)+'</div><div class="ss">'+ugx(p.price)+'</div></div>'+add+'</div>'; }
 function searchRender(q){
   q=(q||'').trim(); var b=$('sqBody'); if(!b)return;
   if(q.length<1){ b.innerHTML=searchDefault(); return; }
@@ -1025,7 +1031,7 @@ function poaCard(name,category,image,packHtml){
   var msg=encodeURIComponent('Hi, I\u2019d like a price for: '+name+'.');
   var wa=(SHOP.waNumber?('https://wa.me/'+SHOP.waNumber+'?text='+msg):'#');
   var ic=catIcon(category);
-  var img='<div class="img">'+ic+(image?'<img src="'+esc(image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+'</div>';
+  var img='<div class="img">'+ic+(image?'<img alt="" src="'+esc(image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+'</div>';
   return '<div class="pc">'+img+'<div class="bd"><div class="nm">'+esc(name)+'</div>'+(packHtml||'')
     +'<div class="pr" style="color:var(--green);font-size:14px">Price on request</div>'
     +'<a class="add" href="'+wa+'" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">Request a quote</a>'
@@ -1040,7 +1046,7 @@ function variantCard(grp){
   var def=(inv[0]||grp.variants[0]),p=def.product;
   var ic=catIcon(grp.category);
   var badge=allOos?'<span class="oosbadge">Out of stock</span>':'<span class="opts">'+grp.variants.length+' sizes</span>';
-  var img='<div class="img'+(allOos?' oos':'')+'" onclick="openVariantPicker('+jk(key)+')">'+ic+(grp.image?'<img src="'+esc(grp.image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+badge+'</div>';
+  var img='<div class="img'+(allOos?' oos':'')+'" onclick="openVariantPicker('+jk(key)+')">'+ic+(grp.image?'<img alt="" src="'+esc(grp.image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+badge+'</div>';
   var unit=def.grams?('<div class="unit">'+ugx(Math.round(p.price/def.grams*1000))+' / kg</div>'):'';
   var totalInCart=grp.variants.reduce(function(s,v){return s+((CART[v.product.name]||{}).qty||0);},0);
   var ctrl=allOos
@@ -1053,7 +1059,7 @@ function variantCard(grp){
 function openVariantPicker(key){
   var grp=GROUPS[key];if(!grp)return;
   $('sheetTitle').textContent=grp.base;
-  var thumb=grp.image?'<img src="'+esc(grp.image)+'" loading="lazy" decoding="async">':catIcon(grp.category);
+  var thumb=grp.image?'<img alt="" src="'+esc(grp.image)+'" loading="lazy" decoding="async">':catIcon(grp.category);
   var rows=grp.variants.map(function(v){
     var p=v.product,c=CART[p.name],oos=oosOf(p);
     var unit=v.grams?(' <span class="vunit">\u00b7 '+ugx(Math.round(p.price/v.grams*1000))+'/kg</span>'):'';
@@ -1132,7 +1138,7 @@ function prodCard(p){
       '<button class="wish'+(isWished(p.id)?' on':'')+'" aria-label="Save to wishlist" aria-pressed="'+(isWished(p.id)?'true':'false')+'" onclick="toggleWish('+p.id+',this,event)">'+HEART_SVG+'</button>'+
       '<button class="cmp'+(CMP[p.id]?' on':'')+'" aria-label="Compare" onclick="toggleCompare('+p.id+',this,event)">'+CMP_SVG+'</button>'+
     '</div>'):'';
-  var img='<div class="img"'+dopen+'>'+cardBadges(p)+btns+ic+(p.image?'<img src="'+esc(p.image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+'</div>';
+  var img='<div class="img"'+dopen+'>'+cardBadges(p)+btns+ic+(p.image?'<img alt="" src="'+esc(p.image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+'</div>';
   var hasMods=p.modifiers&&p.modifiers.length;
   var chips=THEME.specChips?specChipsFor(p):[];
   var chipsHtml=chips.length?('<div class="chips">'+chips.map(function(c){return '<span class="chip">'+esc(c)+'</span>';}).join('')+'</div>'):'';
@@ -1239,7 +1245,7 @@ function reorderItems(items){
   var added=0,missing=0;
   (items||[]).forEach(function(it){var p=prod(it.name);if(p&&!oosOf(p)){if(!CART[p.name])CART[p.name]={name:p.name,price:p.price,qty:0};CART[p.name].qty+=(it.qty||1);added++;}else{missing++;}});
   saveCart();render();bar(); if(added)openCart();
-  if(missing)setTimeout(function(){alert(missing+' item(s) are no longer available and were skipped.');},200);
+  if(missing)setTimeout(function(){toast(missing+' item(s) no longer available — skipped.');},200);
 }
 /* ---- WhatsApp OTP login (cross-device) ---- */
 function authBase(){return (SUBMIT_URL||'').replace(/\/order$/,'');}
@@ -1254,11 +1260,11 @@ function openLogin(prefill){
 }
 async function reqCode(){
   var phone=($('loPhone').value||'').replace(/[^0-9]/g,'');
-  if(phone.length<9){alert('Enter a valid WhatsApp number');return;}
+  if(phone.length<9){toast('Enter a valid WhatsApp number','err');return;}
   var b=$('loSendBtn');b.disabled=true;b.textContent='Sending\u2026';
   try{var r=await fetch(authBase()+'/auth/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:phone})});var d=await r.json();
-    if(d&&d.ok){codeStep(phone,d.sent_to);}else{alert((d&&d.error)||'Could not send code');b.disabled=false;b.textContent='Send code';}
-  }catch(e){alert('Network error');b.disabled=false;b.textContent='Send code';}
+    if(d&&d.ok){codeStep(phone,d.sent_to);}else{toast((d&&d.error)||'Could not send code','err');b.disabled=false;b.textContent='Send code';}
+  }catch(e){toast('Network error','err');b.disabled=false;b.textContent='Send code';}
 }
 function codeStep(phone,mask){
   $('sheetBody').innerHTML=
@@ -1268,14 +1274,14 @@ function codeStep(phone,mask){
 }
 async function verifyCode(phone){
   var code=($('loCode').value||'').replace(/[^0-9]/g,'');
-  if(code.length<4){alert('Enter the code');return;}
+  if(code.length<4){toast('Enter the code','err');return;}
   var b=$('loVerBtn');b.disabled=true;b.textContent='Checking\u2026';
   try{var r=await fetch(authBase()+'/auth/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:phone,code:code})});var d=await r.json();
     if(d&&d.ok&&d.token){AUTHTOK=d.token;try{localStorage.setItem(AUTH_KEY,d.token);}catch(e){}
       var pr=d.profile||{};saveCust({name:pr.name||'',phone:pr.phone||phone,addr:pr.address||''});applyBuyer(pr.buyer);
       await loadMyOrders();closeSheet();render();toast('Logged in');}
-    else{alert((d&&d.error)||'Wrong code');b.disabled=false;b.textContent='Verify & log in';}
-  }catch(e){alert('Network error');b.disabled=false;b.textContent='Verify & log in';}
+    else{toast((d&&d.error)||'Wrong code','err');b.disabled=false;b.textContent='Verify & log in';}
+  }catch(e){toast('Network error','err');b.disabled=false;b.textContent='Verify & log in';}
 }
 async function loadMyOrders(){
   if(!AUTHTOK)return;
@@ -1347,7 +1353,7 @@ function thaliBanner(){
       (THALI.note?('<div style="font-size:11.5px;color:#9A6A3A;margin-top:3px">'+esc(THALI.note)+'</div>'):'')+
     '</div>'+pchip+'</div>';
   // Flyer image embedded when present
-  var imgblock=hasImg?('<img src="'+esc(THALI.image)+'" style="width:100%;display:block;border-top:1px solid #EAD6B5" onerror="this.style.display=\'none\'">'):'';
+  var imgblock=hasImg?('<img alt="" src="'+esc(THALI.image)+'" style="width:100%;display:block;border-top:1px solid #EAD6B5" onerror="this.style.display=\'none\'">'):'';
   // Dish list only when there is no flyer (the flyer already lists the dishes)
   var dishesHtml='';
   if(!hasImg && items.length){
@@ -1389,7 +1395,7 @@ function catProductImg(name){for(var k=0;k<CATS.length;k++){if(CATS[k].name===na
 function catTile(name,i){
   var ci=CAT_IMG[name]||catProductImg(name);
   var inner;
-  if(ci){inner='<div class="ci" style="background:#fff"><img src="'+esc(ci)+'" onerror="this.style.display=\'none\'"></div>';}
+  if(ci){inner='<div class="ci" style="background:#fff"><img alt="" src="'+esc(ci)+'" onerror="this.style.display=\'none\'"></div>';}
   else if(THEME.premiumTiles){inner='<div class="ci cifall"><span class="mono">'+esc(String(name||'?').trim().charAt(0).toUpperCase())+'</span></div>';}
   else{inner='<div class="ci" style="background:'+TINTS[(i<0?0:i)%TINTS.length]+'">'+catIcon(name)+'</div>';}
   return '<button class="cat" onclick="setCat('+jk(name)+')">'+inner+'<div class="nm">'+esc(name)+'</div></button>';
@@ -1568,7 +1574,7 @@ function dswap(u,el){ var m=$('dmain'); if(m)m.src=u; document.querySelectorAll(
 function recoRail(title,items){
   if(!items||!items.length)return '';
   var cards=items.map(function(it){
-    var im=it.image?'<img src="'+esc(it.image)+'" loading="lazy" onerror="this.style.display=\'none\'">':'';
+    var im=it.image?'<img alt="" src="'+esc(it.image)+'" loading="lazy" onerror="this.style.display=\'none\'">':'';
     return '<div class="rcard" onclick="goDetail('+jk(it.id)+')"><div class="rimg">'+im+'</div><div class="rnm">'+esc(it.name)+'</div><div class="rpr">'+ugx(it.price)+'</div></div>';
   }).join('');
   return '<div class="drail"><div class="drailh">'+esc(title)+'</div><div class="rrow">'+cards+'</div></div>';
@@ -1576,8 +1582,8 @@ function recoRail(title,items){
 function renderDetail(d){
   var p=d.product; CUR_DETAIL=p;
   var imgs=(p.images&&p.images.length)?p.images:(p.image?[p.image]:[]);
-  var main=imgs.length?'<img src="'+esc(imgs[0])+'" id="dmain" onerror="this.style.display=\'none\'">':'<div class="dnoimg">'+catIcon(p.category)+'</div>';
-  var thumbs=imgs.length>1?'<div class="dthumbs">'+imgs.map(function(u,i){return '<div class="dth'+(i===0?' on':'')+'" onclick="dswap('+jk(u)+',this)"><img src="'+esc(u)+'" onerror="this.style.display=\'none\'"></div>';}).join('')+'</div>':'';
+  var main=imgs.length?'<img alt="" src="'+esc(imgs[0])+'" id="dmain" onerror="this.style.display=\'none\'">':'<div class="dnoimg">'+catIcon(p.category)+'</div>';
+  var thumbs=imgs.length>1?'<div class="dthumbs">'+imgs.map(function(u,i){return '<div class="dth'+(i===0?' on':'')+'" onclick="dswap('+jk(u)+',this)"><img alt="" src="'+esc(u)+'" onerror="this.style.display=\'none\'"></div>';}).join('')+'</div>':'';
   var mrp=(p.mrp&&p.mrp>p.price)?'<span class="dmrp">'+ugx(p.mrp)+'</span>':'';
   var off=(p.mrp&&p.mrp>p.price)?'<span class="doff">'+Math.round((1-p.price/p.mrp)*100)+'% OFF</span>':'';
   var bits=[]; if(p.unit)bits.push(esc(cap(p.unit))); if(p.pack_size&&p.pack_size>1)bits.push(p.pack_size+' pcs');
@@ -1619,7 +1625,7 @@ function addCustom(){if(!MOD_CTX||!modReady())return;var mods=[];MOD_CTX.groups.
 function closeSheet(){$('sheet').classList.remove('show');}
 /* ---------- V2 cart drawer (Increment 5) ---------- */
 function cartLine(k){ var i=CART[k], p=prod(i.name), kk=jk(k);
-  var thumb=(p&&p.image)?('<img src="'+esc(p.image)+'" loading="lazy">'):(p?catIcon(p.category):'🛒');
+  var thumb=(p&&p.image)?('<img alt="" src="'+esc(p.image)+'" loading="lazy">'):(p?catIcon(p.category):'🛒');
   return '<div class="cline"><div class="cthumb">'+thumb+'</div>'
     +'<div class="cmeta"><div class="cnm">'+esc(i.display||i.name)+'</div><div class="cpr">'+ugx(i.price)+' each</div></div>'
     +'<div class="cright"><div class="stp"><button onclick="bump('+kk+',-1)" aria-label="Decrease">−</button><span>'+i.qty+'</span><button onclick="bump('+kk+',1)" aria-label="Increase">+</button></div>'
@@ -1630,7 +1636,7 @@ function freeDeliveryBar(sub){ var thr=Number((SHOP.delivery&&(SHOP.delivery.fre
   if(sub>=thr) return '<div class="freebar done">🎉 You’ve unlocked free delivery!</div>';
   var pct=Math.min(100,Math.round(sub/thr*100));
   return '<div class="freebar"><div class="ft">Add '+ugx(thr-sub)+' more for <b>free delivery</b></div><div class="fprog"><div style="width:'+pct+'%"></div></div></div>'; }
-function _xcard(p){ return '<div class="xcard"><div class="xthumb" onclick="closeSheet();goDetail('+(p.id||0)+')">'+(p.image?'<img src="'+esc(p.image)+'" loading="lazy">':catIcon(p.category))+'</div><div class="xnm">'+esc(p.name)+'</div><div class="xpr">'+ugx(p.price)+'</div><button class="xadd" onclick="cartAdd('+jk(p.name)+');openCart()">+ Add</button></div>'; }
+function _xcard(p){ return '<div class="xcard"><div class="xthumb" onclick="closeSheet();goDetail('+(p.id||0)+')">'+(p.image?'<img alt="" src="'+esc(p.image)+'" loading="lazy">':catIcon(p.category))+'</div><div class="xnm">'+esc(p.name)+'</div><div class="xpr">'+ugx(p.price)+'</div><button class="xadd" onclick="cartAdd('+jk(p.name)+');openCart()">+ Add</button></div>'; }
 function crossSellStrip(){
   var inCart={}; Object.keys(CART).forEach(function(k){var p=prod(CART[k].name);if(p)inCart[p.id]=1;});
   var pool=PRODUCTS.filter(function(p){return !p.poa && !oosOf(p) && p.id && !inCart[p.id];}).slice().sort(function(a,b){return (b.popularity||0)-(a.popularity||0);}).slice(0,8);
@@ -1707,11 +1713,11 @@ function renderLocMsg(){
   else{m.textContent='Optional — sends an exact map pin so the rider finds you fast.';m.className='locmsg';if(b)b.textContent='📍 Share my current location';}
 }
 function captureLoc(){
-  if(!navigator.geolocation){alert('Location isn’t available on this device — please type your address/landmark.');return;}
+  if(!navigator.geolocation){toast('Location isn’t available — please type your address.','err');return;}
   var b=$('locBtn');if(b){b.disabled=true;b.textContent='Detecting…';}
   navigator.geolocation.getCurrentPosition(
     function(p){GEO={lat:+p.coords.latitude.toFixed(6),lng:+p.coords.longitude.toFixed(6)};if(b)b.disabled=false;renderLocMsg();},
-    function(){if(b)b.disabled=false;renderLocMsg();alert('Couldn’t get your location. Please allow location access, or type your address/landmark.');},
+    function(){if(b)b.disabled=false;renderLocMsg();toast('Couldn’t get your location — type your address instead.','err');},
     {enableHighAccuracy:true,timeout:10000,maximumAge:60000}
   );
 }
@@ -1746,7 +1752,7 @@ async function placeOrder(){
 (function brand(){
   document.title=(SHOP.name||'Shop')+' — Shop';
   var hb=document.querySelector('.top b'); if(hb)hb.textContent=SHOP.name||'Shop';
-  var lg=document.querySelector('.top .lg'); if(lg){ if(SHOP.logo){lg.innerHTML='<img src="'+esc(SHOP.logo)+'" style="width:100%;height:100%;object-fit:cover">';lg.style.background='#fff';} else {lg.textContent=SHOP.initials||'SH';} }
+  var lg=document.querySelector('.top .lg'); if(lg){ if(SHOP.logo){lg.innerHTML='<img alt="" src="'+esc(SHOP.logo)+'" style="width:100%;height:100%;object-fit:cover">';lg.style.background='#fff';} else {lg.textContent=SHOP.initials||'SH';} }
   var fn=$('footName'); if(fn)fn.textContent=(SHOP.name||'Shop')+(SHOP.city?(' · '+SHOP.city):'');
   var sl=$('staffLink'); if(sl)sl.href=ADMIN_URL;
 })();
@@ -1759,6 +1765,12 @@ if($('sq')){
 document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ var o=$('searchOverlay'); if(o&&o.classList.contains('show')){ searchClose(); return; } var sh=$('sheet'); if(sh&&sh.classList.contains('show')) closeSheet(); } });
 /* Infinite scroll: grow the category/search grid as the sentinel nears the viewport. */
 window.addEventListener('scroll',function(){ var lm=$('loadmore'); if(!lm)return; if(lm.getBoundingClientRect().top < window.innerHeight+320){ growGrid(); } },{passive:true});
+/* A11y: when the bottom sheet opens, move focus into the dialog (screen readers announce it,
+   keyboard stays trapped-ish); restore focus to the trigger on close. Centralised via observer. */
+(function(){ var sh=$('sheet'); if(!sh||!window.MutationObserver)return; var last=null;
+  new MutationObserver(function(){ if(sh.classList.contains('show')){ last=document.activeElement; var x=sh.querySelector('.sheethd .x'); if(x){ try{ x.focus(); }catch(e){} } }
+    else if(last){ try{ last.focus(); }catch(e){} last=null; } }).observe(sh,{attributes:true,attributeFilter:['class']});
+})();
 loadCart(); loadCust(); loadWish(); loadRSearch(); bar(); restoreDelv(); if($('content'))$('content').innerHTML=skeletonGrid(8); load();
 </script>
 <div id="detail" class="detail" aria-hidden="true"></div>
