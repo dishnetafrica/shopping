@@ -289,7 +289,7 @@ class StorefrontController extends Controller
 
             return Product::where('active', true)->orderByDesc('display_order')->orderBy('name')
                 ->toBase()
-                ->get(['id', 'name', 'description', 'category', 'keywords', 'base_price', 'price', 'stock', 'image_url', 'display_order', 'moq', 'pack_size', 'unit_label'])
+                ->get(['id', 'name', 'description', 'category', 'keywords', 'base_price', 'price', 'stock', 'image_url', 'display_order', 'moq', 'pack_size', 'unit_label', 'popularity', 'created_at'])
                 ->map(function ($p) use ($mods) {
                     return [
                         'Product Name' => (string) $p->name,
@@ -305,6 +305,9 @@ class StorefrontController extends Controller
                         'MOQ'          => $p->moq === null ? null : (int) $p->moq,
                         'PackSize'     => $p->pack_size === null ? null : (int) $p->pack_size,
                         'Unit'         => (string) ($p->unit_label ?? ''),
+                        // Merchandising signals for the self-updating home rails (Popular / New arrivals).
+                        'Popularity'   => (int) ($p->popularity ?? 0),
+                        'Created'      => $p->created_at ? strtotime((string) $p->created_at) : 0,
                         '_row'         => (int) $p->id,
                     ];
                 })->values();

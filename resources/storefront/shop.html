@@ -288,7 +288,7 @@ var STORE_KEY='cb_cart_'+(SHOP.slug||'shop'), DELV_KEY='cb_delv_'+(SHOP.slug||'s
 var CUST_KEY='cb_cust_'+(SHOP.slug||'shop'), LAST_KEY='cb_last_'+(SHOP.slug||'shop');
 var CUST=null, LASTORDER=null;
 var AUTH_KEY='cb_tok_'+(SHOP.slug||'shop'), AUTHTOK=null, MYORDERS=null, MYSTMT=null;
-function loadCust(){loadWMode();try{CUST=JSON.parse(localStorage.getItem(CUST_KEY)||'null');}catch(e){CUST=null;} try{LASTORDER=JSON.parse(localStorage.getItem(LAST_KEY)||'null');}catch(e){LASTORDER=null;} try{AUTHTOK=localStorage.getItem(AUTH_KEY)||null;}catch(e){AUTHTOK=null;} if(AUTHTOK)loadMyOrders();}
+function loadCust(){loadWMode();loadRecent();try{CUST=JSON.parse(localStorage.getItem(CUST_KEY)||'null');}catch(e){CUST=null;} try{LASTORDER=JSON.parse(localStorage.getItem(LAST_KEY)||'null');}catch(e){LASTORDER=null;} try{AUTHTOK=localStorage.getItem(AUTH_KEY)||null;}catch(e){AUTHTOK=null;} if(AUTHTOK)loadMyOrders();}
 function saveCust(c){CUST=c;try{localStorage.setItem(CUST_KEY,JSON.stringify(c));}catch(e){}}
 function saveLast(items){LASTORDER={items:items,at:Date.now()};try{localStorage.setItem(LAST_KEY,JSON.stringify(LASTORDER));}catch(e){}}
 function forgetCust(){CUST=null;try{localStorage.removeItem(CUST_KEY);}catch(e){} render();}
@@ -309,8 +309,20 @@ function wsBar(){
     '</div>';
 }
 function creditOptionHtml(){ return (isWholesaleBuyer()&&BUYER.credit&&BUYER.credit.limit)?'<option>Credit (account)</option>':''; }
-/* --- Buy Again: personalized rail from the logged-in customer's own order history --------- */
+/* --- Self-updating home rails: Buy Again · Recently Viewed · Popular · New Arrivals --------- */
 var BUYAGAIN=[];
+var RECENT_KEY='cb_recent_'+(SHOP.slug||'shop'), RECENT=[];
+function loadRecent(){try{RECENT=JSON.parse(localStorage.getItem(RECENT_KEY)||'[]')||[];}catch(e){RECENT=[];}}
+function pushRecent(id){ if(id==null)return; id=Number(id); if(!id)return; RECENT=RECENT.filter(function(x){return x!==id;}); RECENT.unshift(id); RECENT=RECENT.slice(0,20); try{localStorage.setItem(RECENT_KEY,JSON.stringify(RECENT));}catch(e){} }
+function sellableRail(p){ return p && !p.poa && !oosOf(p); }
+/* One horizontal, swipeable strip of product cards under a section title. Empty items → nothing. */
+function railHtml(title,items){
+  if(!items||!items.length) return '';
+  items=items.slice(0,12);
+  var cards=items.map(function(p){return '<div style="flex:0 0 152px;max-width:152px">'+prodCard(p)+'</div>';}).join('');
+  return '<div class="section-title">'+esc(title)+'</div>'+
+    '<div style="display:flex;gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 2px 12px;margin-bottom:4px">'+cards+'</div>';
+}
 function buyAgainRail(){
   if(!AUTHTOK || !BUYAGAIN || !BUYAGAIN.length || !PRODUCTS.length) return '';
   var seen={}, items=[];
@@ -320,12 +332,26 @@ function buyAgainRail(){
     if(!p && b.name) p=prod(b.name);
     if(p && !seen[p.name]){ seen[p.name]=1; items.push(p); }
   });
-  if(!items.length) return '';
-  items=items.slice(0,12);
-  var cards=items.map(function(p){return '<div style="flex:0 0 152px;max-width:152px">'+prodCard(p)+'</div>';}).join('');
-  return '<div class="section-title">Buy again</div>'+
-    '<div style="display:flex;gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 2px 12px;margin-bottom:4px">'+cards+'</div>';
+  return railHtml('Buy again', items);
 }
+function recentlyViewedRail(){
+  if(!PRODUCTS.length || !RECENT.length) return '';
+  var items=[]; RECENT.forEach(function(id){ var p=PRODUCTS.find(function(x){return x.id===id;}); if(sellableRail(p)) items.push(p); });
+  return items.length>=3 ? railHtml('Recently viewed', items) : '';
+}
+function popularRail(){
+  if(!PRODUCTS.length) return '';
+  var pool=PRODUCTS.filter(sellableRail).filter(function(p){return (p.popularity||0)>0;});
+  if(pool.length<4) return '';
+  pool=pool.slice().sort(function(a,b){return (b.popularity||0)-(a.popularity||0);});
+  return railHtml('Popular right now', pool);
+}
+function newArrivalsRail(){
+  if(!PRODUCTS.length) return '';
+  var pool=PRODUCTS.filter(sellableRail).slice().sort(function(a,b){return (b.createdAt||b.id||0)-(a.createdAt||a.id||0);});
+  return pool.length>=4 ? railHtml('New arrivals', pool) : '';
+}
+function homeRails(){ return buyAgainRail()+recentlyViewedRail()+popularRail()+newArrivalsRail(); }
 function ugx(n){return CUR+' '+(Number(n)||0).toLocaleString('en-US');}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function jk(s){return JSON.stringify(String(s)).replace(/"/g,'&quot;');}
@@ -342,6 +368,7 @@ function mapProduct(row){
     moq:(row.MOQ===null||row.MOQ===undefined||row.MOQ==='')?1:Math.max(1,parseInt(row.MOQ,10)||1),
     packSize:(row.PackSize===null||row.PackSize===undefined||row.PackSize==='')?0:(parseInt(row.PackSize,10)||0),
     unit:String(row.Unit||'').trim(),
+    popularity:num(row.Popularity), createdAt:Number(row.Created)||0,
     image:String(row.Image||row.Photo||row.Image_URL||row['Image URL']||'')};
 }
 
@@ -864,9 +891,9 @@ function render(){
     return;
   }
   if(CAT==='all'){
-    if(useDepartments()){c.innerHTML=wsBar()+buyAgainRail()+groceryHome();return;}
-    if(useRestaurantMenus()){c.innerHTML=wsBar()+buyAgainRail()+welcomeBanner()+comboStrip()+restaurantHome();return;}
-    c.innerHTML=wsBar()+buyAgainRail()+welcomeBanner()+thaliBanner()+comboStrip()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){return catTile(cat.name,i);}).join('')+'</div>';
+    if(useDepartments()){c.innerHTML=wsBar()+homeRails()+groceryHome();return;}
+    if(useRestaurantMenus()){c.innerHTML=wsBar()+homeRails()+welcomeBanner()+comboStrip()+restaurantHome();return;}
+    c.innerHTML=wsBar()+homeRails()+welcomeBanner()+thaliBanner()+comboStrip()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){return catTile(cat.name,i);}).join('')+'</div>';
     return;
   }
   var list=PRODUCTS.filter(function(p){return p.category===CAT;});
@@ -929,6 +956,7 @@ window.addEventListener('hashchange',handleHash);
 
 async function openDetail(id){
   id=String(id); var el=$('detail'); if(!el)return;
+  pushRecent(id);   // remember for the "Recently viewed" home rail
   el.classList.add('show'); document.body.style.overflow='hidden'; el.scrollTop=0;
   el.innerHTML='<div class="dwrap">'+detailHeader()+'<div class="dload">Loading\u2026</div></div>';
   try{
