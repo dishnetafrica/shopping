@@ -247,21 +247,27 @@ final class InvoiceCapability implements ObjectCapability
         }
         $fx = Fx::forTenant($ctx->tenant);
 
-        $res = app(PaymentService::class)->record($ctx->tenant, [
-            'customer' => (string) $i->customer_name,
-            'phone' => (string) $i->customer_phone,
-            'invoice_no' => (string) $i->invoice_no,
-            'kind' => 'settlement',
-            'currency' => $cur,
-            'amount' => $amount,
-            'rate' => $fx->ratePerUsd($cur),
-            'usd' => $fx->toUsd($amount, $cur),
-            'method' => (string) ($in['method'] ?? 'cash'),
-            'reference' => $in['reference'] ?? null,
-            'holder' => $holder,
-            'holder_user_id' => $holderId,
-            'created_by' => $actorName,
-        ]);
+        try {
+            $res = app(PaymentService::class)->record($ctx->tenant, [
+                'customer' => (string) $i->customer_name,
+                'phone' => (string) $i->customer_phone,
+                'invoice_no' => (string) $i->invoice_no,
+                'kind' => 'settlement',
+                'currency' => $cur,
+                'amount' => $amount,
+                'rate' => $fx->ratePerUsd($cur),
+                'usd' => $fx->toUsd($amount, $cur),
+                'method' => (string) ($in['method'] ?? 'cash'),
+                'reference' => $in['reference'] ?? null,
+                'holder' => $holder,
+                'holder_user_id' => $holderId,
+                'created_by' => $actorName,
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('v3 invoice payment failed: ' . $e->getMessage(), ['invoice' => $i->id]);
+
+            return ['ok' => false, 'error' => 'payment_failed', 'message' => 'Could not record the payment: ' . $e->getMessage()];
+        }
 
         if (is_array($res) && array_key_exists('ok', $res)) {
             return $res;

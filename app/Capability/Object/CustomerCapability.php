@@ -399,21 +399,27 @@ final class CustomerCapability implements ObjectCapability
             $holderId = $hu ? (int) $hu->id : null;   // NULL (not 0) — 0 violates the users FK on order_costs
         }
 
-        return app(PaymentService::class)->record($ctx->tenant, [
-            'customer' => (string) $c->name,
-            'phone' => (string) $c->phone,
-            'invoice_no' => $in['invoice_no'] ?? null,
-            'order_no' => $in['order_no'] ?? null,
-            'kind' => 'settlement',
-            'currency' => $cur,
-            'amount' => $amount,
-            'rate' => $rate,
-            'usd' => $usd,
-            'method' => (string) ($in['method'] ?? 'cash'),
-            'reference' => $in['reference'] ?? null,
-            'holder' => $holder,
-            'holder_user_id' => $holderId,
-            'created_by' => $actorName,
-        ]);
+        try {
+            return app(PaymentService::class)->record($ctx->tenant, [
+                'customer' => (string) $c->name,
+                'phone' => (string) $c->phone,
+                'invoice_no' => $in['invoice_no'] ?? null,
+                'order_no' => $in['order_no'] ?? null,
+                'kind' => 'settlement',
+                'currency' => $cur,
+                'amount' => $amount,
+                'rate' => $rate,
+                'usd' => $usd,
+                'method' => (string) ($in['method'] ?? 'cash'),
+                'reference' => $in['reference'] ?? null,
+                'holder' => $holder,
+                'holder_user_id' => $holderId,
+                'created_by' => $actorName,
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('v3 customer payment failed: ' . $e->getMessage(), ['customer' => $c->id]);
+
+            return ['ok' => false, 'error' => 'payment_failed', 'message' => 'Could not record the payment: ' . $e->getMessage()];
+        }
     }
 }
