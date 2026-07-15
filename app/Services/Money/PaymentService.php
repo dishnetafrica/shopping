@@ -39,7 +39,7 @@ class PaymentService
         $customer = (string) ($d['customer'] ?? '');
         $costNote = $d['cost_note'] ?? ('Payment from ' . $customer . ($orderNo ? (' (' . $orderNo . ')') : ''));
 
-        $result = DB::transaction(function () use ($t, $d, $orderNo, $costNote) {
+        $result = DB::transaction(function () use ($t, $d, $orderNo, $costNote, $customer) {
             // cash side: money IN — credited to the RECEIVER's cash in hand
             $cost = OrderCost::create([
                 'tenant_id' => $t->id, 'order_id' => null, 'order_no' => $orderNo,
