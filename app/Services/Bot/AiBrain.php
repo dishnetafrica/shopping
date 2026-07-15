@@ -27,6 +27,13 @@ class AiBrain
     /** Hidden order/quote protocol version emitted in the prompt; parser stays back-compatible. */
     public const ORDER_PROTOCOL_VERSION = 2;
 
+    /**
+     * QUOTE-FIRST flow (mirrors BotBrain::QUOTE_FIRST). When true, a confirmed AI order captures as a
+     * QUOTATION (sent + saved for staff to convert in v3) instead of creating a sales order directly.
+     * Set to false to restore direct order capture — a one-line, fully reversible switch.
+     */
+    protected const QUOTE_FIRST = true;
+
     public function enabled(): bool
     {
         return (bool) (config('openai.api_key') ?: env('OPENAI_API_KEY'));
@@ -424,6 +431,64 @@ class AiBrain
      * (NotifyOwnerNewOrder). We then append a clean, customer-facing confirmation with the number
      * and a track link. On any failure we still return the cleaned reply so the chat never breaks.
      */
+    /**
+     * QUOTE-FIRST capture: turn a confirmed AI order into a QUOTATION (branded PDF sent on WhatsApp +
+     * saved so it appears under Quotations in v3 for staff to convert), instead of creating a sales
+     * order. Reuses the same OrderCalculator-priced $quote and the QuotationService the AI bot already
+     * uses for price requests — no new quoting logic. Best-effort send; the quotation is always saved.
+     */
+    private function captureOrderAsQuote(Tenant $tenant, Conversation $convo, string $from, array $quote, string $itemsText, string $delivery, string $clean): string
+    {
+        $svc = app(\App\Services\Bot\QuotationService::class);
+        $cur = (string) ($quote['currency'] ?? $tenant->setting('currency', 'UGX'));
+        $name = (string) ($convo->customer_name ?? '');
+
+        $lines = [];
+        foreach (($quote['lines'] ?? []) as $l) {
+            $qty   = (int) ($l['qty'] ?? 1);
+            $price = (float) ($l['price'] ?? ($l['unit_price'] ?? 0));
+            $sum   = (float) ($l['sum'] ?? ($l['line_total'] ?? $price * $qty));
+            $lines[] = ['matched' => true, 'name' => (string) ($l['name'] ?? ''), 'qty' => $qty, 'price' => $price, 'sum' => $sum, 'unit' => (string) ($l['unit'] ?? ''), 'image' => (string) ($l['image'] ?? '')];
+        }
+        if (! $lines) {
+            return $clean; // nothing priceable — let the model's own text go out
+        }
+        $qArr = ['lines' => $lines, 'currency' => $cur, 'total' => (float) ($quote['total'] ?? 0)];
+
+        $qNo = null;
+        try {
+            $doc = $svc->available() ? $svc->generate($tenant, $from, $name, $qArr) : null;
+            if ($doc) {
+                $qNo = (string) ($doc['no'] ?? '');
+                try {
+                    $gw = app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($tenant);
+                    if (method_exists($gw, 'sendDocument') && $tenant->whatsapp_instance) {
+                        $media = ($doc['url'] ?? '') ?: ($doc['b64'] ?? '');
+                        $gw->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], 'Your quotation ' . $qNo);
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('AiBrain quote-first send failed: ' . $e->getMessage());
+                }
+                $q = $svc->persist($tenant, $from, $name, $qArr, $doc, 'bot');
+                if ($q && $delivery !== '') {
+                    try { $q->update(['meta' => array_merge((array) ($q->meta ?? []), ['delivery' => $delivery])]); } catch (\Throwable $e) { /* meta optional */ }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('AiBrain quote-first build failed: ' . $e->getMessage());
+        }
+
+        \App\Support\BotTrace::log($tenant->id, 'ai-order', $from, 'quote_sent', ($qNo ?: '') . ' — ' . $itemsText);
+
+        $totalTxt = number_format((float) ($quote['total'] ?? 0), \App\Services\Pricing::decimalsForCurrency($cur)) . ' ' . $cur;
+        $conf = "\n\n📄 *Quotation" . ($qNo ? ' ' . $qNo : '') . " prepared*\n" . $itemsText;
+        if (((float) ($quote['total'] ?? 0)) > 0) { $conf .= "\nEstimated total: " . $totalTxt; }
+        if ($delivery !== '') { $conf .= "\nDeliver to: " . $delivery; }
+        $conf .= "\nOur team will confirm availability & prices, then send you the order to complete. 🙏";
+
+        return $clean . $conf;
+    }
+
     private function captureOrder(Tenant $tenant, Conversation $convo, string $from, string $reply): string
     {
         $pos = stripos($reply, '<<ORDER');
@@ -471,6 +536,11 @@ class AiBrain
                 $track = $dupe->track_token ? $tenant->publicUrl('/papi/track?o=' . $dupe->id . '&t=' . $dupe->track_token) : '';
                 return $clean . "\n\n✅ This is already on order *" . $dupe->order_no . "*."
                     . ($track !== '' ? "\nTrack it here: " . $track : '');
+            }
+
+            // QUOTE-FIRST: send a quotation for staff to confirm/convert, instead of creating an order.
+            if (static::QUOTE_FIRST) {
+                return $this->captureOrderAsQuote($tenant, $convo, $from, $quote, $itemsText, $delivery, $clean);
             }
 
             $order = new \App\Models\Order();
