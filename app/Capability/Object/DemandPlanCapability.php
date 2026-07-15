@@ -118,10 +118,11 @@ final class DemandPlanCapability implements ObjectCapability
             if ($canEdit && $isOpen) {
                 $procBtns[] = ['icon' => 'cart', 'title' => 'Record purchase', 'action' => [
                     'key' => 'record_procurement', 'label' => 'Procure — ' . $l->name, 'method' => 'POST', 'endpoint' => $endpoint . '/record_procurement', 'actor' => 'human', 'tone' => 'primary',
-                    'schema' => ['qty_available' => 'number', 'qty_purchased' => 'number', 'supplier' => $supplierCombo, 'expected_delivery' => 'text', 'line_status' => 'enum:pending,partial,purchased,not_available', 'remarks' => 'text'],
-                    'labels' => ['qty_available' => 'Qty available at supplier', 'qty_purchased' => 'Qty purchased', 'supplier' => 'Supplier', 'expected_delivery' => 'Expected delivery (YYYY-MM-DD)', 'line_status' => 'Line status', 'remarks' => 'Remarks'],
-                    'prefill' => ['qty_purchased' => $got, 'qty_available' => $l->qty_available !== null ? (float) $l->qty_available : '', 'supplier' => (string) ($l->supplier_name ?: ''), 'expected_delivery' => $l->expected_delivery ? Carbon::parse($l->expected_delivery)->format('Y-m-d') : '', 'line_status' => $st, 'remarks' => (string) ($l->remarks ?: '')],
+                    'schema' => ['qty_purchased' => 'number', 'supplier' => $supplierCombo, 'pay_status' => 'enum:credit,cash', 'holder' => $comboPeople, 'bill_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'qty_available' => 'number', 'expected_delivery' => 'text', 'line_status' => 'enum:pending,partial,purchased,not_available', 'remarks' => 'text'],
+                    'labels' => ['qty_purchased' => 'Qty purchased', 'supplier' => 'Supplier (required)', 'pay_status' => 'On credit (we owe) or paid cash now', 'holder' => 'Paid by (whose cash — if paid now)', 'bill_amount' => 'Bill amount (optional — books the cost)', 'currency' => 'Currency', 'rate_to_usd' => 'Rate (native per $1)', 'qty_available' => 'Qty available at supplier', 'expected_delivery' => 'Expected delivery (YYYY-MM-DD)', 'line_status' => 'Line status', 'remarks' => 'Remarks'],
+                    'prefill' => ['qty_purchased' => $got > 0 ? $got : $req, 'supplier' => (string) ($l->supplier_name ?: ''), 'pay_status' => 'credit', 'holder' => $me, 'bill_amount' => '', 'currency' => $defCur, 'rate_to_usd' => $defRate, 'qty_available' => $l->qty_available !== null ? (float) $l->qty_available : '', 'expected_delivery' => $l->expected_delivery ? Carbon::parse($l->expected_delivery)->format('Y-m-d') : '', 'line_status' => $st, 'remarks' => (string) ($l->remarks ?: '')],
                     'body' => ['line_id' => $l->id],
+                    'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
                 ]];
                 if ($got > 0) {
                     $procBtns[] = ['icon' => 'dispatch', 'title' => 'Loaded / sent', 'action' => [
@@ -184,9 +185,9 @@ final class DemandPlanCapability implements ObjectCapability
         $mkBulkPurchased = fn (string $label, string $tone = 'default') => [
             'key' => 'bulk_purchased', 'label' => $label, 'method' => 'POST', 'endpoint' => $endpoint . '/bulk_purchased',
             'actor' => 'human', 'tone' => $tone,
-            'schema' => ['supplier' => $supplierCombo, 'bill_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'pay_status' => 'enum:credit,cash'] + $bulkSchema,
-            'labels' => ['supplier' => 'Supplier (required — pick or type a new one)', 'bill_amount' => 'Total bill amount (optional — books the cost)', 'currency' => 'Currency', 'rate_to_usd' => 'Rate (native per $1)', 'pay_status' => 'Credit (owe) or paid cash now'] + $bulkLabels,
-            'prefill' => ['supplier' => '', 'bill_amount' => '', 'currency' => $defCur, 'rate_to_usd' => $defRate, 'pay_status' => 'credit'] + $prefPur,
+            'schema' => ['supplier' => $supplierCombo, 'pay_status' => 'enum:credit,cash', 'holder' => $comboPeople, 'bill_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number'] + $bulkSchema,
+            'labels' => ['supplier' => 'Supplier (required — pick or type a new one)', 'pay_status' => 'On credit (we owe) or paid cash now', 'holder' => 'Paid by (whose cash — if paid now)', 'bill_amount' => 'Total bill amount (optional — books the cost)', 'currency' => 'Currency', 'rate_to_usd' => 'Rate (native per $1)'] + $bulkLabels,
+            'prefill' => ['supplier' => '', 'pay_status' => 'credit', 'holder' => $me, 'bill_amount' => '', 'currency' => $defCur, 'rate_to_usd' => $defRate] + $prefPur,
             'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
         ];
         $addLine = ['key' => 'add_line', 'label' => 'Add product', 'method' => 'POST', 'endpoint' => $endpoint . '/add_line', 'actor' => 'human', 'tone' => 'default',
@@ -401,7 +402,8 @@ final class DemandPlanCapability implements ObjectCapability
             $cur = strtoupper((string) ($in['currency'] ?? '')) ?: $ctx->nativeCurrency();
             $rate = (float) ($in['rate_to_usd'] ?? 0);
             $payStatus = strtolower((string) ($in['pay_status'] ?? 'credit')) === 'cash' ? 'cash' : 'credit';
-            $booked = $this->bookBill($ctx, $sup, $billAmount, $cur, $rate, $payStatus, 'Purchase — ' . ($plan->plan_no ?: $plan->id) . ($sup ? (' · ' . $sup->name) : ''));
+            $holder = (string) ($in['holder'] ?? '');
+            $booked = $this->bookBill($ctx, $sup, $billAmount, $cur, $rate, $payStatus, $holder, 'Purchase — ' . ($plan->plan_no ?: $plan->id) . ($sup ? (' · ' . $sup->name) : ''));
         }
 
         $msg = 'Recorded purchases for ' . $n . ' product(s)' . ($sup ? ' from ' . $sup->name : '') . '.';
@@ -415,7 +417,7 @@ final class DemandPlanCapability implements ObjectCapability
      * the proven write path — there is no service layer). Best-effort: a booking hiccup never blocks the
      * quantity update. Cash bills credit the operator's cashbook; credit bills add to supplier payables.
      */
-    private function bookBill(CapabilityContext $ctx, Supplier $sup, float $native, string $cur, float $rate, string $payStatus, string $note): bool
+    private function bookBill(CapabilityContext $ctx, Supplier $sup, float $native, string $cur, float $rate, string $payStatus, string $holderName, string $note): bool
     {
         try {
             $cur = strtoupper(trim($cur)) ?: 'UGX';
@@ -426,6 +428,16 @@ final class DemandPlanCapability implements ObjectCapability
             $user = $ctx->user;
             $ownerLike = (method_exists($user, 'isOwnerLike') && $user->isOwnerLike()) || in_array((string) ($user->role ?? ''), ['manager'], true);
 
+            // Who the money belongs to: for cash it's whose cash-in-hand paid; default = operator.
+            $actor = (string) ($user->name ?? '');
+            $holderName = trim($holderName);
+            $holder = $holderName !== '' ? $holderName : $actor;
+            $holderId = (int) $user->id;
+            if ($holderName !== '' && strcasecmp($holderName, $actor) !== 0) {
+                $hu = \App\Models\User::where('tenant_id', $ctx->tenantId())->whereRaw('lower(name) = ?', [mb_strtolower($holderName)])->first();
+                $holderId = $hu ? (int) $hu->id : null;   // NULL (not 0) — 0 violates the users FK
+            }
+
             \App\Models\OrderCost::create([
                 'tenant_id' => $ctx->tenantId(), 'order_id' => null, 'order_no' => null,
                 'supplier_id' => (int) $sup->id, 'supplier_name' => (string) $sup->name,
@@ -433,7 +445,7 @@ final class DemandPlanCapability implements ObjectCapability
                 'pay_status' => $payStatus, 'paid_native' => $payStatus === 'credit' ? 0 : $native,
                 'currency' => $cur, 'native_amount' => $native, 'rate_to_usd' => $rate,
                 'usd_amount' => \App\Models\OrderCost::toUsd($native, $rate),
-                'holder' => (string) ($user->name ?? ''), 'holder_user_id' => (int) $user->id,
+                'holder' => $holder, 'holder_user_id' => $holderId,
                 'receipt_path' => null, 'note' => $note,
                 'status' => $ownerLike ? 'approved' : ((bool) $ctx->tenant->setting('cost_approval', true) ? 'pending' : 'approved'),
                 'created_by' => (string) ($user->name ?? ''),
@@ -674,7 +686,21 @@ final class DemandPlanCapability implements ObjectCapability
             $plan->save();
         }
 
-        return ['ok' => true, 'message' => 'Recorded procurement for ' . $l->name . ' (' . $this->lineLabel($l->line_status) . ').'];
+        // One-step cost trail: if a bill amount was entered, book the supplier cost now (who paid / credit).
+        $billAmount = round((float) preg_replace('/[^0-9.]/', '', (string) ($in['bill_amount'] ?? '')), 2);
+        $booked = false;
+        if ($billAmount > 0 && isset($sup) && $sup) {
+            $cur = strtoupper((string) ($in['currency'] ?? '')) ?: $ctx->nativeCurrency();
+            $rate = (float) ($in['rate_to_usd'] ?? 0);
+            $payStatus = strtolower((string) ($in['pay_status'] ?? 'credit')) === 'cash' ? 'cash' : 'credit';
+            $holder = (string) ($in['holder'] ?? '');
+            $booked = $this->bookBill($ctx, $sup, $billAmount, $cur, $rate, $payStatus, $holder, 'Purchase — ' . $l->name);
+        }
+
+        $msg = 'Recorded procurement for ' . $l->name . ' (' . $this->lineLabel($l->line_status) . ').';
+        if ($billAmount > 0) { $msg .= $booked ? ' Bill booked.' : ' (Bill could not be booked.)'; }
+
+        return ['ok' => true, 'message' => $msg];
     }
 
     /**
