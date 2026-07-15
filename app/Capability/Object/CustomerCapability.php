@@ -93,6 +93,11 @@ final class CustomerCapability implements ObjectCapability
         $reminder = ['key' => 'send_reminder', 'label' => 'Send reminder', 'method' => 'POST', 'endpoint' => $endpoint . '/send_reminder', 'actor' => 'human', 'tone' => 'default', 'confirm' => 'Send a payment reminder to ' . ($c->name ?: 'this customer') . '?'];
         $setFollow = ['key' => 'set_followup', 'label' => 'Set follow-up', 'method' => 'POST', 'endpoint' => $endpoint . '/set_followup', 'actor' => 'human', 'tone' => 'default', 'schema' => ['follow_up' => 'text'], 'prefill' => ['id' => (int) $c->id, 'follow_up' => (string) ($c->follow_up ?? '')]];
         $assignRep = ['key' => 'assign_rep', 'label' => 'Assign rep', 'method' => 'POST', 'endpoint' => $endpoint . '/assign_rep', 'actor' => 'human', 'tone' => 'default', 'schema' => ['assigned_rep' => 'text'], 'prefill' => ['id' => (int) $c->id, 'assigned_rep' => (string) ($c->assigned_rep ?? '')]];
+        // Statement: download the PDF (GET href → doc endpoint) and send it to the customer on WhatsApp
+        // (POST → frozen StatementMessenger). Both need a phone; hidden for phone-less prospects.
+        $hasPhone = $digits !== '';
+        $dlStatement = ['key' => 'statement_pdf', 'label' => 'Download statement (PDF)', 'href' => '/api/v1/doc/customer-statement?phone=' . rawurlencode($phone)];
+        $sendStatement = ['key' => 'send_statement', 'label' => 'Send statement on WhatsApp', 'method' => 'POST', 'endpoint' => $endpoint . '/send_statement', 'actor' => 'human', 'tone' => 'default', 'confirm' => 'Send the account statement to ' . ($c->name ?: 'this customer') . ' on WhatsApp?'];
         $newQuote = [
             'key' => 'new_quotation', 'label' => 'New quotation', 'method' => 'POST', 'endpoint' => $endpoint . '/create_quotation',
             'actor' => 'human', 'tone' => 'primary', 'builder' => 'quotation',
@@ -307,7 +312,12 @@ final class CustomerCapability implements ObjectCapability
                 ['key' => 'timeline', 'label' => 'Timeline', 'count' => count($timelineEvents)],
             ])
             ->actions([$primary])
-            ->more([$editAction, $reminder, $setFollow, $assignRep])
+            ->more(array_values(array_filter([
+                $editAction,
+                $hasPhone ? $dlStatement : null,
+                $hasPhone ? $sendStatement : null,
+                $reminder, $setFollow, $assignRep,
+            ])))
             ->meta(['capability' => 'customer', 'ttl' => 60, 'layout' => 'record', 'permissions' => ['menu:customers']]);
     }
 
@@ -330,6 +340,7 @@ final class CustomerCapability implements ObjectCapability
             'log_contact' => $this->touch($ctx, $input, 'contact'),
             'log_whatsapp' => $this->touch($ctx, $input, 'whatsapp'),
             'create_quotation' => $this->createQuotation($ctx, $input),
+            'send_statement' => $this->sendStatement($ctx, $input),
             'send_reminder' => ['ok' => true, 'sent' => true, 'message' => 'Reminder sent.'],
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
@@ -377,6 +388,29 @@ final class CustomerCapability implements ObjectCapability
         $kind === 'whatsapp' ? $svc->logWhatsapp($ctx->tenant, $c) : $svc->logContact($ctx->tenant, $c);
 
         return ['ok' => true, 'message' => $kind === 'whatsapp' ? 'WhatsApp contact logged.' : 'Call logged.'];
+    }
+
+    /** Send the account statement to the customer via the FROZEN StatementMessenger (WhatsApp). */
+    private function sendStatement(CapabilityContext $ctx, array $in): array
+    {
+        $c = CustomerProfile::where('tenant_id', $ctx->tenantId())->find((int) ($in['id'] ?? $in['customer_id'] ?? 0));
+        if (! $c) {
+            return ['ok' => false, 'error' => 'not_found'];
+        }
+        $phone = trim((string) $c->phone);
+        if ($phone === '') {
+            return ['ok' => false, 'error' => 'no_phone', 'message' => 'This customer has no phone number on file.'];
+        }
+        try {
+            $res = app(\App\Services\Ledger\StatementMessenger::class)->send($ctx->tenant, $phone);
+            if (is_array($res) && ($res['ok'] ?? false) === false) {
+                return ['ok' => false, 'error' => 'send_failed', 'message' => 'Could not send the statement (' . (string) ($res['reason'] ?? 'WhatsApp channel unavailable') . ').'];
+            }
+
+            return ['ok' => true, 'message' => 'Statement sent to ' . ($c->name ?: $phone) . ' on WhatsApp.'];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'error' => 'send_failed', 'message' => $e->getMessage()];
+        }
     }
 
     /** Delegates to the frozen engine. No model writes, no business logic here. */

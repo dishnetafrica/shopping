@@ -218,8 +218,27 @@ final class InvoiceCapability implements ObjectCapability
     {
         return match ($action) {
             'record_payment' => $this->recordPayment($ctx, $input),
+            'resync' => $this->resync($ctx, $input),
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
+    }
+
+    /** Re-run the frozen payment→invoice reconciliation for this invoice (self-heal a stale balance). */
+    private function resync(CapabilityContext $ctx, array $in): array
+    {
+        $i = Invoice::where('tenant_id', $ctx->tenantId())->find((int) ($in['id'] ?? 0));
+        if (! $i) {
+            return ['ok' => false, 'error' => 'not_found'];
+        }
+        try {
+            app(\App\Services\Invoicing\InvoiceService::class)->syncPaidFromPayments($i);
+            $i->refresh();
+
+            return ['ok' => true, 'balance' => (float) $i->balance, 'amount_paid' => (float) $i->amount_paid, 'status' => (string) $i->status,
+                'message' => 'Balance re-synced: ' . Money::fmt((float) $i->balance, \App\Services\Money\SalesBaseCurrency::txnCurrency($i, $ctx->tenant)) . ' due.'];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'error' => 'resync_failed', 'message' => $e->getMessage()];
+        }
     }
 
     /** Record a payment against this invoice via the FROZEN PaymentService (auto-allocates by invoice_no). */

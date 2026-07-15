@@ -126,7 +126,11 @@ class InvoiceService
                 ->where('kind', 'settlement')   // advances aren't applied to a balance until settled
                 ->get();
 
-            $cur = strtoupper((string) $inv->currency);
+            // The invoice `currency` TAG is unreliable — the issuer stamps the tenant base (e.g. USD)
+            // even on local-currency (UGX) amounts. Reconcile against the TRUE transaction currency,
+            // derived from the linked order, so a USD payment settles a UGX-denominated invoice via FX
+            // instead of naively subtracting 165 USD-units from a 611,325 UGX total (which never clears it).
+            $cur = \App\Services\Money\SalesBaseCurrency::txnCurrency($inv, $t);
             // E3.4 — one FX source (App\Services\Money\Fx): express each USD-normalised payment in
             // the invoice currency. Equivalent to the previous inline rate_*_per_usd read.
             $fx = \App\Services\Money\Fx::forTenant($t);

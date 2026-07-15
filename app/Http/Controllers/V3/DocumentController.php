@@ -209,6 +209,55 @@ final class DocumentController extends Controller
         ]);
     }
 
+    /** GET /api/v1/doc/customer-statement?phone=... — branded account statement (invoices vs payments). */
+    public function customerStatement(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) {
+            abort(401);
+        }
+        $phone = trim((string) $r->query('phone', ''));
+        $digits = preg_replace('/[^0-9]/', '', $phone);
+        if ($digits === '') {
+            abort(404, 'Customer phone required');
+        }
+        $c = \App\Models\CustomerProfile::where('tenant_id', $t->id)
+            ->whereRaw("regexp_replace(coalesce(phone,''),'[^0-9]','','g') = ?", [$digits])->first();
+        if (! $c) {
+            abort(404, 'Customer not found');
+        }
+
+        $ctx = \App\Capability\Contracts\CapabilityContext::fromUser($r->user());
+        $ctx->displayOverride = $r->query('cur');
+        $stmt = app(\App\Capability\Shared\CustomerInsight::class)->statement($ctx, $c);
+
+        $rows = array_map(fn ($row) => [
+            'when' => $row['date'] ?? '',
+            'desc' => $row['detail'] ?? '',
+            'charge' => $row['drText'] ?? '',
+            'payment' => $row['crText'] ?? '',
+            'balance' => $row['balanceText'] ?? '',
+        ], $stmt['rows'] ?? []);
+
+        $pdf = app(\App\Services\Finance\CustomerStatement::class)->pdf([
+            'business' => (string) ($t->name ?: 'Company'),
+            'generated' => now()->format('d M Y, H:i'),
+            'customer' => (string) ($c->name ?: $c->phone),
+            'meta' => trim(implode(' · ', array_filter(['#' . $c->id, (string) $c->contact_person, (string) $c->phone]))),
+            'currency' => (string) ($stmt['currency'] ?? 'USD'),
+            'rows' => $rows,
+            'closingText' => (string) ($stmt['balanceText'] ?? ''),
+        ]);
+        if (! $pdf) {
+            abort(404, 'PDF engine unavailable');
+        }
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="Statement-' . preg_replace('/[^A-Za-z0-9]+/', '', (string) ($c->name ?: $c->phone)) . '-' . now()->format('Ymd') . '.pdf"',
+        ]);
+    }
+
     private function stream(array $doc, string $filename)
     {
         $disk = Storage::disk('public');
