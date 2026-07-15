@@ -88,6 +88,19 @@
   .ares .an{font-size:13.5px;font-weight:700}.ares .ap{font-size:12.5px;color:var(--muted);font-weight:700;white-space:nowrap}
   .cmtbox{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;outline:none;font-family:inherit}
   .cmtbox:focus{border-color:var(--green)}
+  .unav{display:inline-block;margin-top:3px;font-size:11px;font-weight:800;color:var(--red);background:#FDECEC;border-radius:6px;padding:2px 8px}
+  .altcard .hd{border-color:#CDE3F5}
+  .alts{padding:4px 0}
+  .altrow{display:grid;grid-template-columns:46px 1fr auto;gap:12px;align-items:center;padding:11px 18px;border-bottom:1px solid var(--line)}
+  .altrow:last-child{border-bottom:0}
+  .altrow .th{width:46px;height:46px;border-radius:9px;background:#EEF2ED;display:grid;place-items:center;overflow:hidden}
+  .altrow .th img{width:100%;height:100%;object-fit:contain;padding:4px}
+  .altfor{font-size:11.5px;color:var(--muted)}
+  .altnm{font-size:14px;font-weight:800;margin-top:1px}
+  .altpr{font-size:12.5px;color:var(--muted);font-weight:700;margin-top:1px}
+  .altpr .altd{color:var(--green-d);font-weight:800}
+  .altbtn{border:0;background:var(--green);color:#fff;font-weight:800;font-size:13px;padding:10px 16px;border-radius:10px;cursor:pointer}
+  .altbtn:hover{background:var(--green-d)}
   .chgcard .hd{border-color:#CDE9D4}
   .chg{padding:10px 18px 16px}
   .chgrow{display:flex;gap:9px;align-items:flex-start;padding:5px 0;font-size:13.5px}
@@ -171,8 +184,9 @@ function render(){
     itemsHtml=(Q.items||[]).map(function(it){
       var sub=[it.brand,it.variant,it.unit].filter(Boolean).join(' · ');
       var th=it.image?('<img alt="" src="'+esc(it.image)+'">'):'<span class="ph">📦</span>';
+      var un=(it.available===false)?'<div class="unav">Currently unavailable</div>':'';
       return '<div class="it"><div class="th">'+th+'</div>'
-        +'<div><div class="nm">'+esc(it.name)+'</div>'+(sub?('<div class="sub">'+esc(sub)+'</div>'):'')+'</div>'
+        +'<div><div class="nm">'+esc(it.name)+'</div>'+(sub?('<div class="sub">'+esc(sub)+'</div>'):'')+un+'</div>'
         +'<div class="rt"><div class="lt">'+money(it.line_total)+'</div><div class="qp">'+it.qty+' × '+money(it.unit_price)+'</div></div></div>';
     }).join('');
   }
@@ -199,6 +213,22 @@ function render(){
       + '<div class="addbox"><textarea class="cmtbox" id="editComment" rows="2" placeholder="Add a note or request a price review (optional)"></textarea></div>'
       + '<div class="editbar" style="border-top:0;padding-top:0"><button class="btn ghost" style="flex:1" onclick="cancelEdit()">Cancel</button>'
       + '<button class="btn primary" style="flex:2" id="sendEditsBtn" onclick="submitEdits()">Send changes to sales</button></div>';
+  }
+
+  // --- Smart Alternatives (Q4): in-stock swaps for unavailable lines ---
+  var altCard='';
+  if(!EDIT && editable && (Q.alternatives||[]).length){
+    altCard='<div class="card altcard"><div class="hd"><div class="t">Suggested alternatives</div><div class="qn">in stock now</div></div><div class="alts">'
+      + Q.alternatives.map(function(a){
+          var s=a.suggested||{}; var d=Number(s.price_diff)||0;
+          var diff=d===0?'same price':(d>0?('+'+money(d)):('-'+money(-d)));
+          var th=s.image?('<img alt="" src="'+esc(s.image)+'">'):'<span class="ph">📦</span>';
+          return '<div class="altrow"><div class="th">'+th+'</div>'
+            +'<div class="altmid"><div class="altfor">Instead of <b>'+esc(a.for)+'</b> (unavailable)</div>'
+              +'<div class="altnm">'+esc(s.name)+'</div><div class="altpr">'+money(s.price)+' <span class="altd">'+diff+'</span></div></div>'
+            +'<button class="altbtn" onclick="acceptAlt('+JSON.stringify(a.for).replace(/"/g,'&quot;')+','+JSON.stringify(s.name).replace(/"/g,'&quot;')+')">Accept</button></div>';
+        }).join('')
+      + '</div></div>';
   }
 
   // --- "What changed" card (visual diff of the latest revision) ---
@@ -248,6 +278,7 @@ function render(){
       + '<div class="items">'+itemsHtml+'</div>'
       + editUI
       + (EDIT?'':'<div class="tot">'+totRows+'</div>')+'</div>'
+    + altCard
     + (Q.remarks?('<div class="card"><div class="remarks"><div class="k">Remarks</div>'+esc(Q.remarks)+'</div></div>'):'')
     + revsCard
     + '<div class="card"><div class="hd"><div class="t">Timeline</div>'+(respHint?('<div class="qn">'+esc(respHint)+'</div>'):'')+'</div><div class="tl">'+tl+'</div></div>'
@@ -290,6 +321,15 @@ function addPick(name){
   if(ex){ ex.qty=(ex.qty||0)+1; if(ex._orig!=null && ex.qty<=0) ex.qty=1; }
   else { WORK.push({name:p.name,qty:1,unit_price:p.price,image:p.image,unit:p.unit,_added:true}); }
   toast(esc(name)+' added','ok'); render();
+}
+function acceptAlt(forName, altName){
+  var it=(Q.items||[]).filter(function(x){return x.name===forName;})[0];
+  var qty=it?it.qty:1;
+  fetch(CFG.reviseUrl,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({ops:[{op:'remove',name:forName},{op:'add',name:altName,qty:qty}],comment:'Accepted suggested alternative for '+forName})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d&&d.ok){ toast('Swapped to '+altName,'ok'); load(); }
+      else{ toast(d&&d.error?d.error:'Could not accept','err'); }
+    }).catch(function(){ toast('Network error — please try again','err'); });
 }
 function buildOps(){
   var ops=[], orig={}; (Q.items||[]).forEach(function(it){orig[it.name]=it.qty;});

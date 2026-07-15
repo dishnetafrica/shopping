@@ -106,6 +106,25 @@ class QuotationPortalController extends Controller
         $subtotal = (float) $items->sum('line_total');
         $grand    = (float) $q->total;
 
+        // Smart Alternatives (Q4): for any line short on Kampala stock, offer an in-stock swap the
+        // customer can accept in one tap. Fail-soft — never blocks the portal if stock data is absent.
+        $alternatives = [];
+        $unavailable  = [];
+        if ($q->isEditable()) {
+            try {
+                $intel = app(\App\Services\Sales\QuotationIntelligence::class);
+                $alternatives = $intel->customerAlternatives($tenant, $q);
+                $unavailable  = $intel->unavailableNames($tenant, $q);
+            } catch (\Throwable $e) {
+                // no suggestions this time
+            }
+        }
+        $unavailableSet = array_map('mb_strtolower', $unavailable);
+        $items = $items->map(function ($it) use ($unavailableSet) {
+            $it['available'] = ! in_array(mb_strtolower((string) $it['name']), $unavailableSet, true);
+            return $it;
+        });
+
         // Sales rep (assigned user, else the tenant's configured sales employee, else blank).
         $rep = optional($q->salesExec)->name ?: (string) $tenant->setting('sales_employee', '');
 
@@ -159,6 +178,7 @@ class QuotationPortalController extends Controller
                 'grand'    => $grand,
             ],
             'remarks'   => (string) ($q->remarks ?? ''),
+            'alternatives' => $alternatives,
             'timeline'  => $timeline,
             'order_no'  => $q->order ? (string) $q->order->order_no : null,
             'pdf_url'   => url(rtrim($base, '/') . '/q/' . $q->public_token . '/pdf'),
