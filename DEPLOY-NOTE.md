@@ -1,50 +1,52 @@
-# CloudBSS — Category Order Reseed (one-shot, food-first)
+# CloudBSS — Hide & Reorder Categories from v3
 
-Reorders an EXISTING tenant's storefront departments to food-first without a
-re-import. Pairs with the storefront department-ordering patch (which makes the
-storefront read `Category.sort`).
+Two additive fixes so category order and visibility set in the admin panels
+actually take effect on the storefront. No engine changes, mobile unchanged,
+no new routes.
 
-## What it is
-`POST /papi/category-reseed` — authed panel endpoint (same auth + tenant
-context as `/papi/quotation-intel`; papi/* is CSRF-exempt). It only UPDATES the
-`sort` column of the tenant's existing categories. It never creates, renames,
-deletes a category, and never touches products. Idempotent — re-running
-re-applies the same order.
+## 1. Hide a department from the storefront  (NEW capability)
+`Category.active` existed and was toggleable in the `/app` (Filament) panel, but
+the storefront never read it — so the toggle did nothing. Now the storefront
+catalogue feed honours it:
 
-## Files (additive, repo-relative)
-1. `app/Http/Controllers/Panel/CategoryOrderController.php`  (new)
-2. `routes/web.php`  — one line added in the authed papi group:
-   `Route::post('category-reseed', [CategoryOrderController::class, 'reseed']);`
+- A category set **Active = off** disappears from the storefront: its chip AND
+  all its products drop out of browsing and search.
+- Products stay live in the backend — quotations, orders and direct product
+  links are unaffected. It's a storefront-visibility switch, not a delete.
 
-## How to run (once, after deploy)
-Logged in as the tenant owner (so the session cookie is present), from the
-panel/browser console on familyshoppers.net:
+Where to toggle: `/app` admin -> Categories -> edit the category -> Active
+toggle. Takes effect on the next storefront load (the filter runs post-cache,
+so no 5-minute wait for hide/show).
 
-    fetch('/papi/category-reseed', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'})
-      .then(r=>r.json()).then(console.log)
+File: `app/Http/Controllers/Storefront/StorefrontController.php`
+ - catalogue(): inactive categories' products filtered out; `category_order`
+   now emits active categories only.
 
-With an empty body it applies the canonical Family Shoppers food-first order:
-Whole Spices -> Ground Spices -> Recipe Mixes & Masalas -> Dal & Pulses ->
-Grains/Flours/Staples -> Snacks & Namkeen -> Pickles/Chutneys/Pastes ->
-Sauces & Condiments -> Rice/Biryani/Ready Mixes -> Disposables/Foil/Wraps ->
-Cleaning & Hygiene -> Non-Food & General -> Flooring & Paint (Industrial).
+## 2. Reorder from the seller panel now reaches the storefront  (BUG FIX)
+The `/panel` seller UI has left/right arrows to reorder categories, but they
+saved only to a tenant setting the storefront ignores. Now the reorder also
+writes `categories.sort` — the column the storefront reads — so arrow reorder
+moves departments on the live store. (The `/app` Filament Sort field already
+wrote this column and continues to work.)
 
-Any department NOT in the list keeps its relative order but is pushed below the
-listed ones (non-food/legacy settle at the bottom).
+File: `app/Http/Controllers/Panel/PanelApiController.php`
+ - categoryReorder(): now also calls new `writeCategorySort()` to mirror the
+   order into `categories.sort` (listed categories by position; unlisted pushed
+   to the bottom; missing rows created so empty categories can be ordered).
+ - categoryDelete(): also removes the metadata `categories` row (only reached
+   when the category is empty) so it doesn't linger in the storefront order.
 
-To use a custom order, pass `{ "order": ["Cat A","Cat B", ...] }`.
+## Where to do what (summary)
+- Reorder departments: `/panel` arrows  OR  `/app` -> Categories -> Sort.
+- Hide/show a department: `/app` -> Categories -> Active toggle.
+  (The seller `/panel` has no hide toggle yet — easy follow-up if you want it
+  there too.)
 
-### Response
-    { "ok": true, "reseeded": 14, "order": [{"name":"Whole Spices","sort":0}, ...],
-      "missing": [] }
-`missing` lists any requested names with no matching category (typo / not
-imported) — expect `[]` if the taxonomy matches.
+## Safety
+Storefront config is `Cache-Control: no-store`; the product feed caches 5 min,
+but the hide filter and category order run outside that cache, so visibility
+and order changes show on the next load. Backward compatible: tenants with no
+inactive categories and no sort data behave exactly as before.
 
-## Safety / rollback
-Only `categories.sort` changes. Storefront config is `Cache-Control: no-store`
-and the catalogue feed caches 5 min, so the new order shows within 5 minutes.
-To revert, call again with your previous order, or ignore it — the storefront
-falls back to product-count sort only when `category_order` is empty.
-
-Verified: `php -l` clean on both files; reorder algorithm unit-tested
-(food-first applied, unlisted pushed to bottom).
+Verified: `php -l` clean on both files; reorder-sort, hide-filter and
+active-only-order algorithms unit-tested.

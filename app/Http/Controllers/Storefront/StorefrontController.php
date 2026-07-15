@@ -314,6 +314,20 @@ class StorefrontController extends Controller
                 })->values();
         });
 
+        // Hidden departments: a Category toggled inactive in the admin panel is removed from the
+        // storefront — both its chip and its products drop out of browsing and search. Applied
+        // post-cache (the product feed is cached 5 min, this filter is not) so toggling a category
+        // on/off takes effect on the next page load rather than after the cache expires.
+        $hiddenCats = \App\Models\Category::where('tenant_id', $tenant->id)
+            ->where('active', false)->pluck('name')
+            ->map(fn ($n) => mb_strtolower(trim((string) $n)))
+            ->filter(fn ($n) => $n !== '')->flip();
+        if ($hiddenCats->isNotEmpty()) {
+            $rows = $rows->reject(fn ($p) => $hiddenCats->has(
+                mb_strtolower(trim((string) ($p['Category'] ?? '')))
+            ))->values();
+        }
+
         return response()->json([
             'products' => $rows,
             'branches' => $this->branches($tenant),
@@ -324,6 +338,7 @@ class StorefrontController extends Controller
                 'category_images' => (object) $this->categoryImages($tenant, $rows),
                 'category_groups' => (object) ($tenant->setting('category_groups', []) ?: []),
                 'category_order' => \App\Models\Category::where('tenant_id', $tenant->id)
+                    ->where('active', true)
                     ->orderBy('sort')->orderBy('name')->pluck('name')->all(),
                 'thali' => $this->todayThali($tenant),
                 'vertical' => \App\Support\Vertical::of($tenant),

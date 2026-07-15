@@ -2679,6 +2679,10 @@ class PanelApiController extends Controller
             $this->catOrder($t), fn ($e) => strcasecmp($e, $name) !== 0
         )));
 
+        // Remove the metadata row too (only reached when the category has no products) so it does
+        // not linger in the storefront's category order.
+        try { \App\Models\Category::where('tenant_id', $t->id)->where('name', $name)->delete(); } catch (\Throwable $e) {}
+
         $this->catFlush($t);
         return response()->json(['ok' => true]);
     }
@@ -2691,8 +2695,55 @@ class PanelApiController extends Controller
         if (! is_array($order)) $order = [];
         $order = array_values(array_filter(array_map(fn ($x) => trim((string) $x), $order), fn ($x) => $x !== ''));
         $t->putSetting('category_order', $order);
+        // Mirror the order into categories.sort — the column the storefront actually reads. Without
+        // this the arrow reorder saved only to a setting the storefront ignores.
+        $this->writeCategorySort($t, $order);
         $this->catFlush($t);
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Write an ordered list of category names into categories.sort (0-based). Listed categories take
+     * their position; any category not named keeps its relative order but is pushed below the listed
+     * ones. Missing rows are created so empty categories can still be ordered. Tenant-scoped, fail-soft.
+     */
+    private function writeCategorySort($t, array $order): void
+    {
+        try {
+            $pos = [];
+            foreach (array_values($order) as $i => $name) {
+                $key = mb_strtolower(trim((string) $name));
+                if ($key === '' || isset($pos[$key])) continue;
+                $pos[$key] = count($pos);
+            }
+
+            $existing = [];
+            foreach (\App\Models\Category::where('tenant_id', $t->id)->get() as $c) {
+                $existing[mb_strtolower(trim((string) $c->name))] = true;
+            }
+            foreach ($order as $name) {
+                $name = trim((string) $name);
+                $key  = mb_strtolower($name);
+                if ($key !== '' && ! isset($existing[$key])) {
+                    \App\Models\Category::firstOrCreate(
+                        ['tenant_id' => $t->id, 'name' => $name],
+                        ['active' => true, 'sort' => 0]
+                    );
+                    $existing[$key] = true;
+                }
+            }
+
+            $next = count($pos);
+            foreach (\App\Models\Category::where('tenant_id', $t->id)->get() as $c) {
+                $key  = mb_strtolower(trim((string) $c->name));
+                $sort = $pos[$key] ?? $next++;
+                if ((int) $c->sort !== $sort) {
+                    $c->sort = $sort;
+                    $c->save();
+                }
+            }
+        } catch (\Throwable $e) {
+        }
     }
 
     /** Set display order for one or more products (pin to top / push to bottom / reset). */
