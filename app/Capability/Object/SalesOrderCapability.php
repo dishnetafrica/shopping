@@ -120,11 +120,18 @@ final class SalesOrderCapability implements ObjectCapability
         $dispBalance = $balance > 0 ? round((float) $rc->consolidate([['amount' => $balance, 'currency' => $ocur, 'date' => $odate]])['amount'], 2) : 0.0;
         $needConv = strtoupper($ocur) !== strtoupper($dispCur) && $dispBalance > 0;
         $factor = $needConv ? round($balance / $dispBalance, 6) : 1.0;   // native units per 1 display unit
+        // WHO received the cash — a pick-list of the shop's people so a payment lands in the right
+        // person's cashbook (e.g. Asish took it, not the logged-in operator). Defaults to the operator.
+        $me = trim((string) ($ctx->user->name ?? ''));
+        $members = \App\Models\User::where('tenant_id', $ctx->tenantId())->orderBy('name')->pluck('name')
+            ->map(fn ($n) => trim((string) $n))->filter()->unique()->values()->all();
+        if ($me !== '') { $members = array_values(array_unique(array_merge([$me], $members))); }
+        $comboPeople = 'combo:' . (count($members) ? implode('|', $members) : ($me ?: 'Me'));
         $recordPayment = ! $cancelled ? array_filter([
             'key' => 'record_payment', 'label' => 'Record payment', 'method' => 'POST', 'endpoint' => '/papi/record-payment', 'actor' => 'human', 'tone' => 'default',
-            'schema' => ['amount' => 'money', 'method' => 'enum:cash,mobile_money,bank,cheque', 'note' => 'text'], 'body' => ['order' => (int) $o->id],
-            'labels' => ['amount' => 'Amount (' . $dispCur . ')'],
-            'prefill' => ['amount' => $dispBalance > 0 ? $dispBalance : '', 'method' => 'cash'],
+            'schema' => ['amount' => 'money', 'received_by' => $comboPeople, 'method' => 'enum:cash,mobile_money,bank,cheque', 'note' => 'text'], 'body' => ['order' => (int) $o->id],
+            'labels' => ['amount' => 'Amount (' . $dispCur . ')', 'received_by' => 'Received by (whose cash)'],
+            'prefill' => ['amount' => $dispBalance > 0 ? $dispBalance : '', 'received_by' => $me, 'method' => 'cash'],
             'submitConvert' => $needConv ? ['field' => 'amount', 'factor' => $factor] : null,
         ], fn ($v) => $v !== null) : null;
 

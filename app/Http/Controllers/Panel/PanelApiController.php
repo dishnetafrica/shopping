@@ -3498,6 +3498,19 @@ class PanelApiController extends Controller
         $note   = trim((string) $r->input('note', '')) ?: null;
         $notify = $r->input('notify', '1') !== '0';
 
+        // WHO received the cash. Optional `received_by` (or `holder`) names the person who actually took
+        // the money — so it lands in THEIR cashbook, not the logged-in operator's. Defaults to the
+        // operator when not supplied, so existing callers are unchanged. We resolve the matching user id
+        // for the cash-by-person ledger; created_by always stays the operator (who keyed it in).
+        $actorName    = (string) ($r->user()->name ?? '');
+        $receivedName = trim((string) $r->input('received_by', (string) $r->input('holder', '')));
+        $holderName   = $receivedName !== '' ? $receivedName : $actorName;
+        $holderUserId = $r->user()->id;
+        if ($receivedName !== '' && strcasecmp($receivedName, $actorName) !== 0) {
+            $hu = \App\Models\User::where('tenant_id', $t->id)->whereRaw('lower(name) = ?', [mb_strtolower($receivedName)])->first();
+            $holderUserId = $hu ? $hu->id : null;
+        }
+
         if ($ref === '' || $amount <= 0) {
             return response()->json(['ok' => false, 'error' => 'bad_input'], 422);
         }
@@ -3524,7 +3537,7 @@ class PanelApiController extends Controller
                 'amount'      => $amount,
                 'currency'    => 'UGX',
                 'method'      => $method,
-                'received_by' => (string) ($r->user()->name ?? ''),
+                'received_by' => $holderName,
                 'note'        => $note,
             ]);
         }
@@ -3552,9 +3565,9 @@ class PanelApiController extends Controller
                     'method'         => $method,
                     'reference'      => $note,
                     'receipt_path'   => null,
-                    'holder'         => (string) ($r->user()->name ?? ''),
-                    'holder_user_id' => $r->user()->id,
-                    'created_by'     => (string) ($r->user()->name ?? ''),
+                    'holder'         => $holderName,
+                    'holder_user_id' => $holderUserId,
+                    'created_by'     => $actorName,
                     'cost_note'      => 'Payment from ' . (string) ($order->customer_name ?? '') . ' (' . (string) $order->order_no . ')',
                 ]);
             } catch (\Throwable $e) { /* keep the legacy cashbook payment path working regardless */ }

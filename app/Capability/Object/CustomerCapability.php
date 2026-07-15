@@ -69,11 +69,18 @@ final class CustomerCapability implements ObjectCapability
         $brief = $this->assistant->customerBrief($sig + ['name' => (string) $c->name, 'balance' => $balance, 'endpoint' => $endpoint]);
 
         // --- action specs ---
+        // People pick-list so a payment is credited to whoever actually received it (their cashbook).
+        $meName = trim((string) ($ctx->user->name ?? ''));
+        $people = \App\Models\User::where('tenant_id', $ctx->tenantId())->orderBy('name')->pluck('name')
+            ->map(fn ($n) => trim((string) $n))->filter()->unique()->values()->all();
+        if ($meName !== '') { $people = array_values(array_unique(array_merge([$meName], $people))); }
+        $comboPeople = 'combo:' . (count($people) ? implode('|', $people) : ($meName ?: 'Me'));
         $payAction = [
             'key' => 'record_payment', 'label' => 'Record payment', 'method' => 'POST',
             'endpoint' => $endpoint . '/record_payment', 'actor' => 'human', 'tone' => 'primary',
-            'schema' => ['amount' => 'money', 'currency' => 'enum:' . $cur . ',USD,UGX,SSP,KES', 'method' => 'enum:cash,mobile_money,bank,cheque', 'reference' => 'text'],
-            'prefill' => ['customer_id' => (int) $c->id, 'currency' => $cur, 'method' => 'cash'],
+            'schema' => ['amount' => 'money', 'currency' => 'enum:' . $cur . ',USD,UGX,SSP,KES', 'received_by' => $comboPeople, 'method' => 'enum:cash,mobile_money,bank,cheque', 'reference' => 'text'],
+            'labels' => ['received_by' => 'Received by (whose cash)'],
+            'prefill' => ['customer_id' => (int) $c->id, 'currency' => $cur, 'received_by' => $meName, 'method' => 'cash'],
         ];
         $logCall = ['key' => 'log_contact', 'label' => 'Log a call', 'method' => 'POST', 'endpoint' => $endpoint . '/log_contact', 'actor' => 'human', 'tone' => 'default'];
         $logWa = ['key' => 'log_whatsapp', 'label' => 'Log WhatsApp', 'method' => 'POST', 'endpoint' => $endpoint . '/log_whatsapp', 'actor' => 'human', 'tone' => 'default'];
@@ -381,6 +388,16 @@ final class CustomerCapability implements ObjectCapability
         $rate = $fx->ratePerUsd($cur);
         $usd = $fx->toUsd($amount, $cur);
 
+        // WHO received the cash — defaults to the operator; lands in that person's cashbook.
+        $actorName = (string) ($ctx->user->name ?? 'Owner');
+        $recv = trim((string) ($in['received_by'] ?? ''));
+        $holder = $recv !== '' ? $recv : $actorName;
+        $holderId = (int) $ctx->user->id;
+        if ($recv !== '' && strcasecmp($recv, $actorName) !== 0) {
+            $hu = \App\Models\User::where('tenant_id', $ctx->tenantId())->whereRaw('lower(name) = ?', [mb_strtolower($recv)])->first();
+            $holderId = $hu ? (int) $hu->id : 0;
+        }
+
         return app(PaymentService::class)->record($ctx->tenant, [
             'customer' => (string) $c->name,
             'phone' => (string) $c->phone,
@@ -393,9 +410,9 @@ final class CustomerCapability implements ObjectCapability
             'usd' => $usd,
             'method' => (string) ($in['method'] ?? 'cash'),
             'reference' => $in['reference'] ?? null,
-            'holder' => (string) ($ctx->user->name ?? 'Owner'),
-            'holder_user_id' => (int) $ctx->user->id,
-            'created_by' => (string) ($ctx->user->name ?? 'Owner'),
+            'holder' => $holder,
+            'holder_user_id' => $holderId,
+            'created_by' => $actorName,
         ]);
     }
 }

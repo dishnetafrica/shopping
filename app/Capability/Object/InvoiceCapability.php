@@ -60,11 +60,18 @@ final class InvoiceCapability implements ObjectCapability
             ->where('invoice_no', $i->invoice_no)->orderByDesc('created_at')->limit(50)->get();
 
         // --- actions ---
+        // People pick-list so a payment is credited to whoever actually received it (their cashbook).
+        $meName = trim((string) ($ctx->user->name ?? ''));
+        $people = \App\Models\User::where('tenant_id', $ctx->tenantId())->orderBy('name')->pluck('name')
+            ->map(fn ($n) => trim((string) $n))->filter()->unique()->values()->all();
+        if ($meName !== '') { $people = array_values(array_unique(array_merge([$meName], $people))); }
+        $comboPeople = 'combo:' . (count($people) ? implode('|', $people) : ($meName ?: 'Me'));
         $recordPay = [
             'key' => 'record_payment', 'label' => 'Record payment', 'method' => 'POST', 'endpoint' => $ep . '/record_payment',
             'actor' => 'human', 'tone' => 'primary',
-            'schema' => ['amount' => 'money', 'method' => 'enum:cash,mobile_money,bank,cheque', 'reference' => 'text'],
-            'prefill' => ['id' => (int) $i->id, 'amount' => round($balance, 2), 'method' => 'cash'],
+            'schema' => ['amount' => 'money', 'received_by' => $comboPeople, 'method' => 'enum:cash,mobile_money,bank,cheque', 'reference' => 'text'],
+            'labels' => ['received_by' => 'Received by (whose cash)'],
+            'prefill' => ['id' => (int) $i->id, 'amount' => round($balance, 2), 'received_by' => $meName, 'method' => 'cash'],
         ];
         $isVoid = strtolower((string) $i->status) === 'void';
         // Real WhatsApp send via the panel's proven endpoint (replaces the old no-op "Send reminder" stub).
@@ -225,6 +232,15 @@ final class InvoiceCapability implements ObjectCapability
         if ($amount <= 0) {
             return ['ok' => false, 'error' => 'bad_amount', 'message' => 'Enter an amount greater than zero.'];
         }
+        // WHO received the cash — defaults to the operator; lands in that person's cashbook.
+        $actorName = (string) ($ctx->user->name ?? 'Owner');
+        $recv = trim((string) ($in['received_by'] ?? ''));
+        $holder = $recv !== '' ? $recv : $actorName;
+        $holderId = (int) $ctx->user->id;
+        if ($recv !== '' && strcasecmp($recv, $actorName) !== 0) {
+            $hu = \App\Models\User::where('tenant_id', $ctx->tenantId())->whereRaw('lower(name) = ?', [mb_strtolower($recv)])->first();
+            $holderId = $hu ? (int) $hu->id : 0;
+        }
         $fx = Fx::forTenant($ctx->tenant);
 
         $res = app(PaymentService::class)->record($ctx->tenant, [
@@ -238,9 +254,9 @@ final class InvoiceCapability implements ObjectCapability
             'usd' => $fx->toUsd($amount, $cur),
             'method' => (string) ($in['method'] ?? 'cash'),
             'reference' => $in['reference'] ?? null,
-            'holder' => (string) ($ctx->user->name ?? 'Owner'),
-            'holder_user_id' => (int) $ctx->user->id,
-            'created_by' => (string) ($ctx->user->name ?? 'Owner'),
+            'holder' => $holder,
+            'holder_user_id' => $holderId,
+            'created_by' => $actorName,
         ]);
 
         if (is_array($res) && array_key_exists('ok', $res)) {
