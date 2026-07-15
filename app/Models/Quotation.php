@@ -17,7 +17,7 @@ class Quotation extends Model
         'tenant_id', 'quote_no', 'public_token', 'customer_name', 'customer_phone',
         'delivery_address', 'remarks', 'currency',
         'total', 'status', 'source', 'valid_until', 'pdf_path', 'order_id', 'sales_exec_id',
-        'send_count', 'last_sent_at', 'viewed_at', 'accepted_at', 'meta',
+        'current_rev', 'send_count', 'last_sent_at', 'viewed_at', 'accepted_at', 'meta',
     ];
 
     protected $casts = [
@@ -46,6 +46,11 @@ class Quotation extends Model
     public function items(): HasMany
     {
         return $this->hasMany(QuotationItem::class);
+    }
+
+    public function revisions(): HasMany
+    {
+        return $this->hasMany(QuotationRevision::class);
     }
 
     public function order(): BelongsTo

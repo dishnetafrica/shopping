@@ -510,6 +510,7 @@ Route::middleware('web')->group(function () use ($qToken) {
     Route::get('/q/{token}/pdf',     [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'pdf'])->where('token', $qToken);
     Route::post('/q/{token}/share',  [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'share'])->where('token', $qToken);
     Route::post('/q/{token}/approve',[\App\Http\Controllers\Storefront\QuotationPortalController::class, 'approve'])->where('token', $qToken);
+    Route::post('/q/{token}/revise', [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'revise'])->where('token', $qToken);
     Route::post('/event',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'recordEvent']);
     Route::post('/auth/request',   [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'request']);
     Route::post('/auth/verify',    [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'verify']);
@@ -523,6 +524,14 @@ Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::get('/{shop}/shop',      [\App\Http\Controllers\Storefront\StorefrontController::class, 'show'])->where('shop', $shopSlug);
     Route::get('/{shop}/catalogue', [\App\Http\Controllers\Storefront\StorefrontController::class, 'catalogue'])->where('shop', $shopSlug);
     Route::post('/{shop}/order',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'placeOrder'])->where('shop', $shopSlug);
+    // Quotation-first flow (platform slug variants).
+    Route::post('/{shop}/quote',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'requestQuote'])->where('shop', $shopSlug);
+    Route::get('/{shop}/q/{token}',         [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'show'])->where('shop', $shopSlug)->where('token', $qToken);
+    Route::get('/{shop}/q/{token}/data',    [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'data'])->where('shop', $shopSlug)->where('token', $qToken);
+    Route::get('/{shop}/q/{token}/pdf',     [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'pdf'])->where('shop', $shopSlug)->where('token', $qToken);
+    Route::post('/{shop}/q/{token}/share',  [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'share'])->where('shop', $shopSlug)->where('token', $qToken);
+    Route::post('/{shop}/q/{token}/approve',[\App\Http\Controllers\Storefront\QuotationPortalController::class, 'approve'])->where('shop', $shopSlug)->where('token', $qToken);
+    Route::post('/{shop}/q/{token}/revise', [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'revise'])->where('shop', $shopSlug)->where('token', $qToken);
     Route::post('/{shop}/event',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'recordEvent'])->where('shop', $shopSlug);
     Route::post('/{shop}/auth/request', [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'request'])->where('shop', $shopSlug);
     Route::post('/{shop}/auth/verify',  [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'verify'])->where('shop', $shopSlug);

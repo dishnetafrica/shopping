@@ -66,6 +66,8 @@ class QuotationPortalController extends Controller
             'currency'  => (string) $q->currency,
             'dataUrl'   => url(rtrim($base, '/') . '/q/' . $q->public_token . '/data'),
             'pdfUrl'    => url(rtrim($base, '/') . '/q/' . $q->public_token . '/pdf'),
+            'reviseUrl' => url(rtrim($base, '/') . '/q/' . $q->public_token . '/revise'),
+            'catalogueUrl' => url(rtrim($base, '/') . '/catalogue'),
             'shopUrl'   => url(rtrim($base, '/') . '/shop'),
             'waNumber'  => preg_replace('/[^0-9]/', '', (string) ($tenant->whatsapp_number ?? '')),
         ];
@@ -115,6 +117,20 @@ class QuotationPortalController extends Controller
             ['label' => 'Sales Order',       'at' => null, 'done' => $q->status === 'converted'],
         ];
 
+        // Revision ledger (immutable history) — most recent first, with the "what changed" diffs.
+        $revs = $q->revisions()->orderByDesc('rev_no')->get()->map(function ($r) {
+            return [
+                'rev_no'     => (int) $r->rev_no,
+                'actor_type' => (string) $r->actor_type,
+                'actor_name' => (string) ($r->actor_name ?? ''),
+                'at'         => optional($r->created_at)->toIso8601String(),
+                'subtotal'   => (float) $r->subtotal,
+                'grand'      => (float) $r->grand_total,
+                'changes'    => is_array($r->change_summary) ? $r->change_summary : [],
+            ];
+        })->values();
+        $latestChanges = $revs->count() ? ($revs->first()['changes'] ?? []) : [];
+
         return response()->json([
             'ok'           => true,
             'quote_no'     => (string) $q->quote_no,
@@ -124,7 +140,10 @@ class QuotationPortalController extends Controller
             'valid_until'  => optional($q->valid_until)->toDateString(),
             'is_open'      => $q->isOpen(),
             'is_converted' => $q->isConverted(),
-            'revision'     => 1, // becomes dynamic when the revision engine (Q3) lands
+            'editable'     => $q->isOpen() && ! $q->isConverted(),
+            'revision'     => (int) ($q->current_rev ?: 1),
+            'revisions'    => $revs,
+            'latest_changes' => $latestChanges,
             'sales_rep'    => $rep,
             'customer'     => [
                 'name'    => (string) $q->customer_name,
@@ -264,6 +283,67 @@ class QuotationPortalController extends Controller
         }
     }
 
+    /**
+     * Customer edits the quotation → a NEW immutable revision (qty / add / remove / request).
+     * Delegates to QuotationReviseService (which reprices via the frozen QuotationService, so the
+     * PDF, portal and WhatsApp stay in sync) and notifies the sales team best-effort.
+     */
+    public function revise(Request $r, ?string $shop = null, string $token = '')
+    {
+        [$tenant, $base, $q] = $this->resolve($shop, $token);
+
+        if (! $q->isOpen() || $q->isConverted()) {
+            return response()->json(['ok' => false, 'error' => 'This quotation is locked and can no longer be edited.'], 409);
+        }
+
+        // Whitelist the ops a CUSTOMER may perform (never price/discount/remarks — those are sales-only).
+        $ops = [];
+        foreach ((array) $r->input('ops', []) as $op) {
+            $type = (string) ($op['op'] ?? '');
+            if (! in_array($type, ['qty', 'remove', 'add', 'request'], true)) {
+                continue;
+            }
+            $ops[] = [
+                'op'   => $type,
+                'name' => trim((string) ($op['name'] ?? '')),
+                'qty'  => (int) ($op['qty'] ?? 0),
+                'text' => (string) ($op['text'] ?? ''),
+            ];
+        }
+        $comment = trim((string) $r->input('comment', '')) ?: null;
+
+        if (! $ops && ! $comment) {
+            return response()->json(['ok' => false, 'error' => 'No changes to apply.'], 422);
+        }
+
+        $res = app(\App\Services\Sales\QuotationReviseService::class)
+            ->applyCustomerChange($tenant, $q, $ops, $comment);
+
+        if (! ($res['ok'] ?? false)) {
+            return response()->json(['ok' => false, 'error' => (string) ($res['error'] ?? 'Could not update the quotation.')], 422);
+        }
+
+        // Notify sales that the customer revised the quotation (best-effort WhatsApp to the shop line).
+        try {
+            $salesPhone = preg_replace('/[^0-9]/', '', (string) ($tenant->whatsapp_number ?? ''));
+            if ($salesPhone !== '') {
+                $portal = url(rtrim($base, '/') . '/q/' . $q->public_token);
+                $gw = app(WhatsAppManager::class)->forTenant($tenant);
+                $gw->sendText($tenant->whatsapp_instance, $salesPhone,
+                    "✏️ Quotation {$q->quote_no} was updated by the customer (Revision {$res['revision']}).\nNew total: {$q->currency} " . number_format((float) $res['total']) . "\nReview: {$portal}");
+            }
+        } catch (\Throwable $e) {
+            // best-effort
+        }
+
+        return response()->json([
+            'ok'       => true,
+            'revision' => (int) $res['revision'],
+            'total'    => (float) $res['total'],
+            'currency' => (string) $res['currency'],
+        ]);
+    }
+
     /** PDF bytes for sharing — stored file if present, else regenerate via the frozen renderer. */
     private function pdfBytes(Tenant $tenant, Quotation $q): string
     {
@@ -288,12 +368,14 @@ class QuotationPortalController extends Controller
     private function statusLabel(string $status): string
     {
         return [
-            'sent'       => 'Awaiting your review',
-            'accepted'   => 'Approved',
-            'converted'  => 'Approved — Sales Order created',
-            'declined'   => 'Declined',
-            'expired'    => 'Expired',
-            'draft'      => 'Draft',
+            'sent'             => 'Awaiting your review',
+            'customer_revised' => 'Updated by you — sent to sales',
+            'revised'          => 'Updated by sales — please review',
+            'accepted'         => 'Approved',
+            'converted'        => 'Approved — Sales Order created',
+            'declined'         => 'Declined',
+            'expired'          => 'Expired',
+            'draft'            => 'Draft',
         ][$status] ?? ucfirst($status);
     }
 

@@ -70,6 +70,33 @@
   .msheet h3{margin:0 0 4px;font-size:16px} .msheet p{margin:0 0 14px;font-size:13px;color:var(--muted)}
   .msheet input{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:14px;margin-bottom:12px;outline:none}
   .msheet input:focus{border-color:var(--green)}
+  /* edit mode */
+  .editnote{font-size:12.5px;color:var(--muted);padding:2px 18px 8px}
+  .qstep{display:inline-flex;align-items:center;border:1px solid var(--green);border-radius:9px;overflow:hidden;height:34px}
+  .qstep button{border:0;background:#F1F9F4;color:var(--green-d);width:30px;height:100%;font-size:17px;font-weight:800;cursor:pointer}
+  .qstep input{width:44px;height:100%;border:0;border-left:1px solid var(--line);border-right:1px solid var(--line);text-align:center;font-weight:800;font-size:14px;outline:none;-moz-appearance:textfield}
+  .qstep input::-webkit-outer-spin-button,.qstep input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .qrm{border:0;background:none;color:var(--red);font-size:12.5px;font-weight:700;cursor:pointer;padding:6px 4px;margin-top:4px}
+  .editbar{padding:12px 18px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .editbar .add{border:1px dashed var(--green);background:#F6FBF7;color:var(--green-d);font-weight:800;border-radius:10px;padding:10px 14px;cursor:pointer}
+  .addbox{padding:0 18px 14px}
+  .addbox input{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:14px;outline:none}
+  .addbox input:focus{border-color:var(--green)}
+  .addres{max-height:230px;overflow:auto;margin-top:8px;border:1px solid var(--line);border-radius:10px}
+  .ares{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+  .ares:last-child{border-bottom:0}.ares:hover{background:#F6FBF7}
+  .ares .an{font-size:13.5px;font-weight:700}.ares .ap{font-size:12.5px;color:var(--muted);font-weight:700;white-space:nowrap}
+  .cmtbox{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;outline:none;font-family:inherit}
+  .cmtbox:focus{border-color:var(--green)}
+  .chgcard .hd{border-color:#CDE9D4}
+  .chg{padding:10px 18px 16px}
+  .chgrow{display:flex;gap:9px;align-items:flex-start;padding:5px 0;font-size:13.5px}
+  .chgrow .ci{flex:none;color:var(--green-d);font-weight:900;width:16px;text-align:center}
+  .chgrow b{font-weight:800}
+  .revrow{display:flex;justify-content:space-between;gap:10px;padding:11px 18px;border-bottom:1px solid var(--line);font-size:13px}
+  .revrow:last-child{border-bottom:0}
+  .revrow .rl{font-weight:700}.revrow .rm{color:var(--muted);font-size:12px;margin-top:1px}
+  .revrow .rg{font-weight:800;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -91,6 +118,7 @@
 <script>
 var CFG = __QUOTE_CONFIG__;
 var Q = null;
+var EDIT=false, WORK=null, CAT=null, ADDQ='';
 function $(id){return document.getElementById(id);}
 function money(n){ n=Number(n)||0; var cur=String((Q&&Q.currency)||CFG.currency||'UGX').toUpperCase();
   var zero=['UGX','KES','TZS','RWF','BIF','SSP','JPY','KRW','VND','XAF','XOF','GNF','MGA','CLP','PYG','ISK','KMF','XPF'];
@@ -108,37 +136,100 @@ function load(){
   }).catch(function(){ $('wrap').innerHTML='<div class="err">Sorry, we couldn’t load this quotation.<br>Please check the link or contact us on WhatsApp.</div>'; });
 }
 
+function chgIcon(t){return t==='add'?'＋':(t==='remove'?'✕':(t==='price'?'₵':(t==='discount'?'%':(t==='comment'||t==='request'||t==='remarks'?'✎':'✓'))));}
+function chgText(c){
+  if(c.type==='qty') return '<b>'+esc(c.name)+'</b> quantity: '+c.from+' → <b>'+c.to+'</b>';
+  if(c.type==='add') return '<b>'+esc(c.name)+'</b> added ('+c.qty+')';
+  if(c.type==='remove') return '<b>'+esc(c.name)+'</b> removed';
+  if(c.type==='price') return '<b>'+esc(c.name)+'</b> price: '+money(c.from)+' → <b>'+money(c.to)+'</b>';
+  if(c.type==='discount') return '<b>'+esc(c.name)+'</b> discount → <b>'+c.to+'%</b>';
+  if(c.type==='remarks') return 'Remarks updated';
+  if(c.type==='comment'||c.type==='request') return (c.by==='customer'?'You':'Sales')+': "'+esc(c.text||'')+'"';
+  return esc(c.type||'Updated');
+}
+
 function render(){
   var badge='<span class="badge '+esc(Q.status)+'">'+esc(Q.status_label||Q.status)+'</span>';
   var logo=CFG.logo?('<img alt="" src="'+esc(CFG.logo)+'">'):esc((CFG.company||'FS').slice(0,2).toUpperCase());
-  var itemsHtml=(Q.items||[]).map(function(it){
-    var sub=[it.brand,it.variant,it.unit].filter(Boolean).join(' · ');
-    var th=it.image?('<img alt="" src="'+esc(it.image)+'">'):'<span class="ph">📦</span>';
-    return '<div class="it"><div class="th">'+th+'</div>'
-      +'<div><div class="nm">'+esc(it.name)+'</div>'+(sub?('<div class="sub">'+esc(sub)+'</div>'):'')+'</div>'
-      +'<div class="rt"><div class="lt">'+money(it.line_total)+'</div><div class="qp">'+it.qty+' × '+money(it.unit_price)+'</div></div></div>';
-  }).join('');
+  var cust=Q.customer||{};
+  var editable=!!Q.editable;
+
+  // --- Items (read-only, or editable when in edit mode) ---
+  var itemsHtml;
+  if(EDIT){
+    itemsHtml=(WORK||[]).map(function(it,i){
+      if(it.qty<=0 && !it._added) return ''; // removed originals hidden
+      var th=it.image?('<img alt="" src="'+esc(it.image)+'">'):'<span class="ph">📦</span>';
+      return '<div class="it"><div class="th">'+th+'</div>'
+        +'<div><div class="nm">'+esc(it.name)+'</div><div class="sub">'+money(it.unit_price)+' each</div>'
+          +'<button class="qrm" onclick="rmEdit('+i+')">Remove</button></div>'
+        +'<div class="rt"><div class="qstep"><button onclick="stepEdit('+i+',-1)">−</button>'
+          +'<input type="number" min="0" value="'+(it.qty||0)+'" onchange="setEditQty('+i+',this.value)"><button onclick="stepEdit('+i+',1)">+</button></div></div></div>';
+    }).join('');
+  } else {
+    itemsHtml=(Q.items||[]).map(function(it){
+      var sub=[it.brand,it.variant,it.unit].filter(Boolean).join(' · ');
+      var th=it.image?('<img alt="" src="'+esc(it.image)+'">'):'<span class="ph">📦</span>';
+      return '<div class="it"><div class="th">'+th+'</div>'
+        +'<div><div class="nm">'+esc(it.name)+'</div>'+(sub?('<div class="sub">'+esc(sub)+'</div>'):'')+'</div>'
+        +'<div class="rt"><div class="lt">'+money(it.line_total)+'</div><div class="qp">'+it.qty+' × '+money(it.unit_price)+'</div></div></div>';
+    }).join('');
+  }
+
   var t=Q.totals||{};
   var totRows='<div class="tr"><span class="l">Subtotal</span><span>'+money(t.subtotal)+'</span></div>';
+  var adj=(Number(t.grand)||0)-(Number(t.subtotal)||0);
   if(t.discount>0) totRows+='<div class="tr"><span class="l">Discount</span><span>-'+money(t.discount)+'</span></div>';
-  if(t.tax>0) totRows+='<div class="tr"><span class="l">Tax</span><span>'+money(t.tax)+'</span></div>';
-  if(t.freight>0) totRows+='<div class="tr"><span class="l">Freight</span><span>'+money(t.freight)+'</span></div>';
+  else if(adj<0) totRows+='<div class="tr"><span class="l">Discount / adjustments</span><span>'+money(adj)+'</span></div>';
+  else if(adj>0) totRows+='<div class="tr"><span class="l">Taxes / freight</span><span>+'+money(adj)+'</span></div>';
   totRows+='<div class="tr grand"><span>Grand Total</span><span>'+money(t.grand)+'</span></div>';
+
+  // --- Edit controls (add products + comment + submit) ---
+  var editUI='';
+  if(EDIT){
+    var addUI = ADDQ===null ? '' :
+      '<div class="addbox"><input id="addSearch" placeholder="Search products to add…" value="'+esc(ADDQ)+'" oninput="onAddSearch(this.value)">'
+      + '<div class="addres" id="addRes">'+addResults()+'</div></div>';
+    editUI='<div class="editbar"><button class="add" onclick="toggleAdd()">'+ (ADDQ===null?'+ Add products':'Close') +'</button>'
+      + '<span class="rm" style="color:var(--muted);font-size:12.5px">Change quantities, remove or add lines, then send to sales.</span></div>'
+      + addUI
+      + '<div class="addbox"><textarea class="cmtbox" id="editComment" rows="2" placeholder="Add a note or request a price review (optional)"></textarea></div>'
+      + '<div class="editbar" style="border-top:0;padding-top:0"><button class="btn ghost" style="flex:1" onclick="cancelEdit()">Cancel</button>'
+      + '<button class="btn primary" style="flex:2" id="sendEditsBtn" onclick="submitEdits()">Send changes to sales</button></div>';
+  }
+
+  // --- "What changed" card (visual diff of the latest revision) ---
+  var changesCard='';
+  if((Q.revision||1)>1 && (Q.latest_changes||[]).length){
+    changesCard='<div class="card chgcard"><div class="hd"><div class="t">Revision '+Q.revision+' · what changed</div></div><div class="chg">'
+      + Q.latest_changes.map(function(c){return '<div class="chgrow"><span class="ci">'+chgIcon(c.type)+'</span><span>'+chgText(c)+'</span></div>';}).join('')
+      + '</div></div>';
+  }
+
+  // --- Revision history ---
+  var revsCard='';
+  if((Q.revisions||[]).length>1){
+    revsCard='<div class="card"><div class="hd"><div class="t">Revision history</div></div>'
+      + Q.revisions.map(function(r){
+          var who=r.actor_type==='customer'?'You':(r.actor_type==='sales'?(r.actor_name||'Sales'):'Original');
+          var n=(r.changes||[]).length;
+          return '<div class="revrow"><div><div class="rl">Revision '+r.rev_no+'</div><div class="rm">'+who+' · '+ftime(r.at)+(n?(' · '+n+' change'+(n===1?'':'s')):'')+'</div></div><div class="rg">'+money(r.grand)+'</div></div>';
+        }).join('')
+      + '</div>';
+  }
 
   var tl=(Q.timeline||[]).map(function(s){
     return '<div class="tlrow'+(s.done?' done':'')+'"><div class="dot"></div><div><div class="tt">'+esc(s.label)+'</div>'+(s.at?('<div class="ta">'+ftime(s.at)+'</div>'):'')+'</div></div>';
   }).join('');
+  var respHint = Q.status==='converted' ? 'Approved' : ((Q.status==='sent'||Q.status==='customer_revised') ? 'Our sales team typically responds within a few hours' : '');
 
-  var respHint = Q.status==='converted' ? 'Approved' : (Q.status==='sent' ? 'Our sales team typically responds within a few hours' : '');
-  var cust=Q.customer||{};
-
-  var locked = !Q.is_open || Q.is_converted;
   var approveBtn = Q.is_converted
     ? '<button class="btn primary" disabled>✓ Approved — Order '+esc(Q.order_no||'')+'</button>'
     : '<button class="btn primary" id="approveBtn" onclick="approve()">✓ Approve Quotation</button>';
 
   $('wrap').innerHTML =
     '<div class="top"><div class="lg">'+logo+'</div><div><div class="co">'+esc(CFG.company||'')+'</div><div class="qn">Quotation '+esc(Q.quote_no)+'</div></div></div>'
+    + changesCard
     + '<div class="card"><div class="hd"><div class="t">Quotation '+esc(Q.quote_no)+'</div>'+badge+'</div>'
       + '<div class="meta">'
         + m('Valid Until', fdate(Q.valid_until))
@@ -148,24 +239,73 @@ function render(){
         + m('Deliver To', esc(cust.address||'To be confirmed'))
         + m('For', esc(cust.name||''))
       + '</div></div>'
-    + '<div class="card"><div class="hd"><div class="t">Items</div><div class="qn">'+(Q.items||[]).length+' line'+((Q.items||[]).length===1?'':'s')+'</div></div>'
+    + '<div class="card"><div class="hd"><div class="t">Items</div>'
+        + (EDIT?'<div class="qn">Editing…</div>':(editable?'<button class="btn ghost" style="padding:8px 14px;min-width:0;flex:0" onclick="startEdit()">✎ Edit</button>':'<div class="qn">'+(Q.items||[]).length+' lines</div>'))
+      + '</div>'
       + '<div class="items">'+itemsHtml+'</div>'
-      + '<div class="tot">'+totRows+'</div></div>'
+      + editUI
+      + (EDIT?'':'<div class="tot">'+totRows+'</div>')+'</div>'
     + (Q.remarks?('<div class="card"><div class="remarks"><div class="k">Remarks</div>'+esc(Q.remarks)+'</div></div>'):'')
+    + revsCard
     + '<div class="card"><div class="hd"><div class="t">Timeline</div>'+(respHint?('<div class="qn">'+esc(respHint)+'</div>'):'')+'</div><div class="tl">'+tl+'</div></div>'
-    + '<div class="actions"><div class="btnrow">'
+    + (EDIT?'':('<div class="actions"><div class="btnrow">'
       + '<a class="btn ghost" href="'+esc(Q.pdf_url||CFG.pdfUrl)+'" target="_blank" rel="noopener">⬇ Download PDF</a>'
       + '<button class="btn ghost" onclick="window.print()">🖨 Print</button>'
       + '<button class="btn wa" onclick="openShare(\'whatsapp\')">Share on WhatsApp</button>'
       + '<button class="btn ghost" onclick="openShare(\'email\')">Share by Email</button>'
       + '</div><div class="btnrow" style="margin-top:10px">'
-      + (locked?'':'<button class="btn ghost" onclick="requestChanges()">✎ Request Changes</button>')
+      + (editable?'<button class="btn ghost" onclick="startEdit()">✎ Edit Quotation</button>':'')
       + approveBtn
       + '</div>'
       + '<div class="hint"><a href="'+esc(Q.shop_url||CFG.shopUrl)+'">← Continue shopping</a></div>'
-      + '</div>';
+      + '</div>'));
 }
 function m(k,v){return '<div class="m"><div class="k">'+k+'</div><div class="v">'+(v||'—')+'</div></div>';}
+
+/* ---- Customer editing (Q2): builds ops and sends ONE revision ---- */
+function startEdit(){ EDIT=true; ADDQ=null; WORK=(Q.items||[]).map(function(it){return {name:it.name,qty:it.qty,unit_price:it.unit_price,image:it.image,unit:it.unit,_orig:it.qty};}); render(); scrollTo(0,0); }
+function cancelEdit(){ EDIT=false; WORK=null; ADDQ=null; render(); }
+function stepEdit(i,d){ WORK[i].qty=Math.max(0,(WORK[i].qty||0)+d); render(); }
+function setEditQty(i,v){ WORK[i].qty=Math.max(0,parseInt(v,10)||0); render(); }
+function rmEdit(i){ WORK[i].qty=0; if(WORK[i]._added){WORK.splice(i,1);} render(); }
+function toggleAdd(){ if(ADDQ===null){ ADDQ=''; if(!CAT){fetchCat();} } else { ADDQ=null; } render(); }
+function fetchCat(){ fetch(CFG.catalogueUrl,{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
+    CAT=((d&&d.products)||[]).map(function(p){return {name:String(p['Product Name']||p.name||''),price:Number(p.Price_UGX||p.price||0),image:String(p.Image||p.image||''),unit:String(p.Unit||'')};}).filter(function(p){return p.name&&p.price>0;});
+    if(EDIT&&ADDQ!==null){var el=$('addRes'); if(el)el.innerHTML=addResults();}
+  }).catch(function(){CAT=[];}); }
+function onAddSearch(v){ ADDQ=v; var el=$('addRes'); if(el)el.innerHTML=addResults(); }
+function addResults(){
+  if(CAT===null) return '<div class="ares"><span class="an" style="color:var(--muted)">Loading products…</span></div>';
+  var q=(ADDQ||'').toLowerCase().trim(); if(!q) return '<div class="ares"><span class="an" style="color:var(--muted)">Type to search your catalogue</span></div>';
+  var res=CAT.filter(function(p){return p.name.toLowerCase().indexOf(q)>=0;}).slice(0,20);
+  if(!res.length) return '<div class="ares"><span class="an" style="color:var(--muted)">No products match “'+esc(ADDQ)+'”</span></div>';
+  return res.map(function(p){return '<div class="ares" onclick="addPick('+JSON.stringify(p.name).replace(/"/g,'&quot;')+')"><span class="an">'+esc(p.name)+'</span><span class="ap">'+money(p.price)+' · Add</span></div>';}).join('');
+}
+function addPick(name){
+  var p=(CAT||[]).filter(function(x){return x.name===name;})[0]; if(!p)return;
+  var ex=(WORK||[]).filter(function(w){return w.name===name;})[0];
+  if(ex){ ex.qty=(ex.qty||0)+1; if(ex._orig!=null && ex.qty<=0) ex.qty=1; }
+  else { WORK.push({name:p.name,qty:1,unit_price:p.price,image:p.image,unit:p.unit,_added:true}); }
+  toast(esc(name)+' added','ok'); render();
+}
+function buildOps(){
+  var ops=[], orig={}; (Q.items||[]).forEach(function(it){orig[it.name]=it.qty;});
+  (WORK||[]).forEach(function(w){
+    if(w._added){ if(w.qty>0) ops.push({op:'add',name:w.name,qty:w.qty}); }
+    else { var o=orig[w.name]; if(w.qty<=0) ops.push({op:'remove',name:w.name}); else if(w.qty!==o) ops.push({op:'qty',name:w.name,qty:w.qty}); }
+  });
+  return ops;
+}
+function submitEdits(){
+  var ops=buildOps(), comment=($('editComment')&&$('editComment').value||'').trim();
+  if(!ops.length && !comment){ toast('No changes to send','err'); return; }
+  var b=$('sendEditsBtn'); if(b){b.disabled=true;b.textContent='Sending…';}
+  fetch(CFG.reviseUrl,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({ops:ops,comment:comment})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d&&d.ok){ EDIT=false;WORK=null;ADDQ=null; toast('Quotation updated — Revision '+d.revision,'ok'); load(); }
+      else{ toast(d&&d.error?d.error:'Could not update the quotation','err'); if(b){b.disabled=false;b.textContent='Send changes to sales';} }
+    }).catch(function(){ toast('Network error — please try again','err'); if(b){b.disabled=false;b.textContent='Send changes to sales';} });
+}
 
 function approve(){
   var b=$('approveBtn'); if(b){b.disabled=true;b.textContent='Approving…';}
