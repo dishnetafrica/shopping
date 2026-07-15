@@ -2218,6 +2218,9 @@ class PanelApiController extends Controller
             'replace' => $replace, 'existing' => $existing,
             'archived' => ($apply && $replace) ? $archived : ($replace ? $existing : 0),
             'categories' => count($catsSeen),
+            'message' => ($apply ? 'Imported ' : 'Preview: ') . $created . ' product(s)'
+                . ($dup ? (', ' . $dup . ' duplicate(s) skipped') : '')
+                . ($noImg ? (', ' . $noImg . ' without a photo') : '') . '.',
         ]);
     }
 
@@ -2308,6 +2311,8 @@ class PanelApiController extends Controller
             'replace' => $replace, 'existing' => $existing,
             'archived' => ($apply && $replace) ? $archived : ($replace ? $existing : 0),
             'categories' => count($catsSeen), 'mode' => 'csv',
+            'message' => ($apply ? 'Imported ' : 'Preview: ') . $created . ' product(s) from CSV'
+                . ($dup ? (', ' . $dup . ' duplicate(s) skipped') : '') . '.',
         ]);
     }
 

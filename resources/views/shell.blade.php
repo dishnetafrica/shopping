@@ -1094,6 +1094,11 @@ function formModal(a){
         '<input type="file" accept="image/*" id="file_'+k+'" style="display:none" onchange="uploadPhoto(\''+k+'\')">'+
         '<button type="button" class="btn sm" onclick="document.getElementById(\'file_'+k+'\').click()">'+icon('doc','ic-sm')+'Choose photo</button>'+
         '<span class="mut" id="up_'+k+'" style="font-size:12px"></span></div></div></div>'; }
+    else if(type==='file' || String(type).startsWith('file:')){
+      const acc=String(type).startsWith('file:')?String(type).slice(5):'';
+      fields+='<div class="fld"><label>'+lbl+'</label><input type="hidden" id="f_'+k+'" value="">'+
+        '<input type="file" '+(acc?('accept="'+esc(acc)+'"'):'')+' id="upl_'+k+'" onchange="uploadFileField(\''+k+'\')" style="font:inherit;font-size:13px">'+
+        '<span class="mut" id="upls_'+k+'" style="font-size:12px;display:block;margin-top:5px"></span></div>'; }
     else if(String(type).startsWith('enum:')){ const opts=String(type).slice(5).split(',');
       fields+='<div class="fld"><label>'+lbl+'</label><select id="f_'+k+'">'+opts.map(o=>'<option'+(o===val?' selected':'')+'>'+esc(o)+'</option>').join('')+'</select></div>'; }
     else if(String(type).startsWith('combo:')){ const opts=String(type).slice(6).split('|').filter(Boolean);
@@ -1204,6 +1209,17 @@ async function uploadPhoto(k){
       else { if(st) st.textContent=res.message||res.error||'Upload failed'; }
     }catch(e){ if(st) st.textContent='Upload failed'; }
   };
+  reader.readAsDataURL(f);
+}
+/* Generic file field (zip/csv/etc) — reads the chosen file to a base64 data URL held in the hidden f_<k>. */
+function uploadFileField(k){
+  const fi=document.getElementById('upl_'+k); const f=fi&&fi.files&&fi.files[0]; if(!f) return;
+  const st=document.getElementById('upls_'+k);
+  if(f.size>25*1024*1024){ if(st) st.textContent='File too large (max 25MB)'; document.getElementById('f_'+k).value=''; return; }
+  if(st) st.textContent='Reading '+f.name+'…';
+  const reader=new FileReader();
+  reader.onload=()=>{ document.getElementById('f_'+k).value=String(reader.result||''); if(st) st.textContent='✓ '+f.name+' ready — click Save to import'; };
+  reader.onerror=()=>{ if(st) st.textContent='Could not read the file'; document.getElementById('f_'+k).value=''; };
   reader.readAsDataURL(f);
 }
 function closeM(){ document.getElementById('ov').classList.remove('on'); }
