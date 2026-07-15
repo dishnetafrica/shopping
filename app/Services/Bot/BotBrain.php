@@ -30,6 +30,13 @@ class BotBrain
         protected \App\Services\Marketplace\MarketplaceSearch $marketplace,
     ) {}
 
+    /**
+     * QUOTE-FIRST flow. When true, the bot's checkout sends a QUOTATION (for staff to review and
+     * convert to a sales order in v3) instead of creating a sales order directly. Set to false to
+     * restore the original direct-order checkout instantly — a one-line, fully reversible switch.
+     */
+    protected const QUOTE_FIRST = true;
+
     /** One-shot "with <accompaniment>" hint, set per message in respondInner, consumed by maybeAskModifier. */
     protected string $modHint = '';
 
@@ -2741,6 +2748,82 @@ class BotBrain
         return $name;
     }
 
+    /**
+     * QUOTE-FIRST checkout: turn the basket into a QUOTATION (branded PDF sent on WhatsApp + saved so
+     * it appears under Quotations in v3), acknowledge the customer, and clear the basket. No order is
+     * created here — staff review the quotation and press "Convert to order" in v3 when confirmed.
+     *
+     * Reuses the SAME QuotationService the AI bot already uses for price requests (generate + persist),
+     * so there is no new quoting logic. Best-effort on the send; the quotation is always saved so it is
+     * never lost even if the WhatsApp document send fails.
+     */
+    protected function sendQuotationInsteadOfOrder(Tenant $tenant, Conversation $convo, array $cart, int $subtotal, int $deliveryFee, ?string $zoneName, float $grand, string $locStored): string
+    {
+        $svc  = app(\App\Services\Bot\QuotationService::class);
+        $cur  = $this->currencyFor($tenant);
+        $name = (string) ($convo->customer_name ?? '');
+        $phone = (string) $convo->customer_phone;
+
+        // Build the quote in the shape QuotationService expects (one matched line per cart line).
+        $lines = [];
+        foreach ($cart as $l) {
+            $qty   = (int) ($l['qty'] ?? 1);
+            $price = (float) ($l['price'] ?? 0);
+            $lines[] = [
+                'matched' => true,
+                'name'    => (string) ($l['name'] ?? $this->lineLabel($l)),
+                'qty'     => $qty,
+                'price'   => $price,
+                'sum'     => $price * $qty,
+                'unit'    => (string) ($l['unit'] ?? ''),
+                'image'   => (string) ($l['image'] ?? ''),
+            ];
+        }
+        // Show delivery on the quote so the customer sees the complete figure.
+        if ($deliveryFee > 0) {
+            $lines[] = ['matched' => true, 'name' => 'Delivery' . ($zoneName ? ' (' . $zoneName . ')' : ''), 'qty' => 1, 'price' => (float) $deliveryFee, 'sum' => (float) $deliveryFee, 'unit' => ''];
+        }
+        $quote = ['lines' => $lines, 'currency' => $cur, 'total' => $grand];
+
+        $qNo = null;
+        try {
+            $doc = $svc->available() ? $svc->generate($tenant, $phone, $name, $quote) : null;
+            if ($doc) {
+                $qNo = (string) ($doc['no'] ?? '');
+                // Send the PDF on WhatsApp (best-effort — resolve the gateway like the rest of v3 does).
+                try {
+                    $gw = app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($tenant);
+                    if (method_exists($gw, 'sendDocument') && $tenant->whatsapp_instance) {
+                        $media = ($doc['url'] ?? '') ?: ($doc['b64'] ?? '');
+                        $gw->sendDocument($tenant->whatsapp_instance, $phone, $media, $doc['fileName'], 'Your quotation ' . $qNo);
+                    }
+                } catch (\Throwable $e) {
+                    \Log::warning('quote-first: WhatsApp document send failed: ' . $e->getMessage());
+                }
+                // Always persist so the quotation is captured for staff even if the send failed.
+                $q = $svc->persist($tenant, $phone, $name, $quote, $doc, 'bot');
+                if ($q && $locStored !== '') {
+                    try { $q->update(['meta' => array_merge((array) ($q->meta ?? []), ['delivery' => $locStored])]); } catch (\Throwable $e) { /* meta optional */ }
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('quote-first: quotation build failed: ' . $e->getMessage());
+        }
+
+        // Basket is now captured in the quotation — clear it so the next message starts fresh.
+        $convo->cart = [];
+        $convo->state = [];
+        $convo->save();
+
+        $totalTxt = number_format($grand, \App\Services\Pricing::decimalsForCurrency($cur)) . ' ' . $cur;
+        $ref = $qNo ? (' *' . $qNo . '*') : '';
+
+        return "🙏 Thank you! I've prepared your quotation" . $ref . " for *" . $totalTxt . "* (including delivery)."
+            . "\n\nOur team will confirm availability and prices, then send you the order to complete. "
+            . ($qNo ? "Your quotation PDF is attached above. " : "We'll share the details shortly. ")
+            . "Reply here any time if you'd like to change anything. 😊";
+    }
+
     protected function placeOrder(Tenant $tenant, Conversation $convo, string $location, ?float $lat = null, ?float $lng = null, ?string $mapsLink = null): string
     {
         $cart = is_array($convo->cart) ? $convo->cart : [];
@@ -2803,6 +2886,11 @@ class BotBrain
         $dtime = trim((string) data_get($convo->state, 'delivery_time', ''));
         if ($dtime !== '') {
             $locStored .= ' · Deliver ~' . $dtime;
+        }
+
+        // QUOTE-FIRST: send a quotation for staff to confirm/convert, instead of creating an order.
+        if (static::QUOTE_FIRST) {
+            return $this->sendQuotationInsteadOfOrder($tenant, $convo, $cart, (int) round($total), (int) $deliveryFee, $zoneName ? (string) $zoneName : null, (float) $grand, $locStored);
         }
 
         // 2C — Order idempotency.
