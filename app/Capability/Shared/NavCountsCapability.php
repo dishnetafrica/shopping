@@ -35,7 +35,9 @@ final class NavCountsCapability implements Capability
         return array_filter([
             'customers'        => $c(CustomerProfile::query()),
             'salesOrder'       => $c(Order::query()),
-            'quotations'       => $c(Quotation::query()),
+            // Quotations badge shows the actionable count — quotes awaiting staff confirmation/convert
+            // (e.g. the quote-first bot flow), not the lifetime total, so staff see what needs doing.
+            'quotations'       => $c(Quotation::query()->whereRaw("lower(coalesce(status,'')) in ('sent','accepted','pending')")->whereNull('order_id')),
             'invoice'          => $c(Invoice::query()),
             'payment'          => $c(CustomerPayment::query()),
             'product'          => $c(Product::query()),

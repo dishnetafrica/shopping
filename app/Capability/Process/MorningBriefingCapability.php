@@ -41,6 +41,11 @@ final class MorningBriefingCapability implements ProcessCapability
         $cur = $ctx->baseCurrency();
 
         $adArrivals = (int) ($ad['arrivals7d'] ?? 0);
+        // Quotations awaiting staff confirmation/convert (e.g. the quote-first bot flow). Direct count
+        // so the briefing surfaces the to-do without a new capability dependency.
+        $quotesToConfirm = (int) \App\Models\Quotation::where('tenant_id', $ctx->tenantId())
+            ->whereRaw("lower(coalesce(status,'')) in ('sent','accepted','pending')")
+            ->whereNull('order_id')->count();
 
         $metrics = [
             ['label' => 'Cash on hand', 'value' => Money::fmt($cash['cash'], 'USD'), 'tone' => 'ok'],
@@ -51,6 +56,7 @@ final class MorningBriefingCapability implements ProcessCapability
             ['label' => 'Reorder', 'value' => (string) $war['reorder'], 'tone' => 'warn'],
             ['label' => 'Deliveries', 'value' => (string) $dis['inTransit'], 'tone' => 'default'],
             ['label' => 'Ad arrivals (7d)', 'value' => (string) $adArrivals, 'tone' => $adArrivals > 0 ? 'ok' : 'default'],
+            ['label' => 'Quotes to confirm', 'value' => (string) $quotesToConfirm, 'tone' => $quotesToConfirm > 0 ? 'warn' : 'default'],
         ];
 
         $plan = [];
@@ -59,6 +65,9 @@ final class MorningBriefingCapability implements ProcessCapability
         }
         if ($sal['toInvoice'] > 0) {
             $plan[] = new ActionSpec('invoice', 'Invoice ' . $sal['toInvoice'] . ' delivered orders — ' . Money::fmt($sal['toInvoiceValue'], $cur), '/api/v1/workspace/sales.process', 'GET', 'human');
+        }
+        if ($quotesToConfirm > 0) {
+            $plan[] = new ActionSpec('quotes', $quotesToConfirm . ' quotation' . ($quotesToConfirm === 1 ? '' : 's') . ' awaiting your confirmation — review & convert to orders', '/api/v1/workspace/quotations', 'GET', 'human', 'primary');
         }
         if ($war['reorder'] > 0) {
             $plan[] = new ActionSpec('reorder', 'Reorder ' . $war['reorder'] . ' low-stock SKUs', '/api/v1/workspace/warehouse', 'GET', 'human');
