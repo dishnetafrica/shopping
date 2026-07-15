@@ -365,6 +365,25 @@ body{padding-bottom:calc(var(--nav-h) + 14px + var(--safe-b))}
 .cartfoot{position:sticky;bottom:0;background:#fff;padding:10px 0 4px;border-top:1px solid var(--line)}
 .cartfoot .place{width:100%}
 
+/* ---- V2 checkout (Increment 6) ---- */
+.cosec{padding:6px 0 12px;border-bottom:1px solid var(--line)}
+.cosh{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:8px 0 9px}
+.cosum{background:#F6F7F9;border-radius:12px;padding:13px;position:relative}
+.cosum-t{font-weight:700;font-size:14px;padding-right:52px}
+.cosum-s{font-size:13px;color:var(--muted);margin-top:3px;padding-right:52px}
+.cosum-e{position:absolute;top:11px;right:11px;border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 12px;font-weight:700;font-size:12px;color:var(--green-d);cursor:pointer}
+.paytiles{display:flex;flex-direction:column;gap:8px}
+.paytile{display:flex;align-items:center;gap:9px;border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:13px 14px;font-size:14px;font-weight:700;color:var(--ink);cursor:pointer;text-align:left;min-height:48px}
+.paytile.on{border-color:var(--green);background:#f1f9f4;color:var(--green-d)}
+.colink{border:0;background:none;color:var(--green-d);font-weight:700;font-size:13.5px;cursor:pointer;padding:9px 2px;display:block}
+/* success */
+.ok2{text-align:center;padding:22px 12px 8px}
+.ok2 .okcheck{width:74px;height:74px;border-radius:50%;background:var(--green);color:#fff;font-size:40px;display:grid;place-items:center;margin:6px auto 14px;animation:okpop .45s cubic-bezier(.2,.8,.3,1.4)}
+@keyframes okpop{0%{transform:scale(0)}70%{transform:scale(1.12)}100%{transform:scale(1)}}
+.ok2 h2{margin:0;font-size:20px}
+.ok2 .okno{font-weight:800;font-size:15px;color:var(--green-d);margin-top:6px;letter-spacing:.02em}
+.ok2 .okmsg{color:var(--muted);font-size:13.5px;line-height:1.55;margin:10px 16px 0}
+
 </style>
 </head>
 <body>
@@ -1490,25 +1509,42 @@ function openCart(){
     + '<div class="cartfoot"><button class="place" onclick="openCheckout()">Checkout · '+ugx(sub)+' →</button></div>';
   $('sheet').classList.add('show');
 }
+function editDetails(){ var a=$('coSum'), b=$('coFields'); if(a)a.style.display='none'; if(b)b.style.display='block'; }
+function toggleEl(id){ var e=$(id); if(e)e.style.display=(e.style.display==='none'?'block':'none'); }
+function pickPay(btn,val){ var t=btn.parentNode.querySelectorAll('.paytile'); for(var i=0;i<t.length;i++)t[i].classList.remove('on'); btn.classList.add('on'); var inp=$('coPay'); if(inp)inp.value=val; }
 function openCheckout(){
-  $('sheetTitle').textContent=IS_PICKUP?'Pickup details':'Delivery details';
-  $('sheetBody').innerHTML=
-    '<div class="field"><label>Your name</label><input id="coName" value="'+esc((CUST&&CUST.name)||qp('n'))+'" placeholder="Full name"></div>'+
-    '<div class="field"><label>WhatsApp number</label><input id="coPhone" inputmode="numeric" value="'+esc((CUST&&CUST.phone)||qp('c'))+'" placeholder="2567…"></div>'+
-    (IS_PICKUP
-      ? '<div class="field"><label>Pickup note <span style="color:#98a2b3;font-weight:400">(optional)</span></label><textarea id="coAddr" rows="2" placeholder="Anything we should know for collection">'+esc((CUST&&CUST.addr)||'')+'</textarea></div>'
-      : '<div class="field"><label>Delivery address</label><textarea id="coAddr" rows="2" placeholder="Area, road, landmark">'+esc((CUST&&CUST.addr)||'')+'</textarea></div>')+
-    '<div class="field"><label>Special instructions <span style="color:#98a2b3;font-weight:400">(optional)</span></label><textarea id="coNote" rows="2" placeholder="e.g. in the thali remove dal &amp; add kadhi \u00B7 less spicy \u00B7 leave at gate"></textarea></div>'+
-    (IS_PICKUP ? '' :
-    '<div class="field"><label>Delivery location (GPS pin)</label>'+
-    '<button type="button" class="locbtn" id="locBtn" onclick="captureLoc()">📍 Share my current location</button>'+
-    '<div id="locMsg" class="locmsg">Optional — sends an exact map pin so the rider finds you fast.</div></div>')+
-    '<div class="field"><label>Payment</label><select id="coPay"><option>'+(IS_PICKUP?'Cash on pickup':'Cash on delivery')+'</option><option>Mobile money</option>'+creditOptionHtml()+'</select>'+
-      ((isWholesaleBuyer()&&BUYER.credit&&BUYER.credit.limit)?('<div class="note">Credit available: '+esc(BUYER.credit.currency||'')+' '+(Number(BUYER.credit.available||0)).toLocaleString('en-US')+(BUYER.credit.canSell===false?' — account over limit, credit orders are paused':'')+'</div>'):'')+'</div>'+
-    '<div class="field"><label>Schedule for later <span style="color:#98a2b3;font-weight:400">(optional — leave blank to '+(IS_PICKUP?'collect now':'deliver now')+')</span></label><input id="coWhen" type="datetime-local"></div>'+
-    '<div class="totrow g"><span>Total ('+cartCount()+' items)</span><span>'+ugx(cartTotal())+'</span></div>'+
-    '<button class="place" id="placeBtn" onclick="placeOrder()">Place order</button>'+
-    '<button class="place" style="background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="openCart()">← Back to cart</button>';
+  $('sheetTitle').textContent='Checkout';
+  var name=(CUST&&CUST.name)||qp('n')||'', phone=(CUST&&CUST.phone)||qp('c')||'', addr=(CUST&&CUST.addr)||'';
+  var saved=!!(name && phone && (IS_PICKUP || addr));
+  var de=deliveryEstimateText(), sub=cartTotal();
+  var fields=''
+    +'<div class="field"><label>Your name</label><input id="coName" value="'+esc(name)+'" placeholder="Full name"></div>'
+    +'<div class="field"><label>WhatsApp number</label><input id="coPhone" inputmode="numeric" value="'+esc(phone)+'" placeholder="2567 number"></div>'
+    +(IS_PICKUP
+      ? '<div class="field"><label>Pickup note <span style="color:#98a2b3;font-weight:400">(optional)</span></label><textarea id="coAddr" rows="2" placeholder="Anything for collection">'+esc(addr)+'</textarea></div>'
+      : '<div class="field"><label>Delivery address</label><textarea id="coAddr" rows="2" placeholder="Area, road, landmark">'+esc(addr)+'</textarea></div>')
+    +(IS_PICKUP?'':'<div class="field"><button type="button" class="locbtn" id="locBtn" onclick="captureLoc()">Share my current location</button><div id="locMsg" class="locmsg"></div></div>');
+  var summary=saved?('<div class="cosum" id="coSum"><div class="cosum-t">'+esc(name)+' · '+esc(phone)+'</div>'+(addr?('<div class="cosum-s">'+esc(addr)+'</div>'):'')+'<button class="cosum-e" onclick="editDetails()">Edit</button></div>'):'';
+  var details='<div class="cosec"><div class="cosh">'+(IS_PICKUP?'Pickup details':'Deliver to')+'</div>'+summary+'<div id="coFields" style="display:'+(saved?'none':'block')+'">'+fields+'</div></div>';
+  var credit=(isWholesaleBuyer()&&BUYER.credit&&BUYER.credit.limit);
+  var pays=[['Cash on '+(IS_PICKUP?'pickup':'delivery')],['Mobile money']]; if(credit)pays.push(['Credit (account)']);
+  var paytiles='<div class="cosec"><div class="cosh">Payment</div><div class="paytiles">'
+    +pays.map(function(p,i){return '<button type="button" class="paytile'+(i===0?' on':'')+'" onclick="pickPay(this,'+jk(p[0])+')">'+esc(p[0])+'</button>';}).join('')
+    +'</div><input type="hidden" id="coPay" value="'+esc(pays[0][0])+'">'
+    +(credit?('<div class="note">Credit available: '+esc(BUYER.credit.currency||'')+' '+(Number(BUYER.credit.available||0)).toLocaleString('en-US')+(BUYER.credit.canSell===false?' (over limit, credit paused)':'')+'</div>'):'')
+    +'</div>';
+  var extras='<div class="cosec"><button class="colink" onclick="toggleEl(\'coNoteWrap\')">+ Add a note</button>'
+    +'<div id="coNoteWrap" style="display:none"><textarea id="coNote" rows="2" placeholder="e.g. leave at gate, call on arrival"></textarea></div>'
+    +'<button class="colink" onclick="toggleEl(\'coWhenWrap\')">+ Schedule for later</button>'
+    +'<div id="coWhenWrap" style="display:none"><input id="coWhen" type="datetime-local"></div></div>';
+  var bill='<div class="billbox"><div class="billrow"><span>Items ('+cartCount()+')</span><span>'+ugx(sub)+'</span></div>'
+    +'<div class="billrow"><span>Delivery</span><span class="mut">'+(de?esc(de):'set your location')+'</span></div>'
+    +'<div class="billrow tot"><span>To pay</span><span>'+ugx(sub)+'<span class="plusdel"> + delivery</span></span></div></div>';
+  $('sheetBody').innerHTML=details+paytiles+extras+bill
+    +'<div class="trustrow">You only pay when you receive · we message you on WhatsApp at every step</div>'
+    +'<div class="cartfoot"><button class="place" id="placeBtn" onclick="placeOrder()">Place order · '+ugx(sub)+'</button>'
+    +'<button class="colink" style="text-align:center;width:100%;margin-top:6px" onclick="openCart()">Back to cart</button></div>';
+  $('sheet').classList.add('show');
   renderLocMsg();
 }
 function mapsUrl(g){return 'https://maps.google.com/?q='+g.lat+','+g.lng;}
@@ -1540,11 +1576,15 @@ async function placeOrder(){
     var d=await r.json();
     if(d&&d.ok){track('checkout',payload.items.map(function(i){var p=prod(i.name);return p?p.id:null;}).filter(Boolean));saveCust({name:name,phone:phone,addr:addr});saveLast(payload.items);CART={};saveCart();bar();render();$('sheetTitle').textContent='Order placed';
       var shopName=SHOP.name||'us';
-      $('sheetBody').innerHTML='<div class="ok"><div class="big">🙏</div><h2>Order placed!</h2><p>Tap below to confirm your order on WhatsApp — our team will arrange delivery.</p>'+
-        (d.order_no?'<div class="ono">'+esc(d.order_no)+'</div>':'')+'<div style="margin-top:18px">'+
-        (WA_NUMBER?'<a class="place" style="display:block;text-decoration:none;text-align:center" href="https://wa.me/'+WA_NUMBER+'?text='+encodeURIComponent('Hi '+shopName+', I just placed order '+(d.order_no||'')+' on the website. Please confirm and arrange delivery.')+'">Confirm on WhatsApp</a>':'')+
-        (d.track_url?'<a class="place" style="display:block;text-decoration:none;text-align:center;background:#fff;color:var(--green-d);border:1px solid var(--line)" href="'+esc(d.track_url)+'">Track my order</a>':'')+
-        '<button class="place" style="background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="closeSheet()">Done</button></div></div>';
+      var eta=deliveryEstimateText();
+      try{ toast('Order placed'); if(navigator.vibrate)navigator.vibrate([10,30,10]); }catch(e){}
+      $('sheetBody').innerHTML='<div class="ok2"><div class="okcheck">✓</div><h2>Order placed!</h2>'+
+        (d.order_no?'<div class="okno">'+esc(d.order_no)+'</div>':'')+
+        '<p class="okmsg">'+(eta?('We’ll deliver '+esc(eta)+'. '):'')+'We’ll message you on WhatsApp at every step.</p>'+
+        '<div style="margin-top:18px">'+
+        (d.track_url?'<a class="place" style="display:block;text-decoration:none;text-align:center" href="'+esc(d.track_url)+'">Track my order</a>':'')+
+        (WA_NUMBER?'<a class="place" style="display:block;text-decoration:none;text-align:center;background:#fff;color:var(--green-d);border:1px solid var(--line);margin-top:8px" href="https://wa.me/'+WA_NUMBER+'?text='+encodeURIComponent('Hi '+shopName+', about my order '+(d.order_no||''))+'">Message us on WhatsApp</a>':'')+
+        '<button class="place" style="background:#fff;color:var(--ink);border:1px solid var(--line);margin-top:8px" onclick="goHome();closeSheet()">Continue shopping</button></div></div>';
     }else{alert((d&&d.message)?d.message:((d&&d.error)?d.error:'Could not place order. Please try again.'));btn.disabled=false;btn.textContent='Place order';}
   }catch(e){alert('Network error — please try again.');btn.disabled=false;btn.textContent='Place order';}
 }
