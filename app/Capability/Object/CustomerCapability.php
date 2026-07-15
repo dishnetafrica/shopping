@@ -396,7 +396,7 @@ final class CustomerCapability implements ObjectCapability
         $holderId = (int) $ctx->user->id;
         if ($recv !== '' && strcasecmp($recv, $actorName) !== 0) {
             $hu = \App\Models\User::where('tenant_id', $ctx->tenantId())->whereRaw('lower(name) = ?', [mb_strtolower($recv)])->first();
-            $holderId = $hu ? (int) $hu->id : 0;
+            $holderId = $hu ? (int) $hu->id : null;   // NULL (not 0) — 0 violates the users FK on order_costs
         }
 
         return app(PaymentService::class)->record($ctx->tenant, [
