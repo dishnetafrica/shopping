@@ -608,6 +608,97 @@ button{ -webkit-tap-highlight-color:transparent }
   .backbar .crumbsep{ color:#C7CDC7; font-size:13px; font-weight:600 }
   .backbar b{ font-weight:800; font-size:14px; color:var(--ink) }
 }
+
+/* Phase 3 base: the desktop grid wrapper is transparent on mobile
+   (display:contents => no box, children render as if direct body children,
+   so the phone layout is byte-identical). The two rails stay hidden. */
+#dgridwrap{ display:contents }
+#dside, #dcart{ display:none }
+
+/* =====================================================================
+   DESKTOP LAYER — Phase 3: left filter sidebar + sticky cart summary
+   (>=1024px only). Both rails drive the EXISTING filter state / cart
+   state — no duplicated logic. Mobile is unaffected (rules are inside
+   the media query; the wrapper is display:contents below it).
+   ===================================================================== */
+@media(min-width:1024px){
+  /* Three-column band: filters | products | cart. */
+  #dgridwrap{ display:grid; grid-template-columns:236px minmax(0,1fr) 320px; gap:22px;
+    max-width:var(--dcanvas); margin:0 auto; padding:0 var(--dpad); align-items:start }
+  #content{ max-width:none; margin:0; padding:0; min-width:0 }
+
+  /* Content children align to the product column's left edge. */
+  #content .grid, #content .skgrid, #content .catgrid{ padding-left:0; padding-right:0 }
+  #content .backbar, #content .meta, #content .section-title, #content .menutabs,
+  #content .subchips, #content .sgroup, #content .brandstrip{ padding-left:0; padding-right:0; margin-left:0; margin-right:0 }
+
+  /* The inline filter chrome is now owned by the sidebar — hide the
+     duplicate in-content controls so there is one source of truth. */
+  #content .filterbar, #content .sgroup, #content .brandstrip{ display:none }
+
+  /* Sidebars: sticky, independently scrollable, clear the sticky search. */
+  #dside, #dcart{ display:block; position:sticky; top:120px; align-self:start;
+    max-height:calc(100vh - 138px); overflow:auto; overscroll-behavior:contain }
+  #dside{ padding:2px 4px 20px }
+  #dcart{ padding:2px }
+
+  /* --- Left filter sidebar --- */
+  .dsh{ font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--muted); margin:16px 6px 8px }
+  .dsh:first-child{ margin-top:4px }
+  .dcatlist{ display:flex; flex-direction:column; gap:1px }
+  .dcat{ display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%;
+    border:0; background:none; text-align:left; cursor:pointer; color:var(--ink);
+    font-size:13.5px; font-weight:600; padding:8px 8px; border-radius:8px; line-height:1.2 }
+  .dcat:hover{ background:#F2F5F2 }
+  .dcat.on{ background:#EAF6EC; color:var(--green-d); font-weight:800 }
+  .dcat .dct{ font-size:11.5px; font-weight:700; color:var(--muted); flex:none }
+  .dcat.on .dct{ color:var(--green-d) }
+  .dfrow{ display:flex; align-items:center; gap:9px; padding:7px 8px; border-radius:8px;
+    cursor:pointer; font-size:13.5px; font-weight:600; color:var(--ink) }
+  .dfrow:hover{ background:#F2F5F2 }
+  .dfrow input{ width:17px; height:17px; accent-color:var(--green); cursor:pointer; flex:none }
+  .dsort{ display:flex; flex-wrap:wrap; gap:6px; padding:0 6px }
+  .dsort button{ border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer;
+    font-size:12.5px; font-weight:700; padding:6px 11px; border-radius:9px }
+  .dsort button.on{ border-color:var(--green); background:#F1F9F4; color:var(--green-d) }
+  .dprice{ display:flex; flex-direction:column; gap:5px; padding:0 6px }
+  .dprice button{ border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer;
+    font-size:12.5px; font-weight:700; padding:7px 11px; border-radius:9px; text-align:left }
+  .dprice button.on{ border-color:var(--green); background:#F1F9F4; color:var(--green-d) }
+  .dclear{ margin:14px 6px 0; border:1px solid var(--line); background:#fff; color:var(--green-d);
+    cursor:pointer; font-size:12.5px; font-weight:800; padding:9px; border-radius:9px; width:calc(100% - 12px) }
+  .dclear:hover{ background:#F2F5F2 }
+
+  /* --- Right sticky cart summary --- */
+  .dcbox{ border:1px solid var(--line); border-radius:14px; background:#fff; overflow:hidden }
+  .dchd{ display:flex; align-items:center; justify-content:space-between; padding:13px 15px; border-bottom:1px solid var(--line) }
+  .dchd b{ font-size:15px }
+  .dchd .dcn{ font-size:12px; font-weight:700; color:var(--muted) }
+  .dclines{ max-height:230px; overflow:auto; padding:4px 0 }
+  .dcline{ display:flex; align-items:center; gap:9px; padding:7px 15px }
+  .dcline .dq{ flex:none; min-width:26px; height:22px; border-radius:6px; background:#EAF6EC;
+    color:var(--green-d); font-size:12px; font-weight:800; display:grid; place-items:center; padding:0 5px }
+  .dcline .dnm{ flex:1; font-size:12.5px; font-weight:600; line-height:1.25; overflow:hidden;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical }
+  .dcline .dlp{ flex:none; font-size:12.5px; font-weight:800 }
+  .dcmore{ font-size:12px; font-weight:700; color:var(--muted); padding:4px 15px 8px }
+  .dcfree{ padding:9px 15px; border-top:1px solid var(--line) }
+  .dcfree .dcbar{ height:6px; background:#EEF2ED; border-radius:4px; overflow:hidden; margin-top:6px }
+  .dcfree .dcbar > i{ display:block; height:100%; background:var(--green); border-radius:4px }
+  .dcfree .t{ font-size:11.5px; font-weight:700; color:var(--green-d) }
+  .dcsub{ display:flex; align-items:center; justify-content:space-between; padding:12px 15px 2px }
+  .dcsub .l{ font-size:13px; color:var(--muted); font-weight:600 }
+  .dcsub .v{ font-size:18px; font-weight:900 }
+  .dcbtns{ padding:10px 15px 15px; display:flex; flex-direction:column; gap:8px }
+  .dcbtns .co{ border:0; background:var(--green); color:#fff; font-weight:800; font-size:14px;
+    padding:12px; border-radius:11px; cursor:pointer }
+  .dcbtns .co:hover{ background:var(--green-d) }
+  .dcbtns .vc{ border:1px solid var(--line); background:#fff; color:var(--ink); font-weight:700;
+    font-size:13px; padding:10px; border-radius:11px; cursor:pointer }
+  .dcempty{ padding:26px 16px; text-align:center; color:var(--muted); font-size:13px; font-weight:600 }
+  .dcempty .em{ font-size:26px; display:block; margin-bottom:8px }
+}
 </style>
 </head>
 <body>
@@ -621,7 +712,7 @@ button{ -webkit-tap-highlight-color:transparent }
   <nav class="dnav" aria-label="Primary desktop">
     <button class="dlink" onclick="goHome()">Home</button>
     <button class="dlink" onclick="navGo('categories')">Categories</button>
-    <button class="dcartpill" onclick="openCart()" aria-label="View cart">
+    <button class="dcartpill" id="dCartPill" onclick="openCart()" aria-label="View cart">
       <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l2.4 12.2a1 1 0 0 0 1 .8h9.2a1 1 0 0 0 1-.8L21 8H6"/><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/></svg>
       <span id="dCartTotal">Cart</span><span class="dbadge" id="dCartBadge">0</span>
     </button>
@@ -638,8 +729,12 @@ button{ -webkit-tap-highlight-color:transparent }
   <button class="sqbtn" onclick="event.stopPropagation();voiceSearch()" aria-label="Voice search">🎤</button>
   <button class="sqbtn" onclick="event.stopPropagation();barcodeSearch()" aria-label="Scan barcode">📷</button>
 </div></div>
+<div id="dgridwrap">
+<aside id="dside" aria-label="Filters and departments"></aside>
 <div id="content"><div class="skgrid"><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div><div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div></div></div>
 
+<aside id="dcart" aria-label="Cart summary"></aside>
+</div>
 <div id="footer"><span id="footName">Shop</span><br>
 <a href="#" onclick="event.preventDefault();showFaq()">How to order &amp; FAQ</a> · <a id="staffLink" href="#">Staff login</a></div>
 
@@ -962,7 +1057,7 @@ var _lastTap={x:window.innerWidth/2,y:window.innerHeight/2};
 document.addEventListener('pointerdown',function(e){ _lastTap={x:e.clientX,y:e.clientY}; },{passive:true});
 function reducedMotion(){ try{ return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){ return false; } }
 function flyToCart(){
-  var cart=$('navCart');
+  var cart=$('dCartPill'); if(!cart||!cart.offsetParent) cart=$('navCart');
   if(cart){ cart.classList.remove('bump'); void cart.offsetWidth; cart.classList.add('bump'); }
   try{ if(navigator.vibrate) navigator.vibrate(8); }catch(e){}
   if(reducedMotion()||!cart) return;
@@ -1525,6 +1620,55 @@ function featuredBrands(list){ var b=catBrands(list); if(b.length<2)return '';
   return '<div class="sgroup" style="padding-left:14px">Featured brands</div><div class="brandstrip">'+b.slice(0,12).map(function(br){return '<button class="brandchip'+(FBRANDS[br.toLowerCase()]?' on':'')+'" onclick="toggleBrand('+jk(br)+')">'+esc(br)+'</button>';}).join('')+'</div>'; }
 function toggleBrand(br){ br=br.toLowerCase(); if(FBRANDS[br])delete FBRANDS[br]; else FBRANDS[br]=1; _catShown=24; render(); }
 function filterBrandChk(b,on){ if(on)FBRANDS[b]=1; else delete FBRANDS[b]; }
+
+/* ---- Desktop rails (Phase 3): drive the SAME filter/cart state, no logic dup ----
+   Instant-apply togglers (mobile filter sheet applies on "Show results"; the
+   desktop sidebar applies immediately — that's the whole point). All gated to
+   >=1024px so mobile never runs them. */
+function _desktop(){ return !!(window.matchMedia && window.matchMedia('(min-width:1024px)').matches); }
+function toggleBulk(){ FBULK=!FBULK; _catShown=24; render(); }
+function setPmax(v){ FPMAX=(FPMAX===v?0:v); _catShown=24; render(); }
+function _freeOver(){ try{ var d=(window.SHOP&&SHOP.settings&&SHOP.settings.delivery)||{}; var f=d.free_over||d.freeOver||0; return Number(f)||0; }catch(e){ return 0; } }
+
+function syncDesktopSide(){
+  var side=$('dside'); if(!side||!_desktop())return;
+  var hasQ=!!(Q&&Q.trim().length), isList=(CAT&&CAT!=='all')||hasQ;
+  var h='<div class="dsh">Departments</div><div class="dcatlist">';
+  h+='<button class="dcat'+((CAT==='all'&&!hasQ)?' on':'')+'" onclick="setCat(\'all\')"><span>All products</span></button>';
+  (CATS||[]).forEach(function(c){ h+='<button class="dcat'+(CAT===c.name?' on':'')+'" onclick="setCat('+jk(c.name)+')"><span>'+esc(c.name)+'</span><span class="dct">'+(c.count||0)+'</span></button>'; });
+  h+='</div>';
+  if(isList){
+    var list=currentList();
+    var sorts=[['pop','Popular'],['plow','Price ↑'],['phigh','Price ↓'],['new','New']];
+    h+='<div class="dsh">Sort</div><div class="dsort">'+sorts.map(function(s){return '<button class="'+(FSORT===s[0]?'on':'')+'" onclick="setSort('+jk(s[0])+')">'+s[1]+'</button>';}).join('')+'</div>';
+    h+='<div class="dsh">Availability</div>';
+    h+='<label class="dfrow"><input type="checkbox" '+(FINSTOCK?'checked':'')+' onclick="toggleInstock()"> In stock only</label>';
+    h+='<label class="dfrow"><input type="checkbox" '+(FBULK?'checked':'')+' onclick="toggleBulk()"> Bulk / carton</label>';
+    var brands=catBrands(list);
+    if(brands.length){ h+='<div class="dsh">Brand</div>'; brands.slice(0,20).forEach(function(br){ var b=br.toLowerCase(); h+='<label class="dfrow"><input type="checkbox" '+(FBRANDS[b]?'checked':'')+' onclick="toggleBrand('+jk(br)+')"> '+esc(br)+'</label>'; }); }
+    var prices=list.map(function(p){return p.price;}).filter(function(x){return x>0;});
+    var pmax=prices.length?Math.max.apply(null,prices):0, buckets=[];
+    if(pmax>0){[0.25,0.5,0.75].forEach(function(f){var v=Math.ceil(pmax*f/500)*500;if(v>0&&buckets.indexOf(v)<0)buckets.push(v);});}
+    if(buckets.length){ h+='<div class="dsh">Max price</div><div class="dprice">'+buckets.map(function(v){return '<button class="'+(FPMAX===v?'on':'')+'" onclick="setPmax('+v+')">Under '+ugx(v)+'</button>';}).join('')+'</div>'; }
+    if(activeFilterCount()){ h+='<button class="dclear" onclick="resetFilters();_catShown=24;render()">Clear all filters</button>'; }
+  }
+  side.innerHTML=h;
+}
+
+function syncDesktopCart(){
+  var box=$('dcart'); if(!box||!_desktop())return;
+  var items=cartItems(), n=cartCount(), tot=cartTotal();
+  if(!n){ box.innerHTML='<div class="dcbox"><div class="dcempty"><span class="em">🛒</span>Your order is empty.<br>Add products to start building it.</div></div>'; return; }
+  var lines=items.slice(0,5).map(function(i){ return '<div class="dcline"><span class="dq">'+i.qty+'×</span><span class="dnm">'+esc(i.display||i.name)+'</span><span class="dlp">'+ugx(i.price*i.qty)+'</span></div>'; }).join('');
+  var more=items.length>5?'<div class="dcmore">+'+(items.length-5)+' more line'+((items.length-5)>1?'s':'')+'</div>':'';
+  var fo=_freeOver(), free='';
+  if(fo>0){ if(tot>=fo){ free='<div class="dcfree"><span class="t">✓ Free delivery unlocked</span></div>'; } else { var pct=Math.min(100,Math.round(tot/fo*100)); free='<div class="dcfree"><span class="t">'+ugx(fo-tot)+' to free delivery</span><div class="dcbar"><i style="width:'+pct+'%"></i></div></div>'; } }
+  var h='<div class="dcbox"><div class="dchd"><b>Your order</b><span class="dcn">'+n+' item'+(n===1?'':'s')+'</span></div>';
+  h+='<div class="dclines">'+lines+'</div>'+more+free;
+  h+='<div class="dcsub"><span class="l">Subtotal</span><span class="v">'+ugx(tot)+'</span></div>';
+  h+='<div class="dcbtns"><button class="co" onclick="openCheckout()">Checkout</button><button class="vc" onclick="openCart()">View full cart</button></div></div>';
+  box.innerHTML=h;
+}
 function openFilters(){
   var list=currentList(), brands=catBrands(list);
   var prices=list.map(function(p){return p.price;}).filter(function(x){return x>0;});
@@ -1692,7 +1836,8 @@ function cartTotal(){return cartItems().reduce(function(s,i){return s+i.price*i.
 function bar(){var n=cartCount();$('cartbar').classList.toggle('show',n>0);$('cartCount').textContent=n+(n===1?' item':' items');$('cartTotal').textContent=ugx(cartTotal());var nb=$('navCartBadge');if(nb){nb.textContent=n>99?'99+':n;nb.classList.toggle('show',n>0);}
   /* desktop header cart pill (Phase 2) — null-safe, no-op on mobile */
   var dt=$('dCartTotal'); if(dt) dt.textContent = n>0 ? ugx(cartTotal()) : 'Cart';
-  var db=$('dCartBadge'); if(db){ db.textContent=n>99?'99+':n; db.classList.toggle('show',n>0); }}
+  var db=$('dCartBadge'); if(db){ db.textContent=n>99?'99+':n; db.classList.toggle('show',n>0); }
+  if(typeof syncDesktopCart==='function') syncDesktopCart();}
 function saveCart(){try{localStorage.setItem(STORE_KEY,JSON.stringify(CART));}catch(e){}}
 function loadCart(){try{CART=JSON.parse(localStorage.getItem(STORE_KEY)||'{}')||{};}catch(e){CART={};}}
 function bump(key,d){if(!CART[key])return;var p=prod(key);CART[key].qty+=d;if(CART[key].qty<minq(p)){delete CART[key];}saveCart();render();bar();if($('sheet').classList.contains('show'))openCart();}
@@ -1875,6 +2020,7 @@ window.addEventListener('scroll',function(){ var lm=$('loadmore'); if(!lm)return
       html+='<span class="crumbsep">/</span><b>'+esc(cl)+'</b>';
       b.innerHTML=html;
     }
+    if(typeof syncDesktopSide==='function') syncDesktopSide();
   }
   new MutationObserver(enhance).observe(content,{childList:true,subtree:true});
   enhance();
