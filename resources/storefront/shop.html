@@ -732,6 +732,57 @@ button{ -webkit-tap-highlight-color:transparent }
   /* round only the hint's bottom; sbody square-bottom when hint present */
   .soverlay.show .sbody{ border-radius:0 }
 }
+
+/* =====================================================================
+   DESKTOP LAYER — Phase 5: Order Pad (list view) + typeable quantities
+   (>=1024px only). A dense one-row-per-SKU order form for building large
+   (100-300 line) orders fast. Mobile never renders it (DVIEW gate + these
+   rules live in the media query).
+   ===================================================================== */
+@media(min-width:1024px){
+  /* On smaller laptops the right cart rail is dropped so the pad/grid get
+     full width; the header cart pill still shows the running total. */
+  @media(max-width:1279px){
+    #dgridwrap{ grid-template-columns:224px minmax(0,1fr) }
+    #dcart{ display:none }
+  }
+
+  .dviewsw{ display:flex; gap:6px; padding:0 6px }
+  .dviewsw button{ flex:1; border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer;
+    font-size:12.5px; font-weight:700; padding:8px 6px; border-radius:9px }
+  .dviewsw button.on{ border-color:var(--green); background:#F1F9F4; color:var(--green-d) }
+
+  .opad{ border:1px solid var(--line); border-radius:13px; overflow:hidden; background:#fff }
+  .opadhd, .oprow{ display:grid; grid-template-columns:42px minmax(0,1fr) 108px 138px 104px; align-items:center; gap:12px }
+  .opadhd{ padding:10px 14px; background:#FAFBFA; border-bottom:1px solid var(--line);
+    font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--muted) }
+  .opadhd .opup, .opadhd .oplt{ text-align:right }
+  .opadhd .opqty{ text-align:center }
+  .oprow{ padding:9px 14px; border-bottom:1px solid var(--line) }
+  .oprow:last-child{ border-bottom:0 }
+  .oprow:hover{ background:#FAFBFA }
+  .oprow.inpad{ background:#F4FBF5 }
+  .oprow.inpad:hover{ background:#EFF9F1 }
+  .opth{ width:42px; height:42px; border-radius:8px; background:var(--tile); display:grid; place-items:center; overflow:hidden; font-size:20px }
+  .opth img{ width:100%; height:100%; object-fit:contain; padding:3px }
+  .opnm{ min-width:0 }
+  .opn{ font-size:13.5px; font-weight:700; line-height:1.25; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  .opmeta{ font-size:11.5px; color:var(--muted); font-weight:600; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  .opmeta .oplow{ color:var(--amber); font-weight:800 }
+  .opmeta .opoos{ color:var(--red); font-weight:800 }
+  .opup{ font-size:13.5px; font-weight:800; text-align:right; white-space:nowrap }
+  .opup .opu{ font-size:11px; color:var(--muted); font-weight:600 }
+  .opqty{ justify-self:center }
+  .opq-wrap{ display:inline-flex; align-items:center; border:1px solid var(--green); border-radius:9px; overflow:hidden; height:38px }
+  .opq-wrap .opb{ border:0; background:#F1F9F4; color:var(--green-d); width:32px; height:100%; font-size:18px; font-weight:800; cursor:pointer }
+  .opq-wrap .opb:hover{ background:#E4F4E8 }
+  .opq{ width:60px; height:100%; border:0; border-left:1px solid var(--line); border-right:1px solid var(--line);
+    text-align:center; font-size:14px; font-weight:800; color:var(--ink); outline:none; -moz-appearance:textfield }
+  .opq::-webkit-outer-spin-button, .opq::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0 }
+  .opq:focus{ background:#F4FBF5; box-shadow:inset 0 0 0 2px rgba(12,131,31,.25) }
+  .opoosn{ color:var(--muted); font-weight:700 }
+  .oplt{ font-size:14px; font-weight:800; text-align:right; white-space:nowrap }
+}
 </style>
 </head>
 <body>
@@ -1283,7 +1334,68 @@ function vpStep(name,key,d){if(d>0)cartAdd(name);else cartSub(name);openVariantP
 function cartAdd(name){var p=prod(name);if(!p||oosOf(p))return;flyToCart();if(!CART[name]){CART[name]={name:p.name,price:p.price,qty:0};track('add',p.id);}CART[name].qty++;saveCart();render();bar();}
 function cartSub(name){if(!CART[name])return;CART[name].qty--;if(CART[name].qty<=0)delete CART[name];saveCart();render();bar();}
 function vpick(key,i){VSEL[key]=i;render();}
-function gridG(list){var arr=groupProducts(list);arr.forEach(function(g){GROUPS[g.category+"|"+g.base.toLowerCase()]=g;});return '<div class="grid">'+arr.map(variantCard).join('')+'</div>';}
+function gridG(list){
+  if(_desktop && _desktop() && DVIEW==='list') return listG(list);   /* Phase 5: Order Pad on desktop */
+  var arr=groupProducts(list);arr.forEach(function(g){GROUPS[g.category+"|"+g.base.toLowerCase()]=g;});return '<div class="grid">'+arr.map(variantCard).join('')+'</div>';}
+
+/* ---- Order Pad / List view (Phase 5) — desktop only ----
+   A dense, one-row-per-SKU surface with a typeable quantity per line. Quantities
+   commit WITHOUT a full re-render (so keyboard focus is never lost while entering
+   a long order); only the edited row + the cart rail update. Same CART/MOQ logic. */
+var DVIEW='grid';
+function setView(v){ DVIEW=(v==='list'?'list':'grid'); _catShown=24; render(); }
+function listG(list){
+  if(!list.length) return '<div class="empty">No products match these filters.</div>';
+  var rows=list.map(function(p){
+    var q=(CART[p.name]?CART[p.name].qty:0), oos=oosOf(p), mq=minq(p);
+    var meta=[]; if(p.brand)meta.push(esc(p.brand));
+    if(p.packSize>1)meta.push('Pack '+p.packSize); if(mq>1)meta.push('MOQ '+mq);
+    meta.push(oos?'<span class="opoos">Out of stock</span>':((p.stock!=null&&p.stock<=5)?('<span class="oplow">Only '+p.stock+' left</span>'):'In stock'));
+    var thumb=p.image?'<img alt="" src="'+esc(p.image)+'" loading="lazy">':catIcon(p.category);
+    var qtyctl = oos ? '<span class="opoosn">—</span>' :
+      '<div class="opq-wrap"><button class="opb" tabindex="-1" onclick="opadStep('+jk(p.name)+',-1)">−</button>'
+      +'<input class="opq" type="number" inputmode="numeric" min="0" value="'+(q||'')+'" placeholder="0" data-key="'+esc(p.name)+'" onchange="opadSetQty('+jk(p.name)+',this.value)" onkeydown="opadKey(event,this)" aria-label="Quantity for '+esc(p.name)+'">'
+      +'<button class="opb" tabindex="-1" onclick="opadStep('+jk(p.name)+',1)">+</button></div>';
+    return '<div class="oprow'+(q>0?' inpad':'')+'" data-key="'+esc(p.name)+'">'
+      +'<div class="opth">'+thumb+'</div>'
+      +'<div class="opnm"><div class="opn">'+esc(p.name)+'</div><div class="opmeta">'+meta.join(' · ')+'</div></div>'
+      +'<div class="opup">'+ugx(p.price)+'<span class="opu">/'+esc(p.unit||'unit')+'</span></div>'
+      +'<div class="opqty">'+qtyctl+'</div>'
+      +'<div class="oplt">'+(q?ugx(p.price*q):'—')+'</div>'
+      +'</div>';
+  }).join('');
+  return '<div class="opad"><div class="opadhd"><div></div><div>Product</div><div class="opup">Unit price</div><div class="opqty">Qty</div><div class="oplt">Line total</div></div>'+rows+'</div>';
+}
+function opadSetQty(key,val){
+  var p=prod(key); if(!p)return;
+  val=parseInt(val,10); if(isNaN(val)||val<0)val=0;
+  if(val>0 && oosOf(p)){ toast(p.name+' is out of stock','err'); val=0; }
+  var mq=minq(p);
+  if(val>0 && val<mq){ val=mq; toast('Minimum order for '+p.name+' is '+mq,'err'); }
+  if(val<=0){ delete CART[key]; } else { if(!CART[key])CART[key]={name:p.name,price:p.price,qty:0}; CART[key].qty=val; }
+  saveCart(); bar(); opadRefreshRow(key);
+}
+function opadStep(key,dir){
+  var p=prod(key); if(!p)return; var cur=(CART[key]?CART[key].qty:0), mq=minq(p);
+  var nv=cur + dir*((cur===0&&dir>0)?mq:1); if(nv<0)nv=0; if(nv>0&&nv<mq)nv=(dir<0?0:mq);
+  opadSetQty(key,nv);
+}
+function opadRefreshRow(key){
+  var rows=document.querySelectorAll('#content .oprow'); var p=prod(key), q=(CART[key]?CART[key].qty:0);
+  for(var i=0;i<rows.length;i++){ if(rows[i].getAttribute('data-key')===key){
+    var inp=rows[i].querySelector('.opq'); if(inp && document.activeElement!==inp) inp.value=(q||'');
+    var lt=rows[i].querySelector('.oplt'); if(lt) lt.textContent = q?ugx((p?p.price:0)*q):'—';
+    rows[i].classList.toggle('inpad', q>0); break; } }
+}
+function _opadFocus(inp,dir){
+  var all=Array.prototype.slice.call(document.querySelectorAll('#content .opq'));
+  var i=all.indexOf(inp); if(i<0)return; var n=all[i+dir]; if(n){ n.focus(); if(n.select)try{n.select();}catch(e){} }
+}
+function opadKey(e,inp){
+  if(e.key==='Enter'){ e.preventDefault(); opadSetQty(inp.getAttribute('data-key'),inp.value); _opadFocus(inp,1); }
+  else if(e.key==='ArrowDown'){ e.preventDefault(); _opadFocus(inp,1); }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); _opadFocus(inp,-1); }
+}
 
 function oosOf(p){ return !!(p && p.stock!=null && p.stock<=0); }
 
@@ -1667,7 +1779,9 @@ function _freeOver(){ try{ var d=(window.SHOP&&SHOP.settings&&SHOP.settings.deli
 function syncDesktopSide(){
   var side=$('dside'); if(!side||!_desktop())return;
   var hasQ=!!(Q&&Q.trim().length), isList=(CAT&&CAT!=='all')||hasQ;
-  var h='<div class="dsh">Departments</div><div class="dcatlist">';
+  var h='';
+  if(isList){ h+='<div class="dsh">View</div><div class="dviewsw"><button class="'+(DVIEW==='grid'?'on':'')+'" onclick="setView(\'grid\')">▦ Grid</button><button class="'+(DVIEW==='list'?'on':'')+'" onclick="setView(\'list\')">☰ Order Pad</button></div>'; }
+  h+='<div class="dsh">Departments</div><div class="dcatlist">';
   h+='<button class="dcat'+((CAT==='all'&&!hasQ)?' on':'')+'" onclick="setCat(\'all\')"><span>All products</span></button>';
   (CATS||[]).forEach(function(c){ h+='<button class="dcat'+(CAT===c.name?' on':'')+'" onclick="setCat('+jk(c.name)+')"><span>'+esc(c.name)+'</span><span class="dct">'+(c.count||0)+'</span></button>'; });
   h+='</div>';
