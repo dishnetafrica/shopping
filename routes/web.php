@@ -385,6 +385,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         // Deterministic sales intelligence for a quotation (stock/alternatives/usual/volume-discount).
         Route::get('quotation-intel', [\App\Http\Controllers\Panel\QuotationIntelController::class, 'intel']);
         Route::match(['get', 'post'], 'quotation-delete', [PanelApiController::class, 'quotationDelete']);
+        // One-shot reseed of categories.sort so the storefront department list is food-first.
+        Route::post('category-reseed', [\App\Http\Controllers\Panel\CategoryOrderController::class, 'reseed']);
         Route::get('update-product', [PanelApiController::class, 'updateProduct']);
         Route::get('delete-product', [PanelApiController::class, 'deleteProduct']);
         Route::get('add-product',    [PanelApiController::class, 'addProduct']);
