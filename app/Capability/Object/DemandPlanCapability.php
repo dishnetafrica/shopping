@@ -68,9 +68,11 @@ final class DemandPlanCapability implements ObjectCapability
         $planRows = []; $procRows = [];
         $bulkSchema = []; $bulkLabels = []; $prefReq = []; $prefPur = []; $prefSent = []; $prefRecv = [];
 
+        $prefPacked = [];
         foreach ($lines as $l) {
             $req = (float) $l->requested_qty;
             $got = (float) $l->qty_purchased;
+            $packed = (float) $l->qty_packed;
             $sent = (float) $l->qty_sent;
             $recv = (float) $l->received_qty;
             $st = (string) $l->line_status;
@@ -86,8 +88,11 @@ final class DemandPlanCapability implements ObjectCapability
             $bulkSchema[$bk] = 'number';
             $bulkLabels[$bk] = mb_strlen((string) $l->name) > 44 ? (mb_substr((string) $l->name, 0, 44) . '…') : (string) $l->name;
             // Default purchase entry to the REQUIRED qty (so Jayesh confirms most, only zeroes misses);
-            // once something is bought, show what was recorded.
-            $prefReq[$bk] = $req; $prefPur[$bk] = $got > 0 ? $got : $req; $prefSent[$bk] = $sent > 0 ? $sent : $got; $prefRecv[$bk] = $recv;
+            // packing defaults to what was purchased; loading defaults to what was packed.
+            $prefReq[$bk] = $req; $prefPur[$bk] = $got > 0 ? $got : $req;
+            $prefPacked[$bk] = $packed > 0 ? $packed : $got;
+            $prefSent[$bk] = $sent > 0 ? $sent : ($packed > 0 ? $packed : $got);
+            $prefRecv[$bk] = $recv;
 
             $nameCell = ['value' => (string) $l->name . ($l->product_id ? '' : ' (ad-hoc)')];
             $statusCell = ['value' => $this->lineLabel($st), 'badge' => $this->lineBadge($st)];
@@ -125,10 +130,17 @@ final class DemandPlanCapability implements ObjectCapability
                     'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
                 ]];
                 if ($got > 0) {
+                    $procBtns[] = ['icon' => 'warehouse', 'title' => 'Record packing', 'action' => [
+                        'key' => 'record_packing_one', 'label' => 'Pack — ' . $l->name, 'method' => 'POST', 'endpoint' => $endpoint . '/record_packing_one', 'actor' => 'human', 'tone' => 'primary',
+                        'schema' => ['qty_packed' => 'number', 'qty_missing' => 'number', 'pack_damaged' => 'number', 'remarks' => 'text'],
+                        'labels' => ['qty_packed' => 'Quantity packed', 'qty_missing' => 'Missing / short at packing', 'pack_damaged' => 'Damaged during packing', 'remarks' => 'Note'],
+                        'prefill' => ['qty_packed' => $packed > 0 ? $packed : $got, 'qty_missing' => (float) $l->qty_missing, 'pack_damaged' => (float) $l->pack_damaged, 'remarks' => (string) ($l->remarks ?: '')],
+                        'body' => ['line_id' => $l->id],
+                    ]];
                     $procBtns[] = ['icon' => 'dispatch', 'title' => 'Loaded / sent', 'action' => [
                         'key' => 'record_sent_one', 'label' => 'Sent — ' . $l->name, 'method' => 'POST', 'endpoint' => $endpoint . '/record_sent_one', 'actor' => 'human', 'tone' => 'primary',
                         'schema' => ['qty_sent' => 'number'], 'labels' => ['qty_sent' => 'Quantity loaded onto transport'],
-                        'prefill' => ['qty_sent' => $sent > 0 ? $sent : $got], 'body' => ['line_id' => $l->id],
+                        'prefill' => ['qty_sent' => $sent > 0 ? $sent : ($packed > 0 ? $packed : $got)], 'body' => ['line_id' => $l->id],
                     ]];
                     $procBtns[] = ['icon' => 'download', 'title' => 'Receive in Juba', 'action' => [
                         'key' => 'receive_goods', 'label' => 'Receive in Juba — ' . $l->name, 'method' => 'POST', 'endpoint' => $endpoint . '/receive_goods', 'actor' => 'human', 'tone' => 'primary',
@@ -153,7 +165,8 @@ final class DemandPlanCapability implements ObjectCapability
                 $nameCell,
                 ['value' => $this->qty($req)],
                 ['value' => $got > 0 ? $this->qty($got) : '—', 'tone' => ($got >= $req && $req > 0) ? 'ok' : ($got > 0 ? 'warn' : null)],
-                ['value' => $sent > 0 ? $this->qty($sent) : '—', 'tone' => ($sent >= $got && $got > 0) ? 'ok' : ($sent > 0 ? 'warn' : null)],
+                ['value' => $packed > 0 ? $this->qty($packed) : '—', 'tone' => ($packed >= $got && $got > 0) ? 'ok' : ($packed > 0 ? 'warn' : null)],
+                ['value' => $sent > 0 ? $this->qty($sent) : '—', 'tone' => ($sent >= $packed && $packed > 0) ? 'ok' : ($sent > 0 ? 'warn' : null)],
                 ['value' => $recv > 0 ? $this->qty($recv) : '—', 'tone' => ($recv >= $sent && $sent > 0) ? 'ok' : ($recv > 0 ? 'warn' : null)],
                 ['value' => $short > 0 && $st !== 'not_available' ? $this->qty($short) : '—', 'tone' => $short > 0 && $st !== 'not_available' ? 'danger' : null],
                 ['value' => (string) ($l->supplier_name ?: '—')],
@@ -168,7 +181,7 @@ final class DemandPlanCapability implements ObjectCapability
         ];
         $procCols = [
             ['label' => 'Product'], ['label' => 'Required', 'align' => 'right'], ['label' => 'Purchased', 'align' => 'right'],
-            ['label' => 'Sent', 'align' => 'right'], ['label' => 'Received', 'align' => 'right'], ['label' => 'Short', 'align' => 'right'],
+            ['label' => 'Packed', 'align' => 'right'], ['label' => 'Sent', 'align' => 'right'], ['label' => 'Received', 'align' => 'right'], ['label' => 'Short', 'align' => 'right'],
             ['label' => 'Supplier'], ['label' => 'Status'], ['label' => ''],
         ];
 
@@ -210,6 +223,7 @@ final class DemandPlanCapability implements ObjectCapability
             if ($hasLines) {
                 $more[] = $mkBulk('bulk_required', 'Set required — all products', $prefReq);
                 $more[] = $mkBulkPurchased('Record purchases — all');
+                $more[] = $mkBulk('bulk_packing', 'Record packing — all', $prefPacked);
                 $more[] = $mkBulk('bulk_sent', 'Record sent / loaded — all', $prefSent);
                 $more[] = $mkBulk('bulk_receive', 'Receive in Juba — all', $prefRecv);
             }
@@ -273,12 +287,14 @@ final class DemandPlanCapability implements ObjectCapability
             'add_line' => $this->addLine($ctx, $input),
             'edit_line' => $this->editLine($ctx, $input),
             'record_procurement' => $this->recordProcurement($ctx, $input),
+            'record_packing_one' => $this->recordPackingOne($ctx, $input),
             'record_sent_one' => $this->recordSentOne($ctx, $input),
             'receive_goods' => $this->receiveGoods($ctx, $input),
             'allocate_shipment' => $this->allocateShipment($ctx, $input),
             'remove_line' => $this->removeLine($ctx, $input),
             'bulk_required'  => $this->bulkSet($ctx, $input, 'requested_qty'),
             'bulk_purchased' => $this->bulkPurchased($ctx, $input),
+            'bulk_packing'   => $this->bulkSet($ctx, $input, 'qty_packed'),
             'bulk_sent'      => $this->bulkSet($ctx, $input, 'qty_sent'),
             'bulk_receive'   => $this->bulkSet($ctx, $input, 'received_qty'),
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
@@ -330,6 +346,10 @@ final class DemandPlanCapability implements ObjectCapability
         } elseif ($field === 'qty_purchased') {
             $l->qty_purchased = $val;
             $l->line_status = $l->deriveStatus();
+            $l->save();
+        } elseif ($field === 'qty_packed') {
+            $l->qty_packed = $val;
+            $l->packed_at = now();
             $l->save();
         } elseif ($field === 'qty_sent') {
             $l->qty_sent = $val;
@@ -477,6 +497,27 @@ final class DemandPlanCapability implements ObjectCapability
         }
 
         return $sup;
+    }
+
+    /** Warehouse packing (single line): confirm packed, missing/short, and damaged-at-packing. */
+    private function recordPackingOne(CapabilityContext $ctx, array $in): array
+    {
+        $l = $this->line($ctx, $in);
+        if (! $l) {
+            return ['ok' => false, 'error' => 'not_found'];
+        }
+        if (array_key_exists('qty_packed', $in) && $in['qty_packed'] !== '') { $l->qty_packed = max(0.0, round((float) $in['qty_packed'], 3)); }
+        if (array_key_exists('qty_missing', $in) && $in['qty_missing'] !== '') { $l->qty_missing = max(0.0, round((float) $in['qty_missing'], 3)); }
+        if (array_key_exists('pack_damaged', $in) && $in['pack_damaged'] !== '') { $l->pack_damaged = max(0.0, round((float) $in['pack_damaged'], 3)); }
+        if (array_key_exists('remarks', $in) && trim((string) $in['remarks']) !== '') { $l->remarks = trim((string) $in['remarks']); }
+        $l->packed_at = now();
+        $l->save();
+
+        $extra = [];
+        if ((float) $l->qty_missing > 0) { $extra[] = $this->qty($l->qty_missing) . ' missing'; }
+        if ((float) $l->pack_damaged > 0) { $extra[] = $this->qty($l->pack_damaged) . ' damaged'; }
+
+        return ['ok' => true, 'message' => 'Packed ' . $this->qty($l->qty_packed) . ' of ' . $l->name . ($extra ? (' (' . implode(', ', $extra) . ')') : '') . '.'];
     }
 
     /** Record how much of a line was loaded onto today's transport (single line). */
@@ -771,9 +812,10 @@ final class DemandPlanCapability implements ObjectCapability
             $prod = \App\Models\Product::where('tenant_id', $t)->find((int) $l->product_id);
             $unitCost = $prod && $prod->cost_price !== null ? (float) $prod->cost_price : null;
             $unitPrice = $prod ? (float) $prod->price : null;
-            // Ship what was LOADED (qty_sent). If sent wasn't recorded, fall back to purchased so the
-            // simple flow (buy → ship) still works without an explicit "load" step.
-            $shipQty = (float) $l->qty_sent > 0 ? (float) $l->qty_sent : (float) $l->qty_purchased;
+            // Ship what was LOADED (qty_sent); if that wasn't recorded, fall back to packed, then purchased,
+            // so the simple flow still works without an explicit load/pack step.
+            $shipQty = (float) $l->qty_sent > 0 ? (float) $l->qty_sent
+                : ((float) $l->qty_packed > 0 ? (float) $l->qty_packed : (float) $l->qty_purchased);
 
             if ($l->consignment_id) {
                 $cs = \App\Models\ConsignmentStock::where('tenant_id', $t)->find((int) $l->consignment_id);
