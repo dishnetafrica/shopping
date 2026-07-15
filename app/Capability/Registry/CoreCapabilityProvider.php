@@ -6,6 +6,7 @@ use App\Capability\Object\CustomerCapability;
 use App\Capability\Object\DemandPlanCapability;
 use App\Capability\Process\AdsCapability;
 use App\Capability\Process\DemandPlanListCapability;
+use App\Capability\Process\JubaStockCapability;
 use App\Capability\Process\ProcurementDashboardCapability;
 use App\Capability\Object\InvoiceCapability;
 use App\Capability\Object\PaymentCapability;
@@ -101,6 +102,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register($purchase, new CapabilityManifest(key: 'purchase.process', type: 'process', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/purchase.process'));
         $r->register(new DemandPlanListCapability(), new CapabilityManifest(key: 'demand.plans', type: 'process', owner: 'purchasing', permission: 'menu:purchases', commands: [['key' => 'create_plan', 'actor' => 'human']], api: '/api/v1/workspace/demand.plans'));
         $r->register(new ProcurementDashboardCapability(), new CapabilityManifest(key: 'procurement.hub', type: 'process', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/procurement.hub'));
+        $r->register(new JubaStockCapability(), new CapabilityManifest(key: 'juba.stock', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/juba.stock'));
         $r->register(new FinanceCapability($money), new CapabilityManifest(key: 'finance', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/finance'));
         $r->register(new CashbookCapability(), new CapabilityManifest(key: 'cashbook', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/cashbook'));
         $r->register($ads, new CapabilityManifest(key: 'ads', type: 'process', owner: 'management', permission: '', api: '/api/v1/workspace/ads'));
