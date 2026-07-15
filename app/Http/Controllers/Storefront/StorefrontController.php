@@ -586,6 +586,25 @@ class StorefrontController extends Controller
             if ($dirty) {
                 $q->save();
             }
+
+            // Regenerate the PDF now that the portal token exists, so the delivered PDF carries the
+            // QR / live-portal link. Best-effort — the quotation already has a valid PDF from createFor.
+            try {
+                $svc = app(\App\Services\Bot\QuotationService::class);
+                if ($svc->available() && $q->public_token) {
+                    $lines = $q->items->map(fn ($it) => [
+                        'name' => (string) $it->name, 'qty' => (int) $it->qty, 'price' => (float) $it->unit_price,
+                        'sum' => (float) ($it->line_total ?: $it->qty * $it->unit_price), 'unit' => (string) ($it->unit_label ?? ''),
+                        'image' => (string) ($it->image_url ?? ''), 'matched' => true,
+                    ])->all();
+                    $doc = $svc->generate($tenant, (string) $q->customer_phone, (string) $q->customer_name,
+                        ['lines' => $lines, 'currency' => (string) $q->currency, 'total' => (float) $q->total],
+                        (string) $q->quote_no, url(rtrim($base, '/') . '/q/' . $q->public_token), (float) ($q->freight ?? 0));
+                    if ($doc && ! empty($doc['path'])) {
+                        $q->forceFill(['pdf_path' => $doc['path']])->save();
+                    }
+                }
+            } catch (\Throwable $e) { /* keep the createFor PDF */ }
         }
 
         $token = $q?->public_token;

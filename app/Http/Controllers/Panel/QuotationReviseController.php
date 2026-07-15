@@ -43,9 +43,10 @@ class QuotationReviseController extends Controller
         }
         $remarks = $r->filled('remarks') ? (string) $r->input('remarks') : null;
         $comment = $r->filled('comment') ? (string) $r->input('comment') : null;
+        $freight = $r->filled('freight') ? max(0.0, (float) $r->input('freight')) : null;
 
         $res = app(QuotationReviseService::class)->applySalesLines(
-            $t, $q, $items, $remarks, $r->user()->id, (string) ($r->user()->name ?? 'Sales'), $comment
+            $t, $q, $items, $remarks, $r->user()->id, (string) ($r->user()->name ?? 'Sales'), $comment, $freight
         );
 
         if (! ($res['ok'] ?? false)) {

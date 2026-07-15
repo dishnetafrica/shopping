@@ -37,7 +37,7 @@ class QuotationService
     }
 
     /** @return array|null ['no'=>, 'b64'=>, 'path'=>, 'url'=>, 'fileName'=>, 'total'=>, 'currency'=>] */
-    public function generate(Tenant $tenant, string $customerPhone, string $customerName, array $quote, ?string $quoteNo = null): ?array
+    public function generate(Tenant $tenant, string $customerPhone, string $customerName, array $quote, ?string $quoteNo = null, ?string $portalUrl = null, float $freight = 0.0): ?array
     {
         if (! $this->available()) return null;
         $matched = array_filter($quote['lines'], fn ($l) => $l['matched']);
@@ -51,7 +51,12 @@ class QuotationService
         $incVat  = (bool) $tenant->setting('prices_include_vat', false);
         $totals  = $this->priced($quote, $discPct, $vatPct, $incVat);
 
-        $html = $this->html($tenant, $no, $customerPhone, $customerName, $quote, $totals);
+        // Freight (additive, Q3) sits on top of the priced lines + VAT to form the grand total.
+        $freight = max(0.0, (float) $freight);
+        $totals['freight'] = $freight;
+        $totals['grand']   = (float) $totals['grand'] + $freight;
+
+        $html = $this->html($tenant, $no, $customerPhone, $customerName, $quote, $totals, $portalUrl);
 
         try {
             $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
@@ -194,7 +199,7 @@ class QuotationService
         ];
     }
 
-    private function html(Tenant $tenant, string $no, string $phone, string $name, array $quote, array $totals): string
+    private function html(Tenant $tenant, string $no, string $phone, string $name, array $quote, array $totals, ?string $portalUrl = null): string
     {
         $cur = $quote['currency'];
         $dec = \App\Services\Pricing::decimalsForCurrency($cur);
@@ -242,27 +247,45 @@ class QuotationService
 
         $custName = $name !== '' ? e($name) : e($phone);
 
-        // line rows
+        // Meta the professional layout shows in the KV panel.
+        $validDays = (int) $tenant->setting('quote_validity_days', 14);
+        $validUntil = now()->addDays($validDays > 0 ? $validDays : 14)->format('d/m/Y');
+        $payShort  = trim((string) $tenant->setting('quote_payment_terms', ''));
+        $vatPctNum = (float) $totals['vatPct'];
+        $vatP      = rtrim(rtrim(number_format($vatPctNum, 2), '0'), '.');
+        $taxCell   = $vatPctNum > 0 ? ($vatP . '%') : '&mdash;';
+
+        // line rows (PHP-driven zebra so it renders in dompdf; thumbnails via base64 imgData).
         $rows = '';
         $i = 0;
         foreach ($totals['lines'] as $l) {
             $i++;
-            $unit = trim((string) ($l['unit'] ?? ''));
+            $zebra = ($i % 2 === 0) ? ' class="alt"' : '';
+            $unit  = trim((string) ($l['unit'] ?? ''));
             $qtyUnit = number_format((float) ($l['qty'] ?? 0), 2) . ($unit !== '' ? ' ' . strtoupper(e($unit)) : ' PCS');
+            $bv = trim(implode(' · ', array_filter([
+                trim((string) ($l['brand'] ?? '')),
+                trim((string) ($l['variant'] ?? '')),
+            ])));
+            $bvHtml = $bv !== '' ? '<div class="bv">' . e($bv) . '</div>' : '';
+            $imgSrc = $this->imgData((string) ($l['image'] ?? ''));
+            $thumb  = $imgSrc !== '' ? '<img src="' . $imgSrc . '" width="30" height="30" style="border-radius:4px;object-fit:contain">' : '<div class="noimg">&nbsp;</div>';
+
             if (empty($l['matched'])) {
-                $rows .= '<tr><td class="c">' . $i . '</td><td>' . e($l['name'])
-                       . ' <i style="color:#888">(to be confirmed)</i></td><td class="c">' . $qtyUnit
-                       . '</td><td class="r">&mdash;</td><td class="c">&mdash;</td><td class="r">&mdash;</td><td class="r">&mdash;</td></tr>';
+                $rows .= '<tr' . $zebra . '><td class="c">' . $i . '</td><td class="c">' . $thumb . '</td>'
+                       . '<td><div class="pn">' . e($l['name']) . '</div><div class="bv" style="color:#a15c00">To be confirmed</div></td>'
+                       . '<td class="c">' . $qtyUnit . '</td><td class="r">&mdash;</td><td class="c">&mdash;</td><td class="c">&mdash;</td><td class="r">&mdash;</td></tr>';
                 continue;
             }
-            $rows .= '<tr>'
+            $rows .= '<tr' . $zebra . '>'
                 . '<td class="c">' . $i . '</td>'
-                . '<td>' . e($l['name']) . '</td>'
+                . '<td class="c">' . $thumb . '</td>'
+                . '<td><div class="pn">' . e($l['name']) . '</div>' . $bvHtml . '</td>'
                 . '<td class="c">' . $qtyUnit . '</td>'
                 . '<td class="r">' . number_format((float) $l['_unit'], $m2) . '</td>'
                 . '<td class="c">' . number_format((float) $l['_disc'], 2) . '</td>'
-                . '<td class="r">' . number_format((float) $l['_after'], $m2) . '</td>'
-                . '<td class="r">' . number_format((float) $l['_sub'], $m2) . '</td>'
+                . '<td class="c">' . $taxCell . '</td>'
+                . '<td class="r b">' . number_format((float) $l['_sub'], $m2) . '</td>'
                 . '</tr>';
         }
 
@@ -270,141 +293,184 @@ class QuotationService
         $disc = number_format($totals['discount'], $m2);
         $subT = number_format($totals['subTotal'], $m2);
         $vat  = number_format($totals['vat'], $m2);
-        $vatP = rtrim(rtrim(number_format($totals['vatPct'], 2), '0'), '.');
+        $freightNum = (float) ($totals['freight'] ?? 0);
+        $freight = number_format($freightNum, $m2);
         $grand = number_format($totals['grand'], $m2);
 
         // optional blocks
-        $formCodeHtml = $formCode !== '' ? '<div class="formcode">' . $formCode . '</div>' : '';
+        $subHtmlBlock = $subHtml !== '' ? '<div class="sub">' . $subHtml . '</div>' : '';
         $webLineHtml  = $webLine !== '' ? '<div class="webline">' . $webLine . '</div>' : '';
-        $tinLineHtml  = $tinLine !== '' ? '<div class="webline" style="padding-top:2px;">' . $tinLine . '</div>' : '';
-        $salesHtml    = $sales !== '' ? '<div class="sales"><b>Sales Employee</b> &nbsp;' . $sales . '</div>' : '';
-        $lpoCell      = $lpo !== '' ? $lpo : '&nbsp;';
-        $prepCell     = $prepBy !== '' ? '<span style="position:relative;top:-2px;">' . $prepBy . '</span>' : '';
-        $vatRow       = $totals['vatPct'] > 0
-            ? '<tr><td class="lbl">VAT-' . $vatP . '%</td><td class="r">' . $vat . '</td></tr>'
+        $tinLineHtml  = $tinLine !== '' ? '&nbsp;&middot; ' . $tinLine : '';
+        $salesRow     = $sales !== '' ? '<tr><td class="k">Sales Representative</td><td class="v">' . $sales . '</td></tr>' : '';
+        $payRow       = $payShort !== '' ? '<tr><td class="k">Payment Terms</td><td class="v">' . e($payShort) . '</td></tr>' : '';
+        $lpoRow       = $lpo !== '' ? '<tr><td class="k">Customer LPO</td><td class="v">' . $lpo . '</td></tr>' : '';
+        $vatRow       = $vatPctNum > 0
+            ? '<tr><td class="l">VAT (' . $vatP . '%)</td><td class="v">' . $vat . '</td></tr>'
+            : '';
+        $freightRow   = $freightNum > 0
+            ? '<tr><td class="l">Freight</td><td class="v">' . $freight . '</td></tr>'
             : '';
         $incNote = ! empty($totals['inclusive'])
-            ? '<div style="font-size:9px;color:#555;margin-top:4px;">Listed prices are VAT-inclusive; unit prices above are shown net and ' . $vatP . '% VAT is broken out — the total equals the VAT-inclusive price.</div>'
+            ? '<div style="font-size:9px;color:#555;margin-top:4px;">Listed prices are VAT-inclusive; unit prices are shown net and ' . $vatP . '% VAT is broken out — the total equals the VAT-inclusive price.</div>'
             : '';
+
+        // QR / live-portal panel (only when we have a portal URL). QR image is dependency-optional
+        // (composer require bacon/bacon-qr-code); the link is always shown so the panel is complete.
+        $qrPanel = '';
+        if ($portalUrl) {
+            $qrUri  = $this->qrDataUri($portalUrl);
+            $qrImg  = $qrUri !== '' ? '<td style="width:104px"><img src="' . $qrUri . '" width="96" height="96"></td>' : '';
+            $shortUrl = e(preg_replace('#^https?://#', '', (string) $portalUrl));
+            $qrPanel = '<div class="qr"><table width="100%"><tr>' . $qrImg
+                . '<td style="padding-left:' . ($qrImg ? '10' : '0') . 'px;vertical-align:top">'
+                . '<div class="qh">Open your live quotation</div>'
+                . '<div class="qt2">Scan or visit the link to view, edit &amp; approve online. It always shows the latest revision.</div>'
+                . '<div class="qu">' . $shortUrl . '</div></td></tr></table></div>';
+        }
 
         return <<<HTML
 <!doctype html><html><head><meta charset="utf-8"><style>
 * { font-family: "DejaVu Sans", Arial, sans-serif; }
-body { color:#111; font-size:11px; margin:0; }
+@page { margin: 40px 34px 58px; }
+body { color:#1a1a1a; font-size:11px; margin:0; }
 .formcode { text-align:right; font-size:9px; font-weight:bold; }
-.company { font-size:19px; font-weight:bold; text-align:center; line-height:1.1; }
-.sub { text-align:center; font-size:9.5px; line-height:1.35; }
-.webline { text-align:center; font-size:9.5px; padding-top:6px; }
-.rule { border:0; border-top:1px solid #111; margin:8px 0 0; }
-.qtitle { text-align:right; font-size:20px; font-weight:bold; letter-spacing:1px; margin:14px 0 6px; }
-.box { border:1px solid #111; padding:8px 10px; }
+.company { font-size:20px; font-weight:bold; letter-spacing:.3px; }
+.sub { font-size:9.5px; color:#555; line-height:1.4; margin-top:2px; }
+.qbadge { text-align:right; }
+.qbadge .qt { font-size:25px; font-weight:bold; letter-spacing:2px; color:#0C831F; }
+.qbadge .qn { font-size:11.5px; font-weight:bold; margin-top:2px; }
+.rule { border:0; border-top:2px solid #0C831F; margin:10px 0 13px; }
+.tobox { border:1px solid #d8ddd9; border-radius:8px; padding:11px 13px; }
+.tobox .k { font-size:8.5px; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; font-weight:bold; }
+.tobox .v { font-size:13px; font-weight:bold; margin:2px 0 8px; }
 .kv { width:100%; border-collapse:collapse; }
-.kv td { border:1px solid #111; padding:5px 8px; font-size:10.5px; }
-.kv td.k { font-weight:bold; width:46%; }
-.sales { font-size:10.5px; margin:12px 0 4px; }
+.kv td { padding:6px 10px; font-size:10.5px; border-bottom:1px solid #eef1ee; }
+.kv td.k { color:#6b7280; font-weight:bold; width:54%; }
+.kv td.v { text-align:right; font-weight:bold; }
 table.items { width:100%; border-collapse:collapse; margin-top:4px; }
-table.items th { background:#f0f0f0; border:1px solid #111; padding:6px; font-size:10px; text-align:center; }
-table.items td { border:1px solid #111; padding:6px; font-size:10px; vertical-align:top; }
-.r { text-align:right; } .c { text-align:center; }
-table.tot { border-collapse:collapse; }
-table.tot td { border:1px solid #111; padding:6px 10px; font-size:10.5px; }
-table.tot td.lbl { font-weight:bold; }
-table.tot tr.grand td { font-weight:bold; font-size:12px; }
-.terms { margin-top:24px; font-size:9.5px; line-height:1.5; }
-.terms .h { font-weight:bold; }
-.sig td { padding-top:30px; font-size:10px; }
-.sigline { border-bottom:1px solid #111; height:1px; }
-.pageno { text-align:right; font-size:9px; color:#444; margin-top:22px; }
+table.items th { background:#0C831F; color:#fff; padding:8px 6px; font-size:9.5px; text-align:center; font-weight:bold; }
+table.items td { border-bottom:1px solid #eef1ee; padding:7px 6px; font-size:10px; vertical-align:middle; }
+table.items tr.alt td { background:#fafbfa; }
+.pn { font-weight:bold; font-size:10.5px; } .bv { color:#6b7280; font-size:9px; margin-top:1px; }
+.noimg { width:30px; height:30px; border-radius:4px; background:#eef2ed; }
+.r { text-align:right; } .c { text-align:center; } .b { font-weight:bold; }
+table.tot { width:100%; border-collapse:collapse; }
+table.tot td { padding:7px 12px; font-size:11px; }
+table.tot td.l { color:#555; } table.tot td.v { text-align:right; font-weight:bold; }
+table.tot tr.grand td { background:#0C831F; color:#fff; font-size:13.5px; font-weight:bold; }
+.qr { border:1px solid #d8ddd9; border-radius:10px; padding:11px; }
+.qr .qh { font-weight:bold; font-size:11.5px; color:#0C831F; }
+.qr .qt2 { font-size:9px; color:#333; margin-top:3px; line-height:1.4; }
+.qr .qu { font-size:8.5px; color:#555; margin-top:4px; }
+.terms { font-size:9px; color:#444; line-height:1.55; }
+.terms .h { font-weight:bold; color:#111; }
+.appr { width:100%; border-collapse:collapse; margin-top:16px; }
+.appr td { width:50%; vertical-align:top; padding-right:14px; }
+.abox { border:1px dashed #b7c0b9; border-radius:10px; height:88px; padding:9px 11px; }
+.abox .t { font-size:8.5px; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; font-weight:bold; }
+.foot { position:fixed; bottom:-40px; left:0; right:0; text-align:center; font-size:8.5px; color:#8a8f8a; border-top:1px solid #e6e9e6; padding-top:6px; }
+.pageno:after { content: "Page " counter(page) " of " counter(pages); }
 </style></head><body>
-{$formCodeHtml}
+<div class="foot">{$company} · Quotation {$no}{$tinLineHtml} · <span class="pageno"></span></div>
 <table width="100%"><tr>
-  <td style="width:90px;vertical-align:middle;">{$logoTag}</td>
-  <td style="vertical-align:middle;">
+  <td style="width:120px;vertical-align:middle;">{$logoTag}</td>
+  <td style="vertical-align:middle;padding-left:6px;">
     <div class="company">{$company}</div>
-    <div class="sub">{$subHtml}</div>
+    {$subHtmlBlock}{$webLineHtml}
   </td>
-  <td style="width:90px;">&nbsp;</td>
+  <td class="qbadge" style="vertical-align:middle;"><div class="qt">QUOTATION</div><div class="qn">No. {$no}</div></td>
 </tr></table>
-{$webLineHtml}
-{$tinLineHtml}
 <hr class="rule">
 
-<div class="qtitle">QUOTATION</div>
-
-<table width="100%"><tr>
-  <td width="55%" style="vertical-align:top;padding-right:14px;">
-    <div class="box" style="height:118px;">
-      <div><b>To :</b>&nbsp; {$custName}</div>
-      <div style="height:70px;">&nbsp;</div>
-      <div><b>Contact Person :</b></div>
+<table width="100%" style="margin-bottom:12px"><tr>
+  <td width="54%" style="vertical-align:top;padding-right:16px;">
+    <div class="tobox">
+      <div class="k">Quotation For</div><div class="v">{$custName}</div>
+      <div class="k">Attention</div><div style="font-size:10.5px">{$phone}</div>
+      <div class="k" style="margin-top:8px">Contact Person</div><div style="font-size:10.5px">&nbsp;</div>
     </div>
   </td>
-  <td width="45%" style="vertical-align:top;">
+  <td width="46%" style="vertical-align:top;">
     <table class="kv">
-      <tr><td class="k">Quote No.</td><td>{$no}</td></tr>
-      <tr><td class="k">Date :</td><td>{$date}</td></tr>
-      <tr><td class="k">Customer LPO :</td><td>{$lpoCell}</td></tr>
-      <tr><td class="k">Currency :</td><td>{$cur}</td></tr>
+      <tr><td class="k">Quotation No.</td><td class="v">{$no}</td></tr>
+      <tr><td class="k">Date</td><td class="v">{$date}</td></tr>
+      <tr><td class="k">Valid Until</td><td class="v">{$validUntil}</td></tr>
+      {$salesRow}
+      <tr><td class="k">Currency</td><td class="v">{$cur}</td></tr>
+      {$payRow}
+      {$lpoRow}
     </table>
   </td>
 </tr></table>
 
-{$salesHtml}
-
 <table class="items">
   <tr>
-    <th style="width:22px;">#</th>
-    <th>Description</th>
-    <th style="width:74px;">Qty/Unit</th>
-    <th style="width:80px;">Price</th>
-    <th style="width:48px;">Disc %</th>
-    <th style="width:88px;">Price After Disc</th>
-    <th style="width:95px;">Sub-Total</th>
+    <th style="width:20px;">#</th>
+    <th style="width:40px;">Image</th>
+    <th>Product / Brand</th>
+    <th style="width:62px;">Qty/Unit</th>
+    <th style="width:80px;">Unit Price</th>
+    <th style="width:44px;">Disc%</th>
+    <th style="width:40px;">Tax</th>
+    <th style="width:90px;">Line Total</th>
   </tr>
   {$rows}
 </table>
 
-<table width="100%" style="margin-top:10px;"><tr>
-  <td width="52%">&nbsp;</td>
-  <td width="48%">
-    <table class="tot" width="100%">
-      <tr><td class="lbl">Subtotal Before Discount</td><td class="r">{$subB}</td></tr>
-      <tr><td class="lbl">Discount</td><td class="r">{$disc}</td></tr>
-      <tr><td class="lbl">Sub Total</td><td class="r">{$subT}</td></tr>
+<table width="100%" style="margin-top:12px;"><tr>
+  <td width="46%" style="vertical-align:top;padding-right:16px;">{$qrPanel}</td>
+  <td width="54%" style="vertical-align:top;">
+    <table class="tot">
+      <tr><td class="l">Subtotal</td><td class="v">{$subB}</td></tr>
+      <tr><td class="l">Discount</td><td class="v">{$disc}</td></tr>
       {$vatRow}
-      <tr class="grand"><td>Total &nbsp; {$cur}</td><td class="r">{$grand}</td></tr>
+      {$freightRow}
+      <tr class="grand"><td>GRAND TOTAL &nbsp; {$cur}</td><td class="v">{$grand}</td></tr>
     </table>
     {$incNote}
   </td>
 </tr></table>
 
-<div class="terms">
-  <div class="h">Terms of Payments:</div>
-  <div>&nbsp;&nbsp;{$tPay}</div>
-  <div style="height:8px;">&nbsp;</div>
-  <div><span class="h">Delivery</span>: {$tDel}</div>
+<div class="terms" style="margin-top:16px">
+  <div class="h">Terms &amp; Conditions</div>
+  <div><span class="h">Payment:</span> {$tPay}</div>
+  <div><span class="h">Delivery:</span> {$tDel}</div>
   <div><span class="h">Pricing:</span> {$tPri}</div>
   <div><span class="h">Cancellation:</span> {$tCan}</div>
 </div>
 
-<table class="sig" width="100%">
+<table class="appr">
   <tr>
-    <td width="18%">Prepared By :</td>
-    <td width="32%">{$prepCell}<div class="sigline"></div></td>
-    <td width="18%" style="padding-left:18px;">Signature :</td>
-    <td width="32%"><div class="sigline"></div></td>
-  </tr>
-  <tr>
-    <td>Authorised By :</td>
-    <td><div class="sigline"></div></td>
-    <td style="padding-left:18px;">Signature:</td>
-    <td><div class="sigline"></div></td>
+    <td><div class="abox"><div class="t">Company Stamp &amp; Authorised Signature</div></div></td>
+    <td style="padding-right:0"><div class="abox"><div class="t">Customer Approval — Name / Signature / Date</div></div></td>
   </tr>
 </table>
-
-<div class="pageno">Page 1 of 1</div>
 </body></html>
 HTML;
+    }
+
+    /**
+     * QR code as a data URI for the live-quotation link. Dependency-optional: if
+     * bacon/bacon-qr-code is installed (composer require bacon/bacon-qr-code) an SVG QR is embedded
+     * (dompdf v3 renders SVG via php-svg-lib); otherwise returns '' and the PDF shows the link only.
+     */
+    private function qrDataUri(string $text): string
+    {
+        try {
+            if (class_exists(\BaconQrCode\Writer::class)) {
+                $renderer = new \BaconQrCode\Renderer\ImageRenderer(
+                    new \BaconQrCode\Renderer\RendererStyle\RendererStyle(220, 1),
+                    new \BaconQrCode\Renderer\Image\SvgImageBackEnd()
+                );
+                $svg = (new \BaconQrCode\Writer($renderer))->writeString($text);
+
+                return 'data:image/svg+xml;base64,' . base64_encode($svg);
+            }
+        } catch (\Throwable $e) {
+            // fall through to link-only
+        }
+
+        return '';
     }
 
     private function fmt(float $n, int $dec = 0): string

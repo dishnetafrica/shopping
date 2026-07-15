@@ -143,6 +143,7 @@ function chgText(c){
   if(c.type==='remove') return '<b>'+esc(c.name)+'</b> removed';
   if(c.type==='price') return '<b>'+esc(c.name)+'</b> price: '+money(c.from)+' → <b>'+money(c.to)+'</b>';
   if(c.type==='discount') return '<b>'+esc(c.name)+'</b> discount → <b>'+c.to+'%</b>';
+  if(c.type==='freight') return 'Freight updated to <b>'+money(c.to)+'</b>';
   if(c.type==='remarks') return 'Remarks updated';
   if(c.type==='comment'||c.type==='request') return (c.by==='customer'?'You':'Sales')+': "'+esc(c.text||'')+'"';
   return esc(c.type||'Updated');
@@ -177,11 +178,13 @@ function render(){
   }
 
   var t=Q.totals||{};
+  var fr=Number(t.freight)||0;
   var totRows='<div class="tr"><span class="l">Subtotal</span><span>'+money(t.subtotal)+'</span></div>';
-  var adj=(Number(t.grand)||0)-(Number(t.subtotal)||0);
+  var adj=(Number(t.grand)||0)-(Number(t.subtotal)||0)-fr;   // VAT/discount net of freight
   if(t.discount>0) totRows+='<div class="tr"><span class="l">Discount</span><span>-'+money(t.discount)+'</span></div>';
   else if(adj<0) totRows+='<div class="tr"><span class="l">Discount / adjustments</span><span>'+money(adj)+'</span></div>';
-  else if(adj>0) totRows+='<div class="tr"><span class="l">Taxes / freight</span><span>+'+money(adj)+'</span></div>';
+  else if(adj>0) totRows+='<div class="tr"><span class="l">Taxes</span><span>+'+money(adj)+'</span></div>';
+  if(fr>0) totRows+='<div class="tr"><span class="l">Freight</span><span>'+money(fr)+'</span></div>';
   totRows+='<div class="tr grand"><span>Grand Total</span><span>'+money(t.grand)+'</span></div>';
 
   // --- Edit controls (add products + comment + submit) ---

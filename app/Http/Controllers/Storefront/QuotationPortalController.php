@@ -155,7 +155,7 @@ class QuotationPortalController extends Controller
                 'subtotal' => $subtotal,
                 'discount' => 0.0,
                 'tax'      => 0.0,
-                'freight'  => 0.0,
+                'freight'  => (float) ($q->freight ?? 0),
                 'grand'    => $grand,
             ],
             'remarks'   => (string) ($q->remarks ?? ''),
@@ -191,7 +191,8 @@ class QuotationPortalController extends Controller
             'matched' => true,
         ])->all();
         $quote = ['lines' => $lines, 'currency' => (string) $q->currency, 'total' => (float) $q->total];
-        $doc   = $svc->generate($tenant, (string) $q->customer_phone, (string) $q->customer_name, $quote, (string) $q->quote_no);
+        $portalUrl = url(rtrim($base, '/') . '/q/' . $q->public_token);
+        $doc   = $svc->generate($tenant, (string) $q->customer_phone, (string) $q->customer_name, $quote, (string) $q->quote_no, $portalUrl, (float) ($q->freight ?? 0));
         abort_if(! $doc, 503, 'Could not render the quotation PDF');
 
         if (! empty($doc['path'])) {
@@ -360,7 +361,7 @@ class QuotationPortalController extends Controller
             'sum' => (float) ($it->line_total ?: $it->qty * $it->unit_price), 'unit' => (string) ($it->unit_label ?? ''),
             'image' => (string) ($it->image_url ?? ''), 'matched' => true,
         ])->all();
-        $doc = $svc->generate($tenant, (string) $q->customer_phone, (string) $q->customer_name, ['lines' => $lines, 'currency' => (string) $q->currency, 'total' => (float) $q->total], (string) $q->quote_no);
+        $doc = $svc->generate($tenant, (string) $q->customer_phone, (string) $q->customer_name, ['lines' => $lines, 'currency' => (string) $q->currency, 'total' => (float) $q->total], (string) $q->quote_no, $q->canonicalPortalUrl(), (float) ($q->freight ?? 0));
 
         return $doc && ! empty($doc['b64']) ? (string) base64_decode($doc['b64']) : '';
     }

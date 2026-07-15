@@ -40,7 +40,7 @@ class QuotationReviseService
      * automatically. This lets the existing panel editor create immutable revisions instead of
      * overwriting. $lines: [{name, qty, price|unit_price, disc?, unit?, image?}].
      */
-    public function applySalesLines(Tenant $t, Quotation $q, array $lines, ?string $remarks, ?int $actorId, ?string $actorName, ?string $comment = null): array
+    public function applySalesLines(Tenant $t, Quotation $q, array $lines, ?string $remarks, ?int $actorId, ?string $actorName, ?string $comment = null, ?float $freight = null): array
     {
         if (! $q->isEditable()) {
             return ['ok' => false, 'error' => 'This quotation is locked and can no longer be edited.'];
@@ -77,6 +77,13 @@ class QuotationReviseService
         $meta = ['requests' => []];
         if ($remarks !== null && trim($remarks) !== '') {
             $meta['remarks'] = mb_substr(trim($remarks), 0, 800);
+        }
+        if ($freight !== null) {
+            $newFreight = max(0.0, (float) $freight);
+            if (round($newFreight, 2) !== round((float) ($q->freight ?? 0), 2)) {
+                $meta['freight'] = $newFreight;
+            }
+            $q->freight = $newFreight;   // render() reads this; commit()'s save() persists it
         }
 
         return $this->commit($t, $q, $prev, $newLines, $meta, 'sales', $actorId, $actorName, $comment, 'revised');
@@ -120,6 +127,9 @@ class QuotationReviseService
         if (isset($meta['remarks'])) {
             $summary[] = ['type' => 'remarks', 'text' => $meta['remarks']];
         }
+        if (isset($meta['freight'])) {
+            $summary[] = ['type' => 'freight', 'to' => (float) $meta['freight']];
+        }
 
         return DB::transaction(function () use ($t, $q, $lines, $subtotal, $grand, $summary, $doc, $actorType, $actorId, $actorName, $meta, $newStatus) {
             $revNo = (int) ($q->revisions()->max('rev_no') ?? 0) + 1;
@@ -136,7 +146,7 @@ class QuotationReviseService
                 'subtotal'       => $subtotal,
                 'discount_total' => max(0, $subtotal - $grand) > 0 && $grand < $subtotal ? ($subtotal - $grand) : 0,
                 'tax_total'      => 0,
-                'freight'        => 0,
+                'freight'        => (float) ($q->freight ?? 0),
                 'grand_total'    => $grand,
                 'snapshot'       => ['lines' => $lines, 'customer' => [
                     'name'    => (string) $q->customer_name,
@@ -315,6 +325,8 @@ class QuotationReviseService
             $subtotal += $sum;
             $quoteLines[] = [
                 'name'    => (string) $l['name'],
+                'brand'   => (string) ($l['brand'] ?? ''),
+                'variant' => (string) ($l['variant'] ?? ''),
                 'qty'     => (int) $l['qty'],
                 'price'   => (float) $l['price'],
                 'sum'     => $sum,
@@ -326,13 +338,18 @@ class QuotationReviseService
         }
         $quote = ['lines' => $quoteLines, 'currency' => (string) $q->currency, 'total' => $subtotal];
 
+        // Freight (sales-set) sits on top; the professional PDF shows it, and the QR points at the
+        // live portal — so the PDF stays in sync with the portal for this revision.
+        $freight = (float) ($q->freight ?? 0);
+        $portalUrl = $q->public_token ? $q->canonicalPortalUrl() : null;
+
         $svc = app(QuotationService::class);
         $doc = $svc->available()
-            ? $svc->generate($t, (string) $q->customer_phone, (string) $q->customer_name, $quote, (string) $q->quote_no)
+            ? $svc->generate($t, (string) $q->customer_phone, (string) $q->customer_name, $quote, (string) $q->quote_no, $portalUrl, $freight)
             : null;
 
         if (! $doc) {
-            $doc = ['total' => $subtotal, 'path' => (string) $q->pdf_path];
+            $doc = ['total' => $subtotal + $freight, 'path' => (string) $q->pdf_path];
         }
 
         return [$doc, $subtotal];

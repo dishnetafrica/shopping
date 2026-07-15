@@ -16,12 +16,13 @@ class Quotation extends Model
     protected $fillable = [
         'tenant_id', 'quote_no', 'public_token', 'customer_name', 'customer_phone',
         'delivery_address', 'remarks', 'currency',
-        'total', 'status', 'source', 'valid_until', 'pdf_path', 'order_id', 'sales_exec_id',
+        'total', 'freight', 'status', 'source', 'valid_until', 'pdf_path', 'order_id', 'sales_exec_id',
         'current_rev', 'send_count', 'last_sent_at', 'viewed_at', 'accepted_at', 'meta',
     ];
 
     protected $casts = [
         'total'        => 'decimal:2',
+        'freight'      => 'decimal:2',
         'valid_until'  => 'date',
         'last_sent_at' => 'datetime',
         'viewed_at'    => 'datetime',
@@ -84,5 +85,18 @@ class Quotation extends Model
     public function portalUrl(string $base = ''): string
     {
         return url(rtrim($base, '/') . '/q/' . $this->public_token);
+    }
+
+    /** Canonical portal URL resolved from the tenant (custom domain if set, else platform slug) — host-independent. */
+    public function canonicalPortalUrl(): string
+    {
+        $tenant = $this->relationLoaded('tenant') ? $this->tenant : Tenant::find($this->tenant_id);
+        $dom = strtolower(trim((string) ($tenant->custom_domain ?? '')));
+        if ($dom !== '') {
+            return 'https://' . rtrim($dom, '/') . '/q/' . $this->public_token;
+        }
+        $slug = $tenant && $tenant->slug ? '/' . $tenant->slug : '';
+
+        return url($slug . '/q/' . $this->public_token);
     }
 }
