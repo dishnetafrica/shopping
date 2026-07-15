@@ -329,6 +329,42 @@ body{padding-bottom:calc(var(--nav-h) + 14px + var(--safe-b))}
 .frow{display:flex;align-items:center;justify-content:space-between;padding:10px 2px;font-size:14.5px;cursor:pointer}
 .frow input{width:20px;height:20px}
 
+/* ---- V2 cart drawer (Increment 5) ---- */
+.cartlines{padding:2px 0}
+.cline{display:flex;align-items:center;gap:11px;padding:11px 2px;border-bottom:1px solid var(--line)}
+.cline .cthumb{width:46px;height:46px;border-radius:10px;background:var(--tile);display:grid;place-items:center;flex:none;overflow:hidden;font-size:20px}
+.cline .cthumb img{width:100%;height:100%;object-fit:cover}
+.cline .cthumb svg{width:24px;height:24px}
+.cline .cmeta{flex:1;min-width:0}
+.cline .cnm{font-size:14px;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cline .cpr{font-size:12px;color:var(--muted);margin-top:2px}
+.cline .cright{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
+.cline .clsub{font-size:14px;font-weight:800}
+.freebar{background:#F1F8F3;border:1px solid #DDEEE1;border-radius:12px;padding:10px 12px;margin:12px 0}
+.freebar.done{color:var(--green-d);font-weight:700;text-align:center}
+.freebar .ft{font-size:13px;font-weight:600;margin-bottom:7px}
+.freebar .fprog{height:7px;border-radius:99px;background:#e5efe8;overflow:hidden}
+.freebar .fprog>div{height:100%;background:var(--green);border-radius:99px;transition:width .4s}
+.xsell{margin:14px 0 6px}
+.xsh{font-size:13px;font-weight:800;margin-bottom:8px}
+.xrow{display:flex;gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px}
+.xrow::-webkit-scrollbar{display:none}
+.xcard{flex:0 0 120px;max-width:120px;border:1px solid var(--line);border-radius:12px;padding:8px}
+.xcard .xthumb{aspect-ratio:1/1;border-radius:8px;background:var(--tile);display:grid;place-items:center;overflow:hidden;font-size:24px;cursor:pointer}
+.xcard .xthumb img{width:100%;height:100%;object-fit:cover}
+.xcard .xnm{font-size:12px;font-weight:600;line-height:1.25;margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:30px}
+.xcard .xpr{font-size:13px;font-weight:800;margin:3px 0 6px}
+.xcard .xadd{width:100%;border:1px solid var(--green);color:var(--green);background:#fff;border-radius:8px;padding:8px;font-weight:800;font-size:12px;cursor:pointer;min-height:38px}
+.billbox{border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
+.billrow{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;padding:5px 0;color:var(--ink)}
+.billrow .mut{color:var(--muted);font-weight:600;font-size:13px;max-width:60%;text-align:right}
+.billrow.save{color:var(--green-d);font-weight:700}
+.billrow.tot{font-size:16px;font-weight:800;border-top:1px solid var(--line);margin-top:6px;padding-top:10px}
+.billrow.tot .plusdel{font-size:12px;font-weight:600;color:var(--muted)}
+.trustrow{font-size:12px;color:var(--muted);text-align:center;padding:12px 4px 8px;line-height:1.7}
+.cartfoot{position:sticky;bottom:0;background:#fff;padding:10px 0 4px;border-top:1px solid var(--line)}
+.cartfoot .place{width:100%}
+
 </style>
 </head>
 <body>
@@ -1409,16 +1445,49 @@ function drawModSheet(){var html='';MOD_CTX.groups.forEach(function(g){html+='<d
 function addCustom(){if(!MOD_CTX||!modReady())return;var mods=[];MOD_CTX.groups.forEach(function(g){var i=MOD_CTX.sel[g.id];if(i!=null){var o=g.options[i];mods.push({group:g.name,name:o.name,price_delta:(+o.delta||0)});}});var nm=mods.map(function(m){return m.name;});var key=MOD_CTX.name+'||'+nm.slice().sort().join(',');if(!CART[key])CART[key]={name:MOD_CTX.name,display:MOD_CTX.name+(nm.length?(' + '+nm.join(', ')):''),price:modPrice(),qty:0,modifiers:mods};CART[key].qty++;saveCart();render();bar();closeSheet();}
 
 function closeSheet(){$('sheet').classList.remove('show');}
+/* ---------- V2 cart drawer (Increment 5) ---------- */
+function cartLine(k){ var i=CART[k], p=prod(i.name), kk=jk(k);
+  var thumb=(p&&p.image)?('<img src="'+esc(p.image)+'" loading="lazy">'):(p?catIcon(p.category):'🛒');
+  return '<div class="cline"><div class="cthumb">'+thumb+'</div>'
+    +'<div class="cmeta"><div class="cnm">'+esc(i.display||i.name)+'</div><div class="cpr">'+ugx(i.price)+' each</div></div>'
+    +'<div class="cright"><div class="stp"><button onclick="bump('+kk+',-1)" aria-label="Decrease">−</button><span>'+i.qty+'</span><button onclick="bump('+kk+',1)" aria-label="Increase">+</button></div>'
+    +'<div class="clsub">'+ugx(i.price*i.qty)+'</div></div></div>'; }
+function cartSavings(){ var s=0; Object.keys(CART).forEach(function(k){ var p=prod(CART[k].name); if(p&&p.oldPrice&&p.oldPrice>p.price) s+=(p.oldPrice-p.price)*CART[k].qty; }); return s; }
+function deliveryEstimateText(){ if(!DELV) return null; if(DELV.mode==='out') return DELIVERY.out; if(DELV.mode==='city') return 'Delivering to '+((DELV.branch&&DELV.branch.name)||'your area'); return DELV.label||null; }
+function freeDeliveryBar(sub){ var thr=Number((SHOP.delivery&&(SHOP.delivery.free_over||SHOP.delivery.free_delivery_over))||0); if(!thr)return '';
+  if(sub>=thr) return '<div class="freebar done">🎉 You’ve unlocked free delivery!</div>';
+  var pct=Math.min(100,Math.round(sub/thr*100));
+  return '<div class="freebar"><div class="ft">Add '+ugx(thr-sub)+' more for <b>free delivery</b></div><div class="fprog"><div style="width:'+pct+'%"></div></div></div>'; }
+function _xcard(p){ return '<div class="xcard"><div class="xthumb" onclick="closeSheet();goDetail('+(p.id||0)+')">'+(p.image?'<img src="'+esc(p.image)+'" loading="lazy">':catIcon(p.category))+'</div><div class="xnm">'+esc(p.name)+'</div><div class="xpr">'+ugx(p.price)+'</div><button class="xadd" onclick="cartAdd('+jk(p.name)+');openCart()">+ Add</button></div>'; }
+function crossSellStrip(){
+  var inCart={}; Object.keys(CART).forEach(function(k){var p=prod(CART[k].name);if(p)inCart[p.id]=1;});
+  var pool=PRODUCTS.filter(function(p){return !p.poa && !oosOf(p) && p.id && !inCart[p.id];}).slice().sort(function(a,b){return (b.popularity||0)-(a.popularity||0);}).slice(0,8);
+  if(pool.length<3) return '';
+  return '<div class="xsell"><div class="xsh">Complete your order</div><div class="xrow">'+pool.map(_xcard).join('')+'</div></div>';
+}
+function cartEmpty(){
+  var best=PRODUCTS.filter(function(p){return !p.poa && !oosOf(p) && p.id;}).slice().sort(function(a,b){return (b.popularity||0)-(a.popularity||0);}).slice(0,6);
+  var sug=best.length>=3?('<div class="xsell"><div class="xsh">Popular right now</div><div class="xrow">'+best.map(_xcard).join('')+'</div></div>'):'';
+  return '<div style="text-align:center;padding:26px 10px 8px"><div style="font-size:42px">🛒</div><div style="font-weight:800;font-size:16px;margin-top:8px">Your cart is empty</div><div class="mut" style="font-size:13px;margin-top:4px;color:var(--muted)">Add items and check out in seconds.</div></div>'+sug;
+}
 function openCart(){
   $('sheetTitle').textContent='Your cart';
   var keys=Object.keys(CART);
-  if(!keys.length){$('sheetBody').innerHTML='<div class="empty">Your cart is empty.</div>';$('sheet').classList.add('show');return;}
-  var rows=keys.map(function(k){var i=CART[k];var kk=jk(k);
-    return '<div class="ci2"><div><div class="nm">'+esc(i.display||i.name)+'</div><div class="pr">'+ugx(i.price)+' each</div></div>'+
-      '<div class="stp"><button onclick="bump('+kk+',-1)">−</button><span>'+i.qty+'</span><button onclick="bump('+kk+',1)">+</button></div></div>';}).join('');
-  $('sheetBody').innerHTML=rows+'<div style="padding:10px 0"><div class="totrow g"><span>Total</span><span>'+ugx(cartTotal())+'</span></div>'+
-    '<div class="note">Delivery fee is added by our team based on your location.</div>'+
-    '<button class="place" onclick="openCheckout()">Checkout →</button></div>';
+  if(!keys.length){ $('sheetBody').innerHTML=cartEmpty(); $('sheet').classList.add('show'); return; }
+  var sub=cartTotal(), saved=cartSavings(), de=deliveryEstimateText();
+  var bill='<div class="billbox">'
+    +'<div class="billrow"><span>Items ('+cartCount()+')</span><span>'+ugx(sub)+'</span></div>'
+    +(saved>0?('<div class="billrow save"><span>You save</span><span>−'+ugx(saved)+'</span></div>'):'')
+    +'<div class="billrow"><span>Delivery</span><span class="mut">'+(de?esc(de):'set your location')+'</span></div>'
+    +'<div class="billrow tot"><span>To pay</span><span>'+ugx(sub)+'<span class="plusdel"> + delivery</span></span></div>'
+    +'</div>';
+  $('sheetBody').innerHTML=
+    '<div class="cartlines">'+keys.map(cartLine).join('')+'</div>'
+    + freeDeliveryBar(sub)
+    + crossSellStrip()
+    + bill
+    + '<div class="trustrow">✓ Pay on delivery available · ✓ Order confirmed on WhatsApp · ✓ We check every order before delivery</div>'
+    + '<div class="cartfoot"><button class="place" onclick="openCheckout()">Checkout · '+ugx(sub)+' →</button></div>';
   $('sheet').classList.add('show');
 }
 function openCheckout(){
