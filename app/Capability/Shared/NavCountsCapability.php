@@ -29,6 +29,20 @@ final class NavCountsCapability implements Capability
     /** @return array<string,int> map of nav key => count */
     public function counts(CapabilityContext $ctx): array
     {
+        // Sidebar badges are cosmetic and re-fetched on every shell load — cache per tenant for a short
+        // window so 9 COUNT() queries don't run on each catalog request. Staleness of ≤45s is harmless.
+        try {
+            return \Illuminate\Support\Facades\Cache::remember(
+                'navcounts:' . $ctx->tenantId(), 45, fn () => $this->computeCounts($ctx)
+            );
+        } catch (\Throwable $e) {
+            return $this->computeCounts($ctx);
+        }
+    }
+
+    /** @return array<string,int> */
+    private function computeCounts(CapabilityContext $ctx): array
+    {
         $t = $ctx->tenantId();
         $c = fn ($q) => (int) $q->where('tenant_id', $t)->count();
 

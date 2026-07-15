@@ -54,10 +54,15 @@ final class SalesOrderCapability implements ObjectCapability
 
         // Line items (real, from OrderItem) + best-effort COGS from product cost.
         $items = $o->items()->get();
+        // Fetch all line-item product costs in ONE query (was N+1: one lookup per line).
+        $pids = $items->pluck('product_id')->filter()->unique()->values()->all();
+        $costMap = $pids
+            ? Product::where('tenant_id', $ctx->tenantId())->whereIn('id', $pids)->pluck('cost_price', 'id')->all()
+            : [];
         $lineRows = []; $cogs = 0.0; $costKnown = $items->count() > 0;
         foreach ($items as $it) {
             $qty = (float) $it->qty; $price = (float) $it->price; $amount = $qty * $price;
-            $c = $it->product_id ? (float) (Product::where('tenant_id', $ctx->tenantId())->whereKey($it->product_id)->value('cost_price') ?? 0) : 0.0;
+            $c = $it->product_id ? (float) ($costMap[$it->product_id] ?? 0) : 0.0;
             if ($c > 0) { $cogs += $c * $qty; } else { $costKnown = false; }
             $lineRows[] = ['cells' => [(string) $it->name, rtrim(rtrim(number_format($qty, 2), '0'), '.'), $fmt($price), $fmt($amount)],
                 'link' => $it->product_id ? '/api/v1/workspace/product/' . $it->product_id : null];
