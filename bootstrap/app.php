@@ -23,7 +23,19 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant.domain' => \App\Http\Middleware\IdentifyTenantByDomain::class,
         ]);
         // WhatsApp webhook is called by Evolution/Meta — exclude from CSRF.
-        $middleware->validateCsrfTokens(except: ['api/webhook/*', 'papi/*', '*/order', '*/auth/*', '*/account/*', 'r/*', 't/*', 'a/*', 'ops/*']);
+        // Storefront POSTs are token/no-session by design (no CSRF cookie). Exempt them on BOTH the
+        // platform slug (mycloudbss.com/{shop}/…) and a tenant custom domain (familyshoppers.net/…,
+        // where the path is bare, e.g. "quote" or "q/{token}/revise") — hence each pattern twice.
+        $middleware->validateCsrfTokens(except: [
+            'api/webhook/*', 'papi/*',
+            'order', '*/order',
+            'quote', '*/quote',
+            'event', '*/event',
+            'auth/*', '*/auth/*',
+            'account/*', '*/account/*',
+            'q/*', '*/q/*',
+            'r/*', 't/*', 'a/*', 'ops/*',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         // Error tracking: capture exceptions to Sentry if the package is installed AND a DSN is set.
