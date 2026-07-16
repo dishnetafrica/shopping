@@ -114,7 +114,7 @@ td.num,th.num{text-align:right}
         <div class="f"><label>Date</label><input id="f_date" type="datetime-local"></div>
       </div>
       <div class="row2">
-        <div class="f"><label>Received by</label><input id="f_receiver" placeholder="optional — who took the cash"></div>
+        <div class="f"><label>Received by <span style="color:var(--g)">· whose cashbook</span></label><input id="f_receiver" list="holderList" autocomplete="off" placeholder="lands in this person's cash"><datalist id="holderList"></datalist></div>
         <div class="f"><label>Phone</label><input id="f_phone" placeholder="optional"></div>
       </div>
       <div class="f"><label>Note / reference</label><input id="f_note" placeholder="optional"></div>
@@ -161,6 +161,11 @@ async function pmLoadCustomers(){
   PM_CUSTOMERS=Object.keys(m).map(function(ph){return {name:(m[ph].name||''),phone:ph};}).filter(function(c){return c.name;});
   document.getElementById('custList').innerHTML=PM_CUSTOMERS.map(function(c){return '<option value="'+esc(c.name)+'">'+esc(c.phone)+'</option>';}).join('');
 }
+async function pmLoadHolders(){
+  var j=await api('/staff-cash'); var people=(j&&j.people)||[];
+  var names=people.map(function(p){return p.name;}).filter(Boolean);
+  document.getElementById('holderList').innerHTML=names.map(function(n){return '<option value="'+esc(n)+'"></option>';}).join('');
+}
 function pmFindInvoices(){
   clearTimeout(PM_INVT);
   var q=(document.getElementById('f_customer').value||'').trim();
@@ -191,7 +196,7 @@ function pmPickInvoice(idx){
 }
 async function load(){
   document.getElementById('bizname').textContent = CFG.business + ' · manage receipts';
-  pmLoadCustomers();
+  pmLoadCustomers(); pmLoadHolders();
   var fc=document.getElementById('f_cur'), ff=document.getElementById('fcur');
   if(fc.options.length===0){ Object.keys(CFG.rates).forEach(function(c){ fc.add(new Option(c,c)); ff.add(new Option(c,c)); }); fc.value=CFG.base; }
   var j=await api('/payments');
