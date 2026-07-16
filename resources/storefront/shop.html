@@ -53,6 +53,7 @@
   .cat .ci img{width:100%;height:100%;object-fit:cover}
   .cat .ci .ph{font-size:30px}
   .cat .nm{font-size:11.5px;font-weight:600;margin-top:6px;line-height:1.2}
+  .cat .ccount{font-size:10.5px;color:var(--muted,#6b7280);margin-top:2px;font-weight:500}
   /* product cards */
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 12px}
   @media(min-width:560px){.grid{grid-template-columns:1fr 1fr 1fr}}
@@ -1269,7 +1270,7 @@ function merchRows(){ return promotionsRail()+brandsStrip()+recommendedRail(); }
    so tenants without a config see no change. Auto-scrolls, pauses on hover/touch, swipes, and
    respects reduced-motion. Selecting a business re-merchandises collections + best-sellers; the
    CTA / collections drill into a business-filtered product grid (reusing the normal grid). */
-var BANNERS=null, BIZSEL='', _bizSlide=0, _bizTimer=null, BIZVIEW='', _bizOrder=null, KITS=[], COLLVIEW=null;
+var BANNERS=null, BIZSEL='', _bizSlide=0, _bizTimer=null, BIZVIEW='', _bizOrder=null, KITS=[], COLLVIEW=null, CATLIST=false;
 var BIZ_ICO={
  hotels:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 21V6l8-3 8 3v15"/><path d="M9 21v-5h6v5"/><path d="M8 9h.4M12 9h.4M16 9h.4"/></svg>',
  restaurants:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3v7a2 2 0 0 0 4 0V3M8 10v11"/><path d="M16 3c-1.5 0-2.5 2-2.5 5S15 13 16 13v8"/></svg>',
@@ -1412,9 +1413,9 @@ function bizCta(id,cta){ cta=String(cta||'');
   if(cta.indexOf('cat:')===0){ setCat(cta.slice(4)); return; }
   if(cta.indexOf('url:')===0){ try{location.href=cta.slice(4);}catch(e){} return; }
   bizShop(id); }
-function bizColl(id,cat,kw,label){ COLLVIEW={id:id||'',cat:cat||'',keywords:kw||'',label:label||''}; BIZVIEW=''; Q=''; if($('q'))$('q').value=''; CAT='all'; _catShown=24; render(); window.scrollTo(0,0); }
+function bizColl(id,cat,kw,label){ COLLVIEW={id:id||'',cat:cat||'',keywords:kw||'',label:label||''}; BIZVIEW=''; CATLIST=false; Q=''; if($('q'))$('q').value=''; CAT='all'; _catShown=24; render(); window.scrollTo(0,0); }
 function collClose(){ COLLVIEW=null; render(); window.scrollTo(0,0); }
-function bizShop(id){ BIZVIEW=id; COLLVIEW=null; Q=''; if($('q'))$('q').value=''; CAT='all'; _catShown=24; render(); window.scrollTo(0,0); }
+function bizShop(id){ BIZVIEW=id; COLLVIEW=null; CATLIST=false; Q=''; if($('q'))$('q').value=''; CAT='all'; _catShown=24; render(); window.scrollTo(0,0); }
 function bizClose(){ BIZVIEW=''; render(); window.scrollTo(0,0); }
 function updateBizSlide(){ var t=$('bizTrack'); if(t)t.style.transform='translateX(-'+(_bizSlide*100)+'%)'; var d=$('bizDots'); if(d){var ch=d.children; for(var i=0;i<ch.length;i++)ch[i].className=(i===_bizSlide?'on':'');} }
 function bizN(){ var b=currentBiz(); return b&&b.slides?b.slides.length:1; }
@@ -1500,7 +1501,7 @@ async function load(){
   }
 }
 
-function setCat(c){CAT=c;Q='';BIZVIEW='';COLLVIEW=null;if($('q'))$('q').value='';_catShown=24;render();window.scrollTo(0,0);}
+function setCat(c){CAT=c;Q='';BIZVIEW='';COLLVIEW=null;CATLIST=false;if($('q'))$('q').value='';_catShown=24;render();window.scrollTo(0,0);}
 /* Deep-link from the brand site: ?add=<product> drops it in the cart (MOQ-aware) & opens checkout;
    ?cat=<category> jumps straight to that aisle. URL is cleaned so a refresh won't re-add. */
 function applyQuickOrder(){
@@ -1517,7 +1518,7 @@ function applyQuickOrder(){
     if((add||cat)&&window.history&&history.replaceState)history.replaceState(null,'',location.pathname);
   }catch(e){}
 }
-function goHome(){CAT='all';Q='';BIZVIEW='';COLLVIEW=null;if($('q'))$('q').value='';closeSheet();render();window.scrollTo(0,0);setNav('navHome');}
+function goHome(){CAT='all';Q='';BIZVIEW='';COLLVIEW=null;CATLIST=false;if($('q'))$('q').value='';closeSheet();render();window.scrollTo(0,0);setNav('navHome');}
 function navBack(){goHome();}
 
 /* ================= Storefront V2 — bottom nav · skeletons · fly-to-cart ================= */
@@ -1529,9 +1530,7 @@ function navGo(tab){
   if(tab==='cart'){ openCart(); return; }                // sheet overlay
   if(tab==='account'){ openLogin(); return; }            // sheet overlay
 }
-function showCategories(){ CAT='all'; Q=''; if($('q'))$('q').value=''; closeSheet(); render();
-  var el=document.querySelector('.catgrid')||document.querySelector('.section-title');
-  if(el){ el.scrollIntoView({behavior:'smooth',block:'start'}); } else { window.scrollTo(0,0); } }
+function showCategories(){ CAT='all'; Q=''; BIZVIEW=''; COLLVIEW=null; CATLIST=true; if($('q'))$('q').value=''; closeSheet(); render(); window.scrollTo(0,0); }
 function focusSearch(){ searchOpen(); }
 
 /* ================= Storefront V2 — premium search overlay (Increment 3) ================= */
@@ -2276,13 +2275,22 @@ function deptModel(){
 function useDepartments(){ if(VERTICAL!=='grocery')return false; return deptModel().some(function(d){return d.name!=='More';}); }
 function deptOf(cat){var m=deptModel();for(var i=0;i<m.length;i++)if(m[i].subs.indexOf(cat)>=0)return m[i];return null;}
 function catProductImg(name){for(var k=0;k<CATS.length;k++){if(CATS[k].name===name)return CATS[k].img||'';}return '';}
-function catTile(name,i){
+function catTileInner(name,i){
   var ci=CAT_IMG[name]||catProductImg(name);
-  var inner;
-  if(ci){inner='<div class="ci" style="background:#fff"><img alt="" src="'+esc(ci)+'" onerror="this.style.display=\'none\'"></div>';}
-  else if(THEME.premiumTiles){inner='<div class="ci cifall"><span class="mono">'+esc(String(name||'?').trim().charAt(0).toUpperCase())+'</span></div>';}
-  else{inner='<div class="ci" style="background:'+TINTS[(i<0?0:i)%TINTS.length]+'">'+catIcon(name)+'</div>';}
-  return '<button class="cat" onclick="setCat('+jk(name)+')">'+inner+'<div class="nm">'+esc(name)+'</div></button>';
+  if(ci){return '<div class="ci" style="background:#fff"><img alt="" src="'+esc(ci)+'" onerror="this.style.display=\'none\'"></div>';}
+  if(THEME.premiumTiles){return '<div class="ci cifall"><span class="mono">'+esc(String(name||'?').trim().charAt(0).toUpperCase())+'</span></div>';}
+  return '<div class="ci" style="background:'+TINTS[(i<0?0:i)%TINTS.length]+'">'+catIcon(name)+'</div>';
+}
+function catTile(name,i){
+  return '<button class="cat" onclick="setCat('+jk(name)+')">'+catTileInner(name,i)+'<div class="nm">'+esc(name)+'</div></button>';
+}
+// Full "All categories" page (with counts) — always available from the top-nav Categories button,
+// even when the merchandising homepage suppresses the inline "Shop by category" grid.
+function catCount(name){ var c=0; for(var i=0;i<PRODUCTS.length;i++){ if(PRODUCTS[i].category===name)c++; } return c; }
+function catListGrid(){
+  return CATS.map(function(cat,i){ var n=cat.count!=null?cat.count:catCount(cat.name);
+    return '<button class="cat" onclick="setCat('+jk(cat.name)+')">'+catTileInner(cat.name,i)+'<div class="nm">'+esc(cat.name)+'</div><div class="ccount">'+n+' item'+(n===1?'':'s')+'</div></button>';
+  }).join('');
 }
 function groceryHome(){
   return welcomeBanner()+thaliBanner()+deptModel().map(function(d){
@@ -2347,7 +2355,7 @@ function _freeOver(){ try{ var d=(window.SHOP&&SHOP.settings&&SHOP.settings.deli
    desktop media query, so mobile is unaffected. */
 function dLayout(){
   var hasQ=!!(Q&&Q.trim().length);
-  var isHome=(CAT==='all'&&!hasQ&&!BIZVIEW&&!COLLVIEW);
+  var isHome=(CAT==='all'&&!hasQ&&!BIZVIEW&&!COLLVIEW&&!CATLIST);
   document.body.classList.toggle('dhome', isHome);
   document.body.classList.toggle('dcartempty', cartCount()===0);
 }
@@ -2432,6 +2440,14 @@ function render(){
     return;
   }
   if(CAT==='all'){
+    // "All categories" page (top-nav Categories button). Always available — even when the
+    // merchandising homepage hides the inline "Shop by category" grid.
+    if(CATLIST){
+      if(!CATS.length){ c.innerHTML=wsBar()+'<div class="backbar"><button onclick="goHome()">‹ Home</button><b>Categories</b></div><div class="empty">No categories yet.</div>'; return; }
+      c.innerHTML=wsBar()+'<div class="backbar"><button onclick="goHome()">‹ Home</button><b>All categories</b></div>'
+        +'<div class="section-title">Shop by category · '+CATS.length+'</div><div class="catgrid">'+catListGrid()+'</div>';
+      return;
+    }
     // Sub-collection browse (tapped a "Popular collections" tile) — a product grid built with the
     // robust matcher so it works even when the collection uses recategorised names.
     if(COLLVIEW){
