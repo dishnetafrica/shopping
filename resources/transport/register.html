@@ -52,6 +52,8 @@
   .field input::placeholder,.field textarea::placeholder{color:#b3bcc6;font-weight:500}
   .field textarea{resize:none;min-height:40px}
   .req::after{content:" *";color:var(--red)}
+  .pick{flex:1;text-align:left;border:1px dashed var(--line);background:#fafbfc;border-radius:12px;padding:13px 14px;font-size:16px;font-weight:600;color:#b3bcc6;cursor:pointer;font-family:inherit}
+  .pick.has{color:var(--ink);border-style:solid;background:#fff}
   .stepper{display:flex;align-items:center;gap:12px}
   .stepper button{width:46px;height:46px;border:1px solid var(--line);background:#fff;border-radius:13px;font-size:24px;font-weight:800;color:var(--green-d);cursor:pointer;line-height:1;flex:none}
   .stepper input{flex:1;text-align:center;font-size:28px;font-weight:900;border:0;outline:none;width:50px;-moz-appearance:textfield}
@@ -135,8 +137,9 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script>/* Sync config: set by the v3 server page (or a test) BEFORE this runs; null = offline-only. */
-window.TR_CONFIG = window.TR_CONFIG || null;</script>
+<script>/* Sync config + product catalogue: injected by the v3 server page (or a test) BEFORE this runs. */
+window.TR_CONFIG = window.TR_CONFIG || null;
+window.TR_PRODUCTS = window.TR_PRODUCTS || [];</script>
 <script>
 /* ============================================================================
    TRANSPORT REGISTER — shipment-centric (Kampala → Juba). Offline prototype.
@@ -154,6 +157,7 @@ var REG={shipments:[],loads:[],seq:{},companies:[],tombstones:{}};
 /* Sync config is injected by the v3 server page (window.TR_CONFIG); when absent the
    register runs purely on-device (offline prototype). */
 var TRc=(typeof window!=='undefined' && window.TR_CONFIG && typeof window.TR_CONFIG==='object')?window.TR_CONFIG:null;
+var TRP=(typeof window!=='undefined' && Array.isArray(window.TR_PRODUCTS))?window.TR_PRODUCTS:[];   // catalogue: [{name,cat,unit}]
 function load(){ try{var s=localStorage.getItem(KEY); if(s)REG=JSON.parse(s);}catch(e){} REG.shipments=REG.shipments||[]; REG.loads=REG.loads||[]; REG.seq=REG.seq||{}; REG.companies=REG.companies||[]; REG.tombstones=REG.tombstones||{}; }
 function save(){ try{localStorage.setItem(KEY,JSON.stringify(REG));}catch(e){} }
 function markDirty(){ save(); scheduleSync(); }
@@ -287,14 +291,45 @@ function viewReceive(){
       +field('Source warehouse','<input id="rcSrc" value="Kampala Warehouse">',false)
       +field('Reference / delivery note','<input id="rcRef" placeholder="e.g. GRN-1042">',false)
     +'</div>'
+    +rcQuickHtml()
     +'<div class="sec">Products in this shipment <span class="mini mut">carton counts</span></div>'
     +'<div class="card" id="rcItems">'+rcItemsHtml()+'</div>'
     +'<div style="padding:0 14px"><button class="chip" onclick="rcAdd()">+ Add product</button></div>'
     +'<div class="card" style="margin-top:14px">'+field('Notes','<textarea id="rcNotes" placeholder="Optional"></textarea>',false)+'</div>'
     +'<div class="save"><button class="btn green" onclick="saveReceive()">✓ Receive into warehouse</button></div>';
 }
-function rcItemsHtml(){ return RC_ITEMS.map(function(it,i){ return '<div class="field" style="display:flex;gap:10px;align-items:center"><input placeholder="Product (e.g. Toilet Paper)" value="'+esc(it.name)+'" oninput="RC_ITEMS['+i+'].name=this.value" style="flex:1"><input type="number" inputmode="numeric" placeholder="Cartons" value="'+(it.qty||'')+'" oninput="RC_ITEMS['+i+'].qty=this.value" style="width:88px;text-align:center;font-weight:800">'+(RC_ITEMS.length>1?'<button class="chip" onclick="RC_ITEMS.splice('+i+',1);document.getElementById(\'rcItems\').innerHTML=rcItemsHtml()">✕</button>':'')+'</div>'; }).join(''); }
-function rcAdd(){ RC_ITEMS.push({name:'',qty:''}); document.getElementById('rcItems').innerHTML=rcItemsHtml(); }
+function rcItemsHtml(){ return RC_ITEMS.map(function(it,i){
+  // With a catalogue we pick from a list (no typing); without one we fall back to a text box.
+  var nameCell = TRP.length
+    ? '<button class="pick'+(it.name?' has':'')+'" onclick="openProdPicker('+i+')">'+(it.name?esc(it.name):'Tap to choose product')+'</button>'
+    : '<input placeholder="Product (e.g. Toilet Paper)" value="'+esc(it.name)+'" oninput="RC_ITEMS['+i+'].name=this.value" style="flex:1">';
+  return '<div class="field" style="display:flex;gap:10px;align-items:center">'+nameCell
+    +'<input id="rcQty'+i+'" type="number" inputmode="numeric" placeholder="Cartons" value="'+(it.qty||'')+'" oninput="RC_ITEMS['+i+'].qty=this.value" style="width:88px;text-align:center;font-weight:800">'
+    +(RC_ITEMS.length>1?'<button class="chip" onclick="RC_ITEMS.splice('+i+',1);document.getElementById(\'rcItems\').innerHTML=rcItemsHtml()">✕</button>':'')+'</div>'; }).join(''); }
+function rcAdd(){ RC_ITEMS.push({name:'',qty:''}); document.getElementById('rcItems').innerHTML=rcItemsHtml(); if(TRP.length)openProdPicker(RC_ITEMS.length-1); }
+function rcRefresh(){ var el=document.getElementById('rcItems'); if(el)el.innerHTML=rcItemsHtml(); var q=document.getElementById('rcQuick'); if(q)q.innerHTML=rcQuickInner(); }
+/* frequent = products received before (history), topped up from the catalogue */
+function frequentProducts(){ var c={},order=[]; REG.shipments.forEach(function(sh){ (sh.products||[]).forEach(function(p){ if(c[p.name]==null){c[p.name]=0;order.push(p.name);} c[p.name]++; }); });
+  var freq=order.sort(function(a,b){return c[b]-c[a];}).slice(0,8);
+  for(var i=0;i<TRP.length && freq.length<8;i++){ if(freq.indexOf(TRP[i].name)<0)freq.push(TRP[i].name); }
+  return freq; }
+function rcQuickInner(){ var f=frequentProducts(); if(!f.length)return ''; return '<div class="chips">'+f.map(function(n){return '<button class="chip" onclick="rcQuickAdd('+jq(n)+')">+ '+esc(n)+'</button>';}).join('')+'</div>'; }
+function rcQuickHtml(){ var inner=rcQuickInner(); if(!inner)return ''; return '<div class="sec">Quick add <span class="mini mut">tap a product</span></div><div style="padding:0 14px"><div id="rcQuick">'+inner+'</div></div>'; }
+function rcQuickAdd(name){ var slot=-1; for(var i=0;i<RC_ITEMS.length;i++){ if(!RC_ITEMS[i].name){slot=i;break;} } if(slot<0){ RC_ITEMS.push({name:name,qty:''}); slot=RC_ITEMS.length-1; } else RC_ITEMS[slot].name=name; rcRefresh(); haptic(); var q=document.getElementById('rcQty'+slot); if(q){try{q.focus();}catch(e){}} }
+/* ---- product picker sheet (search the catalogue; no typing needed) ---- */
+var RC_PICK=-1;
+function openProdPicker(i){ RC_PICK=i; var b=document.getElementById('sheetBody');
+  b.innerHTML='<div class="sh">Choose product</div>'
+    +'<div style="padding:0 16px 10px"><input id="ppq" placeholder="Search products…" oninput="renderProdPicker()" autocomplete="off" style="width:100%;font-size:16px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;font-weight:600"></div>'
+    +'<div id="ppList" style="max-height:58vh;overflow:auto;-webkit-overflow-scrolling:touch">'+prodPickerList('')+'</div>';
+  document.getElementById('sheet').classList.add('show'); setTimeout(function(){var q=document.getElementById('ppq');if(q)q.focus();},80); }
+function renderProdPicker(){ var q=document.getElementById('ppq'); document.getElementById('ppList').innerHTML=prodPickerList(q?q.value:''); }
+function prodPickerList(q){ q=(q||'').toLowerCase().trim();
+  var list=TRP.filter(function(p){ return !q || (p.name+' '+(p.cat||'')).toLowerCase().indexOf(q)>=0; }).slice(0,120);
+  var rows=list.map(function(p){ var sub=[p.cat,p.unit].filter(Boolean).join(' · '); return '<div class="row" onclick="pickProd('+jq(p.name)+')"><div class="dot g">📦</div><div class="m"><div class="l1">'+esc(p.name)+'</div>'+(sub?'<div class="l2">'+esc(sub)+'</div>':'')+'</div></div>'; }).join('');
+  var custom=(q && !TRP.some(function(p){return p.name.toLowerCase()===q;}))?('<div class="row" onclick="pickProd('+jq(q)+')"><div class="dot" style="background:var(--amber-l);color:var(--amber)">＋</div><div class="m"><div class="l1">Use “'+esc(q)+'”</div><div class="l2">Not in catalogue — add as typed</div></div></div>'):'';
+  return (rows||custom)?(custom+rows):'<div class="empty" style="padding:26px">No products match. Type to add a custom name.</div>'; }
+function pickProd(name){ if(RC_PICK>=0 && RC_ITEMS[RC_PICK])RC_ITEMS[RC_PICK].name=name; closeSheet(); rcRefresh(); var q=document.getElementById('rcQty'+RC_PICK); if(q){try{q.focus();}catch(e){}} }
 function saveReceive(){
   var date=val('rcDate')||todayISO(), src=val('rcSrc'), ref=val('rcRef'), notes=val('rcNotes');
   var products=RC_ITEMS.map(function(it){return {name:(it.name||'').trim(),cartons:Number(it.qty)||0};}).filter(function(p){return p.name&&p.cartons>0;});

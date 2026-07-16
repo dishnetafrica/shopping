@@ -35,7 +35,35 @@ class TransportController extends Controller
         // The register page reads `window.TR_CONFIG || null`; swap in the real config.
         $html = str_replace('window.TR_CONFIG || null', json_encode($cfg, JSON_UNESCAPED_SLASHES), $html);
 
+        // Inject the tenant's product catalogue so the RECEIVE screen is tap-to-pick (no typing).
+        $products = $this->catalogue($r);
+        $html = str_replace('window.TR_PRODUCTS || []', json_encode($products, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $html);
+
         return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
+    }
+
+    /** Product names (with category/unit) for the pick-list. Best-effort; never throws. */
+    private function catalogue(Request $r): array
+    {
+        try {
+            $tid = (int) optional($r->user())->tenant_id;
+            if (! $tid) return [];
+            return \App\Models\Product::query()
+                ->where('tenant_id', $tid)
+                ->orderBy('name')
+                ->get(['name', 'category', 'unit_label'])
+                ->map(fn ($p) => [
+                    'name' => (string) $p->name,
+                    'cat'  => (string) ($p->category ?? ''),
+                    'unit' => (string) ($p->unit_label ?? ''),
+                ])
+                ->filter(fn ($x) => $x['name'] !== '')
+                ->unique('name')
+                ->values()
+                ->all();
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     /** Return the current register for this tenant. */
