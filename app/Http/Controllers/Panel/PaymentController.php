@@ -124,6 +124,8 @@ class PaymentController extends Controller
             'created_at'    => $createdAt,
         ]);
 
+        $this->recomputeOrderPaid($t, $orderNo);   // keep the order's paid tracker in step with the ledger
+
         return response()->json(['ok'=>true,'send_receipt'=>$sendReceipt] + $result + ['usd'=>$usd,'currency'=>$cur,'amount'=>$amount]);
     }
 
@@ -156,6 +158,7 @@ class PaymentController extends Controller
         $p = CustomerPayment::where('tenant_id',$t->id)->find($id);
         if (! $p) return response()->json(['ok'=>false,'error'=>'not_found'],404);
 
+        $oldOrderNo = (string) $p->order_no;   // capture before we overwrite it, to re-sync the old order too
         $customer = trim((string)$request->input('customer_name', $p->customer_name)) ?: $p->customer_name;
         $orderNo  = trim((string)$request->input('order_no',''));
         if ($orderNo === '') return response()->json(['ok'=>false,'error'=>'no_order'],422);   // must stay tied to an order
@@ -208,6 +211,8 @@ class PaymentController extends Controller
         });
 
         try { app(\App\Services\Invoicing\InvoiceService::class)->syncByPayment($t, $p->invoice_no, $orderNo); } catch (\Throwable $e) {}
+        $this->recomputeOrderPaid($t, $orderNo);
+        if ($oldOrderNo !== '' && strcasecmp($oldOrderNo, $orderNo) !== 0) $this->recomputeOrderPaid($t, $oldOrderNo);
 
         return response()->json(['ok'=>true,'id'=>$p->id,'receipt_no'=>$p->receipt_no,'currency'=>$cur,'amount'=>$amount,'usd'=>$usd,'holder'=>$holderName,'order_no'=>$orderNo]);
     }
@@ -222,6 +227,7 @@ class PaymentController extends Controller
         $p->applied = ! filter_var($request->input('undo', false), FILTER_VALIDATE_BOOLEAN);
         $p->save();
         try { app(\App\Services\Invoicing\InvoiceService::class)->syncByPayment($u->tenant, $p->invoice_no, $p->order_no); } catch (\Throwable $e) {}
+        $this->recomputeOrderPaid($u->tenant, $p->order_no);
         return response()->json(['ok'=>true,'applied'=>(bool)$p->applied]);
     }
 
@@ -244,25 +250,37 @@ class PaymentController extends Controller
                     \App\Services\AuditLogger::log($u->tenant_id,'order_cost',$cost->id,'void',$u,$before,['status'=>'void'],'payment voided');
                 }
             }
-            // Reverse the order's own paid tracker too. Voiding the cashbook entry + re-syncing the
-            // invoice was not enough: the order kept its inflated amount_paid and still read "paid"
-            // after its payment was deleted. Decrement by this payment expressed in the order's
-            // transaction currency (mirrors how recordPayment credited it), clamped at zero.
-            if ($p->order_no) {
-                $order = \App\Models\Order::where('tenant_id',$u->tenant_id)->where('order_no',$p->order_no)->first();
-                if ($order) {
-                    $oc  = \App\Services\Money\SalesBaseCurrency::txnCurrency($order,$u->tenant);
-                    $fx  = \App\Services\Money\Fx::forTenant($u->tenant);
-                    $dec = strtoupper((string)$p->currency)===$oc ? (float)$p->amount
-                         : ($oc==='USD' ? (float)$p->usd_amount : (float)$p->usd_amount * $fx->ratePerUsd($oc));
-                    $order->amount_paid = round(max(0,(float)$order->amount_paid - $dec),2);
-                    $order->save();
-                }
-            }
             \App\Services\AuditLogger::log($u->tenant_id,'customer_payment',$p->id,'void',$u,['amount'=>(float)($p->amount ?? 0)],null,'payment voided');
             $p->delete();
         });
         try { app(\App\Services\Invoicing\InvoiceService::class)->syncByPayment($u->tenant, $p->invoice_no, $p->order_no); } catch (\Throwable $e) {}
+        $this->recomputeOrderPaid($u->tenant, $p->order_no);   // roll back the order's paid tracker from the ledger
         return response()->json(['ok'=>true,'voided'=>true]);
+    }
+
+    /**
+     * Recompute an order's amount_paid from the ONE payment ledger (settlement CustomerPayments),
+     * expressed in the order's own transaction currency — the same rule the invoice reconciler uses.
+     * Idempotent: after any create/edit/delete/allocate the order, invoice and cashbook all agree,
+     * so amount_paid can never drift (the bug where an order stayed "paid" after its payment changed).
+     */
+    private function recomputeOrderPaid($tenant, ?string $orderNo): void
+    {
+        if (! $tenant || ! $orderNo) return;
+        try {
+            $order = \App\Models\Order::where('tenant_id', $tenant->id)->where('order_no', $orderNo)->first();
+            if (! $order) return;
+            $oc  = \App\Services\Money\SalesBaseCurrency::txnCurrency($order, $tenant);
+            $fx  = \App\Services\Money\Fx::forTenant($tenant);
+            $pays = CustomerPayment::where('tenant_id', $tenant->id)->where('order_no', $orderNo)
+                ->where('kind', 'settlement')->where('applied', true)->get();
+            $paid = 0.0;
+            foreach ($pays as $p) {
+                $paid += strtoupper((string) $p->currency) === $oc ? (float) $p->amount
+                       : ($oc === 'USD' ? (float) $p->usd_amount : (float) $p->usd_amount * $fx->ratePerUsd($oc));
+            }
+            $order->amount_paid = round($paid, 2);
+            $order->save();
+        } catch (\Throwable $e) { /* never break a payment write on the denormalised tracker */ }
     }
 }

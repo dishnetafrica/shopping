@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Payments — Family Shoppers</title>
+<style>
+:root{--g:#0a7a4b;--gd:#076b41;--ink:#0f172a;--mut:#64748b;--line:#e5e7eb;--bg:#f6f8fa;--card:#fff;--red:#dc2626;--amb:#b45309;--blue:#1d4ed8}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+.wrap{max-width:1180px;margin:0 auto;padding:18px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.top h1{font-size:22px;margin:0}
+.sub{color:var(--mut);font-size:13px}
+.btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:9px 14px;border-radius:9px;cursor:pointer;font-size:14px;font-weight:600}
+.btn.pri{background:var(--g);border-color:var(--g);color:#fff}
+.btn.pri:hover{background:var(--gd)}
+.btn.sm{padding:5px 9px;font-size:12px;border-radius:7px}
+.btn.danger{color:var(--red);border-color:#f3c6c6}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.tile .k{color:var(--mut);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+.tile .v{font-size:24px;font-weight:800;margin-top:4px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.bar input,.bar select{padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:#fff}
+.bar input.search{flex:1;min-width:180px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);font-size:13px;white-space:nowrap}
+th{background:#fafbfc;color:var(--mut);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+tr:last-child td{border-bottom:none}
+td.num,th.num{text-align:right}
+.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.pill.set{background:#dcfce7;color:#166534}
+.pill.adv{background:#fef3c7;color:#92400e}
+.pill.usd{background:#e0edff;color:#1e40af}
+.acts{display:flex;gap:6px;justify-content:flex-end}
+.empty{padding:40px;text-align:center;color:var(--mut)}
+.mask{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+.mask.on{display:flex}
+.modal{background:#fff;border-radius:14px;max-width:520px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.modal h2{margin:0;padding:16px 18px;border-bottom:1px solid var(--line);font-size:17px}
+.mbody{padding:16px 18px}
+.f{margin-bottom:12px}
+.f label{display:block;font-size:12px;font-weight:700;color:var(--mut);margin-bottom:4px}
+.f input,.f select,.f textarea{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;font-family:inherit}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.usdprev{font-size:12px;color:var(--g);font-weight:700;margin-top:4px}
+.mfoot{display:flex;gap:8px;justify-content:flex-end;padding:14px 18px;border-top:1px solid var(--line);position:sticky;bottom:0;background:#fff}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:60;opacity:0;transition:.2s}
+.toast.on{opacity:1}
+.toast.err{background:var(--red)}
+.dl{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13px}
+.dl dt{color:var(--mut);font-weight:600}
+@media(max-width:640px){.tiles{grid-template-columns:1fr}.hidem{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div><h1>Payments</h1><div class="sub" id="bizname">Manage receipts · add, edit, allocate, reverse</div></div>
+    <button class="btn pri" onclick="openForm()">+ Add payment</button>
+  </div>
+
+  <div class="tiles">
+    <div class="tile"><div class="k">Total received</div><div class="v" id="t_total">—</div></div>
+    <div class="tile"><div class="k">Advances held</div><div class="v" id="t_adv">—</div></div>
+    <div class="tile"><div class="k">Payments</div><div class="v" id="t_count">—</div></div>
+  </div>
+
+  <div class="bar">
+    <input class="search" id="q" placeholder="Search customer, order, receipt…" oninput="render()">
+    <select id="fcur" onchange="render()"><option value="">All currencies</option></select>
+    <select id="fkind" onchange="render()"><option value="">All types</option><option value="settlement">Settlement</option><option value="advance">Advance</option></select>
+    <button class="btn" onclick="load()">↻ Refresh</button>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr>
+        <th>Receipt</th><th>Date</th><th>Customer</th><th class="hidem">Order</th><th class="hidem">Method</th>
+        <th class="num">Amount</th><th class="num">USD</th><th>Type</th><th class="num">Actions</th>
+      </tr></thead>
+      <tbody id="rows"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add / Edit modal -->
+<div class="mask" id="mask">
+  <div class="modal">
+    <h2 id="mtitle">Add payment</h2>
+    <div class="mbody">
+      <input type="hidden" id="f_id">
+      <div class="f"><label>Customer name *</label><input id="f_customer" placeholder="e.g. Azam Supermarket"></div>
+      <div class="row2">
+        <div class="f"><label>Order no *</label><input id="f_order" placeholder="ORD-48"></div>
+        <div class="f"><label>Invoice no</label><input id="f_invoice" placeholder="optional"></div>
+      </div>
+      <div class="row2">
+        <div class="f"><label>Amount *</label><input id="f_amount" type="number" step="0.01" min="0" oninput="usdPrev()"></div>
+        <div class="f"><label>Currency</label><select id="f_cur" onchange="rateFromCur();usdPrev()"></select></div>
+      </div>
+      <div class="row2">
+        <div class="f"><label>Rate (per 1 USD)</label><input id="f_rate" type="number" step="0.0001" min="0" oninput="usdPrev()"></div>
+        <div class="f"><label>Type</label><select id="f_kind"><option value="settlement">Settlement (pay an order)</option><option value="advance">Advance / credit</option></select></div>
+      </div>
+      <div class="usdprev" id="f_usd">≈ $0.00</div>
+      <div class="row2">
+        <div class="f"><label>Method</label><input id="f_method" placeholder="Cash / MoMo / Bank"></div>
+        <div class="f"><label>Date</label><input id="f_date" type="datetime-local"></div>
+      </div>
+      <div class="row2">
+        <div class="f"><label>Received by</label><input id="f_receiver" placeholder="optional — who took the cash"></div>
+        <div class="f"><label>Phone</label><input id="f_phone" placeholder="optional"></div>
+      </div>
+      <div class="f"><label>Note / reference</label><input id="f_note" placeholder="optional"></div>
+    </div>
+    <div class="mfoot">
+      <button class="btn" onclick="closeForm()">Cancel</button>
+      <button class="btn pri" id="savebtn" onclick="save()">Save payment</button>
+    </div>
+  </div>
+</div>
+
+<!-- View modal -->
+<div class="mask" id="vmask">
+  <div class="modal">
+    <h2>Payment receipt</h2>
+    <div class="mbody"><dl class="dl" id="vbody"></dl></div>
+    <div class="mfoot"><button class="btn" onclick="document.getElementById('vmask').classList.remove('on')">Close</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var CFG = window.PM_CONFIG || null;
+if(!CFG){ CFG = {base:'USD',native:'UGX',csrf:'',api:'/papi',business:'Family Shoppers',rates:{USD:1,UGX:3655,SSP:7000}}; }
+var DATA = [];
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function money(n,c){var d=(c==='USD')?2:0;return (c||'')+' '+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});}
+function toast(m,err){var t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(err?' err':'');setTimeout(function(){t.className='toast';},2200);}
+
+async function api(path, method, body){
+  var opt={method:method||'GET',credentials:'include',headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'}};
+  if(body){opt.headers['Content-Type']='application/json';opt.headers['X-CSRF-TOKEN']=CFG.csrf;opt.body=JSON.stringify(body);}
+  var r=await fetch(CFG.api+path,opt);
+  var j=null; try{ j=await r.json(); }catch(e){ j={ok:false,error:'HTTP '+r.status}; }
+  if(!r.ok && j && j.ok===undefined) j.ok=false;
+  return j;
+}
+
+async function load(){
+  document.getElementById('bizname').textContent = CFG.business + ' · manage receipts';
+  var fc=document.getElementById('f_cur'), ff=document.getElementById('fcur');
+  if(fc.options.length===0){ Object.keys(CFG.rates).forEach(function(c){ fc.add(new Option(c,c)); ff.add(new Option(c,c)); }); fc.value=CFG.base; }
+  var j=await api('/payments');
+  if(!j.ok){ document.getElementById('rows').innerHTML='<tr><td colspan="9" class="empty">Could not load payments ('+esc(j.error||'')+'). Make sure you are logged in.</td></tr>'; return; }
+  DATA=j.payments||[];
+  document.getElementById('t_total').textContent='$'+Number(j.total_received||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('t_adv').textContent='$'+Number(j.advances_held||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('t_count').textContent=DATA.length;
+  render();
+}
+
+function render(){
+  var q=(document.getElementById('q').value||'').toLowerCase();
+  var fc=document.getElementById('fcur').value, fk=document.getElementById('fkind').value;
+  var list=DATA.filter(function(p){
+    if(fc && p.currency!==fc) return false;
+    if(fk && p.kind!==fk) return false;
+    if(q){ var hay=((p.customer||'')+' '+(p.order_no||'')+' '+(p.receipt_no||'')+' '+(p.method||'')).toLowerCase(); if(hay.indexOf(q)<0) return false; }
+    return true;
+  });
+  if(!list.length){ document.getElementById('rows').innerHTML='<tr><td colspan="9" class="empty">No payments match.</td></tr>'; return; }
+  document.getElementById('rows').innerHTML=list.map(function(p){
+    var kind=p.kind==='settlement'?'<span class="pill set">Settlement</span>':'<span class="pill adv">Advance</span>';
+    return '<tr>'+
+      '<td>'+esc(p.receipt_no||('CP-'+p.id))+'</td>'+
+      '<td>'+esc(p.date||'')+'</td>'+
+      '<td>'+esc(p.customer||'')+'</td>'+
+      '<td class="hidem">'+esc(p.order_no||'')+'</td>'+
+      '<td class="hidem">'+esc(p.method||'')+'</td>'+
+      '<td class="num">'+esc(money(p.amount,p.currency))+'</td>'+
+      '<td class="num"><span class="pill usd">$'+Number(p.usd||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></td>'+
+      '<td>'+kind+'</td>'+
+      '<td class="num"><div class="acts">'+
+        '<button class="btn sm" onclick="view('+p.id+')">View</button>'+
+        '<button class="btn sm" onclick="openForm('+p.id+')">Edit</button>'+
+        '<button class="btn sm danger" onclick="del('+p.id+')">Delete</button>'+
+      '</div></td>'+
+    '</tr>';
+  }).join('');
+}
+
+function rateFromCur(){ var c=document.getElementById('f_cur').value; document.getElementById('f_rate').value=CFG.rates[c]||1; }
+function usdPrev(){
+  var amt=parseFloat(document.getElementById('f_amount').value)||0;
+  var rate=parseFloat(document.getElementById('f_rate').value)||1;
+  document.getElementById('f_usd').textContent='≈ $'+(rate>0?(amt/rate):0).toFixed(2)+' USD';
+}
+
+function openForm(id){
+  var m=document.getElementById('mask'); m.classList.add('on');
+  document.getElementById('f_id').value='';
+  document.getElementById('mtitle').textContent='Add payment';
+  ['f_customer','f_order','f_invoice','f_amount','f_method','f_receiver','f_phone','f_note'].forEach(function(k){document.getElementById(k).value='';});
+  document.getElementById('f_cur').value=CFG.base; rateFromCur();
+  document.getElementById('f_kind').value='settlement';
+  var now=new Date(); now.setMinutes(now.getMinutes()-now.getTimezoneOffset());
+  document.getElementById('f_date').value=now.toISOString().slice(0,16);
+  document.getElementById('f_method').value='Cash';
+  usdPrev();
+  if(id){
+    var p=DATA.filter(function(x){return x.id===id;})[0]; if(!p) return;
+    document.getElementById('mtitle').textContent='Edit payment '+(p.receipt_no||('CP-'+p.id));
+    document.getElementById('f_id').value=p.id;
+    document.getElementById('f_customer').value=p.customer||'';
+    document.getElementById('f_order').value=p.order_no||'';
+    document.getElementById('f_amount').value=p.amount||'';
+    document.getElementById('f_cur').value=p.currency||CFG.base;
+    document.getElementById('f_rate').value=p.rate_to_usd|| (CFG.rates[p.currency]||1);
+    document.getElementById('f_kind').value=p.kind||'settlement';
+    document.getElementById('f_method').value=p.method||'';
+    document.getElementById('f_note').value=p.reference||'';
+    document.getElementById('f_phone').value=p.phone||'';
+    usdPrev();
+  }
+}
+function closeForm(){ document.getElementById('mask').classList.remove('on'); }
+
+async function save(){
+  var id=document.getElementById('f_id').value;
+  var body={
+    customer_name:document.getElementById('f_customer').value.trim(),
+    customer_phone:document.getElementById('f_phone').value.trim(),
+    order_no:document.getElementById('f_order').value.trim(),
+    invoice_no:document.getElementById('f_invoice').value.trim(),
+    kind:document.getElementById('f_kind').value,
+    currency:document.getElementById('f_cur').value,
+    amount:document.getElementById('f_amount').value,
+    rate_to_usd:document.getElementById('f_rate').value,
+    method:document.getElementById('f_method').value.trim(),
+    receiver:document.getElementById('f_receiver').value.trim(),
+    note:document.getElementById('f_note').value.trim(),
+    created_date:document.getElementById('f_date').value
+  };
+  if(!body.customer_name){toast('Customer name required',true);return;}
+  if(!body.order_no){toast('Order no required',true);return;}
+  if(!(parseFloat(body.amount)>0)){toast('Enter an amount',true);return;}
+  var btn=document.getElementById('savebtn'); btn.disabled=true; btn.textContent='Saving…';
+  var j = id ? await api('/payments/'+id+'/update','POST',body) : await api('/payments','POST',body);
+  btn.disabled=false; btn.textContent='Save payment';
+  if(j.ok){ toast(id?'Payment updated':'Payment added'); closeForm(); load(); }
+  else { toast('Error: '+(j.message||j.error||'failed'),true); }
+}
+
+async function del(id){
+  if(!confirm('Delete this payment? This voids its cashbook entry and reverses the order + invoice.')) return;
+  var j=await api('/payments/'+id+'/delete','POST',{});
+  if(j.ok){ toast('Payment deleted & reversed'); load(); }
+  else { toast('Error: '+(j.error||j.message||'failed'),true); }
+}
+
+async function view(id){
+  var j=await api('/payments/'+id);
+  if(!j.ok){ toast('Could not load',true); return; }
+  var p=j.payment;
+  document.getElementById('vbody').innerHTML=
+    row('Receipt',p.receipt_no)+row('Date',p.date)+row('Customer',p.customer)+row('Phone',p.phone)+
+    row('Order',p.order_no)+row('Type',p.kind)+row('Method',p.method)+
+    row('Amount',money(p.amount,p.currency))+row('USD value','$'+Number(p.usd||0).toFixed(2))+
+    row('Rate',p.rate_to_usd)+row('Received by',p.holder)+row('Reference',p.reference);
+  document.getElementById('vmask').classList.add('on');
+}
+function row(k,v){ return '<dt>'+esc(k)+'</dt><dd>'+esc(v||'—')+'</dd>'; }
+
+load();
+</script>
+</body>
+</html>
