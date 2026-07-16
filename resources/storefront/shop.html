@@ -1269,7 +1269,7 @@ function merchRows(){ return promotionsRail()+brandsStrip()+recommendedRail(); }
    so tenants without a config see no change. Auto-scrolls, pauses on hover/touch, swipes, and
    respects reduced-motion. Selecting a business re-merchandises collections + best-sellers; the
    CTA / collections drill into a business-filtered product grid (reusing the normal grid). */
-var BANNERS=null, BIZSEL='', _bizSlide=0, _bizTimer=null, BIZVIEW='', _bizOrder=null, KITS=[];
+var BANNERS=null, BIZSEL='', _bizSlide=0, _bizTimer=null, BIZVIEW='', _bizOrder=null, KITS=[], COLLVIEW=null;
 var BIZ_ICO={
  hotels:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 21V6l8-3 8 3v15"/><path d="M9 21v-5h6v5"/><path d="M8 9h.4M12 9h.4M16 9h.4"/></svg>',
  restaurants:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3v7a2 2 0 0 0 4 0V3M8 10v11"/><path d="M16 3c-1.5 0-2.5 2-2.5 5S15 13 16 13v8"/></svg>',
@@ -1316,6 +1316,21 @@ function bizMatch(p,biz){ if(!p||!biz)return false; var m=biz.match||{};
     for(var i=0;i<kws.length;i++){ if(String(kws[i])&&hay.indexOf(String(kws[i]).toLowerCase())>=0)return true; } }
   return false; }
 function bizProducts(biz){ return PRODUCTS.filter(function(p){return bizMatch(p,biz);}); }
+/* Robust sub-collection matcher — works even when the collection's configured category name
+   doesn't exactly equal the live catalogue's category (matches loose category + keyword tokens
+   derived from the label / category words), so counts & clicks are meaningful. */
+var COLL_STOP={and:1,the:1,ready:1,mixes:1,mix:1,store:1,'with':1,pack:1,packs:1,essentials:1,products:1,supplies:1,items:1,'for':1,amp:1,all:1};
+function collTokens(c){ var raw=(String(c.keywords||'')+' '+String(c.label||'')+' '+String(c.cat||'')).toLowerCase();
+  var toks=raw.split(/[^a-z0-9]+/).filter(function(w){return w.length>=3 && !COLL_STOP[w];});
+  var seen={},out=[]; toks.forEach(function(t){if(!seen[t]){seen[t]=1;out.push(t);}}); return out; }
+function collMatch(p,c){ if(!sellableRail(p))return false;
+  var pcat=String(p.category||'').toLowerCase(), cat=String(c.cat||'').toLowerCase();
+  if(cat){ if(pcat===cat)return true; if(pcat.length>=3 && cat.indexOf(pcat)>=0)return true; if(cat.length>=3 && pcat.indexOf(cat)>=0)return true; }
+  var toks=collTokens(c); if(!toks.length)return false;
+  var hay=(p.name+' '+p.keywords+' '+p.category+' '+p.brand).toLowerCase();
+  for(var i=0;i<toks.length;i++){ if(hay.indexOf(toks[i])>=0)return true; }
+  return false; }
+function collProducts(c){ return PRODUCTS.filter(function(p){return collMatch(p,c);}); }
 function bizTitle(t){ return esc(String(t||'')).replace(/\*(.+?)\*/g,'<b>$1</b>'); }
 
 function businessBanners(){
@@ -1353,17 +1368,16 @@ function businessBanners(){
   var hero='<div class="bizhero" id="bizHero"><div class="biztrack" id="bizTrack" style="transform:translateX(-'+(_bizSlide*100)+'%)">'+track+'</div>'+arrows+'</div>'+dots;
   var coll='';
   if(biz.collections&&biz.collections.length){
-    var collCount=function(c){ var cat=(c.cat||'').toLowerCase(); var kws=(c.keywords||'').toLowerCase().split(',').map(function(s){return s.trim();}).filter(Boolean);
-      return PRODUCTS.filter(function(p){ if(!sellableRail(p))return false;
-        if(cat&&String(p.category||'').toLowerCase()===cat)return true;
-        if(kws.length){var hay=(p.name+' '+p.keywords+' '+p.category).toLowerCase();for(var i=0;i<kws.length;i++){if(hay.indexOf(kws[i])>=0)return true;}}
-        return false; }).length; };
+    // Count with the robust matcher (collMatch) so tiles show real numbers even when the
+    // collection's cat/keywords use the recategorised taxonomy and the live catalogue still
+    // carries the old category names. Empty collections are dropped rather than shown as "0".
     var cc=biz.collections.map(function(c){
       var im=c.image_url?('<div class="im" style="background-image:url(\''+encodeURI(c.image_url)+'\')"></div>'):('<div class="im">'+bizIcon(c.icon||'shop')+'</div>');
-      var n=collCount(c);
-      return '<div class="bizcoll" onclick="bizColl('+jk(biz.id)+','+jk(c.cat||'')+','+jk(c.keywords||'')+')">'+im+'<div class="ct"><b>'+esc(c.label)+'</b><span>'+n+' product'+(n===1?'':'s')+'</span></div></div>';
-    }).join('');
-    coll='<div class="section-title">Popular collections for '+esc(biz.label)+'</div><div class="bizcollrow">'+cc+'</div>';
+      var n=collProducts(c).length;
+      if(!n)return '';
+      return '<div class="bizcoll" onclick="bizColl('+jk(biz.id)+','+jk(c.cat||'')+','+jk(c.keywords||'')+','+jk(c.label||'')+')">'+im+'<div class="ct"><b>'+esc(c.label)+'</b><span>'+n+' product'+(n===1?'':'s')+'</span></div></div>';
+    }).filter(Boolean).join('');
+    if(cc) coll='<div class="section-title">Popular collections for '+esc(biz.label)+'</div><div class="bizcollrow">'+cc+'</div>';
   }
   var items=[], bs=biz.bestsellers;
   if(Array.isArray(bs)&&bs.length){ bs.forEach(function(nm){var p=prod(nm)||PRODUCTS.filter(function(x){return x.name.toLowerCase()===String(nm).toLowerCase();})[0]; if(sellableRail(p))items.push(p);}); }
@@ -1398,8 +1412,9 @@ function bizCta(id,cta){ cta=String(cta||'');
   if(cta.indexOf('cat:')===0){ setCat(cta.slice(4)); return; }
   if(cta.indexOf('url:')===0){ try{location.href=cta.slice(4);}catch(e){} return; }
   bizShop(id); }
-function bizColl(id,cat,kw){ if(cat){ setCat(cat); return; } if(kw){ Q=String(kw); if($('q'))$('q').value=Q; CAT='all'; BIZVIEW=''; _catShown=24; render(); window.scrollTo(0,0); return; } bizShop(id); }
-function bizShop(id){ BIZVIEW=id; Q=''; if($('q'))$('q').value=''; CAT='all'; _catShown=24; render(); window.scrollTo(0,0); }
+function bizColl(id,cat,kw,label){ COLLVIEW={id:id||'',cat:cat||'',keywords:kw||'',label:label||''}; BIZVIEW=''; Q=''; if($('q'))$('q').value=''; CAT='all'; _catShown=24; render(); window.scrollTo(0,0); }
+function collClose(){ COLLVIEW=null; render(); window.scrollTo(0,0); }
+function bizShop(id){ BIZVIEW=id; COLLVIEW=null; Q=''; if($('q'))$('q').value=''; CAT='all'; _catShown=24; render(); window.scrollTo(0,0); }
 function bizClose(){ BIZVIEW=''; render(); window.scrollTo(0,0); }
 function updateBizSlide(){ var t=$('bizTrack'); if(t)t.style.transform='translateX(-'+(_bizSlide*100)+'%)'; var d=$('bizDots'); if(d){var ch=d.children; for(var i=0;i<ch.length;i++)ch[i].className=(i===_bizSlide?'on':'');} }
 function bizN(){ var b=currentBiz(); return b&&b.slides?b.slides.length:1; }
@@ -1485,7 +1500,7 @@ async function load(){
   }
 }
 
-function setCat(c){CAT=c;Q='';BIZVIEW='';if($('q'))$('q').value='';_catShown=24;render();window.scrollTo(0,0);}
+function setCat(c){CAT=c;Q='';BIZVIEW='';COLLVIEW=null;if($('q'))$('q').value='';_catShown=24;render();window.scrollTo(0,0);}
 /* Deep-link from the brand site: ?add=<product> drops it in the cart (MOQ-aware) & opens checkout;
    ?cat=<category> jumps straight to that aisle. URL is cleaned so a refresh won't re-add. */
 function applyQuickOrder(){
@@ -1502,7 +1517,7 @@ function applyQuickOrder(){
     if((add||cat)&&window.history&&history.replaceState)history.replaceState(null,'',location.pathname);
   }catch(e){}
 }
-function goHome(){CAT='all';Q='';BIZVIEW='';if($('q'))$('q').value='';closeSheet();render();window.scrollTo(0,0);setNav('navHome');}
+function goHome(){CAT='all';Q='';BIZVIEW='';COLLVIEW=null;if($('q'))$('q').value='';closeSheet();render();window.scrollTo(0,0);setNav('navHome');}
 function navBack(){goHome();}
 
 /* ================= Storefront V2 — bottom nav · skeletons · fly-to-cart ================= */
@@ -2309,6 +2324,8 @@ function toggleInstock(){ FINSTOCK=!FINSTOCK; _catShown=24; render(); }
 function curCatList(){ return PRODUCTS.filter(function(p){return p.category===CAT;}); }
 function currentList(){ var ql=Q.trim().toLowerCase();
   if(ql) return PRODUCTS.filter(function(p){return (p.name+' '+p.brand+' '+p.category+' '+p.keywords).toLowerCase().indexOf(ql)>=0;});
+  if(COLLVIEW) return collProducts(COLLVIEW);
+  if(BIZVIEW){ var vb=activeBiz().filter(function(x){return x.id===BIZVIEW;})[0]; if(vb) return bizProducts(vb); }
   if(CAT!=='all') return curCatList(); return []; }
 function catBrands(list){ var seen={},b=[]; list.forEach(function(p){var br=p.brand||'';if(br&&!seen[br.toLowerCase()]){seen[br.toLowerCase()]=1;b.push(br);}}); return b; }
 function featuredBrands(list){ var b=catBrands(list); if(b.length<2)return '';
@@ -2330,7 +2347,7 @@ function _freeOver(){ try{ var d=(window.SHOP&&SHOP.settings&&SHOP.settings.deli
    desktop media query, so mobile is unaffected. */
 function dLayout(){
   var hasQ=!!(Q&&Q.trim().length);
-  var isHome=(CAT==='all'&&!hasQ&&!BIZVIEW);
+  var isHome=(CAT==='all'&&!hasQ&&!BIZVIEW&&!COLLVIEW);
   document.body.classList.toggle('dhome', isHome);
   document.body.classList.toggle('dcartempty', cartCount()===0);
 }
@@ -2415,6 +2432,16 @@ function render(){
     return;
   }
   if(CAT==='all'){
+    // Sub-collection browse (tapped a "Popular collections" tile) — a product grid built with the
+    // robust matcher so it works even when the collection uses recategorised names.
+    if(COLLVIEW){
+      var clist=applyFilters(collProducts(COLLVIEW));
+      var clbl=COLLVIEW.label||'Collection';
+      c.innerHTML=wsBar()+'<div class="backbar"><button onclick="collClose()">‹ Home</button><b>'+esc(clbl)+'</b></div>'+featuredBrands(collProducts(COLLVIEW))+filterBar()
+        +'<div class="meta">'+clist.length+' product'+(clist.length===1?'':'s')+' · '+sortLabel()+'</div>'
+        +'<div id="catgridwrap">'+(clist.length?gridG(clist):'<div class="empty">No products in this collection yet.</div>')+'</div>';
+      return;
+    }
     // Business-collection browse (from a banner CTA / collection tap) — a product grid, reusing filters.
     if(BIZVIEW){
       var vbiz=activeBiz().filter(function(x){return x.id===BIZVIEW;})[0];
