@@ -16,7 +16,11 @@ class CustomerController extends Controller
     {
         $u = $request->user();
         if (! $u || ! $u->tenant_id) return redirect('/app/login');
-        if (! (bool) $u->tenant->setting('order_system_enabled', false)) abort(404);
+        // Available when the order system is on, OR to an owner/manager/accountant regardless — so the
+        // v3 Customers screen (which embeds this page) works on tenants without order_system_enabled set.
+        $allowed = (bool) $u->tenant->setting('order_system_enabled', false)
+            || $u->isOwnerLike() || in_array((string) $u->role, ['manager', 'accountant'], true);
+        if (! $allowed) abort(404);
         $path = resource_path('panel/customers360.html');
         if (! is_file($path)) abort(500, 'Customers asset missing.');
         return response(file_get_contents($path), 200)
