@@ -925,9 +925,13 @@ button{ -webkit-tap-highlight-color:transparent }
 .bizpill.on small{color:#0b7a3b;font-weight:800}
 .bizhero{margin:0 12px;border-radius:16px;overflow:hidden;position:relative}
 .biztrack{display:flex;transition:transform .45s cubic-bezier(.4,0,.2,1)}
-.bizslide{flex:0 0 100%;min-height:230px;position:relative;color:#fff;background-size:cover;background-position:center}
-.bizslide:after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,rgba(0,0,0,.68) 8%,rgba(0,0,0,.32) 58%,rgba(0,0,0,.12))}
-.bizslide .bztxt{position:relative;z-index:1;padding:18px;min-height:230px;display:flex;flex-direction:column;justify-content:flex-end}
+.bizslide{flex:0 0 100%;min-height:230px;position:relative;color:#fff;background-size:cover;background-position:center;background-color:#123a2a}
+/* Robust scrim: darkens the left (desktop text) AND the bottom (mobile text) so the headline
+   stays readable over ANY uploaded photo — bright or dark, subject anywhere. No composition rules. */
+.bizslide:after{content:"";position:absolute;inset:0;background:
+  linear-gradient(105deg,rgba(0,0,0,.74) 0%,rgba(0,0,0,.58) 34%,rgba(0,0,0,.24) 62%,rgba(0,0,0,.06) 100%),
+  linear-gradient(0deg,rgba(0,0,0,.55) 0%,rgba(0,0,0,.12) 42%,rgba(0,0,0,0) 68%)}
+.bizslide .bztxt{position:relative;z-index:1;padding:18px;min-height:230px;display:flex;flex-direction:column;justify-content:flex-end;text-shadow:0 1px 10px rgba(0,0,0,.4)}
 .bizslide .kick{align-self:flex-start;background:rgba(255,255,255,.9);color:#172029;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:4px 10px;border-radius:7px;margin-bottom:10px}
 .bizslide h2{font-size:23px;line-height:1.14;letter-spacing:-.02em;margin:0;color:#fff}
 .bizslide h2 b{color:#f4b400;font-weight:800}
