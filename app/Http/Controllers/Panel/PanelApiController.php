@@ -3916,16 +3916,19 @@ class PanelApiController extends Controller
         // and rate so the payment ledger matches what the operator actually typed.
         $baseCur   = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);   // e.g. USD
         $nativeCur = \App\Services\Money\SalesBaseCurrency::nativeCurrency($t); // e.g. UGX
+        $orderCur  = \App\Services\Money\SalesBaseCurrency::txnCurrency($order, $t); // the order's OWN currency
         $curIn     = strtolower(trim((string) ($r->query('cur', '') ?: $r->input('cur', ''))));
+        // Which currency is the typed amount in? cur=base → USD (the v3 payment modal); cur=native →
+        // the tenant local currency; an explicit code → that code; DEFAULT (no cur) → the ORDER's own
+        // currency, because the order "Record payment" action already converts the amount into the
+        // order's native currency before posting. Defaulting to USD here would record 548,250 UGX as
+        // $548,250 on a local-currency order.
         $payCur    = $curIn === 'base' ? $baseCur
                    : ($curIn === 'native' ? $nativeCur
-                   : (in_array(strtoupper($curIn), ['USD', 'UGX', 'SSP'], true) ? strtoupper($curIn) : $baseCur));
+                   : (in_array(strtoupper($curIn), ['USD', 'UGX', 'SSP'], true) ? strtoupper($curIn) : $orderCur));
         $payRate   = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($payCur);
         if ($payRate <= 0) $payRate = 1;
-        // The order tracks total/amount_paid/balanceDue in its OWN transaction currency (e.g. a
-        // panel order is UGX, a storefront order is USD). Express the payment in that same currency
-        // before adding it to amount_paid, or a $90 USD payment credits only "90" of a UGX order.
-        $orderCur         = \App\Services\Money\SalesBaseCurrency::txnCurrency($order, $t);
+        // Express the payment in the order's own currency before adding it to amount_paid.
         $amountInOrderCur = \App\Services\Money\Fx::forTenant($t)->convert($amount, $payCur, $orderCur);
 
         $payUnify = (bool) $t->setting('pay_unify', false);

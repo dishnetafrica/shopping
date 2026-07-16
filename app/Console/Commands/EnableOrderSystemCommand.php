@@ -39,17 +39,24 @@ final class EnableOrderSystemCommand extends Command
         if (! $t) { $this->error("Tenant {$id} not found."); return self::FAILURE; }
 
         $on = ! $this->option('off');
-        $was = (bool) $t->setting('order_system_enabled', false);
+        $wasOrder = (bool) $t->setting('order_system_enabled', false);
+        $wasUnify = (bool) $t->setting('pay_unify', false);
 
         $s = $t->settings ?? [];
         $s['order_system_enabled'] = $on;
+        // pay_unify routes EVERY payment (incl. the order "Record payment" button) through the single
+        // CustomerPayment ledger, so it reconciles the invoice and shows on the Payments screen. Without
+        // it, order payments only bump the order's paid figure and the invoice stays "due". Turn it on
+        // together with the order system so payments behave consistently everywhere.
+        $s['pay_unify'] = $on;
         $t->settings = $s;
         $t->save();
 
-        $this->info("✓ {$t->name} (tenant {$t->id}): order_system_enabled "
-            . ($was ? 'ON' : 'off') . ' → ' . ($on ? 'ON' : 'off'));
+        $this->info("✓ {$t->name} (tenant {$t->id}):");
+        $this->line('    order_system_enabled: ' . ($wasOrder ? 'ON' : 'off') . ' → ' . ($on ? 'ON' : 'off'));
+        $this->line('    pay_unify           : ' . ($wasUnify ? 'ON' : 'off') . ' → ' . ($on ? 'ON' : 'off'));
         if ($on) {
-            $this->line('  All order/trading pages (Payments, Customers 360, Cashbook, Purchasing) now work uniformly.');
+            $this->line('  Order/trading pages work uniformly AND every payment now reconciles the invoice + shows on Payments.');
         }
         return self::SUCCESS;
     }
