@@ -20,8 +20,13 @@ class PaymentController extends Controller
     {
         $u = $request->user();
         if (! $u || ! $u->tenant_id) return null;
-        if (! (bool) $u->tenant->setting('order_system_enabled', false)) return null;
-        return $u;
+        // Payments CRUD is available when the order system is on, OR to an owner/manager/accountant
+        // regardless (mirrors RegisterTableController::allowed, which the classic payments list already
+        // uses). Without this, the v3 Payments screen 403s on tenants that manage payments without the
+        // order_system_enabled flag set.
+        if ((bool) $u->tenant->setting('order_system_enabled', false)) return $u;
+        if ($u->isOwnerLike() || in_array((string) $u->role, ['manager', 'accountant'], true)) return $u;
+        return null;
     }
 
     public function page(Request $request)

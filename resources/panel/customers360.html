@@ -383,4 +383,136 @@ boot();
   wire('total','sellcur');
 })();
 </script>
+
+<!-- ===== Customer 360 — action layer: payment CRUD + invoice actions (UCRM-style) ===== -->
+<style>
+  .lnk{background:none;border:none;color:#0a7a4b;font-size:12px;font-weight:700;cursor:pointer;padding:2px 4px}
+  .lnk.dz{color:#c0392b}
+  .pm-mask{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:80;padding:14px}
+  .pm-mask.on{display:flex}
+  .pm-modal{background:#fff;border-radius:14px;max-width:460px;width:100%;max-height:92vh;overflow:auto}
+  .pm-modal h3{margin:0;padding:14px 16px;border-bottom:1px solid #e5e7eb;font-size:16px}
+  .pm-b{padding:14px 16px}
+  .pm-f{margin-bottom:10px}
+  .pm-f label{display:block;font-size:12px;font-weight:700;color:#64748b;margin-bottom:3px}
+  .pm-f input,.pm-f select{width:100%;padding:9px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px}
+  .pm-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .pm-foot{display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid #e5e7eb}
+  .pm-foot .wa2{cursor:pointer}
+</style>
+<div class="pm-mask" id="pmMask"><div class="pm-modal">
+  <h3 id="pmTitle">Add payment</h3>
+  <div class="pm-b">
+    <input type="hidden" id="pm_id">
+    <div class="pm-f"><label>Customer</label><input id="pm_customer"></div>
+    <div class="pm-2">
+      <div class="pm-f"><label>Order no *</label><input id="pm_order" placeholder="ORD-…"></div>
+      <div class="pm-f"><label>Invoice no</label><input id="pm_invoice" placeholder="optional"></div>
+    </div>
+    <div class="pm-2">
+      <div class="pm-f"><label>Amount *</label><input id="pm_amount" type="number" step="0.01" oninput="pmUsd()"></div>
+      <div class="pm-f"><label>Currency</label><select id="pm_cur" onchange="pmRate();pmUsd()"><option>USD</option><option>UGX</option><option>SSP</option></select></div>
+    </div>
+    <div class="pm-2">
+      <div class="pm-f"><label>Rate /USD</label><input id="pm_rate" type="number" step="0.0001"></div>
+      <div class="pm-f"><label>Type</label><select id="pm_kind"><option value="settlement">Settlement</option><option value="advance">Advance</option></select></div>
+    </div>
+    <div style="font-size:12px;color:#0a7a4b;font-weight:700;margin-bottom:8px" id="pm_usd">≈ $0.00</div>
+    <div class="pm-2">
+      <div class="pm-f"><label>Method</label><input id="pm_method" value="Cash"></div>
+      <div class="pm-f"><label>Phone</label><input id="pm_phone"></div>
+    </div>
+    <div class="pm-f"><label>Note</label><input id="pm_note"></div>
+  </div>
+  <div class="pm-foot"><button class="wa2" style="background:#eee;color:#333" onclick="pmClose()">Cancel</button><button class="wa2" id="pmSaveBtn" onclick="pmSave()">Save</button></div>
+</div></div>
+<script>
+(function(){
+  var RATES={USD:1,UGX:3750,SSP:7000}, BASE='USD';
+  function api(path,method,body){
+    var o={method:method||'GET',credentials:'same-origin',headers:{'X-Requested-With':'XMLHttpRequest','Accept':'application/json'}};
+    if(body){o.headers['Content-Type']='application/json';o.body=JSON.stringify(body);}
+    return fetch(path,o).then(function(r){return r.json().catch(function(){return{ok:false,error:'HTTP '+r.status};});});
+  }
+  window.toast=window.toast||function(m,err){var t=document.createElement('div');t.textContent=m;t.style.cssText='position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:'+(err?'#c0392b':'#0f172a')+';color:#fff;padding:9px 15px;border-radius:9px;z-index:99;font-size:13px';document.body.appendChild(t);setTimeout(function(){t.remove();},2200);};
+  function reload360(){ window.__INV=null; if(typeof boot==='function') boot(); }
+  window.__reload360=reload360;
+
+  // ---------- Payment modal ----------
+  window.pmRate=function(){document.getElementById('pm_rate').value=RATES[document.getElementById('pm_cur').value]||1;};
+  window.pmUsd=function(){var a=parseFloat(document.getElementById('pm_amount').value)||0,r=parseFloat(document.getElementById('pm_rate').value)||1;document.getElementById('pm_usd').textContent='≈ $'+(r>0?a/r:0).toFixed(2);};
+  window.pmClose=function(){document.getElementById('pmMask').classList.remove('on');};
+  window.pmOpen=function(customer,phone,pre){
+    pre=pre||{};
+    document.getElementById('pmTitle').textContent=pre.id?'Edit payment':'Add payment';
+    document.getElementById('pm_id').value=pre.id||'';
+    document.getElementById('pm_customer').value=customer||'';
+    document.getElementById('pm_order').value=pre.order_no||'';
+    document.getElementById('pm_invoice').value=pre.invoice_no||'';
+    document.getElementById('pm_amount').value=pre.amount!=null?pre.amount:'';
+    document.getElementById('pm_cur').value=pre.currency||BASE;
+    document.getElementById('pm_rate').value=pre.rate_to_usd||RATES[pre.currency||BASE]||1;
+    document.getElementById('pm_kind').value=pre.kind||'settlement';
+    document.getElementById('pm_method').value=pre.method||'Cash';
+    document.getElementById('pm_phone').value=phone||'';
+    document.getElementById('pm_note').value=pre.reference||'';
+    pmUsd(); document.getElementById('pmMask').classList.add('on');
+  };
+  window.pmEdit=function(id){var p=((window.__C&&window.__C.pays)||[]).filter(function(x){return x.id===id;})[0];if(!p)return;pmOpen(window.__C.name,Object.keys(window.__C.phones)[0]||'',p);};
+  window.pmDel=function(id){if(!confirm('Delete this payment? This voids its cashbook entry and reverses the order + invoice.'))return;api('/papi/payments/'+id+'/delete','POST',{}).then(function(j){if(j.ok){toast('Payment deleted & reversed');reload360();}else toast('Error: '+(j.error||'failed'),true);});};
+  window.pmSave=function(){
+    var id=document.getElementById('pm_id').value;
+    var body={customer_name:document.getElementById('pm_customer').value.trim(),customer_phone:document.getElementById('pm_phone').value.trim(),
+      order_no:document.getElementById('pm_order').value.trim(),invoice_no:document.getElementById('pm_invoice').value.trim(),
+      kind:document.getElementById('pm_kind').value,currency:document.getElementById('pm_cur').value,
+      amount:document.getElementById('pm_amount').value,rate_to_usd:document.getElementById('pm_rate').value,
+      method:document.getElementById('pm_method').value.trim(),note:document.getElementById('pm_note').value.trim()};
+    if(!body.customer_name){toast('Customer required',true);return;}
+    if(!body.order_no){toast('Order no required',true);return;}
+    if(!(parseFloat(body.amount)>0)){toast('Enter amount',true);return;}
+    var b=document.getElementById('pmSaveBtn');b.disabled=true;b.textContent='Saving…';
+    var req=id?api('/papi/payments/'+id+'/update','POST',body):api('/papi/payments','POST',body);
+    req.then(function(j){b.disabled=false;b.textContent='Save';if(j.ok){toast(id?'Updated':'Payment added');pmClose();reload360();}else toast('Error: '+(j.message||j.error||'failed'),true);});
+  };
+
+  // ---------- Override paysList with actions ----------
+  window.paysList=function(c){
+    var ph=Object.keys(c.phones)[0]||'';
+    var head='<div style="margin-bottom:10px"><button class="wa2" onclick="pmOpen('+JSON.stringify(c.name||'').replace(/"/g,'&quot;')+','+JSON.stringify(ph).replace(/"/g,'&quot;')+')">+ Add payment</button></div>';
+    if(!c.pays.length)return head+'<div class="empty">No payments.</div>';
+    return head+c.pays.slice().sort(function(a,b){return(String(a.date)<String(b.date))?1:-1;}).map(function(p){
+      return '<div class="item"><div class="l"><div class="a">'+esc(p.receipt_no||'')+(p.kind==='advance'?'<span class="st s-out">ADVANCE</span>':'')+'</div>'+
+        '<div class="b">'+esc(p.date||'')+' · '+esc(p.method)+(p.order_no?' · '+esc(p.order_no):'')+'</div>'+
+        '<div style="margin-top:3px">'+(p.id?('<button class="lnk" onclick="pmEdit('+p.id+')">Edit</button> <button class="lnk dz" onclick="pmDel('+p.id+')">Delete</button>'):'')+'</div></div>'+
+        '<div class="amt">'+esc(p.currency)+' '+nf(p.amount)+'<div style="font-size:11px;color:#94a3b8">$'+nf(p.usd)+'</div></div></div>';
+    }).join('');
+  };
+
+  // ---------- Real invoices + actions ----------
+  window.__INV=null;
+  window.loadInvoices=function(phone){return api('/papi/invoices?q='+encodeURIComponent(phone)).then(function(j){window.__INV=(j.ok&&j.invoices)||[];});};
+  window.tabInvoices=function(c){
+    var ph=digits(Object.keys(c.phones)[0]||'');
+    if(window.__INV===null){loadInvoices(ph).then(function(){if(CURTAB==='invoices')showTab('invoices');});return '<div class="loading">Loading invoices…</div>';}
+    var inv=(window.__INV||[]).filter(function(i){return digits(i.phone)===ph;});
+    if(!inv.length)return '<div class="empty">No invoices yet. Issue one from an order (Orders → open → Issue invoice).</div>';
+    return inv.map(function(i){var dec=i.currency==='USD'?2:0,bal=Number(i.balance);
+      var acts='<button class="lnk" onclick="invPdf('+i.id+')">PDF</button> <button class="lnk" onclick="invSend('+i.id+','+JSON.stringify(ph)+')">Send</button>';
+      if(bal>0.005 && i.order_id) acts+=' <button class="lnk" onclick="invPay('+i.order_id+','+JSON.stringify(i.currency)+','+bal+')">Record payment</button>';
+      if(i.status!=='void') acts+=' <button class="lnk dz" onclick="invVoid('+i.id+')">Void</button>';
+      return '<div class="item"><div class="l"><div class="a">'+esc(i.no)+' <span class="st s-'+esc(i.status)+'">'+esc(String(i.status).replace("_"," "))+'</span></div>'+
+        '<div class="b">billed '+esc(i.currency)+' '+fmtN(i.total,dec)+' · paid '+fmtN(i.paid,dec)+'</div><div style="margin-top:3px">'+acts+'</div></div>'+
+        '<div class="amt" style="color:'+(bal>0.005?'#C0392B':'#15803D')+'">'+(bal>0.005?(esc(i.currency)+' '+fmtN(bal,dec)):'Paid')+'</div></div>';
+    }).join('');
+  };
+  window.invPdf=function(id){window.open('/papi/invoice-pdf?id='+id,'_blank');};
+  window.invSend=function(id,phone){api('/papi/invoice-send','POST',{id:id,phone:phone}).then(function(j){toast(j.ok?'Invoice sent':'Send failed: '+(j.error||''),!j.ok);});};
+  window.invVoid=function(id){if(!confirm('Void this invoice? It will no longer count toward the balance.'))return;api('/papi/invoice-void','POST',{id:id}).then(function(j){if(j.ok){toast('Invoice voided');reload360();}else toast('Void failed',true);});};
+  window.invPay=function(orderId,cur,bal){
+    var amt=prompt('Record payment against this invoice ('+cur+'):',bal); if(amt==null)return;
+    var curParam=(cur===BASE)?'base':'native';
+    api('/papi/record-payment?cur='+curParam,'POST',{order:orderId,amount:amt,method:'cash'}).then(function(j){if(j.ok){toast('Payment recorded');reload360();}else toast('Failed: '+(j.message||j.error||''),true);});
+  };
+})();
+</script>
 </body></html>
