@@ -443,6 +443,19 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
   .acct-btn .nm{display:none}
   .acct-btn{padding:5px 6px}
 }
+/* ===== Storefront merchandising editors ===== */
+.sfrow{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.sffield{display:flex;flex-direction:column;gap:4px}
+.sffield label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.sfin,.sfsel,.sfta{height:36px;border:1px solid var(--line);border-radius:8px;padding:0 11px;font-size:13.5px;color:var(--ink);background:var(--surface);outline:none}
+.sfin:focus,.sfsel:focus,.sfta:focus{border-color:var(--brand)}
+.sfta{height:auto;padding:8px 11px;resize:vertical}
+.sfmini{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:8px;background:var(--surface-2)}
+.sfchk{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--ink-2)}
+.sfphoto{width:74px;height:54px;border-radius:8px;object-fit:cover;background:#eef2f5;display:grid;place-items:center;color:var(--faint);font-size:10px}
+.sftabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.sftab{height:34px;padding:0 15px;border-radius:9px;font-weight:700;font-size:13px;border:1px solid var(--line);background:var(--surface);color:var(--muted)}
+.sftab.on{background:var(--brand);border-color:var(--brand);color:#fff}
 </style>
 </head>
 <body>
@@ -487,19 +500,22 @@ const LABELS = { setup:'Get started', briefing:'Morning Briefing', worklist:'My 
   salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance',
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', 'procurement.hub':'Procurement Hub', 'demand.plans':'Demand Plans', 'juba.stock':'Juba Stock', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
-  salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings', ads:'Facebook Ads', campaigns:'Campaigns', 'storefront.insights':'Storefront Insights' };
+  salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings', ads:'Facebook Ads', campaigns:'Campaigns', 'storefront.insights':'Storefront Insights',
+  'storefront.collections':'Shop for Every Need', 'storefront.kits':'Ready-made Kits' };
 const GROUPS = [ ['Overview',['setup','briefing','worklist']],
   ['Sales',['customers','leads','salesOrders','quotations','invoices','payments','collections']],
   ['Inventory',['products','categories','purchase.process','suppliers']],
   ['Procurement',['procurement.hub','demand.plans','juba.stock']],
   ['Operations',['warehouse','dispatch']],
   ['Finance',['finance','cashbook']],
-  ['Marketing',['ads','campaigns','storefront.insights']],
+  ['Marketing',['ads','campaigns','storefront.insights','storefront.collections','storefront.kits']],
   ['Settings',['settings']] ];
 // Which nav key reads which count from the catalog's counts map.
 const NAVCOUNT = { customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['setup','briefing','worklist','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','warehouse','dispatch','settings','cashbook','ads','campaigns','storefront.insights']);
+const READY = new Set(['setup','briefing','worklist','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','warehouse','dispatch','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits']);
+// Storefront config pages are client-rendered (not server workspaces) and always available to the owner.
+const SF_KEYS = new Set(['storefront.collections','storefront.kits']);
 // Dedicated list views still pending — none; kept for future additions.
 const SOON = {};
 function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:1)+'k' : String(n); }
@@ -534,6 +550,8 @@ const P = {
   leads:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8M19 8v6M22 11h-6',
   campaigns:'M22 2 11 13M22 2l-7 20-4-9-9-4z',
   'storefront.insights':'M3 3v18h18M7 15l3-4 3 3 4-6',
+  'storefront.collections':'M3 9l1-5h16l1 5M3 9h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM9 9a3 3 0 0 0 6 0',
+  'storefront.kits':'M20 12v9H4v-9M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z',
   salesOrder:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
   salesOrders:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
   purchaseOrder:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
@@ -648,7 +666,7 @@ function parseHash(){ const p=location.hash.replace('#/','').split('/'); return 
 function renderNav(caps){
   const keys = new Set(caps.map(c=>c.key));
   // A SOON item shows if its underlying entity exists (has a count) even without a list capability yet.
-  const has = k => keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
+  const has = k => SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
   let html='';
   GROUPS.forEach(([g,items])=>{
     const avail=items.filter(has);
@@ -696,6 +714,8 @@ async function route(key, id){
   id = id != null ? id : null;
   closeNav();
   CUR={key,id}; REC_TAB='overview'; location.hash='#/'+key+(id?'/'+id:''); setActive(key);
+  if(key==='storefront.collections'){ sfCollectionsPage(); return; }
+  if(key==='storefront.kits'){ sfKitsPage(); return; }
   if(SOON[key] && !id){ renderSoon(key); return; }
   document.getElementById('view').innerHTML=skeleton();
   let path='/'+key+(id?'/'+id:'');
@@ -1464,6 +1484,196 @@ function cellHtml(c,col){
     return '<td>'+(href?'<button class="btn sm" onclick="event.stopPropagation();try{window.open(\''+esc(href)+'\',\'_blank\')}catch(e){location.href=\''+esc(href)+'\'}">'+icon((c&&c.icon)||'download','ic-sm')+esc(label)+'</button>':'—')+'</td>'; }
   const tone=(c&&c.tone)?(' '+toneCls(c.tone)):'';
   return '<td class="'+align+tone+'">'+esc(cellVal(c))+'</td>';
+}
+
+/* ================= Storefront merchandising editors (native v3) =================
+   Client-rendered pages wired to the existing /papi endpoints (session-authed, same as the
+   classic panel). No server workspace payload — route() special-cases these two keys. */
+var SFCFG={enabled:false,title:'',autoscroll:5,'default':'',businesses:[]};
+var SFKITS=[], SFKCOLLS=[], _sfPhoto=null;
+var SF_ICONS=['home','hotels','restaurants','retail','supermarkets','wholesale','catering','offices','bakeries','cleaning','shop'];
+function sfEl(id){return document.getElementById(id);}
+function sfj(s){return JSON.stringify(String(s==null?'':s)).replace(/"/g,'&quot;');}
+function sfHiddenFile(){ var f=sfEl('sfPhotoFile'); if(!f){ f=document.createElement('input'); f.type='file'; f.accept='image/*'; f.id='sfPhotoFile'; f.style.display='none'; f.onchange=sfPhotoPicked; document.body.appendChild(f);} return f; }
+function sfShrink(file,maxDim,q){ maxDim=maxDim||1400;q=q||0.82; return new Promise(function(res){ var rd=new FileReader(); rd.onerror=function(){res(null);}; rd.onload=function(){ var img=new Image(); img.onload=function(){ var w=img.width,h=img.height,s=Math.min(1,maxDim/Math.max(w,h)); var cw=Math.max(1,Math.round(w*s)),ch=Math.max(1,Math.round(h*s)); try{ var c=document.createElement('canvas'); c.width=cw;c.height=ch; var x=c.getContext('2d'); x.fillStyle='#fff';x.fillRect(0,0,cw,ch);x.drawImage(img,0,0,cw,ch); res(c.toDataURL('image/jpeg',q)); }catch(e){res(rd.result);} }; img.onerror=function(){res(rd.result);}; img.src=rd.result; }; rd.readAsDataURL(file); }); }
+function sfTabs(active){
+  return '<div class="sftabs">'
+    +'<button class="sftab'+(active==='collections'?' on':'')+'" onclick="route(\'storefront.collections\')">Shop for Every Need</button>'
+    +'<button class="sftab'+(active==='kits'?' on':'')+'" onclick="route(\'storefront.kits\')">Ready-made Kits</button></div>';
+}
+
+/* ---------- Shop for Every Need ---------- */
+function sfCollectionsPage(){
+  sfEl('view').innerHTML='<div class="wrap">'+sfTabs('collections')+'<div class="card"><div class="b">Loading…</div></div></div>';
+  getQuery('/papi/business-banners',{}).then(function(d){
+    var c=(d&&d.config)||{};
+    SFCFG={enabled:!!c.enabled,title:c.title||'',autoscroll:(c.autoscroll==null?5:c.autoscroll),'default':c['default']||'',businesses:Array.isArray(c.businesses)?c.businesses:[]};
+    sfCollectionsRender();
+  }).catch(function(){ SFCFG={enabled:false,title:'',autoscroll:5,'default':'',businesses:[]}; sfCollectionsRender(); });
+}
+function sfCollectionsRender(){
+  var defOpts='<option value="">First / most-used</option>'+SFCFG.businesses.map(function(b){return '<option value="'+sfj(b.id)+'"'+(SFCFG['default']===b.id?' selected':'')+'>'+esc(b.label||b.id)+'</option>';}).join('');
+  var head='<div class="card"><div class="h">Shop for Every Need'
+    +'<label class="sfchk" style="margin-left:auto"><input type="checkbox" '+(SFCFG.enabled?'checked':'')+' onchange="sfSet(\'enabled\',this.checked)"> Show on storefront</label></div>'
+    +'<div class="b"><div class="sfrow">'
+      +'<div class="sffield" style="flex:1;min-width:200px"><label>Section title</label><input class="sfin" value="'+esc(SFCFG.title||'')+'" placeholder="Shop for Every Need" onchange="sfSet(\'title\',this.value)"></div>'
+      +'<div class="sffield"><label>Auto-scroll (sec, 0=off)</label><input class="sfin" type="number" min="0" max="30" style="width:120px" value="'+(SFCFG.autoscroll==null?5:SFCFG.autoscroll)+'" onchange="sfSet(\'autoscroll\',this.value)"></div>'
+      +'<div class="sffield"><label>Default for new visitors</label><select class="sfsel" onchange="sfSet(\'default\',this.value)">'+defOpts+'</select></div>'
+      +'<button class="btn" onclick="sfLoadStarter()">Load starter template</button>'
+      +'<button class="btn pri" style="margin-left:auto" onclick="sfSaveCollections()">Save</button>'
+    +'</div></div></div>';
+  var body=SFCFG.businesses.length?SFCFG.businesses.map(function(b,bi){return sfBizCard(b,bi);}).join(''):'<div class="card"><div class="b" style="color:var(--muted)">No collections yet. Add one, or load the starter template.</div></div>';
+  sfEl('view').innerHTML='<div class="wrap">'+sfTabs('collections')+head+'<div style="height:14px"></div>'+body
+    +'<button class="btn" onclick="sfAddBiz()" style="margin-top:12px">+ Add collection</button></div>';
+}
+function sfBizCard(b,bi){
+  var icons=SF_ICONS.map(function(k){return '<option value="'+k+'"'+((b.icon||'')===k?' selected':'')+'>'+k+'</option>';}).join('');
+  var slides=(b.slides||[]).map(function(s,si){return sfSlideRow(s,bi,si);}).join('');
+  var colls=(b.collections||[]).map(function(c,ci){return sfCollRow(c,bi,ci);}).join('');
+  var best=Array.isArray(b.bestsellers)?b.bestsellers.join(', '):(b.bestsellers||'auto');
+  var card=b.card_image?('<img class="sfphoto" src="'+esc(b.card_image)+'">'):('<div class="sfphoto">card</div>');
+  return '<div class="card" style="margin-bottom:14px"><div class="h">'
+    +'<input class="sfin" value="'+esc(b.label||'')+'" placeholder="Collection label" style="font-weight:700;max-width:230px" onchange="sfUpd('+bi+',\'label\',this.value)">'
+    +'<label class="sfchk" style="margin-left:8px"><input type="checkbox" '+(b.active!==false?'checked':'')+' onchange="sfUpd('+bi+',\'active\',this.checked)"> Active</label>'
+    +'<button class="btn sm danger" style="margin-left:auto" onclick="sfDelBiz('+bi+')">Remove</button></div>'
+    +'<div class="b">'
+      +'<div class="sfrow" style="margin-bottom:12px">'
+        +'<div style="text-align:center">'+card+'<div style="margin-top:5px"><button class="btn sm" onclick="sfPickPhoto(\'card\','+bi+')">Card photo</button>'+(b.card_image?' <button class="btn sm danger" onclick="sfClearCard('+bi+')">✕</button>':'')+'</div></div>'
+        +'<div class="sffield" style="flex:1;min-width:160px"><label>One-line description</label><input class="sfin" value="'+esc(b.sub||'')+'" placeholder="Everyday basics" onchange="sfUpd('+bi+',\'sub\',this.value)"></div>'
+        +'<div class="sffield"><label>Icon</label><select class="sfsel" onchange="sfUpd('+bi+',\'icon\',this.value)">'+icons+'</select></div>'
+        +'<div class="sffield"><label>ID</label><input class="sfin" value="'+esc(b.id||'')+'" style="width:110px" onchange="sfUpd('+bi+',\'id\',this.value)"></div>'
+      +'</div>'
+      +'<div class="sfrow" style="margin-bottom:6px">'
+        +'<div class="sffield" style="flex:1;min-width:200px"><label>Match categories (comma)</label><input class="sfin" value="'+esc((b.match&&b.match.categories||[]).join(', '))+'" onchange="sfMatch('+bi+',\'categories\',this.value)"></div>'
+        +'<div class="sffield" style="flex:1;min-width:200px"><label>Match keywords (comma)</label><input class="sfin" value="'+esc((b.match&&b.match.keywords||[]).join(', '))+'" onchange="sfMatch('+bi+',\'keywords\',this.value)"></div>'
+      +'</div>'
+      +'<label class="sfchk" style="margin-bottom:12px"><input type="checkbox" '+(b.match&&b.match.bulk?'checked':'')+' onchange="sfMatchBulk('+bi+',this.checked)"> Also include all bulk / carton items (pack or MOQ &gt; 1)</label>'
+      +'<div style="font-weight:700;font-size:13px;margin:2px 0 8px">Hero slides (auto-scroll)</div>'+slides
+      +'<button class="btn sm" style="margin-top:4px" onclick="sfAddSlide('+bi+')">+ Add slide</button>'
+      +'<div style="font-weight:700;font-size:13px;margin:14px 0 8px">Collections</div>'+colls
+      +'<button class="btn sm" style="margin-top:4px" onclick="sfAddColl('+bi+')">+ Add collection</button>'
+      +'<div class="sffield" style="margin-top:12px"><label>Best sellers (product names, comma — or "auto")</label><input class="sfin" value="'+esc(best)+'" placeholder="auto" onchange="sfUpd('+bi+',\'bestsellers\',this.value)"></div>'
+    +'</div></div>';
+}
+function sfSlideRow(s,bi,si){
+  var img=s.image_url?('<img class="sfphoto" src="'+esc(s.image_url)+'">'):('<div class="sfphoto" style="background:'+(s.theme||'#123a2a')+';color:#fff">hero</div>');
+  return '<div class="sfmini"><div class="sfrow">'
+    +'<div style="text-align:center">'+img+'<div style="margin-top:5px"><button class="btn sm" onclick="sfPickPhoto(\'slide\','+bi+','+si+')">Upload</button>'+(s.image_url?' <button class="btn sm danger" onclick="sfClearSlide('+bi+','+si+')">✕</button>':'')+'</div></div>'
+    +'<div style="flex:1;min-width:220px">'
+      +'<div class="sfrow"><input class="sfin" style="flex:1" value="'+esc(s.kick||'')+'" placeholder="Kicker (Hotel Supplies)" onchange="sfSlide('+bi+','+si+',\'kick\',this.value)"><input class="sfin" style="flex:1" value="'+esc(s.cta_label||'')+'" placeholder="Button (Shop Collection)" onchange="sfSlide('+bi+','+si+',\'cta_label\',this.value)"></div>'
+      +'<input class="sfin" style="width:100%;margin-top:6px" value="'+esc(s.title||'')+'" placeholder="Headline — wrap a word in *stars* to highlight" onchange="sfSlide('+bi+','+si+',\'title\',this.value)">'
+      +'<input class="sfin" style="width:100%;margin-top:6px" value="'+esc((s.points||[]).join(' | '))+'" placeholder="Bullets separated by |" onchange="sfPoints('+bi+','+si+',this.value)">'
+      +'<div class="sfrow" style="margin-top:6px"><input class="sfin" style="flex:1" value="'+esc(s.theme||'')+'" placeholder="CSS background (if no photo)" onchange="sfSlide('+bi+','+si+',\'theme\',this.value)"><input class="sfin" style="flex:1" value="'+esc(s.cta||'')+'" placeholder="Button target (blank=shop this)" onchange="sfSlide('+bi+','+si+',\'cta\',this.value)"><label class="sfchk"><input type="checkbox" '+(s.gold?'checked':'')+' onchange="sfSlide('+bi+','+si+',\'gold\',this.checked)"> Gold</label><button class="btn sm danger" onclick="sfDelSlide('+bi+','+si+')">Remove</button></div>'
+    +'</div></div></div>';
+}
+function sfCollRow(c,bi,ci){
+  return '<div class="sfrow" style="margin-bottom:6px"><input class="sfin" style="flex:1" value="'+esc(c.label||'')+'" placeholder="Collection label" onchange="sfColl('+bi+','+ci+',\'label\',this.value)"><input class="sfin" style="flex:1" value="'+esc(c.cat||'')+'" placeholder="Jump to category" onchange="sfColl('+bi+','+ci+',\'cat\',this.value)"><input class="sfin" style="flex:1" value="'+esc(c.keywords||'')+'" placeholder="or keyword" onchange="sfColl('+bi+','+ci+',\'keywords\',this.value)"><button class="btn sm danger" onclick="sfDelColl('+bi+','+ci+')">✕</button></div>';
+}
+function sfB(bi){return SFCFG.businesses[bi];}
+function sfSet(k,v){ if(k==='autoscroll')v=Math.max(0,Math.min(30,parseInt(v,10)||0)); SFCFG[k]=v; }
+function sfUpd(bi,k,v){var b=sfB(bi);if(!b)return; if(k==='bestsellers'){v=String(v).trim();b.bestsellers=(v===''||v.toLowerCase()==='auto')?'auto':v.split(',').map(function(x){return x.trim();}).filter(Boolean);} else b[k]=v; if(k==='label'||k==='id')sfCollectionsRender();}
+function sfMatch(bi,k,v){var b=sfB(bi);if(!b)return;b.match=b.match||{};b.match[k]=v.split(',').map(function(x){return x.trim();}).filter(Boolean);}
+function sfMatchBulk(bi,on){var b=sfB(bi);if(!b)return;b.match=b.match||{};b.match.bulk=!!on;}
+function sfSlide(bi,si,k,v){var b=sfB(bi);if(!b||!b.slides||!b.slides[si])return;b.slides[si][k]=v;}
+function sfPoints(bi,si,v){var b=sfB(bi);if(!b||!b.slides||!b.slides[si])return;b.slides[si].points=v.split('|').map(function(x){return x.trim();}).filter(Boolean);}
+function sfColl(bi,ci,k,v){var b=sfB(bi);if(!b||!b.collections||!b.collections[ci])return;b.collections[ci][k]=v;}
+function sfAddBiz(){SFCFG.businesses.push({id:'biz'+(SFCFG.businesses.length+1),label:'New Collection',sub:'',icon:'shop',active:true,card_image:'',match:{categories:[],keywords:[],bulk:false},slides:[{kick:'',title:'New headline',points:[],cta_label:'Shop now',cta:'',gold:false,theme:'linear-gradient(135deg,#123a2a,#0b5c46)',image_url:''}],collections:[],bestsellers:'auto'});sfCollectionsRender();}
+function sfDelBiz(bi){if(!confirm('Remove this collection?'))return;SFCFG.businesses.splice(bi,1);sfCollectionsRender();}
+function sfAddSlide(bi){var b=sfB(bi);if(!b)return;b.slides=b.slides||[];b.slides.push({kick:'',title:'New headline',points:[],cta_label:'Shop now',cta:'',gold:false,theme:'linear-gradient(135deg,#123a2a,#0b5c46)',image_url:''});sfCollectionsRender();}
+function sfDelSlide(bi,si){var b=sfB(bi);if(!b||!b.slides)return;b.slides.splice(si,1);sfCollectionsRender();}
+function sfAddColl(bi){var b=sfB(bi);if(!b)return;b.collections=b.collections||[];b.collections.push({label:'',cat:'',keywords:'',icon:'shop',image_url:''});sfCollectionsRender();}
+function sfDelColl(bi,ci){var b=sfB(bi);if(!b||!b.collections)return;b.collections.splice(ci,1);sfCollectionsRender();}
+function sfClearCard(bi){var b=sfB(bi);if(b){b.card_image='';sfCollectionsRender();}}
+function sfClearSlide(bi,si){var b=sfB(bi);if(b&&b.slides&&b.slides[si]){b.slides[si].image_url='';sfCollectionsRender();}}
+function sfPickPhoto(type,bi,si){_sfPhoto={type:type,bi:bi,si:si};var f=sfHiddenFile();f.value='';f.click();}
+async function sfPhotoPicked(){
+  var f=sfEl('sfPhotoFile');var file=f&&f.files&&f.files[0];if(!file||!_sfPhoto)return;
+  toast('Uploading photo…');
+  var data=await sfShrink(file,1600,.82); if(!data){toast('Could not read image',true);return;}
+  var d=await post('/papi/upload-image',{name:(file.name||'img')+'.jpg',data:data});
+  if(d&&d.ok&&d.url){
+    if(_sfPhoto.type==='kit'){ var k=SFKITS[_sfPhoto.bi]; if(k){k.image_url=d.url;sfKitsRender();} }
+    else { var b=sfB(_sfPhoto.bi); if(b){ if(_sfPhoto.type==='card')b.card_image=d.url; else if(b.slides&&b.slides[_sfPhoto.si])b.slides[_sfPhoto.si].image_url=d.url; sfCollectionsRender(); } }
+    toast('Photo added');
+  } else toast('Upload failed — try a smaller image',true);
+}
+async function sfSaveCollections(){
+  var d=await post('/papi/business-banners-save',{config:SFCFG});
+  if(d&&d.ok){ if(d.config)SFCFG=d.config; sfCollectionsRender(); toast('Saved'); } else toast((d&&d.error)||'Could not save',true);
+}
+function sfLoadStarter(){
+  if(SFCFG.businesses.length && !confirm('Replace the current collections with the starter template?'))return;
+  var g={home:'linear-gradient(135deg,#0b5c46,#0b7a3b)',hotels:'linear-gradient(135deg,#123a6b,#1e5aa8)',restaurants:'linear-gradient(135deg,#5a2c12,#9a4a12)',retail:'linear-gradient(135deg,#123018,#0b7a3b)',wholesale:'linear-gradient(135deg,#2a1a4a,#5a3a9a)',catering:'linear-gradient(135deg,#0d4a50,#12959f)',offices:'linear-gradient(135deg,#334155,#556579)'};
+  var m=function(cats,kws,bulk){return {categories:cats,keywords:kws,bulk:!!bulk};};
+  var sl=function(kick,title,pts,cta,gold,theme){return {kick:kick,title:title,points:pts,cta_label:cta,cta:'',gold:!!gold,theme:theme,image_url:''};};
+  var col=function(label,cat){return {label:label,cat:cat,keywords:'',icon:'shop',image_url:''};};
+  SFCFG.enabled=true;SFCFG.title='Shop for Every Need';SFCFG.autoscroll=5;SFCFG['default']='home';
+  SFCFG.businesses=[
+    {id:'home',label:'Home Essentials',sub:'Cooking, cleaning & everyday basics',icon:'home',active:true,card_image:'',match:m(['Cleaning & Hygiene','Snacks & Namkeen','Rice, Biryani & Ready Mixes','Dal & Pulses','Sauces & Condiments'],['oil','rice','sugar','tea','tissue','clean','snack','soap','detergent','flour','salt']),slides:[sl('Home Essentials','Everything Your *Home* Needs',['Cooking, cleaning & everyday basics','Great prices, fast delivery','Buy one, or buy in bulk'],'Shop Home Essentials',false,g.home)],collections:[col('Cooking & Staples','Rice, Biryani & Ready Mixes'),col('Cleaning & Hygiene','Cleaning & Hygiene'),col('Snacks','Snacks & Namkeen')],bestsellers:'auto'},
+    {id:'hotels',label:'Hotel Supplies',sub:'Housekeeping, guest amenities & kitchen',icon:'hotels',active:true,card_image:'',match:m(['Cleaning & Hygiene','Disposables, Foil & Wraps'],['towel','tissue','soap','shampoo','clean','foil','sanitiser','detergent','amenity']),slides:[sl('Hotel Supplies','Everything Your *Hotel* Needs',['Housekeeping & guest amenities','Foil, cling & kitchen','Cleaning chemicals'],'Shop Hotel Collection',false,g.hotels)],collections:[col('Cleaning & Hygiene','Cleaning & Hygiene'),col('Foil & Disposables','Disposables, Foil & Wraps')],bestsellers:'auto'},
+    {id:'restaurants',label:'Restaurant Supplies',sub:'Kitchen essentials & food packaging',icon:'restaurants',active:true,card_image:'',match:m(['Disposables, Foil & Wraps','Recipe Mixes & Masalas','Ground Spices (Powders)','Whole Spices','Sauces & Condiments','Cleaning & Hygiene'],['foil','cling','container','glove','oil','masala','spice','sauce','packaging','clean']),slides:[sl('Restaurant Supplies','Kitchen & Packaging *Essentials*',['Foil, cling & containers','Disposable gloves & kitchen cleaning','Packaging that sells'],'Shop Restaurant Collection',false,g.restaurants)],collections:[col('Foil & Wraps','Disposables, Foil & Wraps'),col('Recipe Mixes & Masalas','Recipe Mixes & Masalas')],bestsellers:'auto'},
+    {id:'retail',label:'Retail Store Essentials',sub:'Fast-moving shelf essentials',icon:'retail',active:true,card_image:'',match:m(['Snacks & Namkeen','Sauces & Condiments','Recipe Mixes & Masalas','Dal & Pulses','Rice, Biryani & Ready Mixes','Cleaning & Hygiene'],['snack','sauce','rice','dal','masala','tea','sugar','clean','tissue']),slides:[sl('Retail Store Essentials','Stock Your *Shelves* Faster',['Fast-moving consumer goods','Best-selling grocery & household','Cleaning & snacks'],'Browse Retail Best Sellers',false,g.retail)],collections:[col('Snacks & Namkeen','Snacks & Namkeen'),col('Rice & Ready Mixes','Rice, Biryani & Ready Mixes'),col('Cleaning','Cleaning & Hygiene')],bestsellers:'auto'},
+    {id:'wholesale',label:'Wholesale Packs',sub:'Carton pricing & bulk savings',icon:'wholesale',active:true,card_image:'',match:m([],['carton','bulk','pack'],true),slides:[sl('Wholesale','Bulk Buying Made *Easy*',['Carton & bulk packs','Lowest MOQ, best margins','Fast quotations'],'View Wholesale Deals',true,g.wholesale)],collections:[],bestsellers:'auto'},
+    {id:'catering',label:'Catering Supplies',sub:'Disposables, cutlery & serving',icon:'catering',active:true,card_image:'',match:m(['Disposables, Foil & Wraps','Recipe Mixes & Masalas','Ground Spices (Powders)'],['plate','cup','cutlery','foil','cling','container','napkin','straw','masala']),slides:[sl('Catering & Events','Everything for *Catering & Events*',['Disposable plates, cups & cutlery','Containers, foil & cling','Serve hundreds, easily'],'Shop Catering Supplies',false,g.catering)],collections:[col('Disposables & Foil','Disposables, Foil & Wraps')],bestsellers:'auto'},
+    {id:'offices',label:'Office Supplies',sub:'Pantry, tissue & cleaning',icon:'offices',active:true,card_image:'',match:m(['Cleaning & Hygiene','Snacks & Namkeen','Sauces & Condiments'],['tea','coffee','tissue','clean','sugar','water','pantry','biscuit']),slides:[sl('Office Supplies','Keep Your *Office* Running Smoothly',['Tea, coffee & pantry','Tissue & cleaning','Stationery & essentials'],'Shop Office Supplies',false,g.offices)],collections:[col('Pantry & Snacks','Snacks & Namkeen'),col('Cleaning & Tissue','Cleaning & Hygiene')],bestsellers:'auto'}
+  ];
+  sfCollectionsRender();toast('Starter loaded — review, add photos, then Save');
+}
+
+/* ---------- Ready-made Kits ---------- */
+function sfKitsPage(){
+  sfEl('view').innerHTML='<div class="wrap">'+sfTabs('kits')+'<div class="card"><div class="b">Loading…</div></div></div>';
+  // collection options come from the banners config; products from the panel feed (for the datalist)
+  getQuery('/papi/business-banners',{}).then(function(d){ var bs=(d&&d.config&&d.config.businesses)||[]; SFKCOLLS=bs.map(function(b){return {id:b.id,label:b.label||b.id};}); }).catch(function(){SFKCOLLS=[];})
+  .finally(function(){
+    getQuery('/papi/products',{}).then(function(d){ var rows=(d&&d.products)||[]; window.__SFPROD=rows.map(function(p){return p['Product Name']||'';}).filter(Boolean); }).catch(function(){window.__SFPROD=[];})
+    .finally(function(){
+      getQuery('/papi/kits',{}).then(function(d){ SFKITS=(d&&Array.isArray(d.kits))?d.kits:[]; sfKitsRender(); }).catch(function(){SFKITS=[];sfKitsRender();});
+    });
+  });
+}
+function sfKitsRender(){
+  var dl='<datalist id="sfProdNames">'+((window.__SFPROD)||[]).map(function(n){return '<option value="'+esc(n)+'">';}).join('')+'</datalist>';
+  var head='<div class="card"><div class="h">Ready-made Kits<button class="btn pri" style="margin-left:auto" onclick="sfSaveKits()">Save kits</button></div>'
+    +'<div class="b" style="color:var(--muted);font-size:13px">A kit is a curated bundle a customer adds to a quotation in one tap. Add products by name (each line respects that product\'s MOQ). Assign a kit to a collection, or leave blank to show it in every collection.</div></div>';
+  var body=SFKITS.length?SFKITS.map(function(k,ki){return sfKitCard(k,ki);}).join(''):'<div class="card"><div class="b" style="color:var(--muted)">No kits yet. Add one — e.g. a "Restaurant Starter Kit".</div></div>';
+  sfEl('view').innerHTML='<div class="wrap">'+sfTabs('kits')+dl+head+'<div style="height:14px"></div>'+body+'<button class="btn" onclick="sfKitAdd()" style="margin-top:12px">+ Add kit</button></div>';
+}
+function sfKitColOpts(sel){return '<option value="">Every collection</option>'+SFKCOLLS.map(function(c){return '<option value="'+sfj(c.id)+'"'+(sel===c.id?' selected':'')+'>'+esc(c.label)+'</option>';}).join('');}
+function sfKitCard(k,ki){
+  var lines=(k.lines||[]).map(function(l,li){return sfKitLine(l,ki,li);}).join('');
+  var img=k.image_url?('<img class="sfphoto" src="'+esc(k.image_url)+'">'):('<div class="sfphoto">photo</div>');
+  return '<div class="card" style="margin-bottom:14px"><div class="h">'
+    +'<input class="sfin" value="'+esc(k.label||'')+'" placeholder="Kit name (Restaurant Starter Kit)" style="font-weight:700;max-width:250px" onchange="sfKitUpd('+ki+',\'label\',this.value)">'
+    +'<label class="sfchk" style="margin-left:8px"><input type="checkbox" '+(k.active!==false?'checked':'')+' onchange="sfKitUpd('+ki+',\'active\',this.checked)"> Active</label>'
+    +'<button class="btn sm danger" style="margin-left:auto" onclick="sfKitDel('+ki+')">Remove</button></div>'
+    +'<div class="b">'
+      +'<div class="sfrow" style="margin-bottom:10px">'
+        +'<div style="text-align:center">'+img+'<div style="margin-top:5px"><button class="btn sm" onclick="sfKitPhoto('+ki+')">Photo</button>'+(k.image_url?' <button class="btn sm danger" onclick="sfKitClearPhoto('+ki+')">✕</button>':'')+'</div></div>'
+        +'<div class="sffield" style="flex:1;min-width:180px"><label>Description</label><input class="sfin" value="'+esc(k.desc||'')+'" placeholder="Everything to get started" onchange="sfKitUpd('+ki+',\'desc\',this.value)"></div>'
+        +'<div class="sffield"><label>Show in collection</label><select class="sfsel" onchange="sfKitUpd('+ki+',\'collection\',this.value)">'+sfKitColOpts(k.collection||'')+'</select></div>'
+        +'<div class="sffield"><label>Button label</label><input class="sfin" style="width:150px" value="'+esc(k.cta_label||'')+'" placeholder="Add kit to quote" onchange="sfKitUpd('+ki+',\'cta_label\',this.value)"></div>'
+      +'</div>'
+      +'<div style="font-weight:700;font-size:13px;margin:2px 0 8px">Products in this kit</div>'+lines
+      +'<button class="btn sm" style="margin-top:4px" onclick="sfKitAddLine('+ki+')">+ Add product</button>'
+    +'</div></div>';
+}
+function sfKitLine(l,ki,li){
+  return '<div class="sfrow" style="margin-bottom:6px"><input class="sfin" list="sfProdNames" style="flex:1;min-width:200px" value="'+esc(l.name||'')+'" placeholder="Product name (must match catalogue)" onchange="sfKitLineEd('+ki+','+li+',\'name\',this.value)"><input class="sfin" type="number" min="1" style="width:90px" value="'+(parseInt(l.qty,10)||1)+'" onchange="sfKitLineEd('+ki+','+li+',\'qty\',this.value)"><button class="btn sm danger" onclick="sfKitDelLine('+ki+','+li+')">✕</button></div>';
+}
+function sfK(ki){return SFKITS[ki];}
+function sfKitUpd(ki,k,v){var it=sfK(ki);if(it)it[k]=v;}
+function sfKitLineEd(ki,li,k,v){var it=sfK(ki);if(!it||!it.lines||!it.lines[li])return;it.lines[li][k]=(k==='qty')?Math.max(1,parseInt(v,10)||1):v;}
+function sfKitAdd(){SFKITS.push({id:'kit'+(SFKITS.length+1)+'_'+Math.random().toString(36).slice(2,6),label:'New Kit',desc:'',image_url:'',active:true,collection:'',cta_label:'Add kit to quote',lines:[{name:'',qty:1}]});sfKitsRender();}
+function sfKitDel(ki){if(!confirm('Remove this kit?'))return;SFKITS.splice(ki,1);sfKitsRender();}
+function sfKitAddLine(ki){var it=sfK(ki);if(!it)return;it.lines=it.lines||[];it.lines.push({name:'',qty:1});sfKitsRender();}
+function sfKitDelLine(ki,li){var it=sfK(ki);if(!it||!it.lines)return;it.lines.splice(li,1);sfKitsRender();}
+function sfKitPhoto(ki){_sfPhoto={type:'kit',bi:ki};var f=sfHiddenFile();f.value='';f.click();}
+function sfKitClearPhoto(ki){var it=sfK(ki);if(it){it.image_url='';sfKitsRender();}}
+async function sfSaveKits(){
+  SFKITS.forEach(function(k){k.lines=(k.lines||[]).filter(function(l){return l.name&&String(l.name).trim();});});
+  var d=await post('/papi/kits-save',{kits:SFKITS});
+  if(d&&d.ok){ if(Array.isArray(d.kits))SFKITS=d.kits; sfKitsRender(); toast('Kits saved'); } else toast((d&&d.error)||'Could not save',true);
 }
 
 boot();
