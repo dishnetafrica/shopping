@@ -1,55 +1,42 @@
-# CloudBSS — Storefront Merchandising, complete bundle (v3 + storefront + backend)
+# CloudBSS — Homepage becomes a full-width showroom (desktop UX direction change)
 
-One clean deploy for the whole feature: **Shop for Every Need** (collection
-merchandising) and **Ready-made Kits** (one-tap bundle → quotation), configurable
-from **v3** (`mycloudbss.com/v3`), rendered on the storefront, backed by tenant
-settings. Additive, no engine/ERP/quotation redesign, no migrations, no new
-storage (reuses `/papi/upload-image`).
+Removes the old ERP-style two-sidebar desktop layout from the **homepage** so the
+"Shop for Every Need" merchandising owns the screen. Product listings and search
+keep their filter sidebar. Single file: `resources/storefront/shop.html`.
+Mobile is unchanged.
 
-## Files (6)
-1. `app/Http/Controllers/Storefront/StorefrontController.php` — emits
-   `business_banners` + `kits` in the catalogue feed.
-2. `app/Http/Controllers/Panel/PanelApiController.php` — `bannersGet/bannersSave`,
-   `kitsGet/kitsSave` (whitelisted, size-capped, stored in tenant settings).
-3. `routes/web.php` — authed `/papi` routes for the above.
-4. `resources/storefront/shop.html` — storefront rendering: collection cards
-   ("Shop for Every Need"), auto-scroll heroes, per-collection best-sellers,
-   bulk matching, gentle device personalization, and kit cards with one-tap
-   add-to-quote (MOQ-aware). Renders only when enabled.
-5. `resources/views/shell.blade.php` — **v3 admin**: two new Marketing items,
-   **Shop for Every Need** and **Ready-made Kits**, native editors (photo upload,
-   starter template, save) wired to the same `/papi` endpoints via the app's own
-   `post()`/`getQuery()` (session-authed, CSRF).
-6. `resources/panel/seller.html` — the classic `/panel` also has the same editors
-   under a tabbed **Storefront** menu (optional; kept in sync so either admin works).
+## What changed
+- **Homepage (desktop) is now full-width.** The permanent left department
+  sidebar and the right cart rail are removed on the homepage — it reads as a
+  merchandising showroom, not an inventory screen.
+- **The department-tile grid is gone from the homepage** when Shop for Every Need
+  is enabled. Category browsing now lives where it belongs — the listing view's
+  filter sidebar and search. (When merchandising is off, the classic category
+  grid stays — backward compatible.)
+- **Sidebar returns on product listings / search** (filters belong there).
+- **The cart rail only appears once the order has items** — an empty cart never
+  reserves screen space. On the homepage it's always hidden.
+- **Collection cards are now image-led.** Each card shows 2–3 real product photos
+  from that collection in the foreground (auto-pulled from your catalogue), over
+  the lifestyle background photo you upload per collection, with the title,
+  one-line description and Browse arrow. Icons are now a small accent, not the
+  hero — photography tells the story.
 
-## Where it lives in v3
-Sidebar → **Marketing** → **Shop for Every Need** / **Ready-made Kits**
-(alongside Storefront Insights). Both are always available to the owner — they're
-client-rendered pages, not server workspaces, so they don't depend on capability
-flags.
+## How it works (no new config)
+- A `body.dhome` class (homepage) collapses the desktop grid to one full-width
+  column and hides the sidebar + cart; a `body.dcartempty` class hides the cart
+  rail until there are items. Both are consumed only inside the desktop media
+  query, so the phone layout is byte-for-byte unchanged.
+- Foreground card photos come from the products each collection already matches —
+  no extra setup. Upload a lifestyle background per collection in v3 → Shop for
+  Every Need for the full premium effect.
 
-## Turn it on (v3)
-1. Deploy all 6 files.
-2. v3 → **Shop for Every Need** → **Load starter template** (7 collections mapped
-   to your categories) → adjust keywords, upload a card + hero photo per
-   collection (optional; gradient shows until then) → tick **Show on storefront**
-   → **Save**.
-3. v3 → **Ready-made Kits** → **+ Add kit** → name it, pick a collection (or all),
-   add products by name (autocompletes from your catalogue) with quantities →
-   **Save kits**.
-4. Storefront reflects it within ~5 min (feed cache).
+## Requires
+Deploy on top of the merchandising bundle (this replaces only its `shop.html`).
+No backend/config change.
 
-## Notes
-- A collection's best-seller rail and a kit render only when ≥ enough real
-  products match (kit needs ≥2 available items), so nothing shows broken.
-- Kit lines honour each product's MOQ; unavailable lines are skipped at add time.
-- Everything is session-authed & tenant-scoped server-side; the v3 app passes no
-  tenant id — the backend resolves it from the session, same as every other page.
-
-Verified: `php -l` clean; shop.html, seller.html and shell.blade.php scripts all
-compile; Playwright — v3 renders both editor pages, loads the 7-collection
-starter, and Save posts correct `business_banners` + `kits` payloads (bulk match,
-title, kit collection & MOQ qty all intact); storefront renders/switches/kits/
-personalization verified earlier; classic panel tabbed Storefront verified. No
-console errors.
+Verified: shop.html JS compiles; Playwright at 1440px — homepage is full-width
+(no sidebar/cart, cards carry foreground thumbnails, no department grid), a
+listing restores the sidebar, the cart rail appears only after adding an item,
+returning home goes full-width again; at 390px the mobile layout is unchanged
+(sidebar stays hidden, cards render). No JS errors.

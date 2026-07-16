@@ -700,6 +700,21 @@ button{ -webkit-tap-highlight-color:transparent }
   .dcempty .em{ font-size:26px; display:block; margin-bottom:8px }
 }
 
+/* =====================================================================
+   DESKTOP LAYER — homepage is a full-width merchandising showroom.
+   On the homepage (body.dhome) the department sidebar and cart rail are
+   removed so the merchandising owns the width. They return on product
+   listings / search. The cart rail also only appears once the order has
+   items (body.dcartempty) — it never reserves empty space. Mobile is
+   untouched (these rules live inside the desktop media query).
+   ===================================================================== */
+@media(min-width:1024px){
+  body.dhome #dgridwrap{ grid-template-columns:minmax(0,1fr) }
+  body.dhome #dside, body.dhome #dcart{ display:none !important }
+  body:not(.dhome).dcartempty #dgridwrap{ grid-template-columns:236px minmax(0,1fr) }
+  body:not(.dhome).dcartempty #dcart{ display:none !important }
+}
+
 /* Keyboard-navigation hint bar is hidden on mobile (touch has no arrow keys). */
 .skbhint{ display:none }
 
@@ -945,7 +960,10 @@ button{ -webkit-tap-highlight-color:transparent }
 .needcard .ntx small{font-size:10.5px;opacity:.9;display:block;margin-top:2px;line-height:1.2}
 .needcard .ntx .arw{font-size:11px;font-weight:800;margin-top:7px;display:inline-block}
 .needcard.on{outline:3px solid #0b7a3b;outline-offset:-3px}
-.needcard.on:before{content:"✓";position:absolute;top:9px;right:10px;z-index:2;background:#0b7a3b;color:#fff;width:20px;height:20px;border-radius:50%;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.needcard.on:before{content:"✓";position:absolute;top:9px;right:10px;z-index:3;background:#0b7a3b;color:#fff;width:20px;height:20px;border-radius:50%;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.needcard .needfeat{position:absolute;top:10px;right:11px;z-index:2;display:flex;gap:5px}
+.needcard.on .needfeat{right:36px}
+.needcard .needfeat span{width:34px;height:34px;border-radius:8px;background:#fff center/cover no-repeat;box-shadow:0 3px 8px rgba(0,0,0,.28);border:1.5px solid rgba(255,255,255,.85)}
 @media(min-width:1024px){
   .needrow{display:grid;grid-template-columns:repeat(auto-fill,minmax(184px,1fr));gap:14px;padding:2px 0 14px;overflow:visible}
   .needcard{flex:none;width:auto;height:172px}
@@ -1253,8 +1271,11 @@ function businessBanners(){
     var im=b.card_image||(b.slides&&b.slides[0]&&b.slides[0].image_url)||'';
     var th=(b.slides&&b.slides[0]&&b.slides[0].theme)||'linear-gradient(135deg,#123a2a,#0b5c46)';
     var style=im?('background-image:url("'+encodeURI(im)+'")'):('background:'+th);
+    // Foreground: 2–3 real product photos from the collection, so the card shows what's inside.
+    var feats=bizProducts(b).filter(function(p){return p.image;}).slice(0,3);
+    var featHtml=feats.length?('<div class="needfeat">'+feats.map(function(p){return '<span style="background-image:url(\''+encodeURI(p.image)+'\')"></span>';}).join('')+'</div>'):'';
     return '<div class="needcard'+(b.id===biz.id?' on':'')+'" style="'+style+'" onclick="pickBiz('+jk(b.id)+')">'
-      +'<span class="ov"></span><span class="nic">'+bizIcon(b.icon||b.id)+'</span>'
+      +'<span class="ov"></span><span class="nic">'+bizIcon(b.icon||b.id)+'</span>'+featHtml
       +'<div class="ntx"><b>'+esc(b.label)+'</b>'+(b.sub?'<small>'+esc(b.sub)+'</small>':'')+'<span class="arw">Browse →</span></div></div>';
   }).join('');
   var selBlock='<div class="section-title">'+esc(title)+'</div><div class="needrow">'+sel+'</div>';
@@ -2232,6 +2253,15 @@ function toggleBulk(){ FBULK=!FBULK; _catShown=24; render(); }
 function setPmax(v){ FPMAX=(FPMAX===v?0:v); _catShown=24; render(); }
 function _freeOver(){ try{ var d=(window.SHOP&&SHOP.settings&&SHOP.settings.delivery)||{}; var f=d.free_over||d.freeOver||0; return Number(f)||0; }catch(e){ return 0; } }
 
+/* Desktop layout mode: full-width showroom on the homepage; sidebar+cart on listings.
+   Cart rail only when the order has items. Body classes are consumed only inside the
+   desktop media query, so mobile is unaffected. */
+function dLayout(){
+  var hasQ=!!(Q&&Q.trim().length);
+  var isHome=(CAT==='all'&&!hasQ&&!BIZVIEW);
+  document.body.classList.toggle('dhome', isHome);
+  document.body.classList.toggle('dcartempty', cartCount()===0);
+}
 function syncDesktopSide(){
   var side=$('dside'); if(!side||!_desktop())return;
   var hasQ=!!(Q&&Q.trim().length), isList=(CAT&&CAT!=='all')||hasQ;
@@ -2295,6 +2325,7 @@ function growGrid(){ var wrap=$('catgridwrap'); if(!wrap)return; var full=applyF
 
 function render(){
   var c=$('content');
+  dLayout();
   var hb=$('hback');if(hb)hb.style.display=(CAT!=='all'||Q)?'grid':'none';
   if(!PRODUCTS.length){c.innerHTML=skeletonGrid(8);return;}
   var q=Q.trim().toLowerCase();
@@ -2327,7 +2358,12 @@ function render(){
     var bb=businessBanners();
     if(useDepartments()){c.innerHTML=wsBar()+bb+homeRails()+groceryHome();bizInit();return;}
     if(useRestaurantMenus()){c.innerHTML=wsBar()+bb+homeRails()+welcomeBanner()+comboStrip()+restaurantHome();bizInit();return;}
-    c.innerHTML=wsBar()+bb+homeRails()+welcomeBanner()+thaliBanner()+comboStrip()+'<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){return catTile(cat.name,i);}).join('')+'</div>';
+    // Merchandising homepage (Shop for Every Need on): a full-width showroom — no department-tile
+    // grid. Category browsing lives in the listing view's sidebar / search. When merchandising is
+    // off, the classic category grid stays (backward compatible).
+    var showBanners=(BANNERS&&BANNERS.enabled&&activeBiz().length);
+    var catG=showBanners?'':('<div class="section-title">Shop by category</div><div class="catgrid">'+CATS.map(function(cat,i){return catTile(cat.name,i);}).join('')+'</div>');
+    c.innerHTML=wsBar()+bb+homeRails()+welcomeBanner()+thaliBanner()+comboStrip()+catG;
     bizInit();
     return;
   }
@@ -2454,6 +2490,7 @@ function cartItems(){return Object.keys(CART).map(function(k){return CART[k];});
 function cartCount(){return cartItems().reduce(function(s,i){return s+i.qty;},0);}
 function cartTotal(){return cartItems().reduce(function(s,i){return s+i.price*i.qty;},0);}
 function bar(){var n=cartCount();$('cartbar').classList.toggle('show',n>0);$('cartCount').textContent=n+(n===1?' item':' items');$('cartTotal').textContent=ugx(cartTotal());var nb=$('navCartBadge');if(nb){nb.textContent=n>99?'99+':n;nb.classList.toggle('show',n>0);}
+  if(typeof dLayout==='function')dLayout();
   /* desktop header cart pill (Phase 2) — null-safe, no-op on mobile */
   var dt=$('dCartTotal'); if(dt) dt.textContent = n>0 ? ugx(cartTotal()) : 'Cart';
   var db=$('dCartBadge'); if(db){ db.textContent=n>99?'99+':n; db.classList.toggle('show',n>0); }
