@@ -275,16 +275,8 @@ class PaymentController extends Controller
         try {
             $order = \App\Models\Order::where('tenant_id', $tenant->id)->where('order_no', $orderNo)->first();
             if (! $order) return;
-            $oc  = \App\Services\Money\SalesBaseCurrency::txnCurrency($order, $tenant);
-            $fx  = \App\Services\Money\Fx::forTenant($tenant);
-            $pays = CustomerPayment::where('tenant_id', $tenant->id)->where('order_no', $orderNo)
-                ->where('kind', 'settlement')->where('applied', true)->get();
-            $paid = 0.0;
-            foreach ($pays as $p) {
-                $paid += strtoupper((string) $p->currency) === $oc ? (float) $p->amount
-                       : ($oc === 'USD' ? (float) $p->usd_amount : (float) $p->usd_amount * $fx->ratePerUsd($oc));
-            }
-            $order->amount_paid = round($paid, 2);
+            // One rule everywhere: match by order_no OR the order's own invoice numbers.
+            $order->amount_paid = \App\Services\Money\OrderPaidReconciler::paidInOrderCurrency($tenant, $order);
             $order->save();
         } catch (\Throwable $e) { /* never break a payment write on the denormalised tracker */ }
     }

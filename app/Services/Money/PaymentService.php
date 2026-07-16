@@ -84,16 +84,9 @@ class PaymentService
         if (! $orderNo) return;
         $order = \App\Models\Order::where('tenant_id', $t->id)->where('order_no', $orderNo)->first();
         if (! $order) return;
-        $oc   = \App\Services\Money\SalesBaseCurrency::txnCurrency($order, $t);
-        $base = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);
-        $fx   = \App\Services\Money\Fx::forTenant($t);
-        $paid = 0.0;
-        foreach (CustomerPayment::where('tenant_id', $t->id)->where('order_no', $orderNo)
-                    ->where('kind', 'settlement')->where('applied', true)->get() as $p) {
-            $paid += strtoupper((string) $p->currency) === $oc ? (float) $p->amount
-                   : ($oc === $base ? (float) $p->usd_amount : (float) $p->usd_amount * $fx->ratePerUsd($oc));
-        }
-        $order->amount_paid = round($paid, 2);
+        // Match the ledger by order_no OR the order's own invoice numbers (single source of truth) —
+        // a payment booked against the order's invoice is a payment on the order.
+        $order->amount_paid = \App\Services\Money\OrderPaidReconciler::paidInOrderCurrency($t, $order);
         $order->save();
     }
 }

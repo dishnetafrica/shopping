@@ -5311,14 +5311,9 @@ class PanelApiController extends Controller
 
         $orderChanges = [];
         foreach (\App\Models\Order::where('tenant_id', $t->id)->get() as $o) {
-            $oc = \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t);
-            $paid = 0.0;
-            foreach (\App\Models\CustomerPayment::where('tenant_id', $t->id)->where('order_no', $o->order_no)
-                        ->where('kind', 'settlement')->where('applied', true)->get() as $p) {
-                $paid += strtoupper((string) $p->currency) === $oc ? (float) $p->amount
-                       : ($oc === $base ? (float) $p->usd_amount : (float) $p->usd_amount * $fx->ratePerUsd($oc));
-            }
-            $paid = round($paid, 2);
+            // Match by order_no OR the order's own invoice numbers (shared reconciler) so a receipt
+            // booked against the invoice reflects on the order too.
+            $paid = \App\Services\Money\OrderPaidReconciler::paidInOrderCurrency($t, $o);
             if (abs($paid - (float) $o->amount_paid) >= 0.01) {
                 $orderChanges[] = ['order' => (string) $o->order_no, 'was' => (float) $o->amount_paid, 'now' => $paid];
                 $o->amount_paid = $paid; $o->save();
@@ -5394,13 +5389,11 @@ class PanelApiController extends Controller
             }
         }
 
-        // 2) orders
+        // 2) orders — expected paid via the shared reconciler (order_no OR the order's invoice numbers).
         $ordMiss = [];
         foreach (\App\Models\Order::where('tenant_id', $t->id)->get() as $o) {
             $oc   = \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t);
-            $paid = 0.0;
-            foreach ($pays as $p) { if ((string) $p->order_no === (string) $o->order_no) $paid += $conv($p, $oc); }
-            $paid = round($paid, 2);
+            $paid = \App\Services\Money\OrderPaidReconciler::paidInOrderCurrency($t, $o);
             if (abs($paid - (float) $o->amount_paid) >= $tol) {
                 $ordMiss[] = ['order' => (string) $o->order_no, 'currency' => $oc, 'total' => (float) $o->total,
                     'stored_paid' => (float) $o->amount_paid, 'expected_paid' => $paid];
@@ -5434,13 +5427,34 @@ class PanelApiController extends Controller
             }
         }
 
+        // 4) delivered-unbilled — the usual EXPLANATION for a customer diff: goods are out (order Delivered)
+        // but there is no LIVE invoice (never issued, or the only invoice was VOIDED). Invoice-based AR
+        // (correctly) can't collect on an un-issued bill, while the order tracker counts the delivered goods,
+        // so the two disagree until the order is billed. Named here so the diff isn't opaque; `backfill-invoices`
+        // is the fix. Read-only.
+        $liveInvOrderIds = \App\Models\Invoice::where('tenant_id', $t->id)->whereNotNull('order_id')
+            ->where('status', '!=', 'void')->pluck('order_id')->flip();
+        $deliveredUnbilled = [];
+        foreach (\App\Models\Order::where('tenant_id', $t->id)
+                    ->whereRaw("lower(coalesce(status,'')) not in ('cancelled','rejected','void')")
+                    ->where(function ($w) { $w->whereNotNull('delivered_at')->orWhereRaw("lower(coalesce(status,'')) = 'delivered'"); })
+                    ->get() as $o) {
+            if (isset($liveInvOrderIds[$o->id])) continue;
+            $voided = \App\Models\Invoice::where('tenant_id', $t->id)->where('order_id', $o->id)->where('status', 'void')->exists();
+            $deliveredUnbilled[] = ['order' => (string) $o->order_no, 'customer' => (string) ($o->customer_name ?: $o->customer_phone),
+                'phone' => preg_replace('/\D+/', '', (string) $o->customer_phone),
+                'total' => (float) $o->total, 'amount_paid' => (float) $o->amount_paid,
+                'reason' => $voided ? 'invoice_voided' : 'never_invoiced'];
+        }
+
         return response()->json([
             'ok' => true,
             'checked' => ['invoices' => $invoices->count(), 'orders' => \App\Models\Order::where('tenant_id', $t->id)->count(), 'settlement_payments' => $pays->count()],
             'invoice_mismatches'  => $invMiss,
             'order_mismatches'    => $ordMiss,
             'customer_mismatches' => $custMiss,
-            'summary' => ['invoices_off' => count($invMiss), 'orders_off' => count($ordMiss), 'customers_off' => count($custMiss)],
+            'delivered_unbilled'  => $deliveredUnbilled,
+            'summary' => ['invoices_off' => count($invMiss), 'orders_off' => count($ordMiss), 'customers_off' => count($custMiss), 'delivered_unbilled' => count($deliveredUnbilled)],
             'clean' => (count($invMiss) + count($ordMiss) + count($custMiss)) === 0,
         ]);
     }
