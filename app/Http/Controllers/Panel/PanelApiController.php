@@ -2744,6 +2744,39 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true, 'kits' => $kits]);
     }
 
+    /**
+     * Set the sales currency basis (owner only).
+     *   native    = the base currency (e.g. USD) IS the operating currency — prices & payments are USD.
+     *   converted = base is only for reporting; the local currency (UGX) is the operating one.
+     * Fixes the "payment booked in UGX on a USD business" problem: with native basis every untagged
+     * order + payment defaults to the base currency, so existing orders like ORD-47 resolve to USD too.
+     */
+    public function currencyBasisSave(Request $r)
+    {
+        if (! $r->user()->isOwnerLike()) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        $t     = $r->user()->tenant;
+        $basis = strtolower(trim((string) $r->input('basis', '')));
+        if (! in_array($basis, ['native', 'converted'], true)) {
+            return response()->json(['ok' => false, 'error' => 'bad_basis', 'detail' => "basis must be 'native' or 'converted'"], 422);
+        }
+        $t->putSetting('currency_basis', $basis);
+        $base = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);
+        $local = \App\Services\Money\SalesBaseCurrency::nativeCurrency($t);
+        return response()->json(['ok' => true, 'currency_basis' => $basis, 'base_currency' => $base, 'operating_currency' => $local]);
+    }
+
+    /** Read the current currency configuration (for confirming the fix). */
+    public function currencyBasisGet(Request $r)
+    {
+        $t = $r->user()->tenant;
+        return response()->json([
+            'ok' => true,
+            'currency_basis'     => (string) ($t->setting('currency_basis', '') ?: '(default: converted)'),
+            'base_currency'      => \App\Services\Money\SalesBaseCurrency::baseCurrency($t),
+            'operating_currency' => \App\Services\Money\SalesBaseCurrency::nativeCurrency($t),
+        ]);
+    }
+
     /** Read the delivery config (branches + per-city free-delivery rules) for the v3 editor. */
     public function deliveryGet(Request $r)
     {

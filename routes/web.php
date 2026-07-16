@@ -401,6 +401,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         // Transport Register (Kampala → Juba) — offline-first sync (merge by uid/updatedAt).
         Route::get('transport-get', [\App\Http\Controllers\Transport\TransportController::class, 'get']);
         Route::post('transport-sync', [\App\Http\Controllers\Transport\TransportController::class, 'sync']);
+        // Sales currency basis (native = base currency is the operating currency, e.g. USD).
+        Route::get('currency-basis', [PanelApiController::class, 'currencyBasisGet']);
+        Route::post('currency-basis-save', [PanelApiController::class, 'currencyBasisSave']);
         Route::get('update-product', [PanelApiController::class, 'updateProduct']);
         Route::get('delete-product', [PanelApiController::class, 'deleteProduct']);
         Route::get('add-product',    [PanelApiController::class, 'addProduct']);
