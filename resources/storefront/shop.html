@@ -2735,7 +2735,7 @@ function freeRules(){
   var d=DELV_CFG||{}, rs=(d.free_rules&&d.free_rules.length)?d.free_rules:null;
   if(!rs){ var g=Number(d.free_over||d.freeOver||0)||0;
     if(g>0){ rs=(BRANCHES||[]).map(function(b){return {city:b.name,free_over:g};}); }
-    else { rs=[{city:'Juba',free_over:50}]; }   // seeded default until configured
+    else { rs=[{city:'Juba',free_over:50},{city:'Kampala',free_over:20}]; }   // seeded default until configured
   }
   return rs.map(function(r){return {city:String(r.city||'').trim(),free_over:Number(r.free_over)||0};})
            .filter(function(r){return r.city && r.free_over>0;});

@@ -1515,7 +1515,7 @@ function sfDeliveryPage(){
     if(!SFDEL.length){
       // Seed a row per branch so the merchant just types amounts (Juba pre-filled at 50).
       var br=(d&&Array.isArray(d.branches)&&d.branches.length)?d.branches:['Juba','Kampala'];
-      SFDEL=br.map(function(c){return {city:c, free_over:(/juba/i.test(c)?50:0)};});
+      SFDEL=br.map(function(c){return {city:c, free_over:(/juba/i.test(c)?50:(/kampala/i.test(c)?20:0))};});
     }
     sfDeliveryRender();
   }).catch(function(){ SFDEL=[{city:'Juba',free_over:50}]; sfDeliveryRender(); });
