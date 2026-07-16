@@ -1027,6 +1027,35 @@ button{ -webkit-tap-highlight-color:transparent }
 .hbrand{flex:0 0 auto;border:1px solid var(--line);background:#fff;border-radius:999px;padding:10px 16px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;white-space:nowrap}
 .hbrand:hover{border-color:#0b7a3b;color:#0a5c2e}
 @media(min-width:1024px){ .homebrands{padding-left:0;padding-right:0;flex-wrap:wrap} }
+
+/* ---- Smart search: "why it matched" chips on product cards ---- */
+.pcmatch{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 3px}
+.pcmatch .mchip{font-size:10px;font-weight:700;color:#0a5c2e;background:#e7f5ec;border:1px solid #cfe9d8;border-radius:999px;padding:2px 7px;line-height:1.35;letter-spacing:.01em}
+/* search suggestion sub-line reason */
+.srow .ss{color:#5b6b7b}
+/* ---- Voice search: listening / auto-run status bar ---- */
+.svoicebar{display:none}
+.svoicebar.show{display:flex;align-items:center;gap:12px;margin:0 12px 8px;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,#0b7a3b,#0a5c2e);color:#fff;box-shadow:0 6px 18px rgba(11,122,59,.28)}
+.svoicebar .vtx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.svoicebar .vtx b{font-size:13px;font-weight:800;letter-spacing:.01em}
+.svoicebar .vpart{font-size:14px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.svoicebar .vpart.dim{opacity:.8;font-size:12.5px;font-weight:500}
+.svoicebar .vstop,.svoicebar .vgo,.svoicebar .vedit{flex:none;border:0;border-radius:999px;font-weight:800;font-size:12px;padding:8px 14px;cursor:pointer}
+.svoicebar .vstop{background:rgba(255,255,255,.16);color:#fff}
+.svoicebar .vgo{background:#fff;color:#0a5c2e}
+.svoicebar .vedit{background:rgba(255,255,255,.16);color:#fff}
+.svoicebar .eq{flex:none;display:flex;align-items:flex-end;gap:3px;height:22px;width:26px}
+.svoicebar .eq span{display:block;width:4px;height:6px;background:#fff;border-radius:2px;animation:eqp 1s ease-in-out infinite}
+.svoicebar .eq span:nth-child(2){animation-delay:.15s}
+.svoicebar .eq span:nth-child(3){animation-delay:.3s}
+.svoicebar .eq span:nth-child(4){animation-delay:.45s}
+.svoicebar .eq span:nth-child(5){animation-delay:.6s}
+@keyframes eqp{0%,100%{height:5px}50%{height:20px}}
+/* mic button recording state (pulse) */
+.sic.rec,.sqbtn.rec{color:#c0392b;position:relative}
+.sic.rec::after,.sqbtn.rec::after{content:"";position:absolute;inset:2px;border-radius:50%;box-shadow:0 0 0 0 rgba(192,57,43,.45);animation:micpulse 1.4s ease-out infinite}
+@keyframes micpulse{0%{box-shadow:0 0 0 0 rgba(192,57,43,.45)}70%{box-shadow:0 0 0 12px rgba(192,57,43,0)}100%{box-shadow:0 0 0 0 rgba(192,57,43,0)}}
+@media(prefers-reduced-motion:reduce){.svoicebar .eq span{animation:none;height:14px}.sic.rec::after,.sqbtn.rec::after{animation:none}}
 </style>
 </head>
 <body>
@@ -1542,15 +1571,178 @@ var RSRCH_KEY='cb_rsearch_'+(SHOP.slug||'shop'), RSEARCH=[];
 function loadRSearch(){try{RSEARCH=JSON.parse(localStorage.getItem(RSRCH_KEY)||'[]')||[];}catch(e){RSEARCH=[];}}
 function pushRSearch(v){ v=(v||'').trim(); if(!v)return; RSEARCH=RSEARCH.filter(function(x){return x.toLowerCase()!==v.toLowerCase();}); RSEARCH.unshift(v); RSEARCH=RSEARCH.slice(0,8); try{localStorage.setItem(RSRCH_KEY,JSON.stringify(RSEARCH));}catch(e){} }
 function searchOpen(){ var o=$('searchOverlay'); if(!o)return; closeSheet(); o.classList.add('show'); document.body.style.overflow='hidden'; var sq=$('sq'); if(sq)sq.value=Q||''; searchRender(Q||''); setTimeout(function(){ if(sq)sq.focus(); },60); }
-function searchClose(){ var o=$('searchOverlay'); if(o)o.classList.remove('show'); document.body.style.overflow=''; }
-function searchSubmit(v){ v=(v==null?(($('sq')&&$('sq').value)||''):v).trim(); searchClose(); if($('q'))$('q').value=v; Q=v; _catShown=24; if(v)pushRSearch(v); render(); window.scrollTo(0,0); }
+function searchClose(){ var o=$('searchOverlay'); if(o)o.classList.remove('show'); document.body.style.overflow=''; try{stopVoice();}catch(e){} cancelAutorun(); }
+function searchSubmit(v,src){ if(_voiceTimer){clearTimeout(_voiceTimer);_voiceTimer=null;} v=(v==null?(($('sq')&&$('sq').value)||''):v).trim(); searchClose(); if($('q'))$('q').value=v; Q=v; _catShown=24; if(v){ pushRSearch(v); sTrack(src==='voice'?'voice_submit':'search',{q:v}); } render(); window.scrollTo(0,0); }
 function searchPickCat(c){ searchClose(); if($('q'))$('q').value=''; Q=''; setCat(c); }
-function searchOpenProduct(id,name){ searchClose(); if(id){ goDetail(id); } else { searchSubmit(name); } }
+function searchOpenProduct(id,name){ var qv=($('sq')&&$('sq').value)||Q||''; sTrack('search_click',{q:qv.trim(),id:id||0,name:name}); searchClose(); if(id){ goDetail(id); } else { searchSubmit(name); } }
 function toast(msg,type){ try{ var t=$('cbToast'); if(!t){ t=document.createElement('div'); t.id='cbToast'; t.setAttribute('role','status'); t.setAttribute('aria-live','polite'); document.body.appendChild(t); } t.className='cbtoast'+(type?(' '+type):''); t.textContent=msg; void t.offsetWidth; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(function(){ t.classList.remove('show'); }, 2400); }catch(e){} }
-function voiceSearch(){ toast('Voice search is coming soon'); }
-function barcodeSearch(){ toast('Barcode scan is coming soon'); }
-function _srow(p){ var add=oosOf(p)?'':('<button class="sadd" onclick="event.stopPropagation();cartAdd('+jk(p.name)+')">Add</button>');
-  return '<div class="srow" onclick="searchOpenProduct('+(p.id||0)+','+jk(p.name)+')"><div class="sthumb">'+(p.image?'<img alt="" src="'+esc(p.image)+'" loading="lazy">':catIcon(p.category))+'</div><div class="smeta"><div class="st">'+esc(p.name)+'</div><div class="ss">'+ugx(p.price)+'</div></div>'+add+'</div>'; }
+/* ============================================================================
+   SMART SEARCH ENGINE  (client-side, catalogue-resident)
+   ----------------------------------------------------------------------------
+   One engine powers typing AND voice — identical quality. It understands
+   synonyms, plural/singular, misspellings (edit distance), packaging sizes &
+   units, price/quantity intent, and business context, then ranks by relevance
+   and explains WHY each product matched.  A SemanticProvider seam lets a real
+   embedding/LLM backend re-rank later WITHOUT touching this file's callers.
+   ============================================================================ */
+var SMATCH={}, SEARCH_ACTIVE=false;
+
+// Words we drop from natural-language queries ("show me…", "do you have…").
+var SEARCH_STOP={show:1,me:1,i:1,need:1,want:1,find:1,get:1,please:1,do:1,you:1,have:1,the:1,a:1,an:1,some:1,of:1,for:1,with:1,looking:1,to:1,is:1,are:1,my:1,we:1,us:1,give:1,search:1,product:1,products:1,item:1,items:1,in:1,on:1,at:1,and:1,or:1,any:1,all:1,got:1,stock:1,pls:1};
+
+// Multi-word canonicalisation applied to the raw query first.
+var SEARCH_PHRASE=[
+  [/\btoilet\s*roll(s)?\b/g,' toilet paper '],
+  [/\bpaper\s*roll(s)?\b/g,' toilet paper '],
+  [/\btissue\s*paper\b/g,' toilet paper tissue '],
+  [/\bpaper\s*towel(s)?\b/g,' kitchen towel tissue '],
+  [/\bcling\s*film\b/g,' cling wrap film '],
+  [/\btea\s*cup(s)?\b/g,' tea cup glass '],
+  [/\brestaurant\s*supplies\b/g,' restaurant '],
+  [/\bhotel\s*supplies\b/g,' hotel '],
+  [/\boffice\s*supplies\b/g,' office '],
+  [/\bcatering\s*supplies\b/g,' catering '],
+  [/\bwholesale\s*pack(s)?\b/g,' wholesale '],
+  [/\bplastic\s*cup(s)?\b/g,' plastic cup glass '],
+  [/\bplastic\s*glass(es)?\b/g,' plastic glass cup ']
+];
+
+// Token-level synonyms (searched as weaker "related" variants).
+var SEARCH_SYN={
+  cup:['glass','tumbler'], cups:['glass','glasses','tumbler'],
+  glass:['cup','tumbler'], glasses:['cup','cups','tumbler'],
+  tissue:['toilet','napkin','roll','serviette','towel'],
+  toilet:['tissue','paper','roll'],
+  napkin:['tissue','serviette','napkins'],
+  foil:['aluminium','aluminum'], aluminium:['foil','aluminum'], aluminum:['foil','aluminium'],
+  wrap:['cling','film'], film:['cling','wrap'],
+  plate:['plates','disposable'], plates:['plate','disposable'],
+  spoon:['cutlery','spoons'], fork:['cutlery','forks'], knife:['cutlery'], cutlery:['spoon','fork','knife'],
+  straw:['straws'], container:['containers','box','tub'], box:['container','carton'],
+  snack:['snacks','farsan','namkeen','chips'], snacks:['snack','farsan','namkeen','chips'],
+  masala:['spice','spices','seasoning'], spice:['masala','spices'], spices:['masala','spice'],
+  rice:['basmati'], pickle:['achar','pickles'], sauce:['ketchup','condiment','sauces'],
+  lid:['lids','cover'], lids:['lid','cover'], bag:['bags','pouch'], carton:['case','box','pack'],
+  wholesale:['bulk','carton','case','pack'], bulk:['wholesale','carton','case','pack']
+};
+
+// Business context → extra terms + a friendly reason label.
+var SEARCH_BIZ={
+  restaurant:{t:['disposable','foil','container','glass','cup','napkin','gloves','cling','tissue'],l:'For restaurants'},
+  hotel:{t:['towel','soap','tissue','amenity','napkin','slipper','shampoo'],l:'For hotels'},
+  office:{t:['tea','coffee','tissue','cup','napkin','cleaning','sugar'],l:'For offices'},
+  catering:{t:['plate','cup','cutlery','napkin','foil','tray','disposable','glass'],l:'For catering'},
+  retail:{t:['snack','sauce','tissue','cleaning','spice'],l:'For retail stores'}
+};
+
+function _normStr(s){ return String(s==null?'':s).toLowerCase().replace(/\s+/g,' ').trim(); }
+function _normUnit(u){ u=u.toLowerCase();
+  if(u==='ltr'||u==='litre'||u==='liter'||u==='l')return 'l';
+  if(u==='gm'||u==='gms'||u==='g')return 'g';
+  if(u==='kgs'||u==='kg')return 'kg';
+  if(u==='pcs'||u==='pc'||u==='piece'||u==='pieces')return 'pc';
+  return u; }
+// word-start (prefix) match at a word boundary — cheap and precise; "glass" hits "glasses".
+function _startHit(text,t){ return (' '+text).indexOf(' '+t)>=0; }
+function _lev(a,b){ var m=a.length,n=b.length; if(!m)return n; if(!n)return m;
+  var d=[]; for(var i=0;i<=m;i++)d[i]=[i]; for(var j=0;j<=n;j++)d[0][j]=j;
+  for(i=1;i<=m;i++){ for(j=1;j<=n;j++){ var c=a.charAt(i-1)===b.charAt(j-1)?0:1;
+    d[i][j]=Math.min(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+c); } }
+  return d[m][n]; }
+function _fuzzyHit(tokens,t){ var thr=t.length>=7?2:1;
+  for(var i=0;i<tokens.length;i++){ var w=tokens[i]; if(!w||Math.abs(w.length-t.length)>thr)continue; if(_lev(w,t)<=thr)return true; }
+  return false; }
+function _pushReason(arr,r){ if(!r)return; for(var i=0;i<arr.length;i++)if(arr[i]===r)return; arr.push(r); }
+function _variants(t){
+  var v=[{v:t,syn:false}], seen={}; seen[t]=1;
+  var alt=(/s$/.test(t)&&t.length>3)?t.replace(/s$/,''):(t+'s');
+  if(!seen[alt]){ seen[alt]=1; v.push({v:alt,syn:false}); }
+  (SEARCH_SYN[t]||[]).forEach(function(s){ if(!seen[s]){seen[s]=1;v.push({v:s,syn:true});} });
+  var sing=t.replace(/s$/,''); if(sing!==t){ (SEARCH_SYN[sing]||[]).forEach(function(s){ if(!seen[s]){seen[s]=1;v.push({v:s,syn:true});} }); }
+  return v;
+}
+function parseQuery(q){
+  var raw=' '+_normStr(q)+' ';
+  SEARCH_PHRASE.forEach(function(pr){ raw=raw.replace(pr[0],pr[1]); });
+  var sortCheap=/\b(cheap|cheapest|lowest|budget|affordable)\b/.test(raw);
+  var sortPop=/\b(best ?sell|bestseller|best sellers|popular|most popular|top rated)\b/.test(raw);
+  var priceMax=0, priceAround=0, m, cut=[];
+  if((m=raw.match(/(?:under|below|less than|upto|up to|max|maximum)\s*\$?\s*(\d+)/))){ priceMax=Number(m[1]); cut.push(m[0]); }
+  if((m=raw.match(/(?:around|about|approx|approximately|~|near|worth|roughly)\s*\$?\s*(\d+)/))){ priceAround=Number(m[1]); cut.push(m[0]); }
+  var sizes=[], re=/(\d+(?:\.\d+)?)\s*(ml|ltr|litre|liter|l|kgs|kg|gms|gm|g|ply|pcs|pc|cm|mm)\b/g;
+  while((m=re.exec(raw))){ sizes.push({val:m[1],unit:_normUnit(m[2]),txt:(m[1]+_normUnit(m[2]))}); cut.push(m[0]); }
+  var wantBulk=/\b(wholesale|bulk|carton|cartons|case|cases|pack|packs)\b/.test(raw);
+  var biz=''; ['restaurant','hotel','office','catering','retail'].forEach(function(b){ if(raw.indexOf(b)>=0) biz=b; });
+  var cleaned=raw; cut.forEach(function(s){ cleaned=cleaned.replace(s,' '); });
+  cleaned=cleaned.replace(/[^a-z0-9\s]+/g,' ');
+  var toks=cleaned.split(/\s+/).filter(function(w){ return w && !SEARCH_STOP[w] && (w.length>=2 || /^\d+$/.test(w)); });
+  var terms=[], seen={}; toks.forEach(function(t){ if(!seen[t]){seen[t]=1;terms.push(t);} });
+  return {raw:_normStr(q),terms:terms,sizes:sizes,priceMax:priceMax,priceAround:priceAround,sortCheap:sortCheap,sortPop:sortPop,wantBulk:wantBulk,biz:biz};
+}
+function _scoreField(f,term,isSyn){
+  var w=isSyn?0.6:1;
+  if(f.name===term) return {s:120*w,r:'Matches "'+term+'"'};
+  if(_startHit(f.name,term)) return {s:60*w,r:'Matches "'+term+'"'};
+  if(f.brand&&_startHit(f.brand,term)) return {s:52*w,r:'Brand: '+f.brandRaw};
+  if(f.cat&&_startHit(f.cat,term)) return {s:34*w,r:'Category: '+f.catRaw};
+  if(f.name.indexOf(term)>=0) return {s:30*w,r:'Matches "'+term+'"'};
+  if(f.kw&&_startHit(f.kw,term)) return {s:20*w,r:null};
+  if(f.brand&&f.brand.indexOf(term)>=0) return {s:22*w,r:'Brand: '+f.brandRaw};
+  if(f.cat&&f.cat.indexOf(term)>=0) return {s:18*w,r:'Category: '+f.catRaw};
+  if(f.kw&&f.kw.indexOf(term)>=0) return {s:12*w,r:null};
+  return {s:0,r:null};
+}
+function scoreProduct(p,parsed){
+  if(p.poa) return null;
+  var f={ name:_normStr(p.name), brand:_normStr(p.brand), cat:_normStr(p.category), kw:_normStr(p.keywords), brandRaw:p.brand||'', catRaw:p.category||'' };
+  var hay=f.name+' '+f.brand+' '+f.cat+' '+f.kw;
+  var nameToks=(f.name+' '+f.brand).split(/\s+/);
+  var score=0, reasons=[], matched=0, sizeHit=false;
+  parsed.terms.forEach(function(t){
+    var best={s:0,r:null};
+    _variants(t).forEach(function(vr){ var g=_scoreField(f,vr.v,vr.syn); if(g.s>best.s) best=g; });
+    if(best.s===0 && t.length>=4 && _fuzzyHit(nameToks,t)){ best={s:26,r:'Close match'}; }
+    if(best.s>0){ matched++; score+=best.s; _pushReason(reasons,best.r); }
+  });
+  parsed.sizes.forEach(function(sz){
+    if(hay.indexOf(sz.val+sz.unit)>=0 || hay.indexOf(sz.val+' '+sz.unit)>=0){ score+=70; sizeHit=true; _pushReason(reasons,'Matched '+sz.txt); }
+  });
+  if(parsed.sizes.length && !sizeHit) score-=12;
+  if(parsed.wantBulk){ if((p.packSize&&p.packSize>1)||(minq(p)>1)||/carton|pack|case|bulk/.test(hay)){ score+=25; _pushReason(reasons,'Wholesale pack'); } }
+  var bizHit=false;
+  if(parsed.biz){ var bz=SEARCH_BIZ[parsed.biz]; if(bz){ for(var i=0;i<bz.t.length;i++){ if(_startHit(hay,bz.t[i])){ bizHit=true; break; } } if(bizHit){ score+=22; matched++; _pushReason(reasons,bz.l); } } }
+  if(parsed.priceMax){ if(p.price<=parsed.priceMax){ score+=10; _pushReason(reasons,'Under $'+parsed.priceMax); } else return null; }
+  if(parsed.priceAround){ var d=Math.abs(p.price-parsed.priceAround), rel=d/(parsed.priceAround||1); score+=Math.max(0,20-rel*20); if(rel<0.5) _pushReason(reasons,'Around $'+parsed.priceAround); }
+  score += Math.min(12,(p.popularity||0)*0.02);
+  score += oosOf(p)? -6 : 4;
+  var pureMod=(!parsed.terms.length && !parsed.sizes.length && !parsed.biz);
+  if(!pureMod){
+    if(matched===0 && !sizeHit) return null;
+    if(parsed.terms.length>=2 && matched < Math.ceil(parsed.terms.length*0.5) && !sizeHit) return null;
+  }
+  return {p:p,score:score,reasons:reasons};
+}
+/* Future semantic layer — plug an embedding/LLM re-ranker here later. Contract:
+   (query, parsed, lexicalResults[{p,score,reasons}]) -> re-ranked array, same shape.
+   Keep it synchronous for the render path (pre-warm a cache) or gate behind enabled. */
+var SemanticProvider={ enabled:false, rerank:function(q,parsed,results){ return results; } };
+function smartSearch(q,limit){
+  var parsed=parseQuery(q), out=[];
+  for(var i=0;i<PRODUCTS.length;i++){ var r=scoreProduct(PRODUCTS[i],parsed); if(r) out.push(r); }
+  if(parsed.sortCheap) out.sort(function(a,b){return a.p.price-b.p.price;});
+  else if(parsed.sortPop) out.sort(function(a,b){return (b.p.popularity||0)-(a.p.popularity||0);});
+  else out.sort(function(a,b){ if(b.score!==a.score)return b.score-a.score; return (b.p.popularity||0)-(a.p.popularity||0); });
+  if(SemanticProvider.enabled){ try{ out=SemanticProvider.rerank(q,parsed,out)||out; }catch(e){} }
+  return limit?out.slice(0,limit):out;
+}
+/* Analytics — fire-and-forget through the storefront's existing event pipeline. */
+function sTrack(ev,data){ try{ if(!EVENT_URL)return; var body={ev:ev,ts:Date.now()}; if(data){for(var k in data){if(data.hasOwnProperty(k))body[k]=data[k];}}
+  fetch(EVENT_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),keepalive:true}).catch(function(){}); }catch(e){} }
+
+function _srow(p,reasons){ var add=oosOf(p)?'':('<button class="sadd" onclick="event.stopPropagation();cartAdd('+jk(p.name)+')">Add</button>');
+  var sub=reasons&&reasons.length?(esc(reasons[0])+' · '+ugx(p.price)):ugx(p.price);
+  return '<div class="srow" onclick="searchOpenProduct('+(p.id||0)+','+jk(p.name)+')"><div class="sthumb">'+(p.image?'<img alt="" src="'+esc(p.image)+'" loading="lazy">':catIcon(p.category))+'</div><div class="smeta"><div class="st">'+esc(p.name)+'</div><div class="ss">'+sub+'</div></div>'+add+'</div>'; }
+function _seeAllRow(q){ return '<div class="srow" onclick="searchSubmit('+jk(q)+')" style="color:var(--green-d);font-weight:700"><div class="sthumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></div><div class="smeta"><div class="st">See all results for “'+esc(q)+'”</div></div></div>'; }
 function searchRender(q){
   q=(q||'').trim(); var b=$('sqBody'); if(!b)return;
   if(q.length<1){ b.innerHTML=searchDefault(); return; }
@@ -1559,14 +1751,67 @@ function searchRender(q){
     var br=p.brand||''; if(br && br.toLowerCase().indexOf(ql)>=0 && !seenB[br.toLowerCase()]){ seenB[br.toLowerCase()]=1; brands.push(br); }
     var c=p.category||''; if(c && c.toLowerCase().indexOf(ql)>=0 && !seenC[c.toLowerCase()]){ seenC[c.toLowerCase()]=1; cats.push(c); }
   });
-  var prods=PRODUCTS.filter(function(p){ return !p.poa && (p.name+' '+p.brand+' '+p.keywords).toLowerCase().indexOf(ql)>=0; });
+  var results=smartSearch(q,6);
   var html='';
   if(brands.length){ html+='<div class="sgroup">Brands</div>'+brands.slice(0,4).map(function(br){return '<div class="srow" onclick="searchSubmit('+jk(br)+')"><div class="sthumb">🏷️</div><div class="smeta"><div class="st">'+esc(br)+'</div><div class="ss">Brand</div></div></div>';}).join(''); }
   if(cats.length){ html+='<div class="sgroup">Categories</div>'+cats.slice(0,4).map(function(c){return '<div class="srow" onclick="searchPickCat('+jk(c)+')"><div class="sthumb">'+catIcon(c)+'</div><div class="smeta"><div class="st">'+esc(c)+'</div><div class="ss">Category</div></div></div>';}).join(''); }
-  if(prods.length){ html+='<div class="sgroup">Products</div>'+prods.slice(0,6).map(_srow).join('')
-    +'<div class="srow" onclick="searchSubmit('+jk(q)+')" style="color:var(--green-d);font-weight:700"><div class="sthumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></div><div class="smeta"><div class="st">See all results for “'+esc(q)+'”</div></div></div>'; }
+  if(results.length){ html+='<div class="sgroup">Products</div>'+results.map(function(r){return _srow(r.p,r.reasons);}).join('')+_seeAllRow(q); }
   b.innerHTML = html || searchZero(q);
 }
+
+/* ============================================================================
+   VOICE SEARCH  (Web Speech API, progressive-enhancement)
+   Tap mic → animated "Listening…" → live interim transcript → on end, fill the
+   box, show suggestions, and auto-run after a short EDITABLE window. Same engine
+   as typing, so results are identical. Graceful fallback where unsupported.
+   ============================================================================ */
+var _rec=null, _recActive=false, _voiceFinal='', _voiceTimer=null;
+function _SR(){ return window.SpeechRecognition||window.webkitSpeechRecognition||null; }
+function voiceSupported(){ return !!_SR(); }
+function _voiceBar(){ var el=$('svoicebar'); if(!el){ el=document.createElement('div'); el.id='svoicebar'; el.className='svoicebar'; var ov=$('searchOverlay'), body=$('sqBody'); if(ov&&body) ov.insertBefore(el,body); else if(ov) ov.appendChild(el); } return el; }
+function setMicState(on){ document.body.classList.toggle('voice-on',!!on);
+  var mics=document.querySelectorAll('[aria-label="Voice search"]');
+  [].forEach.call(mics,function(m){ m.setAttribute('aria-pressed',on?'true':'false'); m.classList.toggle('rec',!!on); }); }
+function showListening(partial){ var el=_voiceBar(); el.className='svoicebar show listening'; el.setAttribute('role','status'); el.setAttribute('aria-live','assertive');
+  el.innerHTML='<div class="eq"><span></span><span></span><span></span><span></span><span></span></div>'
+    +'<div class="vtx"><b>Listening…</b>'+(partial?('<span class="vpart">'+esc(partial)+'</span>'):('<span class="vpart dim">Speak now — e.g. “disposable glasses”</span>'))+'</div>'
+    +'<button class="vstop" onclick="stopVoice()" aria-label="Stop listening">Stop</button>'; }
+function hideListening(){ var el=$('svoicebar'); if(el && !el.classList.contains('autorun')){ el.className='svoicebar'; el.innerHTML=''; } }
+function showAutorun(q){ var el=_voiceBar(); el.className='svoicebar show autorun'; el.setAttribute('aria-live','polite');
+  el.innerHTML='<div class="vtx"><b>Heard:</b> <span class="vpart">“'+esc(q)+'”</span></div>'
+    +'<button class="vgo" onclick="cancelAutorun();searchSubmit('+jk(q)+',&quot;voice&quot;)">Search now</button>'
+    +'<button class="vedit" onclick="cancelAutorun()">Edit</button>'; }
+function hideAutorun(){ var el=$('svoicebar'); if(el){ el.className='svoicebar'; el.innerHTML=''; } }
+function cancelAutorun(){ if(_voiceTimer){clearTimeout(_voiceTimer);_voiceTimer=null;} hideAutorun(); }
+function voiceCommit(q){ var sq=$('sq'); if(sq){ sq.value=q; try{sq.focus();}catch(e){} } searchRender(q); showAutorun(q);
+  if(_voiceTimer)clearTimeout(_voiceTimer); _voiceTimer=setTimeout(function(){ hideAutorun(); searchSubmit(q,'voice'); },1500); }
+function stopVoice(){ if(_rec){ try{_rec.stop();}catch(e){} } }
+function voiceSearch(){
+  if(_recActive){ stopVoice(); return; }
+  var SR=_SR();
+  if(!SR){ searchOpen(); toast('Voice isn’t supported on this browser — please type'); sTrack('voice_unsupported',{}); return; }
+  searchOpen();
+  try{ _rec=new SR(); }catch(e){ toast('Voice unavailable'); return; }
+  _rec.lang=(navigator.language||'en-US'); _rec.interimResults=true; _rec.maxAlternatives=1; _rec.continuous=false;
+  _voiceFinal='';
+  _rec.onstart=function(){ _recActive=true; setMicState(true); showListening(''); };
+  _rec.onresult=function(ev){ var interim='',fin='';
+    for(var i=ev.resultIndex;i<ev.results.length;i++){ var res=ev.results[i]; if(res.isFinal) fin+=res[0].transcript; else interim+=res[0].transcript; }
+    if(fin)_voiceFinal+=fin; var shown=(_voiceFinal+' '+interim).replace(/\s+/g,' ').trim();
+    var sq=$('sq'); if(sq)sq.value=shown; showListening(shown); if(shown)searchRender(shown); };
+  _rec.onerror=function(ev){ setMicState(false); _recActive=false; hideListening();
+    var e=ev&&ev.error;
+    if(e==='not-allowed'||e==='service-not-allowed') toast('Microphone blocked — allow mic access in your browser');
+    else if(e==='no-speech') toast('Didn’t catch that — tap 🎤 and try again');
+    else if(e==='audio-capture') toast('No microphone found');
+    else if(e!=='aborted') toast('Voice error — please type instead');
+    sTrack('voice_error',{err:String(e||'')}); };
+  _rec.onend=function(){ setMicState(false); _recActive=false; hideListening();
+    var q=(_voiceFinal||($('sq')&&$('sq').value)||'').replace(/\s+/g,' ').trim();
+    if(q){ sTrack('voice_search',{q:q}); voiceCommit(q); } };
+  try{ _rec.start(); }catch(e){ setMicState(false); _recActive=false; }
+}
+function barcodeSearch(){ toast('Barcode scan is coming soon'); }
 function topBrands(n){ var cnt={},order=[];
   PRODUCTS.forEach(function(p){ var br=(p.brand||'').trim(); if(!br)return; var k=br.toLowerCase(); if(!cnt[k]){cnt[k]={name:br,c:0};order.push(k);} cnt[k].c++; });
   return order.map(function(k){return cnt[k];}).sort(function(a,b){return b.c-a.c;}).slice(0,n||10).map(function(x){return x.name;}); }
@@ -2025,7 +2270,12 @@ function prodCard(p){
   var was=(p.oldPrice&&p.oldPrice>p.price)?('<span class="was">'+ugx(p.oldPrice)+'</span>'):'';
   var ctrl=oosOf(p)?('<button class="add" disabled>Out of stock</button>'):(hasMods?('<button class="add" onclick="customize('+jk(key)+')">Add</button>'):(inCart?('<div class="stp"><button onclick="dec('+jk(key)+')">−</button><span>'+inCart.qty+'</span><button onclick="inc('+jk(key)+')">+</button></div>'):('<button class="add" onclick="inc('+jk(key)+')">Add</button>')));
   var brandHtml=(p.brand&&String(p.brand).trim())?('<div class="pcbrand"'+dopen+'>'+esc(p.brand)+'</div>'):'';
-  return '<div class="pc">'+img+'<div class="bd">'+chipsHtml+brandHtml+'<div class="nm"'+dopen+'>'+esc(p.name)+'</div>'+(p.desc?'<div class="dsc">'+esc(p.desc)+'</div>':'')+packLine(p)+'<div class="prrow"><span class="pr">'+ugx(p.price)+'</span>'+was+'</div>'+perPiece(p)+lowStockLine(p)+moqLine(p)+ctrl+'</div></div>';
+  // Search "why it matched" chips — only in an active search view, driven by the smart engine.
+  var matchHtml='';
+  if(SEARCH_ACTIVE && SMATCH[p.name] && SMATCH[p.name].length){
+    matchHtml='<div class="pcmatch">'+SMATCH[p.name].slice(0,2).map(function(r){return '<span class="mchip">'+esc(r)+'</span>';}).join('')+'</div>';
+  }
+  return '<div class="pc">'+img+'<div class="bd">'+chipsHtml+matchHtml+brandHtml+'<div class="nm"'+dopen+'>'+esc(p.name)+'</div>'+(p.desc?'<div class="dsc">'+esc(p.desc)+'</div>':'')+packLine(p)+'<div class="prrow"><span class="pr">'+ugx(p.price)+'</span>'+was+'</div>'+perPiece(p)+lowStockLine(p)+moqLine(p)+ctrl+'</div></div>';
 }
 /* derive up to 3 spec chips from the product name + keywords (paper/tissue vernacular) */
 function specChipsFor(p){
@@ -2307,7 +2557,7 @@ function groceryHome(){
 var FSORT='pop', FINSTOCK=false, FBULK=false, FBRANDS={}, FPMAX=0, _catShown=24;
 function activeFilterCount(){ var n=0; if(FINSTOCK)n++; if(FBULK)n++; n+=Object.keys(FBRANDS).length; if(FPMAX>0)n++; return n; }
 function resetFilters(){ FSORT='pop'; FINSTOCK=false; FBULK=false; FBRANDS={}; FPMAX=0; }
-function applyFilters(list){
+function applyFilters(list, keepOrder){
   var out=list.filter(function(p){
     if(FINSTOCK && oosOf(p)) return false;
     if(FBULK && !(p.packSize && p.packSize>=2)) return false;
@@ -2315,6 +2565,9 @@ function applyFilters(list){
     if(Object.keys(FBRANDS).length && !FBRANDS[(p.brand||'').toLowerCase()]) return false;
     return true;
   });
+  // keepOrder: preserve the caller's ordering (used for relevance-ranked search results) unless
+  // the shopper explicitly picked a sort other than the default 'pop'.
+  if(keepOrder && FSORT==='pop') return out;
   out.sort(function(a,b){
     if(FSORT==='plow') return a.price-b.price;
     if(FSORT==='phigh') return b.price-a.price;
@@ -2335,7 +2588,7 @@ function setSort(s){ FSORT=s; render(); }
 function toggleInstock(){ FINSTOCK=!FINSTOCK; _catShown=24; render(); }
 function curCatList(){ return PRODUCTS.filter(function(p){return p.category===CAT;}); }
 function currentList(){ var ql=Q.trim().toLowerCase();
-  if(ql) return PRODUCTS.filter(function(p){return (p.name+' '+p.brand+' '+p.category+' '+p.keywords).toLowerCase().indexOf(ql)>=0;});
+  if(ql) return smartSearch(Q,0).map(function(r){return r.p;});
   if(COLLVIEW) return collProducts(COLLVIEW);
   if(BIZVIEW){ var vb=activeBiz().filter(function(x){return x.id===BIZVIEW;})[0]; if(vb) return bizProducts(vb); }
   if(CAT!=='all') return curCatList(); return []; }
@@ -2422,22 +2675,28 @@ function openFilters(){
   $('sheetBody').innerHTML=html+'<div style="display:flex;gap:10px;margin-top:10px"><button class="place" style="flex:1;background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="resetFilters();closeSheet();render()">Clear all</button><button class="place" style="flex:2" onclick="_catShown=24;closeSheet();render()">Show results</button></div>';
   $('sheet').classList.add('show');
 }
-function growGrid(){ var wrap=$('catgridwrap'); if(!wrap)return; var full=applyFilters(currentList()); if(_catShown>=full.length){var lm=$('loadmore');if(lm)lm.remove();return;} _catShown+=24; wrap.innerHTML=gridG(full.slice(0,_catShown)); if(_catShown<full.length){ if(!$('loadmore')){var d=document.createElement('div');d.id='loadmore';d.style.height='1px';wrap.parentNode.insertBefore(d,wrap.nextSibling);} } else { var l=$('loadmore'); if(l)l.remove(); } }
+function growGrid(){ var wrap=$('catgridwrap'); if(!wrap)return; var full=applyFilters(currentList(), !!(Q&&Q.trim().length)); if(_catShown>=full.length){var lm=$('loadmore');if(lm)lm.remove();return;} _catShown+=24; wrap.innerHTML=gridG(full.slice(0,_catShown)); if(_catShown<full.length){ if(!$('loadmore')){var d=document.createElement('div');d.id='loadmore';d.style.height='1px';wrap.parentNode.insertBefore(d,wrap.nextSibling);} } else { var l=$('loadmore'); if(l)l.remove(); } }
 
 function render(){
   var c=$('content');
+  SEARCH_ACTIVE=false;
   dLayout();
   var hb=$('hback');if(hb)hb.style.display=(CAT!=='all'||Q)?'grid':'none';
   if(!PRODUCTS.length){c.innerHTML=skeletonGrid(8);return;}
   var q=Q.trim().toLowerCase();
   if(q){
-    var res=PRODUCTS.filter(function(p){return (p.name+' '+p.brand+' '+p.category+' '+p.keywords).toLowerCase().indexOf(q)>=0;});
+    SEARCH_ACTIVE=true;
+    var sr=smartSearch(Q,0); SMATCH={}; sr.forEach(function(r){ SMATCH[r.p.name]=r.reasons; });
+    var res=sr.map(function(r){return r.p;});
     if(!res.length){
+      SEARCH_ACTIVE=false;
+      sTrack('search_zero',{q:Q});
       var wa=SHOP.waNumber?('https://wa.me/'+SHOP.waNumber+'?text='+encodeURIComponent('Hi, do you have: '+Q+'?')):'#';
       c.innerHTML=wsBar()+'<div class="backbar"><button onclick="goHome()">‹ Home</button><b>Search</b></div><div class="szero" style="padding-top:40px">No products match “'+esc(Q)+'”.<br>We may still have it — ask us.<br><a class="wa" href="'+wa+'" target="_blank" rel="noopener">Request “'+esc(Q)+'” on WhatsApp</a></div>';
       return;
     }
-    var fres=applyFilters(res), sh=fres.slice(0,_catShown), mo=fres.length>_catShown?'<div id="loadmore" style="height:1px"></div>':'';
+    sTrack('search_result',{q:Q,n:res.length});
+    var fres=applyFilters(res,true), sh=fres.slice(0,_catShown), mo=fres.length>_catShown?'<div id="loadmore" style="height:1px"></div>':'';
     c.innerHTML=wsBar()+'<div class="backbar"><button onclick="goHome()">‹ Home</button><b>Search</b></div><div class="section-title">Results for “'+esc(Q)+'”</div>'
       +filterBar()+'<div class="meta">'+fres.length+' product'+(fres.length===1?'':'s')+' · '+sortLabel()+'</div>'
       +'<div id="catgridwrap">'+(sh.length?gridG(sh):'<div class="empty">No products match these filters.</div>')+'</div>'+mo;
@@ -2814,7 +3073,7 @@ function _skbSet(i){ var rows=_srows(); if(!rows.length){ _skb=-1; return; }
   if(i<0)i=rows.length-1; if(i>=rows.length)i=0; _skb=i;
   rows[i].classList.add('kbhl'); try{ rows[i].scrollIntoView({block:'nearest'}); }catch(e){} }
 if($('sq')){
-  $('sq').addEventListener('input',function(){ searchRender(this.value); _skb=-1; });
+  $('sq').addEventListener('input',function(){ cancelAutorun(); searchRender(this.value); _skb=-1; });
   $('sq').addEventListener('keydown',function(e){
     var rows=_srows();
     if(e.key==='ArrowDown'){ e.preventDefault(); if(rows.length)_skbSet(_skb+1); }
