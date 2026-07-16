@@ -244,6 +244,21 @@ class PaymentController extends Controller
                     \App\Services\AuditLogger::log($u->tenant_id,'order_cost',$cost->id,'void',$u,$before,['status'=>'void'],'payment voided');
                 }
             }
+            // Reverse the order's own paid tracker too. Voiding the cashbook entry + re-syncing the
+            // invoice was not enough: the order kept its inflated amount_paid and still read "paid"
+            // after its payment was deleted. Decrement by this payment expressed in the order's
+            // transaction currency (mirrors how recordPayment credited it), clamped at zero.
+            if ($p->order_no) {
+                $order = \App\Models\Order::where('tenant_id',$u->tenant_id)->where('order_no',$p->order_no)->first();
+                if ($order) {
+                    $oc  = \App\Services\Money\SalesBaseCurrency::txnCurrency($order,$u->tenant);
+                    $fx  = \App\Services\Money\Fx::forTenant($u->tenant);
+                    $dec = strtoupper((string)$p->currency)===$oc ? (float)$p->amount
+                         : ($oc==='USD' ? (float)$p->usd_amount : (float)$p->usd_amount * $fx->ratePerUsd($oc));
+                    $order->amount_paid = round(max(0,(float)$order->amount_paid - $dec),2);
+                    $order->save();
+                }
+            }
             \App\Services\AuditLogger::log($u->tenant_id,'customer_payment',$p->id,'void',$u,['amount'=>(float)($p->amount ?? 0)],null,'payment voided');
             $p->delete();
         });
