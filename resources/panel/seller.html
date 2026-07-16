@@ -662,6 +662,7 @@
               <button type="button" class="btn ghost" onclick="bzLoadStarter()">Load starter template</button>
               <button type="button" class="btn" onclick="bzSave()" style="margin-left:auto">Save</button>
             </div>
+            <div class="mfield" style="margin:0 0 14px"><label>Current promotions — product names, comma-separated (shown as a homepage row)</label><input id="bzProm" placeholder="Aluminium Foil 150m, Cling Film 300m" onchange="bzSetProm(this.value)"></div>
             <div id="bzList"></div>
             <button type="button" class="btn ghost" onclick="bzAddBusiness()" style="margin-top:12px">+ Add collection</button>
           </div>
@@ -3705,22 +3706,24 @@ function storefrontShow(){
 function switchStoreTab(t){ _storeTab=t; storefrontShow(); }
 
 /* ================= Business Banners editor ================= */
-var BZCFG={enabled:false,title:'',autoscroll:5,'default':'',businesses:[]};
+var BZCFG={enabled:false,title:'',autoscroll:5,'default':'',promotions:[],businesses:[]};
 var _bzPhoto=null;   // {bi,kind:'slide'|'card',si} target for the hidden file input
 var BZ_ICONS=['home','hotels','restaurants','retail','supermarkets','wholesale','catering','offices','bakeries','cleaning','shop'];
 function bzEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function bannersInit(){
   fetch(EP.bannersGet+'?token='+encodeURIComponent(token)).then(function(r){return r.json();}).then(function(d){
     var c=(d&&d.config)||{};
-    BZCFG={enabled:!!c.enabled,title:c.title||'',autoscroll:(c.autoscroll==null?5:c.autoscroll),'default':c['default']||'',businesses:Array.isArray(c.businesses)?c.businesses:[]};
+    BZCFG={enabled:!!c.enabled,title:c.title||'',autoscroll:(c.autoscroll==null?5:c.autoscroll),'default':c['default']||'',promotions:Array.isArray(c.promotions)?c.promotions:[],businesses:Array.isArray(c.businesses)?c.businesses:[]};
     bzRender();
-  }).catch(function(){BZCFG={enabled:false,title:'',autoscroll:5,'default':'',businesses:[]};bzRender();});
+  }).catch(function(){BZCFG={enabled:false,title:'',autoscroll:5,'default':'',promotions:[],businesses:[]};bzRender();});
   var f=$('bzPhotoFile'); if(f&&!f._bound){f._bound=true; f.onchange=bzPhotoPicked;}
 }
 function bzSet(k,v){ if(k==='autoscroll')v=Math.max(0,Math.min(30,parseInt(v,10)||0)); BZCFG[k]=v; }
+function bzSetProm(v){ BZCFG.promotions=String(v).split(',').map(function(x){return x.trim();}).filter(Boolean); }
 function bzRender(){
   $('bzEnabled').checked=!!BZCFG.enabled;
   if($('bzTitle'))$('bzTitle').value=BZCFG.title||'';
+  if($('bzProm'))$('bzProm').value=(BZCFG.promotions||[]).join(', ');
   $('bzAuto').value=(BZCFG.autoscroll==null?5:BZCFG.autoscroll);
   var sel=$('bzDefault'); sel.innerHTML='<option value="">First business</option>'+BZCFG.businesses.map(function(b){return '<option value="'+bzEsc(b.id)+'"'+(BZCFG['default']===b.id?' selected':'')+'>'+bzEsc(b.label||b.id)+'</option>';}).join('');
   var root=$('bzList'); if(!BZCFG.businesses.length){root.innerHTML='<div style="color:#5b6b7b;font-size:13px;padding:10px 0">No business types yet. Add one, or load the starter template.</div>';return;}
@@ -3735,7 +3738,7 @@ function bzBusinessCard(b,bi){
     +'<div class="head" style="gap:10px">'
       +'<input value="'+bzEsc(b.label||'')+'" placeholder="Collection label (e.g. Home Essentials)" onchange="bzUpd('+bi+',\'label\',this.value)" style="font-weight:700;max-width:220px">'
       +'<label style="font-weight:600;font-size:12px;margin-left:6px"><input type="checkbox" '+(b.active!==false?'checked':'')+' onchange="bzUpd('+bi+',\'active\',this.checked)"> Active</label>'
-      +'<button type="button" class="btn ghost" style="margin-left:auto;padding:4px 10px;font-size:12px" onclick="bzDelBusiness('+bi+')">Remove</button>'
+      +'<span style="margin-left:auto;display:inline-flex;gap:6px"><button type="button" class="btn ghost" style="padding:4px 9px;font-size:12px" onclick="bzMoveBusiness('+bi+',-1)" title="Move up">↑</button><button type="button" class="btn ghost" style="padding:4px 9px;font-size:12px" onclick="bzMoveBusiness('+bi+',1)" title="Move down">↓</button><button type="button" class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="bzDelBusiness('+bi+')">Remove</button></span>'
     +'</div>'
     +'<div class="body">'
       +'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;align-items:flex-end">'
@@ -3794,6 +3797,7 @@ function bzPoints(bi,si,v){var b=bzB(bi);if(!b||!b.slides||!b.slides[si])return;
 function bzColl(bi,ci,k,v){var b=bzB(bi);if(!b||!b.collections||!b.collections[ci])return;b.collections[ci][k]=v;}
 function bzAddBusiness(){BZCFG.businesses.push({id:'biz'+(BZCFG.businesses.length+1),label:'New Business',sub:'',icon:'shop',active:true,match:{categories:[],keywords:[]},slides:[{kick:'',title:'New headline',points:[],cta_label:'Shop now',cta:'',gold:false,theme:'linear-gradient(135deg,#123a2a,#0b5c46)',image_url:''}],collections:[],bestsellers:'auto'});bzRender();}
 function bzDelBusiness(bi){if(!confirm('Remove this business type?'))return;BZCFG.businesses.splice(bi,1);bzRender();}
+function bzMoveBusiness(bi,dir){var j=bi+dir;if(j<0||j>=BZCFG.businesses.length)return;var a=BZCFG.businesses,t=a[bi];a[bi]=a[j];a[j]=t;bzRender();}
 function bzAddSlide(bi){var b=bzB(bi);if(!b)return;b.slides=b.slides||[];b.slides.push({kick:'',title:'New headline',points:[],cta_label:'Shop now',cta:'',gold:false,theme:'linear-gradient(135deg,#123a2a,#0b5c46)',image_url:''});bzRender();}
 function bzDelSlide(bi,si){var b=bzB(bi);if(!b||!b.slides)return;b.slides.splice(si,1);bzRender();}
 function bzAddColl(bi){var b=bzB(bi);if(!b)return;b.collections=b.collections||[];b.collections.push({label:'',cat:'',keywords:'',icon:'shop',image_url:''});bzRender();}
@@ -3830,36 +3834,15 @@ function bzLoadStarter(){
   var m=function(cats,kws,bulk){return {categories:cats,keywords:kws,bulk:!!bulk};};
   var sl=function(kick,title,pts,cta,gold,theme){return {kick:kick,title:title,points:pts,cta_label:cta,cta:'',gold:!!gold,theme:theme,image_url:''};};
   var col=function(label,cat){return {label:label,cat:cat,keywords:'',icon:'shop',image_url:''};};
-  BZCFG.enabled=true;BZCFG.title='Shop for Every Need';BZCFG.autoscroll=5;BZCFG['default']='home';
+  BZCFG.enabled=true;BZCFG.title='Shop for Every Need';BZCFG.autoscroll=5;BZCFG['default']='wholesale';
   BZCFG.businesses=[
-    {id:'home',label:'Home Essentials',sub:'Cooking, cleaning & everyday basics',icon:'home',active:true,card_image:'',
-      match:m(['Cleaning & Hygiene','Snacks & Namkeen','Rice, Biryani & Ready Mixes','Dal & Pulses','Sauces & Condiments'],['oil','rice','sugar','tea','tissue','clean','snack','soap','detergent','flour','salt']),
-      slides:[sl('Home Essentials','Everything Your *Home* Needs',['Cooking, cleaning & everyday basics','Great prices, fast delivery','Buy one, or buy in bulk'],'Shop Home Essentials',false,g.home)],
-      collections:[col('Cooking & Staples','Rice, Biryani & Ready Mixes'),col('Cleaning & Hygiene','Cleaning & Hygiene'),col('Snacks','Snacks & Namkeen')],bestsellers:'auto'},
-    {id:'hotels',label:'Hotel Supplies',sub:'Housekeeping, guest amenities & kitchen',icon:'hotels',active:true,card_image:'',
-      match:m(['Cleaning & Hygiene','Disposables, Foil & Wraps'],['towel','tissue','soap','shampoo','clean','foil','sanitiser','detergent','amenity']),
-      slides:[sl('Hotel Supplies','Everything Your *Hotel* Needs',['Housekeeping & guest amenities','Foil, cling & kitchen','Cleaning chemicals'],'Shop Hotel Collection',false,g.hotels)],
-      collections:[col('Cleaning & Hygiene','Cleaning & Hygiene'),col('Foil & Disposables','Disposables, Foil & Wraps')],bestsellers:'auto'},
-    {id:'restaurants',label:'Restaurant Supplies',sub:'Kitchen essentials & food packaging',icon:'restaurants',active:true,card_image:'',
-      match:m(['Disposables, Foil & Wraps','Recipe Mixes & Masalas','Ground Spices (Powders)','Whole Spices','Sauces & Condiments','Cleaning & Hygiene'],['foil','cling','container','glove','oil','masala','spice','sauce','packaging','clean']),
-      slides:[sl('Restaurant Supplies','Kitchen & Packaging *Essentials*',['Foil, cling & containers','Disposable gloves & kitchen cleaning','Packaging that sells'],'Shop Restaurant Collection',false,g.restaurants)],
-      collections:[col('Foil & Wraps','Disposables, Foil & Wraps'),col('Recipe Mixes & Masalas','Recipe Mixes & Masalas')],bestsellers:'auto'},
-    {id:'retail',label:'Retail Store Essentials',sub:'Fast-moving shelf essentials',icon:'retail',active:true,card_image:'',
-      match:m(['Snacks & Namkeen','Sauces & Condiments','Recipe Mixes & Masalas','Dal & Pulses','Rice, Biryani & Ready Mixes','Cleaning & Hygiene'],['snack','sauce','rice','dal','masala','tea','sugar','clean','tissue']),
-      slides:[sl('Retail Store Essentials','Stock Your *Shelves* Faster',['Fast-moving consumer goods','Best-selling grocery & household','Cleaning & snacks'],'Browse Retail Best Sellers',false,g.retail)],
-      collections:[col('Snacks & Namkeen','Snacks & Namkeen'),col('Rice & Ready Mixes','Rice, Biryani & Ready Mixes'),col('Cleaning','Cleaning & Hygiene')],bestsellers:'auto'},
-    {id:'wholesale',label:'Wholesale Packs',sub:'Carton pricing & bulk savings',icon:'wholesale',active:true,card_image:'',
-      match:m([],['carton','bulk','pack'],true),
-      slides:[sl('Wholesale','Bulk Buying Made *Easy*',['Carton & bulk packs','Lowest MOQ, best margins','Fast quotations'],'View Wholesale Deals',true,g.wholesale)],
-      collections:[],bestsellers:'auto'},
-    {id:'catering',label:'Catering Supplies',sub:'Disposables, cutlery & serving',icon:'catering',active:true,card_image:'',
-      match:m(['Disposables, Foil & Wraps','Recipe Mixes & Masalas','Ground Spices (Powders)'],['plate','cup','cutlery','foil','cling','container','napkin','straw','masala']),
-      slides:[sl('Catering & Events','Everything for *Catering & Events*',['Disposable plates, cups & cutlery','Containers, foil & cling','Serve hundreds, easily'],'Shop Catering Supplies',false,g.catering)],
-      collections:[col('Disposables & Foil','Disposables, Foil & Wraps')],bestsellers:'auto'},
-    {id:'offices',label:'Office Supplies',sub:'Pantry, tissue & cleaning',icon:'offices',active:true,card_image:'',
-      match:m(['Cleaning & Hygiene','Snacks & Namkeen','Sauces & Condiments'],['tea','coffee','tissue','clean','sugar','water','pantry','biscuit']),
-      slides:[sl('Office Supplies','Keep Your *Office* Running Smoothly',['Tea, coffee & pantry','Tissue & cleaning','Stationery & essentials'],'Shop Office Supplies',false,g.offices)],
-      collections:[col('Pantry & Snacks','Snacks & Namkeen'),col('Cleaning & Tissue','Cleaning & Hygiene')],bestsellers:'auto'}
+    {id:'wholesale',label:'Wholesale Deals',sub:'Bulk & carton pricing',icon:'wholesale',active:true,card_image:'',match:m([],['carton','bulk','pack'],true),slides:[sl('Wholesale Deals','Bulk Buying Made *Easy*',['Carton & bulk packs','Lowest MOQ, best margins','Fast quotations'],'View Wholesale Deals',true,g.wholesale)],collections:[],bestsellers:'auto'},
+    {id:'restaurants',label:'Restaurant Supplies',sub:'Kitchen & packaging',icon:'restaurants',active:true,card_image:'',match:m(['Disposables, Foil & Wraps','Recipe Mixes & Masalas','Ground Spices (Powders)','Whole Spices','Sauces & Condiments','Cleaning & Hygiene'],['foil','cling','container','glove','oil','masala','spice','sauce','packaging','clean']),slides:[sl('Restaurant Supplies','Kitchen & Packaging *Essentials*',['Foil, cling & containers','Disposable gloves & kitchen cleaning','Packaging that sells'],'Shop Restaurant Collection',false,g.restaurants)],collections:[col('Foil & Wraps','Disposables, Foil & Wraps'),col('Recipe Mixes & Masalas','Recipe Mixes & Masalas')],bestsellers:'auto'},
+    {id:'hotels',label:'Hotel Supplies',sub:'Housekeeping & guest',icon:'hotels',active:true,card_image:'',match:m(['Cleaning & Hygiene','Disposables, Foil & Wraps'],['towel','tissue','soap','shampoo','clean','foil','sanitiser','detergent','amenity']),slides:[sl('Hotel Supplies','Everything Your *Hotel* Needs',['Housekeeping & guest amenities','Foil, cling & kitchen','Cleaning chemicals'],'Shop Hotel Collection',false,g.hotels)],collections:[col('Cleaning & Hygiene','Cleaning & Hygiene'),col('Foil & Disposables','Disposables, Foil & Wraps')],bestsellers:'auto'},
+    {id:'retail',label:'Retail Store Essentials',sub:'Fast-moving stock',icon:'retail',active:true,card_image:'',match:m(['Snacks & Namkeen','Sauces & Condiments','Recipe Mixes & Masalas','Dal & Pulses','Rice, Biryani & Ready Mixes','Cleaning & Hygiene'],['snack','sauce','rice','dal','masala','tea','sugar','clean','tissue']),slides:[sl('Retail Store Essentials','Stock Your *Shelves* Faster',['Fast-moving consumer goods','Best-selling grocery & household','Cleaning & snacks'],'Browse Retail Best Sellers',false,g.retail)],collections:[col('Snacks & Namkeen','Snacks & Namkeen'),col('Rice & Ready Mixes','Rice, Biryani & Ready Mixes'),col('Cleaning','Cleaning & Hygiene')],bestsellers:'auto'},
+    {id:'home',label:'Home Essentials',sub:'Daily groceries & household',icon:'home',active:true,card_image:'',match:m(['Cleaning & Hygiene','Snacks & Namkeen','Rice, Biryani & Ready Mixes','Dal & Pulses','Sauces & Condiments'],['oil','rice','sugar','tea','tissue','clean','snack','soap','detergent','flour','salt']),slides:[sl('Home Essentials','Everything Your *Home* Needs',['Cooking, cleaning & everyday basics','Great prices, fast delivery','Buy one, or buy in bulk'],'Shop Home Essentials',false,g.home)],collections:[col('Cooking & Staples','Rice, Biryani & Ready Mixes'),col('Cleaning & Hygiene','Cleaning & Hygiene'),col('Snacks','Snacks & Namkeen')],bestsellers:'auto'},
+    {id:'catering',label:'Catering Supplies',sub:'Events & food service',icon:'catering',active:true,card_image:'',match:m(['Disposables, Foil & Wraps','Recipe Mixes & Masalas','Ground Spices (Powders)'],['plate','cup','cutlery','foil','cling','container','napkin','straw','masala']),slides:[sl('Catering & Events','Everything for *Catering & Events*',['Disposable plates, cups & cutlery','Containers, foil & cling','Serve hundreds, easily'],'Shop Catering Supplies',false,g.catering)],collections:[col('Disposables & Foil','Disposables, Foil & Wraps')],bestsellers:'auto'},
+    {id:'offices',label:'Office Supplies',sub:'Pantry & cleaning',icon:'offices',active:true,card_image:'',match:m(['Cleaning & Hygiene','Snacks & Namkeen','Sauces & Condiments'],['tea','coffee','tissue','clean','sugar','water','pantry','biscuit']),slides:[sl('Office Supplies','Keep Your *Office* Running Smoothly',['Tea, coffee & pantry','Tissue & cleaning','Stationery & essentials'],'Shop Office Supplies',false,g.offices)],collections:[col('Pantry & Snacks','Snacks & Namkeen'),col('Cleaning & Tissue','Cleaning & Hygiene')],bestsellers:'auto'}
   ];
   bzRender();toast('Starter loaded — review, add photos, then Save');
 }
