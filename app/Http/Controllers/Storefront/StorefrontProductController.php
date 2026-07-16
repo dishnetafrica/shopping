@@ -73,8 +73,13 @@ class StorefrontProductController extends Controller
                 'id'          => $product->id,
                 'name'        => $product->name,
                 'category'    => $product->category,
-                'price'       => (int) $product->price,
-                'mrp'         => (int) ($product->base_price ?: $product->price),
+                // SINGLE SOURCE OF TRUTH: mirror the catalogue endpoint EXACTLY
+                // (StorefrontController::catalogue -> Price_UGX = (float)(base_price ?? price)).
+                // The old (int) cast truncated decimals ($2.74 -> $2.00) and ignored
+                // base_price, so the detail page disagreed with the listing/cart. Do NOT
+                // cast prices to int, and do NOT read a different field here.
+                'price'       => (float) ($product->base_price ?? $product->price ?? 0),
+                'mrp'         => (float) ($product->base_price ?? $product->price ?? 0),
                 'image'       => $images[0] ?? '',
                 'images'      => $images,
                 'description' => $product->description ?? null,
@@ -116,7 +121,8 @@ class StorefrontProductController extends Controller
         return [
             'id'    => $p->id,
             'name'  => $p->name,
-            'price' => (int) $p->price,
+            // Same rule as above — float, base_price precedence, never (int).
+            'price' => (float) ($p->base_price ?? $p->price ?? 0),
             'image' => $this->img($p->image_url),
         ];
     }
