@@ -5442,6 +5442,44 @@ class PanelApiController extends Controller
     }
 
     /**
+     * POST /papi/backfill-invoices[?commit=1] — issue a numbered invoice for every DELIVERED order that
+     * doesn't have one, so delivered credit sales appear in AR (invoice-based projections) and the
+     * Customer 360 / Collections stop showing a customer as "$0 owed / healthy" while they hold unbilled
+     * delivered goods. Idempotent (issueForOrder returns the existing invoice if present). DRY RUN unless
+     * ?commit=1 — the dry run lists exactly which orders would be billed. Owner-only.
+     */
+    public function backfillInvoices(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $commit = filter_var($r->query('commit', $r->input('commit', false)), FILTER_VALIDATE_BOOLEAN);
+
+        $invoicedOrderIds = \App\Models\Invoice::where('tenant_id', $t->id)->whereNotNull('order_id')
+            ->where('status', '!=', 'void')->pluck('order_id')->flip();
+        $delivered = \App\Models\Order::where('tenant_id', $t->id)
+            ->where(function ($w) { $w->whereRaw("lower(coalesce(status,'')) = 'delivered'")->orWhereNotNull('delivered_at'); })
+            ->whereRaw("lower(coalesce(status,'')) not in ('cancelled','rejected','void')")
+            ->orderBy('id')->get();
+        $unbilled = $delivered->filter(fn ($o) => ! isset($invoicedOrderIds[$o->id]));
+
+        $rows = []; $issued = 0;
+        $svc = app(\App\Services\Invoicing\InvoiceService::class);
+        foreach ($unbilled as $o) {
+            $rows[] = ['order' => (string) $o->order_no, 'customer' => (string) ($o->customer_name ?: $o->customer_phone),
+                'total' => (float) $o->total, 'status' => (string) $o->status];
+            if ($commit) { try { $svc->issueForOrder($t, $o, 'backfill'); $issued++; } catch (\Throwable $e) {} }
+        }
+
+        return response()->json([
+            'ok' => true, 'committed' => $commit,
+            'delivered_unbilled' => count($rows),
+            'invoices_issued' => $commit ? $issued : 0,
+            'orders' => array_slice($rows, 0, 100),
+        ]);
+    }
+
+    /**
      * Platform diagnostics (GET /papi/diagnostics) — build id, opcache/deploy staleness,
      * and core service checks. The opcache "any_stale" flag answers "is my deploy actually live?"
      */
