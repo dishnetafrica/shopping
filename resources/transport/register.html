@@ -217,8 +217,20 @@ function holderOf(ld){ var s=STATUS[ld.status]||STATUS.park; return (ld.status==
 function nextStatus(st){ var i=FLOW.indexOf(st); return (i>=0&&i<FLOW.length-1)?FLOW[i+1]:null; }
 
 /* ---- computations ---- */
-function loadTotal(ld){ return (ld.lines||[]).reduce(function(s,l){return s+(Number(l.cartons)||0);},0); }
-function shipTotal(sh){ return (sh.products||[]).reduce(function(s,p){return s+(Number(p.cartons)||0);},0); }
+/* ---- big-bag (sack) helpers: a bag = fixed contents [{name,qty}] × count identical sacks ---- */
+function bagUnit(bag){ return (bag.contents||[]).reduce(function(s,c){return s+(Number(c.qty)||0);},0); }   // cartons in ONE sack
+function bagCartons(bag){ return bagUnit(bag)*(Number(bag.count)||0); }                                     // cartons across all its sacks
+function baglineCartons(bl){ return (Number(bl.count)||0)*((bl.contents||[]).reduce(function(s,c){return s+(Number(c.qty)||0);},0)); }
+function loadTotal(ld){ return (ld.lines||[]).reduce(function(s,l){return s+(Number(l.cartons)||0);},0)
+  + (ld.baglines||[]).reduce(function(s,b){return s+baglineCartons(b);},0); }
+function shipTotal(sh){ return (sh.products||[]).reduce(function(s,p){return s+(Number(p.cartons)||0);},0)
+  + (sh.bags||[]).reduce(function(s,b){return s+bagCartons(b);},0); }
+/* bag dispatch tracking (whole sacks): how many sacks of each bag are already on buses */
+function dispatchedBagMap(){ var m={}; REG.loads.forEach(function(ld){ (ld.baglines||[]).forEach(function(bl){ m[bl.bagUid]=(m[bl.bagUid]||0)+(Number(bl.count)||0); }); }); return m; }
+function shipBagPending(bag,dbm){ dbm=dbm||dispatchedBagMap(); return (Number(bag.count)||0)-(dbm[bag.uid]||0); }
+function waitingBags(){ var dbm=dispatchedBagMap(), out=[]; REG.shipments.forEach(function(sh){ (sh.bags||[]).forEach(function(bag){ var pend=(Number(bag.count)||0)-(dbm[bag.uid]||0); if(pend>0) out.push({shipmentId:sh.id, bag:bag, pending:pend}); }); }); return out; }
+function bagLabel(bag){ if(bag.label)return bag.label; var c=(bag.contents||[]); return c.length?('Bag · '+c.slice(0,2).map(function(x){return x.name;}).join(', ')+(c.length>2?'…':'')):'Bag'; }
+function bagSummary(bag){ return (bag.contents||[]).map(function(c){return esc(c.name)+' '+c.qty;}).join(' · '); }
 function dispatchedMap(){ var m={}; REG.loads.forEach(function(ld){ (ld.lines||[]).forEach(function(l){ var k=l.shipmentId+'|'+l.name; m[k]=(m[k]||0)+(Number(l.cartons)||0); }); }); return m; }
 function shipProductPending(sh,name,dm){ var tot=0; (sh.products||[]).forEach(function(p){ if(p.name===name)tot+=Number(p.cartons)||0; }); return tot-((dm||dispatchedMap())[sh.id+'|'+name]||0); }
 function shipDispatched(sh,dm){ dm=dm||dispatchedMap(); var s=0; (sh.products||[]).forEach(function(p){ s+=Math.min(Number(p.cartons)||0,(dm[sh.id+'|'+p.name]||0)); }); return s; }
@@ -285,7 +297,7 @@ function rowLink(ic,l1,l2,onclick){ return '<div class="row" onclick="'+onclick+
 /* ---- RECEIVE (new shipment) ---- */
 var RC_ITEMS=[];
 function viewReceive(){
-  if(!RC_ITEMS.length)RC_ITEMS=[{name:'',qty:''}];
+  if(!RC_ITEMS.length){ RC_ITEMS=[{name:'',qty:''}]; RC_BAGS=[]; }
   return '<div class="card" style="margin-top:14px">'
       +field('Date','<input id="rcDate" type="date" value="'+todayISO()+'">',true)
       +field('Source warehouse','<input id="rcSrc" value="Kampala Warehouse">',false)
@@ -295,18 +307,21 @@ function viewReceive(){
     +'<div class="sec">Products in this shipment <span class="mini mut">carton counts</span></div>'
     +'<div class="card" id="rcItems">'+rcItemsHtml()+'</div>'
     +'<div style="padding:0 14px"><button class="chip" onclick="rcAdd()">+ Add product</button></div>'
+    +'<div class="sec">Big bags / sacks <span class="mini mut">many items in one sack</span></div>'
+    +'<div class="card" id="rcBags">'+rcBagsHtml()+'</div>'
+    +'<div style="padding:0 14px"><button class="chip" onclick="openBagBuilder()">+ Pack a big bag</button></div>'
     +'<div class="card" style="margin-top:14px">'+field('Notes','<textarea id="rcNotes" placeholder="Optional"></textarea>',false)+'</div>'
     +'<div class="save"><button class="btn green" onclick="saveReceive()">✓ Receive into warehouse</button></div>';
 }
 function rcItemsHtml(){ return RC_ITEMS.map(function(it,i){
   // With a catalogue we pick from a list (no typing); without one we fall back to a text box.
   var nameCell = TRP.length
-    ? '<button class="pick'+(it.name?' has':'')+'" onclick="openProdPicker('+i+')">'+(it.name?esc(it.name):'Tap to choose product')+'</button>'
+    ? '<button class="pick'+(it.name?' has':'')+'" onclick="openProdPicker(\'rc\','+i+')">'+(it.name?esc(it.name):'Tap to choose product')+'</button>'
     : '<input placeholder="Product (e.g. Toilet Paper)" value="'+esc(it.name)+'" oninput="RC_ITEMS['+i+'].name=this.value" style="flex:1">';
   return '<div class="field" style="display:flex;gap:10px;align-items:center">'+nameCell
     +'<input id="rcQty'+i+'" type="number" inputmode="numeric" placeholder="Cartons" value="'+(it.qty||'')+'" oninput="RC_ITEMS['+i+'].qty=this.value" style="width:88px;text-align:center;font-weight:800">'
     +(RC_ITEMS.length>1?'<button class="chip" onclick="RC_ITEMS.splice('+i+',1);document.getElementById(\'rcItems\').innerHTML=rcItemsHtml()">✕</button>':'')+'</div>'; }).join(''); }
-function rcAdd(){ RC_ITEMS.push({name:'',qty:''}); document.getElementById('rcItems').innerHTML=rcItemsHtml(); if(TRP.length)openProdPicker(RC_ITEMS.length-1); }
+function rcAdd(){ RC_ITEMS.push({name:'',qty:''}); document.getElementById('rcItems').innerHTML=rcItemsHtml(); if(TRP.length)openProdPicker('rc',RC_ITEMS.length-1); }
 function rcRefresh(){ var el=document.getElementById('rcItems'); if(el)el.innerHTML=rcItemsHtml(); var q=document.getElementById('rcQuick'); if(q)q.innerHTML=rcQuickInner(); }
 /* frequent = products received before (history), topped up from the catalogue */
 function frequentProducts(){ var c={},order=[]; REG.shipments.forEach(function(sh){ (sh.products||[]).forEach(function(p){ if(c[p.name]==null){c[p.name]=0;order.push(p.name);} c[p.name]++; }); });
@@ -317,8 +332,8 @@ function rcQuickInner(){ var f=frequentProducts(); if(!f.length)return ''; retur
 function rcQuickHtml(){ var inner=rcQuickInner(); if(!inner)return ''; return '<div class="sec">Quick add <span class="mini mut">tap a product</span></div><div style="padding:0 14px"><div id="rcQuick">'+inner+'</div></div>'; }
 function rcQuickAdd(name){ var slot=-1; for(var i=0;i<RC_ITEMS.length;i++){ if(!RC_ITEMS[i].name){slot=i;break;} } if(slot<0){ RC_ITEMS.push({name:name,qty:''}); slot=RC_ITEMS.length-1; } else RC_ITEMS[slot].name=name; rcRefresh(); haptic(); var q=document.getElementById('rcQty'+slot); if(q){try{q.focus();}catch(e){}} }
 /* ---- product picker sheet (search the catalogue; no typing needed) ---- */
-var RC_PICK=-1;
-function openProdPicker(i){ RC_PICK=i; var b=document.getElementById('sheetBody');
+var PICK_KIND='rc', PICK_IDX=-1;
+function openProdPicker(kind,idx){ PICK_KIND=kind; PICK_IDX=idx; var b=document.getElementById('sheetBody');
   b.innerHTML='<div class="sh">Choose product</div>'
     +'<div style="padding:0 16px 10px"><input id="ppq" placeholder="Search products…" oninput="renderProdPicker()" autocomplete="off" style="width:100%;font-size:16px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;font-weight:600"></div>'
     +'<div id="ppList" style="max-height:58vh;overflow:auto;-webkit-overflow-scrolling:touch">'+prodPickerList('')+'</div>';
@@ -329,25 +344,57 @@ function prodPickerList(q){ q=(q||'').toLowerCase().trim();
   var rows=list.map(function(p){ var sub=[p.cat,p.unit].filter(Boolean).join(' · '); return '<div class="row" onclick="pickProd('+jq(p.name)+')"><div class="dot g">📦</div><div class="m"><div class="l1">'+esc(p.name)+'</div>'+(sub?'<div class="l2">'+esc(sub)+'</div>':'')+'</div></div>'; }).join('');
   var custom=(q && !TRP.some(function(p){return p.name.toLowerCase()===q;}))?('<div class="row" onclick="pickProd('+jq(q)+')"><div class="dot" style="background:var(--amber-l);color:var(--amber)">＋</div><div class="m"><div class="l1">Use “'+esc(q)+'”</div><div class="l2">Not in catalogue — add as typed</div></div></div>'):'';
   return (rows||custom)?(custom+rows):'<div class="empty" style="padding:26px">No products match. Type to add a custom name.</div>'; }
-function pickProd(name){ if(RC_PICK>=0 && RC_ITEMS[RC_PICK])RC_ITEMS[RC_PICK].name=name; closeSheet(); rcRefresh(); var q=document.getElementById('rcQty'+RC_PICK); if(q){try{q.focus();}catch(e){}} }
+function pickProd(name){
+  if(PICK_KIND==='bag'){ if(BAG_DRAFT.contents[PICK_IDX])BAG_DRAFT.contents[PICK_IDX].name=name; renderBagBuilder(); return; }
+  if(PICK_IDX>=0 && RC_ITEMS[PICK_IDX])RC_ITEMS[PICK_IDX].name=name; closeSheet(); rcRefresh(); var q=document.getElementById('rcQty'+PICK_IDX); if(q){try{q.focus();}catch(e){}} }
+/* ---- big-bag builder (pack many items into one sack) ---- */
+var RC_BAGS=[], BAG_DRAFT=null;
+function rcBagsHtml(){ if(!RC_BAGS.length)return '<div class="field mut" style="font-size:13px">No bags yet. Use this when you pack several products into one big sack.</div>';
+  return RC_BAGS.map(function(bg,i){ return '<div class="prod"><div style="flex:1"><div class="pn">'+esc(bagLabel(bg))+' × '+bg.count+'</div><div class="pb">'+bagSummary(bg)+' &nbsp;('+bagUnit(bg)+'/bag)</div></div><button class="chip" onclick="RC_BAGS.splice('+i+',1);rcBagsRefresh()">✕</button></div>'; }).join(''); }
+function rcBagsRefresh(){ var el=document.getElementById('rcBags'); if(el)el.innerHTML=rcBagsHtml(); }
+function openBagBuilder(){ BAG_DRAFT={label:'',count:1,contents:[{name:'',qty:''}]}; renderBagBuilder(); document.getElementById('sheet').classList.add('show'); }
+function renderBagBuilder(){
+  var d=BAG_DRAFT; var b=document.getElementById('sheetBody');
+  var rows=d.contents.map(function(c,j){
+    var nameCell=TRP.length
+      ? '<button class="pick'+(c.name?' has':'')+'" onclick="openProdPicker(\'bag\','+j+')">'+(c.name?esc(c.name):'Tap to choose product')+'</button>'
+      : '<input placeholder="Product" value="'+esc(c.name)+'" oninput="BAG_DRAFT.contents['+j+'].name=this.value" style="flex:1">';
+    return '<div class="field" style="display:flex;gap:10px;align-items:center">'+nameCell
+      +'<input type="number" inputmode="numeric" placeholder="Qty" value="'+(c.qty||'')+'" oninput="BAG_DRAFT.contents['+j+'].qty=this.value" style="width:74px;text-align:center;font-weight:800">'
+      +(d.contents.length>1?'<button class="chip" onclick="BAG_DRAFT.contents.splice('+j+',1);renderBagBuilder()">✕</button>':'')+'</div>'; }).join('');
+  b.innerHTML='<div class="sh">Pack a big bag (sack)</div>'
+    +'<div class="card" style="margin:0 14px 12px"><div class="field"><label>How many identical bags?</label>'+stepper('bagCount',d.count)+'</div></div>'
+    +'<div class="sec" style="padding-top:2px">What is inside one bag</div>'
+    +'<div class="card" style="margin:0 14px 8px" id="bagRows">'+rows+'</div>'
+    +'<div style="padding:0 14px 10px"><button class="chip" onclick="bagAddItem()">+ Add item</button></div>'
+    +'<div style="padding:0 14px 12px"><button class="btn green" onclick="saveBag()">✓ Add bag</button></div>';
+  var cn=document.getElementById('bagCount'); if(cn)cn.value=d.count;
+}
+function bagAddItem(){ BAG_DRAFT.contents.push({name:'',qty:''}); renderBagBuilder(); if(TRP.length)openProdPicker('bag',BAG_DRAFT.contents.length-1); }
+function saveBag(){ var cnt=Math.max(1,Number(val('bagCount'))||1);
+  var contents=BAG_DRAFT.contents.map(function(c){return {name:(c.name||'').trim(),qty:Number(c.qty)||0};}).filter(function(c){return c.name&&c.qty>0;});
+  if(!contents.length){ toast('Add at least one product to the bag'); return; }
+  RC_BAGS.push({label:'',count:cnt,contents:contents}); closeSheet(); rcBagsRefresh(); haptic(); toast('Bag added'); }
 function saveReceive(){
   var date=val('rcDate')||todayISO(), src=val('rcSrc'), ref=val('rcRef'), notes=val('rcNotes');
   var products=RC_ITEMS.map(function(it){return {name:(it.name||'').trim(),cartons:Number(it.qty)||0};}).filter(function(p){return p.name&&p.cartons>0;});
-  if(!products.length){ toast('Add at least one product with a carton count'); return; }
+  var bags=(RC_BAGS||[]).map(function(bg){return {uid:uid(),label:bg.label||'',count:Number(bg.count)||0,contents:(bg.contents||[]).map(function(c){return {name:c.name,qty:Number(c.qty)||0};})};}).filter(function(b){return b.count>0 && b.contents.length;});
+  if(!products.length && !bags.length){ toast('Add products or a big bag'); return; }
   var id=seqId('TRN',date);
-  REG.shipments.push(stamp({id:id,date:date,ts:Date.now(),source:src,dest:'Juba Warehouse',ref:ref,notes:notes,products:products}));
-  markDirty(); haptic(); RC_ITEMS=[]; toast('Received '+id+' · '+products.reduce(function(s,p){return s+p.cartons;},0)+' cartons'); reset('home');
+  var sh=stamp({id:id,date:date,ts:Date.now(),source:src,dest:'Juba Warehouse',ref:ref,notes:notes,products:products,bags:bags});
+  REG.shipments.push(sh);
+  markDirty(); haptic(); RC_ITEMS=[]; RC_BAGS=[]; toast('Received '+id+' · '+shipTotal(sh)+' cartons'); reset('home');
 }
 
 /* ---- DISPATCH (load a bus from waiting stock) ---- */
 var DP_SEL={}, DP_STATUS='transit';
 function viewDispatch(){
-  var wp=waitingProducts();
-  if(!wp.length) return '<div class="empty"><span class="em">📭</span>Nothing waiting to dispatch.<br>Receive a shipment first, then load it onto a bus.</div><div style="padding:0 14px"><button class="btn green" onclick="reset(\'receive\')">Receive a shipment</button></div>';
-  DP_SEL={}; wp.forEach(function(p){DP_SEL[p.name]=p.pending;});   // default: load all pending
+  var wp=waitingProducts(), wb=waitingBags();
+  if(!wp.length && !wb.length) return '<div class="empty"><span class="em">📭</span>Nothing waiting to dispatch.<br>Receive a shipment first, then load it onto a bus.</div><div style="padding:0 14px"><button class="btn green" onclick="reset(\'receive\')">Receive a shipment</button></div>';
   var comps=(REG.companies||[]).slice(0,8);
   var chips=comps.length?('<div class="chips">'+comps.map(function(c){return '<button class="chip" onclick="setVal(\'dpCo\','+jq(c)+')">'+esc(c)+'</button>';}).join('')+'</div>'):'';
-  var prods='<div class="card" id="dpItems">'+wp.map(function(p,i){ return dpRow(p,i); }).join('')+'</div>';
+  var prods=wp.length?('<div class="sec">Loose cartons <span class="mini mut">tap − / + to adjust</span></div><div class="card" id="dpItems">'+wp.map(function(p,i){ return dpRow(p,i); }).join('')+'</div>'):'';
+  var bags=wb.length?('<div class="sec">Big bags / sacks <span class="mini mut">whole sacks</span></div><div class="card" id="dpBags">'+wb.map(function(w,i){ return dpBagRow(w,i); }).join('')+'</div>'):'';
   return '<div class="sec">Which bus?</div>'
     +'<div class="card">'
       +field('Bus company','<input id="dpCo" placeholder="e.g. Gateway Bus">'+chips,true)
@@ -355,13 +402,13 @@ function viewDispatch(){
       +field('Driver phone','<input id="dpPhone" type="tel" inputmode="tel" placeholder="Optional">',false)
       +field('Expected arrival','<input id="dpEta" placeholder="e.g. Tomorrow AM">',false)
     +'</div>'
-    +'<div class="sec">Cartons to load <span class="mini mut">tap − / + to adjust</span></div>'
-    +prods
+    +prods+bags
     +'<div class="sec">Status now</div>'
     +'<div class="card"><div class="field"><div class="chips" id="dpStatus">'+dpStatusChips()+'</div></div></div>'
     +'<div class="save"><button class="btn red" onclick="doDispatch()" id="dpBtn">✓ Dispatch to bus</button></div>';
 }
 function dpRow(p,i){ return '<div class="prod"><div style="flex:1"><div class="pn">'+esc(p.name)+'</div><div class="pb">'+p.pending+' waiting</div></div><div class="send">'+stepper('dp_'+i,p.pending,p.pending)+'</div></div>'; }
+function dpBagRow(w,i){ return '<div class="prod"><div style="flex:1"><div class="pn">'+esc(bagLabel(w.bag))+'</div><div class="pb">'+w.pending+' bag'+(w.pending===1?'':'s')+' waiting · '+bagSummary(w.bag)+'</div></div><div class="send">'+stepper('dpbag_'+i,w.pending,w.pending)+'</div></div>'; }
 function dpStatusChips(){ return [['park','🅿️ At bus park'],['transit','🚌 Left / in transit']].map(function(s){return '<button class="chip'+(DP_STATUS===s[0]?' on':'')+'" onclick="DP_STATUS=\''+s[0]+'\';document.getElementById(\'dpStatus\').innerHTML=dpStatusChips()">'+s[1]+'</button>';}).join(''); }
 function doDispatch(){
   var co=val('dpCo'), bus=val('dpBus'), phone=val('dpPhone'), eta=val('dpEta');
@@ -369,12 +416,15 @@ function doDispatch(){
   if(!bus){ toast('Enter the bus number'); return; }
   var wp=waitingProducts(), dm=dispatchedMap(), lines=[];
   wp.forEach(function(p,i){ var q=Math.min(p.pending, Number(val('dp_'+i))||0); if(q>0){ lines=lines.concat(allocate(p.name,q,dm)); } });
-  if(!lines.length){ toast('Set how many cartons to load'); return; }
+  var wb=waitingBags(), baglines=[];
+  wb.forEach(function(w,i){ var q=Math.min(w.pending, Number(val('dpbag_'+i))||0); if(q>0){ baglines.push({shipmentId:w.shipmentId,bagUid:w.bag.uid,label:bagLabel(w.bag),count:q,contents:w.bag.contents}); } });
+  if(!lines.length && !baglines.length){ toast('Set how many cartons or bags to load'); return; }
   if(co && REG.companies.indexOf(co)<0){ REG.companies.unshift(co); REG.companies=REG.companies.slice(0,12); }
   var date=todayISO(), id=seqId('LD',date), now=Date.now();
-  REG.loads.push(stamp({id:id,date:date,ts:now,company:co,bus:bus,phone:phone,eta:eta,status:DP_STATUS,lines:lines,
-    events:[{status:DP_STATUS,ts:now,note:'Loaded on '+co+' '+bus}]}));
-  markDirty(); haptic(); toast('Dispatched '+lines.reduce(function(s,l){return s+l.cartons;},0)+' cartons · '+id);
+  var ld=stamp({id:id,date:date,ts:now,company:co,bus:bus,phone:phone,eta:eta,status:DP_STATUS,lines:lines,baglines:baglines,
+    events:[{status:DP_STATUS,ts:now,note:'Loaded on '+co+' '+bus}]});
+  REG.loads.push(ld);
+  markDirty(); haptic(); toast('Dispatched '+loadTotal(ld)+' cartons · '+id);
   reset('home'); go('load',id);
 }
 
@@ -390,7 +440,7 @@ function viewBuses(){
   var body=block('Moving now',active)+shipCards+block('Completed / closed',done);
   return body||'<div class="empty"><span class="em">🚌</span>No buses loaded yet.<br>Dispatch a shipment to start tracking.</div>';
 }
-function loadRow(ld){ var tot=loadTotal(ld); return '<div class="row" onclick="go(\'load\','+jq(ld.id)+')"><div class="dot out">🚌</div><div class="m"><div class="l1">'+esc(ld.company||'')+' · '+esc(ld.bus||'')+'</div><div class="l2">'+esc(ld.id)+' · '+tot+' cartons · '+(ld.lines||[]).length+' product'+((ld.lines||[]).length===1?'':'s')+'</div><div style="margin-top:5px">'+statusPill(ld.status)+' <span class="holder">👤 '+esc(holderOf(ld))+'</span></div></div><div class="r"><div class="q">'+tot+'</div><div class="bal">'+ago(ld.ts)+' ago</div></div></div>'; }
+function loadRow(ld){ var tot=loadTotal(ld); return '<div class="row" onclick="go(\'load\','+jq(ld.id)+')"><div class="dot out">🚌</div><div class="m"><div class="l1">'+esc(ld.company||'')+' · '+esc(ld.bus||'')+'</div><div class="l2">'+esc(ld.id)+' · '+tot+' cartons'+(function(){var nb=(ld.baglines||[]).reduce(function(s,b){return s+(Number(b.count)||0);},0);var parts=[(ld.lines||[]).length?((ld.lines||[]).length+' product'+((ld.lines||[]).length===1?'':'s')):'',nb?(nb+' bag'+(nb===1?'':'s')):''].filter(Boolean).join(' · ');return parts?(' · '+parts):'';})()+'</div><div style="margin-top:5px">'+statusPill(ld.status)+' <span class="holder">👤 '+esc(holderOf(ld))+'</span></div></div><div class="r"><div class="q">'+tot+'</div><div class="bal">'+ago(ld.ts)+' ago</div></div></div>'; }
 function shipRow(sh){ var st=shipStatus(sh), pend=shipTotal(sh)-shipDispatched(sh); return '<div class="row" onclick="go(\'shipment\','+jq(sh.id)+')"><div class="dot in">📦</div><div class="m"><div class="l1">'+esc(sh.id)+'</div><div class="l2">'+fmtDate(sh.date)+' · '+shipTotal(sh)+' cartons · '+(sh.products||[]).length+' products</div><div style="margin-top:5px"><span class="pill '+st.c+'">'+esc(st.l)+'</span></div></div><div class="r"><div class="q" style="color:var(--amber)">'+pend+'</div><div class="bal">waiting</div></div></div>'; }
 
 /* ---- LOAD (bus manifest) ---- */
@@ -402,7 +452,9 @@ function viewLoad(id){
     +(ld.eta?'<div class="field"><label>Expected arrival</label><div style="font-weight:700">'+esc(ld.eta)+'</div></div>':'')
     +(ld.phone?'<div class="field"><label>Driver phone</label><div><a href="tel:'+esc(ld.phone)+'" style="color:var(--green-d);font-weight:700;text-decoration:none">'+esc(ld.phone)+' 📞</a></div></div>':'')
     +'</div>';
-  var lines='<div class="sec">Load ('+tot+' cartons)</div><div class="card">'+(ld.lines||[]).map(function(l){ var sh=shipById(l.shipmentId); return '<div class="prod"><div style="flex:1"><div class="pn">'+esc(l.name)+'</div><div class="pb">from '+esc(sh?sh.id:'—')+'</div></div><div style="font-size:18px;font-weight:900">'+l.cartons+'</div></div>'; }).join('')+'</div>';
+  var lineHtml=(ld.lines||[]).map(function(l){ var sh=shipById(l.shipmentId); return '<div class="prod"><div style="flex:1"><div class="pn">'+esc(l.name)+'</div><div class="pb">from '+esc(sh?sh.id:'—')+'</div></div><div style="font-size:18px;font-weight:900">'+l.cartons+'</div></div>'; }).join('');
+  var bagHtml=(ld.baglines||[]).map(function(bl){ return '<div class="prod"><div style="flex:1"><div class="pn">🛍️ '+esc(bl.label||'Bag')+' × '+bl.count+'</div><div class="pb">'+bagSummary(bl)+' &nbsp;('+baglineCartons(bl)+' cartons)</div></div><div style="font-size:18px;font-weight:900">'+bl.count+' bag'+(bl.count===1?'':'s')+'</div></div>'; }).join('');
+  var lines='<div class="sec">Load ('+tot+' cartons)</div><div class="card">'+lineHtml+bagHtml+'</div>';
   var acts='';
   var nx=nextStatus(ld.status);
   if(nx){ var labels={transit:'🚌 Bus left — In transit',arrived:'📍 Arrived Juba',received:'🏬 Received at Juba warehouse'}; acts+='<div style="padding:0 14px 8px"><button class="btn blue" onclick="advance('+jq(ld.id)+')">'+labels[nx]+'</button></div>'; }
@@ -424,12 +476,14 @@ function viewShipment(id){
     +'<div class="field"><span class="pill '+st.c+'">'+esc(st.l)+'</span></div>'
     +(sh.ref?'<div class="field"><label>Reference</label><div>'+esc(sh.ref)+'</div></div>':'')
     +'</div>';
-  var prods='<div class="sec">Products</div><div class="card">'+(sh.products||[]).map(function(p){ var sent=Math.min(p.cartons,dm[sh.id+'|'+p.name]||0), pend=p.cartons-sent; return '<div class="prod"><div style="flex:1"><div class="pn">'+esc(p.name)+'</div><div class="pb">'+p.cartons+' total · <b style="color:var(--green-d)">'+sent+' sent</b>'+(pend>0?(' · <b style="color:var(--amber)">'+pend+' waiting</b>'):'')+'</div></div><div style="font-size:16px;font-weight:900;color:'+(pend>0?'var(--amber)':'var(--green-d)')+'">'+(pend>0?pend:'✓')+'</div></div>'; }).join('')+'</div>';
-  var loads=REG.loads.filter(function(ld){return (ld.lines||[]).some(function(l){return l.shipmentId===sh.id;});});
+  var prods=(sh.products||[]).length?('<div class="sec">Products</div><div class="card">'+(sh.products||[]).map(function(p){ var sent=Math.min(p.cartons,dm[sh.id+'|'+p.name]||0), pend=p.cartons-sent; return '<div class="prod"><div style="flex:1"><div class="pn">'+esc(p.name)+'</div><div class="pb">'+p.cartons+' total · <b style="color:var(--green-d)">'+sent+' sent</b>'+(pend>0?(' · <b style="color:var(--amber)">'+pend+' waiting</b>'):'')+'</div></div><div style="font-size:16px;font-weight:900;color:'+(pend>0?'var(--amber)':'var(--green-d)')+'">'+(pend>0?pend:'✓')+'</div></div>'; }).join('')+'</div>'):'';
+  var dbm=dispatchedBagMap();
+  var bagsHtml=(sh.bags||[]).length?('<div class="sec">Big bags</div><div class="card">'+(sh.bags||[]).map(function(bag){ var pend=shipBagPending(bag,dbm), sent=(Number(bag.count)||0)-pend; return '<div class="prod"><div style="flex:1"><div class="pn">🛍️ '+esc(bagLabel(bag))+' × '+bag.count+'</div><div class="pb">'+bagSummary(bag)+' · <b style="color:var(--green-d)">'+sent+' sent</b>'+(pend>0?(' · <b style="color:var(--amber)">'+pend+' waiting</b>'):'')+'</div></div><div style="font-size:16px;font-weight:900;color:'+(pend>0?'var(--amber)':'var(--green-d)')+'">'+(pend>0?pend:'✓')+'</div></div>'; }).join('')+'</div>'):'';
+  var loads=REG.loads.filter(function(ld){return (ld.lines||[]).some(function(l){return l.shipmentId===sh.id;}) || (ld.baglines||[]).some(function(b){return b.shipmentId===sh.id;});});
   var lc=loads.length?('<div class="sec">On buses</div><div class="card">'+loads.map(loadRow).join('')+'</div>'):'';
-  return head+prods+lc+'<div style="padding:8px 14px 16px"><button class="btn ghost" style="color:var(--muted)" onclick="delShip('+jq(sh.id)+')">Delete shipment</button></div>';
+  return head+prods+bagsHtml+lc+'<div style="padding:8px 14px 16px"><button class="btn ghost" style="color:var(--muted)" onclick="delShip('+jq(sh.id)+')">Delete shipment</button></div>';
 }
-function delShip(id){ var used=REG.loads.some(function(l){return (l.lines||[]).some(function(x){return x.shipmentId===id;});}); if(used){toast('Cartons already dispatched — delete those manifests first');return;} if(!confirm('Delete this shipment?'))return; var sh=shipById(id); if(sh)tombstone(sh.uid); REG.shipments=REG.shipments.filter(function(s){return s.id!==id;}); markDirty(); back(); toast('Shipment deleted'); }
+function delShip(id){ var used=REG.loads.some(function(l){return (l.lines||[]).some(function(x){return x.shipmentId===id;})||(l.baglines||[]).some(function(x){return x.shipmentId===id;});}); if(used){toast('Cartons already dispatched — delete those manifests first');return;} if(!confirm('Delete this shipment?'))return; var sh=shipById(id); if(sh)tombstone(sh.uid); REG.shipments=REG.shipments.filter(function(s){return s.id!==id;}); markDirty(); back(); toast('Shipment deleted'); }
 
 /* ---- DASHBOARD ---- */
 function viewDash(){
@@ -482,7 +536,7 @@ function val(id){ var e=document.getElementById(id); return e?String(e.value||''
 function setVal(id,v){ var e=document.getElementById(id); if(e)e.value=v; }
 
 /* ---- WhatsApp share ---- */
-function manifestText(ld){ var lines=['*Bus manifest — '+ld.company+' '+ld.bus+'*','('+ld.id+' · '+fmtDate(ld.date)+')','','Status: '+((STATUS[ld.status]||{}).l||ld.status),ld.eta?('ETA: '+ld.eta):'', '']; (ld.lines||[]).forEach(function(l){ lines.push('• '+l.name+' — '+l.cartons); }); lines.push(''); lines.push('*Total: '+loadTotal(ld)+' cartons*'); return lines.filter(function(x){return x!=='' || true;}).join('\n'); }
+function manifestText(ld){ var lines=['*Bus manifest — '+ld.company+' '+ld.bus+'*','('+ld.id+' · '+fmtDate(ld.date)+')','','Status: '+((STATUS[ld.status]||{}).l||ld.status),ld.eta?('ETA: '+ld.eta):'', '']; (ld.lines||[]).forEach(function(l){ lines.push('• '+l.name+' — '+l.cartons); }); (ld.baglines||[]).forEach(function(bl){ lines.push('🛍️ '+(bl.label||'Bag')+' × '+bl.count+' ('+(bl.contents||[]).map(function(c){return c.name+' '+c.qty;}).join(', ')+')'); }); lines.push(''); lines.push('*Total: '+loadTotal(ld)+' cartons*'); return lines.join('\n'); }
 function shareManifest(id){ var ld=loadById(id); if(!ld)return; shareText(manifestText(ld)); }
 function dashText(){ var l=['*Transport status — '+fmtDate(todayISO())+'*','','📥 Received (Kampala): '+totalIntake(),'📦 Waiting to dispatch: '+waitingTotal(),'🅿️ At bus park: '+cartonsByStatus('park'),'🚌 In transit: '+cartonsByStatus('transit'),'📍 Arrived Juba: '+cartonsByStatus('arrived'),'🏬 In Juba warehouse: '+cartonsByStatus('received')]; var lost=cartonsByStatus('lost'); if(lost)l.push('⚠️ Lost/disputed: '+lost); var d=delayedLoads(24).length; if(d)l.push('⏱ Delayed >24h: '+d+' shipments'); return l.join('\n'); }
 function shareDash(){ shareText(dashText()); }
