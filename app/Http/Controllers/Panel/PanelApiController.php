@@ -3922,8 +3922,11 @@ class PanelApiController extends Controller
                    : (in_array(strtoupper($curIn), ['USD', 'UGX', 'SSP'], true) ? strtoupper($curIn) : $baseCur));
         $payRate   = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($payCur);
         if ($payRate <= 0) $payRate = 1;
-        // amount expressed in the order's base currency, for the order's own paid/balance tracking
-        $amountBase = ($payCur === $baseCur) ? $amount : \App\Models\OrderCost::toUsd($amount, $payRate);
+        // The order tracks total/amount_paid/balanceDue in its OWN transaction currency (e.g. a
+        // panel order is UGX, a storefront order is USD). Express the payment in that same currency
+        // before adding it to amount_paid, or a $90 USD payment credits only "90" of a UGX order.
+        $orderCur         = \App\Services\Money\SalesBaseCurrency::txnCurrency($order, $t);
+        $amountInOrderCur = \App\Services\Money\Fx::forTenant($t)->convert($amount, $payCur, $orderCur);
 
         $payUnify = (bool) $t->setting('pay_unify', false);
 
@@ -3945,7 +3948,7 @@ class PanelApiController extends Controller
             ]);
         }
 
-        $order->amount_paid = round((float) $order->amount_paid + $amountBase, 2);
+        $order->amount_paid = round((float) $order->amount_paid + $amountInOrderCur, 2);
         $order->save();
 
         // E4.4 — dual-write into the ONE payment ledger (CustomerPayment) so this cashbook payment is
@@ -3980,10 +3983,11 @@ class PanelApiController extends Controller
         // Receipt to the customer.
         $sent = false;
         if ($notify && $order->customer_phone) {
-            $amt = number_format($amount, $payCur === 'USD' ? 2 : 0);
+            $amt     = number_format($amount, $payCur === 'USD' ? 2 : 0);
+            $balBase = \App\Services\Money\Fx::forTenant($t)->convert($balance, $orderCur, $baseCur);
             $txt = $state === 'paid'
                 ? "✅ Payment received: {$payCur} {$amt} for order *{$order->order_no}*. Paid in full — thank you! 🛍"
-                : "✅ Payment received: {$payCur} {$amt} for order *{$order->order_no}*. Balance left: *{$baseCur} " . number_format($balance, 2) . "*.";
+                : "✅ Payment received: {$payCur} {$amt} for order *{$order->order_no}*. Balance left: *{$baseCur} " . number_format($balBase, 2) . "*.";
             try {
                 $wa->forTenant($t)->sendText($t->whatsapp_instance, $order->customer_phone, $txt);
                 MessageLog::record($t->id, $order->customer_phone, $t->whatsapp_instance, 'out', 'system', $txt);
