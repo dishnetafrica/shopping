@@ -1,31 +1,22 @@
-# CloudBSS — Hero UX fix (default = main, hero merchandises)
+# CloudBSS — Compact hero banner (Blinkit-style)
 
-Two fixes from the live screenshot feedback. Single file:
-`resources/storefront/shop.html`. No backend/config change; works with your
-current saved config.
+The hero was too tall and dominated the screen. It's now a compact promotional
+banner so products sit near the fold. Single file: `resources/storefront/shop.html`.
+No backend/config change.
 
-## 1. The Default collection is now the MAIN (first) card
-Previously "Default for new visitors" only picked which hero opened — the card
-stayed wherever it sat in the list (so Wholesale showed 5th). Now the default
-collection **automatically leads the selector row**. So setting Default =
-Wholesale makes Wholesale the first, highlighted card — no manual reordering.
-It stays stable (the default is a fixed setting; the row doesn't reshuffle as
-visitors click around).
+## What changed
+- **Banner height roughly halved.** Desktop hero is now ~232px (was ~450);
+  mobile ~180px (was ~230). Padding, headline size, bullet spacing and the
+  featured-product cards were all tightened to match — a short, wide promo strip,
+  not a full-height hero.
+- Text is now vertically centered in the shorter band; the featured products
+  still float on the right (desktop) and fit within the compact height.
+- Everything else (default-leads-first, featured products, auto-scroll, scrim)
+  is unchanged.
 
-→ Effect on your live site: since your Default is already Wholesale, deploying
-this makes Wholesale the first card immediately. (To also rename it "Wholesale
-Deals", edit the label in v3 → Shop for Every Need, or Load starter template.)
+Net effect: the collection selector + a compact banner + the best-sellers row all
+fit near the top, like Blinkit/quick-commerce — the banner promotes, the products
+are right there.
 
-## 2. The hero merchandises instead of covering the screen
-The big empty banner was the problem — a first-time visitor saw a large coloured
-block with no product. The hero now shows **3 featured products from the
-collection** floating on the right (desktop), each tappable to the product. So
-the hero communicates what's inside even before you upload a hero photo, and it
-no longer reads as an empty space. When you do add a hero lifestyle photo, the
-product cards sit nicely over it. Featured products come from the collection's
-best-sellers automatically — no setup.
-
-(Mobile is unchanged — the best-sellers rail already sits right under the hero.)
-
-Verified: shop.html JS compiles; Playwright at 1440px — the Default collection
-leads the row and is highlighted; the hero shows 3 featured products; no errors.
+Verified: shop.html JS compiles; Playwright — desktop hero measures 232px,
+mobile 181px, featured products present on desktop; no errors.

@@ -925,20 +925,20 @@ button{ -webkit-tap-highlight-color:transparent }
 .bizpill.on small{color:#0b7a3b;font-weight:800}
 .bizhero{margin:0 12px;border-radius:16px;overflow:hidden;position:relative}
 .biztrack{display:flex;transition:transform .45s cubic-bezier(.4,0,.2,1)}
-.bizslide{flex:0 0 100%;min-height:230px;position:relative;color:#fff;background-size:cover;background-position:center;background-color:#123a2a}
+.bizslide{flex:0 0 100%;min-height:170px;position:relative;color:#fff;background-size:cover;background-position:center;background-color:#123a2a}
 /* Robust scrim: darkens the left (desktop text) AND the bottom (mobile text) so the headline
    stays readable over ANY uploaded photo — bright or dark, subject anywhere. No composition rules. */
 .bizslide:after{content:"";position:absolute;inset:0;background:
   linear-gradient(105deg,rgba(0,0,0,.74) 0%,rgba(0,0,0,.58) 34%,rgba(0,0,0,.24) 62%,rgba(0,0,0,.06) 100%),
   linear-gradient(0deg,rgba(0,0,0,.55) 0%,rgba(0,0,0,.12) 42%,rgba(0,0,0,0) 68%)}
-.bizslide .bztxt{position:relative;z-index:1;padding:18px;min-height:230px;display:flex;flex-direction:column;justify-content:flex-end;text-shadow:0 1px 10px rgba(0,0,0,.4)}
-.bizslide .kick{align-self:flex-start;background:rgba(255,255,255,.9);color:#172029;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:4px 10px;border-radius:7px;margin-bottom:10px}
-.bizslide h2{font-size:23px;line-height:1.14;letter-spacing:-.02em;margin:0;color:#fff}
+.bizslide .bztxt{position:relative;z-index:1;padding:15px 16px;min-height:170px;display:flex;flex-direction:column;justify-content:center;text-shadow:0 1px 10px rgba(0,0,0,.4)}
+.bizslide .kick{align-self:flex-start;background:rgba(255,255,255,.9);color:#172029;font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:3px 9px;border-radius:6px;margin-bottom:7px}
+.bizslide h2{font-size:20px;line-height:1.12;letter-spacing:-.02em;margin:0;color:#fff}
 .bizslide h2 b{color:#f4b400;font-weight:800}
-.bizslide ul{list-style:none;padding:0;margin:11px 0 14px}
-.bizslide ul li{font-size:12px;margin:5px 0;display:flex;align-items:center;gap:7px;color:#eef4ee}
+.bizslide ul{list-style:none;padding:0;margin:8px 0 11px}
+.bizslide ul li{font-size:11.5px;margin:3px 0;display:flex;align-items:center;gap:7px;color:#eef4ee}
 .bizslide ul li:before{content:"✓";color:#7ee6a6;font-weight:900}
-.bizslide .cta{align-self:flex-start;background:#12934a;color:#fff;font-weight:800;font-size:13px;padding:11px 18px;border-radius:11px;border:0;display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.bizslide .cta{align-self:flex-start;background:#12934a;color:#fff;font-weight:800;font-size:12.5px;padding:9px 16px;border-radius:10px;border:0;display:inline-flex;align-items:center;gap:8px;cursor:pointer}
 .bizslide .cta.gold{background:#f4b400;color:#3a2c00}
 .bizarw{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.92);border:0;align-items:center;justify-content:center;cursor:pointer;z-index:5;font-size:16px;color:#172029;display:none;box-shadow:0 3px 10px rgba(0,0,0,.2)}
 .bizhero:hover .bizarw{display:flex}
@@ -979,21 +979,21 @@ button{ -webkit-tap-highlight-color:transparent }
 /* Featured products floating on the right of the hero (desktop only) — merchandises the collection. */
 .bizfeat{display:none}
 @media(min-width:1180px){
-  .bizfeat{display:flex;position:absolute;right:34px;top:50%;transform:translateY(-50%);gap:12px;z-index:2}
-  .bizfeat .fp{width:132px;background:rgba(255,255,255,.97);border-radius:13px;padding:9px;box-shadow:0 12px 28px rgba(0,0,0,.24);cursor:pointer;transition:.15s}
+  .bizfeat{display:flex;position:absolute;right:26px;top:50%;transform:translateY(-50%);gap:11px;z-index:2}
+  .bizfeat .fp{width:112px;background:rgba(255,255,255,.97);border-radius:12px;padding:8px;box-shadow:0 10px 24px rgba(0,0,0,.24);cursor:pointer;transition:.15s}
   .bizfeat .fp:hover{transform:translateY(-3px)}
-  .bizfeat .fp .im{height:84px;border-radius:9px;background:#eef2f5 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#9aa7b5;margin-bottom:7px}
-  .bizfeat .fp .im svg{width:34px;height:34px}
-  .bizfeat .fp .nm{font-size:12px;font-weight:700;color:#172029;line-height:1.2;height:29px;overflow:hidden}
-  .bizfeat .fp .pr{font-size:13.5px;font-weight:800;color:#0b7a3b;margin-top:3px}
+  .bizfeat .fp .im{height:60px;border-radius:8px;background:#eef2f5 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#9aa7b5;margin-bottom:6px}
+  .bizfeat .fp .im svg{width:28px;height:28px}
+  .bizfeat .fp .nm{font-size:11px;font-weight:700;color:#172029;line-height:1.18;height:26px;overflow:hidden}
+  .bizfeat .fp .pr{font-size:12.5px;font-weight:800;color:#0b7a3b;margin-top:2px}
 }
 @media(min-width:1024px){
   .bizhero{margin:0}
-  .bizslide{min-height:330px}
-  .bizslide .bztxt{padding:44px;min-height:330px;max-width:620px}
-  .bizslide h2{font-size:34px;max-width:560px}
-  .bizslide .kick{font-size:11px}
-  .bizslide ul li{font-size:14px}
+  .bizslide{min-height:232px}
+  .bizslide .bztxt{padding:26px 30px;min-height:232px;max-width:560px}
+  .bizslide h2{font-size:26px;max-width:480px}
+  .bizslide .kick{font-size:10.5px}
+  .bizslide ul li{font-size:12.5px}
   .bizsel{padding:12px 0}
   .bizcollrow{padding-left:0;padding-right:0}
   .bizdots{position:absolute;bottom:16px;left:44px;padding:0;z-index:2}
