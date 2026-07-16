@@ -5300,6 +5300,59 @@ class PanelApiController extends Controller
      * denormalised paid/balance fields to match the ledger, fixing drift left by older payment paths
      * (e.g. an order that stayed "Paid $450" from when pay_unify was off). Owner-only. Reports what changed.
      */
+    /**
+     * POST /papi/fix-cash-rates[?commit=1] — repair legacy cashbook rows whose stored rate_to_usd does NOT
+     * reconcile with the dollars actually recorded (native_amount / rate_to_usd != usd_amount). These are
+     * pre-fix currency-conversion legs where the old recorder stamped the SYSTEM DEFAULT rate on the target
+     * leg (e.g. an SSP receipt tagged 5,180 or 8,000 SSP/$ instead of the real deal rate the user typed),
+     * while usd_amount correctly held the real dollars. The true rate of that transaction IS
+     * native_amount / usd_amount, so we set rate_to_usd to that — after which native ÷ rate == usd_amount
+     * on every row and every cashbook view (position, cash-by-person, entries, exports, FX reports) agrees.
+     * usd_amount and native_amount are NEVER changed; only the derived rate is corrected. DRY RUN unless
+     * ?commit=1 — the dry run lists every row it would touch, old rate → new rate. Owner-only.
+     */
+    public function fixCashRates(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $commit = filter_var($r->query('commit', $r->input('commit', false)), FILTER_VALIDATE_BOOLEAN);
+        $tol = 0.02;
+
+        $rows = []; $fixed = 0;
+        $q = \App\Models\OrderCost::where('tenant_id', $t->id)
+            ->whereNotIn('status', ['void', 'rejected'])
+            ->where('usd_amount', '>', 0)
+            ->where('native_amount', '>', 0)
+            ->orderBy('created_at');
+        foreach ($q->get() as $c) {
+            $native = (float) $c->native_amount;
+            $usd    = (float) $c->usd_amount;
+            $rate   = (float) $c->rate_to_usd;
+            $impliedUsd = $rate > 0 ? $native / $rate : null;
+            // Skip USD rows (rate is 1 by definition) and rows already consistent.
+            if (strtoupper((string) $c->currency) === 'USD') continue;
+            if ($impliedUsd !== null && abs($impliedUsd - $usd) < $tol) continue;
+            $newRate = round($native / $usd, 6);
+            $rows[] = [
+                'id' => (int) $c->id, 'when' => optional($c->created_at)->format('Y-m-d'),
+                'currency' => (string) $c->currency, 'stage' => (string) $c->stage, 'category' => (string) $c->category,
+                'native' => $native, 'usd_amount' => $usd,
+                'old_rate' => $rate, 'new_rate' => $newRate,
+                'old_usd_via_rate' => $impliedUsd !== null ? round($impliedUsd, 2) : null,
+                'note' => (string) $c->note,
+                'action' => $commit ? 'fixed' : 'would fix',
+            ];
+            if ($commit) { $c->rate_to_usd = $newRate; $c->save(); $fixed++; }
+        }
+
+        return response()->json([
+            'ok' => true, 'committed' => $commit,
+            'rows_off' => count($rows), 'rows_fixed' => $commit ? $fixed : 0,
+            'rows' => array_slice($rows, 0, 200),
+        ]);
+    }
+
     public function resyncBalances(Request $r)
     {
         if ($g = $this->ownerGate($r)) return $g;

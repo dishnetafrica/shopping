@@ -52,7 +52,14 @@ final class CashbookCapability implements ProcessCapability
         $posRows = $scoped(OrderCost::where('tenant_id', $t)
             ->where(fn ($w) => $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status'))
             ->whereNotIn('status', ['void', 'rejected']))
-            ->select('currency', 'stage', 'holder', DB::raw('SUM(native_amount) as native'), DB::raw('SUM(native_amount / NULLIF(rate_to_usd,0)) as usd'))
+            // USD value = the dated dollars actually recorded on the row (usd_amount), the SAME basis the
+            // Entries list and Company-account running balance already use — so cash-by-person, the combined
+            // position and the entries can never disagree. Fall back to native ÷ rate only for legacy rows
+            // that never stored a usd_amount. (Re-deriving native ÷ rate here mis-valued currency whenever a
+            // legacy conversion leg carried a stale default rate, e.g. SSP stamped at 5,180/8,000 instead of
+            // the real deal rate — the "SSP counted at the wrong rate" bug.)
+            ->select('currency', 'stage', 'holder', DB::raw('SUM(native_amount) as native'),
+                DB::raw('SUM(COALESCE(NULLIF(usd_amount,0), native_amount / NULLIF(rate_to_usd,0), 0)) as usd'))
             ->groupBy('currency', 'stage', 'holder')->get();
 
         $pos = ['USD' => ['native' => 0.0, 'usd' => 0.0], 'UGX' => ['native' => 0.0, 'usd' => 0.0], 'SSP' => ['native' => 0.0, 'usd' => 0.0]];
