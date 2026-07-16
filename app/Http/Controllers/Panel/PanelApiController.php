@@ -5463,12 +5463,17 @@ class PanelApiController extends Controller
             ->orderBy('id')->get();
         $unbilled = $delivered->filter(fn ($o) => ! isset($invoicedOrderIds[$o->id]));
 
+        // Optional exclusions (e.g. internal stock transfers to a staff holder that must NOT be billed).
+        $exclude = array_filter(array_map('trim', explode(',', (string) ($r->query('exclude', $r->input('exclude', ''))))));
+        $exclSet = array_flip(array_map('strtoupper', $exclude));
+
         $rows = []; $issued = 0;
         $svc = app(\App\Services\Invoicing\InvoiceService::class);
         foreach ($unbilled as $o) {
+            $skip = isset($exclSet[strtoupper((string) $o->order_no)]);
             $rows[] = ['order' => (string) $o->order_no, 'customer' => (string) ($o->customer_name ?: $o->customer_phone),
-                'total' => (float) $o->total, 'status' => (string) $o->status];
-            if ($commit) { try { $svc->issueForOrder($t, $o, 'backfill'); $issued++; } catch (\Throwable $e) {} }
+                'total' => (float) $o->total, 'status' => (string) $o->status, 'action' => $skip ? 'excluded' : ($commit ? 'invoiced' : 'would invoice')];
+            if ($commit && ! $skip) { try { $svc->issueForOrder($t, $o, 'backfill'); $issued++; } catch (\Throwable $e) {} }
         }
 
         return response()->json([
