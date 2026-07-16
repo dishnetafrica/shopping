@@ -5295,6 +5295,57 @@ class PanelApiController extends Controller
     }
 
     /**
+     * POST /papi/resync-balances — recompute every order's amount_paid and every invoice's balance
+     * from the ONE payment ledger (settlement CustomerPayments). Idempotent + safe: it only rewrites
+     * denormalised paid/balance fields to match the ledger, fixing drift left by older payment paths
+     * (e.g. an order that stayed "Paid $450" from when pay_unify was off). Owner-only. Reports what changed.
+     */
+    public function resyncBalances(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+
+        $fx   = \App\Services\Money\Fx::forTenant($t);
+        $base = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);
+
+        $orderChanges = [];
+        foreach (\App\Models\Order::where('tenant_id', $t->id)->get() as $o) {
+            $oc = \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t);
+            $paid = 0.0;
+            foreach (\App\Models\CustomerPayment::where('tenant_id', $t->id)->where('order_no', $o->order_no)
+                        ->where('kind', 'settlement')->where('applied', true)->get() as $p) {
+                $paid += strtoupper((string) $p->currency) === $oc ? (float) $p->amount
+                       : ($oc === $base ? (float) $p->usd_amount : (float) $p->usd_amount * $fx->ratePerUsd($oc));
+            }
+            $paid = round($paid, 2);
+            if (abs($paid - (float) $o->amount_paid) >= 0.01) {
+                $orderChanges[] = ['order' => (string) $o->order_no, 'was' => (float) $o->amount_paid, 'now' => $paid];
+                $o->amount_paid = $paid; $o->save();
+            }
+        }
+
+        $invChanges = [];
+        $svc = app(\App\Services\Invoicing\InvoiceService::class);
+        foreach (\App\Models\Invoice::where('tenant_id', $t->id)->where('status', '!=', 'void')->get() as $inv) {
+            $before = (float) $inv->balance;
+            try { $svc->syncPaidFromPayments($inv); $inv->refresh(); } catch (\Throwable $e) { continue; }
+            if (abs((float) $inv->balance - $before) >= 0.01) {
+                $invChanges[] = ['invoice' => (string) $inv->invoice_no, 'was' => $before,
+                    'now' => (float) $inv->balance, 'status' => (string) $inv->status];
+            }
+        }
+
+        return response()->json([
+            'ok' => true,
+            'orders_resynced'   => count($orderChanges),
+            'invoices_resynced' => count($invChanges),
+            'order_changes'     => array_slice($orderChanges, 0, 50),
+            'invoice_changes'   => array_slice($invChanges, 0, 50),
+        ]);
+    }
+
+    /**
      * Platform diagnostics (GET /papi/diagnostics) — build id, opcache/deploy staleness,
      * and core service checks. The opcache "any_stale" flag answers "is my deploy actually live?"
      */

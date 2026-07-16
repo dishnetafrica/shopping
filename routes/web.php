@@ -309,6 +309,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('health',       [PanelApiController::class, 'health']);
         Route::get('platform',                 [PanelApiController::class, 'platformDiag']);
         Route::get('platform/errors',          [PanelApiController::class, 'platformErrors']);
+        Route::match(['get', 'post'], 'resync-balances', [PanelApiController::class, 'resyncBalances']);
         Route::match(['get', 'post'], 'platform/opcache-reset', [PanelApiController::class, 'opcacheReset']);
 
         // CRM — manual lead management (Build 86.5)
