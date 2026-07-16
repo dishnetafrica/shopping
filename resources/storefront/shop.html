@@ -419,7 +419,7 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; let
 .searchbar input::placeholder{ color:#9AA1AB }
 
 /* ---- Section titles ---- */
-.section-title{ font-size:16px; font-weight:800; letter-spacing:-.02em; padding:16px 14px 9px }
+.section-title{ font-size:16px; font-weight:800; letter-spacing:-.02em; padding:11px 14px 7px }
 .sgroup{ letter-spacing:.06em }
 
 /* ---- Category tiles ---- */
@@ -948,22 +948,24 @@ button{ -webkit-tap-highlight-color:transparent }
 .bizdots i.on{background:#0b7a3b;width:20px}
 .bizcollrow{display:flex;gap:11px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 12px 10px}
 .bizcollrow::-webkit-scrollbar{height:0}
-.bizcoll{flex:0 0 128px;width:128px;cursor:pointer}
-.bizcoll .im{height:92px;border-radius:12px;background:linear-gradient(135deg,#f2f6fa,#e6eef6);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;color:#aeb9c6;margin-bottom:7px}
-.bizcoll .im svg{width:38px;height:38px}
-.bizcoll b{font-size:12.5px;line-height:1.2;display:block}
+.bizcoll{flex:0 0 auto;min-width:158px;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:11px;padding:8px 11px;cursor:pointer;transition:.15s}
+.bizcoll:hover{border-color:#c7d3cb;box-shadow:0 4px 12px rgba(16,24,40,.09)}
+.bizcoll .im{width:40px;height:40px;flex:none;border-radius:10px;background:#eef2f5;background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;color:#8aa3bd;margin:0}
+.bizcoll .im svg{width:20px;height:20px}
+.bizcoll .ct b{font-size:13px;line-height:1.15;display:block;color:var(--ink)}
+.bizcoll .ct span{font-size:11.5px;color:var(--muted)}
 /* Shop for Every Need — clean navigation selector (icon + title + subtitle only).
    The merchandising happens in the hero below; the selector just answers
    "what are you shopping for?". Minimal, premium, easy to scan. */
 .needrow{display:flex;gap:11px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 12px 12px}
 .needrow::-webkit-scrollbar{height:0}
-.needcard{flex:0 0 auto;min-width:212px;display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px 15px;cursor:pointer;transition:.15s;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.needcard{flex:0 0 auto;min-width:186px;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px 12px;cursor:pointer;transition:.15s;box-shadow:0 1px 2px rgba(16,24,40,.04)}
 .needcard:hover{border-color:#c7d3cb;box-shadow:0 4px 12px rgba(16,24,40,.09)}
-.needcard .nic{width:44px;height:44px;border-radius:12px;background:#eef2f5;display:flex;align-items:center;justify-content:center;color:#5b6b7b;flex:none}
-.needcard .nic svg{width:22px;height:22px}
+.needcard .nic{width:34px;height:34px;border-radius:9px;background:#eef2f5;display:flex;align-items:center;justify-content:center;color:#5b6b7b;flex:none}
+.needcard .nic svg{width:18px;height:18px}
 .needcard .ntx{min-width:0}
-.needcard .ntx b{font-size:15px;line-height:1.16;display:block;color:var(--ink)}
-.needcard .ntx small{font-size:12px;color:var(--muted);display:block;margin-top:2px;line-height:1.25}
+.needcard .ntx b{font-size:13.5px;line-height:1.14;display:block;color:var(--ink)}
+.needcard .ntx small{font-size:11px;color:var(--muted);display:block;margin-top:1px;line-height:1.2}
 .needcard.on{background:#0b7a3b;border-color:#0b7a3b;box-shadow:0 6px 16px rgba(11,122,59,.28)}
 .needcard.on .nic{background:rgba(255,255,255,.2);color:#fff}
 .needcard.on .ntx b{color:#fff}
@@ -1338,19 +1340,20 @@ function businessBanners(){
   var multi=slides.length>1;
   var dots=multi?('<div class="bizdots" id="bizDots">'+slides.map(function(_,i){return '<i class="'+(i===_bizSlide?'on':'')+'" onclick="bizGo('+i+')"></i>';}).join('')+'</div>'):'';
   var arrows=multi?'<button class="bizarw l" onclick="bizPrev()" aria-label="Previous">‹</button><button class="bizarw r" onclick="bizNext()" aria-label="Next">›</button>':'';
-  // Featured products float on the right of the hero (desktop) so it merchandises the collection
-  // instead of being an empty banner — even before a hero photo is uploaded. Stays put while slides scroll.
-  var hf=bizProducts(biz).filter(sellableRail).slice().sort(function(a,b){return (b.popularity||0)-(a.popularity||0);}).slice(0,3);
-  var featPanel=hf.length?('<div class="bizfeat">'+hf.map(function(p){
-    var im=p.image?('background-image:url(\''+encodeURI(p.image)+'\')'):'';
-    return '<div class="fp" onclick="goDetail('+jk(String(p.id))+')"><div class="im" style="'+im+'">'+(p.image?'':bizIcon('shop'))+'</div><div class="nm">'+esc(p.name)+'</div><div class="pr">'+(p.poa?'On request':ugx(p.price))+'</div></div>';
-  }).join('')+'</div>'):'';
-  var hero='<div class="bizhero" id="bizHero"><div class="biztrack" id="bizTrack" style="transform:translateX(-'+(_bizSlide*100)+'%)">'+track+'</div>'+arrows+featPanel+'</div>'+dots;
+  // Clean banner: message + CTA only. No product cards inside the banner (the real products live in
+  // the "Best sellers" row right below it).
+  var hero='<div class="bizhero" id="bizHero"><div class="biztrack" id="bizTrack" style="transform:translateX(-'+(_bizSlide*100)+'%)">'+track+'</div>'+arrows+'</div>'+dots;
   var coll='';
   if(biz.collections&&biz.collections.length){
+    var collCount=function(c){ var cat=(c.cat||'').toLowerCase(); var kws=(c.keywords||'').toLowerCase().split(',').map(function(s){return s.trim();}).filter(Boolean);
+      return PRODUCTS.filter(function(p){ if(!sellableRail(p))return false;
+        if(cat&&String(p.category||'').toLowerCase()===cat)return true;
+        if(kws.length){var hay=(p.name+' '+p.keywords+' '+p.category).toLowerCase();for(var i=0;i<kws.length;i++){if(hay.indexOf(kws[i])>=0)return true;}}
+        return false; }).length; };
     var cc=biz.collections.map(function(c){
       var im=c.image_url?('<div class="im" style="background-image:url(\''+encodeURI(c.image_url)+'\')"></div>'):('<div class="im">'+bizIcon(c.icon||'shop')+'</div>');
-      return '<div class="bizcoll" onclick="bizColl('+jk(biz.id)+','+jk(c.cat||'')+','+jk(c.keywords||'')+')">'+im+'<b>'+esc(c.label)+'</b></div>';
+      var n=collCount(c);
+      return '<div class="bizcoll" onclick="bizColl('+jk(biz.id)+','+jk(c.cat||'')+','+jk(c.keywords||'')+')">'+im+'<div class="ct"><b>'+esc(c.label)+'</b><span>'+n+' product'+(n===1?'':'s')+'</span></div></div>';
     }).join('');
     coll='<div class="section-title">Popular collections for '+esc(biz.label)+'</div><div class="bizcollrow">'+cc+'</div>';
   }
@@ -1360,7 +1363,8 @@ function businessBanners(){
   var best=items.length>=3?railHtml('Best sellers for '+biz.label, items):'';
   var kitsHtml=kitsFor(biz.id).map(kitCard).filter(Boolean).join('');
   var kitsBlock=kitsHtml?('<div class="section-title">Ready-made kits — add to your quote in one tap</div><div class="kitrow">'+kitsHtml+'</div>'):'';
-  return '<div class="bizwrap">'+selBlock+hero+coll+best+kitsBlock+'</div>';
+  // Product-first: best-sellers (real products) sit directly under the banner, before collections.
+  return '<div class="bizwrap">'+selBlock+hero+best+coll+kitsBlock+'</div>';
 }
 function pickBiz(id){ BIZSEL=id; rememberBiz(id); bumpBizFreq(id); _bizSlide=0; render(); }
 /* Ready-made Kits: a curated bundle a customer drops into a quotation in one tap. Products are
