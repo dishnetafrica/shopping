@@ -427,9 +427,15 @@ body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; let
 .cat .nm{ font-size:12px; font-weight:600; color:#374151 }
 
 /* ---- Product cards ---- */
-.pc{ border:1px solid #EEF0F3; border-radius:16px; box-shadow:var(--shadow-card); transition:box-shadow .2s ease }
+.pc{ border:1px solid #EEF0F3; border-radius:16px; box-shadow:var(--shadow-card); transition:box-shadow .2s ease, transform .16s ease; overflow:hidden }
+@media(hover:hover){ .pc:hover{ transform:translateY(-3px); box-shadow:0 12px 26px rgba(16,24,40,.13); border-color:#e2e7ec }
+  .pc:hover .img img{ transform:scale(1.04) } }
 .pc .img{ background:linear-gradient(180deg,#FBFCFD,#F2F4F7); border-bottom:0; transition:transform .12s ease }
+.pc .img img{ transition:transform .25s ease }
 .pc .img:active{ transform:scale(.98) }
+/* Brand line above the name — small, uppercase, muted (premium retail pattern). */
+.pc .pcbrand{ font-size:10px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:#8a97a5;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:-1px }
 .pc .bd{ padding:9px 10px 11px; gap:5px }
 .pc .nm{ font-size:12.5px; font-weight:600; color:#1F2937; letter-spacing:-.005em }
 .pc .prrow .pr,.pc .pr{ font-size:17px; font-weight:800; letter-spacing:-.02em }
@@ -1993,7 +1999,8 @@ function prodCard(p){
   var chipsHtml=chips.length?('<div class="chips">'+chips.map(function(c){return '<span class="chip">'+esc(c)+'</span>';}).join('')+'</div>'):'';
   var was=(p.oldPrice&&p.oldPrice>p.price)?('<span class="was">'+ugx(p.oldPrice)+'</span>'):'';
   var ctrl=oosOf(p)?('<button class="add" disabled>Out of stock</button>'):(hasMods?('<button class="add" onclick="customize('+jk(key)+')">Add</button>'):(inCart?('<div class="stp"><button onclick="dec('+jk(key)+')">−</button><span>'+inCart.qty+'</span><button onclick="inc('+jk(key)+')">+</button></div>'):('<button class="add" onclick="inc('+jk(key)+')">Add</button>')));
-  return '<div class="pc">'+img+'<div class="bd">'+chipsHtml+'<div class="nm"'+dopen+'>'+esc(p.name)+'</div>'+(p.desc?'<div class="dsc">'+esc(p.desc)+'</div>':'')+packLine(p)+'<div class="prrow"><span class="pr">'+ugx(p.price)+'</span>'+was+'</div>'+perPiece(p)+lowStockLine(p)+moqLine(p)+ctrl+'</div></div>';
+  var brandHtml=(p.brand&&String(p.brand).trim())?('<div class="pcbrand"'+dopen+'>'+esc(p.brand)+'</div>'):'';
+  return '<div class="pc">'+img+'<div class="bd">'+chipsHtml+brandHtml+'<div class="nm"'+dopen+'>'+esc(p.name)+'</div>'+(p.desc?'<div class="dsc">'+esc(p.desc)+'</div>':'')+packLine(p)+'<div class="prrow"><span class="pr">'+ugx(p.price)+'</span>'+was+'</div>'+perPiece(p)+lowStockLine(p)+moqLine(p)+ctrl+'</div></div>';
 }
 /* derive up to 3 spec chips from the product name + keywords (paper/tissue vernacular) */
 function specChipsFor(p){
