@@ -2765,6 +2765,32 @@ function prod(key){return PRODUCTS.find(function(p){return p.name===key;});}
 var SHOP_BASE=(SHOP.base!=null)?SHOP.base:location.pathname.replace(/\/+$/,'').replace(/\/(shop|product\/\d+)$/,'');
 var DETAIL_CACHE={}, CUR_DETAIL=null;
 function detailUrl(id){return SHOP_BASE+'/product/'+encodeURIComponent(id);}
+
+/* ============================================================================
+   ProductPriceService — SINGLE SOURCE OF TRUTH FOR PRICE
+   ----------------------------------------------------------------------------
+   The catalogue feed (PRODUCTS) is authoritative: it is what the listing,
+   search, collections, cart, checkout and WhatsApp summary all read, and it
+   carries the true price (derived from the cents field). The product-detail
+   endpoint (/product/:id) is a SEPARATE data source and has been observed to
+   return a different value for the same product (e.g. a rounded/base price like
+   $2.00 where the catalogue says $2.74). That divergence is the pricing bug.
+
+   Rule: NO screen reads a price from the detail endpoint (or any per-page copy)
+   for display or for adding to the cart. Every surface resolves price through
+   priceOf(); detail/related-product objects are reconciled to the catalogue
+   BEFORE they are shown or added. Same product => same price everywhere.
+   ============================================================================ */
+function _prodById(id){ if(id==null||id==='')return null; id=String(id); for(var i=0;i<PRODUCTS.length;i++){ if(String(PRODUCTS[i].id)===id) return PRODUCTS[i]; } return null; }
+function _prodByName(name){ if(!name)return null; var n=String(name).toLowerCase(); for(var i=0;i<PRODUCTS.length;i++){ if(String(PRODUCTS[i].name).toLowerCase()===n) return PRODUCTS[i]; } return null; }
+function catalogueProduct(ref){ if(ref&&typeof ref==='object') return _prodById(ref.id)||_prodByName(ref.name); return _prodById(ref)||_prodByName(ref); }
+// Authoritative price for a product ref (id | name | object). Falls back to the
+// object's own price ONLY when the item isn't in the catalogue at all.
+function priceOf(ref){ var c=catalogueProduct(ref); if(c && c.price>0) return c.price; if(ref&&typeof ref==='object' && ref.price>0) return ref.price; return 0; }
+function oldPriceOf(ref){ var c=catalogueProduct(ref); if(c) return c.oldPrice||0; if(ref&&typeof ref==='object') return ref.oldPrice||0; return 0; }
+// Align a detail/related-product object's price fields to the catalogue in place,
+// so anything built from it (display, stepper, add-to-cart) is guaranteed correct.
+function reconcilePrice(obj){ if(!obj)return obj; var c=catalogueProduct(obj); if(c && c.price>0){ obj.price=c.price; obj.oldPrice=c.oldPrice||0; obj.mrp=c.oldPrice||0; } return obj; }
 var USER_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.5 3.6-6 8-6s8 2.5 8 6"/></svg>';
 /* Circular icons for the "Why shop here?" rows (matches the quick-commerce storefront style).
    Icon is chosen from the row's title keywords, so it works for custom why_shop entries too. */
@@ -2834,12 +2860,14 @@ function recoRail(title,items){
   if(!items||!items.length)return '';
   var cards=items.map(function(it){
     var im=it.image?'<img alt="" src="'+esc(it.image)+'" loading="lazy" onerror="this.style.display=\'none\'">':'';
-    return '<div class="rcard" onclick="goDetail('+jk(it.id)+')"><div class="rimg">'+im+'</div><div class="rnm">'+esc(it.name)+'</div><div class="rpr">'+ugx(it.price)+'</div></div>';
+    return '<div class="rcard" onclick="goDetail('+jk(it.id)+')"><div class="rimg">'+im+'</div><div class="rnm">'+esc(it.name)+'</div><div class="rpr">'+ugx(priceOf(it))+'</div></div>';
   }).join('');
   return '<div class="drail"><div class="drailh">'+esc(title)+'</div><div class="rrow">'+cards+'</div></div>';
 }
 function renderDetail(d){
-  var p=d.product; CUR_DETAIL=p;
+  // Reconcile the detail endpoint's product to the catalogue price BEFORE anything
+  // is rendered or wired into the cart — this is what fixes the $2.00 vs $2.74 split.
+  var p=reconcilePrice(d.product); CUR_DETAIL=p;
   var imgs=(p.images&&p.images.length)?p.images:(p.image?[p.image]:[]);
   var main=imgs.length?'<img alt="" src="'+esc(imgs[0])+'" id="dmain" onerror="this.style.display=\'none\'">':'<div class="dnoimg">'+catIcon(p.category)+'</div>';
   var thumbs=imgs.length>1?'<div class="dthumbs">'+imgs.map(function(u,i){return '<div class="dth'+(i===0?' on':'')+'" onclick="dswap('+jk(u)+',this)"><img alt="" src="'+esc(u)+'" onerror="this.style.display=\'none\'"></div>';}).join('')+'</div>':'';
