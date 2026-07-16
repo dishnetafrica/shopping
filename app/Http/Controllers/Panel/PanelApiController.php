@@ -3962,7 +3962,7 @@ class PanelApiController extends Controller
     private function normStaffRole(string $role): string
     {
         $role = trim($role) ?: 'staff';
-        return in_array($role, ['owner', 'manager', 'product_staff', 'staff', 'purchaser', 'field', 'sales'], true) ? $role : 'staff';
+        return in_array($role, ['owner', 'manager', 'product_staff', 'staff', 'purchaser', 'field', 'sales', 'transport'], true) ? $role : 'staff';
     }
 
     /** Parse per-user menu override. Returns null (use role default) or an array of valid keys. */

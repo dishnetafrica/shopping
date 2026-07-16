@@ -38,7 +38,7 @@ final class CapabilityServiceProvider extends ServiceProvider
         \App\Models\Invoice::observe(\App\Observers\SalesBaseCurrencyObserver::class);
         \App\Models\Quotation::observe(\App\Observers\SalesBaseCurrencyObserver::class);
 
-        Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () {
+        Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware\ConfineTransportRole::class])->group(function () {
             // The new shell (SPA). Hash-routed, so one entry point serves every workspace.
             Route::get('/v3/{path?}', fn () => view('shell'))->where('path', '.*');
 

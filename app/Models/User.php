@@ -67,6 +67,9 @@ class User extends Authenticatable implements FilamentUser
             case 'cashier':       return ['dashboard', 'orders', 'customers', 'finance', 'cash'];
             // Marketing: Chats + Leads + Campaigns; reads Customers. No money, stock, purchasing, settings.
             case 'marketing':     return ['dashboard', 'customers', 'whatsapp', 'marketing'];
+            // Transport (bus-park operator): confined to the Transport Register only
+            // (see ConfineTransportRole middleware). No ERP menus.
+            case 'transport':     return ['dashboard'];
 
             // E2.2 — deny-by-default (Constitution R9). When the tenant opts into strict
             // permissions (setting perm_strict = true), an unknown/legacy role — e.g. the common
