@@ -2690,6 +2690,8 @@ class PanelApiController extends Controller
             'title'      => $str($in['title'] ?? '', 60),
             'autoscroll' => max(0, min(30, (int) ($in['autoscroll'] ?? 5))),
             'default'    => $str($in['default'] ?? '', 40),
+            // Curated "Current promotions" homepage rail — product names matched on the storefront.
+            'promotions' => $arrS(($in['promotions'] ?? []), 40, 200),
             'businesses' => $businesses,
         ];
 
@@ -2740,6 +2742,50 @@ class PanelApiController extends Controller
         $t->putSetting('kits', $kits);
         $this->catFlush($t);
         return response()->json(['ok' => true, 'kits' => $kits]);
+    }
+
+    /** Read the delivery config (branches + per-city free-delivery rules) for the v3 editor. */
+    public function deliveryGet(Request $r)
+    {
+        $t = $r->user()->tenant;
+        $d = $t->setting('delivery', []);
+        if (! is_array($d)) $d = [];
+        $rules = array_values(array_filter((array) ($d['free_rules'] ?? []), 'is_array'));
+        $branches = array_values(array_map(
+            fn ($b) => (string) ($b['name'] ?? ''),
+            array_filter((array) $t->setting('branches', []), 'is_array')
+        ));
+        return response()->json([
+            'ok'         => true,
+            'free_rules' => $rules,
+            'currency'   => (string) ($t->setting('currency', 'USD') ?: 'USD'),
+            'branches'   => $branches,
+        ]);
+    }
+
+    /** Save per-city free-delivery rules into settings.delivery.free_rules (other delivery fields preserved). */
+    public function deliverySave(Request $r)
+    {
+        $t  = $r->user()->tenant;
+        $in = $r->input('free_rules', []);
+        if (is_string($in)) { $in = json_decode($in, true); }
+        if (! is_array($in)) $in = [];
+
+        $rules = [];
+        foreach (array_slice($in, 0, 30) as $row) {
+            if (! is_array($row)) continue;
+            $city = mb_substr(trim((string) ($row['city'] ?? '')), 0, 80);
+            $over = round((float) ($row['free_over'] ?? 0), 2);
+            if ($city === '' || $over <= 0) continue;
+            $rules[] = ['city' => $city, 'free_over' => $over];
+        }
+
+        $d = $t->setting('delivery', []);
+        if (! is_array($d)) $d = [];
+        $d['free_rules'] = $rules;             // merge — preserves near/mid/far/out & km bands
+        $t->putSetting('delivery', $d);
+        $this->catFlush($t);
+        return response()->json(['ok' => true, 'free_rules' => $rules]);
     }
 
     /** Create an (initially empty) category so it shows as a tile before any product uses it. */

@@ -348,6 +348,10 @@ body{padding-bottom:calc(var(--nav-h) + 14px + var(--safe-b))}
 .freebar .ft{font-size:13px;font-weight:600;margin-bottom:7px}
 .freebar .fprog{height:7px;border-radius:99px;background:#e5efe8;overflow:hidden}
 .freebar .fprog>div{height:100%;background:var(--green);border-radius:99px;transition:width .4s}
+.freebar.done b{color:var(--green-d)}
+.freebar.tap{cursor:pointer}.freebar.tap .ft{margin-bottom:0}
+.freebar.tap b{color:var(--green-d)}
+.freetag{display:inline-block;background:#e7f5ec;color:#0a5c2e;border:1px solid #bfe6cd;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.03em;padding:2px 9px}
 .xsell{margin:14px 0 6px}
 .xsh{font-size:13px;font-weight:800;margin-bottom:8px}
 .xrow{display:flex;gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px}
@@ -1056,6 +1060,18 @@ button{ -webkit-tap-highlight-color:transparent }
 .sic.rec::after,.sqbtn.rec::after{content:"";position:absolute;inset:2px;border-radius:50%;box-shadow:0 0 0 0 rgba(192,57,43,.45);animation:micpulse 1.4s ease-out infinite}
 @keyframes micpulse{0%{box-shadow:0 0 0 0 rgba(192,57,43,.45)}70%{box-shadow:0 0 0 12px rgba(192,57,43,0)}100%{box-shadow:0 0 0 0 rgba(192,57,43,0)}}
 @media(prefers-reduced-motion:reduce){.svoicebar .eq span{animation:none;height:14px}.sic.rec::after,.sqbtn.rec::after{animation:none}}
+/* ---- Barcode / QR scanner overlay ---- */
+.scanov{position:fixed;inset:0;z-index:1200;background:#0b0f14;display:none;flex-direction:column}
+.scanov.show{display:flex}
+.scanov .scanhd{display:flex;align-items:center;gap:10px;padding:14px 14px;color:#fff;font-weight:800;font-size:15px}
+.scanov .scanx{width:38px;height:38px;border:0;border-radius:12px;background:rgba(255,255,255,.12);color:#fff;font-size:22px;cursor:pointer;display:grid;place-items:center}
+.scanov .scanstage{position:relative;flex:1;overflow:hidden;display:grid;place-items:center;background:#000}
+.scanov video{width:100%;height:100%;object-fit:cover}
+.scanov .scanbox{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:72%;max-width:340px;aspect-ratio:1.6/1;border:2px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 100vmax rgba(0,0,0,.45);overflow:hidden}
+.scanov .scanline{position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,transparent,#22c55e,transparent);animation:scanln 1.8s ease-in-out infinite}
+@keyframes scanln{0%{top:6%}50%{top:94%}100%{top:6%}}
+.scanov .scanhint{color:#dbe4ee;text-align:center;font-size:13.5px;padding:16px 20px 30px}
+@media(prefers-reduced-motion:reduce){.scanov .scanline{animation:none;top:50%}}
 </style>
 </head>
 <body>
@@ -1190,6 +1206,7 @@ var BRANCHES = (SHOP.branches && SHOP.branches.length)
   : [{name:(SHOP.city||'Our store'), lat:0.3476, lng:32.5825}];
 var DELV = null;                               // current detected delivery state
 var GEO  = null;                               // captured delivery GPS pin {lat,lng}
+var DELV_CFG = SHOP.delivery || {};            // delivery config (merged with the feed's settings.delivery)
 /* ===================================================================================== */
 
 var $=function(id){return document.getElementById(id);};
@@ -1517,6 +1534,7 @@ async function load(){
     if(d.settings&&d.settings.delivery){var dl=d.settings.delivery;
       ['near_km','mid_km','max_km'].forEach(function(k){if(dl[k]!=null&&isFinite(Number(dl[k])))DELIVERY[k]=Number(dl[k]);});
       ['near','mid','far','out'].forEach(function(k){if(dl[k]!=null)DELIVERY[k]=String(dl[k]);});
+      DELV_CFG=Object.assign({}, DELV_CFG, dl);   // keep full delivery config (incl. free_rules) for free-delivery logic
     }
     var map={};
     PRODUCTS.forEach(function(p){ var c=p.category||'Other'; if(!map[c])map[c]={name:c,img:'',count:0}; map[c].count++; if(!map[c].img&&p.image)map[c].img=p.image; });
@@ -1526,6 +1544,7 @@ async function load(){
       if(ia!==ib)return ia-ib;          // department order from the catalogue (food-first) when configured
       return b.count-a.count;           // otherwise fall back to product count (original behaviour)
     });
+    buildSearchIndex();   // pre-warm the smart-search inverted index for instant queries at scale
     render();
     applyQuickOrder();
     handleHash();
@@ -1585,7 +1604,7 @@ function toast(msg,type){ try{ var t=$('cbToast'); if(!t){ t=document.createElem
    and explains WHY each product matched.  A SemanticProvider seam lets a real
    embedding/LLM backend re-rank later WITHOUT touching this file's callers.
    ============================================================================ */
-var SMATCH={}, SEARCH_ACTIVE=false;
+var SMATCH={}, SEARCH_ACTIVE=false, _sqDeb=null;
 
 // Words we drop from natural-language queries ("show me…", "do you have…").
 var SEARCH_STOP={show:1,me:1,i:1,need:1,want:1,find:1,get:1,please:1,do:1,you:1,have:1,the:1,a:1,an:1,some:1,of:1,for:1,with:1,looking:1,to:1,is:1,are:1,my:1,we:1,us:1,give:1,search:1,product:1,products:1,item:1,items:1,in:1,on:1,at:1,and:1,or:1,any:1,all:1,got:1,stock:1,pls:1};
@@ -1692,9 +1711,10 @@ function _scoreField(f,term,isSyn){
   if(f.kw&&f.kw.indexOf(term)>=0) return {s:12*w,r:null};
   return {s:0,r:null};
 }
-function scoreProduct(p,parsed){
+function scoreProduct(p,parsed,idx){
   if(p.poa) return null;
-  var f={ name:_normStr(p.name), brand:_normStr(p.brand), cat:_normStr(p.category), kw:_normStr(p.keywords), brandRaw:p.brand||'', catRaw:p.category||'' };
+  var f=(idx!=null && SIFIELDS && SIFIELDS[idx]) ? SIFIELDS[idx]
+      : { name:_normStr(p.name), brand:_normStr(p.brand), cat:_normStr(p.category), kw:_normStr(p.keywords), brandRaw:p.brand||'', catRaw:p.category||'' };
   var hay=f.name+' '+f.brand+' '+f.cat+' '+f.kw;
   var nameToks=(f.name+' '+f.brand).split(/\s+/);
   var score=0, reasons=[], matched=0, sizeHit=false;
@@ -1726,9 +1746,44 @@ function scoreProduct(p,parsed){
    (query, parsed, lexicalResults[{p,score,reasons}]) -> re-ranked array, same shape.
    Keep it synchronous for the render path (pre-warm a cache) or gate behind enabled. */
 var SemanticProvider={ enabled:false, rerank:function(q,parsed,results){ return results; } };
+
+/* ---- Inverted index for scale (5k–50k SKUs) ----
+   Built once after the catalogue loads: token -> [product indices], plus a cache of
+   each product's normalised fields. A query scores only the CANDIDATE products whose
+   tokens match (exact / substring / fuzzy) instead of the whole catalogue, so cost is
+   O(candidates) not O(all products). Falls back to a full scan only for pure price/sort
+   queries (no terms). Results are identical to the un-indexed engine. */
+var SIDX=null, SITOKENS=null, SIFIELDS=null;
+function buildSearchIndex(){
+  SIDX={}; SIFIELDS=new Array(PRODUCTS.length);
+  for(var i=0;i<PRODUCTS.length;i++){ var p=PRODUCTS[i];
+    var f={ name:_normStr(p.name), brand:_normStr(p.brand), cat:_normStr(p.category), kw:_normStr(p.keywords), brandRaw:p.brand||'', catRaw:p.category||'' };
+    SIFIELDS[i]=f;
+    var toks=(f.name+' '+f.brand+' '+f.cat+' '+f.kw).split(/[^a-z0-9]+/), seen={};
+    for(var j=0;j<toks.length;j++){ var t=toks[j]; if(!t||t.length<2||seen[t])continue; seen[t]=1; (SIDX[t]||(SIDX[t]=[])).push(i); }
+  }
+  SITOKENS=Object.keys(SIDX);
+}
+function _candidates(parsed){
+  if(!SIDX) return null;                                   // index not ready -> full scan
+  if(!parsed.terms.length && !parsed.sizes.length && !parsed.biz) return null; // pure price/sort -> full scan
+  var set={};
+  var addList=function(l){ if(l) for(var m=0;m<l.length;m++) set[l[m]]=1; };
+  var addTok=function(tok){ if(!tok)return; addList(SIDX[tok]);
+    if(tok.length>=3){ for(var k=0;k<SITOKENS.length;k++){ var st=SITOKENS[k]; if(st.length>tok.length && st.indexOf(tok)>=0) addList(SIDX[st]); } } };
+  parsed.terms.forEach(function(t){
+    _variants(t).forEach(function(vr){ addTok(vr.v); });
+    if(t.length>=4){ var thr=t.length>=7?2:1; for(var k=0;k<SITOKENS.length;k++){ var st=SITOKENS[k]; if(Math.abs(st.length-t.length)<=thr && _lev(st,t)<=thr) addList(SIDX[st]); } }
+  });
+  if(parsed.biz){ var bz=SEARCH_BIZ[parsed.biz]; if(bz) bz.t.forEach(addTok); }
+  parsed.sizes.forEach(function(sz){ addTok(sz.val+sz.unit); addTok(sz.val); });
+  return Object.keys(set);
+}
 function smartSearch(q,limit){
   var parsed=parseQuery(q), out=[];
-  for(var i=0;i<PRODUCTS.length;i++){ var r=scoreProduct(PRODUCTS[i],parsed); if(r) out.push(r); }
+  var cand=_candidates(parsed);
+  if(cand===null){ for(var i=0;i<PRODUCTS.length;i++){ var r=scoreProduct(PRODUCTS[i],parsed,i); if(r) out.push(r); } }
+  else { for(var c=0;c<cand.length;c++){ var idx=+cand[c]; var rr=scoreProduct(PRODUCTS[idx],parsed,idx); if(rr) out.push(rr); } }
   if(parsed.sortCheap) out.sort(function(a,b){return a.p.price-b.p.price;});
   else if(parsed.sortPop) out.sort(function(a,b){return (b.p.popularity||0)-(a.p.popularity||0);});
   else out.sort(function(a,b){ if(b.score!==a.score)return b.score-a.score; return (b.p.popularity||0)-(a.p.popularity||0); });
@@ -1811,7 +1866,74 @@ function voiceSearch(){
     if(q){ sTrack('voice_search',{q:q}); voiceCommit(q); } };
   try{ _rec.start(); }catch(e){ setMicState(false); _recActive=false; }
 }
-function barcodeSearch(){ toast('Barcode scan is coming soon'); }
+/* ============================================================================
+   BARCODE / QR SCAN  (client-side, native BarcodeDetector — no backend)
+   Tap 📷 → camera opens → detect a barcode/QR → resolve to a product (barcode /
+   sku / keywords / name) → open it. Graceful fallback (manual entry) where the
+   BarcodeDetector API is unavailable (e.g. Safari/Firefox). Full "find similar
+   products from a photo" needs a vision model and would sit behind SemanticProvider.
+   ============================================================================ */
+var _scanStream=null, _scanRAF=null, _scanDet=null, _scanActive=false;
+function barcodeSupported(){ return (typeof window.BarcodeDetector!=='undefined'); }
+function barcodeSearch(){
+  if(_scanActive){ stopScan(); return; }
+  if(!barcodeSupported()){
+    var code=null; try{ code=window.prompt('Scan isn’t supported on this browser.\nEnter the product barcode / code:'); }catch(e){}
+    if(code){ resolveBarcode(String(code).trim()); } else { toast('Barcode scan needs Chrome/Android; you can type the code'); }
+    sTrack('scan_unsupported',{}); return;
+  }
+  openScanUI();
+}
+function openScanUI(){
+  var ov=$('scanOverlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='scanOverlay'; ov.className='scanov'; ov.setAttribute('role','dialog'); ov.setAttribute('aria-modal','true'); ov.setAttribute('aria-label','Scan a barcode');
+    ov.innerHTML='<div class="scanhd"><button class="scanx" onclick="stopScan()" aria-label="Close scanner">‹</button><span>Scan barcode</span></div>'
+      +'<div class="scanstage"><video id="scanVid" playsinline muted autoplay></video><div class="scanbox"><span class="scanline"></span></div></div>'
+      +'<div class="scanhint" id="scanHint" role="status" aria-live="polite">Point your camera at a product barcode</div>';
+    document.body.appendChild(ov);
+  }
+  ov.classList.add('show'); document.body.style.overflow='hidden';
+  startScan();
+}
+async function startScan(){
+  var vid=$('scanVid'); if(!vid)return;
+  try{ _scanDet=new window.BarcodeDetector(); }catch(e){ try{ _scanDet=new window.BarcodeDetector({formats:['ean_13','ean_8','code_128','upc_a','upc_e','qr_code']}); }catch(e2){ _scanDet=null; } }
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ if($('scanHint'))$('scanHint').textContent='Camera not available on this device'; setTimeout(stopScan,1500); return; }
+  try{
+    _scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});
+    vid.srcObject=_scanStream; try{ await vid.play(); }catch(e){} _scanActive=true; sTrack('scan_open',{});
+    _scanTick();
+  }catch(e){
+    var nm=e&&e.name, msg=(nm==='NotAllowedError'||nm==='SecurityError')?'Camera blocked — allow camera access to scan':(nm==='NotFoundError'?'No camera found':'Couldn’t start the camera');
+    if($('scanHint'))$('scanHint').textContent=msg; toast(msg); sTrack('scan_error',{err:String(nm||'')});
+    setTimeout(stopScan,1700);
+  }
+}
+function _scanTick(){
+  if(!_scanActive)return; var vid=$('scanVid');
+  if(vid && vid.readyState>=2 && _scanDet){
+    _scanDet.detect(vid).then(function(codes){
+      if(codes&&codes.length){ var v=codes[0].rawValue||''; if(v){ onScanned(String(v).trim()); return; } }
+      _scanRAF=requestAnimationFrame(_scanTick);
+    }).catch(function(){ _scanRAF=requestAnimationFrame(_scanTick); });
+  } else { _scanRAF=requestAnimationFrame(_scanTick); }
+}
+function onScanned(code){ try{ if(navigator.vibrate)navigator.vibrate(30); }catch(e){} sTrack('scan_result',{code:code}); stopScan(); resolveBarcode(code); }
+function stopScan(){
+  _scanActive=false; if(_scanRAF){cancelAnimationFrame(_scanRAF);_scanRAF=null;}
+  if(_scanStream){ try{ _scanStream.getTracks().forEach(function(t){t.stop();}); }catch(e){} _scanStream=null; }
+  var ov=$('scanOverlay'); if(ov)ov.classList.remove('show'); if(!($('searchOverlay')&&$('searchOverlay').classList.contains('show'))) document.body.style.overflow='';
+}
+// Resolve a scanned code to a product: exact barcode/sku first, then keyword/name contains.
+function resolveBarcode(code){
+  if(!code)return; var lc=code.toLowerCase(), hit=null;
+  for(var i=0;i<PRODUCTS.length;i++){ var p=PRODUCTS[i];
+    if(String(p.barcode||'')===code || String(p.sku||'')===code){ hit=p; break; }
+    if(!hit){ var hay=((p.keywords||'')+' '+(p.name||'')).toLowerCase(); if(hay.indexOf(lc)>=0) hit=p; }
+  }
+  if(hit){ toast('Found: '+hit.name,'ok'); sTrack('scan_match',{code:code,id:hit.id||0}); if(hit.id){ goDetail(hit.id); } else { searchSubmit(hit.name); } }
+  else { sTrack('scan_nomatch',{code:code}); searchOpen(); if($('sq'))$('sq').value=code; searchRender(code); toast('Scanned '+code+' — no exact match'); }
+}
 function topBrands(n){ var cnt={},order=[];
   PRODUCTS.forEach(function(p){ var br=(p.brand||'').trim(); if(!br)return; var k=br.toLowerCase(); if(!cnt[k]){cnt[k]={name:br,c:0};order.push(k);} cnt[k].c++; });
   return order.map(function(k){return cnt[k];}).sort(function(a,b){return b.c-a.c;}).slice(0,n||10).map(function(x){return x.name;}); }
@@ -2605,7 +2727,31 @@ function filterBrandChk(b,on){ if(on)FBRANDS[b]=1; else delete FBRANDS[b]; }
 function _desktop(){ return !!(window.matchMedia && window.matchMedia('(min-width:1024px)').matches); }
 function toggleBulk(){ FBULK=!FBULK; _catShown=24; render(); }
 function setPmax(v){ FPMAX=(FPMAX===v?0:v); _catShown=24; render(); }
-function _freeOver(){ try{ var d=(window.SHOP&&SHOP.settings&&SHOP.settings.delivery)||{}; var f=d.free_over||d.freeOver||0; return Number(f)||0; }catch(e){ return 0; } }
+/* ---- Free-delivery rules (config-driven, per-city) ----
+   Rules live in settings.delivery.free_rules = [{city, free_over}] (editable in v3).
+   Falls back to a global delivery.free_over applied to every city, then to a seeded
+   Juba / $50 default so the offer works before it's configured. currency = store currency. */
+function freeRules(){
+  var d=DELV_CFG||{}, rs=(d.free_rules&&d.free_rules.length)?d.free_rules:null;
+  if(!rs){ var g=Number(d.free_over||d.freeOver||0)||0;
+    if(g>0){ rs=(BRANCHES||[]).map(function(b){return {city:b.name,free_over:g};}); }
+    else { rs=[{city:'Juba',free_over:50}]; }   // seeded default until configured
+  }
+  return rs.map(function(r){return {city:String(r.city||'').trim(),free_over:Number(r.free_over)||0};})
+           .filter(function(r){return r.city && r.free_over>0;});
+}
+function currentCity(){ return (DELV&&DELV.branch&&DELV.branch.name)?String(DELV.branch.name):''; }
+function freeRuleForCity(city){ if(!city)return null; var lc=city.toLowerCase(), rs=freeRules();
+  for(var i=0;i<rs.length;i++){ if(rs[i].city.toLowerCase()===lc) return rs[i]; } return null; }
+function activeFreeRule(){ return freeRuleForCity(currentCity()); }
+function freeQualified(sub){ var r=activeFreeRule(); return !!(r && sub>=r.free_over); }
+// One-line delivery arrangement for the order / quotation note (reaches WhatsApp & the merchant).
+function deliveryNote(){ var city=currentCity(), sub=cartTotal(), r=activeFreeRule();
+  if(city && r && sub>=r.free_over) return 'Delivery: FREE (order over '+ugx(r.free_over)+' to '+city+')';
+  if(city && r) return 'Delivery to '+city+': charged (FREE over '+ugx(r.free_over)+'); confirmed on WhatsApp';
+  if(city) return 'Delivery to '+city+': confirmed on WhatsApp';
+  return 'Delivery: confirmed on WhatsApp'; }
+function _freeOver(){ var r=activeFreeRule(); return r?r.free_over:0; }
 
 /* Desktop layout mode: full-width showroom on the homepage; sidebar+cart on listings.
    Cart rail only when the order has items. Body classes are consumed only inside the
@@ -2924,10 +3070,18 @@ function cartLine(k){ var i=CART[k], p=prod(i.name), kk=jk(k);
     +'<div class="clsub">'+ugx(i.price*i.qty)+'</div></div></div>'; }
 function cartSavings(){ var s=0; Object.keys(CART).forEach(function(k){ var p=prod(CART[k].name); if(p&&p.oldPrice&&p.oldPrice>p.price) s+=(p.oldPrice-p.price)*CART[k].qty; }); return s; }
 function deliveryEstimateText(){ if(!DELV) return null; if(DELV.mode==='out') return DELIVERY.out; if(DELV.mode==='city') return 'Delivering to '+((DELV.branch&&DELV.branch.name)||'your area'); return DELV.label||null; }
-function freeDeliveryBar(sub){ var thr=Number((SHOP.delivery&&(SHOP.delivery.free_over||SHOP.delivery.free_delivery_over))||0); if(!thr)return '';
-  if(sub>=thr) return '<div class="freebar done">🎉 You’ve unlocked free delivery!</div>';
-  var pct=Math.min(100,Math.round(sub/thr*100));
-  return '<div class="freebar"><div class="ft">Add '+ugx(thr-sub)+' more for <b>free delivery</b></div><div class="fprog"><div style="width:'+pct+'%"></div></div></div>'; }
+function freeDeliveryBar(sub){
+  var city=currentCity(), rule=activeFreeRule();
+  if(!city){
+    // No location yet — surface the best offer to motivate setting a location.
+    var rs=freeRules(); if(!rs.length) return '';
+    var best=rs.slice().sort(function(a,b){return a.free_over-b.free_over;})[0];
+    return '<div class="freebar tap" onclick="askLocation()"><div class="ft">📍 Set your location — <b>free delivery to '+esc(best.city)+'</b> on orders over '+ugx(best.free_over)+'</div></div>';
+  }
+  if(!rule) return '';   // this city has no free-delivery rule
+  if(sub>=rule.free_over) return '<div class="freebar done">🎉 You’ve unlocked <b>FREE delivery</b> to '+esc(city)+'!</div>';
+  var pct=Math.min(100,Math.round(sub/rule.free_over*100));
+  return '<div class="freebar"><div class="ft">Add <b>'+ugx(rule.free_over-sub)+'</b> more for <b>free delivery</b> to '+esc(city)+'</div><div class="fprog"><div style="width:'+pct+'%"></div></div></div>'; }
 function _xcard(p){ return '<div class="xcard"><div class="xthumb" onclick="closeSheet();goDetail('+(p.id||0)+')">'+(p.image?'<img alt="" src="'+esc(p.image)+'" loading="lazy">':catIcon(p.category))+'</div><div class="xnm">'+esc(p.name)+'</div><div class="xpr">'+ugx(p.price)+'</div><button class="xadd" onclick="cartAdd('+jk(p.name)+');openCart()">+ Add</button></div>'; }
 function crossSellStrip(){
   var inCart={}; Object.keys(CART).forEach(function(k){var p=prod(CART[k].name);if(p)inCart[p.id]=1;});
@@ -2944,12 +3098,13 @@ function openCart(){
   $('sheetTitle').textContent='Your cart';
   var keys=Object.keys(CART);
   if(!keys.length){ $('sheetBody').innerHTML=cartEmpty(); $('sheet').classList.add('show'); return; }
-  var sub=cartTotal(), saved=cartSavings(), de=deliveryEstimateText();
+  var sub=cartTotal(), saved=cartSavings(), de=deliveryEstimateText(), free=freeQualified(sub);
+  var delCell = free ? '<span class="freetag">FREE</span>' : ('<span class="mut">'+(de?esc(de):'set your location')+'</span>');
   var bill='<div class="billbox">'
     +'<div class="billrow"><span>Items ('+cartCount()+')</span><span>'+ugx(sub)+'</span></div>'
     +(saved>0?('<div class="billrow save"><span>You save</span><span>−'+ugx(saved)+'</span></div>'):'')
-    +'<div class="billrow"><span>Delivery</span><span class="mut">'+(de?esc(de):'set your location')+'</span></div>'
-    +'<div class="billrow tot"><span>To pay</span><span>'+ugx(sub)+'<span class="plusdel"> + delivery</span></span></div>'
+    +'<div class="billrow"><span>Delivery</span>'+delCell+'</div>'
+    +'<div class="billrow tot"><span>To pay</span><span>'+ugx(sub)+(free?'':'<span class="plusdel"> + delivery</span>')+'</span></div>'
     +'</div>';
   $('sheetBody').innerHTML=
     '<div class="cartlines">'+keys.map(cartLine).join('')+'</div>'
@@ -2991,6 +3146,7 @@ function openCheckout(){
   /* Quotation-first: this is a Quotation request, not a payment. The bill shows an
      estimated total; final pricing (discounts, VAT, freight) is confirmed on the quotation. */
   var bill='<div class="billbox"><div class="billrow"><span>Items ('+cartCount()+')</span><span>'+ugx(sub)+'</span></div>'
+    +(freeQualified(sub)?'<div class="billrow"><span>Delivery</span><span class="freetag">FREE</span></div>':'')
     +'<div class="billrow tot"><span>Estimated total</span><span>'+ugx(sub)+'</span></div>'
     +'<div class="billrow"><span class="mut" style="max-width:100%;text-align:left;font-size:12px">Your professional quotation is generated instantly. No payment now.</span></div></div>';
   /* Desktop: two columns (details left, sticky bill + Request-Quotation button right). On mobile
@@ -3026,7 +3182,8 @@ async function placeOrder(){
   if(phone.length<7){toast('Please enter your WhatsApp number','err');return;}
   if(!IS_PICKUP && !addr && !GEO){toast('Add your delivery address or share your location','err');return;}
   var onCredit=/credit/i.test(pay);
-  var payload={name:name,phone:phone,location:addr,payment:pay,note:note,when:when,on_credit:onCredit?1:0,items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal(),channel:'web'};
+  var dNote=deliveryNote(); var noteOut=note?(note+' | '+dNote):dNote;
+  var payload={name:name,phone:phone,location:addr,payment:pay,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),when:when,on_credit:onCredit?1:0,items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal(),channel:'web'};
   if(GEO){payload.geo=GEO.lat+','+GEO.lng;payload.maps_url=mapsUrl(GEO);}
   var btn=$('placeBtn');btn.disabled=true;btn.textContent='Placing…';
   try{
@@ -3053,7 +3210,8 @@ async function requestQuotation(){
   var name=($('coName')&&$('coName').value||'').trim(), phone=($('coPhone')&&$('coPhone').value||'').replace(/[^0-9]/g,''), addr=($('coAddr')&&$('coAddr').value||'').trim(), note=(($('coNote')||{}).value||'').trim();
   if(!name){toast('Please enter your name','err');return;}
   if(phone.length<7){toast('Please enter your WhatsApp number','err');return;}
-  var payload={name:name,phone:phone,location:addr,note:note,items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal()};
+  var dNote=deliveryNote(); var noteOut=note?(note+' | '+dNote):dNote;
+  var payload={name:name,phone:phone,location:addr,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal()};
   if(GEO){payload.maps_url=mapsUrl(GEO);}
   var btn=$('placeBtn');if(btn){btn.disabled=true;btn.textContent='Preparing your quotation…';}
   try{
@@ -3101,7 +3259,9 @@ function _skbSet(i){ var rows=_srows(); if(!rows.length){ _skb=-1; return; }
   if(i<0)i=rows.length-1; if(i>=rows.length)i=0; _skb=i;
   rows[i].classList.add('kbhl'); try{ rows[i].scrollIntoView({block:'nearest'}); }catch(e){} }
 if($('sq')){
-  $('sq').addEventListener('input',function(){ cancelAutorun(); searchRender(this.value); _skb=-1; });
+  $('sq').addEventListener('input',function(){ cancelAutorun(); _skb=-1; var v=this.value;
+    // Debounced render keeps typing smooth on large catalogues; empty query renders immediately.
+    if(_sqDeb)clearTimeout(_sqDeb); if(!v){ searchRender(''); return; } _sqDeb=setTimeout(function(){ searchRender(v); }, 80); });
   $('sq').addEventListener('keydown',function(e){
     var rows=_srows();
     if(e.key==='ArrowDown'){ e.preventDefault(); if(rows.length)_skbSet(_skb+1); }
@@ -3119,7 +3279,7 @@ if($('sq')){
 if($('searchOverlay')){
   $('searchOverlay').addEventListener('click',function(e){ if(e.target===this && _desktop()) searchClose(); });
 }
-document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ var o=$('searchOverlay'); if(o&&o.classList.contains('show')){ searchClose(); return; } var sh=$('sheet'); if(sh&&sh.classList.contains('show')) closeSheet(); } });
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ var sc=$('scanOverlay'); if(sc&&sc.classList.contains('show')){ stopScan(); return; } var o=$('searchOverlay'); if(o&&o.classList.contains('show')){ searchClose(); return; } var sh=$('sheet'); if(sh&&sh.classList.contains('show')) closeSheet(); } });
 /* Infinite scroll: grow the category/search grid as the sentinel nears the viewport. */
 window.addEventListener('scroll',function(){ var lm=$('loadmore'); if(!lm)return; if(lm.getBoundingClientRect().top < window.innerHeight+320){ growGrid(); } },{passive:true});
 /* A11y: when the bottom sheet opens, move focus into the dialog (screen readers announce it,

@@ -501,21 +501,21 @@ const LABELS = { setup:'Get started', briefing:'Morning Briefing', worklist:'My 
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', 'procurement.hub':'Procurement Hub', 'demand.plans':'Demand Plans', 'juba.stock':'Juba Stock', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
   salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings', ads:'Facebook Ads', campaigns:'Campaigns', 'storefront.insights':'Storefront Insights',
-  'storefront.collections':'Shop for Every Need', 'storefront.kits':'Ready-made Kits' };
+  'storefront.collections':'Shop for Every Need', 'storefront.kits':'Ready-made Kits', 'storefront.delivery':'Delivery & Free Shipping' };
 const GROUPS = [ ['Overview',['setup','briefing','worklist']],
   ['Sales',['customers','leads','salesOrders','quotations','invoices','payments','collections']],
   ['Inventory',['products','categories','purchase.process','suppliers']],
   ['Procurement',['procurement.hub','demand.plans','juba.stock']],
   ['Operations',['warehouse','dispatch']],
   ['Finance',['finance','cashbook']],
-  ['Marketing',['ads','campaigns','storefront.insights','storefront.collections','storefront.kits']],
+  ['Marketing',['ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery']],
   ['Settings',['settings']] ];
 // Which nav key reads which count from the catalog's counts map.
 const NAVCOUNT = { customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['setup','briefing','worklist','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','warehouse','dispatch','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits']);
+const READY = new Set(['setup','briefing','worklist','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','warehouse','dispatch','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery']);
 // Storefront config pages are client-rendered (not server workspaces) and always available to the owner.
-const SF_KEYS = new Set(['storefront.collections','storefront.kits']);
+const SF_KEYS = new Set(['storefront.collections','storefront.kits','storefront.delivery']);
 // Dedicated list views still pending — none; kept for future additions.
 const SOON = {};
 function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:1)+'k' : String(n); }
@@ -552,6 +552,7 @@ const P = {
   'storefront.insights':'M3 3v18h18M7 15l3-4 3 3 4-6',
   'storefront.collections':'M3 9l1-5h16l1 5M3 9h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM9 9a3 3 0 0 0 6 0',
   'storefront.kits':'M20 12v9H4v-9M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z',
+  'storefront.delivery':'M1 3h15v13H1zM16 8h4l3 3v5h-7M5.5 18.5a2 2 0 1 0 0 .01M17.5 18.5a2 2 0 1 0 0 .01',
   salesOrder:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
   salesOrders:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
   purchaseOrder:'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
@@ -716,6 +717,7 @@ async function route(key, id){
   CUR={key,id}; REC_TAB='overview'; location.hash='#/'+key+(id?'/'+id:''); setActive(key);
   if(key==='storefront.collections'){ sfCollectionsPage(); return; }
   if(key==='storefront.kits'){ sfKitsPage(); return; }
+  if(key==='storefront.delivery'){ sfDeliveryPage(); return; }
   if(SOON[key] && !id){ renderSoon(key); return; }
   document.getElementById('view').innerHTML=skeleton();
   let path='/'+key+(id?'/'+id:'');
@@ -1499,7 +1501,44 @@ function sfShrink(file,maxDim,q){ maxDim=maxDim||1400;q=q||0.82; return new Prom
 function sfTabs(active){
   return '<div class="sftabs">'
     +'<button class="sftab'+(active==='collections'?' on':'')+'" onclick="route(\'storefront.collections\')">Shop for Every Need</button>'
-    +'<button class="sftab'+(active==='kits'?' on':'')+'" onclick="route(\'storefront.kits\')">Ready-made Kits</button></div>';
+    +'<button class="sftab'+(active==='kits'?' on':'')+'" onclick="route(\'storefront.kits\')">Ready-made Kits</button>'
+    +'<button class="sftab'+(active==='delivery'?' on':'')+'" onclick="route(\'storefront.delivery\')">Delivery &amp; Free Shipping</button></div>';
+}
+
+/* ---------- Delivery & Free Shipping (per-city free-delivery thresholds) ---------- */
+var SFDEL=[], SFDEL_CUR='USD';
+function sfDeliveryPage(){
+  sfEl('view').innerHTML='<div class="wrap">'+sfTabs('delivery')+'<div class="card"><div class="b">Loading…</div></div></div>';
+  getQuery('/papi/delivery-rules',{}).then(function(d){
+    SFDEL_CUR=(d&&d.currency)||'USD';
+    SFDEL=(d&&Array.isArray(d.free_rules))?d.free_rules.slice():[];
+    if(!SFDEL.length){
+      // Seed a row per branch so the merchant just types amounts (Juba pre-filled at 50).
+      var br=(d&&Array.isArray(d.branches)&&d.branches.length)?d.branches:['Juba','Kampala'];
+      SFDEL=br.map(function(c){return {city:c, free_over:(/juba/i.test(c)?50:0)};});
+    }
+    sfDeliveryRender();
+  }).catch(function(){ SFDEL=[{city:'Juba',free_over:50}]; sfDeliveryRender(); });
+}
+function sfDeliveryRender(){
+  var head='<div class="card"><div class="h">Delivery &amp; Free Shipping<button class="btn pri" style="margin-left:auto" onclick="sfSaveDelivery()">Save</button></div>'
+    +'<div class="b" style="color:var(--muted);font-size:13px">Set a free-delivery threshold per city. When a customer selects that city and their cart reaches the amount, the storefront shows a “FREE delivery” badge and a progress nudge, and the order note tells you delivery is free. Amounts are in '+esc(SFDEL_CUR)+'. Set 0 to disable free delivery for a city.</div></div>';
+  var rows=SFDEL.map(function(r,i){
+    return '<div class="sfrow" style="margin:8px 0;align-items:flex-end;gap:10px">'
+      +'<div class="sffield" style="flex:1;min-width:160px"><label>City</label><input class="sfin" value="'+esc(r.city||'')+'" placeholder="e.g. Juba" onchange="sfDelUpd('+i+',\'city\',this.value)"></div>'
+      +'<div class="sffield"><label>Free delivery over ('+esc(SFDEL_CUR)+')</label><input class="sfin" type="number" min="0" step="0.01" style="width:150px" value="'+(Number(r.free_over)||0)+'" onchange="sfDelUpd('+i+',\'free_over\',this.value)"></div>'
+      +'<button class="btn sm danger" onclick="sfDelDel('+i+')">Remove</button></div>';
+  }).join('');
+  var body='<div class="card"><div class="b">'+(rows||'<div style="color:var(--muted)">No cities yet — add one.</div>')+'<button class="btn sm" style="margin-top:10px" onclick="sfDelAdd()">+ Add city</button></div></div>';
+  sfEl('view').innerHTML='<div class="wrap">'+sfTabs('delivery')+head+'<div style="height:14px"></div>'+body+'</div>';
+}
+function sfDelUpd(i,k,v){ if(!SFDEL[i])return; SFDEL[i][k]=(k==='free_over')?Math.max(0,parseFloat(v)||0):v; }
+function sfDelAdd(){ SFDEL.push({city:'',free_over:0}); sfDeliveryRender(); }
+function sfDelDel(i){ SFDEL.splice(i,1); sfDeliveryRender(); }
+async function sfSaveDelivery(){
+  var rules=SFDEL.map(function(r){return {city:String(r.city||'').trim(),free_over:Math.max(0,parseFloat(r.free_over)||0)};}).filter(function(r){return r.city&&r.free_over>0;});
+  var d=await post('/papi/delivery-rules-save',{free_rules:rules});
+  if(d&&d.ok){ if(Array.isArray(d.free_rules))SFDEL=d.free_rules.length?d.free_rules:SFDEL; sfDeliveryRender(); toast('Delivery rules saved'); } else toast((d&&d.error)||'Could not save',true);
 }
 
 /* ---------- Shop for Every Need ---------- */

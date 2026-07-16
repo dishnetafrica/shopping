@@ -393,6 +393,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         // Ready-made Kits (curated bundles → one-tap quotation) — read + save.
         Route::get('kits', [PanelApiController::class, 'kitsGet']);
         Route::post('kits-save', [PanelApiController::class, 'kitsSave']);
+        // Delivery: per-city free-delivery thresholds — read + save.
+        Route::get('delivery-rules', [PanelApiController::class, 'deliveryGet']);
+        Route::post('delivery-rules-save', [PanelApiController::class, 'deliverySave']);
         Route::get('update-product', [PanelApiController::class, 'updateProduct']);
         Route::get('delete-product', [PanelApiController::class, 'deleteProduct']);
         Route::get('add-product',    [PanelApiController::class, 'addProduct']);
