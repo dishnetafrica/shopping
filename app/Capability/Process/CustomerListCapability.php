@@ -38,15 +38,18 @@ final class CustomerListCapability implements ProcessCapability
 
         // One grouped pass over orders, keyed by normalised phone AND the order's currency, so a
         // mixed-currency history consolidates correctly instead of adding UGX to USD to SSP.
-        // Cancelled / rejected / void orders are NOT sales and NOT receivables — exclude them from
-        // spend, count and balance (case-insensitive: the engine uses both 'cancelled' and 'Cancelled').
+        // Cancelled / rejected / void orders are NOT sales — exclude them from spend, count and balance.
+        // For the OUTSTANDING balance, only DELIVERED orders are receivables: a New / Accepted /
+        // Preparing / Dispatched order is in progress, not yet owed (and a delivered order is invoiced,
+        // so this matches the invoice-based AR the Customer 360, Collections and Finance all use).
+        // Counting undelivered orders here made the directory show debt the Customer 360 correctly did not.
         $agg = Order::where('tenant_id', $t)
             ->whereRaw("lower(coalesce(status,'')) not in ('cancelled','rejected','void')")
             ->selectRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') as p")
             ->selectRaw("upper(coalesce(nullif(sell_currency,''), ?)) as cur", [$native])
             ->selectRaw('count(*) as orders')
             ->selectRaw('coalesce(sum(total),0) as spend')
-            ->selectRaw('coalesce(sum(greatest(total - amount_paid, 0)),0) as balance')
+            ->selectRaw("coalesce(sum(greatest(case when (delivered_at is not null or lower(coalesce(status,'')) = 'delivered') then total - amount_paid else 0 end, 0)),0) as balance")
             ->selectRaw('max(created_at) as last_at')
             ->groupBy('p', 'cur')
             ->get()

@@ -5416,7 +5416,11 @@ class PanelApiController extends Controller
             $rate = strtoupper($cur) === $base ? 1.0 : ($fx->ratePerUsd($cur) ?: 1.0);
             $invByPhone[$ph] = ($invByPhone[$ph] ?? 0) + (float) $inv->balance / ($rate ?: 1);
         }
-        foreach (\App\Models\Order::where('tenant_id', $t->id)->get() as $o) {
+        // Only DELIVERED orders are receivables (matches the Customers directory + invoice-based AR).
+        foreach (\App\Models\Order::where('tenant_id', $t->id)
+                    ->whereRaw("lower(coalesce(status,'')) not in ('cancelled','rejected','void')")
+                    ->where(function ($w) { $w->whereNotNull('delivered_at')->orWhereRaw("lower(coalesce(status,'')) = 'delivered'"); })
+                    ->get() as $o) {
             $ph = preg_replace('/\D+/', '', (string) $o->customer_phone); if ($ph === '') continue;
             $oc = \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t);
             $rate = strtoupper($oc) === $base ? 1.0 : ($fx->ratePerUsd($oc) ?: 1.0);
