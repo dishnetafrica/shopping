@@ -3909,6 +3909,22 @@ class PanelApiController extends Controller
             return response()->json(['ok' => false, 'error' => 'order_not_found'], 404);
         }
 
+        // Currency of THIS payment. The panel appends ?cur=base for USD-denominated shops (and
+        // may send cur=native / an explicit code otherwise). Previously this was IGNORED and every
+        // payment was booked as UGX — so a $90 payment was stored as 90 UGX (~$0.02), leaving the
+        // invoice permanently a few cents short and stuck on Part_paid. Resolve the real currency
+        // and rate so the payment ledger matches what the operator actually typed.
+        $baseCur   = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);   // e.g. USD
+        $nativeCur = \App\Services\Money\SalesBaseCurrency::nativeCurrency($t); // e.g. UGX
+        $curIn     = strtolower(trim((string) ($r->query('cur', '') ?: $r->input('cur', ''))));
+        $payCur    = $curIn === 'base' ? $baseCur
+                   : ($curIn === 'native' ? $nativeCur
+                   : (in_array(strtoupper($curIn), ['USD', 'UGX', 'SSP'], true) ? strtoupper($curIn) : $baseCur));
+        $payRate   = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($payCur);
+        if ($payRate <= 0) $payRate = 1;
+        // amount expressed in the order's base currency, for the order's own paid/balance tracking
+        $amountBase = ($payCur === $baseCur) ? $amount : \App\Models\OrderCost::toUsd($amount, $payRate);
+
         $payUnify = (bool) $t->setting('pay_unify', false);
 
         // E4.6 — legacy order_payment write retired under pay_unify. When the flag is ON the payment is
@@ -3922,14 +3938,14 @@ class PanelApiController extends Controller
                 'category'    => 'order_payment',
                 'order_id'    => $order->id,
                 'amount'      => $amount,
-                'currency'    => 'UGX',
+                'currency'    => $payCur,
                 'method'      => $method,
                 'received_by' => $holderName,
                 'note'        => $note,
             ]);
         }
 
-        $order->amount_paid = round((float) $order->amount_paid + $amount, 2);
+        $order->amount_paid = round((float) $order->amount_paid + $amountBase, 2);
         $order->save();
 
         // E4.4 — dual-write into the ONE payment ledger (CustomerPayment) so this cashbook payment is
@@ -3937,18 +3953,16 @@ class PanelApiController extends Controller
         // ledger_entries table. Gated on pay_unify. Best-effort: never break the cashbook payment path.
         if ($payUnify) {
             try {
-                $rate = \App\Services\Money\Fx::forTenant($t)->ratePerUsd('UGX');
-                if ($rate <= 0) $rate = 1;
                 app(\App\Services\Money\PaymentService::class)->record($t, [
                     'customer'       => (string) ($order->customer_name ?? 'Customer'),
                     'phone'          => $order->customer_phone,
                     'order_no'       => (string) $order->order_no,
                     'invoice_no'     => null,
                     'kind'           => 'settlement',
-                    'currency'       => 'UGX',
+                    'currency'       => $payCur,
                     'amount'         => $amount,
-                    'rate'           => $rate,
-                    'usd'            => \App\Models\OrderCost::toUsd($amount, $rate),
+                    'rate'           => $payRate,
+                    'usd'            => \App\Models\OrderCost::toUsd($amount, $payRate),
                     'method'         => $method,
                     'reference'      => $note,
                     'receipt_path'   => null,
@@ -3966,10 +3980,10 @@ class PanelApiController extends Controller
         // Receipt to the customer.
         $sent = false;
         if ($notify && $order->customer_phone) {
-            $amt = number_format($amount);
+            $amt = number_format($amount, $payCur === 'USD' ? 2 : 0);
             $txt = $state === 'paid'
-                ? "✅ Payment received: UGX {$amt} for order *{$order->order_no}*. Paid in full — thank you! 🛍"
-                : "✅ Payment received: UGX {$amt} for order *{$order->order_no}*. Balance left: *UGX " . number_format($balance) . "*.";
+                ? "✅ Payment received: {$payCur} {$amt} for order *{$order->order_no}*. Paid in full — thank you! 🛍"
+                : "✅ Payment received: {$payCur} {$amt} for order *{$order->order_no}*. Balance left: *{$baseCur} " . number_format($balance, 2) . "*.";
             try {
                 $wa->forTenant($t)->sendText($t->whatsapp_instance, $order->customer_phone, $txt);
                 MessageLog::record($t->id, $order->customer_phone, $t->whatsapp_instance, 'out', 'system', $txt);
