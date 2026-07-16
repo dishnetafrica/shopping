@@ -65,6 +65,35 @@ class PaymentService
         // Unify with invoices: reflect this payment on the linked invoice's balance + statement.
         try { app(InvoiceService::class)->syncByPayment($t, $d['invoice_no'] ?? null, $orderNo); } catch (\Throwable $e) {}
 
+        // Keep the ORDER's own paid tracker (orders.amount_paid) in step with the invoice ledger too.
+        // The invoice-based projections (Group A) and the order-based projections (Group B — Customers
+        // directory, cashbook "who owes you", sales-order headline, credit reminders) must never
+        // disagree. Doing this HERE, in the single recorder, guarantees every payment path — invoice
+        // "Pay", Customer 360, the order button, the Payments screen, staff-cash — reconciles both.
+        try { $this->syncOrderPaid($t, $orderNo); } catch (\Throwable $e) {}
+
         return $result;
+    }
+
+    /**
+     * Recompute orders.amount_paid from the CustomerPayment settlement ledger, expressed in the order's
+     * own transaction currency — the same rule the invoice reconciler uses. Idempotent.
+     */
+    private function syncOrderPaid(Tenant $t, ?string $orderNo): void
+    {
+        if (! $orderNo) return;
+        $order = \App\Models\Order::where('tenant_id', $t->id)->where('order_no', $orderNo)->first();
+        if (! $order) return;
+        $oc   = \App\Services\Money\SalesBaseCurrency::txnCurrency($order, $t);
+        $base = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);
+        $fx   = \App\Services\Money\Fx::forTenant($t);
+        $paid = 0.0;
+        foreach (CustomerPayment::where('tenant_id', $t->id)->where('order_no', $orderNo)
+                    ->where('kind', 'settlement')->where('applied', true)->get() as $p) {
+            $paid += strtoupper((string) $p->currency) === $oc ? (float) $p->amount
+                   : ($oc === $base ? (float) $p->usd_amount : (float) $p->usd_amount * $fx->ratePerUsd($oc));
+        }
+        $order->amount_paid = round($paid, 2);
+        $order->save();
     }
 }

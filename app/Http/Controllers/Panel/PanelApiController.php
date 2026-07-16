@@ -5346,6 +5346,102 @@ class PanelApiController extends Controller
     }
 
     /**
+     * GET /papi/reconcile-audit — READ-ONLY financial reconciliation across the whole tenant. Verifies
+     * every stored figure against the ONE payment ledger and flags every disagreement:
+     *   1. invoice.balance vs what the CustomerPayment ledger implies (invoice-based / "Group A")
+     *   2. order.amount_paid vs the same ledger (order-based / "Group B")
+     *   3. per-customer: does the invoice-based outstanding equal the order-based outstanding?
+     * Writes NOTHING. This is the "make money impossible to disagree" check. Owner-only.
+     */
+    public function reconcileAudit(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+
+        $fx   = \App\Services\Money\Fx::forTenant($t);
+        $base = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);
+        $tol  = 0.5;
+
+        $pays = \App\Models\CustomerPayment::where('tenant_id', $t->id)
+            ->where('kind', 'settlement')->where('applied', true)->get();
+        $conv = function ($p, string $cur) use ($fx, $base): float {
+            $c = strtoupper((string) $p->currency);
+            if ($c === $cur) return (float) $p->amount;
+            if ($cur === $base) return (float) $p->usd_amount;
+            $rate = $fx->ratePerUsd($cur); return (float) $p->usd_amount * ($rate ?: 1);
+        };
+
+        // 1) invoices
+        $invMiss = [];
+        $invoices = \App\Models\Invoice::with('order:id,order_no')->where('tenant_id', $t->id)
+            ->where('status', '!=', 'void')->get();
+        foreach ($invoices as $inv) {
+            $cur   = \App\Services\Money\SalesBaseCurrency::txnCurrency($inv, $t);
+            $ordNo = (string) (optional($inv->order)->order_no ?? '');
+            $paid  = 0.0;
+            foreach ($pays as $p) {
+                if ((string) $p->invoice_no === (string) $inv->invoice_no
+                    || ($ordNo !== '' && (string) $p->order_no === $ordNo)) {
+                    $paid += $conv($p, $cur);
+                }
+            }
+            $exp = round(max(0, (float) $inv->total - $paid), 2);
+            if (abs($exp - (float) $inv->balance) >= $tol) {
+                $invMiss[] = ['invoice' => (string) $inv->invoice_no, 'order' => $ordNo, 'currency' => $cur,
+                    'total' => (float) $inv->total, 'stored_balance' => (float) $inv->balance,
+                    'expected_balance' => $exp, 'ledger_paid' => round($paid, 2), 'status' => (string) $inv->status];
+            }
+        }
+
+        // 2) orders
+        $ordMiss = [];
+        foreach (\App\Models\Order::where('tenant_id', $t->id)->get() as $o) {
+            $oc   = \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t);
+            $paid = 0.0;
+            foreach ($pays as $p) { if ((string) $p->order_no === (string) $o->order_no) $paid += $conv($p, $oc); }
+            $paid = round($paid, 2);
+            if (abs($paid - (float) $o->amount_paid) >= $tol) {
+                $ordMiss[] = ['order' => (string) $o->order_no, 'currency' => $oc, 'total' => (float) $o->total,
+                    'stored_paid' => (float) $o->amount_paid, 'expected_paid' => $paid];
+            }
+        }
+
+        // 3) per-customer: invoice-based outstanding (USD) vs order-based outstanding (USD)
+        $custMiss = [];
+        $invByPhone = []; $ordByPhone = [];
+        foreach ($invoices as $inv) {
+            $ph = preg_replace('/\D+/', '', (string) $inv->customer_phone); if ($ph === '') continue;
+            $cur = \App\Services\Money\SalesBaseCurrency::txnCurrency($inv, $t);
+            $rate = strtoupper($cur) === $base ? 1.0 : ($fx->ratePerUsd($cur) ?: 1.0);
+            $invByPhone[$ph] = ($invByPhone[$ph] ?? 0) + (float) $inv->balance / ($rate ?: 1);
+        }
+        foreach (\App\Models\Order::where('tenant_id', $t->id)->get() as $o) {
+            $ph = preg_replace('/\D+/', '', (string) $o->customer_phone); if ($ph === '') continue;
+            $oc = \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t);
+            $rate = strtoupper($oc) === $base ? 1.0 : ($fx->ratePerUsd($oc) ?: 1.0);
+            $due = max(0, (float) $o->total - (float) $o->amount_paid);
+            $ordByPhone[$ph] = ($ordByPhone[$ph] ?? 0) + $due / ($rate ?: 1);
+        }
+        foreach (array_unique(array_merge(array_keys($invByPhone), array_keys($ordByPhone))) as $ph) {
+            $a = round($invByPhone[$ph] ?? 0, 2); $b = round($ordByPhone[$ph] ?? 0, 2);
+            if (abs($a - $b) >= 1.0) {
+                $custMiss[] = ['phone' => $ph, 'invoice_based_usd' => $a, 'order_based_usd' => $b, 'diff' => round($a - $b, 2)];
+            }
+        }
+
+        return response()->json([
+            'ok' => true,
+            'checked' => ['invoices' => $invoices->count(), 'orders' => \App\Models\Order::where('tenant_id', $t->id)->count(), 'settlement_payments' => $pays->count()],
+            'invoice_mismatches'  => $invMiss,
+            'order_mismatches'    => $ordMiss,
+            'customer_mismatches' => $custMiss,
+            'summary' => ['invoices_off' => count($invMiss), 'orders_off' => count($ordMiss), 'customers_off' => count($custMiss)],
+            'clean' => (count($invMiss) + count($ordMiss) + count($custMiss)) === 0,
+        ]);
+    }
+
+    /**
      * Platform diagnostics (GET /papi/diagnostics) — build id, opcache/deploy staleness,
      * and core service checks. The opcache "any_stale" flag answers "is my deploy actually live?"
      */
