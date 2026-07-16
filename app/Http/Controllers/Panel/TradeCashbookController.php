@@ -290,9 +290,14 @@ class TradeCashbookController extends Controller
         if ($cd !== '') { try { $createdAt = \Illuminate\Support\Carbon::parse($cd); } catch (\Throwable $e) { $createdAt = null; } }
         $status = 'approved'; // owner/manager-gated action -> auto-approved
 
-        $rateFromToUsd = $from==='USD' ? 1.0 : $usdPerFrom;         // native/USD for the FROM leg
-        $rateToToUsd   = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($to); // E3.4 — one FX source
-        if ($rateToToUsd <= 0) $rateToToUsd = ($usdValue>0 ? $toAmt/$usdValue : 1);
+        // Each leg's rate_to_usd MUST reconcile with the dollars that actually moved
+        // (native / rate_to_usd === usd_amount), otherwise the cashbook — which sums by
+        // rate_to_usd — mis-values the currency held. Deriving both rates from $usdValue
+        // captures the REAL deal rate the user typed (e.g. 720,000 SSP for $100 -> 7,200),
+        // instead of silently stamping the system default rate on the target leg. This is
+        // the permanent fix for the "SSP valued at the wrong rate" bug.
+        $rateFromToUsd = $usdValue > 0 ? round($fromAmt / $usdValue, 6) : ($from==='USD' ? 1.0 : $usdPerFrom);
+        $rateToToUsd   = $usdValue > 0 ? round($toAmt   / $usdValue, 6) : \App\Services\Money\Fx::forTenant($t)->ratePerUsd($to);
 
         $res = DB::transaction(function () use ($t,$u,$from,$to,$fromAmt,$toAmt,$rate,$rateFromToUsd,$rateToToUsd,$usdValue,$holderName,$holderUid,$note,$createdAt,$status) {
             $out = OrderCost::create([
