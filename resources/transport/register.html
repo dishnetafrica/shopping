@@ -122,6 +122,18 @@
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .mut{color:var(--muted)}
   .foot{text-align:center;color:#9aa5b1;font-size:11px;padding:20px 20px 8px}
+  /* barcode scanner */
+  .scanov{position:fixed;inset:0;z-index:1200;background:#0b0f14;display:none;flex-direction:column}
+  .scanov.show{display:flex}
+  .scanov .scanhd{display:flex;align-items:center;gap:10px;padding:calc(14px + env(safe-area-inset-top)) 14px 14px;color:#fff;font-weight:800;font-size:16px}
+  .scanov .scanx{width:38px;height:38px;border:0;border-radius:12px;background:rgba(255,255,255,.12);color:#fff;font-size:22px;cursor:pointer;display:grid;place-items:center}
+  .scanov .scanstage{position:relative;flex:1;overflow:hidden;display:grid;place-items:center;background:#000}
+  .scanov video{width:100%;height:100%;object-fit:cover}
+  .scanov .scanbox{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:72%;max-width:340px;aspect-ratio:1.6/1;border:2px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 100vmax rgba(0,0,0,.45);overflow:hidden}
+  .scanov .scanline{position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,transparent,#22c55e,transparent);animation:scanln 1.8s ease-in-out infinite}
+  @keyframes scanln{0%{top:6%}50%{top:94%}100%{top:6%}}
+  .scanov .scanhint{color:#dbe4ee;text-align:center;font-size:13.5px;padding:16px 20px calc(20px + env(safe-area-inset-bottom))}
+  @media(prefers-reduced-motion:reduce){.scanov .scanline{animation:none;top:50%}}
 </style>
 </head>
 <body>
@@ -135,6 +147,7 @@
 <div class="sheet" id="sheet" onclick="if(event.target===this)closeSheet()">
   <div class="card2"><div class="grab"></div><div id="sheetBody"></div></div>
 </div>
+<div class="scanov" id="scanOv"><div class="scanhd"><button class="scanx" onclick="stopTrScan()" aria-label="Close scanner">‹</button><span>Scan a box</span></div><div class="scanstage"><video id="scanVid" playsinline muted autoplay></video><div class="scanbox"><span class="scanline"></span></div></div><div class="scanhint" id="scanHint">Point the camera at the barcode</div></div>
 <div class="toast" id="toast"></div>
 
 <script>/* Sync config + product catalogue: injected by the v3 server page (or a test) BEFORE this runs. */
@@ -218,9 +231,9 @@ function nextStatus(st){ var i=FLOW.indexOf(st); return (i>=0&&i<FLOW.length-1)?
 
 /* ---- computations ---- */
 /* ---- big-bag (sack) helpers: a bag = fixed contents [{name,qty}] × count identical sacks ---- */
-function bagUnit(bag){ return (bag.contents||[]).reduce(function(s,c){return s+(Number(c.qty)||0);},0); }   // cartons in ONE sack
-function bagCartons(bag){ return bagUnit(bag)*(Number(bag.count)||0); }                                     // cartons across all its sacks
-function baglineCartons(bl){ return (Number(bl.count)||0)*((bl.contents||[]).reduce(function(s,c){return s+(Number(c.qty)||0);},0)); }
+function bagUnit(bag){ return (bag.contents||[]).reduce(function(s,c){return s+(Number(c.qty)||0);},0); }   // items noted inside one sack (informational only)
+function bagCartons(bag){ return Number(bag.count)||0; }        // a big bag counts as ONE unit to dispatch (20 boxes + 2 bags = 22)
+function baglineCartons(bl){ return Number(bl.count)||0; }
 function loadTotal(ld){ return (ld.lines||[]).reduce(function(s,l){return s+(Number(l.cartons)||0);},0)
   + (ld.baglines||[]).reduce(function(s,b){return s+baglineCartons(b);},0); }
 function shipTotal(sh){ return (sh.products||[]).reduce(function(s,p){return s+(Number(p.cartons)||0);},0)
@@ -260,8 +273,9 @@ function cur(){ return STACK[STACK.length-1]; }
 function render(){
   var v=cur(), sub=(v!=='home');
   document.getElementById('top').className='top'+(sub?' sub':'');
-  var titles={home:['Transport Register','Kampala → Juba'],receive:['Receive shipment','Into Kampala warehouse'],dispatch:['Load a bus','Dispatch waiting cartons'],buses:['Buses & shipments','Track everything moving'],load:['Bus manifest',''],shipment:['Shipment',''],dash:['Manager dashboard','End-to-end visibility'],timeline:['Timeline','Every event'],search:['Search','']};
+  var titles={home:['Transport Register','Kampala → Juba'],receive:['Receive shipment','Into Kampala warehouse'],dispatch:['Load a bus','Dispatch waiting boxes'],buses:['Buses & shipments','Track everything moving'],load:['Bus manifest',''],shipment:['Shipment',''],dash:['Manager dashboard','End-to-end visibility'],timeline:['Timeline','Every event'],search:['Search','']};
   var t=titles[v]||['Transport Register',''];
+  if(v==='receive' && EDIT_ID) t=['Edit shipment','Fix a mistake'];
   document.getElementById('title').innerHTML=esc(t[0])+(t[1]?'<span class="sub2">'+esc(t[1])+'</span>':'');
   var app=document.getElementById('app');
   var m={home:viewHome,receive:viewReceive,dispatch:viewDispatch,buses:viewBuses,load:function(){return viewLoad(ARG);},shipment:function(){return viewShipment(ARG);},dash:viewDash,timeline:viewTimeline,search:viewSearch};
@@ -273,14 +287,14 @@ function render(){
 function viewHome(){
   var wait=waitingTotal();
   return '<div class="hero"><div class="lbl">Waiting to dispatch (with transporter)</div>'
-      +'<div class="big">'+wait+' <small>cartons</small></div>'
+      +'<div class="big">'+wait+' <small>boxes</small></div>'
       +'<div class="split">'
         +'<div class="sp"><div class="k">In transit</div><div class="v">'+cartonsByStatus('transit')+'</div></div>'
         +'<div class="sp"><div class="k">Arrived Juba</div><div class="v">'+cartonsByStatus('arrived')+'</div></div>'
         +'<div class="sp"><div class="k">In warehouse</div><div class="v">'+cartonsByStatus('received')+'</div></div>'
       +'</div></div>'
     +'<div class="cards">'
-      +'<button class="bigcard in" onclick="go(\'receive\')"><div><div class="ic">⬇️</div><div class="t">RECEIVE</div><div class="d">New shipment in</div></div></button>'
+      +'<button class="bigcard in" onclick="startNewReceive()"><div><div class="ic">⬇️</div><div class="t">RECEIVE</div><div class="d">New shipment in</div></div></button>'
       +'<button class="bigcard wait" onclick="go(\'dispatch\')"><div class="ic">📦</div><div><div class="d" style="opacity:.95">Waiting to dispatch</div><div class="badge">'+wait+'</div></div></button>'
       +'<button class="bigcard transit" onclick="go(\'buses\')"><div class="ic">🚌</div><div><div class="d" style="opacity:.95">On buses / moving</div><div class="badge">'+(cartonsByStatus('park')+cartonsByStatus('transit')+cartonsByStatus('arrived'))+'</div></div></button>'
       +'<button class="bigcard dash" onclick="go(\'dash\')"><div><div class="ic">📊</div><div class="t">DASHBOARD</div><div class="d">Manager view</div></div></button>'
@@ -295,23 +309,34 @@ function viewHome(){
 function rowLink(ic,l1,l2,onclick){ return '<div class="row" onclick="'+onclick+'"><div class="dot g">'+ic+'</div><div class="m"><div class="l1">'+esc(l1)+'</div><div class="l2">'+esc(l2)+'</div></div><div class="r"><span class="mut" style="font-size:20px">›</span></div></div>'; }
 
 /* ---- RECEIVE (new shipment) ---- */
-var RC_ITEMS=[];
+var RC_ITEMS=[], EDIT_ID=null;
+function startNewReceive(){ EDIT_ID=null; RC_ITEMS=[]; RC_BAGS=[]; go('receive'); }
+function startEditShip(id){ var sh=shipById(id); if(!sh)return;
+  if(shipDispatched(sh)>0){ openShipMeta(id); return; }   // partly dispatched → only metadata is safe to change here
+  EDIT_ID=id;
+  RC_ITEMS=(sh.products||[]).map(function(p){return {name:p.name,qty:p.cartons};}); if(!RC_ITEMS.length)RC_ITEMS=[{name:'',qty:''}];
+  RC_BAGS=(sh.bags||[]).map(function(b){return {label:b.label||'',count:b.count,contents:(b.contents||[]).map(function(c){return {name:c.name,qty:c.qty};})};});
+  go('receive');
+}
 function viewReceive(){
-  if(!RC_ITEMS.length){ RC_ITEMS=[{name:'',qty:''}]; RC_BAGS=[]; }
-  return '<div class="card" style="margin-top:14px">'
-      +field('Date','<input id="rcDate" type="date" value="'+todayISO()+'">',true)
-      +field('Source warehouse','<input id="rcSrc" value="Kampala Warehouse">',false)
-      +field('Reference / delivery note','<input id="rcRef" placeholder="e.g. GRN-1042">',false)
+  if(!RC_ITEMS.length && !EDIT_ID){ RC_ITEMS=[{name:'',qty:''}]; RC_BAGS=[]; }
+  if(!RC_ITEMS.length)RC_ITEMS=[{name:'',qty:''}];
+  var e=EDIT_ID?shipById(EDIT_ID):null;
+  var editBanner=e?'<div class="card" style="margin-top:14px;background:var(--amber-l);border-color:#f2dca6"><div class="field" style="border:0"><b>Editing '+esc(e.id)+'</b><div class="mut" style="font-size:12px">Fix a mistake and save. Nothing has been dispatched from this shipment.</div></div></div>':'';
+  return editBanner+'<div class="card" style="margin-top:14px">'
+      +field('Date','<input id="rcDate" type="date" value="'+esc(e?e.date:todayISO())+'">',true)
+      +field('Source warehouse','<input id="rcSrc" value="'+esc(e?(e.source||'Kampala Warehouse'):'Kampala Warehouse')+'">',false)
+      +field('Reference / delivery note','<input id="rcRef" value="'+esc(e?(e.ref||''):'')+'" placeholder="e.g. GRN-1042">',false)
     +'</div>'
     +rcQuickHtml()
-    +'<div class="sec">Products in this shipment <span class="mini mut">carton counts</span></div>'
+    +'<div class="sec">Products in this shipment <span class="mini mut">box counts</span></div>'
     +'<div class="card" id="rcItems">'+rcItemsHtml()+'</div>'
-    +'<div style="padding:0 14px"><button class="chip" onclick="rcAdd()">+ Add product</button></div>'
-    +'<div class="sec">Big bags / sacks <span class="mini mut">many items in one sack</span></div>'
+    +'<div style="padding:0 14px;display:flex;gap:8px"><button class="chip" onclick="rcAdd()">+ Add product</button>'+(TRP.length?'<button class="chip" style="border-color:#bfe6cd;color:var(--green-d)" onclick="openScanner()">📷 Scan box</button>':'')+'</div>'
+    +'<div class="sec">Big bags / sacks <span class="mini mut">a bag = 1 unit to dispatch</span></div>'
     +'<div class="card" id="rcBags">'+rcBagsHtml()+'</div>'
     +'<div style="padding:0 14px"><button class="chip" onclick="openBagBuilder()">+ Pack a big bag</button></div>'
-    +'<div class="card" style="margin-top:14px">'+field('Notes','<textarea id="rcNotes" placeholder="Optional"></textarea>',false)+'</div>'
-    +'<div class="save"><button class="btn green" onclick="saveReceive()">✓ Receive into warehouse</button></div>';
+    +'<div class="card" style="margin-top:14px">'+field('Notes','<textarea id="rcNotes" placeholder="Optional">'+esc(e?(e.notes||''):'')+'</textarea>',false)+'</div>'
+    +'<div class="save"><button class="btn green" onclick="saveReceive()">'+(e?'✓ Save changes':'✓ Receive into warehouse')+'</button></div>';
 }
 function rcItemsHtml(){ return RC_ITEMS.map(function(it,i){
   // With a catalogue we pick from a list (no typing); without one we fall back to a text box.
@@ -347,10 +372,38 @@ function prodPickerList(q){ q=(q||'').toLowerCase().trim();
 function pickProd(name){
   if(PICK_KIND==='bag'){ if(BAG_DRAFT.contents[PICK_IDX])BAG_DRAFT.contents[PICK_IDX].name=name; renderBagBuilder(); return; }
   if(PICK_IDX>=0 && RC_ITEMS[PICK_IDX])RC_ITEMS[PICK_IDX].name=name; closeSheet(); rcRefresh(); var q=document.getElementById('rcQty'+PICK_IDX); if(q){try{q.focus();}catch(e){}} }
+/* ---- barcode scan → add a box (native BarcodeDetector; no backend, confined-role safe) ---- */
+var _trStream=null,_trRAF=null,_trDet=null,_trActive=false;
+function trScanSupported(){ return (typeof window!=='undefined' && typeof window.BarcodeDetector!=='undefined'); }
+function openScanner(){
+  if(!trScanSupported()){ var c=null; try{c=window.prompt('Scanning needs Chrome/Android. Type or paste the barcode:');}catch(e){} if(c)resolveScan(String(c).trim()); return; }
+  var ov=document.getElementById('scanOv'); ov.classList.add('show'); document.body.style.overflow='hidden'; startTrScan(); }
+function startTrScan(){ var vid=document.getElementById('scanVid'); if(!vid)return;
+  try{ _trDet=new window.BarcodeDetector(); }catch(e){ try{ _trDet=new window.BarcodeDetector({formats:['ean_13','ean_8','code_128','upc_a','upc_e','qr_code']}); }catch(e2){ _trDet=null; } }
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ setHint('Camera not available'); setTimeout(stopTrScan,1400); return; }
+  navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}}).then(function(s){ _trStream=s; vid.srcObject=s; try{vid.play();}catch(e){} _trActive=true; trTick(); })
+   .catch(function(e){ var nm=e&&e.name; setHint(nm==='NotAllowedError'?'Camera blocked — allow camera access':'Couldn’t start the camera'); setTimeout(stopTrScan,1700); }); }
+function setHint(t){ var h=document.getElementById('scanHint'); if(h)h.textContent=t; }
+function trTick(){ if(!_trActive)return; var vid=document.getElementById('scanVid');
+  if(vid&&vid.readyState>=2&&_trDet){ _trDet.detect(vid).then(function(cs){ if(cs&&cs.length){ var v=cs[0].rawValue||''; if(v){ onTrScanned(String(v).trim()); return; } } _trRAF=requestAnimationFrame(trTick); }).catch(function(){ _trRAF=requestAnimationFrame(trTick); }); }
+  else { _trRAF=requestAnimationFrame(trTick); } }
+function onTrScanned(code){ try{ if(navigator.vibrate)navigator.vibrate(30); }catch(e){} stopTrScan(); resolveScan(code); }
+function stopTrScan(){ _trActive=false; if(_trRAF){cancelAnimationFrame(_trRAF);_trRAF=null;} if(_trStream){ try{_trStream.getTracks().forEach(function(t){t.stop();});}catch(e){} _trStream=null; } var ov=document.getElementById('scanOv'); if(ov)ov.classList.remove('show'); document.body.style.overflow=''; }
+function resolveScan(code){ if(!code)return; var lc=code.toLowerCase(), hit=null;
+  for(var i=0;i<TRP.length;i++){ var p=TRP[i]; if((p.barcode&&String(p.barcode)===code)||(p.sku&&String(p.sku).toLowerCase()===lc)){ hit=p; break; } }
+  if(!hit){ for(var j=0;j<TRP.length;j++){ if((TRP[j].name||'').toLowerCase().indexOf(lc)>=0){ hit=TRP[j]; break; } } }
+  if(hit){ scanAddProduct(hit.name); haptic(); toast('Added '+hit.name+' — enter count'); }
+  else { toast('Scanned '+code+' — not in catalogue'); } }
+function scanAddProduct(name){
+  if(cur()!=='receive'){ EDIT_ID=null; RC_ITEMS=[]; RC_BAGS=[]; go('receive'); }
+  if(!RC_ITEMS.length)RC_ITEMS=[{name:'',qty:''}];
+  var slot=-1; for(var i=0;i<RC_ITEMS.length;i++){ if(!RC_ITEMS[i].name){slot=i;break;} }
+  if(slot<0){ RC_ITEMS.push({name:name,qty:''}); slot=RC_ITEMS.length-1; } else RC_ITEMS[slot].name=name;
+  rcRefresh(); var q=document.getElementById('rcQty'+slot); if(q){try{q.focus();}catch(e){}} }
 /* ---- big-bag builder (pack many items into one sack) ---- */
 var RC_BAGS=[], BAG_DRAFT=null;
 function rcBagsHtml(){ if(!RC_BAGS.length)return '<div class="field mut" style="font-size:13px">No bags yet. Use this when you pack several products into one big sack.</div>';
-  return RC_BAGS.map(function(bg,i){ return '<div class="prod"><div style="flex:1"><div class="pn">'+esc(bagLabel(bg))+' × '+bg.count+'</div><div class="pb">'+bagSummary(bg)+' &nbsp;('+bagUnit(bg)+'/bag)</div></div><button class="chip" onclick="RC_BAGS.splice('+i+',1);rcBagsRefresh()">✕</button></div>'; }).join(''); }
+  return RC_BAGS.map(function(bg,i){ var inside=(bg.contents&&bg.contents.length)?('inside: '+bagSummary(bg)):'counts as '+bg.count+' unit'+(bg.count===1?'':'s'); return '<div class="prod"><div style="flex:1"><div class="pn">'+esc(bagLabel(bg))+' × '+bg.count+'</div><div class="pb">'+inside+'</div></div><button class="chip" onclick="RC_BAGS.splice('+i+',1);rcBagsRefresh()">✕</button></div>'; }).join(''); }
 function rcBagsRefresh(){ var el=document.getElementById('rcBags'); if(el)el.innerHTML=rcBagsHtml(); }
 function openBagBuilder(){ BAG_DRAFT={label:'',count:1,contents:[{name:'',qty:''}]}; renderBagBuilder(); document.getElementById('sheet').classList.add('show'); }
 function renderBagBuilder(){
@@ -363,8 +416,10 @@ function renderBagBuilder(){
       +'<input type="number" inputmode="numeric" placeholder="Qty" value="'+(c.qty||'')+'" oninput="BAG_DRAFT.contents['+j+'].qty=this.value" style="width:74px;text-align:center;font-weight:800">'
       +(d.contents.length>1?'<button class="chip" onclick="BAG_DRAFT.contents.splice('+j+',1);renderBagBuilder()">✕</button>':'')+'</div>'; }).join('');
   b.innerHTML='<div class="sh">Pack a big bag (sack)</div>'
-    +'<div class="card" style="margin:0 14px 12px"><div class="field"><label>How many identical bags?</label>'+stepper('bagCount',d.count)+'</div></div>'
-    +'<div class="sec" style="padding-top:2px">What is inside one bag</div>'
+    +'<div class="card" style="margin:0 14px 12px">'
+      +'<div class="field"><label>Bag name <span class="mut" style="font-weight:400">(optional)</span></label><input id="bagLabel" value="'+esc(d.label||'')+'" placeholder="e.g. Aluminium Foil bag" oninput="BAG_DRAFT.label=this.value"></div>'
+      +'<div class="field"><label>How many bags?</label>'+stepper('bagCount',d.count)+'</div></div>'
+    +'<div class="sec" style="padding-top:2px">What is inside <span class="mini mut">optional — for the record, not counted</span></div>'
     +'<div class="card" style="margin:0 14px 8px" id="bagRows">'+rows+'</div>'
     +'<div style="padding:0 14px 10px"><button class="chip" onclick="bagAddItem()">+ Add item</button></div>'
     +'<div style="padding:0 14px 12px"><button class="btn green" onclick="saveBag()">✓ Add bag</button></div>';
@@ -373,17 +428,17 @@ function renderBagBuilder(){
 function bagAddItem(){ BAG_DRAFT.contents.push({name:'',qty:''}); renderBagBuilder(); if(TRP.length)openProdPicker('bag',BAG_DRAFT.contents.length-1); }
 function saveBag(){ var cnt=Math.max(1,Number(val('bagCount'))||1);
   var contents=BAG_DRAFT.contents.map(function(c){return {name:(c.name||'').trim(),qty:Number(c.qty)||0};}).filter(function(c){return c.name&&c.qty>0;});
-  if(!contents.length){ toast('Add at least one product to the bag'); return; }
-  RC_BAGS.push({label:'',count:cnt,contents:contents}); closeSheet(); rcBagsRefresh(); haptic(); toast('Bag added'); }
+  RC_BAGS.push({label:(val('bagLabel')||BAG_DRAFT.label||'').trim(),count:cnt,contents:contents}); closeSheet(); rcBagsRefresh(); haptic(); toast(cnt+' bag'+(cnt===1?'':'s')+' added'); }
 function saveReceive(){
   var date=val('rcDate')||todayISO(), src=val('rcSrc'), ref=val('rcRef'), notes=val('rcNotes');
   var products=RC_ITEMS.map(function(it){return {name:(it.name||'').trim(),cartons:Number(it.qty)||0};}).filter(function(p){return p.name&&p.cartons>0;});
-  var bags=(RC_BAGS||[]).map(function(bg){return {uid:uid(),label:bg.label||'',count:Number(bg.count)||0,contents:(bg.contents||[]).map(function(c){return {name:c.name,qty:Number(c.qty)||0};})};}).filter(function(b){return b.count>0 && b.contents.length;});
+  var bags=(RC_BAGS||[]).map(function(bg){return {uid:uid(),label:bg.label||'',count:Number(bg.count)||0,contents:(bg.contents||[]).map(function(c){return {name:c.name,qty:Number(c.qty)||0};})};}).filter(function(b){return b.count>0;});
   if(!products.length && !bags.length){ toast('Add products or a big bag'); return; }
+  if(EDIT_ID){ var ex=shipById(EDIT_ID); if(ex){ ex.date=date; ex.source=src; ex.ref=ref; ex.notes=notes; ex.products=products; ex.bags=bags; stamp(ex); markDirty(); haptic(); var eid=EDIT_ID; EDIT_ID=null; RC_ITEMS=[]; RC_BAGS=[]; toast('Saved changes · '+ex.id); reset('home'); go('shipment',eid); return; } EDIT_ID=null; }
   var id=seqId('TRN',date);
   var sh=stamp({id:id,date:date,ts:Date.now(),source:src,dest:'Juba Warehouse',ref:ref,notes:notes,products:products,bags:bags});
   REG.shipments.push(sh);
-  markDirty(); haptic(); RC_ITEMS=[]; RC_BAGS=[]; toast('Received '+id+' · '+shipTotal(sh)+' cartons'); reset('home');
+  markDirty(); haptic(); RC_ITEMS=[]; RC_BAGS=[]; toast('Received '+id+' · '+shipTotal(sh)+' boxes'); reset('home');
 }
 
 /* ---- DISPATCH (load a bus from waiting stock) ---- */
@@ -393,7 +448,7 @@ function viewDispatch(){
   if(!wp.length && !wb.length) return '<div class="empty"><span class="em">📭</span>Nothing waiting to dispatch.<br>Receive a shipment first, then load it onto a bus.</div><div style="padding:0 14px"><button class="btn green" onclick="reset(\'receive\')">Receive a shipment</button></div>';
   var comps=(REG.companies||[]).slice(0,8);
   var chips=comps.length?('<div class="chips">'+comps.map(function(c){return '<button class="chip" onclick="setVal(\'dpCo\','+jq(c)+')">'+esc(c)+'</button>';}).join('')+'</div>'):'';
-  var prods=wp.length?('<div class="sec">Loose cartons <span class="mini mut">tap − / + to adjust</span></div><div class="card" id="dpItems">'+wp.map(function(p,i){ return dpRow(p,i); }).join('')+'</div>'):'';
+  var prods=wp.length?('<div class="sec">Loose boxes <span class="mini mut">tap − / + to adjust</span></div><div class="card" id="dpItems">'+wp.map(function(p,i){ return dpRow(p,i); }).join('')+'</div>'):'';
   var bags=wb.length?('<div class="sec">Big bags / sacks <span class="mini mut">whole sacks</span></div><div class="card" id="dpBags">'+wb.map(function(w,i){ return dpBagRow(w,i); }).join('')+'</div>'):'';
   return '<div class="sec">Which bus?</div>'
     +'<div class="card">'
@@ -418,13 +473,13 @@ function doDispatch(){
   wp.forEach(function(p,i){ var q=Math.min(p.pending, Number(val('dp_'+i))||0); if(q>0){ lines=lines.concat(allocate(p.name,q,dm)); } });
   var wb=waitingBags(), baglines=[];
   wb.forEach(function(w,i){ var q=Math.min(w.pending, Number(val('dpbag_'+i))||0); if(q>0){ baglines.push({shipmentId:w.shipmentId,bagUid:w.bag.uid,label:bagLabel(w.bag),count:q,contents:w.bag.contents}); } });
-  if(!lines.length && !baglines.length){ toast('Set how many cartons or bags to load'); return; }
+  if(!lines.length && !baglines.length){ toast('Set how many boxes or bags to load'); return; }
   if(co && REG.companies.indexOf(co)<0){ REG.companies.unshift(co); REG.companies=REG.companies.slice(0,12); }
   var date=todayISO(), id=seqId('LD',date), now=Date.now();
   var ld=stamp({id:id,date:date,ts:now,company:co,bus:bus,phone:phone,eta:eta,status:DP_STATUS,lines:lines,baglines:baglines,
     events:[{status:DP_STATUS,ts:now,note:'Loaded on '+co+' '+bus}]});
   REG.loads.push(ld);
-  markDirty(); haptic(); toast('Dispatched '+loadTotal(ld)+' cartons · '+id);
+  markDirty(); haptic(); toast('Dispatched '+loadTotal(ld)+' boxes · '+id);
   reset('home'); go('load',id);
 }
 
@@ -435,13 +490,13 @@ function viewBuses(){
   var done=loads.filter(function(l){return l.status==='received'||l.status==='lost';});
   var shipCards='';
   var withPending=REG.shipments.filter(function(sh){return shipDispatched(sh)<shipTotal(sh);});
-  if(withPending.length){ shipCards='<div class="sec">Shipments with cartons still at Kampala</div><div class="card">'+withPending.map(shipRow).join('')+'</div>'; }
+  if(withPending.length){ shipCards='<div class="sec">Shipments with boxes still at Kampala</div><div class="card">'+withPending.map(shipRow).join('')+'</div>'; }
   function block(title,list){ if(!list.length)return ''; return '<div class="sec">'+title+'</div><div class="card">'+list.map(loadRow).join('')+'</div>'; }
   var body=block('Moving now',active)+shipCards+block('Completed / closed',done);
   return body||'<div class="empty"><span class="em">🚌</span>No buses loaded yet.<br>Dispatch a shipment to start tracking.</div>';
 }
-function loadRow(ld){ var tot=loadTotal(ld); return '<div class="row" onclick="go(\'load\','+jq(ld.id)+')"><div class="dot out">🚌</div><div class="m"><div class="l1">'+esc(ld.company||'')+' · '+esc(ld.bus||'')+'</div><div class="l2">'+esc(ld.id)+' · '+tot+' cartons'+(function(){var nb=(ld.baglines||[]).reduce(function(s,b){return s+(Number(b.count)||0);},0);var parts=[(ld.lines||[]).length?((ld.lines||[]).length+' product'+((ld.lines||[]).length===1?'':'s')):'',nb?(nb+' bag'+(nb===1?'':'s')):''].filter(Boolean).join(' · ');return parts?(' · '+parts):'';})()+'</div><div style="margin-top:5px">'+statusPill(ld.status)+' <span class="holder">👤 '+esc(holderOf(ld))+'</span></div></div><div class="r"><div class="q">'+tot+'</div><div class="bal">'+ago(ld.ts)+' ago</div></div></div>'; }
-function shipRow(sh){ var st=shipStatus(sh), pend=shipTotal(sh)-shipDispatched(sh); return '<div class="row" onclick="go(\'shipment\','+jq(sh.id)+')"><div class="dot in">📦</div><div class="m"><div class="l1">'+esc(sh.id)+'</div><div class="l2">'+fmtDate(sh.date)+' · '+shipTotal(sh)+' cartons · '+(sh.products||[]).length+' products</div><div style="margin-top:5px"><span class="pill '+st.c+'">'+esc(st.l)+'</span></div></div><div class="r"><div class="q" style="color:var(--amber)">'+pend+'</div><div class="bal">waiting</div></div></div>'; }
+function loadRow(ld){ var tot=loadTotal(ld); return '<div class="row" onclick="go(\'load\','+jq(ld.id)+')"><div class="dot out">🚌</div><div class="m"><div class="l1">'+esc(ld.company||'')+' · '+esc(ld.bus||'')+'</div><div class="l2">'+esc(ld.id)+' · '+tot+' boxes'+(function(){var nb=(ld.baglines||[]).reduce(function(s,b){return s+(Number(b.count)||0);},0);var parts=[(ld.lines||[]).length?((ld.lines||[]).length+' product'+((ld.lines||[]).length===1?'':'s')):'',nb?(nb+' bag'+(nb===1?'':'s')):''].filter(Boolean).join(' · ');return parts?(' · '+parts):'';})()+'</div><div style="margin-top:5px">'+statusPill(ld.status)+' <span class="holder">👤 '+esc(holderOf(ld))+'</span></div></div><div class="r"><div class="q">'+tot+'</div><div class="bal">'+ago(ld.ts)+' ago</div></div></div>'; }
+function shipRow(sh){ var st=shipStatus(sh), pend=shipTotal(sh)-shipDispatched(sh); return '<div class="row" onclick="go(\'shipment\','+jq(sh.id)+')"><div class="dot in">📦</div><div class="m"><div class="l1">'+esc(sh.id)+'</div><div class="l2">'+fmtDate(sh.date)+' · '+shipTotal(sh)+' boxes · '+(sh.products||[]).length+' products</div><div style="margin-top:5px"><span class="pill '+st.c+'">'+esc(st.l)+'</span></div></div><div class="r"><div class="q" style="color:var(--amber)">'+pend+'</div><div class="bal">waiting</div></div></div>'; }
 
 /* ---- LOAD (bus manifest) ---- */
 function viewLoad(id){
@@ -453,11 +508,12 @@ function viewLoad(id){
     +(ld.phone?'<div class="field"><label>Driver phone</label><div><a href="tel:'+esc(ld.phone)+'" style="color:var(--green-d);font-weight:700;text-decoration:none">'+esc(ld.phone)+' 📞</a></div></div>':'')
     +'</div>';
   var lineHtml=(ld.lines||[]).map(function(l){ var sh=shipById(l.shipmentId); return '<div class="prod"><div style="flex:1"><div class="pn">'+esc(l.name)+'</div><div class="pb">from '+esc(sh?sh.id:'—')+'</div></div><div style="font-size:18px;font-weight:900">'+l.cartons+'</div></div>'; }).join('');
-  var bagHtml=(ld.baglines||[]).map(function(bl){ return '<div class="prod"><div style="flex:1"><div class="pn">🛍️ '+esc(bl.label||'Bag')+' × '+bl.count+'</div><div class="pb">'+bagSummary(bl)+' &nbsp;('+baglineCartons(bl)+' cartons)</div></div><div style="font-size:18px;font-weight:900">'+bl.count+' bag'+(bl.count===1?'':'s')+'</div></div>'; }).join('');
-  var lines='<div class="sec">Load ('+tot+' cartons)</div><div class="card">'+lineHtml+bagHtml+'</div>';
+  var bagHtml=(ld.baglines||[]).map(function(bl){ var inside=(bl.contents&&bl.contents.length)?('inside: '+bagSummary(bl)):'big bag'; return '<div class="prod"><div style="flex:1"><div class="pn">🛍️ '+esc(bl.label||'Bag')+' × '+bl.count+'</div><div class="pb">'+inside+'</div></div><div style="font-size:18px;font-weight:900">'+bl.count+' bag'+(bl.count===1?'':'s')+'</div></div>'; }).join('');
+  var lines='<div class="sec">Load ('+tot+' boxes)</div><div class="card">'+lineHtml+bagHtml+'</div>';
   var acts='';
   var nx=nextStatus(ld.status);
   if(nx){ var labels={transit:'🚌 Bus left — In transit',arrived:'📍 Arrived Juba',received:'🏬 Received at Juba warehouse'}; acts+='<div style="padding:0 14px 8px"><button class="btn blue" onclick="advance('+jq(ld.id)+')">'+labels[nx]+'</button></div>'; }
+  acts+='<div style="padding:0 14px 8px"><button class="btn ghost" onclick="openLoadEdit('+jq(ld.id)+')">✎ Edit bus details</button></div>';
   acts+='<div style="padding:0 14px 8px"><button class="btn ghost" onclick="shareManifest('+jq(ld.id)+')">📤 Send manifest on WhatsApp</button></div>';
   if(ld.status!=='lost')acts+='<div style="padding:0 14px 8px"><button class="btn ghost" style="color:var(--red)" onclick="setLoadStatus('+jq(ld.id)+',\'lost\')">⚠️ Flag lost / disputed</button></div>';
   acts+='<div style="padding:0 14px 16px"><button class="btn ghost" style="color:var(--muted)" onclick="delLoad('+jq(ld.id)+')">Delete manifest</button></div>';
@@ -466,7 +522,7 @@ function viewLoad(id){
 }
 function advance(id){ var ld=loadById(id); if(!ld)return; var nx=nextStatus(ld.status); if(nx)setLoadStatus(id,nx); }
 function setLoadStatus(id,st){ var ld=loadById(id); if(!ld)return; ld.status=st; ld.events=ld.events||[]; ld.events.push({status:st,ts:Date.now(),note:(STATUS[st]||{}).l||st}); stamp(ld); markDirty(); haptic(); toast('Updated: '+((STATUS[st]||{}).l||st)); render(); }
-function delLoad(id){ if(!confirm('Delete this manifest? The cartons go back to waiting.'))return; var ld=loadById(id); if(ld)tombstone(ld.uid); REG.loads=REG.loads.filter(function(l){return l.id!==id;}); markDirty(); back(); toast('Manifest deleted'); }
+function delLoad(id){ if(!confirm('Delete this manifest? The boxes go back to waiting.'))return; var ld=loadById(id); if(ld)tombstone(ld.uid); REG.loads=REG.loads.filter(function(l){return l.id!==id;}); markDirty(); back(); toast('Manifest deleted'); }
 
 /* ---- SHIPMENT detail (product sent/pending) ---- */
 function viewShipment(id){
@@ -481,15 +537,39 @@ function viewShipment(id){
   var bagsHtml=(sh.bags||[]).length?('<div class="sec">Big bags</div><div class="card">'+(sh.bags||[]).map(function(bag){ var pend=shipBagPending(bag,dbm), sent=(Number(bag.count)||0)-pend; return '<div class="prod"><div style="flex:1"><div class="pn">🛍️ '+esc(bagLabel(bag))+' × '+bag.count+'</div><div class="pb">'+bagSummary(bag)+' · <b style="color:var(--green-d)">'+sent+' sent</b>'+(pend>0?(' · <b style="color:var(--amber)">'+pend+' waiting</b>'):'')+'</div></div><div style="font-size:16px;font-weight:900;color:'+(pend>0?'var(--amber)':'var(--green-d)')+'">'+(pend>0?pend:'✓')+'</div></div>'; }).join('')+'</div>'):'';
   var loads=REG.loads.filter(function(ld){return (ld.lines||[]).some(function(l){return l.shipmentId===sh.id;}) || (ld.baglines||[]).some(function(b){return b.shipmentId===sh.id;});});
   var lc=loads.length?('<div class="sec">On buses</div><div class="card">'+loads.map(loadRow).join('')+'</div>'):'';
-  return head+prods+bagsHtml+lc+'<div style="padding:8px 14px 16px"><button class="btn ghost" style="color:var(--muted)" onclick="delShip('+jq(sh.id)+')">Delete shipment</button></div>';
+  return head+prods+bagsHtml+lc
+    +'<div style="padding:8px 14px 4px"><button class="btn blue" onclick="startEditShip('+jq(sh.id)+')">✎ Edit shipment</button></div>'
+    +'<div style="padding:4px 14px 16px"><button class="btn ghost" style="color:var(--muted)" onclick="delShip('+jq(sh.id)+')">Delete shipment</button></div>';
 }
-function delShip(id){ var used=REG.loads.some(function(l){return (l.lines||[]).some(function(x){return x.shipmentId===id;})||(l.baglines||[]).some(function(x){return x.shipmentId===id;});}); if(used){toast('Cartons already dispatched — delete those manifests first');return;} if(!confirm('Delete this shipment?'))return; var sh=shipById(id); if(sh)tombstone(sh.uid); REG.shipments=REG.shipments.filter(function(s){return s.id!==id;}); markDirty(); back(); toast('Shipment deleted'); }
+function delShip(id){ var used=REG.loads.some(function(l){return (l.lines||[]).some(function(x){return x.shipmentId===id;})||(l.baglines||[]).some(function(x){return x.shipmentId===id;});}); if(used){toast('Already dispatched — delete those manifests first');return;} if(!confirm('Delete this shipment?'))return; var sh=shipById(id); if(sh)tombstone(sh.uid); REG.shipments=REG.shipments.filter(function(s){return s.id!==id;}); markDirty(); back(); toast('Shipment deleted'); }
+/* metadata-only edit (used when a shipment is already partly dispatched — quantities are locked) */
+function openShipMeta(id){ var sh=shipById(id); if(!sh)return; var b=document.getElementById('sheetBody');
+  b.innerHTML='<div class="sh">Edit '+esc(sh.id)+' <span class="mut" style="font-weight:500;font-size:12px">— details only (already dispatched)</span></div>'
+    +'<div class="card" style="margin:0 14px 12px">'
+      +field('Date','<input id="smDate" type="date" value="'+esc(sh.date)+'">',false)
+      +field('Reference','<input id="smRef" value="'+esc(sh.ref||'')+'">',false)
+      +field('Notes','<textarea id="smNotes">'+esc(sh.notes||'')+'</textarea>',false)
+    +'</div><div style="padding:0 14px 12px"><button class="btn green" onclick="saveShipMeta('+jq(id)+')">✓ Save</button></div>';
+  document.getElementById('sheet').classList.add('show'); }
+function saveShipMeta(id){ var sh=shipById(id); if(!sh)return; sh.date=val('smDate')||sh.date; sh.ref=val('smRef'); sh.notes=val('smNotes'); stamp(sh); markDirty(); closeSheet(); render(); toast('Saved'); }
+/* edit a bus manifest's details (quantities are changed by delete + re-dispatch) */
+function openLoadEdit(id){ var ld=loadById(id); if(!ld)return; var b=document.getElementById('sheetBody');
+  b.innerHTML='<div class="sh">Edit bus details</div>'
+    +'<div class="card" style="margin:0 14px 12px">'
+      +field('Bus company','<input id="leCo" value="'+esc(ld.company||'')+'">',false)
+      +field('Bus number','<input id="leBus" value="'+esc(ld.bus||'')+'">',false)
+      +field('Driver phone','<input id="lePhone" value="'+esc(ld.phone||'')+'">',false)
+      +field('Expected arrival','<input id="leEta" value="'+esc(ld.eta||'')+'">',false)
+    +'</div><div style="padding:0 14px 4px"><button class="btn green" onclick="saveLoadEdit('+jq(id)+')">✓ Save</button></div>'
+    +'<div style="padding:0 14px 12px"><div class="mut" style="font-size:12px;text-align:center">To change loaded quantities, delete this manifest and dispatch again.</div></div>';
+  document.getElementById('sheet').classList.add('show'); }
+function saveLoadEdit(id){ var ld=loadById(id); if(!ld)return; ld.company=val('leCo')||ld.company; ld.bus=val('leBus'); ld.phone=val('lePhone'); ld.eta=val('leEta'); stamp(ld); markDirty(); closeSheet(); render(); toast('Saved'); }
 
 /* ---- DASHBOARD ---- */
 function viewDash(){
   var d1=delayedLoads(24).length, d2=delayedLoads(48).length;
   var tiles=[
-    ['Total received (Kampala)',totalIntake(),'cartons in','info'],
+    ['Total received (Kampala)',totalIntake(),'boxes in','info'],
     ['Waiting to dispatch',waitingTotal(),'with transporter','hot'],
     ['At bus park',cartonsByStatus('park'),'loaded, not left','hot'],
     ['In transit',cartonsByStatus('transit'),'on the road','info'],
@@ -509,8 +589,8 @@ function viewDash(){
 /* ---- TIMELINE ---- */
 function allEvents(){
   var ev=[];
-  REG.shipments.forEach(function(sh){ ev.push({ts:sh.ts,tt:'📥 Received '+sh.id,ts2:shipTotal(sh)+' cartons · '+(sh.products||[]).length+' products'}); });
-  REG.loads.forEach(function(ld){ (ld.events||[]).forEach(function(e){ ev.push({ts:e.ts,tt:(STATUS[e.status]||{}).ic+' '+((STATUS[e.status]||{}).l||e.status)+' — '+ld.company+' '+ld.bus,ts2:loadTotal(ld)+' cartons · '+ld.id}); }); });
+  REG.shipments.forEach(function(sh){ ev.push({ts:sh.ts,tt:'📥 Received '+sh.id,ts2:shipTotal(sh)+' boxes · '+(sh.products||[]).length+' products'}); });
+  REG.loads.forEach(function(ld){ (ld.events||[]).forEach(function(e){ ev.push({ts:e.ts,tt:(STATUS[e.status]||{}).ic+' '+((STATUS[e.status]||{}).l||e.status)+' — '+ld.company+' '+ld.bus,ts2:loadTotal(ld)+' boxes · '+ld.id}); }); });
   return ev.sort(function(a,b){return (b.ts||0)-(a.ts||0);});
 }
 function timelineList(items){ if(!items.length)return '<div class="empty" style="padding:20px">No events yet.</div>'; return '<div style="padding:2px 0 10px">'+items.map(function(it){ return '<div class="timeitem"><div class="tl"><div class="d2"></div><div class="ln"></div></div><div class="tc"><div class="tt">'+esc(it.tt)+'</div><div class="ts">'+esc(it.ts2||'')+' · '+fmtDate(new Date(it.ts).toISOString?new Date(it.ts).toISOString().slice(0,10):todayISO())+' '+fmtTime(it.ts)+'</div></div></div>'; }).join('')+'</div>'; }
@@ -536,7 +616,7 @@ function val(id){ var e=document.getElementById(id); return e?String(e.value||''
 function setVal(id,v){ var e=document.getElementById(id); if(e)e.value=v; }
 
 /* ---- WhatsApp share ---- */
-function manifestText(ld){ var lines=['*Bus manifest — '+ld.company+' '+ld.bus+'*','('+ld.id+' · '+fmtDate(ld.date)+')','','Status: '+((STATUS[ld.status]||{}).l||ld.status),ld.eta?('ETA: '+ld.eta):'', '']; (ld.lines||[]).forEach(function(l){ lines.push('• '+l.name+' — '+l.cartons); }); (ld.baglines||[]).forEach(function(bl){ lines.push('🛍️ '+(bl.label||'Bag')+' × '+bl.count+' ('+(bl.contents||[]).map(function(c){return c.name+' '+c.qty;}).join(', ')+')'); }); lines.push(''); lines.push('*Total: '+loadTotal(ld)+' cartons*'); return lines.join('\n'); }
+function manifestText(ld){ var lines=['*Bus manifest — '+ld.company+' '+ld.bus+'*','('+ld.id+' · '+fmtDate(ld.date)+')','','Status: '+((STATUS[ld.status]||{}).l||ld.status),ld.eta?('ETA: '+ld.eta):'', '']; (ld.lines||[]).forEach(function(l){ lines.push('• '+l.name+' — '+l.cartons); }); (ld.baglines||[]).forEach(function(bl){ lines.push('🛍️ '+(bl.label||'Bag')+' × '+bl.count+' ('+(bl.contents||[]).map(function(c){return c.name+' '+c.qty;}).join(', ')+')'); }); lines.push(''); lines.push('*Total: '+loadTotal(ld)+' boxes*'); return lines.join('\n'); }
 function shareManifest(id){ var ld=loadById(id); if(!ld)return; shareText(manifestText(ld)); }
 function dashText(){ var l=['*Transport status — '+fmtDate(todayISO())+'*','','📥 Received (Kampala): '+totalIntake(),'📦 Waiting to dispatch: '+waitingTotal(),'🅿️ At bus park: '+cartonsByStatus('park'),'🚌 In transit: '+cartonsByStatus('transit'),'📍 Arrived Juba: '+cartonsByStatus('arrived'),'🏬 In Juba warehouse: '+cartonsByStatus('received')]; var lost=cartonsByStatus('lost'); if(lost)l.push('⚠️ Lost/disputed: '+lost); var d=delayedLoads(24).length; if(d)l.push('⏱ Delayed >24h: '+d+' shipments'); return l.join('\n'); }
 function shareDash(){ shareText(dashText()); }

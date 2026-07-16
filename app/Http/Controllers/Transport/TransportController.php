@@ -51,11 +51,13 @@ class TransportController extends Controller
             return \App\Models\Product::query()
                 ->where('tenant_id', $tid)
                 ->orderBy('name')
-                ->get(['name', 'category', 'unit_label'])
+                ->get(['name', 'category', 'unit_label', 'barcode', 'sku'])
                 ->map(fn ($p) => [
-                    'name' => (string) $p->name,
-                    'cat'  => (string) ($p->category ?? ''),
-                    'unit' => (string) ($p->unit_label ?? ''),
+                    'name'    => (string) $p->name,
+                    'cat'     => (string) ($p->category ?? ''),
+                    'unit'    => (string) ($p->unit_label ?? ''),
+                    'barcode' => (string) ($p->barcode ?? ''),
+                    'sku'     => (string) ($p->sku ?? ''),
                 ])
                 ->filter(fn ($x) => $x['name'] !== '')
                 ->unique('name')
