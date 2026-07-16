@@ -1,24 +1,31 @@
-# CloudBSS — Hero images just work (no composition rules)
+# CloudBSS — Hero UX fix (default = main, hero merchandises)
 
-Makes the collection hero robust to ANY uploaded photo, so there are no
-image rules to follow. Single file: `resources/storefront/shop.html`.
+Two fixes from the live screenshot feedback. Single file:
+`resources/storefront/shop.html`. No backend/config change; works with your
+current saved config.
 
-## What changed
-- **Automatic readability.** The hero now uses a stronger two-part scrim that
-  darkens the left (where the desktop headline sits) AND the bottom (where the
-  mobile headline sits), plus a subtle text shadow. The headline, bullets and
-  button stay legible over any photo — bright or dark, subject anywhere.
-- **Automatic sizing/cropping** (already the case): the uploader shrinks &
-  compresses on upload; the hero fills with `cover` + centered crop and a dark
-  fallback colour if a photo is missing.
+## 1. The Default collection is now the MAIN (first) card
+Previously "Default for new visitors" only picked which hero opened — the card
+stayed wherever it sat in the list (so Wholesale showed 5th). Now the default
+collection **automatically leads the selector row**. So setting Default =
+Wholesale makes Wholesale the first, highlighted card — no manual reordering.
+It stays stable (the default is a fixed setting; the row doesn't reshuffle as
+visitors click around).
 
-Net effect: upload any decent landscape photo — the system handles size,
-cropping and text contrast. No safe-zone / composition rules needed. (Putting the
-main subject slightly to the right still looks nicest, but it's no longer
-required for readability.)
+→ Effect on your live site: since your Default is already Wholesale, deploying
+this makes Wholesale the first card immediately. (To also rename it "Wholesale
+Deals", edit the label in v3 → Shop for Every Need, or Load starter template.)
 
-Requires: deploy on top of the current storefront bundle (replaces its shop.html).
-No backend/config change.
+## 2. The hero merchandises instead of covering the screen
+The big empty banner was the problem — a first-time visitor saw a large coloured
+block with no product. The hero now shows **3 featured products from the
+collection** floating on the right (desktop), each tappable to the product. So
+the hero communicates what's inside even before you upload a hero photo, and it
+no longer reads as an empty space. When you do add a hero lifestyle photo, the
+product cards sit nicely over it. Featured products come from the collection's
+best-sellers automatically — no setup.
 
-Verified: shop.html JS compiles; Playwright — hero renders over an uploaded
-image with the two-gradient scrim and text shadow applied, headline legible.
+(Mobile is unchanged — the best-sellers rail already sits right under the hero.)
+
+Verified: shop.html JS compiles; Playwright at 1440px — the Default collection
+leads the row and is highlighted; the hero shows 3 featured products; no errors.

@@ -976,6 +976,17 @@ button{ -webkit-tap-highlight-color:transparent }
 @keyframes bizHeroIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .bizhero{animation:bizHeroIn .34s ease both}
 @media(prefers-reduced-motion:reduce){ .bizhero{animation:none} }
+/* Featured products floating on the right of the hero (desktop only) — merchandises the collection. */
+.bizfeat{display:none}
+@media(min-width:1180px){
+  .bizfeat{display:flex;position:absolute;right:34px;top:50%;transform:translateY(-50%);gap:12px;z-index:2}
+  .bizfeat .fp{width:132px;background:rgba(255,255,255,.97);border-radius:13px;padding:9px;box-shadow:0 12px 28px rgba(0,0,0,.24);cursor:pointer;transition:.15s}
+  .bizfeat .fp:hover{transform:translateY(-3px)}
+  .bizfeat .fp .im{height:84px;border-radius:9px;background:#eef2f5 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#9aa7b5;margin-bottom:7px}
+  .bizfeat .fp .im svg{width:34px;height:34px}
+  .bizfeat .fp .nm{font-size:12px;font-weight:700;color:#172029;line-height:1.2;height:29px;overflow:hidden}
+  .bizfeat .fp .pr{font-size:13.5px;font-weight:800;color:#0b7a3b;margin-top:3px}
+}
 @media(min-width:1024px){
   .bizhero{margin:0}
   .bizslide{min-height:330px}
@@ -1298,7 +1309,12 @@ function bizProducts(biz){ return PRODUCTS.filter(function(p){return bizMatch(p,
 function bizTitle(t){ return esc(String(t||'')).replace(/\*(.+?)\*/g,'<b>$1</b>'); }
 
 function businessBanners(){
-  var list=activeBiz(); if(!list.length) return '';   // stable, config (business-priority) order
+  var list=activeBiz(); if(!list.length) return '';   // config order…
+  // …but the "Default for new visitors" collection always leads the row (it's the main). Stable —
+  // the default is a fixed setting, so the selector doesn't reshuffle as visitors click around.
+  var def=(BANNERS&&BANNERS['default'])||'';
+  if(def){ var di=-1; for(var _i=0;_i<list.length;_i++){ if(list[_i].id===def){di=_i;break;} }
+    if(di>0){ list=[list[di]].concat(list.slice(0,di)).concat(list.slice(di+1)); } }
   var biz=currentBiz(); if(!biz) return '';
   var slides=(biz.slides&&biz.slides.length)?biz.slides:[{title:biz.label,cta_label:'Shop '+biz.label}];
   if(_bizSlide>=slides.length||_bizSlide<0)_bizSlide=0;
@@ -1322,7 +1338,14 @@ function businessBanners(){
   var multi=slides.length>1;
   var dots=multi?('<div class="bizdots" id="bizDots">'+slides.map(function(_,i){return '<i class="'+(i===_bizSlide?'on':'')+'" onclick="bizGo('+i+')"></i>';}).join('')+'</div>'):'';
   var arrows=multi?'<button class="bizarw l" onclick="bizPrev()" aria-label="Previous">‹</button><button class="bizarw r" onclick="bizNext()" aria-label="Next">›</button>':'';
-  var hero='<div class="bizhero" id="bizHero"><div class="biztrack" id="bizTrack" style="transform:translateX(-'+(_bizSlide*100)+'%)">'+track+'</div>'+arrows+'</div>'+dots;
+  // Featured products float on the right of the hero (desktop) so it merchandises the collection
+  // instead of being an empty banner — even before a hero photo is uploaded. Stays put while slides scroll.
+  var hf=bizProducts(biz).filter(sellableRail).slice().sort(function(a,b){return (b.popularity||0)-(a.popularity||0);}).slice(0,3);
+  var featPanel=hf.length?('<div class="bizfeat">'+hf.map(function(p){
+    var im=p.image?('background-image:url(\''+encodeURI(p.image)+'\')'):'';
+    return '<div class="fp" onclick="goDetail('+jk(String(p.id))+')"><div class="im" style="'+im+'">'+(p.image?'':bizIcon('shop'))+'</div><div class="nm">'+esc(p.name)+'</div><div class="pr">'+(p.poa?'On request':ugx(p.price))+'</div></div>';
+  }).join('')+'</div>'):'';
+  var hero='<div class="bizhero" id="bizHero"><div class="biztrack" id="bizTrack" style="transform:translateX(-'+(_bizSlide*100)+'%)">'+track+'</div>'+arrows+featPanel+'</div>'+dots;
   var coll='';
   if(biz.collections&&biz.collections.length){
     var cc=biz.collections.map(function(c){
