@@ -43,7 +43,7 @@ class InvoiceController extends Controller
         $t = $request->user()->tenant;
         if (! $t) return response()->json(['ok' => false], 401);
 
-        $q = Invoice::where('tenant_id', $t->id)->orderByDesc('id');
+        $q = Invoice::with('order:id,order_no')->where('tenant_id', $t->id)->orderByDesc('id');
         $search = trim((string) $request->query('q', ''));
         if ($search !== '') {
             $q->where(function ($w) use ($search) {
@@ -69,6 +69,7 @@ class InvoiceController extends Controller
                 'currency' => $i->currency, 'total' => (float) $i->total,
                 'paid' => (float) $i->amount_paid, 'balance' => (float) $i->balance,
                 'status' => $i->status, 'order_id' => $i->order_id,
+                'order_no' => (string) (optional($i->order)->order_no ?? ''),
                 'due' => optional($i->due_at)->format('d M Y'),
                 'pdf' => $i->pdf_path ? ('/papi/invoice-pdf?id=' . $i->id) : '',
             ])->values(),

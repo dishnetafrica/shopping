@@ -52,6 +52,8 @@ td.num,th.num{text-align:right}
 .toast.err{background:var(--red)}
 .dl{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13px}
 .dl dt{color:var(--mut);font-weight:600}
+.pminv{display:inline-block;margin:2px 4px 2px 0;padding:5px 9px;border:1px solid #cbd5e1;background:#f8fafc;border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;color:#0f172a}
+.pminv:hover{background:#e0edff;border-color:#93c5fd}
 @media(max-width:640px){.tiles{grid-template-columns:1fr}.hidem{display:none}}
 </style>
 </head>
@@ -92,7 +94,8 @@ td.num,th.num{text-align:right}
     <h2 id="mtitle">Add payment</h2>
     <div class="mbody">
       <input type="hidden" id="f_id">
-      <div class="f"><label>Customer name *</label><input id="f_customer" placeholder="e.g. Azam Supermarket"></div>
+      <div class="f"><label>Customer name *</label><input id="f_customer" list="custList" autocomplete="off" placeholder="Start typing a customer…" oninput="pmFindInvoices()"><datalist id="custList"></datalist></div>
+      <div id="pmInv" style="margin:-4px 0 12px"></div>
       <div class="row2">
         <div class="f"><label>Order no *</label><input id="f_order" placeholder="ORD-48"></div>
         <div class="f"><label>Invoice no</label><input id="f_invoice" placeholder="optional"></div>
@@ -152,8 +155,43 @@ async function api(path, method, body){
   return j;
 }
 
+var PM_CUSTOMERS=[], PM_INVT=null, PM_INV=[];
+async function pmLoadCustomers(){
+  var j=await api('/customers'); var m=(j&&j.customers)||{};
+  PM_CUSTOMERS=Object.keys(m).map(function(ph){return {name:(m[ph].name||''),phone:ph};}).filter(function(c){return c.name;});
+  document.getElementById('custList').innerHTML=PM_CUSTOMERS.map(function(c){return '<option value="'+esc(c.name)+'">'+esc(c.phone)+'</option>';}).join('');
+}
+function pmFindInvoices(){
+  clearTimeout(PM_INVT);
+  var q=(document.getElementById('f_customer').value||'').trim();
+  var box=document.getElementById('pmInv');
+  var match=PM_CUSTOMERS.filter(function(c){return c.name.toLowerCase()===q.toLowerCase();})[0];
+  if(match && !document.getElementById('f_phone').value) document.getElementById('f_phone').value=match.phone;
+  if(q.length<2){ box.innerHTML=''; return; }
+  PM_INVT=setTimeout(function(){
+    api('/invoices?q='+encodeURIComponent(q)).then(function(j){
+      PM_INV=((j&&j.invoices)||[]).filter(function(i){return Number(i.balance)>0.005 && i.status!=='void';});
+      if(!PM_INV.length){ box.innerHTML='<div style="font-size:12px;color:#64748b">No open invoices for this customer.</div>'; return; }
+      box.innerHTML='<div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:5px">Open invoices — click to fill:</div>'+
+        PM_INV.slice(0,10).map(function(i,idx){var dec=i.currency==='USD'?2:0;
+          return '<button type="button" class="pminv" onclick="pmPickInvoice('+idx+')">'+esc(i.no)+' · '+esc(i.currency)+' '+Number(i.balance).toLocaleString(undefined,{minimumFractionDigits:dec,maximumFractionDigits:dec})+' due'+(i.order_no?(' · '+esc(i.order_no)):'')+'</button>';
+        }).join('');
+    });
+  },300);
+}
+function pmPickInvoice(idx){
+  var i=PM_INV[idx]; if(!i) return;
+  document.getElementById('f_order').value=i.order_no||'';
+  document.getElementById('f_invoice').value=i.no||'';
+  document.getElementById('f_amount').value=i.balance||'';
+  document.getElementById('f_cur').value=i.currency||CFG.base;
+  document.getElementById('f_kind').value='settlement';
+  rateFromCur(); usdPrev();
+  toast('Filled from '+(i.no||'invoice'));
+}
 async function load(){
   document.getElementById('bizname').textContent = CFG.business + ' · manage receipts';
+  pmLoadCustomers();
   var fc=document.getElementById('f_cur'), ff=document.getElementById('fcur');
   if(fc.options.length===0){ Object.keys(CFG.rates).forEach(function(c){ fc.add(new Option(c,c)); ff.add(new Option(c,c)); }); fc.value=CFG.base; }
   var j=await api('/payments');
@@ -207,6 +245,7 @@ function openForm(id){
   document.getElementById('f_id').value='';
   document.getElementById('mtitle').textContent='Add payment';
   ['f_customer','f_order','f_invoice','f_amount','f_method','f_receiver','f_phone','f_note'].forEach(function(k){document.getElementById(k).value='';});
+  document.getElementById('pmInv').innerHTML='';
   document.getElementById('f_cur').value=CFG.base; rateFromCur();
   document.getElementById('f_kind').value='settlement';
   var now=new Date(); now.setMinutes(now.getMinutes()-now.getTimezoneOffset());
