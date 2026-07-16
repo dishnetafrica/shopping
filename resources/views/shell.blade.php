@@ -482,7 +482,7 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
         </button>
         <div class="acct-menu" id="acctMenu">
           <div class="who"><div class="n" id="acctwho">User</div><div class="s" id="acctrole"></div></div>
-          <button onclick="location.href='/panel'"><svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M4 4h16v12H4zM2 20h20"/></svg>Open classic panel</button>
+          <button onclick="location.href='/panel?classic=1'"><svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M4 4h16v12H4zM2 20h20"/></svg>Open classic panel</button>
           <button class="dgr" onclick="signOut()"><svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign out</button>
         </div>
       </div>
@@ -717,6 +717,7 @@ async function route(key, id){
   closeNav();
   CUR={key,id}; REC_TAB='overview'; location.hash='#/'+key+(id?'/'+id:''); setActive(key);
   if(key==='transport'){ location.href='/transport'; return; }
+  if(key==='payments'){ document.getElementById('view').innerHTML='<div class="crumb">Payments</div><iframe title="Payments" src="/panel/payments-manager" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='storefront.collections'){ sfCollectionsPage(); return; }
   if(key==='storefront.kits'){ sfKitsPage(); return; }
   if(key==='storefront.delivery'){ sfDeliveryPage(); return; }
