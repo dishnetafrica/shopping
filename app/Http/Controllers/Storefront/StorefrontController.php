@@ -515,10 +515,6 @@ class StorefrontController extends Controller
         if ($pay = trim((string) $r->input('payment', ''))) $o->payment = $pay;
         elseif ($onCredit) $o->payment = 'Credit';
         if ($location !== '') $o->location = $location;
-        // Stamp the sale's currency so payments/invoices book in the storefront's real currency
-        // (e.g. USD) instead of falling back to the ERP's local currency. Fixes UGX-defaulted payments.
-        $sellCur = strtoupper($this->currency($tenant));
-        if (in_array($sellCur, ['USD', 'UGX', 'SSP'], true)) $o->sell_currency = $sellCur;
         $o->save(); // OrderObserver: assigns order_no + track_token, dispatches NotifyOwnerNewOrder
 
         // Create line rows so the order shows its items on the Kitchen Board / panel — web orders
