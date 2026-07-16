@@ -32,7 +32,7 @@ final class SupplierListCapability implements ProcessCapability
             ->where('stage', 'purchase')->where('status', '!=', 'void')
             ->whereNotNull('supplier_id')
             ->selectRaw('supplier_id')
-            ->selectRaw('COALESCE(SUM(native_amount - COALESCE(paid_native,0)),0) as owed')
+            ->selectRaw('COALESCE(SUM((native_amount - COALESCE(paid_native,0)) / NULLIF(rate_to_usd,0)),0) as owed')
             ->selectRaw('COUNT(*) as pos')
             ->groupBy('supplier_id')
             ->get()->keyBy('supplier_id');
