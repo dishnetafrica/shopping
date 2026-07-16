@@ -73,6 +73,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
             ->header('Cache-Control', 'public, max-age=3600');
     });
     Route::get('/panel', [\App\Http\Controllers\Panel\LandingController::class, 'panel']);
+    // Transport Register — full-screen mobile page behind login (Kampala → Juba movement ledger).
+    Route::get('/transport', [\App\Http\Controllers\Transport\TransportController::class, 'page']);
     Route::get('/panel/app', [\App\Http\Controllers\Panel\LauncherController::class, 'page']);
     Route::match(['get', 'post'], '/panel/logout', [SellerPanelController::class, 'logout']);
     Route::get('/panel/m', [\App\Http\Controllers\Panel\LandingController::class, 'mobile']);
@@ -396,6 +398,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class])->group(function () 
         // Delivery: per-city free-delivery thresholds — read + save.
         Route::get('delivery-rules', [PanelApiController::class, 'deliveryGet']);
         Route::post('delivery-rules-save', [PanelApiController::class, 'deliverySave']);
+        // Transport Register (Kampala → Juba) — offline-first sync (merge by uid/updatedAt).
+        Route::get('transport-get', [\App\Http\Controllers\Transport\TransportController::class, 'get']);
+        Route::post('transport-sync', [\App\Http\Controllers\Transport\TransportController::class, 'sync']);
         Route::get('update-product', [PanelApiController::class, 'updateProduct']);
         Route::get('delete-product', [PanelApiController::class, 'deleteProduct']);
         Route::get('add-product',    [PanelApiController::class, 'addProduct']);

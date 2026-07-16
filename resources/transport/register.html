@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0b7a3b">
+<title>Transport Register</title>
+<style>
+  :root{
+    --green:#0b7a3b; --green-d:#0a5c2e; --green-l:#e7f5ec;
+    --red:#d92d20; --red-l:#fdeceb;
+    --amber:#e08b00; --amber-l:#fdf3e3;
+    --blue:#1d6fd6; --blue-l:#e8f1fd;
+    --purple:#7a3ec9; --purple-l:#f0e9fb;
+    --ink:#172029; --muted:#66727e; --line:#e8ecf0; --bg:#f4f6f8; --card:#fff;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--ink)}
+  body{max-width:520px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:16px}
+  .top{position:sticky;top:0;z-index:20;background:var(--green);color:#fff;display:flex;align-items:center;gap:10px;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top))}
+  .top .bk{width:34px;height:34px;border:0;background:rgba(255,255,255,.16);color:#fff;border-radius:10px;font-size:20px;display:none;place-items:center;cursor:pointer;flex:none}
+  .top.sub .bk{display:grid}
+  .top h1{font-size:17px;margin:0;font-weight:800;letter-spacing:-.01em;flex:1;line-height:1.15}
+  .top .sub2{font-size:11px;opacity:.85;font-weight:500;display:block}
+  .top .act{width:34px;height:34px;border:0;background:rgba(255,255,255,.16);color:#fff;border-radius:10px;font-size:16px;display:grid;place-items:center;cursor:pointer;flex:none}
+  .hero{background:linear-gradient(135deg,var(--green),var(--green-d));color:#fff;border-radius:18px;padding:18px;margin:14px;box-shadow:0 8px 20px rgba(11,122,59,.22)}
+  .hero .lbl{font-size:12px;opacity:.85;font-weight:600;letter-spacing:.02em}
+  .hero .big{font-size:44px;font-weight:900;line-height:1;margin:6px 0 2px}
+  .hero .big small{font-size:16px;font-weight:700;opacity:.85}
+  .hero .split{display:flex;gap:8px;margin-top:14px}
+  .hero .sp{flex:1;background:rgba(255,255,255,.14);border-radius:12px;padding:8px 9px}
+  .hero .sp .k{font-size:10.5px;opacity:.85;font-weight:600}
+  .hero .sp .v{font-size:18px;font-weight:800;margin-top:2px}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 14px}
+  .bigcard{border:0;border-radius:18px;padding:16px;text-align:left;cursor:pointer;color:#fff;min-height:104px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 4px 12px rgba(16,24,40,.08)}
+  .bigcard .ic{font-size:24px}
+  .bigcard .t{font-size:18px;font-weight:800;margin-top:6px}
+  .bigcard .d{font-size:12px;opacity:.9;font-weight:500;margin-top:2px}
+  .bigcard .badge{font-size:30px;font-weight:900;line-height:1}
+  .bigcard.in{background:linear-gradient(135deg,#12a150,#0b7a3b)}
+  .bigcard.wait{background:linear-gradient(135deg,#f0a500,#d98200)}
+  .bigcard.transit{background:linear-gradient(135deg,#2b7fe0,#1a5bb8)}
+  .bigcard.dash{background:linear-gradient(135deg,#3b3f52,#22252f)}
+  .sec{padding:16px 14px 4px;font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;justify-content:space-between}
+  .sec .mini{font-size:11px;font-weight:700;text-transform:none;letter-spacing:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;margin:0 14px 12px;overflow:hidden}
+  .field{padding:12px 14px;border-bottom:1px solid var(--line)}
+  .field:last-child{border-bottom:0}
+  .field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px}
+  .field input,.field select,.field textarea{width:100%;border:0;font-size:17px;font-weight:600;color:var(--ink);background:none;outline:none;font-family:inherit}
+  .field input::placeholder,.field textarea::placeholder{color:#b3bcc6;font-weight:500}
+  .field textarea{resize:none;min-height:40px}
+  .req::after{content:" *";color:var(--red)}
+  .stepper{display:flex;align-items:center;gap:12px}
+  .stepper button{width:46px;height:46px;border:1px solid var(--line);background:#fff;border-radius:13px;font-size:24px;font-weight:800;color:var(--green-d);cursor:pointer;line-height:1;flex:none}
+  .stepper input{flex:1;text-align:center;font-size:28px;font-weight:900;border:0;outline:none;width:50px;-moz-appearance:textfield}
+  .stepper input::-webkit-outer-spin-button,.stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 13px;font-size:14px;font-weight:700;color:var(--ink);cursor:pointer}
+  .chip.on{background:var(--green-l);border-color:#bfe6cd;color:var(--green-d)}
+  .save{position:sticky;bottom:0;padding:12px 14px calc(14px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(244,246,248,0),var(--bg) 34%)}
+  .btn{width:100%;border:0;border-radius:15px;padding:16px;font-size:17px;font-weight:800;color:#fff;cursor:pointer;box-shadow:0 6px 16px rgba(11,122,59,.24)}
+  .btn.green{background:var(--green)} .btn.red{background:var(--red);box-shadow:0 6px 16px rgba(217,45,32,.24)}
+  .btn.blue{background:var(--blue);box-shadow:0 6px 16px rgba(29,111,214,.24)}
+  .btn.ghost{background:#fff;color:var(--green-d);border:1px solid var(--line);box-shadow:none}
+  .btn:disabled{opacity:.5}
+  .row{display:flex;align-items:center;gap:12px;padding:13px 14px;background:#fff;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:0}
+  .row:active{background:#fafbfc}
+  .row .dot{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:18px;flex:none;font-weight:800}
+  .dot.in{background:var(--green-l);color:var(--green-d)} .dot.out{background:var(--blue-l);color:var(--blue)}
+  .dot.g{background:#eef1f4;color:#5b6b7b}
+  .row .m{flex:1;min-width:0}
+  .row .m .l1{font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .m .l2{font-size:12.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .r{text-align:right;flex:none}
+  .row .r .q{font-size:16px;font-weight:900}
+  .row .r .bal{font-size:11px;color:var(--muted);margin-top:2px}
+  .pill{display:inline-block;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;letter-spacing:.01em}
+  .st-kampala{background:#eef1f4;color:#5b6b7b}
+  .st-park{background:var(--amber-l);color:var(--amber)}
+  .st-transit{background:var(--blue-l);color:var(--blue)}
+  .st-arrived{background:#eef3ff;color:#3652c9}
+  .st-received{background:var(--green-l);color:var(--green-d)}
+  .st-lost{background:var(--red-l);color:var(--red)}
+  .holder{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:800;color:var(--purple);background:var(--purple-l);padding:3px 9px;border-radius:999px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 14px}
+  .tile{background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px}
+  .tile .k{font-size:12px;font-weight:700;color:var(--muted);line-height:1.25}
+  .tile .v{font-size:28px;font-weight:900;margin-top:4px;line-height:1}
+  .tile .u{font-size:11px;color:var(--muted);font-weight:600}
+  .tile.hot .v{color:var(--amber)} .tile.bad .v{color:var(--red)} .tile.good .v{color:var(--green-d)} .tile.info .v{color:var(--blue)}
+  .prod{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .prod:last-child{border-bottom:0}
+  .prod .pn{flex:1;font-weight:700;font-size:15px}
+  .prod .pb{font-size:11px;color:var(--muted);margin-top:2px;font-weight:600}
+  .prod .send{width:120px;flex:none}
+  .searchbar{margin:14px;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+  .searchbar input{flex:1;border:0;outline:none;font-size:16px;font-weight:600;font-family:inherit}
+  .empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:14px}
+  .empty .em{font-size:40px;display:block;margin-bottom:8px}
+  .timeitem{display:flex;gap:12px;padding:0 14px}
+  .timeitem .tl{display:flex;flex-direction:column;align-items:center;flex:none}
+  .timeitem .tl .d2{width:12px;height:12px;border-radius:50%;background:var(--green);margin-top:16px}
+  .timeitem .tl .ln{flex:1;width:2px;background:var(--line)}
+  .timeitem .tc{flex:1;padding:12px 0 4px;border-bottom:1px solid var(--line)}
+  .timeitem:last-child .tc{border-bottom:0}
+  .timeitem .tc .tt{font-weight:700;font-size:14px}
+  .timeitem .tc .ts{font-size:12px;color:var(--muted);margin-top:2px}
+  .sheet{position:fixed;inset:0;z-index:40;background:rgba(16,24,40,.42);display:none;align-items:flex-end;justify-content:center}
+  .sheet.show{display:flex}
+  .sheet .card2{background:#fff;width:100%;max-width:520px;border-radius:20px 20px 0 0;padding:8px 0 calc(12px + env(safe-area-inset-bottom));animation:up .22s ease;max-height:86vh;overflow:auto}
+  @keyframes up{from{transform:translateY(30px);opacity:.6}to{transform:translateY(0);opacity:1}}
+  .sheet .grab{width:38px;height:4px;background:#d7dde3;border-radius:99px;margin:8px auto 6px}
+  .sheet .sh{font-size:16px;font-weight:800;padding:6px 18px 12px}
+  .sheet .opt{display:flex;align-items:center;gap:12px;padding:15px 18px;font-size:16px;font-weight:700;cursor:pointer;border-top:1px solid var(--line)}
+  .sheet .opt .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none}
+  .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);background:#172029;color:#fff;padding:12px 18px;border-radius:12px;font-size:14px;font-weight:600;opacity:0;transition:.25s;z-index:60;pointer-events:none;max-width:90%}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .mut{color:var(--muted)}
+  .foot{text-align:center;color:#9aa5b1;font-size:11px;padding:20px 20px 8px}
+</style>
+</head>
+<body>
+<div class="top" id="top">
+  <button class="bk" onclick="back()" aria-label="Back">‹</button>
+  <h1 id="title">Transport Register<span class="sub2">Kampala → Juba</span></h1>
+  <button class="act" id="syncBtn" onclick="syncNow()" aria-label="Sync now" style="display:none;font-size:18px">↻</button>
+  <button class="act" onclick="openMenu()" aria-label="Menu">⋯</button>
+</div>
+<div id="app"></div>
+<div class="sheet" id="sheet" onclick="if(event.target===this)closeSheet()">
+  <div class="card2"><div class="grab"></div><div id="sheetBody"></div></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>/* Sync config: set by the v3 server page (or a test) BEFORE this runs; null = offline-only. */
+window.TR_CONFIG = window.TR_CONFIG || null;</script>
+<script>
+/* ============================================================================
+   TRANSPORT REGISTER — shipment-centric (Kampala → Juba). Offline prototype.
+   Model:
+     shipment = an intake batch (TRN-YYYYMMDD-NNN) received at Kampala warehouse,
+                holding products with carton totals.
+     load     = a bus manifest (LD-YYYYMMDD-NNN): partial product quantities put on
+                ONE bus, moving through the lifecycle with a current HOLDER.
+   Every carton is always in exactly one place:
+     waiting at Kampala  →  at bus park  →  in transit  →  arrived Juba  →  Juba warehouse
+   (or flagged lost/disputed). Product-level sent/pending falls out of this.
+   ============================================================================ */
+var KEY='transport_register_v2';
+var REG={shipments:[],loads:[],seq:{},companies:[],tombstones:{}};
+/* Sync config is injected by the v3 server page (window.TR_CONFIG); when absent the
+   register runs purely on-device (offline prototype). */
+var TRc=(typeof window!=='undefined' && window.TR_CONFIG && typeof window.TR_CONFIG==='object')?window.TR_CONFIG:null;
+function load(){ try{var s=localStorage.getItem(KEY); if(s)REG=JSON.parse(s);}catch(e){} REG.shipments=REG.shipments||[]; REG.loads=REG.loads||[]; REG.seq=REG.seq||{}; REG.companies=REG.companies||[]; REG.tombstones=REG.tombstones||{}; }
+function save(){ try{localStorage.setItem(KEY,JSON.stringify(REG));}catch(e){} }
+function markDirty(){ save(); scheduleSync(); }
+
+/* ---- SYNC (offline-first, last-write-wins per entity by updatedAt) ---- */
+var SYNC={state:TRc?'idle':'local',timer:null,pull:null};
+function stamp(e){ e.uid=e.uid||uid(); e.updatedAt=Date.now(); return e; }
+function tombstone(uidv){ REG.tombstones[uidv]=Date.now(); }
+function scheduleSync(){ if(!TRc)return; if(SYNC.timer)clearTimeout(SYNC.timer); SYNC.timer=setTimeout(syncNow,700); }
+function setSync(s){ SYNC.state=s; var el=document.getElementById('syncBtn'); if(el){ var m={idle:['↻','#fff'],syncing:['⟳','#ffe9a8'],synced:['✓','#c7f0d5'],offline:['⚠','#ffd0cc'],error:['⚠','#ffd0cc']}; var v=m[s]||m.idle; el.textContent=v[0]; el.style.color=v[1]; } }
+function mergeList(t,remoteList){
+  var by={}; (REG[t]||[]).forEach(function(e){by[e.uid]=e;});
+  (remoteList||[]).forEach(function(r){ if(!r||!r.uid)return; var l=by[r.uid]; if(!l||(r.updatedAt||0)>(l.updatedAt||0))by[r.uid]=r; });
+  REG[t]=Object.keys(by).map(function(k){return by[k];});
+}
+function mergeReg(remote){
+  mergeList('shipments',remote.shipments); mergeList('loads',remote.loads);
+  var tomb=remote.tombstones||{}; for(var k in tomb){ if(!REG.tombstones[k]||tomb[k]>REG.tombstones[k])REG.tombstones[k]=tomb[k]; }
+  // apply tombstones: drop any entity a delete supersedes
+  ['shipments','loads'].forEach(function(t){ REG[t]=REG[t].filter(function(e){ var td=REG.tombstones[e.uid]; return !(td && td>=(e.updatedAt||0)); }); });
+  (remote.companies||[]).forEach(function(c){ if(REG.companies.indexOf(c)<0)REG.companies.push(c); });
+}
+function syncNow(){
+  if(!TRc)return;
+  if(typeof navigator!=='undefined' && navigator.onLine===false){ setSync('offline'); return; }
+  setSync('syncing');
+  fetch(TRc.syncUrl,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':TRc.csrf||''},credentials:'include',
+    body:JSON.stringify({shipments:REG.shipments,loads:REG.loads,tombstones:REG.tombstones,companies:REG.companies})})
+   .then(function(r){ if(!r.ok)throw 0; return r.json(); })
+   .then(function(d){ if(d&&d.ok){ mergeReg(d); save(); setSync('synced'); render(); } else setSync('error'); })
+   .catch(function(){ setSync('offline'); });
+}
+function startSync(){ if(!TRc)return; syncNow(); if(SYNC.pull)clearInterval(SYNC.pull); SYNC.pull=setInterval(function(){ if(document.visibilityState!=='hidden')syncNow(); },20000);
+  try{ window.addEventListener('online',syncNow); window.addEventListener('focus',syncNow); }catch(e){} }
+function uid(){ return 'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function jq(s){return JSON.stringify(String(s==null?'':s)).replace(/"/g,'&quot;');}
+function todayISO(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmtDate(iso){ if(!iso)return ''; var p=String(iso).split('-'); if(p.length<3)return iso; var m=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return Number(p[2])+' '+m[Number(p[1])-1]+' '+p[0]; }
+function fmtTime(ts){ try{return new Date(ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
+function ago(ts){ var h=(Date.now()-ts)/3600000; if(h<1)return Math.max(1,Math.round(h*60))+' min'; if(h<24)return Math.round(h)+'h'; return Math.round(h/24)+'d'; }
+function toast(m){ var t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(function(){t.classList.remove('show');},2400); }
+function haptic(){ try{ if(navigator.vibrate)navigator.vibrate(12);}catch(e){} }
+function seqId(pfx,dateISO){ var ymd=String(dateISO).replace(/-/g,''); var k=pfx+ymd; REG.seq[k]=(REG.seq[k]||0)+1; return pfx+'-'+ymd+'-'+String(REG.seq[k]).padStart(3,'0'); }
+
+/* ---- lifecycle ---- */
+var STATUS={
+  park:{l:'At bus park',c:'st-park',ic:'🅿️',holder:'Bus park'},
+  transit:{l:'In transit',c:'st-transit',ic:'🚌',holder:null},          /* holder = bus company */
+  arrived:{l:'Arrived Juba',c:'st-arrived',ic:'📍',holder:'Juba staff'},
+  received:{l:'Juba warehouse',c:'st-received',ic:'🏬',holder:'Juba warehouse'},
+  lost:{l:'Lost / disputed',c:'st-lost',ic:'⚠️',holder:'Disputed'}
+};
+var FLOW=['park','transit','arrived','received'];
+function statusPill(st){ var s=STATUS[st]||STATUS.park; return '<span class="pill '+s.c+'">'+s.ic+' '+s.l+'</span>'; }
+function holderOf(ld){ var s=STATUS[ld.status]||STATUS.park; return (ld.status==='transit')?(ld.company||'Bus company'):s.holder; }
+function nextStatus(st){ var i=FLOW.indexOf(st); return (i>=0&&i<FLOW.length-1)?FLOW[i+1]:null; }
+
+/* ---- computations ---- */
+function loadTotal(ld){ return (ld.lines||[]).reduce(function(s,l){return s+(Number(l.cartons)||0);},0); }
+function shipTotal(sh){ return (sh.products||[]).reduce(function(s,p){return s+(Number(p.cartons)||0);},0); }
+function dispatchedMap(){ var m={}; REG.loads.forEach(function(ld){ (ld.lines||[]).forEach(function(l){ var k=l.shipmentId+'|'+l.name; m[k]=(m[k]||0)+(Number(l.cartons)||0); }); }); return m; }
+function shipProductPending(sh,name,dm){ var tot=0; (sh.products||[]).forEach(function(p){ if(p.name===name)tot+=Number(p.cartons)||0; }); return tot-((dm||dispatchedMap())[sh.id+'|'+name]||0); }
+function shipDispatched(sh,dm){ dm=dm||dispatchedMap(); var s=0; (sh.products||[]).forEach(function(p){ s+=Math.min(Number(p.cartons)||0,(dm[sh.id+'|'+p.name]||0)); }); return s; }
+function shipStatus(sh,dm){ dm=dm||dispatchedMap(); var d=shipDispatched(sh,dm), t=shipTotal(sh); if(d<=0)return {l:'At Kampala (waiting)',c:'st-kampala'}; if(d<t)return {l:'Partly dispatched',c:'st-park'}; return {l:'Fully dispatched',c:'st-transit'}; }
+function totalIntake(){ return REG.shipments.reduce(function(s,sh){return s+shipTotal(sh);},0); }
+function totalDispatched(){ return REG.loads.reduce(function(s,ld){return s+loadTotal(ld);},0); }
+function waitingTotal(){ return totalIntake()-totalDispatched(); }
+function cartonsByStatus(st){ return REG.loads.filter(function(ld){return ld.status===st;}).reduce(function(s,ld){return s+loadTotal(ld);},0); }
+function todayIntake(){ var t=todayISO(); return REG.shipments.filter(function(s){return s.date===t;}).reduce(function(a,s){return a+shipTotal(s);},0); }
+function todayDispatched(){ var t=todayISO(); return REG.loads.filter(function(l){return l.date===t;}).reduce(function(a,l){return a+loadTotal(l);},0); }
+function delayedLoads(hrs){ hrs=hrs||24; var cut=Date.now()-hrs*3600000; return REG.loads.filter(function(ld){ return (ld.status==='park'||ld.status==='transit') && (ld.ts||0)<cut; }); }
+function waitingProducts(){ var dm=dispatchedMap(),agg={},order=[]; REG.shipments.forEach(function(sh){ (sh.products||[]).forEach(function(p){ var pend=(Number(p.cartons)||0)-(dm[sh.id+'|'+p.name]||0); if(pend>0){ if(agg[p.name]==null){agg[p.name]=0;order.push(p.name);} agg[p.name]+=pend; } }); }); return order.map(function(n){return {name:n,pending:agg[n]};}); }
+function activeLoads(){ return REG.loads.filter(function(ld){return ld.status!=='received'&&ld.status!=='lost';}).sort(function(a,b){return (b.ts||0)-(a.ts||0);}); }
+function shipById(id){ return REG.shipments.filter(function(s){return s.id===id;})[0]; }
+function loadById(id){ return REG.loads.filter(function(l){return l.id===id;})[0]; }
+
+/* ---- allocation (FIFO across shipments) ---- */
+function allocate(name,qty,dm){ var lines=[],need=qty; REG.shipments.slice().sort(function(a,b){return (a.ts||0)-(b.ts||0);}).forEach(function(sh){ if(need<=0)return; var pend=(function(){var t=0;(sh.products||[]).forEach(function(p){if(p.name===name)t+=Number(p.cartons)||0;});return t-(dm[sh.id+'|'+name]||0);})(); if(pend>0){ var take=Math.min(pend,need); lines.push({shipmentId:sh.id,name:name,cartons:take}); need-=take; dm[sh.id+'|'+name]=(dm[sh.id+'|'+name]||0)+take; } }); return lines; }
+
+/* ---- navigation ---- */
+var STACK=['home'], ARG=null;
+function go(v,a){ STACK.push(v); ARG=a; render(); }
+function back(){ if(STACK.length>1){STACK.pop();ARG=null;render();} }
+function reset(v){ STACK=[v||'home']; ARG=null; render(); }
+function cur(){ return STACK[STACK.length-1]; }
+
+function render(){
+  var v=cur(), sub=(v!=='home');
+  document.getElementById('top').className='top'+(sub?' sub':'');
+  var titles={home:['Transport Register','Kampala → Juba'],receive:['Receive shipment','Into Kampala warehouse'],dispatch:['Load a bus','Dispatch waiting cartons'],buses:['Buses & shipments','Track everything moving'],load:['Bus manifest',''],shipment:['Shipment',''],dash:['Manager dashboard','End-to-end visibility'],timeline:['Timeline','Every event'],search:['Search','']};
+  var t=titles[v]||['Transport Register',''];
+  document.getElementById('title').innerHTML=esc(t[0])+(t[1]?'<span class="sub2">'+esc(t[1])+'</span>':'');
+  var app=document.getElementById('app');
+  var m={home:viewHome,receive:viewReceive,dispatch:viewDispatch,buses:viewBuses,load:function(){return viewLoad(ARG);},shipment:function(){return viewShipment(ARG);},dash:viewDash,timeline:viewTimeline,search:viewSearch};
+  app.innerHTML=(m[v]||viewHome)();
+  window.scrollTo(0,0);
+}
+
+/* ---- HOME ---- */
+function viewHome(){
+  var wait=waitingTotal();
+  return '<div class="hero"><div class="lbl">Waiting to dispatch (with transporter)</div>'
+      +'<div class="big">'+wait+' <small>cartons</small></div>'
+      +'<div class="split">'
+        +'<div class="sp"><div class="k">In transit</div><div class="v">'+cartonsByStatus('transit')+'</div></div>'
+        +'<div class="sp"><div class="k">Arrived Juba</div><div class="v">'+cartonsByStatus('arrived')+'</div></div>'
+        +'<div class="sp"><div class="k">In warehouse</div><div class="v">'+cartonsByStatus('received')+'</div></div>'
+      +'</div></div>'
+    +'<div class="cards">'
+      +'<button class="bigcard in" onclick="go(\'receive\')"><div><div class="ic">⬇️</div><div class="t">RECEIVE</div><div class="d">New shipment in</div></div></button>'
+      +'<button class="bigcard wait" onclick="go(\'dispatch\')"><div class="ic">📦</div><div><div class="d" style="opacity:.95">Waiting to dispatch</div><div class="badge">'+wait+'</div></div></button>'
+      +'<button class="bigcard transit" onclick="go(\'buses\')"><div class="ic">🚌</div><div><div class="d" style="opacity:.95">On buses / moving</div><div class="badge">'+(cartonsByStatus('park')+cartonsByStatus('transit')+cartonsByStatus('arrived'))+'</div></div></button>'
+      +'<button class="bigcard dash" onclick="go(\'dash\')"><div><div class="ic">📊</div><div class="t">DASHBOARD</div><div class="d">Manager view</div></div></button>'
+    +'</div>'
+    +'<div class="sec">Quick access</div>'
+    +'<div class="card">'
+      +rowLink('🧾','Timeline','Every receipt, load & status change',"go('timeline')")
+      +rowLink('🔎','Search','Reference · bus · company · product · date',"go('search')")
+    +'</div>'
+    +'<div class="foot">Saved on this phone · works offline<br>Prototype — production version syncs live with your v3 dashboard</div>';
+}
+function rowLink(ic,l1,l2,onclick){ return '<div class="row" onclick="'+onclick+'"><div class="dot g">'+ic+'</div><div class="m"><div class="l1">'+esc(l1)+'</div><div class="l2">'+esc(l2)+'</div></div><div class="r"><span class="mut" style="font-size:20px">›</span></div></div>'; }
+
+/* ---- RECEIVE (new shipment) ---- */
+var RC_ITEMS=[];
+function viewReceive(){
+  if(!RC_ITEMS.length)RC_ITEMS=[{name:'',qty:''}];
+  return '<div class="card" style="margin-top:14px">'
+      +field('Date','<input id="rcDate" type="date" value="'+todayISO()+'">',true)
+      +field('Source warehouse','<input id="rcSrc" value="Kampala Warehouse">',false)
+      +field('Reference / delivery note','<input id="rcRef" placeholder="e.g. GRN-1042">',false)
+    +'</div>'
+    +'<div class="sec">Products in this shipment <span class="mini mut">carton counts</span></div>'
+    +'<div class="card" id="rcItems">'+rcItemsHtml()+'</div>'
+    +'<div style="padding:0 14px"><button class="chip" onclick="rcAdd()">+ Add product</button></div>'
+    +'<div class="card" style="margin-top:14px">'+field('Notes','<textarea id="rcNotes" placeholder="Optional"></textarea>',false)+'</div>'
+    +'<div class="save"><button class="btn green" onclick="saveReceive()">✓ Receive into warehouse</button></div>';
+}
+function rcItemsHtml(){ return RC_ITEMS.map(function(it,i){ return '<div class="field" style="display:flex;gap:10px;align-items:center"><input placeholder="Product (e.g. Toilet Paper)" value="'+esc(it.name)+'" oninput="RC_ITEMS['+i+'].name=this.value" style="flex:1"><input type="number" inputmode="numeric" placeholder="Cartons" value="'+(it.qty||'')+'" oninput="RC_ITEMS['+i+'].qty=this.value" style="width:88px;text-align:center;font-weight:800">'+(RC_ITEMS.length>1?'<button class="chip" onclick="RC_ITEMS.splice('+i+',1);document.getElementById(\'rcItems\').innerHTML=rcItemsHtml()">✕</button>':'')+'</div>'; }).join(''); }
+function rcAdd(){ RC_ITEMS.push({name:'',qty:''}); document.getElementById('rcItems').innerHTML=rcItemsHtml(); }
+function saveReceive(){
+  var date=val('rcDate')||todayISO(), src=val('rcSrc'), ref=val('rcRef'), notes=val('rcNotes');
+  var products=RC_ITEMS.map(function(it){return {name:(it.name||'').trim(),cartons:Number(it.qty)||0};}).filter(function(p){return p.name&&p.cartons>0;});
+  if(!products.length){ toast('Add at least one product with a carton count'); return; }
+  var id=seqId('TRN',date);
+  REG.shipments.push(stamp({id:id,date:date,ts:Date.now(),source:src,dest:'Juba Warehouse',ref:ref,notes:notes,products:products}));
+  markDirty(); haptic(); RC_ITEMS=[]; toast('Received '+id+' · '+products.reduce(function(s,p){return s+p.cartons;},0)+' cartons'); reset('home');
+}
+
+/* ---- DISPATCH (load a bus from waiting stock) ---- */
+var DP_SEL={}, DP_STATUS='transit';
+function viewDispatch(){
+  var wp=waitingProducts();
+  if(!wp.length) return '<div class="empty"><span class="em">📭</span>Nothing waiting to dispatch.<br>Receive a shipment first, then load it onto a bus.</div><div style="padding:0 14px"><button class="btn green" onclick="reset(\'receive\')">Receive a shipment</button></div>';
+  DP_SEL={}; wp.forEach(function(p){DP_SEL[p.name]=p.pending;});   // default: load all pending
+  var comps=(REG.companies||[]).slice(0,8);
+  var chips=comps.length?('<div class="chips">'+comps.map(function(c){return '<button class="chip" onclick="setVal(\'dpCo\','+jq(c)+')">'+esc(c)+'</button>';}).join('')+'</div>'):'';
+  var prods='<div class="card" id="dpItems">'+wp.map(function(p,i){ return dpRow(p,i); }).join('')+'</div>';
+  return '<div class="sec">Which bus?</div>'
+    +'<div class="card">'
+      +field('Bus company','<input id="dpCo" placeholder="e.g. Gateway Bus">'+chips,true)
+      +field('Bus number','<input id="dpBus" placeholder="e.g. UBK 456Y">',true)
+      +field('Driver phone','<input id="dpPhone" type="tel" inputmode="tel" placeholder="Optional">',false)
+      +field('Expected arrival','<input id="dpEta" placeholder="e.g. Tomorrow AM">',false)
+    +'</div>'
+    +'<div class="sec">Cartons to load <span class="mini mut">tap − / + to adjust</span></div>'
+    +prods
+    +'<div class="sec">Status now</div>'
+    +'<div class="card"><div class="field"><div class="chips" id="dpStatus">'+dpStatusChips()+'</div></div></div>'
+    +'<div class="save"><button class="btn red" onclick="doDispatch()" id="dpBtn">✓ Dispatch to bus</button></div>';
+}
+function dpRow(p,i){ return '<div class="prod"><div style="flex:1"><div class="pn">'+esc(p.name)+'</div><div class="pb">'+p.pending+' waiting</div></div><div class="send">'+stepper('dp_'+i,p.pending,p.pending)+'</div></div>'; }
+function dpStatusChips(){ return [['park','🅿️ At bus park'],['transit','🚌 Left / in transit']].map(function(s){return '<button class="chip'+(DP_STATUS===s[0]?' on':'')+'" onclick="DP_STATUS=\''+s[0]+'\';document.getElementById(\'dpStatus\').innerHTML=dpStatusChips()">'+s[1]+'</button>';}).join(''); }
+function doDispatch(){
+  var co=val('dpCo'), bus=val('dpBus'), phone=val('dpPhone'), eta=val('dpEta');
+  if(!co){ toast('Which bus company?'); return; }
+  if(!bus){ toast('Enter the bus number'); return; }
+  var wp=waitingProducts(), dm=dispatchedMap(), lines=[];
+  wp.forEach(function(p,i){ var q=Math.min(p.pending, Number(val('dp_'+i))||0); if(q>0){ lines=lines.concat(allocate(p.name,q,dm)); } });
+  if(!lines.length){ toast('Set how many cartons to load'); return; }
+  if(co && REG.companies.indexOf(co)<0){ REG.companies.unshift(co); REG.companies=REG.companies.slice(0,12); }
+  var date=todayISO(), id=seqId('LD',date), now=Date.now();
+  REG.loads.push(stamp({id:id,date:date,ts:now,company:co,bus:bus,phone:phone,eta:eta,status:DP_STATUS,lines:lines,
+    events:[{status:DP_STATUS,ts:now,note:'Loaded on '+co+' '+bus}]}));
+  markDirty(); haptic(); toast('Dispatched '+lines.reduce(function(s,l){return s+l.cartons;},0)+' cartons · '+id);
+  reset('home'); go('load',id);
+}
+
+/* ---- BUSES / active loads ---- */
+function viewBuses(){
+  var loads=REG.loads.slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+  var active=loads.filter(function(l){return l.status!=='received'&&l.status!=='lost';});
+  var done=loads.filter(function(l){return l.status==='received'||l.status==='lost';});
+  var shipCards='';
+  var withPending=REG.shipments.filter(function(sh){return shipDispatched(sh)<shipTotal(sh);});
+  if(withPending.length){ shipCards='<div class="sec">Shipments with cartons still at Kampala</div><div class="card">'+withPending.map(shipRow).join('')+'</div>'; }
+  function block(title,list){ if(!list.length)return ''; return '<div class="sec">'+title+'</div><div class="card">'+list.map(loadRow).join('')+'</div>'; }
+  var body=block('Moving now',active)+shipCards+block('Completed / closed',done);
+  return body||'<div class="empty"><span class="em">🚌</span>No buses loaded yet.<br>Dispatch a shipment to start tracking.</div>';
+}
+function loadRow(ld){ var tot=loadTotal(ld); return '<div class="row" onclick="go(\'load\','+jq(ld.id)+')"><div class="dot out">🚌</div><div class="m"><div class="l1">'+esc(ld.company||'')+' · '+esc(ld.bus||'')+'</div><div class="l2">'+esc(ld.id)+' · '+tot+' cartons · '+(ld.lines||[]).length+' product'+((ld.lines||[]).length===1?'':'s')+'</div><div style="margin-top:5px">'+statusPill(ld.status)+' <span class="holder">👤 '+esc(holderOf(ld))+'</span></div></div><div class="r"><div class="q">'+tot+'</div><div class="bal">'+ago(ld.ts)+' ago</div></div></div>'; }
+function shipRow(sh){ var st=shipStatus(sh), pend=shipTotal(sh)-shipDispatched(sh); return '<div class="row" onclick="go(\'shipment\','+jq(sh.id)+')"><div class="dot in">📦</div><div class="m"><div class="l1">'+esc(sh.id)+'</div><div class="l2">'+fmtDate(sh.date)+' · '+shipTotal(sh)+' cartons · '+(sh.products||[]).length+' products</div><div style="margin-top:5px"><span class="pill '+st.c+'">'+esc(st.l)+'</span></div></div><div class="r"><div class="q" style="color:var(--amber)">'+pend+'</div><div class="bal">waiting</div></div></div>'; }
+
+/* ---- LOAD (bus manifest) ---- */
+function viewLoad(id){
+  var ld=loadById(id); if(!ld)return '<div class="empty">Not found.</div>';
+  var tot=loadTotal(ld);
+  var head='<div class="card" style="margin-top:14px"><div class="field"><label>Bus manifest</label><div style="font-size:20px;font-weight:900">'+esc(ld.company||'')+' · '+esc(ld.bus||'')+'</div><div class="mut" style="font-size:12px;margin-top:2px">'+esc(ld.id)+' · dispatched '+fmtDate(ld.date)+' '+fmtTime(ld.ts)+'</div></div>'
+    +'<div class="field" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+statusPill(ld.status)+'<span class="holder">👤 Current holder: '+esc(holderOf(ld))+'</span></div>'
+    +(ld.eta?'<div class="field"><label>Expected arrival</label><div style="font-weight:700">'+esc(ld.eta)+'</div></div>':'')
+    +(ld.phone?'<div class="field"><label>Driver phone</label><div><a href="tel:'+esc(ld.phone)+'" style="color:var(--green-d);font-weight:700;text-decoration:none">'+esc(ld.phone)+' 📞</a></div></div>':'')
+    +'</div>';
+  var lines='<div class="sec">Load ('+tot+' cartons)</div><div class="card">'+(ld.lines||[]).map(function(l){ var sh=shipById(l.shipmentId); return '<div class="prod"><div style="flex:1"><div class="pn">'+esc(l.name)+'</div><div class="pb">from '+esc(sh?sh.id:'—')+'</div></div><div style="font-size:18px;font-weight:900">'+l.cartons+'</div></div>'; }).join('')+'</div>';
+  var acts='';
+  var nx=nextStatus(ld.status);
+  if(nx){ var labels={transit:'🚌 Bus left — In transit',arrived:'📍 Arrived Juba',received:'🏬 Received at Juba warehouse'}; acts+='<div style="padding:0 14px 8px"><button class="btn blue" onclick="advance('+jq(ld.id)+')">'+labels[nx]+'</button></div>'; }
+  acts+='<div style="padding:0 14px 8px"><button class="btn ghost" onclick="shareManifest('+jq(ld.id)+')">📤 Send manifest on WhatsApp</button></div>';
+  if(ld.status!=='lost')acts+='<div style="padding:0 14px 8px"><button class="btn ghost" style="color:var(--red)" onclick="setLoadStatus('+jq(ld.id)+',\'lost\')">⚠️ Flag lost / disputed</button></div>';
+  acts+='<div style="padding:0 14px 16px"><button class="btn ghost" style="color:var(--muted)" onclick="delLoad('+jq(ld.id)+')">Delete manifest</button></div>';
+  var tl='<div class="sec">Status history</div>'+timelineList((ld.events||[]).map(function(e){return {ts:e.ts,tt:(STATUS[e.status]||{}).l||e.status,ts2:e.note};}));
+  return head+lines+acts+tl;
+}
+function advance(id){ var ld=loadById(id); if(!ld)return; var nx=nextStatus(ld.status); if(nx)setLoadStatus(id,nx); }
+function setLoadStatus(id,st){ var ld=loadById(id); if(!ld)return; ld.status=st; ld.events=ld.events||[]; ld.events.push({status:st,ts:Date.now(),note:(STATUS[st]||{}).l||st}); stamp(ld); markDirty(); haptic(); toast('Updated: '+((STATUS[st]||{}).l||st)); render(); }
+function delLoad(id){ if(!confirm('Delete this manifest? The cartons go back to waiting.'))return; var ld=loadById(id); if(ld)tombstone(ld.uid); REG.loads=REG.loads.filter(function(l){return l.id!==id;}); markDirty(); back(); toast('Manifest deleted'); }
+
+/* ---- SHIPMENT detail (product sent/pending) ---- */
+function viewShipment(id){
+  var sh=shipById(id); if(!sh)return '<div class="empty">Not found.</div>';
+  var dm=dispatchedMap(), st=shipStatus(sh,dm);
+  var head='<div class="card" style="margin-top:14px"><div class="field"><label>Shipment</label><div style="font-size:20px;font-weight:900">'+esc(sh.id)+'</div><div class="mut" style="font-size:12px;margin-top:2px">'+esc(sh.source||'Kampala')+' → '+esc(sh.dest||'Juba')+' · '+fmtDate(sh.date)+'</div></div>'
+    +'<div class="field"><span class="pill '+st.c+'">'+esc(st.l)+'</span></div>'
+    +(sh.ref?'<div class="field"><label>Reference</label><div>'+esc(sh.ref)+'</div></div>':'')
+    +'</div>';
+  var prods='<div class="sec">Products</div><div class="card">'+(sh.products||[]).map(function(p){ var sent=Math.min(p.cartons,dm[sh.id+'|'+p.name]||0), pend=p.cartons-sent; return '<div class="prod"><div style="flex:1"><div class="pn">'+esc(p.name)+'</div><div class="pb">'+p.cartons+' total · <b style="color:var(--green-d)">'+sent+' sent</b>'+(pend>0?(' · <b style="color:var(--amber)">'+pend+' waiting</b>'):'')+'</div></div><div style="font-size:16px;font-weight:900;color:'+(pend>0?'var(--amber)':'var(--green-d)')+'">'+(pend>0?pend:'✓')+'</div></div>'; }).join('')+'</div>';
+  var loads=REG.loads.filter(function(ld){return (ld.lines||[]).some(function(l){return l.shipmentId===sh.id;});});
+  var lc=loads.length?('<div class="sec">On buses</div><div class="card">'+loads.map(loadRow).join('')+'</div>'):'';
+  return head+prods+lc+'<div style="padding:8px 14px 16px"><button class="btn ghost" style="color:var(--muted)" onclick="delShip('+jq(sh.id)+')">Delete shipment</button></div>';
+}
+function delShip(id){ var used=REG.loads.some(function(l){return (l.lines||[]).some(function(x){return x.shipmentId===id;});}); if(used){toast('Cartons already dispatched — delete those manifests first');return;} if(!confirm('Delete this shipment?'))return; var sh=shipById(id); if(sh)tombstone(sh.uid); REG.shipments=REG.shipments.filter(function(s){return s.id!==id;}); markDirty(); back(); toast('Shipment deleted'); }
+
+/* ---- DASHBOARD ---- */
+function viewDash(){
+  var d1=delayedLoads(24).length, d2=delayedLoads(48).length;
+  var tiles=[
+    ['Total received (Kampala)',totalIntake(),'cartons in','info'],
+    ['Waiting to dispatch',waitingTotal(),'with transporter','hot'],
+    ['At bus park',cartonsByStatus('park'),'loaded, not left','hot'],
+    ['In transit',cartonsByStatus('transit'),'on the road','info'],
+    ['Arrived in Juba',cartonsByStatus('arrived'),'at bus park',''],
+    ['In Juba warehouse',cartonsByStatus('received'),'available','good'],
+    ['Delayed > 24h',d1,'moving too long',d1?'bad':''],
+    ['Lost / disputed',cartonsByStatus('lost'),'need action',cartonsByStatus('lost')?'bad':'']
+  ];
+  var grid='<div class="grid" style="margin-top:14px">'+tiles.map(function(t){return '<div class="tile '+(t[3]||'')+'"><div class="k">'+esc(t[0])+'</div><div class="v">'+t[1]+'</div><div class="u">'+esc(t[2])+'</div></div>';}).join('')+'</div>';
+  var delayed=delayedLoads(24).sort(function(a,b){return (a.ts||0)-(b.ts||0);});
+  var dl=delayed.length?('<div class="sec">⏱ Delayed shipments <span class="mini mut">'+d2+' over 48h</span></div><div class="card">'+delayed.map(function(ld){ return '<div class="row" onclick="go(\'load\','+jq(ld.id)+')"><div class="dot" style="background:var(--red-l);color:var(--red)">⏱</div><div class="m"><div class="l1">'+esc(ld.company||'')+' · '+esc(ld.bus||'')+'</div><div class="l2">'+statusPill(ld.status)+' · stuck '+ago(ld.ts)+'</div></div><div class="r"><div class="q" style="color:var(--red)">'+loadTotal(ld)+'</div></div></div>'; }).join('')+'</div>'):'';
+  var open=activeLoads();
+  var live=open.length?('<div class="sec">Moving now</div><div class="card">'+open.map(loadRow).join('')+'</div>'):'';
+  return grid+dl+live+'<div style="padding:12px 14px"><button class="btn ghost" onclick="shareDash()">📤 Share dashboard on WhatsApp</button></div>';
+}
+
+/* ---- TIMELINE ---- */
+function allEvents(){
+  var ev=[];
+  REG.shipments.forEach(function(sh){ ev.push({ts:sh.ts,tt:'📥 Received '+sh.id,ts2:shipTotal(sh)+' cartons · '+(sh.products||[]).length+' products'}); });
+  REG.loads.forEach(function(ld){ (ld.events||[]).forEach(function(e){ ev.push({ts:e.ts,tt:(STATUS[e.status]||{}).ic+' '+((STATUS[e.status]||{}).l||e.status)+' — '+ld.company+' '+ld.bus,ts2:loadTotal(ld)+' cartons · '+ld.id}); }); });
+  return ev.sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+}
+function timelineList(items){ if(!items.length)return '<div class="empty" style="padding:20px">No events yet.</div>'; return '<div style="padding:2px 0 10px">'+items.map(function(it){ return '<div class="timeitem"><div class="tl"><div class="d2"></div><div class="ln"></div></div><div class="tc"><div class="tt">'+esc(it.tt)+'</div><div class="ts">'+esc(it.ts2||'')+' · '+fmtDate(new Date(it.ts).toISOString?new Date(it.ts).toISOString().slice(0,10):todayISO())+' '+fmtTime(it.ts)+'</div></div></div>'; }).join('')+'</div>'; }
+function viewTimeline(){ var ev=allEvents(); if(!ev.length)return '<div class="empty"><span class="em">🧾</span>No events yet.<br>Receive a shipment to begin.</div>'; return timelineList(ev); }
+
+/* ---- SEARCH ---- */
+function viewSearch(){ return '<div class="searchbar">🔎<input id="sq" placeholder="Reference, bus, company, product, TRN, date…" oninput="doSearch()"></div><div id="sres"><div class="empty"><span class="em">🔎</span>Search by reference, bus number, company, product, shipment or date.</div></div>'; }
+function doSearch(){
+  var q=(val('sq')||'').toLowerCase(), box=document.getElementById('sres'); if(!q){ box.innerHTML='<div class="empty"><span class="em">🔎</span>Type to search.</div>'; return; }
+  var ld=REG.loads.filter(function(l){ var hay=[l.id,l.company,l.bus,l.phone,l.eta,l.date,fmtDate(l.date),(l.lines||[]).map(function(x){return x.name;}).join(' ')].join(' ').toLowerCase(); return hay.indexOf(q)>=0; });
+  var sh=REG.shipments.filter(function(s){ var hay=[s.id,s.ref,s.source,s.date,fmtDate(s.date),(s.products||[]).map(function(x){return x.name;}).join(' ')].join(' ').toLowerCase(); return hay.indexOf(q)>=0; });
+  var html='';
+  if(sh.length)html+='<div class="sec">Shipments</div><div class="card">'+sh.map(shipRow).join('')+'</div>';
+  if(ld.length)html+='<div class="sec">Buses</div><div class="card">'+ld.map(loadRow).join('')+'</div>';
+  box.innerHTML=html||'<div class="empty"><span class="em">🤷</span>No results for “'+esc(val('sq'))+'”.</div>';
+}
+
+/* ---- shared inputs ---- */
+function field(label,inner,req){ return '<div class="field"><label class="'+(req?'req':'')+'">'+esc(label)+'</label>'+inner+'</div>'; }
+function stepper(id,v,max){ return '<div class="stepper"><button onclick="stepVal(\''+id+'\',-1,'+(max||0)+')">−</button><input id="'+id+'" type="number" inputmode="numeric" value="'+v+'" min="0"'+(max?' max="'+max+'"':'')+'><button onclick="stepVal(\''+id+'\',1,'+(max||0)+')">+</button></div>'; }
+function stepVal(id,d,max){ var el=document.getElementById(id); var n=Math.max(0,(Number(el.value)||0)+d); if(max&&n>max)n=max; el.value=n; }
+function val(id){ var e=document.getElementById(id); return e?String(e.value||'').trim():''; }
+function setVal(id,v){ var e=document.getElementById(id); if(e)e.value=v; }
+
+/* ---- WhatsApp share ---- */
+function manifestText(ld){ var lines=['*Bus manifest — '+ld.company+' '+ld.bus+'*','('+ld.id+' · '+fmtDate(ld.date)+')','','Status: '+((STATUS[ld.status]||{}).l||ld.status),ld.eta?('ETA: '+ld.eta):'', '']; (ld.lines||[]).forEach(function(l){ lines.push('• '+l.name+' — '+l.cartons); }); lines.push(''); lines.push('*Total: '+loadTotal(ld)+' cartons*'); return lines.filter(function(x){return x!=='' || true;}).join('\n'); }
+function shareManifest(id){ var ld=loadById(id); if(!ld)return; shareText(manifestText(ld)); }
+function dashText(){ var l=['*Transport status — '+fmtDate(todayISO())+'*','','📥 Received (Kampala): '+totalIntake(),'📦 Waiting to dispatch: '+waitingTotal(),'🅿️ At bus park: '+cartonsByStatus('park'),'🚌 In transit: '+cartonsByStatus('transit'),'📍 Arrived Juba: '+cartonsByStatus('arrived'),'🏬 In Juba warehouse: '+cartonsByStatus('received')]; var lost=cartonsByStatus('lost'); if(lost)l.push('⚠️ Lost/disputed: '+lost); var d=delayedLoads(24).length; if(d)l.push('⏱ Delayed >24h: '+d+' shipments'); return l.join('\n'); }
+function shareDash(){ shareText(dashText()); }
+function shareText(txt){ if(navigator.share){ navigator.share({text:txt}).catch(function(){}); return; } try{ window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank'); }catch(e){ try{navigator.clipboard.writeText(txt);toast('Copied');}catch(e2){toast('Share not available');} } }
+
+/* ---- menu / backup ---- */
+function openMenu(){ var b=document.getElementById('sheetBody'); b.innerHTML='<div class="sh">Transport Register</div>'
+  +opt('📊','Manager dashboard','','closeSheet();go(\'dash\')')
+  +opt('📤','Share status on WhatsApp','','closeSheet();shareDash()')
+  +opt('⬇️','Export backup (JSON)','','closeSheet();exportData()')
+  +opt('⬆️','Import backup','','closeSheet();importData()')
+  +opt('🧹','Clear all data','','closeSheet();clearAll()');
+  document.getElementById('sheet').classList.add('show'); }
+function opt(ic,l,note,onclick){ return '<div class="opt" onclick="'+onclick+'"><div class="ic" style="background:#eef1f4">'+ic+'</div><div style="flex:1">'+esc(l)+'</div>'+(note?'<span class="mut" style="font-size:12px;font-weight:700">'+esc(note)+'</span>':'')+'</div>'; }
+function closeSheet(){ document.getElementById('sheet').classList.remove('show'); }
+function exportData(){ var blob=new Blob([JSON.stringify(REG,null,2)],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='transport-register-'+todayISO()+'.json'; a.click(); toast('Backup downloaded'); }
+function importData(){ var f=document.createElement('input'); f.type='file'; f.accept='application/json'; f.onchange=function(){ var file=f.files[0]; if(!file)return; var r=new FileReader(); r.onload=function(){ try{ var d=JSON.parse(r.result); if(d&&(d.shipments||d.loads)){ REG=d; load(); save(); reset('home'); toast('Backup restored'); } else toast('Not a valid backup'); }catch(e){ toast('Could not read file'); } }; r.readAsText(file); }; f.click(); }
+function clearAll(){ if(!confirm('Delete ALL transport records on this phone?'))return; REG={shipments:[],loads:[],seq:{},companies:[]}; save(); reset('home'); toast('All data cleared'); }
+
+/* ---- boot ---- */
+load();
+/* Demo data only in the standalone offline prototype (no server). A real deployment
+   starts empty and shares data through the sync endpoints. */
+if(!TRc && !REG.shipments.length && !localStorage.getItem(KEY+'_seen')){
+  var t=todayISO(), now=Date.now();
+  var s1=seqId('TRN',t);
+  REG.shipments.push(stamp({id:s1,date:t,ts:now-9000000,source:'Kampala Warehouse',dest:'Juba Warehouse',ref:'GRN-1042',products:[{name:'Toilet Paper',cartons:40},{name:'Brown Chana',cartons:25},{name:'Disposable Glasses',cartons:55}]}));
+  var dm={};
+  var L1=seqId('LD',t); REG.loads.push(stamp({id:L1,date:t,ts:now-6000000,company:'Gateway Bus',bus:'UBK 456Y',eta:'Tomorrow AM',status:'transit',lines:allocate('Toilet Paper',40,dm).concat(allocate('Brown Chana',10,dm)).concat(allocate('Disposable Glasses',55,dm)),events:[{status:'park',ts:now-6300000,note:'Loaded on Gateway Bus'},{status:'transit',ts:now-6000000,note:'Bus left Kampala'}]}));
+  REG.companies=['Gateway Bus','Nile Coach'];
+  localStorage.setItem(KEY+'_seen','1'); save();
+}
+if(TRc){ var sb=document.getElementById('syncBtn'); if(sb)sb.style.display='grid'; }
+render();
+if(TRc) startSync();
+</script>
+</body>
+</html>
