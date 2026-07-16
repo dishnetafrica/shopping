@@ -1329,7 +1329,11 @@ function collMatch(p,c){ if(!sellableRail(p))return false;
   if(cat){ if(pcat===cat)return true; if(pcat.length>=3 && cat.indexOf(pcat)>=0)return true; if(cat.length>=3 && pcat.indexOf(cat)>=0)return true; }
   var toks=collTokens(c); if(!toks.length)return false;
   var hay=(p.name+' '+p.keywords+' '+p.category+' '+p.brand).toLowerCase();
-  for(var i=0;i<toks.length;i++){ if(hay.indexOf(toks[i])>=0)return true; }
+  for(var i=0;i<toks.length;i++){ var t=toks[i];
+    if(hay.indexOf(t)>=0)return true;
+    // Plural/singular tolerance: token "masalas" should match category "masala"; "wraps"→"wrap".
+    if(t.length>=4){ var s=t.replace(/s$/,''); if(s!==t && hay.indexOf(s)>=0)return true; }
+  }
   return false; }
 function collProducts(c){ return PRODUCTS.filter(function(p){return collMatch(p,c);}); }
 function bizTitle(t){ return esc(String(t||'')).replace(/\*(.+?)\*/g,'<b>$1</b>'); }
