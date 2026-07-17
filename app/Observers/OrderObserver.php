@@ -24,6 +24,16 @@ class OrderObserver
         if (empty($order->status_changed_at)) {
             $order->status_changed_at = now();
         }
+
+        // Store the customer phone in canonical form (strip local trunk 0, ensure country code) so the
+        // order lines up with its customer master and the AR/directory joins — and so WhatsApp routing
+        // uses the full international number. Pure reformat; only applied when it yields a sane number.
+        if (! empty($order->customer_phone)) {
+            $canon = \App\Support\PhoneNormalizer::canonical((string) $order->customer_phone);
+            if ($canon !== '' && strlen($canon) >= 9) {
+                $order->customer_phone = $canon;
+            }
+        }
     }
 
     /**

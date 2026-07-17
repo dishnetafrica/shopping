@@ -5389,6 +5389,95 @@ class PanelApiController extends Controller
         ]);
     }
 
+    /**
+     * POST /papi/merge-customers[?commit=1] — canonicalise every customer phone (strip local trunk 0,
+     * ensure country code) across orders / invoices / payments / quotations, then MERGE customer masters
+     * that now resolve to the same number (e.g. "Asish" 211926190900 + "Ashish" 0211926190900 → one).
+     * The richest profile survives, blank fields are filled from the duplicates, and the duplicates are
+     * removed. Nothing financial is recalculated — only the phone key is unified so a customer's history
+     * stops being split. DRY RUN unless ?commit=1 (lists every phone change + every merge first). Owner-only.
+     */
+    public function mergeCustomers(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $commit = filter_var($r->query('commit', $r->input('commit', false)), FILTER_VALIDATE_BOOLEAN);
+        $canon = fn ($p) => \App\Support\PhoneNormalizer::canonical((string) $p);
+
+        // 1) Canonicalise phones on the transactional records (so they line up with the master + joins).
+        $tables = [
+            'orders'            => \App\Models\Order::class,
+            'invoices'          => \App\Models\Invoice::class,
+            'customer_payments' => \App\Models\CustomerPayment::class,
+            'quotations'        => \App\Models\Quotation::class,
+        ];
+        $phoneChanges = []; $samples = [];
+        foreach ($tables as $label => $model) {
+            $n = 0;
+            foreach ($model::where('tenant_id', $t->id)->get() as $row) {
+                $old = (string) $row->customer_phone;
+                $new = $canon($old);
+                if ($new !== '' && strlen($new) >= 9 && $new !== preg_replace('/\D+/', '', $old)) {
+                    $n++;
+                    if (count($samples) < 25) $samples[] = ['table' => $label, 'from' => $old, 'to' => $new];
+                    if ($commit) { $row->customer_phone = $new; $row->save(); }
+                }
+            }
+            $phoneChanges[$label] = $n;
+        }
+
+        // 2) Group customer masters by canonical phone and merge collisions.
+        $fields = ['name', 'contact_person', 'alt_phone', 'email', 'address', 'city', 'country',
+            'segment', 'credit_limit', 'notes', 'assigned_rep', 'ss_markup_pct', 'lang', 'greeting'];
+        $score = function ($p) use ($fields) { $s = 0; foreach ($fields as $f) { if (trim((string) $p->$f) !== '') $s++; } return $s; };
+
+        $groups = [];
+        foreach (\App\Models\CustomerProfile::where('tenant_id', $t->id)->get() as $p) {
+            $key = $canon($p->phone);
+            if ($key === '' || strlen($key) < 9) continue;   // can't canonicalise → leave untouched
+            $groups[$key][] = $p;
+        }
+
+        $merges = []; $mergedAway = 0;
+        foreach ($groups as $key => $members) {
+            usort($members, function ($a, $b) use ($score) {
+                $sa = $score($a); $sb = $score($b);
+                return $sa !== $sb ? $sb <=> $sa : $a->id <=> $b->id;
+            });
+            $winner = $members[0];
+            $losers = array_slice($members, 1);
+            $renamedOnly = (count($losers) === 0 && (string) $winner->phone !== $key);
+            if (count($losers) === 0 && ! $renamedOnly) continue;
+
+            if (count($losers) > 0) {
+                $merges[] = ['target' => $key,
+                    'winner' => ['id' => $winner->id, 'name' => (string) $winner->name, 'phone' => (string) $winner->phone],
+                    'losers' => array_map(fn ($l) => ['id' => $l->id, 'name' => (string) $l->name, 'phone' => (string) $l->phone], $losers)];
+                $mergedAway += count($losers);
+            }
+
+            if ($commit) {
+                foreach ($losers as $l) {
+                    foreach ($fields as $f) {
+                        if (trim((string) $winner->$f) === '' && trim((string) $l->$f) !== '') $winner->$f = $l->$f;
+                    }
+                }
+                if ((string) $winner->phone !== $key) $winner->phone = $key;
+                $winner->save();
+                foreach ($losers as $l) { $l->delete(); }
+            }
+        }
+
+        return response()->json([
+            'ok' => true, 'committed' => $commit,
+            'phone_changes' => $phoneChanges,
+            'phone_change_samples' => $samples,
+            'duplicate_masters_merged' => $mergedAway,
+            'merges' => $merges,
+        ]);
+    }
+
     public function resyncBalances(Request $r)
     {
         if ($g = $this->ownerGate($r)) return $g;

@@ -25,7 +25,9 @@ final class CustomerMasterService
     /** Create or refresh the customer master behind an order. Returns null when the order has no phone. */
     public function ensureFromOrder(Tenant $t, Order $order): ?CustomerProfile
     {
-        $phone = preg_replace('/[^0-9]/', '', (string) $order->customer_phone);
+        // Canonical phone (strip leading 0, ensure country code) so "0211…"/"211…"/bare-local variants
+        // resolve to ONE master instead of duplicates like Asish/Ashish.
+        $phone = \App\Support\PhoneNormalizer::canonical((string) $order->customer_phone);
         if ($phone === '') {
             return null;
         }
