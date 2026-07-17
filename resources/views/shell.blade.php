@@ -866,7 +866,9 @@ function openLink(apiPath){
   if(apiPath && apiPath.indexOf('filter:')===0){
     const p=apiPath.split(':'); PENDING_FILTER={ key:p[2], val:decodeURIComponent(p[3]||'') }; route(p[1]); return;
   }
-  const h=apiToHash(apiPath); if(h) route(h.key, h.id);
+  const h=apiToHash(apiPath); if(h){ route(h.key, h.id); return; }
+  // External / legacy-panel links (e.g. /panel/setup for the WhatsApp QR connect) — navigate the browser.
+  if(apiPath && (/^https?:/.test(apiPath) || apiPath.indexOf('/panel/')===0)){ window.location.href = apiPath; }
 }
 
 /* ============ record shell (tabbed 360: answers · health · KPIs · NBA · tabs) ============ */

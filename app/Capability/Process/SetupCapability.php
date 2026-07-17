@@ -30,9 +30,16 @@ final class SetupCapability implements ProcessCapability
     public function project(CapabilityContext $ctx): WorkspacePayload
     {
         $t = $ctx->tenantId();
+        $tenant = $ctx->tenant;
         $has = fn ($q) => $q->where('tenant_id', $t)->exists();
 
+        // Foundational setup, tracked by settings rather than a record existing:
+        $businessSet = (bool) $tenant->setting('onboarded', false) || trim((string) $tenant->setting('currency', '')) !== '';
+        $waConnected = trim((string) $tenant->whatsapp_instance) !== '';
+
         $steps = [
+            ['key' => 'settings', 'title' => 'Set up your business', 'desc' => 'Set your currency, exchange rates, invoice details and business profile.', 'done' => $businessSet, 'link' => '/api/v1/workspace/settings'],
+            ['key' => 'whatsapp', 'title' => 'Connect WhatsApp', 'desc' => 'Link your WhatsApp number so customers can order and you get alerts — it also powers OTP login.', 'done' => $waConnected, 'link' => '/panel/setup'],
             ['key' => 'categories', 'title' => 'Create product categories', 'desc' => 'Group what you sell — e.g. Beverages, Hygiene, Staples.', 'done' => $has(Category::query())],
             ['key' => 'products',   'title' => 'Add your products',          'desc' => 'Add items with photos, price, cost, stock and MOQ — the bot uses these to sell.', 'done' => $has(Product::query())],
             ['key' => 'suppliers',  'title' => 'Add your suppliers',         'desc' => 'Who you buy stock from, so you can track what you owe.', 'done' => $has(Supplier::query())],
@@ -53,7 +60,7 @@ final class SetupCapability implements ProcessCapability
             label: ($i + 1) . '. ' . $s['title'],
             sublabel: $s['desc'],
             count: null,
-            link: '/api/v1/workspace/' . $s['key'],
+            link: $s['link'] ?? '/api/v1/workspace/' . $s['key'],
         ), $steps, array_keys($steps));
 
         // Mark done-ness on each related row (the shell renders a green check vs a "Start" chevron).

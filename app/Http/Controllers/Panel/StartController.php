@@ -106,10 +106,11 @@ class StartController extends Controller
                     'order_prefix'    => $this->prefixFrom($name),
                     // plan=free + 30-day trial are auto-set in Tenant::booted().
                     'settings'        => [
-                        'bot_kind'      => $kind,
-                        'onboarded'     => false,               // → first-run wizard runs
-                        'signup_source' => 'self',
-                        'signup_at'     => now()->toIso8601String(),
+                        'bot_kind'             => $kind,
+                        'onboarded'            => false,        // → first-run wizard runs
+                        'order_system_enabled' => true,         // new shops land on v3 (Get-started checklist)
+                        'signup_source'        => 'self',
+                        'signup_at'            => now()->toIso8601String(),
                     ],
                 ]);
 

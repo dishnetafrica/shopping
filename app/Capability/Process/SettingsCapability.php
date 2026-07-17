@@ -129,12 +129,16 @@ final class SettingsCapability implements ProcessCapability
             ['Daily cashbook email', $s('cashbook_digest_to') ?: '— off —'],
         ]];
         // --- WhatsApp & bot ---
-        $waStatus = $t->whatsapp_instance ? 'Connected' : 'Not connected';
+        $waLinked = trim((string) $t->whatsapp_instance) !== '';
+        $waStatus = $waLinked ? 'Connected' : 'Not connected';
+        // Connect/manage opens the guided QR-scan screen (legacy /panel/setup); the shell navigates there.
+        $connectWa = ['key' => 'connect_whatsapp', 'label' => $waLinked ? 'Manage WhatsApp connection' : 'Connect WhatsApp', 'href' => '/panel/setup', 'actor' => 'human', 'tone' => $waLinked ? 'default' : 'primary'];
         $connCard = ['kind' => 'dl', 'title' => 'WhatsApp connection', 'rows' => [
             ['Number', (string) ($t->whatsapp_number ?: '—')],
             ['Driver', (string) ($t->whatsapp_driver ?: '—')],
             ['Instance', (string) ($t->whatsapp_instance ?: '—')],
             ['Status', $waStatus],
+            ['Setup', $waLinked ? 'Use “Manage WhatsApp connection” to re-scan or switch number.' : 'Use “Connect WhatsApp” above to scan the QR code and go live.'],
         ]];
         $trunc = fn (string $v, int $n = 60) => $v === '' ? '—' : (mb_strlen($v) > $n ? mb_substr($v, 0, $n) . '…' : $v);
         $botCard = ['kind' => 'dl', 'title' => 'Bot messages', 'rows' => [
@@ -197,7 +201,7 @@ final class SettingsCapability implements ProcessCapability
                 ['key' => 'mode', 'label' => 'Report mode', 'value' => $mode === 'original' ? 'Original' : 'Consolidated'],
                 ['key' => 'terms', 'label' => 'Payment terms', 'value' => ($s('invoice_terms_days', '0') ?: '0') . ' days'],
             ])
-            ->quickActions([$editProfile, $editCurrency, $editRates, $editInvoicing, $editDocuments, $editBot, $addMember])
+            ->quickActions([$editProfile, $editCurrency, $editRates, $editInvoicing, $editDocuments, $connectWa, $editBot, $addMember])
             ->overviewCards([$profileCard, $currencyCard, $invoiceCard])
             ->tabSections([
                 'business' => [$profileCard],
@@ -219,7 +223,7 @@ final class SettingsCapability implements ProcessCapability
                 ['key' => 'team', 'label' => 'Team', 'count' => $members->count()],
             ])
             ->actions([$editProfile])
-            ->more([$editStock, $editCurrency, $editRates, $editInvoicing, $editDocuments, $editBot, $addMember])
+            ->more([$editStock, $editCurrency, $editRates, $editInvoicing, $editDocuments, $connectWa, $editBot, $addMember])
             ->meta(['capability' => 'settings', 'ttl' => 20, 'layout' => 'record', 'listKey' => 'settings', 'permissions' => []]);
     }
 
