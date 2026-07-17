@@ -5763,24 +5763,35 @@ class PanelApiController extends Controller
         $t = $r->user()->tenant;
         if (! $t) return response()->json(['ok' => false], 401);
 
-        $inStages = ['funding', 'cash_in', 'customer_payment'];
-        $buckets = [];   // stage => usd (signed, IN +)
-        foreach (\App\Models\OrderCost::where('tenant_id', $t->id)->where('status', 'approved')
+        // Classify each cash row. Capital is often typed as a generic cash_in with a "capital/introduced"
+        // note rather than the funding stage — detect that so equity isn't misread as income. Status
+        // filter matches the cashbook (everything not void/rejected) so this reconciles to its closing.
+        $isCapitalNote = fn ($n) => (bool) preg_match('/capital|startup|introduc|invest/i', (string) $n);
+        $cap = ['capital' => 0.0, 'revenue' => 0.0, 'purchase' => 0.0, 'supplier' => 0.0,
+                'opex' => 0.0, 'other_in' => 0.0, 'other_out' => 0.0, 'drawings' => 0.0];
+        foreach (\App\Models\OrderCost::where('tenant_id', $t->id)
+                    ->whereNotIn('status', ['void', 'rejected'])
                     ->where(function ($w) { $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status'); })
                     ->whereNotIn('category', ['Conversion', 'Transfer'])
-                    ->get(['stage', 'usd_amount']) as $c) {
-            $stage = (string) $c->stage;
-            $buckets[$stage] = ($buckets[$stage] ?? 0) + (float) $c->usd_amount;
+                    ->get(['stage', 'usd_amount', 'note']) as $c) {
+            $s = (string) $c->stage; $usd = (float) $c->usd_amount;
+            if ($s === 'funding' || ($s === 'cash_in' && $isCapitalNote($c->note))) $cap['capital'] += $usd;
+            elseif ($s === 'customer_payment') $cap['revenue'] += $usd;
+            elseif ($s === 'cash_in') $cap['other_in'] += $usd;
+            elseif ($s === 'purchase') $cap['purchase'] += $usd;
+            elseif ($s === 'supplier_payment') $cap['supplier'] += $usd;
+            elseif ($s === 'expense') $cap['opex'] += $usd;
+            elseif ($s === 'drawing') $cap['drawings'] += $usd;
+            elseif ($s === 'cash_out') $cap['other_out'] += $usd;
         }
-        $g2 = fn (string $s) => round((float) ($buckets[$s] ?? 0), 2);
-
-        $revenue   = $g2('customer_payment');
-        $cogs      = round($g2('purchase') + $g2('supplier_payment'), 2);
-        $opex      = $g2('expense');
-        $otherIn   = $g2('cash_in');      // generic money-in not yet classified (capital typed as cash_in, misc)
-        $otherOut  = $g2('cash_out');     // generic money-out not yet classified (misc expense/drawing)
-        $capital   = $g2('funding');
-        $drawings  = $g2('drawing');
+        $revenue  = round($cap['revenue'], 2);
+        $cogs     = round($cap['purchase'] + $cap['supplier'], 2);
+        $opex     = round($cap['opex'], 2);
+        $otherIn  = round($cap['other_in'], 2);
+        $otherOut = round($cap['other_out'], 2);
+        $capital  = round($cap['capital'], 2);
+        $drawings = round($cap['drawings'], 2);
+        $buckets  = array_map(fn ($v) => round($v, 2), $cap);
 
         $grossProfit = round($revenue - $cogs, 2);
         $operatingProfit = round($grossProfit - $opex - $otherOut + $otherIn, 2);
@@ -5804,6 +5815,49 @@ class PanelApiController extends Controller
                 'note' => 'Should match the Company Account Cash Book closing balance. If off, some generic cash_in/cash_out rows need classifying (see the *_review lines).'],
             'raw_stage_totals' => array_map(fn ($v) => round($v, 2), $buckets),
             'note' => 'Cash-basis: revenue = cash received from customers; COGS = cash paid for goods (purchases + supplier account). This reflects real trade, unlike the invoice-based view which only saw the small invoiced subset.',
+        ]);
+    }
+
+    /**
+     * GET /papi/capital-trace — READ-ONLY. Finds every capital / working-capital / startup introduction
+     * in the cashbook (funding stage, or any money-in whose note says capital/introduced/invested) and
+     * lists it per person (Bhavin, Jayesh Bhai, …) with USD, so the equity contributed by each partner
+     * is visible instead of being buried in generic cash-in. Excludes FX conversion legs. Writes nothing.
+     */
+    public function capitalTrace(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+
+        $rows = []; $byHolder = []; $total = 0.0;
+        foreach (\App\Models\OrderCost::where('tenant_id', $t->id)
+                    ->whereNotIn('status', ['void', 'rejected'])
+                    ->whereNotIn('category', ['Conversion', 'Transfer'])
+                    ->orderBy('created_at')->get() as $c) {
+            $stage = (string) $c->stage;
+            $note  = (string) $c->note;
+            $isIn  = in_array($stage, ['funding', 'cash_in', 'customer_payment'], true);
+            $isCapital = $stage === 'funding'
+                || ($isIn && preg_match('/capital|startup|introduc|invest/i', $note));
+            if (! $isCapital) continue;
+
+            $usd = (float) $c->usd_amount;
+            $holder = trim((string) $c->holder) ?: 'Unassigned';
+            $rows[] = ['date' => optional($c->created_at)->format('Y-m-d H:i'), 'holder' => $holder,
+                'stage' => $stage, 'currency' => (string) $c->currency, 'native' => round((float) $c->native_amount, 2),
+                'usd' => round($usd, 2), 'note' => $note];
+            $byHolder[$holder] = round(($byHolder[$holder] ?? 0) + $usd, 2);
+            $total += $usd;
+        }
+        arsort($byHolder);
+
+        return response()->json([
+            'ok' => true, 'currency' => \App\Services\Money\SalesBaseCurrency::baseCurrency($t),
+            'total_capital_introduced' => round($total, 2),
+            'by_partner' => $byHolder,
+            'entries' => $rows,
+            'note' => 'Capital = equity, not income. These are the amounts each partner put into the business (working capital, startup capital, and cash-in rows noted as an introduction).',
         ]);
     }
 
