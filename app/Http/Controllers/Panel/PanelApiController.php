@@ -5527,6 +5527,97 @@ class PanelApiController extends Controller
         ]);
     }
 
+    /**
+     * GET /papi/books-preview — READ-ONLY accrual income statement + AR, computed from the existing
+     * reconciled data (invoices, the CustomerPayment ledger, product costs). Writes NOTHING and enables
+     * NO general ledger. It answers "what would the accrual books show?" so revenue recognition can be
+     * validated BEFORE any GL is switched on — and it is the target the GL trial balance must match.
+     * All figures in the base currency (USD). Owner-only.
+     */
+    public function booksPreview(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+
+        $fx   = \App\Services\Money\Fx::forTenant($t);
+        $base = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);
+        $toUsd = function ($amount, string $cur) use ($fx, $base): float {
+            $cur = strtoupper($cur);
+            if ($cur === $base) return (float) $amount;
+            $rate = $fx->ratePerUsd($cur) ?: 1.0;
+            return (float) $amount / $rate;
+        };
+
+        // --- Revenue + Output VAT + AR, from non-void invoices (the reconciled AR source) ---
+        $grossUsd = 0.0; $arUsd = 0.0; $invCount = 0;
+        foreach (\App\Models\Invoice::with('order:id,order_no')->where('tenant_id', $t->id)
+                    ->where('status', '!=', 'void')->get() as $inv) {
+            $cur = \App\Services\Money\SalesBaseCurrency::txnCurrency($inv, $t);
+            $grossUsd += $toUsd((float) $inv->total, $cur);
+            $arUsd    += $toUsd((float) $inv->balance, $cur);
+            $invCount++;
+        }
+        $vatPct  = (float) $t->setting('quote_vat_pct', 0);
+        $netUsd  = $vatPct > 0 ? $grossUsd / (1 + $vatPct / 100) : $grossUsd;
+        $vatUsd  = $grossUsd - $netUsd;
+        $collectedOnInvoicesUsd = round($grossUsd - $arUsd, 2);
+
+        // --- COGS from delivered orders' lines × product cost (base currency) ---
+        $cogsUsd = 0.0; $linesCosted = 0; $linesMissingCost = 0;
+        $costCache = [];
+        $delivered = \App\Models\Order::where('tenant_id', $t->id)
+            ->where(function ($w) { $w->whereRaw("lower(coalesce(status,'')) = 'delivered'")->orWhereNotNull('delivered_at'); })
+            ->whereRaw("lower(coalesce(status,'')) not in ('cancelled','rejected','void')")
+            ->pluck('id');
+        foreach (\App\Models\OrderItem::whereIn('order_id', $delivered)->get() as $it) {
+            $pid = (int) ($it->product_id ?? 0);
+            $qty = (float) $it->qty;
+            if ($pid <= 0 || $qty <= 0) { $linesMissingCost++; continue; }
+            if (! array_key_exists($pid, $costCache)) {
+                $costCache[$pid] = \App\Models\Product::where('tenant_id', $t->id)->where('id', $pid)->value('cost_price');
+            }
+            $cost = $costCache[$pid];
+            if ($cost === null) { $linesMissingCost++; continue; }
+            $cogsUsd += (float) $cost * $qty;   // cost_price is held in base currency (USD)
+            $linesCosted++;
+        }
+
+        // --- Cash collected via the CustomerPayment ledger (cross-check on AR relief) ---
+        $cashUsd = 0.0;
+        foreach (\App\Models\CustomerPayment::where('tenant_id', $t->id)
+                    ->where('kind', 'settlement')->where('applied', true)->get() as $p) {
+            $cur = strtoupper((string) $p->currency);
+            $cashUsd += $cur === $base ? (float) $p->amount : (float) $p->usd_amount;
+        }
+
+        $netUsd = round($netUsd, 2); $vatUsd = round($vatUsd, 2); $cogsUsd = round($cogsUsd, 2);
+        $grossProfit = round($netUsd - $cogsUsd, 2);
+
+        return response()->json([
+            'ok' => true,
+            'currency' => $base,
+            'income_statement' => [
+                'sales_revenue_net' => $netUsd,
+                'output_vat'        => $vatUsd,
+                'vat_rate_pct'      => $vatPct,
+                'cogs'              => $cogsUsd,
+                'gross_profit'      => $grossProfit,
+                'gross_margin_pct'  => $netUsd > 0 ? round($grossProfit / $netUsd * 100, 1) : null,
+            ],
+            'receivables' => [
+                'invoiced_gross'          => round($grossUsd, 2),
+                'collected_on_invoices'   => $collectedOnInvoicesUsd,
+                'ar_outstanding'          => round($arUsd, 2),
+                'invoices_counted'        => $invCount,
+            ],
+            'cash' => ['collected_via_payment_ledger' => round($cashUsd, 2)],
+            'cogs_coverage' => ['lines_costed' => $linesCosted, 'lines_missing_cost' => $linesMissingCost,
+                'note' => $linesMissingCost > 0 ? 'Some delivered lines have no product cost — COGS/gross-profit understated until costs are filled.' : 'All delivered lines had a product cost.'],
+            'note' => 'Read-only preview from live data. No general ledger is enabled. This is the accrual picture a correctly-wired GL should reproduce.',
+        ]);
+    }
+
     public function resyncBalances(Request $r)
     {
         if ($g = $this->ownerGate($r)) return $g;

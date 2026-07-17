@@ -317,6 +317,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::match(['get', 'post'], 'backfill-customers', [PanelApiController::class, 'backfillCustomers']);
         Route::match(['get', 'post'], 'merge-customers', [PanelApiController::class, 'mergeCustomers']);
         Route::match(['get', 'post'], 'backfill-stock-issues', [PanelApiController::class, 'backfillStockIssues']);
+        Route::get('books-preview', [PanelApiController::class, 'booksPreview']);
         Route::match(['get', 'post'], 'platform/opcache-reset', [PanelApiController::class, 'opcacheReset']);
 
         // CRM — manual lead management (Build 86.5)
