@@ -31,7 +31,10 @@ final class ReceiptRenderer
         try {
             $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
             $dompdf->loadHtml($html);
-            $dompdf->setPaper('A5', 'landscape');
+            // Tenant-configurable (Settings → Documents); defaults match the built-in one-page layout.
+            $size = strtoupper((string) $tenant->setting('receipt_page_size', 'A5')) ?: 'A5';
+            $orient = strtolower((string) $tenant->setting('receipt_orientation', 'landscape')) === 'portrait' ? 'portrait' : 'landscape';
+            $dompdf->setPaper($size, $orient);
             $dompdf->render();
             $pdf = $dompdf->output();
         } catch (\Throwable $e) {

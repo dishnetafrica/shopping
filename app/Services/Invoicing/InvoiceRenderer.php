@@ -158,7 +158,10 @@ class InvoiceRenderer
     {
         $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
         $dompdf->loadHtml($this->html($t, $d));
-        $dompdf->setPaper('A4');
+        // Tenant-configurable (Settings → Documents); defaults match the previous fixed A4 portrait.
+        $size = strtoupper((string) $t->setting('invoice_page_size', 'A4')) ?: 'A4';
+        $orient = strtolower((string) $t->setting('invoice_orientation', 'portrait')) === 'landscape' ? 'landscape' : 'portrait';
+        $dompdf->setPaper($size, $orient);
         $dompdf->render();
         return $dompdf->output();
     }

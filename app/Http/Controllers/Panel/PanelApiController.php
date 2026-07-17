@@ -6217,6 +6217,77 @@ class PanelApiController extends Controller
     }
 
     /**
+     * GET /panel/settings-manager — serves the self-service tenant Settings screen (v3 → Settings).
+     * Owner-only. The page talks to /papi/config-schema (read) and /papi/config-save (write).
+     */
+    public function settingsManagerPage(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $path = resource_path('panel/settings-manager.html');
+        $html = is_file($path) ? (string) file_get_contents($path) : '<h1>Settings unavailable</h1>';
+
+        return response($html, 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
+    }
+
+    /**
+     * GET /papi/config-schema — the settings registry merged with this tenant's current values
+     * (schema + values in one payload, ready for a tabbed form). Owner-only. Read-only.
+     */
+    public function configSchema(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+
+        $schema = \App\Support\TenantSettingsRegistry::schema();
+        foreach ($schema as &$tab) {
+            foreach ($tab['groups'] as &$group) {
+                foreach ($group['fields'] as $key => &$spec) {
+                    $spec['value'] = $t->setting($key, $spec['default'] ?? null);
+                }
+                unset($spec);
+            }
+            unset($group);
+        }
+        unset($tab);
+
+        return response()->json(['ok' => true, 'schema' => $schema]);
+    }
+
+    /**
+     * POST /papi/config-save — validated write of tenant settings. The registry is the allow-list:
+     * unknown keys are ignored, every value is coerced/validated against its declared type, and all
+     * accepted keys are persisted in ONE save. Owner-only. Never touches keys outside the registry.
+     */
+    public function configSave(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+
+        $fields = \App\Support\TenantSettingsRegistry::fields();
+        $in = (array) $r->input('values', []);
+
+        $s = $t->settings ?? [];
+        if (! is_array($s)) $s = [];
+
+        $saved = []; $errors = [];
+        foreach ($in as $key => $v) {
+            if (! isset($fields[$key])) continue;   // registry is the allow-list
+            [$ok, $val, $err] = \App\Support\TenantSettingsRegistry::coerce($fields[$key], $v);
+            if (! $ok) { $errors[$key] = $err; continue; }
+            \Illuminate\Support\Arr::set($s, $key, $val);
+            $saved[] = $key;
+        }
+
+        if ($saved) { $t->settings = $s; $t->save(); }
+
+        return response()->json(['ok' => empty($errors), 'saved' => $saved, 'errors' => $errors]);
+    }
+
+    /**
      * GET /papi/classify-receipts — READ-ONLY. Checks every payment receipt's currency TAG against the
      * currency its numbers actually imply, using the trusted usd_amount (the figure the cashbook/P&L
      * already reconcile on). implied_rate = amount ÷ usd_amount; a UGX receipt should imply ~3655, a USD
