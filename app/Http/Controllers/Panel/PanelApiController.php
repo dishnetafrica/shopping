@@ -6262,13 +6262,17 @@ class PanelApiController extends Controller
 
         $sections = \App\Support\SettingsSchema::sections();
         foreach ($sections as &$sec) {
-            foreach (($sec['groups'] ?? []) as &$g2) {
-                foreach ($g2['fields'] as &$f) {
-                    $f['value'] = $resolve($f);
+            // NB: iterate the real $sec['groups'] key by reference — NOT `($sec['groups'] ?? [])`, which
+            // is a temporary copy, so the resolved `value`s would never propagate back into $sections.
+            if (! empty($sec['groups'])) {
+                foreach ($sec['groups'] as &$g2) {
+                    foreach ($g2['fields'] as &$f) {
+                        $f['value'] = $resolve($f);
+                    }
+                    unset($f);
                 }
-                unset($f);
+                unset($g2);
             }
-            unset($g2);
         }
         unset($sec);
 
@@ -6285,6 +6289,7 @@ class PanelApiController extends Controller
 
         return response()->json([
             'ok' => true,
+            'build' => 'readfix-2',   // bumped when this endpoint changes — the diagnostic prints it to prove the new code is live
             'sections' => $sections,
             'team' => $team,
             'roles' => ['sales', 'manager', 'staff', 'purchaser', 'product_staff', 'field'],

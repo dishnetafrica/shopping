@@ -114,10 +114,15 @@
     var btn=document.getElementById('save'), msg=document.getElementById('msg');
     btn.disabled=true; msg.className='msg'; msg.textContent='Saving…';
     post('/papi/settings-hub-save',{values:vals}).then(function(r){
-      btn.disabled=false;
-      if(r&&r.ok){ msg.className='msg ok'; msg.textContent=r.message||'Saved.'; }
-      else { msg.className='msg err'; msg.textContent=(r&&r.message)||'Could not save.'; }
-    }).catch(function(){ btn.disabled=false; msg.className='msg err'; msg.textContent='Could not save — are you still logged in?'; });
+      if(r&&r.ok){
+        // Re-read from the server so the form always reflects what's actually stored (confirms the save).
+        return get('/papi/settings-hub').then(function(h){
+          if(h&&h.ok){ HUB=h; renderNav(); renderSection(); }
+          var m=document.getElementById('msg'); if(m){ m.className='msg ok'; m.textContent=(r.message||'Saved.'); }
+        });
+      }
+      btn.disabled=false; msg.className='msg err'; msg.textContent=(r&&r.message)||'Could not save.';
+    }).catch(function(){ var b=document.getElementById('save'); if(b) b.disabled=false; var m=document.getElementById('msg'); if(m){ m.className='msg err'; m.textContent='Could not save — are you still logged in?'; } });
   }
 
   /* ---- Team ---- */
