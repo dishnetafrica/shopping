@@ -28,11 +28,17 @@ final class WorkspaceController
 
         // Sidebar badge counts, resolved via the registry (no model access in the HTTP layer).
         $counts = [];
-        if ($registry->has('_nav')) {
-            $nav = $registry->get('_nav');
-            if (method_exists($nav, 'counts')) {
-                $counts = $nav->counts($ctx);
+        try {
+            if ($registry->has('_nav')) {
+                $nav = $registry->get('_nav');
+                if (method_exists($nav, 'counts')) {
+                    $counts = $nav->counts($ctx);
+                }
             }
+        } catch (\Throwable $e) {
+            // Badges are cosmetic. The catalog (and therefore the ENTIRE sidebar) must
+            // never fail because a count did — incident 2026-07-18.
+            $counts = [];
         }
 
         // Currency & reporting: the shell renders a global report-currency selector from this.

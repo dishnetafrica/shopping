@@ -100,7 +100,11 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register(new ChatListCapability(), new CapabilityManifest(key: 'chats', type: 'process', owner: 'sales', permission: 'menu:whatsapp', api: '/api/v1/workspace/chats'));
         $r->register(new ChatCapability(), new CapabilityManifest(key: 'chat', type: 'object', owner: 'sales', permission: 'menu:whatsapp', api: '/api/v1/workspace/chat/{id}'));
         // Migration plan G2 — the Email Center as a v3 workspace (UI re-home; engine untouched).
-        $r->register(new CommunicationCapability(), new CapabilityManifest(key: 'communication', type: 'process', owner: 'management', permission: 'menu:settings', api: '/api/v1/workspace/communication'));
+        // Guarded: only register where the Comms backend (M1-M4 zip) is actually deployed,
+        // so the menu never offers a workspace that would 500 — incident 2026-07-18.
+        if (class_exists(\App\Models\CommMessage::class)) {
+            $r->register(new CommunicationCapability(), new CapabilityManifest(key: 'communication', type: 'process', owner: 'management', permission: 'menu:settings', api: '/api/v1/workspace/communication'));
+        }
         $r->register(new QuotationListCapability(), new CapabilityManifest(key: 'quotations', type: 'process', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/quotations'));
         $r->register(new InvoiceListCapability(), new CapabilityManifest(key: 'invoices', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/invoices'));
         $r->register(new SalesOrderListCapability(), new CapabilityManifest(key: 'salesOrders', type: 'process', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/salesOrders'));
