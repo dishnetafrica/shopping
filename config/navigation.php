@@ -52,6 +52,10 @@ return [
             ['key' => 'buy-list',  'label' => 'Buy List',  'route' => '/panel/buy-list',  'icon' => '📋', 'menu' => 'purchases', 'setting' => 'order_system_enabled'],
             ['key' => 'purchases', 'label' => 'Purchases', 'route' => '/panel/purchases', 'icon' => '🛒', 'menu' => 'purchases'],
             ['key' => 'suppliers', 'label' => 'Suppliers', 'route' => '/panel/suppliers', 'icon' => '🏭', 'menu' => 'purchases', 'setting' => 'order_system_enabled'],
+            // nav_v2 pre-flight: screens that existed in the legacy sidebar but were missing here.
+            ['key' => 'sourcing',      'label' => 'Sourcing',      'route' => '/panel/sourcing',      'icon' => '🔎', 'menu' => 'purchases'],
+            ['key' => 'supplier-debt', 'label' => 'Supplier Debt', 'route' => '/panel/supplier-debt', 'icon' => '🧾', 'menu' => 'purchases', 'setting' => 'order_system_enabled'],
+            ['key' => 'approvals',     'label' => 'Approvals',     'route' => '/panel/approvals',     'icon' => '✅', 'menu' => 'approvals', 'setting' => 'order_system_enabled'],
         ],
     ],
 
@@ -81,6 +85,9 @@ return [
                 ],
             ],
             ['key' => 'expenses', 'label' => 'Expenses', 'route' => '/panel/expenses',       'icon' => '💸', 'menu' => 'finance', 'setting' => 'order_system_enabled'],
+            // nav_v2 pre-flight additions:
+            ['key' => 'partners', 'label' => 'Partners', 'route' => '/panel/partners', 'icon' => '🤝', 'menu' => 'finance'],
+            ['key' => 'audit',    'label' => 'Audit',    'route' => '/panel/audit',    'icon' => '🛡️', 'menu' => 'finance'],
         ],
     ],
 
@@ -97,6 +104,9 @@ return [
             ['key' => 'chats',     'label' => 'Chats',     'route' => '/panel/chats',     'icon' => '💬', 'menu' => 'whatsapp'],
             ['key' => 'leads',     'label' => 'Leads',     'route' => '/panel/leads',     'icon' => '🎯', 'menu' => 'marketing'],
             ['key' => 'campaigns', 'label' => 'Campaigns', 'route' => '/panel/marketing', 'icon' => '📣', 'menu' => 'marketing'],
+            // nav_v2 pre-flight additions:
+            ['key' => 'scheduled', 'label' => 'Scheduled', 'route' => '/panel/scheduled', 'icon' => '⏰', 'menu' => 'whatsapp'],
+            ['key' => 'ads',       'label' => 'Ads',       'route' => '/panel/ads',       'icon' => '📢', 'menu' => 'marketing'],
         ],
     ],
 
