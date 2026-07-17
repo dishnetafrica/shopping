@@ -168,9 +168,11 @@ class TradeCashbookController extends Controller
         if (! $t) return response()->json(['ok'=>false],401);
         $dir = $request->input('dir')==='out' ? 'cash_out' : 'cash_in';
         $cur = strtoupper((string)$request->input('currency','UGX'));
-        $native = (float)$request->input('native_amount',0);
+        // The "Pay supplier" form posts the amount as `amount`; the guided tiles post it as `native_amount`.
+        // Accept either so a supplier payment (e.g. UGX from Jayesh) is not silently rejected as bad_amount.
+        $native = (float)$request->input('native_amount', $request->input('amount', 0));
         $rate = (float)$request->input('rate_to_usd', $cur==='USD'?1:0);
-        if ($native<=0 || $rate<=0) return response()->json(['ok'=>false,'error'=>'bad_amount']);
+        if ($native<=0 || $rate<=0) return response()->json(['ok'=>false,'error'=>'bad_amount','message'=>'Enter an amount and a rate.']);
 
         $isPriv = $u->isOwnerLike() || in_array((string)$u->role,['manager'],true);
         $category = trim((string)$request->input('category','')) ?: null;
