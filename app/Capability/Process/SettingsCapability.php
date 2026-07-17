@@ -67,6 +67,24 @@ final class SettingsCapability implements ProcessCapability
             'prefill' => ['bot_greeting' => $s('bot_greeting'), 'bot_fallback_text' => $s('bot_fallback_text'), 'ai_persona' => $s('ai_persona'), 'business_hours' => $s('business_hours'), 'delivery_areas' => $s('delivery_areas'), 'bot_website_link' => $s('bot_website_link'), 'faq' => $s('faq')],
         ];
 
+        // --- document PDFs (page size / orientation for invoices & receipts) ---
+        $editDocuments = [
+            'key' => 'edit_documents', 'label' => 'Document PDFs', 'method' => 'POST', 'endpoint' => $ep . '/save_settings', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['invoice_page_size' => 'enum:A4,A5,Letter', 'invoice_orientation' => 'enum:portrait,landscape', 'receipt_page_size' => 'enum:A4,A5', 'receipt_orientation' => 'enum:portrait,landscape'],
+            'labels' => ['invoice_page_size' => 'Invoice page size', 'invoice_orientation' => 'Invoice orientation', 'receipt_page_size' => 'Receipt page size', 'receipt_orientation' => 'Receipt orientation'],
+            'prefill' => [
+                'invoice_page_size' => $s('invoice_page_size', 'A4') ?: 'A4',
+                'invoice_orientation' => $s('invoice_orientation', 'portrait') ?: 'portrait',
+                'receipt_page_size' => $s('receipt_page_size', 'A5') ?: 'A5',
+                'receipt_orientation' => $s('receipt_orientation', 'landscape') ?: 'landscape',
+            ],
+        ];
+        $documentsCard = ['kind' => 'dl', 'title' => 'Document PDFs', 'rows' => [
+            ['Invoice PDF', ($s('invoice_page_size', 'A4') ?: 'A4') . ' · ' . ($s('invoice_orientation', 'portrait') ?: 'portrait')],
+            ['Receipt PDF', ($s('receipt_page_size', 'A5') ?: 'A5') . ' · ' . ($s('receipt_orientation', 'landscape') ?: 'landscape')],
+            ['Note', 'Page size & layout for the PDFs your customers receive. Defaults match the built-in layout — change only if your printer or filing needs a different size.'],
+        ]];
+
         // --- stock tracking (the real-inventory switch) ---
         $ledgerOn = (bool) $t->setting('stock_ledger', false);
         $liveStockOn = (bool) $t->setting('stock_v2', false);
@@ -179,12 +197,13 @@ final class SettingsCapability implements ProcessCapability
                 ['key' => 'mode', 'label' => 'Report mode', 'value' => $mode === 'original' ? 'Original' : 'Consolidated'],
                 ['key' => 'terms', 'label' => 'Payment terms', 'value' => ($s('invoice_terms_days', '0') ?: '0') . ' days'],
             ])
-            ->quickActions([$editProfile, $editCurrency, $editRates, $editInvoicing, $editBot, $addMember])
+            ->quickActions([$editProfile, $editCurrency, $editRates, $editInvoicing, $editDocuments, $editBot, $addMember])
             ->overviewCards([$profileCard, $currencyCard, $invoiceCard])
             ->tabSections([
                 'business' => [$profileCard],
                 'currency' => [$currencyCard, $ratesCard, $help],
                 'invoicing' => [$invoiceCard],
+                'documents' => [$documentsCard],
                 'inventory' => [$stockCard],
                 'whatsapp' => [$connCard, $botCard],
                 'team' => [$teamCard, $teamNote],
@@ -194,12 +213,13 @@ final class SettingsCapability implements ProcessCapability
                 ['key' => 'business', 'label' => 'Business profile'],
                 ['key' => 'currency', 'label' => 'Currency & rates'],
                 ['key' => 'invoicing', 'label' => 'Invoice & tax'],
+                ['key' => 'documents', 'label' => 'Documents'],
                 ['key' => 'inventory', 'label' => 'Stock tracking'],
                 ['key' => 'whatsapp', 'label' => 'WhatsApp & bot'],
                 ['key' => 'team', 'label' => 'Team', 'count' => $members->count()],
             ])
             ->actions([$editProfile])
-            ->more([$editStock, $editCurrency, $editRates, $editInvoicing, $editBot, $addMember])
+            ->more([$editStock, $editCurrency, $editRates, $editInvoicing, $editDocuments, $editBot, $addMember])
             ->meta(['capability' => 'settings', 'ttl' => 20, 'layout' => 'record', 'listKey' => 'settings', 'permissions' => []]);
     }
 

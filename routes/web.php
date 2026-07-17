@@ -101,7 +101,6 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
     Route::get('/panel/credit-notes', [\App\Http\Controllers\Panel\CreditNoteController::class, 'page']);
     Route::get('/panel/payments', [\App\Http\Controllers\Panel\PaymentController::class, 'page']);
     Route::get('/panel/payments-manager', [\App\Http\Controllers\Panel\PaymentsManagerController::class, 'page']);
-    Route::get('/panel/settings-manager', [\App\Http\Controllers\Panel\PanelApiController::class, 'settingsManagerPage']);
     Route::get('/panel/pnl-report', [\App\Http\Controllers\Panel\PanelApiController::class, 'pnlReportPage']);
     Route::get('/panel/sourcing', [\App\Http\Controllers\Panel\SourcingController::class, 'page']);
     Route::get('/panel/customers360', [\App\Http\Controllers\Panel\CustomerController::class, 'page']);
@@ -319,8 +318,6 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('classify-invoices', [PanelApiController::class, 'classifyInvoices']);
         Route::match(['get', 'post'], 'normalize-invoices-usd', [PanelApiController::class, 'normalizeInvoicesUsd']);
         Route::get('classify-receipts', [PanelApiController::class, 'classifyReceipts']);
-        Route::get('config-schema', [PanelApiController::class, 'configSchema']);
-        Route::post('config-save', [PanelApiController::class, 'configSave']);
         Route::get('bot/quote-diagnostics', [PanelApiController::class, 'botQuoteDiagnostics']);
         Route::match(['get', 'post'], 'backfill-customers', [PanelApiController::class, 'backfillCustomers']);
         Route::match(['get', 'post'], 'merge-customers', [PanelApiController::class, 'mergeCustomers']);

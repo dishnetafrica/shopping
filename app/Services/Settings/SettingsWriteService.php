@@ -42,6 +42,14 @@ final class SettingsWriteService
         'stock_v2',      // read on-hand from the ledger on site/bot (needs the ledger seeded first)
     ];
 
+    /** Enum settings: [key => allowed values]. Document PDF page setup (read by the PDF renderers). */
+    private const ENUM_KEYS = [
+        'invoice_page_size'   => ['A4', 'A5', 'Letter'],
+        'invoice_orientation' => ['portrait', 'landscape'],
+        'receipt_page_size'   => ['A4', 'A5'],
+        'receipt_orientation' => ['portrait', 'landscape'],
+    ];
+
     /**
      * Apply any subset of the settings. Absent keys are left untouched, so a form that edits one section
      * never disturbs another. Returns the applied summary.
@@ -108,6 +116,18 @@ final class SettingsWriteService
                 $on = $v === true || $v === 1 || in_array(strtolower(trim((string) $v)), ['1', 'true', 'on', 'yes', 'enabled'], true);
                 $tenant->putSetting($k, $on);
                 $changed[] = str_replace('_', ' ', $k) . ' → ' . ($on ? 'on' : 'off');
+            }
+        }
+
+        // Enum settings (validated against their allowed values).
+        foreach (self::ENUM_KEYS as $k => $opts) {
+            if (array_key_exists($k, $input) && trim((string) $input[$k]) !== '') {
+                $v = trim((string) $input[$k]);
+                if (! in_array($v, $opts, true)) {
+                    return ['ok' => false, 'error' => 'bad_option', 'message' => str_replace('_', ' ', $k) . ' must be one of ' . implode(', ', $opts) . '.'];
+                }
+                $tenant->putSetting($k, $v);
+                $changed[] = str_replace('_', ' ', $k) . ' → ' . $v;
             }
         }
 
