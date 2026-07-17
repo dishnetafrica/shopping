@@ -587,6 +587,77 @@ class AiBrain
      * truncates or malforms it. Supports protocol v2 quantity{value,unit} and the legacy
      * {qty[,grams]} shape, so older prompts and replay fixtures keep working.
      */
+    /**
+     * Recover the quote items when the model intended a quotation but forgot the <<QUOTE>> marker.
+     * A focused, JSON-only extraction call (a far easier task than appending a hidden line in a long
+     * chat) reads the recent conversation + the catalogue and returns the product(s)+quantity(ies).
+     * Returns a synthesised "<<QUOTE {json}>>" string for the normal pipeline, or '' if nothing clear.
+     * Read-only side-effects; never throws into the send path.
+     */
+    private function recoverQuoteMarker(Tenant $tenant, string $from, string $text, string $reply): string
+    {
+        try {
+            $catalogue = trim($this->catalogueLines($tenant));
+            if ($catalogue === '') return '';
+
+            $model     = (string) ($tenant->setting('ai_model', '') ?: env('OPENAI_MODEL', 'gpt-4o-mini'));
+            $tenantKey = (string) $tenant->setting('openai_api_key', '');
+            $client    = $tenantKey !== '' ? \OpenAI::client($tenantKey) : \OpenAI::getFacadeRoot();
+
+            $sys = "You are a strict extraction function for a wholesale shop's quotation system. "
+                 . "From the conversation, output ONLY the product(s) and quantity(ies) the customer wants a QUOTATION for. "
+                 . "Respond with MINIFIED JSON ONLY, no prose, exactly this shape: "
+                 . "{\"items\":[{\"name\":\"<EXACT product name from CATALOGUE>\",\"quantity\":{\"value\":<number>,\"unit\":\"pcs|g|kg|carton|pack|dozen\"}}]}. "
+                 . "Rules: use EXACT names copied from CATALOGUE; include an item ONLY if the customer clearly asked to be quoted for it AND a quantity is known; "
+                 . "never invent products or quantities; if nothing is clearly quotable, output {\"items\":[]}.\n\nCATALOGUE:\n" . $catalogue;
+
+            $usr = trim($this->recentTranscript($tenant, $from, 8))
+                 . "\n\nAssistant just replied: " . $reply
+                 . "\nCustomer's latest message: " . $text
+                 . "\n\nExtract the quotation items as JSON.";
+
+            $resp = $client->chat()->create([
+                'model'           => $model,
+                'temperature'     => 0,
+                'response_format' => ['type' => 'json_object'],
+                'messages'        => [
+                    ['role' => 'system', 'content' => $sys],
+                    ['role' => 'user',   'content' => $usr],
+                ],
+            ]);
+            $json = trim((string) ($resp->choices[0]->message->content ?? ''));
+            $data = json_decode($json, true);
+            $items = (is_array($data) && is_array($data['items'] ?? null)) ? $data['items'] : [];
+            $items = array_values(array_filter($items, fn ($i) => is_array($i) && trim((string) ($i['name'] ?? '')) !== ''));
+            if (! $items) return '';
+            $items = array_slice($items, 0, 30);   // sanity cap
+
+            return '<<QUOTE ' . json_encode(['version' => 2, 'items' => $items], JSON_UNESCAPED_UNICODE) . '>>';
+        } catch (\Throwable $e) {
+            \Log::warning('recoverQuoteMarker failed: ' . $e->getMessage());
+            return '';
+        }
+    }
+
+    /** Recent conversation as a compact transcript for the extraction call. Best-effort. */
+    private function recentTranscript(Tenant $tenant, string $from, int $n): string
+    {
+        try {
+            $rows = \App\Models\Message::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)->where('customer_phone', $from)
+                ->orderByDesc('id')->limit(max(1, $n))->get()->reverse();
+            $lines = [];
+            foreach ($rows as $m) {
+                $body = trim((string) $m->body);
+                if ($body === '') continue;
+                $lines[] = ((string) $m->direction === 'in' ? 'Customer' : 'Assistant') . ': ' . $body;
+            }
+            return $lines ? "Recent conversation:\n" . implode("\n", $lines) : '';
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
     private function extractOrderItems(string $block): array
     {
         $out = [];
@@ -641,10 +712,19 @@ class AiBrain
     {
         $pos = stripos($reply, '<<QUOTE');
         if ($pos === false) {
-            // Prime suspect for "said preparing, no PDF": the model promised a quote but never emitted
-            // the machine marker, so nothing was generated. Make that visible.
+            // "Said preparing, no PDF": the model promised a quote but never emitted the machine marker
+            // (common with smaller models like gpt-4o-mini under a long catalogue prompt — it chats the
+            // quote in prose and forgets the hidden line). Rather than dead-end to text, RECOVER the
+            // items with a focused, single-purpose extraction call and re-run the REAL pipeline via a
+            // synthesised marker. The downstream "must match a priced product" guard still protects
+            // against wrong items, so this cannot send a hallucinated quote.
             if (preg_match('/\b(quotation|quote|proforma)\b/i', $reply)) {
-                \App\Support\QuotationPipeline::stage($tenant->id, $from, 'marker_missing', false, '', 'reply mentioned a quote but emitted no <<QUOTE>> line');
+                $recovered = $this->recoverQuoteMarker($tenant, $from, $text, $reply);
+                if ($recovered !== '') {
+                    \App\Support\QuotationPipeline::stage($tenant->id, $from, 'marker_recovered', true, '', 'marker missing — items recovered by extraction, re-running pipeline');
+                    return $this->captureQuote($tenant, $convo, $from, $text, $reply . "\n" . $recovered, $gateway);
+                }
+                \App\Support\QuotationPipeline::stage($tenant->id, $from, 'marker_missing', false, '', 'reply mentioned a quote but emitted no <<QUOTE>> line; extraction found no clear items');
             }
             return ['reply' => $reply, 'sent' => false];
         }

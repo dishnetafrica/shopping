@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
  */
 class QuotationPipeline
 {
-    public const STAGES = ['marker_missing', 'pdf_unavailable', 'gateway_no_send', 'no_items_in_marker',
+    public const STAGES = ['marker_missing', 'marker_recovered', 'pdf_unavailable', 'gateway_no_send', 'no_items_in_marker',
         'no_match', 'dedup_skip', 'pdf_generate', 'pdf_store', 'wa_sent'];
 
     public static function stage(int $tenantId, string $phone, string $stage, bool $ok = true, string $quoteNo = '', string $detail = ''): void
