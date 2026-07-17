@@ -5618,6 +5618,82 @@ class PanelApiController extends Controller
         ]);
     }
 
+    /**
+     * GET /papi/cash-revenue-bridge — READ-ONLY. Explains the gap between customer cash collected and
+     * invoiced revenue by classifying every settlement in the CustomerPayment ledger:
+     *   - on_invoice          → tied to a live invoice (recognised revenue / AR relief)
+     *   - delivered_no_invoice→ paid against a DELIVERED order with no live invoice (UNRECOGNISED revenue)
+     *   - undelivered_advance → paid against an order not yet delivered (customer ADVANCE = a liability)
+     *   - no_order_link       → receipt with no order reference (unallocated)
+     * This tells us whether the cash-vs-revenue gap is missing invoices or customer deposits, which
+     * decides the whole GL design. Writes nothing. Owner-only.
+     */
+    public function cashRevenueBridge(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+
+        $base = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);
+
+        $orders = \App\Models\Order::where('tenant_id', $t->id)->get()->keyBy(fn ($o) => (string) $o->order_no);
+        $liveInvNos = \App\Models\Invoice::where('tenant_id', $t->id)->where('status', '!=', 'void')
+            ->pluck('invoice_no')->map(fn ($n) => (string) $n)->flip();
+        $liveInvOrderIds = \App\Models\Invoice::where('tenant_id', $t->id)->whereNotNull('order_id')
+            ->where('status', '!=', 'void')->pluck('order_id')->flip();
+
+        $isDelivered = fn ($o) => $o && ((! empty($o->delivered_at)) || strcasecmp((string) $o->status, 'Delivered') === 0);
+
+        $buckets = ['on_invoice' => 0.0, 'delivered_no_invoice' => 0.0, 'undelivered_advance' => 0.0, 'no_order_link' => 0.0];
+        $counts  = ['on_invoice' => 0, 'delivered_no_invoice' => 0, 'undelivered_advance' => 0, 'no_order_link' => 0];
+        $examples = ['delivered_no_invoice' => [], 'undelivered_advance' => [], 'no_order_link' => []];
+        $total = 0.0;
+
+        foreach (\App\Models\CustomerPayment::where('tenant_id', $t->id)
+                    ->where('kind', 'settlement')->where('applied', true)->get() as $p) {
+            $usd = strtoupper((string) $p->currency) === $base ? (float) $p->amount : (float) $p->usd_amount;
+            $total += $usd;
+            $ono = (string) ($p->order_no ?? '');
+            $ino = (string) ($p->invoice_no ?? '');
+            $order = $ono !== '' ? ($orders[$ono] ?? null) : null;
+
+            $hasLiveInvoice = ($ino !== '' && isset($liveInvNos[$ino]))
+                || ($order && isset($liveInvOrderIds[$order->id]));
+
+            if ($hasLiveInvoice) {
+                $b = 'on_invoice';
+            } elseif ($order && $isDelivered($order)) {
+                $b = 'delivered_no_invoice';
+            } elseif ($order) {
+                $b = 'undelivered_advance';
+            } else {
+                $b = 'no_order_link';
+            }
+            $buckets[$b] += $usd; $counts[$b]++;
+            if (isset($examples[$b]) && count($examples[$b]) < 8) {
+                $examples[$b][] = ['receipt' => (string) $p->receipt_no, 'order' => $ono ?: '—',
+                    'customer' => (string) $p->customer_name, 'usd' => round($usd, 2)];
+            }
+        }
+
+        foreach ($buckets as $k => $v) $buckets[$k] = round($v, 2);
+
+        return response()->json([
+            'ok' => true, 'currency' => $base,
+            'total_customer_cash' => round($total, 2),
+            'buckets' => $buckets,
+            'counts'  => $counts,
+            'examples' => $examples,
+            'reading' => [
+                'recognised_revenue_cash' => $buckets['on_invoice'],
+                'unrecognised_revenue (delivered, not invoiced)' => $buckets['delivered_no_invoice'],
+                'customer_advances_liability (not delivered)' => $buckets['undelivered_advance'],
+                'unallocated (no order)' => $buckets['no_order_link'],
+            ],
+            'note' => 'delivered_no_invoice → issue invoices to recognise it as revenue. undelivered_advance → a liability until you deliver. no_order_link → receipts to allocate.',
+        ]);
+    }
+
     public function resyncBalances(Request $r)
     {
         if ($g = $this->ownerGate($r)) return $g;
