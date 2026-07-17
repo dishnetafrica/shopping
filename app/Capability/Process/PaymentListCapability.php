@@ -57,7 +57,7 @@ final class PaymentListCapability implements ProcessCapability
                 'applied'  => (string) $appliedTo,
                 'amount'   => ['value' => $line['text'], 'tone' => 'ok', 'sort' => (float) $line['amount']],
                 'date'     => ['value' => $when ? $when->format('d M Y') : '—', 'sort' => $when ? $when->timestamp : 0],
-                'act'      => ['buttons' => [['icon' => 'download', 'title' => 'Download receipt', 'href' => '/papi/receipt-pdf?id=' . $p->id]]],
+                'act'      => ['buttons' => [['icon' => 'download', 'title' => 'Download receipt', 'href' => '/api/v1/doc/receipt/' . $p->id]]],
                 'link'     => '/api/v1/workspace/payment/' . $p->id,
             ];
         }

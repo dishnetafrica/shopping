@@ -6303,29 +6303,6 @@ class PanelApiController extends Controller
     }
 
     /**
-     * GET /papi/receipt-pdf?id={paymentId} — stream a payment's branded receipt PDF inline (the same
-     * document the "Download receipt" button and the Payments-list download icon open). Renders on demand
-     * via ReceiptRenderer (which also caches a copy). Tenant-scoped; mirrors the invoice-pdf route.
-     */
-    public function receiptPdf(Request $r)
-    {
-        $t = $r->user()->tenant;
-        if (! $t) abort(401);
-        $p = \App\Models\CustomerPayment::where('tenant_id', $t->id)->find((int) $r->query('id'));
-        if (! $p) abort(404);
-
-        $doc = app(\App\Services\Finance\ReceiptRenderer::class)->pdf($t, $p);
-        if (! $doc || ($doc['b64'] ?? '') === '') abort(503, 'PDF engine unavailable');
-        $bytes = base64_decode($doc['b64']);
-        $name  = (string) ($doc['fileName'] ?? ('Receipt-' . ($p->receipt_no ?: $p->id) . '.pdf'));
-
-        return response($bytes, 200, [
-            'Content-Type'        => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="' . $name . '"',
-        ]);
-    }
-
-    /**
      * GET/POST /papi/normalize-invoices-usd — normalize every invoice to store REAL USD (the house rule:
      * all invoices are USD; only purchases + local transport are UGX/SSP). Dry-run by default; ?commit=1 writes.
      *
