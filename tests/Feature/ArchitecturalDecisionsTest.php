@@ -180,4 +180,85 @@ class ArchitecturalDecisionsTest extends TestCase
             ."published API, or publish deliberately in this test + MODULE-MAP.md (D5):\n"
             .implode("\n", array_unique($bad)));
     }
+
+    // -------------------------------- D6: V3 is the default for new development
+
+    /**
+     * Directive 2026-07-18 (V3-DEFAULT-MIGRATION-PLAN.md): every NEW screen is a
+     * Capability under app/Capability rendered by the /v3 shell. The classic panel
+     * (60 pinned pages) is frozen — bug fixes only. A new .html here fails.
+     */
+    public function test_no_new_classic_panel_screens(): void
+    {
+        $pinned = [
+            'ads.html',
+            'app_home.html',
+            'audit.html',
+            'billing.html',
+            'book_cost.html',
+            'books.html',
+            'buy_list.html',
+            'cash_position.html',
+            'cashbook.html',
+            'chats.html',
+            'consignment.html',
+            'cost_approvals.html',
+            'credit-notes.html',
+            'customers360.html',
+            'dashboard.html',
+            'diagnostics.html',
+            'email-center.html',
+            'exceptions.html',
+            'expenses.html',
+            'field-task.html',
+            'guide.html',
+            'indent.html',
+            'inventory-count.html',
+            'invoiced.html',
+            'invoices.html',
+            'leads.html',
+            'ledger.html',
+            'maintenance.html',
+            'marketing.html',
+            'mobile.html',
+            'my_cash.html',
+            'oif.html',
+            'onboard.html',
+            'orders_costs.html',
+            'partners.html',
+            'payments-manager.html',
+            'payments.html',
+            'planning.html',
+            'pnl-report.html',
+            'pnl.html',
+            'production.html',
+            'purchase.html',
+            'sales.html',
+            'scheduled.html',
+            'scoreboard.html',
+            'seller.html',
+            'settings-manager.html',
+            'setup.html',
+            'sourcing.html',
+            'staff.html',
+            'staff_cash.html',
+            'start.html',
+            'supplier_debt.html',
+            'suppliers.html',
+            'system.html',
+            'tasks.html',
+            'today.html',
+            'trade_cashbook.html',
+            'training.html',
+            'winworld-hub.html',
+        ];
+        $found = [];
+        foreach (scandir($this->base().'/resources/panel') as $f) {
+            if (str_ends_with($f, '.html')) $found[] = $f;
+        }
+        $new = array_values(array_diff($found, $pinned));
+        $this->assertSame([], $new,
+            "New classic-panel screen detected — V3 is the default: build it as a Capability "
+            ."under app/Capability (see V3-DEFAULT-MIGRATION-PLAN.md rule 1):\n".implode("\n", $new));
+    }
 }
