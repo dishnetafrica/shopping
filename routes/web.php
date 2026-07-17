@@ -314,6 +314,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('reconcile-audit', [PanelApiController::class, 'reconcileAudit']);
         Route::match(['get', 'post'], 'backfill-invoices', [PanelApiController::class, 'backfillInvoices']);
         Route::match(['get', 'post'], 'fix-cash-rates', [PanelApiController::class, 'fixCashRates']);
+        Route::match(['get', 'post'], 'backfill-order-currency', [PanelApiController::class, 'backfillOrderCurrency']);
         Route::get('bot/quote-diagnostics', [PanelApiController::class, 'botQuoteDiagnostics']);
         Route::match(['get', 'post'], 'backfill-customers', [PanelApiController::class, 'backfillCustomers']);
         Route::match(['get', 'post'], 'merge-customers', [PanelApiController::class, 'mergeCustomers']);

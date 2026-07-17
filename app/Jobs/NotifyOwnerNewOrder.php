@@ -42,7 +42,11 @@ class NotifyOwnerNewOrder implements ShouldQueue
             ->get();
         if ($recipients->isEmpty()) return;
 
-        $cur = (string) $t->setting('currency', 'UGX');
+        // The order's total is stored in the order's OWN transaction currency (it matches its line items),
+        // so label it with THAT currency — not the tenant base. txnCurrency returns the order's
+        // sell_currency when set, else the native operating currency (UGX) — never a hardcoded 'USD'.
+        // This is what stops "USD 1,151,325" (a UGX total wearing a USD label).
+        $cur = \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t);
         $tz  = (string) $t->setting('timezone', config('app.timezone', 'Africa/Kampala'));
         $msg = OrderNotificationMessage::build([
             'order_no'       => $o->order_no,

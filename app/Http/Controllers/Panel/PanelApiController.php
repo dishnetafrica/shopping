@@ -6002,6 +6002,73 @@ class PanelApiController extends Controller
             ->header('Cache-Control', 'no-store');
     }
 
+    /**
+     * POST /papi/backfill-order-currency[?commit=1] — infer and stamp each order's real transaction
+     * currency into sell_currency, WITHOUT touching any total. Orders store their total in the same
+     * currency as their line items (verified), but sell_currency is usually null, so sellCurrency()
+     * falls back to a hardcoded 'USD' and mislabels UGX orders. Inference is reliable: re-price the
+     * order from the catalogue (which is UGX) and compare to the stored total — a match means UGX, a
+     * match after dividing by the FX rate means USD. Only the LABEL is written; totals are never
+     * changed. DRY RUN unless ?commit=1. Owner-only.
+     */
+    public function backfillOrderCurrency(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $commit = filter_var($r->query('commit', $r->input('commit', false)), FILTER_VALIDATE_BOOLEAN);
+
+        $native = \App\Services\Money\SalesBaseCurrency::nativeCurrency($t);   // UGX here
+        $rate   = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($native) ?: 3655.0;
+
+        // Catalogue base price (native/UGX) by product id and by lowercased name.
+        $byId = []; $byName = [];
+        foreach (\App\Models\Product::where('tenant_id', $t->id)->get(['id', 'name', 'base_price', 'price']) as $p) {
+            $bp = (float) ($p->base_price ?: $p->price ?: 0);
+            if ($bp > 0) { $byId[(int) $p->id] = $bp; $byName[mb_strtolower(trim((string) $p->name))] = $bp; }
+        }
+
+        $rows = []; $set = 0; $counts = ['UGX' => 0, 'USD' => 0, 'ambiguous' => 0, 'no_items' => 0];
+        foreach (\App\Models\Order::where('tenant_id', $t->id)->orderBy('id')->get() as $o) {
+            $stored = (float) $o->total;
+            $items = is_array($o->items_json) ? $o->items_json : [];
+            $catUgx = 0.0; $matched = 0;
+            foreach ($items as $l) {
+                if (! is_array($l)) continue;
+                $qty = (float) ($l['qty'] ?? $l['quantity'] ?? 0);
+                $pid = (int) ($l['product_id'] ?? 0);
+                $bp = $pid && isset($byId[$pid]) ? $byId[$pid]
+                    : ($byName[mb_strtolower(trim((string) ($l['name'] ?? '')))] ?? null);
+                if ($bp !== null && $qty > 0) { $catUgx += $bp * $qty; $matched++; }
+            }
+            if ($matched === 0 || $catUgx <= 0 || $stored <= 0) {
+                $counts['no_items']++;
+                $rows[] = ['order' => (string) $o->order_no, 'stored_total' => $stored, 'catalogue_ugx' => round($catUgx, 0),
+                    'inferred' => '(cannot infer — no matched items)', 'current' => (string) ($o->sell_currency ?: 'null'), 'action' => 'skip'];
+                continue;
+            }
+            $inferred = null;
+            if (abs($stored - $catUgx) <= 0.12 * $catUgx) $inferred = $native;                 // total ≈ catalogue UGX
+            elseif (abs($stored * $rate - $catUgx) <= 0.12 * $catUgx) $inferred = 'USD';         // total×rate ≈ catalogue UGX → USD
+            $counts[$inferred ?? 'ambiguous']++;
+            $cur = (string) ($o->sell_currency ?: 'null');
+            $act = 'no change';
+            if ($inferred && strtoupper($cur) !== $inferred) {
+                $act = $commit ? 'set ' . $inferred : 'would set ' . $inferred;
+                if ($commit) { $o->sell_currency = $inferred; $o->save(); $set++; }
+            }
+            $rows[] = ['order' => (string) $o->order_no, 'stored_total' => $stored, 'catalogue_ugx' => round($catUgx, 0),
+                'inferred' => $inferred ?? 'ambiguous (' . round($stored / $catUgx, 2) . '×)', 'current' => $cur, 'action' => $act];
+        }
+
+        return response()->json([
+            'ok' => true, 'committed' => $commit, 'native' => $native, 'rate' => $rate,
+            'summary' => $counts, 'labels_set' => $commit ? $set : 0,
+            'note' => 'Only sell_currency (the label) is written; no total is ever changed. Ambiguous/no-item orders are left untouched for manual review.',
+            'orders' => array_slice($rows, 0, 200),
+        ]);
+    }
+
     public function resyncBalances(Request $r)
     {
         if ($g = $this->ownerGate($r)) return $g;
