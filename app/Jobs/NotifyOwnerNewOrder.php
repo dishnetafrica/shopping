@@ -42,11 +42,12 @@ class NotifyOwnerNewOrder implements ShouldQueue
             ->get();
         if ($recipients->isEmpty()) return;
 
-        // The order's total is stored in the order's OWN transaction currency (it matches its line items),
-        // so label it with THAT currency — not the tenant base. txnCurrency returns the order's
-        // sell_currency when set, else the native operating currency (UGX) — never a hardcoded 'USD'.
-        // This is what stops "USD 1,151,325" (a UGX total wearing a USD label).
-        $cur = \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t);
+        // House rule: the sell side reports in the tenant's BASE currency (USD). The order total is stored
+        // in its own transaction currency (UGX for a local order), so CONVERT it to base for the alert —
+        // "$315.00", not "UGX 1,151,325". Fx::convert(total, txnCurrency → base) handles USD/UGX/SSP.
+        $base = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);
+        $txn  = \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t);
+        $amount = \App\Services\Money\Fx::forTenant($t)->convert((float) $o->total, $txn, $base);
         $tz  = (string) $t->setting('timezone', config('app.timezone', 'Africa/Kampala'));
         $msg = OrderNotificationMessage::build([
             'order_no'       => $o->order_no,
@@ -54,10 +55,10 @@ class NotifyOwnerNewOrder implements ShouldQueue
             'customer_phone' => $o->customer_phone,
             'items_text'     => $o->items_text,
             'items_json'     => is_array($o->items_json) ? $o->items_json : [],
-            'total'          => $o->total,
+            'total'          => $amount,
             'location'       => $o->location,
             'created_at'     => optional($o->created_at)->timestamp,
-        ], $cur, $tz);
+        ], $base, $tz);
 
         $gateway = $wa->forTenant($t);
         $inst = $t->sendInstance();

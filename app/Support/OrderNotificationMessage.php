@@ -34,7 +34,8 @@ final class OrderNotificationMessage
         $lines[] = 'Phone: ' . $phone;
         $lines[] = 'Items:';
         $lines[] = $items;
-        $lines[] = 'Total: ' . $currency . ' ' . number_format((float) ($order['total'] ?? 0));
+        $dec = strtoupper($currency) === 'USD' ? 2 : 0;   // USD shows cents; local currencies whole units
+        $lines[] = 'Total: ' . $currency . ' ' . number_format((float) ($order['total'] ?? 0), $dec);
         if (! empty($order['location'])) $lines[] = 'Delivery: ' . $order['location'];
         if ($when !== '') $lines[] = 'Order Time: ' . $when;
 
