@@ -5556,6 +5556,83 @@ class PanelApiController extends Controller
     }
 
     /**
+     * GET /papi/bot/quote-diagnostics — prove exactly where the "quotation PDF over WhatsApp" pipeline
+     * stands for THIS tenant, instead of guessing. Read-only. Checks the PDF engine (dompdf), actually
+     * GENERATES a dummy quotation PDF end-to-end, reports the bot mode / WhatsApp driver / instance /
+     * document-send capability, and tails the recorded quote pipeline stages (marker_missing,
+     * pdf_unavailable, pdf_generate, wa_sent, …). Owner-only.
+     */
+    public function botQuoteDiagnostics(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+
+        $out = ['ok' => true];
+
+        // 1) PDF engine
+        $svc = app(\App\Services\Bot\QuotationService::class);
+        $dompdf = class_exists(\Dompdf\Dompdf::class);
+        $available = false; try { $available = $svc->available(); } catch (\Throwable $e) {}
+        $out['pdf_engine'] = ['dompdf_installed' => $dompdf, 'quotation_service_available' => $available];
+
+        // 2) Actually generate a dummy quotation PDF (the "run dummy data" step)
+        $gen = ['attempted' => true, 'ok' => false];
+        try {
+            $quote = ['currency' => \App\Services\Money\SalesBaseCurrency::baseCurrency($t),
+                'lines' => [['matched' => true, 'name' => 'DIAGNOSTIC ITEM', 'qty' => 1, 'price' => 1.0, 'sum' => 1.0, 'unit' => '']],
+                'total' => 1.0];
+            $doc = $svc->available() ? $svc->generate($t, '000000000', 'Diagnostic', $quote) : null;
+            if ($doc) {
+                $gen = ['attempted' => true, 'ok' => true, 'quote_no' => (string) ($doc['no'] ?? ''),
+                    'b64_length' => strlen((string) ($doc['b64'] ?? '')), 'stored_path' => (string) ($doc['path'] ?? ''),
+                    'public_disk_url' => (string) ($doc['url'] ?? ''),
+                    'note' => 'b64 is what the bot now sends (symlink-free); public_disk_url resolves to <APP_URL>/storage and is only reachable if the storage symlink exists.'];
+            } else {
+                $gen['reason'] = $available ? 'generate_returned_null (no matched line or render failed)' : 'pdf_engine_unavailable';
+            }
+        } catch (\Throwable $e) { $gen['error'] = $e->getMessage(); }
+        $out['dummy_generate'] = $gen;
+
+        // 3) Bot + WhatsApp wiring
+        $driver = (string) ($t->whatsapp_driver ?: 'evolution');
+        $hasSendDoc = false;
+        try { $gw = app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($t); $hasSendDoc = method_exists($gw, 'sendDocument'); } catch (\Throwable $e) {}
+        $out['whatsapp'] = [
+            'bot_mode' => (string) $t->setting('bot_mode', 'auto'),
+            'driver' => $driver,
+            'instance_set' => (bool) $t->whatsapp_instance,
+            'gateway_can_send_document' => $hasSendDoc,
+            'note' => $driver === 'evolution'
+                ? 'Evolution accepts raw base64 or a URL — base64 path needs no symlink.'
+                : 'Cloud API needs a PUBLIC https link (base64 not accepted); the /q/{token}/pdf route satisfies it.',
+        ];
+
+        // 4) Recent quote-pipeline traces (bot_events, trace = quote_pipeline)
+        $traces = [];
+        try {
+            $traces = \Illuminate\Support\Facades\DB::table('bot_events')
+                ->where('tenant_id', $t->id)->where('trace', 'quote_pipeline')
+                ->orderByDesc('id')->limit(15)
+                ->get(['stage', 'phone', 'detail', 'created_at'])->toArray();
+        } catch (\Throwable $e) {}
+        $out['recent_pipeline_stages'] = $traces;
+
+        // 5) Verdict
+        if (! $dompdf || ! $available) {
+            $out['verdict'] = 'PDF engine not available — install dompdf (composer require dompdf/dompdf) and deploy. Until then every path degrades to text.';
+        } elseif (! $out['whatsapp']['instance_set']) {
+            $out['verdict'] = 'No WhatsApp instance configured for this tenant — documents cannot be sent.';
+        } elseif ($gen['ok']) {
+            $out['verdict'] = 'PDF engine works and a dummy PDF generated. With this build the bot sends base64 (Evolution) / a public link (Cloud API), so quotations will attach. If a specific chat still sent text-only, check bot_mode=ai marker_missing in recent_pipeline_stages.';
+        } else {
+            $out['verdict'] = 'PDF generation failed even though the engine reports available — see dummy_generate.error/reason.';
+        }
+
+        return response()->json($out);
+    }
+
+    /**
      * Platform diagnostics (GET /papi/diagnostics) — build id, opcache/deploy staleness,
      * and core service checks. The opcache "any_stale" flag answers "is my deploy actually live?"
      */

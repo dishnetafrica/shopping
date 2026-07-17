@@ -260,7 +260,12 @@ class QuotationPortalController extends Controller
             $gw    = app(WhatsAppManager::class)->forTenant($tenant);
             $gw->sendText($tenant->whatsapp_instance, $phone, $summary);
             if (method_exists($gw, 'sendDocument')) {
-                $media = $q->pdf_path ? Storage::disk('public')->url($q->pdf_path) : ('data:application/pdf;base64,' . base64_encode($this->pdfBytes($tenant, $q)));
+                // Prefer the PUBLIC, symlink-free token route (/q/{token}/pdf) — it streams the PDF
+                // server-side, so it works for BOTH Evolution (URL fetch) and Cloud API (needs a public
+                // https link). The old code used Storage::disk('public')->url() → <APP_URL>/storage/...
+                // which 404s (no symlink), so nothing was delivered. Fall back to inline base64.
+                $portal = method_exists($q, 'portalUrl') ? rtrim((string) $q->portalUrl(), '/') . '/pdf' : '';
+                $media  = $portal !== '' ? $portal : ('data:application/pdf;base64,' . base64_encode($this->pdfBytes($tenant, $q)));
                 $gw->sendDocument($tenant->whatsapp_instance, $phone, $media, 'Quotation-' . $q->quote_no . '.pdf', 'Your quotation ' . $q->quote_no);
             }
 

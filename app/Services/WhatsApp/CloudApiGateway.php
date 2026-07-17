@@ -36,6 +36,26 @@ class CloudApiGateway implements WhatsAppGateway
         ])->json() ?? [];
     }
 
+    /**
+     * Send a document (e.g. a PDF quotation). Meta Cloud API requires a PUBLIC https link (or a
+     * pre-uploaded media id) — it cannot accept raw base64 inline. Callers guard with method_exists()
+     * (same optional-capability pattern as EvolutionGateway::sendDocument). Pass a public URL such as
+     * the token route /q/{token}/pdf; a base64/data-URI is rejected by Meta and logged as unsupported.
+     */
+    public function sendDocument(string $instance, string $to, string $media, string $fileName, string $caption = ''): array
+    {
+        if (! preg_match('#^https?://#i', $media)) {
+            \Log::warning('CloudApiGateway::sendDocument needs a public URL; got non-URL media — skipping', ['file' => $fileName]);
+            return ['error' => 'cloud_api_requires_public_url'];
+        }
+        return Http::withToken($this->token)->post("{$this->baseUrl}/{$instance}/messages", [
+            'messaging_product' => 'whatsapp',
+            'to' => preg_replace('/[^0-9]/', '', $to),
+            'type' => 'document',
+            'document' => ['link' => $media, 'filename' => $fileName, 'caption' => $caption],
+        ])->json() ?? [];
+    }
+
     public function markRead(string $instance, string $messageId): void
     {
         Http::withToken($this->token)->post("{$this->baseUrl}/{$instance}/messages", [

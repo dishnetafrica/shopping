@@ -2794,7 +2794,11 @@ class BotBrain
                 try {
                     $gw = app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($tenant);
                     if (method_exists($gw, 'sendDocument') && $tenant->whatsapp_instance) {
-                        $media = ($doc['url'] ?? '') ?: ($doc['b64'] ?? '');
+                        // base64-FIRST (mirrors the working AI path). The public-disk URL resolves to
+                        // <APP_URL>/storage/... which is NOT reachable (no public/storage symlink), so
+                        // preferring it made Evolution fetch a 404 and silently drop the PDF — the bot
+                        // then sent only the "PDF is attached" text. Raw base64 needs no symlink.
+                        $media = ($doc['b64'] ?? '') ?: ($doc['url'] ?? '');
                         $gw->sendDocument($tenant->whatsapp_instance, $phone, $media, $doc['fileName'], 'Your quotation ' . $qNo);
                     }
                 } catch (\Throwable $e) {
