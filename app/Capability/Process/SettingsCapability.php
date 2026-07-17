@@ -131,8 +131,9 @@ final class SettingsCapability implements ProcessCapability
         // --- WhatsApp & bot ---
         $waLinked = trim((string) $t->whatsapp_instance) !== '';
         $waStatus = $waLinked ? 'Connected' : 'Not connected';
-        // Connect/manage opens the guided QR-scan screen (legacy /panel/setup); the shell navigates there.
-        $connectWa = ['key' => 'connect_whatsapp', 'label' => $waLinked ? 'Manage WhatsApp connection' : 'Connect WhatsApp', 'href' => '/panel/setup', 'actor' => 'human', 'tone' => $waLinked ? 'default' : 'primary'];
+        // Connect/manage opens the guided QR-scan screen embedded INSIDE v3 (the shell renders /panel/setup
+        // in an iframe under the 'wa-connect' key — the user never leaves v3).
+        $connectWa = ['key' => 'connect_whatsapp', 'label' => $waLinked ? 'Manage WhatsApp connection' : 'Connect WhatsApp', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/wa-connect', 'actor' => 'human', 'tone' => $waLinked ? 'default' : 'primary'];
         $connCard = ['kind' => 'dl', 'title' => 'WhatsApp connection', 'rows' => [
             ['Number', (string) ($t->whatsapp_number ?: '—')],
             ['Driver', (string) ($t->whatsapp_driver ?: '—')],

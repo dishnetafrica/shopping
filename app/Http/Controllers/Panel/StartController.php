@@ -37,7 +37,7 @@ class StartController extends Controller
     public function page(Request $request)
     {
         if ($request->user()) {
-            return redirect('/panel/onboard');
+            return redirect('/panel');   // LandingController routes owners to v3, staff to the app home
         }
         $path = resource_path('panel/start.html');
         if (! is_file($path)) {
@@ -133,7 +133,7 @@ class StartController extends Controller
         Auth::guard('web')->login($user, true);
         $request->session()->regenerate();
 
-        return response()->json(['ok' => true, 'redirect' => '/panel/onboard']);
+        return response()->json(['ok' => true, 'redirect' => '/v3']);   // single-view: land straight on v3 (Get-started checklist)
     }
 
     private function fail(string $error, string $detail, int $status = 422)

@@ -719,6 +719,7 @@ async function route(key, id){
   if(key==='transport'){ location.href='/transport'; return; }
   if(key==='payments'){ document.getElementById('view').innerHTML='<div class="crumb">Payments</div><iframe title="Payments" src="/panel/payments-manager" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='pnl'){ document.getElementById('view').innerHTML='<div class="crumb">Profit & Loss</div><iframe title="Profit and Loss" src="/panel/pnl-report" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
+  if(key==='wa-connect'){ document.getElementById('view').innerHTML='<div class="crumb">Connect WhatsApp</div><iframe title="Connect WhatsApp" src="/panel/setup" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='storefront.collections'){ sfCollectionsPage(); return; }
   if(key==='storefront.kits'){ sfKitsPage(); return; }
   if(key==='storefront.delivery'){ sfDeliveryPage(); return; }
@@ -866,9 +867,7 @@ function openLink(apiPath){
   if(apiPath && apiPath.indexOf('filter:')===0){
     const p=apiPath.split(':'); PENDING_FILTER={ key:p[2], val:decodeURIComponent(p[3]||'') }; route(p[1]); return;
   }
-  const h=apiToHash(apiPath); if(h){ route(h.key, h.id); return; }
-  // External / legacy-panel links (e.g. /panel/setup for the WhatsApp QR connect) — navigate the browser.
-  if(apiPath && (/^https?:/.test(apiPath) || apiPath.indexOf('/panel/')===0)){ window.location.href = apiPath; }
+  const h=apiToHash(apiPath); if(h) route(h.key, h.id);
 }
 
 /* ============ record shell (tabbed 360: answers · health · KPIs · NBA · tabs) ============ */

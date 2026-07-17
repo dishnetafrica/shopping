@@ -39,7 +39,7 @@ final class SetupCapability implements ProcessCapability
 
         $steps = [
             ['key' => 'settings', 'title' => 'Set up your business', 'desc' => 'Set your currency, exchange rates, invoice details and business profile.', 'done' => $businessSet, 'link' => '/api/v1/workspace/settings'],
-            ['key' => 'whatsapp', 'title' => 'Connect WhatsApp', 'desc' => 'Link your WhatsApp number so customers can order and you get alerts — it also powers OTP login.', 'done' => $waConnected, 'link' => '/panel/setup'],
+            ['key' => 'whatsapp', 'title' => 'Connect WhatsApp', 'desc' => 'Link your WhatsApp number so customers can order and you get alerts — it also powers OTP login.', 'done' => $waConnected, 'link' => '/api/v1/workspace/wa-connect'],
             ['key' => 'categories', 'title' => 'Create product categories', 'desc' => 'Group what you sell — e.g. Beverages, Hygiene, Staples.', 'done' => $has(Category::query())],
             ['key' => 'products',   'title' => 'Add your products',          'desc' => 'Add items with photos, price, cost, stock and MOQ — the bot uses these to sell.', 'done' => $has(Product::query())],
             ['key' => 'suppliers',  'title' => 'Add your suppliers',         'desc' => 'Who you buy stock from, so you can track what you owe.', 'done' => $has(Supplier::query())],
