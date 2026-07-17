@@ -6216,6 +6216,135 @@ class PanelApiController extends Controller
         ]);
     }
 
+    /**
+     * GET/POST /papi/normalize-invoices-usd — normalize every invoice to store REAL USD (the house rule:
+     * all invoices are USD; only purchases + local transport are UGX/SSP). Dry-run by default; ?commit=1 writes.
+     *
+     * For each invoice whose stored total is a UGX-magnitude number (confirmed by re-pricing its frozen
+     * line items from the USD catalogue, else the corrected linked order), it divides EVERY money field —
+     * total, subtotal, discount, freight, amount_paid, balance, and each line item's unit_price/line_total —
+     * by the USD rate and stamps currency=USD. Invoices already in USD are left untouched (only their tag is
+     * confirmed). On commit it ALSO sets the tenant flag `invoices_usd_normalized` in the SAME transaction,
+     * so `txnCurrency()` starts trusting each invoice's own (now-correct) USD tag everywhere at once — no
+     * half-converted window. The cached PDF is dropped so it regenerates in USD. Owner-only.
+     */
+    public function normalizeInvoicesUsd(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $commit = filter_var($r->query('commit', $r->input('commit', false)), FILTER_VALIDATE_BOOLEAN);
+
+        $base   = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);     // USD
+        $native = \App\Services\Money\SalesBaseCurrency::nativeCurrency($t);   // UGX
+        $rate   = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($native) ?: 3655.0;
+
+        // Catalogue base price is in USD — the reference for "is this stored number USD or UGX?"
+        $byName = [];
+        foreach (\App\Models\Product::where('tenant_id', $t->id)->get(['id', 'name', 'base_price', 'price']) as $p) {
+            $bp = (float) ($p->base_price ?: $p->price ?: 0);
+            if ($bp > 0) { $byName[mb_strtolower(trim((string) $p->name))] = $bp; }
+        }
+        $LOW = 4000.0; $HIGH = 40000.0;
+
+        $inv2 = round($rate, 6);
+        $div = fn ($v) => round(((float) $v) / $rate, 2);
+
+        $rows = []; $converted = 0; $confirmedUsd = 0; $skipped = 0;
+
+        $run = function () use ($t, $base, $native, $rate, $byName, $LOW, $HIGH, $div, $commit, &$rows, &$converted, &$confirmedUsd, &$skipped) {
+            $invoices = \App\Models\Invoice::with(['items', 'order:id,order_no,sell_currency'])
+                ->where('tenant_id', $t->id)->where('status', '!=', 'void')->orderBy('id')->get();
+
+            foreach ($invoices as $inv) {
+                $stored = (float) $inv->total;
+
+                // Classify the stored total's real currency (same logic as /papi/classify-invoices).
+                $catBase = 0.0; $matched = 0;
+                foreach ($inv->items as $it) {
+                    $qty = (float) $it->qty;
+                    $bp = $byName[mb_strtolower(trim((string) $it->name))] ?? null;
+                    if ($bp !== null && $qty > 0) { $catBase += $bp * $qty; $matched++; }
+                }
+                $inferred = null; $method = '';
+                if ($stored <= 0) { $method = 'no total'; }
+                elseif ($matched > 0 && $catBase > 0) {
+                    if (abs($stored - $catBase) <= 0.12 * $catBase) { $inferred = $base; $method = 'catalogue'; }
+                    elseif (abs($stored - $catBase * $rate) <= 0.12 * $catBase * $rate) { $inferred = $native; $method = 'catalogue'; }
+                    else { $method = 'catalogue mismatch (' . round($stored / max($catBase, 0.01), 2) . '× base)'; }
+                }
+                $ordCur = strtoupper((string) (optional($inv->order)->sell_currency ?: ''));
+                if ($inferred === null && $ordCur !== '' && $stored > 0) { $inferred = $ordCur; $method = $method ? $method . ' → order ' . $ordCur : 'order ' . $ordCur; }
+                if ($inferred === null && $stored > 0) {
+                    if ($stored < $LOW) { $inferred = $base; $method = $method ?: 'magnitude'; }
+                    elseif ($stored > $HIGH) { $inferred = $native; $method = $method ?: 'magnitude'; }
+                }
+
+                $row = ['invoice' => (string) $inv->invoice_no, 'order' => (string) (optional($inv->order)->order_no ?? ''),
+                    'stored_total' => $stored, 'inferred' => $inferred ?? 'review', 'method' => $method];
+
+                if ($inferred === $native) {
+                    // Convert the whole document down to USD.
+                    $row['action'] = $commit ? 'converted → USD' : 'would convert → USD';
+                    $row['new_total'] = $div($stored);
+                    $row['new_paid'] = $div($inv->amount_paid);
+                    $row['new_balance'] = $div($inv->balance);
+                    if ($commit) {
+                        $inv->subtotal    = $div($inv->subtotal);
+                        $inv->discount    = $div($inv->discount);
+                        $inv->freight     = $div($inv->freight);
+                        $inv->total       = $div($inv->total);
+                        $inv->amount_paid = $div($inv->amount_paid);
+                        $inv->balance     = $div($inv->balance);
+                        $inv->currency    = 'USD';
+                        // Regenerate the PDF in USD on next download.
+                        try { if ($inv->pdf_path) \Illuminate\Support\Facades\Storage::disk('public')->delete($inv->pdf_path); } catch (\Throwable $e) {}
+                        $inv->pdf_path = null;
+                        $inv->save();
+                        foreach ($inv->items as $it) {
+                            $it->unit_price = $div($it->unit_price);
+                            $it->line_total = $div($it->line_total);
+                            $it->save();
+                        }
+                    }
+                    $converted++;
+                } elseif ($inferred === $base) {
+                    // Already USD — just confirm the tag (never rewrite an already-USD number).
+                    if (strtoupper((string) $inv->currency) !== 'USD') {
+                        $row['action'] = $commit ? 'tag → USD' : 'would tag → USD';
+                        if ($commit) { $inv->currency = 'USD'; $inv->save(); }
+                    } else { $row['action'] = 'already USD'; }
+                    $confirmedUsd++;
+                } else {
+                    $row['action'] = 'SKIPPED (no clear signal — left untouched)';
+                    $skipped++;
+                }
+                $rows[] = $row;
+            }
+        };
+
+        if ($commit) {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($run, $t) {
+                $run();
+                // Flip the source of truth for THIS tenant only, atomically with the conversion.
+                $t->putSetting('invoices_usd_normalized', true);
+            });
+        } else {
+            $run();
+        }
+
+        return response()->json([
+            'ok' => true, 'committed' => $commit, 'base' => $base, 'native' => $native, 'rate' => $inv2,
+            'converted_to_usd' => $converted, 'already_usd' => $confirmedUsd, 'skipped' => $skipped,
+            'flag_set' => $commit ? 'invoices_usd_normalized' : '(dry-run — not set)',
+            'note' => 'Dry-run shows what WOULD change; add ?commit=1 to write. Only UGX-magnitude invoices are '
+                . 'divided by the rate to USD (line items included); already-USD invoices are never rewritten. On '
+                . 'commit the tenant flag is set in the SAME transaction so every screen trusts the USD tag at once. '
+                . 'After commit, re-run /papi/classify-invoices — every row should read USD with matching should_show.',
+            'invoices' => $rows,
+        ]);
+    }
+
     public function resyncBalances(Request $r)
     {
         if ($g = $this->ownerGate($r)) return $g;

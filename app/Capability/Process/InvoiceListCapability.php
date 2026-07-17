@@ -27,8 +27,10 @@ final class InvoiceListCapability implements ProcessCapability
         $t = $ctx->tenantId();
         $rc = ReportingCurrency::forContext($ctx);
         $cur = $rc->consolidationCurrency();   // KPI tiles + grid totals are always ONE currency
-        // Invoice `currency` tags are unreliable (the issuer stamps the tenant base even on local-currency
-        // amounts), so treat invoice amounts as the local operating currency for conversion.
+        // Each invoice's amount is converted using its TRUE transaction currency (SalesBaseCurrency::
+        // txnCurrency) — which, once the tenant's invoices are normalized, is the invoice's own USD tag,
+        // and otherwise the corrected linked-order currency. This replaces the old blanket "treat every
+        // invoice as native UGX", which mis-divided genuinely-USD invoices into cents ($625 → $0.17).
         $native = \App\Services\Money\SalesBaseCurrency::nativeCurrency($ctx->tenant);
         $now = Carbon::now();
 
@@ -45,7 +47,7 @@ final class InvoiceListCapability implements ProcessCapability
         $rows = [];
 
         foreach ($invoices as $i) {
-            $icur = $native;   // amounts are in the local operating currency, not the (unreliable) tag
+            $icur = \App\Services\Money\SalesBaseCurrency::txnCurrency($i, $ctx->tenant) ?: $native;
             $total = (float) $i->total;
             $paid = (float) $i->amount_paid;
             $balance = (float) $i->balance;

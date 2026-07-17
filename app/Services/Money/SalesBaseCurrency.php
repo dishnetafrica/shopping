@@ -66,6 +66,14 @@ final class SalesBaseCurrency
             return $rateable($c) ? $c : $native;
         }
         if ($doc instanceof Invoice) {
+            // Once a tenant's invoices have been normalized to store their TRUE currency (the
+            // `invoices_usd_normalized` flag is set atomically with that migration), the invoice's own
+            // `currency` tag is authoritative — trust it. Tenants without that flag keep the
+            // order-derived fallback below, because their invoice.currency tag is still unreliable.
+            if ($t->setting('invoices_usd_normalized')) {
+                $c = strtoupper((string) ($doc->currency ?? ''));
+                if ($rateable($c)) { return $c; }
+            }
             try {
                 if ($doc->order_id) {
                     $o = Order::where('tenant_id', $t->id)->find($doc->order_id);

@@ -316,6 +316,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::match(['get', 'post'], 'fix-cash-rates', [PanelApiController::class, 'fixCashRates']);
         Route::match(['get', 'post'], 'backfill-order-currency', [PanelApiController::class, 'backfillOrderCurrency']);
         Route::get('classify-invoices', [PanelApiController::class, 'classifyInvoices']);
+        Route::match(['get', 'post'], 'normalize-invoices-usd', [PanelApiController::class, 'normalizeInvoicesUsd']);
         Route::get('bot/quote-diagnostics', [PanelApiController::class, 'botQuoteDiagnostics']);
         Route::match(['get', 'post'], 'backfill-customers', [PanelApiController::class, 'backfillCustomers']);
         Route::match(['get', 'post'], 'merge-customers', [PanelApiController::class, 'mergeCustomers']);
