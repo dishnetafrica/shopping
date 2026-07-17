@@ -6321,6 +6321,95 @@ class PanelApiController extends Controller
     }
 
     /**
+     * GET /papi/supplier-reconcile?name=nura[&keywords=nura,cling,foil,alumin][&commit=1] — reconcile one
+     * supplier: total purchased, total paid, balance owed (mirrors the Supplier 360 formula), AND find
+     * "forgotten name" entries — untagged (supplier_id NULL) purchase/payment rows whose note matches the
+     * keywords (e.g. cling/foil for Nura, who is the only such supplier). Dry-run lists them; ?commit=1
+     * links them to the supplier. Only NULL-supplier purchase & supplier_payment rows are ever touched —
+     * expenses/transport are never linked. Owner-only.
+     */
+    public function supplierReconcile(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $commit = filter_var($r->query('commit', $r->input('commit', false)), FILTER_VALIDATE_BOOLEAN);
+        $name = trim((string) $r->query('name', $r->input('name', '')));
+        if ($name === '') return response()->json(['ok' => false, 'error' => 'name_required', 'message' => 'Pass ?name=<supplier>']);
+
+        $needle = mb_strtolower($name);
+        $sup = \App\Models\Supplier::where('tenant_id', $t->id)
+            ->whereRaw('LOWER(name) LIKE ?', ['%' . $needle . '%'])->orderBy('id')->first();
+        if (! $sup) return response()->json(['ok' => false, 'error' => 'supplier_not_found', 'message' => "No supplier matching '$name'"]);
+
+        $fx = \App\Services\Money\Fx::forTenant($t);
+        $kw = array_values(array_filter(array_map(fn ($x) => mb_strtolower(trim($x)),
+            explode(',', (string) $r->query('keywords', $name . ',cling,foil,alumin')))));
+
+        $sumUsd = fn ($rows) => round($rows->sum(fn ($c) => (float) $c->usd_amount), 2);
+        $byCur = function ($rows) {
+            $m = ['USD' => 0.0, 'UGX' => 0.0, 'SSP' => 0.0];
+            foreach ($rows as $c) { if (isset($m[$c->currency])) $m[$c->currency] += (float) $c->native_amount; }
+            return array_map(fn ($v) => round($v, 2), $m);
+        };
+
+        // --- linked (by supplier_id) — mirrors SupplierCapability's balance formula ---
+        $linkedPurch = \App\Models\OrderCost::where('tenant_id', $t->id)->where('supplier_id', $sup->id)
+            ->where('stage', 'purchase')->whereNotIn('status', ['rejected', 'void'])->get();
+        $linkedPays = \App\Models\OrderCost::where('tenant_id', $t->id)->where('supplier_id', $sup->id)
+            ->where('stage', 'supplier_payment')->whereNotIn('status', ['rejected', 'void'])->get();
+
+        $creditUsd = round($linkedPurch->where('pay_status', 'credit')->sum(fn ($c) => (float) $c->usd_amount), 2);
+        $paidUsd = $sumUsd($linkedPays);
+        $openUsd = 0.0;
+        if ((float) $sup->opening_balance > 0) {
+            $orate = $fx->ratePerUsd(strtoupper((string) ($sup->opening_currency ?: 'USD'))) ?: 1;
+            $openUsd = (float) $sup->opening_balance / ($orate ?: 1);
+        }
+        $owedUsd = round($creditUsd + $openUsd - $paidUsd, 2);
+
+        // --- orphans: untagged purchase/payment rows whose note/category matches a keyword ---
+        $orphans = \App\Models\OrderCost::where('tenant_id', $t->id)
+            ->whereNull('supplier_id')
+            ->whereIn('stage', ['purchase', 'supplier_payment'])
+            ->whereNotIn('status', ['rejected', 'void'])
+            ->where(function ($w) use ($kw) {
+                foreach ($kw as $k) { $w->orWhereRaw('LOWER(note) LIKE ?', ['%' . $k . '%'])->orWhereRaw('LOWER(category) LIKE ?', ['%' . $k . '%']); }
+            })
+            ->orderBy('created_at')->get();
+
+        $orphanRows = $orphans->map(fn ($c) => [
+            'id' => $c->id, 'date' => optional($c->created_at)->format('Y-m-d'), 'stage' => $c->stage,
+            'currency' => $c->currency, 'native' => (float) $c->native_amount, 'usd' => (float) $c->usd_amount,
+            'pay_status' => (string) $c->pay_status, 'note' => (string) $c->note,
+        ])->all();
+        $orphanCreditUsd = round($orphans->where('stage', 'purchase')->where('pay_status', 'credit')->sum(fn ($c) => (float) $c->usd_amount), 2);
+        $orphanPayUsd = round($orphans->where('stage', 'supplier_payment')->sum(fn ($c) => (float) $c->usd_amount), 2);
+
+        $linkedNow = 0;
+        if ($commit && $orphans->count()) {
+            foreach ($orphans as $c) { $c->supplier_id = $sup->id; $c->supplier_name = $sup->name; $c->save(); $linkedNow++; }
+        }
+
+        return response()->json([
+            'ok' => true, 'committed' => $commit,
+            'supplier' => ['id' => $sup->id, 'name' => $sup->name],
+            'linked' => [
+                'purchases_count' => $linkedPurch->count(), 'purchases_by_currency' => $byCur($linkedPurch), 'purchases_usd' => $sumUsd($linkedPurch),
+                'credit_purchases_usd' => $creditUsd, 'opening_usd' => round($openUsd, 2),
+                'payments_count' => $linkedPays->count(), 'payments_by_currency' => $byCur($linkedPays), 'payments_usd' => $paidUsd,
+                'balance_owed_usd' => $owedUsd,
+            ],
+            'orphans' => ['count' => $orphans->count(), 'credit_purchases_usd' => $orphanCreditUsd, 'payments_usd' => $orphanPayUsd, 'rows' => $orphanRows],
+            'projected_owed_usd_if_linked' => round($owedUsd + $orphanCreditUsd - $orphanPayUsd, 2),
+            'linked_now' => $linkedNow,
+            'keywords' => $kw,
+            'note' => 'Dry-run lists untagged (no supplier) purchase/payment rows matching the keywords. Add ?commit=1 to link them to '
+                . $sup->name . '. Only NULL-supplier purchase & supplier_payment rows are touched — transport/expenses are never linked.',
+        ]);
+    }
+
+    /**
      * GET /papi/classify-receipts — READ-ONLY. Checks every payment receipt's currency TAG against the
      * currency its numbers actually imply, using the trusted usd_amount (the figure the cashbook/P&L
      * already reconcile on). implied_rate = amount ÷ usd_amount; a UGX receipt should imply ~3655, a USD

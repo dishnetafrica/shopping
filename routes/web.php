@@ -319,6 +319,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('classify-invoices', [PanelApiController::class, 'classifyInvoices']);
         Route::match(['get', 'post'], 'normalize-invoices-usd', [PanelApiController::class, 'normalizeInvoicesUsd']);
         Route::get('classify-receipts', [PanelApiController::class, 'classifyReceipts']);
+        Route::match(['get', 'post'], 'supplier-reconcile', [PanelApiController::class, 'supplierReconcile']);
         Route::get('settings-hub', [PanelApiController::class, 'settingsHub']);
         Route::post('settings-hub-save', [PanelApiController::class, 'settingsHubSave']);
         Route::get('bot/quote-diagnostics', [PanelApiController::class, 'botQuoteDiagnostics']);
