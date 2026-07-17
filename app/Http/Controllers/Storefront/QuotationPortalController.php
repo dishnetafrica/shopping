@@ -245,6 +245,23 @@ class QuotationPortalController extends Controller
                     return response()->json(['ok' => false, 'error' => 'Enter a valid email address.'], 422);
                 }
                 $bytes = $this->pdfBytes($tenant, $q);
+
+                // Comms M2: when the tenant is live on the Email Center, route through it —
+                // tenant's own providers + failover + audit log + `quotation` template.
+                // Flag off => the legacy Mail::raw path below runs untouched.
+                if ((bool) $tenant->setting('comms_email_live', false)) {
+                    \App\Support\Comms::sendQuotation($tenant, $to, [
+                        'customer_name'    => (string) ($q->customer_name ?: 'Customer'),
+                        'quotation_number' => (string) $q->quote_no,
+                        'total'            => trim($q->currency . ' ' . number_format((float) $q->total)),
+                        'valid_until'      => optional($q->valid_until)->toFormattedDateString() ?: '—',
+                        'portal_url'       => $portal,
+                        'quotation_id'     => $q->id,
+                    ], $bytes !== '' ? base64_encode($bytes) : null);
+
+                    return response()->json(['ok' => true, 'channel' => 'email']);
+                }
+
                 Mail::raw($summary, function ($m) use ($to, $bytes, $q, $tenant) {
                     $m->to($to)->subject('Quotation ' . $q->quote_no . ' from ' . $tenant->name);
                     if ($bytes !== '') {

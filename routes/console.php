@@ -60,3 +60,10 @@ Schedule::command('storefront:gaps-digest')->weeklyOn(1, '08:00')->timezone('Afr
 // Virtual salesperson: enquiry follow-up cadence + reorder reminders (opt-in per tenant).
 // Pinned to East Africa Time so "9am–7pm" is local (Kampala/Juba), regardless of server TZ.
 Schedule::command('bot:sales-cadence')->hourly()->between('9:00', '19:00')->timezone('Africa/Kampala')->withoutOverlapping()->onOneServer();
+
+// Communication Center: email queue heartbeat — sends due/scheduled/retry mail. With
+// QUEUE_CONNECTION=sync this sweep IS the sender (no worker needed). Atomic claim => Horizon-safe.
+Schedule::command('comms:email-sweep')->everyMinute()->withoutOverlapping()->onOneServer();
+
+// Communication Center: campaign batches — one throttle-sized batch per due campaign per minute.
+Schedule::command('comms:campaign-sweep')->everyMinute()->withoutOverlapping()->onOneServer();

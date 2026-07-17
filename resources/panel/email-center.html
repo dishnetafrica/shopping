@@ -1,0 +1,595 @@
+<!DOCTYPE html><html lang="en"><head>
+  <link rel="stylesheet" href="/panel/shared/tokens.css">
+  <script src="/panel/shared/ui.js"></script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email Center</title>
+<style>
+:root{--dark:#1B3A2B;--green:#15803D;--red:#C0392B;--amber:#b45309;--blue:#1D4ED8;--line:#e4e9e4;--muted:#6b7280;--bg:#f6f8f6}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1B211D;background:var(--bg)}
+.top{background:var(--dark);color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between}
+.top h1{font-size:18px;margin:0;font-weight:800}.back{background:#ffffff22;border:none;color:#fff;border-radius:9px;padding:8px 12px;font-weight:700;cursor:pointer}
+.tabs{display:flex;gap:6px;padding:10px 14px 0;max-width:1100px;margin:0 auto;flex-wrap:wrap}
+.tabs button{border:1.5px solid var(--line);background:#fff;border-radius:10px 10px 0 0;padding:9px 16px;font-weight:800;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button.on{color:var(--dark);border-bottom-color:#fff;background:#fff;box-shadow:0 -1px 3px #0000000d}
+.wrap{max-width:1100px;margin:0 auto;padding:14px}
+.card{background:#fff;border-radius:14px;box-shadow:0 1px 3px #0000000d;margin-bottom:14px;overflow:hidden}
+.card .pad{padding:16px}
+.grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:#fff;border-radius:14px;padding:14px;box-shadow:0 1px 3px #0000000d}
+.kpi .n{font-size:24px;font-weight:800}.kpi .l{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:800}
+.kpi.red .n{color:var(--red)}.kpi.green .n{color:var(--green)}.kpi.amber .n{color:var(--amber)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#f0f4f0;text-align:left;padding:10px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
+tr:hover td{background:#fafcfa}
+.bar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.bar input,.bar select{padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:14px}
+.bar input{flex:1;min-width:160px}
+.add{background:var(--green);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:800;cursor:pointer}
+.ghost{background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;font-weight:800;cursor:pointer}
+.badge{display:inline-block;padding:3px 9px;border-radius:99px;font-size:11px;font-weight:800}
+.b-sent{background:#dcfce7;color:#166534}.b-pending,.b-retry,.b-sending{background:#fef3c7;color:#92400e}
+.b-failed{background:#fee2e2;color:#991b1b}.b-cancelled{background:#e5e7eb;color:#374151}
+.act button{border:1px solid var(--line);background:#fff;border-radius:7px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer;margin:1px}
+.act .v{color:var(--blue)}.act .e{color:var(--amber)}.act .d{color:var(--red);border-color:#fca5a5}.act .g{color:var(--green);border-color:#86efac}
+.pag{display:flex;justify-content:space-between;align-items:center;padding:10px;font-size:13px;color:var(--muted)}
+.pag button{border:1.5px solid var(--line);background:#fff;border-radius:8px;padding:7px 12px;font-weight:700;cursor:pointer}
+.pag button:disabled{opacity:.4;cursor:default}
+.modalwrap{position:fixed;inset:0;background:#0006;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow:auto;z-index:50}
+.modalwrap.hide{display:none}
+.modal{background:#fff;border-radius:14px;max-width:760px;width:100%;padding:18px}
+.modal h2{margin:0 0 12px;font-size:17px}
+.f{margin-bottom:10px}.f label{display:block;font-size:12px;font-weight:800;color:#374151;margin-bottom:4px}
+.f input,.f textarea,.f select{width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-size:14px;font-family:inherit}
+.f textarea.code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+.frow{display:flex;gap:8px;flex-wrap:wrap}.frow>*{flex:1;min-width:140px}
+.save{width:100%;background:var(--green);color:#fff;border:none;border-radius:10px;padding:12px;font-weight:800;font-size:15px;cursor:pointer;margin-top:6px}
+.x{float:right;background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)}
+.subt{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:14px 0 4px}
+.note{font-size:12px;color:var(--muted)}
+.err{color:var(--red);font-size:12px;font-weight:700}
+.okmsg{color:var(--green);font-size:12px;font-weight:700}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;word-break:break-all}
+.warn{background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:12px}
+.preview{border:1px solid var(--line);border-radius:10px;min-height:120px;max-height:420px;overflow:auto;background:#fff}
+.copy{cursor:pointer;color:var(--blue);font-weight:700;font-size:11px}
+@media (max-width:640px){.modal{padding:14px}}
+</style></head>
+<body>
+<div class="top"><button class="back" onclick="history.back()">‹ Back</button><h1>📧 Email Center</h1><span></span></div>
+<div class="tabs">
+  <button id="tb-dash" class="on" onclick="tab('dash')">Dashboard</button>
+  <button id="tb-queue" onclick="tab('queue')">Queue &amp; Logs</button>
+  <button id="tb-tpl" onclick="tab('tpl')">Templates</button>
+  <button id="tb-prov" onclick="tab('prov')">Providers</button>
+  <button id="tb-route" onclick="tab('route')">Routing</button>
+  <button id="tb-camp" onclick="tab('camp')">Campaigns</button>
+  <button id="tb-set" onclick="tab('set')">Settings</button>
+</div>
+<div class="wrap">
+
+  <!-- ============ DASHBOARD ============ -->
+  <div id="tab-dash">
+    <div id="dashWarn"></div>
+    <div class="subt">Today</div>
+    <div class="grid4" id="kToday"></div>
+    <div class="subt">Last 7 days</div>
+    <div class="grid4" id="kWeek"></div>
+    <div class="card"><div class="pad"><b>Providers</b><div class="note" style="margin-bottom:8px">Failover order — lowest priority number is tried first.</div>
+      <div style="overflow:auto"><table><thead><tr><th>#</th><th>Name</th><th>Driver</th><th>Status</th><th>Today</th><th>Last used</th><th>Last error</th></tr></thead><tbody id="dashProv"></tbody></table></div>
+    </div></div>
+    <div class="card"><div class="pad"><b>Recent failures</b>
+      <div style="overflow:auto"><table><thead><tr><th>To</th><th>Subject</th><th>Error</th><th>When</th></tr></thead><tbody id="dashFail"></tbody></table></div>
+    </div></div>
+  </div>
+
+  <!-- ============ QUEUE & LOGS ============ -->
+  <div id="tab-queue" style="display:none">
+    <div class="bar">
+      <input id="qSearch" placeholder="Search to, subject, template…" oninput="qDeb()">
+      <select id="qStatus" onchange="loadQueue(1)">
+        <option value="">All statuses</option><option value="queued">Queued</option><option value="sent">Sent</option>
+        <option value="failed">Failed</option><option value="cancelled">Cancelled</option>
+      </select>
+      <button class="ghost" onclick="loadQueue(qPage)">↻ Refresh</button>
+    </div>
+    <div class="card">
+      <div style="overflow:auto"><table><thead><tr>
+        <th>To</th><th>Subject</th><th>Template</th><th>Status</th><th>Tries</th><th>Opens</th><th>Created</th><th>Actions</th>
+      </tr></thead><tbody id="qRows"><tr><td colspan="8" class="note" style="padding:16px">Loading…</td></tr></tbody></table></div>
+      <div class="pag"><span id="qInfo"></span><span><button id="qPrev" onclick="qGo(-1)">‹ Prev</button> <button id="qNext" onclick="qGo(1)">Next ›</button></span></div>
+    </div>
+  </div>
+
+  <!-- ============ TEMPLATES ============ -->
+  <div id="tab-tpl" style="display:none">
+    <div class="bar">
+      <span class="note" style="flex:1">Placeholders use <b>{{variable}}</b>. Add <b>{{unsubscribe_url}}</b> to marketing templates.</span>
+      <button class="ghost" onclick="seedTpl()">Install default pack</button>
+      <button class="add" onclick="tplOpen()">+ New template</button>
+    </div>
+    <div class="card"><div style="overflow:auto"><table><thead><tr>
+      <th>Key</th><th>Locale</th><th>Name</th><th>Subject</th><th>Active</th><th>Actions</th>
+    </tr></thead><tbody id="tplRows"><tr><td colspan="6" class="note" style="padding:16px">Loading…</td></tr></tbody></table></div></div>
+  </div>
+
+  <!-- ============ PROVIDERS ============ -->
+  <div id="tab-prov" style="display:none">
+    <div class="bar">
+      <span class="note" style="flex:1">If the first provider fails, the next active one is tried automatically.</span>
+      <button class="add" onclick="provOpen()">+ Add provider</button>
+    </div>
+    <div class="card"><div style="overflow:auto"><table><thead><tr>
+      <th>Priority</th><th>Name</th><th>Driver</th><th>Active</th><th>Daily limit</th><th>Sent today</th><th>Last error</th><th>Actions</th>
+    </tr></thead><tbody id="provRows"><tr><td colspan="8" class="note" style="padding:16px">Loading…</td></tr></tbody></table></div></div>
+  </div>
+
+  <!-- ============ ROUTING (M3) ============ -->
+  <div id="tab-route" style="display:none">
+    <div id="routeWarn"></div>
+    <div class="card"><div class="pad">
+      <b>Event routing</b>
+      <div class="note" style="margin-bottom:10px">Which channels carry each event. Defaults are email-only — ticking WhatsApp is the explicit opt-in per event. Untick everything to mute an event.</div>
+      <div style="overflow:auto"><table><thead><tr><th>Event</th><th style="width:110px">📧 Email</th><th style="width:110px">💬 WhatsApp</th></tr></thead><tbody id="routeRows"><tr><td colspan="3" class="note" style="padding:16px">Loading…</td></tr></tbody></table></div>
+      <button class="save" style="max-width:240px" onclick="saveRoutes()">Save routing</button>
+      <span id="routeMsg" class="note" style="margin-left:10px"></span>
+    </div></div>
+  </div>
+
+  <!-- ============ CAMPAIGNS (M4) ============ -->
+  <div id="tab-camp" style="display:none">
+    <div class="bar">
+      <span class="note" style="flex:1">Bulk sends over a customer segment. Batches of <i>throttle/min</i> go out each minute; suppression &amp; unsubscribe are automatic.</span>
+      <button class="ghost" onclick="loadCamp()">&#8635; Refresh</button>
+      <button class="add" onclick="campOpen()">+ New campaign</button>
+    </div>
+    <div class="card"><div style="overflow:auto"><table><thead><tr>
+      <th>Name</th><th>Channel</th><th>Status</th><th>Progress</th><th>Sent</th><th>Opened</th><th>Failed</th><th>Actions</th>
+    </tr></thead><tbody id="campRows"><tr><td colspan="8" class="note" style="padding:16px">Loading&hellip;</td></tr></tbody></table></div></div>
+  </div>
+
+  <!-- ============ SETTINGS ============ -->
+  <div id="tab-set" style="display:none">
+    <div class="card"><div class="pad">
+      <b>Sender identity</b>
+      <div class="note" style="margin-bottom:10px">Used as the From address on every email (a provider can override it with its own verified sender).</div>
+      <div class="frow">
+        <div class="f"><label>From name</label><input id="sFromName"></div>
+        <div class="f"><label>From email *</label><input id="sFromEmail" type="email"></div>
+        <div class="f"><label>Reply-to</label><input id="sReplyTo" type="email"></div>
+      </div>
+      <div class="f"><label>Footer text (appended to every email)</label><textarea id="sFooter" rows="2"></textarea></div>
+      <div class="f" style="background:#f0f4f0;border-radius:10px;padding:12px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">
+          <input type="checkbox" id="sLive" style="width:auto;transform:scale(1.3)">
+          <span><b>Go live</b> — route module emails (quotation share, cashbook digest, …) through the Email Center</span>
+        </label>
+        <div class="note" style="margin-top:6px">Off = modules keep their legacy sending. Requires a From email and at least one active provider.</div>
+      </div>
+      <button class="save" style="max-width:240px" onclick="saveSettings()">Save settings</button>
+      <span id="sMsg" class="note" style="margin-left:10px"></span>
+    </div></div>
+    <div class="card"><div class="pad">
+      <b>Provider webhooks</b>
+      <div class="note" style="margin-bottom:8px">Paste the matching URL into your provider's webhook settings to receive delivered / opened / bounced / complained events.</div>
+      <div id="hookList"></div>
+    </div></div>
+  </div>
+</div>
+
+<!-- Campaign modal -->
+<div class="modalwrap hide" id="mCamp"><div class="modal">
+  <button class="x" onclick="hide('mCamp')">&times;</button>
+  <h2 id="cTitle">New campaign</h2>
+  <input type="hidden" id="cId">
+  <div class="frow">
+    <div class="f"><label>Name *</label><input id="cName" placeholder="July promo"></div>
+    <div class="f"><label>Channel *</label><select id="cChannel" onchange="campContentFields()"><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="both">Email + WhatsApp</option></select></div>
+    <div class="f"><label>Throttle / minute</label><input id="cThrottle" type="number" min="1" max="600" value="60"></div>
+  </div>
+  <div class="f"><label>Template <span class="note">(blank = write inline content below)</span></label>
+    <select id="cTemplate"><option value="">— inline content —</option></select></div>
+  <div id="cInline">
+    <div class="f" id="cSubjWrap"><label>Email subject</label><input id="cSubject"></div>
+    <div class="f" id="cHtmlWrap"><label>Email HTML body <span class="note">(unsubscribe link auto-added if missing)</span></label><textarea id="cHtml" rows="6" class="code"></textarea></div>
+    <div class="f" id="cTextWrap"><label>WhatsApp text</label><textarea id="cText" rows="3" class="code"></textarea></div>
+  </div>
+  <div class="subt">Audience</div>
+  <div class="frow">
+    <div class="f"><label>Segment tag</label><input id="cSeg" placeholder="wholesale"></div>
+    <div class="f"><label>City</label><input id="cCity" placeholder="Kampala"></div>
+    <div class="f"><label>Ordered within (days)</label><input id="cOrdIn" type="number" min="1"></div>
+    <div class="f"><label>NOT ordered within (days)</label><input id="cOrdOut" type="number" min="1"></div>
+  </div>
+  <div class="frow">
+    <button class="ghost" style="flex:0" onclick="campEstimate()">Estimate audience</button>
+    <span class="note" id="cEst" style="align-self:center"></span>
+  </div>
+  <button class="save" onclick="campSave()">Save campaign</button>
+  <div class="subt">Launch</div>
+  <div class="frow">
+    <div class="f"><label>Schedule (optional, blank = now)</label><input id="cWhen" type="datetime-local"></div>
+    <button class="ghost" style="flex:0;align-self:end" onclick="campLaunch()">&#128640; Launch</button>
+  </div>
+  <div class="note" id="cMsg"></div>
+</div></div>
+
+<!-- Message detail modal -->
+<div class="modalwrap hide" id="mView"><div class="modal">
+  <button class="x" onclick="hide('mView')">×</button>
+  <h2 id="mvSubject">Message</h2>
+  <div id="mvHead" class="note"></div>
+  <div id="mvError"></div>
+  <div class="subt">Timeline</div><div id="mvEvents" class="note"></div>
+  <div class="subt">Body preview</div><div class="preview"><iframe id="mvFrame" style="width:100%;height:300px;border:0"></iframe></div>
+</div></div>
+
+<!-- Template modal -->
+<div class="modalwrap hide" id="mTpl"><div class="modal">
+  <button class="x" onclick="hide('mTpl')">×</button>
+  <h2 id="tplTitle">New template</h2>
+  <input type="hidden" id="tId">
+  <div class="frow">
+    <div class="f"><label>Key * <span class="note">(invoice, welcome…)</span></label><input id="tKey"></div>
+    <div class="f"><label>Locale *</label><input id="tLocale" value="en"></div>
+    <div class="f"><label>Active</label><select id="tActive"><option value="1">Yes</option><option value="0">No</option></select></div>
+  </div>
+  <div class="f"><label>Name *</label><input id="tName"></div>
+  <div class="f"><label>Subject</label><input id="tSubject"></div>
+  <div class="f"><label>HTML body</label><textarea id="tHtml" rows="10" class="code"></textarea></div>
+  <div class="f"><label>Plain-text body (optional)</label><textarea id="tText" rows="3" class="code"></textarea></div>
+  <button class="save" onclick="tplSave()">Save template</button>
+  <div class="note" id="tMsg" style="margin-top:8px"></div>
+</div></div>
+
+<!-- Provider modal -->
+<div class="modalwrap hide" id="mProv"><div class="modal">
+  <button class="x" onclick="hide('mProv')">×</button>
+  <h2 id="pTitle">Add provider</h2>
+  <input type="hidden" id="pId">
+  <div class="frow">
+    <div class="f"><label>Name *</label><input id="pName" placeholder="Primary M365"></div>
+    <div class="f"><label>Driver *</label><select id="pDriver" onchange="provFields()">
+      <option value="smtp">SMTP (M365 / Gmail / SES / any)</option><option value="mailgun">Mailgun</option>
+      <option value="sendgrid">SendGrid</option><option value="postmark">Postmark</option><option value="brevo">Brevo</option>
+    </select></div>
+  </div>
+  <div class="frow">
+    <div class="f"><label>Priority * <span class="note">(1 = first)</span></label><input id="pPriority" type="number" min="1" value="10"></div>
+    <div class="f"><label>Daily limit <span class="note">(blank = unlimited)</span></label><input id="pDaily" type="number" min="0"></div>
+    <div class="f"><label>Active</label><select id="pActive"><option value="1">Yes</option><option value="0">No</option></select></div>
+  </div>
+  <div id="pFields"></div>
+  <div class="frow">
+    <div class="f"><label>From email override <span class="note">(verified sender, optional)</span></label><input id="pFromEmail"></div>
+    <div class="f"><label>From name override</label><input id="pFromName"></div>
+  </div>
+  <button class="save" onclick="provSave()">Save provider</button>
+  <div class="subt">Test</div>
+  <div class="frow"><div class="f"><input id="pTestTo" placeholder="you@example.com"></div>
+    <button class="ghost" style="flex:0" onclick="provTest()">Send test</button></div>
+  <div class="note" id="pMsg"></div>
+</div></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>(s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function hide(id){$(id).classList.add('hide')}
+function show(id){$(id).classList.remove('hide')}
+async function api(url,opts){
+  const o=Object.assign({headers:{'Accept':'application/json'}},opts||{});
+  if(o.body&&typeof o.body!=='string'){o.body=JSON.stringify(o.body);o.headers['Content-Type']='application/json'}
+  const r=await fetch(url,o);let j={};try{j=await r.json()}catch(e){}
+  if(!j.ok&&!r.ok)j.error=j.error||('HTTP '+r.status);
+  return j;
+}
+function tab(t){
+  for(const k of ['dash','queue','tpl','prov','route','camp','set']){
+    $('tab-'+k).style.display=(k===t?'':'none');
+    $('tb-'+k).classList.toggle('on',k===t);
+  }
+  if(t==='dash')loadDash(); if(t==='queue')loadQueue(1);
+  if(t==='tpl')loadTpl(); if(t==='prov')loadProv(); if(t==='set')loadSettings();
+  if(t==='route')loadRoutes(); if(t==='camp')loadCamp();
+}
+
+/* ---------- dashboard ---------- */
+function kpis(el,d){
+  el.innerHTML=
+    '<div class="kpi green"><div class="n">'+d.sent+'</div><div class="l">Sent</div></div>'+
+    '<div class="kpi amber"><div class="n">'+d.queued+'</div><div class="l">Queued</div></div>'+
+    '<div class="kpi red"><div class="n">'+d.failed+'</div><div class="l">Failed</div></div>'+
+    '<div class="kpi"><div class="n">'+d.opened+'</div><div class="l">Opened</div></div>'+
+    '<div class="kpi red"><div class="n">'+d.bounced+'</div><div class="l">Bounced</div></div>';
+}
+async function loadDash(){
+  const j=await api('/papi/comms/stats');
+  if(!j.ok)return;
+  $('dashWarn').innerHTML='';
+  if(!j.from_ok)$('dashWarn').innerHTML='<div class="warn">⚠️ No <b>From address</b> configured yet — go to <b>Settings</b> and set your sender identity, then add a <b>Provider</b>.</div>';
+  else if(!(j.providers||[]).some(p=>p.is_active))$('dashWarn').innerHTML='<div class="warn">⚠️ No <b>active provider</b> — emails will queue but cannot send. Add one under <b>Providers</b>.</div>';
+  kpis($('kToday'),j.today);kpis($('kWeek'),j.week);
+  $('dashProv').innerHTML=(j.providers||[]).map(p=>'<tr><td>'+p.priority+'</td><td><b>'+esc(p.name)+'</b></td><td>'+esc(p.driver)+'</td>'+
+    '<td>'+(p.is_active?'<span class="badge b-sent">active</span>':'<span class="badge b-cancelled">off</span>')+'</td>'+
+    '<td>'+p.sent_today+(p.daily_limit?' / '+p.daily_limit:'')+'</td><td>'+esc(p.last_used_at||'—')+'</td>'+
+    '<td class="note">'+esc(p.last_error||'—')+'</td></tr>').join('')||'<tr><td colspan="7" class="note" style="padding:14px">No providers yet.</td></tr>';
+  $('dashFail').innerHTML=(j.recent_fail||[]).map(f=>'<tr><td>'+esc(f.to_email)+'</td><td>'+esc(f.subject||'—')+'</td>'+
+    '<td class="note">'+esc(f.last_error||'')+'</td><td class="note">'+esc(f.created_at||'')+'</td></tr>').join('')||'<tr><td colspan="4" class="note" style="padding:14px">None 🎉</td></tr>';
+}
+
+/* ---------- queue & logs ---------- */
+let qPage=1,qPages=1,qTimer=null;
+function qDeb(){clearTimeout(qTimer);qTimer=setTimeout(()=>loadQueue(1),350)}
+function qGo(d){const p=qPage+d;if(p>=1&&p<=qPages)loadQueue(p)}
+async function loadQueue(p){
+  qPage=p;
+  const j=await api('/papi/comms/messages?page='+p+'&status='+encodeURIComponent($('qStatus').value)+'&q='+encodeURIComponent($('qSearch').value));
+  if(!j.ok)return;
+  qPages=j.pages||1;
+  $('qInfo').textContent=j.total+' message(s) — page '+j.page+'/'+qPages;
+  $('qPrev').disabled=qPage<=1;$('qNext').disabled=qPage>=qPages;
+  $('qRows').innerHTML=(j.items||[]).map(m=>{
+    const acts=['<button class="v" onclick="viewMsg('+m.id+')">View</button>'];
+    if(m.status==='failed'||m.status==='cancelled')acts.push('<button class="g" onclick="retryMsg('+m.id+')">Retry</button>');
+    if(m.status==='pending'||m.status==='retry')acts.push('<button class="d" onclick="cancelMsg('+m.id+')">Cancel</button>');
+    return '<tr><td><b>'+esc(m.to_email)+'</b>'+(m.to_name?'<br><span class="note">'+esc(m.to_name)+'</span>':'')+'</td>'+
+      '<td>'+esc(m.subject||'—')+'</td><td class="note">'+esc(m.template_key||'raw')+'</td>'+
+      '<td><span class="badge b-'+m.status+'">'+m.status+'</span></td>'+
+      '<td>'+m.attempts+'</td><td>'+(m.opens||0)+'</td><td class="note">'+esc(m.created_at||'')+'</td>'+
+      '<td class="act">'+acts.join(' ')+'</td></tr>';
+  }).join('')||'<tr><td colspan="8" class="note" style="padding:16px">No messages.</td></tr>';
+}
+async function viewMsg(id){
+  const j=await api('/papi/comms/messages/'+id);
+  if(!j.ok)return alert(j.error||'error');
+  const m=j.message;
+  $('mvSubject').textContent=m.subject||'(no subject)';
+  $('mvHead').innerHTML='To: <b>'+esc(m.to_email)+'</b> · Status: <span class="badge b-'+m.status+'">'+m.status+'</span> · Tries '+m.attempts+'/'+m.max_attempts+
+    (m.provider?' · via '+esc(m.provider):'')+(m.sent_at?' · sent '+esc(m.sent_at):'')+
+    (m.attachments&&m.attachments.length?' · 📎 '+m.attachments.map(a=>esc(a.name)).join(', '):'');
+  $('mvError').innerHTML=m.last_error?'<div class="warn">'+esc(m.last_error)+'</div>':'';
+  const ev=(j.events||[]).map(e=>esc(e.occurred_at||'')+' — <b>'+esc(e.event)+'</b>'+(e.provider?' ('+esc(e.provider)+')':'')).join('<br>');
+  $('mvEvents').innerHTML=ev||'No events yet.';
+  const doc=$('mvFrame').contentWindow.document;doc.open();doc.write(m.html_body||('<pre style="font-family:monospace;white-space:pre-wrap">'+esc(m.text_body||'(empty body)')+'</pre>'));doc.close();
+  show('mView');
+}
+async function retryMsg(id){const j=await api('/papi/comms/messages/'+id+'/retry',{method:'POST'});if(!j.ok)alert(j.error||'error');loadQueue(qPage)}
+async function cancelMsg(id){if(!confirm('Cancel this queued email?'))return;const j=await api('/papi/comms/messages/'+id+'/cancel',{method:'POST'});if(!j.ok)alert(j.error||'error');loadQueue(qPage)}
+
+/* ---------- templates ---------- */
+let tplCache=[];
+async function loadTpl(){
+  const j=await api('/papi/comms/templates');
+  if(!j.ok)return;
+  tplCache=j.items||[];
+  $('tplRows').innerHTML=tplCache.map(t=>'<tr><td class="mono">'+esc(t.key)+'</td><td>'+esc(t.locale)+'</td><td><b>'+esc(t.name)+'</b></td>'+
+    '<td class="note">'+esc(t.subject||'—')+'</td><td>'+(t.is_active?'✅':'—')+'</td>'+
+    '<td class="act"><button class="e" onclick="tplOpen('+t.id+')">Edit</button></td></tr>').join('')||
+    '<tr><td colspan="6" class="note" style="padding:16px">No templates yet — click "Install default pack".</td></tr>';
+}
+function tplOpen(id){
+  const t=id?tplCache.find(x=>x.id===id):null;
+  $('tplTitle').textContent=t?('Edit: '+t.name):'New template';
+  $('tId').value=t?t.id:'';$('tKey').value=t?t.key:'';$('tLocale').value=t?t.locale:'en';
+  $('tActive').value=t?(t.is_active?'1':'0'):'1';$('tName').value=t?t.name:'';
+  $('tSubject').value=t?(t.subject||''):'';$('tHtml').value=t?(t.html_body||''):'';$('tText').value=t?(t.text_body||''):'';
+  $('tMsg').textContent='';show('mTpl');
+}
+async function tplSave(){
+  const body={id:$('tId').value||null,key:$('tKey').value.trim(),locale:$('tLocale').value.trim()||'en',
+    name:$('tName').value.trim(),subject:$('tSubject').value,html_body:$('tHtml').value,text_body:$('tText').value,
+    is_active:$('tActive').value==='1'};
+  if(!body.key||!body.name){$('tMsg').innerHTML='<span class="err">Key and name are required.</span>';return}
+  const j=await api('/papi/comms/templates/save',{method:'POST',body});
+  if(!j.ok){$('tMsg').innerHTML='<span class="err">'+esc(j.error||'error')+'</span>';return}
+  hide('mTpl');loadTpl();
+}
+async function seedTpl(){
+  const j=await api('/papi/comms/templates/seed',{method:'POST'});
+  if(!j.ok){alert(j.error||'error');return}
+  loadTpl();
+}
+
+/* ---------- providers ---------- */
+let provCache=[];
+const DRIVER_FIELDS={
+  smtp:[['host','Host *','smtp.office365.com'],['port','Port *','587'],['username','Username','user@domain.com'],['password','Password','········'],['encryption','Encryption (tls / ssl / none)','tls']],
+  mailgun:[['domain','Sending domain *','mg.yourdomain.com'],['api_key','API key *',''],['region','Region (us / eu)','us']],
+  sendgrid:[['api_key','API key *','SG.…']],
+  postmark:[['server_token','Server token *',''],['message_stream','Message stream','outbound']],
+  brevo:[['api_key','API key *','xkeysib-…']]
+};
+function provFields(cfg){
+  cfg=cfg||{};
+  const d=$('pDriver').value;
+  $('pFields').innerHTML=(DRIVER_FIELDS[d]||[]).map(f=>'<div class="f"><label>'+f[1]+'</label><input id="pc_'+f[0]+'" placeholder="'+esc(f[2])+'" value="'+esc(cfg[f[0]]||'')+'"'+((f[0]==='password'||f[0]==='api_key'||f[0]==='server_token')?' autocomplete="new-password"':'')+'></div>').join('');
+}
+async function loadProv(){
+  const j=await api('/papi/comms/providers');
+  if(!j.ok)return;
+  provCache=j.items||[];
+  $('provRows').innerHTML=provCache.map(p=>'<tr><td><b>'+p.priority+'</b></td><td><b>'+esc(p.name)+'</b></td><td>'+esc(p.driver)+'</td>'+
+    '<td>'+(p.is_active?'<span class="badge b-sent">active</span>':'<span class="badge b-cancelled">off</span>')+'</td>'+
+    '<td>'+(p.daily_limit??'∞')+'</td><td>'+p.sent_today+'</td><td class="note">'+esc(p.last_error||'—')+'</td>'+
+    '<td class="act"><button class="e" onclick="provOpen('+p.id+')">Edit</button><button class="d" onclick="provDel('+p.id+')">Delete</button></td></tr>').join('')||
+    '<tr><td colspan="8" class="note" style="padding:16px">No providers yet — add SMTP or an API provider.</td></tr>';
+}
+function provOpen(id){
+  const p=id?provCache.find(x=>x.id===id):null;
+  $('pTitle').textContent=p?('Edit: '+p.name):'Add provider';
+  $('pId').value=p?p.id:'';$('pName').value=p?p.name:'';$('pDriver').value=p?p.driver:'smtp';
+  $('pPriority').value=p?p.priority:10;$('pDaily').value=p&&p.daily_limit!=null?p.daily_limit:'';
+  $('pActive').value=p?(p.is_active?'1':'0'):'1';
+  provFields(p?p.config:{});
+  $('pFromEmail').value=p&&p.config?(p.config.from_email||''):'';
+  $('pFromName').value=p&&p.config?(p.config.from_name||''):'';
+  $('pMsg').textContent='';$('pTestTo').value='';show('mProv');
+}
+function provCollect(){
+  const d=$('pDriver').value,cfg={};
+  for(const f of (DRIVER_FIELDS[d]||[])){const el=$('pc_'+f[0]);if(el&&el.value!=='')cfg[f[0]]=el.value}
+  if($('pFromEmail').value)cfg.from_email=$('pFromEmail').value;
+  if($('pFromName').value)cfg.from_name=$('pFromName').value;
+  return {id:$('pId').value||null,name:$('pName').value.trim(),driver:d,
+    priority:parseInt($('pPriority').value||'10',10),
+    daily_limit:$('pDaily').value===''?null:parseInt($('pDaily').value,10),
+    is_active:$('pActive').value==='1',config:cfg};
+}
+async function provSave(){
+  const body=provCollect();
+  if(!body.name){$('pMsg').innerHTML='<span class="err">Name is required.</span>';return}
+  const j=await api('/papi/comms/providers/save',{method:'POST',body});
+  if(!j.ok){$('pMsg').innerHTML='<span class="err">'+esc(j.error||'error')+'</span>';return}
+  $('pId').value=j.id;$('pMsg').innerHTML='<span class="okmsg">Saved ✓ — now send a test below.</span>';
+  loadProv();
+}
+async function provTest(){
+  const id=$('pId').value;
+  if(!id){$('pMsg').innerHTML='<span class="err">Save the provider first.</span>';return}
+  const to=$('pTestTo').value.trim();
+  if(!to){$('pMsg').innerHTML='<span class="err">Enter a test recipient.</span>';return}
+  $('pMsg').innerHTML='Sending test…';
+  const j=await api('/papi/comms/providers/'+id+'/test',{method:'POST',body:{to}});
+  $('pMsg').innerHTML=j.ok?'<span class="okmsg">✓ Test sent'+(j.message_id?' (id '+esc(j.message_id)+')':'')+'</span>'
+                          :'<span class="err">✗ '+esc(j.error||'failed')+'</span>';
+}
+async function provDel(id){
+  if(!confirm('Delete this provider? Queued mail will fail over to the remaining ones.'))return;
+  const j=await api('/papi/comms/providers/'+id+'/delete',{method:'POST'});
+  if(!j.ok)alert(j.error||'error');
+  loadProv();
+}
+
+/* ---------- routing (M3) ---------- */
+let routeEvents=[];
+async function loadRoutes(){
+  const j=await api('/papi/comms/routes');
+  if(!j.ok)return;
+  routeEvents=j.events||[];
+  $('routeWarn').innerHTML=j.whatsapp_ok?'':'<div class="warn">⚠️ No WhatsApp instance connected for this shop — WhatsApp sends will fail until it is set up under Settings → WhatsApp.</div>';
+  $('routeRows').innerHTML=routeEvents.map(e=>{
+    const em=e.channels.includes('email'),wa=e.channels.includes('whatsapp');
+    return '<tr><td><b>'+esc(e.event)+'</b></td>'+
+      '<td style="text-align:center"><input type="checkbox" style="transform:scale(1.3)" id="rt_'+e.event+'_email"'+(em?' checked':'')+'></td>'+
+      '<td style="text-align:center"><input type="checkbox" style="transform:scale(1.3)" id="rt_'+e.event+'_whatsapp"'+(wa?' checked':'')+'></td></tr>';
+  }).join('');
+}
+async function saveRoutes(){
+  const routes={};
+  for(const e of routeEvents){
+    const chs=[];
+    if($('rt_'+e.event+'_email').checked)chs.push('email');
+    if($('rt_'+e.event+'_whatsapp').checked)chs.push('whatsapp');
+    routes[e.event]=chs;
+  }
+  $('routeMsg').textContent='Saving…';
+  const j=await api('/papi/comms/routes/save',{method:'POST',body:{routes}});
+  $('routeMsg').innerHTML=j.ok?'<span class="okmsg">Saved ✓</span>':'<span class="err">'+esc(j.error||'error')+'</span>';
+}
+
+/* ---------- campaigns (M4) ---------- */
+let campCache=[];
+async function loadCamp(){
+  const j=await api('/papi/comms/campaigns');
+  if(!j.ok)return;
+  campCache=j.items||[];
+  $('campRows').innerHTML=campCache.map(c=>{
+    const st=c.stats||{},prog=(c.total_estimated?Math.min(100,Math.round(100*c.enqueued_count/Math.max(1,c.total_estimated))):0);
+    const acts=['<button class="v" onclick="campOpen('+c.id+')">'+(c.status==='draft'||c.status==='scheduled'?'Edit':'View')+'</button>'];
+    if(c.status==='sending'||c.status==='scheduled')acts.push('<button class="e" onclick="campAct('+c.id+',\'pause\')">Pause</button>');
+    if(c.status==='paused')acts.push('<button class="g" onclick="campAct('+c.id+',\'resume\')">Resume</button>');
+    if(c.status!=='done'&&c.status!=='cancelled')acts.push('<button class="d" onclick="campAct('+c.id+',\'cancel\')">Cancel</button>');
+    const badge=c.status==='done'?'b-sent':(c.status==='cancelled'?'b-cancelled':(c.status==='sending'||c.status==='scheduled'?'b-pending':'b-cancelled'));
+    return '<tr><td><b>'+esc(c.name)+'</b>'+(c.scheduled_at?'<br><span class="note">'+esc(c.scheduled_at)+'</span>':'')+'</td>'+
+      '<td>'+esc(c.channel)+'</td><td><span class="badge '+badge+'">'+esc(c.status)+'</span></td>'+
+      '<td>'+c.enqueued_count+' / '+c.total_estimated+(c.status==='sending'?' ('+prog+'%)':'')+'</td>'+
+      '<td>'+(st.sent||0)+'</td><td>'+(st.opened||0)+'</td><td>'+((st.failed||0)+(st.bounced||0))+'</td>'+
+      '<td class="act">'+acts.join(' ')+'</td></tr>';
+  }).join('')||'<tr><td colspan="8" class="note" style="padding:16px">No campaigns yet.</td></tr>';
+}
+function campContentFields(){
+  const ch=$('cChannel').value;
+  $('cSubjWrap').style.display=(ch==='whatsapp')?'none':'';
+  $('cHtmlWrap').style.display=(ch==='whatsapp')?'none':'';
+  $('cTextWrap').style.display=(ch==='email')?'none':'';
+}
+async function campOpen(id){
+  // fill the template dropdown from the templates cache (load if empty)
+  if(!tplCache.length){const j=await api('/papi/comms/templates');if(j.ok)tplCache=j.items||[]}
+  const keys=[...new Set(tplCache.filter(t=>t.is_active).map(t=>t.key))];
+  $('cTemplate').innerHTML='<option value="">&mdash; inline content &mdash;</option>'+keys.map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join('');
+  const c=id?campCache.find(x=>x.id===id):null;
+  $('cTitle').textContent=c?c.name:'New campaign';
+  $('cId').value=c?c.id:'';$('cName').value=c?c.name:'';$('cChannel').value=c?c.channel:'email';
+  $('cThrottle').value=c?c.throttle_per_minute:60;$('cTemplate').value=c?(c.template_key||''):'';
+  $('cSubject').value=c?(c.subject||''):'';$('cHtml').value=c?(c.html_body||''):'';$('cText').value=c?(c.text_body||''):'';
+  const sg=c&&c.segment?c.segment:{};
+  $('cSeg').value=sg.segment||'';$('cCity').value=sg.city||'';
+  $('cOrdIn').value=sg.ordered_within_days||'';$('cOrdOut').value=sg.not_ordered_within_days||'';
+  $('cWhen').value='';$('cEst').textContent='';$('cMsg').textContent='';
+  campContentFields();show('mCamp');
+}
+function campSegment(){
+  const sg={};
+  if($('cSeg').value.trim())sg.segment=$('cSeg').value.trim();
+  if($('cCity').value.trim())sg.city=$('cCity').value.trim();
+  if($('cOrdIn').value)sg.ordered_within_days=parseInt($('cOrdIn').value,10);
+  if($('cOrdOut').value)sg.not_ordered_within_days=parseInt($('cOrdOut').value,10);
+  return sg;
+}
+async function campEstimate(){
+  $('cEst').textContent='Counting…';
+  const j=await api('/papi/comms/campaigns/estimate',{method:'POST',body:{segment:campSegment(),channel:$('cChannel').value}});
+  if(!j.ok){$('cEst').innerHTML='<span class="err">'+esc(j.error||'error')+'</span>';return}
+  const e=j.estimate;
+  $('cEst').innerHTML='&#128231; '+e.email+' &middot; &#128172; '+e.whatsapp+' (of '+e.total_profiles+' customers)';
+}
+async function campSave(){
+  const body={id:$('cId').value||null,name:$('cName').value.trim(),channel:$('cChannel').value,
+    template_key:$('cTemplate').value||null,subject:$('cSubject').value,html_body:$('cHtml').value,
+    text_body:$('cText').value,segment:campSegment(),throttle_per_minute:parseInt($('cThrottle').value||'60',10)};
+  if(!body.name){$('cMsg').innerHTML='<span class="err">Name is required.</span>';return}
+  const j=await api('/papi/comms/campaigns/save',{method:'POST',body});
+  if(!j.ok){$('cMsg').innerHTML='<span class="err">'+esc(j.error||'error')+'</span>';return}
+  $('cId').value=j.id;$('cMsg').innerHTML='<span class="okmsg">Saved &#10003; &mdash; estimate, then launch when ready.</span>';
+  loadCamp();
+}
+async function campLaunch(){
+  const id=$('cId').value;
+  if(!id){$('cMsg').innerHTML='<span class="err">Save the campaign first.</span>';return}
+  const when=$('cWhen').value?new Date($('cWhen').value).toISOString():null;
+  if(!confirm(when?'Schedule this campaign?':'Launch this campaign now?'))return;
+  const j=await api('/papi/comms/campaigns/'+id+'/launch',{method:'POST',body:{when}});
+  if(!j.ok){$('cMsg').innerHTML='<span class="err">'+esc(j.error||'error')+'</span>';return}
+  $('cMsg').innerHTML='<span class="okmsg">&#128640; '+esc(j.status)+' &mdash; audience locked at '+j.total_estimated+'.</span>';
+  loadCamp();
+}
+async function campAct(id,act){
+  if(act==='cancel'&&!confirm('Cancel this campaign? Already-queued messages still send.'))return;
+  const j=await api('/papi/comms/campaigns/'+id+'/'+act,{method:'POST'});
+  if(!j.ok)alert(j.error||'error');
+  loadCamp();
+}
+
+/* ---------- settings ---------- */
+async function loadSettings(){
+  const j=await api('/papi/comms/settings');
+  if(!j.ok)return;
+  $('sFromName').value=j.settings.from_name||'';$('sFromEmail').value=j.settings.from_email||'';
+  $('sReplyTo').value=j.settings.reply_to||'';$('sFooter').value=j.settings.footer_text||'';
+  $('sLive').checked=!!j.settings.live;
+  $('hookList').innerHTML=Object.entries(j.webhooks||{}).map(([d,u])=>
+    '<div class="f"><label>'+d+' <span class="copy" onclick="navigator.clipboard.writeText(\''+u+'\');this.textContent=\'copied ✓\'">copy</span></label>'+
+    '<div class="mono">'+esc(u)+'</div></div>').join('');
+}
+async function saveSettings(){
+  $('sMsg').textContent='Saving…';
+  const j=await api('/papi/comms/settings/save',{method:'POST',body:{
+    from_name:$('sFromName').value,from_email:$('sFromEmail').value,
+    reply_to:$('sReplyTo').value,footer_text:$('sFooter').value,live:$('sLive').checked}});
+  $('sMsg').innerHTML=j.ok?'<span class="okmsg">Saved ✓</span>':'<span class="err">'+esc(j.error||'error')+'</span>';
+}
+
+loadDash();
+</script>
+</body></html>

@@ -101,6 +101,15 @@ return [
     ],
 
     [
+        // Communication Center (V3 spec). Own module gate — deliberately NOT under the
+        // 'whatsapp' Messaging group, so a tenant without WhatsApp still gets Email.
+        'key' => 'communication', 'label' => 'Communication', 'module' => 'communication',
+        'items' => [
+            ['key' => 'email-center', 'label' => 'Email', 'route' => '/panel/email-center', 'icon' => '📧', 'menu' => 'settings'],
+        ],
+    ],
+
+    [
         'key' => 'settings', 'label' => 'Settings',
         'items' => [
             ['key' => 'business', 'label' => 'Business profile', 'route' => '/panel/setup',       'icon' => '🏢', 'menu' => 'settings'],

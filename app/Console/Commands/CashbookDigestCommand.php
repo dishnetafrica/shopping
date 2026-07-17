@@ -110,11 +110,27 @@ final class CashbookDigestCommand extends Command
 
             if ($to !== '') {
                 try {
-                    Mail::raw($this->emailBody($t, $date), function ($m) use ($to, $csv, $date, $t) {
-                        $m->to($to)
-                            ->subject(($t->name ?: 'Cashbook') . ' — cashbook ' . $date)
-                            ->attachData($csv, 'Cashbook-' . $date . '.csv', ['mime' => 'text/csv']);
-                    });
+                    // Comms M2: live tenants send via the Email Center (tenant identity, failover,
+                    // retry, audit log). Flag off => the legacy Mail::raw path runs untouched.
+                    if ((bool) $t->setting('comms_email_live', false)) {
+                        $body = $this->emailBody($t, $date);
+                        app(\App\Services\Comms\EmailService::class)->queueRaw(
+                            $t, $to,
+                            ($t->name ?: 'Cashbook') . ' — cashbook ' . $date,
+                            nl2br(e($body)), $body,
+                            [
+                                'attachments'  => [['name' => 'Cashbook-' . $date . '.csv', 'mime' => 'text/csv', 'data' => base64_encode($csv)]],
+                                'related_type' => 'cashbook_digest',
+                                'meta'         => ['date' => $date],
+                            ]
+                        );
+                    } else {
+                        Mail::raw($this->emailBody($t, $date), function ($m) use ($to, $csv, $date, $t) {
+                            $m->to($to)
+                                ->subject(($t->name ?: 'Cashbook') . ' — cashbook ' . $date)
+                                ->attachData($csv, 'Cashbook-' . $date . '.csv', ['mime' => 'text/csv']);
+                        });
+                    }
                 } catch (\Throwable $e) {
                     Log::warning('cashbook:digest email failed', ['tenant' => $t->id, 'to' => $to, 'err' => $e->getMessage()]);
                 }

@@ -28,6 +28,11 @@ Route::get('/papi/pending', [\App\Http\Controllers\Panel\PendingController::clas
 Route::get('/r/{token}',     [\App\Http\Controllers\Panel\RiderTrackController::class, 'show']);
 Route::post('/r/{token}/loc', [\App\Http\Controllers\Panel\RiderTrackController::class, 'loc']);
 
+// Communication Center — public engagement endpoints (token / secret is the key, no login).
+Route::get('/c/e/o/{token}.gif', [\App\Http\Controllers\Comms\EmailTrackController::class, 'open']);
+Route::get('/c/e/u/{token}',     [\App\Http\Controllers\Comms\EmailTrackController::class, 'unsubscribe']);
+Route::post('/papi/comms/hook/{driver}', [\App\Http\Controllers\Comms\EmailWebhookController::class, 'ingest']);
+
 // Operations field channel — no-login, signed + expiring links (the link is the auth).
 Route::middleware('signed')->group(function () {
     Route::get('/ops/t/{task}',                       [FieldTaskController::class, 'show'])->name('ops.field.show');
@@ -102,6 +107,32 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
     Route::get('/panel/payments', [\App\Http\Controllers\Panel\PaymentController::class, 'page']);
     Route::get('/panel/payments-manager', [\App\Http\Controllers\Panel\PaymentsManagerController::class, 'page']);
     Route::get('/panel/settings-manager', [\App\Http\Controllers\Panel\PanelApiController::class, 'settingsManagerPage']);
+
+    // Communication Center — Email (Milestone 1). One page, JSON papi endpoints below.
+    Route::get('/panel/email-center', [\App\Http\Controllers\Panel\EmailCenterController::class, 'page']);
+    Route::get ('/papi/comms/stats',                 [\App\Http\Controllers\Panel\EmailCenterController::class, 'stats']);
+    Route::get ('/papi/comms/messages',              [\App\Http\Controllers\Panel\EmailCenterController::class, 'messages']);
+    Route::get ('/papi/comms/messages/{id}',         [\App\Http\Controllers\Panel\EmailCenterController::class, 'messageShow']);
+    Route::post('/papi/comms/messages/{id}/retry',   [\App\Http\Controllers\Panel\EmailCenterController::class, 'messageRetry']);
+    Route::post('/papi/comms/messages/{id}/cancel',  [\App\Http\Controllers\Panel\EmailCenterController::class, 'messageCancel']);
+    Route::get ('/papi/comms/templates',             [\App\Http\Controllers\Panel\EmailCenterController::class, 'templates']);
+    Route::post('/papi/comms/templates/save',        [\App\Http\Controllers\Panel\EmailCenterController::class, 'templateSave']);
+    Route::post('/papi/comms/templates/seed',        [\App\Http\Controllers\Panel\EmailCenterController::class, 'seedTemplates']);
+    Route::get ('/papi/comms/providers',             [\App\Http\Controllers\Panel\EmailCenterController::class, 'providers']);
+    Route::post('/papi/comms/providers/save',        [\App\Http\Controllers\Panel\EmailCenterController::class, 'providerSave']);
+    Route::post('/papi/comms/providers/{id}/delete', [\App\Http\Controllers\Panel\EmailCenterController::class, 'providerDelete']);
+    Route::post('/papi/comms/providers/{id}/test',   [\App\Http\Controllers\Panel\EmailCenterController::class, 'providerTest']);
+    Route::get ('/papi/comms/settings',              [\App\Http\Controllers\Panel\EmailCenterController::class, 'settingsGet']);
+    Route::post('/papi/comms/settings/save',         [\App\Http\Controllers\Panel\EmailCenterController::class, 'settingsSave']);
+    Route::get ('/papi/comms/routes',                [\App\Http\Controllers\Panel\EmailCenterController::class, 'routesGet']);
+    Route::post('/papi/comms/routes/save',           [\App\Http\Controllers\Panel\EmailCenterController::class, 'routesSave']);
+    Route::get ('/papi/comms/campaigns',             [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaigns']);
+    Route::post('/papi/comms/campaigns/save',        [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignSave']);
+    Route::post('/papi/comms/campaigns/estimate',    [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignEstimate']);
+    Route::post('/papi/comms/campaigns/{id}/launch', [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignLaunch']);
+    Route::post('/papi/comms/campaigns/{id}/pause',  [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignPause']);
+    Route::post('/papi/comms/campaigns/{id}/resume', [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignResume']);
+    Route::post('/papi/comms/campaigns/{id}/cancel', [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignCancel']);
     Route::get('/panel/pnl-report', [\App\Http\Controllers\Panel\PanelApiController::class, 'pnlReportPage']);
     Route::get('/panel/sourcing', [\App\Http\Controllers\Panel\SourcingController::class, 'page']);
     Route::get('/panel/customers360', [\App\Http\Controllers\Panel\CustomerController::class, 'page']);
