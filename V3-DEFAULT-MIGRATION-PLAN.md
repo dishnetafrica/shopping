@@ -87,9 +87,11 @@ today; use classic only for §1's ❌ list.*
 to classic every day), then G2 Email Center as the pattern-setting Capability port,
 then G3/G4/G5 (the money-approval loop with Jayesh/Asish).
 
-**Phase C — migrate the last 2 roles:** flip `LandingController` so purchaser/field
-also land on `/v3` once G4/G5 + their mobile flows exist; retire the nav_v2
-transitional work at the same moment.
+**Phase C — migrate the last 2 roles: ✅ SHIPPED 2026-07-18.** purchaser/field land on
+`/v3` (desktop + `/panel/m`), gated by tenant setting `v3_all_roles` (default ON;
+`php artisan v3:staff {tenant} --off` restores the tap-tile home instantly, no deploy).
+Cashbook's v3 gate corrected from menu:finance → menu:cash for classic parity — the
+one real blocker found. The nav_v2 transitional work is now retired.
 
 **Phase D — disable V2:** `/panel/*` page routes → 302 to the V3 equivalent (papi
 endpoints stay — V3 consumes some of them); keep `?classic=1` one quarter as the

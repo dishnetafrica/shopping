@@ -31,7 +31,9 @@ final class CashbookCapability implements ProcessCapability
 
     public function key(): string { return 'cashbook'; }
 
-    public function permission(): string { return 'menu:finance'; }
+    // Classic parity: the Cashbook menu item was gated on the 'cash' key (purchaser/field
+    // hold cash but NOT finance) — Phase C flips those roles to /v3, so the gate must match.
+    public function permission(): string { return 'menu:cash'; }
 
     public function project(CapabilityContext $ctx): WorkspacePayload
     {

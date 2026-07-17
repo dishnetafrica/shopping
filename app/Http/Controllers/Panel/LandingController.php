@@ -17,12 +17,15 @@ class LandingController extends Controller
     {
         $u = $request->user();
         if ($u && $u->tenant_id && (bool) $u->tenant->setting('order_system_enabled', false)) {
-            if (in_array((string) $u->role, ['purchaser', 'field'], true)) {
+            // Phase C (V3-DEFAULT-MIGRATION-PLAN): purchaser/field land on /v3 like everyone
+            // else. Runtime-reversible WITHOUT a deploy: `php artisan v3:staff {tenant} --off`
+            // (tenant setting v3_all_roles=false) restores their old tap-tile home instantly.
+            if (in_array((string) $u->role, ['purchaser', 'field'], true)
+                && ! (bool) $u->tenant->setting('v3_all_roles', true)) {
                 return redirect('/panel/app');
             }
-            // v3 is now the primary working screen for owner/manager/sales. The classic panel
-            // stays fully reachable with ?classic=1 (the account menu's "Open classic panel" link
-            // uses it), so this is a soft switch — reversible by removing this redirect.
+            // The classic panel stays fully reachable with ?classic=1 (the account menu's
+            // "Open classic panel" link uses it) until Phase D retires it.
             if (! $request->boolean('classic')) {
                 return redirect('/v3');
             }
@@ -38,7 +41,10 @@ class LandingController extends Controller
         if ($u && $u->tenant_id
             && (bool) $u->tenant->setting('order_system_enabled', false)
             && in_array((string) $u->role, ['purchaser', 'field'], true)) {
-            return redirect('/panel/app');
+            // Phase C: staff go to /v3 too; v3_all_roles=false restores the tap-tile home.
+            return (bool) $u->tenant->setting('v3_all_roles', true)
+                ? redirect('/v3')
+                : redirect('/panel/app');
         }
         return app(\App\Http\Controllers\Panel\SellerPanelController::class)->mobile($request);
     }

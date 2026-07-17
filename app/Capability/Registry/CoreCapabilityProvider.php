@@ -118,7 +118,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register(new JubaStockCapability(), new CapabilityManifest(key: 'juba.stock', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/juba.stock'));
         $r->register(new StorefrontInsightsCapability(), new CapabilityManifest(key: 'storefront.insights', type: 'process', owner: 'management', permission: 'menu:products', api: '/api/v1/workspace/storefront.insights'));
         $r->register(new FinanceCapability($money), new CapabilityManifest(key: 'finance', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/finance'));
-        $r->register(new CashbookCapability(), new CapabilityManifest(key: 'cashbook', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/cashbook'));
+        $r->register(new CashbookCapability(), new CapabilityManifest(key: 'cashbook', type: 'process', owner: 'accounts', permission: 'menu:cash', api: '/api/v1/workspace/cashbook'));
         $r->register($ads, new CapabilityManifest(key: 'ads', type: 'process', owner: 'management', permission: '', api: '/api/v1/workspace/ads'));
         $r->register(new CampaignListCapability(), new CapabilityManifest(key: 'campaigns', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/campaigns'));
         $r->register($warehouse, new CapabilityManifest(key: 'warehouse', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/warehouse'));
