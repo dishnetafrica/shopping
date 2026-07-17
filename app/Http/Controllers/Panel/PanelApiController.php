@@ -5876,6 +5876,121 @@ class PanelApiController extends Controller
         ]);
     }
 
+    /**
+     * GET /papi/finance-overview — READ-ONLY data for the Finance dashboard: KPI tiles (cash / receivable
+     * / payable / net position), cash by currency, a daily cash-in series, receivables & payables ageing,
+     * and the cash-basis P&L summary. All from the reconciled cashbook + invoices. Owner-only.
+     */
+    public function financeOverview(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $fx = \App\Services\Money\Fx::forTenant($t);
+        $base = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);
+        $toUsd = function ($amt, $cur) use ($fx, $base) {
+            $cur = strtoupper((string) $cur);
+            return $cur === $base ? (float) $amt : (float) $amt / ($fx->ratePerUsd($cur) ?: 1);
+        };
+        $inStages = ['funding', 'cash_in', 'customer_payment'];
+        $isCapitalNote = fn ($n) => (bool) preg_match('/capital|startup|introduc|invest/i', (string) $n);
+
+        $curNative = []; $curUsd = []; $cashOnHand = 0.0; $daily = [];
+        $cb = ['capital' => 0.0, 'revenue' => 0.0, 'purchase' => 0.0, 'supplier' => 0.0,
+               'opex' => 0.0, 'other_in' => 0.0, 'other_out' => 0.0, 'drawings' => 0.0];
+        foreach (\App\Models\OrderCost::where('tenant_id', $t->id)
+                    ->whereNotIn('status', ['void', 'rejected'])
+                    ->where(function ($w) { $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status'); })
+                    ->get(['stage', 'currency', 'paid_native', 'usd_amount', 'note', 'category', 'created_at']) as $c) {
+            $s = (string) $c->stage; $cur = strtoupper((string) $c->currency);
+            $sign = in_array($s, $inStages, true) ? 1 : -1;
+            $usd = (float) $c->usd_amount;
+            $curNative[$cur] = ($curNative[$cur] ?? 0) + $sign * (float) $c->paid_native;
+            $curUsd[$cur]    = ($curUsd[$cur] ?? 0) + $sign * $usd;
+            $cashOnHand += $sign * $usd;
+            if (in_array((string) $c->category, ['Conversion', 'Transfer'], true)) continue;   // FX/custody, not P&L/flow
+            // P&L classification
+            if ($s === 'funding' || ($s === 'cash_in' && $isCapitalNote($c->note))) $cb['capital'] += $usd;
+            elseif ($s === 'customer_payment') $cb['revenue'] += $usd;
+            elseif ($s === 'cash_in') $cb['other_in'] += $usd;
+            elseif ($s === 'purchase') $cb['purchase'] += $usd;
+            elseif ($s === 'supplier_payment') $cb['supplier'] += $usd;
+            elseif ($s === 'expense') $cb['opex'] += $usd;
+            elseif ($s === 'drawing') $cb['drawings'] += $usd;
+            elseif ($s === 'cash_out') $cb['other_out'] += $usd;
+            // daily cash flow
+            $d = optional($c->created_at)->format('Y-m-d') ?: 'unknown';
+            if (! isset($daily[$d])) $daily[$d] = ['in' => 0.0, 'out' => 0.0];
+            if ($sign > 0) $daily[$d]['in'] += $usd; else $daily[$d]['out'] += $usd;
+        }
+
+        // Receivable (invoices) + Payable (credit purchases outstanding)
+        $receivable = 0.0;
+        foreach (\App\Models\Invoice::with('order:id,order_no')->where('tenant_id', $t->id)->where('status', '!=', 'void')->get() as $inv) {
+            $receivable += $toUsd((float) $inv->balance, \App\Services\Money\SalesBaseCurrency::txnCurrency($inv, $t));
+        }
+        $payable = 0.0; $payAge = [];
+        foreach (\App\Models\OrderCost::where('tenant_id', $t->id)->where('pay_status', 'credit')
+                    ->whereNotIn('status', ['void', 'rejected'])->get(['native_amount', 'paid_native', 'rate_to_usd', 'created_at']) as $c) {
+            $out = ((float) $c->native_amount - (float) $c->paid_native) / ((float) $c->rate_to_usd ?: 1);
+            if ($out <= 0.01) continue;
+            $payable += $out;
+            $payAge[$this->ageBucket($c->created_at)] = ($payAge[$this->ageBucket($c->created_at)] ?? 0) + $out;
+        }
+
+        // Receivables ageing (by invoice date)
+        $recvAge = [];
+        foreach (\App\Models\Invoice::where('tenant_id', $t->id)->where('status', '!=', 'void')->get() as $inv) {
+            $b = $toUsd((float) $inv->balance, \App\Services\Money\SalesBaseCurrency::txnCurrency($inv, $t));
+            if ($b <= 0.01) continue;
+            $recvAge[$this->ageBucket($inv->issued_at ?: $inv->created_at)] = ($recvAge[$this->ageBucket($inv->issued_at ?: $inv->created_at)] ?? 0) + $b;
+        }
+
+        ksort($daily);
+        $flow = [];
+        foreach (array_slice($daily, -14, 14, true) as $d => $v) {
+            $flow[] = ['date' => $d, 'label' => \Illuminate\Support\Carbon::parse($d)->format('d M'),
+                'in' => round($v['in'], 2), 'out' => round($v['out'], 2)];
+        }
+
+        $revenue = round($cb['revenue'], 2); $cogs = round($cb['purchase'] + $cb['supplier'], 2);
+        $opex = round($cb['opex'], 2);
+        $operatingProfit = round($revenue - $cogs - $opex - $cb['other_out'] + $cb['other_in'], 2);
+        $cashUsd = round($cashOnHand, 2);
+        $recv = round($receivable, 2); $pay = round($payable, 2);
+
+        $ageOut = function ($m) { $tot = array_sum($m); $order = ['Current', '31–60 days', '61–90 days', '90+ days'];
+            $out = []; foreach ($order as $k) { $v = round($m[$k] ?? 0, 2); $out[] = ['bucket' => $k, 'usd' => $v, 'pct' => $tot > 0 ? round($v / $tot * 100) : 0]; } return $out; };
+
+        return response()->json([
+            'ok' => true, 'currency' => $base,
+            'rates' => ['USD' => 1, 'UGX' => round($fx->ratePerUsd('UGX') ?: 3655, 2), 'SSP' => round($fx->ratePerUsd('SSP') ?: 7000, 2)],
+            'kpis' => ['cash_on_hand' => $cashUsd, 'receivable' => $recv, 'payable' => $pay,
+                'net_position' => round($cashUsd + $recv - $pay, 2)],
+            'cash_by_currency' => array_values(array_map(fn ($cur) => [
+                'currency' => $cur, 'native' => round($curNative[$cur] ?? 0, 2), 'usd' => round($curUsd[$cur] ?? 0, 2),
+            ], array_keys($curNative))),
+            'cash_flow' => $flow,
+            'receivables_ageing' => $ageOut($recvAge),
+            'payables_ageing' => $ageOut($payAge),
+            'pnl' => ['revenue' => $revenue, 'cogs' => $cogs, 'gross_profit' => round($revenue - $cogs, 2),
+                'gross_margin_pct' => $revenue > 0 ? round(($revenue - $cogs) / $revenue * 100, 1) : null,
+                'operating_expenses' => $opex, 'operating_profit' => $operatingProfit,
+                'capital_introduced' => round($cb['capital'], 2)],
+        ]);
+    }
+
+    /** Age bucket for a date vs now. */
+    private function ageBucket($date): string
+    {
+        if (! $date) return 'Current';
+        $days = \Illuminate\Support\Carbon::parse($date)->diffInDays(now());
+        if ($days <= 30) return 'Current';
+        if ($days <= 60) return '31–60 days';
+        if ($days <= 90) return '61–90 days';
+        return '90+ days';
+    }
+
     /** GET /panel/pnl-report — serves the self-contained cash-basis P&L dashboard (owner-only). */
     public function pnlReportPage(Request $r)
     {
