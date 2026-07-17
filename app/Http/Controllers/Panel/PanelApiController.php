@@ -5478,6 +5478,55 @@ class PanelApiController extends Controller
         ]);
     }
 
+    /**
+     * POST /papi/backfill-stock-issues[?commit=1] — issue stock for every already-DELIVERED order that
+     * hasn't moved its inventory yet (Step 2 perpetual-inventory backfill). Idempotent. Reports whether
+     * ledger inventory is even enabled for the tenant, and previews the exact lines it would move so the
+     * owner can validate before committing. DRY RUN unless ?commit=1. Owner-only.
+     */
+    public function backfillStockIssues(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $commit = filter_var($r->query('commit', $r->input('commit', false)), FILTER_VALIDATE_BOOLEAN);
+
+        $active = \App\Services\Inventory\OrderStockIssuer::active($t);
+        $issuer = app(\App\Services\Inventory\OrderStockIssuer::class);
+
+        $orders = \App\Models\Order::where('tenant_id', $t->id)
+            ->where(function ($w) { $w->whereRaw("lower(coalesce(status,'')) = 'delivered'")->orWhereNotNull('delivered_at'); })
+            ->whereRaw("lower(coalesce(channel,'')) <> 'market'")
+            ->orderBy('id')->get();
+
+        $rows = []; $issued = 0; $linesTotal = 0; $unresolved = 0;
+        foreach ($orders as $o) {
+            $lines = \App\Services\Inventory\OrderStockIssuer::lines($o);
+            $lineCount = count($lines);
+            $hasItems = \App\Models\OrderItem::where('order_id', $o->id)->exists() || ! empty($o->items_json);
+            $unresolvedHere = $hasItems && $lineCount === 0;
+            if ($unresolvedHere) $unresolved++;
+            $linesTotal += $lineCount;
+            $rows[] = ['order' => (string) $o->order_no, 'status' => (string) $o->status, 'lines' => $lineCount,
+                'sample' => implode('; ', array_map(fn ($l) => $l['name'] . ' x' . rtrim(rtrim(number_format($l['qty'], 2, '.', ''), '0'), '.'), array_slice($lines, 0, 3))),
+                'unresolved' => $unresolvedHere, 'action' => $commit && $active ? 'issued' : ($active ? 'would issue' : 'dormant')];
+            if ($commit && $active) { try { $issued += $issuer->issueForOrder($t, $o); } catch (\Throwable $e) {} }
+        }
+
+        return response()->json([
+            'ok' => true, 'committed' => $commit,
+            'ledger_active' => $active,
+            'note' => $active
+                ? 'Ledger inventory is ON — deliveries move stock out of Kampala.'
+                : 'Ledger inventory is OFF (needs stock_v2 + stock_ledger). Step 2 is installed but DORMANT until you enable it and seed opening balances — backfill writes nothing while off.',
+            'delivered_orders' => count($rows),
+            'stock_movements_written' => $commit ? $issued : 0,
+            'lines_to_issue' => $linesTotal,
+            'orders_with_unresolved_lines' => $unresolved,
+            'orders' => array_slice($rows, 0, 200),
+        ]);
+    }
+
     public function resyncBalances(Request $r)
     {
         if ($g = $this->ownerGate($r)) return $g;

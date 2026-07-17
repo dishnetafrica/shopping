@@ -98,6 +98,13 @@ class OrderObserver
                 if ($t && $order->customer_phone && (bool) $t->setting('auto_customer_on_order', true)) {
                     app(\App\Services\Crm\CustomerMasterService::class)->ensureFromOrder($t, $order);
                 }
+
+                // Perpetual inventory (Step 2): an order created ALREADY Delivered (POS / walk-in sale)
+                // issues stock now. Status-change deliveries are handled in updated(). Gated + idempotent.
+                if ($t && strcasecmp((string) $order->status, 'Delivered') === 0
+                    && \App\Services\Inventory\OrderStockIssuer::active($t)) {
+                    app(\App\Services\Inventory\OrderStockIssuer::class)->issueForOrder($t, $order);
+                }
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning('task.start_failed', ['order' => $order->id, 'err' => $e->getMessage()]);
             }
@@ -117,6 +124,22 @@ class OrderObserver
         if ($order->wasChanged('status') && strcasecmp((string) $order->status, 'Delivered') === 0) {
             try {
                 \App\Jobs\AutoIssueInvoice::dispatch((int) $order->tenant_id, (int) $order->id);
+            } catch (\Throwable $e) { /* never break the order save */ }
+        }
+
+        // Perpetual inventory (Step 2): move stock on the Delivered transition, and reverse it if the
+        // order is moved back out of Delivered. Gated + idempotent + best-effort.
+        if ($order->wasChanged('status')) {
+            try {
+                $t = Tenant::find($order->tenant_id);
+                if ($t && \App\Services\Inventory\OrderStockIssuer::active($t)) {
+                    $issuer = app(\App\Services\Inventory\OrderStockIssuer::class);
+                    if (strcasecmp((string) $order->status, 'Delivered') === 0) {
+                        $issuer->issueForOrder($t, $order);
+                    } else {
+                        $issuer->reverseForOrder($t, $order);
+                    }
+                }
             } catch (\Throwable $e) { /* never break the order save */ }
         }
     }
