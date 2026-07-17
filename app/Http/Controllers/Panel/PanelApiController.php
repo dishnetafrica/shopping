@@ -6217,6 +6217,102 @@ class PanelApiController extends Controller
     }
 
     /**
+     * GET /panel/settings-manager — serves the multi-page Settings hub (v3 → Settings, embedded iframe).
+     */
+    public function settingsManagerPage(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $path = resource_path('panel/settings-manager.html');
+        $html = is_file($path) ? (string) file_get_contents($path) : '<h1>Settings unavailable</h1>';
+
+        return response($html, 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
+    }
+
+    /**
+     * GET /papi/settings-hub — the settings SECTIONS schema merged with this tenant's current values,
+     * plus team members and WhatsApp status. Read-only. Owner-only. Values are resolved from the tenant
+     * (name column, settings JSON, and the Fx service for rates) so the forms show what's live.
+     */
+    public function settingsHub(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+
+        $fx = \App\Services\Money\Fx::forTenant($t);
+        $resolve = function (array $f) use ($t, $fx) {
+            $k = $f['key'];
+            $def = $f['default'] ?? '';
+            switch ($k) {
+                case 'business_name':        return (string) $t->name;
+                case 'base_currency':        return \App\Services\Money\SalesBaseCurrency::baseCurrency($t);
+                case 'report_currency_mode': return (string) ($t->setting('report_currency_mode', 'base') ?: 'base');
+                case 'rate_ugx_per_usd':     return (int) round($fx->ratePerUsd('UGX') ?: 0);
+                case 'rate_ssp_per_usd':     return (int) round($fx->ratePerUsd('SSP') ?: 0);
+                case 'stock_ledger':         return (bool) $t->setting('stock_ledger', false);
+                case 'stock_v2':             return (bool) $t->setting('stock_v2', false);
+                default:                     return $t->setting($k, $def);
+            }
+        };
+
+        $sections = \App\Support\SettingsSchema::sections();
+        foreach ($sections as &$sec) {
+            foreach (($sec['groups'] ?? []) as &$g2) {
+                foreach ($g2['fields'] as &$f) {
+                    $f['value'] = $resolve($f);
+                }
+                unset($f);
+            }
+            unset($g2);
+        }
+        unset($sec);
+
+        // Team members (for the Team section).
+        $meId = (int) $r->user()->id;
+        $team = \App\Models\User::where('tenant_id', $t->id)->orderBy('name')->limit(100)->get()
+            ->map(fn ($u) => [
+                'id' => (int) $u->id,
+                'name' => (string) ($u->name ?: $u->email ?: 'Member'),
+                'email' => (string) ($u->email ?: ''),
+                'role' => (string) ($u->role ?: 'user'),
+                'is_me' => (int) $u->id === $meId,
+            ])->all();
+
+        return response()->json([
+            'ok' => true,
+            'sections' => $sections,
+            'team' => $team,
+            'roles' => ['sales', 'manager', 'staff', 'purchaser', 'product_staff', 'field'],
+            'whatsapp' => [
+                'linked' => trim((string) $t->whatsapp_instance) !== '',
+                'number' => (string) ($t->whatsapp_number ?: ''),
+                'connect_url' => '/panel/setup',
+            ],
+        ]);
+    }
+
+    /**
+     * POST /papi/settings-hub-save — validated write of a settings section. Routes EVERY field through
+     * the single write path (SettingsWriteService::apply), which owns the typed allow-lists + validation.
+     * Owner-only. Unknown keys the service doesn't recognise are simply ignored by it.
+     */
+    public function settingsHubSave(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+
+        $in = (array) $r->input('values', []);
+        if (! $in) return response()->json(['ok' => false, 'message' => 'No changes were provided.']);
+
+        $res = app(\App\Services\Settings\SettingsWriteService::class)->apply($t, $in);
+
+        return response()->json($res);
+    }
+
+    /**
      * GET /papi/classify-receipts — READ-ONLY. Checks every payment receipt's currency TAG against the
      * currency its numbers actually imply, using the trusted usd_amount (the figure the cashbook/P&L
      * already reconcile on). implied_rate = amount ÷ usd_amount; a UGX receipt should imply ~3655, a USD

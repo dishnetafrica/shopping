@@ -1,0 +1,100 @@
+<?php
+
+namespace App\Support;
+
+/**
+ * Layout schema for the multi-page Settings hub (v3 → Settings). Declares the left-menu SECTIONS, each
+ * with grouped FIELDS. This is a UI/layout + read-mapping layer only — every write goes through the one
+ * existing write path, App\Services\Settings\SettingsWriteService::apply, whose typed allow-lists are the
+ * source of truth for validation. Field `key`s here are the INPUT keys that service understands.
+ *
+ * Adding a setting later = add a field here (and, if it's a new key, to SettingsWriteService's allow-list).
+ */
+final class SettingsSchema
+{
+    public static function sections(): array
+    {
+        return [
+            ['key' => 'business', 'label' => 'Business profile', 'icon' => 'user', 'groups' => [
+                ['label' => 'Identity', 'fields' => [
+                    ['key' => 'business_name', 'type' => 'text', 'label' => 'Business name'],
+                    ['key' => 'trading_as',    'type' => 'text', 'label' => 'Trading as'],
+                    ['key' => 'owner_name',     'type' => 'text', 'label' => 'Owner name'],
+                ]],
+                ['label' => 'Contact', 'fields' => [
+                    ['key' => 'public_phone', 'type' => 'text', 'label' => 'Public phone'],
+                    ['key' => 'public_email', 'type' => 'text', 'label' => 'Public email'],
+                    ['key' => 'address',      'type' => 'text', 'label' => 'Address'],
+                    ['key' => 'city',         'type' => 'text', 'label' => 'City'],
+                    ['key' => 'country',      'type' => 'text', 'label' => 'Country'],
+                    ['key' => 'tin',          'type' => 'text', 'label' => 'TIN / Tax ID'],
+                ]],
+                ['label' => 'Branding', 'fields' => [
+                    ['key' => 'tagline', 'type' => 'text', 'label' => 'Tagline'],
+                    ['key' => 'logo',    'type' => 'text', 'label' => 'Logo URL'],
+                ]],
+            ]],
+            ['key' => 'currency', 'label' => 'Currency & rates', 'icon' => 'dollar', 'groups' => [
+                ['label' => 'Reporting', 'help' => 'Your accounting currency and how figures are shown.', 'fields' => [
+                    ['key' => 'base_currency',        'type' => 'enum', 'label' => 'Base currency', 'options' => ['USD', 'UGX', 'SSP'], 'default' => 'USD'],
+                    ['key' => 'report_currency_mode', 'type' => 'enum', 'label' => 'Report mode', 'options' => ['base', 'original'], 'default' => 'base', 'optionLabels' => ['base' => 'Consolidated to base', 'original' => 'Original currency']],
+                ]],
+                ['label' => 'Exchange rates (per 1 USD)', 'help' => 'Used to convert local-currency amounts for reporting.', 'fields' => [
+                    ['key' => 'rate_ugx_per_usd', 'type' => 'number', 'label' => 'UGX per USD'],
+                    ['key' => 'rate_ssp_per_usd', 'type' => 'number', 'label' => 'SSP per USD'],
+                ]],
+            ]],
+            ['key' => 'invoicing', 'label' => 'Invoice & tax', 'icon' => 'invoice', 'groups' => [
+                ['label' => 'Invoice defaults', 'fields' => [
+                    ['key' => 'invoice_title',      'type' => 'text',     'label' => 'Invoice title', 'default' => 'INVOICE'],
+                    ['key' => 'invoice_terms_days', 'type' => 'number',   'label' => 'Payment terms', 'unit' => 'days', 'default' => 0],
+                    ['key' => 'vat_rate',           'type' => 'number',   'label' => 'VAT rate', 'unit' => '%', 'default' => 0],
+                    ['key' => 'bank_details',       'type' => 'textarea', 'label' => 'Bank details'],
+                    ['key' => 'invoice_footer',     'type' => 'textarea', 'label' => 'Invoice footer'],
+                    ['key' => 'cashbook_digest_to', 'type' => 'text',     'label' => 'Daily cashbook email', 'help' => 'Blank = off'],
+                ]],
+            ]],
+            ['key' => 'documents', 'label' => 'Documents', 'icon' => 'doc', 'groups' => [
+                ['label' => 'PDF page setup', 'help' => 'Page size & layout for the PDFs your customers receive. Defaults match the built-in layout.', 'fields' => [
+                    ['key' => 'invoice_page_size',   'type' => 'enum', 'label' => 'Invoice page size', 'options' => ['A4', 'A5', 'Letter'], 'default' => 'A4'],
+                    ['key' => 'invoice_orientation', 'type' => 'enum', 'label' => 'Invoice orientation', 'options' => ['portrait', 'landscape'], 'default' => 'portrait'],
+                    ['key' => 'receipt_page_size',   'type' => 'enum', 'label' => 'Receipt page size', 'options' => ['A4', 'A5'], 'default' => 'A5'],
+                    ['key' => 'receipt_orientation', 'type' => 'enum', 'label' => 'Receipt orientation', 'options' => ['portrait', 'landscape'], 'default' => 'landscape'],
+                ]],
+            ]],
+            ['key' => 'inventory', 'label' => 'Stock tracking', 'icon' => 'warehouse', 'groups' => [
+                ['label' => 'Real inventory', 'help' => 'Turn on once your on-hand counts are trusted.', 'fields' => [
+                    ['key' => 'stock_ledger', 'type' => 'bool', 'label' => 'Track real stock (record receipts & sales)'],
+                    ['key' => 'stock_v2',     'type' => 'bool', 'label' => 'Show live stock on site & bot'],
+                ]],
+            ]],
+            ['key' => 'whatsapp', 'label' => 'WhatsApp & bot', 'icon' => 'mail', 'groups' => [
+                ['label' => 'Bot messages', 'help' => 'What your WhatsApp assistant says.', 'fields' => [
+                    ['key' => 'bot_greeting',      'type' => 'textarea', 'label' => 'Greeting'],
+                    ['key' => 'bot_fallback_text', 'type' => 'textarea', 'label' => 'Fallback reply'],
+                    ['key' => 'ai_persona',        'type' => 'textarea', 'label' => 'AI persona'],
+                    ['key' => 'business_hours',    'type' => 'text',     'label' => 'Business hours'],
+                    ['key' => 'delivery_areas',    'type' => 'textarea', 'label' => 'Delivery areas'],
+                    ['key' => 'bot_website_link',  'type' => 'text',     'label' => 'Website link'],
+                    ['key' => 'faq',               'type' => 'textarea', 'label' => 'FAQ'],
+                ]],
+            ]],
+            ['key' => 'team', 'label' => 'Team', 'icon' => 'user', 'special' => 'team'],
+        ];
+    }
+
+    /** Flat list of every field spec across sections (for value resolution + defaults). */
+    public static function fields(): array
+    {
+        $out = [];
+        foreach (self::sections() as $sec) {
+            foreach (($sec['groups'] ?? []) as $g) {
+                foreach (($g['fields'] ?? []) as $f) {
+                    $out[$f['key']] = $f;
+                }
+            }
+        }
+
+        return $out;
+    }
+}
