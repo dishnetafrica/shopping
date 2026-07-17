@@ -34,6 +34,23 @@ final class CommunicationCapability implements ProcessCapability
 
     public function project(CapabilityContext $ctx): WorkspacePayload
     {
+        // Incident 2026-07-18: opening this workspace before `php artisan migrate`
+        // has created the comm_* tables must EXPLAIN, not 500.
+        if (! $this->backendReady()) {
+            return (new WorkspacePayload)
+                ->object(['type' => 'process:communication', 'title' => 'Email Center', 'subtitle' => 'Backend not installed yet', 'status' => 'inactive'])
+                ->headline('SETUP', 'Email Center', 'warn')
+                ->tabSections(['setup' => [[
+                    'kind' => 'dl', 'title' => 'Finish installation', 'rows' => [
+                        ['1. Create the tables', 'php artisan migrate'],
+                        ['2. Install templates', 'php artisan comms:seed-templates '.$ctx->tenantId()],
+                        ['Then', 'refresh this screen — the queue, providers, routing, campaigns and suppressions appear here.'],
+                    ],
+                ]]])
+                ->tabs([['key' => 'setup', 'label' => 'Setup']])
+                ->meta(['capability' => 'communication', 'ttl' => 5, 'permissions' => ['menu:settings']]);
+        }
+
         $t = $ctx->tenant;
         $tid = $ctx->tenantId();
         $isOwner = $ctx->can('menu:settings');
@@ -282,6 +299,9 @@ final class CommunicationCapability implements ProcessCapability
 
     public function summary(CapabilityContext $ctx, array $scope = []): array
     {
+        if (! $this->backendReady()) {
+            return ['live' => false, 'installed' => false];
+        }
         $tid = $ctx->tenantId();
         $msgs = fn () => CommMessage::withoutGlobalScope('tenant')->where('tenant_id', $tid);
 
@@ -291,6 +311,16 @@ final class CommunicationCapability implements ProcessCapability
             'queued' => (clone $msgs())->whereIn('status', ['pending', 'retry', 'sending'])->count(),
             'sent24' => (clone $msgs())->where('status', 'sent')->where('sent_at', '>=', now()->subDay())->count(),
         ];
+    }
+
+    /** True once `php artisan migrate` has created the Comms tables on this server. */
+    private function backendReady(): bool
+    {
+        try {
+            return \Illuminate\Support\Facades\Schema::hasTable('comm_messages');
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
