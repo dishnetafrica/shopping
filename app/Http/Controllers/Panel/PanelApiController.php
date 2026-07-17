@@ -6217,6 +6217,92 @@ class PanelApiController extends Controller
     }
 
     /**
+     * GET /papi/classify-receipts — READ-ONLY. Checks every payment receipt's currency TAG against the
+     * currency its numbers actually imply, using the trusted usd_amount (the figure the cashbook/P&L
+     * already reconcile on). implied_rate = amount ÷ usd_amount; a UGX receipt should imply ~3655, a USD
+     * one ~1, an SSP one ~5180. A tag that disagrees is flagged MISLABELED (e.g. currency='USD' on a
+     * 1,151,325 amount → the receipt PDF would print "$1,151,325"). Writes NOTHING. The correctly-stored
+     * receipts need no change — the PDF already prints "UGX 1,151,325 (≈ $315)", the honest way to
+     * receipt cash. Owner-only.
+     */
+    public function classifyReceipts(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+
+        $native = \App\Services\Money\SalesBaseCurrency::nativeCurrency($t);   // UGX
+        $fx = \App\Services\Money\Fx::forTenant($t);
+        $cands = ['USD' => 1.0, 'UGX' => ($fx->ratePerUsd('UGX') ?: 3655.0), 'SSP' => ($fx->ratePerUsd('SSP') ?: 5180.0)];
+
+        $rows = []; $counts = ['USD' => 0, 'UGX' => 0, 'SSP' => 0, 'unknown' => 0];
+        $mislabeled = 0; $noTag = 0; $usdTotal = 0.0;
+
+        foreach (\App\Models\CustomerPayment::where('tenant_id', $t->id)->orderBy('id')->get() as $p) {
+            $tag    = strtoupper((string) ($p->currency ?: '')) ?: 'null';
+            $amount = (float) $p->amount;
+            $usd    = (float) $p->usd_amount;
+            $storedRate = (float) $p->rate_to_usd;
+            $usdTotal += $usd;
+
+            // Infer the true currency from the implied rate (amount ÷ usd_amount), matched to the nearest
+            // known rate; else fall back to magnitude when there is no usd_amount to anchor on.
+            $implied = $usd > 0 ? $amount / $usd : null;
+            $true = null;
+            if ($implied !== null) {
+                $best = 1e18;
+                foreach ($cands as $c => $rt) {
+                    $rel = abs($implied - $rt) / max($rt, 0.01);
+                    if ($rel < $best && $rel <= 0.15) { $best = $rel; $true = $c; }
+                }
+            } elseif ($amount > 0) {
+                if ($amount < 4000) { $true = 'USD'; } elseif ($amount > 40000) { $true = $native; }
+            }
+
+            $tagCur = $tag === 'null' ? $native : $tag;
+            $fmt = function ($cur, $n) { return $cur === 'USD' ? '$' . number_format($n, 2) : number_format($n, 0) . ' ' . $cur; };
+            $usdTail = ($usd > 0 && $tagCur !== 'USD') ? ('  (≈ $' . number_format($usd, 2) . ')') : '';
+            $pdfShows = $fmt($tagCur, $amount) . $usdTail;
+            $shouldCur = $true ?? $tagCur;
+            $shouldShows = $fmt($shouldCur, $amount) . (($usd > 0 && $shouldCur !== 'USD') ? ('  (≈ $' . number_format($usd, 2) . ')') : '');
+
+            $verdict = 'ok';
+            if ($true !== null && $true !== $tagCur) { $verdict = 'MISLABELED tag=' . $tag . ' real=' . $true; $mislabeled++; }
+            elseif ($tag === 'null') { $verdict = 'no currency tag (defaults to ' . $native . ')'; $noTag++; }
+
+            if ($true) { $counts[$true] = ($counts[$true] ?? 0) + 1; } else { $counts['unknown']++; }
+
+            $rows[] = [
+                'receipt' => (string) ($p->receipt_no ?: ('PAY-' . $p->id)),
+                'against' => (string) ($p->invoice_no ?: $p->order_no ?: ''),
+                'kind'    => (string) $p->kind,
+                'tag'     => $tag,
+                'amount'  => $amount,
+                'usd_amount' => round($usd, 2),
+                'stored_rate' => round($storedRate, 4),
+                'implied_rate' => $implied === null ? null : round($implied, 2),
+                'real'    => $true ?? 'unknown',
+                'pdf_shows' => $pdfShows,
+                'should_show' => $shouldShows,
+                'verdict' => $verdict,
+            ];
+        }
+
+        return response()->json([
+            'ok' => true, 'native' => $native, 'reference_rates' => $cands,
+            'receipt_count' => count($rows),
+            'summary' => $counts, 'mislabeled' => $mislabeled, 'no_tag' => $noTag,
+            'total_received_usd' => round($usdTotal, 2),
+            'note' => 'READ-ONLY — nothing written. real = the currency the numbers actually imply (amount ÷ '
+                . 'usd_amount, matched to the nearest known rate). pdf_shows = what the receipt PDF prints today. '
+                . 'A correctly-stored receipt already prints "UGX 1,151,325 (≈ $315)" — the honest way to receipt '
+                . 'cash, so it needs NO change. Only MISLABELED rows (tag disagrees with the numbers) need a '
+                . 'label-only fix; usd_amount is never touched (the cashbook already reconciles on it).',
+            'receipts' => $rows,
+        ]);
+    }
+
+    /**
      * GET/POST /papi/normalize-invoices-usd — normalize every invoice to store REAL USD (the house rule:
      * all invoices are USD; only purchases + local transport are UGX/SSP). Dry-run by default; ?commit=1 writes.
      *
