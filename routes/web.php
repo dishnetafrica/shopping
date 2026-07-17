@@ -133,6 +133,12 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
     Route::post('/papi/comms/campaigns/{id}/pause',  [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignPause']);
     Route::post('/papi/comms/campaigns/{id}/resume', [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignResume']);
     Route::post('/papi/comms/campaigns/{id}/cancel', [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignCancel']);
+    // v3 CommunicationCapability adapters (G2) — flat-form endpoints delegating to the handlers above.
+    Route::post('/papi/comms/messages/retry',        [\App\Http\Controllers\Panel\EmailCenterController::class, 'messageRetryBody']);
+    Route::post('/papi/comms/messages/cancel',       [\App\Http\Controllers\Panel\EmailCenterController::class, 'messageCancelBody']);
+    Route::post('/papi/comms/routes/save-simple',    [\App\Http\Controllers\Panel\EmailCenterController::class, 'routesSaveSimple']);
+    Route::post('/papi/comms/suppressions/add',      [\App\Http\Controllers\Panel\EmailCenterController::class, 'suppressionAdd']);
+    Route::post('/papi/comms/suppressions/remove',   [\App\Http\Controllers\Panel\EmailCenterController::class, 'suppressionRemove']);
     Route::get('/panel/pnl-report', [\App\Http\Controllers\Panel\PanelApiController::class, 'pnlReportPage']);
     Route::get('/panel/sourcing', [\App\Http\Controllers\Panel\SourcingController::class, 'page']);
     Route::get('/panel/customers360', [\App\Http\Controllers\Panel\CustomerController::class, 'page']);

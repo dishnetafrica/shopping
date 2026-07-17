@@ -7,6 +7,7 @@ use App\Jobs\SendCommEmail;
 use App\Models\CommEvent;
 use App\Models\CommMessage;
 use App\Models\CommProvider;
+use App\Models\CommSuppression;
 use App\Models\CommTemplate;
 use App\Services\Comms\EmailDispatcher;
 use App\Services\Comms\EmailService;
@@ -467,6 +468,87 @@ class EmailCenterController extends Controller
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    // ---------------------------------------------- v3 capability adapters (G2)
+    // The v3 shell submits flat form fields to fixed endpoints; these thin adapters
+    // translate and DELEGATE to the methods above — no logic is duplicated.
+
+    /**
+     * Body-id alias for messageRetry. The v3 combo picker sends the option label
+     * verbatim ("123 — user@x · bounced"); PHP's (int) cast takes the leading digits,
+     * so the id arrives intact. Same for cancel below.
+     */
+    public function messageRetryBody(Request $request)
+    {
+        return $this->messageRetry($request, (int) $request->input('id'));
+    }
+
+    public function messageCancelBody(Request $request)
+    {
+        return $this->messageCancel($request, (int) $request->input('id'));
+    }
+
+    /**
+     * Flat routing form (ev_<event> = off|email|whatsapp|both) → routes[] map,
+     * then straight into routesSave (which owns validation + persistence).
+     */
+    public function routesSaveSimple(Request $request)
+    {
+        $map = [];
+        foreach (array_keys(\App\Services\Comms\CommCenter::DEFAULT_ROUTES) as $event) {
+            $v = strtolower(trim((string) $request->input('ev_'.$event, '')));
+            if ($v === '') continue;                         // untouched → keep current
+            $map[$event] = match ($v) {
+                'off' => [], 'email' => ['email'], 'whatsapp' => ['whatsapp'],
+                'both' => ['email', 'whatsapp'], default => null,
+            };
+            if ($map[$event] === null) unset($map[$event]);
+        }
+        $request->merge(['routes' => $map]);
+
+        return $this->routesSave($request);
+    }
+
+    // ------------------------------------------------------------ suppressions
+    // Closes the M1 gap: the suppression list finally has management endpoints.
+    // Auto-writes (bounce/complaint/unsubscribe) continue to come from the
+    // dispatcher/webhooks; these are the owner's manual add/remove.
+
+    public function suppressionAdd(Request $request)
+    {
+        if ($resp = $this->ownerGate($request)) return $resp;
+        $t = $this->tenant($request);
+
+        $data = $request->validate([
+            'channel' => 'required|string|in:email,whatsapp',
+            'address' => 'required|string|max:190',
+            'reason'  => 'nullable|string|max:190',
+        ]);
+
+        $address = strtolower(trim($data['address']));
+        CommSuppression::withoutGlobalScope('tenant')->firstOrCreate(
+            ['tenant_id' => $t->id, 'channel' => $data['channel'], 'address' => $address],
+            ['reason' => (string) ($data['reason'] ?? 'manual'), 'source' => 'manual']
+        );
+
+        return response()->json(['ok' => true, 'message' => 'Suppressed '.$address]);
+    }
+
+    /** Remove by address (all channels) — a suppressed address is a natural key for the owner. */
+    public function suppressionRemove(Request $request)
+    {
+        if ($resp = $this->ownerGate($request)) return $resp;
+        $t = $this->tenant($request);
+
+        $address = strtolower(trim((string) $request->input('address', '')));
+        if ($address === '') {
+            return response()->json(['ok' => false, 'error' => 'address required'], 422);
+        }
+        $n = CommSuppression::withoutGlobalScope('tenant')
+            ->where('tenant_id', $t->id)->where('address', $address)->delete();
+
+        return response()->json(['ok' => true, 'message' => 'Removed '.$n.' suppression'.($n === 1 ? '' : 's')]);
     }
 
     /** Owner installs / refreshes the default template pack from the panel. */

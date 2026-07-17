@@ -49,6 +49,9 @@ final class NavCountsCapability implements Capability
 
         return array_filter([
             'customers'        => $c(CustomerProfile::query()),
+            // Email Center badge = failed messages (what needs doing).
+            'communication'    => (int) \App\Models\CommMessage::withoutGlobalScope('tenant')
+                                    ->where('tenant_id', $t)->where('status', 'failed')->count(),
             // Chats badge = conversations with unread messages (what needs doing), not lifetime total.
             'chats'            => $c(Conversation::query()->where('unread', '>', 0)),
             'salesOrder'       => $c(Order::query()),
