@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Finance — Cash-basis P&L · CloudBSS</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#0f172a; --muted:#64748b; --line:#e5e8ec;
+    --green:#16a34a; --green-soft:#ecfdf3; --red:#dc2626; --amber:#b45309; --amber-soft:#fffbeb;
+    --brand:#0e7c4a; --brand-soft:#e7f5ee;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1120px;margin:0 auto;padding:28px 22px 60px}
+  .head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+  h1{font-size:26px;margin:0 0 4px;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:14px}
+  .badge{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:999px;font-weight:600;font-size:13px}
+  .badge.ok{background:var(--green-soft);color:var(--green)}
+  .badge.warn{background:var(--amber-soft);color:var(--amber)}
+  .dot{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block}
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
+  .tile .lbl{color:var(--muted);font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .tile .val{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-top:8px}
+  .tile .foot{color:var(--muted);font-size:12.5px;margin-top:4px}
+  .val.pos{color:var(--green)} .val.neg{color:var(--red)}
+  .grid{display:grid;grid-template-columns:1.3fr 1fr;gap:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px}
+  .card h2{font-size:15px;margin:0 0 14px;letter-spacing:-.01em}
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  td{padding:9px 0;border-bottom:1px solid var(--line)}
+  td.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  tr:last-child td{border-bottom:0}
+  .row-strong td{font-weight:700;border-top:2px solid var(--ink);border-bottom:0;padding-top:12px}
+  .muted{color:var(--muted)} .neg{color:var(--red)} .pos{color:var(--green)}
+  .bar{height:12px;border-radius:6px;background:#eef1f4;overflow:hidden;margin-top:6px}
+  .bar > i{display:block;height:100%;background:var(--green)}
+  .pl-note{color:var(--muted);font-size:12.5px;margin-top:16px;line-height:1.6}
+  .cur-row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line)}
+  .cur-row:last-child{border-bottom:0}
+  .chip{font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:var(--brand-soft);color:var(--brand)}
+  .loading{padding:60px;text-align:center;color:var(--muted)}
+  @media(max-width:860px){.tiles{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <h1>Finance — Cash-basis P&amp;L</h1>
+      <div class="sub" id="sub">Your real books, straight from the company cashbook · <span id="today"></span></div>
+    </div>
+    <div id="reconBadge" class="badge ok"><span class="dot"></span> Loading…</div>
+  </div>
+
+  <div id="app"><div class="loading">Loading your numbers…</div></div>
+</div>
+
+<script>
+const H = { 'Accept':'application/json', 'X-Requested-With':'XMLHttpRequest' };
+const get = u => fetch(u, {credentials:'include', headers:H}).then(r=>r.json()).catch(()=>({ok:false}));
+const money = (n,cur) => (n<0?'-':'') + (cur==='USD'||!cur?'$':'') + Math.abs(+n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + (cur&&cur!=='USD'?(' '+cur):'');
+const whole = n => Math.round(+n||0).toLocaleString();
+
+(async () => {
+  document.getElementById('today').textContent = new Date().toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
+  const [pnl, cap, cash] = await Promise.all([
+    get('/papi/cash-pnl'), get('/papi/capital-trace'), get('/papi/trade-cashbook?currency=ALL&per=5')
+  ]);
+  if (!pnl.ok) { document.getElementById('app').innerHTML = '<div class="card">Could not load — make sure you are signed in as the owner.</div>'; return; }
+
+  const i = pnl.income_statement, eq = pnl.equity, rec = pnl.reconciliation;
+  const endCash = rec.implied_ending_cash;
+  const cashbookClose = (rec.cashbook_closing!=null) ? rec.cashbook_closing : endCash;
+  const bal = cash.balances || {};
+  const rates = (cash.default_rates)||{UGX:3655,SSP:7000,USD:1};
+  const combined = (bal.USD||0) + (bal.UGX||0)/(rates.UGX||1) + (bal.SSP||0)/(rates.SSP||1);
+
+  // Reconciliation = classified P&L ending cash vs the cashbook's own closing (same cost basis).
+  const tie = (rec.reconciles!=null) ? rec.reconciles : (Math.abs(endCash-cashbookClose) < 0.05);
+  const rb = document.getElementById('reconBadge');
+  rb.className = 'badge ' + (tie ? 'ok':'warn');
+  rb.innerHTML = '<span class="dot"></span> ' + (tie ? 'Reconciled to cashbook' : 'Reconciliation: review');
+
+  const gp = i.gross_profit, op = i.operating_profit;
+  const tiles = [
+    {lbl:'Cash on hand', val:money(endCash), foot:'reconciles to cashbook closing', cls:'pos'},
+    {lbl:'Gross profit', val:money(gp), foot:(i.gross_margin_pct!=null?i.gross_margin_pct+'% margin':''), cls: gp>=0?'pos':'neg'},
+    {lbl:'Operating profit', val:money(op), foot:'after route & running costs', cls: op>=0?'pos':'neg'},
+    {lbl:'Partner capital', val:money(cap.ok?cap.total_capital_introduced:eq.capital_introduced), foot:'equity introduced', cls:''},
+  ];
+
+  const partners = cap.ok ? Object.entries(cap.by_partner) : [];
+  const capTotal = cap.ok ? cap.total_capital_introduced : eq.capital_introduced;
+
+  const marginPct = Math.max(0, Math.min(100, i.gross_margin_pct||0));
+
+  document.getElementById('app').innerHTML = `
+    <div class="tiles">
+      ${tiles.map(t=>`<div class="tile"><div class="lbl">${t.lbl}</div><div class="val ${t.cls}">${t.val}</div><div class="foot">${t.foot}</div></div>`).join('')}
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h2>Income statement · cash basis (${pnl.currency})</h2>
+        <table>
+          <tr><td>Sales revenue <span class="muted">— cash from customers</span></td><td class="r">${money(i.sales_revenue)}</td></tr>
+          <tr><td>Cost of goods <span class="muted">— purchases + supplier</span></td><td class="r neg">(${money(i.cost_of_goods)})</td></tr>
+          <tr class="row-strong"><td>Gross profit</td><td class="r ${gp>=0?'pos':'neg'}">${money(gp)}</td></tr>
+          <tr><td>Operating expenses <span class="muted">— transport, custom, delivery</span></td><td class="r neg">(${money(i.operating_expenses)})</td></tr>
+          ${i.other_cash_out_review?`<tr><td>Other cash out <span class="muted">— to classify</span></td><td class="r neg">(${money(i.other_cash_out_review)})</td></tr>`:''}
+          ${i.other_cash_in_review?`<tr><td>Other cash in <span class="muted">— to classify</span></td><td class="r">${money(i.other_cash_in_review)}</td></tr>`:''}
+          <tr class="row-strong"><td>Operating profit</td><td class="r ${op>=0?'pos':'neg'}">${money(op)}</td></tr>
+        </table>
+        <div style="margin-top:16px">
+          <div class="muted" style="font-size:12.5px;font-weight:600">Gross margin</div>
+          <div class="bar"><i style="width:${marginPct}%"></i></div>
+          <div class="muted" style="font-size:12px;margin-top:4px">${i.gross_margin_pct!=null?i.gross_margin_pct+'%':'—'} of every sales dollar is gross profit</div>
+        </div>
+        <div class="pl-note">Cash-basis: revenue is money actually received from customers; cost of goods is cash paid for stock. Stock still sitting unsold is expensed here — true margin firms up once inventory goes live. FX conversions and person-to-person transfers are excluded (they net to zero).</div>
+      </div>
+
+      <div>
+        <div class="card" style="margin-bottom:14px">
+          <h2>Cash by currency</h2>
+          ${['USD','UGX','SSP'].map(c=>`<div class="cur-row"><span><span class="chip">${c}</span></span><span class="r">${c==='USD'?money(bal[c]||0):whole(bal[c]||0)+' '+c}</span></div>`).join('')}
+          <div class="cur-row" style="font-weight:700"><span>Combined (USD)</span><span>${money(combined)}</span></div>
+        </div>
+        <div class="card">
+          <h2>Partner capital · equity</h2>
+          <table>
+            ${partners.map(([who,amt])=>`<tr><td>${who}</td><td class="r">${money(amt)}</td></tr>`).join('') || '<tr><td class="muted">No capital recorded</td><td></td></tr>'}
+            <tr class="row-strong"><td>Total introduced</td><td class="r">${money(capTotal)}</td></tr>
+          </table>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <h2>Reconciliation</h2>
+          <table>
+            <tr><td>P&amp;L ending cash</td><td class="r">${money(endCash)}</td></tr>
+            <tr><td>Cashbook closing</td><td class="r">${money(cashbookClose)}</td></tr>
+            <tr class="row-strong"><td>${tie?'✓ Ties out':'Difference'}</td><td class="r ${tie?'pos':'neg'}">${money(endCash-cashbookClose)}</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+})();
+</script>
+</body>
+</html>

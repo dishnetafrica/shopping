@@ -5797,6 +5797,19 @@ class PanelApiController extends Controller
         $operatingProfit = round($grossProfit - $opex - $otherOut + $otherIn, 2);
         $endingCash = round($capital + $revenue + $otherIn - $cogs - $opex - $otherOut - $drawings, 2);
 
+        // True cashbook closing = signed usd over EVERY cash row (incl. conversions/transfers, which net
+        // to zero). If this differs from the classified ending cash, some row was dropped or a conversion
+        // is lop-sided — the completeness check that caught the NULL-category bug.
+        $cashbookClosing = 0.0;
+        foreach (\App\Models\OrderCost::where('tenant_id', $t->id)
+                    ->whereNotIn('status', ['void', 'rejected'])
+                    ->where(function ($w) { $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status'); })
+                    ->get(['stage', 'usd_amount']) as $c) {
+            $cashbookClosing += (in_array((string) $c->stage, ['funding', 'cash_in', 'customer_payment'], true) ? 1 : -1) * (float) $c->usd_amount;
+        }
+        $cashbookClosing = round($cashbookClosing, 2);
+        $reconciles = abs($cashbookClosing - $endingCash) < 0.05;
+
         return response()->json([
             'ok' => true, 'currency' => \App\Services\Money\SalesBaseCurrency::baseCurrency($t),
             'income_statement' => [
@@ -5812,7 +5825,9 @@ class PanelApiController extends Controller
             'equity' => ['capital_introduced' => $capital, 'drawings' => $drawings],
             'excluded' => ['fx_conversions_and_transfers' => 'net zero — omitted from P&L'],
             'reconciliation' => ['implied_ending_cash' => $endingCash,
-                'note' => 'Should match the Company Account Cash Book closing balance. If off, some generic cash_in/cash_out rows need classifying (see the *_review lines).'],
+                'cashbook_closing' => $cashbookClosing, 'reconciles' => $reconciles,
+                'difference' => round($endingCash - $cashbookClosing, 2),
+                'note' => 'implied_ending_cash (from the classified P&L) should equal cashbook_closing (every cash row). If they differ, a row is unclassified — see the *_review lines.'],
             'raw_stage_totals' => array_map(fn ($v) => round($v, 2), $buckets),
             'note' => 'Cash-basis: revenue = cash received from customers; COGS = cash paid for goods (purchases + supplier account). This reflects real trade, unlike the invoice-based view which only saw the small invoiced subset.',
         ]);
@@ -5859,6 +5874,17 @@ class PanelApiController extends Controller
             'entries' => $rows,
             'note' => 'Capital = equity, not income. These are the amounts each partner put into the business (working capital, startup capital, and cash-in rows noted as an introduction).',
         ]);
+    }
+
+    /** GET /panel/pnl-report — serves the self-contained cash-basis P&L dashboard (owner-only). */
+    public function pnlReportPage(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $path = resource_path('panel/pnl-report.html');
+        $html = is_file($path) ? (string) file_get_contents($path) : '<h1>Report unavailable</h1>';
+        return response($html, 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
     }
 
     public function resyncBalances(Request $r)
