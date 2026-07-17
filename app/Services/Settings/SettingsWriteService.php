@@ -58,6 +58,8 @@ final class SettingsWriteService
         'invoice_orientation' => ['portrait', 'landscape'],
         'receipt_page_size'   => ['A4', 'A5'],
         'receipt_orientation' => ['portrait', 'landscape'],
+        // native = base currency (USD) IS the operating currency for selling; converted = local (UGX).
+        'currency_basis'      => ['native', 'converted'],
     ];
 
     /**

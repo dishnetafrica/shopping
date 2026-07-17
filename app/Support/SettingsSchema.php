@@ -37,6 +37,7 @@ final class SettingsSchema
             ['key' => 'currency', 'label' => 'Currency & rates', 'icon' => 'dollar', 'groups' => [
                 ['label' => 'Reporting', 'help' => 'Your accounting currency and how figures are shown.', 'fields' => [
                     ['key' => 'base_currency',        'type' => 'enum', 'label' => 'Base currency', 'options' => ['USD', 'UGX', 'SSP'], 'default' => 'USD'],
+                    ['key' => 'currency_basis',       'type' => 'enum', 'label' => 'Sell in', 'options' => ['native', 'converted'], 'default' => 'converted', 'optionLabels' => ['native' => 'Base currency (USD) — no conversion', 'converted' => 'Local currency (UGX)'], 'help' => 'Native = prices, orders, invoices & payments are all in your base currency. Choose this if you sell in USD.'],
                     ['key' => 'report_currency_mode', 'type' => 'enum', 'label' => 'Report mode', 'options' => ['base', 'original'], 'default' => 'base', 'optionLabels' => ['base' => 'Consolidated to base', 'original' => 'Original currency']],
                 ]],
                 ['label' => 'Exchange rates (per 1 USD)', 'help' => 'Used to convert local-currency amounts for reporting.', 'fields' => [
