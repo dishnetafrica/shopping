@@ -6018,53 +6018,66 @@ class PanelApiController extends Controller
         if (! $t) return response()->json(['ok' => false], 401);
         $commit = filter_var($r->query('commit', $r->input('commit', false)), FILTER_VALIDATE_BOOLEAN);
 
-        $native = \App\Services\Money\SalesBaseCurrency::nativeCurrency($t);   // UGX here
+        $base   = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);     // USD — the catalogue's currency
+        $native = \App\Services\Money\SalesBaseCurrency::nativeCurrency($t);   // UGX — the local operating currency
         $rate   = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($native) ?: 3655.0;
 
-        // Catalogue base price (native/UGX) by product id and by lowercased name.
+        // Catalogue base price is in the BASE currency (USD) — proven: a $315 order re-prices to 315 here,
+        // not 1.15M. So: stored ≈ catBase → the order is in BASE (USD); stored ≈ catBase×rate → NATIVE (UGX).
         $byId = []; $byName = [];
         foreach (\App\Models\Product::where('tenant_id', $t->id)->get(['id', 'name', 'base_price', 'price']) as $p) {
             $bp = (float) ($p->base_price ?: $p->price ?: 0);
             if ($bp > 0) { $byId[(int) $p->id] = $bp; $byName[mb_strtolower(trim((string) $p->name))] = $bp; }
         }
+        // Magnitude fallback thresholds derived from the clear gap in the data (USD totals ≤ few-thousand,
+        // UGX totals ≥ tens-of-thousands). The band between is treated as ambiguous, not guessed.
+        $LOW = 4000.0;    // below → almost certainly base (USD)
+        $HIGH = 40000.0;  // above → almost certainly native (UGX)
 
-        $rows = []; $set = 0; $counts = ['UGX' => 0, 'USD' => 0, 'ambiguous' => 0, 'no_items' => 0];
+        $rows = []; $set = 0; $counts = ['USD' => 0, 'UGX' => 0, 'ambiguous' => 0, 'no_signal' => 0];
         foreach (\App\Models\Order::where('tenant_id', $t->id)->orderBy('id')->get() as $o) {
             $stored = (float) $o->total;
             $items = is_array($o->items_json) ? $o->items_json : [];
-            $catUgx = 0.0; $matched = 0;
+            $catBase = 0.0; $matched = 0;
             foreach ($items as $l) {
                 if (! is_array($l)) continue;
                 $qty = (float) ($l['qty'] ?? $l['quantity'] ?? 0);
                 $pid = (int) ($l['product_id'] ?? 0);
                 $bp = $pid && isset($byId[$pid]) ? $byId[$pid]
                     : ($byName[mb_strtolower(trim((string) ($l['name'] ?? '')))] ?? null);
-                if ($bp !== null && $qty > 0) { $catUgx += $bp * $qty; $matched++; }
+                if ($bp !== null && $qty > 0) { $catBase += $bp * $qty; $matched++; }
             }
-            if ($matched === 0 || $catUgx <= 0 || $stored <= 0) {
-                $counts['no_items']++;
-                $rows[] = ['order' => (string) $o->order_no, 'stored_total' => $stored, 'catalogue_ugx' => round($catUgx, 0),
-                    'inferred' => '(cannot infer — no matched items)', 'current' => (string) ($o->sell_currency ?: 'null'), 'action' => 'skip'];
-                continue;
+
+            $inferred = null; $method = '';
+            if ($stored <= 0) {
+                $method = 'no total';
+            } elseif ($matched > 0 && $catBase > 0) {
+                if (abs($stored - $catBase) <= 0.12 * $catBase) { $inferred = $base; $method = 'catalogue'; }
+                elseif (abs($stored - $catBase * $rate) <= 0.12 * $catBase * $rate) { $inferred = $native; $method = 'catalogue'; }
+                else { $method = 'catalogue mismatch (' . round($stored / $catBase, 2) . '× base)'; }
             }
-            $inferred = null;
-            if (abs($stored - $catUgx) <= 0.12 * $catUgx) $inferred = $native;                 // total ≈ catalogue UGX
-            elseif (abs($stored * $rate - $catUgx) <= 0.12 * $catUgx) $inferred = 'USD';         // total×rate ≈ catalogue UGX → USD
-            $counts[$inferred ?? 'ambiguous']++;
-            $cur = (string) ($o->sell_currency ?: 'null');
+            if ($inferred === null && $stored > 0) {   // magnitude fallback for no-item / unmatched orders
+                if ($stored < $LOW) { $inferred = $base; $method = $method ?: 'magnitude'; }
+                elseif ($stored > $HIGH) { $inferred = $native; $method = $method ?: 'magnitude'; }
+            }
+
+            if ($inferred === null) { $counts[$stored <= 0 ? 'no_signal' : 'ambiguous']++; }
+            else { $counts[$inferred === $native ? 'UGX' : 'USD']++; }
+
+            $cur = strtoupper((string) ($o->sell_currency ?: ''));
             $act = 'no change';
-            if ($inferred && strtoupper($cur) !== $inferred) {
+            if ($inferred !== null && $cur !== strtoupper($inferred)) {
                 $act = $commit ? 'set ' . $inferred : 'would set ' . $inferred;
                 if ($commit) { $o->sell_currency = $inferred; $o->save(); $set++; }
             }
-            $rows[] = ['order' => (string) $o->order_no, 'stored_total' => $stored, 'catalogue_ugx' => round($catUgx, 0),
-                'inferred' => $inferred ?? 'ambiguous (' . round($stored / $catUgx, 2) . '×)', 'current' => $cur, 'action' => $act];
+            $rows[] = ['order' => (string) $o->order_no, 'stored_total' => $stored, 'catalogue_base' => round($catBase, 2),
+                'inferred' => $inferred ?? 'review', 'method' => $method, 'current' => $cur ?: 'null', 'action' => $act];
         }
 
         return response()->json([
-            'ok' => true, 'committed' => $commit, 'native' => $native, 'rate' => $rate,
+            'ok' => true, 'committed' => $commit, 'base' => $base, 'native' => $native, 'rate' => $rate,
             'summary' => $counts, 'labels_set' => $commit ? $set : 0,
-            'note' => 'Only sell_currency (the label) is written; no total is ever changed. Ambiguous/no-item orders are left untouched for manual review.',
+            'note' => 'Only sell_currency (the label) is written; no total is ever changed. catalogue = re-priced from products (USD). "review" rows (catalogue mismatch / gray-zone magnitude) are left untouched.',
             'orders' => array_slice($rows, 0, 200),
         ]);
     }
