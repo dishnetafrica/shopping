@@ -496,7 +496,7 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 
 <script>
 const CFG = { base:'/api/v1/workspace', csrf: document.querySelector('meta[name=csrf-token]').content, user: @json(['name'=>'']) };
-const LABELS = { setup:'Get started', briefing:'Morning Briefing', worklist:'My Work', customers:'Customers', leads:'Leads', collections:'Collections',
+const LABELS = { setup:'Get started', chats:'Chats', chat:'Chat', briefing:'Morning Briefing', worklist:'My Work', customers:'Customers', leads:'Leads', collections:'Collections',
   salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance', pnl:'Profit & Loss',
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', 'procurement.hub':'Procurement Hub', 'demand.plans':'Demand Plans', 'juba.stock':'Juba Stock', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch', transport:'Transport Register', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
@@ -504,6 +504,7 @@ const LABELS = { setup:'Get started', briefing:'Morning Briefing', worklist:'My 
   'storefront.collections':'Shop for Every Need', 'storefront.kits':'Ready-made Kits', 'storefront.delivery':'Delivery & Free Shipping' };
 const GROUPS = [ ['Overview',['setup','briefing','worklist']],
   ['Sales',['customers','leads','salesOrders','quotations','invoices','payments','collections']],
+  ['Messaging',['chats']],
   ['Inventory',['products','categories','purchase.process','suppliers']],
   ['Procurement',['procurement.hub','demand.plans','juba.stock']],
   ['Operations',['warehouse','dispatch','transport']],
@@ -511,9 +512,9 @@ const GROUPS = [ ['Overview',['setup','briefing','worklist']],
   ['Marketing',['ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery']],
   ['Settings',['settings']] ];
 // Which nav key reads which count from the catalog's counts map.
-const NAVCOUNT = { customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
+const NAVCOUNT = { chats:'chats', customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['setup','briefing','worklist','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','warehouse','dispatch','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport']);
+const READY = new Set(['setup','briefing','worklist','chats','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','warehouse','dispatch','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport']);
 // Storefront config pages are client-rendered (not server workspaces) and always available to the owner.
 const SF_KEYS = new Set(['storefront.collections','storefront.kits','storefront.delivery','transport']);
 // Dedicated list views still pending — none; kept for future additions.
@@ -522,6 +523,8 @@ function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:
 
 /* ---- inline icon set ---- */
 const P = {
+  chats:'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
+  chat:'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
   setup:'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
   briefing:'M12 3v18M3 12h18', worklist:'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01',
   settings:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',

@@ -23,6 +23,8 @@ use App\Capability\Process\CollectionsCapability;
 use App\Capability\Process\CustomerListCapability;
 use App\Capability\Process\DispatchCapability;
 use App\Capability\Process\InvoiceListCapability;
+use App\Capability\Object\ChatCapability;
+use App\Capability\Process\ChatListCapability;
 use App\Capability\Process\LeadListCapability;
 use App\Capability\Process\PaymentListCapability;
 use App\Capability\Process\ProductListCapability;
@@ -93,6 +95,9 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register($sales, new CapabilityManifest(key: 'sales.process', type: 'process', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/sales.process'));
         $r->register(new CustomerListCapability(), new CapabilityManifest(key: 'customers', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/customers'));
         $r->register(new LeadListCapability(), new CapabilityManifest(key: 'leads', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/leads'));
+        // Migration plan G1 — the WhatsApp inbox in v3 (list + single-conversation object).
+        $r->register(new ChatListCapability(), new CapabilityManifest(key: 'chats', type: 'process', owner: 'sales', permission: 'menu:whatsapp', api: '/api/v1/workspace/chats'));
+        $r->register(new ChatCapability(), new CapabilityManifest(key: 'chat', type: 'object', owner: 'sales', permission: 'menu:whatsapp', api: '/api/v1/workspace/chat/{id}'));
         $r->register(new QuotationListCapability(), new CapabilityManifest(key: 'quotations', type: 'process', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/quotations'));
         $r->register(new InvoiceListCapability(), new CapabilityManifest(key: 'invoices', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/invoices'));
         $r->register(new SalesOrderListCapability(), new CapabilityManifest(key: 'salesOrders', type: 'process', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/salesOrders'));

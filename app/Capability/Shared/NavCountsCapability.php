@@ -6,6 +6,7 @@ use App\Capability\Contracts\Capability;
 use App\Capability\Contracts\CapabilityContext;
 use App\Capability\Dto\WorkspacePayload;
 use App\Models\Category;
+use App\Models\Conversation;
 use App\Models\CustomerPayment;
 use App\Models\CustomerProfile;
 use App\Models\Invoice;
@@ -48,6 +49,8 @@ final class NavCountsCapability implements Capability
 
         return array_filter([
             'customers'        => $c(CustomerProfile::query()),
+            // Chats badge = conversations with unread messages (what needs doing), not lifetime total.
+            'chats'            => $c(Conversation::query()->where('unread', '>', 0)),
             'salesOrder'       => $c(Order::query()),
             // Quotations badge shows the actionable count — quotes awaiting staff confirmation/convert
             // (e.g. the quote-first bot flow), not the lifetime total, so staff see what needs doing.
