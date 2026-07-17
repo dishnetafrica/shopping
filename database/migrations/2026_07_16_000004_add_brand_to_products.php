@@ -13,6 +13,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Idempotent (prod incident 2026-07-18): the column pre-existed on the live DB
+        // while the migrations ledger said otherwise, and the failure blocked every
+        // later migration (incl. the Comms tables). Guarded so drift can't block again.
+        if (Schema::hasColumn('products', 'brand')) {
+            return;
+        }
         Schema::table('products', function (Blueprint $table) {
             $table->string('brand')->nullable()->after('category');
         });
