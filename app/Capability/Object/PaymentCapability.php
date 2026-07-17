@@ -48,7 +48,7 @@ final class PaymentCapability implements ObjectCapability
         $when = $p->created_at ? Carbon::parse($p->created_at) : null;
 
         // --- actions ---
-        $downloadReceipt = ['key' => 'receipt_pdf', 'label' => 'Download receipt', 'href' => '/api/v1/doc/receipt/' . $p->id, 'actor' => 'human', 'tone' => 'primary'];
+        $downloadReceipt = ['key' => 'receipt_pdf', 'label' => 'Download receipt', 'href' => '/papi/receipt-pdf?id=' . $p->id, 'actor' => 'human', 'tone' => 'primary'];
         $openInvoice = $inv ? ['key' => 'open_invoice', 'label' => 'Open invoice', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/invoice/' . $inv->id, 'actor' => 'human', 'tone' => 'default'] : null;
         $openCustomer = $profile ? ['key' => 'open_customer', 'label' => 'Open customer', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customer/' . $profile->id, 'actor' => 'human', 'tone' => 'default'] : null;
 
