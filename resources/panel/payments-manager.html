@@ -230,6 +230,7 @@ function render(){
       '<td class="num"><span class="pill usd">$'+Number(p.usd||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></td>'+
       '<td>'+kind+'</td>'+
       '<td class="num"><div class="acts">'+
+        '<a class="btn sm" href="/api/v1/doc/receipt/'+p.id+'" target="_blank" rel="noopener" title="Download receipt PDF">Receipt</a>'+
         '<button class="btn sm" onclick="view('+p.id+')">View</button>'+
         '<button class="btn sm" onclick="openForm('+p.id+')">Edit</button>'+
         '<button class="btn sm danger" onclick="del('+p.id+')">Delete</button>'+
