@@ -6253,6 +6253,9 @@ class PanelApiController extends Controller
                 case 'rate_ssp_per_usd':     return (int) round($fx->ratePerUsd('SSP') ?: 0);
                 case 'stock_ledger':         return (bool) $t->setting('stock_ledger', false);
                 case 'stock_v2':             return (bool) $t->setting('stock_v2', false);
+                case 'digest_enabled':       return (bool) $t->setting('digest_enabled', true);
+                case 'pay_on_delivery':      return (bool) $t->setting('pay_on_delivery', true);
+                case 'pay_unify':            return (bool) $t->setting('pay_unify', false);
                 default:                     return $t->setting($k, $def);
             }
         };

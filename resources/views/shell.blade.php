@@ -668,7 +668,7 @@ function parseHash(){ const p=location.hash.replace('#/','').split('/'); return 
 function renderNav(caps){
   const keys = new Set(caps.map(c=>c.key));
   // A SOON item shows if its underlying entity exists (has a count) even without a list capability yet.
-  const has = k => k==='pnl' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
+  const has = k => k==='pnl' || k==='settings' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
   let html='';
   GROUPS.forEach(([g,items])=>{
     const avail=items.filter(has);

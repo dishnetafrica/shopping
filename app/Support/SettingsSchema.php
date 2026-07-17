@@ -51,7 +51,6 @@ final class SettingsSchema
                     ['key' => 'vat_rate',           'type' => 'number',   'label' => 'VAT rate', 'unit' => '%', 'default' => 0],
                     ['key' => 'bank_details',       'type' => 'textarea', 'label' => 'Bank details'],
                     ['key' => 'invoice_footer',     'type' => 'textarea', 'label' => 'Invoice footer'],
-                    ['key' => 'cashbook_digest_to', 'type' => 'text',     'label' => 'Daily cashbook email', 'help' => 'Blank = off'],
                 ]],
             ]],
             ['key' => 'documents', 'label' => 'Documents', 'icon' => 'doc', 'groups' => [
@@ -74,9 +73,33 @@ final class SettingsSchema
                     ['key' => 'bot_fallback_text', 'type' => 'textarea', 'label' => 'Fallback reply'],
                     ['key' => 'ai_persona',        'type' => 'textarea', 'label' => 'AI persona'],
                     ['key' => 'business_hours',    'type' => 'text',     'label' => 'Business hours'],
-                    ['key' => 'delivery_areas',    'type' => 'textarea', 'label' => 'Delivery areas'],
                     ['key' => 'bot_website_link',  'type' => 'text',     'label' => 'Website link'],
                     ['key' => 'faq',               'type' => 'textarea', 'label' => 'FAQ'],
+                ]],
+            ]],
+            ['key' => 'notifications', 'label' => 'Notifications', 'icon' => 'bell', 'groups' => [
+                ['label' => 'Daily digest', 'help' => 'A summary of the day sent to you.', 'fields' => [
+                    ['key' => 'digest_enabled',     'type' => 'bool',   'label' => 'Send daily digest'],
+                    ['key' => 'digest_hour',        'type' => 'number', 'label' => 'Send at hour', 'unit' => '24h', 'default' => 18],
+                    ['key' => 'cashbook_digest_to', 'type' => 'text',   'label' => 'Daily cashbook email', 'help' => 'Blank = off'],
+                ]],
+                ['label' => 'Stock alerts', 'fields' => [
+                    ['key' => 'low_stock_threshold', 'type' => 'number', 'label' => 'Low-stock threshold', 'unit' => 'units', 'default' => 5],
+                    ['key' => 'reorder_days',        'type' => 'number', 'label' => 'Reorder lead time', 'unit' => 'days', 'default' => 30],
+                ]],
+            ]],
+            ['key' => 'delivery', 'label' => 'Delivery', 'icon' => 'truck', 'groups' => [
+                ['label' => 'Delivery', 'fields' => [
+                    ['key' => 'delivery_areas', 'type' => 'textarea', 'label' => 'Delivery areas'],
+                    ['key' => 'delivery_note',  'type' => 'textarea', 'label' => 'Delivery note', 'help' => 'Shown to customers at checkout.'],
+                    ['key' => 'min_order',      'type' => 'number',   'label' => 'Minimum order value', 'default' => 0],
+                    ['key' => 'moq_note',       'type' => 'text',     'label' => 'MOQ note'],
+                ]],
+            ]],
+            ['key' => 'payments', 'label' => 'Payments', 'icon' => 'card', 'groups' => [
+                ['label' => 'Accepted payments', 'help' => 'How customers can pay.', 'fields' => [
+                    ['key' => 'pay_on_delivery', 'type' => 'bool', 'label' => 'Offer pay on delivery'],
+                    ['key' => 'pay_unify',       'type' => 'bool', 'label' => 'Unified payment handling'],
                 ]],
             ]],
             ['key' => 'team', 'label' => 'Team', 'icon' => 'user', 'special' => 'team'],

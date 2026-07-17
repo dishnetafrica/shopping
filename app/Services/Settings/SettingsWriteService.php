@@ -26,6 +26,8 @@ final class SettingsWriteService
         // WhatsApp bot configuration (read by the bot/AI engine).
         'bot_greeting', 'bot_fallback_text', 'bot_unreadable_text', 'bot_website_link',
         'ai_persona', 'business_hours', 'delivery_areas', 'faq', 'brand_knowledge', 'languages',
+        // Delivery notes shown to customers / staff.
+        'delivery_note', 'moq_note',
     ];
 
     /** Numeric settings: [key => ['int'|'float', min]]. */
@@ -34,12 +36,20 @@ final class SettingsWriteService
         'rate_ssp_per_usd' => ['float', 0.0001],
         'invoice_terms_days' => ['int', 0],
         'vat_rate' => ['float', 0.0],
+        // Notifications + delivery numeric settings.
+        'digest_hour' => ['int', 0],
+        'low_stock_threshold' => ['int', 0],
+        'reorder_days' => ['int', 0],
+        'min_order' => ['float', 0.0],
     ];
 
     /** On/off toggle settings (stored as booleans). */
     private const BOOL_KEYS = [
         'stock_ledger',  // write the real stock ledger (record receipts & sales)
         'stock_v2',      // read on-hand from the ledger on site/bot (needs the ledger seeded first)
+        'digest_enabled',   // send the daily digest
+        'pay_on_delivery',  // offer pay-on-delivery
+        'pay_unify',        // unify payment handling
     ];
 
     /** Enum settings: [key => allowed values]. Document PDF page setup (read by the PDF renderers). */
