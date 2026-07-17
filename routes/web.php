@@ -60,7 +60,7 @@ Route::get('/icons/{name}',         [PwaController::class, 'icon']);
 
 // The customer's existing Family Shopper seller UI, served verbatim behind the
 // /app web session. (Filament business panel stays available at /app.)
-Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware\ConfineTransportRole::class])->group(function () {
+Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware\ConfineTransportRole::class, \App\Http\Middleware\ClassicPanelRedirects::class])->group(function () {
     // E9.1 — shared design tokens stylesheet (one palette/typography/spacing), served for every panel page.
     Route::get('/panel/shared/tokens.css', function () {
         $path = resource_path('panel/shared/tokens.css');

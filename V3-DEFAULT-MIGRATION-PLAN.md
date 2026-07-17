@@ -93,11 +93,13 @@ then G3/G4/G5 (the money-approval loop with Jayesh/Asish).
 Cashbook's v3 gate corrected from menu:finance → menu:cash for classic parity — the
 one real blocker found. The nav_v2 transitional work is now retired.
 
-**Phase D — disable V2:** `/panel/*` page routes → 302 to the V3 equivalent (papi
-endpoints stay — V3 consumes some of them); keep `?classic=1` one quarter as the
-escape hatch; then remove the redirect targets and archive `resources/panel` next to
-the other legacy homes. Filament `/app` business panel gets the same treatment once
-Products/Categories parity is confirmed (operator Admin panel stays).
+**Phase D — disable V2: KIT SHIPPED 2026-07-18, flag OFF.** `ClassicPanelRedirects`
+middleware maps 35 classic pages → their v3 workspaces (every target verified against
+the live capability registry); papi untouched; `?classic=1` escapes every redirect for
+one quarter; honest tail (audit, partners, billing, diagnostics, guide, onboard) stays
+classic. Flip after the staff soak: `php artisan v3:retire {tenant}`; instant rollback
+`--off`. Final step after the quarter: archive `resources/panel` + Filament `/app`
+decision (operator Admin stays).
 
 ## 4. Sequencing note
 Do **Phase B–G1 (Chats) before** the seller.html decomposition and Operations control
