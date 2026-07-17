@@ -5772,7 +5772,7 @@ class PanelApiController extends Controller
         foreach (\App\Models\OrderCost::where('tenant_id', $t->id)
                     ->whereNotIn('status', ['void', 'rejected'])
                     ->where(function ($w) { $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status'); })
-                    ->whereNotIn('category', ['Conversion', 'Transfer'])
+                    ->where(function ($w) { $w->whereNull('category')->orWhereNotIn('category', ['Conversion', 'Transfer']); })
                     ->get(['stage', 'usd_amount', 'note']) as $c) {
             $s = (string) $c->stage; $usd = (float) $c->usd_amount;
             if ($s === 'funding' || ($s === 'cash_in' && $isCapitalNote($c->note))) $cap['capital'] += $usd;
@@ -5833,7 +5833,7 @@ class PanelApiController extends Controller
         $rows = []; $byHolder = []; $total = 0.0;
         foreach (\App\Models\OrderCost::where('tenant_id', $t->id)
                     ->whereNotIn('status', ['void', 'rejected'])
-                    ->whereNotIn('category', ['Conversion', 'Transfer'])
+                    ->where(function ($w) { $w->whereNull('category')->orWhereNotIn('category', ['Conversion', 'Transfer']); })
                     ->orderBy('created_at')->get() as $c) {
             $stage = (string) $c->stage;
             $note  = (string) $c->note;
