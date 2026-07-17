@@ -167,6 +167,15 @@ class NavController extends Controller
         // opted in (nav_v2 = true). Default false => existing menu is untouched.
         $navV2 = $t ? (bool) $t->setting('nav_v2', false) : false;
 
+        // V3 PREVIEW: an owner-like user can see the grouped sidebar AHEAD of the
+        // tenant flip by loading the panel with ?v3=1 (the client then calls this
+        // endpoint with ?preview=1, sticky per browser tab). Owner-only, read-only,
+        // per-request — the tenant flag and every other user are untouched.
+        if (! $navV2 && $request->boolean('preview')
+            && method_exists($u, 'isOwnerLike') && $u->isOwnerLike()) {
+            $navV2 = true;
+        }
+
         return response()->json([
             'ok'       => true,
             'enabled'  => $navV2,

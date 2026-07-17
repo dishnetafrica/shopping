@@ -5443,9 +5443,29 @@ if(token){startApp();}else{showLogin();}
     return true;
   }
   function go(){
-    fetch('/papi/nav',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+    /* V3 preview: /panel?v3=1 turns the grouped sidebar on for THIS browser tab only
+       (owner-gated server-side); ?v3=0 turns it off. Sticky via sessionStorage so it
+       survives in-tab reloads while the tenant flag stays untouched. */
+    var pv=false;
+    try{
+      var q=new URLSearchParams(location.search);
+      if(q.get('v3')==='1')sessionStorage.setItem('navV3Preview','1');
+      if(q.get('v3')==='0')sessionStorage.removeItem('navV3Preview');
+      pv=sessionStorage.getItem('navV3Preview')==='1';
+    }catch(e){}
+    fetch('/papi/nav'+(pv?'?preview=1':''),{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
       .then(function(r){return r.json();})
-      .then(function(d){ if(d&&d.ok&&d.enabled&&Array.isArray(d.groups)&&d.groups.length){ build(d.groups); } })
+      .then(function(d){
+        if(d&&d.ok&&d.enabled&&Array.isArray(d.groups)&&d.groups.length){
+          if(build(d.groups)&&pv){
+            var nav=document.querySelector('#side nav');
+            if(nav)nav.insertAdjacentHTML('afterbegin',
+              '<div style="background:#b45309;color:#fff;font-size:10px;font-weight:800;letter-spacing:.5px;'+
+              'text-align:center;padding:4px 6px;border-radius:6px;margin:0 0 8px">V3 NAV PREVIEW — only you see this'+
+              ' &middot; <a href="/panel?v3=0" style="color:#fff">exit</a></div>');
+          }
+        }
+      })
       .catch(function(){});
   }
   if(document.readyState!=='loading')go(); else document.addEventListener('DOMContentLoaded',go);
