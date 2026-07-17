@@ -323,6 +323,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('payments-audit', [PanelApiController::class, 'paymentsAudit']);
         Route::get('cash-pnl', [PanelApiController::class, 'cashPnl']);
         Route::get('capital-trace', [PanelApiController::class, 'capitalTrace']);
+        Route::get('finance-overview', [PanelApiController::class, 'financeOverview']);
         Route::match(['get', 'post'], 'platform/opcache-reset', [PanelApiController::class, 'opcacheReset']);
 
         // CRM — manual lead management (Build 86.5)
