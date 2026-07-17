@@ -5353,6 +5353,42 @@ class PanelApiController extends Controller
         ]);
     }
 
+    /**
+     * POST /papi/backfill-customers[?commit=1] — create a Customer master (CustomerProfile) for every
+     * DISTINCT order phone that doesn't already have one, so historical orders stop being orphaned from
+     * the customer directory / AR. Uses the same non-destructive upsert the OrderObserver now runs on
+     * new orders (fills blanks only, never renames). DRY RUN unless ?commit=1. Owner-only.
+     */
+    public function backfillCustomers(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $commit = filter_var($r->query('commit', $r->input('commit', false)), FILTER_VALIDATE_BOOLEAN);
+
+        $existing = \App\Models\CustomerProfile::where('tenant_id', $t->id)->pluck('phone')
+            ->map(fn ($p) => preg_replace('/[^0-9]/', '', (string) $p))->filter()->flip();
+
+        $svc = app(\App\Services\Crm\CustomerMasterService::class);
+        $rows = []; $created = 0; $seen = [];
+        foreach (\App\Models\Order::where('tenant_id', $t->id)->orderBy('id')->get() as $o) {
+            $ph = preg_replace('/[^0-9]/', '', (string) $o->customer_phone);
+            if ($ph === '' || isset($existing[$ph]) || isset($seen[$ph])) continue;
+            $seen[$ph] = true;
+            $rows[] = ['phone' => $ph, 'name' => (string) ($o->customer_name ?: '—'),
+                'from_order' => (string) $o->order_no, 'location' => (string) $o->location,
+                'action' => $commit ? 'created' : 'would create'];
+            if ($commit) { try { $svc->ensureFromOrder($t, $o); $created++; } catch (\Throwable $e) {} }
+        }
+
+        return response()->json([
+            'ok' => true, 'committed' => $commit,
+            'orders_without_master' => count($rows),
+            'customers_created' => $commit ? $created : 0,
+            'customers' => array_slice($rows, 0, 200),
+        ]);
+    }
+
     public function resyncBalances(Request $r)
     {
         if ($g = $this->ownerGate($r)) return $g;

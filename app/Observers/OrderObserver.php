@@ -80,6 +80,14 @@ class OrderObserver
                 if ($t && \App\Support\WorkflowConfig::enabled($t)) {
                     app(\App\Services\Ops\TaskEngine::class)->start($t, $order);
                 }
+
+                // Customer master: promote this order's contact to a real CustomerProfile (ERP
+                // "customer on Sales Order confirmation"). Keyed by the same normalised phone the
+                // AR/directory join on, so it lines up everywhere. Gated + best-effort; never breaks
+                // the order save. (Step 1 of the operational-audit backlog.)
+                if ($t && $order->customer_phone && (bool) $t->setting('auto_customer_on_order', true)) {
+                    app(\App\Services\Crm\CustomerMasterService::class)->ensureFromOrder($t, $order);
+                }
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning('task.start_failed', ['order' => $order->id, 'err' => $e->getMessage()]);
             }
