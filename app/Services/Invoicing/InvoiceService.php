@@ -31,6 +31,11 @@ class InvoiceService
             if ($existing) return $existing;
         }
 
+        // Born-USD: for a tenant whose invoices are kept in USD (invoices_usd_normalized), convert the
+        // incoming amounts to USD at the source — so a UGX-priced order never mints another mislabeled
+        // invoice. Self-contained (re-prices from the catalogue); no-op for every other tenant.
+        $d = $this->toUsdIfNeeded($t, $d, $orderId);
+
         $cur     = (string) ($d['cur'] ?? ($t->setting('currency', 'UGX') ?: 'UGX'));
         $paid    = (float) ($d['paid'] ?? 0);
         $total   = (float) ($d['grand'] ?? 0);
@@ -102,6 +107,76 @@ class InvoiceService
     public function issueForOrder(Tenant $t, Order $order, string $source = 'auto'): Invoice
     {
         return $this->issue($t, $this->renderer->fromOrder($t, $order), (int) $order->id, $source);
+    }
+
+    /**
+     * Born-USD conversion for tenants whose invoices are kept in USD (the `invoices_usd_normalized`
+     * flag, set atomically with the one-time normalization). Detects the TRUE currency of the incoming
+     * amounts the same way the normalizer does — re-price the lines against the USD catalogue — and, when
+     * they are in local currency, converts every money field to USD. Falls back to the linked order's
+     * transaction currency (which handles SSP correctly) when the lines don't match the catalogue. When
+     * the currency can't be determined confidently, it leaves the data untouched (never a risky divide).
+     * Returns $d unchanged for any tenant without the flag, so the shared engine is unaffected.
+     */
+    private function toUsdIfNeeded(Tenant $t, array $d, ?int $orderId): array
+    {
+        if (! $t->setting('invoices_usd_normalized')) return $d;
+
+        $native = \App\Services\Money\SalesBaseCurrency::nativeCurrency($t);      // UGX (local operating)
+        $rate   = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($native) ?: 3655.0;
+        $grand  = (float) ($d['grand'] ?? 0);
+        if ($grand <= 0) return $d;
+
+        // Re-price the lines from the catalogue (which is in USD).
+        $byName = [];
+        foreach (\App\Models\Product::where('tenant_id', $t->id)->get(['name', 'base_price', 'price']) as $p) {
+            $bp = (float) ($p->base_price ?: $p->price ?: 0);
+            if ($bp > 0) { $byName[mb_strtolower(trim((string) $p->name))] = $bp; }
+        }
+        $catBase = 0.0; $matched = 0;
+        foreach (($d['lines'] ?? []) as $l) {
+            $qty = (float) ($l['qty'] ?? 0);
+            $bp  = $byName[mb_strtolower(trim((string) ($l['name'] ?? '')))] ?? null;
+            if ($bp !== null && $qty > 0) { $catBase += $bp * $qty; $matched++; }
+        }
+
+        // 1) Catalogue signal (USD vs the local currency).
+        $srcCur = null;
+        if ($matched > 0 && $catBase > 0) {
+            if (abs($grand - $catBase) <= 0.12 * $catBase) { $srcCur = 'USD'; }
+            elseif (abs($grand - $catBase * $rate) <= 0.12 * $catBase * $rate) { $srcCur = $native; }
+        }
+        // 2) Linked-order currency (rateable, and correct for SSP) when the catalogue is inconclusive.
+        if ($srcCur === null && $orderId) {
+            try {
+                $o = \App\Models\Order::where('tenant_id', $t->id)->find($orderId);
+                if ($o) {
+                    $c = strtoupper((string) \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t));
+                    if (in_array($c, ['USD', 'UGX', 'SSP'], true)) { $srcCur = $c; }
+                }
+            } catch (\Throwable $e) { /* leave undetermined */ }
+        }
+
+        if ($srcCur === null) { return $d; }        // can't tell → don't risk a wrong conversion
+        if ($srcCur === 'USD') { $d['cur'] = 'USD'; $d['dec'] = 2; return $d; }   // already USD
+
+        // Local currency → convert the whole document to USD at each currency's own rate.
+        $fx = \App\Services\Money\Fx::forTenant($t);
+        $cv = fn ($v) => round($fx->toUsd((float) $v, $srcCur), 2);
+        foreach (['subtotal', 'discount', 'freight', 'grand', 'paid'] as $k) {
+            if (isset($d[$k])) { $d[$k] = $cv($d[$k]); }
+        }
+        if (! empty($d['lines']) && is_array($d['lines'])) {
+            $d['lines'] = array_map(function ($l) use ($cv) {
+                if (isset($l['unit']))   { $l['unit']   = $cv($l['unit']); }
+                if (isset($l['amount'])) { $l['amount'] = $cv($l['amount']); }
+                return $l;
+            }, $d['lines']);
+        }
+        $d['cur'] = 'USD';
+        $d['dec'] = 2;
+
+        return $d;
     }
 
     /**
