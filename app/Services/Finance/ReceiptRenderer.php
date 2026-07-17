@@ -85,27 +85,29 @@ final class ReceiptRenderer
 
         return <<<HTML
 <!doctype html><html><head><meta charset="utf-8"><style>
+@page{margin:0;}
 *{font-family:"DejaVu Sans",Arial,sans-serif;}
-body{color:#111;font-size:12px;margin:0;padding:6px;}
-.head{display:table;width:100%;border-bottom:2px solid #16a34a;padding-bottom:8px;}
+html,body{margin:0;padding:0;}
+body{color:#111;font-size:11px;padding:8px 12px;}
+.head{display:table;width:100%;border-bottom:2px solid #16a34a;padding-bottom:5px;}
 .head .l{display:table-cell;vertical-align:middle;}
 .head .r{display:table-cell;vertical-align:middle;text-align:right;}
-.company{font-size:18px;font-weight:bold;}
-.sub{font-size:10px;color:#444;line-height:1.4;margin-top:2px;}
-.title{text-align:center;font-size:20px;font-weight:bold;letter-spacing:2px;color:#16a34a;margin:14px 0 4px;}
-.rcptno{text-align:center;font-size:11px;color:#555;margin-bottom:12px;}
-table.kv{width:100%;border-collapse:collapse;margin-top:6px;}
-table.kv td{padding:7px 10px;font-size:12px;border-bottom:1px solid #eee;}
+.company{font-size:16px;font-weight:bold;}
+.sub{font-size:9px;color:#444;line-height:1.3;margin-top:1px;}
+.title{text-align:center;font-size:16px;font-weight:bold;letter-spacing:2px;color:#16a34a;margin:7px 0 1px;}
+.rcptno{text-align:center;font-size:10px;color:#555;margin-bottom:5px;}
+table.kv{width:100%;border-collapse:collapse;margin-top:3px;}
+table.kv td{padding:3px 10px;font-size:11px;border-bottom:1px solid #eee;}
 table.kv td.k{color:#666;width:38%;}
 table.kv td.v{font-weight:bold;text-align:right;}
-.amtbox{margin-top:16px;border:2px solid #16a34a;border-radius:8px;padding:12px 16px;text-align:center;background:#f4fbf6;}
-.amtbox .lbl{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#16a34a;font-weight:bold;}
-.amtbox .amt{font-size:26px;font-weight:800;color:#15803d;margin-top:2px;}
-.amtbox .usd{font-size:11px;color:#555;}
-.note{margin-top:16px;font-size:10.5px;color:#555;}
-.sig{margin-top:26px;display:table;width:100%;}
-.sig .c{display:table-cell;width:50%;font-size:10px;color:#555;}
-.sigline{border-bottom:1px solid #111;height:22px;margin-bottom:3px;}
+.amtbox{margin-top:8px;border:2px solid #16a34a;border-radius:8px;padding:7px 16px;text-align:center;background:#f4fbf6;}
+.amtbox .lbl{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#16a34a;font-weight:bold;}
+.amtbox .amt{font-size:22px;font-weight:800;color:#15803d;margin-top:1px;}
+.amtbox .usd{font-size:10px;color:#555;}
+.note{margin-top:8px;font-size:10px;color:#555;}
+.sig{margin-top:14px;display:table;width:100%;}
+.sig .c{display:table-cell;width:50%;font-size:9px;color:#555;}
+.sigline{border-bottom:1px solid #111;height:16px;margin-bottom:2px;}
 </style></head><body>
 <div class="head">
   <div class="l"><div class="company">{$company}</div><div class="sub">{$address}<br>{$contactLine}<br>{$tinLine}</div></div>
