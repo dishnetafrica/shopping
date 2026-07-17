@@ -6082,6 +6082,140 @@ class PanelApiController extends Controller
         ]);
     }
 
+    /**
+     * GET /papi/classify-invoices — READ-ONLY. Determines the TRUE currency of every invoice's stored
+     * total, so we can see the invoice-side twin of the order-currency problem BEFORE changing any display.
+     *
+     * Writes NOTHING. For each live invoice it:
+     *   • re-prices the frozen line items from the catalogue (which is in USD) → catalogue_USD
+     *   • checks stored total against the catalogue and against catalogue×rate → infers USD vs UGX
+     *   • cross-checks the linked order's (already-corrected) sell_currency
+     *   • sanity-checks that the item lines sum to the stored total (same currency, no data rot)
+     *   • shows what the PDF prints today (trusts the stored `currency` tag) AND what the v3 list
+     *     prints today (forces native UGX, then converts) — so the two wrong numbers are visible side by side.
+     * The `verdict` column flags every invoice whose stored `currency` tag disagrees with its real currency.
+     */
+    public function classifyInvoices(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+
+        $base   = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);     // USD — the catalogue's currency
+        $native = \App\Services\Money\SalesBaseCurrency::nativeCurrency($t);   // UGX — the local operating currency
+        $rate   = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($native) ?: 3655.0;
+
+        // Catalogue base price is in the BASE currency (USD) — same proven fact used for orders.
+        $byId = []; $byName = [];
+        foreach (\App\Models\Product::where('tenant_id', $t->id)->get(['id', 'name', 'base_price', 'price']) as $p) {
+            $bp = (float) ($p->base_price ?: $p->price ?: 0);
+            if ($bp > 0) { $byId[(int) $p->id] = $bp; $byName[mb_strtolower(trim((string) $p->name))] = $bp; }
+        }
+        $LOW = 4000.0; $HIGH = 40000.0;   // magnitude fallback band (same as orders)
+
+        $rows = [];
+        $counts = ['USD' => 0, 'UGX' => 0, 'ambiguous' => 0, 'no_signal' => 0];
+        $mislabeled = 0; $itemsMismatch = 0;
+
+        $invoices = \App\Models\Invoice::with(['items', 'order:id,order_no,sell_currency'])
+            ->where('tenant_id', $t->id)->where('status', '!=', 'void')->orderBy('id')->get();
+
+        foreach ($invoices as $inv) {
+            $stored = (float) $inv->total;
+            $tag    = strtoupper((string) ($inv->currency ?: '')) ?: 'null';
+
+            // Re-price the frozen line items from the catalogue (USD) + sum the line totals (integrity check).
+            $catBase = 0.0; $matched = 0; $itemsSum = 0.0;
+            foreach ($inv->items as $it) {
+                $qty = (float) $it->qty;
+                $itemsSum += (float) $it->line_total;
+                $bp = $byName[mb_strtolower(trim((string) $it->name))] ?? null;
+                if ($bp !== null && $qty > 0) { $catBase += $bp * $qty; $matched++; }
+            }
+
+            // 1) Catalogue signal (strongest when line items matched).
+            $inferred = null; $method = '';
+            if ($stored <= 0) {
+                $method = 'no total';
+            } elseif ($matched > 0 && $catBase > 0) {
+                if (abs($stored - $catBase) <= 0.12 * $catBase) { $inferred = $base; $method = 'catalogue'; }
+                elseif (abs($stored - $catBase * $rate) <= 0.12 * $catBase * $rate) { $inferred = $native; $method = 'catalogue'; }
+                else { $method = 'catalogue mismatch (' . round($stored / max($catBase, 0.01), 2) . '× base)'; }
+            }
+            // 2) Linked-order signal (the order labels were already corrected & reviewed).
+            $ordCur = strtoupper((string) (optional($inv->order)->sell_currency ?: ''));
+            if ($inferred === null && $ordCur !== '' && $stored > 0) {
+                $inferred = $ordCur; $method = $method ? $method . ' → order says ' . $ordCur : 'order ' . $ordCur;
+            }
+            // 3) Magnitude fallback.
+            if ($inferred === null && $stored > 0) {
+                if ($stored < $LOW) { $inferred = $base; $method = $method ?: 'magnitude'; }
+                elseif ($stored > $HIGH) { $inferred = $native; $method = $method ?: 'magnitude'; }
+            }
+
+            if ($inferred === null) { $counts[$stored <= 0 ? 'no_signal' : 'ambiguous']++; }
+            else { $counts[$inferred === $native ? 'UGX' : 'USD']++; }
+
+            // Item-sum integrity: the frozen lines should add up to the stored total (same currency).
+            $itemsOk = $matched === 0 && $itemsSum == 0.0 ? null
+                : (abs($itemsSum - $stored) <= max(0.5, 0.02 * max($stored, 1)));
+            if ($itemsOk === false) $itemsMismatch++;
+
+            // What each surface prints TODAY (to make the two wrong numbers concrete):
+            $tagDec  = $tag === 'USD' ? 2 : 0;
+            $pdfShows = ($tag === 'null' ? '?' : $tag) . ' ' . number_format($stored, $tagDec);   // PDF trusts the tag, no convert
+            $listShows = '$' . number_format($stored / $rate, 2);                                  // v3 list: force UGX → convert to USD base
+
+            // What it SHOULD show — ALWAYS in USD (the house rule: all invoices are USD). A stored USD
+            // number shows as-is; a stored UGX-magnitude number is ÷ rate to become its USD value.
+            $usdValue = $inferred === null ? null
+                : ($inferred === $base ? $stored : $stored / $rate);
+            $trueShows = $usdValue === null ? '—' : '$' . number_format($usdValue, 2)
+                . ($inferred === $native ? '  (from ' . $native . ' ' . number_format($stored, 0) . ' ÷ ' . $rate . ')' : '');
+
+            $verdict = 'ok';
+            if ($inferred === null) $verdict = 'review';
+            elseif ($tag !== $inferred) { $verdict = 'MISLABELED tag=' . $tag . ' real=' . $inferred; $mislabeled++; }
+
+            $rows[] = [
+                'invoice'      => (string) $inv->invoice_no,
+                'order'        => (string) (optional($inv->order)->order_no ?? ''),
+                'stored_total' => $stored,
+                'items_sum'    => round($itemsSum, 2),
+                'items_ok'     => $itemsOk,
+                'catalogue_USD'=> round($catBase, 2),
+                'stored_tag'   => $tag,
+                'order_cur'    => $ordCur ?: '—',
+                'inferred_true'=> $inferred ?? 'review',
+                'method'       => $method,
+                'pdf_shows'    => $pdfShows,
+                'list_shows'   => $listShows,
+                'should_show_USD' => $trueShows,
+                'usd_value'    => $usdValue === null ? null : round($usdValue, 2),
+                'verdict'      => $verdict,
+            ];
+        }
+
+        $usdTotal = round(array_sum(array_map(fn ($x) => (float) ($x['usd_value'] ?? 0), $rows)), 2);
+
+        return response()->json([
+            'ok' => true, 'base' => $base, 'native' => $native, 'rate' => $rate,
+            'invoice_count' => $invoices->count(),
+            'summary' => $counts,
+            'mislabeled' => $mislabeled,
+            'items_mismatch' => $itemsMismatch,
+            'total_invoiced_usd' => $usdTotal,
+            'note' => 'READ-ONLY — nothing written. HOUSE RULE: all invoices are USD; only purchases + local '
+                . 'transport are UGX/SSP. inferred_true = whether the STORED total is already USD or a UGX-magnitude '
+                . 'number (catalogue=re-priced from products in USD; else the corrected linked order; else magnitude). '
+                . 'pdf_shows = what the invoice PDF prints today (trusts the stored tag; right on USD invoices, wrong on UGX ones). '
+                . 'list_shows = what the v3 list prints today (forces UGX ÷ rate; right on UGX invoices, wrong on USD ones → $0.17). '
+                . 'should_show_USD = the ONE correct figure both screens should show (every invoice in USD). '
+                . 'verdict MISLABELED = the stored currency tag disagrees with the real currency.',
+            'invoices' => $rows,
+        ]);
+    }
+
     public function resyncBalances(Request $r)
     {
         if ($g = $this->ownerGate($r)) return $g;
