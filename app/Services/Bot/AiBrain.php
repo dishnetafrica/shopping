@@ -987,6 +987,7 @@ class AiBrain
         // Explicit location & currency context — overrides any default assumption (e.g. Kampala)
         // baked into a persona. Built from the tenant's own setup so the bot speaks to the right
         // place and money.
+        $shopAddr = trim((string) $tenant->setting('shop_address', ''));
         $city    = trim((string) $tenant->setting('city', ''));
         $country = trim((string) $tenant->setting('country', ''));
         $cur     = strtoupper(trim((string) $tenant->setting('currency', 'UGX'))) ?: 'UGX';
@@ -998,6 +999,9 @@ class AiBrain
             $p .= "BUSINESS CONTEXT:\n";
             if ($where !== '') {
                 $p .= "- This shop is based in {$where}. Deliveries, examples and references are about {$where} — do NOT assume any other city (e.g. do not say Kampala/Uganda unless that is actually {$where}).\n";
+            }
+            if ($shopAddr !== '') {
+                $p .= "- Physical shop address (give this EXACTLY when anyone asks where the shop is / where to find us / where to collect): {$shopAddr}\n";
             }
             if ($basis === 'native') {
                 $p .= "- Prices are in {$cur}, and {$cur} IS the price exactly as listed — there is no other base currency and no ex-works/Kampala conversion. Quote prices in {$cur} as shown. Never describe prices as 'ex-Kampala', 'UGX base', or converted.\n";

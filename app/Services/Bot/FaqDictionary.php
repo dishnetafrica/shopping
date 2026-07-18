@@ -106,6 +106,19 @@ class FaqDictionary
                 return "\u{1F6F5} Yes, we deliver across town. Share your *location pin* (tap \u{1F4CE} \u{2192} Location) and I'll work out the delivery fee for you.";
             }],
 
+            // --- Where is your shop / physical location -------------------------
+            [[
+                '/\\bwhere\\b.{0,20}\\b(shop|store|located|location|office|branch)\\b/',
+                '/\\b(your|the)\\s+(shop|store)\\s+(location|address)\\b/',
+                '/\\bhow (do|can) (i|we) (find|reach|get to) (you|your shop|the shop)\\b/',
+                '/\\bphysical (shop|store|location|address)\\b/',
+                '/\\bcome (to|and) (buy|pick|collect)\\b/',
+            ], function ($ctx) {
+                $addr = trim((string) ($ctx['shop_address'] ?? ''));
+                if ($addr === '') return null;   // not configured → fall through to other answers
+                return "\u{1F4CD} You'll find us here:\n{$addr}\n\nYou're welcome to visit — or just order right here on WhatsApp and we deliver. \u{1F69A}";
+            }],
+
             // --- Opening hours / are you open -----------------------------------
             [[
                 '/\b(open|opening|closing|business|working) (hours?|time|times)\b/',

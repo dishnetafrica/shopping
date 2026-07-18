@@ -1908,6 +1908,7 @@ class BotBrain
         }
         $ctx = array_filter([
             'currency'        => $this->currencyFor($tenant),
+            'shop_address'    => trim((string) $tenant->setting('shop_address', '')) ?: null,
             'payments'        => is_array($payments) ? $payments : null,
             'hours'           => trim((string) $tenant->setting('business_hours', '')) ?: null,
             'deliver_areas'   => is_array($areas) ? $areas : null,
