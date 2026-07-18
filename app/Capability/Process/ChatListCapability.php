@@ -109,10 +109,32 @@ final class ChatListCapability implements ProcessCapability
                 'schema' => ['phone' => 'text', 'body' => 'text'],
                 'labels' => ['phone' => 'WhatsApp number (digits, e.g. 2567…)', 'body' => 'Message'],
             ];
+            $actions[] = ['key' => 'wa_health', 'label' => 'Check connection now', 'method' => 'GET',
+                'endpoint' => '/papi/wa/health', 'actor' => 'human', 'icon' => 'refresh'];
             $actions[] = ['key' => 'sync', 'label' => 'Sync contacts', 'queryWrite' => true, 'method' => 'POST',
                 'endpoint' => '/papi/chats/sync', 'actor' => 'human', 'icon' => 'export',
                 'confirm' => 'Pull the latest conversations from WhatsApp now?'];
         }
+
+        // WhatsApp health chip (2026-07-18): the connection status finally VISIBLE where
+        // the team lives. Settings are maintained by wa:watchdog; a 60s-cached live probe
+        // keeps it honest between watchdog runs. Guarded — a probe failure never breaks Chats.
+        $waT = \App\Models\Tenant::find($ctx->tenantId());
+        $waStatus = (string) ($waT?->setting('wa_status', 'open') ?? 'open');
+        $waLastOk = (string) ($waT?->setting('wa_last_ok', '') ?? '');
+        try {
+            $inst = (string) ($waT?->whatsapp_instance ?? '');
+            if ($inst !== '') {
+                $live = \Illuminate\Support\Facades\Cache::remember('wa_live:'.$ctx->tenantId(), 60,
+                    fn () => app(\App\Services\WhatsApp\EvolutionAdmin::class)->state($inst));
+                if ($live !== '') $waStatus = $live === 'open' ? 'open' : ($live === 'connecting' ? 'connecting' : 'down');
+            }
+        } catch (\Throwable $e) {
+        }
+        $waChip = ['key' => 'wa', 'label' => 'WhatsApp',
+            'value' => $waStatus === 'open' ? 'Connected' : ($waStatus === 'connecting' ? 'Connecting…' : 'DOWN'),
+            'tone' => $waStatus === 'open' ? 'ok' : ($waStatus === 'connecting' ? 'warn' : 'danger'),
+            'foot' => $waLastOk !== '' ? 'last OK '.\Illuminate\Support\Carbon::parse($waLastOk)->diffForHumans() : 'checked live'];
 
         return (new WorkspacePayload)
             ->object([
@@ -120,6 +142,7 @@ final class ChatListCapability implements ProcessCapability
                 'subtitle' => number_format($stats['total']).' conversations · '.$stats['unread'].' unread',
             ])
             ->financials([
+                $waChip,
                 ['key' => 'unread', 'label' => 'Unread', 'value' => (string) $stats['unread'], 'tone' => $stats['unread'] > 0 ? 'danger' : 'ok', 'foot' => 'need a reply'],
                 ['key' => 'agent', 'label' => 'Agent mode', 'value' => (string) $stats['agent'], 'tone' => $stats['agent'] > 0 ? 'warn' : 'default', 'foot' => 'bot paused, human driving'],
                 ['key' => 'today', 'label' => 'Active today', 'value' => (string) $stats['today'], 'foot' => 'any direction'],

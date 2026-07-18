@@ -1276,6 +1276,37 @@ class PanelApiController extends Controller
      * QuotationService the bot uses. Input: phone, name (optional), items (JSON [{name,qty}]).
      */
     /** Bulk WhatsApp send: loops the proven quotationSend per id (capped, paced). */
+    /** Live WhatsApp health (2026-07-18): probe Evolution NOW for the main + send instances. */
+    public function waHealth(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $admin = app(\App\Services\WhatsApp\EvolutionAdmin::class);
+        $parts = [];
+        $overall = true;
+        $insts = array_values(array_unique(array_filter([
+            (string) $t->whatsapp_instance,
+            (string) $t->setting('wa_send_instance', ''),
+        ])));
+        foreach ($insts as $i) {
+            try {
+                $s = (string) $admin->state($i);
+            } catch (\Throwable $e) {
+                $s = 'unreachable';
+            }
+            $overall = $overall && $s === 'open';
+            $parts[] = $i.': '.($s === 'open' ? "connected \u{2705}" : ($s ?: 'unknown')." \u{26A0}\u{FE0F}");
+        }
+        if ($insts) {
+            $t->putSetting('wa_status', $overall ? 'open' : 'down');
+            if ($overall) $t->putSetting('wa_last_ok', now()->toIso8601String());
+        }
+        \Illuminate\Support\Facades\Cache::forget('wa_live:'.$t->id);
+
+        return response()->json(['ok' => $overall,
+            'message' => $parts ? implode(' · ', $parts) : 'No WhatsApp instance configured']);
+    }
+
     public function quotationBulkSend(Request $r)
     {
         $ids = array_slice(array_filter(array_map('intval', (array) $r->input('ids', []))), 0, 25);

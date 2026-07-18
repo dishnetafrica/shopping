@@ -88,6 +88,16 @@ final class MorningBriefingCapability implements ProcessCapability
         if ($war['reorder'] > 0) {
             $plan[] = new ActionSpec('reorder', 'Reorder ' . $war['reorder'] . ' low-stock SKUs', '/api/v1/workspace/warehouse', 'GET', 'human');
         }
+        // WhatsApp connection line (2026-07-18): a dead line is the FIRST thing to know each morning.
+        $waT = \App\Models\Tenant::find($ctx->tenantId());
+        if ($waT && (string) $waT->setting('wa_status', 'open') === 'down') {
+            $since = (string) $waT->setting('wa_down_since', '');
+            $plan[] = new ActionSpec('wa_down',
+                "\u{1F534} WhatsApp is DISCONNECTED".($since !== '' ? ' since '.\Illuminate\Support\Carbon::parse($since)->diffForHumans() : '')
+                .' — customers cannot reach the bot. Check the connection from Chats.',
+                '/api/v1/workspace/chats', 'GET', 'human', 'primary');
+        }
+
         if ($aiPending > 0) {
             $plan[] = new ActionSpec('ai_plan', "Review the AI's plan for today — " . $aiPending . ' follow-up' . ($aiPending === 1 ? '' : 's') . ' awaiting your judgment', '/api/v1/workspace/followups', 'GET', 'human', 'primary');
         }
