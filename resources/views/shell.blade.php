@@ -297,7 +297,7 @@ svg{display:block}
 
 /* WhatsApp-Web mode (route 'chats'): split pane — conversations left, thread right */
 .waweb{display:grid;grid-template-columns:340px 1fr;height:calc(100vh - 150px);background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
-.wal{border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.wal{border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0;min-height:0}
 .wasearch{padding:10px;border-bottom:1px solid var(--line)}
 .wasearch input{width:100%;height:36px;border:1px solid var(--line);border-radius:9px;padding:0 12px;background:var(--surface-2)}
 .wasearch input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-wash);background:#fff}
@@ -312,7 +312,7 @@ svg{display:block}
 .wat{font-size:10.5px;color:var(--faint)}
 .waun{background:#16a34a;color:#fff;border-radius:99px;min-width:20px;height:20px;display:grid;place-items:center;font-size:11px;font-weight:800;padding:0 6px}
 .wam{font-size:10px;font-weight:700;border-radius:99px;padding:2px 7px}.wam.bt{background:var(--surface-2);color:var(--muted)}.wam.ag{background:#fef3c7;color:#92400e}
-.war{display:flex;flex-direction:column;min-width:0;background:var(--surface-2)}
+.war{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--surface-2)}
 .wahd{display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);background:#fff}
 .wahm{flex:1;min-width:0}
 .waback{display:none;border:none;background:none;font-size:18px;cursor:pointer;padding:4px}
@@ -321,6 +321,8 @@ svg{display:block}
 .attach{height:40px;width:44px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);cursor:pointer;font-size:16px}
 .waempty{margin:auto;text-align:center;color:var(--muted);display:grid;gap:8px;place-items:center;font-weight:600}
 .wimg{max-width:260px;max-height:280px;border-radius:10px;display:block;cursor:zoom-in}
+.thread .sys{align-self:center;font-size:11px;color:var(--faint);background:var(--surface-2);border-radius:99px;padding:3px 10px;max-width:90%}
+.thread .oldmedia{font-size:12px;color:var(--muted);font-style:italic}
 @media(max-width:760px){
   .waweb{grid-template-columns:1fr}
   .waweb .war{display:none}.waweb .wal{display:flex}
@@ -806,13 +808,25 @@ async function openThread(id){
     const msgs=(p.meta&&p.meta.msgs)||[];
     const mh=msgs.map(function(m){
       const out=m.dir==='out'; const bot=out&&m.sender==='bot';
+      const body=(m.body||'').trim();
+      /* system lines render as centred notes, not bubbles */
+      if(m.sender==='system'){
+        return body?'<div class="sys">'+esc(body)+' · '+esc(m.at||'')+'</div>':'';
+      }
       let inner='';
       if(m.media){
         if(m.media.kind==='image') inner+='<img class="wimg" loading="lazy" src="'+esc(m.media.src)+'" onclick="try{window.open(this.src)}catch(e){}">';
         else if(m.media.kind==='audio') inner+='<audio controls preload="none" style="max-width:240px" src="'+esc(m.media.src)+'"></audio>';
         else inner+='<a href="'+esc(m.media.src)+'" target="_blank">📎 Attachment</a>';
       }
-      if(m.body && m.body!=='[photo]') inner+='<div>'+esc(m.body)+'</div>';
+      const ph=body.match(/^\[(image|photo|voice|audio|video|sticker|document|file)\]$/i);
+      if(!m.media && ph){
+        inner+='<div class="oldmedia">📎 '+esc(ph[1].toLowerCase())+' (sent before media logging)</div>';
+      } else if(body && body!=='[photo]'){
+        inner+='<div>'+esc(body)+'</div>';
+      }
+      /* nothing to show at all → skip the row entirely (this was the ghost-bubble gap bug) */
+      if(!inner) return '';
       return '<div class="msg '+(out?'out':'in')+(bot?' bot':'')+'">'+
         (out?'<div class="who">'+(bot?'🤖 Bot':'🧑‍💼 Agent')+'</div>':'')+inner+
         '<div class="when">'+esc(m.at||'')+'</div></div>';
