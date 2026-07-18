@@ -84,6 +84,12 @@ class RelationshipExtractor
     {
         $cust = (array) ($out['customer'] ?? []);
 
+        // identity: fill EMPTY columns only (never overwrite what a human typed)
+        $cn = trim((string) ($cust['customer_name'] ?? ''));
+        if ($cn !== '' && ! trim((string) $profile->name)) $profile->name = mb_substr($cn, 0, 120);
+        $sa = trim((string) ($cust['shop_area'] ?? ''));
+        if ($sa !== '' && ! trim((string) $profile->address)) $profile->address = mb_substr($sa, 0, 200);
+
         // facts: merge (AI supplies deltas; humans can always overwrite via the 360 later)
         $facts = (array) ($profile->facts ?? []);
         foreach ((array) ($cust['facts'] ?? []) as $k => $v) {
@@ -150,7 +156,7 @@ class RelationshipExtractor
 You are the relationship analyst for a WhatsApp commerce shop in East Africa (customers often write Juba Arabic or mixed English). Analyze the NEW portion of one customer conversation and reply with ONLY valid JSON, no markdown:
 {
  "customer": {
-   "facts": {  // ONLY newly learned/changed facts, snake_case keys. Useful keys: usual_products, brands_preferred, budget_band, decision_role, payment_behavior, delivery_prefs, preferred_contact_hours, current_goal, next_expected_action, current_objection, wanted_unavailable (array of product names they wanted but we lacked)
+   "customer_name": "their name if stated or clearly inferable, else \"\"", "shop_area": "shop name/number + market or area if mentioned (e.g. \"Shop 307, Konyo Konyo\"), else \"\"", "facts": {  // ONLY newly learned/changed facts, snake_case keys. Useful keys: usual_products, brands_preferred, budget_band, decision_role, payment_behavior, delivery_prefs, preferred_contact_hours, current_goal, next_expected_action, current_objection, wanted_unavailable (array of product names they wanted but we lacked)
    },
    "stage_proposal": "INTERESTED|NEGOTIATING|WAITING_BUDGET or empty string",  // ONLY these three, only if the conversation clearly shows it
    "sentiment": "positive|neutral|negative",

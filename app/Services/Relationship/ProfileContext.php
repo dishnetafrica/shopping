@@ -19,7 +19,17 @@ class ProfileContext
             $p = CustomerProfile::withoutGlobalScopes()
                 ->where('tenant_id', $tenant->id)->where('phone', preg_replace('/[^0-9]/', '', $phone))
                 ->first();
-            if (! $p) return '';
+            if (! $p) {
+                // BRAND-NEW customer — the first-impressions moment. In Juba trade the
+                // relationship IS the sale: knowing their name and shop/area turns an
+                // anonymous number into a customer we can deliver to and greet properly.
+                return "\n\nNEW CUSTOMER — we know nothing about them yet.\n"
+                    ."- FIRST fully answer whatever they asked. THEN, in the same or next reply, get acquainted "
+                    ."with ONE short warm line combining name + shop/area, e.g.: \"By the way, who do I have the "
+                    ."pleasure of serving? Which shop and area — so we deliver right \u{1F60A}\"\n"
+                    ."- ONE ask only. Never before answering. Never if they seem upset or in a hurry. "
+                    ."If they ignore it, do NOT ask again this conversation — the details will come naturally with the first order.";
+            }
 
             $bits = [];
             if ($p->name)  $bits[] = 'Name: '.$p->name;
@@ -44,6 +54,20 @@ class ProfileContext
                 'LOST' => 'Courteous and minimal; do not sell.',
             ][strtoupper((string) $p->stage)] ?? null;
             if ($playbook) $bits[] = 'Playbook for this stage: '.$playbook;
+
+            // Progressive profiling: surface what we STILL don't know, so the bot can
+            // close ONE gap per conversation at a natural moment — never an interrogation.
+            $gaps = [];
+            if (! trim((string) $p->name)) $gaps[] = 'their name';
+            if (! trim((string) $p->address) && ! trim((string) $p->city)) $gaps[] = 'their shop + area (needed for delivery)';
+            if ($gaps) {
+                $bits[] = 'STILL UNKNOWN: '.implode(' · ', $gaps)
+                    .'. Weave ONE natural question for ONE of these at the right moment — '
+                    .'delivery talk is the perfect moment for the shop/area. Never interrogate, never ask before answering them, '
+                    .'and one ignored ask = drop it for this conversation.';
+            } else {
+                $bits[] = 'Greet and refer to them BY NAME — being remembered is half the relationship in this market.';
+            }
             if ($p->ai_summary) $bits[] = "Relationship summary:\n".$p->ai_summary;
             if (! $bits) return '';
 
