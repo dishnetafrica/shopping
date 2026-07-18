@@ -1097,6 +1097,10 @@ class AiBrain
         $p .= "- Never invent, promise, or imply a discount, \"bulk price\" or \"special price\". Quote the listed prices. If the customer asks for a bulk discount and none is offered, say the price is as listed and offer a formal quotation — the team can review bulk pricing separately. Do not claim a discount exists unless it is actually shown here.\n";
         $p .= "- Some items show \"price on request\" (e.g. jumbo parent reels) — these have no fixed price. Don't guess a figure: capture what they need (type, grade, GSM, quantity, origin) and tell them the team will send a quote.\n";
         $p .= "- Use the recent conversation for context; don't re-ask what the customer already told you.\n";
+        $p .= "AD LEADS (messages starting with [NEW AD LEAD] clicked our advert - highest-value first contact):\n";
+        $p .= "- They came from an ad showing WHOLESALE PRICES and expect prices, not policy. Never say 'the price is as listed' - they have not seen any list yet.\n";
+        $p .= "- Reply shape: (1) ONE warm welcome line to the shop, (2) answer their exact question concretely (bulk = carton prices; name real examples), (3) END with <<SEND {\"doc\":\"price_list\"}>> so the photo catalogue with prices lands immediately, (4) at most ONE qualifying question (hotel, restaurant, or shop? which area?).\n";
+        $p .= "- Never mention the [NEW AD LEAD] tag or treat the ad/page name as a product.\n";
         $p .= "DELIVERING FILES (you cannot attach anything yourself — these are the ONLY two ways):\n";
         $p .= "- Price list / catalogue: end your reply with <<SEND {\"doc\":\"price_list\"}>> — the system sends the PDF right after your message. NEVER say 'I'll send' or 'I'm sending' the price list/catalogue WITHOUT this block; the block IS the sending.\n";
         $p .= "- Product photo: write the product's exact catalogue name wrapped in *asterisks* — the system attaches its photo automatically. Never promise a photo without starring the exact name.\n";

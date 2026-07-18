@@ -18,6 +18,20 @@ class SendPromiseCouplingTest extends TestCase
         $this->assertStringContainsString('starring the exact name', $src, 'photos couple via *starred* names');
     }
 
+    public function test_ad_leads_get_the_red_carpet_not_the_terms_and_conditions(): void
+    {
+        $job = file_get_contents(app_path('Jobs/ProcessIncomingMessage.php'));
+        $this->assertStringContainsString('[NEW AD LEAD]', $job);
+        $this->assertStringContainsString('ad_lead_tagged', $job, 'tagged once per conversation');
+        $this->assertStringContainsString('lead source: WhatsApp/Facebook ad', $job,
+            'the extractor and learner see where the customer came from');
+
+        $brain = file_get_contents(app_path('Services/Bot/AiBrain.php'));
+        $this->assertStringContainsString('AD LEADS', $brain);
+        $this->assertStringContainsString('they have not seen any list yet', $brain);
+        $this->assertStringContainsString('hotel, restaurant, or shop', $brain, 'one qualifying question');
+    }
+
     public function test_the_318_product_incident_can_not_recur(): void
     {
         $src = file_get_contents(app_path('Services/Bot/AiBrain.php'));

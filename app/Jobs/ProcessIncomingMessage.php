@@ -295,7 +295,19 @@ class ProcessIncomingMessage implements ShouldQueue
                 // DON'T weave it as a product — just let the customer's real message through.
                 if ($adHead !== '' && $this->adTitleIsBrand($tenant, $adHead)) {
                     BotTrace::log($this->tenantId, $trace, $from, 'ad_referral', $adHead . ' (page/brand — not treated as product)');
-                    $adHead = '';   // fall through: answer the customer's actual text (or greet)
+                    // Red-carpet (2026-07-19): a page-name title still means THIS IS AN AD CLICK —
+                    // the hottest lead type. Tag it once so the AI runs the AD LEAD playbook
+                    // (welcome + concrete answer + catalogue via <<SEND>> + one qualifying question).
+                    $st = is_array($convo->state) ? $convo->state : [];
+                    if (empty($st['ad_lead_tagged'])) {
+                        $st['ad_lead_tagged'] = time();
+                        $convo->state = $st;
+                        $convo->save();
+                        $this->incoming['text'] = '[NEW AD LEAD] ' . trim((string) $this->incoming['text']);
+                        \App\Support\MessageLog::record($this->tenantId, $from, (string) $tenant->whatsapp_instance,
+                            'in', 'system', '[lead source: WhatsApp/Facebook ad — ' . mb_substr($adHead, 0, 60) . ']');
+                    }
+                    $adHead = '';   // the customer's real question flows through untouched
                 }
                 if ($adHead !== '') {
                     $adHead = mb_substr($adHead, 0, 160);
