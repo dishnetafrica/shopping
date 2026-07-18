@@ -29,6 +29,7 @@ use App\Capability\Process\ChatListCapability;
 use App\Capability\Process\CommunicationCapability;
 use App\Capability\Process\ConsignmentListCapability;
 use App\Capability\Process\FollowupsCapability;
+use App\Capability\Process\BotDiagnosticsCapability;
 use App\Capability\Process\GuideCapability;
 use App\Capability\Process\ScheduledOrdersCapability;
 use App\Capability\Process\LeadListCapability;
@@ -115,6 +116,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
             // warning + one missing menu item — NEVER a dead panel.
             try {
                 $r->register(new FollowupsCapability(), new CapabilityManifest(key: 'followups', type: 'process', owner: 'sales', permission: '', api: '/api/v1/workspace/followups'));
+                $r->register(new BotDiagnosticsCapability(), new CapabilityManifest(key: 'diagnostics', type: 'process', owner: 'messaging', permission: '', api: '/api/v1/workspace/diagnostics'));
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning('followups capability not registered: '.$e->getMessage());
             }

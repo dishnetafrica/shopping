@@ -1276,6 +1276,20 @@ class PanelApiController extends Controller
      * QuotationService the bot uses. Input: phone, name (optional), items (JSON [{name,qty}]).
      */
     /** Bulk WhatsApp send: loops the proven quotationSend per id (capped, paced). */
+    /** Clear historical failed-job records (diagnostics action). */
+    public function diagQueueFlush(Request $r)
+    {
+        if (! $r->user()->tenant) return response()->json(['ok' => false], 401);
+        try {
+            $n = \Illuminate\Support\Facades\DB::table('failed_jobs')->count();
+            \Illuminate\Support\Facades\Artisan::call('queue:flush');
+
+            return response()->json(['ok' => true, 'message' => "Cleared {$n} old failed job record(s)"]);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => 'flush failed'], 500);
+        }
+    }
+
     /** Live WhatsApp health (2026-07-18): probe Evolution NOW for the main + send instances. */
     public function waHealth(Request $r)
     {

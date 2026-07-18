@@ -312,6 +312,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('export/{entity}',        [\App\Http\Controllers\Panel\BulkExportController::class, 'export']);
         Route::post('quotations/bulk-send',  [PanelApiController::class, 'quotationBulkSend']);
         Route::get('wa/health',              [PanelApiController::class, 'waHealth']);
+        Route::post('diag/queue-flush',      [PanelApiController::class, 'diagQueueFlush']);
         Route::match(['get','post'], 'invoice-pay',  [\App\Http\Controllers\Panel\InvoiceController::class, 'pay']);
         Route::match(['get','post'], 'invoice-void', [\App\Http\Controllers\Panel\InvoiceController::class, 'void']);
         // Numbered credit note register (CN-2026-0001)
