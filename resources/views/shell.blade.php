@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/v3-manifest.webmanifest">
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <title>CloudBSS</title>
 <style>
@@ -727,7 +728,25 @@ async function boot(){
     var o=c.createOscillator(), g=c.createGain(); o.connect(g); g.connect(c.destination);
     o.frequency.value=880; g.gain.value=0.05; o.start();
     setTimeout(function(){ try{o.stop(); c.close();}catch(e){} },160); }catch(e){} }
-  function askPerm(){ try{ if(window.Notification && Notification.permission==='default'){ Notification.requestPermission(); } }catch(e){}
+  function b64uArr(s){ const pad='='.repeat((4-s.length%4)%4); const b=atob((s+pad).replace(/-/g,'+').replace(/_/g,'/'));
+    const a=new Uint8Array(b.length); for(let i=0;i<b.length;i++) a[i]=b.charCodeAt(i); return a; }
+  async function pushEnroll(){
+    try{
+      if(!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      if(!window.Notification || Notification.permission!=='granted') return;
+      const reg=await navigator.serviceWorker.register('/sw.js');
+      let sub=await reg.pushManager.getSubscription();
+      if(!sub){
+        const kr=await fetch('/papi/push/vapid-public',{credentials:'same-origin'}).then(x=>x.json());
+        if(!kr||!kr.key) return;
+        sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64uArr(kr.key)});
+      }
+      const raw=sub.toJSON();
+      await post('/papi/push/subscribe',{endpoint:sub.endpoint, p256dh:(raw.keys&&raw.keys.p256dh)||'', auth:(raw.keys&&raw.keys.auth)||''});
+    }catch(e){}
+  }
+  function askPerm(){ try{ if(window.Notification && Notification.permission==='default'){ Notification.requestPermission().then(function(p){ if(p==='granted') pushEnroll(); }); }
+    else if(window.Notification && Notification.permission==='granted'){ pushEnroll(); } }catch(e){}
     document.removeEventListener('click', askPerm); }
   document.addEventListener('click', askPerm);
   function announce(n){

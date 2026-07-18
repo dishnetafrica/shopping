@@ -48,6 +48,18 @@ class MessageLog
         }
         $convo->save();
 
+        // Phones buzz on new inbound — browser closed included (Web Push). Resolved via
+        // the container so tests can fake it; fail-soft so a push can NEVER break logging.
+        if ($direction === 'in') {
+            try {
+                $preview = trim($body) !== '' ? $body : 'sent a message';
+                app(\App\Services\Push\WebPushService::class)
+                    ->notifyInbound($tenantId, $phone, $phone, $preview);
+            } catch (\Throwable $e) {
+                // never let push failures touch the transcript
+            }
+        }
+
         return $msg;
     }
 }

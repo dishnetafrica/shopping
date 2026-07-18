@@ -390,6 +390,10 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::post('chats/send',        [PanelApiController::class, 'chatSend']);
         Route::get('chats/media',        [PanelApiController::class, 'chatMedia']);
         Route::post('chats/send-media',  [PanelApiController::class, 'chatSendMedia']);
+        Route::get('push/vapid-public',  [\App\Http\Controllers\Panel\PushController::class, 'vapidPublic']);
+        Route::post('push/subscribe',    [\App\Http\Controllers\Panel\PushController::class, 'subscribe']);
+        Route::post('push/unsubscribe',  [\App\Http\Controllers\Panel\PushController::class, 'unsubscribe']);
+        Route::post('push/test',         [\App\Http\Controllers\Panel\PushController::class, 'test']);
         Route::post('chats/takeover',    [PanelApiController::class, 'chatTakeover']);
         Route::post('chats/mute',        [PanelApiController::class, 'chatMute']);
         Route::post('chats/bot-mode',    [PanelApiController::class, 'chatBotMode']);
