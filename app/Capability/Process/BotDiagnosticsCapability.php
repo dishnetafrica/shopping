@@ -22,7 +22,7 @@ class BotDiagnosticsCapability implements ProcessCapability
 
     public function permission(): string { return ''; }
 
-    public function summary(CapabilityContext $ctx): array
+    public function summary(CapabilityContext $ctx, array $scope = []): array
     {
         $err = (int) DB::table('bot_events')->where('tenant_id', $ctx->tenantId())
             ->where('created_at', '>', now()->subDay())
