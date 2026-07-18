@@ -103,6 +103,7 @@ final class CustomerListCapability implements ProcessCapability
                 'last_order' => ['value' => $lastAt ? $lastAt->diffForHumans(null, true) . ' ago' : 'never', 'sort' => $lastAt ? $lastAt->timestamp : 0],
                 'country'    => (string) ($c->country ?: ''),
                 'link'       => '/api/v1/workspace/customer/' . $c->id,
+                'id'         => (int) $c->id,
             ];
         }
 
@@ -141,6 +142,11 @@ final class CustomerListCapability implements ProcessCapability
             ])
             ->table($columns, $rows, $filters)
             ->actions([
+                'selectable' => true,
+                'bulk' => [
+                    ['label' => 'Export CSV', 'method' => 'GET', 'endpoint' => '/papi/export/customers?format=csv'],
+                    ['label' => 'Export PDF', 'method' => 'GET', 'endpoint' => '/papi/export/customers?format=pdf'],
+                ],
                 ['key' => 'add_customer', 'label' => 'New customer', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/customers/_/add_customer', 'actor' => 'human', 'tone' => 'primary', 'schema' => self::formSchema()],
                 ['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customers', 'actor' => 'human', 'tone' => 'default', 'icon' => 'export'],
             ])

@@ -101,6 +101,12 @@ final class ProductListCapability implements ProcessCapability
             ->table($columns, $rows, [
                 ['key' => 'category', 'label' => 'Category'],
                 ['key' => 'status', 'label' => 'Status'],
+            ], [
+                'selectable' => true,
+                'bulk' => [
+                    ['label' => 'Export CSV', 'method' => 'GET', 'endpoint' => '/papi/export/products?format=csv'],
+                    ['label' => 'Export PDF', 'method' => 'GET', 'endpoint' => '/papi/export/products?format=pdf'],
+                ],
             ])
             ->actions(array_values(array_filter([
                 $scope !== '' ? ['key' => 'all_products', 'label' => 'Show all products', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/products', 'actor' => 'human', 'tone' => 'default'] : null,

@@ -63,6 +63,7 @@ final class SalesOrderListCapability implements ProcessCapability
                 'created'  => ['value' => $created ? $created->format('d M Y') : '—', 'sort' => $created ? $created->timestamp : 0],
                 'act'      => ['buttons' => $rowBtns],
                 'link'     => '/api/v1/workspace/salesOrder/' . $o->id,
+                'id'       => (int) $o->id,
             ];
         }
         $value = $rc->consolidate($valueRows)['amount'];
@@ -88,7 +89,13 @@ final class SalesOrderListCapability implements ProcessCapability
                 ['key' => 'delivered', 'label' => 'Delivered', 'value' => $delivered, 'tone' => 'ok', 'foot' => 'fulfilled'],
                 ['key' => 'value', 'label' => 'Order value', 'value' => Money::fmt($value, $cur), 'foot' => 'open book'],
             ])
-            ->table($columns, $rows)
+            ->table($columns, $rows, [], [
+                'selectable' => true,
+                'bulk' => [
+                    ['label' => 'Export CSV', 'method' => 'GET', 'endpoint' => '/papi/export/orders?format=csv'],
+                    ['label' => 'Export PDF', 'method' => 'GET', 'endpoint' => '/papi/export/orders?format=pdf'],
+                ],
+            ])
             ->actions([['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/salesOrders', 'actor' => 'human', 'tone' => 'default']])
             ->meta(['capability' => 'salesOrders', 'ttl' => 30, 'permissions' => ['menu:orders'], 'note' => $total > self::MAX_ROWS ? ('Showing most recent ' . self::MAX_ROWS . ' of ' . $total . '; KPIs cover all.') : null]);
     }

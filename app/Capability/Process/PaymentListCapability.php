@@ -59,6 +59,7 @@ final class PaymentListCapability implements ProcessCapability
                 'date'     => ['value' => $when ? $when->format('d M Y') : '—', 'sort' => $when ? $when->timestamp : 0],
                 'act'      => ['buttons' => [['icon' => 'download', 'title' => 'Download receipt', 'href' => '/api/v1/doc/receipt/' . $p->id]]],
                 'link'     => '/api/v1/workspace/payment/' . $p->id,
+                'id'       => (int) $p->id,
             ];
         }
 
@@ -84,7 +85,13 @@ final class PaymentListCapability implements ProcessCapability
                 ['key' => 'month', 'label' => 'This month', 'value' => $rc->fmtConsolidated($monthTotal), 'tone' => 'ok', 'foot' => 'received this month'],
                 ['key' => 'avg', 'label' => 'Avg. payment', 'value' => $rc->fmtConsolidated($avg), 'foot' => 'per receipt'],
             ])
-            ->table($columns, $rows, [['key' => 'received', 'label' => 'Received by'], ['key' => 'method', 'label' => 'Method']])
+            ->table($columns, $rows, [['key' => 'received', 'label' => 'Received by'], ['key' => 'method', 'label' => 'Method']], [
+                'selectable' => true,
+                'bulk' => [
+                    ['label' => 'Export CSV', 'method' => 'GET', 'endpoint' => '/papi/export/payments?format=csv'],
+                    ['label' => 'Export PDF', 'method' => 'GET', 'endpoint' => '/papi/export/payments?format=pdf'],
+                ],
+            ])
             ->actions([['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/payments', 'actor' => 'human', 'tone' => 'default']])
             ->meta(['capability' => 'payments', 'ttl' => 60, 'permissions' => ['menu:finance']]);
     }

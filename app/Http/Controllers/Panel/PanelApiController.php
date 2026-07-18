@@ -1275,6 +1275,28 @@ class PanelApiController extends Controller
      * panel and send it to a customer's WhatsApp. Reuses the same OrderCalculator +
      * QuotationService the bot uses. Input: phone, name (optional), items (JSON [{name,qty}]).
      */
+    /** Bulk WhatsApp send: loops the proven quotationSend per id (capped, paced). */
+    public function quotationBulkSend(Request $r)
+    {
+        $ids = array_slice(array_filter(array_map('intval', (array) $r->input('ids', []))), 0, 25);
+        if (! $ids) return response()->json(['ok' => false, 'error' => 'no_ids'], 422);
+        $sent = 0; $failed = [];
+        foreach ($ids as $id) {
+            $r->merge(['id' => $id]);
+            try {
+                $body = json_decode($this->quotationSend($r)->getContent(), true);
+                if (! empty($body['ok'])) $sent++;
+                else $failed[] = $id.':'.($body['error'] ?? 'failed');
+            } catch (\Throwable $e) {
+                $failed[] = $id.':exception';
+            }
+            usleep(400000);
+        }
+
+        return response()->json(['ok' => $sent > 0, 'message' => "Sent {$sent} of ".count($ids)
+            .($failed ? ' · failed: '.implode(', ', array_slice($failed, 0, 5)) : '')]);
+    }
+
     public function quotationSend(Request $r)
     {
         $t = $r->user()->tenant;

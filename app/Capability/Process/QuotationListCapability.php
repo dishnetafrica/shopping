@@ -77,6 +77,7 @@ final class QuotationListCapability implements ProcessCapability
                 'created'  => ['value' => $created ? $created->format('d M Y') : '—', 'sort' => $created ? $created->timestamp : 0],
                 'act'      => ['buttons' => $rowBtns],
                 'link'     => $q->order_id ? '/api/v1/workspace/salesOrder/' . $q->order_id : '/api/v1/workspace/quotation/' . $q->id,
+                'id'       => (int) $q->id,
             ];
         }
 
@@ -106,6 +107,12 @@ final class QuotationListCapability implements ProcessCapability
                 ['key' => 'openvalue', 'label' => 'Open value', 'value' => $rc->totalText($openRows), 'foot' => 'awaiting reply'],
             ])
             ->table($columns, $rows, [], [
+                'selectable' => true,
+                'bulk' => [
+                    ['label' => 'Export CSV', 'method' => 'GET', 'endpoint' => '/papi/export/quotations?format=csv'],
+                    ['label' => 'Export PDF', 'method' => 'GET', 'endpoint' => '/papi/export/quotations?format=pdf'],
+                    ['label' => 'Send on WhatsApp', 'method' => 'POST', 'endpoint' => '/papi/quotations/bulk-send', 'tone' => 'primary', 'confirm' => 'Send {n} quotation PDF(s) to their customers on WhatsApp?'],
+                ],
                 'dateKey' => 'created', 'dateLabel' => 'Created', 'currency' => $cur, 'pageSize' => 20,
                 'totals' => [['key' => 'value', 'label' => 'Total value', 'money' => true]],
             ])
