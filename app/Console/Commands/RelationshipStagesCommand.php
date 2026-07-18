@@ -39,6 +39,7 @@ class RelationshipStagesCommand extends Command
             $median = max(1.0, (float) $agg->pluck('rev12')->filter(fn ($v) => $v > 0)->median());
 
             foreach (CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)->cursor() as $p) {
+                if (strtoupper((string) $p->stage) === 'LOST') continue;   // human decision — sticky, never recomputed
                 $a = $agg->get($p->phone);
                 $orders = $a ? (int) $a->c : 0;
                 $daysSinceOrder = $a ? now()->diffInDays($a->last_at) : null;

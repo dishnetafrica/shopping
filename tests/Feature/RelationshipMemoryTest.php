@@ -48,6 +48,40 @@ class RelationshipMemoryTest extends TestCase
         return $c;
     }
 
+    public function test_customer_360_shows_the_memory_and_humans_can_correct_it(): void
+    {
+        $t = $this->tenant();
+        $user = \App\Models\User::factory()->create(['tenant_id' => $t->id, 'role' => 'owner']);
+        $this->actingAs($user);
+        $c = CustomerProfile::withoutGlobalScopes()->create(['tenant_id' => $t->id, 'phone' => '211900000010',
+            'name' => 'Shop 58', 'stage' => 'NEGOTIATING',
+            'facts' => ['budget_band' => 'about 500 usd'], 'ai_summary' => 'Bulk cup buyer.']);
+
+        $j = $this->getJson('/api/v1/workspace/customer/'.$c->id)->assertOk()->json();
+        $cards = collect($j['object']['overviewCards'] ?? $j['meta']['overviewCards'] ?? []);
+        $rel = $cards->first(fn ($x) => ($x['title'] ?? '') === 'Relationship (AI memory)');
+        $this->assertNotNull($rel, 'the memory must be visible on the 360 when the flag is on');
+        $flat = json_encode($rel);
+        $this->assertStringContainsString('NEGOTIATING', $flat);
+        $this->assertStringContainsString('Bulk cup buyer.', $flat);
+
+        // human corrections
+        $this->postJson('/api/v1/workspace/customer/'.$c->id.'/set_stage', ['id' => $c->id, 'stage' => 'LOST'])
+            ->assertOk()->assertJson(['ok' => true]);
+        $this->postJson('/api/v1/workspace/customer/'.$c->id.'/correct_fact',
+            ['id' => $c->id, 'fact_key' => 'budget_band', 'fact_value' => ''])
+            ->assertOk();
+        $c->refresh();
+        $this->assertSame('LOST', $c->stage);
+        $this->assertArrayNotHasKey('budget_band', (array) $c->facts, 'empty value deletes the fact');
+
+        // LOST survives the nightly math — sticky human decision
+        \App\Models\Order::withoutGlobalScopes()->create(['tenant_id' => $t->id, 'customer_phone' => '211900000010',
+            'customer_name' => 'Shop 58', 'items' => [], 'total' => 100, 'status' => 'completed']);
+        $this->artisan('relationship:stages', ['--tenant' => $t->id])->assertExitCode(0);
+        $this->assertSame('LOST', $c->fresh()->stage, 'the cron never overrides a human LOST');
+    }
+
     public function test_extraction_merges_facts_validates_stage_and_stores_guardian_review(): void
     {
         $t = $this->tenant();

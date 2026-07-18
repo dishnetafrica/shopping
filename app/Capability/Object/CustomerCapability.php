@@ -242,6 +242,26 @@ final class CustomerCapability implements ObjectCapability
             ]],
         ];
 
+        // V4.0 Relationship card — the machine's memory, visible and correctable.
+        if ((bool) $ctx->tenant->setting('relationship_memory', false)) {
+            $rrows = [
+                ['Stage', (string) ($c->stage ?: 'NEW')
+                    .($c->stage_changed_at ? '  (since '.Carbon::parse($c->stage_changed_at)->format('d M').')' : '')],
+                ['Health', $c->health !== null
+                    ? $c->health.'/100'.($c->health_prev !== null && (int) $c->health_prev !== (int) $c->health
+                        ? ((int) $c->health > (int) $c->health_prev ? ' ↑' : ' ↓').' (was '.$c->health_prev.')' : '')
+                    : 'not scored yet'],
+                ['Flags', implode(' · ', (array) ($c->health_flags ?? [])) ?: '—'],
+            ];
+            foreach ((array) ($c->facts ?? []) as $fk => $fv) {
+                if (count($rrows) >= 11) break;
+                if (is_array($fv)) $fv = implode(', ', array_map('strval', $fv));
+                $rrows[] = [ucfirst(str_replace('_', ' ', (string) $fk)), mb_substr((string) $fv, 0, 110)];
+            }
+            $rrows[] = ['AI summary', (string) ($c->ai_summary ?: 'Builds itself from conversations — nothing yet.')];
+            $overviewCards[] = ['kind' => 'dl', 'title' => 'Relationship (AI memory)', 'rows' => $rrows];
+        }
+
         // Account statement tab = running ledger + any credit notes.
         $financialsCards = [];
         if ($cnRows) {
@@ -314,6 +334,27 @@ final class CustomerCapability implements ObjectCapability
             ->actions([$primary])
             ->more(array_values(array_filter([
                 $editAction,
+                (bool) $ctx->tenant->setting('relationship_memory', false) ? [
+                    'key' => 'set_stage', 'label' => 'Set relationship stage', 'method' => 'POST',
+                    'endpoint' => $endpoint . '/set_stage', 'actor' => 'human', 'submitLabel' => 'Set stage',
+                    'schema' => ['stage' => 'enum:' . implode(',', \App\Services\Relationship\RelationshipExtractor::STAGES)],
+                    'labels' => ['stage' => 'Stage (LOST and VIP are yours to decide — the AI never sets them)'],
+                    'prefill' => ['id' => (int) $c->id, 'stage' => (string) ($c->stage ?: 'NEW')],
+                ] : null,
+                (bool) $ctx->tenant->setting('relationship_memory', false) ? [
+                    'key' => 'edit_summary', 'label' => 'Edit AI summary', 'method' => 'POST',
+                    'endpoint' => $endpoint . '/edit_summary', 'actor' => 'human', 'submitLabel' => 'Save summary',
+                    'schema' => ['summary' => 'textarea'],
+                    'prefill' => ['id' => (int) $c->id, 'summary' => (string) ($c->ai_summary ?: '')],
+                ] : null,
+                (bool) $ctx->tenant->setting('relationship_memory', false) ? [
+                    'key' => 'correct_fact', 'label' => 'Correct a fact', 'method' => 'POST',
+                    'endpoint' => $endpoint . '/correct_fact', 'actor' => 'human', 'submitLabel' => 'Save fact',
+                    'schema' => ['fact_key' => 'combo:' . (implode('|', array_map('strval', array_keys((array) ($c->facts ?? [])))) ?: 'usual_products'),
+                                 'fact_value' => 'text'],
+                    'labels' => ['fact_key' => 'Fact', 'fact_value' => 'Correct value (leave EMPTY to delete the fact)'],
+                    'prefill' => ['id' => (int) $c->id],
+                ] : null,
                 $hasPhone ? $dlStatement : null,
                 $hasPhone ? $sendStatement : null,
                 $reminder, $setFollow, $assignRep,
@@ -337,6 +378,7 @@ final class CustomerCapability implements ObjectCapability
         return match ($action) {
             'record_payment' => $this->recordPayment($ctx, $input),
             'update_customer', 'set_followup', 'assign_rep' => $this->updateCustomer($ctx, $input),
+            'set_stage', 'edit_summary', 'correct_fact' => $this->relationshipUpdate($ctx, $action, $input),
             'log_contact' => $this->touch($ctx, $input, 'contact'),
             'log_whatsapp' => $this->touch($ctx, $input, 'whatsapp'),
             'create_quotation' => $this->createQuotation($ctx, $input),
@@ -344,6 +386,41 @@ final class CustomerCapability implements ObjectCapability
             'send_reminder' => ['ok' => true, 'sent' => true, 'message' => 'Reminder sent.'],
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
+    }
+
+    /** V4.0 — humans own the memory: stage overrides (incl. LOST — sticky, see stages cron),
+     *  summary edits, fact corrections/deletions. */
+    private function relationshipUpdate(CapabilityContext $ctx, string $action, array $input): array
+    {
+        $c = CustomerProfile::where('tenant_id', $ctx->tenantId())->find((int) ($input['id'] ?? 0));
+        if (! $c) return ['ok' => false, 'error' => 'not_found'];
+
+        if ($action === 'set_stage') {
+            $stage = strtoupper(trim((string) ($input['stage'] ?? '')));
+            if (! in_array($stage, \App\Services\Relationship\RelationshipExtractor::STAGES, true)) {
+                return ['ok' => false, 'error' => 'bad_stage'];
+            }
+            $c->stage = $stage;
+            $c->stage_changed_at = now();
+            $c->save();
+            return ['ok' => true, 'message' => 'Stage set to '.$stage];
+        }
+        if ($action === 'edit_summary') {
+            $c->ai_summary = mb_substr(trim((string) ($input['summary'] ?? '')), 0, 1200) ?: null;
+            $c->save();
+            return ['ok' => true, 'message' => 'Summary saved'];
+        }
+        // correct_fact
+        $k = substr(preg_replace('/[^a-z0-9_]/', '', strtolower((string) ($input['fact_key'] ?? ''))), 0, 40);
+        if ($k === '') return ['ok' => false, 'error' => 'empty_key'];
+        $facts = (array) ($c->facts ?? []);
+        $v = trim((string) ($input['fact_value'] ?? ''));
+        if ($v === '') { unset($facts[$k]); $msg = 'Fact removed'; }
+        else { $facts[$k] = mb_substr($v, 0, 160); $msg = 'Fact saved'; }
+        $c->facts = $facts;
+        $c->save();
+
+        return ['ok' => true, 'message' => $msg];
     }
 
     /** Raise a quotation for this customer via the frozen QuotationService (build → PDF → persist → send). */
