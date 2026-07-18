@@ -32,6 +32,14 @@ class FollowupsCapability
 
         $sentToday = FollowupProposal::where('tenant_id', $ctx->tenantId())
             ->where('status', 'sent')->where('updated_at', '>=', now()->startOfDay())->count();
+
+        // V4.3 measurement — the AI desk's own scoreboard (30 days, pure math)
+        $sent30 = FollowupProposal::where('tenant_id', $ctx->tenantId())
+            ->where('status', 'sent')->where('updated_at', '>', now()->subDays(30))->get();
+        $conv30 = $sent30->whereNotNull('influenced_order_id');
+        $rev30 = \App\Models\Order::withoutGlobalScopes()
+            ->whereIn('id', $conv30->pluck('influenced_order_id'))->sum('total');
+        $convPct = $sent30->count() ? round(100 * $conv30->count() / $sent30->count()) : 0;
         $byTrigger = $pending->groupBy('trigger')->map->count();
 
         $rows = $pending->map(fn ($p) => [
@@ -77,6 +85,10 @@ class FollowupsCapability
                 ['key' => 'sent', 'label' => 'Sent today', 'value' => (string) $sentToday, 'foot' => 'human-approved'],
                 ['key' => 'quotes', 'label' => 'Quote chases', 'value' => (string) ($byTrigger['quote_chase'] ?? 0), 'foot' => 'open quotations'],
                 ['key' => 'reorders', 'label' => 'Reorders + winback', 'value' => (string) (($byTrigger['reorder'] ?? 0) + ($byTrigger['winback'] ?? 0)), 'foot' => 'cycle + dormant'],
+                ['key' => 'conv', 'label' => 'Converted (30d)', 'value' => $convPct.'%',
+                 'tone' => $convPct >= 30 ? 'ok' : 'default', 'foot' => $conv30->count().' of '.$sent30->count().' sent led to an order'],
+                ['key' => 'rev', 'label' => 'Influenced revenue (30d)', 'value' => number_format((float) $rev30, 0),
+                 'tone' => $rev30 > 0 ? 'ok' : 'default', 'foot' => '7-day attribution window — direction, not gospel'],
             ])
             ->table(
                 [
