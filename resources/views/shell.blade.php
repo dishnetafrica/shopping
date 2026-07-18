@@ -329,6 +329,10 @@ svg{display:block}
 .trline{margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);font-size:12.5px;color:var(--muted)}
 .trbtn{border:none;background:none;color:var(--brand);font-size:11.5px;font-weight:700;cursor:pointer;padding:2px 0;display:block}
 .attach.on{background:var(--brand-wash);border-color:var(--brand)}
+.selh,.selc{width:34px;text-align:center}
+.selc input,.selh input{width:15px;height:15px;accent-color:var(--brand);cursor:pointer}
+.selbar{display:flex;align-items:center;gap:8px;padding:9px 12px;margin-bottom:8px;background:var(--brand-wash);border:1px solid var(--brand);border-radius:10px;flex-wrap:wrap}
+.selbar b{margin-right:4px}
 @media(max-width:760px){
   .waweb{grid-template-columns:1fr}
   .waweb .war{display:none}.waweb .wal{display:flex}
@@ -1685,7 +1689,8 @@ function renderList(p){
   const o=p.object||{}; const cap=(p.meta&&p.meta.capability)||CUR.key; const tb=p.table||{};
   TBL = { cols:tb.columns||[], rows:tb.rows||[], filters:tb.filters||[], fval:{}, sort:null, dir:1, q:'',
     dateKey:tb.dateKey||null, dateLabel:tb.dateLabel||'Created', totals:tb.totals||[], from:'', to:'', page:1,
-    pageSize:tb.pageSize||15, cur:tb.currency||'UGX' };
+    pageSize:tb.pageSize||15, cur:tb.currency||'UGX',
+    selectable:!!tb.selectable, bulk:tb.bulk||[], sel:{} };
   // A drill-through from another screen (e.g. a category card) pre-applies its filter here.
   if(PENDING_FILTER){ TBL.fval[PENDING_FILTER.key]=PENDING_FILTER.val; PENDING_FILTER=null; }
   let h='<div class="crumb">'+(LABELS[cap]||cap)+'</div>';
@@ -1748,10 +1753,16 @@ function renderTable(){
   if(TBL.page>pages) TBL.page=pages; if(TBL.page<1) TBL.page=1;
   const start=(TBL.page-1)*ps, pageRows=rows.slice(start,start+ps);
   const arrow=k=> TBL.sort===k ? '<span class="sar">'+(TBL.dir>0?'↑':'↓')+'</span>' : '';
-  const th=TBL.cols.map(c=>'<th class="'+(c.align==='right'?'num':'')+(c.sortable!==false?' srt':'')+(TBL.sort===c.key?' sorted':'')+'"'+(c.sortable!==false?' onclick="sortBy(\''+c.key+'\')"':'')+'><span class="thc">'+esc(c.label)+arrow(c.key)+'</span></th>').join('');
-  const body = pageRows.length ? pageRows.map(r=>'<tr'+(r.link?' onclick="openLink(\''+esc(r.link)+'\')"':'')+'>'+TBL.cols.map(c=>cellHtml(r[c.key],c)).join('')+'</tr>').join('')
-    : '<tr><td colspan="'+TBL.cols.length+'"><div class="empty" style="padding:40px">'+icon('worklist','ic-lg')+'<div style="margin-top:8px">No matching records</div></div></td></tr>';
-  document.getElementById('tbl').innerHTML='<table class="dt"><thead><tr>'+th+'</tr></thead><tbody>'+body+'</tbody></table>';
+  const selTh=TBL.selectable?('<th class="selh"><input type="checkbox" onchange="tselPage(this.checked)"'+(pageRows.length&&pageRows.every(r=>TBL.sel[r.id])?' checked':'')+'></th>'):'';
+  const th=selTh+TBL.cols.map(c=>'<th class="'+(c.align==='right'?'num':'')+(c.sortable!==false?' srt':'')+(TBL.sort===c.key?' sorted':'')+'"'+(c.sortable!==false?' onclick="sortBy(\''+c.key+'\')"':'')+'><span class="thc">'+esc(c.label)+arrow(c.key)+'</span></th>').join('');
+  const selTd=r=>TBL.selectable?('<td class="selc" onclick="event.stopPropagation()"><input type="checkbox"'+(TBL.sel[r.id]?' checked':'')+' onchange="tsel(\''+esc(String(r.id))+'\',this.checked)"></td>'):'';
+  const body = pageRows.length ? pageRows.map(r=>'<tr'+(r.link?' onclick="openLink(\''+esc(r.link)+'\')"':'')+'>'+selTd(r)+TBL.cols.map(c=>cellHtml(r[c.key],c)).join('')+'</tr>').join('')
+    : '<tr><td colspan="'+(TBL.cols.length+(TBL.selectable?1:0))+'"><div class="empty" style="padding:40px">'+icon('worklist','ic-lg')+'<div style="margin-top:8px">No matching records</div></div></td></tr>';
+  const nsel=Object.keys(TBL.sel).length;
+  const bulkBar = (TBL.selectable&&nsel)?('<div class="selbar"><b>'+nsel+' selected</b>'+
+    TBL.bulk.map((b,i)=>'<button class="btn'+(b.tone==='primary'?' pri':'')+'" onclick="tselRun('+i+')">'+esc(b.label)+'</button>').join('')+
+    '<button class="btn" onclick="tselClear()">Clear</button></div>'):'';
+  document.getElementById('tbl').innerHTML=bulkBar+'<table class="dt"><thead><tr>'+th+'</tr></thead><tbody>'+body+'</tbody></table>';
   const ti=document.getElementById('tinfo'); if(ti) ti.textContent=fmtCount(filtered)+(filtered!==TBL.rows.length?' of '+fmtCount(TBL.rows.length):'');
   const pg=document.getElementById('pager');
   if(pg){ if(filtered>ps){ const a=start+1, b=Math.min(start+ps,filtered);
@@ -1761,6 +1772,21 @@ function renderTable(){
         '<button onclick="TBL.page++;renderTable()"'+(TBL.page>=pages?' disabled':'')+'>Next</button>';
     } else { pg.innerHTML=''; } }
 }
+/* UCRM-style bulk selection (2026-07-18): any table opts {selectable:true, bulk:[...]}. */
+function tsel(id,on){ if(on)TBL.sel[id]=1; else delete TBL.sel[id]; renderTable(); }
+function tselPage(on){ /* select/clear every row visible on the current page */
+  document.querySelectorAll('#tbl tbody .selc input').forEach(cb=>{
+    const m=cb.getAttribute('onchange').match(/tsel\('(.+?)'/); if(!m) return;
+    if(on)TBL.sel[m[1]]=1; else delete TBL.sel[m[1]]; });
+  renderTable(); }
+function tselClear(){ TBL.sel={}; renderTable(); }
+function tselRun(i){ const b=TBL.bulk[i]; if(!b) return; const ids=Object.keys(TBL.sel);
+  if(!ids.length){ toast('Select some rows first', true); return; }
+  if(b.confirm && !window.confirm(b.confirm.replace('{n}', ids.length))) return;
+  if((b.method||'GET')==='GET'){ window.open(b.endpoint+(b.endpoint.includes('?')?'&':'?')+'ids='+ids.join(','), '_blank'); return; }
+  (async()=>{ const res=await post(b.endpoint,{ids:ids.map(Number)});
+    toast(res&&res.ok?(res.message||'Done'):((res&&res.error)||'Failed'), !(res&&res.ok));
+    if(res&&res.ok){ TBL.sel={}; refresh(); } })(); }
 function cellHtml(c,col){
   const align=col.align==='right'?' num':'';
   if(col.type==='avatar'){ const nm=cellVal(c), sub=(c&&c.sub)||'', img=(c&&c.image)||'';

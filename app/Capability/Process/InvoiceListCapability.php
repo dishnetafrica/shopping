@@ -93,6 +93,7 @@ final class InvoiceListCapability implements ProcessCapability
                 'status'   => ['value' => $status, 'badge' => $badge],
                 'act'      => ['buttons' => $rowBtns],
                 'link'     => '/api/v1/workspace/invoice/' . $i->id,
+                'id'       => (int) $i->id,
             ];
         }
 
@@ -126,6 +127,14 @@ final class InvoiceListCapability implements ProcessCapability
             ])
             ->table($columns, $rows, [], [
                 'dateKey' => 'issued', 'dateLabel' => 'Created', 'currency' => $cur, 'pageSize' => 20,
+                // UCRM-style bulk operations (2026-07-18)
+                'selectable' => true,
+                'bulk' => [
+                    ['label' => 'Export CSV', 'method' => 'GET', 'endpoint' => '/papi/invoices/export?format=csv'],
+                    ['label' => 'Export PDF', 'method' => 'GET', 'endpoint' => '/papi/invoices/export?format=pdf'],
+                    ['label' => 'Send on WhatsApp', 'method' => 'POST', 'endpoint' => '/papi/invoices/bulk-send', 'tone' => 'primary',
+                     'confirm' => 'Send {n} invoice PDF(s) to their customers on WhatsApp?'],
+                ],
                 'totals' => [
                     ['key' => 'total', 'label' => 'Total', 'money' => true],
                     ['key' => 'balance', 'label' => 'Amount due', 'money' => true],

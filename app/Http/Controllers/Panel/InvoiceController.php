@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
-use App\Models\MessageLog;
+use App\Support\MessageLog;   // fixed 2026-07-18: was App\Models\MessageLog (non-existent) — invoice-send fataled at the logging step
 use App\Services\Invoicing\InvoiceRenderer;
 use App\Services\Invoicing\InvoiceService;
 use App\Services\Invoicing\StatementService;
@@ -176,6 +176,92 @@ class InvoiceController extends Controller
      * POST /papi/invoice-send — WhatsApp the invoice PDF to the customer (like a quotation send).
      * Uses the invoice's own phone unless a phone is passed. Never issues/changes the invoice.
      */
+    /** UCRM-style export of selected invoices (?ids=1,2,3) — CSV always, PDF when dompdf exists. */
+    public function export(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) abort(401);
+        $ids = array_filter(array_map('intval', explode(',', (string) $request->query('ids', ''))));
+        $q = Invoice::where('tenant_id', $t->id)->orderByDesc('created_at');
+        if ($ids) $q->whereIn('id', $ids);
+        $invoices = $q->limit(1000)->get();
+        if ($invoices->isEmpty()) abort(404, 'No invoices selected');
+
+        if ($request->query('format') === 'pdf') {
+            if (! class_exists(\Dompdf\Dompdf::class)) abort(503, 'PDF engine unavailable');
+            $rowsHtml = '';
+            foreach ($invoices as $i) {
+                $rowsHtml .= '<tr><td>'.e($i->invoice_no).'</td><td>'.e($i->customer_name).'</td>'
+                    .'<td class="r">'.number_format((float) $i->total, 2).'</td>'
+                    .'<td class="r">'.number_format((float) $i->amount_paid, 2).'</td>'
+                    .'<td class="r">'.number_format((float) $i->balance, 2).'</td>'
+                    .'<td>'.e($i->status).'</td>'
+                    .'<td>'.($i->issued_at ? \Illuminate\Support\Carbon::parse($i->issued_at)->format('d M Y') : '').'</td>'
+                    .'<td>'.($i->due_at ? \Illuminate\Support\Carbon::parse($i->due_at)->format('d M Y') : '').'</td></tr>';
+            }
+            $sum = number_format((float) $invoices->sum('total'), 2);
+            $due = number_format((float) $invoices->sum('balance'), 2);
+            $html = '<html><head><style>body{font-family:DejaVu Sans,sans-serif;font-size:10px;color:#111}h1{font-size:16px;margin:0 0 2px}
+                .sub{color:#666;margin-bottom:12px}table{width:100%;border-collapse:collapse}th{background:#f1f5f9;text-align:left}
+                th,td{border:1px solid #e2e8f0;padding:5px 7px}.r{text-align:right}tfoot td{font-weight:bold;background:#f8fafc}</style></head><body>'
+                .'<h1>'.e($t->name).' — Invoices</h1><div class="sub">'.count($invoices).' invoice(s) · exported '.now()->format('d M Y H:i').'</div>'
+                .'<table><thead><tr><th>Invoice #</th><th>Customer</th><th class="r">Total</th><th class="r">Paid</th><th class="r">Due</th><th>Status</th><th>Created</th><th>Due date</th></tr></thead>'
+                .'<tbody>'.$rowsHtml.'</tbody>'
+                .'<tfoot><tr><td colspan="2">Totals</td><td class="r">'.$sum.'</td><td></td><td class="r">'.$due.'</td><td colspan="3"></td></tr></tfoot></table></body></html>';
+            $dompdf = new \Dompdf\Dompdf();
+            $dompdf->loadHtml($html);
+            $dompdf->setPaper('A4', 'landscape');
+            $dompdf->render();
+
+            return response($dompdf->output(), 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="Invoices-'.now()->format('Ymd-Hi').'.pdf"',
+            ]);
+        }
+
+        // CSV (Excel opens it natively; UTF-8 BOM so Arabic names render correctly)
+        $out = "\xEF\xBB\xBF".'"Invoice #","Customer","Phone","Currency","Subtotal","Discount","Total","Paid","Balance","Status","Created","Due date"'."\n";
+        foreach ($invoices as $i) {
+            $csv = fn ($v) => '"'.str_replace('"', '""', (string) $v).'"';
+            $out .= implode(',', [
+                $csv($i->invoice_no), $csv($i->customer_name), $csv($i->customer_phone), $csv($i->currency),
+                (float) $i->subtotal, (float) $i->discount, (float) $i->total, (float) $i->amount_paid,
+                (float) $i->balance, $csv($i->status),
+                $csv($i->issued_at ? \Illuminate\Support\Carbon::parse($i->issued_at)->format('Y-m-d') : ''),
+                $csv($i->due_at ? \Illuminate\Support\Carbon::parse($i->due_at)->format('Y-m-d') : ''),
+            ])."\n";
+        }
+
+        return response($out, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="Invoices-'.now()->format('Ymd-Hi').'.csv"',
+        ]);
+    }
+
+    /** Bulk WhatsApp send: loops the proven single-invoice send() per id (capped, paced). */
+    public function bulkSend(Request $request)
+    {
+        $ids = array_slice(array_filter(array_map('intval', (array) $request->input('ids', []))), 0, 25);
+        if (! $ids) return response()->json(['ok' => false, 'error' => 'no_ids'], 422);
+
+        $sent = 0; $failed = [];
+        foreach ($ids as $id) {
+            $request->merge(['id' => $id]);
+            try {
+                $res = $this->send($request);
+                $body = json_decode($res->getContent(), true);
+                if (! empty($body['ok'])) $sent++;
+                else $failed[] = $id.':'.($body['error'] ?? 'failed');
+            } catch (\Throwable $e) {
+                $failed[] = $id.':exception';
+            }
+            usleep(400000);   // pace WhatsApp sends
+        }
+
+        return response()->json(['ok' => $sent > 0, 'message' => "Sent {$sent} of ".count($ids)
+            .($failed ? ' · failed: '.implode(', ', array_slice($failed, 0, 5)) : ''), 'failed' => $failed]);
+    }
+
     public function send(Request $request)
     {
         $t = $request->user()->tenant;
