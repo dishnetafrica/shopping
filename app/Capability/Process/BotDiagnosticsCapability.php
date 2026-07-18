@@ -4,7 +4,7 @@ namespace App\Capability\Process;
 
 use App\Capability\Contracts\CapabilityContext;
 use App\Capability\Contracts\ProcessCapability;
-use App\Capability\Payload\WorkspacePayload;
+use App\Capability\Dto\WorkspacePayload;
 use App\Models\Tenant;
 use App\Models\WhatsappChannel;
 use Illuminate\Support\Carbon;
@@ -93,9 +93,21 @@ class BotDiagnosticsCapability implements ProcessCapability
             ];
         }
 
-        return WorkspacePayload::make($this->key(), 'Bot diagnostics')
-            ->subtitle('Every customer message and what the bot did with it — newest first. Use this to see where a message stopped.')
-            ->financials([
+        // Numbers as chips (guaranteed-rendering house UI; one chip per channel, max 3)
+        $numChips = [];
+        foreach (array_slice($numRows, 0, 3) as $i => $line) {
+            $ok = str_contains($line, '\u{2705}') || str_contains($line, 'Connected');
+            $numChips[] = ['key' => 'num'.$i, 'label' => 'Number '.($i + 1),
+                'value' => $ok ? 'Connected' : 'Not linked', 'tone' => $ok ? 'ok' : 'danger',
+                'foot' => mb_substr($line, 0, 60)];
+        }
+
+        return (new WorkspacePayload)
+            ->object([
+                'type' => 'process:diagnostics', 'title' => 'Bot diagnostics',
+                'subtitle' => 'Every customer message and what the bot did with it — newest first. Use this to see where a message stopped.',
+            ])
+            ->financials(array_merge([
                 ['key' => 'wa', 'label' => 'WhatsApp',
                  'value' => $waStatus === 'open' ? 'Connected' : ($waStatus === 'connecting' ? 'Connecting…' : 'DOWN'),
                  'tone' => $waStatus === 'open' ? 'ok' : ($waStatus === 'connecting' ? 'warn' : 'danger'),
@@ -106,8 +118,7 @@ class BotDiagnosticsCapability implements ProcessCapability
                  'tone' => $openai === 'configured' ? 'ok' : 'danger', 'foot' => 'AI brain'],
                 ['key' => 'hook', 'label' => 'Last webhook', 'value' => $ago($lastHook), 'tone' => 'info', 'foot' => 'message received'],
                 ['key' => 'done', 'label' => 'Last reply', 'value' => $ago($lastDone), 'tone' => 'info', 'foot' => 'bot answered'],
-            ])
-            ->object('WhatsApp numbers', $numRows ?: ['No channels registered'])
+            ], $numChips))
             ->table($columns, $rows, [
                 ['key' => 'stage', 'label' => 'Stage'],
                 ['key' => 'phone', 'label' => 'Customer'],
