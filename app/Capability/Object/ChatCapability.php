@@ -123,17 +123,17 @@ final class ChatCapability implements ObjectCapability
                 'schema' => ['body' => 'text'],
                 'labels' => ['body' => 'Message to '.$name],
                 'body'   => ['phone' => $phone]];
-            $actions[] = ['key' => 'send_image', 'label' => 'Send photo', 'method' => 'POST',
+            $actions[] = ['key' => 'send_image', 'label' => 'Send photo', 'submitLabel' => 'Send', 'method' => 'POST',
                 'endpoint' => '/papi/chats/send-media', 'actor' => 'human',
                 'schema' => ['image' => 'image', 'caption' => 'text'],
                 'labels' => ['image' => 'Photo', 'caption' => 'Caption (optional)'],
                 'body'   => ['phone' => $phone]];
-            $actions[] = ['key' => 'send_file', 'label' => 'Send document', 'method' => 'POST',
+            $actions[] = ['key' => 'send_file', 'label' => 'Send document', 'submitLabel' => 'Send', 'method' => 'POST',
                 'endpoint' => '/papi/chats/send-document', 'actor' => 'human',
                 'schema' => ['file' => 'file:.pdf,.doc,.docx,.xls,.xlsx,.csv', 'filename' => 'text', 'caption' => 'text'],
                 'labels' => ['file' => 'Document (PDF, Word, Excel…)', 'filename' => 'File name shown to the customer', 'caption' => 'Caption (optional)'],
                 'body'   => ['phone' => $phone]];
-            $actions[] = ['key' => 'send_location', 'label' => 'Send a location', 'method' => 'POST',
+            $actions[] = ['key' => 'send_location', 'label' => 'Send a location', 'submitLabel' => 'Send', 'method' => 'POST',
                 'endpoint' => '/papi/chats/send-location', 'actor' => 'human',
                 'schema' => ['lat' => 'number', 'lng' => 'number', 'name' => 'text', 'address' => 'text'],
                 'labels' => ['lat' => 'Latitude', 'lng' => 'Longitude', 'name' => 'Place name', 'address' => 'Address (optional)'],

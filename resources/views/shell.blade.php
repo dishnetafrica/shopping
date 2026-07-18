@@ -1410,7 +1410,7 @@ function formModal(a){
     else { const t=(type==='money'||type==='number')?'type="number" step="'+(type==='money'?'0.01':'1')+'"':''; const ph=type==='money'?'placeholder="0.00"':'';
       fields+='<div class="fld"><label>'+lbl+'</label><input id="f_'+k+'" '+t+' '+ph+' value="'+esc(val)+'"></div>'; }
   });
-  document.getElementById('modal').innerHTML='<div class="h">'+esc(a.label)+'<button class="x" onclick="closeM()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><div class="b">'+fields+'</div><div class="f"><button class="btn" onclick="closeM()">Cancel</button><button class="btn pri" id="mok">Save</button></div>';
+  document.getElementById('modal').innerHTML='<div class="h">'+esc(a.label)+'<button class="x" onclick="closeM()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><div class="b">'+fields+'</div><div class="f"><button class="btn" onclick="closeM()">Cancel</button><button class="btn pri" id="mok">'+esc(a.submitLabel||'Save')+'</button></div>';
   document.getElementById('ov').classList.add('on');
   Object.entries(a.schema).forEach(([k,type])=>{ if(type==='gallery') renderGal(k); });
   // Auto-fill a rate field from a source select (e.g. currency → rate_to_usd) so the user can't mismatch them.
