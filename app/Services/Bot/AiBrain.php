@@ -1057,7 +1057,12 @@ class AiBrain
         $p .= "- Never invent, promise, or imply a discount, \"bulk price\" or \"special price\". Quote the listed prices. If the customer asks for a bulk discount and none is offered, say the price is as listed and offer a formal quotation — the team can review bulk pricing separately. Do not claim a discount exists unless it is actually shown here.\n";
         $p .= "- Some items show \"price on request\" (e.g. jumbo parent reels) — these have no fixed price. Don't guess a figure: capture what they need (type, grade, GSM, quantity, origin) and tell them the team will send a quote.\n";
         $p .= "- Use the recent conversation for context; don't re-ask what the customer already told you.\n";
-        $p .= "- Move the customer toward an order: capture quantity and delivery area. For big buyers push cartons; for small buyers offer retail packs.\n";
+        $p .= "SALES DISCIPLINE (how a trusted supplier behaves — restraint sells):\n";
+        $p .= "- ANSWER FIRST, completely and exactly what was asked — then STOP. A price question deserves the price, not a pitch. A stock question deserves the stock answer. Do not append suggestions to answers.\n";
+        $p .= "- Suggest another item AT MOST ONCE per conversation, and ONLY when one of these is true: (a) it directly complements something they are actually buying (cups → lids), (b) they asked for ideas/recommendations, or (c) they are finalising an order — one relevant attach, briefly.\n";
+        $p .= "- NEVER suggest anything during: complaints, delivery/payment questions, greetings, or support topics. And after ONE decline or ignored suggestion, suggesting is CLOSED for this conversation — pushing twice destroys trust.\n";
+        $p .= "- MIRROR the customer: terse customer → short answers. Do not volunteer paragraphs to someone sending three words.\n";
+        $p .= "- When they are ordering: capture quantity and delivery area naturally. If a clearly BIG buyer orders retail quantities, you may mention ONCE that the carton price saves money — and drop it if not taken.\n";
         $p .= "- Do NOT calculate multi-item order totals yourself. If the customer asks for a total, acknowledge it and let them know you're adding it up — the exact total is computed and appended by the system from the price list.\n";
         if (strtolower((string) $tenant->setting('moq_mode', 'off')) === 'roundup') {
             $p .= "- MINIMUM ORDER QUANTITIES ARE ENFORCED: each product's MOQ is the smallest quantity we sell. If a customer asks for fewer than a product's MOQ, do NOT confirm that smaller quantity — raise it to the MOQ and tell them plainly (e.g. \"the minimum for that is 10, so I've set it to 10\"). The system also auto-corrects the quantity to the MOQ when it prices the order, so your confirmation must match that minimum.\n";
@@ -1081,7 +1086,7 @@ class AiBrain
         if ($know !== '')   $p .= "COMPANY KNOWLEDGE:\n{$know}\n\n";
         if ($faqTxt !== '') $p .= "FAQ (answer from these):\n{$faqTxt}\n\n";
         $combos = \App\Support\Combos::promptBlock($tenant);
-        if ($combos !== '') $p .= "COMBO OFFERS (proactively suggest a relevant one; prices are fixed, quote them as-is):\n{$combos}\n\n";
+        if ($combos !== '') $p .= "COMBO OFFERS (mention ONLY if it overlaps what the customer is already buying or they ask what's on offer — never lead with one, never repeat one; prices are fixed, quote as-is):\n{$combos}\n\n";
         if (count((array) $tenant->setting('menu_files', [])) > 0)
             $p .= "MENU: if the customer asks for the menu (food / drinks), acknowledge warmly — the system sends the menu file(s) automatically.\n\n";
         if (count((array) $tenant->setting('catalog_files', [])) > 0)

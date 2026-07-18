@@ -773,7 +773,7 @@ class ProcessIncomingMessage implements ShouldQueue
                 && (($convo->state['step'] ?? null) === 'awaiting_confirm') && $reply !== '') {
                 $curCk = (string) $tenant->setting('currency', 'UGX');
                 $comboCk = app(\App\Services\Bot\ComboEngine::class)
-                    ->recommendForCart($tenant->id, array_map('intval', array_keys($cartAfter)), 3);
+                    ->recommendForCart($tenant->id, array_map('intval', array_keys($cartAfter)), 2);
                 $blockCk = $this->comboBlock($comboCk, $curCk, "🍽️ Add before you finish?");
                 if ($blockCk !== '') {
                     $reply .= "\n\n" . $blockCk . "\nReply with a name to add, or *confirm* to place the order.";
@@ -855,7 +855,10 @@ class ProcessIncomingMessage implements ShouldQueue
                 && (($convo->state['step'] ?? null) !== 'awaiting_confirm')) {
                 $focal   = (int) ($addedId ?: $focalThisTurn);
                 $context = $addedId ? 'after_add' : 'single_product';
-                if ($focal > 0) {
+                // Sales-manners fix (2026-07-18): suggestions ride ONLY on a committed
+                // add-to-cart. A customer merely ASKING about a product gets an answer,
+                // not a bazaar. (Checkout attach below is unchanged — that's honest retail.)
+                if ($addedId && $focal > 0) {
                     $curFu  = (string) $tenant->setting('currency', 'UGX');
                     $comboFu = app(\App\Services\Bot\ComboEngine::class)
                         ->recommendForProduct($tenant->id, $focal, 3, array_map('intval', array_keys($cartAfter)));
