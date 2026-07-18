@@ -26,6 +26,7 @@ use App\Capability\Process\InvoiceListCapability;
 use App\Capability\Object\ChatCapability;
 use App\Capability\Process\ChatListCapability;
 use App\Capability\Process\CommunicationCapability;
+use App\Capability\Process\GuideCapability;
 use App\Capability\Process\LeadListCapability;
 use App\Capability\Process\PaymentListCapability;
 use App\Capability\Process\ProductListCapability;
@@ -102,6 +103,9 @@ final class CoreCapabilityProvider implements CapabilityProvider
         // Migration plan G2 — the Email Center as a v3 workspace (UI re-home; engine untouched).
         // Guarded: only register where the Comms backend (M1-M4 zip) is actually deployed,
         // so the menu never offers a workspace that would 500 — incident 2026-07-18.
+        // Help & Training — the UCRM-style built-in manual (open to every role).
+        $r->register(new GuideCapability(), new CapabilityManifest(key: 'guide', type: 'process', owner: 'management', permission: '', api: '/api/v1/workspace/guide'));
+
         if (class_exists(\App\Models\CommMessage::class)) {
             $r->register(new CommunicationCapability(), new CapabilityManifest(key: 'communication', type: 'process', owner: 'management', permission: 'menu:settings', api: '/api/v1/workspace/communication'));
         }
