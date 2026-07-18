@@ -165,17 +165,46 @@ final class PurchaseProcessCapability implements ProcessCapability
         $exportPdf = ['key' => 'export_pdf', 'label' => 'Export PDF', 'href' => '/api/v1/doc/purchases-export?format=pdf', 'actor' => 'human', 'tone' => 'default', 'exportScope' => $exportScope];
         $exportCsv = ['key' => 'export_csv', 'label' => 'Export CSV', 'href' => '/api/v1/doc/purchases-export?format=csv', 'actor' => 'human', 'tone' => 'default', 'exportScope' => $exportScope];
 
+        // Parity fix (v3 retire audit 2026-07-18): /panel/approvals redirects here, so
+        // approving staff-recorded costs must work HERE. Writes go through the proven
+        // /papi/order-costs/{id}/decide endpoint (owner/manager/accounts gated server-side).
+        $approvalChips = [];
+        $approvalActions = [];
+        if ($ctx->can('menu:approvals')) {
+            $pendingCosts = \App\Models\OrderCost::where('tenant_id', $ctx->tenantId())
+                ->where('status', 'pending')->orderByDesc('id')->limit(4)->get();
+            $pendingTotal = \App\Models\OrderCost::where('tenant_id', $ctx->tenantId())
+                ->where('status', 'pending')->count();
+            if ($pendingTotal > 0) {
+                $approvalChips[] = ['key' => 'approvals', 'label' => 'Awaiting approval', 'value' => (string) $pendingTotal,
+                    'tone' => 'warn', 'foot' => 'approve from Quick actions'];
+            }
+            foreach ($pendingCosts as $pc) {
+                $desc = ($pc->expense_category ?: str_replace('_', ' ', (string) $pc->stage)).' · '
+                    .$pc->currency.' '.number_format((float) $pc->native_amount, 0)
+                    .' — '.($pc->holder ?: $pc->created_by ?: 'staff')
+                    .($pc->order_no ? ' ('.$pc->order_no.')' : '');
+                $ep = '/papi/order-costs/'.$pc->id.'/decide';
+                $approvalActions[] = ['key' => 'appr_'.$pc->id, 'label' => 'Approve — '.$desc,
+                    'method' => 'POST', 'endpoint' => $ep, 'actor' => 'human', 'tone' => 'primary',
+                    'body' => ['action' => 'approve'], 'confirm' => 'Approve: '.$desc.'?'];
+                $approvalActions[] = ['key' => 'rej_'.$pc->id, 'label' => 'Reject — '.$desc,
+                    'method' => 'POST', 'endpoint' => $ep, 'actor' => 'human',
+                    'body' => ['action' => 'reject'], 'confirm' => 'Reject: '.$desc.'?'];
+            }
+        }
+
         return (new WorkspacePayload)
             ->object([
                 'type' => 'process:purchase', 'title' => 'Purchasing',
                 'subtitle' => number_format($purchases->count()) . ' purchases · ' . Money::fmt($payableUsd, 'USD') . ' still owed',
             ])
-            ->financials([
+            ->financials(array_merge([
                 ['key' => 'count', 'label' => 'Purchases', 'value' => number_format($purchases->count()), 'foot' => $cashCount . ' cash · ' . $creditCount . ' credit'],
                 ['key' => 'payable', 'label' => 'Still owed', 'value' => Money::fmt($payableUsd, 'USD'), 'tone' => $payableUsd > 0 ? 'warn' : 'ok', 'foot' => $unpaid . ' bills unpaid'],
                 ['key' => 'month', 'label' => 'This month', 'value' => Money::fmt(round($monthSpendUsd, 2), 'USD'), 'foot' => 'purchased since ' . $monthStart->format('d M')],
                 ['key' => 'total', 'label' => 'Total (shown)', 'value' => Money::fmt(round($totalSpendUsd, 2), 'USD'), 'foot' => 'last ' . self::MAX_ROWS . ' purchases'],
-            ])
+            ], $approvalChips))
             ->table($columns, $rows,
                 [
                     ['key' => 'supplier', 'label' => 'Supplier'],
@@ -184,7 +213,7 @@ final class PurchaseProcessCapability implements ProcessCapability
                 ],
                 ['dateKey' => 'date', 'dateLabel' => 'Date', 'currency' => 'USD', 'pageSize' => 25,
                     'totals' => [['key' => 'amount', 'label' => 'Total (USD)', 'money' => true]]])
-            ->actions($canEdit ? [$recordPurchase, $exportPdf, $exportCsv] : [$exportPdf, $exportCsv])
+            ->actions(array_merge($canEdit ? [$recordPurchase, $exportPdf, $exportCsv] : [$exportPdf, $exportCsv], $approvalActions))
             ->meta(['capability' => 'purchase.process', 'ttl' => 30, 'permissions' => ['menu:purchases']]);
     }
 
