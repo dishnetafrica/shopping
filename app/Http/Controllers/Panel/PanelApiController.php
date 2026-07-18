@@ -3186,8 +3186,11 @@ class PanelApiController extends Controller
 
         $gw = $wa->forTenant($t);
         if (! method_exists($gw, 'getMediaBase64')) return response()->json(['ok' => false, 'error' => 'unsupported'], 404);
+        // The key may be a json-packed Evolution message-key array (image/audio/video/document alike).
+        $decoded = json_decode($key, true);
+        $mediaKey = is_array($decoded) ? $decoded : $key;
         try {
-            $b64 = (string) ($gw->getMediaBase64($t->whatsapp_instance, $key) ?? '');
+            $b64 = (string) ($gw->getMediaBase64($t->whatsapp_instance, $mediaKey) ?? '');
         } catch (\Throwable $e) {
             $b64 = '';
         }

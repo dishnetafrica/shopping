@@ -134,6 +134,33 @@ class ChatsWorkspaceTest extends TestCase
         $this->assertSame('image', $acts['send_image']['schema']['image']);
     }
 
+    public function test_location_video_and_documents_surface_in_the_transcript(): void
+    {
+        $t = $this->login();
+        $c = $this->convo($t, '256700000011', 0, false, [
+            ['in', 'customer', 'my location'], ['in', 'customer', 'see video'], ['in', 'customer', 'price list'],
+        ]);
+        $rows = \App\Models\Message::withoutGlobalScope('tenant')
+            ->where('tenant_id', $t->id)->where('customer_phone', '256700000011')->orderBy('id')->get();
+        $rows[0]->update(['meta' => ['media' => ['kind' => 'location', 'lat' => 4.85, 'lng' => 31.58, 'name' => 'Konyo Konyo']]]);
+        $rows[1]->update(['meta' => ['media' => ['kind' => 'video', 'key' => ['id' => 'V1', 'remoteJid' => 'x'], 'mime' => 'video/mp4']]]);
+        $rows[2]->update(['meta' => ['media' => ['kind' => 'file', 'key' => ['id' => 'D1', 'remoteJid' => 'x'], 'mime' => 'application/pdf', 'name' => 'pricelist.pdf']]]);
+
+        $j = $this->getJson('/api/v1/workspace/chat/'.$c->id)->assertOk()->json();
+        $msgs = collect($j['meta']['msgs']);
+
+        $loc = $msgs->firstWhere('media.kind', 'location');
+        $this->assertSame('Konyo Konyo', $loc['media']['name']);
+        $this->assertStringContainsString('maps.google.com/?q=4.85,31.58', $loc['media']['maps']);
+
+        $vid = $msgs->firstWhere('media.kind', 'video');
+        $this->assertStringContainsString('/papi/chats/media?key=', $vid['media']['src']);
+        $this->assertStringContainsString('video%2Fmp4', $vid['media']['src']);
+
+        $doc = $msgs->firstWhere('media.kind', 'file');
+        $this->assertSame('pricelist.pdf', $doc['media']['name'], 'documents keep their filename');
+    }
+
     public function test_send_media_endpoint_sends_logs_and_takes_over(): void
     {
         $t = $this->login();

@@ -81,14 +81,30 @@ final class ChatCapability implements ObjectCapability
             $media = null;
             $mm = (array) (($m->meta['media'] ?? null) ?: []);
             if ($mm) {
-                $src = isset($mm['url']) && $mm['url']
-                    ? (string) $mm['url']
-                    : (isset($mm['key']) && $mm['key']
-                        ? '/papi/chats/media?key='.rawurlencode((string) $mm['key'])
-                            .'&mime='.rawurlencode((string) ($mm['mime'] ?? ''))
-                        : null);
-                if ($src) {
-                    $media = ['kind' => (string) ($mm['kind'] ?? 'file'), 'src' => $src];
+                $kind = (string) ($mm['kind'] ?? 'file');
+                if ($kind === 'location' && isset($mm['lat'], $mm['lng'])) {
+                    $media = array_filter([
+                        'kind' => 'location',
+                        'name' => $mm['name'] ?? null,
+                        'address' => $mm['address'] ?? null,
+                        'maps' => 'https://maps.google.com/?q='.((float) $mm['lat']).','.((float) $mm['lng']),
+                    ]);
+                } else {
+                    // media_key can be an array (Evolution message key) — json-pack it for the query.
+                    $keyRaw = $mm['key'] ?? null;
+                    $keyStr = is_array($keyRaw) ? json_encode($keyRaw) : (string) ($keyRaw ?? '');
+                    $src = isset($mm['url']) && $mm['url']
+                        ? (string) $mm['url']
+                        : ($keyStr !== ''
+                            ? '/papi/chats/media?key='.rawurlencode($keyStr)
+                                .'&mime='.rawurlencode((string) ($mm['mime'] ?? ''))
+                            : null);
+                    if ($src) {
+                        $media = array_filter([
+                            'kind' => $kind, 'src' => $src,
+                            'name' => $mm['name'] ?? null,
+                        ]);
+                    }
                 }
             }
             $rich[] = [

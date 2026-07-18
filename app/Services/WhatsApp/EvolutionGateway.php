@@ -284,6 +284,28 @@ class EvolutionGateway implements WhatsAppGateway
         // can transcribe it (inline base64 if Evolution sent it, else fetched via media_key).
         $aud      = data_get($msg, 'message.audioMessage');
         $hasAudio = is_array($aud);
+
+        // WhatsApp-Web mode (2026-07-18, additive): videos and documents (PDFs etc.)
+        // were invisible to the transcript — capture their presence, mime, filename and
+        // caption so the inbox can show and stream them. Bot behaviour unchanged.
+        $vid    = data_get($msg, 'message.videoMessage');
+        $doc    = data_get($msg, 'message.documentMessage');
+        $hasVideo = is_array($vid);
+        $hasDoc   = is_array($doc);
+        $mediaMime = (string) (
+            ($hasImage ? data_get($img, 'mimetype') : null)
+            ?? ($hasAudio ? data_get($aud, 'mimetype') : null)
+            ?? ($hasVideo ? data_get($vid, 'mimetype') : null)
+            ?? ($hasDoc ? data_get($doc, 'mimetype') : null)
+            ?? ''
+        );
+        $mediaCaption = trim((string) (
+            ($imageCaption !== '' ? $imageCaption : null)
+            ?? ($hasVideo ? data_get($vid, 'caption') : null)
+            ?? ($hasDoc ? data_get($doc, 'caption') : null)
+            ?? ''
+        ));
+        $docName = $hasDoc ? trim((string) (data_get($doc, 'fileName') ?: '')) : '';
         $audioB64 = $hasAudio ? (string) (
             data_get($msg, 'message.base64') ?? data_get($msg, 'base64') ?? data_get($payload, 'data.base64') ?? ''
         ) : '';
@@ -311,7 +333,12 @@ class EvolutionGateway implements WhatsAppGateway
             'ad_body'         => $adBody,
             'ad_source_url'   => $adSourceUrl,
             'is_ad_referral'  => ($adHeadline !== '' || $adBody !== ''),
-            'media_key'       => ($hasImage || $hasAudio) ? [
+            'has_video'       => $hasVideo,
+            'has_document'    => $hasDoc,
+            'doc_name'        => $docName,
+            'media_mime'      => $mediaMime,
+            'media_caption'   => $mediaCaption,
+            'media_key'       => ($hasImage || $hasAudio || $hasVideo || $hasDoc) ? [
                 'id'          => (string) data_get($msg, 'key.id', ''),
                 'remoteJid'   => (string) $remote,
                 'participant' => $participant,

@@ -141,12 +141,29 @@ class ProcessIncomingMessage implements ShouldQueue
         $mMime = (string) ($this->incoming['media_mime'] ?? '');
         $mMeta = [];
         if ($mKey) {
+            // Kind from the normalizer's explicit flags (mime is a fallback, not the source of truth).
+            $kind = ! empty($this->incoming['has_image']) ? 'image'
+                : (! empty($this->incoming['has_audio']) ? 'audio'
+                : (! empty($this->incoming['has_video']) ? 'video'
+                : (! empty($this->incoming['has_document']) ? 'file'
+                : (str_starts_with($mMime, 'image/') ? 'image'
+                : (str_starts_with($mMime, 'audio/') ? 'audio'
+                : (str_starts_with($mMime, 'video/') ? 'video' : 'file'))))));
             $mMeta = ['media' => array_filter([
-                'kind'    => str_starts_with($mMime, 'image/') ? 'image'
-                            : (str_starts_with($mMime, 'audio/') ? 'audio' : 'file'),
+                'kind'    => $kind,
                 'key'     => $mKey,
                 'mime'    => $mMime ?: null,
-                'caption' => trim((string) ($this->incoming['image_caption'] ?? '')) ?: null,
+                'name'    => trim((string) ($this->incoming['doc_name'] ?? '')) ?: null,
+                'caption' => trim((string) ($this->incoming['media_caption'] ?? ($this->incoming['image_caption'] ?? ''))) ?: null,
+            ])];
+        } elseif (($this->incoming['lat'] ?? null) !== null && ($this->incoming['lng'] ?? null) !== null) {
+            // Location pin: no media key — coordinates ARE the payload. Gold for deliveries.
+            $mMeta = ['media' => array_filter([
+                'kind' => 'location',
+                'lat'  => (float) $this->incoming['lat'],
+                'lng'  => (float) $this->incoming['lng'],
+                'name' => trim((string) ($this->incoming['loc_name'] ?? '')) ?: null,
+                'address' => trim((string) ($this->incoming['loc_address'] ?? '')) ?: null,
             ])];
         }
         MessageLog::record(

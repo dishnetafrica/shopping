@@ -323,6 +323,8 @@ svg{display:block}
 .wimg{max-width:260px;max-height:280px;border-radius:10px;display:block;cursor:zoom-in}
 .thread .sys{align-self:center;font-size:11px;color:var(--faint);background:var(--surface-2);border-radius:99px;padding:3px 10px;max-width:90%}
 .thread .oldmedia{font-size:12px;color:var(--muted);font-style:italic}
+.wloc{display:grid;gap:4px;font-size:13px}
+.wloc a{color:var(--brand);font-weight:700;font-size:12px}
 @media(max-width:760px){
   .waweb{grid-template-columns:1fr}
   .waweb .war{display:none}.waweb .wal{display:flex}
@@ -817,7 +819,9 @@ async function openThread(id){
       if(m.media){
         if(m.media.kind==='image') inner+='<img class="wimg" loading="lazy" src="'+esc(m.media.src)+'" onclick="try{window.open(this.src)}catch(e){}">';
         else if(m.media.kind==='audio') inner+='<audio controls preload="none" style="max-width:240px" src="'+esc(m.media.src)+'"></audio>';
-        else inner+='<a href="'+esc(m.media.src)+'" target="_blank">📎 Attachment</a>';
+        else if(m.media.kind==='video') inner+='<video controls preload="none" class="wimg" style="max-width:280px" src="'+esc(m.media.src)+'"></video>';
+        else if(m.media.kind==='location') inner+='<div class="wloc">📍 <b>'+esc(m.media.name||'Location shared')+'</b>'+(m.media.address?'<div class="oldmedia">'+esc(m.media.address)+'</div>':'')+'<a href="'+esc(m.media.maps)+'" target="_blank">Open in Google Maps ↗</a></div>';
+        else inner+='<a href="'+esc(m.media.src)+'" target="_blank" download>📎 '+esc(m.media.name||'Attachment')+'</a>';
       }
       const ph=body.match(/^\[(image|photo|voice|audio|video|sticker|document|file)\]$/i);
       if(!m.media && ph){
