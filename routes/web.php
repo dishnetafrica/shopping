@@ -139,6 +139,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
     Route::post('/papi/comms/routes/save-simple',    [\App\Http\Controllers\Panel\EmailCenterController::class, 'routesSaveSimple']);
     Route::post('/papi/comms/suppressions/add',      [\App\Http\Controllers\Panel\EmailCenterController::class, 'suppressionAdd']);
     Route::post('/papi/comms/suppressions/remove',   [\App\Http\Controllers\Panel\EmailCenterController::class, 'suppressionRemove']);
+    Route::post('/papi/comms/campaigns/save-simple',     [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignSaveSimple']);
+    Route::post('/papi/comms/campaigns/estimate-simple', [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignEstimateSimple']);
     Route::get('/panel/pnl-report', [\App\Http\Controllers\Panel\PanelApiController::class, 'pnlReportPage']);
     Route::get('/panel/sourcing', [\App\Http\Controllers\Panel\SourcingController::class, 'page']);
     Route::get('/panel/customers360', [\App\Http\Controllers\Panel\CustomerController::class, 'page']);

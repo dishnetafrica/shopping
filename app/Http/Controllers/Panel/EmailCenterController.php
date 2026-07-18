@@ -510,6 +510,43 @@ class EmailCenterController extends Controller
         return $this->routesSave($request);
     }
 
+    /**
+     * v3 flat-form segment: segment_type + segment_value → the assoc map
+     * CampaignService::buildSegmentQuery understands. 'all' (or blank) = everyone.
+     */
+    private function segmentFromSimple(Request $request): array
+    {
+        $type = strtolower(trim((string) $request->input('segment_type', 'all')));
+        $val  = trim((string) $request->input('segment_value', ''));
+        return match ($type) {
+            'tag'                     => $val !== '' ? ['segment' => $val] : [],
+            'city'                    => $val !== '' ? ['city' => $val] : [],
+            'ordered_within_days'     => (int) $val > 0 ? ['ordered_within_days' => (int) $val] : [],
+            'not_ordered_within_days' => (int) $val > 0 ? ['not_ordered_within_days' => (int) $val] : [],
+            default                   => [],
+        };
+    }
+
+    /** v3 New-campaign form (flat fields incl. audience) → campaignSave. */
+    public function campaignSaveSimple(Request $request)
+    {
+        $request->merge(['segment' => $this->segmentFromSimple($request)]);
+
+        return $this->campaignSave($request);
+    }
+
+    /** v3 audience preview: same flat fields → a human message for the toast. */
+    public function campaignEstimateSimple(Request $request)
+    {
+        $request->merge(['segment' => $this->segmentFromSimple($request)]);
+        $resp = $this->campaignEstimate($request, app(\App\Services\Comms\CampaignService::class));
+        $j = $resp->getData(true);
+        if (empty($j['ok'])) return $resp;
+
+        return response()->json(['ok' => true, 'estimate' => $j['estimate'],
+            'message' => 'Audience ≈ '.number_format((int) $j['estimate']).' customer'.((int) $j['estimate'] === 1 ? '' : 's')]);
+    }
+
     // ------------------------------------------------------------ suppressions
     // Closes the M1 gap: the suppression list finally has management endpoints.
     // Auto-writes (bounce/complaint/unsubscribe) continue to come from the

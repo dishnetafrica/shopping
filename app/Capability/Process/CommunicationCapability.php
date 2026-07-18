@@ -136,8 +136,14 @@ final class CommunicationCapability implements ProcessCapability
         $campActions = [];
         foreach ($camps as $c) {
             $tone = ['draft' => 'default', 'scheduled' => 'info', 'sending' => 'warn', 'paused' => 'warn', 'done' => 'ok', 'cancelled' => 'default'][$c->status] ?? 'default';
+            $seg = (array) ($c->segment ?? []);
+            $aud = 'All customers';
+            if (! empty($seg['segment'])) $aud = 'Tag: '.$seg['segment'];
+            elseif (! empty($seg['city'])) $aud = 'City: '.$seg['city'];
+            elseif (! empty($seg['ordered_within_days'])) $aud = 'Ordered ≤ '.$seg['ordered_within_days'].'d';
+            elseif (! empty($seg['not_ordered_within_days'])) $aud = 'Winback > '.$seg['not_ordered_within_days'].'d';
             $campRows[] = [
-                (string) $c->name, strtoupper((string) $c->channel),
+                (string) $c->name, strtoupper((string) $c->channel), $aud,
                 ['value' => ucfirst((string) $c->status), 'tone' => $tone],
                 number_format((int) $c->sent_count).' / '.number_format((int) $c->total_count),
                 Carbon::parse($c->created_at)->format('d M'),
@@ -157,7 +163,7 @@ final class CommunicationCapability implements ProcessCapability
             }
         }
         $campCard = ['kind' => 'table', 'title' => 'Campaigns', 'sub' => count($campRows).' most recent',
-            'columns' => [['label' => 'Name'], ['label' => 'Ch'], ['label' => 'Status'], ['label' => 'Progress', 'align' => 'right'], ['label' => 'Created', 'align' => 'right']],
+            'columns' => [['label' => 'Name'], ['label' => 'Ch'], ['label' => 'Audience'], ['label' => 'Status'], ['label' => 'Progress', 'align' => 'right'], ['label' => 'Created', 'align' => 'right']],
             'rows' => $campRows, 'empty' => 'No campaigns yet — "New campaign" creates a draft you can launch.'];
 
         // ---- Suppressions tab (closes the M1 gap) --------------------------
@@ -227,9 +233,29 @@ final class CommunicationCapability implements ProcessCapability
             }
 
             $quick[] = ['key' => 'new_template', 'label' => 'New template', 'method' => 'POST', 'endpoint' => '/papi/comms/templates/save', 'actor' => 'human',
-                'schema' => ['key' => 'text', 'locale' => 'text', 'name' => 'text', 'subject' => 'text', 'text_body' => 'text'],
-                'labels' => ['key' => 'Key (e.g. invoice)', 'locale' => 'Locale (e.g. en)', 'name' => 'Name', 'subject' => 'Subject ({{vars}} allowed)', 'text_body' => 'Text body'],
-                'prefill' => ['locale' => 'en']];
+                'schema' => ['key' => 'text', 'channel' => 'enum:email,whatsapp', 'locale' => 'text', 'name' => 'text', 'subject' => 'text', 'text_body' => 'textarea', 'html_body' => 'textarea'],
+                'labels' => ['key' => 'Key (e.g. invoice)', 'channel' => 'Channel', 'locale' => 'Locale (e.g. en)', 'name' => 'Name', 'subject' => 'Subject ({{vars}} allowed)', 'text_body' => 'Text body ({{vars}} allowed)', 'html_body' => 'HTML body (optional)'],
+                'prefill' => ['locale' => 'en', 'channel' => 'email']];
+            // Rich editing (round 2): a chooser tile per template opens a PREFILLED form —
+            // full body editing with {{vars}}, posting to the same templates/save upsert.
+            if ($tpls->count()) {
+                $quick[] = ['key' => 'edit_template', 'label' => 'Edit a template', 'actor' => 'human',
+                    'chooser' => $tpls->take(30)->map(fn ($x) => [
+                        'title' => $x->key.' · '.strtoupper((string) $x->channel).' ('.$x->locale.')',
+                        'sub' => mb_substr((string) ($x->subject ?: $x->name), 0, 44),
+                        'icon' => 'doc',
+                        'action' => [
+                            'key' => 'tpl_edit_'.$x->id, 'label' => 'Edit — '.$x->key,
+                            'method' => 'POST', 'endpoint' => '/papi/comms/templates/save', 'actor' => 'human',
+                            'body' => ['id' => $x->id, 'key' => (string) $x->key, 'locale' => (string) $x->locale],
+                            'schema' => ['name' => 'text', 'subject' => 'text', 'text_body' => 'textarea', 'html_body' => 'textarea', 'is_active' => 'enum:1,0'],
+                            'labels' => ['name' => 'Name', 'subject' => 'Subject', 'text_body' => 'Text body', 'html_body' => 'HTML body', 'is_active' => 'Active? (1 = yes)'],
+                            'prefill' => ['name' => (string) $x->name, 'subject' => (string) ($x->subject ?? ''),
+                                'text_body' => (string) ($x->text_body ?? ''), 'html_body' => (string) ($x->html_body ?? ''),
+                                'is_active' => $x->is_active ? '1' : '0'],
+                        ],
+                    ])->values()->all()];
+            }
             $quick[] = ['key' => 'seed_tpl', 'label' => 'Install default templates', 'method' => 'POST', 'endpoint' => '/papi/comms/templates/seed', 'actor' => 'human',
                 'confirm' => 'Install/refresh the default template pack? Existing keys are kept.'];
 
@@ -243,10 +269,14 @@ final class CommunicationCapability implements ProcessCapability
                     'confirm' => 'Send a test email through "'.$p->name.'" to the owner address?'];
             }
 
-            $quick[] = ['key' => 'new_campaign', 'label' => 'New campaign (draft)', 'method' => 'POST', 'endpoint' => '/papi/comms/campaigns/save', 'actor' => 'human',
-                'schema' => ['name' => 'text', 'channel' => 'enum:email,whatsapp,both', 'subject' => 'text', 'text_body' => 'text', 'throttle_per_minute' => 'number'],
-                'labels' => ['name' => 'Campaign name', 'channel' => 'Channel', 'subject' => 'Subject (email)', 'text_body' => 'Message body', 'throttle_per_minute' => 'Send rate per minute'],
-                'prefill' => ['channel' => 'email', 'throttle_per_minute' => 60]];
+            $quick[] = ['key' => 'new_campaign', 'label' => 'New campaign (draft)', 'method' => 'POST', 'endpoint' => '/papi/comms/campaigns/save-simple', 'actor' => 'human',
+                'schema' => ['name' => 'text', 'channel' => 'enum:email,whatsapp,both', 'segment_type' => 'enum:all,tag,city,ordered_within_days,not_ordered_within_days', 'segment_value' => 'text', 'subject' => 'text', 'text_body' => 'textarea', 'throttle_per_minute' => 'number'],
+                'labels' => ['name' => 'Campaign name', 'channel' => 'Channel', 'segment_type' => 'Audience', 'segment_value' => 'Audience value (tag name / city / number of days — blank for all)', 'subject' => 'Subject (email)', 'text_body' => 'Message body ({{name}} etc.)', 'throttle_per_minute' => 'Send rate per minute'],
+                'prefill' => ['channel' => 'email', 'segment_type' => 'all', 'throttle_per_minute' => 60]];
+            $quick[] = ['key' => 'estimate_audience', 'label' => 'Estimate an audience', 'method' => 'POST', 'endpoint' => '/papi/comms/campaigns/estimate-simple', 'actor' => 'human',
+                'schema' => ['channel' => 'enum:email,whatsapp,both', 'segment_type' => 'enum:all,tag,city,ordered_within_days,not_ordered_within_days', 'segment_value' => 'text'],
+                'labels' => ['channel' => 'Channel', 'segment_type' => 'Audience', 'segment_value' => 'Audience value (tag name / city / number of days — blank for all)'],
+                'prefill' => ['channel' => 'email', 'segment_type' => 'all']];
             $quick = array_merge($quick, $campActions);
 
             $quick[] = ['key' => 'suppress_add', 'label' => 'Suppress an address', 'method' => 'POST', 'endpoint' => '/papi/comms/suppressions/add', 'actor' => 'human',

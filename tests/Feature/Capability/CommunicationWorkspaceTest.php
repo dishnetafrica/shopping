@@ -106,6 +106,46 @@ class CommunicationWorkspaceTest extends TestCase
         $this->assertSame('retry', $m->fresh()->status);
     }
 
+    public function test_edit_template_chooser_carries_prefilled_forms(): void
+    {
+        $this->login();
+        $tpl = \App\Models\CommTemplate::withoutGlobalScope('tenant')->create([
+            'tenant_id' => $this->t->id, 'channel' => 'email', 'key' => 'invoice', 'locale' => 'en',
+            'name' => 'Invoice', 'subject' => 'Invoice {{invoice_no}}', 'text_body' => 'Dear {{name}}', 'is_active' => true,
+        ]);
+
+        $j = $this->getJson('/api/v1/workspace/communication')->assertOk()->json();
+        $edit = collect($j['quickActions'])->firstWhere('key', 'edit_template');
+        $this->assertNotNull($edit, 'round 2: template editing must exist');
+        $tile = collect($edit['chooser'])->first(fn ($x) => str_contains($x['title'], 'invoice'));
+        $this->assertNotNull($tile);
+        $a = $tile['action'];
+        $this->assertSame('/papi/comms/templates/save', $a['endpoint']);
+        $this->assertSame($tpl->id, $a['body']['id']);
+        $this->assertSame('Dear {{name}}', $a['prefill']['text_body'], 'the form must open PREFILLED');
+        $this->assertSame('textarea', $a['schema']['text_body']);
+    }
+
+    public function test_campaign_save_simple_translates_segment(): void
+    {
+        $this->login();
+        $this->postJson('/papi/comms/campaigns/save-simple', [
+            'name' => 'Winback July', 'channel' => 'email',
+            'segment_type' => 'not_ordered_within_days', 'segment_value' => '30',
+            'subject' => 'We miss you', 'text_body' => 'Hi {{name}}', 'throttle_per_minute' => 60,
+        ])->assertOk()->assertJson(['ok' => true]);
+
+        $c = \App\Models\CommCampaign::withoutGlobalScope('tenant')
+            ->where('tenant_id', $this->t->id)->where('name', 'Winback July')->first();
+        $this->assertNotNull($c);
+        $this->assertSame(['not_ordered_within_days' => 30], (array) $c->segment);
+
+        $est = $this->postJson('/papi/comms/campaigns/estimate-simple', [
+            'channel' => 'email', 'segment_type' => 'all', 'segment_value' => '',
+        ])->assertOk()->json();
+        $this->assertStringContainsString('Audience', $est['message']);
+    }
+
     public function test_flat_routing_save_translates_and_persists(): void
     {
         $this->login();
