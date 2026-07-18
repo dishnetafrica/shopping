@@ -8,6 +8,7 @@ use App\Capability\Dto\WorkspacePayload;
 use App\Models\Conversation;
 use App\Models\CustomerProfile;
 use App\Models\Message;
+use App\Models\Order;
 use Illuminate\Support\Carbon;
 
 /**
@@ -41,6 +42,11 @@ final class ChatListCapability implements ProcessCapability
         $phones = $convos->pluck('customer_phone')->filter()->unique()->values();
         $names = CustomerProfile::where('tenant_id', $t)
             ->whereIn('phone', $phones)->pluck('name', 'phone');
+        // Most contacts have no profile yet — but if they ever ORDERED, we know their name.
+        // Ordered ASC so pluck keeps the LATEST name per phone.
+        $orderNames = Order::where('tenant_id', $t)->whereIn('customer_phone', $phones)
+            ->whereNotNull('customer_name')->where('customer_name', '!=', '')
+            ->orderBy('id')->pluck('customer_name', 'customer_phone');
         $lastByPhone = Message::where('tenant_id', $t)
             ->whereIn('customer_phone', $phones)
             ->orderBy('id')
@@ -50,7 +56,7 @@ final class ChatListCapability implements ProcessCapability
         $rows = [];
         foreach ($convos as $c) {
             $phone  = (string) $c->customer_phone;
-            $name   = trim((string) ($names[$phone] ?? '')) ?: $phone;
+            $name   = trim((string) ($names[$phone] ?? '')) ?: (trim((string) ($orderNames[$phone] ?? '')) ?: $phone);
             $unread = (int) $c->unread;
             $last   = $lastByPhone[$phone] ?? null;
             $lastAt = $c->last_message_at ? Carbon::parse($c->last_message_at) : null;

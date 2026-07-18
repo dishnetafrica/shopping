@@ -76,6 +76,22 @@ class ChatsWorkspaceTest extends TestCase
         $this->assertStringContainsString('price for rice', $row['last']['value']);
     }
 
+    public function test_contact_names_fall_back_to_their_latest_order(): void
+    {
+        $t = $this->login();
+        // No CustomerProfile — but this phone ordered before, so we KNOW the name.
+        \App\Models\Order::create([
+            'tenant_id' => $t->id, 'order_no' => 'FS-5001', 'customer_name' => 'Mary Akech',
+            'customer_phone' => '211920000009', 'status' => 'Delivered', 'total' => 40,
+        ]);
+        $this->convo($t, '211920000009', 1, false, [['in', 'customer', 'hello again']]);
+
+        $j = $this->getJson('/api/v1/workspace/chats')->assertOk()->json();
+        $row = collect($j['table']['rows'])->first();
+        $this->assertSame('Mary Akech', $row['contact']['value'],
+            'a phone that ever ordered must show a NAME, not digits');
+    }
+
     public function test_chat_object_renders_thread_and_delegated_actions(): void
     {
         $t = $this->login();

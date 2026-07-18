@@ -678,6 +678,54 @@ async function boot(){
   const h = parseHash();
   route(h.key || landingKey(), h.id);
 }
+
+/* ---- WhatsApp attention engine: so nobody has to keep checking the WhatsApp app ----
+   Polls the catalog every 45s: sidebar badges stay live, the tab title shows (n),
+   a NEW unread triggers a beep + a desktop notification (tab hidden) or a toast
+   (tab visible) that jumps to Chats. While ON Chats/a chat, the view refreshes every
+   20s — but never while a modal is open or while you are typing. */
+(function(){
+  var PREV=null, TITLE=document.title;
+  function beep(){ try{ var c=new (window.AudioContext||window.webkitAudioContext)();
+    var o=c.createOscillator(), g=c.createGain(); o.connect(g); g.connect(c.destination);
+    o.frequency.value=880; g.gain.value=0.05; o.start();
+    setTimeout(function(){ try{o.stop(); c.close();}catch(e){} },160); }catch(e){} }
+  function askPerm(){ try{ if(window.Notification && Notification.permission==='default'){ Notification.requestPermission(); } }catch(e){}
+    document.removeEventListener('click', askPerm); }
+  document.addEventListener('click', askPerm);
+  function announce(n){
+    beep();
+    try{
+      if(document.hidden && window.Notification && Notification.permission==='granted'){
+        var x=new Notification('CloudBSS — WhatsApp', {body:n+' conversation'+(n===1?'':'s')+' need a reply', tag:'cbss-chats'});
+        x.onclick=function(){ try{ window.focus(); }catch(e){} route('chats'); try{ x.close(); }catch(e){} };
+      } else if(!document.hidden && CUR.key!=='chats' && CUR.key!=='chat'){
+        toast('New WhatsApp message — open Chats');
+      }
+    }catch(e){}
+  }
+  async function tick(){
+    try{
+      var cat=await api('/');
+      if(!cat || !cat.counts) return;
+      CFG.counts=cat.counts;
+      if(cat.capabilities && cat.capabilities.length) renderNav(cat.capabilities);
+      var n=Number(cat.counts.chats||0);
+      document.title = n>0 ? '('+n+') '+TITLE : TITLE;
+      if(PREV!==null && n>PREV) announce(n);
+      PREV=n;
+    }catch(e){}
+  }
+  setInterval(tick, 45000);
+  setInterval(function(){
+    try{
+      if(!CUR || (CUR.key!=='chats' && CUR.key!=='chat')) return;
+      var ov=document.getElementById('ov'); if(ov && ov.classList.contains('on')) return;
+      var ae=document.activeElement; if(ae && (ae.tagName==='INPUT'||ae.tagName==='TEXTAREA')) return;
+      refresh();
+    }catch(e){}
+  }, 20000);
+})();
 // A brand-new shop (nothing sold or stocked yet) lands on the Get-started checklist;
 // an established shop lands on the Morning Briefing.
 function landingKey(){

@@ -48,7 +48,14 @@ final class ChatCapability implements ObjectCapability
 
         $phone   = (string) $c->customer_phone;
         $profile = CustomerProfile::where('tenant_id', $t)->where('phone', $phone)->first();
-        $name    = trim((string) ($profile->name ?? '')) ?: $phone;
+        $name    = trim((string) ($profile->name ?? ''));
+        if ($name === '') {
+            // Fallback: the latest order this phone ever placed carries their name.
+            $name = trim((string) \App\Models\Order::where('tenant_id', $t)
+                ->where('customer_phone', $phone)->whereNotNull('customer_name')
+                ->orderByDesc('id')->value('customer_name'));
+        }
+        $name = $name !== '' ? $name : $phone;
         $canChat = $ctx->can('menu:whatsapp');
 
         $msgs = Message::where('tenant_id', $t)
