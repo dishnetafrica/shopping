@@ -29,6 +29,7 @@ use App\Capability\Process\ChatListCapability;
 use App\Capability\Process\CommunicationCapability;
 use App\Capability\Process\ConsignmentListCapability;
 use App\Capability\Process\GuideCapability;
+use App\Capability\Process\ScheduledOrdersCapability;
 use App\Capability\Process\LeadListCapability;
 use App\Capability\Process\PaymentListCapability;
 use App\Capability\Process\ProductListCapability;
@@ -110,6 +111,9 @@ final class CoreCapabilityProvider implements CapabilityProvider
         // payload-gated and the papi endpoints re-enforce priv() server-side.
         $r->register(new ConsignmentListCapability(), new CapabilityManifest(key: 'consignments', type: 'process', owner: 'logistics', permission: '', api: '/api/v1/workspace/consignments'));
         $r->register(new ConsignmentCapability(), new CapabilityManifest(key: 'consignment', type: 'object', owner: 'logistics', permission: '', api: '/api/v1/workspace/consignment/{id}'));
+
+        // Retire-audit tail: scheduled ORDERS (future deliveries; ProcessScheduled cron).
+        $r->register(new ScheduledOrdersCapability(), new CapabilityManifest(key: 'scheduled', type: 'process', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/scheduled'));
 
         // Help & Training — the UCRM-style built-in manual (open to every role).
         $r->register(new GuideCapability(), new CapabilityManifest(key: 'guide', type: 'process', owner: 'management', permission: '', api: '/api/v1/workspace/guide'));

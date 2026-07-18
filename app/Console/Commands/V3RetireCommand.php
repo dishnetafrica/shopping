@@ -28,9 +28,8 @@ class V3RetireCommand extends Command
         foreach (ClassicPanelRedirects::MAP as $from => $key) {
             $this->line(sprintf('  %-26s → /v3#/%s', $from, $key));
         }
-        $this->warn('Unmapped (stay classic — the honest tail): /panel/audit, /panel/partners, '
-            .'/panel/billing, /panel/diagnostics, /panel/onboard, '
-            .'/panel/scheduled (scheduled ORDERS — port pending)');
+        $this->warn('Unmapped (stay classic — admin-only tail): /panel/audit, /panel/partners, '
+            .'/panel/billing, /panel/diagnostics, /panel/onboard');
         $this->line('Escape hatch on every mapped page: ?classic=1 (kept one quarter).');
 
         if ($this->option('dry')) {

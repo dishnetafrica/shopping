@@ -39,6 +39,11 @@ return [
                 ['3 · Invoice', 'Invoices are issued from the order. Share by WhatsApp or email from the screen.'],
                 ['4 · Payment', 'Record payments as they arrive; Collections shows who still owes.'],
             ]],
+            ['title' => 'Scheduled orders', 'rows' => [
+                ['Park it', 'Customer wants delivery Thursday 2pm? Scheduled → "Schedule an order" with the date and time. It waits there, out of the daily flow.'],
+                ['Automatic', 'The system moves it back into the normal flow at the right time and handles the reminders — nothing to remember.'],
+                ['Change of plan', '"Change a delivery time" or "Send now" releases it immediately.'],
+            ]],
             ['title' => 'Quotations', 'rows' => [
                 ['Create', 'Quotations → New. Add items, send to the customer by WhatsApp.'],
                 ['Convert', 'When the customer agrees, one click converts the quotation into a sales order — nothing retyped.'],

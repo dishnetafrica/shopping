@@ -69,6 +69,10 @@ final class NavCountsCapability implements Capability
             'categories'        => $safe(fn () => $c(Category::query())),
             'supplier'          => $safe(fn () => $c(Supplier::query())),
             'purchase.process'  => $safe(fn () => $c(OrderCost::query()->where('stage', 'purchase'))),
+            // Scheduled badge = deliveries due within 24h (what needs attention today).
+            'scheduled'         => $safe(fn () => (int) \App\Models\Order::where('tenant_id', $t)
+                                        ->whereNotNull('scheduled_for')->whereNull('delivered_at')
+                                        ->where('scheduled_for', '<=', now()->addDay())->count()),
             // Consignments badge = orders still ON BOARD (what needs delivering).
             'consignments'      => $safe(fn () => (int) \App\Models\ShipmentOrder::where('tenant_id', $t)
                                         ->where('status', \App\Models\ShipmentOrder::ON_BOARD)->count()),
