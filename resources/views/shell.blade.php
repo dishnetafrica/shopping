@@ -281,6 +281,20 @@ svg{display:block}
 .tl .e .tt{font-weight:600;font-size:13.5px}
 .tl .e .ts{font-size:12px;color:var(--muted);margin-top:2px}
 
+/* chat thread (payload meta.thread) — WhatsApp-style bubbles + inline composer */
+.thread{display:flex;flex-direction:column;gap:6px;max-height:520px;overflow-y:auto;padding:6px 2px}
+.thread .msg{max-width:78%;padding:8px 12px;border-radius:14px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.thread .in{align-self:flex-start;background:var(--surface-2);border:1px solid var(--line);border-bottom-left-radius:4px}
+.thread .out{align-self:flex-end;background:var(--brand-wash);border:1px solid var(--brand);border-bottom-right-radius:4px}
+.thread .out.bot{background:var(--surface-2);border:1px dashed var(--line)}
+.thread .who{font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:2px}
+.thread .when{font-size:10px;color:var(--faint);margin-top:3px;text-align:right}
+.composer{display:flex;gap:8px;margin-top:10px}
+.composer input{flex:1;height:40px;border:1px solid var(--line);border-radius:10px;padding:0 12px;background:var(--surface-2)}
+.composer input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-wash);background:#fff}
+.composer button{height:40px;padding:0 16px;border:none;border-radius:10px;background:var(--brand);color:#fff;font-weight:700;cursor:pointer}
+.composer button:disabled{opacity:.5;cursor:default}
+
 /* related / queue rows */
 .qrow{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line-2);cursor:pointer;transition:.08s}
 .qrow:hover{background:var(--brand-wash)}
@@ -813,9 +827,28 @@ function renderView(p){
     /* main column */
     h+='<div class="grid">';
     if(p.timeline&&p.timeline.length){
-      h+='<div class="card"><div class="h">'+icon('clock','ic-sm')+'Timeline</div><div class="b"><div class="tl">'+
-        p.timeline.map(e=>'<div class="e"><div class="node">'+icon('bolt','ic-sm')+'</div><div class="tt">'+esc(e.title)+'</div><div class="ts">'+esc(e.at||'')+(e.actor?' · '+esc(e.actor):'')+'</div></div>').join('')+
-        '</div></div></div>';
+      if(p.meta&&p.meta.thread){
+        /* WhatsApp-style thread: inbound left, outbound right (bot = dashed), composer wired
+           to the payload's own `reply` action — same endpoint, same body, no new write path. */
+        const ract=(p.actions||[]).find(a=>a.key==='reply');
+        window.__THREAD_REPLY__=ract||null;
+        h+='<div class="card"><div class="h">'+icon('clock','ic-sm')+'Conversation</div><div class="b">'+
+          '<div class="thread" id="thread">'+
+          p.timeline.map(e=>{
+            const out=e.type==='outbound';
+            const bot=out&&(e.title||'').indexOf('\u{1F916}')>=0;
+            return '<div class="msg '+(out?'out':'in')+(bot?' bot':'')+'">'+
+              '<div class="who">'+esc(e.title||'')+'</div>'+esc(e.detail||'')+
+              '<div class="when">'+esc(e.at||'')+'</div></div>';
+          }).join('')+'</div>'+
+          (ract?'<div class="composer"><input id="cmpin" placeholder="Type a reply…" autocomplete="off" onkeydown="if(event.key===\'Enter\')sendThread()"><button id="cmpbtn" onclick="sendThread()">Send</button></div>':'')+
+          '</div></div>';
+        setTimeout(function(){var el=document.getElementById('thread'); if(el) el.scrollTop=el.scrollHeight;},0);
+      } else {
+        h+='<div class="card"><div class="h">'+icon('clock','ic-sm')+'Timeline</div><div class="b"><div class="tl">'+
+          p.timeline.map(e=>'<div class="e"><div class="node">'+icon('bolt','ic-sm')+'</div><div class="tt">'+esc(e.title)+'</div><div class="ts">'+esc(e.at||'')+(e.actor?' · '+esc(e.actor):'')+'</div></div>').join('')+
+          '</div></div></div>';
+      }
     }
     if(p.related&&p.related.length){
       h+='<div class="card"><div class="h">'+icon('worklist','ic-sm')+'Related</div>'+p.related.map(qrow).join('')+'</div>';
@@ -1090,6 +1123,17 @@ async function doAction(a){
   const ep=a.endpoint||a.post; if(!ep){ return; }   // accept `post:` (menu/row delete actions) as well as `endpoint:`
   const res=await post(ep,a.body||{}); toast(res.ok?(res.message||'Done'):(res.message||res.error||'Error'), !res.ok);
   if(res&&res.ok){ if(res.pdf_b64){ downloadB64(res.pdf_b64,res.filename||'document.pdf'); } else if(res.url){ try{ window.open(res.url,'_blank'); }catch(e){} } }
+  refresh();
+}
+/* Thread composer: posts through the payload's reply action (proven /papi/chats/send). */
+async function sendThread(){
+  const a=window.__THREAD_REPLY__; const inp=document.getElementById('cmpin'); const btn=document.getElementById('cmpbtn');
+  if(!a||!inp) return;
+  const txt=(inp.value||'').trim(); if(!txt) return;
+  inp.disabled=true; if(btn) btn.disabled=true;
+  const body=Object.assign({},a.body||{}); body.body=txt;
+  const res=await post(a.endpoint,body);
+  toast(res&&res.ok?'Sent':((res&&(res.message||res.error))||'Could not send'), !(res&&res.ok));
   refresh();
 }
 /* Per-row list action: confirm (optional) → POST → toast → refresh the list. */

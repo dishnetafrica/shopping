@@ -86,6 +86,7 @@ class ChatsWorkspaceTest extends TestCase
         $j = $this->getJson('/api/v1/workspace/chat/'.$c->id)->assertOk()->json();
 
         $this->assertSame('chat', $j['object']['type']);
+        $this->assertTrue((bool) ($j['meta']['thread'] ?? false), 'thread flag drives the bubble renderer');
         $this->assertCount(3, $j['timeline']);
         $this->assertSame('inbound',  $j['timeline'][0]['type']);
         $this->assertSame('outbound', $j['timeline'][1]['type']);

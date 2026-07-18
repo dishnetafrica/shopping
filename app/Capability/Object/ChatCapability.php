@@ -106,7 +106,7 @@ final class ChatCapability implements ObjectCapability
             ->timeline($timeline)
             ->actions($actions)
             ->related($related)
-            ->meta(['capability' => 'chat', 'ttl' => 10, 'permissions' => ['menu:whatsapp']]);
+            ->meta(['capability' => 'chat', 'ttl' => 10, 'thread' => true, 'permissions' => ['menu:whatsapp']]);
     }
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
