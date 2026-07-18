@@ -981,10 +981,16 @@ class AiBrain
         $persona = (string) $tenant->setting('ai_persona', '');
         if ($persona === '' && $isMfr) $persona = BrandDefaults::persona((string) $tenant->name);
         $know = (string) $tenant->setting('brand_knowledge', '');
+        // Learned glossary (2026-07-18): DATA, not instructions — what customers call things.
+        $lex = (array) $tenant->setting('shop_lexicon', []);
+        $lexTxt = collect($lex)->map(fn ($e) => '"'.($e['term'] ?? '').'" = '.($e['means'] ?? ''))->filter()->implode("\n");
         if ($know === '' && $isMfr) $know = BrandDefaults::knowledge();
         $faqTxt  = collect($this->brandFaq($tenant))
             ->map(fn ($f) => 'Q: ' . ($f['q'] ?? '') . "\nA: " . ($f['a'] ?? ''))
             ->implode("\n\n");
+        if ($lexTxt !== '') {
+            $p2lex = "CUSTOMER VOCABULARY (learned from this shop's real chats — treat as ground truth when interpreting requests):\n".$lexTxt."\n\n";
+        } else { $p2lex = ''; }
         $lines = $this->catalogueLines($tenant);
         $overview = $this->catalogueOverview($tenant);
         $greeting = trim((string) $tenant->setting('bot_greeting', ''));
@@ -1084,6 +1090,7 @@ class AiBrain
             $p .= "BUSINESS DETAILS (these are true — share them when asked; NEVER say we don't have a website/contact if one is listed here):\n- " . implode("\n- ", $bizBits) . "\n\n";
         }
         if ($know !== '')   $p .= "COMPANY KNOWLEDGE:\n{$know}\n\n";
+        $p .= $p2lex;
         if ($faqTxt !== '') $p .= "FAQ (answer from these):\n{$faqTxt}\n\n";
         $combos = \App\Support\Combos::promptBlock($tenant);
         if ($combos !== '') $p .= "COMBO OFFERS (mention ONLY if it overlaps what the customer is already buying or they ask what's on offer — never lead with one, never repeat one; prices are fixed, quote as-is):\n{$combos}\n\n";

@@ -8,6 +8,7 @@ Schedule::command('shopbot:process-scheduled')->everyMinute()->withoutOverlappin
 // Smart-bot (n8n) shared, tenant-keyed schedules
 Schedule::command('bot:watchdog')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:extract')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
+Schedule::command('relationship:learn')->dailyAt('02:30')->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:stages')->dailyAt('03:15')->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:attribute')->dailyAt('06:50')->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:plan')->dailyAt('07:30')->withoutOverlapping()->onOneServer();

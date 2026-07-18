@@ -71,6 +71,20 @@ class RelationshipReviewCommand extends Command
             $profiles = \App\Models\CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id);
             $total = (clone $profiles)->count();
             $withFacts = (clone $profiles)->whereNotNull('facts')->count();
+            // what the shop LEARNED (nightly study sessions)
+            $lex = (array) $t->setting('shop_lexicon', []);
+            $log = (array) $t->setting('learning_log', []);
+            if ($lex || $log) {
+                $this->line('— What the shop learned (nightly study) —');
+                $this->line('  vocabulary glossary: '.count($lex).' term(s)'.($lex ? ' · newest: "'
+                    .(end($lex)['term'] ?? '').'" = '.(end($lex)['means'] ?? '') : ''));
+                $gaps = collect($log)->pluck('gaps')->flatten()->countBy()->sortDesc()->take(5);
+                foreach ($gaps as $g => $n) $this->line("  {$n}× gap: {$g}");
+                $demand = collect($log)->pluck('demand')->flatten()->countBy()->sortDesc()->take(5);
+                foreach ($demand as $d => $n) $this->line("  {$n}× asked-but-not-stocked: {$d}  ← purchasing signal");
+                $this->comment('  Vocabulary is data the bot now uses. Gaps and demand are for YOUR decisions.');
+            }
+
             $this->line('— Memory —');
             $this->line('  '.$withFacts.' of '.$total.' profiles carry learned facts ('
                 .($total ? round(100 * $withFacts / $total) : 0).'%)');
