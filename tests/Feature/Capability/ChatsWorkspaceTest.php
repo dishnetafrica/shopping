@@ -114,6 +114,54 @@ class ChatsWorkspaceTest extends TestCase
         $this->assertArrayHasKey('takeover', $acts, 'bot-mode chat offers Take over');
     }
 
+    public function test_rich_transcript_carries_media_and_send_photo_action(): void
+    {
+        $t = $this->login();
+        $c = $this->convo($t, '256700000007', 0, false, [['in', 'customer', 'see photo']]);
+        // attach media meta to the inbound row (what the webhook now records)
+        \Illuminate\Support\Facades\DB::table('messages')
+            ->where('tenant_id', $t->id)->where('customer_phone', '256700000007')
+            ->update(['meta' => json_encode(['media' => ['kind' => 'image', 'key' => 'MK123', 'mime' => 'image/jpeg']])]);
+
+        $j = $this->getJson('/api/v1/workspace/chat/'.$c->id)->assertOk()->json();
+
+        $m = collect($j['meta']['msgs'])->first();
+        $this->assertSame('image', $m['media']['kind']);
+        $this->assertStringContainsString('/papi/chats/media?key=MK123', $m['media']['src'],
+            'media must resolve to the on-demand stream endpoint');
+        $acts = collect($j['actions'])->keyBy('key');
+        $this->assertSame('/papi/chats/send-media', $acts['send_image']['endpoint']);
+        $this->assertSame('image', $acts['send_image']['schema']['image']);
+    }
+
+    public function test_send_media_endpoint_sends_logs_and_takes_over(): void
+    {
+        $t = $this->login();
+        $gw = new class {
+            public array $sent = [];
+            public function sendImage($i, $to, $media, $cap = '') { $this->sent[] = [$to, $media, $cap]; return ['ok' => true]; }
+            public function sendText($i, $to, $m, $q = null) { return ['ok' => true]; }
+        };
+        $mgr = new class($gw) extends \App\Services\WhatsApp\WhatsAppManager {
+            public function __construct(private object $g) {}
+            public function forTenant(\App\Models\Tenant $t): object { return $this->g; }
+        };
+        $this->app->instance(\App\Services\WhatsApp\WhatsAppManager::class, $mgr);
+
+        $this->postJson('/papi/chats/send-media', [
+            'phone' => '256700000008', 'image' => 'https://cdn.example/x.jpg', 'caption' => 'Your order',
+        ])->assertOk()->assertJson(['ok' => true]);
+
+        $this->assertSame(['256700000008', 'https://cdn.example/x.jpg', 'Your order'], $gw->sent[0]);
+        $msg = \App\Models\Message::withoutGlobalScope('tenant')
+            ->where('tenant_id', $t->id)->where('customer_phone', '256700000008')->first();
+        $this->assertSame('Your order', $msg->body);
+        $this->assertSame('image', $msg->meta['media']['kind']);
+        $convo = \App\Models\Conversation::withoutGlobalScope('tenant')
+            ->where('tenant_id', $t->id)->where('customer_phone', '256700000008')->first();
+        $this->assertTrue((bool) $convo->agent_active, 'sending a photo takes the chat over, same as text');
+    }
+
     public function test_chat_permissions_and_missing_id(): void
     {
         $t = $this->login();

@@ -134,9 +134,25 @@ class ProcessIncomingMessage implements ShouldQueue
 
         // Always log what the customer said — even if the bot is off or a human
         // has taken over. This is what powers the live web inbox.
+        // WhatsApp-Web mode (2026-07-18): remember WHAT arrived, not just its text.
+        // Purely additive — flow, bot behaviour and all existing fields unchanged; the
+        // media itself stays on WhatsApp's servers and is fetched on demand by key.
+        $mKey  = $this->incoming['media_key'] ?? null;
+        $mMime = (string) ($this->incoming['media_mime'] ?? '');
+        $mMeta = [];
+        if ($mKey) {
+            $mMeta = ['media' => array_filter([
+                'kind'    => str_starts_with($mMime, 'image/') ? 'image'
+                            : (str_starts_with($mMime, 'audio/') ? 'audio' : 'file'),
+                'key'     => $mKey,
+                'mime'    => $mMime ?: null,
+                'caption' => trim((string) ($this->incoming['image_caption'] ?? '')) ?: null,
+            ])];
+        }
         MessageLog::record(
             $this->tenantId, $this->incoming['from'], $this->incoming['instance'],
-            'in', 'customer', $this->incoming['text'], $this->incoming['messageId'] ?: null
+            'in', 'customer', $this->incoming['text'], $this->incoming['messageId'] ?: null,
+            null, $mMeta
         );
 
         if ($this->incoming['messageId']) {

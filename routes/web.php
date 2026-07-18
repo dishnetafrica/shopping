@@ -388,6 +388,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('chats',              [PanelApiController::class, 'chats']);
         Route::get('chats/thread',       [PanelApiController::class, 'chatThread']);
         Route::post('chats/send',        [PanelApiController::class, 'chatSend']);
+        Route::get('chats/media',        [PanelApiController::class, 'chatMedia']);
+        Route::post('chats/send-media',  [PanelApiController::class, 'chatSendMedia']);
         Route::post('chats/takeover',    [PanelApiController::class, 'chatTakeover']);
         Route::post('chats/mute',        [PanelApiController::class, 'chatMute']);
         Route::post('chats/bot-mode',    [PanelApiController::class, 'chatBotMode']);

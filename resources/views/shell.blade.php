@@ -295,6 +295,39 @@ svg{display:block}
 .composer button{height:40px;padding:0 16px;border:none;border-radius:10px;background:var(--brand);color:#fff;font-weight:700;cursor:pointer}
 .composer button:disabled{opacity:.5;cursor:default}
 
+/* WhatsApp-Web mode (route 'chats'): split pane — conversations left, thread right */
+.waweb{display:grid;grid-template-columns:340px 1fr;height:calc(100vh - 150px);background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.wal{border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.wasearch{padding:10px;border-bottom:1px solid var(--line)}
+.wasearch input{width:100%;height:36px;border:1px solid var(--line);border-radius:9px;padding:0 12px;background:var(--surface-2)}
+.wasearch input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-wash);background:#fff}
+.walist{overflow-y:auto;flex:1}
+.wac{display:flex;gap:10px;padding:10px 12px;border-bottom:1px solid var(--surface-2);cursor:pointer;align-items:center}
+.wac:hover{background:var(--surface-2)}.wac.on{background:var(--brand-wash)}
+.waav{width:40px;height:40px;border-radius:50%;background:#1B3A2B;color:#fff;display:grid;place-items:center;font-weight:800;flex:none}
+.wamid{min-width:0;flex:1}
+.wanm{font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wapv{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.waend{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
+.wat{font-size:10.5px;color:var(--faint)}
+.waun{background:#16a34a;color:#fff;border-radius:99px;min-width:20px;height:20px;display:grid;place-items:center;font-size:11px;font-weight:800;padding:0 6px}
+.wam{font-size:10px;font-weight:700;border-radius:99px;padding:2px 7px}.wam.bt{background:var(--surface-2);color:var(--muted)}.wam.ag{background:#fef3c7;color:#92400e}
+.war{display:flex;flex-direction:column;min-width:0;background:var(--surface-2)}
+.wahd{display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);background:#fff}
+.wahm{flex:1;min-width:0}
+.waback{display:none;border:none;background:none;font-size:18px;cursor:pointer;padding:4px}
+.war .thread{flex:1;max-height:none;padding:14px;overflow-y:auto}
+.war .composer{margin:0;padding:10px;border-top:1px solid var(--line);background:#fff}
+.attach{height:40px;width:44px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);cursor:pointer;font-size:16px}
+.waempty{margin:auto;text-align:center;color:var(--muted);display:grid;gap:8px;place-items:center;font-weight:600}
+.wimg{max-width:260px;max-height:280px;border-radius:10px;display:block;cursor:zoom-in}
+@media(max-width:760px){
+  .waweb{grid-template-columns:1fr}
+  .waweb .war{display:none}.waweb .wal{display:flex}
+  .waweb.open .wal{display:none}.waweb.open .war{display:flex}
+  .waweb.open .waback{display:block}
+}
+
 /* related / queue rows */
 .qrow{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line-2);cursor:pointer;transition:.08s}
 .qrow:hover{background:var(--brand-wash)}
@@ -726,6 +759,78 @@ async function boot(){
     }catch(e){}
   }, 20000);
 })();
+
+/* ---- WhatsApp-Web mode: split-pane Chats (list + live thread + media + composer) ---- */
+window.__WA={active:null,list:null,q:''};
+async function waweb(id){
+  if(id) window.__WA.active=id;
+  document.getElementById('view').innerHTML=
+    '<div class="waweb" id="waweb"><div class="wal">'+
+    '<div class="wasearch"><input id="waq" placeholder="Search name or number…" value="'+esc(window.__WA.q||'')+'" oninput="window.__WA.q=this.value;waPaint()"></div>'+
+    '<div class="walist" id="walist">'+skeleton()+'</div></div>'+
+    '<div class="war" id="war"><div class="waempty">'+icon('chats','')+'<div>Pick a conversation</div><div style="font-weight:400;font-size:12px">Everything WhatsApp — names, photos, voice notes, replies — without leaving CloudBSS.</div></div></div></div>';
+  try{ window.__WA.list=await api('/chats'); }catch(e){}
+  waPaint();
+  if(window.__WA.active) openThread(window.__WA.active);
+}
+function waPaint(){
+  const p=window.__WA.list; const el=document.getElementById('walist'); if(!p||!el) return;
+  const q=(window.__WA.q||'').toLowerCase();
+  let hh='';
+  ((p.table&&p.table.rows)||[]).forEach(function(r){
+    const id=String((r.link||'').split('/').pop());
+    const nm=(r.contact&&r.contact.value)||'', sub=(r.contact&&r.contact.sub)||'';
+    if(q && nm.toLowerCase().indexOf(q)<0 && sub.indexOf(q)<0) return;
+    const un=r.unread&&r.unread.value; const mode=(r.mode&&r.mode.value)||'';
+    hh+='<div class="wac'+(String(window.__WA.active)===id?' on':'')+'" onclick="openThread(\''+id+'\')">'+
+      '<div class="waav">'+esc((nm||'?').slice(0,1).toUpperCase())+'</div>'+
+      '<div class="wamid"><div class="wanm">'+esc(nm)+'</div><div class="wapv">'+esc((r.last&&r.last.value)||'')+'</div></div>'+
+      '<div class="waend"><div class="wat">'+esc((r.when&&r.when.value)||'')+'</div>'+
+      (un?'<span class="waun">'+esc(un)+'</span>':'<span class="wam '+(mode==='Agent'?'ag':'bt')+'">'+esc(mode||'Bot')+'</span>')+
+      '</div></div>';
+  });
+  el.innerHTML=hh||'<div class="waempty" style="padding:30px">No conversations match.</div>';
+}
+async function openThread(id){
+  window.__WA.active=String(id);
+  try{ history.replaceState(null,'','#/chats/'+id); }catch(e){}
+  const box=document.getElementById('waweb'); if(box) box.classList.add('open');
+  waPaint();
+  const war=document.getElementById('war'); if(!war) return;
+  try{
+    const p=await api('/chat/'+id);
+    const acts=p.actions||[];
+    const reply=acts.find(a=>a.key==='reply'); const img=acts.find(a=>a.key==='send_image');
+    const tk=acts.find(a=>a.key==='takeover'||a.key==='to_bot');
+    window.__THREAD_REPLY__=reply||null;
+    const msgs=(p.meta&&p.meta.msgs)||[];
+    const mh=msgs.map(function(m){
+      const out=m.dir==='out'; const bot=out&&m.sender==='bot';
+      let inner='';
+      if(m.media){
+        if(m.media.kind==='image') inner+='<img class="wimg" loading="lazy" src="'+esc(m.media.src)+'" onclick="try{window.open(this.src)}catch(e){}">';
+        else if(m.media.kind==='audio') inner+='<audio controls preload="none" style="max-width:240px" src="'+esc(m.media.src)+'"></audio>';
+        else inner+='<a href="'+esc(m.media.src)+'" target="_blank">📎 Attachment</a>';
+      }
+      if(m.body && m.body!=='[photo]') inner+='<div>'+esc(m.body)+'</div>';
+      return '<div class="msg '+(out?'out':'in')+(bot?' bot':'')+'">'+
+        (out?'<div class="who">'+(bot?'🤖 Bot':'🧑‍💼 Agent')+'</div>':'')+inner+
+        '<div class="when">'+esc(m.at||'')+'</div></div>';
+    }).join('');
+    war.innerHTML=
+      '<div class="wahd"><button class="waback" onclick="document.getElementById(\'waweb\').classList.remove(\'open\')">←</button>'+
+      '<div class="waav">'+esc(((p.object&&p.object.title)||'?').slice(0,1).toUpperCase())+'</div>'+
+      '<div class="wahm"><div class="wanm">'+esc((p.object&&p.object.title)||'')+'</div><div class="wapv">'+esc((p.object&&p.object.subtitle)||'')+'</div></div>'+
+      (tk?'<button class="btn sm" onclick=\'doAction('+JSON.stringify(tk).replace(/'/g,"&#39;")+')\'>'+esc(tk.label)+'</button>':'')+
+      '</div>'+
+      '<div class="thread" id="thread">'+(mh||'<div class="waempty" style="padding:30px">No messages logged yet — your first reply starts the transcript.</div>')+'</div>'+
+      (reply?('<div class="composer">'+
+        (img?'<button class="attach" title="Send photo" onclick=\'doAction('+JSON.stringify(img).replace(/'/g,"&#39;")+')\'>📎</button>':'')+
+        '<input id="cmpin" placeholder="Type a message…" autocomplete="off" onkeydown="if(event.key===\'Enter\')sendThread()">'+
+        '<button id="cmpbtn" onclick="sendThread()">Send</button></div>'):'');
+    const th=document.getElementById('thread'); if(th) th.scrollTop=th.scrollHeight;
+  }catch(e){}
+}
 // A brand-new shop (nothing sold or stocked yet) lands on the Get-started checklist;
 // an established shop lands on the Morning Briefing.
 function landingKey(){
@@ -787,6 +892,7 @@ async function route(key, id){
   closeNav();
   CUR={key,id}; REC_TAB='overview'; location.hash='#/'+key+(id?'/'+id:''); setActive(key);
   if(key==='transport'){ location.href='/transport'; return; }
+  if(key==='chats'){ CUR.key='chats'; CUR.id=id||null; setActive('chats'); waweb(id||null); return; }
   if(key==='payments'){ document.getElementById('view').innerHTML='<div class="crumb">Payments</div><iframe title="Payments" src="/panel/payments-manager" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='pnl'){ document.getElementById('view').innerHTML='<div class="crumb">Profit & Loss</div><iframe title="Profit and Loss" src="/panel/pnl-report" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='wa-connect'){ document.getElementById('view').innerHTML='<div class="crumb">Connect WhatsApp</div><iframe title="Connect WhatsApp" src="/panel/setup" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }

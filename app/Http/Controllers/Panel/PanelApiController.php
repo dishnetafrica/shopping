@@ -3173,6 +3173,66 @@ class PanelApiController extends Controller
         return response()->json(['messages' => $msgs, 'agent_active' => $agent, 'muted' => $muted]);
     }
 
+    /**
+     * WhatsApp-Web mode: stream a media item ON DEMAND by its WhatsApp media key.
+     * Nothing is stored on our side — the gateway decrypts/fetches (getMediaBase64)
+     * and we relay bytes with the right mime. Auth'd like every papi route.
+     */
+    public function chatMedia(Request $r, WhatsAppManager $wa)
+    {
+        $t = $r->user()->tenant;
+        $key = (string) $r->query('key', '');
+        if (! $t || $key === '') return response()->json(['ok' => false], 422);
+
+        $gw = $wa->forTenant($t);
+        if (! method_exists($gw, 'getMediaBase64')) return response()->json(['ok' => false, 'error' => 'unsupported'], 404);
+        try {
+            $b64 = (string) ($gw->getMediaBase64($t->whatsapp_instance, $key) ?? '');
+        } catch (\Throwable $e) {
+            $b64 = '';
+        }
+        if ($b64 === '') return response()->json(['ok' => false, 'error' => 'media_unavailable'], 404);
+
+        return response(base64_decode($b64), 200, [
+            'Content-Type'  => (string) ($r->query('mime') ?: 'application/octet-stream'),
+            'Cache-Control' => 'private, max-age=86400',
+        ]);
+    }
+
+    /** WhatsApp-Web mode: send a photo (URL from the uploader, or base64) with optional caption. */
+    public function chatSendMedia(Request $r, WhatsAppManager $wa)
+    {
+        $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));
+        $media = trim((string) $r->input('image', ''));
+        $cap   = trim((string) $r->input('caption', ''));
+        if ($phone === '' || $media === '') {
+            return response()->json(['ok' => false, 'error' => 'empty'], 422);
+        }
+        $t = $r->user()->tenant;
+
+        // Same rule as text: sending by hand takes the chat over from the bot.
+        $c = Conversation::firstOrCreate(
+            ['customer_phone' => $phone, 'instance' => $t->whatsapp_instance],
+            ['tenant_id' => $t->id, 'state' => [], 'cart' => []]
+        );
+        $c->agent_active = true;
+        $c->save();
+
+        $gw = $wa->forTenant($t);
+        if (! method_exists($gw, 'sendImage')) return response()->json(['ok' => false, 'error' => 'unsupported'], 422);
+        try {
+            $gw->sendImage($t->whatsapp_instance, $phone, $media, $cap);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => 'send_failed'], 502);
+        }
+
+        \App\Support\MessageLog::record($t->id, $phone, $t->whatsapp_instance, 'out', 'agent',
+            $cap !== '' ? $cap : '[photo]', null, null,
+            ['media' => ['kind' => 'image', 'url' => $media]]);
+
+        return response()->json(['ok' => true, 'message' => 'Photo sent']);
+    }
+
     public function chatSend(Request $r, WhatsAppManager $wa)
     {
         $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));

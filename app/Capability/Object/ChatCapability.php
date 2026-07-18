@@ -74,12 +74,43 @@ final class ChatCapability implements ObjectCapability
             );
         }
 
+        // WhatsApp-Web mode: a parallel rich transcript for the split-pane renderer —
+        // same rows, plus on-demand media (image/audio/file) resolved to a src.
+        $rich = [];
+        foreach ($msgs as $m) {
+            $media = null;
+            $mm = (array) (($m->meta['media'] ?? null) ?: []);
+            if ($mm) {
+                $src = isset($mm['url']) && $mm['url']
+                    ? (string) $mm['url']
+                    : (isset($mm['key']) && $mm['key']
+                        ? '/papi/chats/media?key='.rawurlencode((string) $mm['key'])
+                            .'&mime='.rawurlencode((string) ($mm['mime'] ?? ''))
+                        : null);
+                if ($src) {
+                    $media = ['kind' => (string) ($mm['kind'] ?? 'file'), 'src' => $src];
+                }
+            }
+            $rich[] = [
+                'dir' => $m->direction === 'in' ? 'in' : 'out',
+                'sender' => (string) $m->sender,
+                'at' => Carbon::parse($m->created_at)->format('d M H:i'),
+                'body' => (string) $m->body,
+                'media' => $media,
+            ];
+        }
+
         $actions = [];
         if ($canChat) {
             $actions[] = ['key' => 'reply', 'label' => 'Reply', 'queryWrite' => true, 'method' => 'POST',
                 'endpoint' => '/papi/chats/send', 'actor' => 'human', 'tone' => 'primary',
                 'schema' => ['body' => 'text'],
                 'labels' => ['body' => 'Message to '.$name],
+                'body'   => ['phone' => $phone]];
+            $actions[] = ['key' => 'send_image', 'label' => 'Send photo', 'method' => 'POST',
+                'endpoint' => '/papi/chats/send-media', 'actor' => 'human',
+                'schema' => ['image' => 'image', 'caption' => 'text'],
+                'labels' => ['image' => 'Photo', 'caption' => 'Caption (optional)'],
                 'body'   => ['phone' => $phone]];
             $actions[] = $c->agent_active
                 ? ['key' => 'to_bot', 'label' => 'Hand back to bot', 'queryWrite' => true, 'method' => 'POST',
@@ -113,7 +144,7 @@ final class ChatCapability implements ObjectCapability
             ->timeline($timeline)
             ->actions($actions)
             ->related($related)
-            ->meta(['capability' => 'chat', 'ttl' => 10, 'thread' => true, 'permissions' => ['menu:whatsapp']]);
+            ->meta(['capability' => 'chat', 'ttl' => 10, 'thread' => true, 'msgs' => $rich, 'permissions' => ['menu:whatsapp']]);
     }
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
