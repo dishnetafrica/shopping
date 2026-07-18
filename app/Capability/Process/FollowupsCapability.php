@@ -6,6 +6,7 @@ use App\Capability\CapabilityContext;
 use App\Capability\Dto\WorkspacePayload;
 use App\Models\CustomerProfile;
 use App\Models\FollowupProposal;
+use App\Capability\Contracts\ProcessCapability;
 use Illuminate\Support\Carbon;
 
 /**
@@ -14,9 +15,13 @@ use Illuminate\Support\Carbon;
  * and per-proposal actions Send / Edit & send / Snooze 3d / Skip (with reason —
  * every skip teaches the engine in V4.3). Send delegates to the proven chat path.
  */
-class FollowupsCapability
+final class FollowupsCapability implements ProcessCapability
 {
-    public function build(CapabilityContext $ctx): WorkspacePayload
+    public function key(): string { return 'followups'; }
+
+    public function permission(): string { return ''; }   // sales + owners work this inbox
+
+    public function project(CapabilityContext $ctx): WorkspacePayload
     {
         // Migration not run yet? Say so instead of 500ing (incident hardening).
         try {
