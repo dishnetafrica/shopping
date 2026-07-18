@@ -106,6 +106,18 @@ class FaqDictionary
                 return "\u{1F6F5} Yes, we deliver across town. Share your *location pin* (tap \u{1F4CE} \u{2192} Location) and I'll work out the delivery fee for you.";
             }],
 
+            // --- Website / catalogue / what do you sell -------------------------
+            [[
+                '/\\b(your|the)\\s*(website|web site|site|online shop|online store)\\b/',
+                '/\\b(catalogue|catalog|price ?list|product list)\\b/',
+                '/\\bwhat (do|can) (you|u) (sell|have|offer)\\b/',
+                '/\\b(see|view|browse|check) (your |the )?(products|items|prices)\\b/',
+            ], function ($ctx) {
+                $web = trim((string) ($ctx['website'] ?? ''));
+                if ($web === '') return null;
+                return "\u{1F6D2} Browse everything with photos and prices here:\n{$web}\n\nAdd to cart there, or just tell me what you need right here — both reach us instantly. \u{1F44D}";
+            }],
+
             // --- Where is your shop / physical location -------------------------
             [[
                 '/\\bwhere\\b.{0,20}\\b(shop|store|located|location|office|branch)\\b/',
@@ -116,7 +128,9 @@ class FaqDictionary
             ], function ($ctx) {
                 $addr = trim((string) ($ctx['shop_address'] ?? ''));
                 if ($addr === '') return null;   // not configured → fall through to other answers
-                return "\u{1F4CD} You'll find us here:\n{$addr}\n\nYou're welcome to visit — or just order right here on WhatsApp and we deliver. \u{1F69A}";
+                $web = trim((string) ($ctx['website'] ?? ''));
+                $webLine = $web !== '' ? "\nBrowse online: {$web}" : '';
+                return "\u{1F4CD} You'll find us here:\n{$addr}{$webLine}\n\nYou're welcome to visit — or just order right here on WhatsApp and we deliver. \u{1F69A}";
             }],
 
             // --- Opening hours / are you open -----------------------------------

@@ -22,6 +22,16 @@ class ShopAddressFaqTest extends TestCase
         $this->assertStringContainsString('deliver', (string) FaqDictionary::match('where is your shop?', []),
             'no address configured → topic yields, another answer or the AI takes it');
 
+        // website topic + website inside the address answer
+        $ctx2 = ['shop_address' => 'A29, Freedom Square', 'website' => 'https://familyshoppers.net'];
+        foreach (['send me your catalogue', 'do you have a price list', 'what do you sell',
+                  'can i see your products', 'your website?'] as $q) {
+            $this->assertStringContainsString('familyshoppers.net', (string) FaqDictionary::match($q, $ctx2), $q);
+        }
+        $this->assertStringContainsString('familyshoppers.net',
+            (string) FaqDictionary::match('where is your shop?', $ctx2),
+            'the address answer advertises the website when configured');
+
         $src = file_get_contents(app_path('Services/Bot/AiBrain.php'));
         $this->assertStringContainsString('Physical shop address', $src, 'the AI path knows it too');
     }
