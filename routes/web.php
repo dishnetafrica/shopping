@@ -608,6 +608,8 @@ Route::middleware('web')->group(function () use ($qToken) {
     Route::get('/product/{product}', [\App\Http\Controllers\Storefront\StorefrontProductController::class, 'show'])->where('product', '[0-9]+');
     Route::get('/shop',            [\App\Http\Controllers\Storefront\StorefrontController::class, 'show']);
     Route::get('/catalogue',       [\App\Http\Controllers\Storefront\StorefrontController::class, 'catalogue']);
+    Route::get('/c/{slug}',        [\App\Http\Controllers\Storefront\StorefrontController::class, 'category']);
+    Route::get('/sitemap.xml',     [\App\Http\Controllers\Storefront\StorefrontController::class, 'sitemap']);
     Route::post('/order',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'placeOrder']);
     // Quotation-first flow (B2B): submit cart -> instant Quotation + public portal.
     Route::post('/quote',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'requestQuote']);
@@ -629,6 +631,7 @@ Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::get('/{shop}',           [\App\Http\Controllers\Storefront\StorefrontController::class, 'landing'])->where('shop', $shopSlug);
     Route::get('/{shop}/shop',      [\App\Http\Controllers\Storefront\StorefrontController::class, 'show'])->where('shop', $shopSlug);
     Route::get('/{shop}/catalogue', [\App\Http\Controllers\Storefront\StorefrontController::class, 'catalogue'])->where('shop', $shopSlug);
+    Route::get('/{shop}/c/{slug}',  [\App\Http\Controllers\Storefront\StorefrontController::class, 'category'])->where('shop', $shopSlug);
     Route::post('/{shop}/order',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'placeOrder'])->where('shop', $shopSlug);
     // Quotation-first flow (platform slug variants).
     Route::post('/{shop}/quote',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'requestQuote'])->where('shop', $shopSlug);

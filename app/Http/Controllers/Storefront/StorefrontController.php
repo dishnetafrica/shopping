@@ -113,7 +113,7 @@ class StorefrontController extends Controller
     }
 
     /** Render the shop HTML for a resolved tenant. $base is '' on a custom domain, '/{slug}' on the platform. */
-    private function renderShop(Tenant $tenant, string $base)
+    private function renderShop(Tenant $tenant, string $base, ?string $seoCat = null)
     {
 
         $cfg = [
@@ -153,6 +153,28 @@ class StorefrontController extends Controller
                 .($cfg['logo'] ? "\n".'<meta property="og:image" content="'.e($cfg['logo']).'">' : ''), $html);
         }
         $html = str_replace('__SHOP_CONFIG__', json_encode($cfg, JSON_UNESCAPED_UNICODE), $html);
+
+        // ---- Premium dynamic footer (2026-07-19): trust + navigation + SEO, server-rendered
+        //      from the live catalogue. Only links that actually resolve are generated. ----
+        $html = str_replace(
+            '<div id="footer"><span id="footName">Shop</span><br>',
+            $this->premiumFooter($tenant, $base).'<div id="footer" style="display:none"><span id="footName">Shop</span><br>',
+            $html
+        );
+
+        // ---- SEO category landing (/c/{slug}): unique title/meta/canonical for crawlers,
+        //      and a one-line hop into the aisle for humans. ----
+        if ($seoCat !== null) {
+            $safeCat = e($seoCat);
+            $tName = e((string) $tenant->name);
+            $html = preg_replace('/<title>[^<]*<\/title>/',
+                '<title>'.$safeCat.' — buy wholesale &amp; retail | '.$tName.'</title>', $html, 1);
+            $html = str_replace('</title>',
+                '</title>'."\n".'<meta name="description" content="'.$safeCat.' at wholesale and retail prices from '.$tName.'. Order on WhatsApp, delivery in Juba &amp; Kampala.">'
+                ."\n".'<link rel="canonical" href="'.e(url()->current()).'">', $html);
+            $html = str_replace('</body>',
+                '<script>if(!location.search){location.replace("'.($base ?: '').'/?cat='.rawurlencode($seoCat).'");}</script></body>', $html);
+        }
 
         return response($html, 200)
             ->header('Content-Type', 'text/html; charset=utf-8')
@@ -776,5 +798,117 @@ class StorefrontController extends Controller
             $out[] = ['name' => (string) ($b['name'] ?? 'Branch'), 'lat' => $lat, 'lng' => $lng];
         }
         return $out;
+    }
+
+    /** All active categories with product counts — the footer and sitemap share this. */
+    private function liveCategories(Tenant $tenant): array
+    {
+        return \Illuminate\Support\Facades\Cache::remember('sf_cats:'.$tenant->id, 600, function () use ($tenant) {
+            return \App\Models\Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)->where('active', true)
+                ->whereNotNull('category')->where('category', '!=', '')
+                ->selectRaw('category, count(*) as n')->groupBy('category')
+                ->orderBy('category')->pluck('n', 'category')->all();
+        });
+    }
+
+    /** The Blinkit-class footer: categories, industries, company, contact, trust, JSON-LD. */
+    private function premiumFooter(Tenant $tenant, string $base): string
+    {
+        $cats = $this->liveCategories($tenant);
+        $name = e((string) $tenant->name);
+        $addr = e((string) $tenant->setting('shop_address', ''));
+        $site = (string) $tenant->setting('website', '');
+        $wa = preg_replace('/[^0-9]/', '', (string) optional(\App\Models\WhatsappChannel::where('tenant_id', $tenant->id)->where('is_primary', true)->first())->number);
+        $b = $base ?: '';
+
+        $catLinks = '';
+        foreach ($cats as $cat => $n) {
+            $catLinks .= '<li><a href="'.$b.'/c/'.\Illuminate\Support\Str::slug($cat).'">'.e($cat).' <em>('.$n.')</em></a></li>';
+        }
+
+        // Shop-by-industry from the banner config: link each to its first collection category
+        $indLinks = '';
+        $banners = (array) data_get($tenant->settings, 'business_banners.businesses', []);
+        foreach ($banners as $biz) {
+            if (empty($biz['active'])) continue;
+            $target = (string) data_get($biz, 'collections.0.cat', '') ?: (string) data_get($biz, 'match.categories.0', '');
+            if ($target === '' || ! isset($cats[$target])) continue;
+            $indLinks .= '<li><a href="'.$b.'/c/'.\Illuminate\Support\Str::slug($target).'">'.e((string) ($biz['label'] ?? '')).'</a></li>';
+        }
+
+        $trust = '';
+        foreach (['Genuine products', 'Wholesale prices', 'Fast delivery — Juba & Kampala', 'Order on WhatsApp', 'Team support'] as $tb) {
+            $trust .= '<li>&#10004; '.$tb.'</li>';
+        }
+
+        $jsonLd = json_encode(['@context' => 'https://schema.org', '@type' => 'LocalBusiness',
+            'name' => (string) $tenant->name,
+            'url' => $site !== '' ? $site : url($b.'/'),
+            'address' => (string) $tenant->setting('shop_address', ''),
+            'telephone' => $wa !== '' ? '+'.$wa : '',
+            'priceRange' => '$$',
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        return '<style>
+#sfoot{background:var(--card,#fff);border-top:1px solid var(--line,#e5e7eb);margin-top:48px;padding:40px 20px calc(96px + env(safe-area-inset-bottom,0px));font-size:14px;color:#374151}
+#sfoot .wrap{max-width:1180px;margin:0 auto;display:grid;gap:36px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+#sfoot h4{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;margin:0 0 14px}
+#sfoot ul{list-style:none;margin:0;padding:0}
+#sfoot li{margin:0 0 9px}
+#sfoot a{color:#374151;text-decoration:none;border-radius:6px;transition:color .15s}
+#sfoot a:hover{color:var(--green-d,#0b7a3b)}
+#sfoot em{color:#9ca3af;font-style:normal;font-size:12px}
+#sfoot .brandline{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;border-top:1px solid var(--line,#eef0f3);padding-top:22px;color:#6b7280;font-size:13px}
+#sfoot .trust li{color:#0b7a3b;font-weight:500}
+@media (prefers-color-scheme:dark){#sfoot{background:#111827;border-color:#1f2937;color:#d1d5db}#sfoot a{color:#d1d5db}#sfoot h4{color:#9ca3af}#sfoot .brandline{border-color:#1f2937;color:#9ca3af}}
+</style>
+<footer id="sfoot"><div class="wrap">
+<section><h4>Shop by category</h4><nav><ul>'.$catLinks.'</ul></nav></section>
+'.($indLinks !== '' ? '<section><h4>Shop by industry</h4><nav><ul>'.$indLinks.'</ul></nav></section>' : '')
+.'<section><h4>'.$name.'</h4><ul>
+'.($addr !== '' ? '<li>'.nl2br($addr).'</li>' : '')
+.($wa !== '' ? '<li><a href="https://wa.me/'.$wa.'" rel="noopener">WhatsApp: +'.$wa.'</a></li>' : '')
+.'<li><a href="'.$b.'/catalogue">Download price catalogue (PDF)</a></li>
+<li><a href="#" onclick="event.preventDefault();showFaq()">How to order &amp; FAQ</a></li>
+<li><a id="staffLink2" href="#" onclick="event.preventDefault();var s=document.getElementById(\'staffLink\');if(s)s.click();">Staff login</a></li>
+</ul></section>
+<section class="trust"><h4>Why shop with us</h4><ul>'.$trust.'</ul></section>
+<div class="brandline"><span>&copy; '.date('Y').' '.$name.' &middot; Wholesale &amp; retail, Kampala &rarr; Juba</span><span>Order anytime on WhatsApp &middot; team confirms every delivery</span></div>
+</div>
+<script type="application/ld+json">'.$jsonLd.'</script>
+</footer>';
+    }
+
+    /** SEO landing: /c/{slug} → the shop, category-preset, with unique title + meta. */
+    public function category(string $slugOrShop, ?string $slug = null)
+    {
+        $tenant = $slug === null
+            ? Tenant::byCustomDomain(request()->getHost())
+            : Tenant::where('slug', $slugOrShop)->first();
+        abort_unless($tenant, 404);
+        $want = $slug ?? $slugOrShop;
+        foreach (array_keys($this->liveCategories($tenant)) as $cat) {
+            if (\Illuminate\Support\Str::slug($cat) === $want) {
+                $base = $slug === null ? '' : '/'.$tenant->slug;
+                return $this->renderShop($tenant, $base, $cat);
+            }
+        }
+        abort(404);
+    }
+
+    /** /sitemap.xml — root + every category landing, on the tenant's own domain. */
+    public function sitemap()
+    {
+        $tenant = Tenant::byCustomDomain(request()->getHost());
+        abort_unless($tenant, 404);
+        $urls = ['<url><loc>'.e(url('/')).'</loc><changefreq>daily</changefreq></url>'];
+        foreach (array_keys($this->liveCategories($tenant)) as $cat) {
+            $urls[] = '<url><loc>'.e(url('/c/'.\Illuminate\Support\Str::slug($cat))).'</loc><changefreq>weekly</changefreq></url>';
+        }
+
+        return response('<?xml version="1.0" encoding="UTF-8"?>'
+            .'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'.implode('', $urls).'</urlset>',
+            200, ['Content-Type' => 'application/xml']);
     }
 }
