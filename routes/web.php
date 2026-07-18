@@ -394,6 +394,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::post('chats/send-location', [PanelApiController::class, 'chatSendLocation']);
         Route::post('chats/translate',      [PanelApiController::class, 'chatTranslate']);
         Route::post('chats/translate-out',  [PanelApiController::class, 'chatTranslateOut']);
+        Route::post('followups/{id}/approve', [PanelApiController::class, 'followupApprove']);
+        Route::post('followups/{id}/snooze',  [PanelApiController::class, 'followupSnooze']);
+        Route::post('followups/{id}/skip',    [PanelApiController::class, 'followupSkip']);
         Route::get('push/vapid-public',  [\App\Http\Controllers\Panel\PushController::class, 'vapidPublic']);
         Route::post('push/subscribe',    [\App\Http\Controllers\Panel\PushController::class, 'subscribe']);
         Route::post('push/unsubscribe',  [\App\Http\Controllers\Panel\PushController::class, 'unsubscribe']);

@@ -28,6 +28,7 @@ use App\Capability\Object\ConsignmentCapability;
 use App\Capability\Process\ChatListCapability;
 use App\Capability\Process\CommunicationCapability;
 use App\Capability\Process\ConsignmentListCapability;
+use App\Capability\Process\FollowupsCapability;
 use App\Capability\Process\GuideCapability;
 use App\Capability\Process\ScheduledOrdersCapability;
 use App\Capability\Process\LeadListCapability;
@@ -110,6 +111,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
         // permission on purpose: delivery is the FIELD role's job; management actions are
         // payload-gated and the papi endpoints re-enforce priv() server-side.
         $r->register(new ConsignmentListCapability(), new CapabilityManifest(key: 'consignments', type: 'process', owner: 'logistics', permission: '', api: '/api/v1/workspace/consignments'));
+        $r->register(new FollowupsCapability(), new CapabilityManifest(key: 'followups', type: 'process', owner: 'sales', permission: '', api: '/api/v1/workspace/followups'));
         $r->register(new ConsignmentCapability(), new CapabilityManifest(key: 'consignment', type: 'object', owner: 'logistics', permission: '', api: '/api/v1/workspace/consignment/{id}'));
 
         // Retire-audit tail: scheduled ORDERS (future deliveries; ProcessScheduled cron).

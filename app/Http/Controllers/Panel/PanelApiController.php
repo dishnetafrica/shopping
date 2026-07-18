@@ -3276,6 +3276,65 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true, 'message' => $name.' sent']);
     }
 
+    /** V4.1 — approve a follow-up proposal: send via the gateway, log it, stamp the
+     *  global touch cap. Optional edited draft in the request wins over the stored one. */
+    public function followupApprove(Request $r, WhatsAppManager $wa, int $id)
+    {
+        $t = $r->user()->tenant;
+        $p = \App\Models\FollowupProposal::where('tenant_id', $t->id)->find($id);
+        if (! $p) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        if ($p->status === 'sent') return response()->json(['ok' => false, 'error' => 'already_sent'], 422);
+
+        $text = trim((string) $r->input('draft', '')) ?: (string) $p->draft;
+        $gw = $wa->forTenant($t);
+        try {
+            $gw->sendText($t->whatsapp_instance, $p->customer_phone, $text);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => 'send_failed'], 502);
+        }
+
+        $msg = \App\Support\MessageLog::record($t->id, $p->customer_phone, $t->whatsapp_instance,
+            'out', 'agent', $text);
+
+        $p->draft = $text;
+        $p->status = 'sent';
+        $p->approved_by = (string) ($r->user()->name ?? '');
+        $p->sent_message_id = $msg?->id;
+        $p->save();
+
+        \App\Models\CustomerProfile::withoutGlobalScopes()->updateOrCreate(
+            ['tenant_id' => $t->id, 'phone' => $p->customer_phone], []
+        )->forceFill(['last_contacted_at' => now()])->save();
+
+        return response()->json(['ok' => true, 'message' => 'Sent']);
+    }
+
+    /** V4.1 — snooze a proposal 3 days. */
+    public function followupSnooze(Request $r, int $id)
+    {
+        $t = $r->user()->tenant;
+        $p = \App\Models\FollowupProposal::where('tenant_id', $t->id)->find($id);
+        if (! $p) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        $p->status = 'snoozed';
+        $p->snoozed_until = now()->addDays(3);
+        $p->save();
+
+        return response()->json(['ok' => true, 'message' => 'Snoozed until '.$p->snoozed_until->format('d M')]);
+    }
+
+    /** V4.1 — skip with a reason (V4.3 learns from every one). */
+    public function followupSkip(Request $r, int $id)
+    {
+        $t = $r->user()->tenant;
+        $p = \App\Models\FollowupProposal::where('tenant_id', $t->id)->find($id);
+        if (! $p) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        $p->status = 'skipped';
+        $p->skip_reason = mb_substr(trim((string) $r->input('skip_reason', '')), 0, 240) ?: null;
+        $p->save();
+
+        return response()->json(['ok' => true, 'message' => 'Skipped']);
+    }
+
     /** Translate an inbound message to English — cached on the row forever (one AI call per message, ever). */
     public function chatTranslate(Request $r, \App\Services\Chat\ChatTranslator $tr)
     {

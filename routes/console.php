@@ -9,6 +9,7 @@ Schedule::command('shopbot:process-scheduled')->everyMinute()->withoutOverlappin
 Schedule::command('bot:watchdog')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:extract')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:stages')->dailyAt('03:15')->withoutOverlapping()->onOneServer();
+Schedule::command('relationship:plan')->dailyAt('07:30')->withoutOverlapping()->onOneServer();
 Schedule::command('bot:digest')->hourly()->withoutOverlapping()->onOneServer();
 
 // Reliability: catch dropped WhatsApp connections fast (a down number silently kills orders),

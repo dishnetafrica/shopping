@@ -179,6 +179,9 @@ class SalesCadenceCommand extends Command
         try {
             if (! empty($touch['text'])) {
                 $g->sendText($t->whatsapp_instance, $phone, $touch['text']);
+                \App\Models\CustomerProfile::withoutGlobalScopes()->updateOrCreate(
+                    ['tenant_id' => $t->id, 'phone' => $phone], []
+                )->forceFill(['last_contacted_at' => now()])->save();   // V4.1 global touch cap sees cadence too
             }
             if (! empty($touch['sendPriceList'])) {
                 $doc = app(PriceListService::class)->available() ? app(PriceListService::class)->generate($t) : null;
