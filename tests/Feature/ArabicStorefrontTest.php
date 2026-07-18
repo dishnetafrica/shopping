@@ -19,6 +19,8 @@ class ArabicStorefrontTest extends TestCase
         $this->assertStringContainsString('I18N_AR', $html, 'the dictionary must exist');
         $this->assertStringContainsString("setAttribute('dir','rtl')", $html, 'Arabic must flip the layout RTL');
         $this->assertStringContainsString('id="langbtn"', $html, 'the toggle must be in the search bar');
+        $this->assertStringContainsString('default ENGLISH for every new visitor', $html,
+            'no browser auto-detect — Arabic is opt-in via the toggle only');
         $this->assertStringContainsString("T('Add to cart')", $html);
         $this->assertStringContainsString("T('Place order')", $html);
         $this->assertStringContainsString("'Place order':'إتمام الطلب'", $html, 'dictionary keys must be plain strings');

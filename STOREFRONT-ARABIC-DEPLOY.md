@@ -6,7 +6,7 @@ A **ع button** in the search bar (next to 🎤 📷). Tap → the storefront fl
 - ~30 interface strings in Arabic: search placeholder, nav (الرئيسية/الفئات/السلة),
   cart sheet, **أضف إلى السلة** (Add to cart), **الدفع** (Checkout), **إتمام الطلب**
   (Place order), delivery bar, footer
-- Choice remembered; **Arabic-language browsers land in Arabic on first visit**
+- **Every new visitor lands in ENGLISH** (no browser auto-detect); Arabic is opt-in via ع, and the choice is remembered on that device
 - Product names stay English on purpose (brands/SKUs — customers know them)
 - Exact-match dictionary only: anything not translated stays English rather than
   guessing — long dynamic sentences (delivery fee lines) are English in v1

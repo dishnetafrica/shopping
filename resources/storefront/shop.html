@@ -1175,7 +1175,7 @@ var I18N_AR={
  'Note (optional)':'ملاحظة (اختياري)','Sign out':'تسجيل الخروج','Out of stock':'غير متوفر'
 };
 var LANG=(function(){ try{ var s=localStorage.getItem('fs_lang'); if(s==='ar'||s==='en') return s; }catch(e){}
-  return ((navigator.language||'').toLowerCase().indexOf('ar')===0)?'ar':'en'; })();
+  return 'en'; /* default ENGLISH for every new visitor — Arabic only via the ع toggle (owner decision 2026-07-18) */ })();
 function T(s){ return (LANG==='ar'&&I18N_AR[s])?I18N_AR[s]:s; }
 function setLang(l){ try{ localStorage.setItem('fs_lang',l); }catch(e){} location.reload(); }
 if(LANG==='ar'){ document.documentElement.setAttribute('dir','rtl'); document.documentElement.setAttribute('lang','ar'); }
