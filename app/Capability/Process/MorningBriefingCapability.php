@@ -43,6 +43,12 @@ final class MorningBriefingCapability implements ProcessCapability
         $adArrivals = (int) ($ad['arrivals7d'] ?? 0);
         // Quotations awaiting staff confirmation/convert (e.g. the quote-first bot flow). Direct count
         // so the briefing surfaces the to-do without a new capability dependency.
+        // V4.2 AI desk — direct counts (same precedent as quotesToConfirm below).
+        $aiPending = (int) \App\Models\FollowupProposal::where('tenant_id', $ctx->tenantId())
+            ->where('status', 'draft')->count();
+        $aiEscalations = (int) \App\Models\CustomerProfile::withoutGlobalScopes()
+            ->where('tenant_id', $ctx->tenantId())->where('follow_up', 'like', 'ESCALATED:%')->count();
+
         $quotesToConfirm = (int) \App\Models\Quotation::where('tenant_id', $ctx->tenantId())
             ->whereRaw("lower(coalesce(status,'')) in ('sent','accepted','pending')")
             ->whereNull('order_id')->count();
@@ -71,6 +77,14 @@ final class MorningBriefingCapability implements ProcessCapability
         }
         if ($war['reorder'] > 0) {
             $plan[] = new ActionSpec('reorder', 'Reorder ' . $war['reorder'] . ' low-stock SKUs', '/api/v1/workspace/warehouse', 'GET', 'human');
+        }
+        if ($aiPending > 0) {
+            $plan[] = new ActionSpec('ai_plan', "Review the AI's plan for today — " . $aiPending . ' follow-up' . ($aiPending === 1 ? '' : 's') . ' awaiting your judgment', '/api/v1/workspace/followups', 'GET', 'human', 'primary');
+        }
+        if ($aiEscalations > 0) {
+            $plan[] = new ActionSpec('ai_esc', '🚨 ' . $aiEscalations . ' escalated customer' . ($aiEscalations === 1 ? '' : 's') . ' need a human — open Chats', '/api/v1/workspace/chats', 'GET', 'human', 'primary');
+        }
+        if (false) {
         }
         if ($pur['payable'] > 0) {
             $plan[] = new ActionSpec('pay', 'Review ' . Money::fmt($pur['payable'], $cur) . ' in supplier bills', '/api/v1/workspace/purchase.process', 'GET', 'human');

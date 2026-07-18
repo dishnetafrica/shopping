@@ -79,8 +79,10 @@ class AiBrain
               ]]
             : ['role' => 'user', 'content' => $text !== '' ? $text : '(no text)'];
 
+        $planning = (bool) $tenant->setting('ai_planning', false);
         $messages = array_merge([['role' => 'system', 'content' => $this->systemPrompt($tenant)
-            .\App\Services\Relationship\ProfileContext::block($tenant, $from)]], $prior, [$current]);
+            .\App\Services\Relationship\ProfileContext::block($tenant, $from)
+            .($planning ? \App\Services\Relationship\PlanParser::instructions() : '')]], $prior, [$current]);
 
         // 3. call OpenAI (per-tenant key override, else the global CloudBSS key). Images need a
         //    vision model — fall back to gpt-4o-mini (vision-capable) if one isn't configured.
@@ -100,6 +102,27 @@ class AiBrain
             return $this->fallback($tenant, $from, $gateway, 'ai_error');
         }
         if ($reply === '') return $this->fallback($tenant, $from, $gateway, 'empty_reply');
+
+        // V4.2 — the think-first preamble: parse <<PLAN {…}>>, honor silence and escalation.
+        if ($planning) {
+            $planned = \App\Services\Relationship\PlanParser::parse($reply);
+            $reply = $planned['reply'];
+            $plan = $planned['plan'];
+            if ($plan) {
+                \App\Support\BotTrace::log($tenant->id, 'ai_plan', $from, $plan['purpose'], $plan['note'] ?? null);
+                if (in_array($plan['purpose'], ['silent', 'wait'], true)) {
+                    return true;   // silence is a decision, not a failure — nothing is sent
+                }
+                if ($plan['purpose'] === 'escalate') {
+                    app(\App\Services\Relationship\EscalationService::class)
+                        ->raise($tenant, $from, (string) ($plan['escalate_reason'] ?? ''), (string) ($plan['note'] ?? ''));
+                    if ($reply === '') {
+                        $reply = 'Let me connect you with our team — someone will be with you shortly. 🙏';
+                    }
+                }
+            }
+            if ($reply === '') return true;   // plan stripped everything → intentional silence
+        }
 
         // 3a. order capture — if the model confirmed an order it emits a hidden <<ORDER {json}>>
         //     block. Create a real, trackable order (number + staff alert via OrderObserver),

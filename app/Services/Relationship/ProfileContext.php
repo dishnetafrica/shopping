@@ -31,6 +31,19 @@ class ProfileContext
                 $bits[] = str_replace('_', ' ', $k).': '.mb_substr((string) $v, 0, 120);
                 if (count($bits) >= 14) break;
             }
+            $playbook = [
+                'NEW' => 'First impressions: helpful and unhurried; learn what they need.',
+                'INTERESTED' => 'Give specifics and a clear next step; offer a quotation.',
+                'QUOTED' => 'Reference the open quotation; remove obstacles, do not re-pitch.',
+                'NEGOTIATING' => 'Stay on the open discussion; no new discounts without a human.',
+                'WAITING_BUDGET' => 'Zero pressure; keep the door open warmly.',
+                'PURCHASED' => 'Aftercare tone: delivery, satisfaction, small next suggestion.',
+                'REPEAT' => 'Familiar and efficient; they know us — skip the basics.',
+                'VIP' => 'Gratitude and priority; flag anything unusual to a human early.',
+                'DORMANT' => 'Warm and light; no guilt, no pressure, one easy re-entry.',
+                'LOST' => 'Courteous and minimal; do not sell.',
+            ][strtoupper((string) $p->stage)] ?? null;
+            if ($playbook) $bits[] = 'Playbook for this stage: '.$playbook;
             if ($p->ai_summary) $bits[] = "Relationship summary:\n".$p->ai_summary;
             if (! $bits) return '';
 
