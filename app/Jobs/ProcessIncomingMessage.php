@@ -23,8 +23,6 @@ use Illuminate\Queue\SerializesModels;
 
 class ProcessIncomingMessage implements ShouldQueue
 {
-    /** One retry for transient AI/API hiccups; then failed() guarantees the customer is never met with silence. */
-    public $tries = 2;
 
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
