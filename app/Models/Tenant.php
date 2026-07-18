@@ -85,11 +85,21 @@ class Tenant extends Model
     /** Write a single setting (dot-notation supported) and persist. */
     public function putSetting(string $key, $value): void
     {
-        $s = $this->settings ?? [];
-        if (! is_array($s)) $s = [];
-        data_set($s, $key, $value);
-        $this->settings = $s;
-        $this->save();
+        // Atomic (2026-07-18): the old read-modify-write let any stale Tenant instance
+        // (watchdogs, queue jobs) save its old copy of the WHOLE settings JSON seconds
+        // later -- silently erasing keys written in between. That is why flags vanished
+        // around deploys: restart storms make every cron load-and-save at once. Now every
+        // write locks the row, re-reads FRESH, changes one key, saves -- nothing clobbers.
+        \Illuminate\Support\Facades\DB::transaction(function () use ($key, $value) {
+            $fresh = static::query()->lockForUpdate()->find($this->id);
+            if (! $fresh) return;
+            $s = $fresh->settings ?? [];
+            if (! is_array($s)) $s = [];
+            data_set($s, $key, $value);
+            $fresh->settings = $s;
+            $fresh->save();
+            $this->settings = $s;   // keep this in-memory instance honest too
+        });
     }
 
     /**
