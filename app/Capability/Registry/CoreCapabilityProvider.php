@@ -111,7 +111,12 @@ final class CoreCapabilityProvider implements CapabilityProvider
         // permission on purpose: delivery is the FIELD role's job; management actions are
         // payload-gated and the papi endpoints re-enforce priv() server-side.
         $r->register(new ConsignmentListCapability(), new CapabilityManifest(key: 'consignments', type: 'process', owner: 'logistics', permission: '', api: '/api/v1/workspace/consignments'));
-        $r->register(new FollowupsCapability(), new CapabilityManifest(key: 'followups', type: 'process', owner: 'sales', permission: '', api: '/api/v1/workspace/followups'));
+        // Hardened after the 2026-07-18 incident: a partially-uploaded deploy must never
+        // kill the whole registry (same principle as NavCounts per-key isolation).
+        if (class_exists(\App\Capability\Process\FollowupsCapability::class)
+            && class_exists(\App\Models\FollowupProposal::class)) {
+            $r->register(new FollowupsCapability(), new CapabilityManifest(key: 'followups', type: 'process', owner: 'sales', permission: '', api: '/api/v1/workspace/followups'));
+        }
         $r->register(new ConsignmentCapability(), new CapabilityManifest(key: 'consignment', type: 'object', owner: 'logistics', permission: '', api: '/api/v1/workspace/consignment/{id}'));
 
         // Retire-audit tail: scheduled ORDERS (future deliveries; ProcessScheduled cron).

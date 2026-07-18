@@ -18,6 +18,16 @@ class FollowupsCapability
 {
     public function build(CapabilityContext $ctx): WorkspacePayload
     {
+        // Migration not run yet? Say so instead of 500ing (incident hardening).
+        try {
+            FollowupProposal::query()->limit(1)->count();
+        } catch (\Throwable $e) {
+            return (new WorkspacePayload)
+                ->object(['type' => 'process:followups', 'title' => "AI's plan for today",
+                    'subtitle' => 'Setup needed: run  php artisan migrate  once, then reload.'])
+                ->meta(['capability' => 'followups', 'ttl' => 10, 'permissions' => []]);
+        }
+
         $pending = FollowupProposal::where('tenant_id', $ctx->tenantId())
             ->where(function ($q) {
                 $q->where('status', 'draft')
@@ -107,8 +117,12 @@ class FollowupsCapability
 
     public function summary(CapabilityContext $ctx, array $scope = []): array
     {
-        return ['pending' => FollowupProposal::where('tenant_id', $ctx->tenantId())
-            ->where('status', 'draft')->count()];
+        try {
+            return ['pending' => FollowupProposal::where('tenant_id', $ctx->tenantId())
+                ->where('status', 'draft')->count()];
+        } catch (\Throwable $e) {
+            return ['pending' => 0];
+        }
     }
 
     public function command(CapabilityContext $ctx, string $action, array $input): array

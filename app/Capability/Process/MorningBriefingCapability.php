@@ -44,10 +44,20 @@ final class MorningBriefingCapability implements ProcessCapability
         // Quotations awaiting staff confirmation/convert (e.g. the quote-first bot flow). Direct count
         // so the briefing surfaces the to-do without a new capability dependency.
         // V4.2 AI desk — direct counts (same precedent as quotesToConfirm below).
-        $aiPending = (int) \App\Models\FollowupProposal::where('tenant_id', $ctx->tenantId())
-            ->where('status', 'draft')->count();
-        $aiEscalations = (int) \App\Models\CustomerProfile::withoutGlobalScopes()
-            ->where('tenant_id', $ctx->tenantId())->where('follow_up', 'like', 'ESCALATED:%')->count();
+        // Fail-soft: before `php artisan migrate` these tables/columns may not exist —
+        // the briefing must degrade to zeros, never 500 (2026-07-18 incident hardening).
+        try {
+            $aiPending = (int) \App\Models\FollowupProposal::where('tenant_id', $ctx->tenantId())
+                ->where('status', 'draft')->count();
+        } catch (\Throwable $e) {
+            $aiPending = 0;
+        }
+        try {
+            $aiEscalations = (int) \App\Models\CustomerProfile::withoutGlobalScopes()
+                ->where('tenant_id', $ctx->tenantId())->where('follow_up', 'like', 'ESCALATED:%')->count();
+        } catch (\Throwable $e) {
+            $aiEscalations = 0;
+        }
 
         $quotesToConfirm = (int) \App\Models\Quotation::where('tenant_id', $ctx->tenantId())
             ->whereRaw("lower(coalesce(status,'')) in ('sent','accepted','pending')")
