@@ -130,7 +130,7 @@ class InvoiceService
         // Re-price the lines from the catalogue (which is in USD).
         $byName = [];
         foreach (\App\Models\Product::where('tenant_id', $t->id)->get(['name', 'base_price', 'price']) as $p) {
-            $bp = (float) ($p->base_price ?: $p->price ?: 0);
+            $bp = (float) ($p->price ?: $p->base_price ?: 0);   // price-drift fix: invoices re-price at the SELLING price
             if ($bp > 0) { $byName[mb_strtolower(trim((string) $p->name))] = $bp; }
         }
         $catBase = 0.0; $matched = 0;

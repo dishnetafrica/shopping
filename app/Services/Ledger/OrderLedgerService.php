@@ -84,7 +84,8 @@ class OrderLedgerService
         return $order->delivered_at !== null || $order->customer_confirmed_at !== null;
     }
 
-    /** COGS from product base_price × qty. Returns 0 if cost isn't tracked (entry still balances). */
+    /** COGS from product cost_price × qty (base_price mirrors the SELLING price, so it was
+     *  never a cost — price-drift fix 2026-07-18). Returns 0 if cost isn't tracked. */
     private function cogs(Order $order): float
     {
         try {
@@ -92,7 +93,7 @@ class OrderLedgerService
             if ($items->isEmpty()) return 0.0;
             $ids   = $items->pluck('product_id')->filter()->unique()->all();
             if (! $ids) return 0.0;
-            $cost  = Product::withoutGlobalScopes()->whereIn('id', $ids)->pluck('base_price', 'id');
+            $cost  = Product::withoutGlobalScopes()->whereIn('id', $ids)->pluck('cost_price', 'id');
             $total = 0.0;
             foreach ($items as $it) {
                 $total += (float) ($cost[$it->product_id] ?? 0) * (float) $it->qty;

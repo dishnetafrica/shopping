@@ -277,7 +277,7 @@ class QuotationReviseService
                             'variant' => '',
                             'unit'    => (string) ($p->unit_label ?? ''),
                             'qty'     => $qty,
-                            'price'   => (float) ($p->base_price ?: $p->price),
+                            'price'   => (float) ($p->price ?: $p->base_price),   // price-drift fix
                             'image'   => (string) ($p->image_url ?? ''),
                             'disc'    => 0.0,
                         ];

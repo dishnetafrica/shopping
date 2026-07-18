@@ -14,6 +14,17 @@ class Product extends Model
     protected static function booted(): void
     {
         static::observe(\App\Observers\ProductStockObserver::class);
+
+        // Price-drift fix (2026-07-18): base_price is a legacy mirror of the selling
+        // price (ProductWriteService always wrote them together), but edit paths that
+        // set `price` alone let them diverge — and storefront/bot preferred the stale
+        // base_price, silently selling at OLD prices. Sync on every save: drift is now
+        // structurally impossible, whichever screen edits the price.
+        static::saving(function (self $p) {
+            if ((float) $p->price > 0 && (float) $p->price !== (float) $p->base_price) {
+                $p->base_price = $p->price;
+            }
+        });
     }
 
     /**
