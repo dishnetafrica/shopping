@@ -1072,11 +1072,6 @@ button{ -webkit-tap-highlight-color:transparent }
 @keyframes scanln{0%{top:6%}50%{top:94%}100%{top:6%}}
 .scanov .scanhint{color:#dbe4ee;text-align:center;font-size:13.5px;padding:16px 20px 30px}
 @media(prefers-reduced-motion:reduce){.scanov .scanline{animation:none;top:50%}}
-
-/* Arabic mode (dir=rtl): flex/grid mirror automatically; only nudge text inputs */
-html[dir=rtl] body{direction:rtl}
-html[dir=rtl] input,html[dir=rtl] textarea{text-align:right}
-html[dir=rtl] #q,html[dir=rtl] #sq{text-align:right}
 </style>
 </head>
 <body>
@@ -1106,7 +1101,6 @@ html[dir=rtl] #q,html[dir=rtl] #sq{text-align:right}
   <input id="q" readonly placeholder="Search products, brands…" aria-label="Search" onfocus="searchOpen()">
   <button class="sqbtn" onclick="event.stopPropagation();voiceSearch()" aria-label="Voice search">🎤</button>
   <button class="sqbtn" onclick="event.stopPropagation();barcodeSearch()" aria-label="Scan barcode">📷</button>
-  <button class="sqbtn" id="langbtn" onclick="event.stopPropagation();setLang(LANG==='ar'?'en':'ar')" aria-label="Language" title="عربي / English">ع</button>
 </div></div>
 <div id="dgridwrap">
 <aside id="dside" aria-label="Filters and departments"></aside>
@@ -1157,39 +1151,6 @@ html[dir=rtl] #q,html[dir=rtl] #sq{text-align:right}
   <div class="skbhint"><span><span class="k">↑</span><span class="k">↓</span> Navigate</span><span><span class="k">Enter</span> Add to order</span><span><span class="k">Esc</span> Close</span></div>
 </div>
 
-<script>
-/* ---- Arabic UI mode (2026-07-18) ---------------------------------------
-   EN/AR toggle: dictionary-translated UI, RTL layout, choice remembered.
-   Product names stay English (brands/SKUs). Exact-match only — anything not
-   in the dictionary stays English rather than guessing. */
-var I18N_AR={
- 'Search products, brands…':'ابحث عن المنتجات والماركات…',
- 'Home':'الرئيسية','Categories':'الفئات','Cart':'السلة','Account':'الحساب','Offers':'العروض',
- 'Your cart':'سلة المشتريات','My account':'حسابي','My orders':'طلباتي',
- 'Add to cart':'أضف إلى السلة','Add':'أضف','Place order':'إتمام الطلب','Placing…':'جاري الإرسال…',
- 'Checkout':'الدفع','Continue shopping':'مواصلة التسوق','Total':'الإجمالي','Subtotal':'المجموع',
- 'Set your location for delivery time':'حدد موقعك لمعرفة وقت التوصيل',
- 'How to order & FAQ':'كيفية الطلب والأسئلة الشائعة','Staff login':'دخول الموظفين',
- 'Why shop here?':'لماذا تتسوق معنا؟','Search':'بحث','Close':'إغلاق','Back':'رجوع','All':'الكل',
- 'Name':'الاسم','Phone (WhatsApp)':'رقم الهاتف (واتساب)','Address / area':'العنوان / المنطقة',
- 'Note (optional)':'ملاحظة (اختياري)','Sign out':'تسجيل الخروج','Out of stock':'غير متوفر'
-};
-var LANG=(function(){ try{ var s=localStorage.getItem('fs_lang'); if(s==='ar'||s==='en') return s; }catch(e){}
-  return 'en'; /* default ENGLISH for every new visitor — Arabic only via the ع toggle (owner decision 2026-07-18) */ })();
-function T(s){ return (LANG==='ar'&&I18N_AR[s])?I18N_AR[s]:s; }
-function setLang(l){ try{ localStorage.setItem('fs_lang',l); }catch(e){} location.reload(); }
-if(LANG==='ar'){ document.documentElement.setAttribute('dir','rtl'); document.documentElement.setAttribute('lang','ar'); }
-document.addEventListener('DOMContentLoaded',function(){
-  var lb=document.getElementById('langbtn'); if(lb) lb.textContent=(LANG==='ar'?'EN':'ع');
-  if(LANG!=='ar') return;
-  /* one sweep over the STATIC page: translate exact-match text nodes + placeholders */
-  try{
-    var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null);
-    var n; while((n=w.nextNode())){ var t=(n.nodeValue||'').trim(); if(t&&I18N_AR[t]){ n.nodeValue=n.nodeValue.replace(t,I18N_AR[t]); } }
-    ['q','sq'].forEach(function(id){ var el=document.getElementById(id); if(el&&I18N_AR[el.placeholder]) el.placeholder=I18N_AR[el.placeholder]; });
-  }catch(e){}
-});
-</script>
 <script>
 /* ====================== CONFIG (injected per shop by the server) ====================== */
 window.SHOP = __SHOP_CONFIG__;
@@ -2521,7 +2482,7 @@ function welcomeBanner(){
     return '<div style="'+strip+'">'+
       '<div style="flex:1"><div style="font-weight:700;font-size:14px">Welcome back, '+esc(name||'there')+' \uD83D\uDC4B</div>'+
       '<div style="font-size:11px;color:var(--muted)">Logged in \u00B7 <a href="#" onclick="event.preventDefault();logoutCust()" style="color:#B4232A;font-weight:600">Log out</a></div></div>'+
-      '<button onclick="openMyOrders()" style="border:1px solid var(--green);background:#fff;color:var(--green-d);font-weight:700;border-radius:9px;padding:8px 12px;font-size:13px;cursor:pointer">'+T('My orders')+'</button>'+reBtn+'</div>';
+      '<button onclick="openMyOrders()" style="border:1px solid var(--green);background:#fff;color:var(--green-d);font-weight:700;border-radius:9px;padding:8px 12px;font-size:13px;cursor:pointer">My orders</button>'+reBtn+'</div>';
   }
   if(name){
     return '<div style="'+strip+'">'+
@@ -2588,7 +2549,7 @@ function logoutCust(){AUTHTOK=null;MYORDERS=null;MYSTMT=null;BUYAGAIN=[];try{loc
 function openMyOrders(){
   if(!AUTHTOK){openLogin();return;}
   if(!MYORDERS){loadMyOrders().then(openMyOrders);return;}
-  $('sheetTitle').textContent=T('My account');
+  $('sheetTitle').textContent='My account';
   var stmtHtml=renderMyStatement();
   if(!MYORDERS.length){$('sheetBody').innerHTML=stmtHtml+'<div class="empty">No past orders yet.</div><button class="place" style="background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="closeSheet()">Close</button>';$('sheet').classList.add('show');return;}
   /* Phase 6: class-based markup. Base CSS reproduces the previous inline look
@@ -3035,7 +2996,7 @@ function detailStepper(p){
   if(oosDetail(p)) return '<button class="dadd" disabled>Out of stock</button>';
   var c=CART[p.name];
   if(c&&c.qty>0) return '<div class="dstp"><button onclick="detailDec('+jk(p.name)+')">\u2212</button><span>'+c.qty+'</span><button onclick="detailInc('+jk(p.name)+','+p.price+','+(p.moq||1)+')">+</button></div>';
-  return '<button class="dadd" onclick="detailInc('+jk(p.name)+','+p.price+','+(p.moq||1)+')">'+T('Add to cart')+'</button>';
+  return '<button class="dadd" onclick="detailInc('+jk(p.name)+','+p.price+','+(p.moq||1)+')">Add to cart</button>';
 }
 function refreshDetailStepper(){ if(CUR_DETAIL&&$('dstepwrap')) $('dstepwrap').innerHTML=detailStepper(CUR_DETAIL); }
 function detailInc(name,price,moq){ if(!CART[name])CART[name]={name:name,price:price,qty:0}; CART[name].qty += (CART[name].qty===0?Math.max(1,moq||1):1); saveCart(); bar(); refreshDetailStepper(); render(); }
@@ -3151,7 +3112,7 @@ function openCart(){
     + crossSellStrip()
     + bill
     + '<div class="trustrow">✓ Pay on delivery available · ✓ Order confirmed on WhatsApp · ✓ We check every order before delivery</div>'
-    + '<div class="cartfoot"><button class="place" onclick="openCheckout()">'+T('Checkout')+' · '+ugx(sub)+' →</button></div>';
+    + '<div class="cartfoot"><button class="place" onclick="openCheckout()">Checkout · '+ugx(sub)+' →</button></div>';
   $('sheet').classList.add('show');
 }
 function editDetails(){ var a=$('coSum'), b=$('coFields'); if(a)a.style.display='none'; if(b)b.style.display='block'; }
@@ -3238,9 +3199,9 @@ async function placeOrder(){
         '<div style="margin-top:18px">'+
         (d.track_url?'<a class="place" style="display:block;text-decoration:none;text-align:center" href="'+esc(d.track_url)+'">Track my order</a>':'')+
         (WA_NUMBER?'<a class="place" style="display:block;text-decoration:none;text-align:center;background:#fff;color:var(--green-d);border:1px solid var(--line);margin-top:8px" href="https://wa.me/'+WA_NUMBER+'?text='+encodeURIComponent('Hi '+shopName+', about my order '+(d.order_no||''))+'">Message us on WhatsApp</a>':'')+
-        '<button class="place" style="background:#fff;color:var(--ink);border:1px solid var(--line);margin-top:8px" onclick="goHome();closeSheet()">'+T('Continue shopping')+'</button></div></div>';
-    }else{toast((d&&d.message)?d.message:((d&&d.error)?d.error:'Could not place order. Please try again.'),'err');btn.disabled=false;btn.textContent=T('Place order');}
-  }catch(e){toast('Network error — please try again.','err');btn.disabled=false;btn.textContent=T('Place order');}
+        '<button class="place" style="background:#fff;color:var(--ink);border:1px solid var(--line);margin-top:8px" onclick="goHome();closeSheet()">Continue shopping</button></div></div>';
+    }else{toast((d&&d.message)?d.message:((d&&d.error)?d.error:'Could not place order. Please try again.'),'err');btn.disabled=false;btn.textContent='Place order';}
+  }catch(e){toast('Network error — please try again.','err');btn.disabled=false;btn.textContent='Place order';}
 }
 
 /* Quotation-first submit: turn the cart into a professional Quotation instantly (B2B trading flow).
@@ -3271,7 +3232,7 @@ async function requestQuotation(){
         '<div style="margin-top:18px">'+
         (d.portal_url?'<a class="place" style="display:block;text-decoration:none;text-align:center" href="'+esc(d.portal_url)+'">View my quotation →</a>':'')+
         (d.pdf_url?'<a class="place" style="display:block;text-decoration:none;text-align:center;background:#fff;color:var(--green-d);border:1px solid var(--line);margin-top:8px" href="'+esc(d.pdf_url)+'" target="_blank" rel="noopener">⬇ Download PDF</a>':'')+
-        '<button class="place" style="background:#fff;color:var(--ink);border:1px solid var(--line);margin-top:8px" onclick="goHome();closeSheet()">'+T('Continue shopping')+'</button></div></div>';
+        '<button class="place" style="background:#fff;color:var(--ink);border:1px solid var(--line);margin-top:8px" onclick="goHome();closeSheet()">Continue shopping</button></div></div>';
     }else{toast((d&&d.message)?d.message:((d&&d.error)?d.error:'Could not create the quotation. Please try again.'),'err');if(btn){btn.disabled=false;btn.textContent='Request Quotation';}}
   }catch(e){toast('Network error — please try again.','err');if(btn){btn.disabled=false;btn.textContent='Request Quotation';}}
 }
