@@ -166,11 +166,24 @@ class ProcessIncomingMessage implements ShouldQueue
                 'address' => trim((string) ($this->incoming['loc_address'] ?? '')) ?: null,
             ])];
         }
-        MessageLog::record(
+        $inMsg = MessageLog::record(
             $this->tenantId, $this->incoming['from'], $this->incoming['instance'],
             'in', 'customer', $this->incoming['text'], $this->incoming['messageId'] ?: null,
             null, $mMeta
         );
+
+        // Auto-translate (2026-07-18): Juba customers write Arabic, the team reads
+        // English — translate AT ARRIVAL so the inbox is readable without any tap.
+        // Fail-soft (webhook can never break on it); cached forever on the row;
+        // per-tenant switch chat_auto_translate (default ON).
+        try {
+            if ((bool) $tenant->setting('chat_auto_translate', true)
+                && \App\Services\Chat\ChatTranslator::hasArabic((string) $this->incoming['text'])) {
+                app(\App\Services\Chat\ChatTranslator::class)->translateAndCache($inMsg);
+            }
+        } catch (\Throwable $e) {
+            // the 🌐 button remains as manual fallback
+        }
 
         if ($this->incoming['messageId']) {
             $gateway->markRead($tenant->whatsapp_instance, $this->incoming['messageId']);

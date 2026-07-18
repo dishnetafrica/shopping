@@ -40,6 +40,36 @@ class ChatTranslator
         );
     }
 
+    /** Does the text contain Arabic script? */
+    public static function hasArabic(string $text): bool
+    {
+        return (bool) preg_match('/[\x{0600}-\x{06FF}]/u', $text);
+    }
+
+    /**
+     * Auto-translate one inbound message and cache it on the row (idempotent — the
+     * cache makes repeat calls free). Returns the English, or null on any failure.
+     */
+    public function translateAndCache(\App\Models\Message $m): ?string
+    {
+        try {
+            $meta = (array) ($m->meta ?? []);
+            if (! empty($meta['tr_en'])) return (string) $meta['tr_en'];
+            if (! self::hasArabic((string) $m->body)) return null;
+
+            $en = $this->toEnglish((string) $m->body);
+            if ($en === null) return null;
+
+            $meta['tr_en'] = $en;
+            $m->meta = $meta;
+            $m->save();
+
+            return $en;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
     private function run(string $system, string $text): ?string
     {
         $text = trim($text);

@@ -134,6 +134,52 @@ class ChatsWorkspaceTest extends TestCase
         $this->assertSame('image', $acts['send_image']['schema']['image']);
     }
 
+    public function test_opening_a_chat_auto_translates_arabic_without_any_tap(): void
+    {
+        $t = $this->login();
+        $fake = new class extends \App\Services\Chat\ChatTranslator {
+            public int $calls = 0;
+            public function enabled(): bool { return true; }
+            public function toEnglish(string $x): ?string { $this->calls++; return 'EN: '.mb_substr($x, 0, 10); }
+        };
+        $this->app->instance(\App\Services\Chat\ChatTranslator::class, $fake);
+
+        $c = $this->convo($t, '256700000041', 0, false, [
+            ['in', 'customer', 'عايز اسال سعر زيت'],
+            ['in', 'customer', 'ok thanks'],           // English — must be skipped
+        ]);
+
+        $j = $this->getJson('/api/v1/workspace/chat/'.$c->id)->assertOk()->json();
+
+        $msgs = collect($j['meta']['msgs']);
+        $ar = $msgs->first(fn ($m) => str_contains($m['body'], 'عايز'));
+        $this->assertNotNull($ar['tr'], 'Arabic must arrive already translated — no tap');
+        $en = $msgs->first(fn ($m) => $m['body'] === 'ok thanks');
+        $this->assertNull($en['tr'], 'English messages must not be translated');
+        $this->assertSame(1, $fake->calls);
+
+        // persisted: a second load costs ZERO further AI calls
+        $this->getJson('/api/v1/workspace/chat/'.$c->id)->assertOk();
+        $this->assertSame(1, $fake->calls, 'cache makes the second open free');
+    }
+
+    public function test_auto_translate_respects_the_tenant_switch(): void
+    {
+        $t = $this->login();
+        $t->putSetting('chat_auto_translate', false);
+        $fake = new class extends \App\Services\Chat\ChatTranslator {
+            public int $calls = 0;
+            public function enabled(): bool { return true; }
+            public function toEnglish(string $x): ?string { $this->calls++; return 'EN'; }
+        };
+        $this->app->instance(\App\Services\Chat\ChatTranslator::class, $fake);
+
+        $c = $this->convo($t, '256700000042', 0, false, [['in', 'customer', 'لو ممكن']]);
+        $this->getJson('/api/v1/workspace/chat/'.$c->id)->assertOk();
+
+        $this->assertSame(0, $fake->calls, 'switch OFF = zero AI calls; the 🌐 button remains');
+    }
+
     public function test_translate_caches_on_the_row_and_surfaces_in_transcript(): void
     {
         $t = $this->login();

@@ -74,6 +74,28 @@ final class ChatCapability implements ObjectCapability
             );
         }
 
+        // Auto-translate backfill (2026-07-18): opening a chat translates up to 4
+        // still-untranslated Arabic messages (newest first) — history heals itself as
+        // staff work. Cached on the rows, so each message costs one AI call EVER.
+        try {
+            if ((bool) $ctx->tenant->setting('chat_auto_translate', true)) {
+                $translator = app(\App\Services\Chat\ChatTranslator::class);
+                if ($translator->enabled()) {
+                    $todo = 4;
+                    foreach ($msgs->reverse() as $mm2) {
+                        if ($todo <= 0) break;
+                        if ($mm2->direction !== 'in') continue;
+                        if (! empty(((array) ($mm2->meta ?? []))['tr_en'])) continue;
+                        if (! \App\Services\Chat\ChatTranslator::hasArabic((string) $mm2->body)) continue;
+                        $translator->translateAndCache($mm2);
+                        $todo--;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // never block the thread view on translation
+        }
+
         // WhatsApp-Web mode: a parallel rich transcript for the split-pane renderer —
         // same rows, plus on-demand media (image/audio/file) resolved to a src.
         $rich = [];
