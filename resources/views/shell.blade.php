@@ -326,6 +326,9 @@ svg{display:block}
 .thread .oldmedia{font-size:12px;color:var(--muted);font-style:italic}
 .wloc{display:grid;gap:4px;font-size:13px}
 .wloc a{color:var(--brand);font-weight:700;font-size:12px}
+.trline{margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);font-size:12.5px;color:var(--muted)}
+.trbtn{border:none;background:none;color:var(--brand);font-size:11.5px;font-weight:700;cursor:pointer;padding:2px 0;display:block}
+.attach.on{background:var(--brand-wash);border-color:var(--brand)}
 @media(max-width:760px){
   .waweb{grid-template-columns:1fr}
   .waweb .war{display:none}.waweb .wal{display:flex}
@@ -852,6 +855,13 @@ async function openThread(id){
       }
       /* nothing to show at all → skip the row entirely (this was the ghost-bubble gap bug) */
       if(!inner) return '';
+      /* Juba reality: Arabic in → English team. Cached translation shows forever; else offer 🌐. */
+      if(!out){
+        if(m.tr){ inner+='<div class="trline">🌐 '+esc(m.tr)+'</div>'; }
+        else if(m.id && /[\u0600-\u06FF]/.test(body)){
+          inner+='<button class="trbtn" onclick="trMsg('+m.id+')">🌐 Translate</button>';
+        }
+      }
       return '<div class="msg '+(out?'out':'in')+(bot?' bot':'')+'">'+
         (out?'<div class="who">'+(bot?'🤖 Bot':'🧑‍💼 Agent')+'</div>':'')+inner+
         '<div class="when">'+esc(m.at||'')+'</div></div>';
@@ -867,6 +877,7 @@ async function openThread(id){
         (img?'<button class="attach" title="Send photo" onclick=\'doAction('+JSON.stringify(img).replace(/'/g,"&#39;")+')\'>📎</button>':'')+
         (doc?'<button class="attach" title="Send document (PDF…)" onclick=\'doAction('+JSON.stringify(doc).replace(/'/g,"&#39;")+')\'>📄</button>':'')+
         (loc?'<button class="attach" title="Send location" onclick="sendLoc()">📍</button>':'')+
+        '<button class="attach'+(window.__WA.arOut?' on':'')+'" id="arbtn" title="Reply in Arabic (translates before sending)" onclick="window.__WA.arOut=!window.__WA.arOut;this.classList.toggle(\'on\')">🌐</button>'+
         '<input id="cmpin" placeholder="Type a message…" autocomplete="off" onkeydown="if(event.key===\'Enter\')sendThread()">'+
         '<button id="cmpbtn" onclick="sendThread()">Send</button></div>'):'');
     const th=document.getElementById('thread'); if(th) th.scrollTop=th.scrollHeight;
@@ -1320,6 +1331,12 @@ async function doAction(a){
   if(res&&res.ok){ if(res.pdf_b64){ downloadB64(res.pdf_b64,res.filename||'document.pdf'); } else if(res.url){ try{ window.open(res.url,'_blank'); }catch(e){} } }
   refresh();
 }
+/* 🌐 translate one inbound message: one AI call ever (server caches on the row). */
+async function trMsg(id){
+  const res=await post('/papi/chats/translate',{message_id:id});
+  if(res&&res.ok){ if(window.__WA.active) openThread(window.__WA.active); }
+  else toast((res&&res.error==='ai_not_configured')?'AI key not configured':'Could not translate', true);
+}
 /* 📍 quick-send: your current position via browser geolocation; falls back to the
    manual lat/lng form (the send_location action) if permission is denied. */
 function sendLoc(){
@@ -1338,7 +1355,15 @@ function sendLoc(){
 async function sendThread(){
   const a=window.__THREAD_REPLY__; const inp=document.getElementById('cmpin'); const btn=document.getElementById('cmpbtn');
   if(!a||!inp) return;
-  const txt=(inp.value||'').trim(); if(!txt) return;
+  let txt=(inp.value||'').trim(); if(!txt) return;
+  /* reply-in-Arabic mode: translate the draft, show it, confirm, send the Arabic */
+  if(window.__WA.arOut){
+    const tr=await post('/papi/chats/translate-out',{text:txt});
+    if(tr&&tr.ok&&tr.translation){
+      if(!window.confirm('Send in Arabic:\n\n'+tr.translation)) return;
+      txt=tr.translation;
+    } else if(!window.confirm('Could not translate — send in English instead?')){ return; }
+  }
   inp.disabled=true; if(btn) btn.disabled=true;
   const body=Object.assign({},a.body||{}); body.body=txt;
   const res=await post(a.endpoint,body);

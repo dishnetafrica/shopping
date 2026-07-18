@@ -108,10 +108,12 @@ final class ChatCapability implements ObjectCapability
                 }
             }
             $rich[] = [
+                'id' => (int) $m->id,
                 'dir' => $m->direction === 'in' ? 'in' : 'out',
                 'sender' => (string) $m->sender,
                 'at' => Carbon::parse($m->created_at)->format('d M H:i'),
                 'body' => (string) $m->body,
+                'tr' => (string) (($m->meta['tr_en'] ?? '') ?: '') ?: null,
                 'media' => $media,
             ];
         }

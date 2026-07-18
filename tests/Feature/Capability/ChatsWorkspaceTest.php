@@ -134,6 +134,45 @@ class ChatsWorkspaceTest extends TestCase
         $this->assertSame('image', $acts['send_image']['schema']['image']);
     }
 
+    public function test_translate_caches_on_the_row_and_surfaces_in_transcript(): void
+    {
+        $t = $this->login();
+        $fake = new class extends \App\Services\Chat\ChatTranslator {
+            public int $calls = 0;
+            public function enabled(): bool { return true; }
+            public function toEnglish(string $x): ?string { $this->calls++; return 'If possible bring it to me now'; }
+        };
+        $this->app->instance(\App\Services\Chat\ChatTranslator::class, $fake);
+
+        $c = $this->convo($t, '256700000031', 0, false, [['in', 'customer', 'لو ممكن جيب لي الان']]);
+        $mid = \App\Models\Message::withoutGlobalScope('tenant')
+            ->where('tenant_id', $t->id)->where('customer_phone', '256700000031')->value('id');
+
+        $this->postJson('/papi/chats/translate', ['message_id' => $mid])
+            ->assertOk()->assertJson(['ok' => true, 'translation' => 'If possible bring it to me now']);
+        $this->postJson('/papi/chats/translate', ['message_id' => $mid])
+            ->assertOk()->assertJson(['cached' => true]);
+        $this->assertSame(1, $fake->calls, 'one AI call per message, EVER — the row caches it');
+
+        $j = $this->getJson('/api/v1/workspace/chat/'.$c->id)->assertOk()->json();
+        $m = collect($j['meta']['msgs'])->first();
+        $this->assertSame('If possible bring it to me now', $m['tr'], 'cached translation rides the transcript');
+        $this->assertIsInt($m['id']);
+    }
+
+    public function test_translate_out_returns_arabic_draft(): void
+    {
+        $this->login();
+        $fake = new class extends \App\Services\Chat\ChatTranslator {
+            public function enabled(): bool { return true; }
+            public function toArabic(string $x): ?string { return 'سأوصلها لك اليوم'; }
+        };
+        $this->app->instance(\App\Services\Chat\ChatTranslator::class, $fake);
+
+        $this->postJson('/papi/chats/translate-out', ['text' => 'I will deliver it today'])
+            ->assertOk()->assertJson(['ok' => true, 'translation' => 'سأوصلها لك اليوم']);
+    }
+
     private function fakeGateway(): object
     {
         $gw = new class {

@@ -3276,6 +3276,45 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true, 'message' => $name.' sent']);
     }
 
+    /** Translate an inbound message to English — cached on the row forever (one AI call per message, ever). */
+    public function chatTranslate(Request $r, \App\Services\Chat\ChatTranslator $tr)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $m = \App\Models\Message::withoutGlobalScope('tenant')
+            ->where('tenant_id', $t->id)->find((int) $r->input('message_id'));
+        if (! $m) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        $meta = (array) ($m->meta ?? []);
+        if (! empty($meta['tr_en'])) {
+            return response()->json(['ok' => true, 'translation' => $meta['tr_en'], 'cached' => true]);
+        }
+        if (! $tr->enabled()) return response()->json(['ok' => false, 'error' => 'ai_not_configured'], 422);
+
+        $en = $tr->toEnglish((string) $m->body);
+        if ($en === null) return response()->json(['ok' => false, 'error' => 'translate_failed'], 502);
+
+        $meta['tr_en'] = $en;
+        $m->meta = $meta;
+        $m->save();
+
+        return response()->json(['ok' => true, 'translation' => $en]);
+    }
+
+    /** Translate a staff draft to Arabic (preview before sending; nothing stored). */
+    public function chatTranslateOut(Request $r, \App\Services\Chat\ChatTranslator $tr)
+    {
+        if (! $r->user()->tenant) return response()->json(['ok' => false], 401);
+        $text = trim((string) $r->input('text', ''));
+        if ($text === '') return response()->json(['ok' => false, 'error' => 'empty'], 422);
+        if (! $tr->enabled()) return response()->json(['ok' => false, 'error' => 'ai_not_configured'], 422);
+
+        $ar = $tr->toArabic($text);
+        if ($ar === null) return response()->json(['ok' => false, 'error' => 'translate_failed'], 502);
+
+        return response()->json(['ok' => true, 'translation' => $ar]);
+    }
+
     /** WhatsApp-Web mode: send a location pin (your position, or the shop's). */
     public function chatSendLocation(Request $r, WhatsAppManager $wa)
     {
