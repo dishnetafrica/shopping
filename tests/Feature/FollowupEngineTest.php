@@ -51,6 +51,35 @@ class FollowupEngineTest extends TestCase
         $this->assertSame(0, $this->engine()->plan($t), 'one open proposal per customer — rerun creates nothing');
     }
 
+    public function test_abandoned_cart_becomes_a_hot_proposal_but_never_after_an_order(): void
+    {
+        $t = $this->tenant();
+        $mk = function (string $phone, $updatedAt, array $cart) use ($t) {
+            $c = \App\Models\Conversation::withoutGlobalScope('tenant')->create([
+                'tenant_id' => $t->id, 'customer_phone' => $phone, 'instance' => 'i1',
+                'state' => [], 'cart' => $cart, 'agent_active' => false]);
+            \App\Models\Conversation::withoutGlobalScope('tenant')->where('id', $c->id)
+                ->update(['updated_at' => $updatedAt]);
+            return $c;
+        };
+        $p = \App\Models\Product::withoutGlobalScopes()->create(['tenant_id' => $t->id,
+            'name' => 'Marhaba Soap', 'price' => 5000, 'base_price' => 5000, 'active' => true]);
+
+        $mk('211900000051', now()->subHours(5), [$p->id => 3]);              // idle 5h → candidate
+        $mk('211900000052', now()->subMinutes(30), [$p->id => 2]);           // too fresh → skip
+        $mk('211900000053', now()->subHours(6), [$p->id => 1]);              // ordered after → skip
+        \App\Models\Order::withoutGlobalScopes()->create(['tenant_id' => $t->id,
+            'customer_phone' => '211900000053', 'customer_name' => 'X', 'items' => [],
+            'total' => 5000, 'status' => 'completed']);
+
+        $this->assertSame(1, $this->engine()->plan($t));
+        $fp = \App\Models\FollowupProposal::where('tenant_id', $t->id)->first();
+        $this->assertSame('cart_abandoned', $fp->trigger);
+        $this->assertSame('high', $fp->confidence, 'a basket from today = the hottest lead, BY RULE');
+        $this->assertSame('211900000051', $fp->customer_phone);
+        $this->assertStringContainsString('15,000', $fp->evidence, 'cart value computed from panel prices');
+    }
+
     public function test_global_touch_cap_blocks_recently_contacted_customers(): void
     {
         $t = $this->tenant();

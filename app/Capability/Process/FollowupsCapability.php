@@ -99,6 +99,8 @@ final class FollowupsCapability implements ProcessCapability
                  'tone' => count($rows) > 0 ? 'warn' : 'ok', 'foot' => 'approve from Quick actions'],
                 ['key' => 'sent', 'label' => 'Sent today', 'value' => (string) $sentToday, 'foot' => 'human-approved'],
                 ['key' => 'quotes', 'label' => 'Quote chases', 'value' => (string) ($byTrigger['quote_chase'] ?? 0), 'foot' => 'open quotations'],
+                ['key' => 'carts', 'label' => 'Abandoned carts', 'value' => (string) ($byTrigger['cart_abandoned'] ?? 0),
+                 'tone' => ($byTrigger['cart_abandoned'] ?? 0) > 0 ? 'warn' : 'default', 'foot' => 'picked items, never confirmed'],
                 ['key' => 'reorders', 'label' => 'Reorders + winback', 'value' => (string) (($byTrigger['reorder'] ?? 0) + ($byTrigger['winback'] ?? 0)), 'foot' => 'cycle + dormant'],
                 ['key' => 'conv', 'label' => 'Converted (30d)', 'value' => $convPct.'%',
                  'tone' => $convPct >= 30 ? 'ok' : 'default', 'foot' => $conv30->count().' of '.$sent30->count().' sent led to an order'],

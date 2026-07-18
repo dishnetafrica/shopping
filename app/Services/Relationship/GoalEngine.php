@@ -56,6 +56,40 @@ class GoalEngine
     {
         $out = [];
 
+        // 0) ABANDONED CART — the hottest lead in the business: they picked items TODAY
+        //    and stopped one step short. Idle > N hours (default 2), fresher than 48h,
+        //    no order placed since, and no human already working the chat.
+        $idleH = max(1, (int) $t->setting('cart_abandon_hours', 2));
+        $carts = \App\Models\Conversation::withoutGlobalScope('tenant')->where('tenant_id', $t->id)
+            ->where('agent_active', false)
+            ->whereBetween('updated_at', [now()->subHours(48), now()->subHours($idleH)])
+            ->orderByDesc('updated_at')->limit(120)->get()
+            ->filter(fn ($c) => ! empty(array_filter((array) $c->cart)));
+        foreach ($carts as $c) {
+            $phone = preg_replace('/[^0-9]/', '', (string) $c->customer_phone);
+            if ($phone === '') continue;
+            $ordered = Order::withoutGlobalScopes()->where('tenant_id', $t->id)
+                ->where('customer_phone', $phone)->where('created_at', '>', $c->updated_at)->exists();
+            if ($ordered) continue;   // they finished another way — no nagging
+
+            $ids = array_map('intval', array_keys((array) $c->cart));
+            $qty = fn ($v) => is_numeric($v) ? (int) $v : (int) ($v['qty'] ?? 1);
+            $prods = \App\Models\Product::withoutGlobalScopes()
+                ->whereIn('id', $ids)->pluck('price', 'id');
+            $value = 0.0; $n = 0;
+            foreach ((array) $c->cart as $pid => $v) {
+                $n += $qty($v);
+                $value += ((float) ($prods[(int) $pid] ?? 0)) * $qty($v);
+            }
+            $hours = (int) now()->diffInHours($c->updated_at);
+            $cur = (string) $t->setting('currency', 'UGX');
+            $out[] = ['phone' => $phone, 'trigger' => 'cart_abandoned',
+                'reason' => "{$n} item(s) sitting in their basket for {$hours}h — never confirmed",
+                'evidence' => "cart ~{$cur} ".number_format($value, 0)." · idle {$hours}h",
+                'confidence' => $hours <= 24 ? 'high' : 'medium',
+                'outcome' => 'Recover the basket into an order'];
+        }
+
         // 1) QUOTE CHASE — a quotation went out, 2-14 days ago, never became an order.
         $quotes = Quotation::withoutGlobalScopes()->where('tenant_id', $t->id)
             ->whereNull('order_id')
@@ -173,6 +207,7 @@ class GoalEngine
             'quote_chase' => "Hello! Just checking in on the quotation we sent — happy to adjust quantities or answer any questions. — {$t->name}",
             'reorder'     => "Hello! It's about the time you usually restock — shall we prepare your regular order? — {$t->name}",
             'winback'     => "Hello! It's been a while — we've missed serving you. Anything we can get ready for you this week? — {$t->name}",
+            'cart_abandoned' => "Hello! You have some items waiting in your basket \u{1F6D2} — shall I confirm the order for you, or adjust anything? — {$t->name}",
             default       => "Hello! Following up as promised — please let us know how we can help. — {$t->name}",
         };
     }

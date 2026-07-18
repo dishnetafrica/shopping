@@ -25,7 +25,11 @@ class WebhookController
 
         $incoming = $this->wa->driver($driver)->parseIncoming($request->all());
         $hasPin = $incoming && ! empty($incoming['lat']) && ! empty($incoming['lng']);
-        if (!$incoming || ($incoming['text'] === '' && !$hasPin)) {
+        // Media fix (2026-07-18): voice notes and captionless photos have NO text but MUST
+        // reach the pipeline — it has full transcription + vision branches waiting for them.
+        // This guard predated those features and was dropping them at the front door.
+        $hasMedia = $incoming && (! empty($incoming['has_audio']) || ! empty($incoming['has_image']));
+        if (!$incoming || ($incoming['text'] === '' && !$hasPin && !$hasMedia)) {
             // Not a customer message. Evolution also sends connection.update here —
             // use it to detect a dropped WhatsApp link and alert the shop owner.
             $this->maybeHandleConnection($request->all());
