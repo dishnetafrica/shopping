@@ -70,6 +70,23 @@ class ChatTranslator
         }
     }
 
+    /** 3–6 Arabic search terms for a product (MSA + Juba colloquial), comma-separated. */
+    public function arabicKeywords(string $productName, string $category = ''): ?string
+    {
+        $out = $this->run(
+            'Customers in Juba, South Sudan search a grocery shop in Arabic. For the given '
+            .'product, reply with ONLY 3-6 Arabic search keywords a customer would type '
+            .'(Modern Standard + common Juba colloquial), comma-separated, no explanations, '
+            .'no Latin letters.',
+            $productName.($category !== '' ? ' (category: '.$category.')' : '')
+        );
+        if ($out === null) return null;
+        // keep it clean: strip stray quotes/newlines, cap length
+        $out = trim(str_replace(["\n", '"', "'"], [' ', '', ''], $out));
+
+        return $out !== '' ? mb_substr($out, 0, 190) : null;
+    }
+
     private function run(string $system, string $text): ?string
     {
         $text = trim($text);
