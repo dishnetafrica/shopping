@@ -124,6 +124,23 @@ class AiBrain
             if ($reply === '') return true;   // plan stripped everything → intentional silence
         }
 
+        // <<SEND>> promise block (2026-07-18): the AI can only PROMISE a document by
+        // emitting the block that actually delivers it — mouth and hands, coupled.
+        if (preg_match('/<<SEND\s*(\{.*?\})\s*>>/s', $reply, $sm)) {
+            $reply = trim(str_replace($sm[0], '', $reply));
+            $sj = json_decode($sm[1], true);
+            $docType = strtolower(trim((string) ($sj['doc'] ?? '')));
+            if (in_array($docType, ['price_list', 'catalogue', 'catalog'], true)) {
+                $ok = $this->deliverPriceList($tenant, $from, $gateway, true);
+                if (! $ok) {
+                    \App\Support\BotTrace::log($tenant->id, 'send_block_failed', $from, $docType, null);
+                    \App\Jobs\NotifyOwner::dispatch($tenant->id,
+                        "\u{26A0}\u{FE0F} Promised the price list to {$from} but delivery failed — please send it manually from the chat (\u{1F4CE} or the Send catalogue action).");
+                    $reply = trim($reply."\n\nThe catalogue is being prepared — it will reach you shortly. \u{1F64F}");
+                }
+            }
+        }
+
         // 3a. order capture — if the model confirmed an order it emits a hidden <<ORDER {json}>>
         //     block. Create a real, trackable order (number + staff alert via OrderObserver),
         //     price it from OUR catalogue (never the LLM), and append a clean confirmation.
@@ -350,14 +367,31 @@ class AiBrain
             $count = \App\Models\Product::withoutGlobalScopes()
                 ->where('tenant_id', $tenant->id)->where('active', true)
                 ->where('price', '>', 0)->count();
-            if ($count < 1 || $count > 300) return false;
+            if ($count < 1 || $count > 1000) return false;   // was 300 — silently disabled at 318 products (2026-07-18 incident); the cached photo catalogue handles big lists
         } elseif (! $flag) {
             return false;
         }
 
+        return $this->deliverPriceList($tenant, $from, $gateway, false, $text);
+    }
+
+    /**
+     * The actual delivery (2026-07-18): callable by the intent path AND by the AI's own
+     * <<SEND>> promise block. force=true = an explicit promise MUST be honoured — skip
+     * the intent gate, the recent-send suppression and the count heuristic.
+     */
+    private function deliverPriceList(Tenant $tenant, string $from, WhatsAppGateway $gateway, bool $force = false, string $text = ''): bool
+    {
+        $svc = app(\App\Services\Bot\PriceListService::class);
+        if (! method_exists($gateway, 'sendDocument')) return false;
+        $plKey = "pricelist_sent:{$tenant->id}:{$from}";
+        if (! $force && Cache::get($plKey)) return false;
+
+        if (! $force) {
         $t = mb_strtolower($text);
         $triggers = [
             'price list', 'pricelist', 'rate list', 'ratelist', 'price sheet', 'rate sheet',
+            'list of products', 'list of the products', 'product list', 'products and prices', 'send me list', 'full list', 'menu',
             'prices', 'price', 'rates', 'rate', 'pricing', 'cost', 'how much',
             'what about price', 'what is the price', 'what are the prices', 'price of', 'rate of',
             'bei', 'bei gani', 'orodha ya bei',
@@ -369,6 +403,7 @@ class AiBrain
         $asks = false;
         foreach ($triggers as $w) if (str_contains($t, $w)) { $asks = true; break; }
         if (! $asks) return false;
+        }
 
         // Photo-first (2026-07-18): when a customer asks for prices, send the branded
         // PHOTO catalogue (photos + prices, one category per page). `price_list_style`
@@ -409,6 +444,22 @@ class AiBrain
             ->filter(fn ($m) => $m['url'] !== '')->values()->all();
         if (! $files) return false; // nothing to send → never activates for tenants without a catalogue
 
+        return $this->deliverPriceList($tenant, $from, $gateway, false, $text);
+    }
+
+    /**
+     * The actual delivery (2026-07-18): callable by the intent path AND by the AI's own
+     * <<SEND>> promise block. force=true = an explicit promise MUST be honoured — skip
+     * the intent gate, the recent-send suppression and the count heuristic.
+     */
+    private function deliverPriceList(Tenant $tenant, string $from, WhatsAppGateway $gateway, bool $force = false, string $text = ''): bool
+    {
+        $svc = app(\App\Services\Bot\PriceListService::class);
+        if (! method_exists($gateway, 'sendDocument')) return false;
+        $plKey = "pricelist_sent:{$tenant->id}:{$from}";
+        if (! $force && Cache::get($plKey)) return false;
+
+        if (! $force) {
         $t = mb_strtolower($text);
         $triggers = [
             // English — brochure / photos / product list (NOT prices; price-list step owns those)
@@ -431,6 +482,7 @@ class AiBrain
         $asks = false;
         foreach ($triggers as $w) if (str_contains($t, $w)) { $asks = true; break; }
         if (! $asks) return false;
+        }
 
         foreach ($files as $f) {
             $isPdf = (bool) preg_match('/\.pdf(\?|$)/i', $f['url']);
@@ -1063,7 +1115,11 @@ class AiBrain
         $p .= "- Never invent, promise, or imply a discount, \"bulk price\" or \"special price\". Quote the listed prices. If the customer asks for a bulk discount and none is offered, say the price is as listed and offer a formal quotation — the team can review bulk pricing separately. Do not claim a discount exists unless it is actually shown here.\n";
         $p .= "- Some items show \"price on request\" (e.g. jumbo parent reels) — these have no fixed price. Don't guess a figure: capture what they need (type, grade, GSM, quantity, origin) and tell them the team will send a quote.\n";
         $p .= "- Use the recent conversation for context; don't re-ask what the customer already told you.\n";
-        $p .= "SALES DISCIPLINE (how a trusted supplier behaves — restraint sells):\n";
+        $p .= "DELIVERING FILES (you cannot attach anything yourself — these are the ONLY two ways):\n";
+        $p .= "- Price list / catalogue: end your reply with <<SEND {\"doc\":\"price_list\"}>> — the system sends the PDF right after your message. NEVER say 'I'll send' or 'I'm sending' the price list/catalogue WITHOUT this block; the block IS the sending.\n";
+        $p .= "- Product photo: write the product's exact catalogue name wrapped in *asterisks* — the system attaches its photo automatically. Never promise a photo without starring the exact name.\n";
+        $p .= "- Anything else (videos, documents you don't have): never promise it — say what you CAN do instead.\n";
+                $p .= "SALES DISCIPLINE (how a trusted supplier behaves — restraint sells):\n";
         $p .= "- ANSWER FIRST, completely and exactly what was asked — then STOP. A price question deserves the price, not a pitch. A stock question deserves the stock answer. Do not append suggestions to answers.\n";
         $p .= "- Suggest another item AT MOST ONCE per conversation, and ONLY when one of these is true: (a) it directly complements something they are actually buying (cups → lids), (b) they asked for ideas/recommendations, or (c) they are finalising an order — one relevant attach, briefly.\n";
         $p .= "- NEVER suggest anything during: complaints, delivery/payment questions, greetings, or support topics. And after ONE decline or ignored suggestion, suggesting is CLOSED for this conversation — pushing twice destroys trust.\n";
