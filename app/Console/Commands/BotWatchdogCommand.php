@@ -24,7 +24,9 @@ class BotWatchdogCommand extends Command
     {
         $now = now();
         foreach (Tenant::all() as $t) {
-            if (! in_array((string) $t->setting('bot_mode', ''), ['n8n', 'ai'], true)) continue;
+            // default 'ai' (2026-07-18): an unset bot_mode used to silently exclude the
+            // tenant from watching — the exact opposite of a safety net's job.
+            if (! in_array((string) $t->setting('bot_mode', 'ai'), ['n8n', 'ai'], true)) continue;
             if (! $t->setting('watchdog_enabled', true)) continue;
 
             // Business hours in the tenant's local time (default EAT, UTC+3).
@@ -44,6 +46,34 @@ class BotWatchdogCommand extends Command
                 ->where('last_inbound_at', '<=', $now->copy()->subMinutes($waitMin))
                 ->where('last_inbound_at', '>=', $now->copy()->subMinutes($maxMin))
                 ->get();
+
+            // Takeover lane (2026-07-18): taken-over chats were invisible to the watchdog
+            // AND nothing ever released them — an escalated customer could wait forever.
+            // Longer patience (staff are human), then: alert + AUTO-RELEASE the bot after
+            // `agent_release_min` (default 120) so the NEXT message gets answered.
+            $tWait = max($waitMin, (int) $t->setting('takeover_wait_min', 30));
+            $tRelease = max($tWait, (int) $t->setting('agent_release_min', 120));
+            $taken = Conversation::withoutGlobalScopes()
+                ->where('tenant_id', $t->id)
+                ->where('unread', '>', 0)
+                ->where('agent_active', true)
+                ->whereNotNull('last_inbound_at')
+                ->where('last_inbound_at', '<=', $now->copy()->subMinutes($tWait))
+                ->where('last_inbound_at', '>=', $now->copy()->subMinutes($maxMin))
+                ->get();
+            foreach ($taken as $c) {
+                if ($c->last_inbound_at->lte($now->copy()->subMinutes($tRelease))
+                    && (bool) $t->setting('agent_auto_release', true)) {
+                    $c->agent_active = false;
+                    $c->save();
+                    \App\Support\BotTrace::log($t->id, 'takeover_auto_released', (string) $c->customer_phone,
+                        'unanswered_'.$tRelease.'m', null);
+                    $c->wd_note = 'bot RESUMED (staff quiet '.$tRelease.'m)';
+                } else {
+                    $c->wd_note = 'with STAFF (taken over)';
+                }
+            }
+            $convos = $convos->concat($taken);
             if ($convos->isEmpty()) continue;
 
             $to = $this->route($t, ['dispatch', 'sales', 'management']);

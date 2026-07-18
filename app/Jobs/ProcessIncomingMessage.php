@@ -23,11 +23,38 @@ use Illuminate\Queue\SerializesModels;
 
 class ProcessIncomingMessage implements ShouldQueue
 {
+    /** One retry for transient AI/API hiccups; then failed() guarantees the customer is never met with silence. */
+    public $tries = 2;
+
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     /** Generous attempts: WithoutOverlapping releases (not fails) while a sibling runs. */
     public int $tries = 25;
     public int $backoff = 3;
+
+    /**
+     * Reliability net (2026-07-18): if processing dies for ANY reason, the customer
+     * still gets a courtesy reply and a human gets the alarm — silence is forbidden.
+     */
+    public function failed(\Throwable $e): void
+    {
+        try {
+            $t = \App\Models\Tenant::find($this->tenantId);
+            $from = preg_replace('/[^0-9]/', '', (string) ($this->incoming['from'] ?? ''));
+            if ($t && $from !== '') {
+                try {
+                    app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($t)
+                        ->sendText($t->whatsapp_instance, $from,
+                            "We received your message \u{1F64F} Give us one moment — a team member will reply shortly.");
+                } catch (\Throwable $e2) {
+                }
+                \App\Jobs\NotifyOwner::dispatch($t->id,
+                    "\u{1F6A8} Bot failed to process a message from {$from} — please reply manually. (".mb_substr($e->getMessage(), 0, 120).')');
+            }
+            \App\Support\BotTrace::log($this->tenantId, 'job_failed', $from ?? '', mb_substr(get_class($e), 0, 60), mb_substr($e->getMessage(), 0, 200));
+        } catch (\Throwable $e3) {
+        }
+    }
 
     public function __construct(
         public int $tenantId,
