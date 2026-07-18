@@ -49,6 +49,7 @@ class ClassicPanelRedirects
         '/panel/setup'            => 'settings',
         '/panel/staff'            => 'settings',
         '/panel/system'           => 'settings',
+        '/panel/consignment'      => 'consignments',
         '/panel/guide'            => 'guide',
         '/panel/today'            => 'briefing',
         '/panel/tasks'            => 'worklist',

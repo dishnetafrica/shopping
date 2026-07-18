@@ -134,6 +134,23 @@ return [
         'links' => ['products' => 'Open Products', 'warehouse' => 'Open Warehouse'],
     ],
 
+    ['key' => 'consignments', 'title' => 'Consignments (Juba loads)', 'menu' => 'orders',
+        'cards' => [
+            ['title' => 'Sending a load (Kampala side)', 'rows' => [
+                ['1 · Create', 'Consignments → "New consignment": bus, driver, and the receiving agent. If the last load had unsent stock, it carries forward automatically.'],
+                ['2 · Load orders', '"Add order" for one, or "Add ALL ready orders" in one tap. The manifest shows every customer and phone.'],
+                ['3 · Load stock', '"Add stock line" for shop goods travelling with the load — request first, mark quantities sent when the bus is packed.'],
+                ['4 · Print', '"Manifest sheet" prints the full load list for the driver.'],
+            ]],
+            ['title' => 'Receiving a load (Juba side)', 'rows' => [
+                ['Everything arrived', '"Deliver ALL on-board" — one tap, every customer gets their WhatsApp automatically.'],
+                ['One order at a time', '"Set one order\'s status" — delivered or returned, with a note.'],
+                ['Selling carried stock', '"Sell from stock" records the sale with buyer and price; margin appears on the Stock tab instantly.'],
+            ]],
+        ],
+        'links' => ['consignments' => 'Open Consignments'],
+    ],
+
     ['key' => 'admin', 'title' => 'Settings & team (owner)', 'menu' => 'staff',
         'cards' => [
             ['title' => 'Team & roles — who sees what', 'rows' => [

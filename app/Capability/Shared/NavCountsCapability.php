@@ -69,6 +69,9 @@ final class NavCountsCapability implements Capability
             'categories'        => $safe(fn () => $c(Category::query())),
             'supplier'          => $safe(fn () => $c(Supplier::query())),
             'purchase.process'  => $safe(fn () => $c(OrderCost::query()->where('stage', 'purchase'))),
+            // Consignments badge = orders still ON BOARD (what needs delivering).
+            'consignments'      => $safe(fn () => (int) \App\Models\ShipmentOrder::where('tenant_id', $t)
+                                        ->where('status', \App\Models\ShipmentOrder::ON_BOARD)->count()),
             // Requires the Email Center backend (comm_messages) — $safe omits it until migrated.
             'communication'     => $safe(fn () => (int) \App\Models\CommMessage::withoutGlobalScope('tenant')
                                         ->where('tenant_id', $t)->where('status', 'failed')->count()),

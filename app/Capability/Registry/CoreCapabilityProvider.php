@@ -24,8 +24,10 @@ use App\Capability\Process\CustomerListCapability;
 use App\Capability\Process\DispatchCapability;
 use App\Capability\Process\InvoiceListCapability;
 use App\Capability\Object\ChatCapability;
+use App\Capability\Object\ConsignmentCapability;
 use App\Capability\Process\ChatListCapability;
 use App\Capability\Process\CommunicationCapability;
+use App\Capability\Process\ConsignmentListCapability;
 use App\Capability\Process\GuideCapability;
 use App\Capability\Process\LeadListCapability;
 use App\Capability\Process\PaymentListCapability;
@@ -103,6 +105,12 @@ final class CoreCapabilityProvider implements CapabilityProvider
         // Migration plan G2 — the Email Center as a v3 workspace (UI re-home; engine untouched).
         // Guarded: only register where the Comms backend (M1-M4 zip) is actually deployed,
         // so the menu never offers a workspace that would 500 — incident 2026-07-18.
+        // Retire-audit tail: consignments (Kampala→Juba batches) — list + object. Open
+        // permission on purpose: delivery is the FIELD role's job; management actions are
+        // payload-gated and the papi endpoints re-enforce priv() server-side.
+        $r->register(new ConsignmentListCapability(), new CapabilityManifest(key: 'consignments', type: 'process', owner: 'logistics', permission: '', api: '/api/v1/workspace/consignments'));
+        $r->register(new ConsignmentCapability(), new CapabilityManifest(key: 'consignment', type: 'object', owner: 'logistics', permission: '', api: '/api/v1/workspace/consignment/{id}'));
+
         // Help & Training — the UCRM-style built-in manual (open to every role).
         $r->register(new GuideCapability(), new CapabilityManifest(key: 'guide', type: 'process', owner: 'management', permission: '', api: '/api/v1/workspace/guide'));
 

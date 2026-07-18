@@ -30,7 +30,7 @@ class V3RetireCommand extends Command
         }
         $this->warn('Unmapped (stay classic — the honest tail): /panel/audit, /panel/partners, '
             .'/panel/billing, /panel/diagnostics, /panel/onboard, '
-            .'/panel/consignment (rich tool, no v3 port yet), /panel/scheduled (scheduled ORDERS, not campaigns)');
+            .'/panel/scheduled (scheduled ORDERS — port pending)');
         $this->line('Escape hatch on every mapped page: ?classic=1 (kept one quarter).');
 
         if ($this->option('dry')) {

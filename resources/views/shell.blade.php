@@ -496,7 +496,7 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 
 <script>
 const CFG = { base:'/api/v1/workspace', csrf: document.querySelector('meta[name=csrf-token]').content, user: @json(['name'=>'']) };
-const LABELS = { setup:'Get started', chats:'Chats', chat:'Chat', communication:'Email Center', guide:'Help & Training', briefing:'Morning Briefing', worklist:'My Work', customers:'Customers', leads:'Leads', collections:'Collections',
+const LABELS = { setup:'Get started', chats:'Chats', chat:'Chat', communication:'Email Center', guide:'Help & Training', consignments:'Consignments', consignment:'Consignment', briefing:'Morning Briefing', worklist:'My Work', customers:'Customers', leads:'Leads', collections:'Collections',
   salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance', pnl:'Profit & Loss',
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', 'procurement.hub':'Procurement Hub', 'demand.plans':'Demand Plans', 'juba.stock':'Juba Stock', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch', transport:'Transport Register', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
@@ -505,16 +505,16 @@ const LABELS = { setup:'Get started', chats:'Chats', chat:'Chat', communication:
 const GROUPS = [ ['Overview',['setup','briefing','worklist','guide']],
   ['Sales',['customers','leads','salesOrders','quotations','invoices','payments','collections']],
   ['Messaging',['chats','communication']],
-  ['Inventory',['products','categories','purchase.process','suppliers']],
+  ['Inventory',['products','categories','purchase.process','suppliers','consignments']],
   ['Procurement',['procurement.hub','demand.plans','juba.stock']],
   ['Operations',['warehouse','dispatch','transport']],
   ['Finance',['finance','pnl','cashbook']],
   ['Marketing',['ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery']],
   ['Settings',['settings']] ];
 // Which nav key reads which count from the catalog's counts map.
-const NAVCOUNT = { chats:'chats', communication:'communication', customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
+const NAVCOUNT = { chats:'chats', communication:'communication', consignments:'consignments', customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['setup','briefing','worklist','chats','communication','guide','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','warehouse','dispatch','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport']);
+const READY = new Set(['setup','briefing','worklist','chats','communication','guide','consignments','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','warehouse','dispatch','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport']);
 // Storefront config pages are client-rendered (not server workspaces) and always available to the owner.
 const SF_KEYS = new Set(['storefront.collections','storefront.kits','storefront.delivery','transport']);
 // Dedicated list views still pending — none; kept for future additions.
@@ -523,6 +523,8 @@ function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:
 
 /* ---- inline icon set ---- */
 const P = {
+  consignments:'M1 3h15v13H1zM16 8h4l3 3v5h-7zM5.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM18.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  consignment:'M1 3h15v13H1zM16 8h4l3 3v5h-7z',
   guide:'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z',
   communication:'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 6l-10 7L2 6',
   chats:'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
