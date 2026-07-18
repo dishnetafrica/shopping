@@ -824,6 +824,8 @@ async function openThread(id){
     const p=await api('/chat/'+id);
     const acts=p.actions||[];
     const reply=acts.find(a=>a.key==='reply'); const img=acts.find(a=>a.key==='send_image');
+    const doc=acts.find(a=>a.key==='send_file'); const loc=acts.find(a=>a.key==='send_location');
+    window.__WA.locAct=loc||null;
     const tk=acts.find(a=>a.key==='takeover'||a.key==='to_bot');
     window.__THREAD_REPLY__=reply||null;
     const msgs=(p.meta&&p.meta.msgs)||[];
@@ -863,6 +865,8 @@ async function openThread(id){
       '<div class="thread" id="thread">'+(mh||'<div class="waempty" style="padding:30px">No messages logged yet — your first reply starts the transcript.</div>')+'</div>'+
       (reply?('<div class="composer">'+
         (img?'<button class="attach" title="Send photo" onclick=\'doAction('+JSON.stringify(img).replace(/'/g,"&#39;")+')\'>📎</button>':'')+
+        (doc?'<button class="attach" title="Send document (PDF…)" onclick=\'doAction('+JSON.stringify(doc).replace(/'/g,"&#39;")+')\'>📄</button>':'')+
+        (loc?'<button class="attach" title="Send location" onclick="sendLoc()">📍</button>':'')+
         '<input id="cmpin" placeholder="Type a message…" autocomplete="off" onkeydown="if(event.key===\'Enter\')sendThread()">'+
         '<button id="cmpbtn" onclick="sendThread()">Send</button></div>'):'');
     const th=document.getElementById('thread'); if(th) th.scrollTop=th.scrollHeight;
@@ -1315,6 +1319,20 @@ async function doAction(a){
   const res=await post(ep,a.body||{}); toast(res.ok?(res.message||'Done'):(res.message||res.error||'Error'), !res.ok);
   if(res&&res.ok){ if(res.pdf_b64){ downloadB64(res.pdf_b64,res.filename||'document.pdf'); } else if(res.url){ try{ window.open(res.url,'_blank'); }catch(e){} } }
   refresh();
+}
+/* 📍 quick-send: your current position via browser geolocation; falls back to the
+   manual lat/lng form (the send_location action) if permission is denied. */
+function sendLoc(){
+  const a=window.__WA.locAct; if(!a) return;
+  if(!navigator.geolocation){ doAction(a); return; }
+  navigator.geolocation.getCurrentPosition(async function(pos){
+    if(!window.confirm('Send your current location to this customer?')){ return; }
+    const body=Object.assign({},a.body||{});
+    body.lat=pos.coords.latitude; body.lng=pos.coords.longitude; body.name='My location';
+    const res=await post(a.endpoint,body);
+    toast(res&&res.ok?'Location sent':((res&&(res.message||res.error))||'Could not send'), !(res&&res.ok));
+    refresh();
+  }, function(){ doAction(a); }, {enableHighAccuracy:true, timeout:8000});
 }
 /* Thread composer: posts through the payload's reply action (proven /papi/chats/send). */
 async function sendThread(){

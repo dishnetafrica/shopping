@@ -128,6 +128,17 @@ final class ChatCapability implements ObjectCapability
                 'schema' => ['image' => 'image', 'caption' => 'text'],
                 'labels' => ['image' => 'Photo', 'caption' => 'Caption (optional)'],
                 'body'   => ['phone' => $phone]];
+            $actions[] = ['key' => 'send_file', 'label' => 'Send document', 'method' => 'POST',
+                'endpoint' => '/papi/chats/send-document', 'actor' => 'human',
+                'schema' => ['file' => 'file:.pdf,.doc,.docx,.xls,.xlsx,.csv', 'filename' => 'text', 'caption' => 'text'],
+                'labels' => ['file' => 'Document (PDF, Word, Excel…)', 'filename' => 'File name shown to the customer', 'caption' => 'Caption (optional)'],
+                'body'   => ['phone' => $phone]];
+            $actions[] = ['key' => 'send_location', 'label' => 'Send a location', 'method' => 'POST',
+                'endpoint' => '/papi/chats/send-location', 'actor' => 'human',
+                'schema' => ['lat' => 'number', 'lng' => 'number', 'name' => 'text', 'address' => 'text'],
+                'labels' => ['lat' => 'Latitude', 'lng' => 'Longitude', 'name' => 'Place name', 'address' => 'Address (optional)'],
+                'prefill' => ['name' => (string) ($ctx->tenant->name ?? 'Our shop')],
+                'body'   => ['phone' => $phone]];
             $actions[] = $c->agent_active
                 ? ['key' => 'to_bot', 'label' => 'Hand back to bot', 'queryWrite' => true, 'method' => 'POST',
                     'endpoint' => '/papi/chats/takeover', 'actor' => 'human',

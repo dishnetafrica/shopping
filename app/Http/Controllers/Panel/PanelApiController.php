@@ -3236,6 +3236,81 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true, 'message' => 'Photo sent']);
     }
 
+    /** WhatsApp-Web mode: send a document (PDF etc.). The web form supplies a base64
+     *  data-URL — we strip the prefix and hand Evolution raw base64. */
+    public function chatSendDocument(Request $r, WhatsAppManager $wa)
+    {
+        $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));
+        $file  = trim((string) $r->input('file', ''));
+        $name  = trim((string) $r->input('filename', ''));
+        $cap   = trim((string) $r->input('caption', ''));
+        if ($phone === '' || $file === '') {
+            return response()->json(['ok' => false, 'error' => 'empty'], 422);
+        }
+        // data:application/pdf;base64,XXXX → raw base64 (+ derive a filename fallback)
+        if (str_starts_with($file, 'data:')) {
+            if ($name === '' && preg_match('#^data:application/pdf#', $file)) $name = 'document.pdf';
+            $file = substr($file, strpos($file, ',') + 1);
+        }
+        if ($name === '') $name = 'document';
+
+        $t = $r->user()->tenant;
+        $c = Conversation::firstOrCreate(
+            ['customer_phone' => $phone, 'instance' => $t->whatsapp_instance],
+            ['tenant_id' => $t->id, 'state' => [], 'cart' => []]
+        );
+        $c->agent_active = true;
+        $c->save();
+
+        $gw = $wa->forTenant($t);
+        if (! method_exists($gw, 'sendDocument')) return response()->json(['ok' => false, 'error' => 'unsupported'], 422);
+        try {
+            $gw->sendDocument($t->whatsapp_instance, $phone, $file, $name, $cap);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => 'send_failed'], 502);
+        }
+
+        \App\Support\MessageLog::record($t->id, $phone, $t->whatsapp_instance, 'out', 'agent',
+            '📄 '.$name.($cap !== '' ? ' — '.$cap : ''));
+
+        return response()->json(['ok' => true, 'message' => $name.' sent']);
+    }
+
+    /** WhatsApp-Web mode: send a location pin (your position, or the shop's). */
+    public function chatSendLocation(Request $r, WhatsAppManager $wa)
+    {
+        $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));
+        $lat = $r->input('lat'); $lng = $r->input('lng');
+        if ($phone === '' || ! is_numeric($lat) || ! is_numeric($lng)) {
+            return response()->json(['ok' => false, 'error' => 'empty'], 422);
+        }
+        $name = trim((string) $r->input('name', ''));
+        $addr = trim((string) $r->input('address', ''));
+
+        $t = $r->user()->tenant;
+        $c = Conversation::firstOrCreate(
+            ['customer_phone' => $phone, 'instance' => $t->whatsapp_instance],
+            ['tenant_id' => $t->id, 'state' => [], 'cart' => []]
+        );
+        $c->agent_active = true;
+        $c->save();
+
+        $gw = $wa->forTenant($t);
+        if (! method_exists($gw, 'sendLocation')) return response()->json(['ok' => false, 'error' => 'unsupported'], 422);
+        try {
+            $gw->sendLocation($t->whatsapp_instance, $phone, (float) $lat, (float) $lng, $name, $addr);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => 'send_failed'], 502);
+        }
+
+        \App\Support\MessageLog::record($t->id, $phone, $t->whatsapp_instance, 'out', 'agent',
+            '📍 '.($name !== '' ? $name : 'Location'), null, null,
+            ['media' => array_filter(['kind' => 'location', 'lat' => (float) $lat, 'lng' => (float) $lng,
+                'name' => $name ?: null, 'address' => $addr ?: null])]);
+
+        return response()->json(['ok' => true, 'message' => 'Location sent']);
+    }
+
     public function chatSend(Request $r, WhatsAppManager $wa)
     {
         $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));

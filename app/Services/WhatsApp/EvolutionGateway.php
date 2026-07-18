@@ -65,6 +65,19 @@ class EvolutionGateway implements WhatsAppGateway
         ])->json() ?? [];
     }
 
+    /** Send a location pin (lat/lng + optional place name/address). Not in the interface;
+     *  callers guard with method_exists() (same additive pattern as sendDocument). */
+    public function sendLocation(string $instance, string $to, float $lat, float $lng, string $name = '', string $address = ''): array
+    {
+        return $this->http()->post("/message/sendLocation/{$instance}", [
+            'number'    => preg_replace('/[^0-9]/', '', $to),
+            'latitude'  => $lat,
+            'longitude' => $lng,
+            'name'      => $name,
+            'address'   => $address,
+        ])->json() ?? [];
+    }
+
     public function fetchContacts(string $instance): array
     {
         $rows = [];

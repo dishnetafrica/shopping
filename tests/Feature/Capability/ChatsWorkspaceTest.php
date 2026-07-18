@@ -134,6 +134,56 @@ class ChatsWorkspaceTest extends TestCase
         $this->assertSame('image', $acts['send_image']['schema']['image']);
     }
 
+    private function fakeGateway(): object
+    {
+        $gw = new class {
+            public array $docs = []; public array $locs = [];
+            public function sendDocument($i, $to, $media, $name, $cap = '') { $this->docs[] = [$to, $media, $name, $cap]; return ['ok' => true]; }
+            public function sendLocation($i, $to, $lat, $lng, $name = '', $addr = '') { $this->locs[] = [$to, $lat, $lng, $name]; return ['ok' => true]; }
+            public function sendImage($i, $to, $m, $c = '') { return ['ok' => true]; }
+            public function sendText($i, $to, $m, $q = null) { return ['ok' => true]; }
+        };
+        $mgr = new class($gw) extends \App\Services\WhatsApp\WhatsAppManager {
+            public function __construct(private object $g) {}
+            public function forTenant(\App\Models\Tenant $t): object { return $this->g; }
+        };
+        $this->app->instance(\App\Services\WhatsApp\WhatsAppManager::class, $mgr);
+        return $gw;
+    }
+
+    public function test_send_document_strips_data_url_and_keeps_filename(): void
+    {
+        $this->login();
+        $gw = $this->fakeGateway();
+
+        $this->postJson('/papi/chats/send-document', [
+            'phone' => '256700000021', 'file' => 'data:application/pdf;base64,QUJDRA==',
+            'filename' => 'pricelist.pdf', 'caption' => 'Latest prices',
+        ])->assertOk()->assertJson(['ok' => true]);
+
+        $this->assertSame(['256700000021', 'QUJDRA==', 'pricelist.pdf', 'Latest prices'], $gw->docs[0],
+            'Evolution must receive RAW base64, not the data-URL');
+    }
+
+    public function test_send_location_logs_a_maps_ready_pin_and_takes_over(): void
+    {
+        $t = $this->login();
+        $gw = $this->fakeGateway();
+
+        $this->postJson('/papi/chats/send-location', [
+            'phone' => '256700000022', 'lat' => 0.3476, 'lng' => 32.5825, 'name' => 'Family Shoppers',
+        ])->assertOk()->assertJson(['ok' => true]);
+
+        $this->assertSame(['256700000022', 0.3476, 32.5825, 'Family Shoppers'], $gw->locs[0]);
+        $msg = \App\Models\Message::withoutGlobalScope('tenant')
+            ->where('tenant_id', $t->id)->where('customer_phone', '256700000022')->first();
+        $this->assertSame('location', $msg->meta['media']['kind']);
+        $this->assertSame(0.3476, (float) $msg->meta['media']['lat']);
+        $convo = \App\Models\Conversation::withoutGlobalScope('tenant')
+            ->where('tenant_id', $t->id)->where('customer_phone', '256700000022')->first();
+        $this->assertTrue((bool) $convo->agent_active);
+    }
+
     public function test_location_video_and_documents_surface_in_the_transcript(): void
     {
         $t = $this->login();
