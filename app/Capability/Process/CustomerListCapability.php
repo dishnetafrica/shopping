@@ -140,13 +140,14 @@ final class CustomerListCapability implements ProcessCapability
                 ['key' => 'outstanding', 'label' => 'Outstanding balance', 'value' => $rc->fmtConsolidated($outstanding), 'tone' => $outstanding > 0 ? 'warn' : 'ok', 'foot' => 'across ' . $accountsOwing . ' accounts'],
                 ['key' => 'avg', 'label' => 'Avg. order value', 'value' => $rc->fmtConsolidated($avgOrder), 'foot' => number_format($totalOrders) . ' orders'],
             ])
-            ->table($columns, $rows, $filters)
-            ->actions([
+            ->table($columns, $rows, $filters, [
                 'selectable' => true,
                 'bulk' => [
                     ['label' => 'Export CSV', 'method' => 'GET', 'endpoint' => '/papi/export/customers?format=csv'],
                     ['label' => 'Export PDF', 'method' => 'GET', 'endpoint' => '/papi/export/customers?format=pdf'],
                 ],
+            ])
+            ->actions([
                 ['key' => 'add_customer', 'label' => 'New customer', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/customers/_/add_customer', 'actor' => 'human', 'tone' => 'primary', 'schema' => self::formSchema()],
                 ['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customers', 'actor' => 'human', 'tone' => 'default', 'icon' => 'export'],
             ])
