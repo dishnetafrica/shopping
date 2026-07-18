@@ -7,6 +7,8 @@ Schedule::command('shopbot:process-scheduled')->everyMinute()->withoutOverlappin
 
 // Smart-bot (n8n) shared, tenant-keyed schedules
 Schedule::command('bot:watchdog')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
+Schedule::command('relationship:extract')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
+Schedule::command('relationship:stages')->dailyAt('03:15')->withoutOverlapping()->onOneServer();
 Schedule::command('bot:digest')->hourly()->withoutOverlapping()->onOneServer();
 
 // Reliability: catch dropped WhatsApp connections fast (a down number silently kills orders),

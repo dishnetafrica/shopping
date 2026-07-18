@@ -9,5 +9,5 @@ class Conversation extends Model
 {
     use BelongsToTenant;
     protected $fillable = ['tenant_id','customer_phone','instance','state','cart','last_message_at','agent_active','unread','last_inbound_at'];
-    protected $casts = ['state'=>'array','cart'=>'array','last_message_at'=>'datetime','last_inbound_at'=>'datetime','agent_active'=>'boolean'];
+    protected $casts = ['state'=>'array','cart'=>'array','last_message_at'=>'datetime','last_inbound_at'=>'datetime','agent_active'=>'boolean', 'review' => 'array', 'summarized_at' => 'datetime', 'reviewed_at' => 'datetime'];
 }

@@ -79,7 +79,8 @@ class AiBrain
               ]]
             : ['role' => 'user', 'content' => $text !== '' ? $text : '(no text)'];
 
-        $messages = array_merge([['role' => 'system', 'content' => $this->systemPrompt($tenant)]], $prior, [$current]);
+        $messages = array_merge([['role' => 'system', 'content' => $this->systemPrompt($tenant)
+            .\App\Services\Relationship\ProfileContext::block($tenant, $from)]], $prior, [$current]);
 
         // 3. call OpenAI (per-tenant key override, else the global CloudBSS key). Images need a
         //    vision model — fall back to gpt-4o-mini (vision-capable) if one isn't configured.
