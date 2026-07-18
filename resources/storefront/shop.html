@@ -2166,7 +2166,7 @@ function gridG(list){
 var DVIEW='grid';
 function setView(v){ DVIEW=(v==='list'?'list':'grid'); _catShown=24; render(); }
 function listG(list){
-  if(!list.length) return '<div class="empty">No products match these filters.</div>';
+  if(!list.length) return '<div class="empty">No products match these filters.'+waRescue()+'</div>';
   var rows=list.map(function(p){
     var q=(CART[p.name]?CART[p.name].qty:0), oos=oosOf(p), mq=minq(p);
     var meta=[]; if(p.brand)meta.push(esc(p.brand));
@@ -2364,7 +2364,17 @@ function bestThresh(){ if(_popThresh!==null)return _popThresh;
   var ps=PRODUCTS.map(function(p){return p.popularity||0;}).filter(function(x){return x>0;}).sort(function(a,b){return b-a;});
   _popThresh = ps.length>=6 ? ps[Math.floor(ps.length*0.15)] : Infinity; return _popThresh; }
 function isBestseller(p){ var t=bestThresh(); return t!==Infinity && (p.popularity||0)>0 && (p.popularity||0)>=t; }
-function isNew(p){ if(!p.createdAt)return false; var days=(Date.now()/1000 - p.createdAt)/86400; return days>=0 && days<=30; }
+var _newFrac=null;
+function _newRatio(){ if(_newFrac!==null)return _newFrac; var n=0,t=0;
+  PRODUCTS.forEach(function(p){ if(!p.createdAt)return; t++; var d=(Date.now()/1000-p.createdAt)/86400; if(d>=0&&d<=14)n++; });
+  _newFrac = t>0 ? (n/t) : 1; return _newFrac; }
+/* "New" only means something when it is scarce: 14 days AND under 40% of the
+   catalogue — a freshly imported catalogue would otherwise badge EVERYTHING. */
+function isNew(p){ if(!p.createdAt)return false; if(_newRatio()>0.4)return false;
+  var days=(Date.now()/1000 - p.createdAt)/86400; return days>=0 && days<=14; }
+/* Search/filter dead-ends should open a conversation, not close a tab. */
+function waRescue(){ if(!WA_NUMBER) return '';
+  return '<div style="margin-top:10px"><a class="wa" target="_blank" rel="noopener" href="https://wa.me/'+WA_NUMBER+'?text='+encodeURIComponent('Hi! I could not find what I need on the website. I am looking for: ')+'">We may still have it — ask us on WhatsApp</a></div>'; }
 function cardBadges(p){
   var b='';
   if(p.oldPrice && p.oldPrice>p.price){ var d=Math.round((1-p.price/p.oldPrice)*100); if(d>0)b='<span class="cbadge disc">-'+d+'%</span>'; }
@@ -2845,7 +2855,7 @@ function render(){
     var fres=applyFilters(res,true), sh=fres.slice(0,_catShown), mo=fres.length>_catShown?'<div id="loadmore" style="height:1px"></div>':'';
     c.innerHTML=wsBar()+'<div class="backbar"><button onclick="goHome()">‹ Home</button><b>Search</b></div><div class="section-title">Results for “'+esc(Q)+'”</div>'
       +filterBar()+'<div class="meta">'+fres.length+' product'+(fres.length===1?'':'s')+' · '+sortLabel()+'</div>'
-      +'<div id="catgridwrap">'+(sh.length?gridG(sh):'<div class="empty">No products match these filters.</div>')+'</div>'+mo;
+      +'<div id="catgridwrap">'+(sh.length?gridG(sh):'<div class="empty">No products match these filters.'+waRescue()+'</div>')+'</div>'+mo;
     return;
   }
   if(CAT==='all'){
@@ -2864,7 +2874,7 @@ function render(){
       var clbl=COLLVIEW.label||'Collection';
       c.innerHTML=wsBar()+'<div class="backbar"><button onclick="collClose()">‹ Home</button><b>'+esc(clbl)+'</b></div>'+featuredBrands(collProducts(COLLVIEW))+filterBar()
         +'<div class="meta">'+clist.length+' product'+(clist.length===1?'':'s')+' · '+sortLabel()+'</div>'
-        +'<div id="catgridwrap">'+(clist.length?gridG(clist):'<div class="empty">No products in this collection yet.</div>')+'</div>';
+        +'<div id="catgridwrap">'+(clist.length?gridG(clist):'<div class="empty">No products in this collection yet.'+waRescue()+'</div>')+'</div>';
       return;
     }
     // Business-collection browse (from a banner CTA / collection tap) — a product grid, reusing filters.
@@ -2874,7 +2884,7 @@ function render(){
         var vlist=applyFilters(bizProducts(vbiz));
         c.innerHTML=wsBar()+'<div class="backbar"><button onclick="bizClose()">‹ Home</button><b>'+esc(vbiz.label)+'</b></div>'+featuredBrands(bizProducts(vbiz))+filterBar()
           +'<div class="meta">'+vlist.length+' product'+(vlist.length===1?'':'s')+' · '+sortLabel()+'</div>'
-          +'<div id="catgridwrap">'+(vlist.length?gridG(vlist):'<div class="empty">No products in this collection yet.</div>')+'</div>';
+          +'<div id="catgridwrap">'+(vlist.length?gridG(vlist):'<div class="empty">No products in this collection yet.'+waRescue()+'</div>')+'</div>';
         return;
       }
       BIZVIEW='';
@@ -3199,6 +3209,7 @@ async function placeOrder(){
         '<div style="margin-top:18px">'+
         (d.track_url?'<a class="place" style="display:block;text-decoration:none;text-align:center" href="'+esc(d.track_url)+'">Track my order</a>':'')+
         (WA_NUMBER?'<a class="place" style="display:block;text-decoration:none;text-align:center;background:#fff;color:var(--green-d);border:1px solid var(--line);margin-top:8px" href="https://wa.me/'+WA_NUMBER+'?text='+encodeURIComponent('Hi '+shopName+', about my order '+(d.order_no||''))+'">Message us on WhatsApp</a>':'')+
+        (AUTHTOK?'':'<button class="place" style="margin-top:8px" onclick="closeSheet();openLogin((CUST&&CUST.phone)||\'\')">🔑 Save my orders — see them & buy again next time</button>')+
         '<button class="place" style="background:#fff;color:var(--ink);border:1px solid var(--line);margin-top:8px" onclick="goHome();closeSheet()">Continue shopping</button></div></div>';
     }else{toast((d&&d.message)?d.message:((d&&d.error)?d.error:'Could not place order. Please try again.'),'err');btn.disabled=false;btn.textContent='Place order';}
   }catch(e){toast('Network error — please try again.','err');btn.disabled=false;btn.textContent='Place order';}
@@ -3232,6 +3243,7 @@ async function requestQuotation(){
         '<div style="margin-top:18px">'+
         (d.portal_url?'<a class="place" style="display:block;text-decoration:none;text-align:center" href="'+esc(d.portal_url)+'">View my quotation →</a>':'')+
         (d.pdf_url?'<a class="place" style="display:block;text-decoration:none;text-align:center;background:#fff;color:var(--green-d);border:1px solid var(--line);margin-top:8px" href="'+esc(d.pdf_url)+'" target="_blank" rel="noopener">⬇ Download PDF</a>':'')+
+        (AUTHTOK?'':'<button class="place" style="margin-top:8px" onclick="closeSheet();openLogin((CUST&&CUST.phone)||\'\')">🔑 Save my orders — see them & buy again next time</button>')+
         '<button class="place" style="background:#fff;color:var(--ink);border:1px solid var(--line);margin-top:8px" onclick="goHome();closeSheet()">Continue shopping</button></div></div>';
     }else{toast((d&&d.message)?d.message:((d&&d.error)?d.error:'Could not create the quotation. Please try again.'),'err');if(btn){btn.disabled=false;btn.textContent='Request Quotation';}}
   }catch(e){toast('Network error — please try again.','err');if(btn){btn.disabled=false;btn.textContent='Request Quotation';}}
