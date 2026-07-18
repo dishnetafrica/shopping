@@ -138,6 +138,20 @@ class StorefrontController extends Controller
 
         $path = resource_path('storefront/shop.html');
         $html = is_file($path) ? file_get_contents($path) : '<h1>Shop unavailable</h1>';
+
+        // Server-side identity injection (2026-07-18): WhatsApp/Facebook link previews
+        // and non-JS crawlers read the STATIC html — so the real shop name must be in
+        // the bytes, not only in the JS config. Placeholders are replaced exactly once.
+        $safeName = e((string) $tenant->name);
+        $html = str_replace('<title>Shop</title>', '<title>'.$safeName.' — order on WhatsApp</title>', $html);
+        $html = str_replace('<div class="lg">SH</div>', '<div class="lg">'.e($cfg['initials']).'</div>', $html);
+        $html = str_replace('<div><b>Shop</b><span class="sub"', '<div><b>'.$safeName.'</b><span class="sub"', $html);
+        $html = str_replace('<span id="footName">Shop</span>', '<span id="footName">'.$safeName.'</span>', $html);
+        if (! str_contains($html, 'og:title')) {
+            $html = str_replace('</title>', '</title>'."\n".'<meta property="og:title" content="'.$safeName.'">'
+                ."\n".'<meta property="og:description" content="Browse the catalogue and order on WhatsApp — '.$safeName.'">'
+                .($cfg['logo'] ? "\n".'<meta property="og:image" content="'.e($cfg['logo']).'">' : ''), $html);
+        }
         $html = str_replace('__SHOP_CONFIG__', json_encode($cfg, JSON_UNESCAPED_UNICODE), $html);
 
         return response($html, 200)

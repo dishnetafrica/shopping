@@ -111,14 +111,13 @@ final class CoreCapabilityProvider implements CapabilityProvider
         // permission on purpose: delivery is the FIELD role's job; management actions are
         // payload-gated and the papi endpoints re-enforce priv() server-side.
         $r->register(new ConsignmentListCapability(), new CapabilityManifest(key: 'consignments', type: 'process', owner: 'logistics', permission: '', api: '/api/v1/workspace/consignments'));
-        // Hardened after the 2026-07-18 incident (twice): a missing file OR a contract
-        // mismatch in ONE capability must never kill the whole registry — worst case is
-        // one absent menu item (same principle as NavCounts per-key isolation).
-        try {
-            $r->register(new FollowupsCapability(), new CapabilityManifest(key: 'followups', type: 'process', owner: 'sales', permission: '', api: '/api/v1/workspace/followups'));
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('followups capability not registered: '.$e->getMessage());
-        }
+            // Hardened (2026-07-18 incident): ANY failure registering this capability = one
+            // warning + one missing menu item — NEVER a dead panel.
+            try {
+                $r->register(new FollowupsCapability(), new CapabilityManifest(key: 'followups', type: 'process', owner: 'sales', permission: '', api: '/api/v1/workspace/followups'));
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('followups capability not registered: '.$e->getMessage());
+            }
         $r->register(new ConsignmentCapability(), new CapabilityManifest(key: 'consignment', type: 'object', owner: 'logistics', permission: '', api: '/api/v1/workspace/consignment/{id}'));
 
         // Retire-audit tail: scheduled ORDERS (future deliveries; ProcessScheduled cron).
