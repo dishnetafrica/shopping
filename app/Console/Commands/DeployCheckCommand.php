@@ -33,18 +33,31 @@ class DeployCheckCommand extends Command
         $this->line('1/3  loading every class under app/ …');
         $files = iterator_to_array((new Finder)->files()->in(app_path())->name('*.php'));
         $n = 0;
+        $foreign = 0;
         foreach ($files as $f) {
             $rel = str_replace([app_path().DIRECTORY_SEPARATOR, '.php'], '', $f->getRealPath());
             $fqcn = 'App\\'.str_replace(DIRECTORY_SEPARATOR, '\\', $rel);
+
+            // v2 (2026-07-18 night incident): read the DECLARED namespace before touching the
+            // file. Stray experiment files (e.g. namespace CloudBSS\App) inside app/ made v1
+            // fatal on a duplicate declaration BEFORE it could report anything else. Foreign
+            // namespaces are skipped-and-flagged — they should not be in this tree at all.
+            $src = (string) @file_get_contents($f->getRealPath());
+            if (preg_match('/^namespace\s+([\w\\\\]+)\s*;/m', $src, $nm) && ! str_starts_with($nm[1], 'App')) {
+                $this->warn("   ⚠️  FOREIGN NAMESPACE skipped: {$rel}.php declares {$nm[1]} — this file does not belong in app/");
+                $foreign++;
+                continue;
+            }
             try {
                 if (class_exists($fqcn) || interface_exists($fqcn) || trait_exists($fqcn) || enum_exists($fqcn)) $n++;
-                // (a compile-level incompatibility is uncatchable by design — it aborts this
-                //  command with the exact file+line printed, which fails the build: mission accomplished)
+                // (a compile-level incompatibility in APP code is uncatchable by design — it
+                //  aborts with the exact file+line printed, which fails the build: mission accomplished)
             } catch (\Throwable $e) {
                 $this->error("❌ {$fqcn}: ".get_class($e).' — '.$e->getMessage());
                 $fail++;
             }
         }
+        if ($foreign > 0) $this->warn("   {$foreign} foreign file(s) skipped — move them out of app/ (they also pollute composer's classmap)");
         $this->info("   ✅ {$n} classes loaded clean".($fail ? " · {$fail} FAILED" : ''));
 
         if (! $this->option('fast')) {
