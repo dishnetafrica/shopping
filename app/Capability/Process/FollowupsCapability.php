@@ -2,7 +2,7 @@
 
 namespace App\Capability\Process;
 
-use App\Capability\CapabilityContext;
+use App\Capability\Contracts\CapabilityContext;
 use App\Capability\Dto\WorkspacePayload;
 use App\Models\CustomerProfile;
 use App\Models\FollowupProposal;
