@@ -331,8 +331,18 @@ svg{display:block}
 .attach.on{background:var(--brand-wash);border-color:var(--brand)}
 .selh,.selc{width:34px;text-align:center}
 .selc input,.selh input{width:15px;height:15px;accent-color:var(--brand);cursor:pointer}
-.selbar{display:flex;align-items:center;gap:8px;padding:9px 12px;margin-bottom:8px;background:var(--brand-wash);border:1px solid var(--brand);border-radius:10px;flex-wrap:wrap}
-.selbar b{margin-right:4px}
+tr.sel td{background:var(--brand-wash)!important}
+tr.sel td.selc{box-shadow:inset 3px 0 0 var(--brand)}
+.selbar{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:60;
+  display:flex;align-items:center;gap:8px;padding:10px 14px;flex-wrap:wrap;max-width:calc(100vw - 24px);
+  background:var(--card,#fff);border:1px solid var(--brand);border-radius:14px;
+  box-shadow:0 8px 28px rgba(0,0,0,.16);animation:selUp .18s ease-out;
+  padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}
+@keyframes selUp{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+.selbar .selcount{white-space:nowrap}
+.selbar .selcount a{color:var(--brand);font-weight:600;text-decoration:none;margin-left:4px}
+.selbar .selsum{font-size:12px;color:var(--mut,#667085);white-space:nowrap;padding:3px 8px;background:var(--brand-wash);border-radius:8px}
+.selbar .btn.ghost{border-color:transparent;background:transparent}
 @media(max-width:760px){
   .waweb{grid-template-columns:1fr}
   .waweb .war{display:none}.waweb .wal{display:flex}
@@ -1753,16 +1763,32 @@ function renderTable(){
   if(TBL.page>pages) TBL.page=pages; if(TBL.page<1) TBL.page=1;
   const start=(TBL.page-1)*ps, pageRows=rows.slice(start,start+ps);
   const arrow=k=> TBL.sort===k ? '<span class="sar">'+(TBL.dir>0?'↑':'↓')+'</span>' : '';
-  const selTh=TBL.selectable?('<th class="selh"><input type="checkbox" onchange="tselPage(this.checked)"'+(pageRows.length&&pageRows.every(r=>TBL.sel[r.id])?' checked':'')+'></th>'):'';
+  TBL.fltIds=TBL.selectable?rows.map(r=>r.id).filter(x=>x!=null):[];
+  TBL.pageIds=TBL.selectable?pageRows.map(r=>r.id):[];
+  const pageAll=pageRows.length&&pageRows.every(r=>TBL.sel[r.id]);
+  const pageSome=pageRows.some(r=>TBL.sel[r.id]);
+  const selTh=TBL.selectable?('<th class="selh"><input type="checkbox" id="selAllCb" aria-label="Select all on this page" onclick="event.stopPropagation();tselPage(this.checked)"'+(pageAll?' checked':'')+'></th>'):'';
   const th=selTh+TBL.cols.map(c=>'<th class="'+(c.align==='right'?'num':'')+(c.sortable!==false?' srt':'')+(TBL.sort===c.key?' sorted':'')+'"'+(c.sortable!==false?' onclick="sortBy(\''+c.key+'\')"':'')+'><span class="thc">'+esc(c.label)+arrow(c.key)+'</span></th>').join('');
-  const selTd=r=>TBL.selectable?('<td class="selc" onclick="event.stopPropagation()"><input type="checkbox"'+(TBL.sel[r.id]?' checked':'')+' onchange="tsel(\''+esc(String(r.id))+'\',this.checked)"></td>'):'';
-  const body = pageRows.length ? pageRows.map(r=>'<tr'+(r.link?' onclick="openLink(\''+esc(r.link)+'\')"':'')+'>'+selTd(r)+TBL.cols.map(c=>cellHtml(r[c.key],c)).join('')+'</tr>').join('')
+  const selTd=(r,i)=>TBL.selectable?('<td class="selc" onclick="event.stopPropagation()"><input type="checkbox" aria-label="Select row"'+(TBL.sel[r.id]?' checked':'')+' onclick="tselClick(event,\''+esc(String(r.id))+'\','+i+')"></td>'):'';
+  const body = pageRows.length ? pageRows.map((r,i)=>'<tr'+(TBL.selectable&&TBL.sel[r.id]?' class="sel"':'')+(r.link?' onclick="openLink(\''+esc(r.link)+'\')"':'')+'>'+selTd(r,i)+TBL.cols.map(c=>cellHtml(r[c.key],c)).join('')+'</tr>').join('')
     : '<tr><td colspan="'+(TBL.cols.length+(TBL.selectable?1:0))+'"><div class="empty" style="padding:40px">'+icon('worklist','ic-lg')+'<div style="margin-top:8px">No matching records</div></div></td></tr>';
   const nsel=Object.keys(TBL.sel).length;
-  const bulkBar = (TBL.selectable&&nsel)?('<div class="selbar"><b>'+nsel+' selected</b>'+
-    TBL.bulk.map((b,i)=>'<button class="btn'+(b.tone==='primary'?' pri':'')+'" onclick="tselRun('+i+')">'+esc(b.label)+'</button>').join('')+
-    '<button class="btn" onclick="tselClear()">Clear</button></div>'):'';
-  document.getElementById('tbl').innerHTML=bulkBar+'<table class="dt"><thead><tr>'+th+'</tr></thead><tbody>'+body+'</tbody></table>';
+  let bulkBar='';
+  if(TBL.selectable&&nsel){
+    const byId={}; TBL.rows.forEach(r=>{ if(r.id!=null) byId[r.id]=r; });
+    let sums='';
+    (TBL.totals||[]).forEach(t=>{ if(!t.money) return;
+      let s=0; Object.keys(TBL.sel).forEach(id=>{ const r=byId[id]; if(r) s+=Number(cellSort(r[t.key]))||0; });
+      if(s>0) sums+='<span class="selsum">'+esc(t.label)+': <b>'+esc(curFmt(s,TBL.cur))+'</b></span>'; });
+    const canAll=TBL.fltIds.length>nsel;
+    bulkBar='<div class="selbar"><span class="selcount"><b>'+nsel+'</b> selected'
+      +(canAll?' <a href="javascript:void(0)" onclick="tselAllMatching()">select all '+fmtCount(TBL.fltIds.length)+'</a>':'')
+      +'</span>'+sums
+      +TBL.bulk.map((b,i)=>'<button class="btn'+(b.tone==='primary'?' pri':'')+'" onclick="tselRun('+i+',this)">'+esc(b.label)+' ('+nsel+')</button>').join('')
+      +'<button class="btn ghost" onclick="tselClear()" title="Esc also clears">Clear</button></div>';
+  }
+  document.getElementById('tbl').innerHTML='<table class="dt"><thead><tr>'+th+'</tr></thead><tbody>'+body+'</tbody></table>'+bulkBar;
+  if(TBL.selectable){ const hc=document.getElementById('selAllCb'); if(hc) hc.indeterminate=(!pageAll&&pageSome); }
   const ti=document.getElementById('tinfo'); if(ti) ti.textContent=fmtCount(filtered)+(filtered!==TBL.rows.length?' of '+fmtCount(TBL.rows.length):'');
   const pg=document.getElementById('pager');
   if(pg){ if(filtered>ps){ const a=start+1, b=Math.min(start+ps,filtered);
@@ -1772,21 +1798,33 @@ function renderTable(){
         '<button onclick="TBL.page++;renderTable()"'+(TBL.page>=pages?' disabled':'')+'>Next</button>';
     } else { pg.innerHTML=''; } }
 }
-/* UCRM-style bulk selection (2026-07-18): any table opts {selectable:true, bulk:[...]}. */
-function tsel(id,on){ if(on)TBL.sel[id]=1; else delete TBL.sel[id]; renderTable(); }
-function tselPage(on){ /* select/clear every row visible on the current page */
-  document.querySelectorAll('#tbl tbody .selc input').forEach(cb=>{
-    const m=cb.getAttribute('onchange').match(/tsel\('(.+?)'/); if(!m) return;
-    if(on)TBL.sel[m[1]]=1; else delete TBL.sel[m[1]]; });
-  renderTable(); }
-function tselClear(){ TBL.sel={}; renderTable(); }
-function tselRun(i){ const b=TBL.bulk[i]; if(!b) return; const ids=Object.keys(TBL.sel);
+/* UCRM-style bulk selection (2026-07-18, UX-studied v2): shift-range, select-all-matching,
+   selection money totals, busy states, Esc-to-clear, indeterminate header. */
+function tselClick(ev,id,idx){ ev.stopPropagation();
+  const on=!TBL.sel[id];
+  if(ev.shiftKey && TBL.lastIdx!=null && Array.isArray(TBL.pageIds)){
+    const a=Math.min(TBL.lastIdx,idx), b=Math.max(TBL.lastIdx,idx);
+    for(let k=a;k<=b;k++){ const rid=TBL.pageIds[k]; if(rid==null) continue;
+      if(on)TBL.sel[rid]=1; else delete TBL.sel[rid]; }
+  } else { if(on)TBL.sel[id]=1; else delete TBL.sel[id]; }
+  TBL.lastIdx=idx; renderTable(); }
+function tselPage(on){ (TBL.pageIds||[]).forEach(rid=>{ if(rid==null) return;
+    if(on)TBL.sel[rid]=1; else delete TBL.sel[rid]; });
+  TBL.lastIdx=null; renderTable(); }
+function tselAllMatching(){ (TBL.fltIds||[]).forEach(rid=>{ if(rid!=null)TBL.sel[rid]=1; }); renderTable(); }
+function tselClear(){ TBL.sel={}; TBL.lastIdx=null; renderTable(); }
+function tselRun(i,btn){ const b=TBL.bulk[i]; if(!b) return; const ids=Object.keys(TBL.sel);
   if(!ids.length){ toast('Select some rows first', true); return; }
   if(b.confirm && !window.confirm(b.confirm.replace('{n}', ids.length))) return;
   if((b.method||'GET')==='GET'){ window.open(b.endpoint+(b.endpoint.includes('?')?'&':'?')+'ids='+ids.join(','), '_blank'); return; }
-  (async()=>{ const res=await post(b.endpoint,{ids:ids.map(Number)});
-    toast(res&&res.ok?(res.message||'Done'):((res&&res.error)||'Failed'), !(res&&res.ok));
-    if(res&&res.ok){ TBL.sel={}; refresh(); } })(); }
+  (async()=>{ let old='';
+    if(btn){ old=btn.textContent; btn.disabled=true; btn.textContent=old.replace(/\s*\(\d+\)$/,'')+'…'; }
+    try{ const res=await post(b.endpoint,{ids:ids.map(Number)});
+      toast(res&&res.ok?(res.message||'Done'):((res&&res.error)||'Failed'), !(res&&res.ok));
+      if(res&&res.ok){ TBL.sel={}; TBL.lastIdx=null; refresh(); return; }
+    } finally { if(btn){ btn.disabled=false; btn.textContent=old; } } })(); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && TBL && TBL.selectable && Object.keys(TBL.sel||{}).length
+  && !document.querySelector('.mwrap,.modal,[data-modal-open]')){ tselClear(); } });
 function cellHtml(c,col){
   const align=col.align==='right'?' num':'';
   if(col.type==='avatar'){ const nm=cellVal(c), sub=(c&&c.sub)||'', img=(c&&c.image)||'';
