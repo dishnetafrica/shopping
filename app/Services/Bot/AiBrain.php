@@ -444,22 +444,6 @@ class AiBrain
             ->filter(fn ($m) => $m['url'] !== '')->values()->all();
         if (! $files) return false; // nothing to send → never activates for tenants without a catalogue
 
-        return $this->deliverPriceList($tenant, $from, $gateway, false, $text);
-    }
-
-    /**
-     * The actual delivery (2026-07-18): callable by the intent path AND by the AI's own
-     * <<SEND>> promise block. force=true = an explicit promise MUST be honoured — skip
-     * the intent gate, the recent-send suppression and the count heuristic.
-     */
-    private function deliverPriceList(Tenant $tenant, string $from, WhatsAppGateway $gateway, bool $force = false, string $text = ''): bool
-    {
-        $svc = app(\App\Services\Bot\PriceListService::class);
-        if (! method_exists($gateway, 'sendDocument')) return false;
-        $plKey = "pricelist_sent:{$tenant->id}:{$from}";
-        if (! $force && Cache::get($plKey)) return false;
-
-        if (! $force) {
         $t = mb_strtolower($text);
         $triggers = [
             // English — brochure / photos / product list (NOT prices; price-list step owns those)
@@ -482,7 +466,6 @@ class AiBrain
         $asks = false;
         foreach ($triggers as $w) if (str_contains($t, $w)) { $asks = true; break; }
         if (! $asks) return false;
-        }
 
         foreach ($files as $f) {
             $isPdf = (bool) preg_match('/\.pdf(\?|$)/i', $f['url']);
@@ -519,8 +502,7 @@ class AiBrain
      * saved so it appears under Quotations in v3 for staff to convert), instead of creating a sales
      * order. Reuses the same OrderCalculator-priced $quote and the QuotationService the AI bot already
      * uses for price requests — no new quoting logic. Best-effort send; the quotation is always saved.
-     */
-    private function captureOrderAsQuote(Tenant $tenant, Conversation $convo, string $from, array $quote, string $itemsText, string $delivery, string $clean): string
+     */    private function captureOrderAsQuote(Tenant $tenant, Conversation $convo, string $from, array $quote, string $itemsText, string $delivery, string $clean): string
     {
         $svc = app(\App\Services\Bot\QuotationService::class);
         $cur = (string) ($quote['currency'] ?? $tenant->setting('currency', 'UGX'));
