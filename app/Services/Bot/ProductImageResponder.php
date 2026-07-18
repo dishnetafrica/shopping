@@ -247,13 +247,13 @@ class ProductImageResponder
         $header = $this->cleanName($p);
 
         if ($short) {
-            $price = (float) ($p->base_price ?? $p->price ?? 0);
+            $price = (float) ($p->price ?? $p->base_price ?? 0);   // price-drift fix: captions quote the PANEL price
             return $price > 0 ? $header . ' — ' . $cur . ' ' . number_format($price) : $header;
         }
 
         $sizes = $this->variantLines($p);
         if (! $sizes) {
-            $price = (float) ($p->base_price ?? $p->price ?? 0);
+            $price = (float) ($p->price ?? $p->base_price ?? 0);   // price-drift fix: captions quote the PANEL price
             return $price > 0 ? $header . ' — ' . $cur . ' ' . number_format($price) : $header;
         }
 

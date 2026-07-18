@@ -135,7 +135,7 @@ class ComboEngine
             if (count($out) >= $limit) break;
             $p = $byId->get($id);
             if (! $p) continue;
-            $out[$id] = ['id' => (int) $p->id, 'name' => (string) $p->name, 'price' => (float) ($p->base_price ?? $p->price ?? 0)];
+            $out[$id] = ['id' => (int) $p->id, 'name' => (string) $p->name, 'price' => (float) ($p->price ?? $p->base_price ?? 0)];   // price-drift fix
         }
         return $out;
     }

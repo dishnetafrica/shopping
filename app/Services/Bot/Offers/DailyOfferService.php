@@ -96,7 +96,7 @@ class DailyOfferService
         if ($fresh->isNotEmpty()) {
             $lines = ['🔥 *Fresh today:*'];
             foreach ($fresh as $p) {
-                $price = (float) ($p->base_price ?? $p->price ?? 0);
+                $price = (float) ($p->price ?? $p->base_price ?? 0);   // price-drift fix
                 $lines[] = '• ' . $p->name . ($price > 0 ? ' — ' . $cur . ' ' . number_format($price) : '');
             }
             $lines[] = 'Reply with a name to add it.';

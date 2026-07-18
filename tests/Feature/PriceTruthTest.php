@@ -59,5 +59,15 @@ class PriceTruthTest extends TestCase
         $bot = file_get_contents(app_path('Services/Bot/OrderCalculator.php'));
         $this->assertStringContainsString('$p->price ?? $p->base_price', $bot,
             'the bot must charge the panel price');
+        foreach (['Services/Bot/ProductImageResponder.php', 'Services/Bot/ComboEngine.php',
+                  'Services/Bot/Offers/DailyOfferService.php'] as $f) {
+            $src = file_get_contents(app_path($f));
+            $this->assertStringNotContainsString('$p->base_price ?? $p->price', $src,
+                $f.' must never prefer the stale base_price (photo captions / combos / offers)');
+        }
+        foreach (['Services/Bot/PriceListService.php', 'Services/Catalog/CatalogRenderer.php'] as $f) {
+            $this->assertStringNotContainsString('base_price ??', file_get_contents(app_path($f)),
+                $f.' — both price LISTS stay on the panel price');
+        }
     }
 }
