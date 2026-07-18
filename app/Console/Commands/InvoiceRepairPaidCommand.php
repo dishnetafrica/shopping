@@ -35,44 +35,60 @@ class InvoiceRepairPaidCommand extends Command
             ->orderBy('id')->get();
         $changed = 0;
 
+        $fx = \App\Services\Money\Fx::forTenant($t);
         foreach ($invoices as $inv) {
-            $before = [round((float) $inv->amount_paid, 2), round((float) $inv->balance, 2), (string) $inv->status];
+            $before = [round((float) $inv->total, 2), round((float) $inv->amount_paid, 2),
+                       round((float) $inv->balance, 2), (string) $inv->status, (string) $inv->currency];
 
-            if ($dry) {
-                // simulate on a clone so nothing persists
-                $sim = $inv->replicate(['pdf_path']);
-                $sim->id = $inv->id;
-                $sim->exists = true;
-                $sim->invoice_no = $inv->invoice_no;
-                try {
-                    \Illuminate\Support\Facades\DB::beginTransaction();
-                    $svc->syncPaidFromPayments($inv);
-                    $after = [round((float) $inv->amount_paid, 2), round((float) $inv->balance, 2), (string) $inv->status];
-                    \Illuminate\Support\Facades\DB::rollBack();
-                    $inv->refresh();
-                } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\DB::rollBack();
-                    $this->warn("  {$inv->invoice_no}: simulate failed — ".$e->getMessage());
-                    continue;
-                }
-            } else {
-                try {
-                    $svc->syncPaidFromPayments($inv);
-                } catch (\Throwable $e) {
-                    $this->warn("  {$inv->invoice_no}: failed — ".$e->getMessage());
-                    continue;
-                }
-                $inv->refresh();
-                $after = [round((float) $inv->amount_paid, 2), round((float) $inv->balance, 2), (string) $inv->status];
+            // STEP 1 — normalise the MONEY SIDE of the invoice into its TRUE transaction
+            // currency. The issuer stamps the tenant base (USD) even on UGX deals, so a
+            // 1,315,800-UGX invoice can sit with total=360 in USD units. Convert
+            // subtotal/discount/freight/total tag→txn via the same USD bridge as payments,
+            // and stamp the honest currency (original tag kept in meta).
+            $txn = \App\Services\Money\SalesBaseCurrency::txnCurrency($inv, $t);
+            $tag = strtoupper((string) $inv->currency ?: $txn);
+            if ($txn !== '' && $tag !== $txn) {
+                $conv = function ($v) use ($fx, $tag, $txn) {
+                    $usd = $tag === 'USD' ? (float) $v : ((float) $v / max(0.0001, $fx->ratePerUsd($tag)));
+                    return round($txn === 'USD' ? $usd : $usd * $fx->ratePerUsd($txn), 2);
+                };
+                $meta = (array) ($inv->meta ?? []);
+                $meta['currency_tag_original'] = $tag;
+                $meta['currency_repaired_at'] = now()->toDateTimeString();
+                $inv->meta = $meta;
+                $inv->subtotal = $conv($inv->subtotal);
+                $inv->discount = $conv($inv->discount);
+                $inv->freight  = $conv($inv->freight);
+                $inv->total    = $conv($inv->total);
+                $inv->currency = $txn;
             }
+
+
+            // STEP 2 — recompute paid/balance/status from the payment ledger (the proven
+            // FX-correct sync). In --dry everything (incl. step 1) rolls back.
+            try {
+                \Illuminate\Support\Facades\DB::beginTransaction();
+                $svc->syncPaidFromPayments($inv);
+                $after = [round((float) $inv->total, 2), round((float) $inv->amount_paid, 2),
+                          round((float) $inv->balance, 2), (string) $inv->status, (string) $inv->currency];
+                if ($dry) { \Illuminate\Support\Facades\DB::rollBack(); } else { \Illuminate\Support\Facades\DB::commit(); }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\DB::rollBack();
+                $this->warn("  {$inv->invoice_no}: failed — ".$e->getMessage());
+                $inv->refresh();
+                continue;
+            }
+            if ($dry) $inv->refresh();
 
             if ($before !== $after) {
                 $changed++;
-                $this->line(sprintf('  %-14s %-10s paid %14s → %-14s balance %12s → %-12s status %s → %s',
-                    $inv->invoice_no, (string) $inv->customer_name,
+                $this->line(sprintf('  %-14s %-16s %s→%s  total %14s → %-14s paid %14s → %-14s balance %10s → %-10s %s→%s',
+                    $inv->invoice_no, mb_substr((string) $inv->customer_name, 0, 16),
+                    $before[4], $after[4],
                     number_format($before[0], 2), number_format($after[0], 2),
                     number_format($before[1], 2), number_format($after[1], 2),
-                    $before[2], $after[2]));
+                    number_format($before[2], 2), number_format($after[2], 2),
+                    $before[3], $after[3]));
             }
         }
 
