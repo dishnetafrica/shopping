@@ -370,7 +370,14 @@ class AiBrain
         foreach ($triggers as $w) if (str_contains($t, $w)) { $asks = true; break; }
         if (! $asks) return false;
 
-        $doc = $svc->generate($tenant);
+        // Photo-first (2026-07-18): when a customer asks for prices, send the branded
+        // PHOTO catalogue (photos + prices, one category per page). `price_list_style`
+        // setting: photos (default) | text. Text renderer remains the fallback.
+        $doc = null;
+        if ((string) $tenant->setting('price_list_style', 'photos') === 'photos') {
+            $doc = app(\App\Services\Catalog\CatalogRenderer::class)->forTenant($tenant);
+        }
+        if (! $doc) $doc = $svc->generate($tenant);
         if (! $doc) return false; // no priced products → let the catalogue path handle it
 
         $caption = (string) ($tenant->setting('price_list_caption', '')

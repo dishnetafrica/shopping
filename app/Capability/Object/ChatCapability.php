@@ -157,6 +157,11 @@ final class ChatCapability implements ObjectCapability
                 'schema' => ['file' => 'file:.pdf,.doc,.docx,.xls,.xlsx,.csv', 'filename' => 'text', 'caption' => 'text'],
                 'labels' => ['file' => 'Document (PDF, Word, Excel…)', 'filename' => 'File name shown to the customer', 'caption' => 'Caption (optional)'],
                 'body'   => ['phone' => $phone]];
+            $actions[] = ['key' => 'send_catalogue', 'label' => 'Send photo catalogue (PDF)', 'method' => 'POST',
+                'endpoint' => '/papi/chats/send-catalogue', 'actor' => 'human', 'submitLabel' => 'Send',
+                'schema' => ['caption' => 'text'],
+                'labels' => ['caption' => 'Caption (optional)'],
+                'body'   => ['phone' => $phone]];
             $actions[] = ['key' => 'send_location', 'label' => 'Send a location', 'submitLabel' => 'Send', 'method' => 'POST',
                 'endpoint' => '/papi/chats/send-location', 'actor' => 'human',
                 'schema' => ['lat' => 'number', 'lng' => 'number', 'name' => 'text', 'address' => 'text'],

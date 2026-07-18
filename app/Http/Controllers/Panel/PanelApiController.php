@@ -3374,6 +3374,40 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true, 'translation' => $ar]);
     }
 
+    /** Send the branded photo catalogue (photos + prices) to a customer, on demand. */
+    public function chatSendCatalogue(Request $r, WhatsAppManager $wa)
+    {
+        $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));
+        if ($phone === '') return response()->json(['ok' => false, 'error' => 'empty'], 422);
+
+        $t = $r->user()->tenant;
+        $doc = app(\App\Services\Catalog\CatalogRenderer::class)->forTenant($t);
+        if (! $doc) return response()->json(['ok' => false, 'error' => 'catalogue_unavailable'], 422);
+
+        $cap = trim((string) $r->input('caption', ''))
+            ?: 'Our full catalogue with photos and prices 📸 Tell me what you need and I will arrange it.';
+
+        $c = Conversation::firstOrCreate(
+            ['customer_phone' => $phone, 'instance' => $t->whatsapp_instance],
+            ['tenant_id' => $t->id, 'state' => [], 'cart' => []]
+        );
+        $c->agent_active = true;
+        $c->save();
+
+        $gw = $wa->forTenant($t);
+        if (! method_exists($gw, 'sendDocument')) return response()->json(['ok' => false, 'error' => 'unsupported'], 422);
+        try {
+            $gw->sendDocument($t->whatsapp_instance, $phone, $doc['b64'], $doc['fileName'], $cap);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => 'send_failed'], 502);
+        }
+
+        \App\Support\MessageLog::record($t->id, $phone, $t->whatsapp_instance, 'out', 'agent',
+            '📸 '.$doc['fileName'].' — '.$cap);
+
+        return response()->json(['ok' => true, 'message' => 'Catalogue sent']);
+    }
+
     /** WhatsApp-Web mode: send a location pin (your position, or the shop's). */
     public function chatSendLocation(Request $r, WhatsAppManager $wa)
     {

@@ -58,6 +58,64 @@ final class CatalogRenderer
         return ['path' => $path, 'url' => $this->url($path), 'b64' => base64_encode($pdf), 'fileName' => $fileName];
     }
 
+    /**
+     * The whole-shop photo catalogue for a tenant, ready for WhatsApp sendDocument.
+     * Groups active products by category (same shape the V3 doc endpoint builds),
+     * renders once, then serves from a 6h cache (meta cached, bytes re-read from
+     * storage) — first ask pays the render, everyone after gets it instantly.
+     */
+    public function forTenant(Tenant $tenant, bool $withPrices = true): ?array
+    {
+        try {
+            $key = 'catalog_pdf:'.$tenant->id.':'.($withPrices ? 'p' : 'np');
+            $meta = \Illuminate\Support\Facades\Cache::get($key);
+            if (is_array($meta) && ! empty($meta['path'])) {
+                try {
+                    $bytes = Storage::disk('public')->get($meta['path']);
+                    if ($bytes !== null && $bytes !== '') {
+                        return ['path' => $meta['path'], 'url' => $this->url($meta['path']),
+                                'b64' => base64_encode($bytes), 'fileName' => $meta['fileName']];
+                    }
+                } catch (\Throwable $e) {
+                }
+            }
+
+            $products = \App\Models\Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)->where('active', true)->where('price', '>', 0)
+                ->orderBy('category')->orderBy('name')->get();
+            if ($products->isEmpty()) return null;
+
+            $cur = (string) ($tenant->setting('currency', 'UGX') ?: 'UGX');
+            $grouped = [];
+            foreach ($products as $p) {
+                $cat = trim((string) $p->category) ?: 'Uncategorised';
+                $grouped[$cat][] = [
+                    'name' => (string) $p->name,
+                    'unit' => (string) ($p->unit_label ?: ''),
+                    'moq' => $p->moq ? (int) $p->moq : null,
+                    'price' => (float) $p->price,
+                    'sku' => (string) ($p->sku ?: ''),
+                    'image' => (string) ($p->image_url ?: ''),
+                ];
+            }
+            ksort($grouped, SORT_NATURAL | SORT_FLAG_CASE);
+            $groups = [];
+            foreach ($grouped as $cat => $items) $groups[] = ['category' => $cat, 'items' => $items];
+
+            $doc = $this->pdf($tenant, $groups, $cur, $withPrices);
+            if ($doc) {
+                \Illuminate\Support\Facades\Cache::put($key,
+                    ['path' => $doc['path'], 'fileName' => $doc['fileName']], now()->addHours(6));
+            }
+
+            return $doc;
+        } catch (\Throwable $e) {
+            \Log::warning('CatalogRenderer::forTenant failed: '.$e->getMessage());
+
+            return null;
+        }
+    }
+
     private function url(string $path): string
     {
         try { return Storage::disk('public')->url($path); } catch (\Throwable $e) { return ''; }

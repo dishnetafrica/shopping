@@ -392,6 +392,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::post('chats/send-media',  [PanelApiController::class, 'chatSendMedia']);
         Route::post('chats/send-document', [PanelApiController::class, 'chatSendDocument']);
         Route::post('chats/send-location', [PanelApiController::class, 'chatSendLocation']);
+        Route::post('chats/send-catalogue', [PanelApiController::class, 'chatSendCatalogue']);
         Route::post('chats/translate',      [PanelApiController::class, 'chatTranslate']);
         Route::post('chats/translate-out',  [PanelApiController::class, 'chatTranslateOut']);
         Route::post('followups/{id}/approve', [PanelApiController::class, 'followupApprove']);

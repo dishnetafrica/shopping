@@ -184,7 +184,9 @@ class SalesCadenceCommand extends Command
                 )->forceFill(['last_contacted_at' => now()])->save();   // V4.1 global touch cap sees cadence too
             }
             if (! empty($touch['sendPriceList'])) {
-                $doc = app(PriceListService::class)->available() ? app(PriceListService::class)->generate($t) : null;
+                $doc = ((string) $t->setting('price_list_style', 'photos') === 'photos')
+                    ? app(\App\Services\Catalog\CatalogRenderer::class)->forTenant($t) : null;
+                if (! $doc) $doc = app(PriceListService::class)->available() ? app(PriceListService::class)->generate($t) : null;
                 if ($doc && ! empty($doc['b64']) && method_exists($g, 'sendDocument')) {
                     $g->sendDocument($t->whatsapp_instance, $phone, $doc['b64'], $doc['fileName'] ?? 'Price-List.pdf', 'Our latest price list 📄');
                 } else {
