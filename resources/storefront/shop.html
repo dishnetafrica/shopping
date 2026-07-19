@@ -2348,7 +2348,8 @@ function openCompare(){
   if(!items.length)return;
   $('sheetTitle').textContent='Compare';
   var cols=items.map(function(p){
-    var pp=(p.packSize&&p.packSize>=2)?('<div class="cmprow">≈ '+ugx(Math.round(p.price/p.packSize))+' / pc</div>'):'';
+    var _ppv=(p.packSize&&p.packSize>=2)?(p.price/p.packSize):0;
+    var pp=(_ppv>=0.05)?('<div class="cmprow">≈ '+ugx(Math.round(_ppv*100)/100)+' / pc</div>'):'';   // sub-cent per-pc reads as $0.00 = broken; hide it (2026-07-19)
     var pack=(p.packSize)?('<div class="cmprow">'+(WMODE?('Carton of '+p.packSize):('Pack · '+p.packSize+' pcs'))+'</div>'):'';
     var stk=(p.stock!=null)?('<div class="cmprow">'+(p.stock<=0?'Out of stock':(p.stock<=5?('Only '+p.stock+' left'):'In stock'))+'</div>'):'';
     var add=oosOf(p)?'<button class="add" disabled>Out of stock</button>':('<button class="add" onclick="cartAdd('+jk(p.name)+')">Add</button>');
@@ -2424,7 +2425,7 @@ function specChipsFor(p){
 }
 /* wholesale unit helpers — render nothing unless the product opts in */
 function packLine(p){ if(!p.unit && !p.packSize) return ''; if(WMODE && p.packSize){ return '<div class="packlbl">Carton of '+p.packSize+(p.unit?(' '+esc(p.unit)):' pcs')+'</div>'; } var t=p.unit?cap(p.unit):'Pack'; if(p.packSize)t+=' · '+p.packSize+' pcs'; return '<div class="packlbl">'+esc(t)+'</div>'; }
-function perPiece(p){ if(!p.packSize||p.packSize<2) return ''; return '<div class="unit">\u2248 '+ugx(Math.round(p.price/p.packSize))+' / pc</div>'; }
+function perPiece(p){ if(!p.packSize||p.packSize<2) return ''; var v=p.price/p.packSize; if(v<0.05) return ''; return '<div class="unit">\u2248 '+ugx(Math.round(v*100)/100)+' / pc</div>'; }
 function moqLine(p){ var m=minq(p); if(m<=1) return ''; return '<div class="moqlbl">Min order: '+m+' '+esc(p.unit?(m>1?plur(p.unit):p.unit):'units')+'</div>'; }
 function cap(s){return s?s.charAt(0).toUpperCase()+s.slice(1):s;}
 function plur(s){return /s$/i.test(s)?s:s+'s';}
