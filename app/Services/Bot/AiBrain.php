@@ -1015,6 +1015,15 @@ class AiBrain
         $persona = (string) $tenant->setting('ai_persona', '');
         if ($persona === '' && $isMfr) $persona = BrandDefaults::persona((string) $tenant->name);
         $know = (string) $tenant->setting('brand_knowledge', '');
+        // Strip placeholder lines that would leak template scaffolding to customers.
+        // Any line containing [FILL IN or [TODO is removed; header warns of this behaviour.
+        if ($know !== '' && (str_contains($know, '[FILL IN') || str_contains($know, '[TODO'))) {
+            $lines = preg_split('/\r?\n/', $know);
+            $kept  = array_filter($lines, fn ($ln) => ! str_contains($ln, '[FILL IN') && ! str_contains($ln, '[TODO'));
+            $stripped = count($lines) - count($kept);
+            $know = trim(implode("\n", $kept));
+            \App\Support\BotTrace::log($tenant->id, 'prompt', null, 'brand_knowledge_stripped', (string) $stripped.' line(s)');
+        }
         // Learned glossary (2026-07-18): DATA, not instructions — what customers call things.
         $lex = (array) $tenant->setting('shop_lexicon', []);
         $lexTxt = collect($lex)->map(fn ($e) => '"'.($e['term'] ?? '').'" = '.($e['means'] ?? ''))->filter()->implode("\n");

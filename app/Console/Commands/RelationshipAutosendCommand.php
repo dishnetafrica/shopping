@@ -65,8 +65,14 @@ class RelationshipAutosendCommand extends Command
                 ->orderByRaw("case confidence when 'high' then 0 when 'medium' then 1 else 2 end")
                 ->orderBy('id')->get();
 
-            $sent = 0; $held = ['confidence' => 0, 'human_active' => 0, 'fresh_chat' => 0, 'over_cap' => 0];
+            $owners = array_map(fn($n) => preg_replace('/[^0-9]/', '', (string) $n), $t->ownerAlertNumbers());
+            $sent = 0; $held = ['confidence' => 0, 'human_active' => 0, 'fresh_chat' => 0, 'over_cap' => 0, 'owner_number' => 0];
             foreach ($open as $i => $p) {
+                if (in_array(preg_replace('/[^0-9]/', '', (string) $p->customer_phone), $owners, true)) {
+                    $held['owner_number']++;
+                    BotTrace::log($t->id, 'autosend', $p->customer_phone, 'held_owner_number', $p->trigger);
+                    continue;
+                }
                 if (! in_array((string) $p->confidence, $allowed, true)) { $held['confidence']++; continue; }
                 if ($sentToday + $sent >= $cap) { $held['over_cap']++; continue; }
 
@@ -109,6 +115,7 @@ class RelationshipAutosendCommand extends Command
                 $held['human_active'] ? $held['human_active'].' human-active' : '',
                 $held['fresh_chat'] ? $held['fresh_chat'].' fresh-chat' : '',
                 $held['over_cap'] ? $held['over_cap'].' over cap' : '',
+                $held['owner_number'] ? $held['owner_number'].' owner-number' : '',
             ]));
             $summary = "\u{1F916} Auto-sent {$sent} follow-up(s)".($heldTxt !== '' ? " · held for you: {$heldTxt} (see AI Follow-ups)" : '');
             $this->info("{$t->name}: {$summary}");
