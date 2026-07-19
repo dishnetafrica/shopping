@@ -823,7 +823,10 @@ class StorefrontController extends Controller
         $name = e((string) $tenant->name);
         $addr = e((string) $tenant->setting('shop_address', ''));
         $site = (string) $tenant->setting('website', '');
-        $wa = preg_replace('/[^0-9]/', '', (string) optional(\App\Models\WhatsappChannel::where('tenant_id', $tenant->id)->where('is_primary', true)->first())->number);
+        $waCh = \App\Models\WhatsappChannel::where('tenant_id', $tenant->id)
+            ->orderByRaw('case when instance = ? then 0 when is_primary then 1 else 2 end', [(string) $tenant->whatsapp_instance])
+            ->first();
+        $wa = preg_replace('/[^0-9]/', '', (string) optional($waCh)->number);
         $b = $base ?: '';
 
         $catLinks = '';
@@ -870,7 +873,7 @@ class StorefrontController extends Controller
             .'#sfoot a{color:#374151;text-decoration:none;transition:color .15s}#sfoot a:hover{color:var(--green-d,#0b7a3b)}'
             .'#sfoot em{color:#9ca3af;font-style:normal;font-size:12px}'
             .'#sfoot .brandline{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;border-top:1px solid var(--line,#eef0f3);padding-top:22px;color:#6b7280;font-size:13px}'
-            .'#sfoot .trust li{color:#0b7a3b;font-weight:500}'
+            .'#sfoot .sftrust{background:transparent!important;color:inherit!important;padding:0!important}#sfoot .sftrust li{color:#0b7a3b;font-weight:500;background:transparent}'
             .'@media (prefers-color-scheme:dark){#sfoot{background:#111827;border-color:#1f2937;color:#d1d5db}#sfoot a{color:#d1d5db}#sfoot h4{color:#9ca3af}#sfoot .brandline{border-color:#1f2937;color:#9ca3af}}'
             .'</style>';
 
@@ -879,7 +882,7 @@ class StorefrontController extends Controller
             .'<section><h4>Shop by category</h4><nav><ul>'.$catLinks.'</ul></nav></section>'
             .($indLinks !== '' ? '<section><h4>Shop by industry</h4><nav><ul>'.$indLinks.'</ul></nav></section>' : '')
             .'<section><h4>'.$name.'</h4><ul>'.$company.'</ul></section>'
-            .'<section class="trust"><h4>Why shop with us</h4><ul>'.$trust.'</ul></section>'
+            .'<section class="sftrust"><h4>Why shop with us</h4><ul>'.$trust.'</ul></section>'
             .'<div class="brandline"><span>&copy; '.date('Y').' '.$name.' &middot; Wholesale &amp; retail, Kampala &rarr; Juba</span>'
             .'<span>Order anytime on WhatsApp &middot; team confirms every delivery</span></div>'
             .'</div><script type="application/ld+json">'.$jsonLd.'</script></footer>';
