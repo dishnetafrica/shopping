@@ -27,7 +27,7 @@ class AutosendTest extends TestCase
         return FollowupProposal::create(['tenant_id' => $t->id, 'customer_phone' => $phone,
             'source' => 'goal_engine', 'trigger' => 'quote_chase', 'trigger_reason' => 'test',
             'evidence' => 'e', 'draft' => 'Hello from the plan', 'confidence' => $conf,
-            'expected_outcome' => 'x', 'status' => 'proposed']);
+            'expected_outcome' => 'x', 'status' => 'draft']);
     }
 
     public function test_flag_off_means_nothing_moves(): void
@@ -35,7 +35,7 @@ class AutosendTest extends TestCase
         $t = $this->tenant(false);
         $this->proposal($t, '211900000081');
         $this->artisan('relationship:autosend', ['--tenant' => $t->id, '--dry' => true])->assertExitCode(0);
-        $this->assertSame('proposed', FollowupProposal::first()->status);
+        $this->assertSame('draft', FollowupProposal::first()->status);
     }
 
     public function test_rails_hold_the_right_ones(): void

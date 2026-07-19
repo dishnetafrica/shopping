@@ -87,7 +87,7 @@ class BotDiagnosticsCapability implements ProcessCapability
             $rows[] = [
                 'id' => (int) $e->id,
                 'when' => ['value' => Carbon::parse($e->created_at)->format('d M H:i:s'), 'sort' => strtotime($e->created_at)],
-                'phone' => (string) $e->from_number,
+                'phone' => (string) $e->phone,
                 'stage' => ['value' => (string) $e->stage, 'badge' => $tone, 'sort' => (string) $e->stage],
                 'detail' => mb_substr((string) ($e->detail ?? ''), 0, 90),
             ];

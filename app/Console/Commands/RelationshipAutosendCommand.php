@@ -61,7 +61,7 @@ class RelationshipAutosendCommand extends Command
             $sentToday = FollowupProposal::where('tenant_id', $t->id)->where('status', 'sent')
                 ->where('updated_at', '>', now()->startOfDay())->count();
 
-            $open = FollowupProposal::where('tenant_id', $t->id)->where('status', 'proposed')
+            $open = FollowupProposal::where('tenant_id', $t->id)->where('status', 'draft')
                 ->orderByRaw("case confidence when 'high' then 0 when 'medium' then 1 else 2 end")
                 ->orderBy('id')->get();
 
