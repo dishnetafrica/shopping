@@ -156,9 +156,11 @@ class StorefrontController extends Controller
 
         // ---- Premium dynamic footer (2026-07-19): trust + navigation + SEO, server-rendered
         //      from the live catalogue. Only links that actually resolve are generated. ----
+        // Anchor on the div alone (2026-07-19): the identity injection above already
+        // rewrote footName "Shop" -> tenant name, so any anchor containing "Shop" is dead.
         $html = str_replace(
-            '<div id="footer"><span id="footName">Shop</span><br>',
-            $this->premiumFooter($tenant, $base).'<div id="footer" style="display:none"><span id="footName">Shop</span><br>',
+            '<div id="footer">',
+            $this->premiumFooter($tenant, $base).'<div id="footer" style="display:none">',
             $html
         );
 
