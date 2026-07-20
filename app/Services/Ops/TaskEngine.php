@@ -201,7 +201,10 @@ class TaskEngine
             elseif ($due->isSunday()) $due->addDay();
         }
 
-        $task = OrderTask::create([
+        // Base columns present since the table was created. Optional columns (priority,
+        // checklist, requires_upload) are set only if the migration that adds them has run
+        // on this database — keeps ad-hoc assignment working regardless of migration state.
+        $attrs = [
             'tenant_id'      => $tenant->id,
             'order_id'       => 0,               // ad-hoc: no order
             'seq'            => 0,
@@ -214,10 +217,13 @@ class TaskEngine
             'paused_minutes' => 0,
             'assigned_at'    => now(),
             'due_at'         => $due,
-            'requires_upload'=> false,
-            'checklist'      => [],
-            'priority'       => max(1, min(3, $priority)),
-        ]);
+        ];
+        $table = (new OrderTask)->getTable();
+        if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'requires_upload')) $attrs['requires_upload'] = false;
+        if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'checklist'))       $attrs['checklist']       = [];
+        if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'priority'))        $attrs['priority']        = max(1, min(3, $priority));
+
+        $task = OrderTask::create($attrs);
 
         $this->log($tenant, 0, $task->id, 'created', $by, null, 'adhoc',
             $task->title . ' assigned to ' . ($assignee->name ?: ('user ' . $assignee->id)));
