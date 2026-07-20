@@ -256,7 +256,9 @@ class TaskEngine
     {
         $nonce = trim($nonce);
         if ($nonce === '' || strlen($nonce) > 32) return null;
-        return OrderTask::where('link_nonce', $nonce)->first();
+        // Public route has no tenant context — bypass the global tenant scope so the
+        // nonce (itself the credential) resolves the task regardless of who's asking.
+        return OrderTask::withoutGlobalScopes()->where('link_nonce', $nonce)->first();
     }
 
     /** Accept a task via its public link (no login). Idempotent-ish. */
@@ -268,7 +270,7 @@ class TaskEngine
         $task->started_at = $task->started_at ?: now();
         $task->accepted_at = now();
         $task->save();
-        $tenant = Tenant::find($task->tenant_id);
+        $tenant = Tenant::withoutGlobalScopes()->find($task->tenant_id);
         if ($tenant) $this->log($tenant, $task->order_id, $task->id, 'accepted', null, null, $task->stage,
             $task->title . ' accepted via link');
         return ['ok' => true];
@@ -285,7 +287,7 @@ class TaskEngine
         $task->completed_at = now();
         if ($note) $task->note = mb_substr($note, 0, 500);
         $task->save();
-        $tenant = Tenant::find($task->tenant_id);
+        $tenant = Tenant::withoutGlobalScopes()->find($task->tenant_id);
         if ($tenant) $this->log($tenant, $task->order_id, $task->id, 'completed', null, $task->stage, null,
             $task->title . ' completed via link' . ($note ? ' — ' . $note : ''));
         return ['ok' => true];
@@ -296,7 +298,7 @@ class TaskEngine
     {
         $text = trim($text);
         if ($text === '') return ['ok' => false, 'error' => 'Empty comment.'];
-        $tenant = Tenant::find($task->tenant_id);
+        $tenant = Tenant::withoutGlobalScopes()->find($task->tenant_id);
         if ($tenant) $this->log($tenant, $task->order_id, $task->id, 'comment', null, null, null,
             mb_substr($text, 0, 500));
         return ['ok' => true];
