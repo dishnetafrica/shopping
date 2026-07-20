@@ -91,10 +91,10 @@ class V3TasksTest extends TestCase
         $nonce = OrderTask::find($res['task_id'])->link_nonce;
 
         // Show page (no auth)
-        $this->get('/t/' . $nonce)->assertStatus(200)->assertSee('Public task');
+        $this->get('/task/' . $nonce)->assertStatus(200)->assertSee('Public task');
 
         // Complete via link (no auth)
-        $this->postJson('/t/' . $nonce . '/complete', ['note' => 'done'])
+        $this->postJson('/task/' . $nonce . '/complete', ['note' => 'done'])
             ->assertStatus(200)->assertJson(['ok' => true]);
 
         $this->assertSame('completed', OrderTask::find($res['task_id'])->status);
@@ -102,7 +102,7 @@ class V3TasksTest extends TestCase
 
     public function test_unknown_nonce_is_404(): void
     {
-        $this->get('/t/doesnotexist123')->assertStatus(404);
+        $this->get('/task/doesnotexist123')->assertStatus(404);
     }
 
     public function test_nonce_a_cannot_touch_task_b(): void
@@ -113,7 +113,7 @@ class V3TasksTest extends TestCase
         $b = OrderTask::find(app(TaskEngine::class)->assignAdHoc($t,$savan,'Task B',null,2,$mgr)['task_id']);
 
         // Completing via A's nonce must only affect A.
-        $this->postJson('/t/' . $a->link_nonce . '/complete', [])->assertJson(['ok'=>true]);
+        $this->postJson('/task/' . $a->link_nonce . '/complete', [])->assertJson(['ok'=>true]);
         $this->assertSame('completed', $a->fresh()->status);
         $this->assertNotSame('completed', $b->fresh()->status, 'task B untouched');
     }

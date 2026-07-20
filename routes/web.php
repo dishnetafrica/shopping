@@ -17,10 +17,10 @@ Route::get('/', [MarketingController::class, 'home']);
 // Public, no-login task links (tokenized nonce). Rate-limited to defeat nonce guessing.
 // The nonce authorizes only task-scoped actions on that one task — never account access.
 Route::middleware('throttle:30,1')->group(function () {
-    Route::get('/t/{nonce}', [\App\Http\Controllers\TaskLinkController::class, 'show']);
-    Route::post('/t/{nonce}/accept', [\App\Http\Controllers\TaskLinkController::class, 'accept']);
-    Route::post('/t/{nonce}/complete', [\App\Http\Controllers\TaskLinkController::class, 'complete']);
-    Route::post('/t/{nonce}/comment', [\App\Http\Controllers\TaskLinkController::class, 'comment']);
+    Route::get('/task/{nonce}', [\App\Http\Controllers\TaskLinkController::class, 'show']);
+    Route::post('/task/{nonce}/accept', [\App\Http\Controllers\TaskLinkController::class, 'accept']);
+    Route::post('/task/{nonce}/complete', [\App\Http\Controllers\TaskLinkController::class, 'complete']);
+    Route::post('/task/{nonce}/comment', [\App\Http\Controllers\TaskLinkController::class, 'comment']);
 });
 
 // Public customer order-tracking page (no auth — order id + secret token are the key).

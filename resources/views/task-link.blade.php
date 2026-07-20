@@ -58,7 +58,7 @@
   var TOKEN = document.querySelector('meta[name=csrf-token]').content;
   function flash(m, ok){ var f=document.getElementById('flash'); f.textContent=m; f.className='msg '+(ok?'ok':'err'); }
   async function post(path, body){
-    var r = await fetch('/t/'+NONCE+'/'+path, {
+    var r = await fetch('/task/'+NONCE+'/'+path, {
       method:'POST',
       headers:{'Content-Type':'application/json','X-CSRF-TOKEN':TOKEN,'Accept':'application/json'},
       body: JSON.stringify(body||{})

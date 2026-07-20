@@ -241,7 +241,7 @@ class TaskEngine
         if (! $assignee->phone || ! $tenant->whatsapp_instance) return;
         try {
             $due = $task->due_at ? $task->due_at->format('M j, H:i') : '';
-            $link = $task->link_nonce ? url('/t/' . $task->link_nonce) : '';
+            $link = $task->link_nonce ? url('/task/' . $task->link_nonce) : '';
             $msg = "📋 New task assigned to you:\n\n*" . $task->title . "*"
                 . ($due ? "\nDue: " . $due : "")
                 . ($link ? "\n\nOpen your task:\n" . $link : "\n\nOpen your task list to see details and mark it done when finished.");
