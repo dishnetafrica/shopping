@@ -29,6 +29,55 @@ final class TasksCapability implements ProcessCapability
         $t = $ctx->tenant; $u = $ctx->user;
         $canManage = $u->isOwnerLike() || $u->role === 'manager';
 
+        // Managers default to the "All Tasks" overview; staff see only their own.
+        if ($canManage) {
+            $all = $this->engine->allTasks($t, ['status' => 'active']);
+            $rows = $all->map(function (OrderTask $x) {
+                $due = $x->due_at ? $x->due_at->format('M j, H:i') : '—';
+                $status = $x->status === 'completed' ? '✅ Done'
+                    : ($x->status === 'in_progress' ? '🔵 In progress'
+                    : ($x->isOverdue() ? '🔴 Overdue' : '🟡 To do'));
+                $buttons = [];
+                if ($x->status !== 'in_progress' && $x->status !== 'completed') {
+                    $buttons[] = ['title' => 'Start', 'post' => '/api/v1/workspace/tasks/' . $x->id . '/start'];
+                }
+                if ($x->status !== 'completed') {
+                    $buttons[] = ['title' => 'Done', 'tone' => 'ok', 'post' => '/api/v1/workspace/tasks/' . $x->id . '/done'];
+                }
+                return ['id' => $x->id, 'cells' => [
+                    $x->title,
+                    $x->assignee_name ?? '',
+                    $due,
+                    ['value' => $status],
+                    ['buttons' => $buttons],
+                ]];
+            })->values()->all();
+            $cols = [['label' => 'Task'], ['label' => 'Assignee'], ['label' => 'Due'], ['label' => 'Status'], ['label' => '']];
+
+            $staffOpts = User::where('tenant_id', $t->id)->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn ($x) => '#' . $x->id . ' ' . ($x->name ?: ('User ' . $x->id)))
+                ->all();
+
+            return (new WorkspacePayload)
+                ->object(['type' => 'process:tasks', 'title' => 'Tasks', 'subtitle' => 'All team tasks — assign, track, and close'])
+                ->headline((string) $all->count(), 'Open tasks', $all->filter(fn ($x) => $x->isOverdue())->count() ? 'warn' : 'default')
+                ->actions([[
+                    'key' => 'assign', 'label' => 'New task', 'tone' => 'primary', 'actor' => 'human',
+                    'endpoint' => '/api/v1/workspace/tasks/0/assign', 'method' => 'POST', 'submitLabel' => 'Assign task',
+                    'schema' => [
+                        'assignee' => 'enum:' . implode(',', $staffOpts),
+                        'title'    => 'text',
+                        'due_at'   => 'date',
+                        'priority' => 'enum:Normal,High,Low',
+                    ],
+                    'labels' => ['assignee' => 'Assign to', 'title' => 'Task', 'due_at' => 'Due (optional)', 'priority' => 'Priority'],
+                ]])
+                ->table($cols, $rows, [], ['empty' => 'No open tasks across the team.'])
+                ->meta(['capability' => 'tasks', 'listKey' => 'tasks', 'canManage' => true]);
+        }
+
+        // Staff: personal list only.
         $mine = $this->engine->myTasks($t, $u);
         $rows = $mine->map(function (OrderTask $x) {
             $due = $x->due_at ? $x->due_at->format('M j, H:i') : '—';
@@ -37,42 +86,11 @@ final class TasksCapability implements ProcessCapability
         })->values()->all();
         $cols = [['label' => 'Task'], ['label' => 'Due'], ['label' => 'Status']];
 
-        $payload = (new WorkspacePayload)
-            ->object(['type' => 'process:tasks', 'title' => 'Tasks', 'subtitle' => 'Your work — and assign to your team'])
-            ->headline((string) $mine->count(), 'My open tasks', $mine->filter(fn ($x) => $x->isOverdue())->count() ? 'warn' : 'default');
-
-        // Manager-only: a primary "New task" action rendered as a schema form the SPA can open.
-        if ($canManage) {
-            $staff = User::where('tenant_id', $t->id)->orderBy('name')
-                ->get(['id', 'name'])
-                ->map(fn ($x) => '#' . $x->id . ' ' . ($x->name ?: ('User ' . $x->id)))
-                ->all();
-            $payload->actions([[
-                'key'    => 'assign',
-                'label'  => 'New task',
-                'tone'   => 'primary',
-                'actor'  => 'human',
-                'endpoint' => '/api/v1/workspace/tasks/0/assign',
-                'method' => 'POST',
-                'submitLabel' => 'Assign task',
-                'schema' => [
-                    'assignee' => 'enum:' . implode(',', $staff),
-                    'title'    => 'text',
-                    'due_at'   => 'date',
-                    'priority' => 'enum:Normal,High,Low',
-                ],
-                'labels' => [
-                    'assignee' => 'Assign to',
-                    'title'    => 'Task',
-                    'due_at'   => 'Due (optional)',
-                    'priority' => 'Priority',
-                ],
-            ]]);
-        }
-
-        return $payload
+        return (new WorkspacePayload)
+            ->object(['type' => 'process:tasks', 'title' => 'My Tasks', 'subtitle' => 'Your work'])
+            ->headline((string) $mine->count(), 'My open tasks', $mine->filter(fn ($x) => $x->isOverdue())->count() ? 'warn' : 'default')
             ->table($cols, $rows, [], ['empty' => 'No open tasks. Nice and clear.'])
-            ->meta(['capability' => 'tasks', 'listKey' => 'tasks', 'canManage' => $canManage]);
+            ->meta(['capability' => 'tasks', 'listKey' => 'tasks', 'canManage' => false]);
     }
 
     public function summary(CapabilityContext $ctx, array $scope = []): array
@@ -123,6 +141,21 @@ final class TasksCapability implements ProcessCapability
             $res = $this->engine->assignAdHoc($t, $assignee, (string) ($input['title'] ?? ''), $due, $priority, $u);
             if (! empty($res['ok'])) $res['message'] = 'Task assigned to ' . ($assignee->name ?: 'staff');
             return $res;
+        }
+
+        if ($action === 'start') {
+            if (! $canManage) return ['ok' => false, 'error' => 'forbidden'];
+            return $this->engine->setStatusById($t, (int) ($input['id'] ?? 0), 'in_progress', $u);
+        }
+
+        if ($action === 'done') {
+            // Managers can complete any task; staff can complete their own.
+            $taskId = (int) ($input['id'] ?? 0);
+            if (! $canManage) {
+                $owned = OrderTask::where('tenant_id', $t->id)->where('owner_user_id', $u->id)->find($taskId);
+                if (! $owned) return ['ok' => false, 'error' => 'Task not found.'];
+            }
+            return $this->engine->setStatusById($t, $taskId, 'completed', $u);
         }
 
         if ($action === 'complete') {

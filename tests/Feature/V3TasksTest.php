@@ -105,6 +105,59 @@ class V3TasksTest extends TestCase
         $this->get('/task/doesnotexist123')->assertStatus(404);
     }
 
+    public function test_all_tasks_shows_every_persons_tasks(): void
+    {
+        \Illuminate\Support\Facades\Queue::fake();
+        [$t,$mgr,$savan] = $this->seed();
+        app(TaskEngine::class)->assignAdHoc($t, $savan, 'Savan task', null, 2, $mgr);
+        app(TaskEngine::class)->assignAdHoc($t, $mgr, 'Mgr task', null, 2, $mgr);
+
+        $all = app(TaskEngine::class)->allTasks($t, ['status' => 'active']);
+        $this->assertCount(2, $all, 'manager sees all team tasks');
+        $titles = $all->pluck('title')->all();
+        $this->assertContains('Savan task', $titles);
+        $this->assertContains('Mgr task', $titles);
+        // assignee name attached
+        $this->assertNotEmpty($all->first()->assignee_name);
+    }
+
+    public function test_manager_can_set_status_from_list(): void
+    {
+        \Illuminate\Support\Facades\Queue::fake();
+        [$t,$mgr,$savan] = $this->seed();
+        $id = app(TaskEngine::class)->assignAdHoc($t, $savan, 'Move me', null, 2, $mgr)['task_id'];
+
+        $r1 = app(TaskEngine::class)->setStatusById($t, $id, 'in_progress', $mgr);
+        $this->assertTrue($r1['ok']);
+        $this->assertSame('in_progress', OrderTask::find($id)->status);
+
+        $r2 = app(TaskEngine::class)->setStatusById($t, $id, 'completed', $mgr);
+        $this->assertTrue($r2['ok']);
+        $this->assertSame('completed', OrderTask::find($id)->status);
+    }
+
+    public function test_invalid_status_rejected(): void
+    {
+        \Illuminate\Support\Facades\Queue::fake();
+        [$t,$mgr,$savan] = $this->seed();
+        $id = app(TaskEngine::class)->assignAdHoc($t, $savan, 'x', null, 2, $mgr)['task_id'];
+        $r = app(TaskEngine::class)->setStatusById($t, $id, 'bogus', $mgr);
+        $this->assertFalse($r['ok']);
+    }
+
+    public function test_completed_tasks_excluded_from_active_all_tasks(): void
+    {
+        \Illuminate\Support\Facades\Queue::fake();
+        [$t,$mgr,$savan] = $this->seed();
+        $id = app(TaskEngine::class)->assignAdHoc($t, $savan, 'done soon', null, 2, $mgr)['task_id'];
+        app(TaskEngine::class)->setStatusById($t, $id, 'completed', $mgr);
+
+        $active = app(TaskEngine::class)->allTasks($t, ['status' => 'active']);
+        $this->assertCount(0, $active);
+        $allInc = app(TaskEngine::class)->allTasks($t, ['status' => 'all']);
+        $this->assertCount(1, $allInc);
+    }
+
     public function test_nonce_a_cannot_touch_task_b(): void
     {
         Queue::fake();
