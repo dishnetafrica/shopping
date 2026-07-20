@@ -30,10 +30,18 @@ class User extends Authenticatable implements FilamentUser
     /** All menu keys that exist (the master list for the RBAC editor). */
     public static function allMenuKeys(): array
     {
-        return ['dashboard', 'products', 'orders', 'customers', 'quotations', 'whatsapp', 'finance', 'marketing', 'settings', 'staff', 'cash', 'purchases', 'ordercosts', 'approvals'];
+        return ['dashboard', 'products', 'orders', 'customers', 'quotations', 'whatsapp', 'finance', 'marketing', 'settings', 'staff', 'cash', 'purchases', 'ordercosts', 'approvals', 'tasks'];
     }
 
     public function effectiveMenus(): array
+    {
+        $menus = $this->effectiveMenusRaw();
+        // Everyone can see their own task list, regardless of role.
+        if (! in_array('tasks', $menus, true)) $menus[] = 'tasks';
+        return array_values($menus);
+    }
+
+    private function effectiveMenusRaw(): array
     {
         $all = self::allMenuKeys();
         if ($this->isOwnerLike()) return $all;

@@ -222,6 +222,8 @@ class TaskEngine
         if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'requires_upload')) $attrs['requires_upload'] = false;
         if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'checklist'))       $attrs['checklist']       = [];
         if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'priority'))        $attrs['priority']        = max(1, min(3, $priority));
+        // Tokenized link so the assignee can open/accept/complete from the WhatsApp nudge (no login).
+        if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'link_nonce'))      $attrs['link_nonce']      = \Illuminate\Support\Str::random(16);
 
         $task = OrderTask::create($attrs);
 
@@ -239,11 +241,65 @@ class TaskEngine
         if (! $assignee->phone || ! $tenant->whatsapp_instance) return;
         try {
             $due = $task->due_at ? $task->due_at->format('M j, H:i') : '';
+            $link = $task->link_nonce ? url('/t/' . $task->link_nonce) : '';
             $msg = "📋 New task assigned to you:\n\n*" . $task->title . "*"
                 . ($due ? "\nDue: " . $due : "")
-                . "\n\nOpen your task list to see details and mark it done when finished.";
+                . ($link ? "\n\nOpen your task:\n" . $link : "\n\nOpen your task list to see details and mark it done when finished.");
             NotifyOwner::dispatch($tenant->id, $msg, $assignee->phone);
         } catch (\Throwable $e) {}
+    }
+
+    // ---------------------------------------------------------- tokenized (no-login) access
+
+    /** Resolve a task by its public link nonce. Null if not found. */
+    public function findByNonce(string $nonce): ?OrderTask
+    {
+        $nonce = trim($nonce);
+        if ($nonce === '' || strlen($nonce) > 32) return null;
+        return OrderTask::where('link_nonce', $nonce)->first();
+    }
+
+    /** Accept a task via its public link (no login). Idempotent-ish. */
+    public function acceptByNonce(OrderTask $task): array
+    {
+        if (! $task->isActive()) return ['ok' => false, 'error' => 'This task is no longer active.'];
+        if ($task->status === 'in_progress') return ['ok' => true, 'already' => true];
+        $task->status     = 'in_progress';
+        $task->started_at = $task->started_at ?: now();
+        $task->accepted_at = now();
+        $task->save();
+        $tenant = Tenant::find($task->tenant_id);
+        if ($tenant) $this->log($tenant, $task->order_id, $task->id, 'accepted', null, null, $task->stage,
+            $task->title . ' accepted via link');
+        return ['ok' => true];
+    }
+
+    /** Complete a task via its public link (no login). */
+    public function completeByNonce(OrderTask $task, ?string $note = null): array
+    {
+        if (! $task->isActive()) return ['ok' => false, 'error' => 'This task is already closed.'];
+        if ($task->requires_upload && empty($task->attachment)) {
+            return ['ok' => false, 'error' => 'This task needs a file to be uploaded from the panel first.'];
+        }
+        $task->status       = 'completed';
+        $task->completed_at = now();
+        if ($note) $task->note = mb_substr($note, 0, 500);
+        $task->save();
+        $tenant = Tenant::find($task->tenant_id);
+        if ($tenant) $this->log($tenant, $task->order_id, $task->id, 'completed', null, $task->stage, null,
+            $task->title . ' completed via link' . ($note ? ' — ' . $note : ''));
+        return ['ok' => true];
+    }
+
+    /** Add a comment to a task via its public link. */
+    public function commentByNonce(OrderTask $task, string $text): array
+    {
+        $text = trim($text);
+        if ($text === '') return ['ok' => false, 'error' => 'Empty comment.'];
+        $tenant = Tenant::find($task->tenant_id);
+        if ($tenant) $this->log($tenant, $task->order_id, $task->id, 'comment', null, null, null,
+            mb_substr($text, 0, 500));
+        return ['ok' => true];
     }
 
     // ----------------------------------------------------------------- internals
