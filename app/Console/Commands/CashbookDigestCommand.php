@@ -63,6 +63,12 @@ final class CashbookDigestCommand extends Command
             $ad = $this->adStats($t, $date, $offset);
             $text = $this->summaryText($t, $data, $date, $ad);
             $numbers = method_exists($t, 'ownerAlertNumbers') ? $t->ownerAlertNumbers() : [];
+            // Dedicated accountant recipients (optional): finance reports can go to specific
+            // numbers (e.g. the accountant) without adding them to general owner alerts.
+            $extra = array_filter(array_map('trim', preg_split('/[,\s]+/', (string) $t->setting('cashbook_digest_numbers', ''))));
+            if ($extra) {
+                $numbers = array_values(array_unique(array_merge($numbers, $extra)));
+            }
             $instance = $t->whatsapp_instance ?? null;
             if ($instance && $numbers) {
                 $gw = $wa->forTenant($t);
@@ -74,6 +80,17 @@ final class CashbookDigestCommand extends Command
                     $pdf = $export->pdf($t, $data);
                     if ($pdf) { $docs[] = [base64_encode($pdf), 'Cashbook-' . $date . '.pdf', '🧾 Cashbook ' . $date . ' — full statement']; }
                 } catch (\Throwable $e) { /* skip */ }
+
+                // company book: EVERY currency consolidated into one running USD balance --
+                // the accountant's "where does the business stand in USD" view, as PDF + CSV
+                // (CSV so it can be imported into the books instead of retyped).
+                try {
+                    $cData = $export->collect($t, null, $date, $date, null, true);
+                    $cPdf = $export->pdf($t, $cData);
+                    if ($cPdf) { $docs[] = [base64_encode($cPdf), 'Company-USD-Cashbook-' . $date . '.pdf', '💵 Company cash book ' . $date . ' — all currencies in USD']; }
+                    $cCsv = $export->csv($cData);
+                    if ($cCsv !== '') { $docs[] = [base64_encode($cCsv), 'Company-USD-Cashbook-' . $date . '.csv', '📊 Company USD cash book (CSV for import)']; }
+                } catch (\Throwable $e) { /* skip company book */ }
 
                 // one running-balance book per currency that had movement yesterday
                 foreach (['USD', 'UGX', 'SSP'] as $cc) {
