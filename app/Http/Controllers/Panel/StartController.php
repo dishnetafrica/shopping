@@ -95,8 +95,10 @@ class StartController extends Controller
 
         RateLimiter::hit($ipKey, 3600); // 1-hour window
 
+        $correlationId = \App\Support\OnboardingTrace::newCorrelationId();
+
         try {
-            $user = DB::transaction(function () use ($name, $kind, $ownerName, $phone, $email) {
+            [$tenant, $user] = DB::transaction(function () use ($name, $kind, $ownerName, $phone, $email, $correlationId) {
                 $tenant = Tenant::create([
                     'name'            => $name,
                     'slug'            => $this->uniqueSlug($name),
@@ -111,10 +113,12 @@ class StartController extends Controller
                         'order_system_enabled' => true,         // new shops land on v3 (Get-started checklist)
                         'signup_source'        => 'self',
                         'signup_at'            => now()->toIso8601String(),
+                        'onboarding_state'     => \App\Support\OnboardingState::TENANT_CREATED,
+                        'onboarding_corr'      => $correlationId,
                     ],
                 ]);
 
-                return User::create([
+                $user = User::create([
                     'tenant_id'      => $tenant->id,
                     'name'           => $ownerName,
                     'phone'          => $phone,
@@ -123,11 +127,21 @@ class StartController extends Controller
                     'role'           => 'owner',
                     'is_super_admin' => false,
                 ]);
+
+                return [$tenant, $user];
             });
         } catch (\Throwable $e) {
             report($e);
             return $this->fail('server', 'Something went wrong creating your shop. Please try again.', 500);
         }
+
+        // Trace signup completion (after commit — no orphan traces on rollback).
+        \App\Support\OnboardingTrace::log($tenant->id, 'signup_complete', null,
+            $correlationId, 0, 'user', ['kind' => $kind], $phone);
+
+        // Async provisioning: dispatch AFTER commit so the job sees the persisted tenant.
+        // Signup returns to the user regardless of Evolution's availability.
+        \App\Jobs\ProvisionTenantJob::dispatch($tenant->id, $correlationId);
 
         // First session: sign them straight in, then the wizard takes over.
         Auth::guard('web')->login($user, true);

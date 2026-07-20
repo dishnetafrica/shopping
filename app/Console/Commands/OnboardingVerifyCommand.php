@@ -46,6 +46,30 @@ class OnboardingVerifyCommand extends Command
         ]);
         app(TenantContext::class)->set($tenant->id);
 
+        // ---- state machine assertions (Stage 0 rev 2) ----
+        // These validate the OnboardingState + Trace subsystem against a real tenant,
+        // independent of the discovery pipeline below.
+        $tenant->putSetting('onboarding_state', \App\Support\OnboardingState::TENANT_CREATED);
+        $corr = \App\Support\OnboardingTrace::newCorrelationId();
+        \App\Support\OnboardingTrace::log($tenant->id, 'signup_complete', null, $corr, 0, 'user');
+
+        $stateOk = \App\Support\OnboardingState::current($tenant) === \App\Support\OnboardingState::TENANT_CREATED;
+        $this->assert('Onboarding state initialised to TenantCreated', $stateOk);
+
+        $moved = \App\Support\OnboardingState::transition($tenant, \App\Support\OnboardingState::PROVISIONING);
+        $this->assert('Forward transition TenantCreated -> Provisioning allowed', $moved);
+
+        // Monotonic guard: try to move backwards, expect rejection.
+        $blocked = \App\Support\OnboardingState::transition($tenant, \App\Support\OnboardingState::TENANT_CREATED);
+        $this->assert('Backward transition rejected (monotonic)', $blocked === false);
+
+        \App\Support\OnboardingState::transition($tenant, \App\Support\OnboardingState::WHATSAPP_READY);
+        $this->assert('Reached WhatsAppReady', \App\Support\OnboardingState::isProvisioned($tenant));
+
+        // Stale-retry guard: Failed transition after WhatsAppReady must be rejected.
+        $failBlocked = \App\Support\OnboardingState::transition($tenant, \App\Support\OnboardingState::FAILED);
+        $this->assert('Stale Failed transition rejected after success', $failBlocked === false);
+
         try {
             $this->seed($tenant);
 
