@@ -45,7 +45,7 @@ final class TasksCapability implements ProcessCapability
         if ($canManage) {
             $staff = User::where('tenant_id', $t->id)->orderBy('name')
                 ->get(['id', 'name'])
-                ->map(fn ($x) => $x->id . ' — ' . ($x->name ?: ('User ' . $x->id)))
+                ->map(fn ($x) => '#' . $x->id . ' ' . ($x->name ?: ('User ' . $x->id)))
                 ->all();
             $payload->actions([[
                 'key'    => 'assign',
@@ -103,9 +103,13 @@ final class TasksCapability implements ProcessCapability
 
         if ($action === 'assign') {
             if (! $canManage) return ['ok' => false, 'error' => 'forbidden'];
-            // The SPA form sends assignee as "id — Name" (from the enum); accept a raw id too.
+            // The SPA form sends assignee as "#id Name" (from the enum); accept a raw id too.
             $rawAssignee = (string) ($input['assignee'] ?? $input['assignee_id'] ?? '');
-            $assigneeId = (int) trim(explode('—', $rawAssignee)[0]);
+            if (preg_match('/#?(\d+)/', $rawAssignee, $m)) {
+                $assigneeId = (int) $m[1];
+            } else {
+                $assigneeId = (int) $rawAssignee;
+            }
             $assignee = User::where('tenant_id', $t->id)->find($assigneeId);
             if (! $assignee) return ['ok' => false, 'error' => 'Pick a valid staff member.'];
 
