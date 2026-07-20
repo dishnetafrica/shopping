@@ -170,6 +170,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
             Route::get('summary', [TaskApiController::class, 'summary']);
             Route::get('mine',  [TaskApiController::class, 'mine']);
             Route::get('queue', [TaskApiController::class, 'queue']);
+            Route::get('assignable', [TaskApiController::class, 'assignable']);
+            Route::post('assign', [TaskApiController::class, 'assign']);
             Route::match(['get','post'], 'complete',  [TaskApiController::class, 'complete']);
             Route::match(['get','post'], 'exception', [TaskApiController::class, 'exception']);
             Route::match(['get','post'], 'resume',    [TaskApiController::class, 'resume']);

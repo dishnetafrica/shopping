@@ -177,6 +177,69 @@ class TaskEngine
         })->values();
     }
 
+    /**
+     * Assign a one-off (ad-hoc) task to a specific staff member. Not tied to any order
+     * (order_id = 0, stage = 'adhoc'). Flows through the existing My Tasks list, ops:digest,
+     * and tasks:escalate automatically because those key on owner_user_id + due_at.
+     */
+    public function assignAdHoc(
+        Tenant $tenant,
+        User $assignee,
+        string $title,
+        ?\Illuminate\Support\Carbon $due = null,
+        int $priority = 2,
+        ?User $by = null
+    ): array {
+        $title = trim($title);
+        if ($title === '') return ['ok' => false, 'error' => 'Task title is required.'];
+        if ($assignee->tenant_id !== $tenant->id) return ['ok' => false, 'error' => 'Invalid assignee.'];
+
+        // Default due: end of next business day, so escalation behaves sensibly.
+        if (! $due) {
+            $due = now()->addDay()->setTime(17, 0);
+            if ($due->isSaturday()) $due->addDays(2);
+            elseif ($due->isSunday()) $due->addDay();
+        }
+
+        $task = OrderTask::create([
+            'tenant_id'      => $tenant->id,
+            'order_id'       => 0,               // ad-hoc: no order
+            'seq'            => 0,
+            'stage'          => 'adhoc',
+            'role'           => 'adhoc',
+            'owner_user_id'  => $assignee->id,
+            'title'          => mb_substr($title, 0, 180),
+            'status'         => 'pending',
+            'sla_minutes'    => 0,
+            'paused_minutes' => 0,
+            'assigned_at'    => now(),
+            'due_at'         => $due,
+            'requires_upload'=> false,
+            'checklist'      => [],
+            'priority'       => max(1, min(3, $priority)),
+        ]);
+
+        $this->log($tenant, 0, $task->id, 'created', $by, null, 'adhoc',
+            $task->title . ' assigned to ' . ($assignee->name ?: ('user ' . $assignee->id)));
+
+        $this->notifyAdHoc($tenant, $task, $assignee);
+
+        return ['ok' => true, 'task_id' => $task->id];
+    }
+
+    /** WhatsApp nudge for a freshly-assigned ad-hoc task (order-free variant of notifyOwner). */
+    private function notifyAdHoc(Tenant $tenant, OrderTask $task, User $assignee): void
+    {
+        if (! $assignee->phone || ! $tenant->whatsapp_instance) return;
+        try {
+            $due = $task->due_at ? $task->due_at->format('M j, H:i') : '';
+            $msg = "📋 New task assigned to you:\n\n*" . $task->title . "*"
+                . ($due ? "\nDue: " . $due : "")
+                . "\n\nOpen your task list to see details and mark it done when finished.";
+            NotifyOwner::dispatch($tenant->id, $msg, $assignee->phone);
+        } catch (\Throwable $e) {}
+    }
+
     // ----------------------------------------------------------------- internals
 
     private function openStage(Tenant $tenant, ?Order $order, array $stage): OrderTask

@@ -231,6 +231,42 @@ async function loadQueue(){
     +'<div class="qcell'+(d.overdue>0?' over':'')+'"><div class="t">Overdue</div><div class="v">'+d.overdue+'</div><div class="x">past SLA</div></div>'
     +'<div class="qcell"><div class="t">Completed today</div><div class="v">'+d.completed_today+'</div><div class="x">orders done</div></div>'
     +'</div><div class="secthead">Blockers</div><div class="qgrid">'+excHtml+'</div>';
+  var ab=document.createElement('div');ab.style.cssText='margin:14px 0';ab.innerHTML='<button class="btn" style="background:#16a34a;color:#fff;border:0;padding:12px 18px;border-radius:10px;font-weight:600;cursor:pointer" onclick="openAssign()">+ Assign task to staff</button>';$('#viewQueue').prepend(ab);
+}
+
+/* ---------------- Assign ad-hoc task (manager) ---------------- */
+async function openAssign(){
+  var d=await api('assignable');
+  if(!d||!d.ok){toast('Could not load staff list');return;}
+  var opts=(d.users||[]).map(function(u){return '<option value="'+u.id+'">'+esc(u.name)+(u.role?(' ('+esc(u.role)+')'):'')+'</option>';}).join('');
+  var m=document.createElement('div');
+  m.id='assignModal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+  m.innerHTML='<div style="background:#fff;border-radius:14px;padding:22px;width:min(440px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.3)">'
+    +'<div style="font-size:18px;font-weight:700;margin-bottom:14px">Assign a task</div>'
+    +'<label style="display:block;font-size:13px;color:#555;margin:8px 0 4px">Assign to</label>'
+    +'<select id="asgWho" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">'+opts+'</select>'
+    +'<label style="display:block;font-size:13px;color:#555;margin:12px 0 4px">Task</label>'
+    +'<input id="asgTitle" placeholder="e.g. Enter the new products" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">'
+    +'<label style="display:block;font-size:13px;color:#555;margin:12px 0 4px">Due (optional)</label>'
+    +'<input id="asgDue" type="datetime-local" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">'
+    +'<label style="display:block;font-size:13px;color:#555;margin:12px 0 4px">Priority</label>'
+    +'<select id="asgPrio" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px"><option value="1">Low</option><option value="2" selected>Normal</option><option value="3">High</option></select>'
+    +'<div style="display:flex;gap:10px;margin-top:18px">'
+    +'<button onclick="closeAssign()" style="flex:1;padding:11px;border:1px solid #ddd;background:#f5f5f5;border-radius:8px;cursor:pointer">Cancel</button>'
+    +'<button onclick="submitAssign()" style="flex:1;padding:11px;border:0;background:#16a34a;color:#fff;border-radius:8px;font-weight:600;cursor:pointer">Assign</button>'
+    +'</div></div>';
+  document.body.appendChild(m);
+}
+function closeAssign(){var m=$('#assignModal');if(m)m.remove();}
+async function submitAssign(){
+  var who=$('#asgWho').value, title=($('#asgTitle').value||'').trim(), dueRaw=$('#asgDue').value, prio=$('#asgPrio').value;
+  if(!title){toast('Enter a task');return;}
+  var body={assignee_id:parseInt(who,10),title:title,priority:parseInt(prio,10)};
+  if(dueRaw)body.due_at=dueRaw;
+  var r=await api('assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(r&&r.ok){toast('Task assigned');closeAssign();loadQueue();}
+  else{toast((r&&r.error)||'Could not assign');}
 }
 
 /* ---------------- Activity (manager) ---------------- */

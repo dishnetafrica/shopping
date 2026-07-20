@@ -56,6 +56,7 @@ Schedule::command('credit:reminders')->dailyAt('09:00')->withoutOverlapping()->o
 
 Schedule::command('tasks:escalate')->everyFifteenMinutes()->between('8:00', '20:00')->withoutOverlapping()->onOneServer();
 Schedule::command('ops:digest')->dailyAt('08:00')->withoutOverlapping()->onOneServer();
+Schedule::command('ops:digest')->dailyAt('14:00')->withoutOverlapping()->onOneServer();
 Schedule::command('bot:lead-followup')->everyFiveMinutes()->between('8:00', '20:00')->withoutOverlapping()->onOneServer();
 
 // Sourcing: keep nudging the buyer (Jayesh) for unpriced requests until he replies the price.

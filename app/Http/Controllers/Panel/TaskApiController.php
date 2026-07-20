@@ -34,6 +34,44 @@ class TaskApiController extends Controller
         ]);
     }
 
+    /** Manager assigns a one-off task to a staff member. */
+    public function assign(Request $r)
+    {
+        $u = $r->user(); $t = $u->tenant;
+        if (! $u->isOwnerLike() && $u->role !== 'manager') {
+            return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        }
+        $data = $r->validate([
+            'assignee_id' => 'required|integer',
+            'title'       => 'required|string|max:180',
+            'due_at'      => 'nullable|date',
+            'priority'    => 'nullable|integer|min:1|max:3',
+        ]);
+
+        $assignee = \App\Models\User::where('tenant_id', $t->id)->find($data['assignee_id']);
+        if (! $assignee) return response()->json(['ok' => false, 'error' => 'assignee not found'], 422);
+
+        $due = ! empty($data['due_at']) ? \Illuminate\Support\Carbon::parse($data['due_at']) : null;
+        $res = $this->engine->assignAdHoc($t, $assignee, $data['title'], $due, (int) ($data['priority'] ?? 2), $u);
+
+        return response()->json($res, $res['ok'] ? 200 : 422);
+    }
+
+    /** Users a manager can assign work to (same tenant, excludes super-admins). */
+    public function assignable(Request $r)
+    {
+        $u = $r->user(); $t = $u->tenant;
+        if (! $u->isOwnerLike() && $u->role !== 'manager') {
+            return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        }
+        $users = \App\Models\User::where('tenant_id', $t->id)
+            ->orderBy('name')
+            ->get(['id', 'name', 'role'])
+            ->map(fn ($x) => ['id' => $x->id, 'name' => $x->name ?: ('User ' . $x->id), 'role' => $x->role])
+            ->values();
+        return response()->json(['ok' => true, 'users' => $users]);
+    }
+
     /** Manager view: where work sits, what's overdue, what's blocked. */
     public function queue(Request $r)
     {
@@ -292,7 +330,7 @@ class TaskApiController extends Controller
         return [
             'id'        => $x->id,
             'order_id'  => $x->order_id,
-            'order_no'  => $orders[$x->order_id] ?? ('#' . $x->order_id),
+            'order_no'  => $x->order_id > 0 ? ($orders[$x->order_id] ?? ('#' . $x->order_id)) : 'Task',
             'stage'     => $x->stage,
             'stage_label' => WorkflowConfig::roleLabel($x->role),
             'title'     => $x->title,
