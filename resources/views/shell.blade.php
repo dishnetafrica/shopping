@@ -909,7 +909,9 @@ function parseHash(){ const p=location.hash.replace('#/','').split('/'); return 
 function renderNav(caps){
   const keys = new Set(caps.map(c=>c.key));
   // A SOON item shows if its underlying entity exists (has a count) even without a list capability yet.
-  const has = k => k==='pnl' || k==='settings' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
+  /* pnl is a legacy-iframe screen with no capability of its own — gate it on the
+     permission-filtered finance capability so restricted roles don't see P&L. */
+  const has = k => (k==='pnl' && keys.has('finance')) || k==='settings' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
   let html='';
   GROUPS.forEach(([g,items])=>{
     const avail=items.filter(has);
@@ -1699,7 +1701,7 @@ function renderList(p){
   const o=p.object||{}; const cap=(p.meta&&p.meta.capability)||CUR.key; const tb=p.table||{};
   TBL = { cols:tb.columns||[], rows:tb.rows||[], filters:tb.filters||[], fval:{}, sort:null, dir:1, q:'',
     dateKey:tb.dateKey||null, dateLabel:tb.dateLabel||'Created', totals:tb.totals||[], from:'', to:'', page:1,
-    pageSize:tb.pageSize||15, cur:tb.currency||'UGX',
+    pageSize:tb.pageSize||15, cur:tb.currency||'UGX', empty:tb.empty||'',
     selectable:!!tb.selectable, bulk:tb.bulk||[], sel:{} };
   // A drill-through from another screen (e.g. a category card) pre-applies its filter here.
   if(PENDING_FILTER){ TBL.fval[PENDING_FILTER.key]=PENDING_FILTER.val; PENDING_FILTER=null; }
@@ -1771,7 +1773,7 @@ function renderTable(){
   const th=selTh+TBL.cols.map(c=>'<th class="'+(c.align==='right'?'num':'')+(c.sortable!==false?' srt':'')+(TBL.sort===c.key?' sorted':'')+'"'+(c.sortable!==false?' onclick="sortBy(\''+c.key+'\')"':'')+'><span class="thc">'+esc(c.label)+arrow(c.key)+'</span></th>').join('');
   const selTd=(r,i)=>TBL.selectable?('<td class="selc" onclick="event.stopPropagation()"><input type="checkbox" aria-label="Select row"'+(TBL.sel[r.id]?' checked':'')+' onclick="tselClick(event,\''+esc(String(r.id))+'\','+i+')"></td>'):'';
   const body = pageRows.length ? pageRows.map((r,i)=>'<tr'+(TBL.selectable&&TBL.sel[r.id]?' class="sel"':'')+(r.link?' onclick="openLink(\''+esc(r.link)+'\')"':'')+'>'+selTd(r,i)+TBL.cols.map(c=>cellHtml(r[c.key],c)).join('')+'</tr>').join('')
-    : '<tr><td colspan="'+(TBL.cols.length+(TBL.selectable?1:0))+'"><div class="empty" style="padding:40px">'+icon('worklist','ic-lg')+'<div style="margin-top:8px">No matching records</div></div></td></tr>';
+    : '<tr><td colspan="'+(TBL.cols.length+(TBL.selectable?1:0))+'"><div class="empty" style="padding:40px">'+icon('worklist','ic-lg')+'<div style="margin-top:8px">'+esc(TBL.empty||'No matching records')+'</div></div></td></tr>';
   const nsel=Object.keys(TBL.sel).length;
   let bulkBar='';
   if(TBL.selectable&&nsel){

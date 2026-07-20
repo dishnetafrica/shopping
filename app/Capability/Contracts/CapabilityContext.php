@@ -27,6 +27,11 @@ final class CapabilityContext
 
     public static function fromUser(User $user): self
     {
+        // A user with no tenant (e.g. a super-admin browsing /v3) would fatal on the
+        // non-nullable Tenant param below — fail as a clean 403 instead of a 500.
+        if (! $user->tenant) {
+            abort(403, 'This workspace requires a tenant account.');
+        }
         $menus = method_exists($user, 'effectiveMenus') ? (array) $user->effectiveMenus() : [];
         return new self(
             tenant: $user->tenant,

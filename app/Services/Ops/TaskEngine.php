@@ -87,10 +87,14 @@ class TaskEngine
 
             $next = WorkflowConfig::nextStage($tenant, $task->stage);
             if (! $next) {
-                if ($order = Order::withoutGlobalScopes()->find($task->order_id)) {
-                    $order->forceFill(['workflow_done_at' => now()])->save();
+                // Ad-hoc tasks (order_id 0) are not part of an order workflow — closing one
+                // must not log a bogus "Workflow complete" event on order #0.
+                if ($task->order_id > 0) {
+                    if ($order = Order::withoutGlobalScopes()->find($task->order_id)) {
+                        $order->forceFill(['workflow_done_at' => now()])->save();
+                    }
+                    $this->log($tenant, $task->order_id, null, 'completed', $by, $task->stage, null, 'Workflow complete — customer received.');
                 }
-                $this->log($tenant, $task->order_id, null, 'completed', $by, $task->stage, null, 'Workflow complete — customer received.');
                 return ['ok' => true, 'done' => true, 'next' => null];
             }
 
@@ -275,7 +279,7 @@ class TaskEngine
         $table = (new OrderTask)->getTable();
         if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'requires_upload')) $attrs['requires_upload'] = false;
         if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'checklist'))       $attrs['checklist']       = [];
-        if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'priority'))        $attrs['priority']        = max(1, min(3, $priority));
+        if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'priority'))        $attrs['priority']        = max(0, min(3, $priority));
         // Tokenized link so the assignee can open/accept/complete from the WhatsApp nudge (no login).
         if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'link_nonce'))      $attrs['link_nonce']      = \Illuminate\Support\Str::random(16);
 

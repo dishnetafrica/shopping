@@ -52,7 +52,9 @@ class TaskApiController extends Controller
         if (! $assignee) return response()->json(['ok' => false, 'error' => 'assignee not found'], 422);
 
         $due = ! empty($data['due_at']) ? \Illuminate\Support\Carbon::parse($data['due_at']) : null;
-        $res = $this->engine->assignAdHoc($t, $assignee, $data['title'], $due, (int) ($data['priority'] ?? 2), $u);
+        // The panel dropdown sends 1=Low / 2=Normal / 3=High; WorkflowConfig::PRIORITY is
+        // low 0 / normal 1 / high 2 / critical 3 — shift here so labels display correctly.
+        $res = $this->engine->assignAdHoc($t, $assignee, $data['title'], $due, ((int) ($data['priority'] ?? 2)) - 1, $u);
 
         return response()->json($res, $res['ok'] ? 200 : 422);
     }
