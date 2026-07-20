@@ -41,11 +41,33 @@ final class TasksCapability implements ProcessCapability
             ->object(['type' => 'process:tasks', 'title' => 'Tasks', 'subtitle' => 'Your work — and assign to your team'])
             ->headline((string) $mine->count(), 'My open tasks', $mine->filter(fn ($x) => $x->isOverdue())->count() ? 'warn' : 'default');
 
-        // Manager-only: assign quick action.
+        // Manager-only: a primary "New task" action rendered as a schema form the SPA can open.
         if ($canManage) {
-            $payload->quickActions([
-                ['key' => 'open_assign', 'label' => '+ Assign task to staff', 'tone' => 'primary'],
-            ]);
+            $staff = User::where('tenant_id', $t->id)->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn ($x) => $x->id . ' — ' . ($x->name ?: ('User ' . $x->id)))
+                ->all();
+            $payload->actions([[
+                'key'    => 'assign',
+                'label'  => 'New task',
+                'tone'   => 'primary',
+                'actor'  => 'human',
+                'endpoint' => '/api/v1/workspace/tasks/0/assign',
+                'method' => 'POST',
+                'submitLabel' => 'Assign task',
+                'schema' => [
+                    'assignee' => 'enum:' . implode(',', $staff),
+                    'title'    => 'text',
+                    'due_at'   => 'date',
+                    'priority' => 'enum:Normal,High,Low',
+                ],
+                'labels' => [
+                    'assignee' => 'Assign to',
+                    'title'    => 'Task',
+                    'due_at'   => 'Due (optional)',
+                    'priority' => 'Priority',
+                ],
+            ]]);
         }
 
         return $payload
@@ -81,11 +103,22 @@ final class TasksCapability implements ProcessCapability
 
         if ($action === 'assign') {
             if (! $canManage) return ['ok' => false, 'error' => 'forbidden'];
-            $assignee = User::where('tenant_id', $t->id)->find((int) ($input['assignee_id'] ?? 0));
+            // The SPA form sends assignee as "id — Name" (from the enum); accept a raw id too.
+            $rawAssignee = (string) ($input['assignee'] ?? $input['assignee_id'] ?? '');
+            $assigneeId = (int) trim(explode('—', $rawAssignee)[0]);
+            $assignee = User::where('tenant_id', $t->id)->find($assigneeId);
             if (! $assignee) return ['ok' => false, 'error' => 'Pick a valid staff member.'];
+
             $due = ! empty($input['due_at']) ? \Illuminate\Support\Carbon::parse($input['due_at']) : null;
-            return $this->engine->assignAdHoc($t, $assignee, (string) ($input['title'] ?? ''), $due,
-                (int) ($input['priority'] ?? 2), $u);
+
+            // Priority may arrive as a label (Normal/High/Low) or a number.
+            $prioMap = ['low' => 1, 'normal' => 2, 'high' => 3];
+            $rawPrio = strtolower(trim((string) ($input['priority'] ?? 'normal')));
+            $priority = $prioMap[$rawPrio] ?? (is_numeric($rawPrio) ? (int) $rawPrio : 2);
+
+            $res = $this->engine->assignAdHoc($t, $assignee, (string) ($input['title'] ?? ''), $due, $priority, $u);
+            if (! empty($res['ok'])) $res['message'] = 'Task assigned to ' . ($assignee->name ?: 'staff');
+            return $res;
         }
 
         if ($action === 'complete') {
