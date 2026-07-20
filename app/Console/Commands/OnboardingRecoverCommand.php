@@ -41,14 +41,42 @@ class OnboardingRecoverCommand extends Command
 
         $needsWorkCount = 0;
         $dispatchedCount = 0;
+        $backfilledCount = 0;
         $skipped = 0;
 
         foreach ($tenants as $t) {
             $state = OnboardingState::current($t);
             $hasInstance = ! empty($t->whatsapp_instance);
+
+            // Already terminal in the state machine → leave alone.
+            if (OnboardingState::isProvisioned($t)) {
+                $skipped++;
+                continue;
+            }
+
+            // Legacy tenant (state=Pending because the field predates the state machine)
+            // that ALREADY has a WhatsApp instance is provisioned — just backfill its
+            // state to WhatsAppReady. Do NOT re-dispatch (that would re-provision a
+            // healthy production tenant).
+            if ($hasInstance && $state === OnboardingState::PENDING) {
+                $this->line(sprintf('  tenant %d (%s): has instance %s, state=Pending → %s',
+                    $t->id, $t->name, $t->whatsapp_instance,
+                    $apply ? 'BACKFILLING state=WhatsAppReady' : 'would backfill state'));
+                if ($apply) {
+                    // Direct set (bypass monotonic guard: Pending→WhatsAppReady is a valid
+                    // forward jump, and transition() allows it since ranks increase).
+                    OnboardingState::transition($t, OnboardingState::WHATSAPP_READY);
+                    OnboardingTrace::log($t->id, 'recover_backfilled', null,
+                        OnboardingTrace::newCorrelationId(), 0, 'operator',
+                        ['instance' => $t->whatsapp_instance], $t->whatsapp_number);
+                    $backfilledCount++;
+                }
+                continue;
+            }
+
+            // Genuinely needs provisioning: Failed state, OR no instance at all.
             $needsWork = $state === OnboardingState::FAILED
-                || (! OnboardingState::isProvisioned($t) && ! $hasInstance)
-                || (! OnboardingState::isProvisioned($t) && $state === OnboardingState::PENDING);
+                || (! $hasInstance);
 
             if (! $needsWork) {
                 $skipped++;
@@ -71,10 +99,10 @@ class OnboardingRecoverCommand extends Command
 
         $this->line('');
         if ($apply) {
-            $this->info("Recovered {$dispatchedCount} tenant(s). Skipped {$skipped} (healthy or terminal).");
+            $this->info("Backfilled {$backfilledCount} · re-dispatched {$dispatchedCount} · skipped {$skipped} (healthy).");
         } else {
-            $this->info("{$needsWorkCount} tenant(s) would be re-dispatched. Skipped {$skipped}.");
-            $this->comment('Dry-run. Re-run with --apply to execute.');
+            $this->info("{$needsWorkCount} would re-dispatch, {$backfilledCount} would backfill state only, {$skipped} healthy.");
+            $this->comment('Dry-run. Re-run with --apply to execute. Backfill only sets state on tenants that already have a working instance — it does NOT re-provision them.');
         }
 
         return self::SUCCESS;
