@@ -117,8 +117,9 @@ class V3TasksTest extends TestCase
         $titles = $all->pluck('title')->all();
         $this->assertContains('Savan task', $titles);
         $this->assertContains('Mgr task', $titles);
-        // assignee name attached
-        $this->assertNotEmpty($all->first()->assignee_name);
+        // assignee names resolvable via the map
+        $names = app(TaskEngine::class)->assigneeNames($t);
+        $this->assertArrayHasKey($savan->id, $names);
     }
 
     public function test_manager_can_set_status_from_list(): void

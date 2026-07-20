@@ -32,7 +32,8 @@ final class TasksCapability implements ProcessCapability
         // Managers default to the "All Tasks" overview; staff see only their own.
         if ($canManage) {
             $all = $this->engine->allTasks($t, ['status' => 'active']);
-            $rows = $all->map(function (OrderTask $x) {
+            $names = $this->engine->assigneeNames($t);
+            $rows = $all->map(function (OrderTask $x) use ($names) {
                 $due = $x->due_at ? $x->due_at->format('M j, H:i') : '—';
                 $status = $x->status === 'completed' ? '✅ Done'
                     : ($x->status === 'in_progress' ? '🔵 In progress'
@@ -46,7 +47,7 @@ final class TasksCapability implements ProcessCapability
                 }
                 return ['id' => $x->id, 'cells' => [
                     $x->title,
-                    $x->assignee_name ?? '',
+                    $names[$x->owner_user_id] ?? ('User ' . $x->owner_user_id),
                     $due,
                     ['value' => $status],
                     ['buttons' => $buttons],

@@ -163,6 +163,60 @@ class TaskEngine
     }
 
     /** A person's open work: critical-overdue first, then priority, then oldest. */
+    /**
+     * All tasks for the tenant (every staff member) — the manager "All Tasks" view.
+     * Optional filters: status ('active'|'completed'|'all'), owner_user_id.
+     * Returns a flat, sorted collection. Assignee names are resolved by the caller via
+     * $this->assigneeNames($tenant) to avoid mutating models.
+     */
+    public function allTasks(Tenant $tenant, array $filters = [])
+    {
+        $q = OrderTask::query()->where('tenant_id', $tenant->id);
+
+        $status = $filters['status'] ?? 'active';
+        if ($status === 'active')        $q->whereIn('status', OrderTask::ACTIVE);
+        elseif ($status === 'completed') $q->where('status', 'completed');
+        // 'all' → no status filter
+
+        if (! empty($filters['owner_user_id'])) $q->where('owner_user_id', (int) $filters['owner_user_id']);
+
+        $tasks = $q->orderByDesc('id')->limit(500)->get();
+
+        return $tasks->sortBy(function (OrderTask $t) {
+            $done     = $t->status === 'completed' ? 1 : 0;
+            $over     = $t->isOverdue() ? 0 : 1;
+            $assigned = $t->assigned_at ? $t->assigned_at->timestamp : PHP_INT_MAX;
+            return sprintf('%d|%d|%020d', $done, $over, $assigned);
+        })->values();
+    }
+
+    /** Map of user id → display name for a tenant (for the All Tasks assignee column). */
+    public function assigneeNames(Tenant $tenant): array
+    {
+        return User::where('tenant_id', $tenant->id)->pluck('name', 'id')->toArray();
+    }
+
+    /** Change a task's status by id, scoped to the tenant (manager action from the list). */
+    public function setStatusById(Tenant $tenant, int $taskId, string $status, ?User $by = null): array
+    {
+        $allowed = ['pending', 'in_progress', 'completed'];
+        if (! in_array($status, $allowed, true)) return ['ok' => false, 'error' => 'Invalid status.'];
+
+        $task = OrderTask::where('tenant_id', $tenant->id)->find($taskId);
+        if (! $task) return ['ok' => false, 'error' => 'Task not found.'];
+
+        $from = $task->status;
+        $task->status = $status;
+        if ($status === 'in_progress' && ! $task->started_at)  $task->started_at  = now();
+        if ($status === 'completed'   && ! $task->completed_at) $task->completed_at = now();
+        $task->save();
+
+        $this->log($tenant, $task->order_id, $task->id, 'status', $by, $from, $status,
+            $task->title . ' → ' . $status);
+
+        return ['ok' => true, 'status' => $status];
+    }
+
     public function myTasks(Tenant $tenant, User $user)
     {
         $tasks = OrderTask::query()->where('tenant_id', $tenant->id)
