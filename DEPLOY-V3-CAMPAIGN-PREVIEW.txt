@@ -1,0 +1,63 @@
+DEPLOY — V3 Campaigns: live WhatsApp phone-frame preview (v-preview)
+====================================================================
+Adds a WhatsApp mobile-frame preview beside the campaign form that composes,
+live as you type/pick, EXACTLY what the customer will receive — message,
+product lines, call-to-action and the photo. Builds on the campaign photo
+picker; this bundle is CUMULATIVE (includes the picker changes too), so it
+deploys cleanly on its own.
+
+FILES CHANGED (3 + this note)
+  resources/views/shell.blade.php                    (waPreview phone frame +
+                                                      mediapick picker; earlier)
+  app/Capability/Process/CampaignListCapability.php  (waPreview config + picker
+                                                      search/upload; earlier)
+  app/Jobs/SendCampaign.php                          (compose parity: keep the
+                                                      operator's product order;
+                                                      trim-based empty checks)
+
+WHAT'S NEW
+  New/Edit campaign now opens a wider dialog: the form on the left, a phone
+  showing a WhatsApp chat on the right. The green header carries your business
+  name ("business account"); the incoming bubble shows the photo on top (when
+  set) and, below it, your message + each attached product as
+    "• <name> — UGX <price>"
+  + a blank line + the call to action, then a timestamp — the same text the
+  server sends. It updates instantly as you type the message/CTA, pick or
+  remove products, or change the photo. On a phone the preview stacks under
+  the form.
+
+PARITY (why SendCampaign.php changed)
+  The preview must equal what actually sends. Two small server-side quirks
+  would have made it lie, now fixed in compose():
+    • Product lines now follow the order you attached them (the old whereIn
+      re-sorted by product id, so a preview showing Rice then Beans could send
+      Beans then Rice).
+    • Empty message/CTA use trim()-based checks, matching the preview (a
+      whitespace-only message no longer emits a stray blank first line).
+  Column, currency label (UGX), 0-decimal thousands, the "•" bullet and the
+  " — " em dash are identical on both sides.
+
+NOTE
+  The preview shows UGX to match the send job (SendCampaign composes product
+  prices in UGX). If you later make campaign pricing currency-aware, update
+  both compose() and waPreviewCompose() together.
+
+DEPLOY
+  git add resources/views/shell.blade.php \
+          app/Capability/Process/CampaignListCapability.php \
+          app/Jobs/SendCampaign.php
+  git commit -m "v3 campaigns: live WhatsApp preview + compose parity (order, trim)"
+  git push  ->  EasyPanel Rebuild        (no migration)
+
+VERIFY
+  1. /v3 -> Campaigns -> New campaign: the phone preview appears on the right.
+  2. Type in Message and Call to action -> the bubble updates as you type.
+  3. Pick two products in different order -> both appear as "• name — UGX price"
+     in the order you picked; send to yourself -> WhatsApp matches that order.
+  4. Pick/upload a photo -> it shows at the top of the bubble; remove it ->
+     bubble becomes text-only.
+  5. On a phone, the preview stacks below the form and still updates.
+  6. Send a real one to yourself -> the received WhatsApp == the preview.
+
+ROLLBACK
+  Revert the commit. No data/schema changes.

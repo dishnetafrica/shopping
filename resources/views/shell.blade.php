@@ -441,6 +441,33 @@ tr.sel td.selc{box-shadow:inset 3px 0 0 var(--brand)}
 .mp-chip{display:inline-flex;align-items:center;gap:6px;background:var(--brand-wash);color:var(--brand-ink);border:1px solid var(--line);border-radius:20px;padding:3px 8px 3px 4px;font-size:12.5px;font-weight:600}
 .mp-chip button{border:0;background:none;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:0 2px}
 .mp-chdot{width:20px;height:20px;border-radius:50%;background:#fff center/cover no-repeat;flex:none}
+/* ===== WhatsApp live preview (phone frame) ===== */
+.modal.wa-modal{max-width:860px}
+.wa-split{display:flex;gap:26px;align-items:flex-start}
+.wa-formcol{flex:1;min-width:0}
+.wa-previewcol{flex:none;width:290px;position:sticky;top:0}
+.wa-phone{width:290px;background:#000;border-radius:36px;padding:9px;box-shadow:0 12px 34px rgba(17,24,28,.28);position:relative}
+.wa-notch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:96px;height:20px;background:#000;border-radius:0 0 14px 14px;z-index:3}
+.wa-top{background:#008069;color:#fff;border-radius:28px 28px 0 0;padding:26px 12px 9px;display:flex;align-items:center;gap:9px}
+.wa-bk{width:20px;height:20px;stroke:#fff;stroke-width:2.4;fill:none;flex:none}
+.wa-av{width:32px;height:32px;border-radius:50%;background:#ffffff2e;display:grid;place-items:center;font-size:12px;font-weight:700;flex:none}
+.wa-ti{flex:1;min-width:0}
+.wa-nm{font-size:14px;font-weight:600;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wa-st{font-size:11px;opacity:.8;line-height:1.1}
+.wa-ic2{width:19px;height:19px;stroke:#fff;stroke-width:1.8;fill:none;flex:none;opacity:.92}
+.wa-chat{background:#efeae2;background-image:radial-gradient(circle at 20% 30%, rgba(0,0,0,.018) 0 1px, transparent 1px),radial-gradient(circle at 70% 60%, rgba(0,0,0,.018) 0 1px, transparent 1px);background-size:26px 26px;min-height:330px;max-height:430px;overflow-y:auto;padding:14px 12px 16px}
+.wa-daypill{margin:0 auto 12px;width:max-content;background:#fff;color:#54656f;font-size:11px;font-weight:600;padding:4px 11px;border-radius:8px;box-shadow:0 1px 1px rgba(0,0,0,.06)}
+.wa-bubble{background:#fff;border-radius:9px;border-top-left-radius:2px;box-shadow:0 1px 1px rgba(0,0,0,.13);padding:6px 8px 5px;max-width:88%;width:max-content;position:relative}
+.wa-bubble .wa-img{width:100%;min-width:210px;height:150px;border-radius:6px;background:#e9edef center/cover no-repeat;margin-bottom:5px}
+.wa-txt{font-size:13px;line-height:1.4;color:#111b21;white-space:pre-wrap;word-break:break-word}
+.wa-txt.wa-ph{color:#8a97a1;font-style:italic}
+.wa-time{font-size:10.5px;color:#667781;text-align:right;margin-top:3px;line-height:1}
+.wa-inbar{display:flex;align-items:center;gap:8px;background:#f0f2f5;border-radius:0 0 28px 28px;padding:9px 12px 16px}
+.wa-inbox{flex:1;background:#fff;border-radius:18px;padding:8px 13px;color:#8a97a1;font-size:12.5px}
+.wa-send{width:34px;height:34px;border-radius:50%;background:#008069;display:grid;place-items:center;color:#fff;flex:none}
+.wa-send .ic{stroke:#fff;fill:none;width:16px;height:16px}
+.wa-hint{font-size:11.5px;color:var(--muted);text-align:center;margin-top:9px}
+@media(max-width:760px){ .wa-split{flex-direction:column} .wa-previewcol{width:100%;position:static;display:flex;justify-content:center} }
 .gallery{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
 .gthumb{position:relative;width:72px;height:72px;border-radius:10px;border:1px solid var(--line);background:#f3f4f6 center/cover no-repeat;flex:none}
 .gthumb.gload{display:grid;place-items:center;color:var(--muted);font-size:18px}
@@ -1501,9 +1528,16 @@ function formModal(a){
     else { const t=(type==='money'||type==='number')?'type="number" step="'+(type==='money'?'0.01':'1')+'"':''; const ph=type==='money'?'placeholder="0.00"':'';
       fields+='<div class="fld"><label>'+lbl+'</label><input id="f_'+k+'" '+t+' '+ph+' value="'+esc(val)+'"></div>'; }
   });
-  document.getElementById('modal').innerHTML='<div class="h">'+esc(a.label)+'<button class="x" onclick="closeM()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><div class="b">'+fields+'</div><div class="f"><button class="btn" onclick="closeM()">Cancel</button><button class="btn pri" id="mok">'+esc(a.submitLabel||'Save')+'</button></div>';
+  // Optional live WhatsApp preview: fields on the left, a phone frame on the right that
+  // composes exactly what the customer will receive as you type.
+  const __body = a.waPreview
+    ? '<div class="wa-split"><div class="wa-formcol">'+fields+'</div><div class="wa-previewcol">'+waPhoneShell(a)+'</div></div>'
+    : fields;
+  const __mEl=document.getElementById('modal'); __mEl.style.maxWidth=''; __mEl.classList.toggle('wa-modal', !!a.waPreview);
+  __mEl.innerHTML='<div class="h">'+esc(a.label)+'<button class="x" onclick="closeM()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><div class="b">'+__body+'</div><div class="f"><button class="btn" onclick="closeM()">Cancel</button><button class="btn pri" id="mok">'+esc(a.submitLabel||'Save')+'</button></div>';
   document.getElementById('ov').classList.add('on');
   Object.entries(a.schema).forEach(([k,type])=>{ if(type==='gallery') renderGal(k); if(type==='mediapick') mpChips(k); });
+  if(a.waPreview) waPreviewInit(a);
   // Auto-fill a rate field from a source select (e.g. currency → rate_to_usd) so the user can't mismatch them.
   if(a.autoRate && a.autoRate.field && a.autoRate.source && a.autoRate.map){
     const src=document.getElementById('f_'+a.autoRate.source), tgt=document.getElementById('f_'+a.autoRate.field);
@@ -1612,6 +1646,7 @@ function mpSync(k){ // paste-a-URL / after upload: reflect the current URL into 
   var el=document.getElementById('f_'+k); if(!el) return; var u=(el.value||'').trim();
   if(window.MP&&window.MP[k]) window.MP[k].url=u;
   var pv=document.getElementById('prev_'+k); if(pv) pv.style.cssText=cssBg(u);
+  if(window.__WAPV&&window.__WAPV._active) waPreviewUpdate();
 }
 function mpSearch(k){
   var box=document.getElementById('mpres_'+k), inp=document.getElementById('mpq_'+k); if(!box||!inp) return;
@@ -1645,6 +1680,7 @@ function mpChips(k){
   if(!l.length){ el.innerHTML=''; return; }
   el.innerHTML='<div class="mp-chips-h">Attached products (their name &amp; price are added to the message):</div>'+
     l.map(function(p,i){ return '<span class="mp-chip">'+(p.image?'<span class="mp-chdot" style="'+cssBg(p.image)+'"></span>':'')+esc(p.name)+'<button type="button" onclick="mpUnpick(\''+k+'\','+i+')">×</button></span>'; }).join('');
+  if(window.__WAPV&&window.__WAPV._active) waPreviewUpdate();
 }
 /* mediapick upload — uses the field's configured endpoint (campaigns' own, under menu:customers). */
 async function mpUpload(k){
@@ -1661,6 +1697,61 @@ async function mpUpload(k){
   };
   reader.readAsDataURL(f);
 }
+/* ===== Live WhatsApp preview (mobile frame) for the campaign form ===== */
+var __WAPV=null;
+function waPhoneShell(a){
+  var cfg=a.waPreview||{}; var biz=String(cfg.business||'Your business');
+  var ini=(biz.trim().split(/\s+/).map(function(w){return w[0];}).join('').slice(0,2)||'B').toUpperCase();
+  return '<div class="wa-phone"><div class="wa-notch"></div>'+
+    '<div class="wa-top">'+
+      '<svg class="wa-bk" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>'+
+      '<div class="wa-av">'+esc(ini)+'</div>'+
+      '<div class="wa-ti"><div class="wa-nm">'+esc(biz)+'</div><div class="wa-st">business account</div></div>'+
+      '<svg class="wa-ic2" viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7zM1 5h15v14H1z"/></svg>'+
+      '<svg class="wa-ic2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>'+
+    '</div>'+
+    '<div class="wa-chat"><div class="wa-daypill">TODAY</div><div class="wa-bubble" id="waBubble"></div></div>'+
+    '<div class="wa-inbar"><div class="wa-inbox">Message</div><div class="wa-send">'+icon('send','ic-sm')+'</div></div>'+
+  '</div><div class="wa-hint">Live preview — exactly what the customer receives</div>';
+}
+function waPreviewInit(a){
+  __WAPV=a.waPreview||{}; __WAPV._active=true;
+  ['messageField','ctaField','imageField'].forEach(function(fk){
+    var k=__WAPV[fk]; if(!k) return; var el=document.getElementById('f_'+k);
+    if(el){ ['input','change'].forEach(function(ev){ el.addEventListener(ev,waPreviewUpdate); }); }
+  });
+  waPreviewUpdate();
+}
+/* Mirrors SendCampaign::compose() on the server so the preview == what actually sends. */
+function waPreviewCompose(){
+  if(!__WAPV) return {text:'',image:''};
+  var g=function(fk){ var k=__WAPV[fk]; if(!k) return null; return document.getElementById('f_'+k); };
+  var msgEl=g('messageField'), ctaEl=g('ctaField'), imgEl=g('imageField');
+  var message=msgEl?String(msgEl.value||'').trim():'';
+  var cta=ctaEl?String(ctaEl.value||'').trim():'';
+  var image=imgEl?String(imgEl.value||'').trim():'';
+  var prods=[]; var mk=__WAPV.imageField;
+  if(mk && window.MP && window.MP[mk]) prods=window.MP[mk].products||[];
+  var lines=[];
+  if(message) lines.push(message);
+  prods.forEach(function(p){ lines.push('• '+p.name+' — UGX '+Number(p.price||0).toLocaleString('en-US',{maximumFractionDigits:0})); });
+  if(cta){ lines.push(''); lines.push(cta); }
+  return {text:lines.join('\n'), image:image};
+}
+function waPreviewUpdate(){
+  var el=document.getElementById('waBubble'); if(!el||!__WAPV) return;
+  var c=waPreviewCompose();
+  var now=new Date(); var hh=now.getHours(), mm=String(now.getMinutes()).padStart(2,'0');
+  var ap=hh<12?'AM':'PM'; var h12=((hh+11)%12)+1; var time=h12+':'+mm+' '+ap;
+  var html='';
+  if(c.image) html+='<div class="wa-img" style="'+cssBg(c.image)+'"></div>';
+  var txt=(c.text||'').trim();
+  if(txt){ html+='<div class="wa-txt">'+esc(txt).replace(/\n/g,'<br>')+'</div>'; }
+  else if(!c.image){ html+='<div class="wa-txt wa-ph">Your message preview will appear here…</div>'; }
+  html+='<div class="wa-time">'+esc(time)+'</div>';
+  el.innerHTML=html;
+  el.classList.toggle('wa-hasimg', !!c.image);
+}
 /* Generic file field (zip/csv/etc) — reads the chosen file to a base64 data URL held in the hidden f_<k>. */
 function uploadFileField(k){
   const fi=document.getElementById('upl_'+k); const f=fi&&fi.files&&fi.files[0]; if(!f) return;
@@ -1672,7 +1763,7 @@ function uploadFileField(k){
   reader.onerror=()=>{ if(st) st.textContent='Could not read the file'; document.getElementById('f_'+k).value=''; };
   reader.readAsDataURL(f);
 }
-function closeM(){ document.getElementById('ov').classList.remove('on'); }
+function closeM(){ document.getElementById('ov').classList.remove('on'); __WAPV=null; var m=document.getElementById('modal'); if(m) m.classList.remove('wa-modal'); }
 document.getElementById('ov').addEventListener('click',e=>{ if(e.target.id==='ov') closeM(); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeM(); });
 document.getElementById('search').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const p=e.target.value.trim().split(/\s+/); if(p[0]&&p[1]) route(p[0].toLowerCase(),p[1]); } });
@@ -1688,7 +1779,7 @@ function quoteBuilder(a){
   const seed=(a.lines||[]).map(l=>({name:String(l.name||''),unit:String(l.unit||l.unit_label||''),qty:Math.max(1,parseInt(l.qty||1,10)||1),price:Math.max(0,parseFloat(l.price!=null?l.price:l.unit_price)||0)}));
   window.QB={lines:seed, cur:cur, a:a, edit:edit, invoice:invoice, _res:[], _cres:[], customerId:(a.prefill&&a.prefill.id)||null, customerName:a.customer||'', customerPhone:(a.prefill&&a.prefill.phone)||'', pick:!!a.pickCustomer};
   const curOpts=(a.currencies||[cur]).map(c=>'<option'+(c===cur?' selected':'')+'>'+esc(c)+'</option>').join('');
-  const m=document.getElementById('modal'); m.style.maxWidth='660px';
+  const m=document.getElementById('modal'); m.classList.remove('wa-modal'); m.style.maxWidth='660px'; __WAPV=null;
   const custBlock=a.pickCustomer?'<div class="qb-custwrap" id="qbcustwrap"></div>':'';
   const noun=invoice?'invoice':'quotation';
   const title=(edit?'Edit ':'New ')+noun+(a.customer?' — '+esc(a.customer):'');

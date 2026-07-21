@@ -39,6 +39,7 @@ final class CampaignListCapability implements ProcessCapability
         $canEdit = $ctx->can('menu:customers');
         $canSend = $this->privileged($ctx);
 
+        $business = (string) (optional($ctx->tenant)->name ?: 'Your business');
         $typeLabels = ['promotion' => 'Product Promotion', 'launch' => 'New Product Launch', 'discount' => 'Discount Campaign', 'seasonal' => 'Seasonal Offer'];
         $audLabels = ['all' => 'Everyone', 'recent' => 'Recent buyers (30d)', 'inactive' => 'Lapsed (60d+)', 'vip' => 'VIP spenders', 'category' => 'Bought a category'];
 
@@ -69,7 +70,7 @@ final class CampaignListCapability implements ProcessCapability
 
             $btns = [];
             if ($canEdit) {
-                $btns[] = ['icon' => 'edit', 'title' => 'Edit campaign', 'action' => $this->editForm($c, $comboCats, $typeLabels, $audLabels)];
+                $btns[] = ['icon' => 'edit', 'title' => 'Edit campaign', 'action' => $this->editForm($c, $comboCats, $typeLabels, $audLabels, $business)];
             }
             if ($canSend && in_array($status, ['draft', 'scheduled'], true)) {
                 $btns[] = ['icon' => 'bolt', 'title' => 'Send now', 'tone' => 'primary', 'action' => [
@@ -98,7 +99,7 @@ final class CampaignListCapability implements ProcessCapability
             ['key' => 'act', 'label' => '', 'type' => 'action', 'align' => 'right'],
         ];
 
-        $newCampaign = $this->editForm(null, $comboCats, $typeLabels, $audLabels);
+        $newCampaign = $this->editForm(null, $comboCats, $typeLabels, $audLabels, $business);
 
         return (new WorkspacePayload)
             ->object([
@@ -118,7 +119,7 @@ final class CampaignListCapability implements ProcessCapability
     }
 
     /** Create (null) or edit a campaign — POST JSON to the proven /papi/campaign/save endpoint. */
-    private function editForm(?Campaign $c, string $comboCats, array $typeLabels, array $audLabels): array
+    private function editForm(?Campaign $c, string $comboCats, array $typeLabels, array $audLabels, string $business = 'Your business'): array
     {
         $isEdit = $c !== null;
         $whenPrefill = ($isEdit && $c->scheduled_for) ? Carbon::parse($c->scheduled_for)->format('Y-m-d H:i') : '';
@@ -152,6 +153,14 @@ final class CampaignListCapability implements ProcessCapability
             'attachedProducts' => $attached,
             'mediaSearch' => '/api/v1/workspace/campaigns/_/search',
             'mediaUpload' => '/api/v1/workspace/campaigns/_/upload_image',
+            // Live WhatsApp phone-frame preview — composes message + product lines + CTA + photo
+            // exactly like SendCampaign, so the operator sees what the customer will receive.
+            'waPreview' => [
+                'business'     => $business,
+                'messageField' => 'message',
+                'ctaField'     => 'cta',
+                'imageField'   => 'image_url',
+            ],
             'prefill' => $isEdit
                 ? ['name' => (string) $c->name, 'type' => (string) ($c->type ?: 'promotion'), 'audience' => (string) ($c->audience ?: 'all'), 'category' => (string) $c->category, 'message' => (string) $c->message, 'cta' => (string) ($c->cta ?: 'Reply BUY to order instantly.'), 'image_url' => (string) $c->image_url, 'scheduled_for' => $whenPrefill]
                 : ['type' => 'promotion', 'audience' => 'all', 'cta' => 'Reply BUY to order instantly.'],

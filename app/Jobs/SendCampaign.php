@@ -80,18 +80,23 @@ class SendCampaign implements ShouldQueue
     protected function compose(Campaign $c): string
     {
         $lines = [];
-        if ($c->message) $lines[] = trim($c->message);
+        $message = trim((string) $c->message);
+        if ($message !== '') $lines[] = $message;
 
         if (is_array($c->product_ids) && $c->product_ids) {
-            $prods = Product::whereIn('id', $c->product_ids)->get();
-            foreach ($prods as $p) {
-                $lines[] = '• ' . $p->name . ' — UGX ' . number_format((float) $p->price);
+            // Keep the exact order the operator attached them in (matches the v3 live
+            // WhatsApp preview) — whereIn() alone would reorder by primary key.
+            $prods = Product::whereIn('id', $c->product_ids)->get()->keyBy('id');
+            foreach ($c->product_ids as $pid) {
+                $p = $prods->get((int) $pid);
+                if ($p) $lines[] = '• ' . $p->name . ' — UGX ' . number_format((float) $p->price);
             }
         }
 
-        if ($c->cta) {
+        $cta = trim((string) $c->cta);
+        if ($cta !== '') {
             $lines[] = '';
-            $lines[] = $c->cta;
+            $lines[] = $cta;
         }
         return implode("\n", $lines);
     }
