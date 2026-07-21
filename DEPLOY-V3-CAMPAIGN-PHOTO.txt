@@ -1,0 +1,68 @@
+DEPLOY — V3 Campaigns: pick a product photo or upload one (v-photo)
+==================================================================
+On /v3 -> Campaigns -> New/Edit campaign, the plain "Image URL" text box is
+replaced by a photo picker: search your products and tap one (its photo +
+name & price attach and go out to customers), OR upload a photo from the
+device, OR still paste a link. Backend already sends the image on WhatsApp
+(sendImage) and appends attached product lines — the form just never let you
+do this before.
+
+FILES CHANGED (2 + this note)
+  app/Capability/Process/CampaignListCapability.php   (mediapick field +
+                                                       own search/upload command)
+  resources/views/shell.blade.php                     (new "mediapick" form field
+                                                       type + helpers + CSS)
+
+WHAT'S NEW
+  In the campaign form the Photo field now offers three ways to set the image:
+    • Search your products  — type a name, pick from the list (each shows its
+      thumbnail + price). Picking sets the campaign photo to that product's
+      image AND attaches the product, so its name & price are added to the
+      message automatically. Attached products show as removable chips.
+    • Upload photo          — choose an image from the phone/computer.
+    • Paste a link          — the old behaviour, still there as a fallback.
+  Editing a campaign that already has products pre-loads them as chips.
+
+WHY THE NEW SEARCH/UPLOAD LIVES ON THE CAMPAIGNS CAPABILITY
+  The picker calls /api/v1/workspace/campaigns/_/search and .../upload_image,
+  which are gated by the campaigns permission (menu:customers). The products
+  capability is gated by menu:products, which sales/marketing campaign
+  operators don't have — so reusing it would have 403'd the picker for exactly
+  those users. The campaigns "search" returns each product's id (needed so the
+  chosen product's name/price attach) + image (for the thumbnail).
+
+HOW IT SENDS (unchanged backend)
+  /papi/campaign/save already stores image_url + product_ids. SendCampaign
+  sends the image with the composed caption when image_url is set, and appends
+  "• <product> — UGX <price>" for each attached product id. A product with no
+  photo still works: it attaches the name/price line and sends as text.
+
+DEPLOY
+  git add app/Capability/Process/CampaignListCapability.php resources/views/shell.blade.php
+  git commit -m "v3 campaigns: product-photo picker + upload in the campaign form"
+  git push  ->  EasyPanel Rebuild        (no migration)
+
+VERIFY
+  1. /v3 -> Campaigns -> New campaign. In "Photo", type a product name ->
+     results show with thumbnails -> tap one -> its photo fills the preview and
+     a product chip appears.
+  2. Save as draft, then Edit it -> the photo and the product chip are still
+     there.
+  3. "Upload photo" -> choose an image -> preview updates.
+  4. Send the campaign to yourself (small audience) -> WhatsApp shows the photo
+     with the caption + the product name/price line.
+  5. As a MARKETING or SALES staff login (no products menu): the product search
+     and upload both work (they run under the campaigns/customers permission).
+  6. Pick a product that has NO photo -> it still attaches (name/price line);
+     message sends as text.
+
+ROLLBACK
+  Revert the commit. No data or schema changes (image_url/product_ids columns
+  already existed).
+
+NOTE — reusable field
+  "mediapick" is a generic form field; other v3 forms can use it by setting the
+  schema value to 'mediapick' and (optionally) passing mediaSearch/mediaUpload
+  endpoints + attachedProducts. If a single form ever needs TWO mediapick
+  fields, the product-attachment (product_ids) would need a per-field key —
+  today only Campaigns uses it, with one field, so this is a future note.

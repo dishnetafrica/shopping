@@ -426,6 +426,21 @@ tr.sel td.selc{box-shadow:inset 3px 0 0 var(--brand)}
 .imgfld{display:flex;gap:12px;align-items:center}
 .imgprev{width:56px;height:56px;border-radius:9px;border:1px solid var(--line);background:#f3f4f6 center/cover no-repeat;flex:none}
 .imgbtns{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+/* mediapick (product photo picker + upload + url) */
+.mp{display:flex;gap:12px;align-items:flex-start}
+.mp-prev{width:72px;height:72px}
+.mp-side{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.mp-search{position:relative}
+.mp-search>input{width:100%;font:inherit;font-size:13px;padding:8px 11px;border:1px solid var(--line);border-radius:8px;outline:none}
+.mp-search>input:focus{border-color:var(--brand)}
+.mp-btns{display:flex;align-items:center;gap:8px}
+.mp-th{width:30px;height:30px;border-radius:6px;background:#f3f4f6 center/cover no-repeat;flex:none}
+.mp-th0{display:grid;place-items:center;color:var(--faint)}
+.mp-chips{margin-top:9px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.mp-chips-h{flex-basis:100%;font-size:11.5px;color:var(--muted)}
+.mp-chip{display:inline-flex;align-items:center;gap:6px;background:var(--brand-wash);color:var(--brand-ink);border:1px solid var(--line);border-radius:20px;padding:3px 8px 3px 4px;font-size:12.5px;font-weight:600}
+.mp-chip button{border:0;background:none;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:0 2px}
+.mp-chdot{width:20px;height:20px;border-radius:50%;background:#fff center/cover no-repeat;flex:none}
 .gallery{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
 .gthumb{position:relative;width:72px;height:72px;border-radius:10px;border:1px solid var(--line);background:#f3f4f6 center/cover no-repeat;flex:none}
 .gthumb.gload{display:grid;place-items:center;color:var(--muted);font-size:18px}
@@ -1450,6 +1465,27 @@ function formModal(a){
       fields+='<div class="fld"><label>'+lbl+'</label><input type="hidden" id="f_'+k+'" value="">'+
         '<input type="file" '+(acc?('accept="'+esc(acc)+'"'):'')+' id="upl_'+k+'" onchange="uploadFileField(\''+k+'\')" style="font:inherit;font-size:13px">'+
         '<span class="mut" id="upls_'+k+'" style="font-size:12px;display:block;margin-top:5px"></span></div>'; }
+    else if(type==='mediapick'){
+      // Photo you can (a) pick from your products — its image + name/price attach automatically,
+      // (b) upload from the device, or (c) paste a URL. Chosen products ride along as product_ids.
+      window.MP=window.MP||{};
+      window.MP[k]={url:val, products:(a.attachedProducts||[]).slice(),
+        searchEp:a.mediaSearch||'/api/v1/workspace/products/_/search',
+        uploadEp:a.mediaUpload||'/api/v1/workspace/products/_/upload_image'};
+      fields+='<div class="fld"><label>'+lbl+'</label>'+
+        '<div class="mp">'+
+          '<div class="imgprev mp-prev" id="prev_'+k+'" style="'+cssBg(val)+'"></div>'+
+          '<div class="mp-side">'+
+            '<div class="mp-search"><input id="mpq_'+k+'" placeholder="Search your products…" autocomplete="off" oninput="mpSearch(\''+k+'\')"><div class="qb-res" id="mpres_'+k+'"></div></div>'+
+            '<div class="mp-btns">'+
+              '<input type="file" accept="image/*" id="file_'+k+'" style="display:none" onchange="mpUpload(\''+k+'\')">'+
+              '<button type="button" class="btn sm" onclick="document.getElementById(\'file_'+k+'\').click()">'+icon('doc','ic-sm')+'Upload photo</button>'+
+              '<span class="mut" id="up_'+k+'" style="font-size:12px"></span>'+
+            '</div>'+
+            '<input id="f_'+k+'" value="'+esc(val)+'" placeholder="…or paste an image link" oninput="mpSync(\''+k+'\')" style="width:100%;font-size:12.5px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;color:var(--muted)">'+
+          '</div>'+
+        '</div>'+
+        '<div class="mp-chips" id="mpchips_'+k+'"></div></div>'; }
     else if(String(type).startsWith('enum:')){ const opts=String(type).slice(5).split(',');
       fields+='<div class="fld"><label>'+lbl+'</label><select id="f_'+k+'">'+opts.map(o=>'<option'+(o===val?' selected':'')+'>'+esc(o)+'</option>').join('')+'</select></div>'; }
     else if(String(type).startsWith('combo:')){ const opts=String(type).slice(6).split('|').filter(Boolean);
@@ -1467,7 +1503,7 @@ function formModal(a){
   });
   document.getElementById('modal').innerHTML='<div class="h">'+esc(a.label)+'<button class="x" onclick="closeM()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><div class="b">'+fields+'</div><div class="f"><button class="btn" onclick="closeM()">Cancel</button><button class="btn pri" id="mok">'+esc(a.submitLabel||'Save')+'</button></div>';
   document.getElementById('ov').classList.add('on');
-  Object.entries(a.schema).forEach(([k,type])=>{ if(type==='gallery') renderGal(k); });
+  Object.entries(a.schema).forEach(([k,type])=>{ if(type==='gallery') renderGal(k); if(type==='mediapick') mpChips(k); });
   // Auto-fill a rate field from a source select (e.g. currency → rate_to_usd) so the user can't mismatch them.
   if(a.autoRate && a.autoRate.field && a.autoRate.source && a.autoRate.map){
     const src=document.getElementById('f_'+a.autoRate.source), tgt=document.getElementById('f_'+a.autoRate.field);
@@ -1495,7 +1531,10 @@ function formModal(a){
     compute();
   }
   document.getElementById('mok').onclick=async()=>{ const body=Object.assign({}, a.body||{});
-    Object.entries(a.schema).forEach(([k,type])=>{ if(type==='gallery'){ body[k]=window.GAL[k]||[]; } else { const el=document.getElementById('f_'+k); if(el) body[k]=el.value; } });
+    Object.entries(a.schema).forEach(([k,type])=>{ if(type==='gallery'){ body[k]=window.GAL[k]||[]; }
+      else if(type==='mediapick'){ const el=document.getElementById('f_'+k); if(el) body[k]=(el.value||'').trim();
+        body.product_ids=((window.MP&&window.MP[k]&&window.MP[k].products)||[]).map(p=>p.id).filter(x=>x!=null); }
+      else { const el=document.getElementById('f_'+k); if(el) body[k]=el.value; } });
     // pathMap: resolve the target URL from a picked field value (e.g. supplier name → /papi/suppliers/{id}/pay).
     let ep=a.endpoint;
     if(a.pathMap && a.pathMap.field && a.pathMap.map){ const sel=body[a.pathMap.field]; const mapped=a.pathMap.map[sel];
@@ -1562,6 +1601,62 @@ async function uploadPhoto(k){
       const res=await post('/api/v1/workspace/products/_/upload_image',{data:reader.result,name:f.name});
       if(res.ok&&res.url){ document.getElementById('f_'+k).value=res.url; const pv=document.getElementById('prev_'+k); if(pv) pv.style.backgroundImage='url(\''+res.url+'\')'; if(st) st.textContent='✓ uploaded'; }
       else { if(st) st.textContent=res.message||res.error||'Upload failed'; }
+    }catch(e){ if(st) st.textContent='Upload failed'; }
+  };
+  reader.readAsDataURL(f);
+}
+/* ===== mediapick: product-photo picker + upload + URL, for campaigns & the like ===== */
+var MPT={};
+function cssBg(u){ u=(u==null?'':String(u)).trim(); return u?("background-image:url('"+u.replace(/'/g,'%27').replace(/"/g,'%22')+"')"):''; }
+function mpSync(k){ // paste-a-URL / after upload: reflect the current URL into MP + preview
+  var el=document.getElementById('f_'+k); if(!el) return; var u=(el.value||'').trim();
+  if(window.MP&&window.MP[k]) window.MP[k].url=u;
+  var pv=document.getElementById('prev_'+k); if(pv) pv.style.cssText=cssBg(u);
+}
+function mpSearch(k){
+  var box=document.getElementById('mpres_'+k), inp=document.getElementById('mpq_'+k); if(!box||!inp) return;
+  var q=inp.value.trim(); clearTimeout(MPT[k]);
+  if(q.length<2){ box.innerHTML=''; box.classList.remove('on'); return; }
+  var ep=(window.MP[k]&&window.MP[k].searchEp)||'/api/v1/workspace/products/_/search';
+  MPT[k]=setTimeout(async function(){
+    var res=await post(ep,{q:q}); var items=(res&&res.items)||[];
+    window.MP[k]._res=items;
+    box.innerHTML=items.length? items.map(function(it,i){
+        var th=it.image?('<span class="mp-th" style="'+cssBg(it.image)+'"></span>'):'<span class="mp-th mp-th0">'+icon('products','ic-sm')+'</span>';
+        return '<div class="qb-opt" onclick="mpPick(\''+k+'\','+i+')">'+th+'<div style="flex:1"><div class="qb-on">'+esc(it.name)+'</div><div class="qb-op">'+esc(curFmt(it.price,'UGX'))+(it.unit?' / '+esc(it.unit):'')+(it.image?'':' · no photo')+'</div></div></div>';
+      }).join('')
+      : '<div class="qb-empty" style="padding:9px 12px;color:var(--muted);font-size:12.5px">No products match “'+esc(q)+'”</div>';
+    box.classList.add('on');
+  },220);
+}
+function mpPick(k,i){
+  var it=((window.MP[k]&&window.MP[k]._res)||[])[i]; if(!it) return;
+  var box=document.getElementById('mpres_'+k), inp=document.getElementById('mpq_'+k); if(box){box.innerHTML='';box.classList.remove('on');} if(inp) inp.value='';
+  // attach the product (name/price line rides along via product_ids); dedupe by id then name
+  var list=window.MP[k].products=window.MP[k].products||[];
+  if(!list.some(function(p){return (it.id!=null&&p.id===it.id)||(p.name||'')===it.name;})) list.push({id:it.id,name:it.name,price:it.price,image:it.image||''});
+  // use its photo as the campaign image (a real product photo is what you want to send)
+  if(it.image){ var el=document.getElementById('f_'+k); if(el){ el.value=it.image; } mpSync(k); }
+  mpChips(k);
+}
+function mpUnpick(k,idx){ var l=(window.MP[k]&&window.MP[k].products)||[]; l.splice(idx,1); mpChips(k); }
+function mpChips(k){
+  var el=document.getElementById('mpchips_'+k); if(!el) return; var l=(window.MP[k]&&window.MP[k].products)||[];
+  if(!l.length){ el.innerHTML=''; return; }
+  el.innerHTML='<div class="mp-chips-h">Attached products (their name &amp; price are added to the message):</div>'+
+    l.map(function(p,i){ return '<span class="mp-chip">'+(p.image?'<span class="mp-chdot" style="'+cssBg(p.image)+'"></span>':'')+esc(p.name)+'<button type="button" onclick="mpUnpick(\''+k+'\','+i+')">×</button></span>'; }).join('');
+}
+/* mediapick upload — uses the field's configured endpoint (campaigns' own, under menu:customers). */
+async function mpUpload(k){
+  var fi=document.getElementById('file_'+k); var f=fi&&fi.files&&fi.files[0]; if(!f) return;
+  var st=document.getElementById('up_'+k); if(st) st.textContent='Uploading…';
+  if(f.size>6*1024*1024){ if(st) st.textContent='Image too large (max 6MB)'; return; }
+  var ep=(window.MP[k]&&window.MP[k].uploadEp)||'/api/v1/workspace/products/_/upload_image';
+  var reader=new FileReader();
+  reader.onload=async function(){
+    try{ var res=await post(ep,{data:reader.result,name:f.name});
+      if(res&&res.ok&&res.url){ var el=document.getElementById('f_'+k); if(el) el.value=res.url; mpSync(k); if(st) st.textContent='✓ uploaded'; }
+      else { if(st) st.textContent=(res&&(res.message||res.error))||'Upload failed'; }
     }catch(e){ if(st) st.textContent='Upload failed'; }
   };
   reader.readAsDataURL(f);

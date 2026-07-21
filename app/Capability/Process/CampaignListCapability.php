@@ -7,6 +7,7 @@ use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\WorkspacePayload;
 use App\Models\Campaign;
 use App\Models\Product;
+use App\Services\Catalog\ImageUploadService;
 use Illuminate\Support\Carbon;
 
 /**
@@ -122,20 +123,35 @@ final class CampaignListCapability implements ProcessCapability
         $isEdit = $c !== null;
         $whenPrefill = ($isEdit && $c->scheduled_for) ? Carbon::parse($c->scheduled_for)->format('Y-m-d H:i') : '';
 
+        // On edit, resolve any already-attached products so the picker shows them as chips (with photos).
+        $attached = [];
+        if ($isEdit && is_array($c->product_ids) && $c->product_ids) {
+            $attached = Product::where('tenant_id', $c->tenant_id)->whereIn('id', $c->product_ids)
+                ->get(['id', 'name', 'price', 'image_url'])
+                ->map(fn ($p) => ['id' => (int) $p->id, 'name' => (string) $p->name, 'price' => round((float) $p->price, 2), 'image' => (string) ($p->image_url ?: '')])
+                ->values()->all();
+        }
+
         return [
             'key' => $isEdit ? 'edit_campaign' : 'new_campaign',
             'label' => $isEdit ? ('Edit campaign — ' . ($c->name ?: 'Campaign')) : 'New campaign',
             'method' => 'POST', 'endpoint' => '/papi/campaign/save', 'actor' => 'human', 'tone' => 'primary',
             'schema' => [
                 'name' => 'text', 'type' => 'enum:' . self::TYPES, 'audience' => 'enum:' . self::AUDIENCES,
-                'category' => $comboCats, 'message' => 'textarea', 'cta' => 'text', 'image_url' => 'text', 'scheduled_for' => 'text',
+                'category' => $comboCats, 'message' => 'textarea', 'cta' => 'text', 'image_url' => 'mediapick', 'scheduled_for' => 'text',
             ],
             'labels' => [
                 'name' => 'Campaign name', 'type' => 'Type', 'audience' => 'Send to (audience)',
                 'category' => 'Category (only if audience = "Bought a category")', 'message' => 'Message',
-                'cta' => 'Call to action', 'image_url' => 'Image URL (optional)',
+                'cta' => 'Call to action', 'image_url' => 'Photo (pick a product, upload, or paste a link)',
                 'scheduled_for' => 'Schedule for (YYYY-MM-DD HH:MM · blank = save as draft)',
             ],
+            // The picker reads these to seed chips on edit and to search/upload under the
+            // campaigns permission (menu:customers) — NOT the products capability, which a
+            // sales/marketing campaign operator has no menu access to.
+            'attachedProducts' => $attached,
+            'mediaSearch' => '/api/v1/workspace/campaigns/_/search',
+            'mediaUpload' => '/api/v1/workspace/campaigns/_/upload_image',
             'prefill' => $isEdit
                 ? ['name' => (string) $c->name, 'type' => (string) ($c->type ?: 'promotion'), 'audience' => (string) ($c->audience ?: 'all'), 'category' => (string) $c->category, 'message' => (string) $c->message, 'cta' => (string) ($c->cta ?: 'Reply BUY to order instantly.'), 'image_url' => (string) $c->image_url, 'scheduled_for' => $whenPrefill]
                 : ['type' => 'promotion', 'audience' => 'all', 'cta' => 'Reply BUY to order instantly.'],
@@ -156,6 +172,37 @@ final class CampaignListCapability implements ProcessCapability
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
+        // Product picker for the campaign form — gated by this capability's own permission
+        // (menu:customers), so sales/marketing operators can use it. Returns id (needed so
+        // the chosen product's name/price attach via product_ids) + image for the thumbnail.
+        if ($action === 'search') {
+            $q = trim((string) ($input['q'] ?? ''));
+            $rows = Product::where('tenant_id', $ctx->tenantId())
+                ->where('active', true)
+                ->when($q !== '', fn ($qq) => $qq->where('name', 'ilike', '%' . $q . '%'))
+                ->orderBy('name')->limit(20)->get();
+            $items = $rows->map(fn ($p) => [
+                'id' => (int) $p->id,
+                'name' => (string) $p->name,
+                'price' => round((float) $p->price, 2),
+                'unit' => (string) ($p->unit_label ?: ''),
+                'image' => (string) ($p->image_url ?: ''),
+            ])->all();
+
+            return ['ok' => true, 'items' => $items];
+        }
+
+        // Upload a photo for the campaign — same store as products, under menu:customers.
+        if ($action === 'upload_image') {
+            try {
+                $url = app(ImageUploadService::class)->store($ctx->tenant, (string) ($input['data'] ?? ''), (string) ($input['name'] ?? 'upload'));
+            } catch (\InvalidArgumentException $e) {
+                return ['ok' => false, 'error' => $e->getMessage(), 'message' => 'Could not read that image.'];
+            }
+
+            return ['ok' => true, 'url' => $url];
+        }
+
         return ['ok' => false, 'error' => 'unknown_action'];
     }
 }
