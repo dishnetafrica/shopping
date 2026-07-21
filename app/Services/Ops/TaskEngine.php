@@ -246,7 +246,8 @@ class TaskEngine
         string $title,
         ?\Illuminate\Support\Carbon $due = null,
         int $priority = 2,
-        ?User $by = null
+        ?User $by = null,
+        int $slaMinutes = 0
     ): array {
         $title = trim($title);
         if ($title === '') return ['ok' => false, 'error' => 'Task title is required.'];
@@ -271,7 +272,7 @@ class TaskEngine
             'owner_user_id'  => $assignee->id,
             'title'          => mb_substr($title, 0, 180),
             'status'         => 'pending',
-            'sla_minutes'    => 0,
+            'sla_minutes'    => max(0, $slaMinutes),   // used as the job's expected duration for ad-hoc tasks
             'paused_minutes' => 0,
             'assigned_at'    => now(),
             'due_at'         => $due,

@@ -293,6 +293,43 @@ final class DocumentController extends Controller
         ]);
     }
 
+    /**
+     * GET /api/v1/doc/tasks-export?format=pdf|csv — the team's task/job register (V3 Tasks screen).
+     * Optional ?from=&to=&status=open|closed&assignee_id= scope it like the on-screen filters.
+     */
+    public function tasksExport(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) {
+            abort(401);
+        }
+        $svc = app(\App\Services\Ops\TasksExport::class);
+        $data = $svc->collect($t, [
+            'from' => (string) $r->query('from', ''),
+            'to' => (string) $r->query('to', ''),
+            'status' => (string) $r->query('status', ''),
+            'assignee_id' => (int) $r->query('assignee_id', 0),
+        ]);
+        $stamp = now()->format('Ymd-Hi');
+
+        if (strtolower((string) $r->query('format', 'pdf')) === 'csv') {
+            return response($svc->csv($data), 200, [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="Tasks-' . $stamp . '.csv"',
+            ]);
+        }
+
+        $pdf = $svc->pdf($t, $data);
+        if (! $pdf) {
+            abort(404, 'PDF engine unavailable');
+        }
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="Tasks-' . $stamp . '.pdf"',
+        ]);
+    }
+
     private function stream(array $doc, string $filename)
     {
         $disk = Storage::disk('public');

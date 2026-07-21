@@ -525,6 +525,18 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 .sftabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
 .sftab{height:34px;padding:0 15px;border-radius:9px;font-weight:700;font-size:13px;border:1px solid var(--line);background:var(--surface);color:var(--muted)}
 .sftab.on{background:var(--brand);border-color:var(--brand);color:#fff}
+/* ===== List/Agenda toggle + Agenda view (any dated list) ===== */
+.vtog{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-right:6px}
+.vtog button{border:0;background:var(--surface);padding:6px 13px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--muted)}
+.vtog button.on{background:var(--brand);color:#fff}
+.agenda{padding:2px 0}
+.ag-day{padding:11px 14px 7px;font-weight:800;font-size:13px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.ag-day.today{color:var(--brand-ink)}
+.ag-row{display:flex;align-items:center;gap:12px;padding:9px 14px;border-bottom:1px solid var(--line)}
+.ag-row.clk{cursor:pointer}
+.ag-row.clk:hover{background:var(--surface-2)}
+.ag-time{min-width:46px;font-weight:700;font-size:12.5px;color:var(--muted)}
+.ag-main{flex:1;min-width:0}
 </style>
 </head>
 <body>
@@ -1448,6 +1460,8 @@ function formModal(a){
       fields+='<div class="fld"><label>'+lbl+'</label><textarea id="f_'+k+'" rows="4" style="width:100%;padding:9px 11px;border:1px solid var(--line,#e4e9e4);border-radius:9px;font:inherit;font-size:14px;resize:vertical">'+esc(val)+'</textarea></div>'; }
     else if(type==='date'){
       fields+='<div class="fld"><label>'+lbl+'</label><input type="date" id="f_'+k+'" value="'+esc(val)+'"></div>'; }
+    else if(type==='datetime'){
+      fields+='<div class="fld"><label>'+lbl+'</label><input type="datetime-local" id="f_'+k+'" value="'+esc(val)+'"></div>'; }
     else { const t=(type==='money'||type==='number')?'type="number" step="'+(type==='money'?'0.01':'1')+'"':''; const ph=type==='money'?'placeholder="0.00"':'';
       fields+='<div class="fld"><label>'+lbl+'</label><input id="f_'+k+'" '+t+' '+ph+' value="'+esc(val)+'"></div>'; }
   });
@@ -1699,9 +1713,11 @@ function cellVal(c){ return (c && typeof c==='object') ? (c.value!=null?c.value:
 function cellSort(c){ if(c && typeof c==='object') return c.sort!=null?c.sort:(c.value!=null?c.value:''); return c!=null?c:''; }
 function renderList(p){
   const o=p.object||{}; const cap=(p.meta&&p.meta.capability)||CUR.key; const tb=p.table||{};
+  window._VIEWMODE = window._VIEWMODE || {};   // per-capability List/Agenda choice, survives refresh()
   TBL = { cols:tb.columns||[], rows:tb.rows||[], filters:tb.filters||[], fval:{}, sort:null, dir:1, q:'',
     dateKey:tb.dateKey||null, dateLabel:tb.dateLabel||'Created', totals:tb.totals||[], from:'', to:'', page:1,
-    pageSize:tb.pageSize||15, cur:tb.currency||'UGX', empty:tb.empty||'',
+    pageSize:tb.pageSize||15, cur:tb.currency||'UGX', empty:tb.empty||'', capKey:cap,
+    mode:(tb.dateKey && window._VIEWMODE[cap])||'table',
     selectable:!!tb.selectable, bulk:tb.bulk||[], sel:{} };
   // A drill-through from another screen (e.g. a category card) pre-applies its filter here.
   if(PENDING_FILTER){ TBL.fval[PENDING_FILTER.key]=PENDING_FILTER.val; PENDING_FILTER=null; }
@@ -1735,11 +1751,30 @@ function renderToolbar(){
        '<label class="chip">To <input type="date" value="'+esc(TBL.to)+'" onchange="TBL.to=this.value;TBL.page=1;renderTable()"></label>'+
        ((TBL.from||TBL.to)?'<button class="btn sm" onclick="TBL.from=\'\';TBL.to=\'\';TBL.page=1;renderToolbar();renderTable()">Clear</button>':'');
   }
-  h+='<div style="flex:1"></div><span class="tinfo" id="tinfo"></span>';
+  h+='<div style="flex:1"></div>';
+  // List / Agenda toggle for any dated list + CSV of the current filtered rows.
+  if(TBL.dateKey) h+='<div class="vtog"><button class="'+(TBL.mode!=='agenda'?'on':'')+'" onclick="tblMode(\'table\')">List</button><button class="'+(TBL.mode==='agenda'?'on':'')+'" onclick="tblMode(\'agenda\')">Agenda</button></div>';
+  h+='<button class="btn sm" onclick="exportTblCsv()" title="Download the filtered rows as CSV">CSV</button>';
+  h+='<span class="tinfo" id="tinfo"></span>';
   document.getElementById('tbar').innerHTML=h;
 }
+function tblMode(m){ TBL.mode=m; try{ window._VIEWMODE[TBL.capKey||'']=m; }catch(e){} renderToolbar(); renderTable(); }
+function exportTblCsv(){
+  const rows=tblFiltered();
+  const cols=TBL.cols.filter(c=>c.key&&c.type!=='action');
+  const escCsv=v=>{ v=String(v==null?'':v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  let csv='\uFEFF'+cols.map(c=>escCsv(c.label||c.key)).join(',')+'\n';  // BOM so Excel reads UTF-8
+  rows.forEach(r=>{ csv+=cols.map(c=>{ const v=r[c.key]; let s=String(cellVal(v)); if(v&&v.sub) s+=' — '+v.sub; return escCsv(s); }).join(',')+'\n'; });
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=(TBL.capKey||'export')+'-'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),5000);
+  toast('CSV downloaded ('+rows.length+' rows)');
+}
 function sortBy(k){ if(TBL.sort===k){ TBL.dir=-TBL.dir; } else { TBL.sort=k; TBL.dir=1; } renderTable(); }
-function renderTable(){
+/* The current rows after search, filters, date range and sort — shared by the table,
+   the Agenda view and the CSV export so all three always agree. */
+function tblFiltered(){
   let rows=TBL.rows.slice();
   const q=(TBL.q||'').trim().toLowerCase();
   if(q) rows=rows.filter(r=>TBL.cols.some(c=>{const v=r[c.key]; return String(cellVal(v)).toLowerCase().includes(q) || (v&&v.sub&&String(v.sub).toLowerCase().includes(q));}));
@@ -1752,6 +1787,11 @@ function renderTable(){
   if(TBL.sort){ rows.sort((a,b)=>{ let x=cellSort(a[TBL.sort]), y=cellSort(b[TBL.sort]);
     if(typeof x==='string'||typeof y==='string'){ x=String(x).toLowerCase(); y=String(y).toLowerCase(); }
     return (x>y?1:x<y?-1:0)*TBL.dir; }); }
+  return rows;
+}
+function renderTable(){
+  if(TBL.mode==='agenda'){ renderAgenda(); return; }
+  let rows=tblFiltered();
   const filtered=rows.length;
   // Grid totals over the full filtered set (not just the visible page).
   if(TBL.totals&&TBL.totals.length){
@@ -1799,6 +1839,49 @@ function renderTable(){
         '<span>Page '+TBL.page+' / '+pages+'</span>'+
         '<button onclick="TBL.page++;renderTable()"'+(TBL.page>=pages?' disabled':'')+'>Next</button>';
     } else { pg.innerHTML=''; } }
+}
+/* Agenda view — the same filtered rows grouped by day of the list's dateKey (CRM-style).
+   Generic: first column = title, badge column = status chip, action column = row buttons,
+   the rest become the grey sub-line. */
+function renderAgenda(){
+  const rows=tblFiltered();
+  const pg=document.getElementById('pager'); if(pg) pg.innerHTML='';
+  const gt=document.getElementById('gtot'); if(gt) gt.innerHTML='';
+  const ti=document.getElementById('tinfo'); if(ti) ti.textContent=fmtCount(rows.length)+(rows.length!==TBL.rows.length?' of '+fmtCount(TBL.rows.length):'');
+  const el=document.getElementById('tbl'); if(!el) return;
+  if(!rows.length){ el.innerHTML='<div class="empty" style="padding:40px">'+icon('worklist','ic-lg')+'<div style="margin-top:8px">'+esc(TBL.empty||'No matching records')+'</div></div>'; return; }
+  const titleCol=TBL.cols[0]||{};
+  const badgeCol=TBL.cols.find(c=>c.type==='badge');
+  const actCol=TBL.cols.find(c=>c.type==='action');
+  const subCols=TBL.cols.filter(c=>c!==titleCol&&c!==badgeCol&&c!==actCol&&c.key&&c.key!==TBL.dateKey);
+  const dayKey=ts=>{ const d=new Date(ts*1000); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+  const groups={}, order=[];
+  rows.forEach(r=>{ const ts=Number(cellSort(r[TBL.dateKey]))||0; const gk=ts?dayKey(ts):'nodate';
+    if(!groups[gk]){ groups[gk]=[]; order.push(gk); } groups[gk].push(r); });
+  order.sort((a,b)=>a==='nodate'?1:(b==='nodate'?-1:(a<b?-1:1)));
+  const now=new Date(); const tk=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  let h='<div class="agenda">';
+  order.forEach(gk=>{
+    let lbl='No date';
+    if(gk!=='nodate'){ const d=new Date(gk+'T00:00:00');
+      lbl=d.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+      if(gk===tk) lbl+=' · Today'; }
+    h+='<div class="ag-day'+(gk===tk?' today':'')+'">'+esc(lbl)+' <span style="color:var(--faint);font-weight:600">· '+groups[gk].length+'</span></div>';
+    groups[gk].sort((a,b)=>(Number(cellSort(a[TBL.dateKey]))||0)-(Number(cellSort(b[TBL.dateKey]))||0)).forEach(r=>{
+      const ts=Number(cellSort(r[TBL.dateKey]))||0;
+      const tm=ts?new Date(ts*1000).toTimeString().slice(0,5):'—';
+      const bc=badgeCol?r[badgeCol.key]:null;
+      const sub=subCols.map(c=>{ const v=cellVal(r[c.key]); return (v&&v!=='—')?v:''; }).filter(Boolean).join(' · ');
+      h+='<div class="ag-row'+(r.link?' clk':'')+'"'+(r.link?' onclick="openLink(\''+esc(r.link)+'\')"':'')+'>'
+        +'<div class="ag-time">'+esc(tm)+'</div>'
+        +'<div class="ag-main"><div class="prim">'+esc(cellVal(r[titleCol.key]))+'</div>'+(sub?'<div class="mut" style="font-size:12px">'+esc(sub)+'</div>':'')+'</div>'
+        +(bc&&cellVal(bc)?('<span class="badge '+toneBadge((bc&&bc.badge)||'default')+'"><span class="d"></span>'+esc(cellVal(bc))+'</span>'):'')
+        +((actCol&&r[actCol.key]&&r[actCol.key].buttons)?('<div class="rowacts">'+rowActBtnsHtml(r[actCol.key].buttons)+'</div>'):'')
+        +'</div>';
+    });
+  });
+  h+='</div>';
+  el.innerHTML=h;
 }
 /* UCRM-style bulk selection (2026-07-18, UX-studied v2): shift-range, select-all-matching,
    selection money totals, busy states, Esc-to-clear, indeterminate header. */

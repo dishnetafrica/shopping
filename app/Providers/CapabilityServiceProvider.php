@@ -58,6 +58,7 @@ final class CapabilityServiceProvider extends ServiceProvider
                 Route::get('supplier-statement', [\App\Http\Controllers\V3\DocumentController::class, 'supplierStatement']);
                 Route::get('customer-statement', [\App\Http\Controllers\V3\DocumentController::class, 'customerStatement']);
                 Route::get('products-export', [\App\Http\Controllers\V3\DocumentController::class, 'productsExport']);
+                Route::get('tasks-export', [\App\Http\Controllers\V3\DocumentController::class, 'tasksExport']);
             });
         });
     }

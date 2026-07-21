@@ -5,28 +5,19 @@ namespace App\Capability\Process;
 use App\Capability\Contracts\CapabilityContext;
 use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\WorkspacePayload;
+use App\Models\Order;
 use App\Models\OrderTask;
 use App\Models\User;
 use App\Services\Ops\TaskEngine;
+use App\Support\WorkflowConfig;
 
 /**
- * Tasks (V3) — a person's own task list, plus (for owner/manager) the ability to assign
- * a one-off task to a staff member. Reads/writes through the existing TaskEngine + the
- * same task data the classic panel and WhatsApp reminders use. Assigning here sends the
- * assignee a WhatsApp with a tap-through link (no login) to accept/complete.
+ * Tasks (V3) — CRM-style job list: filterable (status / assignee / priority / due range),
+ * with client + duration columns, bulk mark-done, PDF export and an Agenda view (the
+ * Agenda toggle itself lives in the shell and works for any dated list).
  *
- * FIXED (v3 tasks bugfix):
- *  - Table payload now uses KEYED columns + keyed rows (the renderList/renderTable
- *    contract in shell.blade.php), instead of the positional `cells` shape that only
- *    the embedded card-table renderer understands. Before this fix the /v3 Tasks page
- *    rendered every cell blank and never showed the Start/Done buttons.
- *  - The action column carries type:'action' so the per-row buttons actually render.
- *  - 'done' on an ORDER-WORKFLOW task now flows through TaskEngine::complete() so the
- *    next stage opens (and the requires_upload gate applies); plain status flips are
- *    reserved for ad-hoc tasks. Previously "Done" silently stalled the order pipeline.
- *  - Priority map aligned to WorkflowConfig::PRIORITY (low 0 / normal 1 / high 2) so
- *    "Normal" no longer displays as "High". (See also the TaskEngine clamp note in
- *    FIX-V3-TASKS.md.)
+ * Managers see every task and can assign; staff see and close their own. All writes go
+ * through the existing TaskEngine; order-workflow tasks advance stages on completion.
  */
 final class TasksCapability implements ProcessCapability
 {
@@ -37,45 +28,99 @@ final class TasksCapability implements ProcessCapability
     // Everyone can see their own tasks; the Assign action is gated inside command().
     public function permission(): string { return 'menu:tasks'; }
 
+    /** pending/offered → Open · in_progress → In progress · paused → Paused · exception → Blocked · completed → Closed */
+    private function statusCell(OrderTask $x): array
+    {
+        return match ($x->status) {
+            'completed'   => ['value' => 'Closed',      'badge' => 'ok'],
+            'in_progress' => ['value' => 'In progress', 'badge' => 'info'],
+            'paused'      => ['value' => 'Paused',      'badge' => 'default'],
+            'exception'   => ['value' => 'Blocked',     'badge' => 'danger'],
+            default       => ['value' => 'Open',        'badge' => 'warn'],
+        };
+    }
+
+    private function durationText(OrderTask $x): string
+    {
+        $m = (int) $x->sla_minutes;
+        if ($m <= 0) return '—';
+        $h = intdiv($m, 60); $r = $m % 60;
+        return trim(($h ? $h . ' hr' : '') . ($r ? ' ' . $r . ' min' : ''));
+    }
+
+    private function dueCell(OrderTask $x): array
+    {
+        if (! $x->due_at) return ['value' => '—', 'sort' => 0];
+        $over = $x->isOverdue() && $x->status !== 'completed';
+        return ['value' => $x->due_at->format('M j, H:i'), 'sort' => $x->due_at->timestamp, 'tone' => $over ? 'danger' : null];
+    }
+
+    private function rowButtons(OrderTask $x): array
+    {
+        $buttons = [];
+        if ($x->status !== 'in_progress' && $x->status !== 'completed') {
+            $buttons[] = ['title' => 'Start', 'icon' => 'bolt', 'post' => '/api/v1/workspace/tasks/' . $x->id . '/start'];
+        }
+        if ($x->status !== 'completed') {
+            $buttons[] = ['title' => 'Done', 'icon' => 'check', 'tone' => 'ok', 'post' => '/api/v1/workspace/tasks/' . $x->id . '/done'];
+        }
+        return $buttons;
+    }
+
+    /** order_id → order_no map for the Client column (one query, tenant-scoped). */
+    private function clientMap($tasks, int $tenantId): array
+    {
+        $ids = $tasks->pluck('order_id')->filter(fn ($v) => (int) $v > 0)->unique()->values()->all();
+        if (! $ids) return [];
+        return Order::withoutGlobalScopes()->where('tenant_id', $tenantId)
+            ->whereIn('id', $ids)->pluck('order_no', 'id')->toArray();
+    }
+
     public function project(CapabilityContext $ctx): WorkspacePayload
     {
         $t = $ctx->tenant; $u = $ctx->user;
         $canManage = $u->isOwnerLike() || $u->role === 'manager';
 
-        // Managers default to the "All Tasks" overview; staff see only their own.
+        // Managers: the "All Jobs" register — every open task plus the recent closed ones.
+        // Fetched separately so completed rows can never crowd open ones out of the
+        // 500-row window, and the headline count comes straight from the DB.
         if ($canManage) {
-            $all = $this->engine->allTasks($t, ['status' => 'active']);
+            $active = $this->engine->allTasks($t, ['status' => 'active']);
+            $closedRecent = $this->engine->allTasks($t, ['status' => 'completed'])->take(150);
+            $all = $active->concat($closedRecent)->values();
+            $openCount = OrderTask::where('tenant_id', $t->id)->whereIn('status', OrderTask::ACTIVE)->count();
+            $overdueN = $active->filter(fn ($x) => $x->isOverdue())->count();
             $names = $this->engine->assigneeNames($t);
-            $rows = $all->map(function (OrderTask $x) use ($names) {
-                $due = $x->due_at ? $x->due_at->format('M j, H:i') : '—';
-                $status = $x->status === 'completed' ? '✅ Done'
-                    : ($x->status === 'in_progress' ? '🔵 In progress'
-                    : ($x->isOverdue() ? '🔴 Overdue' : '🟡 To do'));
-                $buttons = [];
-                if ($x->status !== 'in_progress' && $x->status !== 'completed') {
-                    $buttons[] = ['title' => 'Start', 'icon' => 'bolt', 'post' => '/api/v1/workspace/tasks/' . $x->id . '/start'];
-                }
-                if ($x->status !== 'completed') {
-                    $buttons[] = ['title' => 'Done', 'icon' => 'check', 'tone' => 'ok', 'post' => '/api/v1/workspace/tasks/' . $x->id . '/done'];
-                }
-                // KEYED row — matches the renderTable contract (r[col.key]).
+            $clients = $this->clientMap($all, $t->id);
+
+            $rows = $all->map(function (OrderTask $x) use ($names, $clients) {
                 return [
                     'id'       => $x->id,
                     'task'     => $x->title,
-                    'assignee' => $names[$x->owner_user_id] ?? ('User ' . $x->owner_user_id),
-                    'due'      => $due,
-                    'status'   => ['value' => $status, 'tone' => $x->isOverdue() && $x->status !== 'completed' ? 'danger' : null],
-                    'act'      => ['buttons' => $buttons],
+                    'client'   => (string) ($clients[$x->order_id] ?? '—'),
+                    'assignee' => $names[$x->owner_user_id] ?? ($x->owner_user_id ? ('User ' . $x->owner_user_id) : '—'),
+                    'due'      => $this->dueCell($x),
+                    'duration' => $this->durationText($x),
+                    'priority' => ucfirst(WorkflowConfig::priorityLabel((int) $x->priority)),
+                    'status'   => $this->statusCell($x),
+                    'act'      => ['buttons' => $this->rowButtons($x)],
                 ];
             })->values()->all();
 
-            // KEYED columns — 'act' is type:'action' so the row buttons render.
             $cols = [
-                ['key' => 'task',     'label' => 'Task'],
+                ['key' => 'task',     'label' => 'Task', 'type' => 'strong'],
+                ['key' => 'client',   'label' => 'Client'],
                 ['key' => 'assignee', 'label' => 'Assignee'],
                 ['key' => 'due',      'label' => 'Due'],
-                ['key' => 'status',   'label' => 'Status'],
+                ['key' => 'duration', 'label' => 'Duration'],
+                ['key' => 'priority', 'label' => 'Priority'],
+                ['key' => 'status',   'label' => 'Status', 'type' => 'badge'],
                 ['key' => 'act',      'label' => '', 'type' => 'action', 'sortable' => false],
+            ];
+            $filters = [
+                ['key' => 'status',   'label' => 'Status'],
+                ['key' => 'assignee', 'label' => 'Assignee'],
+                ['key' => 'priority', 'label' => 'Priority'],
             ];
 
             $staffOpts = User::where('tenant_id', $t->id)->orderBy('name')
@@ -84,52 +129,82 @@ final class TasksCapability implements ProcessCapability
                 ->map(fn ($x) => '#' . $x->id . ' ' . str_replace(',', ' ', $x->name ?: ('User ' . $x->id)))
                 ->all();
 
+            // Export follows the on-screen filters (same mechanism the purchases export uses).
+            $exportScope = [
+                'dateFrom' => 'from', 'dateTo' => 'to',
+                'filters' => [
+                    'status'   => ['param' => 'status', 'map' => [
+                        'Closed' => 'closed', 'Open' => 'open', 'In progress' => 'in_progress', 'Paused' => 'paused', 'Blocked' => 'blocked',
+                    ]],
+                    'assignee' => ['param' => 'assignee_id', 'map' => collect($names)
+                        ->filter(fn ($n) => is_string($n) && $n !== '')->flip()->toArray()],
+                ],
+            ];
+
             return (new WorkspacePayload)
                 ->object(['type' => 'process:tasks', 'title' => 'Tasks', 'subtitle' => 'All team tasks — assign, track, and close'])
-                ->headline((string) $all->count(), 'Open tasks', $all->filter(fn ($x) => $x->isOverdue())->count() ? 'warn' : 'default')
-                ->actions([[
-                    'key' => 'assign', 'label' => 'New task', 'tone' => 'primary', 'actor' => 'human',
-                    'endpoint' => '/api/v1/workspace/tasks/0/assign', 'method' => 'POST', 'submitLabel' => 'Assign task',
-                    'schema' => [
-                        'assignee' => 'enum:' . implode(',', $staffOpts),
-                        'title'    => 'text',
-                        'due_at'   => 'date',
-                        'priority' => 'enum:Normal,High,Low',
+                ->headline((string) $openCount, 'Open tasks', $overdueN ? 'warn' : 'default')
+                ->actions([
+                    [
+                        'key' => 'assign', 'label' => 'New task', 'tone' => 'primary', 'actor' => 'human',
+                        'endpoint' => '/api/v1/workspace/tasks/0/assign', 'method' => 'POST', 'submitLabel' => 'Assign task',
+                        'schema' => [
+                            'assignee' => 'enum:' . implode(',', $staffOpts),
+                            'title'    => 'text',
+                            'due_at'   => 'datetime',
+                            'duration' => 'enum:—,30 min,1 hr,1 hr 30 min,2 hr,3 hr,Half day (4 hr),Full day (8 hr)',
+                            'priority' => 'enum:Normal,High,Low',
+                        ],
+                        'labels' => ['assignee' => 'Assign to', 'title' => 'Task', 'due_at' => 'Due (date & time, optional)', 'duration' => 'Duration', 'priority' => 'Priority'],
                     ],
-                    'labels' => ['assignee' => 'Assign to', 'title' => 'Task', 'due_at' => 'Due (optional)', 'priority' => 'Priority'],
-                ]])
-                ->table($cols, $rows, [], ['empty' => 'No open tasks across the team.'])
+                    ['key' => 'export-pdf', 'label' => 'Export PDF', 'href' => '/api/v1/doc/tasks-export?format=pdf', 'exportScope' => $exportScope],
+                ])
+                ->table($cols, $rows, $filters, [
+                    'empty'    => 'No tasks yet — assign the first one.',
+                    'dateKey'  => 'due', 'dateLabel' => 'Due',
+                    'pageSize' => 15,
+                    'selectable' => true,
+                    'bulk' => [[
+                        'label' => 'Mark done', 'tone' => 'primary', 'method' => 'POST',
+                        'endpoint' => '/api/v1/workspace/tasks/0/bulk-done',
+                        'confirm' => 'Mark {n} task(s) as done?',
+                    ]],
+                ])
                 ->meta(['capability' => 'tasks', 'listKey' => 'tasks', 'canManage' => true]);
         }
 
-        // Staff: personal list only (keyed shape, same contract).
+        // Staff: personal list (same shape, no assignee column, no bulk).
         $mine = $this->engine->myTasks($t, $u);
-        $rows = $mine->map(function (OrderTask $x) {
-            $due = $x->due_at ? $x->due_at->format('M j, H:i') : '—';
-            $badge = $x->isOverdue() ? '🔴 overdue' : ($x->status === 'in_progress' ? '🔵 in progress' : '🟡 to do');
-            $buttons = [];
-            if ($x->status !== 'completed') {
-                $buttons[] = ['title' => 'Done', 'icon' => 'check', 'tone' => 'ok', 'post' => '/api/v1/workspace/tasks/' . $x->id . '/done'];
-            }
+        $clients = $this->clientMap($mine, $t->id);
+        $rows = $mine->map(function (OrderTask $x) use ($clients) {
             return [
-                'id'     => $x->id,
-                'task'   => $x->title,
-                'due'    => $due,
-                'status' => ['value' => $badge, 'tone' => $x->isOverdue() ? 'danger' : null],
-                'act'    => ['buttons' => $buttons],
+                'id'       => $x->id,
+                'task'     => $x->title,
+                'client'   => (string) ($clients[$x->order_id] ?? '—'),
+                'due'      => $this->dueCell($x),
+                'duration' => $this->durationText($x),
+                'priority' => ucfirst(WorkflowConfig::priorityLabel((int) $x->priority)),
+                'status'   => $this->statusCell($x),
+                'act'      => ['buttons' => $this->rowButtons($x)],
             ];
         })->values()->all();
         $cols = [
-            ['key' => 'task',   'label' => 'Task'],
-            ['key' => 'due',    'label' => 'Due'],
-            ['key' => 'status', 'label' => 'Status'],
-            ['key' => 'act',    'label' => '', 'type' => 'action', 'sortable' => false],
+            ['key' => 'task',     'label' => 'Task', 'type' => 'strong'],
+            ['key' => 'client',   'label' => 'Client'],
+            ['key' => 'due',      'label' => 'Due'],
+            ['key' => 'duration', 'label' => 'Duration'],
+            ['key' => 'priority', 'label' => 'Priority'],
+            ['key' => 'status',   'label' => 'Status', 'type' => 'badge'],
+            ['key' => 'act',      'label' => '', 'type' => 'action', 'sortable' => false],
         ];
 
         return (new WorkspacePayload)
             ->object(['type' => 'process:tasks', 'title' => 'My Tasks', 'subtitle' => 'Your work'])
             ->headline((string) $mine->count(), 'My open tasks', $mine->filter(fn ($x) => $x->isOverdue())->count() ? 'warn' : 'default')
-            ->table($cols, $rows, [], ['empty' => 'No open tasks. Nice and clear.'])
+            ->table($cols, $rows, [['key' => 'status', 'label' => 'Status']], [
+                'empty' => 'No open tasks. Nice and clear.',
+                'dateKey' => 'due', 'dateLabel' => 'Due',
+            ])
             ->meta(['capability' => 'tasks', 'listKey' => 'tasks', 'canManage' => false]);
     }
 
@@ -139,12 +214,39 @@ final class TasksCapability implements ProcessCapability
         return ['open' => $mine->count(), 'overdue' => $mine->filter(fn ($x) => $x->isOverdue())->count()];
     }
 
+    /** "1 hr 30 min" / "Half day (4 hr)" → minutes. 0 when blank/—. */
+    private function durationToMinutes(string $label): int
+    {
+        $label = strtolower(trim($label));
+        if ($label === '' || $label === '—') return 0;
+        if (preg_match('/\((\d+)\s*hr\)/', $label, $m)) return ((int) $m[1]) * 60; // Half/Full day
+        $min = 0;
+        if (preg_match('/(\d+)\s*hr/', $label, $m))  $min += ((int) $m[1]) * 60;
+        if (preg_match('/(\d+)\s*min/', $label, $m)) $min += (int) $m[1];
+        return $min;
+    }
+
+    /** Close one task the safe way: workflow tasks advance stages; ad-hoc just complete. */
+    private function closeTask(OrderTask $task, $t, User $u): array
+    {
+        if ($task->order_id > 0 && $task->stage !== 'adhoc') {
+            if ($task->status === 'offered') {
+                $acc = $this->engine->accept($t, $task, $u);
+                if (empty($acc['ok'])) return $acc;
+                $task->refresh();
+            }
+            return $this->engine->complete($t, $task, $u);
+        }
+        return $this->engine->setStatusById($t, (int) $task->id, 'completed', $u);
+    }
+
     /**
      * Actions:
      *   assignable → list of staff a manager can assign to
-     *   assign     → create a one-off task for a person (manager only)
+     *   assign     → create a one-off task (manager only); due datetime + duration supported
      *   start      → mark a task in progress (manager only)
      *   done       → close a task; order-workflow tasks advance via the engine
+     *   bulk-done  → close many at once (from the list's selection bar)
      *   complete   → mark one of the caller's tasks done
      */
     public function command(CapabilityContext $ctx, string $action, array $input): array
@@ -173,44 +275,53 @@ final class TasksCapability implements ProcessCapability
             $assignee = User::where('tenant_id', $t->id)->find($assigneeId);
             if (! $assignee) return ['ok' => false, 'error' => 'Pick a valid staff member.'];
 
+            // datetime-local ("2026-07-21T17:00") or plain date both parse.
             $due = ! empty($input['due_at']) ? \Illuminate\Support\Carbon::parse($input['due_at']) : null;
 
-            // Priority may arrive as a label (Normal/High/Low) or a number.
-            // Aligned to WorkflowConfig::PRIORITY: low 0 / normal 1 / high 2 / critical 3.
+            // Priority label → WorkflowConfig::PRIORITY rank (low 0 / normal 1 / high 2).
             $prioMap = ['low' => 0, 'normal' => 1, 'high' => 2];
             $rawPrio = strtolower(trim((string) ($input['priority'] ?? 'normal')));
             $priority = $prioMap[$rawPrio] ?? (is_numeric($rawPrio) ? (int) $rawPrio : 1);
 
-            $res = $this->engine->assignAdHoc($t, $assignee, (string) ($input['title'] ?? ''), $due, $priority, $u);
+            $sla = $this->durationToMinutes((string) ($input['duration'] ?? ''));
+
+            $res = $this->engine->assignAdHoc($t, $assignee, (string) ($input['title'] ?? ''), $due, $priority, $u, $sla);
             if (! empty($res['ok'])) $res['message'] = 'Task assigned to ' . ($assignee->name ?: 'staff');
             return $res;
         }
 
         if ($action === 'start') {
-            if (! $canManage) return ['ok' => false, 'error' => 'forbidden'];
-            return $this->engine->setStatusById($t, (int) ($input['id'] ?? 0), 'in_progress', $u);
+            // Managers can start any task; staff can start their own (mirrors accept).
+            $taskId = (int) ($input['id'] ?? 0);
+            $task = OrderTask::where('tenant_id', $t->id)->find($taskId);
+            if (! $task) return ['ok' => false, 'error' => 'Task not found.'];
+            if (! $canManage && (int) $task->owner_user_id !== (int) $u->id) {
+                return ['ok' => false, 'error' => 'Task not found.'];
+            }
+            return $this->engine->setStatusById($t, $taskId, 'in_progress', $u);
         }
 
         if ($action === 'done') {
             $taskId = (int) ($input['id'] ?? 0);
             $task = OrderTask::where('tenant_id', $t->id)->find($taskId);
             if (! $task) return ['ok' => false, 'error' => 'Task not found.'];
-            // Staff may only close their own tasks; managers may close any.
             if (! $canManage && (int) $task->owner_user_id !== (int) $u->id) {
                 return ['ok' => false, 'error' => 'Task not found.'];
             }
-            // ORDER-WORKFLOW tasks must advance the pipeline (and respect the upload
-            // gate) — route them through the engine. A bare status flip would close
-            // the stage without opening the next one and silently stall the order.
-            if ($task->order_id > 0 && $task->stage !== 'adhoc') {
-                if ($task->status === 'offered') {
-                    $acc = $this->engine->accept($t, $task, $u);
-                    if (empty($acc['ok'])) return $acc;
-                    $task->refresh();
-                }
-                return $this->engine->complete($t, $task, $u);
+            return $this->closeTask($task, $t, $u);
+        }
+
+        if ($action === 'bulk-done') {
+            $ids = array_values(array_filter(array_map('intval', (array) ($input['ids'] ?? []))));
+            if (! $ids) return ['ok' => false, 'error' => 'Nothing selected.'];
+            $doneN = 0; $skipN = 0;
+            foreach (OrderTask::where('tenant_id', $t->id)->whereIn('id', $ids)->get() as $task) {
+                if ($task->status === 'completed') { $skipN++; continue; }
+                if (! $canManage && (int) $task->owner_user_id !== (int) $u->id) { $skipN++; continue; }
+                $r = $this->closeTask($task, $t, $u);
+                ! empty($r['ok']) ? $doneN++ : $skipN++;
             }
-            return $this->engine->setStatusById($t, $taskId, 'completed', $u);
+            return ['ok' => true, 'message' => $doneN . ' task(s) closed' . ($skipN ? (', ' . $skipN . ' skipped') : '')];
         }
 
         if ($action === 'complete') {

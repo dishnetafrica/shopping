@@ -1,0 +1,70 @@
+DEPLOY — V3 Tasks: CRM-style scheduling upgrade (filters, exports, agenda)
+==========================================================================
+Upgrades the /v3 Tasks screen to work like the DishNet CRM Scheduling page:
+filterable job register, date range, bulk actions, CSV/PDF export, timed
+tasks with duration, and a grouped-by-day Agenda view. Builds on the earlier
+V3 Tasks bugfix (this bundle is CUMULATIVE — it contains that fix too, so it
+deploys cleanly whether or not the previous bundle was applied).
+
+FILES (9 + this note)
+  app/Capability/Process/TasksCapability.php        (rebuilt — the feature)
+  app/Services/Ops/TasksExport.php                  (NEW — CSV/PDF register)
+  app/Services/Ops/TaskEngine.php                   (duration param + earlier fixes)
+  app/Http/Controllers/V3/DocumentController.php    (+tasksExport endpoint)
+  app/Providers/CapabilityServiceProvider.php       (+/api/v1/doc/tasks-export route)
+  app/Capability/Registry/CoreCapabilityProvider.php (+bulk-done command in manifest)
+  resources/views/shell.blade.php                   (datetime field, CSV button,
+                                                     List/Agenda toggle, agenda view,
+                                                     + earlier fixes)
+  app/Http/Controllers/Panel/TaskApiController.php  (earlier fix: priority scale)
+  app/Capability/Http/CommandController.php         (earlier fix: route id authoritative)
+  app/Capability/Contracts/CapabilityContext.php    (earlier fix: no-tenant guard)
+
+WHAT'S NEW on /v3 -> Tasks
+  REGISTER   Columns: Task · Client (order no) · Assignee · Due · Duration ·
+             Priority · Status. Status chips: Open / In progress / Paused /
+             Blocked / Closed. Overdue due-dates show red. Managers see every
+             open task + the 150 most recent closed; staff see their own.
+  FILTERS    Status, Assignee and Priority dropdowns + From/To due-date range
+             + live search — all combine, count updates live.
+  BULK       Tick rows (shift-click for ranges) -> "Mark done (n)". Order-
+             workflow tasks advance to their next stage; ad-hoc just close.
+  EXPORT     CSV button in the toolbar downloads exactly the filtered rows
+             (works on every dated list, not just Tasks). "Export PDF" makes
+             a branded A4 register via /api/v1/doc/tasks-export and follows
+             the on-screen status/assignee/date filters.
+  NEW TASK   Now takes a due DATE + TIME (datetime picker) and a Duration
+             (30 min … Full day) stored as the job's planned minutes, shown
+             in the Duration column — like the CRM's job duration.
+  AGENDA     List | Agenda toggle (top right of the toolbar). Agenda groups
+             the same filtered rows by day — time, task, details, status
+             chip and the Start/Done buttons on each line. Today is
+             highlighted; the choice sticks per screen while you work.
+  STAFF      Staff can now Start and Done their own tasks from the screen
+             (Start used to be manager-only and errored for staff).
+
+DEPLOY
+  git add app/Capability/Process/TasksCapability.php app/Services/Ops/TasksExport.php \
+          app/Services/Ops/TaskEngine.php app/Http/Controllers/V3/DocumentController.php \
+          app/Providers/CapabilityServiceProvider.php app/Capability/Registry/CoreCapabilityProvider.php \
+          resources/views/shell.blade.php app/Http/Controllers/Panel/TaskApiController.php \
+          app/Capability/Http/CommandController.php app/Capability/Contracts/CapabilityContext.php
+  git commit -m "v3 tasks: CRM-style register — filters, bulk done, CSV/PDF export, duration, agenda"
+  git push  ->  EasyPanel Rebuild        (no migration)
+
+VERIFY
+  1. /v3 -> Tasks: new columns appear; pick Status=Open, an assignee, and a
+     From/To range -> the register and the count follow.
+  2. Toggle Agenda -> tasks group under day headers, Today highlighted,
+     Start/Done work from the agenda lines; toggle back to List.
+  3. CSV button -> downloads the filtered rows; Export PDF -> branded A4
+     register honouring the same filters.
+  4. New task -> pick a due date AND time + "1 hr 30 min" duration ->
+     row shows the due time and Duration "1 hr 30 min"; WhatsApp nudge goes
+     out as before.
+  5. Tick 3 test tasks -> "Mark done (3)" -> all close, one toast.
+  6. As a staff login: Start then Done on your own task -> both work.
+  7. php artisan test --filter=V3TasksTest -> passes.
+
+ROLLBACK
+  Revert the commit. No data changes; sla_minutes was already a column.
