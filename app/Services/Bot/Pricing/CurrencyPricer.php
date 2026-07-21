@@ -39,10 +39,20 @@ class CurrencyPricer
      */
     public function isNativeBasis(Tenant $t): bool
     {
+        // Explicit override always wins.
+        if (strtolower(trim((string) $t->setting('currency_basis', ''))) === 'native') return true;
+
         $raw = strtoupper(trim((string) $t->setting('currency', 'UGX')));
         if ($raw === '' || $raw === 'AUTO') $raw = 'UGX';
-        if (strtolower(trim((string) $t->setting('currency_basis', ''))) === 'native') return true;
-        return ! in_array($raw, ['AUTO', 'UGX', 'SSP', 'USD'], true);
+
+        // The UGX↔USD/SSP conversion model has a UGX BASE: prices are stored in UGX and USD is a
+        // display layer computed by DIVIDING by the usdUgx rate. If the shop's money currency is
+        // already USD, its catalogue prices ARE USD — dividing 33 by ~3750 floors every line to
+        // $0.00 (the "quotation USD 0.00" bug). A USD base is therefore native: quote it as-is.
+        if ($raw === 'USD') return true;
+
+        // Anything outside the Uganda/South-Sudan UGX-based model (RWF, KES, native USD, …) is native.
+        return ! in_array($raw, ['AUTO', 'UGX', 'SSP'], true);
     }
 
     /** Per-client SS markup % (customer override) else the tenant default; 0 when neither is set. */
@@ -61,6 +71,11 @@ class CurrencyPricer
     {
         // Safety net: never convert a native-currency quote (prices already ARE the currency).
         if ($this->isNativeBasis($t)) {
+            return ['quote' => $quote, 'meta' => ['native' => true]];
+        }
+        // Defence in depth: a USD base is never divided by the UGX rate, even if this is somehow
+        // reached directly — dividing already-USD prices would zero them.
+        if (strtoupper(trim((string) $t->setting('currency', 'UGX'))) === 'USD') {
             return ['quote' => $quote, 'meta' => ['native' => true]];
         }
         $rate   = $this->usdRate($t);

@@ -1,0 +1,57 @@
+DEPLOY — Bot quotation "Total USD 0.00" fix (USD-base shops)
+============================================================
+A South-Sudan (+211) customer received a WhatsApp quotation reading
+"Total USD 0.00". Root cause + fix below. One file changed; no migration.
+
+WHAT WAS HAPPENING
+  Family Shoppers' money currency is USD and the catalogue prices ARE USD
+  (aluminium foil = 33 → $33). When a customer asks for USD / export or has a
+  +211 number, the bot ran the Uganda→South-Sudan USD conversion, which DIVIDES
+  the price by the ~3,750 UGX-per-USD rate:
+        33 ÷ 3750 = $0.0088  → rounded to nearest $0.50 → $0.00
+  So every line floored to $0.00 and the quotation total was USD 0.00. (Same
+  family as the earlier POS "USD 0.00" fix, but this is the AI-bot path.)
+
+THE FIX (app/Services/Bot/Pricing/CurrencyPricer.php)
+  A shop whose currency is already USD is NATIVE — its prices ARE USD, so there
+  is nothing to "convert to USD". isNativeBasis() now returns true for a USD
+  base, so the bot (and POS, and quote→order convert, which share this method)
+  quote USD prices AS-IS. A defensive guard in toUsd() also refuses to divide a
+  USD base by the rate. UGX-base shops that genuinely export to South Sudan in
+  USD (e.g. EuroPearl) are UNCHANGED — they still convert UGX→USD at the rate.
+
+  Net effect for Family Shoppers: the same items now quote e.g.
+     • 50 × Basmati 25kg — USD 33.00 × 50 = USD 1,650.00  (real numbers)
+  instead of USD 0.00, and the "price is ex-Kampala" note no longer appears
+  (correct — a USD shop's price is the final price, not an ex-Kampala export).
+
+YOU NO LONGER NEED THE currency_basis=native WORKAROUND
+  The earlier note told you to set currency_basis=native via tinker for USD
+  shops. After this fix, currency=USD alone is enough; the setting is harmless
+  if already present. (Leaving it set changes nothing.)
+
+DEPLOY
+  git add app/Services/Bot/Pricing/CurrencyPricer.php
+  git commit -m "bot: USD-base shops quote native USD (fix quotation USD 0.00)"
+  git push  ->  EasyPanel Rebuild        (no migration)
+
+VERIFY
+  1. From a +211 (or any) number, ask for a quote on a couple of products.
+  2. The WhatsApp quotation total is now the real USD amount (price × qty),
+     not USD 0.00, with 2 decimals.
+  3. The caption no longer says "ex-Kampala" for your USD shop.
+  4. (UGX export tenants, if any) confirm a +211 quote STILL converts UGX→USD
+     as before — unchanged.
+
+THE OLD BROKEN QUOTE CAN'T BE UN-ZEROED
+  Quotation ORD-Q260721-CTTA is already stored with prices = 0 in the DB; that
+  value is gone. After deploy, just re-issue the quote (ask the bot again, or
+  send it from the panel) and the new one will carry the correct total.
+
+OPTIONAL (South-Sudan markup on a USD shop)
+  With the shop native, a per-customer/tenant South-Sudan markup % is no longer
+  auto-added (markup was part of the UGX→USD conversion layer). If you want a
+  Juba uplift on your USD prices, say so and I'll add it to the native path.
+
+ROLLBACK
+  Revert the commit. No data/schema changes.
