@@ -1,0 +1,20 @@
+TWEAK — Today greeting/date now use the phone's local clock
+============================================================
+The "Good morning/afternoon/evening" greeting (and the date) were computed on the SERVER, so they
+followed the server's timezone, not your phone's — that's why it said "Good evening" at 12:32 your time.
+Now they're computed in the browser from the device clock, so they always match the phone in hand.
+
+FILE CHANGED
+  resources/views/shell.blade.php
+    + tdyGreeting() / tdyDate() (client-side, local time); the Today header uses them instead of the
+      server-sent greeting/date. (The server still sends them; they're just no longer used for display.)
+
+DEPLOY
+  git add resources/views/shell.blade.php
+  git commit -m "today: greeting/date from the device's local time, not the server timezone"
+  git push  ->  EasyPanel Rebuild
+  php artisan view:clear        (it's a Blade view — clear the compiled copy so the new shell serves)
+
+VERIFY
+  Open Today on your phone -> the greeting matches your local time of day (morning before 12, afternoon
+  12–5, evening after 5), and the date matches your phone.

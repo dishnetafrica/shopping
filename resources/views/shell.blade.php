@@ -1527,8 +1527,8 @@ async function bosToday(){
   if(!r || r.ok===false){ v.innerHTML=emptyState('bolt','Today unavailable','The day view could not load right now.'); return; }
   const nm=(((CFG.user&&CFG.user.name)||'').split(/\s+/)[0])||'';
   const k=r.kpis||[], acts=r.activities||[];
-  const head='<div class="tdy-head"><div class="tdy-hi">'+esc(r.greeting||'Hello')+(nm?', '+esc(nm):'')+'</div>'
-    +'<div class="tdy-dt">'+esc(r.date||'')+'</div></div>';
+  const head='<div class="tdy-head"><div class="tdy-hi">'+esc(tdyGreeting())+(nm?', '+esc(nm):'')+'</div>'
+    +'<div class="tdy-dt">'+esc(tdyDate())+'</div></div>';
   const tiles='<div class="tdy-kpis">'+k.map(function(x){
     return '<div class="tdy-kpi '+tdyTone(x.tone)+'"><div class="tdy-v">'+esc(x.value)+'</div><div class="tdy-l">'+esc(x.label)+'</div></div>';
   }).join('')+'</div>';
@@ -1538,6 +1538,9 @@ async function bosToday(){
   v.innerHTML=installBanner()+head+tiles+list;
 }
 function tdyTone(t){ return t==='danger'?'danger':(t==='warn'?'warn':(t==='ok'?'ok':'')); }
+/* Greeting + date from the PHONE's local clock, so they match the device (not the server timezone). */
+function tdyGreeting(){ var h=new Date().getHours(); return h<12?'Good morning':(h<17?'Good afternoon':'Good evening'); }
+function tdyDate(){ try{ return new Date().toLocaleDateString(undefined,{weekday:'long',day:'2-digit',month:'short'}); }catch(e){ return ''; } }
 /* ===== "Add to Home Screen" hint — iPhone shows the Share tip; Android offers the native prompt.
    Hidden once installed (standalone) or dismissed. Purely additive; no effect on the app itself. ===== */
 let OB_INSTALL=null;
