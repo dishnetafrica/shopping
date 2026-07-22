@@ -1,0 +1,43 @@
+DEPLOY — BOS v1.0 Slice 2: Customer Timeline (first user-visible value)
+======================================================================
+One customer = one WhatsApp-style stream of everything that happened (visited → quoted → accepted →
+invoiced → paid). Overlay: 2 new-ish lines in existing services + 1 read command + 1 shell screen.
+Prereq: deploy Slice 1 (migrate bos_events) and Slice 1.5 (bos:demo) first, so it has data.
+
+FILES CHANGED
+  app/BOS/Emit.php                                  (NEW) guarded bridge: service → Bos::emit
+  app/Services/Money/PaymentService.php             +1 emit (PaymentReceived) at the end of record()
+  app/Services/Invoicing/InvoiceService.php         +1 emit (InvoiceIssued) at the end of issue()
+  app/Capability/Object/CustomerCapability.php      + 'timeline' read command + a "Timeline" action
+  resources/views/shell.blade.php                   + the timeline screen (bosTimeline) + CSS + route
+
+HOW IT WORKS (all overlay, all reversible)
+  - Recording a payment / issuing an invoice now also writes ONE event to bos_events, via
+    Emit::customerEvent — which is guarded (no-op if bos_events isn't migrated) and never throws, so
+    the money path is byte-for-byte unaffected whether or not the spine exists.
+  - Opening a customer shows a "🕑 Timeline" action → a full-screen, mobile-first timeline read from
+    the spine, with the live outstanding balance in the header. Pure read (a projection).
+
+DEPLOY
+  git add app/BOS/Emit.php app/Services/Money/PaymentService.php \
+          app/Services/Invoicing/InvoiceService.php \
+          app/Capability/Object/CustomerCapability.php resources/views/shell.blade.php
+  git commit -m "BOS v1.0 Slice 2: customer timeline (guarded emits + read projection + screen)"
+  git push  ->  EasyPanel Rebuild        (no migration — bos_events already exists from Slice 1)
+
+VERIFY
+  1. Demo data lights up (from Slice 1.5): open a customer in the BOS Demo Co tenant, tap "🕑 Timeline"
+     -> you see New customer / Invoice issued / Payment received lines in order, newest first.
+  2. Live tenant starts filling: on your real tenant, record a payment or issue an invoice, then open
+     that customer's Timeline -> the new event appears with the right amount + time.
+  3. Events are instrumented:
+       php artisan tinker --execute="dump(App\BOS\Event::withoutGlobalScopes()->latest('recorded_at')->first()?->only(['name','subject_type','subject_id','correlation_id','device','app_version']));"
+  4. Money path unaffected: payment/invoice totals and receipts behave exactly as before.
+
+ROLLBACK
+  Remove the two emit lines (services), the 'timeline' command + action (CustomerCapability), and the
+  timeline block in shell.blade.php. No data/schema change; events already written are harmless history.
+
+NOTE
+  This is where the spine stops being inert and starts recording real facts. From here, Today (Slice 3)
+  is just the same events grouped by priority — no new data source.

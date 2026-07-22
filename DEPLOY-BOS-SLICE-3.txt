@@ -1,0 +1,63 @@
+DEPLOY — BOS v1.0 Slice 3: Today (the day's work, on your phone)
+================================================================
+The mobile "Today" tab stops being the old briefing and becomes the day's work: a greeting, four
+KPI tiles (To Collect / Overdue / Quotes Waiting / Collected Today), and a ranked "To do now" list of
+who to chase — each row one tap into that customer's Timeline (Slice 2). No new data: Today groups the
+same live invoices/payments/quotes the timeline is already built from. Every number traces to a real
+query — nothing invented (R23, ADR-006). Desktop is untouched (still lands on the classic briefing).
+
+Prereq: Slice 1 (bos_events migrated) + Slice 2 (customer timeline) already deployed. No migration here.
+
+FILES CHANGED
+  app/BOS/Projections/CollectionsActivities.php   (NEW) Activity projection — one "Collect USD X — name"
+                                                        per customer who owes, ranked by value x urgency.
+  app/BOS/Projections/DailyToday.php              (NEW) Today projection — greeting + 4 KPIs + activities.
+  app/Http/Controllers/Panel/BosTodayController.php (NEW) GET /papi/bos-today — pure read, never throws.
+  routes/web.php                                  +1 line: the /papi/bos-today route (in the papi group,
+                                                        right after receipt-send). Nothing else changed.
+  resources/views/shell.blade.php                 + the Today screen (bosToday) + tone-accented KPI/CSS
+                                                        + route guard; mobile "Today" tab now opens it;
+                                                        phone landing goes to Today (desktop unchanged).
+
+HOW IT WORKS (all overlay, all reversible)
+  - Opening the app on a phone (or tapping the Today tab) calls GET /papi/bos-today, which runs the
+    DailyToday projection: SUM of open invoice balances (To Collect), overdue count, quotes waiting,
+    and today's receipts — all live queries. The activity list is CollectionsActivities: overdue-first,
+    biggest-first. Tapping a row opens that customer's Timeline.
+  - The controller is wrapped in try/catch and returns ok:false (HTTP 200) on any error, so a bad day
+    view can never white-screen the app — it just shows "Today unavailable".
+  - Pure read end to end: no writes, no rule logic, no new table. Fitness stays green.
+
+DEPLOY
+  git add app/BOS/Projections/CollectionsActivities.php app/BOS/Projections/DailyToday.php \
+          app/Http/Controllers/Panel/BosTodayController.php routes/web.php \
+          resources/views/shell.blade.php
+  git commit -m "BOS v1.0 Slice 3: Today (day's work — greeting + KPIs + ranked collections)"
+  git push  ->  EasyPanel Rebuild        (no migration)
+
+  NOTE on routes/web.php: this file already includes your receipt-send route; Slice 3 only adds ONE new
+  line next to it. If your live web.php has diverged and you'd rather not ship the whole file, skip it
+  from `git add` and instead add this single line inside the `Route::prefix('papi')->group(...)` block:
+
+      Route::get('bos-today', [\App\Http\Controllers\Panel\BosTodayController::class, 'show']);
+
+VERIFY
+  1. On your phone, open the app -> you land on "Good morning, <name>" with the four tiles and the
+     ranked collect list. Tap a row -> the customer's Timeline opens.
+  2. The tiles are real: "To Collect" equals the sum of open invoice balances; "Collected Today" equals
+     today's receipts (both in USD). Cross-check against Finance if you like.
+  3. Empty-state: on a tenant with nothing outstanding, the list shows "All clear" and tiles read 0.
+  4. Desktop unchanged: on a computer the app still opens the classic briefing; the "Today" label in the
+     sidebar behaves exactly as before.
+  5. Safety: if the projection ever errors, you see "Today unavailable" — never a broken screen; the
+     money paths (invoices/payments/receipts) are completely untouched.
+
+ROLLBACK
+  Revert routes/web.php (remove the one line), revert shell.blade.php (WS.today route back to 'briefing',
+  remove the bos.today guard + bosToday()/CSS), and delete the two projections + the controller. No
+  data/schema change — Today reads only, so removing it restores exact prior behaviour.
+
+NOTE
+  This closes the "see your day in one screen" loop: Slice 2 gave one customer's whole history; Slice 3
+  turns the same events into the morning to-do list. Next (Slice 4): make the Quote -> Order -> Invoice
+  -> Payment -> Receipt journey excellent end to end before expanding.

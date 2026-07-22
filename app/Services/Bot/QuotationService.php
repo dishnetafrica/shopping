@@ -121,6 +121,10 @@ class QuotationService
                     'matched'      => true,
                 ]);
             }
+            // BOS spine (Slice 4): record QuoteCreated for the customer timeline. Guarded + never-throws.
+            \App\BOS\Emit::customerEvent($tenant->id, 'QuoteCreated', (string) $q->customer_phone, [
+                'quote_no' => (string) $q->quote_no, 'total' => (float) $q->total, 'currency' => (string) $q->currency,
+            ], ['actor' => ['type' => 'system', 'name' => $source]]);
             return $q;
         } catch (\Throwable $e) {
             \Log::warning('Quotation persist failed: ' . $e->getMessage());

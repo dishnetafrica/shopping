@@ -100,6 +100,12 @@ class InvoiceService
         // paid/balance is unified with the payment ledger from the start.
         if ($orderId) $this->syncPaidFromPayments($inv);
 
+        // BOS spine (Slice 2): record InvoiceIssued for the customer timeline. Guarded + never-throws.
+        \App\BOS\Emit::customerEvent($t->id, 'InvoiceIssued', (string) $inv->customer_phone, [
+            'invoice_no' => $inv->invoice_no, 'total' => (float) $inv->total,
+            'currency' => (string) $inv->currency, 'balance' => (float) $inv->balance,
+        ], ['actor' => ['type' => 'system', 'name' => $source]]);
+
         return $inv;
     }
 

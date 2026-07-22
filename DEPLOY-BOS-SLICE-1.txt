@@ -1,0 +1,61 @@
+DEPLOY — BOS v1.0 Slice 1: Business Foundation (event spine + rule engine + projections + SDK)
+==============================================================================================
+Pure OVERLAY. New code under a new namespace (app/BOS/) + ONE new table. Nothing existing is
+touched, and nothing writes to the new table yet — so deploying this changes zero live behaviour.
+It's the spine the sales journey (Slices 2-3) is built on.
+
+FILES ADDED (new; none modified)
+  database/migrations/2026_07_23_000001_create_bos_events_table.php   (unified event store)
+  app/BOS/Event.php                        append-only event model (updates/deletes throw)
+  app/BOS/EventStore.php                   emit() — idempotent write + subscriber fan-out
+  app/BOS/Contracts/Subscriber.php         subscriber interface
+  app/BOS/Rules/BusinessRule.php           rule interface (single source of policy)
+  app/BOS/Rules/RuleRegistry.php           the one place rules are registered
+  app/BOS/Rules/RuleViolation.php          thrown on enforce()
+  app/BOS/Rules/Rules/ReceiptRequiresPayment.php   R2
+  app/BOS/Rules/Rules/PaymentNotExceedBalance.php  R3
+  app/BOS/Rules/Rules/NoHardDeleteFinancial.php    R4
+  app/BOS/Projections/Projection.php       read-only projection base
+  app/BOS/Projections/TimelineProjection.php   events-by-subject (seed of Customer Timeline)
+  app/BOS/Capabilities/Capability.php      verb-capability interface
+  app/BOS/Bos.php                          the internal SDK: Bos::emit / check / enforce / timeline
+  app/BOS/InstrumentationContext.php       correlation/causation/device/connectivity/version (ADR-015)
+  app/BOS/LegacyEventBridge.php            converge legacy event tables onto the spine (ADR-012)
+  app/BOS/Projections/ActivityProjection.php   canonical projection type 2/4 (ADR-014)
+  app/BOS/Projections/TodayProjection.php      canonical projection type 3/4
+  app/BOS/Projections/MetricsProjection.php    canonical projection type 4/4
+  tests/Unit/Bos/BusinessRuleTest.php      test_R2 / R3 / R4 (+ enforce throws)
+  tests/Feature/Bos/ArchitectureFitnessTest.php   CI fitness tests (architecture drift = build fail)
+
+REVIEW CHANGES APPLIED (pre-merge): (1) legacy→spine strategy + bridge (ADR-012); (2) rule engine
+mandatory + fitness guard (ADR-013); (3) projections capped at 4 canonical types (ADR-014);
+(4) every event instrumented from day one (ADR-015). The bos_events migration now includes the
+instrumentation columns — it is still ONE new table, still inert on deploy.
+
+DEPLOY
+  git add database/migrations/2026_07_23_000001_create_bos_events_table.php app/BOS tests/Unit/Bos tests/Feature/Bos
+  git commit -m "BOS v1.0 Slice 1: event spine + rule engine + projections + SDK (overlay)"
+  git push  ->  EasyPanel Rebuild
+  Then run the migration (EasyPanel terminal):   php artisan migrate
+
+VERIFY
+  1. Table exists:   php artisan tinker --execute="dump(Schema::hasTable('bos_events'));"   -> true
+  2. Tests pass:     php artisan test --filter=Bos
+                     -> BusinessRuleTest (rules) + ArchitectureFitnessTest (architecture) all green.
+  3. Append-only proof (optional):
+       php artisan tinker --execute="try{ \$e=App\BOS\Event::first(); if(\$e){\$e->name='x';\$e->save();} echo 'NO-GUARD'; }catch(\Throwable \$x){ echo 'guard OK: '.\$x->getMessage(); }"
+  4. Inert check: no existing screen or number changes (nothing emits yet).
+
+WHAT THIS UNLOCKS
+  Slice 2 (Today) and Slice 3 (Customer Journey) build on Bos::emit()/timeline(). The first real
+  events (PaymentReceived, InvoiceIssued, QuoteCreated) get emitted from the existing services in
+  Slice 3 — at which point the Customer Timeline lights up from data you already produce.
+
+ROLLBACK
+  php artisan migrate:rollback   (drops bos_events; the migration has a working down())
+  Remove app/BOS + tests/Unit/Bos + tests/Feature/Bos + the migration file. Zero impact — nothing
+  in V3 references them.
+
+CI (recommended)
+  Wire `php artisan test --filter=Bos` into your build. From now on, architecture drift fails the
+  build instead of slipping through review (the four-review gate, doc 9).

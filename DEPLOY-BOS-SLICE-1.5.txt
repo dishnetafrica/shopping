@@ -1,0 +1,45 @@
+DEPLOY — BOS v1.0 Slice 1.5: Demo Company (realistic data for every future slice)
+=================================================================================
+One new artisan command. Pure OVERLAY. It seeds a DEDICATED demo tenant — it never touches your live
+tenant (Family Shoppers / #17). Best run AFTER Slice 1 is migrated, so it also emits BOS events.
+
+FILE ADDED (new)
+  app/Console/Commands/BosDemoCommand.php    (php artisan bos:demo)
+
+WHY
+  So the Customer Timeline (Slice 2), Today, and Insights are built and demoed against realistic
+  volume (hundreds of invoices, overdue accounts, payments) instead of one toy row. It also proves the
+  event spine end-to-end: seeding emits CustomerCreated / InvoiceIssued / PaymentReceived into
+  bos_events, which the timeline then reads.
+
+SAFE BY DESIGN
+  - Only ever writes to a tenant with slug 'bos-demo' (found or created). NEVER your live tenant.
+  - Reversible: `php artisan bos:demo --purge` deletes the demo tenant and all its rows.
+  - Skips Sales Orders on purpose (creating them would fire owner/customer notification jobs).
+  - No faker dependency — runs on a production (no-dev) build.
+
+DEPLOY
+  git add app/Console/Commands/BosDemoCommand.php
+  git commit -m "BOS v1.0 Slice 1.5: demo company seeder (dedicated tenant, reversible)"
+  git push  ->  EasyPanel Rebuild
+  (No migration. Laravel auto-registers the command.)
+
+RUN (EasyPanel terminal)
+  php artisan bos:demo
+    -> creates tenant 'BOS Demo Co', seeds 500 products, 100 customers, 300 invoices (+ payments),
+       and (if bos_events exists) emits the matching events. Idempotent: re-running refuses unless
+       --fresh. Scale with --products= --customers= --invoices=.
+
+VERIFY
+  1. Data landed (into the demo tenant only):
+       php artisan tinker --execute="\$t=App\Models\Tenant::where('slug','bos-demo')->first(); echo 'tenant #'.\$t->id.'  products='.App\Models\Product::withoutGlobalScopes()->where('tenant_id',\$t->id)->count().'  customers='.App\Models\CustomerProfile::withoutGlobalScopes()->where('tenant_id',\$t->id)->count().'  invoices='.App\Models\Invoice::withoutGlobalScopes()->where('tenant_id',\$t->id)->count();"
+  2. Events landed + instrumented (correlation/causation captured):
+       php artisan tinker --execute="\$t=App\Models\Tenant::where('slug','bos-demo')->first(); dump(App\BOS\Event::withoutGlobalScopes()->where('tenant_id',\$t->id)->count()); dump(App\BOS\Event::withoutGlobalScopes()->where('tenant_id',\$t->id)->latest('recorded_at')->first()?->only(['name','subject_type','subject_id','correlation_id','device']));"
+  3. Your live tenant #17 is untouched (its counts are unchanged).
+
+PURGE (when done, or before a fresh run)
+  php artisan bos:demo --purge          # removes the demo tenant entirely
+  php artisan bos:demo --fresh          # purge + re-seed
+
+ROLLBACK
+  --purge, then remove the command file. Zero impact on live data.

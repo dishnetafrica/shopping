@@ -72,6 +72,14 @@ class PaymentService
         // "Pay", Customer 360, the order button, the Payments screen, staff-cash — reconciles both.
         try { $this->syncOrderPaid($t, $orderNo); } catch (\Throwable $e) {}
 
+        // BOS spine (Slice 2): record the fact for the customer timeline / Today / Insights. Guarded +
+        // never-throws inside Emit — the payment path is unaffected whether or not the spine exists.
+        \App\BOS\Emit::customerEvent($t->id, 'PaymentReceived', $d['phone'] ?? null, [
+            'receipt_no' => $result['receipt_no'] ?? null, 'amount' => (float) $d['amount'],
+            'currency' => $d['currency'], 'usd' => (float) $d['usd'], 'invoice_no' => $d['invoice_no'] ?? null,
+            'kind' => $d['kind'] ?? 'settlement',
+        ], ['actor' => ['type' => 'user', 'name' => (string) ($d['created_by'] ?? '')]]);
+
         return $result;
     }
 

@@ -1,0 +1,68 @@
+DEPLOY — BOS v1.0 Slice 5: Offline Field Notes (work with no signal; sync invisibly)
+====================================================================================
+The field team can log what happened at a customer — a Visit, a Note, a Follow-up — even with NO
+signal. It's saved on the phone and syncs itself the moment they reconnect. This slice builds the
+offline OUTBOX (queue → optimistic UI → flush-on-reconnect → idempotent server) and proves it on the
+safest high-value action first. No money path is touched; nothing can double-count (the event spine
+already dedupes on the client's idempotency key). No migration.
+
+Why notes first (deliberate risk-staging): recording a PAYMENT offline is the eventual prize, but it
+needs an order to tie to and it's the money path — where an untested duplicate/loss is costly. So Slice
+5 hardens the outbox on notes (a lost/dup note is harmless, and the spine is already idempotent). Slice
+6 then puts offline-collect on the SAME outbox — no new machinery.
+
+FILES CHANGED
+  app/Http/Controllers/Panel/BosNoteController.php   (NEW) POST /papi/customer-note — emits a customer
+                                                           event (Visit/Note/Follow-up) via the SDK
+                                                           bridge, carrying the client idempotency key +
+                                                           the true field time. Guarded; never throws.
+  routes/web.php                                     +1 line: the /papi/customer-note route (papi group).
+  resources/views/shell.blade.php                    + the offline outbox (IndexedDB, with in-memory
+                                                           fallback) + the note composer on the customer
+                                                           Timeline + pending-sync chip + "Offline" pill
+                                                           + note text on timeline lines + CSS.
+
+HOW IT WORKS (all overlay, all reversible)
+  - Opening a customer's Timeline shows a one-thumb composer (📍 Visit · 📝 Note · 🔔 Follow-up + text).
+  - WITH signal: Send posts immediately; the note appears on the timeline.
+  - NO signal: Send saves the note to the phone's outbox, shows it as "⏳ waiting to sync", and a chip
+    counts what's queued. A background flush (on reconnect, every 30s, and on app load) drains the queue,
+    posting each item with its idempotency key. EventStore::emit returns the existing event if the key was
+    already seen, so a replay is a no-op — never a second fact. Each event also records the REAL time it
+    was taken (occurred_at) and connectivity=offline, so history is accurate, not sync-stamped.
+  - The money path is completely untouched. The endpoint only ever writes an event through the sanctioned
+    Emit bridge (guarded, never throws).
+
+DEPLOY
+  git add app/Http/Controllers/Panel/BosNoteController.php routes/web.php resources/views/shell.blade.php
+  git commit -m "BOS v1.0 Slice 5: offline field notes (outbox + idempotent sync + timeline composer)"
+  git push  ->  EasyPanel Rebuild        (no migration)
+
+  NOTE on routes/web.php: it already carries your receipt-send + bos-today routes; Slice 5 adds ONE new
+  line (customer-note). If your live web.php has diverged, skip it from git add and instead add, inside
+  the Route::prefix('papi')->group(...) block:
+      Route::post('customer-note', [\App\Http\Controllers\Panel\BosNoteController::class, 'store']);
+
+VERIFY
+  1. Open a customer's Timeline -> the composer is there. Type "Dropped samples, wants a quote" with
+     Visit selected -> Send -> it appears on the timeline immediately (online).
+  2. Offline test: in the browser, DevTools -> Network -> Offline (or turn off Wi-Fi). The "Offline" pill
+     shows. Send a note -> it shows "⏳ waiting to sync" and the chip reads "⏳ 1 to sync". Go back online
+     -> within ~30s (or instantly on the reconnect event) it flushes; the chip clears and the note becomes
+     a normal timeline line dated to when you wrote it.
+  3. Replay safety: the same queued note never creates two events (idempotency key). Follow-ups and notes
+     show their text on the timeline.
+  4. Safety: quotes, invoices, payments, receipts all behave exactly as before — this slice adds only a
+     note endpoint and client outbox.
+
+ROLLBACK
+  Delete BosNoteController + its route line, and remove the outbox/composer/CSS block in shell.blade.php.
+  All additive + read-safe -> removal restores exact prior behaviour. No schema/data change; events
+  already written are harmless history.
+
+NOTE
+  Slice 6 rides this outbox to OFFLINE COLLECTIONS: add customer_payments.idempotency_key, allowlist the
+  payment action into the same outbox, and prefill order/invoice from the already-loaded record — no new
+  offline machinery, because this slice built and proved it. (A future slice can also switch the service
+  worker to cache the app shell for true cold-start-offline; kept separate so a caching bug never rides in
+  with the money-critical outbox.)

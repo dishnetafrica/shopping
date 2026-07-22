@@ -1,0 +1,62 @@
+DEPLOY — BOS v1.0 Slice 4: The Sales Journey (Quote → Accept → Convert → Invoice → Pay → Receipt)
+=================================================================================================
+Two things, both overlay: (1) every step of the sales journey now writes ONE event, so the customer
+timeline tells the whole story; (2) each customer's Timeline opens with a journey rail + the single
+next step to advance the deal (collect the balance / convert the accepted quote / send the receipt),
+one tap into the screen where that action already lives. No new tables, no migration, no money-path
+changes. The V3 timeline renderer already had icons for these events — they light up immediately.
+
+Prereq: Slices 1–3 deployed (bos_events exists). No migration here.
+
+FILES CHANGED
+  app/Services/Bot/QuotationService.php                         +1 emit  QuoteCreated (all quote sources)
+  app/Http/Controllers/Panel/PanelApiController.php             +2 emits QuoteAccepted + QuoteConverted (panel)
+  app/Services/Sales/QuotationConvertService.php                +1 emit  QuoteConverted (service path)
+  app/Http/Controllers/Storefront/QuotationPortalController.php +1 emit  QuoteAccepted (customer portal)
+  app/Http/Controllers/Panel/PaymentController.php              +1 emit  ReceiptSent
+  app/BOS/Process/SalesJourney.php                     (NEW) read-only Order-to-Cash: stage rail + next step
+  app/Capability/Object/CustomerCapability.php         + 'journey' key on the timeline read (try/caught)
+  resources/views/shell.blade.php                      + the journey rail + next-step button + CSS
+
+HOW IT WORKS (all overlay, all reversible)
+  - Each journey step calls the SAME guarded bridge as Slice 2 (App\BOS\Emit::customerEvent): it no-ops
+    if bos_events isn't migrated and never throws, so quotes/orders/receipts behave byte-for-byte the
+    same whether or not the spine exists. The events are additive history.
+  - Opening a customer's Timeline now runs SalesJourney (a pure read of their live quotes/invoices/
+    payments): it shows a 5-stage rail (done/current/todo) and the ONE next best action. That action is
+    only ever a deep-link to the existing verb screen (the invoice to collect on, the quote to convert,
+    the payment to receipt) — SalesJourney never mutates anything, so the rule engine stays the only gate.
+
+DEPLOY
+  git add app/Services/Bot/QuotationService.php \
+          app/Http/Controllers/Panel/PanelApiController.php \
+          app/Services/Sales/QuotationConvertService.php \
+          app/Http/Controllers/Storefront/QuotationPortalController.php \
+          app/Http/Controllers/Panel/PaymentController.php \
+          app/BOS/Process/SalesJourney.php \
+          app/Capability/Object/CustomerCapability.php \
+          resources/views/shell.blade.php
+  git commit -m "BOS v1.0 Slice 4: sales journey (journey emits + Order-to-Cash rail + next step)"
+  git push  ->  EasyPanel Rebuild        (no migration — bos_events already exists)
+
+VERIFY
+  1. Accept a quote in the panel (or a customer accepts via the portal link) -> open that customer's
+     Timeline: you see "Quote accepted" (and, once converted, "Quote converted to order"); the rail
+     advances. Issue the invoice -> "Invoice issued"; the rail shows Invoiced done, Paid current, and the
+     Next-step reads "Collect USD <balance>" and taps straight into that invoice.
+  2. Send a receipt from the payments screen -> "Receipt sent" appears on the timeline; the rail completes
+     and the Next-step clears to "All caught up on this customer".
+  3. Full trail on a fresh deal: New customer -> Quote created -> Quote accepted -> Quote converted ->
+     Invoice issued -> Payment received -> Receipt sent, newest first.
+  4. Safety: quotes, orders, invoices, receipts all send/print exactly as before; the emits are guarded
+     and never block those paths.
+
+ROLLBACK
+  Remove the six emit lines, the 'journey' key in CustomerCapability, the rail block + CSS in
+  shell.blade.php, and delete app/BOS/Process/SalesJourney.php. All additive + read-only, so removal
+  restores exact prior behaviour. No data/schema change; events already written are harmless history.
+
+NOTE
+  This closes the sales loop end to end: Slice 2 showed one customer's history, Slice 3 turned it into a
+  to-do list, Slice 4 makes each deal legible and self-advancing. Next (Slice 5): offline-first sync, so
+  the field team keeps quoting/collecting with no signal and it reconciles invisibly when they reconnect.

@@ -312,6 +312,10 @@ class QuotationPortalController extends Controller
 
         try {
             $q->forceFill(['status' => 'accepted', 'accepted_at' => now()])->save();
+            // BOS spine (Slice 4): the customer accepted their own quote via the portal. Guarded.
+            \App\BOS\Emit::customerEvent($tenant->id, 'QuoteAccepted', (string) $q->customer_phone, [
+                'quote_no' => (string) $q->quote_no, 'total' => (float) $q->total, 'currency' => (string) $q->currency,
+            ], ['actor' => ['type' => 'customer', 'name' => (string) ($q->customer_name ?? '')]]);
             $out   = app(QuotationConvertService::class)->convert($tenant, $q->fresh());
             $order = $out['order'] ?? null;
 

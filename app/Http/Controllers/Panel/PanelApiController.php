@@ -1531,6 +1531,12 @@ class PanelApiController extends Controller
 
         $q->status = $status;
         $q->save();
+        // BOS spine (Slice 4): record QuoteAccepted when the panel marks a quote accepted. Guarded.
+        if ($status === 'accepted') {
+            \App\BOS\Emit::customerEvent($t->id, 'QuoteAccepted', (string) $q->customer_phone, [
+                'quote_no' => (string) $q->quote_no, 'total' => (float) $q->total, 'currency' => (string) $q->currency,
+            ], ['actor' => ['type' => 'user', 'name' => (string) ($r->user()->name ?? '')]]);
+        }
         return response()->json(['ok' => true, 'status' => $q->status]);
     }
 
@@ -1589,6 +1595,11 @@ class PanelApiController extends Controller
         $q->order_id = (int) $o->id;
         $q->status   = 'converted';
         $q->save();
+
+        // BOS spine (Slice 4): record QuoteConverted for the customer timeline. Guarded + never-throws.
+        \App\BOS\Emit::customerEvent($t->id, 'QuoteConverted', (string) $q->customer_phone, [
+            'quote_no' => (string) $q->quote_no, 'order_no' => (string) $o->order_no,
+        ], ['actor' => ['type' => 'user', 'name' => (string) ($r->user()->name ?? '')]]);
 
         return response()->json(['ok' => true, 'order_id' => (int) $o->id, 'order_no' => (string) $o->order_no]);
     }

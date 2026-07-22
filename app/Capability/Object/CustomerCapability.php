@@ -331,7 +331,7 @@ final class CustomerCapability implements ObjectCapability
                 ['key' => 'financials', 'label' => 'Account statement'],
                 ['key' => 'timeline', 'label' => 'Timeline', 'count' => count($timelineEvents)],
             ])
-            ->actions([$primary])
+            ->actions([$primary, ['key' => 'bos_timeline', 'label' => '🕑 Timeline', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/bos.timeline/' . $c->id, 'actor' => 'human', 'tone' => 'default']])
             ->more(array_values(array_filter([
                 $editAction,
                 (bool) $ctx->tenant->setting('relationship_memory', false) ? [
@@ -384,8 +384,46 @@ final class CustomerCapability implements ObjectCapability
             'create_quotation' => $this->createQuotation($ctx, $input),
             'send_statement' => $this->sendStatement($ctx, $input),
             'send_reminder' => ['ok' => true, 'sent' => true, 'message' => 'Reminder sent.'],
+            'timeline' => $this->bosTimeline($ctx, $input),
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
+    }
+
+    /**
+     * BOS Slice 2 — the Customer Timeline: this customer's whole history as one stream, read from the
+     * event spine (bos_events). Pure read; no writes. The outstanding total comes from live invoices.
+     */
+    private function bosTimeline(CapabilityContext $ctx, array $input): array
+    {
+        $id = (int) ($input['id'] ?? 0);
+        $c = CustomerProfile::where('tenant_id', $ctx->tenantId())->find($id);
+        if (! $c) return ['ok' => false, 'error' => 'not_found'];
+
+        $outstanding = 0.0;
+        try {
+            $outstanding = (float) \App\Models\Invoice::where('tenant_id', $ctx->tenantId())
+                ->where('customer_phone', $c->phone)->where('status', '!=', 'void')->sum('balance');
+        } catch (\Throwable $e) { /* invoices optional */ }
+
+        $lines = [];
+        try { $lines = \App\BOS\Bos::timeline('customer', (int) $c->id, (int) $ctx->tenantId(), 200); }
+        catch (\Throwable $e) { $lines = []; }
+
+        // BOS Slice 4 — Order-to-Cash journey: where this customer's latest deal stands + the next step.
+        $journey = null;
+        try { $journey = (new \App\BOS\Process\SalesJourney((int) $ctx->tenantId(), (int) $c->id))->build(); }
+        catch (\Throwable $e) { $journey = null; }
+
+        return [
+            'ok' => true,
+            'customer' => [
+                'id' => (int) $c->id, 'name' => (string) ($c->name ?: 'Customer'),
+                'phone' => (string) $c->phone, 'city' => (string) ($c->city ?? ''),
+                'outstanding' => round($outstanding, 2),
+            ],
+            'journey' => $journey,
+            'timeline' => $lines,
+        ];
     }
 
     /** V4.0 — humans own the memory: stage overrides (incl. LOST — sticky, see stages cron),

@@ -579,6 +579,132 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 .ag-row.clk:hover{background:var(--surface-2)}
 .ag-time{min-width:46px;font-weight:700;font-size:12.5px;color:var(--muted)}
 .ag-main{flex:1;min-width:0}
+
+/* ===================== MOBILE-FIRST: workspaces bar + smart create + hubs ===================== */
+/* Desktop is untouched — the bar, FAB and hub layout only kick in on phones (≤880px). */
+.botnav{display:none}
+.fab{display:none}
+@media(max-width:880px){
+  .wrap{padding-bottom:92px}                 /* clear the fixed bar so nothing hides behind it */
+  #toasts{bottom:84px}
+  .selbar{bottom:84px}
+  .botnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:46;height:60px;
+    background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -2px 14px rgba(16,24,40,.07);
+    align-items:stretch;padding-bottom:env(safe-area-inset-bottom,0)}
+  .bn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    color:var(--muted);font-size:10.5px;font-weight:600;background:none;border:none;-webkit-tap-highlight-color:transparent}
+  .bn .ic{width:22px;height:22px;stroke-width:1.9}
+  .bn.on{color:var(--brand)}
+  .bn.on .ic{stroke-width:2.3}
+  /* Floating, context-aware create button — sits above the bar, changes actions per workspace */
+  .fab{display:grid;place-items:center;position:fixed;right:16px;z-index:47;
+    bottom:calc(74px + env(safe-area-inset-bottom,0));width:56px;height:56px;border-radius:50%;
+    background:var(--brand);color:#fff;box-shadow:0 8px 20px rgba(22,163,74,.44);border:none}
+  .fab .ic{width:27px;height:27px;stroke-width:2.4}
+  .fab:active{transform:scale(.94)}
+}
+/* Create bottom sheet — items are rendered per current workspace (context-aware). */
+.qsheet-ov{display:none;position:fixed;inset:0;background:rgba(17,24,28,.44);backdrop-filter:blur(2px);z-index:72;align-items:flex-end;justify-content:center}
+.qsheet-ov.on{display:flex}
+.qsheet{background:var(--surface);width:100%;max-width:520px;border-radius:20px 20px 0 0;
+  padding:10px 14px calc(18px + env(safe-area-inset-bottom,0));box-shadow:var(--sh-lg);animation:qsup .22s cubic-bezier(.2,.7,.3,1)}
+@keyframes qsup{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.qsheet .grab{width:42px;height:4px;border-radius:2px;background:var(--line);margin:4px auto 12px}
+.qsheet h4{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:0 4px 10px}
+.qgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.qadd{display:flex;align-items:center;gap:12px;padding:14px 13px;border-radius:13px;background:var(--surface-2);
+  border:1px solid var(--line);font-size:14px;font-weight:600;color:var(--ink);text-align:left;transition:.12s}
+.qadd:active{background:var(--brand-wash);border-color:var(--brand)}
+.qadd .qaic{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:none;background:var(--brand-wash);color:var(--brand-ink)}
+.qadd .qaic .ic{width:19px;height:19px}
+/* Workspace hubs (Operations / Finance / Me): action-oriented card menu into existing screens. */
+.hubhead{font-size:23px;font-weight:800;letter-spacing:-.01em;margin:2px 2px 3px}
+.hubsub{color:var(--muted);font-size:13px;margin:0 2px 16px}
+.hubgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.hubcard{display:flex;flex-direction:column;gap:12px;padding:15px 15px;border-radius:15px;background:var(--surface);
+  border:1px solid var(--line);box-shadow:var(--sh-sm);text-align:left;min-height:104px;justify-content:space-between;transition:.12s}
+.hubcard:active{border-color:var(--brand);background:var(--brand-wash)}
+.hubcard .hi{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:var(--brand-wash);color:var(--brand-ink)}
+.hubcard .hi .ic{width:20px;height:20px}
+.hubcard .ht{font-size:14.5px;font-weight:700;color:var(--ink);line-height:1.25}
+.hubcard .hc{font-size:12px;color:var(--muted);font-weight:600}
+@media(min-width:881px){ .hubgrid{grid-template-columns:repeat(3,1fr);max-width:760px} }
+/* ===== BOS Customer Timeline (Slice 2) — one customer's whole history, WhatsApp-style ===== */
+.btl-head{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:16px;box-shadow:var(--sh-sm)}
+.btl-nm{font-size:19px;font-weight:800;letter-spacing:-.01em}
+.btl-sub{color:var(--muted);font-size:12.5px;margin-top:2px}
+.btl-out{margin-top:9px;font-size:13px;color:var(--warn);font-weight:600}
+.btl-out.ok{color:var(--brand-ink)}
+.btl-out b{font-weight:800}
+.btl{position:relative;padding:2px 0}
+.btl-row{display:flex;gap:12px;margin-left:16px;padding:9px 2px 9px 18px;border-left:2px solid var(--line);position:relative}
+.btl-ic{position:absolute;left:-15px;top:7px;width:28px;height:28px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:grid;place-items:center;font-size:14px}
+.btl-body{flex:1;min-width:0;padding-top:3px}
+.btl-txt{font-size:14px;font-weight:600;color:var(--ink);line-height:1.35}
+.btl-at{font-size:11.5px;color:var(--faint);margin-top:2px}
+.btl-empty{color:var(--muted);padding:26px;text-align:center}
+/* ===== BOS Today (Slice 3) — the day's work: greeting, KPI tiles, ranked to-do ===== */
+.tdy-head{margin:2px 0 14px}
+.tdy-hi{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.tdy-dt{color:var(--muted);font-size:13px;margin-top:2px}
+.tdy-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px}
+.tdy-kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 15px;box-shadow:var(--sh-sm);position:relative;overflow:hidden}
+.tdy-kpi::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line-2)}
+.tdy-kpi.ok::before{background:var(--brand)}
+.tdy-kpi.warn::before{background:var(--warn)}
+.tdy-kpi.danger::before{background:var(--danger)}
+.tdy-v{font-size:20px;font-weight:800;letter-spacing:-.01em;line-height:1.1}
+.tdy-kpi.warn .tdy-v{color:var(--warn)}
+.tdy-kpi.danger .tdy-v{color:var(--danger)}
+.tdy-l{color:var(--muted);font-size:12px;font-weight:600;margin-top:4px}
+.tdy-sec{font-size:12px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;margin:0 2px 10px}
+.tdy-list{display:flex;flex-direction:column;gap:9px}
+.tdy-row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:12px 14px;box-shadow:var(--sh-sm);transition:.12s}
+.tdy-row:active{border-color:var(--brand);background:var(--brand-wash)}
+.tdy-ric{width:36px;height:36px;border-radius:10px;flex:none;display:grid;place-items:center;background:var(--warn-wash);font-size:16px}
+.tdy-rb{flex:1;min-width:0}
+.tdy-rt{font-size:14px;font-weight:700;color:var(--ink);line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tdy-rs{font-size:12px;color:var(--muted);margin-top:1px}
+.tdy-od{font-size:10.5px;font-weight:700;color:var(--danger);background:var(--danger-wash);padding:3px 8px;border-radius:20px;flex:none}
+.tdy-rc{color:var(--faint);font-size:20px;font-weight:400;flex:none}
+.tdy-clear{text-align:center;color:var(--muted);padding:44px 20px}
+.tdy-clear .ic{width:40px;height:40px;color:var(--brand);opacity:.7;margin-bottom:8px}
+@media(min-width:881px){ .tdy-kpis{grid-template-columns:repeat(4,1fr)} }
+/* ===== BOS Sales Journey (Slice 4) — the Order-to-Cash rail + next-step on the customer timeline ===== */
+.bjr-wrap{margin-bottom:16px}
+.bjr{display:flex;align-items:flex-start;justify-content:space-between;padding:4px 2px 12px}
+.bjr-step{display:flex;flex-direction:column;align-items:center;gap:5px;flex:0 0 auto;width:54px;text-align:center}
+.bjr-dot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:800;border:2px solid var(--line-2);background:var(--surface);color:var(--faint)}
+.bjr-step.done .bjr-dot{background:var(--brand);border-color:var(--brand);color:#fff}
+.bjr-step.current .bjr-dot{border-color:var(--warn);color:var(--warn);box-shadow:0 0 0 3px var(--warn-wash)}
+.bjr-lb{font-size:10.5px;font-weight:600;color:var(--faint);line-height:1.1}
+.bjr-step.done .bjr-lb{color:var(--brand-ink)}
+.bjr-step.current .bjr-lb{color:var(--warn)}
+.bjr-line{flex:1;height:2px;background:var(--line-2);margin-top:14px;min-width:6px}
+.bjr-next{display:flex;align-items:center;gap:12px;border-radius:13px;padding:13px 15px;box-shadow:var(--sh-sm);border:1px solid var(--line);background:var(--surface)}
+.bjr-next.warn{background:var(--warn-wash);border-color:#f4d9a8}
+.bjr-next.brand{background:var(--brand-wash);border-color:#bfe8cd}
+.bjr-next[onclick]{cursor:pointer}
+.bjr-nx{flex:1;min-width:0}
+.bjr-nl{font-size:14px;font-weight:700;color:var(--ink);line-height:1.3}
+.bjr-nh{font-size:12px;color:var(--muted);margin-top:1px}
+.bjr-ng{font-size:20px;color:var(--faint);flex:none}
+.bjr-next.warn .bjr-ng{color:var(--warn)}
+.bjr-next.brand .bjr-ng{color:var(--brand-ink)}
+.bjr-next.ok .bjr-ng{color:var(--brand)}
+/* ===== BOS Offline notes (Slice 5) — composer + pending-sync chip on the customer timeline ===== */
+.obchip{display:inline-block;margin-top:9px;font-size:11px;font-weight:700;color:var(--warn);background:var(--warn-wash);padding:3px 9px;border-radius:20px}
+.obc{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:10px 12px;margin-bottom:14px;box-shadow:var(--sh-sm)}
+.obc-k{display:flex;gap:7px;margin-bottom:9px}
+.obk{border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:12px;font-weight:600;padding:5px 11px;border-radius:20px;cursor:pointer}
+.obk.on{background:var(--brand-wash);border-color:#bfe8cd;color:var(--brand-ink)}
+.obc-r{display:flex;gap:8px}
+.obc-in{flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:14px;font-family:inherit;color:var(--ink);outline:none}
+.obc-in:focus{border-color:var(--brand)}
+.obc-go{flex:none;background:var(--brand);color:#fff;border:0;border-radius:10px;padding:0 16px;font-size:13px;font-weight:700;cursor:pointer}
+.btl-row.obp{opacity:.72}
+.btl-row.obp .btl-ic{border-style:dashed;border-color:var(--warn)}
+.offpill{font-size:11px;font-weight:700;color:#b45309;background:#fff2dd;padding:2px 8px;border-radius:20px}
 </style>
 </head>
 <body>
@@ -617,9 +743,21 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 <div class="scrim" id="scrim" onclick="closeNav()"></div>
 <div id="toasts"></div>
 
+<!-- ===== Mobile workspaces bar (role-aware, JS-rendered) + context-aware create (phones only) ===== -->
+<nav class="botnav" id="botnav"></nav>
+<button class="fab" id="fab" onclick="openQuickAdd()" aria-label="Create">
+  <svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+<div class="qsheet-ov" id="qsheet" onclick="if(event.target===this)closeQuickAdd()">
+  <div class="qsheet" role="dialog" aria-label="Create new">
+    <div class="grab"></div>
+    <h4 id="qsheetTitle">Create</h4>
+    <div class="qgrid" id="qgrid"></div>
+  </div>
+</div>
+
 <script>
 const CFG = { base:'/api/v1/workspace', csrf: document.querySelector('meta[name=csrf-token]').content, user: @json(['name'=>'']) };
-const LABELS = { setup:'Get started', chats:'Chats', chat:'Chat', communication:'Email Center', guide:'Help & Training', consignments:'Consignments', consignment:'Consignment', scheduled:'Scheduled', briefing:'Morning Briefing', worklist:'My Work', tasks:'Tasks', followups:'AI Follow-ups', diagnostics:'Bot Diagnostics', customers:'Customers', leads:'Leads', collections:'Collections',
+const LABELS = { setup:'Get started', chats:'Chats', chat:'Chat', communication:'Email Center', guide:'Help & Training', consignments:'Consignments', consignment:'Consignment', scheduled:'Scheduled', briefing:'Today', worklist:'My Work', tasks:'Tasks', followups:'AI Follow-ups', diagnostics:'Bot Diagnostics', customers:'Customers', leads:'Leads', collections:'Collections',
   salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance', pnl:'Profit & Loss',
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', 'procurement.hub':'Procurement Hub', 'demand.plans':'Demand Plans', 'juba.stock':'Juba Stock', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch', transport:'Transport Register', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
@@ -784,6 +922,7 @@ async function boot(){
   document.getElementById('acctwho').textContent = nm;
   document.getElementById('acctrole').textContent = (CFG.user.role||'') + (CFG.user.org ? ' · ' + CFG.user.org : '');
   renderNav(cat.capabilities||[]);
+  renderBotnav();   // phone workspaces bar (role-aware); no-op visual on desktop
   const h = parseHash();
   route(h.key || landingKey(), h.id);
 }
@@ -957,11 +1096,15 @@ function landingKey(){
   const c = CFG.counts||{};
   const started = ['product','customers','supplier','salesOrder','quotations','invoice','payment']
     .some(k => Number(c[k]||0) > 0);
-  return started ? 'briefing' : 'setup';
+  if(!started) return 'setup';
+  // Mobile-first (BOS Slice 3): the phone lands on the new Today screen; desktop keeps the classic briefing.
+  try{ if(window.matchMedia('(max-width:880px)').matches) return 'bos.today'; }catch(e){}
+  return 'briefing';
 }
 function parseHash(){ const p=location.hash.replace('#/','').split('/'); return { key:p[0]||'', id:p[1]||null }; }
 function renderNav(caps){
   const keys = new Set(caps.map(c=>c.key));
+  CFG.capKeys = keys;   // shared with the mobile workspace bar so it hides workspaces the role can't see
   // A SOON item shows if its underlying entity exists (has a count) even without a list capability yet.
   /* pnl is a legacy-iframe screen with no capability of its own — gate it on the
      permission-filtered finance capability so restricted roles don't see P&L. */
@@ -979,7 +1122,110 @@ function renderNav(caps){
   });
   document.getElementById('nav').innerHTML=html;
 }
-function setActive(key){ document.querySelectorAll('.nitem').forEach(n=>n.classList.toggle('on', n.dataset.key===key)); }
+function setActive(key){ document.querySelectorAll('.nitem').forEach(n=>n.classList.toggle('on', n.dataset.key===key)); setActiveWorkspace(key); }
+
+/* ================= MOBILE WORKSPACES — Today · Customers · Operations · Finance · Me =================
+   Phone-first "operating system" chrome: role-aware workspaces in the bottom bar, a context-aware +
+   that changes actions per workspace, and action-oriented hubs. Desktop is untouched (bar/FAB hidden). */
+const WSICON = {
+  today:'M3 10.5 12 3l9 7.5M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5',
+  customers:'M9 8a3.1 3.1 0 1 0 .01 0M3.6 20a5.4 5.4 0 0 1 10.8 0M16 6.3a3 3 0 0 1 0 5.4',
+  operations:'M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8',
+  finance:'M3 7h18v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM3 7l2.5-4h13L21 7M12 12v4M9.5 14h5',
+  me:'M12 8a3.4 3.4 0 1 0 .01 0M5.5 20a6.5 6.5 0 0 1 13 0'
+};
+function svgIc(d,extra){ return '<svg class="ic'+(extra?' '+extra:'')+'" viewBox="0 0 24 24"><path d="'+d+'"/></svg>'; }
+const WS = {
+  today:      { label:'Today',      route:'bos.today', members:['bos.today','briefing'] },
+  customers:  { label:'Customers',  route:'customers', members:['customers','leads','followups'] },
+  operations: { label:'Operations', hub:true, sub:'Stock, orders & fulfilment',
+                members:['salesOrders','products','categories','purchase.process','suppliers','warehouse','dispatch','consignments','procurement.hub','demand.plans','juba.stock','scheduled'] },
+  finance:    { label:'Finance',    hub:true, sub:'Money in & money out',
+                members:['collections','invoices','payments','quotations','cashbook','finance','pnl'] },
+  me:         { label:'Me',         hub:true, sub:'', members:[] }
+};
+const WS_ORDER = ['today','customers','operations','finance','me'];
+/* Action-oriented card labels (work, not database tables). */
+const HUBCARD = {
+  collections:{t:'Money to Collect',c:'overdue & due'}, invoices:{t:'Waiting for Payment',c:'issued'},
+  payments:{t:'Receipts',c:'money received'}, quotations:{t:'Quotes Waiting',c:'to confirm'},
+  cashbook:{t:'Cash Book',c:'cash in & out'}, finance:{t:'Finance',c:'overview'}, pnl:{t:'Profit & Loss',c:''},
+  salesOrders:{t:'Open Orders',c:'to fulfil'}, products:{t:'Products',c:'catalogue'}, categories:{t:'Categories',c:''},
+  'purchase.process':{t:'Items to Receive',c:'purchasing'}, suppliers:{t:'Suppliers',c:''},
+  warehouse:{t:'Low Stock',c:'reorder'}, dispatch:{t:'To Deliver',c:'dispatch'}, consignments:{t:'Consignments',c:''},
+  'procurement.hub':{t:'Procurement',c:''}, 'demand.plans':{t:'Demand Plans',c:''}, 'juba.stock':{t:'Juba Stock',c:''},
+  scheduled:{t:'Scheduled',c:'deliveries'}
+};
+/* Context-aware create actions per workspace (only real, permitted screens are offered). */
+const WS_ADD = {
+  today:      [['quotations','New Quote'],['invoices','New Invoice'],['payments','Receive Payment'],['cashbook','Expense'],['tasks','Customer Visit'],['customers','New Customer']],
+  customers:  [['customers','New Customer'],['quotations','New Quote'],['payments','Receive Payment'],['tasks','Customer Visit']],
+  operations: [['purchase.process','New Purchase'],['products','New Product'],['salesOrders','New Order']],
+  finance:    [['cashbook','Expense'],['payments','Receive Payment'],['invoices','New Invoice']],
+  me:         []
+};
+var WS_CUR = 'today';
+function hasScreen(k){
+  var s = CFG.capKeys;
+  if(k==='pnl') return !!(s && s.has('finance'));
+  if(k==='settings' || k==='guide') return true;
+  if(SF_KEYS.has(k)) return true;
+  if(s && s.has(k)) return true;
+  return !!(SOON[k] && CFG.counts && CFG.counts[NAVCOUNT[k]||k]!=null);
+}
+function wsVisible(id){ if(id==='today'||id==='me') return true; return WS[id].members.some(hasScreen); }
+function renderBotnav(){
+  var bar=document.getElementById('botnav'); if(!bar) return;
+  bar.innerHTML = WS_ORDER.filter(wsVisible).map(function(id){
+    return '<button class="bn" data-ws="'+id+'" onclick="openWorkspace(\''+id+'\')">'+svgIc(WSICON[id])+'<span>'+WS[id].label+'</span></button>';
+  }).join('');
+}
+function openWorkspace(id){ var w=WS[id]; if(!w) return; w.hub ? route('ws.'+id) : route(w.route); }
+function wsOf(key){
+  if(key && key.indexOf('ws.')===0) return key.slice(3);
+  for(var i=0;i<WS_ORDER.length;i++){ var id=WS_ORDER[i]; if(WS[id].route===key || WS[id].members.indexOf(key)>=0) return id; }
+  return null;
+}
+function setActiveWorkspace(key){
+  var id=wsOf(key), bar=document.getElementById('botnav');
+  if(id) WS_CUR=id;
+  if(bar) bar.querySelectorAll('.bn[data-ws]').forEach(function(n){ n.classList.toggle('on', n.getAttribute('data-ws')===id); });
+  var fab=document.getElementById('fab'); if(fab) fab.style.display = (id==='me') ? 'none' : '';
+}
+/* Workspace hubs: an action-oriented card menu that opens the existing screens. */
+function renderHub(id){
+  var w=WS[id]; if(!w) return;
+  if(id==='me') return renderMeHub();
+  var cards=w.members.filter(hasScreen).map(function(k){
+    var m=HUBCARD[k]||{t:(LABELS[k]||k),c:''};
+    var cnt=CFG.counts?CFG.counts[NAVCOUNT[k]||k]:null;
+    var sub=(cnt!=null&&cnt!=='')?(fmtCount(cnt)+(m.c?' · '+m.c:'')):(m.c||'');
+    return '<button class="hubcard" onclick="route(\''+k+'\')"><span class="hi">'+icon(k)+'</span>'
+      +'<span><span class="ht">'+m.t+'</span>'+(sub?'<br><span class="hc">'+sub+'</span>':'')+'</span></button>';
+  }).join('');
+  document.getElementById('view').innerHTML='<div class="hubhead">'+w.label+'</div>'
+    +'<div class="hubsub">'+(w.sub||'')+'</div>'
+    +'<div class="hubgrid">'+(cards||'<div class="hubsub">Nothing here for your role.</div>')+'</div>';
+}
+function renderMeHub(){
+  var nm=(CFG.user&&CFG.user.name)||'You', role=(CFG.user&&CFG.user.role)||'', org=(CFG.user&&CFG.user.org)||'';
+  var cards='';
+  [['settings','Settings','preferences'],['guide','Help & Training','how-to']].forEach(function(x){
+    if(hasScreen(x[0])) cards+='<button class="hubcard" onclick="route(\''+x[0]+'\')"><span class="hi">'+icon(x[0])+'</span><span><span class="ht">'+x[1]+'</span><br><span class="hc">'+x[2]+'</span></span></button>';
+  });
+  cards+='<button class="hubcard" onclick="location.href=\'/panel?classic=1\'"><span class="hi">'+icon('settings')+'</span><span><span class="ht">Classic panel</span><br><span class="hc">full desktop</span></span></button>';
+  cards+='<button class="hubcard" onclick="signOut()"><span class="hi" style="background:var(--danger-wash);color:var(--danger)">'+svgIc('M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9')+'</span><span><span class="ht">Sign out</span></span></button>';
+  document.getElementById('view').innerHTML='<div class="hubhead">'+esc(nm)+'</div><div class="hubsub">'+esc(role)+(org?' · '+esc(org):'')+'</div><div class="hubgrid">'+cards+'</div>';
+}
+/* Context-aware create sheet — items depend on the workspace you're in. */
+function openQuickAdd(){
+  var items=(WS_ADD[WS_CUR]||WS_ADD.today).filter(function(x){ return hasScreen(x[0]); });
+  if(!items.length) items=WS_ADD.today.filter(function(x){ return hasScreen(x[0]); });
+  document.getElementById('qgrid').innerHTML = items.map(function(x){
+    return '<button class="qadd" onclick="quickAdd(\''+x[0]+'\')"><span class="qaic">'+icon(x[0])+'</span>'+x[1]+'</button>';
+  }).join('');
+  document.getElementById('qsheet').classList.add('on');
+}
 
 /* ---- global report-currency selector ---- */
 const CUR_LABELS = { base:'Base currency', original:'Original currency', USD:'USD', UGX:'UGX', SSP:'SSP' };
@@ -1022,6 +1268,9 @@ async function route(key, id){
   if(key==='storefront.collections'){ sfCollectionsPage(); return; }
   if(key==='storefront.kits'){ sfKitsPage(); return; }
   if(key==='storefront.delivery'){ sfDeliveryPage(); return; }
+  if(key.indexOf('ws.')===0){ renderHub(key.slice(3)); return; }   // mobile workspace hub (Operations/Finance/Me)
+  if(key==='bos.today'){ bosToday(); return; }                     // BOS Slice 3 — the day's work
+  if(key==='bos.timeline'){ bosTimeline(id); return; }             // BOS Slice 2 — customer timeline
   if(SOON[key] && !id){ renderSoon(key); return; }
   document.getElementById('view').innerHTML=skeleton();
   let path='/'+key+(id?'/'+id:'');
@@ -1045,6 +1294,183 @@ function renderSoon(key){
 function refresh(){ if(CUR.key) route(CUR.key, CUR.id); }
 /* Mobile nav drawer + top-bar account menu (Sign out / classic panel). */
 function toggleNav(){ const a=document.querySelector('.app'); const open=a.classList.toggle('navopen'); document.getElementById('scrim').classList.toggle('on',open); }
+/* Mobile quick-add sheet (the center + in the bottom nav). Each item jumps to its workspace. */
+function closeQuickAdd(){ document.getElementById('qsheet').classList.remove('on'); }
+function quickAdd(key){ closeQuickAdd(); route(key); }
+
+/* ===== BOS Slice 2 — Customer Timeline: one customer's whole history from the event spine ===== */
+async function bosTimeline(id){
+  const v=document.getElementById('view'); v.innerHTML=skeleton();
+  let r; try{ r=await post(CFG.base+'/customer/'+id+'/timeline', {id:id}); }catch(e){ r=null; }
+  if(!r || r.ok===false){ v.innerHTML=emptyState('bolt','Timeline unavailable','No history yet, or the event spine isn\'t enabled.'); return; }
+  const c=r.customer||{}, t=r.timeline||[]; const out=Number(c.outstanding||0);
+  const head='<div class="btl-head"><div class="btl-nm">'+esc(c.name||'Customer')+'</div>'
+    +'<div class="btl-sub">'+esc(c.phone||'')+(c.city?' · '+esc(c.city):'')+'</div>'
+    +(out>0.5?'<div class="btl-out">Outstanding <b>USD '+bmoney(out)+'</b></div>':'<div class="btl-out ok">No outstanding balance</div>')
+    +'<span class="obchip" style="display:none"></span></div>';
+  const rows = t.length ? t.map(bosTLine).join('') : '<div class="btl-empty">No activity yet — actions will appear here as they happen.</div>';
+  v.innerHTML='<div class="crumb"><span onclick="route(\'customers\')" style="cursor:pointer;color:var(--brand-ink)">Customers</span> <span style="color:var(--faint)">/</span> '+esc(c.name||'')+' — timeline <span class="offpill" style="display:'+(navigator.onLine?'none':'inline-block')+'">Offline</span></div>'+head+bosJourney(r.journey)+obComposer(Number(c.id||id))+'<div id="obpend"></div><div class="btl">'+rows+'</div>';
+  renderObPending(); obBadge();
+}
+/* BOS Slice 4 — Order-to-Cash rail + the single next step (read-only; deep-links to the verb's screen). */
+function bosJourney(j){
+  if(!j || !j.steps || !j.steps.length) return '';
+  const steps=j.steps.map(function(s){
+    return '<div class="bjr-step '+s.state+'"><div class="bjr-dot">'+(s.state==='done'?'✓':'')+'</div><div class="bjr-lb">'+esc(s.label)+'</div></div>';
+  }).join('<div class="bjr-line"></div>');
+  const n=j.next; let nb;
+  if(n){
+    const rt=(n.route&&n.route.key)?(' onclick="route(\''+n.route.key+'\','+Number(n.route.id||0)+')"'):'';
+    nb='<div class="bjr-next '+(n.tone||'default')+'"'+rt+'><div class="bjr-nx"><div class="bjr-nl">Next: '+esc(n.label)+'</div>'+(n.hint?'<div class="bjr-nh">'+esc(n.hint)+'</div>':'')+'</div><div class="bjr-ng">›</div></div>';
+  } else {
+    nb='<div class="bjr-next ok"><div class="bjr-nx"><div class="bjr-nl">All caught up on this customer</div></div><div class="bjr-ng">✓</div></div>';
+  }
+  return '<div class="bjr-wrap"><div class="bjr">'+steps+'</div>'+nb+'</div>';
+}
+function bmoney(v){ return Number(v||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function bwhen(iso){ if(!iso) return ''; try{ const d=new Date(iso); return d.toLocaleDateString(undefined,{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
+function bosTLine(e){
+  const d=e.data||{}, cur=d.currency||'USD', amt=(x)=>cur+' '+bmoney(x);
+  const M={
+    CustomerCreated:['👤','New customer'+(d.segment?' — '+esc(d.segment):'')],
+    CustomerVisited:['📍', d.note ? ('Visit — '+esc(d.note)) : ('Visited'+(d.city?' — '+esc(d.city):''))],
+    CustomerNote:['📝','Note — '+esc(d.note||'')],
+    QuoteCreated:['🧾','Quote '+esc(d.quote_no||'')+(d.total?' — '+amt(d.total):'')],
+    QuoteAccepted:['✅','Quote accepted'], QuoteConverted:['🔁','Quote converted to order'],
+    OrderConfirmed:['📦','Order '+esc(d.order_no||'')+' confirmed'], DeliveryCompleted:['🚚','Delivered'],
+    InvoiceIssued:['🧾','Invoice '+esc(d.invoice_no||'')+' — '+amt(d.total)+(Number(d.balance)>0.5?' · balance '+bmoney(d.balance):'')],
+    PaymentReceived:['💵','Payment '+amt(d.amount)+' received'+(d.receipt_no?' · '+esc(d.receipt_no):'')],
+    ReceiptSent:['📄','Receipt sent'],
+    FollowupScheduled:['🔔', d.note ? ('Follow-up — '+esc(d.note)+(d.due?' (by '+esc(d.due)+')':'')) : 'Follow-up scheduled']
+  };
+  const m=M[e.event]||['•',esc(e.event)];
+  return '<div class="btl-row"><div class="btl-ic">'+m[0]+'</div><div class="btl-body"><div class="btl-txt">'+m[1]+'</div><div class="btl-at">'+esc(bwhen(e.at))+(e.actor?' · '+esc(e.actor):'')+'</div></div></div>';
+}
+
+/* ===== BOS Slice 5 — Offline outbox: field writes survive no signal, then sync idempotently =====
+   A tiny IndexedDB queue (with an in-memory fallback). A note posts immediately when there's signal;
+   with no signal it's saved locally + shown as "waiting to sync", and a background flush drains the
+   queue on reconnect. Every item carries a client idempotency key, so a replay is a no-op server-side
+   (EventStore dedupes) — nothing is ever double-counted. */
+const OB = (function(){
+  const DBN='cloudbss-ob', STORE='outbox'; let _db=null, _mem=[];
+  function open(){ return new Promise(function(res){
+    if(_db) return res(_db);
+    try{ const rq=indexedDB.open(DBN,1);
+      rq.onupgradeneeded=function(){ try{ rq.result.createObjectStore(STORE,{keyPath:'id'}); }catch(e){} };
+      rq.onsuccess=function(){ _db=rq.result; res(_db); };
+      rq.onerror=function(){ res(null); };
+    }catch(e){ res(null); }
+  }); }
+  function store(mode){ return open().then(function(db){ try{ return db? db.transaction(STORE,mode).objectStore(STORE):null; }catch(e){ return null; } }); }
+  function uid(){ try{ if(crypto&&crypto.randomUUID) return crypto.randomUUID(); }catch(e){} return 'ob-'+Date.now()+'-'+Math.random().toString(16).slice(2); }
+  return {
+    uuid:uid,
+    add:function(item){ return store('readwrite').then(function(st){
+      if(!st){ _mem.push(item); return item; }
+      return new Promise(function(res){ try{ st.add(item); st.transaction.oncomplete=function(){res(item);}; st.transaction.onerror=function(){ _mem.push(item); res(item); }; }catch(e){ _mem.push(item); res(item); } });
+    }); },
+    all:function(){ return store('readonly').then(function(st){
+      if(!st) return _mem.slice();
+      return new Promise(function(res){ try{ const rq=st.getAll(); rq.onsuccess=function(){ res(rq.result||[]); }; rq.onerror=function(){ res(_mem.slice()); }; }catch(e){ res(_mem.slice()); } });
+    }); },
+    del:function(id){ return store('readwrite').then(function(st){
+      if(!st){ _mem=_mem.filter(function(x){return x.id!==id;}); return; }
+      return new Promise(function(res){ try{ st.delete(id); st.transaction.oncomplete=function(){res();}; st.transaction.onerror=function(){ _mem=_mem.filter(function(x){return x.id!==id;}); res(); }; }catch(e){ res(); } });
+    }); }
+  };
+})();
+let OB_CUST=0, OB_KIND='visit', OB_BUSY=false;
+function obKind(k){ OB_KIND=k; document.querySelectorAll('.obk').forEach(function(b){ b.classList.toggle('on', b.dataset.k===k); }); }
+function obComposer(cid){
+  OB_CUST=Number(cid)||0;
+  const chip=function(k,l){ return '<button class="obk'+(k===OB_KIND?' on':'')+'" data-k="'+k+'" onclick="obKind(\''+k+'\')">'+l+'</button>'; };
+  return '<div class="obc"><div class="obc-k">'+chip('visit','📍 Visit')+chip('note','📝 Note')+chip('followup','🔔 Follow-up')+'</div>'
+    +'<div class="obc-r"><input id="obtext" class="obc-in" maxlength="1000" placeholder="What happened? (works offline)" onkeydown="if(event.key===\'Enter\')obSend()"><button class="obc-go" onclick="obSend()">Send</button></div></div>';
+}
+function obPendingLine(it){
+  const k=it.kind, lbl=(k==='visit'?'📍 Visit':(k==='followup'?'🔔 Follow-up':'📝 Note'));
+  return '<div class="btl-row obp"><div class="btl-ic">⏳</div><div class="btl-body"><div class="btl-txt">'+lbl+' — '+esc((it.body&&it.body.text)||'')+'</div><div class="btl-at">waiting to sync</div></div></div>';
+}
+async function renderObPending(){
+  const box=document.getElementById('obpend'); if(!box) return;
+  let items=[]; try{ items=await OB.all(); }catch(e){ items=[]; }
+  items=items.filter(function(x){ return Number(x.customer_id)===Number(OB_CUST); }).sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+  box.innerHTML=items.map(obPendingLine).join('');
+}
+async function obBadge(){
+  let n=0; try{ n=(await OB.all()).length; }catch(e){ n=0; }
+  document.querySelectorAll('.obchip').forEach(function(c){ c.textContent='⏳ '+n+' to sync'; c.style.display=n>0?'':'none'; });
+}
+async function obSend(){
+  const el=document.getElementById('obtext'); if(!el) return;
+  const text=(el.value||'').trim(); if(!text) return;
+  const id=OB.uuid(), now=new Date();
+  const item={ id:id, ts:now.getTime(), kind:OB_KIND, customer_id:OB_CUST, endpoint:'/papi/customer-note',
+    body:{ customer_id:OB_CUST, kind:OB_KIND, text:text, idempotency_key:id, occurred_at:now.toISOString(), connectivity:(navigator.onLine?'online':'offline') } };
+  el.value='';
+  if(navigator.onLine){
+    let r=null, neterr=false;
+    try{ r=await post(item.endpoint, item.body); }catch(e){ neterr=true; }
+    if(!neterr && r && r.ok){ toast('Saved'); bosTimeline(OB_CUST); return; }
+    if(!neterr && r && r.ok===false){ toast(r.error==='empty'?'Add a note first':'Could not save', true); el.value=text; return; }
+    /* network failed mid-send → fall through and queue it */
+  }
+  await OB.add(item); await renderObPending(); await obBadge();
+  toast('Saved offline — will sync');
+}
+async function obFlush(){
+  if(OB_BUSY || !navigator.onLine) return; OB_BUSY=true; let changed=false;
+  try{
+    let items=[]; try{ items=await OB.all(); }catch(e){ items=[]; }
+    items.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });   // FIFO — preserve field order
+    for(let i=0;i<items.length;i++){ const it=items[i];
+      let r=null, neterr=false;
+      try{ r=await post(it.endpoint, it.body); }catch(e){ neterr=true; }
+      if(neterr) break;                                          // still unreachable — keep the rest, retry later
+      if(r && r.ok){ await OB.del(it.id); changed=true; }
+      else { await OB.del(it.id); changed=true; toast('A queued note was rejected and removed.', true); }
+    }
+  } finally { OB_BUSY=false; }
+  await obBadge();
+  if(changed && CUR && CUR.key==='bos.timeline'){ bosTimeline(CUR.id); }   // pending → real
+}
+function obConn(){ const off=!navigator.onLine; document.querySelectorAll('.offpill').forEach(function(p){ p.style.display=off?'inline-block':'none'; }); }
+(function(){ try{
+  window.addEventListener('online', function(){ obConn(); obFlush(); });
+  window.addEventListener('offline', obConn);
+  setInterval(function(){ obFlush(); }, 30000);
+  obFlush();
+}catch(e){} })();
+
+/* ===== BOS Slice 3 — Today: the day's work (greeting + KPI tiles + ranked to-do) =====
+   Pure read of the DailyToday projection: every figure traces to a live object query (no invented
+   numbers). Collect activities deep-link into the customer timeline (Slice 2) — one tap from work to
+   context. Mobile-first; desktop reflows the tiles to a 4-up row. */
+async function bosToday(){
+  const v=document.getElementById('view'); v.innerHTML=skeleton();
+  let r; try{ r=await getQuery('/papi/bos-today',{}); }catch(e){ r=null; }
+  if(!r || r.ok===false){ v.innerHTML=emptyState('bolt','Today unavailable','The day view could not load right now.'); return; }
+  const nm=(((CFG.user&&CFG.user.name)||'').split(/\s+/)[0])||'';
+  const k=r.kpis||[], acts=r.activities||[];
+  const head='<div class="tdy-head"><div class="tdy-hi">'+esc(r.greeting||'Hello')+(nm?', '+esc(nm):'')+'</div>'
+    +'<div class="tdy-dt">'+esc(r.date||'')+'</div></div>';
+  const tiles='<div class="tdy-kpis">'+k.map(function(x){
+    return '<div class="tdy-kpi '+tdyTone(x.tone)+'"><div class="tdy-v">'+esc(x.value)+'</div><div class="tdy-l">'+esc(x.label)+'</div></div>';
+  }).join('')+'</div>';
+  const list = acts.length
+    ? '<div class="tdy-sec">To do now</div><div class="tdy-list">'+acts.map(bosTodoRow).join('')+'</div>'
+    : '<div class="tdy-clear">'+icon('check','ic-lg')+'<div>All clear — nothing to chase right now.</div></div>';
+  v.innerHTML=head+tiles+list;
+}
+function tdyTone(t){ return t==='danger'?'danger':(t==='warn'?'warn':(t==='ok'?'ok':'')); }
+function bosTodoRow(a){
+  const link=(Number(a.customer_id)>0)?(' onclick="route(\'bos.timeline\','+Number(a.customer_id)+')" style="cursor:pointer"'):'';
+  const badge=a.overdue?'<span class="tdy-od">overdue</span>':'';
+  return '<div class="tdy-row"'+link+'><div class="tdy-ric">💵</div>'
+    +'<div class="tdy-rb"><div class="tdy-rt">'+esc(a.title||'')+'</div><div class="tdy-rs">'+esc(a.sub||'')+'</div></div>'
+    +badge+'<div class="tdy-rc">›</div></div>';
+}
 function closeNav(){ document.querySelector('.app').classList.remove('navopen'); document.getElementById('scrim').classList.remove('on'); }
 function toggleAcct(e){ if(e) e.stopPropagation(); document.getElementById('acctMenu').classList.toggle('on'); }
 function signOut(){ if(window.confirm('Sign out of CloudBSS?')) location.href='/panel/logout'; }

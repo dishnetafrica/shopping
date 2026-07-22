@@ -1,0 +1,52 @@
+DEPLOY — BOS v1.0 COMBINED (Slices 1–5) + currency fixes
+=========================================================
+This is ONE bundle with the current state of every file the BOS work touched, so you can upload it to
+GitHub in a single commit instead of slice by slice. Extract it at the ROOT of your repo (the folder that
+contains app/, routes/, resources/) — the paths inside the zip already match your repo, so files land in
+the right place and overwrite the older versions.
+
+WHAT'S INSIDE (paths are repo-relative)
+  app/BOS/**                                   The event spine, rules, projections, SDK, SalesJourney
+  app/Console/Commands/BosDemoCommand.php      `php artisan bos:demo` — a demo tenant to see it all live
+  app/Http/Controllers/Panel/BosTodayController.php   GET /papi/bos-today   (Slice 3 — Today)
+  app/Http/Controllers/Panel/BosNoteController.php    POST /papi/customer-note (Slice 5 — offline notes)
+  app/Capability/Object/CustomerCapability.php  Timeline + journey on the customer object
+  app/Services/Money/PaymentService.php         + PaymentReceived emit (Slice 2)
+  app/Services/Invoicing/InvoiceService.php     + InvoiceIssued emit (Slice 2) + the USD-currency fix
+  app/Services/Bot/QuotationService.php         + QuoteCreated emit (Slice 4)
+  app/Services/Sales/QuotationConvertService.php + QuoteConverted emit (Slice 4)
+  app/Http/Controllers/Panel/PanelApiController.php   + QuoteAccepted/QuoteConverted emits + currency fix
+  app/Http/Controllers/Storefront/QuotationPortalController.php + QuoteAccepted emit (portal)
+  app/Http/Controllers/Panel/PaymentController.php    + ReceiptSent emit + receipt WhatsApp send
+  app/Http/Controllers/Panel/OrderInvoiceController.php  USD-currency fix
+  app/Services/Money/SalesBaseCurrency.php      USD base-currency helper
+  routes/web.php                                + /papi/bos-today, /papi/customer-note, receipt-send
+  resources/views/shell.blade.php               Today, timeline, journey rail, offline outbox + composer
+  database/migrations/2026_07_23_000001_create_bos_events_table.php   the ONE new table
+  tests/Feature/Bos/ArchitectureFitnessTest.php  CI fitness gates
+  tests/Unit/Bos/BusinessRuleTest.php            rule tests
+  OPERATING-MODEL/**                             the operating model + every slice plan
+  DEPLOY-BOS-SLICE-1..5 (+1.5).txt               the per-slice deploy notes (for reference)
+
+APPLY (single commit)
+  1) Unzip at your repo root (overwrite when asked).
+  2) git add -A
+     git commit -m "BOS v1.0 (Slices 1-5): event spine, timeline, Today, sales journey, offline notes"
+     git push
+  3) EasyPanel Rebuild.
+  4) RUN THE MIGRATION ONCE (this is the only schema change in the whole bundle):
+        php artisan migrate --force
+     It creates bos_events. Everything else is additive code; every emit is guarded (no-ops until the
+     table exists), so even before you migrate, nothing breaks.
+  5) (optional) Seed a demo tenant to see Today/Timeline/Journey with data:
+        php artisan bos:demo
+     Remove it any time with:  php artisan bos:demo --purge
+
+SAFETY
+  Every BOS write goes through the guarded Emit bridge (never throws into the money path). Projections
+  and SalesJourney are read-only. The offline outbox is idempotent (replays are no-ops). Rollback for any
+  piece is a straight revert — bos_events is additive and isolated; dropping it loses only history.
+
+NOT INCLUDED (on purpose)
+  The sandbox verify scripts (verify-invoice-currency.php, verify_live.php, etc.) and the unrelated
+  historical deploy notes are left out — this bundle is just the BOS feature set + the currency fixes.

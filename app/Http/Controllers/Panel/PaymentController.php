@@ -178,6 +178,13 @@ class PaymentController extends Controller
             return response()->json(['ok'=>false,'error'=>'send_failed'],500);
         }
 
+        // BOS spine (Slice 4): record ReceiptSent for the customer timeline / journey. Guarded + never-throws.
+        \App\BOS\Emit::customerEvent($t->id, 'ReceiptSent', $phone, [
+            'receipt_no' => (string) ($doc['no'] ?? $p->receipt_no),
+            'invoice_no' => (string) ($p->invoice_no ?? ''),
+            'amount'     => (float) $p->amount, 'currency' => (string) $p->currency,
+        ], ['actor' => ['type' => 'user', 'name' => (string) ($request->user()->name ?? '')]]);
+
         return response()->json(['ok'=>true,'sent_to'=>$phone,'receipt_no'=>$doc['no']]);
     }
 

@@ -1,0 +1,109 @@
+id,phase,capability,title,objective,dependencies,acceptance,complexity,rollback,tests
+BOS-0001,0-Foundations,Platform,Unified events table,"Create append-only events table with the shared envelope (event_id uuid; tenant_id; name; subject_type; subject_id; actor; transition; payload json; occurred_at; recorded_at; idempotency_key)",,"Migration up/down; unique(idempotency_key); indexes on (tenant,subject);",M,Drop table (no reads yet),Migration up+down; unique-key constraint
+BOS-0002,0-Foundations,Platform,Event model + append-only guard,Eloquent Event model that forbids update/delete at the model layer,BOS-0001,"saving on existing row throws; delete throws; only insert allowed",S,Remove guard,test_events_immutable
+BOS-0003,0-Foundations,Platform,emit() service,Single entry point that writes an event then dispatches to subscribers,BOS-0002,"emit(name,subject,payload,actor) writes 1 row + notifies subscribers; idempotent on key",M,Feature-flag off,test_emit_writes_once; test_emit_idempotent
+BOS-0004,0-Foundations,Platform,Subscriber interface + registry,Define Subscriber contract and a registry so services never call each other,BOS-0003,"subscribers register by event name; unknown event = no-op",S,Unregister,test_subscriber_dispatch
+BOS-0005,0-Foundations,Platform,Shim existing event tables,Read-only adapter mapping bot_events/activity_feed/product_events/shipment_events into the unified read model,BOS-0001,"timeline query returns legacy rows alongside new events",M,Remove adapter,test_legacy_events_visible
+BOS-0006,0-Foundations,Platform,Client UUID + idempotency,Objects and events created on device carry a client UUID + idempotency key,BOS-0001,"server accepts client uuid; duplicate key is ignored not duplicated",M,Server-generate ids,test_idempotent_create
+BOS-0007,0-Foundations,Platform,Offline sync envelope spec,"Freeze the wire format for queued mutations (uuid; idempotency; occurred_at; op; payload)",BOS-0006,"documented schema; versioned",S,n/a,schema validation test
+BOS-0008,0-Foundations,Platform,Client outbox (IndexedDB),Durable local queue in the PWA for offline mutations,BOS-0007,"mutations persist across reload/offline; ordered",L,Disable outbox (online-only),test_outbox_persists
+BOS-0009,0-Foundations,Platform,Idempotent sync endpoint,Server endpoint that upserts queued mutations by idempotency key,"BOS-0006,BOS-0008","replaying same batch changes nothing; partial batch resumable",L,Feature-flag off,test_sync_idempotent; test_sync_resume
+BOS-0010,0-Foundations,Platform,Conflict policy scaffold,Per-object conflict hook (default last-write-wins; money = reject+flag),BOS-0009,"two offline edits resolve per object rule; payment conflict raises needs-attention",M,Default LWW,test_conflict_payment_flagged
+BOS-0011,0-Foundations,Platform,PWA app-shell caching,Upgrade service worker to cache the app shell so V3 opens offline,,"app opens with no network; assets versioned/cache-busted",M,Revert sw.js (push-only),test_offline_boot (playwright)
+BOS-0012,0-Foundations,Platform,Offline catalogue cache,Cache the product catalogue for offline quoting,BOS-0011,"quote screen lists products offline; refreshes online",M,Skip cache,test_offline_catalogue
+BOS-0013,0-Foundations,Platform,Sync status derivation,Derive per-record status (synced/syncing/offline/needs-attention) from the outbox,BOS-0008,"badge reflects true queue state; clears on ack",S,Hide badge,test_sync_status_states
+BOS-0014,0-Foundations,Platform,Rule-test harness,Convention + base test case so every rule Rn has test_Rn_*,,"harness lists rules missing tests; CI fails if any missing",S,n/a,meta test: all rules have tests
+BOS-0015,0-Foundations,Platform,Feature-flag system,Per-tenant flags to roll BOS features out safely,,"flag gates a capability; default off; owner toggle",S,All flags off,test_flag_gate
+BOS-0016,0-Foundations,Platform,PR checklist automation,CI check that a PR names capability/process/objects/rules/events/services/projection/tests,,"PR without the block fails CI",S,Disable check,ci dry-run
+BOS-0017,0-Foundations,Platform,Projection rebuild command,artisan command to rebuild any projection from objects+events,"BOS-0001,BOS-0048","rebuild produces identical output to live; idempotent",M,n/a,test_rebuild_matches_live
+BOS-0018,0-Foundations,Platform,Telemetry,Track event volume + sync success/failure per tenant,BOS-0003,"dashboard shows emit rate + sync errors",S,Remove metrics,smoke test
+BOS-0019,0-Foundations,Platform,Migration reversibility gate,CI ensures every migration has a working down(),,"CI fails on irreversible migration",S,n/a,migrate:rollback in CI
+BOS-0020,0-Foundations,Platform,Staging tenant + fixtures,Seeded tenant mirroring Family Shoppers for e2e,,"e2e suite runs against fixtures",S,n/a,seed smoke test
+BOS-0021,1-Foundation,Platform,Capability interface (verb),"Define Capability contract: id,purpose,processes[],objects[],permission — evolving ProcessCapability",BOS-0004,"interface documented; existing capabilities implement it",M,Keep current capabilities,test_capability_contract
+BOS-0022,1-Foundation,Platform,Register 8 capabilities,Register Sell/Buy/Move/Collect/Support/Market/Manage/Analyze,BOS-0021,"registry returns 8; each has purpose+members",S,Revert registry,test_capabilities_registered
+BOS-0023,1-Foundation,Platform,Process→capability map,Attach the 12 processes to their capability,BOS-0022,"each process resolves to one capability",S,n/a,test_process_ownership
+BOS-0024,1-Foundation,Platform,Object→owner map,Each object declares its owner capability (Invoice=Sell issues/Collect settles),BOS-0022,"ownership resolves; dual-owned objects reference correctly",S,n/a,test_object_ownership
+BOS-0025,1-Foundation,Platform,Rule engine core,"Rule interface (applies_to,evaluate,message) + single registry (one place)",BOS-0014,"rules evaluated centrally; no duplicated rule logic",M,Inline guards,test_rule_engine
+BOS-0026,1-Foundation,Collect,Rule R1 invoice-immutable-after-pay,Block edits to a paid/part_paid invoice; corrections via credit note,BOS-0025,"edit on part_paid rejected; credit-note path allowed",M,Warn-only,test_R1_invoice_immutable_after_pay
+BOS-0027,1-Foundation,Collect,Rule R2 receipt-requires-payment,Receipt cannot exist without a payment,BOS-0025,"receipt create without payment rejected",S,n/a,test_R2_receipt_requires_payment
+BOS-0028,1-Foundation,Collect,Rule R3 payment<=balance,Applied payment cannot exceed balance; excess→advance,BOS-0025,"overpay creates advance not negative balance",M,Warn-only,test_R3_payment_le_balance
+BOS-0029,1-Foundation,Platform,Rule R4 void-not-delete,No hard delete of financial/customer objects; void+reason,BOS-0025,"delete blocked; void keeps row + reason",S,n/a,test_R4_void_not_delete
+BOS-0030,1-Foundation,Manage,Rule R6/R7 currency invariants,Assert stored currency fixed; USD base; local-for-local,BOS-0025,"stored amount currency never rewritten; conversions labeled",M,n/a,test_R6_currency_fixed; test_R7_currency_policy
+BOS-0031,1-Foundation,Sell,Rule R8 catalogue-price-only,Quote/invoice re-price from Product not free text,BOS-0025,"line price = catalogue; AI price ignored",S,n/a,test_R8_catalogue_price
+BOS-0032,1-Foundation,Manage,Rule R9 balanced-transfer,Cash transfer creates two balanced legs,BOS-0025,"single-leg transfer impossible",S,n/a,test_R9_balanced_transfer
+BOS-0033,1-Foundation,Platform,Rule R11 transition-guard,Framework rejecting illegal object state transitions online+offline,"BOS-0025,BOS-0006","illegal transition rejected everywhere",M,Warn-only,test_R11_transitions
+BOS-0034,1-Foundation,Sell,Rule R12 quote-convert-once,Quote converts to order at most once,BOS-0033,"second convert returns existing order",S,n/a,test_R12_convert_once
+BOS-0035,1-Foundation,Buy,Rule R16 no-negative-stock,Stock cannot go negative without approval,BOS-0033,"below-zero move needs approval flag",M,Warn-only,test_R16_no_negative_stock
+BOS-0036,1-Foundation,Analyze,Rule R17-19 AI guards,AI never emits money numbers/state changes/invented qty,BOS-0025,"AI output stripped of computed money; qty asks when unstated",M,n/a,test_R17_ai_no_money; test_R19_no_invented_qty
+BOS-0037,1-Foundation,Manage,Rule R24 period-lock,Reject edits/voids dated in a locked period,BOS-0025,"locked-period write rejected",S,n/a,test_R24_period_lock
+BOS-0038,1-Foundation,Sell,Event OrderConfirmed/StatusChanged,Name the events OrderObserver already fires,"BOS-0003,BOS-0042","order create/status writes unified events",S,Keep observer only,test_order_events
+BOS-0039,1-Foundation,Collect,Event PaymentReceived,Emit from PaymentService.record fan-out,BOS-0003,"payment writes 1 event; subscribers unchanged",S,Keep inline,test_payment_event
+BOS-0040,1-Foundation,Collect,Event InvoiceIssued/Sent/Voided,Emit from InvoiceService + send + void,BOS-0003,"three events fire at the right points",S,Keep inline,test_invoice_events
+BOS-0041,1-Foundation,Sell,Event Quote*,Emit QuoteCreated/Edited/Sent/Accepted/Converted,BOS-0003,"quote lifecycle emits events",M,Keep inline,test_quote_events
+BOS-0042,1-Foundation,Buy,Event Stock*,Emit StockReceived/Adjusted/LowStockDetected,BOS-0003,"stock changes emit events",M,Keep observer,test_stock_events
+BOS-0043,1-Foundation,Manage,Event Cash*,Emit ExpenseRecorded/CashTransferred/CashEntryVoided,BOS-0003,"cash actions emit events",S,Keep inline,test_cash_events
+BOS-0044,1-Foundation,Platform,Projection base class,Base for read-only projections computed from objects+events,BOS-0017,"projection declares inputs; rebuildable; no writes to source",M,n/a,test_projection_base
+BOS-0045,1-Foundation,Platform,Timeline engine,Generic timeline: events WHERE subject ORDER BY occurred_at,"BOS-0044,BOS-0005","returns merged legacy+new events for any subject",M,n/a,test_timeline_engine
+BOS-0046,1-Foundation,Platform,Activity model+projection,Activities = open work by owner/due across sources,BOS-0044,"open tasks/follow-ups/collections/deliveries surface as activities",L,n/a,test_activity_projection
+BOS-0047,1-Foundation,Platform,Activity generators,Generate activities from collections/follow-ups/deliveries/reorder,BOS-0046,"each source yields activities with subject+due",M,Disable a source,test_activity_generators
+BOS-0048,1-Foundation,Platform,Activity completion,Completing an activity emits its domain event,"BOS-0046,BOS-0003","complete 'collect' emits PaymentReceived path",M,n/a,test_activity_completion
+BOS-0049,1-Foundation,Platform,Smart priority scorer,Rank activities by value x urgency (deterministic; no AI),BOS-0046,"ordering stable; AI-independent",M,Sort by due only,test_priority_scorer
+BOS-0050,2-Today,Analyze,Today projection,activities WHERE owner=me AND due<=today,"BOS-0046,BOS-0049","returns my due activities ranked",M,n/a,test_today_projection
+BOS-0051,2-Today,Analyze,Today screen,Render Today as activity list + KPI tiles (mobile),"BOS-0050,BOS-0016","one-thumb; taps route to work",M,Show old briefing,e2e_today_one_thumb
+BOS-0052,2-Today,Analyze,Wire briefing→Today,Point the Today tab at the projection; keep briefing metrics,BOS-0051,"Today shows real to-collect/quotes/reorder",S,Revert to briefing,test_today_data
+BOS-0053,2-Today,Analyze,KPI tiles from projections,Today/collections/quotes-waiting/outstanding from real data,BOS-0050,"every tile traces to a projection; unknown=—",S,Hide tiles,test_kpi_no_invented
+BOS-0054,2-Today,Sell,Continue-last-job,Resume the last in-progress activity,BOS-0046,"tapping continues where left off",S,Remove,test_continue_job
+BOS-0055,2-Today,Sell,Customer timeline projection,events WHERE subject={customer},BOS-0045,"returns one stream per customer",S,n/a,test_customer_timeline
+BOS-0056,2-Today,Sell,Customer timeline screen,"WhatsApp-style timeline + header (outstanding; last order)","BOS-0055","renders stream; header totals from invoices",M,n/a,e2e_customer_timeline
+BOS-0057,2-Today,Sell,Context-aware action resolver,Return valid actions for the current object/workspace,"BOS-0024","customer returns quote/invoice/payment/visit; ops returns purchase/stock",M,Static list,test_action_resolver
+BOS-0058,2-Today,Sell,FAB uses resolver,Evolve the shipped FAB to call the resolver,BOS-0057,"FAB actions change by context; only permitted shown",S,Static FAB,e2e_context_fab
+BOS-0059,2-Today,Platform,Sync-status badge UI,Show per-record ✓/⟳/📴/⚠ from BOS-0013,BOS-0013,"badge visible on activities/records; no Sync button",S,Hide,e2e_sync_badge
+BOS-0060,2-Today,Analyze,AI Morning Brief,Narrate Today facts in one paragraph; optional; degrades if AI off,"BOS-0050,BOS-0036","every figure lifted from projection; AI-off shows plain Today",M,Hide brief,test_brief_no_invented; test_brief_degrades
+BOS-0061,2-Today,Platform,Offline Today,Today renders from cached activities offline,"BOS-0011,BOS-0050","Today works with no network",M,Online-only,e2e_offline_today
+BOS-0062,2-Today,Platform,Empty/error states,Graceful empty + offline states across Today/timeline,BOS-0051,"no blank screens; clear guidance",S,n/a,ui states test
+BOS-0081,3-Sell,Sell,Lead object+events,"Lead model; emits LeadCaptured/qualified; convert to Customer","BOS-0022,BOS-0003","lead lifecycle emits events; convert creates customer",M,Keep leads list,test_lead_lifecycle
+BOS-0082,3-Sell,Sell,Lead capture UI,Add lead in ≤3 taps; offline,"BOS-0081,BOS-0008","lead saved offline; syncs",S,n/a,e2e_lead_offline
+BOS-0083,3-Sell,Sell,Visit object,Visit model with states checked_in→checked_out,BOS-0033,"legal transitions only",M,n/a,test_visit_states
+BOS-0084,3-Sell,Sell,Visit check-in (GPS),Capture geo via wrapper; emit CustomerVisited; offline,"BOS-0083,BOS-0006","visit works offline; geo stamped device time",M,Manual check-in,e2e_visit_offline
+BOS-0085,3-Sell,Sell,Visit on timeline,CustomerVisited appears on customer timeline,"BOS-0084,BOS-0055","visit line shows",S,n/a,test_visit_timeline
+BOS-0086,3-Sell,Sell,Quote create (offline),Create quote offline with UUID; catalogue prices,"BOS-0031,BOS-0012,BOS-0041","quote created offline; prices from catalogue",L,Online-only,e2e_quote_offline; test_R8
+BOS-0087,3-Sell,Sell,Quote PDF on device,Render quote PDF client-side,BOS-0086,"PDF generated with no network",M,Server render,test_quote_pdf_offline
+BOS-0088,3-Sell,Sell,Quote edit/negotiate,Edit lines; emit QuoteEdited; new PDF,BOS-0086,"remove/adjust line updates total+PDF",M,n/a,test_quote_edit
+BOS-0089,3-Sell,Sell,Quote send (queued),WhatsApp send queues offline; fires on reconnect,"BOS-0087,BOS-0008","send queued; idempotent; one message",M,Online send,e2e_quote_send_queue
+BOS-0090,3-Sell,Sell,Quote accept,Mark accepted; emit QuoteAccepted; unlock convert,BOS-0086,"accept enables convert",S,n/a,test_quote_accept
+BOS-0091,3-Sell,Sell,Quote→Order convert,Convert once; create order; emit events,"BOS-0034,BOS-0038","idempotent convert; order created",M,n/a,test_R12; test_convert
+BOS-0092,3-Sell,Sell,Order object+states,Order state machine New→…→Delivered→Invoiced,BOS-0033,"legal transitions; notifications on change",M,Keep current,test_order_states
+BOS-0093,3-Sell,Move,Delivery hooks,Dispatch/complete emit events; POD capture,"BOS-0092,BOS-0084","delivered triggers auto-invoice; POD photo offline",M,Manual,e2e_delivery_pod
+BOS-0094,3-Sell,Sell,Invoice issue,Issue from order; USD; emit InvoiceIssued,"BOS-0040,BOS-0030","invoice in USD even from legacy UGX order",M,n/a,test_invoice_usd; test_R7
+BOS-0095,3-Sell,Sell,Invoice PDF+send,PDF on device; WhatsApp queued,"BOS-0087,BOS-0089","invoice PDF+send offline-capable",S,Online,e2e_invoice_send
+BOS-0096,3-Collect,Collect,Payment (offline idempotent),Record payment offline UUID+idempotency; emit PaymentReceived,"BOS-0006,BOS-0028,BOS-0039","no double-post on retry; balance updates",L,Online-only,e2e_payment_offline; test_R3
+BOS-0097,3-Collect,Collect,Receipt generate+send,Receipt from payment; PDF; WhatsApp queued,"BOS-0027,BOS-0096","receipt requires payment; send queued",S,n/a,test_R2; e2e_receipt_send
+BOS-0098,3-Sell,Sell,Follow-up schedule,"On receipt/accept schedule follow-up; emit FollowupScheduled",BOS-0048,"follow-up appears on due date in Today",S,n/a,test_followup
+BOS-0099,3-Sell,Sell,Quote→Cash e2e,End-to-end thumb path visit→quote→accept→order→pay→receipt,"BOS-0084,BOS-0086,BOS-0091,BOS-0096,BOS-0097","full flow ≤ target taps; works offline",L,n/a,e2e_quote_to_cash
+BOS-0100,3-Sell,Sell,Relationship view,Dormancy + follow-up surfaced on customer,"BOS-0055,BOS-0098","14-day dormancy flagged from real orders",S,n/a,test_dormancy
+BOS-0151,4-Collect,Collect,Collections projection,Aged unpaid invoices as activities,"BOS-0046,BOS-0040","overdue customers become collect activities",M,n/a,test_collections
+BOS-0152,4-Collect,Collect,Collections call-list order,Rank by value x likelihood (deterministic),BOS-0049,"list ordered; AI-independent",S,n/a,test_calllist
+BOS-0153,4-Collect,Collect,Collect activity→payment,Complete collect activity records payment+receipt,"BOS-0048,BOS-0096","completes loop; invoice→paid",M,n/a,e2e_collect
+BOS-0154,4-Collect,Analyze,At-risk narration,AI phrases real AR at-risk figure,BOS-0060,"number equals AR query; AI phrases only",S,Hide,test_atrisk_no_invented
+BOS-0155,4-Collect,Collect,EPIC decompose,Remaining Collections tasks (reminders/partial/statements),BOS-0153,"backlog expanded JIT before phase start",M,n/a,n/a
+BOS-0176,5-Buy,Buy,Purchase order object+events,PO lifecycle ordered→received; emit events,BOS-0042,"PO states + events",M,n/a,test_po
+BOS-0177,5-Buy,Buy,Receive stock,Receive increments stock; clears low-stock,"BOS-0035,BOS-0042","on-hand up; reorder closes",M,n/a,test_receive
+BOS-0178,5-Buy,Buy,Supplier payment,Pay supplier; cashbook leg; UGX/SSP,BOS-0043,"payable reduced; currency local",S,n/a,test_supplier_pay
+BOS-0179,5-Buy,Buy,Reorder suggestions,From unmet-demand signal (existing),BOS-0046,"reorder list from real demand",S,n/a,test_reorder
+BOS-0180,5-Buy,Buy,EPIC decompose,Remaining Procurement tasks,BOS-0176,"expanded JIT",M,n/a,n/a
+BOS-0196,6-Inventory,Buy,Barcode scan,Wrapper/Web barcode; lookup <1s,BOS-0011,"scan resolves product <1s",M,Manual search,perf_barcode
+BOS-0197,6-Inventory,Buy,Stock count,Count session; variance→adjustment event,"BOS-0042,BOS-0035","count posts adjustment with variance",M,n/a,test_stockcount
+BOS-0198,6-Inventory,Buy,Stock transfer,Transfer between locations both sides,BOS-0042,"both locations update; balanced",M,n/a,test_transfer
+BOS-0199,6-Inventory,Buy,Offline inventory,Counts/adjustments offline queued,BOS-0008,"works offline; idempotent",M,Online-only,e2e_inventory_offline
+BOS-0200,6-Inventory,Buy,EPIC decompose,Remaining Inventory tasks,BOS-0196,"expanded JIT",M,n/a,n/a
+BOS-0216,7-Finance,Manage,Expense approval,Record→approve; cashbook+P&L,BOS-0043,"pending→approved; P&L updates",M,n/a,test_expense
+BOS-0217,7-Finance,Manage,Cashbook projection,Cash by holder/currency from events,"BOS-0043,BOS-0044","balances match event sum; void excluded",M,n/a,test_cashbook
+BOS-0218,7-Finance,Manage,Ledger/statement,Customer statement from events,BOS-0045,"statement = invoices-payments",M,n/a,test_statement
+BOS-0219,7-Finance,Analyze,Daily closing,Reconcile day; variance event; optional handover,"BOS-0046,BOS-0032","closing reconciles cash vs events",M,n/a,e2e_closing
+BOS-0220,7-Finance,Manage,EPIC decompose,Remaining Finance tasks (bank/reports),BOS-0216,"expanded JIT",M,n/a,n/a
+BOS-0236,8-Analytics,Analyze,Insights projections,Sales/collections/overdue/top-customers/profit as event aggregations,BOS-0044,"each figure = aggregation over events; period+currency stated",M,n/a,test_insights_no_invented
+BOS-0237,8-Analytics,Analyze,Role dashboards,Owner/Sales/Finance filtered projections,"BOS-0236,BOS-0022","role-aware; each a projection",M,n/a,test_role_dashboards
+BOS-0238,8-Analytics,Analyze,AI recommendations,Next-best-action from real facts; assist-only,"BOS-0036,BOS-0046","recommendations reference real activities; never act",M,Hide,test_ai_assist_only
+BOS-0239,8-Analytics,Analyze,Demand/forecast,Predict demand from historical events,BOS-0236,"forecast cites source events; labeled as estimate",L,Hide,test_forecast_sourced
+BOS-0240,8-Analytics,Analyze,EPIC decompose,Remaining Analytics+AI tasks,BOS-0236,"expanded JIT",L,n/a,n/a
+BOS-0300,X-Wrapper,Platform,Android wrapper (TWA/Capacitor),Thin wrapper: push/camera/GPS/biometric/files/print/share/bg-sync; no business logic,"BOS-0011,BOS-0084,BOS-0093,BOS-0196","installable app; native bridges; PWA unchanged",XL,Ship PWA only,e2e_wrapper_bridges

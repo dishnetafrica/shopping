@@ -64,6 +64,11 @@ final class QuotationConvertService
         $q->status   = 'converted';
         $q->save();
 
+        // BOS spine (Slice 4): record QuoteConverted for the customer timeline. Guarded + never-throws.
+        \App\BOS\Emit::customerEvent($t->id, 'QuoteConverted', (string) $q->customer_phone, [
+            'quote_no' => (string) $q->quote_no, 'order_no' => (string) $o->order_no,
+        ], ['actor' => ['type' => 'system', 'name' => 'convert']]);
+
         return ['order' => $o, 'already' => false];
     }
 }

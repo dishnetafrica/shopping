@@ -318,6 +318,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('invoice-show',                [\App\Http\Controllers\Panel\InvoiceController::class, 'show']);
         Route::get('invoice-pdf',                 [\App\Http\Controllers\Panel\InvoiceController::class, 'pdf']);
         Route::match(['get','post'], 'invoice-send', [\App\Http\Controllers\Panel\InvoiceController::class, 'send']);
+        Route::post('receipt-send', [\App\Http\Controllers\Panel\PaymentController::class, 'send']); // WhatsApp a receipt PDF to the customer
+        Route::get('bos-today', [\App\Http\Controllers\Panel\BosTodayController::class, 'show']); // BOS Slice 3 — the day's work (greeting + KPIs + activities)
+        Route::post('customer-note', [\App\Http\Controllers\Panel\BosNoteController::class, 'store']); // BOS Slice 5 — offline field note/visit/follow-up
         Route::get('invoices/export',      [\App\Http\Controllers\Panel\InvoiceController::class, 'export']);
         Route::post('invoices/bulk-send',  [\App\Http\Controllers\Panel\InvoiceController::class, 'bulkSend']);
         Route::get('export/{entity}',        [\App\Http\Controllers\Panel\BulkExportController::class, 'export']);
