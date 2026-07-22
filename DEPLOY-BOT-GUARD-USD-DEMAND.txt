@@ -1,0 +1,77 @@
+DEPLOY — 3 fixes: bot anti-hallucination guard · USD safeguard · weekly demand report
+======================================================================================
+Three independent improvements in one bundle. No migration.
+
+FILES CHANGED (6 + this note)
+  app/Services/Bot/AiBrain.php                        (1: bot guard + prompt)
+  app/Services/Money/SalesBaseCurrency.php            (2: USD safeguard)
+  app/Capability/Contracts/CapabilityContext.php      (2: USD safeguard)
+  app/Support/PanelCurrency.php                       (2: USD safeguard)
+  tests/finance/currency-basis.test.php               (2: updated test)
+  app/Console/Commands/DemandWeeklyCommand.php         (3: NEW command)
+  routes/console.php                                  (3: weekly schedule)
+
+──────────────────────────────────────────────────────────────────────────────
+1. BOT — never invent quantities/products (the "50 bags nobody asked for" fix)
+──────────────────────────────────────────────────────────────────────────────
+When a customer listed items with NO amounts ("rice, oil, beans and sugar"), the
+bot invented "50 bags x 25kg Basmati", "100 cartons x 5L Sunflower"… and sent a
+quotation for goods/quantities never requested. Two-layer fix:
+  • Prompt: a hard rule — if items are listed without quantities, ASK "how many of
+    each?" and do NOT emit a <<QUOTE>>; never fill in amounts/sizes the customer
+    didn't state.
+  • Code guard (the real safety net, since the model ignored the soft rule): before
+    a quote is sent, if any line quantity > 1 but the customer's own words (this
+    message + last 6 inbound) contain NO number (digits, Arabic-Indic digits, or a
+    spelled number word), the bot asks for the real quantities instead of sending an
+    invented quote. Fail-safe: it can only DELAY a quote to ask — it can never send
+    a made-up one. It never blocks a single-unit price check (qty 1).
+
+──────────────────────────────────────────────────────────────────────────────
+2. USD-SHOP SAFEGUARD — a USD shop is always treated as native
+──────────────────────────────────────────────────────────────────────────────
+Makes the "$66 shown as UGX 66 / quote USD 0.00 / order $0.27" family of bugs
+impossible to recur — even if the currency_basis flag is wrong or unset. A shop
+whose base currency is USD has its prices IN USD, so it is native by definition;
+the code no longer ever assumes such a shop stores UGX and divides by the FX rate.
+  • SalesBaseCurrency::nativeCurrency, CapabilityContext::nativeCurrency: a USD base
+    now resolves to USD (was UGX on converted basis).
+  • PanelCurrency::payload: a USD base renders "plain" (no UGX→USD display maths).
+NO EFFECT on UGX/SSP shops (proven: the edit is identical for every non-USD base),
+and a NO-OP for your tenant (already currency_basis=native) — it's pure insurance
+so it can't slip back. Test tests/finance/currency-basis.test.php updated: 5/5 pass.
+
+──────────────────────────────────────────────────────────────────────────────
+3. WEEKLY DEMAND REPORT — what customers asked for that you don't stock
+──────────────────────────────────────────────────────────────────────────────
+New command demand:weekly sends a short WhatsApp to the owner every Monday 08:00
+(Kampala) listing, from the AI's nightly learning log: items customers asked for
+that didn't match your catalogue (purchasing signal) + questions the bot handled
+poorly. Only sends if there's something to report. Opt-in via relationship_memory
+(already ON for you). Extra recipients via the `demand_weekly_numbers` setting.
+  Preview it now:  php artisan demand:weekly --tenant=17 --force
+
+DEPLOY
+  git add app/Services/Bot/AiBrain.php app/Services/Money/SalesBaseCurrency.php \
+          app/Capability/Contracts/CapabilityContext.php app/Support/PanelCurrency.php \
+          tests/finance/currency-basis.test.php app/Console/Commands/DemandWeeklyCommand.php \
+          routes/console.php
+  git commit -m "bot: don't invent quantities; USD-shop native safeguard; weekly demand report"
+  git push  ->  EasyPanel Rebuild        (no migration)
+
+VERIFY
+  1. Bot: from a test number, message "quote for rice, oil, beans and sugar" (no
+     amounts) -> the bot ASKS how many of each, does NOT send a quote. Then reply
+     "10 cartons of each" -> it quotes normally.
+  2. Currency: unchanged for you (already correct) — spot-check a campaign still
+     shows USD and orders still show real USD totals.
+  3. Demand report: run `php artisan demand:weekly --tenant=17 --force` -> you get
+     a WhatsApp listing recent unmatched items (e.g. "Sunny", "samosa", "a4 paper").
+
+ROLLBACK
+  Revert the commit. No data/schema changes.
+
+NOTE — task notifications (item 4) need NO code change: diagnosis showed savan's
+number already receives them (109 messages logged, gateway OK). The earlier misfire
+was those tasks being assigned before savan's phone was on file. New assignments
+notify correctly.

@@ -15,6 +15,8 @@ Schedule::command('relationship:stages')->dailyAt('03:15')->timezone('Africa/Nai
 Schedule::command('relationship:attribute')->dailyAt('06:50')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:plan')->dailyAt('07:30')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:review')->monthlyOn(1, '08:00')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
+// Weekly WhatsApp to the owner: items customers asked for that we don't stock + bot gaps (purchasing signal).
+Schedule::command('demand:weekly')->weeklyOn(1, '08:00')->timezone('Africa/Kampala')->withoutOverlapping()->onOneServer();
 Schedule::command('bot:digest')->hourly()->withoutOverlapping()->onOneServer();
 
 // Reliability: catch dropped WhatsApp connections fast (a down number silently kills orders),

@@ -45,7 +45,10 @@ final class SalesBaseCurrency
             return in_array($base, self::RATEABLE, true) ? $base : 'UGX';
         }
 
-        return $base === 'USD' ? 'UGX' : $base;   // converted basis: USD base => UGX local
+        // SAFEGUARD: a USD base means the catalogue/amounts ARE USD — it is native, never a UGX
+        // display over a UGX base. Treating a USD shop's untagged amounts as UGX divides every
+        // order total by the FX rate (a $990 order read as $0.27). Only a UGX base stores UGX locally.
+        return $base === 'USD' ? 'USD' : $base;   // converted basis: UGX base => UGX; USD base => USD
     }
 
     /**

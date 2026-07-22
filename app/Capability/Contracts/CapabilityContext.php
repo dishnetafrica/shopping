@@ -76,7 +76,9 @@ final class CapabilityContext
             return $base;
         }
 
-        return $base === 'USD' ? 'UGX' : $base;
+        // SAFEGUARD: a USD base is native (prices ARE USD) — never a UGX display over a UGX base.
+        // Only a UGX base stores UGX locally; this prevents USD amounts being mislabelled/divided.
+        return $base === 'USD' ? 'USD' : $base;
     }
 
     /**

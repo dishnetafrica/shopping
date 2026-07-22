@@ -826,6 +826,37 @@ class AiBrain
                 \App\Support\QuotationPipeline::stage($tenant->id, $from, 'no_match', false, '', 'no requested item matched a priced product');
                 return ['reply' => $clean, 'sent' => false];
             }
+            // Anti-hallucination guard: NEVER send a quote whose quantities the customer never stated.
+            // The model sometimes turns a vague "rice, oil, beans, sugar" into "50 bags, 100 cartons, …"
+            // — inventing amounts nobody asked for. If the quote carries a multi-unit quantity but the
+            // customer's own words (this message + recent inbound) contain no number at all, that qty was
+            // invented: ask for the real quantities instead of sending a made-up quotation. Best-effort —
+            // it must never break the quote path.
+            try {
+                $maxQty = 0;
+                foreach ($matched as $ml) { $maxQty = max($maxQty, (int) ($ml['qty'] ?? 1)); }
+                if ($maxQty > 1) {
+                    $recentIn = \App\Models\Message::withoutGlobalScopes()
+                        ->where('tenant_id', $tenant->id)->where('customer_phone', $from)
+                        ->where('direction', 'in')->latest()->limit(6)->pluck('body')->all();
+                    $saidText = $text . ' ' . implode(' ', array_map('strval', $recentIn));
+                    // Digits, Arabic-Indic digits, or a spelled-out number word = the customer gave an amount.
+                    $numWords = 'one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|dozen|couple|few|several|half|quarter';
+                    $gaveQty = (bool) preg_match('/[0-9\x{0660}-\x{0669}]|\b(' . $numWords . ')\b/iu', $saidText);
+                    if (! $gaveQty) {
+                        \App\Support\QuotationPipeline::stage($tenant->id, $from, 'blocked_invented_qty', false, '', 'quote had qty>1 but the customer stated no quantity — asked instead');
+                        $ask = ($clean !== '' ? rtrim($clean) . "\n\n" : '')
+                            . "To prepare an accurate quotation, please tell me how many (or how much) of each you'd like — for example how many cartons or bags of each item. 👍";
+                        // Even if the ask fails to send, still block the invented-quantity quote (fail-safe).
+                        try {
+                            $gateway->sendText($tenant->whatsapp_instance, $from, $ask);
+                            MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $ask, null, null, ['via' => 'ai', 'kind' => 'quote_needs_qty']);
+                        } catch (\Throwable $e2) { /* still block below */ }
+                        return ['reply' => '', 'sent' => true];
+                    }
+                }
+            } catch (\Throwable $e) { /* guard is best-effort; never break the quote */ }
+
             // Remember the product for a follow-up "send a photo" that doesn't name it.
             $firstMatchedName = (string) (collect($matched)->first()['name'] ?? '');
             if ($firstMatchedName !== '') Cache::put("lastproduct:{$tenant->id}:{$from}", $firstMatchedName, now()->addHours(6));
@@ -1125,6 +1156,7 @@ class AiBrain
             $p .= "- MINIMUM ORDER QUANTITIES ARE ENFORCED: each product's MOQ is the smallest quantity we sell. If a customer asks for fewer than a product's MOQ, do NOT confirm that smaller quantity — raise it to the MOQ and tell them plainly (e.g. \"the minimum for that is 10, so I've set it to 10\"). The system also auto-corrects the quantity to the MOQ when it prices the order, so your confirmation must match that minimum.\n";
         }
         $p .= "- If the customer asks for a quotation / quote / proforma, first make sure you know the exact product(s) and quantity(ies) — ask if it's unclear. Once you know them, emit the <<QUOTE>> line described below and the system builds & sends the branded PDF with exact totals. Never paste the prices yourself, and never send a quote with items the customer didn't ask for. CRITICAL: when the customer confirms or asks you to send the formal quotation, you MUST emit the <<QUOTE>> line in that same reply — saying \"preparing your quotation\" WITHOUT the <<QUOTE>> line does nothing (no PDF is generated). Do NOT compute or state any currency-conversion or USD total yourself in prose; emit <<QUOTE>> and the system prices it (in USD when the customer wants USD/export).\n";
+        $p .= "- NEVER INVENT QUANTITIES OR SIZES. If the customer lists items WITHOUT saying how many — e.g. \"rice, oil, beans and sugar\" — you MUST ask \"how many (or how much) of each?\" and you MUST NOT emit a <<QUOTE>> line yet. Do not fill in amounts like \"50 bags\" or pack sizes like \"25kg\" that the customer never stated, and do not assume a pack/carton size the customer didn't give. Only put a quantity in <<QUOTE>> that the customer actually told you.\n";
         $p .= "- If the customer sends an image (e.g. a product, a receipt, a damaged item), look at it and respond helpfully; for our products match it to the list, for payments confirm you've noted it and the team will verify.\n";
         if ((bool) $tenant->setting('send_product_images', true)) {
             $p .= "- If the customer asks for a photo / picture / image of a product — even without naming it (they usually mean the item you were just discussing) — acknowledge warmly (e.g. \"Sure, sending a photo now 📷\"). The system attaches the product's photo automatically. NEVER say you can't send photos or images; you can.\n";

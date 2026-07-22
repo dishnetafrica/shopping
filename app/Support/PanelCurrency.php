@@ -46,7 +46,9 @@ class PanelCurrency
         // ex-Kampala conversion). That forces "plain" rendering even for USD/SSP which would
         // otherwise be treated as part of the Uganda<->South-Sudan conversion model.
         $basis = strtolower(trim((string) $tenant->setting('currency_basis', '')));
-        $plain = ($basis === 'native') ? true : ! in_array($raw, self::CONVERTIBLE, true);
+        // SAFEGUARD: a USD base is native (prices ARE USD) — render it plain, never as a UGX->USD
+        // display conversion. Only a UGX base is the convertible display model.
+        $plain = ($basis === 'native' || $raw === 'USD') ? true : ! in_array($raw, self::CONVERTIBLE, true);
         return [
             'code'  => $raw,
             'dec'   => \App\Services\Pricing::decimalsForCurrency($raw),
