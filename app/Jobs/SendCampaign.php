@@ -37,7 +37,7 @@ class SendCampaign implements ShouldQueue
         if (! $t || ! $t->whatsapp_instance || ! $c) return;
 
         $phones  = $aud->phones($c->audience, $c->category);
-        $caption = $this->compose($c);
+        $caption = $this->compose($c, $t);
         $gateway = $wa->forTenant($t);
         $inst = $t->sendInstance();
 
@@ -77,8 +77,13 @@ class SendCampaign implements ShouldQueue
         $c->update(['status' => 'sent', 'stats' => $stats]);
     }
 
-    protected function compose(Campaign $c): string
+    protected function compose(Campaign $c, ?Tenant $t = null): string
     {
+        // Show prices in the tenant's OWN currency (what $p->price is stored in) instead of a
+        // hardcoded "UGX" — a native-USD shop must read "USD 33", not "UGX 33". This mirrors
+        // CapabilityContext::nativeCurrency() so the send matches the v3 live preview exactly.
+        [$cur, $dec] = self::priceCurrency($t);
+
         $lines = [];
         $message = trim((string) $c->message);
         if ($message !== '') $lines[] = $message;
@@ -89,7 +94,7 @@ class SendCampaign implements ShouldQueue
             $prods = Product::whereIn('id', $c->product_ids)->get()->keyBy('id');
             foreach ($c->product_ids as $pid) {
                 $p = $prods->get((int) $pid);
-                if ($p) $lines[] = '• ' . $p->name . ' — UGX ' . number_format((float) $p->price);
+                if ($p) $lines[] = '• ' . $p->name . ' — ' . $cur . ' ' . number_format((float) $p->price, $dec);
             }
         }
 
@@ -99,5 +104,23 @@ class SendCampaign implements ShouldQueue
             $lines[] = $cta;
         }
         return implode("\n", $lines);
+    }
+
+    /**
+     * The currency code + decimal places to LABEL a product's price with in a campaign.
+     *
+     * A product's stored `price` is always in the tenant's BASE currency (the catalogue's own
+     * currency): a USD shop stores 66 = $66, a UGX shop stores 165000 = UGX 165,000. So the
+     * campaign simply labels with the base currency — no rate conversion, no dependence on the
+     * currency_basis flag. This is what stops "$66" being shown to customers as "UGX 66".
+     *
+     * @return array{0:string,1:int}
+     */
+    public static function priceCurrency(?Tenant $t): array
+    {
+        if (! $t) return ['UGX', 0];
+        $base = strtoupper(trim((string) $t->setting('currency', 'UGX')));
+        if ($base === '' || $base === 'AUTO') $base = 'UGX';
+        return [$base, \App\Services\Pricing::decimalsForCurrency($base)];
     }
 }

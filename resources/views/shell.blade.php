@@ -1732,9 +1732,10 @@ function waPreviewCompose(){
   var image=imgEl?String(imgEl.value||'').trim():'';
   var prods=[]; var mk=__WAPV.imageField;
   if(mk && window.MP && window.MP[mk]) prods=window.MP[mk].products||[];
+  var cur=__WAPV.currency||'UGX'; var dec=(__WAPV.dec!=null?__WAPV.dec:0);
   var lines=[];
   if(message) lines.push(message);
-  prods.forEach(function(p){ lines.push('• '+p.name+' — UGX '+Number(p.price||0).toLocaleString('en-US',{maximumFractionDigits:0})); });
+  prods.forEach(function(p){ lines.push('• '+p.name+' — '+cur+' '+Number(p.price||0).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})); });
   if(cta){ lines.push(''); lines.push(cta); }
   return {text:lines.join('\n'), image:image};
 }
