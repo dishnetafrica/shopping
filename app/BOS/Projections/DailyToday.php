@@ -31,9 +31,21 @@ class DailyToday extends TodayProjection
 
         $activities = (new CollectionsActivities($this->tenantId))->build();
 
+        $target = round($toCollect + $collectedToday, 2);
+
         return [
             'greeting' => $this->greeting(),
             'date'     => now()->format('l, d M'),
+            // Day-progress for the hero: remaining, collected today, and the day's starting target.
+            'progress' => [
+                'remaining' => (int) round($toCollect),
+                'collected' => (int) round($collectedToday),
+                'total'     => (int) round($target),
+                'pct'       => $target > 0.5 ? min(100, (int) round($collectedToday / $target * 100)) : 0,
+                'currency'  => 'USD',
+            ],
+            'overdue'  => $overdue,
+            'quotes'   => $quotes,
             'kpis'     => [
                 ['label' => 'To Collect',      'value' => 'USD ' . number_format($toCollect, 0), 'tone' => $toCollect > 0 ? 'warn' : 'ok'],
                 ['label' => 'Overdue',         'value' => (string) $overdue,                     'tone' => $overdue > 0 ? 'danger' : 'ok'],

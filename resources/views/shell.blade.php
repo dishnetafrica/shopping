@@ -678,6 +678,42 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 .tdy-clear{text-align:center;color:var(--muted);padding:44px 20px}
 .tdy-clear .ic{width:40px;height:40px;color:var(--brand);opacity:.7;margin-bottom:8px}
 @media(min-width:881px){ .tdy-kpis{grid-template-columns:repeat(4,1fr)} }
+/* ===== Modern Today (Design System v1.0 — frozen) — day-progress hero + status cards + sync pill ===== */
+.mtoday{letter-spacing:-.012em}
+@media(min-width:881px){ .mtoday{max-width:600px} }
+.mt-hd{display:flex;align-items:center;justify-content:space-between;padding:4px 2px 14px}
+.mt-d{font-size:12.5px;font-weight:650;color:var(--muted)}
+.mt-g{font-size:20px;font-weight:820;letter-spacing:-.02em;margin-top:-1px;color:var(--ink)}
+.mt-hr{display:flex;align-items:center;gap:10px}
+.mt-me{width:40px;height:40px;border-radius:13px;background:linear-gradient(140deg,#15AC57,#0A7A3C);color:#fff;display:grid;place-items:center;font-weight:800;font-size:13.5px;box-shadow:0 1px 2px rgba(12,20,32,.06)}
+.mt-sync{font-size:11px;font-weight:750;padding:4px 9px;border-radius:999px;white-space:nowrap;color:#0A7A3C;background:#E9F7EF}
+.mt-sync.ok{color:#0A7A3C;background:#E9F7EF} .mt-sync.q{color:#DD8500;background:#FCF4E4} .mt-sync.off{color:#8B95A3;background:#F1F3F6}
+.mt-hero{background:linear-gradient(155deg,#14A755,#0A7A3C);border-radius:24px;padding:20px;color:#fff;box-shadow:0 16px 30px -12px rgba(10,122,60,.5);position:relative;overflow:hidden;margin-bottom:18px}
+.mt-hero::after{content:"";position:absolute;right:-50px;top:-60px;width:190px;height:190px;border-radius:50%;background:rgba(255,255,255,.09)}
+.mt-hk{font-size:12.5px;font-weight:700;opacity:.9;position:relative}
+.mt-hv{font-size:38px;font-weight:850;letter-spacing:-.025em;line-height:1;margin-top:5px;position:relative}
+.mt-hero.done .mt-hv{font-size:28px}
+.mt-hb{height:8px;border-radius:999px;background:rgba(255,255,255,.22);margin:16px 0 9px;overflow:hidden;position:relative}
+.mt-hb i{display:block;height:100%;border-radius:999px;background:#fff}
+.mt-hm{display:flex;justify-content:space-between;font-size:12px;font-weight:650;opacity:.92;position:relative}
+.mt-hm b{font-weight:800}
+.mt-sec{display:flex;align-items:center;justify-content:space-between;margin:22px 6px 12px}
+.mt-sec h3{font-size:17px;font-weight:820;color:var(--ink)}
+.mt-pc{display:flex;align-items:center;gap:13px;background:#fff;border-radius:20px;padding:14px;box-shadow:0 1px 2px rgba(12,20,32,.04),0 4px 12px -4px rgba(12,20,32,.06);margin-bottom:11px;transition:transform .08s;cursor:pointer}
+.mt-pc:active{transform:scale(.985)}
+.mt-av{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:16px;flex:none}
+.mt-av svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.mt-bd{flex:1;min-width:0}
+.mt-t{font-size:15.5px;font-weight:780;display:flex;align-items:center;gap:7px;color:var(--ink)}
+.mt-dot{width:9px;height:9px;border-radius:50%;flex:none}
+.mt-s{font-size:12px;color:var(--muted);font-weight:600;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mt-r{text-align:right;flex:none}
+.mt-r b{font-size:15.5px;font-weight:840;color:var(--ink)}
+.mt-lab{font-size:10.5px;font-weight:700;color:#DD8500;text-transform:uppercase;letter-spacing:.04em}
+.mt-chev{color:var(--faint);flex:none;display:grid;place-items:center}
+.mt-chev svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.mt-clear{text-align:center;color:var(--muted);padding:40px 20px;font-weight:600}
+.mt-clear-ic{width:44px;height:44px;border-radius:50%;background:#E9F7EF;color:#0A7A3C;display:grid;place-items:center;font-size:20px;font-weight:800;margin:0 auto 10px}
 /* ===== BOS Sales Journey (Slice 4) — the Order-to-Cash rail + next-step on the customer timeline ===== */
 .bjr-wrap{margin-bottom:16px}
 .bjr{display:flex;align-items:flex-start;justify-content:space-between;padding:4px 2px 12px}
@@ -1525,7 +1561,7 @@ async function obFlush(){
   await obBadge();
   if(changed && CUR && CUR.key==='bos.timeline'){ bosTimeline(CUR.id); }   // pending → real
 }
-function obConn(){ const off=!navigator.onLine; document.querySelectorAll('.offpill').forEach(function(p){ p.style.display=off?'inline-block':'none'; }); }
+function obConn(){ const off=!navigator.onLine; document.querySelectorAll('.offpill').forEach(function(p){ p.style.display=off?'inline-block':'none'; }); try{ mtSync(); }catch(e){} }
 (function(){ try{
   window.addEventListener('online', function(){ obConn(); obFlush(); });
   window.addEventListener('offline', obConn);
@@ -1542,16 +1578,48 @@ async function bosToday(){
   let r; try{ r=await getQuery('/papi/bos-today',{}); }catch(e){ r=null; }
   if(!r || r.ok===false){ v.innerHTML=emptyState('bolt','Today unavailable','The day view could not load right now.'); return; }
   const nm=(((CFG.user&&CFG.user.name)||'').split(/\s+/)[0])||'';
-  const k=r.kpis||[], acts=r.activities||[];
-  const head='<div class="tdy-head"><div class="tdy-hi">'+esc(tdyGreeting())+(nm?', '+esc(nm):'')+'</div>'
-    +'<div class="tdy-dt">'+esc(tdyDate())+'</div></div>';
-  const tiles='<div class="tdy-kpis">'+k.map(function(x){
-    return '<div class="tdy-kpi '+tdyTone(x.tone)+'"><div class="tdy-v">'+esc(x.value)+'</div><div class="tdy-l">'+esc(x.label)+'</div></div>';
-  }).join('')+'</div>';
+  const p=r.progress||{}, acts=r.activities||[], quotes=Number(r.quotes||0);
+  const cur=p.currency||'USD', rem=Number(p.remaining||0), col=Number(p.collected||0), tot=Number(p.total||0), pct=Number(p.pct||0);
+  const meInit=(CFG.user&&CFG.user.name)?initials(CFG.user.name):'·';
+  const head='<div class="mt-hd"><div><div class="mt-d">'+esc(tdyDate())+'</div>'
+    +'<div class="mt-g">'+esc(tdyGreeting())+(nm?', '+esc(nm):'')+'</div></div>'
+    +'<div class="mt-hr"><span class="mt-sync" id="mtsync">● Synced</span><div class="mt-me">'+esc(meInit)+'</div></div></div>';
+  const done = rem<=0.5 && tot>0.5;
+  const hero = done
+    ? '<div class="mt-hero done"><div class="mt-hk">Today’s collections</div><div class="mt-hv">Mission complete 🎉</div>'
+      +'<div class="mt-hb"><i style="width:100%"></i></div><div class="mt-hm"><span><b>'+cur+' '+bmoney0(col)+'</b> collected</span><span>of <b>'+cur+' '+bmoney0(tot)+'</b></span></div></div>'
+    : '<div class="mt-hero"><div class="mt-hk">Remaining to collect today</div><div class="mt-hv">'+cur+' '+bmoney0(rem)+'</div>'
+      +'<div class="mt-hb"><i style="width:'+Math.max(3,Math.min(100,pct))+'%"></i></div>'
+      +'<div class="mt-hm"><span><b>'+cur+' '+bmoney0(col)+'</b> collected</span><span>of <b>'+cur+' '+bmoney0(tot)+'</b></span></div></div>';
   const list = acts.length
-    ? '<div class="tdy-sec">To do now</div><div class="tdy-list">'+acts.map(bosTodoRow).join('')+'</div>'
-    : '<div class="tdy-clear">'+icon('check','ic-lg')+'<div>All clear — nothing to chase right now.</div></div>';
-  v.innerHTML=installBanner()+head+tiles+list;
+    ? '<div class="mt-sec"><h3>To collect</h3></div>'+acts.map(mtCard).join('')
+    : '<div class="mt-clear"><div class="mt-clear-ic">✓</div>All clear — nothing to chase right now.</div>';
+  const waiting = quotes>0
+    ? '<div class="mt-sec"><h3>Waiting</h3></div><div class="mt-pc" onclick="route(\'quotations\')"><div class="mt-av" style="background:#DD8500">'+mtIcon('file')+'</div>'
+      +'<div class="mt-bd"><div class="mt-t">'+quotes+' quote'+(quotes>1?'s':'')+' waiting</div><div class="mt-s">confirm or follow up</div></div>'+mtChev()+'</div>'
+    : '';
+  v.innerHTML='<div class="mtoday">'+installBanner()+head+hero+list+waiting+'</div>';
+  mtSync();
+}
+function bmoney0(v){ return Number(v||0).toLocaleString(undefined,{maximumFractionDigits:0}); }
+function mtChev(){ return '<span class="mt-chev"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></span>'; }
+function mtIcon(n){ return '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>'; }
+function mtCard(a){
+  const name=a.name||'Customer', amt=Number(a.amount||0), st=a.status||'ok';
+  const dotc = st==='overdue'?'#E24B3B':(st==='due'?'#DD8500':'#12A150');
+  const ctx=[a.invoice_no, a.due_label, a.city].filter(Boolean).join(' · ');
+  const link=(Number(a.customer_id)>0)?(' onclick="route(\'bos.timeline\','+Number(a.customer_id)+')"'):'';
+  return '<div class="mt-pc"'+link+'><div class="mt-av" style="background:'+avColor(name)+'">'+esc(initials(name))+'</div>'
+    +'<div class="mt-bd"><div class="mt-t"><span class="mt-dot" style="background:'+dotc+'"></span>'+esc(name)+'</div>'
+    +'<div class="mt-s">'+esc(ctx)+'</div></div>'
+    +'<div class="mt-r"><b>USD '+bmoney0(amt)+'</b><div class="mt-lab">Outstanding</div></div></div>';
+}
+async function mtSync(){
+  var el=document.getElementById('mtsync'); if(!el) return;
+  var n=0; try{ n=(await OB.all()).length; }catch(e){}
+  if(!navigator.onLine){ el.textContent='● Offline'; el.className='mt-sync off'; }
+  else if(n>0){ el.textContent='● '+n+' queued'; el.className='mt-sync q'; }
+  else { el.textContent='● Synced'; el.className='mt-sync ok'; }
 }
 function tdyTone(t){ return t==='danger'?'danger':(t==='warn'?'warn':(t==='ok'?'ok':'')); }
 /* Greeting + date from the PHONE's local clock, so they match the device (not the server timezone). */

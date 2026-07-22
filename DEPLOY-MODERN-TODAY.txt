@@ -1,0 +1,41 @@
+BUILD — Modern Today (Design System v1.0 frozen) live in the app
+=================================================================
+The redesign you reviewed (9.2/10) is now built into the real Today screen with your LIVE data — not a
+mockup. Design system is frozen (OPERATING-MODEL/DESIGN-SYSTEM.md); from here it's workflows + interactions.
+
+WHAT'S NEW ON TODAY
+  • Day-progress hero — "Remaining to collect today USD X", a progress bar, and "USD Y collected of USD Z".
+    It fills as you collect and flips to "Mission complete 🎉" when nothing's left. (Real numbers: remaining
+    = open invoice balances, collected = today's receipts, target = the two combined.)
+  • Compact header — small date + greeting, so the hero dominates (no more oversized greeting).
+  • Live sync pill — ● Synced / ● N queued / ● Offline, top-right, from the offline outbox.
+  • Status + context cards — coloured avatar, a status dot (red overdue / amber due-today / green upcoming),
+    the primary invoice, a human due-label ("3 days overdue", "due today", "due in 5 days") and city, then
+    the amount + OUTSTANDING. Whole card taps into the customer.
+  • Soft "Apple-Wallet" elevation, the one outline-icon family, and the frozen radii/type/shadow scale.
+
+FILES CHANGED  (no migration)
+  app/BOS/Projections/CollectionsActivities.php  enriched: status, primary invoice, due-label, city, name.
+  app/BOS/Projections/DailyToday.php             adds the day-progress block (remaining/collected/target/pct).
+  resources/views/shell.blade.php                modern Today render (bosToday) + .mt-* design-system CSS +
+                                                 the live sync pill. (Old tiles code left dormant, unused.)
+  OPERATING-MODEL/DESIGN-SYSTEM.md    (NEW)       the FROZEN design system — the single source of truth.
+
+DEPLOY
+  git add app/BOS/Projections/CollectionsActivities.php app/BOS/Projections/DailyToday.php \
+          resources/views/shell.blade.php OPERATING-MODEL/DESIGN-SYSTEM.md
+  git commit -m "Modern Today: day-progress hero + status cards + sync pill (design system v1.0 frozen)"
+  git push  ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear      <-- important (shell is a Blade view)
+
+VERIFY
+  1. Open the app on your phone -> Today shows the green day-progress hero and the status cards with real
+     invoice/due context. Collect a payment -> reopen Today -> "collected" rises and "remaining" drops.
+  2. Go offline (record a note/collect) -> the pill reads "● N queued"; back online -> "● Synced".
+  3. A customer with all invoices settled drops off the list; when nothing's left, the hero says
+     "Mission complete 🎉".
+
+NEXT (per your review — interactions, not more restyling)
+  Customer screen to the same system · contextual FAB menu · timeline filter chips + customer summary strip ·
+  success animation after a payment that updates Today · skeletons / page transitions / swipe actions /
+  pull-to-refresh / Android haptics. The visual system is frozen; these are the remaining polish.
