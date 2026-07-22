@@ -1,0 +1,83 @@
+DEPLOY — invoice shows UGX under a "USD" label  (INV-2026-0018 = USD 2,814,350 → USD 770)
+=========================================================================================
+No migration. Deploy the 3 files, then run ONE remediation URL to fix the invoices already
+on file. After that, new invoices from old orders convert to USD automatically.
+
+WHY IT HAPPENED  (your "why why?")
+  Your catalogue is in USD: Popcorn Seeds 1kg = $2.20, Aluminum Foil Medium = $66.
+  The invoice printed 8,041 and 241,230 — those are the USD prices × 3,655 (the UGX rate).
+  So the numbers were UGX, but the document stamped a "USD" label on them WITHOUT converting.
+  Correct total: 50×$2.20 + 10×$66 = USD 770.00  (not USD 2,814,350).
+
+  Root: the Ciano SALES ORDER is a LEGACY order — created before we switched the shop to
+  USD-native — so its line prices were stored in UGX. New orders are already fine (the
+  quote→order path no longer converts for a USD shop). The problem is only OLD orders being
+  invoiced now: the invoice labels their UGX numbers "USD".
+
+  There WAS a built-in converter meant to catch exactly this, but the earlier USD-native
+  safeguard made the currency helper report the shop's local currency as "USD" — which set
+  the conversion rate to 1 and silently disabled every UGX→USD conversion. That defeated
+  three places at once. This bundle fixes all three.
+
+FILES CHANGED (3 + this note)
+  app/Services/Invoicing/InvoiceService.php                 (issued invoice: born-USD convert)
+  app/Http/Controllers/Panel/OrderInvoiceController.php     (quick/preview PDF: same convert)
+  app/Http/Controllers/Panel/PanelApiController.php         (bulk remediation endpoint fix)
+
+WHAT EACH FIX DOES
+  1) InvoiceService::toUsdIfNeeded — when a USD-base shop issues an invoice, it detects whether
+     the incoming amounts are actually UGX/SSP (by comparing the total to the USD-catalogue total
+     at the real UGX and SSP rates, NOT via the helper that now returns USD) and, if so, divides
+     every money field to USD. Strict NO-OP when the amounts are already USD. Now runs for any
+     USD-base shop, not only ones carrying an internal flag.
+  2) OrderInvoiceController::pdf — the quick, un-numbered "preview" invoice (/papi/order-invoice-pdf)
+     rendered directly and skipped the converter, so it would still show UGX. It now applies the
+     exact same normalization, so preview and issued invoice match.
+  3) /papi/normalize-invoices-usd — the one-time tool that fixes invoices ALREADY stored. It was
+     also disabled by the same helper (rate became 1 → it divided by 1 → no change, then skipped).
+     Pinned to the real local currency (UGX) so it converts legacy UGX-magnitude invoices and sets
+     the house-rule flag.
+
+DEPLOY
+  git add app/Services/Invoicing/InvoiceService.php \
+          app/Http/Controllers/Panel/OrderInvoiceController.php \
+          app/Http/Controllers/Panel/PanelApiController.php
+  git commit -m "invoice: convert legacy UGX orders to USD on issue + preview; fix normalize endpoint (USD-native)"
+  git push  ->  EasyPanel Rebuild        (no migration)
+
+FIX THE INVOICES ALREADY ON FILE  (fixes INV-2026-0018 + sets the house-rule flag)
+  You're the owner, so just open these while logged into the panel (in your browser):
+
+  1. DRY-RUN (shows what WOULD change, writes nothing):
+       https://<your-panel-domain>/papi/normalize-invoices-usd
+     Expect INV-2026-0018 to read:  inferred "UGX", action "would convert → USD", new_total 770.
+     Any invoice already in real USD shows "already USD" and is left untouched.
+
+  2. COMMIT (converts + regenerates the PDFs + sets the flag, all in one transaction):
+       https://<your-panel-domain>/papi/normalize-invoices-usd?commit=1
+
+  Setting the flag also fixes a related edge: without it, recording a payment on a legacy-order
+  invoice could re-inflate the "Amount Paid" line. The commit above closes that too.
+
+VERIFY
+  1. Re-download INV-2026-0018 → Total now USD 770.00, Popcorn USD 2.20, Foil USD 66.00.
+  2. Quick preview: open the order and hit the invoice/preview button → shows USD, not UGX.
+  3. New invoice from any old order → issues in USD automatically (no need to re-run the tool).
+  4. A genuine USD order is unchanged (the converter is a no-op when amounts are already USD).
+
+IF A NUMBER STILL LOOKS OFF
+  Re-run the dry-run URL and read the "method" column per invoice:
+    "catalogue"                 → matched your USD catalogue, converted with confidence.
+    "order UGX/SSP"             → matched the linked order's currency.
+    "magnitude"                 → inferred from size (>40,000 = UGX, <4,000 = USD).
+    "SKIPPED (no clear signal)" → left untouched on purpose (tell me the invoice # and I'll look).
+
+ROLLBACK
+  Revert the commit. The invoice conversions are data writes — before committing, the dry-run
+  shows exactly what changes, and only UGX-magnitude invoices are ever divided (already-USD
+  invoices are never rewritten).
+
+SCOPE NOTE
+  This targets USD-priced legacy orders stored in UGX (your case). SSP-priced legacy sales
+  invoices, if any, are left untouched by the bulk tool (never mis-divided) — send me an
+  invoice number if you have one and I'll handle it directly.

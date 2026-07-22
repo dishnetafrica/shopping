@@ -6852,7 +6852,12 @@ class PanelApiController extends Controller
         $commit = filter_var($r->query('commit', $r->input('commit', false)), FILTER_VALIDATE_BOOLEAN);
 
         $base   = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);     // USD
-        $native = \App\Services\Money\SalesBaseCurrency::nativeCurrency($t);   // UGX
+        $native = \App\Services\Money\SalesBaseCurrency::nativeCurrency($t);   // local operating currency
+        // On a USD-base shop the native-basis safeguard makes nativeCurrency() return USD, which would
+        // set $rate=1 and turn every UGX→USD division below into a no-op (legacy UGX invoices would be
+        // classified 'catalogue mismatch' then SKIPPED, never converted). The real local currency those
+        // legacy invoices are stored in is UGX — pin it so detection + division work.
+        if ($base === 'USD' && $native === 'USD') { $native = 'UGX'; }
         $rate   = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($native) ?: 3655.0;
 
         // Catalogue base price is in USD — the reference for "is this stored number USD or UGX?"

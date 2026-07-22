@@ -31,10 +31,10 @@ class InvoiceService
             if ($existing) return $existing;
         }
 
-        // Born-USD: for a tenant whose invoices are kept in USD (invoices_usd_normalized), convert the
-        // incoming amounts to USD at the source — so a UGX-priced order never mints another mislabeled
-        // invoice. Self-contained (re-prices from the catalogue); no-op for every other tenant.
-        $d = $this->toUsdIfNeeded($t, $d, $orderId);
+        // Born-USD: for a USD-base tenant, convert incoming LOCAL-currency amounts (a legacy UGX/SSP
+        // order) to USD at the source — so a UGX-priced order never mints another mislabeled invoice.
+        // Self-contained (re-prices from the catalogue); no-op when already USD or for non-USD bases.
+        $d = self::toUsdIfNeeded($t, $d, $orderId);
 
         $cur     = (string) ($d['cur'] ?? ($t->setting('currency', 'UGX') ?: 'UGX'));
         $paid    = (float) ($d['paid'] ?? 0);
@@ -110,24 +110,40 @@ class InvoiceService
     }
 
     /**
-     * Born-USD conversion for tenants whose invoices are kept in USD (the `invoices_usd_normalized`
-     * flag, set atomically with the one-time normalization). Detects the TRUE currency of the incoming
-     * amounts the same way the normalizer does — re-price the lines against the USD catalogue — and, when
-     * they are in local currency, converts every money field to USD. Falls back to the linked order's
-     * transaction currency (which handles SSP correctly) when the lines don't match the catalogue. When
-     * the currency can't be determined confidently, it leaves the data untouched (never a risky divide).
-     * Returns $d unchanged for any tenant without the flag, so the shared engine is unaffected.
+     * Born-USD conversion for USD-base shops: an invoice must show USD, but a LEGACY order (created
+     * before the shop switched to USD-native) stored its line prices in the local currency (UGX/SSP).
+     * The issuer stamps the tenant base ("USD") on those local numbers, so without this step the PDF
+     * reads "USD 2,814,350" for what is really USD 770. Here we detect the TRUE currency of the incoming
+     * amounts — re-price the lines against the USD catalogue and compare the document total to the
+     * catalogue total at each convertible rate (USD, UGX, SSP) — and, when they are in a local currency,
+     * convert every money field to USD by DIVIDING at that currency's own rate (so a negotiated price is
+     * preserved, not overwritten by the catalogue). Falls back to the linked order's transaction currency
+     * when the catalogue is inconclusive. When the currency can't be determined confidently, it leaves the
+     * data untouched (never a risky divide).
+     *
+     * Runs for any USD-base tenant (or one carrying the historical `invoices_usd_normalized` flag). It is
+     * a strict NO-OP when the amounts are already USD (grand ≈ catalogue total), so correct/native orders
+     * are never touched; non-USD-base shops (UGX/SSP operating currency) return unchanged.
+     *
+     * public static so the QUICK/WYSIWYG preview path (OrderInvoiceController::pdf) can apply the exact
+     * same normalization before rendering, keeping the un-numbered preview and the issued invoice identical.
      */
-    private function toUsdIfNeeded(Tenant $t, array $d, ?int $orderId): array
+    public static function toUsdIfNeeded(Tenant $t, array $d, ?int $orderId): array
     {
-        if (! $t->setting('invoices_usd_normalized')) return $d;
+        $baseUsd = \App\Services\Money\SalesBaseCurrency::baseCurrency($t) === 'USD';
+        if (! $baseUsd && ! $t->setting('invoices_usd_normalized')) return $d;
 
-        $native = \App\Services\Money\SalesBaseCurrency::nativeCurrency($t);      // UGX (local operating)
-        $rate   = \App\Services\Money\Fx::forTenant($t)->ratePerUsd($native) ?: 3655.0;
-        $grand  = (float) ($d['grand'] ?? 0);
+        $grand = (float) ($d['grand'] ?? 0);
         if ($grand <= 0) return $d;
 
-        // Re-price the lines from the catalogue (which is in USD).
+        // Rates for every convertible local currency (units per 1 USD). We compare against these
+        // EXPLICITLY rather than SalesBaseCurrency::nativeCurrency(), which for a USD-native tenant
+        // resolves to USD (rate 1) and would make a UGX order look like it's "already USD".
+        $fx      = \App\Services\Money\Fx::forTenant($t);
+        $rateUgx = (float) ($fx->ratePerUsd('UGX') ?: 3655.0);
+        $rateSsp = (float) ($fx->ratePerUsd('SSP') ?: 0);
+
+        // Re-price the lines from the catalogue (which is in USD) — used ONLY to detect the currency.
         $byName = [];
         foreach (\App\Models\Product::where('tenant_id', $t->id)->get(['name', 'base_price', 'price']) as $p) {
             $bp = (float) ($p->price ?: $p->base_price ?: 0);   // price-drift fix: invoices re-price at the SELLING price
@@ -140,18 +156,23 @@ class InvoiceService
             if ($bp !== null && $qty > 0) { $catBase += $bp * $qty; $matched++; }
         }
 
-        // 1) Catalogue signal (USD vs the local currency).
+        // 1) Catalogue signal — which multiple of the USD catalogue total does the document total match?
         $srcCur = null;
         if ($matched > 0 && $catBase > 0) {
-            if (abs($grand - $catBase) <= 0.12 * $catBase) { $srcCur = 'USD'; }
-            elseif (abs($grand - $catBase * $rate) <= 0.12 * $catBase * $rate) { $srcCur = $native; }
+            if (abs($grand - $catBase) <= 0.12 * $catBase) {
+                $srcCur = 'USD';                                             // already USD → no-op below
+            } elseif ($rateUgx > 0 && abs($grand - $catBase * $rateUgx) <= 0.12 * $catBase * $rateUgx) {
+                $srcCur = 'UGX';
+            } elseif ($rateSsp > 0 && abs($grand - $catBase * $rateSsp) <= 0.12 * $catBase * $rateSsp) {
+                $srcCur = 'SSP';
+            }
         }
         // 2) Linked-order currency (rateable, and correct for SSP) when the catalogue is inconclusive.
         if ($srcCur === null && $orderId) {
             try {
                 $o = \App\Models\Order::where('tenant_id', $t->id)->find($orderId);
                 if ($o) {
-                    $c = strtoupper((string) \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t));
+                    $c = strtoupper((string) ($o->sell_currency ?? ''));
                     if (in_array($c, ['USD', 'UGX', 'SSP'], true)) { $srcCur = $c; }
                 }
             } catch (\Throwable $e) { /* leave undetermined */ }
@@ -160,8 +181,9 @@ class InvoiceService
         if ($srcCur === null) { return $d; }        // can't tell → don't risk a wrong conversion
         if ($srcCur === 'USD') { $d['cur'] = 'USD'; $d['dec'] = 2; return $d; }   // already USD
 
-        // Local currency → convert the whole document to USD at each currency's own rate.
-        $fx = \App\Services\Money\Fx::forTenant($t);
+        // Local currency → convert the whole document to USD at that currency's own rate. We DIVIDE
+        // the stored amounts (via Fx::toUsd) rather than substituting catalogue prices, so any
+        // negotiated/discounted line price the customer was actually quoted is preserved.
         $cv = fn ($v) => round($fx->toUsd((float) $v, $srcCur), 2);
         foreach (['subtotal', 'discount', 'freight', 'grand', 'paid'] as $k) {
             if (isset($d[$k])) { $d[$k] = $cv($d[$k]); }

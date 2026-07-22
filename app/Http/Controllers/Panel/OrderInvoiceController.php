@@ -26,6 +26,13 @@ class OrderInvoiceController extends Controller
         $data = $this->renderer->fromRequest($r, $t);
         if (empty($data['lines'])) abort(422, 'Nothing to invoice');
 
+        // Same born-USD normalization the issued invoice gets: on a USD-base shop a LEGACY order's
+        // line prices are stored in the local currency (UGX/SSP); without this the quick preview would
+        // print those numbers under a "USD" label (USD 2,814,350 for what is really USD 770). No-op when
+        // the amounts are already USD or the shop is not USD-base.
+        $orderId = (int) $r->input('id', 0);
+        $data = \App\Services\Invoicing\InvoiceService::toUsdIfNeeded($t, $data, $orderId > 0 ? $orderId : null);
+
         try {
             $pdf = $this->renderer->pdf($t, $data);
         } catch (\Throwable $e) {
