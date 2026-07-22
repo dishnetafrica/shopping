@@ -1,0 +1,36 @@
+DEPLOY — iPhone access polish (skip the landing page + Add-to-Home-Screen)
+==========================================================================
+Two small, additive UX changes so opening the app on a phone feels like an app.
+
+FILES CHANGED
+  app/Http/Controllers/Marketing/MarketingController.php
+      On the MAIN domain, a signed-in shop owner (tenant + order system on) is now forwarded straight
+      from mycloudbss.com to /v3 — no more passing through the marketing page. Anonymous visitors still
+      get the marketing page; a shop's own custom domain still serves that shop's storefront (unchanged);
+      and ?site=1 still shows the marketing page if the owner wants it.
+  resources/views/shell.blade.php
+      A dismissible "Add CloudBSS to your Home Screen" banner on the Today screen: on iPhone it shows the
+      Share ▸ Add to Home Screen tip; on Android it offers the native install prompt. It hides itself once
+      the app is installed (running standalone) or after it's dismissed. (This file also carries the
+      earlier iOS <head> tags: apple-mobile-web-app-capable, viewport-fit=cover, etc.)
+
+DEPLOY
+  git add app/Http/Controllers/Marketing/MarketingController.php resources/views/shell.blade.php
+  git commit -m "iPhone access: owner root->/v3 redirect + Add-to-Home-Screen banner"
+  git push  ->  EasyPanel Rebuild        (no migration)
+
+VERIFY
+  1. On your phone, signed in, open mycloudbss.com -> you land directly on the app's Today screen
+     (not the marketing page). Add ?site=1 to see the marketing page again.
+  2. On the Today screen (in Safari, not yet installed) -> the green "Add to Home Screen" banner shows the
+     Share tip. Tap Share ▸ Add to Home Screen -> the CloudBSS icon opens /v3 full-screen; the banner no
+     longer appears (it detects standalone). ✕ dismisses it if you're not ready.
+  3. Anonymous visitor (logged out) still sees the marketing page; a shop custom domain still serves the
+     shop. Nothing else changes.
+
+ROLLBACK
+  Revert the two files. Purely additive; no schema/data change.
+
+NOTE
+  These two files are also folded into the latest BOS-COMBINED.zip, so if you deploy that bundle you get
+  this automatically.

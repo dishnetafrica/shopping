@@ -713,6 +713,14 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 .btl-row.obp{opacity:.72}
 .btl-row.obp .btl-ic{border-style:dashed;border-color:var(--warn)}
 .offpill{font-size:11px;font-weight:700;color:#b45309;background:#fff2dd;padding:2px 8px;border-radius:20px}
+/* ===== Add-to-Home-Screen banner (Today) ===== */
+.instbar{display:flex;align-items:center;gap:11px;background:var(--brand-wash);border:1px solid #bfe8cd;border-radius:13px;padding:11px 13px;margin-bottom:14px}
+.inst-ic{font-size:20px;flex:none}
+.inst-tx{flex:1;min-width:0}
+.inst-tx>b{font-size:13.5px;font-weight:700;color:var(--ink)}
+.inst-sub{font-size:12px;color:var(--muted);margin-top:1px}
+.inst-go{flex:none;background:var(--brand);color:#fff;border:0;border-radius:9px;padding:7px 13px;font-size:12.5px;font-weight:700;cursor:pointer}
+.inst-x{flex:none;background:none;border:0;color:var(--faint);font-size:15px;cursor:pointer;padding:2px 4px;align-self:flex-start}
 /* ===== BOS Offline collect (Slice 6) — inline "record payment" against the open invoice ===== */
 .obcol{background:var(--warn-wash);border:1px solid #f4d9a8;border-radius:13px;padding:13px 15px;box-shadow:var(--sh-sm)}
 .obcol-t{font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-.01em}
@@ -1516,9 +1524,28 @@ async function bosToday(){
   const list = acts.length
     ? '<div class="tdy-sec">To do now</div><div class="tdy-list">'+acts.map(bosTodoRow).join('')+'</div>'
     : '<div class="tdy-clear">'+icon('check','ic-lg')+'<div>All clear — nothing to chase right now.</div></div>';
-  v.innerHTML=head+tiles+list;
+  v.innerHTML=installBanner()+head+tiles+list;
 }
 function tdyTone(t){ return t==='danger'?'danger':(t==='warn'?'warn':(t==='ok'?'ok':'')); }
+/* ===== "Add to Home Screen" hint — iPhone shows the Share tip; Android offers the native prompt.
+   Hidden once installed (standalone) or dismissed. Purely additive; no effect on the app itself. ===== */
+let OB_INSTALL=null;
+try{ window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); OB_INSTALL=e; }); }catch(e){}
+function obStandalone(){ try{ return (window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone===true; }catch(e){ return false; } }
+function obInstallDismissed(){ try{ return localStorage.getItem('cbss_install_x')==='1'; }catch(e){ return false; } }
+function obDismissInstall(){ try{ localStorage.setItem('cbss_install_x','1'); }catch(e){} const b=document.getElementById('instbar'); if(b) b.remove(); }
+async function obInstall(){ if(OB_INSTALL){ try{ OB_INSTALL.prompt(); await OB_INSTALL.userChoice; }catch(e){} OB_INSTALL=null; obDismissInstall(); } }
+function installBanner(){
+  if(obStandalone() || obInstallDismissed()) return '';
+  const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent||'');
+  let sub, right;
+  if(OB_INSTALL){ sub='Open it like an app — full screen, one tap.'; right='<button class="inst-go" onclick="obInstall()">Install</button>'; }
+  else if(isIOS){ sub='Tap <b>Share</b> ⎋ then <b>Add to Home Screen</b>.'; right=''; }
+  else { return ''; }
+  return '<div class="instbar" id="instbar"><div class="inst-ic">📲</div>'
+    +'<div class="inst-tx"><b>Add CloudBSS to your Home Screen</b><div class="inst-sub">'+sub+'</div></div>'
+    +right+'<button class="inst-x" onclick="obDismissInstall()" aria-label="Dismiss">✕</button></div>';
+}
 function bosTodoRow(a){
   const link=(Number(a.customer_id)>0)?(' onclick="route(\'bos.timeline\','+Number(a.customer_id)+')" style="cursor:pointer"'):'';
   const badge=a.overdue?'<span class="tdy-od">overdue</span>':'';

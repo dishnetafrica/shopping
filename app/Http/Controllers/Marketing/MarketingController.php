@@ -41,6 +41,17 @@ class MarketingController extends Controller
             return app(\App\Http\Controllers\Storefront\StorefrontController::class)->landing($tenant->slug);
         }
 
+        // A signed-in shop owner on the main domain shouldn't have to pass through the marketing page —
+        // send them straight to the app (mirrors LandingController's gate). ?site=1 still shows marketing.
+        $u = $request->user();
+        if ($u && $u->tenant_id && ! $request->boolean('site')) {
+            try {
+                if ((bool) $u->tenant->setting('order_system_enabled', false)) {
+                    return redirect('/v3');
+                }
+            } catch (\Throwable $e) { /* fall through to the marketing page */ }
+        }
+
         $path = resource_path('marketing/index.html');
         if (! is_file($path)) {
             abort(500, 'Marketing page asset missing.');
