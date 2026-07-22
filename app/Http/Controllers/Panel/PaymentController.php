@@ -134,6 +134,53 @@ class PaymentController extends Controller
         return response()->json(['ok'=>true,'send_receipt'=>$sendReceipt] + $result + ['usd'=>$usd,'currency'=>$cur,'amount'=>$amount]);
     }
 
+    /**
+     * POST /papi/receipt-send — WhatsApp the branded receipt PDF to the customer. Manual, button-triggered
+     * (mirrors InvoiceController::send). Sends to the payment's saved phone, or a `phone` passed in. The
+     * PDF is regenerated fresh from the recorded payment, so it always reflects the current amount.
+     */
+    public function send(Request $request)
+    {
+        // Same access as InvoiceController::send — any panel user with a tenant (the button only shows on
+        // the finance-gated payments screen). A stricter role gate here would 403 finance viewers (cashier/
+        // procurement) who can send invoices + download receipts, an inconsistent, confusing failure.
+        $t = $request->user()?->tenant;
+        if (! $t) return response()->json(['ok'=>false],401);
+
+        $p = CustomerPayment::where('tenant_id',$t->id)->find((int) $request->input('id'));
+        if (! $p) return response()->json(['ok'=>false,'error'=>'not_found'],404);
+
+        $phone = preg_replace('/[^0-9]/','', (string) ($request->input('phone','') ?: $p->customer_phone));
+        if ($phone === '') return response()->json(['ok'=>false,'error'=>'no_phone'],422);
+
+        $gw = app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($t);
+        if (! method_exists($gw,'sendDocument') || ! $t->whatsapp_instance) {
+            return response()->json(['ok'=>false,'error'=>'whatsapp_off'],422);
+        }
+
+        $doc = app(\App\Services\Finance\ReceiptRenderer::class)->pdf($t, $p);
+        if (! $doc || ($doc['b64'] ?? '') === '') {
+            return response()->json(['ok'=>false,'error'=>'pdf_unavailable'],503);
+        }
+
+        try {
+            $cur     = (string) ($p->currency ?: $t->setting('currency','UGX'));
+            $dec     = $cur === 'USD' ? 2 : 0;
+            $amount  = $cur . ' ' . number_format((float) $p->amount, $dec);
+            $against = $p->invoice_no ? ('invoice ' . $p->invoice_no) : ($p->order_no ? ('order ' . $p->order_no) : '');
+            $caption = "🧾 Payment receipt {$doc['no']} — {$amount} received"
+                . ($against !== '' ? " against {$against}" : '') . '. Thank you!';
+            $gw->sendDocument($t->whatsapp_instance, $phone, $doc['b64'], $doc['fileName'], $caption);
+            \App\Support\MessageLog::record($t->id, $phone, $t->whatsapp_instance, 'out', 'panel',
+                "[receipt {$doc['no']}] " . $caption, null, null, ['via'=>'panel','kind'=>'receipt','receipt_no'=>$doc['no']]);
+        } catch (\Throwable $e) {
+            \Log::warning('receipt send failed: ' . $e->getMessage());
+            return response()->json(['ok'=>false,'error'=>'send_failed'],500);
+        }
+
+        return response()->json(['ok'=>true,'sent_to'=>$phone,'receipt_no'=>$doc['no']]);
+    }
+
     /** GET /papi/payments/{id} — one payment (for the receipt). */
     public function show(Request $request, int $id)
     {

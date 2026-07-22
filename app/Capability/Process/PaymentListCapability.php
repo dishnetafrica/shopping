@@ -57,7 +57,10 @@ final class PaymentListCapability implements ProcessCapability
                 'applied'  => (string) $appliedTo,
                 'amount'   => ['value' => $line['text'], 'tone' => 'ok', 'sort' => (float) $line['amount']],
                 'date'     => ['value' => $when ? $when->format('d M Y') : '—', 'sort' => $when ? $when->timestamp : 0],
-                'act'      => ['buttons' => [['icon' => 'download', 'title' => 'Download receipt', 'href' => '/api/v1/doc/receipt/' . $p->id]]],
+                'act'      => ['buttons' => [
+                    ['icon' => 'download', 'title' => 'Download receipt', 'href' => '/api/v1/doc/receipt/' . $p->id],
+                    ['icon' => 'send', 'title' => 'Send on WhatsApp', 'post' => '/papi/receipt-send', 'body' => ['id' => (int) $p->id], 'confirm' => 'Send receipt ' . ($p->receipt_no ?: ('PAY-' . $p->id)) . ' to ' . ($p->customer_name ?: 'the customer') . ' on WhatsApp?'],
+                ]],
                 'link'     => '/api/v1/workspace/payment/' . $p->id,
                 'id'       => (int) $p->id,
             ];

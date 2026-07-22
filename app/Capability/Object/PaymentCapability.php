@@ -48,7 +48,8 @@ final class PaymentCapability implements ObjectCapability
         $when = $p->created_at ? Carbon::parse($p->created_at) : null;
 
         // --- actions ---
-        $downloadReceipt = ['key' => 'receipt_pdf', 'label' => 'Download receipt', 'href' => '/papi/receipt-pdf?id=' . $p->id, 'actor' => 'human', 'tone' => 'primary'];
+        $downloadReceipt = ['key' => 'receipt_pdf', 'label' => 'Download receipt', 'href' => '/api/v1/doc/receipt/' . $p->id, 'actor' => 'human', 'tone' => 'primary'];
+        $sendReceipt = ['key' => 'send_receipt', 'label' => 'Send on WhatsApp', 'method' => 'POST', 'endpoint' => '/papi/receipt-send', 'actor' => 'human', 'tone' => 'default', 'body' => ['id' => (int) $p->id], 'confirm' => 'Send receipt ' . ($p->receipt_no ?: ('PAY-' . $p->id)) . ' to ' . ($p->customer_name ?: 'the customer') . ' on WhatsApp?'];
         $openInvoice = $inv ? ['key' => 'open_invoice', 'label' => 'Open invoice', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/invoice/' . $inv->id, 'actor' => 'human', 'tone' => 'default'] : null;
         $openCustomer = $profile ? ['key' => 'open_customer', 'label' => 'Open customer', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customer/' . $profile->id, 'actor' => 'human', 'tone' => 'default'] : null;
 
@@ -122,7 +123,7 @@ final class PaymentCapability implements ObjectCapability
                 ['key' => 'timeline', 'label' => 'Timeline', 'count' => 1],
                 ['key' => 'documents', 'label' => 'Documents', 'count' => count($docs)],
             ])
-            ->actions([$downloadReceipt])
+            ->actions([$downloadReceipt, $sendReceipt])
             ->more(array_values(array_filter([$openInvoice, $openCustomer])))
             ->meta(['capability' => 'payment', 'ttl' => 300, 'layout' => 'record', 'listKey' => 'payments', 'permissions' => ['menu:finance']]);
     }

@@ -1,0 +1,71 @@
+DEPLOY — "Send receipt on WhatsApp" button
+==========================================
+Adds a Send button on the Payments/Receipts screen that WhatsApps the branded receipt PDF
+to the customer — the same one-click flow invoices already have. Manual (button), not automatic.
+No migration.
+
+FILES IN THIS ZIP (3 code files + 1 manual route line + this note)
+  app/Http/Controllers/Panel/PaymentController.php        (new send() endpoint)
+  app/Capability/Process/PaymentListCapability.php        (Send button on each receipt row)
+  app/Capability/Object/PaymentCapability.php             (Send action on the receipt detail
+                                                           + fixes the Download-receipt 404)
+
+  Unzip at the repo ROOT so the app/... files land in place. Then make ONE small manual edit
+  to routes/web.php (below) — I did NOT ship web.php because your other deploys have added
+  routes to it and overwriting would undo them.
+
+──────────────────────────────────────────────────────────────────────────────
+STEP 1 — add ONE line to routes/web.php
+──────────────────────────────────────────────────────────────────────────────
+Open routes/web.php, FIND this existing line (it's already there):
+
+    Route::match(['get','post'], 'invoice-send', [\App\Http\Controllers\Panel\InvoiceController::class, 'send']);
+
+Add this NEW line directly BELOW it:
+
+    Route::post('receipt-send', [\App\Http\Controllers\Panel\PaymentController::class, 'send']);
+
+That's the only edit to web.php. (It sits inside the same `papi` route group, so the path
+becomes /papi/receipt-send.)
+
+──────────────────────────────────────────────────────────────────────────────
+STEP 2 — deploy
+──────────────────────────────────────────────────────────────────────────────
+  git add app/Http/Controllers/Panel/PaymentController.php \
+          app/Capability/Process/PaymentListCapability.php \
+          app/Capability/Object/PaymentCapability.php \
+          routes/web.php
+  git commit -m "receipts: Send-on-WhatsApp button (+ fix receipt download link)"
+  git push  ->  EasyPanel Rebuild        (no migration)
+
+──────────────────────────────────────────────────────────────────────────────
+WHAT YOU GET
+──────────────────────────────────────────────────────────────────────────────
+  • Payments list: each receipt row now has a ✈ "Send on WhatsApp" button next to Download.
+    Click it → confirm → the receipt PDF is sent to that customer's saved WhatsApp number.
+  • Receipt detail view: a "Send on WhatsApp" action does the same.
+  • The message caption reads e.g. "🧾 Payment receipt RCP-00042 — USD 770 received against
+    invoice INV-2026-0018. Thank you!"
+  • Also fixed: the detail "Download receipt" button used a dead link (/papi/receipt-pdf) and
+    404'd — it now points at the working /api/v1/doc/receipt/{id}.
+
+REQUIREMENTS (same as invoice send)
+  • Your WhatsApp line must be connected (it is).
+  • The payment must have the customer's phone on it. If a receipt has no phone, the button
+    returns "no_phone" — open the payment and add the number, or record payments with the phone.
+
+VERIFY
+  1. Open Payments. On any receipt row, click the Send (✈) button → confirm.
+     -> You should get {ok:true, sent_to:...} and the customer receives the receipt PDF.
+  2. Check the customer's WhatsApp (or your Chats screen) — the receipt PDF is there with the
+     caption.
+  3. Open a receipt (detail) → "Send on WhatsApp" works the same, and "Download receipt" now
+     opens the PDF instead of 404.
+
+ERRORS YOU MIGHT SEE (and meaning)
+  whatsapp_off     -> WhatsApp line not connected for the shop.
+  no_phone         -> that payment has no customer phone saved.
+  pdf_unavailable  -> the PDF engine (dompdf) isn't installed on the box.
+
+ROLLBACK
+  Revert the commit and remove the one web.php line. No data/schema changes.
