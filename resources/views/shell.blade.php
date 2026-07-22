@@ -2,8 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="manifest" href="/v3-manifest.webmanifest">
+<meta name="theme-color" content="#1B3A2B">
+<!-- iPhone/iPad "Add to Home Screen": launch full-screen (standalone), not a Safari tab.
+     viewport-fit=cover above activates the env(safe-area-inset-*) padding already in the CSS. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="CloudBSS">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <title>CloudBSS</title>
 <style>
@@ -705,6 +713,14 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 .btl-row.obp{opacity:.72}
 .btl-row.obp .btl-ic{border-style:dashed;border-color:var(--warn)}
 .offpill{font-size:11px;font-weight:700;color:#b45309;background:#fff2dd;padding:2px 8px;border-radius:20px}
+/* ===== BOS Offline collect (Slice 6) — inline "record payment" against the open invoice ===== */
+.obcol{background:var(--warn-wash);border:1px solid #f4d9a8;border-radius:13px;padding:13px 15px;box-shadow:var(--sh-sm)}
+.obcol-t{font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-.01em}
+.obcol-s{font-size:12px;color:#9a6a1e;margin-top:1px}
+.obcol-r{display:flex;align-items:center;gap:8px;margin-top:11px}
+.obcol-cur{font-size:13px;font-weight:700;color:var(--muted);flex:none}
+.obcol .obc-in{background:var(--surface)}
+.obcol-go{width:100%;margin-top:11px;background:var(--warn);color:#fff;border:0;border-radius:10px;padding:11px 16px;font-size:14px;font-weight:800;cursor:pointer}
 </style>
 </head>
 <body>
@@ -1304,6 +1320,8 @@ async function bosTimeline(id){
   let r; try{ r=await post(CFG.base+'/customer/'+id+'/timeline', {id:id}); }catch(e){ r=null; }
   if(!r || r.ok===false){ v.innerHTML=emptyState('bolt','Timeline unavailable','No history yet, or the event spine isn\'t enabled.'); return; }
   const c=r.customer||{}, t=r.timeline||[]; const out=Number(c.outstanding||0);
+  OB_CTX={ customer_id:Number(c.id||id), name:(c.name||''), phone:(c.phone||''),
+    collect:(r.journey&&r.journey.next&&r.journey.next.collect)||null };
   const head='<div class="btl-head"><div class="btl-nm">'+esc(c.name||'Customer')+'</div>'
     +'<div class="btl-sub">'+esc(c.phone||'')+(c.city?' · '+esc(c.city):'')+'</div>'
     +(out>0.5?'<div class="btl-out">Outstanding <b>USD '+bmoney(out)+'</b></div>':'<div class="btl-out ok">No outstanding balance</div>')
@@ -1319,7 +1337,9 @@ function bosJourney(j){
     return '<div class="bjr-step '+s.state+'"><div class="bjr-dot">'+(s.state==='done'?'✓':'')+'</div><div class="bjr-lb">'+esc(s.label)+'</div></div>';
   }).join('<div class="bjr-line"></div>');
   const n=j.next; let nb;
-  if(n){
+  if(n && n.collect){
+    nb=obCollectCard(n);                        // Slice 6 — collect inline (works offline), not a deep-link
+  } else if(n){
     const rt=(n.route&&n.route.key)?(' onclick="route(\''+n.route.key+'\','+Number(n.route.id||0)+')"'):'';
     nb='<div class="bjr-next '+(n.tone||'default')+'"'+rt+'><div class="bjr-nx"><div class="bjr-nl">Next: '+esc(n.label)+'</div>'+(n.hint?'<div class="bjr-nh">'+esc(n.hint)+'</div>':'')+'</div><div class="bjr-ng">›</div></div>';
   } else {
@@ -1380,8 +1400,40 @@ const OB = (function(){
     }); }
   };
 })();
-let OB_CUST=0, OB_KIND='visit', OB_BUSY=false;
+let OB_CUST=0, OB_KIND='visit', OB_BUSY=false, OB_CTX=null, OB_METHOD='Cash';
 function obKind(k){ OB_KIND=k; document.querySelectorAll('.obk').forEach(function(b){ b.classList.toggle('on', b.dataset.k===k); }); }
+/* Slice 6 — collect against the open invoice, inline and offline-safe (idempotent server-side). */
+function obCollectCard(n){
+  const cl=n.collect||{}, cur=cl.currency||'USD', amt=Number(cl.amount||0);
+  const mchip=function(m){ return '<button class="obk'+(m===OB_METHOD?' on':'')+'" data-m="'+m+'" onclick="obMethod(\''+m+'\')">'+m+'</button>'; };
+  return '<div class="obcol"><div class="obcol-h"><div class="obcol-t">Collect '+esc(cur)+' '+bmoney(amt)+'</div>'
+    +'<div class="obcol-s">'+esc(cl.invoice_no||'')+' · balance due · works offline</div></div>'
+    +'<div class="obcol-r"><span class="obcol-cur">'+esc(cur)+'</span>'
+    +'<input id="obamt" class="obc-in" inputmode="decimal" value="'+amt.toFixed(2)+'"></div>'
+    +'<div class="obc-k" style="margin:9px 0 0">'+mchip('Cash')+mchip('MoMo')+mchip('Bank')+'</div>'
+    +'<button class="obcol-go" onclick="obCollect()">Record payment</button></div>';
+}
+function obMethod(m){ OB_METHOD=m; document.querySelectorAll('.obcol [data-m]').forEach(function(b){ b.classList.toggle('on', b.dataset.m===m); }); }
+async function obCollect(){
+  if(!OB_CTX || !OB_CTX.collect){ return; }
+  const el=document.getElementById('obamt'); const amt=Math.round((parseFloat(el&&el.value)||0)*100)/100;
+  if(!(amt>0)){ toast('Enter an amount', true); return; }
+  const cl=OB_CTX.collect, id=OB.uuid(), now=new Date();
+  const item={ id:id, ts:now.getTime(), kind:'collect', customer_id:OB_CTX.customer_id, endpoint:'/papi/payments',
+    body:{ customer_name:(OB_CTX.name||OB_CTX.phone||'Customer'), customer_phone:OB_CTX.phone, order_no:cl.order_no,
+      invoice_no:cl.invoice_no, kind:'settlement', currency:cl.currency, amount:amt, method:OB_METHOD,
+      rate_to_usd:0, idempotency_key:id, created_date:now.toISOString() },
+    label:('Collect '+cl.currency+' '+bmoney(amt)) };
+  if(navigator.onLine){
+    let r=null, neterr=false;
+    try{ r=await post(item.endpoint, item.body); }catch(e){ neterr=true; }
+    if(!neterr && r && r.ok){ toast('Payment recorded'); bosTimeline(OB_CTX.customer_id); return; }
+    if(!neterr && r && r.ok===false){ toast('Could not record ('+esc(r.error||'error')+')', true); return; }
+    /* network failed mid-send → fall through and queue it */
+  }
+  await OB.add(item); await renderObPending(); await obBadge();
+  toast('Saved offline — will sync');
+}
 function obComposer(cid){
   OB_CUST=Number(cid)||0;
   const chip=function(k,l){ return '<button class="obk'+(k===OB_KIND?' on':'')+'" data-k="'+k+'" onclick="obKind(\''+k+'\')">'+l+'</button>'; };
@@ -1389,8 +1441,11 @@ function obComposer(cid){
     +'<div class="obc-r"><input id="obtext" class="obc-in" maxlength="1000" placeholder="What happened? (works offline)" onkeydown="if(event.key===\'Enter\')obSend()"><button class="obc-go" onclick="obSend()">Send</button></div></div>';
 }
 function obPendingLine(it){
-  const k=it.kind, lbl=(k==='visit'?'📍 Visit':(k==='followup'?'🔔 Follow-up':'📝 Note'));
-  return '<div class="btl-row obp"><div class="btl-ic">⏳</div><div class="btl-body"><div class="btl-txt">'+lbl+' — '+esc((it.body&&it.body.text)||'')+'</div><div class="btl-at">waiting to sync</div></div></div>';
+  const k=it.kind;
+  let txt, ic='⏳';
+  if(k==='collect'){ ic='💵'; txt=esc(it.label||('Collect '+((it.body&&it.body.currency)||'')+' '+bmoney((it.body&&it.body.amount)||0))); }
+  else { const lbl=(k==='visit'?'📍 Visit':(k==='followup'?'🔔 Follow-up':'📝 Note')); txt=lbl+' — '+esc((it.body&&it.body.text)||''); }
+  return '<div class="btl-row obp"><div class="btl-ic">'+ic+'</div><div class="btl-body"><div class="btl-txt">'+txt+'</div><div class="btl-at">waiting to sync</div></div></div>';
 }
 async function renderObPending(){
   const box=document.getElementById('obpend'); if(!box) return;

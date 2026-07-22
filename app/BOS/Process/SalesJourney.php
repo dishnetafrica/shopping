@@ -73,6 +73,22 @@ final class SalesJourney
             $next = ['label' => 'Collect ' . $cur . ' ' . $this->money($openInv->balance, $cur),
                 'hint' => trim(((string) $openInv->invoice_no) . ' · balance due'),
                 'route' => ['key' => 'invoices', 'id' => (int) $openInv->id], 'tone' => 'warn'];
+            // Slice 6 — offline collect needs an order to tie to (PaymentService requires order_no). Only
+            // when we can resolve one do we expose the inline collect form; otherwise it stays a deep-link.
+            $orderNo = null;
+            if ($openInv->order_id) {
+                try { $orderNo = (string) (\App\Models\Order::withoutGlobalScopes()
+                    ->where('tenant_id', $this->tenantId)->where('id', (int) $openInv->order_id)->value('order_no') ?: ''); }
+                catch (\Throwable $e) { $orderNo = null; }
+            }
+            if ($orderNo) {
+                $next['collect'] = [
+                    'order_no'   => $orderNo,
+                    'invoice_no' => (string) $openInv->invoice_no,
+                    'currency'   => $cur,
+                    'amount'     => round((float) $openInv->balance, 2),
+                ];
+            }
             $current = 'pay';
         } elseif ($quote && $quoteStatus === 'accepted' && ! $quote->order_id) {
             $next = ['label' => 'Convert the accepted quote',

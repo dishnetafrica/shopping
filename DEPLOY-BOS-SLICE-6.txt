@@ -1,0 +1,59 @@
+DEPLOY — BOS v1.0 Slice 6: Offline Collections (take a payment with no signal)
+==============================================================================
+The field team can record a payment against an open invoice even with NO signal — right from the
+customer's timeline. It rides the Slice-5 outbox unchanged. The only new machinery is a client
+idempotency key on customer_payments, so a payment queued offline replays on reconnect WITHOUT ever
+creating a second receipt. That same guard also stops the online double-tap duplicate.
+
+>>> THIS SLICE HAS A MIGRATION. Run `php artisan migrate --force` after deploying. <<<
+
+Prereq: Slices 1–5 deployed.
+
+FILES CHANGED
+  database/migrations/2026_07_24_000001_add_idempotency_key_to_customer_payments.php  (NEW) +1 column
+  app/Models/CustomerPayment.php                     + 'idempotency_key' fillable
+  app/Services/Money/PaymentService.php              + idempotent replay guard (return the same receipt)
+  app/Http/Controllers/Panel/PaymentController.php    + reads idempotency_key from the request
+  app/BOS/Process/SalesJourney.php                    + resolves order_no → exposes next.collect context
+  resources/views/shell.blade.php                     + inline "Collect USD X" composer (works offline)
+
+HOW IT WORKS (all overlay, reversible)
+  - A payment now records through the SAME single recorder as always. If the request carries an
+    idempotency_key we've already stored, record() returns that first receipt instead of making a second —
+    so a replayed offline payment (or an impatient double-tap online) can never double-charge.
+  - When a customer has a collectable open invoice, the Timeline's next-step becomes an inline collect card
+    (amount prefilled to the balance + Cash/MoMo/Bank). Online it records immediately; offline it queues in
+    the Slice-5 outbox, shows a 💵 "waiting to sync" line + the pending chip, and flushes idempotently on
+    reconnect. The USD rate is computed server-side at record time — no FX needed offline.
+  - The form only appears when the invoice ties to an order (payments require one); otherwise the next-step
+    stays a deep-link to the invoice. Online payments send no key (NULL) and behave exactly as before.
+
+DEPLOY
+  git add database/migrations/2026_07_24_000001_add_idempotency_key_to_customer_payments.php \
+          app/Models/CustomerPayment.php app/Services/Money/PaymentService.php \
+          app/Http/Controllers/Panel/PaymentController.php app/BOS/Process/SalesJourney.php \
+          resources/views/shell.blade.php
+  git commit -m "BOS v1.0 Slice 6: offline collections (idempotent payments + inline collect composer)"
+  git push  ->  EasyPanel Rebuild
+  php artisan migrate --force            <-- REQUIRED (adds customer_payments.idempotency_key)
+
+VERIFY
+  1. Open a customer with an outstanding balance -> the timeline shows an inline "Collect USD X" card
+     (prefilled to the balance). Tap Record payment -> a receipt is created; the timeline shows the
+     Payment line; the rail advances toward Receipt.
+  2. Offline test: DevTools -> Network -> Offline. Record payment -> "Saved offline", a 💵 pending line,
+     chip reads "⏳ 1 to sync". Go online -> within ~30s it flushes to exactly ONE receipt; the pending
+     line becomes the real Payment line.
+  3. Double-tap / replay safety: recording the same queued payment twice yields ONE receipt (the second
+     call returns the first). Existing online payments behave exactly as before.
+  4. Safety: the Payments screen, invoice "Pay", receipts, and cashbook all behave as before — this slice
+     only adds an idempotency key + an inline collect form.
+
+ROLLBACK
+  Revert the 6 files; the migration's down() drops the column. Online payments used no key, so removing it
+  restores exact prior behaviour. (The outbox itself came in Slice 5 and stays.)
+
+NOTE
+  This completes the field money loop end to end. A later slice can switch the service worker to cache the
+  app shell for true cold-start-offline (kept separate so a caching bug never rides in with money-critical
+  code), and allowlist more actions into the same outbox.

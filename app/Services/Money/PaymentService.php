@@ -39,6 +39,15 @@ class PaymentService
         $customer = (string) ($d['customer'] ?? '');
         $costNote = $d['cost_note'] ?? ('Payment from ' . $customer . ($orderNo ? (' (' . $orderNo . ')') : ''));
 
+        // BOS Slice 6 — idempotent replay: a payment queued offline may POST more than once on reconnect.
+        // If we've already recorded this client key, return that same receipt instead of a second one.
+        $idem = ! empty($d['idempotency_key']) ? (string) $d['idempotency_key'] : null;
+        if ($idem !== null) {
+            $seen = CustomerPayment::withoutGlobalScopes()
+                ->where('tenant_id', $t->id)->where('idempotency_key', $idem)->first();
+            if ($seen) return ['id' => $seen->id, 'receipt_no' => $seen->receipt_no, 'duplicate' => true];
+        }
+
         $result = DB::transaction(function () use ($t, $d, $orderNo, $costNote, $customer) {
             // cash side: money IN — credited to the RECEIVER's cash in hand
             $cost = OrderCost::create([
@@ -55,6 +64,7 @@ class PaymentService
                 'method' => $d['method'], 'reference' => $d['reference'] ?? null, 'receipt_path' => $d['receipt_path'] ?? null,
                 'applied' => ($d['kind'] === 'settlement'),
                 'order_cost_id' => $cost->id, 'holder' => $d['holder'], 'holder_user_id' => $d['holder_user_id'], 'created_by' => $d['created_by'],
+                'idempotency_key' => $idem,
             ]);
             $pay->receipt_no = 'RCP-' . str_pad((string) $pay->id, 5, '0', STR_PAD_LEFT);
             if (! empty($d['created_at'])) { $pay->created_at = $d['created_at']; $cost->created_at = $d['created_at']; $cost->save(); }

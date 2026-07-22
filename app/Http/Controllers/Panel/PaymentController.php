@@ -127,6 +127,7 @@ class PaymentController extends Controller
             'created_by'    => $u->name ?? '',
             'cost_note'     => 'Payment from '.$customer.($orderNo?(' ('.$orderNo.')'):''),
             'created_at'    => $createdAt,
+            'idempotency_key' => trim((string)$request->input('idempotency_key','')) ?: null,
         ]);
 
         $this->recomputeOrderPaid($t, $orderNo);   // keep the order's paid tracker in step with the ledger

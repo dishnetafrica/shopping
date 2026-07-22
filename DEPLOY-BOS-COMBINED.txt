@@ -21,8 +21,11 @@ WHAT'S INSIDE (paths are repo-relative)
   app/Http/Controllers/Panel/OrderInvoiceController.php  USD-currency fix
   app/Services/Money/SalesBaseCurrency.php      USD base-currency helper
   routes/web.php                                + /papi/bos-today, /papi/customer-note, receipt-send
-  resources/views/shell.blade.php               Today, timeline, journey rail, offline outbox + composer
-  database/migrations/2026_07_23_000001_create_bos_events_table.php   the ONE new table
+  app/Models/CustomerPayment.php                + idempotency_key (Slice 6 — offline collect, no dup receipts)
+  resources/views/shell.blade.php               Today, timeline, journey rail, offline outbox + collect
+                                                composer + iPhone "Add to Home Screen" tags (full-screen app)
+  database/migrations/2026_07_23_000001_create_bos_events_table.php            new table (bos_events)
+  database/migrations/2026_07_24_000001_add_idempotency_key_to_customer_payments.php   +1 column (Slice 6)
   tests/Feature/Bos/ArchitectureFitnessTest.php  CI fitness gates
   tests/Unit/Bos/BusinessRuleTest.php            rule tests
   OPERATING-MODEL/**                             the operating model + every slice plan
@@ -34,10 +37,10 @@ APPLY (single commit)
      git commit -m "BOS v1.0 (Slices 1-5): event spine, timeline, Today, sales journey, offline notes"
      git push
   3) EasyPanel Rebuild.
-  4) RUN THE MIGRATION ONCE (this is the only schema change in the whole bundle):
+  4) RUN MIGRATIONS ONCE (two additive changes: the bos_events table + the payment idempotency key):
         php artisan migrate --force
-     It creates bos_events. Everything else is additive code; every emit is guarded (no-ops until the
-     table exists), so even before you migrate, nothing breaks.
+     Everything else is additive code; every emit is guarded (no-ops until the table exists), so even
+     before you migrate, nothing breaks.
   5) (optional) Seed a demo tenant to see Today/Timeline/Journey with data:
         php artisan bos:demo
      Remove it any time with:  php artisan bos:demo --purge
