@@ -1,0 +1,126 @@
+DEPLOY — bot quotation PDF fix (+ 3 improvements folded in)
+==========================================================
+Headline fix: the bot now reliably SENDS the quotation PDF again.
+No migration. One Rebuild deploys everything below.
+
+⚠️  THIS BUNDLE SUPERSEDES "DEPLOY-BOT-GUARD-USD-DEMAND".
+    Both edit app/Services/Bot/AiBrain.php. If you have NOT yet deployed that
+    earlier bundle — good, deploy THIS one instead (it already contains those
+    changes). If you already deployed it, THIS just adds the quotation-PDF
+    recovery on top — deploy normally, it's the same files.
+
+FILES CHANGED (7 + this note)
+  app/Services/Bot/AiBrain.php                        (1 quote-PDF recovery + 2 bot guard)
+  app/Services/Money/SalesBaseCurrency.php            (3 USD safeguard)
+  app/Capability/Contracts/CapabilityContext.php      (3 USD safeguard)
+  app/Support/PanelCurrency.php                       (3 USD safeguard)
+  tests/finance/currency-basis.test.php               (3 updated test)
+  app/Console/Commands/DemandWeeklyCommand.php         (4 NEW command)
+  routes/console.php                                  (4 weekly schedule)
+
+──────────────────────────────────────────────────────────────────────────────
+1. THE FIX — bot not sending the quotation PDF  ★ your reported issue
+──────────────────────────────────────────────────────────────────────────────
+WHAT WAS HAPPENING
+  The AI (gpt-4o-mini) was TYPING OUT the quotation as a chat message — even
+  inventing a fake number like "Quotation ORD-Q260722-D4NW" — instead of emitting
+  the hidden <<QUOTE>> line that actually triggers the real PDF. No <<QUOTE>> line
+  = no PDF built = customer gets prose, never the branded document.
+  Diagnosis: bot_events showed stage `marker_missing` on EVERY quote attempt.
+
+THE FIX (two layers, both in AiBrain.php)
+  • RECOVERY (the real fix): when the model says "quotation/quote/proforma" but
+    forgets the <<QUOTE>> line, the bot now runs a focused extraction call to
+    rebuild the items from the conversation + the product it just showed, then
+    RE-RUNS the real pipeline with a synthesised marker. The customer's prose is
+    replaced with one clean line and the genuine numbered PDF is sent.
+      - If the customer named a clear product but no amount, recovery quotes
+        quantity 1 (a unit-price quote) — it does NOT invent a big number.
+      - It can ONLY quote items that match a priced product in YOUR catalogue,
+        so recovery can never send a wrong/hallucinated item.
+  • PROMPT HARDENING: the model is now told, in hard terms, to NEVER type the
+    quotation itself, NEVER invent a quotation number, and to emit <<QUOTE>> in
+    the SAME reply when the product is clear (even a single unit).
+
+WHY IT'S SAFE
+  - Loop-safe: the re-run sees the <<QUOTE>> marker and takes the normal path —
+    it can't re-enter recovery.
+  - The MOQ interaction is handled: recovery may quote qty 1, and if a product
+    has a minimum order (e.g. Galaxy Pack MOQ 5) the system rounds up to 5 for
+    the price — the anti-hallucination guard (item 2) reads the REQUESTED qty,
+    not the rounded one, so it never mis-fires on a legitimate MOQ bump.
+
+──────────────────────────────────────────────────────────────────────────────
+2. BOT — never invent quantities/products (the "50 bags nobody asked for" fix)
+──────────────────────────────────────────────────────────────────────────────
+When a customer listed items with NO amounts ("rice, oil, beans and sugar"), the
+bot used to invent "50 bags x 25kg Basmati" etc. and quote goods never requested.
+  • Prompt rule: if items are listed without quantities, ASK "how many of each?"
+    and do NOT emit <<QUOTE>>.
+  • Code guard (the real net): before a quote is sent, if a line's REQUESTED
+    quantity is > 1 but the customer's own words (this message + last 6 inbound)
+    contain NO number at all (digits, Arabic-Indic digits, or a spelled number),
+    the bot asks for the real amounts instead of sending an invented quote.
+    Fail-safe: it can only DELAY a quote to ask — never send a made-up one. It
+    never blocks a single-unit price check (qty 1).
+
+──────────────────────────────────────────────────────────────────────────────
+3. USD-SHOP SAFEGUARD — a USD shop is always treated as native
+──────────────────────────────────────────────────────────────────────────────
+Makes the "$66 shown as UGX 66 / quote USD 0.00 / order $0.27" family of bugs
+impossible to recur — even if currency_basis is wrong or unset. A USD-base shop
+has its prices IN USD, so it's native by definition; the code no longer assumes
+such a shop stores UGX and divides by the FX rate.
+  • SalesBaseCurrency::nativeCurrency, CapabilityContext::nativeCurrency: USD base
+    resolves to USD.  PanelCurrency::payload: USD base renders "plain".
+NO EFFECT on UGX/SSP shops, and a NO-OP for you (already currency_basis=native) —
+pure insurance so it can't slip back. Test currency-basis.test.php: 5/5 pass.
+
+──────────────────────────────────────────────────────────────────────────────
+4. WEEKLY DEMAND REPORT — what customers asked for that you don't stock
+──────────────────────────────────────────────────────────────────────────────
+New command demand:weekly sends a short WhatsApp to the owner every Monday 08:00
+(Kampala) listing, from the AI's nightly learning log: items customers asked for
+that didn't match your catalogue (purchasing signal) + questions the bot handled
+poorly. Only sends if there's something to report. Opt-in via relationship_memory
+(already ON for you). Extra recipients via the `demand_weekly_numbers` setting.
+
+DEPLOY
+  git add app/Services/Bot/AiBrain.php app/Services/Money/SalesBaseCurrency.php \
+          app/Capability/Contracts/CapabilityContext.php app/Support/PanelCurrency.php \
+          tests/finance/currency-basis.test.php app/Console/Commands/DemandWeeklyCommand.php \
+          routes/console.php
+  git commit -m "bot: recover missing <<QUOTE>> so PDF sends; don't invent qty; USD-native safeguard; weekly demand report"
+  git push  ->  EasyPanel Rebuild        (no migration)
+
+VERIFY  (the important one first)
+  1. QUOTE PDF: from a test number, message the bot for a quote on ONE clear
+     product (e.g. "quote for Galaxy Pack" / "price for 10 cartons of X").
+     -> you should receive the branded PDF with a real quotation number, not a
+        typed-out message. Check: bot_events now shows `marker_recovered` (or a
+        normal quote) instead of `marker_missing`.
+  2. NO INVENTED QTY: message "quote for rice, oil, beans and sugar" (no amounts)
+     -> the bot ASKS how many of each, does NOT send a quote. Reply "10 cartons
+        of each" -> it quotes normally.
+  3. CURRENCY: unchanged for you — spot-check a campaign still shows USD and
+     orders show real USD totals.
+  4. DEMAND REPORT: run  php artisan demand:weekly --tenant=17 --force
+     -> WhatsApp listing recent unmatched items.
+
+IF A QUOTE STILL DOESN'T SEND (quick diagnosis on the EasyPanel terminal)
+  - Tail the pipeline for your test number after messaging the bot:
+      php artisan tinker --execute="dump(DB::table('bot_events')->where('trace','quote_pipeline')->latest('id')->limit(8)->get(['stage','ok','detail','created_at'])->toArray());"
+    marker_recovered / dedup_skip / a quote number = working.
+    pdf_unavailable = the PDF engine (dompdf) isn't installed on the box.
+    no_match = the product name didn't match your catalogue (alias it).
+  - Also worth a glance: was `ai_model` changed around 21 Jul ~15:35 when the
+    failures began? This fix is model-agnostic, but a switch to a weaker model
+    makes the model drop the marker more often (recovery now covers that).
+      php artisan tinker --execute="echo App\Models\Tenant::find(17)->setting('ai_model','(default)');"
+
+ROLLBACK
+  Revert the commit. No data/schema changes.
+
+NOTE — task notifications need NO code change: savan's number already receives
+them (diagnosis: 109 messages logged, gateway OK). Earlier misfires were tasks
+assigned before his phone was on file; new assignments notify correctly.

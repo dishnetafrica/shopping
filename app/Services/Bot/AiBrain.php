@@ -670,11 +670,12 @@ class AiBrain
             $client    = $tenantKey !== '' ? \OpenAI::client($tenantKey) : \OpenAI::getFacadeRoot();
 
             $sys = "You are a strict extraction function for a wholesale shop's quotation system. "
-                 . "From the conversation, output ONLY the product(s) and quantity(ies) the customer wants a QUOTATION for. "
+                 . "From the conversation, output the product(s) the customer wants a QUOTATION / price for. "
                  . "Respond with MINIFIED JSON ONLY, no prose, exactly this shape: "
                  . "{\"items\":[{\"name\":\"<EXACT product name from CATALOGUE>\",\"quantity\":{\"value\":<number>,\"unit\":\"pcs|g|kg|carton|pack|dozen\"}}]}. "
-                 . "Rules: use EXACT names copied from CATALOGUE; include an item ONLY if the customer clearly asked to be quoted for it AND a quantity is known; "
-                 . "never invent products or quantities; if nothing is clearly quotable, output {\"items\":[]}.\n\nCATALOGUE:\n" . $catalogue;
+                 . "Rules: use EXACT names copied from CATALOGUE — map the customer's wording OR the product the assistant just showed to the closest EXACT catalogue product. "
+                 . "If the customer stated a quantity, use it; if they did NOT state one, use value 1 in the product's natural unit (a unit-price quote) — do NOT invent a large quantity. "
+                 . "Include a product ONLY if it clearly appears in CATALOGUE and the customer clearly wants it quoted; NEVER invent a product or a price; if none is identifiable, output {\"items\":[]}.\n\nCATALOGUE:\n" . $catalogue;
 
             $usr = trim($this->recentTranscript($tenant, $from, 8))
                  . "\n\nAssistant just replied: " . $reply
@@ -787,7 +788,9 @@ class AiBrain
                 $recovered = $this->recoverQuoteMarker($tenant, $from, $text, $reply);
                 if ($recovered !== '') {
                     \App\Support\QuotationPipeline::stage($tenant->id, $from, 'marker_recovered', true, '', 'marker missing — items recovered by extraction, re-running pipeline');
-                    return $this->captureQuote($tenant, $convo, $from, $text, $reply . "\n" . $recovered, $gateway);
+                    // Replace the model's prose (which often carries an INVENTED quote number like
+                    // "ORD-Q…") with one clean line — the real numbered PDF follows from the marker.
+                    return $this->captureQuote($tenant, $convo, $from, $text, "Sure — sending your quotation now 📄\n" . $recovered, $gateway);
                 }
                 \App\Support\QuotationPipeline::stage($tenant->id, $from, 'marker_missing', false, '', 'reply mentioned a quote but emitted no <<QUOTE>> line; extraction found no clear items');
             }
@@ -833,8 +836,10 @@ class AiBrain
             // invented: ask for the real quantities instead of sending a made-up quotation. Best-effort —
             // it must never break the quote path.
             try {
+                // Use the REQUESTED quantity (before any MOQ round-up), so a system MOQ bump
+                // (e.g. a "min 5 carton" product) is never mistaken for an invented amount.
                 $maxQty = 0;
-                foreach ($matched as $ml) { $maxQty = max($maxQty, (int) ($ml['qty'] ?? 1)); }
+                foreach ($matched as $ml) { $maxQty = max($maxQty, (int) ($ml['req_qty'] ?? $ml['qty'] ?? 1)); }
                 if ($maxQty > 1) {
                     $recentIn = \App\Models\Message::withoutGlobalScopes()
                         ->where('tenant_id', $tenant->id)->where('customer_phone', $from)
@@ -1157,6 +1162,7 @@ class AiBrain
         }
         $p .= "- If the customer asks for a quotation / quote / proforma, first make sure you know the exact product(s) and quantity(ies) — ask if it's unclear. Once you know them, emit the <<QUOTE>> line described below and the system builds & sends the branded PDF with exact totals. Never paste the prices yourself, and never send a quote with items the customer didn't ask for. CRITICAL: when the customer confirms or asks you to send the formal quotation, you MUST emit the <<QUOTE>> line in that same reply — saying \"preparing your quotation\" WITHOUT the <<QUOTE>> line does nothing (no PDF is generated). Do NOT compute or state any currency-conversion or USD total yourself in prose; emit <<QUOTE>> and the system prices it (in USD when the customer wants USD/export).\n";
         $p .= "- NEVER INVENT QUANTITIES OR SIZES. If the customer lists items WITHOUT saying how many — e.g. \"rice, oil, beans and sugar\" — you MUST ask \"how many (or how much) of each?\" and you MUST NOT emit a <<QUOTE>> line yet. Do not fill in amounts like \"50 bags\" or pack sizes like \"25kg\" that the customer never stated, and do not assume a pack/carton size the customer didn't give. Only put a quantity in <<QUOTE>> that the customer actually told you.\n";
+        $p .= "- NEVER WRITE THE QUOTATION YOURSELF. Do NOT type out the quotation as a message, and NEVER invent a quotation number (e.g. \"Quotation ORD-Q...\") — only the system creates the numbered PDF. When the customer wants the quotation for a clear product (even just one, quantity 1), emit the <<QUOTE>> line in that same reply; keep your visible text to one short sentence like \"Sure — sending your quotation now 📄\". If you write \"quotation prepared/here is your quotation\" WITHOUT a <<QUOTE>> line, NO PDF is sent and the customer gets nothing.\n";
         $p .= "- If the customer sends an image (e.g. a product, a receipt, a damaged item), look at it and respond helpfully; for our products match it to the list, for payments confirm you've noted it and the team will verify.\n";
         if ((bool) $tenant->setting('send_product_images', true)) {
             $p .= "- If the customer asks for a photo / picture / image of a product — even without naming it (they usually mean the item you were just discussing) — acknowledge warmly (e.g. \"Sure, sending a photo now 📷\"). The system attaches the product's photo automatically. NEVER say you can't send photos or images; you can.\n";
