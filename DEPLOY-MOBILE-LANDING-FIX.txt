@@ -1,0 +1,42 @@
+FIX — iPhone was landing on the OLD mobile panel, never reaching /v3
+====================================================================
+What your screenshot showed (Dashboard with a Home · Orders · Chats · POS · More bottom bar) is the
+LEGACY mobile panel (resources/panel/mobile.html), NOT the V3 app. Root cause: the mobile route /panel/m
+only redirected purchaser/field STAFF to /v3 — an OWNER fell through to the old dashboard. So on your
+phone you were stuck on the legacy screen and never saw Today / the mobile shell.
+
+FILES CHANGED
+  app/Http/Controllers/Panel/LandingController.php
+      /panel/m now redirects owners (everyone with the order system on) to /v3 — exactly like /panel does.
+  app/Http/Controllers/Panel/SellerPanelController.php
+      Belt-and-suspenders: mobile() itself redirects to /v3, so even a direct hit to /panel/m, an old
+      bookmark, or a pinned "classic" home-screen icon lands on the app. (?classic=1 still opens the old one.)
+  app/Http/Controllers/Marketing/MarketingController.php
+      (from the earlier iPhone bundle) the bare domain mycloudbss.com also forwards a signed-in owner to /v3.
+
+DEPLOY
+  git add app/Http/Controllers/Panel/LandingController.php \
+          app/Http/Controllers/Panel/SellerPanelController.php \
+          app/Http/Controllers/Marketing/MarketingController.php
+  git commit -m "mobile: owners land on /v3 (fix /panel/m + bare domain routing to the app)"
+  git push  ->  EasyPanel Rebuild
+  php artisan optimize:clear        <-- refresh route/config cache
+
+STEP 2 — confirm the order system is ON for your shop (the redirects are gated on it)
+  php artisan tenant:enable-order-system
+      -> lists your businesses and shows "order_system_enabled: ON/off" for each.
+  If Family Shoppers shows "off", turn it on (this also makes every payment reconcile the invoice):
+      php artisan tenant:enable-order-system --tenant=<your id>
+  (It almost certainly IS on — your dashboard shows the order-cost cash position — but this confirms it.)
+
+VERIFY
+  1. On the iPhone, fully close Safari tabs for the site, then open mycloudbss.com -> you now land on the
+     V3 app: "Good morning…", the Today tiles, and the bottom bar Today · Customers · ➕ · Operations ·
+     Finance (NOT Home/Orders/Chats/POS/More).
+  2. Direct check any time: mycloudbss.com/v3 -> the app. (Bookmark THIS, and Add THIS to your Home Screen;
+     then DELETE the old home-screen icon that opened the Dashboard/POS screen — that one points at the
+     legacy panel.)
+  3. Old panel still reachable on purpose with mycloudbss.com/panel/m?classic=1 if you ever need it.
+
+ROLLBACK
+  Revert the three files. No schema/data change.

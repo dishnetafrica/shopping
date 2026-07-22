@@ -77,6 +77,14 @@ class SellerPanelController extends Controller
             return redirect('/app/login');
         }
 
+        // V3 is the app now. A tenant with the order system on gets the mobile-first shell, not this
+        // legacy dashboard — no matter how the phone got here (/panel/m, a pinned classic PWA icon, an
+        // old bookmark). ?classic=1 still opens the old panel for anyone who wants it.
+        if ((bool) $user->tenant->setting('order_system_enabled', false)
+            && ! $request->boolean('classic')) {
+            return redirect('/v3');
+        }
+
         $path = resource_path('panel/mobile.html');
         if (! is_file($path)) {
             abort(500, 'Mobile panel asset missing.');

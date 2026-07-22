@@ -38,13 +38,17 @@ class LandingController extends Controller
     public function mobile(Request $request)
     {
         $u = $request->user();
-        if ($u && $u->tenant_id
-            && (bool) $u->tenant->setting('order_system_enabled', false)
-            && in_array((string) $u->role, ['purchaser', 'field'], true)) {
-            // Phase C: staff go to /v3 too; v3_all_roles=false restores the tap-tile home.
-            return (bool) $u->tenant->setting('v3_all_roles', true)
-                ? redirect('/v3')
-                : redirect('/panel/app');
+        if ($u && $u->tenant_id && (bool) $u->tenant->setting('order_system_enabled', false)) {
+            // Purchaser/field who kept the tap-tile home go to /panel/app; EVERYONE ELSE — owners
+            // included — gets the mobile-first V3 shell. (Owners used to fall through to the legacy
+            // mobile dashboard here, so the phone never reached /v3. This mirrors panel() above.)
+            if (in_array((string) $u->role, ['purchaser', 'field'], true)
+                && ! (bool) $u->tenant->setting('v3_all_roles', true)) {
+                return redirect('/panel/app');
+            }
+            if (! $request->boolean('classic')) {
+                return redirect('/v3');
+            }
         }
         return app(\App\Http\Controllers\Panel\SellerPanelController::class)->mobile($request);
     }
