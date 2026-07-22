@@ -1,0 +1,28 @@
+FIX — "Paid ✓" showing next to money still due (journey rail)
+=============================================================
+On a customer with more than one invoice, the journey rail marked "Paid" as DONE whenever the LATEST
+invoice was paid — even if an OLDER invoice still had a balance. That's why Shop no 58 showed Paid ✓ and,
+at the same time, "Outstanding USD 300" + a "Collect USD 300" card. Contradictory and confusing.
+
+FILE CHANGED
+  app/BOS/Process/SalesJourney.php
+    "Paid" is now DONE only when NOTHING is outstanding (no open invoice). If any invoice still has a
+    balance, "Paid" stays the CURRENT step, so the rail matches the Collect card. (Proven across cases:
+    the multi-invoice case flips from a false "Paid ✓" to "current"; fully-settled customers still show
+    Paid ✓.)
+
+DEPLOY
+  git add app/BOS/Process/SalesJourney.php
+  git commit -m "fix(journey): Paid is done only when nothing is outstanding (was reading latest invoice)"
+  git push  ->  EasyPanel Rebuild        (no migration)
+  php artisan optimize:clear
+
+VERIFY
+  Open Shop no 58 -> the rail now reads Quoted ✓ · Accepted ✓ · Invoiced ✓ · Paid (current) · Receipt,
+  matching the "Collect USD 300" card. A customer with everything settled still shows Paid ✓ and the
+  "Send the receipt" step.
+
+NOTE (empty timeline)
+  "No activity yet" on this customer is expected: their invoice/payment were created BEFORE the event
+  spine went live, so there are no history events for them. Every NEW quote / payment / visit note from
+  now on appears here. The header (outstanding, rail, collect) reads live invoices, so it's always current.

@@ -57,12 +57,15 @@ final class SalesJourney
         $quoteStatus = strtolower((string) ($quote->status ?? ''));
         $invPaid = $anyInv && strtolower((string) $anyInv->status) === 'paid';
 
-        // Stage done-flags (the rail).
+        // Stage done-flags (the rail). "Paid" is done only when NOTHING is outstanding (no open invoice)
+        // — NOT merely because the latest invoice is paid. A customer can hold several invoices; if any
+        // still has a balance, Paid stays the CURRENT step so the rail agrees with the "Collect" card
+        // instead of showing a paid tick right next to money still due.
         $done = [
             'quote'   => (bool) ($quote || $anyInv),
             'accept'  => (bool) (($quote && in_array($quoteStatus, ['accepted', 'converted'], true)) || $anyInv),
             'invoice' => (bool) $anyInv,
-            'pay'     => (bool) ($invPaid || (! $anyInv && $pay)),
+            'pay'     => (bool) (($anyInv && ! $openInv) || (! $anyInv && $pay)),
             'receipt' => (bool) $receiptSent,
         ];
 
