@@ -19,10 +19,14 @@ WHY IT HAPPENED  (your "why why?")
   the conversion rate to 1 and silently disabled every UGX→USD conversion. That defeated
   three places at once. This bundle fixes all three.
 
-FILES CHANGED (3 + this note)
+FILES IN THIS ZIP (3 code fixes + 1 diagnostic + this note)
   app/Services/Invoicing/InvoiceService.php                 (issued invoice: born-USD convert)
   app/Http/Controllers/Panel/OrderInvoiceController.php     (quick/preview PDF: same convert)
   app/Http/Controllers/Panel/PanelApiController.php         (bulk remediation endpoint fix)
+  verify-invoice-currency.php                               (read-only diagnostic — run after deploy)
+
+  Unzip at the repo ROOT (so the app/... files land in place and verify-invoice-currency.php
+  sits next to artisan). Commit + push to GitHub → EasyPanel Rebuild. No migration.
 
 WHAT EACH FIX DOES
   1) InvoiceService::toUsdIfNeeded — when a USD-base shop issues an invoice, it detects whether
@@ -41,9 +45,19 @@ WHAT EACH FIX DOES
 DEPLOY
   git add app/Services/Invoicing/InvoiceService.php \
           app/Http/Controllers/Panel/OrderInvoiceController.php \
-          app/Http/Controllers/Panel/PanelApiController.php
+          app/Http/Controllers/Panel/PanelApiController.php \
+          verify-invoice-currency.php
   git commit -m "invoice: convert legacy UGX orders to USD on issue + preview; fix normalize endpoint (USD-native)"
   git push  ->  EasyPanel Rebuild        (no migration)
+
+STEP 0 — VERIFY (run FIRST, right after Rebuild — read-only, writes nothing):
+  php artisan tinker verify-invoice-currency.php
+  Read the top of the output:
+    • "InvoiceService fix / normalize-endpoint fix: DEPLOYED"  -> the code push worked.
+    • "invoices_usd_normalized: no (flag OFF)"                 -> the remediation URL below
+       has NOT been run yet — that's why the saved invoice still shows UGX.
+    • VERDICT tells you the invoice is stored in UGX and what USD total it becomes.
+  Re-run this same script AFTER the commit URL below to confirm it flipped to USD.
 
 FIX THE INVOICES ALREADY ON FILE  (fixes INV-2026-0018 + sets the house-rule flag)
   You're the owner, so just open these while logged into the panel (in your browser):
