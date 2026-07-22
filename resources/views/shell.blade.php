@@ -550,7 +550,7 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 .acct-menu button.dgr{color:#b91c1c}
 .scrim{display:none;position:fixed;inset:0;background:#0006;z-index:40}
 .scrim.on{display:block}
-@media(max-width:880px){
+@media(max-width:880px),(pointer:coarse){
   .app{grid-template-columns:1fr}
   .side{display:none;position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);z-index:50}
   .app.navopen .side{display:flex}
@@ -592,7 +592,7 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 /* Desktop is untouched — the bar, FAB and hub layout only kick in on phones (≤880px). */
 .botnav{display:none}
 .fab{display:none}
-@media(max-width:880px){
+@media(max-width:880px),(pointer:coarse){
   .wrap{padding-bottom:92px}                 /* clear the fixed bar so nothing hides behind it */
   #toasts{bottom:84px}
   .selbar{bottom:84px}
@@ -1116,13 +1116,24 @@ async function openThread(id){
 }
 // A brand-new shop (nothing sold or stocked yet) lands on the Get-started checklist;
 // an established shop lands on the Morning Briefing.
+/* True on any phone/tablet: narrow width OR a touch-primary pointer OR a mobile user-agent. Drives the
+   app-style landing; the CSS uses the same (max-width:880px),(pointer:coarse) so chrome + landing agree. */
+function isAppUI(){
+  try{
+    if(window.matchMedia && window.matchMedia('(max-width:880px)').matches) return true;
+    if(window.matchMedia && window.matchMedia('(pointer:coarse)').matches) return true;
+    if(/iphone|ipad|ipod|android|mobile|silk|kindle|blackberry|iemobile/i.test(navigator.userAgent||'')) return true;
+  }catch(e){}
+  return false;
+}
 function landingKey(){
   const c = CFG.counts||{};
   const started = ['product','customers','supplier','salesOrder','quotations','invoice','payment']
     .some(k => Number(c[k]||0) > 0);
   if(!started) return 'setup';
-  // Mobile-first (BOS Slice 3): the phone lands on the new Today screen; desktop keeps the classic briefing.
-  try{ if(window.matchMedia('(max-width:880px)').matches) return 'bos.today'; }catch(e){}
+  // Mobile-first: any phone/tablet (narrow OR touch-primary) lands on the app Today screen; a desktop
+  // with a mouse keeps the classic briefing. Touch detection so wide phones/tablets aren't misread as desktop.
+  if(isAppUI()) return 'bos.today';
   return 'briefing';
 }
 function parseHash(){ const p=location.hash.replace('#/','').split('/'); return { key:p[0]||'', id:p[1]||null }; }

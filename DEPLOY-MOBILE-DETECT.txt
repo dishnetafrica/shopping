@@ -1,0 +1,35 @@
+FIX — App layout now detects a touch device, not just a narrow screen
+=====================================================================
+The mobile/app layout (bottom nav, no sidebar, Today landing) was switching ONLY on screen width
+(≤ 880px). So a wide viewport — a tablet, a large phone in landscape, or a desktop dev-tools window at
+946px — got the desktop sidebar even on a touch device. Now it also switches whenever the device's
+primary pointer is touch (pointer:coarse), so ANY phone or tablet gets the app style regardless of width.
+
+FILE CHANGED
+  resources/views/shell.blade.php
+    - The two layout media queries are now  @media (max-width:880px),(pointer:coarse)  — i.e. narrow
+      screen OR a touch device triggers the app chrome.
+    - landingKey() uses a new isAppUI() check (narrow OR touch OR mobile user-agent), so a phone/tablet
+      also LANDS on the Today screen, not the classic briefing.
+
+DEPLOY
+  git add resources/views/shell.blade.php
+  git commit -m "mobile: switch to app layout on any touch device (pointer:coarse), not just narrow width"
+  git push  ->  EasyPanel Rebuild
+  php artisan view:clear        <-- IMPORTANT: the shell is a Blade view; clear the compiled copy
+                                    (also run  php artisan optimize:clear  if you cache views/config)
+
+VERIFY  (proven in test: same 1000px width — a mouse shows the sidebar, a touch device shows the bottom nav)
+  1. On your actual iPhone: open mycloudbss.com -> you get the app layout (bottom nav: Today · Customers ·
+     ➕ · Operations · Finance), landing on Today. If you'd added it to the Home Screen earlier, delete
+     that icon and re-add it so it picks up the new shell.
+  2. In Chrome DevTools: click the device-toolbar phone icon and pick an actual device (e.g. "iPhone 14")
+     from the dropdown — NOT generic "Responsive". That turns on touch emulation, so you'll see the app
+     layout even though the window is wide. (Generic Responsive with a mouse stays desktop by design.)
+  3. On a normal desktop with a mouse -> still the sidebar dashboard (unchanged), which is correct.
+
+WHY IT LOOKED BROKEN BEFORE
+  Your earlier screenshot was DevTools "Responsive" at 946px with a mouse pointer — above the 880px width
+  cutoff and not a touch pointer, so it correctly showed desktop. A real iPhone (≤ 430px + touch) was
+  always app-style; this change just makes wide/tablet touch devices app-style too, and makes the
+  detection robust so it "just works" on anything you'd hold in your hand.
