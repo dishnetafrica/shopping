@@ -70,9 +70,9 @@ final class InvoiceCapability implements ObjectCapability
         $recordPay = [
             'key' => 'record_payment', 'label' => 'Record payment', 'method' => 'POST', 'endpoint' => $ep . '/record_payment',
             'actor' => 'human', 'tone' => 'primary',
-            'schema' => ['amount' => 'money', 'received_by' => $comboPeople, 'method' => 'enum:cash,mobile_money,bank,cheque', 'reference' => 'text'],
-            'labels' => ['received_by' => 'Received by (whose cash)'],
-            'prefill' => ['id' => (int) $i->id, 'amount' => round($balance, 2), 'received_by' => $meName, 'method' => 'cash'],
+            'schema' => ['amount' => 'money', 'discount' => 'money', 'received_by' => $comboPeople, 'method' => 'enum:cash,mobile_money,bank,cheque', 'reference' => 'text'],
+            'labels' => ['received_by' => 'Received by (whose cash)', 'discount' => 'Discount (optional — writes off the rest, closes the invoice)'],
+            'prefill' => ['id' => (int) $i->id, 'amount' => round($balance, 2), 'discount' => 0, 'received_by' => $meName, 'method' => 'cash'],
         ];
         $isVoid = strtolower((string) $i->status) === 'void';
         // Real WhatsApp send via the panel's proven endpoint (replaces the old no-op "Send reminder" stub).
@@ -295,6 +295,7 @@ final class InvoiceCapability implements ObjectCapability
                 'holder' => $holder,
                 'holder_user_id' => $holderId,
                 'created_by' => $actorName,
+                'discount' => round((float) ($in['discount'] ?? 0), 2),   // optional: write off the rest, close it
             ]);
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('v3 invoice payment failed: ' . $e->getMessage(), ['invoice' => $i->id]);
@@ -306,6 +307,10 @@ final class InvoiceCapability implements ObjectCapability
             return $res;
         }
 
-        return ['ok' => true, 'message' => 'Payment of ' . Money::fmt($amount, $cur) . ' recorded on ' . $i->invoice_no . '.'];
+        $msg = 'Payment of ' . Money::fmt($amount, $cur) . ' recorded on ' . $i->invoice_no . '.';
+        if (is_array($res) && ! empty($res['discount_applied'])) {
+            $msg = 'Payment of ' . Money::fmt($amount, $cur) . ' recorded — ' . $i->invoice_no . ' closed with a discount.';
+        }
+        return ['ok' => true, 'message' => $msg];
     }
 }

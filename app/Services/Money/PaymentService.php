@@ -82,6 +82,42 @@ class PaymentService
         // "Pay", Customer 360, the order button, the Payments screen, staff-cash — reconciles both.
         try { $this->syncOrderPaid($t, $orderNo); } catch (\Throwable $e) {}
 
+        // Optional discount at collection ("give USD X off, close the invoice"). Applied HERE in the one
+        // recorder — after the payment records (fresh only; a duplicate returned early above) — so EVERY
+        // payment path (customer-timeline Collect, invoice "Pay", the order button, Payments, staff-cash)
+        // gets it consistently. It reduces the invoice via its OWN discount field AND mirrors the same
+        // reduction on the linked order's total, so invoice-based and order-based views agree. Capped so it
+        // can never write off more than what's still due. Guarded + never-throws: a discount hiccup can
+        // never affect the payment that was just recorded.
+        $discount = round((float) ($d['discount'] ?? 0), 2);
+        if ($discount > 0 && ! empty($d['invoice_no'])) {
+            try {
+                $inv = \App\Models\Invoice::where('tenant_id', $t->id)->where('invoice_no', (string) $d['invoice_no'])
+                    ->where('status', '!=', 'void')->first();
+                if ($inv) {
+                    $svc = app(InvoiceService::class);
+                    $svc->syncPaidFromPayments($inv);              // balance now reflects the payment just taken
+                    $inv->refresh();
+                    $dd = min($discount, round((float) $inv->balance, 2));  // never more than what's left
+                    if ($dd > 0) {
+                        $inv->discount = round((float) $inv->discount + $dd, 2);
+                        $inv->total    = round((float) $inv->total - $dd, 2);
+                        $inv->save();
+                        $svc->syncPaidFromPayments($inv);          // recompute balance/status → closes it
+                        $ord = $inv->order_id
+                            ? \App\Models\Order::where('tenant_id', $t->id)->find((int) $inv->order_id)
+                            : \App\Models\Order::where('tenant_id', $t->id)->where('order_no', $orderNo)->first();
+                        if ($ord) {
+                            $ord->total = round(max(0, (float) $ord->total - $dd), 2);
+                            $ord->save();
+                            $this->syncOrderPaid($t, (string) $ord->order_no);
+                        }
+                        $result['discount_applied'] = true;
+                    }
+                }
+            } catch (\Throwable $e) { \Log::warning('collect discount failed: ' . $e->getMessage()); }
+        }
+
         // BOS spine (Slice 2): record the fact for the customer timeline / Today / Insights. Guarded +
         // never-throws inside Emit — the payment path is unaffected whether or not the spine exists.
         \App\BOS\Emit::customerEvent($t->id, 'PaymentReceived', $d['phone'] ?? null, [

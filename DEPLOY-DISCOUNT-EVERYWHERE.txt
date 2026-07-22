@@ -1,0 +1,41 @@
+FEATURE — "Give discount" now works from EVERY way you take a payment
+=====================================================================
+The discount that closes an invoice used to live only on the customer-timeline Collect card. It's now
+built into the ONE payment recorder (PaymentService::record), so every path that records a payment can
+close the invoice with a discount — and all of them reconcile the invoice AND the linked order the same way.
+
+WHERE IT NOW WORKS
+  • Customer timeline → Collect card         (type less than the balance → tick "write off the rest")
+  • Invoice → "Record payment" (v3)          (a new "Discount" field on the form — leave 0 for none)
+  • Classic invoice "Pay" endpoint           (accepts an optional discount too)
+
+FILES CHANGED  (no migration; reuses the invoice discount field + Slice-6 idempotency)
+  app/Services/Money/PaymentService.php          the discount logic now lives HERE (one recorder): after a
+                                                 FRESH payment, reduce the invoice via its discount field
+                                                 (total −= X, balance → 0, PAID) AND reduce the linked
+                                                 order's total by the same amount, so both sides settle.
+                                                 Capped (never over-discounts); guarded (never affects the
+                                                 recorded payment); skipped on idempotent replay.
+  app/Http/Controllers/Panel/PaymentController.php   store() now just passes `discount` through to record()
+                                                 (the inline copy was removed — single source of truth).
+  app/Http/Controllers/Panel/InvoiceController.php   /papi/invoice-pay passes `discount` through too (and
+                                                 handles the rare no-order invoice directly).
+  app/Capability/Object/InvoiceCapability.php    the v3 invoice "Record payment" form gains a "Discount"
+                                                 field; a discounted settlement reports "closed with a discount".
+  resources/views/shell.blade.php                (unchanged this round — carries the Collect-card discount UI
+                                                 from the previous bundle; included so one deploy has it all.)
+
+DEPLOY
+  git add app/Services/Money/PaymentService.php app/Http/Controllers/Panel/PaymentController.php \
+          app/Http/Controllers/Panel/InvoiceController.php app/Capability/Object/InvoiceCapability.php \
+          resources/views/shell.blade.php
+  git commit -m "discount: apply in the one recorder so it works from Collect card, invoice Pay, and classic pay"
+  git push  ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear
+
+VERIFY
+  1. Customer timeline (Shop no 58, USD 300): change 300 → 250, tick discount, Record → invoice + order settle.
+  2. Open the INVOICE itself → "Record payment": you'll now see an Amount field AND a "Discount" field.
+     Enter amount 250, discount 50, Record → it says "…closed with a discount"; balance 0, order owed 0.
+  3. Leave Discount at 0 → behaves exactly as before (a normal / partial payment).
+  4. Every case reconciles: invoice balance 0 AND order owed 0 (cashbook "who owes", credit reminders agree).

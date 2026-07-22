@@ -128,58 +128,14 @@ class PaymentController extends Controller
             'cost_note'     => 'Payment from '.$customer.($orderNo?(' ('.$orderNo.')'):''),
             'created_at'    => $createdAt,
             'idempotency_key' => trim((string)$request->input('idempotency_key','')) ?: null,
+            // Optional discount ("give USD X off, close the invoice") — applied inside the ONE recorder
+            // (PaymentService::record) so the invoice + order reconcile identically on every payment path.
+            'discount'      => round((float)$request->input('discount', 0), 2),
         ]);
 
         $this->recomputeOrderPaid($t, $orderNo);   // keep the order's paid tracker in step with the ledger
 
-        // Optional discount at collection ("give USD X off, close the invoice"). We apply it via the
-        // invoice's OWN discount field — the field it already carries — so total drops by the discount and
-        // balance recomputes to zero (settled), which every v3 screen reads. Guarded + never-throws: a
-        // discount hiccup can never affect the payment that was just recorded. Only on a FRESH payment
-        // (skipped on an idempotent replay) so a re-synced offline collect never double-discounts.
-        $discount = round((float) $request->input('discount', 0), 2);
-        $discountApplied = false;
-        if ($discount > 0 && empty($result['duplicate']) && $invoice) {
-            try {
-                $inv = \App\Models\Invoice::where('tenant_id', $t->id)->where('invoice_no', $invoice)
-                    ->where('status', '!=', 'void')->first();
-                if ($inv) {
-                    $svc = app(\App\Services\Invoicing\InvoiceService::class);
-                    $svc->syncPaidFromPayments($inv);                 // balance now reflects the payment just taken
-                    $inv->refresh();
-                    $d = min($discount, round((float) $inv->balance, 2));  // never write off more than what's left
-                    if ($d > 0) {
-                        $inv->discount = round((float) $inv->discount + $d, 2);
-                        $inv->total    = round((float) $inv->total - $d, 2);
-                        $inv->save();
-                        $svc->syncPaidFromPayments($inv);             // recompute balance/status from the new total
-
-                        // Keep the ORDER-based views in step (cashbook "who owes", sales-order headline,
-                        // credit reminders read order.total - amount_paid). Reduce the linked order's total
-                        // by the SAME discount so both sides agree — never below zero. Best-effort; a hiccup
-                        // here never affects the payment or the (already-closed) invoice.
-                        try {
-                            $ord = $inv->order_id
-                                ? \App\Models\Order::where('tenant_id', $t->id)->find((int) $inv->order_id)
-                                : \App\Models\Order::where('tenant_id', $t->id)->where('order_no', $orderNo)->first();
-                            if ($ord) {
-                                $ord->total = round(max(0, (float) $ord->total - $d), 2);
-                                $ord->save();
-                                $this->recomputeOrderPaid($t, (string) $ord->order_no);
-                            }
-                        } catch (\Throwable $e) {
-                            \Log::warning('collect discount order sync failed: ' . $e->getMessage());
-                        }
-
-                        $discountApplied = true;
-                    }
-                }
-            } catch (\Throwable $e) {
-                \Log::warning('collect discount failed: ' . $e->getMessage());
-            }
-        }
-
-        return response()->json(['ok'=>true,'send_receipt'=>$sendReceipt,'discount_applied'=>$discountApplied]
+        return response()->json(['ok'=>true,'send_receipt'=>$sendReceipt,'discount_applied'=>! empty($result['discount_applied'])]
             + $result + ['usd'=>$usd,'currency'=>$cur,'amount'=>$amount]);
     }
 

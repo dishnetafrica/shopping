@@ -314,6 +314,7 @@ class InvoiceController extends Controller
         $amt = round((float) $request->input('amount', 0), 2);
         if ($amt <= 0) return response()->json(['ok' => false, 'error' => 'bad_amount'], 422);
         $cur = strtoupper(trim((string) $request->input('currency', ''))) ?: (string) $inv->currency;
+        $discount = round((float) $request->input('discount', 0), 2);   // optional "give X off, close it"
 
         $orderNo = $inv->order?->order_no;
 
@@ -345,11 +346,18 @@ class InvoiceController extends Controller
                 'holder_user_id' => $u->id,
                 'created_by'     => $u->name ?? '',
                 'cost_note'      => 'Payment on ' . $inv->invoice_no,
+                'discount'       => $discount,   // recorder applies it to the invoice + linked order
             ]);
             $inv->refresh();
         } else {
             // no order to tie a receipt to — update the invoice directly
             $inv->amount_paid = round((float) $inv->amount_paid + $amt, 2);
+            // Optional discount: write off the rest via the invoice's own discount field so it closes.
+            if ($discount > 0) {
+                $left = round(max(0, (float) $inv->total - (float) $inv->amount_paid), 2);
+                $dd = min($discount, $left);
+                if ($dd > 0) { $inv->discount = round((float) $inv->discount + $dd, 2); $inv->total = round((float) $inv->total - $dd, 2); }
+            }
             $inv->balance     = round(max(0, (float) $inv->total - (float) $inv->amount_paid), 2);
             $inv->status      = $inv->balance <= 0.5 ? 'paid' : ((float) $inv->amount_paid > 0 ? 'part_paid' : 'issued');
             try { if ($inv->pdf_path) Storage::disk('public')->delete($inv->pdf_path); } catch (\Throwable $e) {}
