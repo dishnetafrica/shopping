@@ -1,0 +1,36 @@
+HOTFIX — /v3-manifest.webmanifest 404 (PWA manifest not served)
+================================================================
+Your verify showed everything green EXCEPT the app icon/manifest: GET /v3-manifest.webmanifest → 404.
+The shell links that manifest for "Add to Home Screen." It 404s because the file either didn't reach the
+server's public/ folder on deploy, or the host doesn't serve the .webmanifest extension. This fix covers
+BOTH causes: it serves the manifest from a Laravel route (no file needed) AND ships the actual files.
+
+FILES CHANGED / INCLUDED
+  routes/web.php                       + a public GET /v3-manifest.webmanifest route that returns the
+                                         manifest inline (guaranteed to work regardless of static serving).
+  public/v3-manifest.webmanifest       the manifest file (in case it was simply missing on the server).
+  public/site.webmanifest              (companion manifest, same reason)
+  public/icon-192.png                  home-screen icons the manifest points to — shipped so they can't
+  public/icon-512.png                  404 either.
+  public/apple-touch-icon.png          the iPhone home-screen icon (Safari picks this up by convention).
+
+DEPLOY
+  git add routes/web.php public/v3-manifest.webmanifest public/site.webmanifest \
+          public/icon-192.png public/icon-512.png public/apple-touch-icon.png
+  git commit -m "hotfix: serve /v3-manifest.webmanifest via route + ship manifest/icons (PWA install)"
+  git push  ->  EasyPanel Rebuild
+  php artisan optimize:clear        <-- important if you cache routes/config (refreshes the route table)
+
+VERIFY (after rebuild)
+  1. In the browser, open  https://mycloudbss.com/v3-manifest.webmanifest  directly -> you should now see
+     the JSON ({ "name":"CloudBSS", "start_url":"/v3", ... }), NOT a 404.
+  2. Re-run the console check -> the manifest 404 in the console is gone, and DevTools ▸ Application ▸
+     Manifest shows "CloudBSS" with the icons.
+  3. Also open  /icon-192.png  and  /apple-touch-icon.png  directly -> both should show the icon (not 404).
+  4. On the iPhone: Safari ▸ Share ▸ Add to Home Screen -> the CloudBSS icon appears and launches /v3
+     full-screen.
+
+WHY THIS IS SAFE
+  The route is public and read-only; it just returns a small JSON. Shipping the icon/manifest files is
+  additive. Nothing else changes. (The rest of your deploy already verified green — this is only the
+  install-manifest gap.)

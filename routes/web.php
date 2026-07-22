@@ -14,6 +14,24 @@ use Illuminate\Support\Facades\Route;
 // operator via /admin/login (both linked from the page).
 Route::get('/', [MarketingController::class, 'home']);
 
+// PWA manifest — served inline so "Add to Home Screen" never breaks on a deploy/static-serving hiccup
+// (some hosts don't serve the .webmanifest extension, or the public/ file may be missing). Public, no auth.
+Route::get('/v3-manifest.webmanifest', function () {
+    return response(json_encode([
+        'name'             => 'CloudBSS',
+        'short_name'       => 'CloudBSS',
+        'start_url'        => '/v3',
+        'scope'            => '/v3',
+        'display'          => 'standalone',
+        'background_color' => '#1B3A2B',
+        'theme_color'      => '#1B3A2B',
+        'icons'            => [
+            ['src' => '/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any maskable'],
+            ['src' => '/icon-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable'],
+        ],
+    ]), 200, ['Content-Type' => 'application/manifest+json', 'Cache-Control' => 'public, max-age=86400']);
+});
+
 // Public, no-login task links (tokenized nonce). Rate-limited to defeat nonce guessing.
 // The nonce authorizes only task-scoped actions on that one task — never account access.
 Route::middleware('throttle:30,1')->group(function () {
