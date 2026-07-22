@@ -153,6 +153,24 @@ class PaymentController extends Controller
                         $inv->total    = round((float) $inv->total - $d, 2);
                         $inv->save();
                         $svc->syncPaidFromPayments($inv);             // recompute balance/status from the new total
+
+                        // Keep the ORDER-based views in step (cashbook "who owes", sales-order headline,
+                        // credit reminders read order.total - amount_paid). Reduce the linked order's total
+                        // by the SAME discount so both sides agree — never below zero. Best-effort; a hiccup
+                        // here never affects the payment or the (already-closed) invoice.
+                        try {
+                            $ord = $inv->order_id
+                                ? \App\Models\Order::where('tenant_id', $t->id)->find((int) $inv->order_id)
+                                : \App\Models\Order::where('tenant_id', $t->id)->where('order_no', $orderNo)->first();
+                            if ($ord) {
+                                $ord->total = round(max(0, (float) $ord->total - $d), 2);
+                                $ord->save();
+                                $this->recomputeOrderPaid($t, (string) $ord->order_no);
+                            }
+                        } catch (\Throwable $e) {
+                            \Log::warning('collect discount order sync failed: ' . $e->getMessage());
+                        }
+
                         $discountApplied = true;
                     }
                 }

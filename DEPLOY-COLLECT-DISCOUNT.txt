@@ -38,7 +38,15 @@ VERIFY
   3. The USD 250 shows on your Payments screen / cashbook as the cash you actually received.
   4. Works offline too: the collect (with discount) queues and applies when you reconnect, once.
 
+BOTH SIDES RECONCILE (invoice AND order)
+  The discount reduces the invoice (its discount field) AND the linked order's total by the same amount, so
+  every view agrees:
+    - v3 app + invoices  : total 250 · paid 250 · balance 0 (PAID)
+    - order-based reports : order total 250 · paid 250 · owed 0   (cashbook "who owes", sales-order
+                            headline, credit reminders all show settled — no phantom 50)
+  Verified: after a 50 discount on a 300 invoice/order collected at 250, BOTH invoice balance and order
+  owed are 0. Order sync is best-effort and never affects the payment or the already-closed invoice.
+
 NOTE
-  The discount is recorded on the invoice itself (its discount field) — the customer's invoice now honestly
-  shows total 250 with a 50 discount, net of what you forgave. This is what every v3 screen reads. If you
-  also rely on the older order-based reports, tell me and I'll reconcile the order total the same way.
+  The discount is recorded honestly on the invoice (its discount field) and mirrored on the order total —
+  the customer's invoice shows total 250 with a 50 discount, net of what you forgave.
