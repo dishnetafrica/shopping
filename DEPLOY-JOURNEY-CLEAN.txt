@@ -1,0 +1,25 @@
+CLEAN-UP — the customer journey rail is now honest and simple
+==============================================================
+The 5-dot rail was confusing because it invented steps: it showed "Quoted ✓ Accepted ✓" for a customer
+you invoiced directly (no quote ever happened), and it labelled the current step "Paid" while money was
+still due. Both made you second-guess the screen.
+
+WHAT CHANGED  (app/BOS/Process/SalesJourney.php — one file, no migration)
+  - The rail only shows the Quote/Accept steps when a REAL quote exists. A direct invoice now shows a
+    simple 3-step rail:  Invoiced ✓ → Payment (current) → Receipt  — no fabricated steps.
+  - The payment stage is labelled "Payment", never "Paid", so a highlighted current step never reads as
+    if the money is already in.
+  (This file also carries the earlier fix: "Payment/Paid" is done only when nothing is outstanding.)
+
+So Shop no 58 now reads: Outstanding USD 300 · Invoiced ✓ → Payment (current) → Receipt · Collect USD 300.
+Clean and truthful — exactly "you invoiced them, they haven't paid, collect it."
+
+DEPLOY
+  git add app/BOS/Process/SalesJourney.php
+  git commit -m "journey: honest adaptive rail (no fabricated quote steps; 'Payment' not 'Paid')"
+  git push  ->  EasyPanel Rebuild        (no migration)
+  php artisan optimize:clear
+
+VERIFY
+  Open Shop no 58 -> the rail is now Invoiced ✓ · Payment (orange, current) · Receipt, matching the
+  Collect card. A customer whose deal started with a real quote still shows the full 5 steps.

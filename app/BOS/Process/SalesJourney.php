@@ -110,7 +110,14 @@ final class SalesJourney
             $current = 'accept';
         }
 
-        $labels = ['quote' => 'Quoted', 'accept' => 'Accepted', 'invoice' => 'Invoiced', 'pay' => 'Paid', 'receipt' => 'Receipt'];
+        // Honest, adaptive rail. Only show the Quote/Accept stages when a REAL quote exists — don't
+        // fabricate them from an invoice (a direct invoice starts the rail at "Invoiced"). And label the
+        // payment stage "Payment", never "Paid", so a highlighted CURRENT step never reads as if the money
+        // is already in when it isn't.
+        $labels = ['invoice' => 'Invoiced', 'pay' => 'Payment', 'receipt' => 'Receipt'];
+        if ($quote) {
+            $labels = ['quote' => 'Quoted', 'accept' => 'Accepted'] + $labels;
+        }
         $steps = [];
         foreach ($labels as $key => $label) {
             $state = $done[$key] ? 'done' : ($key === $current ? 'current' : 'todo');
