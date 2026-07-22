@@ -729,6 +729,8 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 .obcol-cur{font-size:13px;font-weight:700;color:var(--muted);flex:none}
 .obcol .obc-in{background:var(--surface)}
 .obcol-go{width:100%;margin-top:11px;background:var(--warn);color:#fff;border:0;border-radius:10px;padding:11px 16px;font-size:14px;font-weight:800;cursor:pointer}
+.obdisc{display:flex;align-items:center;gap:8px;margin-top:11px;font-size:12.5px;font-weight:600;color:#9a6a1e;cursor:pointer}
+.obdisc input{width:17px;height:17px;accent-color:var(--warn);flex:none}
 </style>
 </head>
 <body>
@@ -1428,25 +1430,39 @@ function obCollectCard(n){
   return '<div class="obcol"><div class="obcol-h"><div class="obcol-t">Collect '+esc(cur)+' '+bmoney(amt)+'</div>'
     +'<div class="obcol-s">'+esc(cl.invoice_no||'')+' · balance due · works offline</div></div>'
     +'<div class="obcol-r"><span class="obcol-cur">'+esc(cur)+'</span>'
-    +'<input id="obamt" class="obc-in" inputmode="decimal" value="'+amt.toFixed(2)+'"></div>'
+    +'<input id="obamt" class="obc-in" inputmode="decimal" value="'+amt.toFixed(2)+'" oninput="obDiscHint()"></div>'
     +'<div class="obc-k" style="margin:9px 0 0">'+mchip('Cash')+mchip('MoMo')+mchip('Bank')+'</div>'
+    +'<label class="obdisc" id="obdiscwrap" style="display:none"><input type="checkbox" id="obdisc"><span id="obdisch"></span></label>'
     +'<button class="obcol-go" onclick="obCollect()">Record payment</button></div>';
 }
 function obMethod(m){ OB_METHOD=m; document.querySelectorAll('.obcol [data-m]').forEach(function(b){ b.classList.toggle('on', b.dataset.m===m); }); }
+/* When you collect LESS than the balance, offer to write off the rest as a discount (closes the invoice). */
+function obDiscHint(){
+  var wrap=document.getElementById('obdiscwrap'), cb=document.getElementById('obdisc'), h=document.getElementById('obdisch');
+  if(!wrap||!cb||!h||!OB_CTX||!OB_CTX.collect) return;
+  var bal=Number(OB_CTX.collect.amount||0), cur=OB_CTX.collect.currency||'USD';
+  var amt=Math.round((parseFloat((document.getElementById('obamt')||{}).value)||0)*100)/100;
+  var d=Math.round((bal-amt)*100)/100;
+  if(d>0.005 && amt>0){ h.textContent=' Write off '+cur+' '+bmoney(d)+' as a discount — close the invoice'; wrap.style.display=''; }
+  else { cb.checked=false; wrap.style.display='none'; }
+}
 async function obCollect(){
   if(!OB_CTX || !OB_CTX.collect){ return; }
   const el=document.getElementById('obamt'); const amt=Math.round((parseFloat(el&&el.value)||0)*100)/100;
   if(!(amt>0)){ toast('Enter an amount', true); return; }
-  const cl=OB_CTX.collect, id=OB.uuid(), now=new Date();
+  const cl=OB_CTX.collect, bal=Number(cl.amount||0);
+  const dcb=document.getElementById('obdisc');
+  const discount=(dcb&&dcb.checked&&(bal-amt)>0.005)?Math.round((bal-amt)*100)/100:0;
+  const id=OB.uuid(), now=new Date();
   const item={ id:id, ts:now.getTime(), kind:'collect', customer_id:OB_CTX.customer_id, endpoint:'/papi/payments',
     body:{ customer_name:(OB_CTX.name||OB_CTX.phone||'Customer'), customer_phone:OB_CTX.phone, order_no:cl.order_no,
       invoice_no:cl.invoice_no, kind:'settlement', currency:cl.currency, amount:amt, method:OB_METHOD,
-      rate_to_usd:0, idempotency_key:id, created_date:now.toISOString() },
-    label:('Collect '+cl.currency+' '+bmoney(amt)) };
+      rate_to_usd:0, discount:discount, idempotency_key:id, created_date:now.toISOString() },
+    label:('Collect '+cl.currency+' '+bmoney(amt)+(discount>0?(' · '+bmoney(discount)+' disc'):'')) };
   if(navigator.onLine){
     let r=null, neterr=false;
     try{ r=await post(item.endpoint, item.body); }catch(e){ neterr=true; }
-    if(!neterr && r && r.ok){ toast('Payment recorded'); bosTimeline(OB_CTX.customer_id); return; }
+    if(!neterr && r && r.ok){ toast(r.discount_applied?'Recorded · invoice closed with discount':'Payment recorded'); bosTimeline(OB_CTX.customer_id); return; }
     if(!neterr && r && r.ok===false){ toast('Could not record ('+esc(r.error||'error')+')', true); return; }
     /* network failed mid-send → fall through and queue it */
   }

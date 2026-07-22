@@ -1,0 +1,44 @@
+FEATURE — "Give discount" on the Collect card (close the invoice for less)
+==========================================================================
+On a customer's Collect card, change the amount to what you actually take. If it's LESS than the balance,
+a checkbox appears: "Write off USD X as a discount — close the invoice." Tick it and tap Record payment:
+the app records the cash you took AND applies the shortfall as a discount, so the invoice closes to zero
+instead of leaving a phantom amount owing.
+
+FILES CHANGED  (no migration — reuses the idempotency key from Slice 6 and the invoice's own discount field)
+  app/Http/Controllers/Panel/PaymentController.php
+     store() accepts an optional `discount`. AFTER the payment is recorded, it applies the discount to the
+     invoice via the invoice's OWN discount field (discount += X, total -= X) and recomputes the balance to
+     zero (status = paid). Guarded + never-throws: a discount hiccup can never affect the payment. Capped
+     so it can NEVER write off more than what's still due. Skipped on an idempotent replay, so a re-synced
+     offline collect never double-discounts.
+  resources/views/shell.blade.php
+     The Collect card shows the "write off the rest as a discount" checkbox only when you collect less than
+     the balance; on success it confirms "Recorded · invoice closed with discount".
+
+HOW THE NUMBERS WORK (verified)
+  Balance USD 300, you collect USD 250 and tick discount:
+     -> payment recorded: USD 250 (real cash in your cashbook)
+     -> invoice: total 300 → 250 (discount 50), paid 250, balance 0, status PAID.
+  Collect 250 WITHOUT ticking discount -> partial payment, balance 50 still due (unchanged behaviour).
+  Ask for more discount than is owed -> automatically capped to the remaining balance (never negative).
+
+DEPLOY
+  git add app/Http/Controllers/Panel/PaymentController.php resources/views/shell.blade.php
+  git commit -m "collect: optional discount that closes the invoice (invoice discount field, capped, guarded)"
+  git push  ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear
+
+VERIFY
+  1. Open a customer who owes you, e.g. Shop no 58 (USD 300). Change the Collect amount to 250 -> the
+     checkbox "Write off USD 50.00 as a discount — close the invoice" appears. Tick it, pick Cash,
+     Record payment. You'll see "Recorded · invoice closed with discount".
+  2. Re-open the customer -> Outstanding is USD 0, the rail shows Payment ✓, and the invoice reads
+     total 250 / paid 250 / balance 0 with a 50 discount.
+  3. The USD 250 shows on your Payments screen / cashbook as the cash you actually received.
+  4. Works offline too: the collect (with discount) queues and applies when you reconnect, once.
+
+NOTE
+  The discount is recorded on the invoice itself (its discount field) — the customer's invoice now honestly
+  shows total 250 with a 50 discount, net of what you forgave. This is what every v3 screen reads. If you
+  also rely on the older order-based reports, tell me and I'll reconcile the order total the same way.
