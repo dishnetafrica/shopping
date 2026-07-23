@@ -38,6 +38,10 @@ final class AuditPaymentsCommand extends Command
         $t = Tenant::find($id);
         if (! $t) { $this->error("Tenant {$id} not found."); return self::FAILURE; }
 
+        // Money models (CustomerPayment) + Order/Invoice are tenant-scoped: without an active tenant
+        // context the global scope would filter to `tenant_id IS NULL` and this audit would see nothing.
+        app(\App\Support\TenantContext::class)->set($t->id);
+
         $base   = SalesBaseCurrency::baseCurrency($t);          // USD
         $native = SalesBaseCurrency::nativeCurrency($t);        // UGX
         $rate   = (float) (Fx::forTenant($t)->ratePerUsd($native) ?: 1);

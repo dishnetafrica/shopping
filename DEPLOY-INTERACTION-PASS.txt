@@ -1,0 +1,53 @@
+INTERACTION PASS — page transitions + pull-to-refresh + skeletons (design v1.0)
+================================================================================
+
+WHAT
+  The app now feels native, not like a re-rendering web page:
+
+  1. PAGE TRANSITIONS — every screen (Today, Customer 360, Customers, Finance, Operations, Me)
+     eases in with a short 0.24s slide-up+fade when it renders. Subtle, consistent, and it
+     honours "Reduce Motion" (users with that accessibility setting get no animation).
+
+  2. PULL-TO-REFRESH — pull down from the top of any live screen and a green spinner drops in
+     (the Apple-Wallet look on our design system), then the screen re-fetches its data. Works
+     the way a phone user already expects. It only engages at the very top of the scroll, is
+     damped so it never fights the finger, and is suppressed while a Collect Run, a modal, the
+     create sheet, or a chat is open, and on the iframe screens (Settings/Payments/P&L) that
+     have nothing to pull-refresh.
+
+  3. SKELETONS — already in place: every live screen shows a shimmering placeholder while its
+     data loads, so there's no blank flash.
+
+  HELD BACK ON PURPOSE — "swipe-to-collect" on the Today cards. It needs a collect payload on
+  each Today card and a swipe gesture that can't be mistaken for a scroll; getting that wrong
+  risks an accidental money action. The guided Collect Run already gives a safer, faster way to
+  collect down the whole list, so this one waits until it can be built and field-tested properly.
+
+FILES CHANGED
+  resources/views/shell.blade.php
+    - CSS: @keyframes viewIn + .mtoday,.c360-wrap animation (with prefers-reduced-motion opt-out);
+      .ptr / .ptr-ring / ptrspin spinner.
+    - Markup: a single fixed #ptr spinner element.
+    - JS: Customer 360 render wrapped in .c360-wrap so it animates like the rest; a touch
+      pull-to-refresh handler on the main scroller that re-runs the current route.
+  (this one file carries the full modern app + Collect Run + offline/icon fixes)
+
+VERIFICATION DONE HERE
+  node --check clean on the whole shell script. Rendered the pull-to-refresh spinner at 390px
+  through the real stylesheet (screenshot) — white disc, soft shadow, brand-green arc, as intended.
+
+FIELD-TEST ON A PHONE (this is a touch feature — please try it)
+  Open Today. Pull down from the top -> the green spinner drops -> the day's numbers refresh.
+  Do the same on Customers and Finance. Confirm it does NOT fire mid-list (only at the top) and
+  does NOT fire while a Collect Run is open. Navigate between screens -> each eases in.
+
+SAFETY
+  Frontend-only. No migration, no money-path write, no backend change. Fully reversible — it's
+  additive CSS + one fixed element + one touch handler. If pull-to-refresh ever misbehaves on a
+  device, it's isolated to that handler.
+
+DEPLOY
+  git add resources/views/shell.blade.php DEPLOY-INTERACTION-PASS.txt
+  git commit -m "Interaction pass: page transitions + pull-to-refresh + skeletons (design v1.0)"
+  git push   ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear

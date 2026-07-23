@@ -1,0 +1,94 @@
+P0 SECURITY — MONEY-FIVE TENANT SCOPING  (STAGE 2 — DEPLOY ONLY AFTER STAGE-1 TESTS ARE GREEN)
+================================================================================================
+
+⚠️ READ THIS FIRST — THIS IS GATED ON PURPOSE
+  This bundle adds row-level tenant isolation to the FIVE money models — the ones that hold cash and
+  the general ledger. A mistake here is the worst kind (money vanishing or crossing tenants), so it is
+  deliberately sequenced BEHIND a green test suite. Do NOT deploy this until:
+
+     1. Stage 1 (the tenant-isolation test harness) is deployed, and
+     2. `php artisan test --filter=TenantIsolation` runs GREEN on your server.
+
+  If your `php artisan test` still only shows the 2 example tests, Stage 1 isn't deployed yet — deploy
+  that first (see "STAGE 1 — GET TO GREEN" below), confirm green, THEN come back to this bundle.
+
+WHAT THIS CHANGES
+  Adds `use App\Models\Concerns\BelongsToTenant;` to the last five unscoped tenant-owned models:
+     CustomerPayment · OrderCost · LedgerAccount · LedgerJournal · LedgerLine
+  This drives the KNOWN_UNSCOPED backlog to ZERO (history: 24 → 11 → 8 → 3 → 0). After this, every
+  tenant-owned model is isolated; only the three permanent platform models stay global by design.
+
+THE TRAP THIS BUNDLE HANDLES (why it's more than a one-line trait add)
+  Once a model is scoped, any query with NO active tenant context silently filters to `tenant_id IS NULL`
+  and returns nothing — and an explicit `->where('tenant_id', $id)` does NOT rescue it. The money models
+  are read by CLI repair/backfill commands that had no tenant context. Each of those is patched to set an
+  active TenantContext for the tenant it processes, BEFORE it touches the models:
+     • AuditPaymentsCommand      (cash:audit-payments)   — set ctx after --tenant resolves
+     • FixPaymentsCommand        (cash:fix-payments)     — set ctx before the forward AND rollback paths
+     • RepriceForeignCashCommand (cash:reprice-foreign)  — set ctx before reprice AND rollback
+     • LedgerBackfill            (ledger:backfill)       — set ctx per tenant inside its loop
+  (BosDemoCommand already set context; EnableOrderSystemCommand never queries these models — untouched.)
+  Request-path readers — CashService, LedgerController, the collect endpoint — already run with the
+  tenant context set by middleware, so scoping is transparent there (and adds defense in depth).
+
+FILES IN THIS BUNDLE
+  app/Models/CustomerPayment.php                       + BelongsToTenant
+  app/Models/OrderCost.php                             + BelongsToTenant
+  app/Models/LedgerAccount.php                         + BelongsToTenant
+  app/Models/LedgerJournal.php                         + BelongsToTenant
+  app/Models/LedgerLine.php                            + BelongsToTenant
+  app/Console/Commands/AuditPaymentsCommand.php        + per-tenant TenantContext
+  app/Console/Commands/FixPaymentsCommand.php          + per-tenant TenantContext
+  app/Console/Commands/RepriceForeignCashCommand.php   + per-tenant TenantContext
+  app/Console/Commands/LedgerBackfill.php              + per-tenant TenantContext (in the loop)
+  tests/Unit/TenantIsolationTest.php                   register updated → KNOWN_UNSCOPED now []
+  tests/Feature/TenantIsolationDbTest.php              + money-model isolation + payment-stamp cases
+
+VERIFICATION DONE HERE (static — I cannot boot Laravel or hit a DB in this environment)
+  • php -l clean on all 11 files.
+  • Re-ran the TenantIsolationTest register logic against the real app/Models: offenders are now exactly
+    the 3 permanent platform models; KNOWN_UNSCOPED is empty; both register assertions pass.
+  • Traced every no-context caller of the five models across app/Console, app/Jobs, app/Listeners,
+    app/Observers and confirmed each is either patched here or already context-aware.
+  I could NOT run the DB test (needs the sqlite test harness + migrations). That run is exactly the gate:
+  your green `php artisan test` is the proof this bundle is safe on your data.
+
+────────────────────────────────────────────────────────────────────────────────────────────────
+STAGE 1 — GET TO GREEN (do this if your test suite isn't green yet)
+  Your server showed only the 2 example tests, which means the test harness (a restored tests/TestCase.php
+  + the TenantIsolation tests + phpunit.xml's sqlite config) isn't on the server yet. Deploy the P0 test
+  bundle you already have (CloudBSS-P0-ALL, "Restore testing" + isolation guard), then on the server:
+
+     php artisan test --filter=TenantIsolation
+     # expect: TenantIsolationTest (structural, no DB) + TenantIsolationDbTest (sqlite) all GREEN
+
+  Paste me that output. Once it's green, deploy THIS bundle and re-run the same command — it now also
+  exercises the money-model isolation cases added here.
+────────────────────────────────────────────────────────────────────────────────────────────────
+
+DEPLOY (ONLY after Stage-1 green)
+  unzip into repo root
+  git add app/Models/CustomerPayment.php app/Models/OrderCost.php app/Models/LedgerAccount.php \
+          app/Models/LedgerJournal.php app/Models/LedgerLine.php \
+          app/Console/Commands/AuditPaymentsCommand.php app/Console/Commands/FixPaymentsCommand.php \
+          app/Console/Commands/RepriceForeignCashCommand.php app/Console/Commands/LedgerBackfill.php \
+          tests/Unit/TenantIsolationTest.php tests/Feature/TenantIsolationDbTest.php \
+          DEPLOY-MONEY-FIVE-SCOPING.txt
+  git commit -m "P0: scope the money five (CustomerPayment, OrderCost, Ledger*) + patch no-context commands"
+  git push   ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear
+
+VERIFY ON THE SERVER (right after deploy)
+  php artisan test --filter=TenantIsolation          # must be GREEN (now includes the money models)
+  Open the app as your normal user: Finance cash figures, Payments screen, and a customer's payment
+  history all still show their real numbers (proves request-context reads are unaffected).
+  If you use the repair commands: `php artisan cash:audit-payments --tenant=17` still lists payments
+  (proves the CLI context patch works — before the patch it would now show nothing).
+
+ROLLBACK
+  Reversible: `git revert` this commit (removes the trait + command patches together) and rebuild.
+  Because the trait only adds a query filter, reverting restores the exact previous behaviour.
+
+NEXT (not in this bundle, on purpose)
+  The accounting migration (§4a: one GL via LedgerService + VAT via VatConfig, retire the kernel) is the
+  next P0 step. It should follow this one landing cleanly and green — consolidate/verify before adding.

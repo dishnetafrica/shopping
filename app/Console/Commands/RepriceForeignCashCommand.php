@@ -71,6 +71,10 @@ final class RepriceForeignCashCommand extends Command
         $t = Tenant::find($id);
         if (! $t) { $this->error("Tenant {$id} not found."); return self::FAILURE; }
 
+        // OrderCost + the ledger models are tenant-scoped: activate this tenant so their global scope
+        // resolves to it (both the reprice path and rollback read OrderCost, and the GL revalue writes lines).
+        app(\App\Support\TenantContext::class)->set($t->id);
+
         $cur = strtoupper((string) $this->option('currency'));
         if ($this->option('rollback')) {
             return $this->rollback($t, $cur);

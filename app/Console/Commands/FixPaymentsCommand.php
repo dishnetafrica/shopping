@@ -54,6 +54,10 @@ final class FixPaymentsCommand extends Command
         $t = Tenant::find($id);
         if (! $t) { $this->error("Tenant {$id} not found."); return self::FAILURE; }
 
+        // CustomerPayment + OrderCost are tenant-scoped: set the active tenant so their global scope
+        // resolves to this tenant (otherwise every query below — and the rollback — would see nothing).
+        app(\App\Support\TenantContext::class)->set($t->id);
+
         if ($this->option('rollback')) return $this->rollback($t);
 
         $base   = SalesBaseCurrency::baseCurrency($t);          // USD

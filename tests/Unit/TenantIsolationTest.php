@@ -25,7 +25,9 @@ use PHPUnit\Framework\TestCase;
  * The guard FAILS if a new unscoped tenant model appears (regression), and FAILS if a listed model is
  * fixed but not delisted (keeps the register honest). History: 24 → 11 (batch 1: 13 safe models scoped)
  * → 8 (batch 2: SourcingRequest, FollowupProposal, BotMiss scoped after patching their scheduled
- * commands). Remaining debt = the money five, held for a test-gated batch.
+ * commands) → 3 (batch 3: the money five — CustomerPayment, OrderCost, LedgerAccount, LedgerJournal,
+ * LedgerLine — scoped after their no-context CLI commands were given a per-tenant TenantContext).
+ * Remaining KNOWN_UNSCOPED debt = ZERO. Only the three permanent PLATFORM_GLOBAL models stay unscoped.
  */
 class TenantIsolationTest extends TestCase
 {
@@ -37,17 +39,13 @@ class TenantIsolationTest extends TestCase
     ];
 
     /**
-     * Tenant-owned models that still lack the trait — the P0 remediation backlog (shrink to zero).
-     * Each carries the no-tenant-context site that must be patched first (verified in triage):
+     * Tenant-owned models that still lack the trait — the P0 remediation backlog. Now EMPTY: the money
+     * five were scoped in batch 3, after their no-tenant-context CLI commands were each given an active
+     * TenantContext for the tenant they process (AuditPaymentsCommand, FixPaymentsCommand,
+     * RepriceForeignCashCommand set it per --tenant; LedgerBackfill sets it per tenant in its loop).
+     * Keep this at [] — any future tenant-owned model must ship WITH the trait, not join a backlog.
      */
-    private const KNOWN_UNSCOPED = [
-        // The money five — held for a dedicated batch WITH a full test run (they feed cash + the GL).
-        'CustomerPayment',  // AuditPaymentsCommand, FixPaymentsCommand -> set ctx in tenant loop
-        'LedgerAccount',    // LedgerBackfill via LedgerService
-        'LedgerJournal',    // LedgerBackfill via LedgerService
-        'LedgerLine',       // LedgerBackfill via LedgerService
-        'OrderCost',        // FixPaymentsCommand, RepriceForeignCashCommand, LedgerBackfill
-    ];
+    private const KNOWN_UNSCOPED = [];
 
     public function test_no_new_unscoped_tenant_models(): void
     {

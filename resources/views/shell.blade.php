@@ -788,7 +788,7 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 .c360-e{display:flex;gap:13px;padding:11px 2px;border-bottom:1px solid var(--line)}
 .c360-e:last-child{border-bottom:0}
 .c360-ci{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;flex:none;background:#F1F3F6;color:var(--ink-2)}
-.c360-ci .i{width:18px;height:18px;stroke-width:1.9}
+.c360-ci .i{width:18px;height:18px;stroke-width:1.9;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
 .c360-ci.pay{background:var(--brand-wash);color:var(--brand-ink)}
 .c360-ci.inv{background:#EDEBFB;color:#6C5CE7}
 .c360-ci.visit{background:#E7F3FC;color:#2C97DE}
@@ -801,7 +801,7 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 .bcl-h{margin:2px 2px 12px}
 .bcl-title{font-size:26px;font-weight:860;letter-spacing:-.02em;color:var(--ink)}
 .bcl-srch{display:flex;align-items:center;gap:9px;background:#fff;border-radius:14px;padding:11px 14px;box-shadow:0 1px 2px rgba(12,20,32,.04),0 4px 12px -4px rgba(12,20,32,.06);margin-bottom:12px}
-.bcl-srch .i{width:18px;height:18px;stroke:var(--faint);flex:none}
+.bcl-srch .i{width:18px;height:18px;stroke:var(--faint);fill:none;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .bcl-srch input{border:0;outline:0;flex:1;font:inherit;font-size:14.5px;background:transparent;color:var(--ink)}
 .bcl-c{display:flex;align-items:center;gap:13px;background:#fff;border-radius:18px;padding:13px 14px;box-shadow:0 1px 2px rgba(12,20,32,.04),0 4px 12px -4px rgba(12,20,32,.06);margin-bottom:10px;cursor:pointer;transition:transform .08s}
 .bcl-c:active{transform:scale(.985)}
@@ -815,6 +815,115 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 .bcl-r b.bcl-set{color:var(--faint)}
 .bcl-lab{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
 .bcl-lab.amber{color:#DD8500}.bcl-lab.red{color:#E24B3B}.bcl-lab.ok{color:#0A7A3C}
+/* ===== Modern Finance hub ===== */
+.fin-hero{background:linear-gradient(160deg,#2A3442,#0C1420);border-radius:24px;padding:20px;color:#fff;box-shadow:0 16px 30px -14px rgba(12,20,32,.55);margin-bottom:18px;position:relative;overflow:hidden}
+.fin-hero::after{content:"";position:absolute;right:-46px;top:-56px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,.05)}
+.fin-hk{font-size:12.5px;font-weight:750;opacity:.72;letter-spacing:.02em}
+.fin-hv{font-size:34px;font-weight:860;letter-spacing:-.02em;margin-top:3px}
+.fin-hs{font-size:13px;font-weight:650;opacity:.85;margin-top:8px}
+.fin-list{display:flex;flex-direction:column}
+.fin-c{display:flex;align-items:center;gap:13px;background:#fff;border-radius:18px;padding:14px;box-shadow:0 1px 2px rgba(12,20,32,.04),0 4px 12px -4px rgba(12,20,32,.06);margin-bottom:11px;cursor:pointer;transition:transform .08s}
+.fin-c:active{transform:scale(.985)}
+.fin-ic{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;flex:none}
+.fin-ic .i{width:21px;height:21px;stroke-width:1.9;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+.fin-bd{flex:1;min-width:0}
+.fin-t{font-size:15.5px;font-weight:800;color:var(--ink)}
+.fin-s{font-size:12.5px;color:var(--muted);font-weight:600;margin-top:1px}
+.fin-r{display:flex;align-items:center;gap:6px;flex:none}
+.fin-r b{font-size:15px;font-weight:840;color:var(--ink);letter-spacing:-.01em}
+.fin-chev{width:18px;height:18px;stroke:var(--faint);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;flex:none}
+/* ===== Modern Operations hub ===== */
+.ops-row{display:flex;align-items:center;gap:13px;background:#fff;border-radius:18px;padding:14px;box-shadow:0 1px 2px rgba(12,20,32,.04),0 4px 12px -4px rgba(12,20,32,.06);margin-bottom:11px;cursor:pointer;transition:transform .08s}
+.ops-row:active{transform:scale(.985)}
+.ops-ic{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;flex:none}
+.ops-ic .i{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.ops-ic.sky{background:#E7F3FC;color:#2C97DE}.ops-ic.red{background:#FCE9E6;color:#E24B3B}.ops-ic.indigo{background:#EDEBFB;color:#6C5CE7}.ops-ic.amber{background:#FCF1DE;color:#DD8500}
+.ops-bd{flex:1;min-width:0}
+.ops-t{font-size:15.5px;font-weight:800;color:var(--ink)}
+.ops-s{font-size:12.5px;color:var(--muted);font-weight:600;margin-top:1px}
+.ops-n{font-size:23px;font-weight:860;letter-spacing:-.02em;flex:none;color:var(--ink)}
+.ops-n.zero{color:var(--faint)}.ops-n.red{color:#E24B3B}.ops-n.amber{color:#DD8500}.ops-n.sky{color:#2C97DE}.ops-n.indigo{color:#6C5CE7}
+.ops-chev{width:18px;height:18px;stroke:var(--faint);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ops-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.ops-tile{background:#fff;border-radius:18px;padding:16px;box-shadow:0 1px 2px rgba(12,20,32,.04),0 4px 12px -4px rgba(12,20,32,.06);cursor:pointer;transition:transform .08s}
+.ops-tile:active{transform:scale(.985)}
+.ops-tic{width:38px;height:38px;border-radius:11px;background:#F1F3F6;color:var(--ink-2);display:grid;place-items:center;margin-bottom:10px}
+.ops-tic .i{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.ops-tv{font-size:22px;font-weight:860;color:var(--ink);letter-spacing:-.02em}
+.ops-tl{font-size:12.5px;color:var(--muted);font-weight:700;margin-top:1px}
+/* ===== Modern Me ===== */
+.me-prof{display:flex;align-items:center;gap:14px;margin:2px 2px 20px}
+.me-av{width:58px;height:58px;border-radius:18px;background:linear-gradient(140deg,#15AC57,#0A7A3C);color:#fff;display:grid;place-items:center;font-size:22px;font-weight:840;flex:none}
+.me-nm{font-size:20px;font-weight:840;letter-spacing:-.02em;color:var(--ink)}
+.me-rl{font-size:13px;color:var(--muted);font-weight:650;margin-top:2px}
+.me-group{background:#fff;border-radius:18px;box-shadow:0 1px 2px rgba(12,20,32,.04),0 4px 12px -4px rgba(12,20,32,.06);margin-bottom:16px;overflow:hidden}
+.me-row{display:flex;align-items:center;gap:13px;padding:14px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .1s}
+.me-row:last-child{border-bottom:0}
+.me-row:active{background:#F7F9FB}
+.me-ci{width:38px;height:38px;border-radius:12px;background:#F1F3F6;color:var(--ink-2);display:grid;place-items:center;flex:none}
+.me-ci .i{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.me-ci.dgr{background:#FCE9E6;color:#E24B3B}
+.me-l{flex:1;font-size:15px;font-weight:730;color:var(--ink)}
+.me-row.dgr .me-l{color:#E24B3B}
+.me-chev{flex:none;color:var(--faint);display:flex}
+.me-chev .i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+/* ===== Guided Collect Run ===== */
+.mt-run{width:100%;display:flex;align-items:center;gap:13px;background:var(--ink,#0C1420);color:#fff;border:0;border-radius:18px;padding:15px 16px;box-shadow:0 14px 26px -12px rgba(12,20,32,.6);cursor:pointer;margin:2px 0 18px;text-align:left}
+.mt-run-pl{width:40px;height:40px;border-radius:13px;background:rgba(255,255,255,.14);display:grid;place-items:center;flex:none}
+.mt-run-pl svg{width:20px;height:20px;fill:#fff}
+.mt-run-t{flex:1}.mt-run-t .a{display:block;font-size:15px;font-weight:830}.mt-run-t .b{display:block;font-size:12px;opacity:.72;font-weight:600;margin-top:2px}
+.mt-run-go{flex:none;opacity:.55}.mt-run-go svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:2}
+.runview{position:fixed;inset:0;z-index:200;background:linear-gradient(165deg,#111A29,#1C2637);color:#fff;display:none;flex-direction:column;padding:calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));overflow-y:auto;max-width:460px;margin:0 auto}
+.runview.on{display:flex}
+.run-load{margin:auto;text-align:center;opacity:.85;font-weight:650;line-height:1.9}
+.run-top{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:38px}
+.run-dots{display:flex;gap:6px;flex-wrap:wrap}.run-dots i{width:22px;height:5px;border-radius:3px;background:rgba(255,255,255,.22)}.run-dots i.on{background:#fff}.run-dots i.done{background:#3DDC84}
+.run-x{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,.1);border:0;display:grid;place-items:center;cursor:pointer;color:#fff;flex:none}
+.run-x svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:2}
+.run-x2{background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:12px;padding:11px 20px;margin-top:16px;font:inherit;font-weight:750;cursor:pointer}
+.run-k{font-size:13px;font-weight:700;opacity:.7;margin:22px 2px 0}
+.run-card{background:#fff;color:var(--ink,#0C1420);border-radius:24px;padding:20px;box-shadow:0 24px 44px -18px rgba(0,0,0,.55);margin-top:10px}
+.run-cust{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.run-av{width:54px;height:54px;border-radius:17px;display:grid;place-items:center;color:#fff;font-size:20px;font-weight:840;flex:none}
+.run-nm{font-size:20px;font-weight:840;letter-spacing:-.02em}
+.run-mt{font-size:12.5px;color:#8B95A3;font-weight:600;margin-top:2px;display:flex;align-items:center;gap:6px}
+.run-mt span{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.run-aml{font-size:11px;color:#8B95A3;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.run-amt-row{display:flex;align-items:baseline;gap:8px;margin-top:2px}
+.run-cur{font-size:15px;font-weight:800;color:#8B95A3;flex:none}
+.run-in{border:0;outline:0;font:inherit;font-size:34px;font-weight:860;letter-spacing:-.02em;color:#DD8500;width:100%;background:transparent;min-width:0}
+.run-nav{display:flex;align-items:center;gap:8px;background:#F2F4F7;border-radius:14px;padding:12px 14px;margin:14px 0;font-size:13px;font-weight:700;color:#2A3442;cursor:pointer}
+.run-pin{width:18px;height:18px;fill:none;stroke:#2C97DE;stroke-width:2;flex:none}.run-nav .run-go{margin-left:auto;color:#2C97DE;font-weight:800}
+.run-seg{display:flex;gap:8px;background:#F2F4F7;border-radius:12px;padding:4px;margin-bottom:14px}
+.run-seg button{flex:1;border:0;background:transparent;font:inherit;font-size:13.5px;font-weight:750;padding:9px;border-radius:9px;color:#42505F;cursor:pointer}
+.run-seg button.on{background:#fff;color:var(--ink,#0C1420);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.run-act{display:flex;gap:10px}
+.run-skip{flex:0 0 34%;background:#F2F4F7;color:#42505F;border:0;border-radius:14px;padding:15px;font:inherit;font-size:14px;font-weight:780;cursor:pointer}
+.run-col{flex:1;background:linear-gradient(140deg,#15AC57,#0A7A3C);color:#fff;border:0;border-radius:14px;padding:15px;font:inherit;font-size:14.5px;font-weight:840;cursor:pointer;box-shadow:0 10px 20px -8px rgba(10,122,60,.6)}
+.run-ok,.run-done{text-align:center;margin:auto 0;padding:20px 0}
+.run-check{width:96px;height:96px;border-radius:50%;background:rgba(255,255,255,.16);display:grid;place-items:center;margin:0 auto 22px;animation:runpop .45s cubic-bezier(.2,1.3,.4,1)}
+@keyframes runpop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+.run-check svg{width:52px;height:52px;fill:none;stroke:#fff;stroke-width:2.6}
+.run-ok-v,.run-done-v{font-size:34px;font-weight:860}
+.run-ok-k,.run-done-k{opacity:.85;font-weight:700;margin-top:4px}
+.run-next,.run-back{margin-top:32px;width:100%;max-width:320px;background:#fff;color:var(--ink,#0C1420);border:0;border-radius:14px;padding:15px;font:inherit;font-size:15px;font-weight:840;cursor:pointer}
+.run-skip-h{font-size:19px;font-weight:840;letter-spacing:-.01em}
+.run-skip-s{font-size:13px;color:#8B95A3;font-weight:600;margin:4px 0 16px}
+.run-reasons{display:flex;flex-direction:column;gap:9px}
+.run-reasons button{background:#F2F4F7;border:0;border-radius:13px;padding:14px;font:inherit;font-size:14.5px;font-weight:750;color:var(--ink,#0C1420);text-align:left;cursor:pointer}
+.run-reasons button:active{background:#E7EAEF}
+.run-skip-back{background:none;border:0;color:#2C97DE;font:inherit;font-size:13.5px;font-weight:750;margin-top:14px;cursor:pointer;padding:4px}
+.mt-celebrate{background:var(--brand-wash,#eafaf0);color:var(--brand-ink,#15803d);border-radius:14px;padding:12px 14px;font-size:13.5px;font-weight:780;margin-bottom:14px;text-align:center;animation:mtcelin .45s cubic-bezier(.2,1.3,.4,1)}
+@keyframes mtcelin{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+/* ===== Page transitions + pull-to-refresh ===== */
+@keyframes viewIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+.mtoday,.c360-wrap{animation:viewIn .24s cubic-bezier(.2,.7,.3,1)}
+@media(prefers-reduced-motion:reduce){.mtoday,.c360-wrap{animation:none}}
+.ptr{position:fixed;top:calc(env(safe-area-inset-top) + 4px);left:50%;transform:translateX(-50%) translateY(-46px);z-index:150;opacity:0;pointer-events:none;transition:transform .22s ease,opacity .15s}
+.ptr.drag{transition:opacity .15s}
+.ptr-ring{width:30px;height:30px;border-radius:50%;border:3px solid var(--line,#E7EAEF);border-top-color:var(--brand,#12A150);background:#fff;box-shadow:0 4px 12px rgba(0,0,0,.14);box-sizing:border-box}
+.ptr.spin .ptr-ring{animation:ptrspin .7s linear infinite}
+@keyframes ptrspin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -852,6 +961,7 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 <div class="ov" id="ov"><div class="modal" id="modal"></div></div>
 <div class="scrim" id="scrim" onclick="closeNav()"></div>
 <div id="toasts"></div>
+<div class="ptr" id="ptr" aria-hidden="true"><div class="ptr-ring"></div></div>
 
 <!-- ===== Mobile workspaces bar (role-aware, JS-rendered) + context-aware create (phones only) ===== -->
 <nav class="botnav" id="botnav"></nav>
@@ -1328,15 +1438,32 @@ function renderHub(id){
     +'<div class="hubsub">'+(w.sub||'')+'</div>'
     +'<div class="hubgrid">'+(cards||'<div class="hubsub">Nothing here for your role.</div>')+'</div>';
 }
+/* Modern Me (design v1.0): profile header + grouped account rows. */
 function renderMeHub(){
-  var nm=(CFG.user&&CFG.user.name)||'You', role=(CFG.user&&CFG.user.role)||'', org=(CFG.user&&CFG.user.org)||'';
-  var cards='';
-  [['settings','Settings','preferences'],['guide','Help & Training','how-to']].forEach(function(x){
-    if(hasScreen(x[0])) cards+='<button class="hubcard" onclick="route(\''+x[0]+'\')"><span class="hi">'+icon(x[0])+'</span><span><span class="ht">'+x[1]+'</span><br><span class="hc">'+x[2]+'</span></span></button>';
-  });
-  cards+='<button class="hubcard" onclick="location.href=\'/panel?classic=1\'"><span class="hi">'+icon('settings')+'</span><span><span class="ht">Classic panel</span><br><span class="hc">full desktop</span></span></button>';
-  cards+='<button class="hubcard" onclick="signOut()"><span class="hi" style="background:var(--danger-wash);color:var(--danger)">'+svgIc('M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9')+'</span><span><span class="ht">Sign out</span></span></button>';
-  document.getElementById('view').innerHTML='<div class="hubhead">'+esc(nm)+'</div><div class="hubsub">'+esc(role)+(org?' · '+esc(org):'')+'</div><div class="hubgrid">'+cards+'</div>';
+  var u=CFG.user||{}, nm=u.name||'You', role=u.role||'', org=u.org||'';
+  var init = (nm && nm!=='You') ? nm.trim().split(/\s+/).map(function(w){return (w[0]||'')}).slice(0,2).join('').toUpperCase() : '·';
+  var sub = role ? (role + (org?' · '+org:'')) : (org||'—');
+  var chev='<span class="me-chev"><svg class="i" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></span>';
+  var IC={
+    home:'<path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 13h.01M15 9h.01M15 13h.01"/>',
+    wa:'<path d="M21 11.5a8.4 8.4 0 0 1-11.9 7.6L3 21l1.9-6A8.4 8.4 0 1 1 21 11.5Z"/>',
+    help:'<circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/>',
+    panel:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/>',
+    out:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'
+  };
+  function row(ic,label,right,onclick,danger){
+    return '<div class="me-row'+(danger?' dgr':'')+'" onclick="'+onclick+'"><div class="me-ci'+(danger?' dgr':'')+'"><svg class="i" viewBox="0 0 24 24">'+ic+'</svg></div><div class="me-l">'+label+'</div>'+(right||'')+'</div>';
+  }
+  var g1='';
+  if(hasScreen('settings')) g1+=row(IC.home,'Business profile &amp; settings',chev,"route('settings')");
+  g1+=row(IC.wa,'WhatsApp connection',chev,"route('wa-connect')");
+  if(hasScreen('guide')) g1+=row(IC.help,'Help &amp; training',chev,"route('guide')");
+  var g2='';
+  g2+=row(IC.panel,'Open classic panel',chev,"location.href='/panel?classic=1'");
+  g2+=row(IC.out,'Sign out','',"signOut()",true);
+  document.getElementById('view').innerHTML='<div class="mtoday"><div class="bcl-h"><div class="bcl-title">Me</div></div>'
+    +'<div class="me-prof"><div class="me-av">'+esc(init)+'</div><div><div class="me-nm">'+esc(nm)+'</div><div class="me-rl">'+esc(sub)+'</div></div></div>'
+    +'<div class="me-group">'+g1+'</div><div class="me-group">'+g2+'</div></div>';
 }
 /* Context-aware create sheet — items depend on the workspace you're in. */
 function openQuickAdd(){
@@ -1389,7 +1516,9 @@ async function route(key, id){
   if(key==='storefront.collections'){ sfCollectionsPage(); return; }
   if(key==='storefront.kits'){ sfKitsPage(); return; }
   if(key==='storefront.delivery'){ sfDeliveryPage(); return; }
-  if(key.indexOf('ws.')===0){ renderHub(key.slice(3)); return; }   // mobile workspace hub (Operations/Finance/Me)
+  if(key==='ws.finance'){ bosFinance(); return; }                  // Modern Finance hub (design v1.0)
+  if(key==='ws.operations'){ bosOperations(); return; }            // Modern Operations hub (design v1.0)
+  if(key.indexOf('ws.')===0){ renderHub(key.slice(3)); return; }   // mobile workspace hub (Me)
   if(key==='bos.today'){ bosToday(); return; }                     // BOS Slice 3 — the day's work
   if(key==='bos.timeline'){ bosTimeline(id); return; }             // BOS Slice 2 — customer timeline
   if(key==='customers'){ bosCustomers(); return; }                 // Modern Customers list (design v1.0)
@@ -1421,6 +1550,152 @@ function closeQuickAdd(){ document.getElementById('qsheet').classList.remove('on
 function quickAdd(key){ closeQuickAdd(); route(key); }
 
 /* ===== BOS Slice 2 — Customer Timeline: one customer's whole history from the event spine ===== */
+/* ===== Guided Collect Run — the app as an assistant, offline-safe (reuses the OB outbox + /papi/payments) ===== */
+var RUN={stops:[],i:0,collected:0,count:0,total:0,cur:'USD'}, RUN_METHOD='Cash';
+function runEnsure(){ if(!document.getElementById('runview')){ var d=document.createElement('div'); d.id='runview'; d.className='runview'; document.body.appendChild(d); } }
+async function runStart(){
+  runEnsure(); var el=document.getElementById('runview'); el.classList.add('on'); el.innerHTML='<div class="run-load">Loading your run…</div>';
+  var r=null; try{ r=await getQuery('/papi/bos-run',{}); }catch(e){}
+  if(!r || r.ok===false || !(r.stops&&r.stops.length)){ el.innerHTML='<div class="run-load">Nothing to collect right now.<br><button class="run-x2" onclick="runExit()">Close</button></div>'; return; }
+  RUN={stops:r.stops, i:0, collected:0, count:0, total:Number(r.total||0), cur:r.currency||'USD'}; RUN_METHOD='Cash';
+  runRender();
+}
+function runXIcon(){ return '<svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>'; }
+function runDots(){ var h=''; for(var k=0;k<RUN.stops.length;k++){ h+='<i class="'+(k<RUN.i?'done':(k===RUN.i?'on':''))+'"></i>'; } return h; }
+function runTop(closeable){ return '<div class="run-top"><div class="run-dots">'+runDots()+'</div>'+(closeable?'<button class="run-x" onclick="runExit()">'+runXIcon()+'</button>':'')+'</div>'; }
+function runRender(){
+  var el=document.getElementById('runview');
+  if(RUN.i>=RUN.stops.length){
+    el.innerHTML=runTop(true)+'<div class="run-done"><div class="run-check"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div>'
+      +'<div class="run-done-v">Run complete</div><div class="run-done-k">'+RUN.cur+' '+bmoney0(RUN.collected)+' collected from '+RUN.count+' of '+RUN.stops.length+' stops</div>'
+      +'<button class="run-back" onclick="runExit()">Back to Today</button></div>'; return;
+  }
+  var s=RUN.stops[RUN.i], ccy=s.currency||RUN.cur;
+  var dot = s.status==='overdue'?'#E24B3B':(s.status==='due'?'#DD8500':'#12A150');
+  el.innerHTML=runTop(true)+'<div class="run-k">Stop '+(RUN.i+1)+' of '+RUN.stops.length+'</div>'
+    +'<div class="run-card">'
+    +'<div class="run-cust"><div class="run-av" style="background:'+avColor(s.name)+'">'+esc(initials(s.name))+'</div>'
+      +'<div><div class="run-nm">'+esc(s.name)+'</div><div class="run-mt"><span style="background:'+dot+'"></span>'+esc(s.invoice_no||'')+(s.due_label?' · '+esc(s.due_label):'')+'</div></div></div>'
+    +'<div class="run-aml">To collect</div>'
+    +'<div class="run-amt-row"><span class="run-cur">'+esc(ccy)+'</span><input id="runamt" class="run-in" inputmode="decimal" value="'+Number(s.amount).toFixed(2)+'"></div>'
+    +(s.city?'<div class="run-nav" onclick="runMaps('+RUN.i+')"><svg class="run-pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>'+esc(s.city)+'<span class="run-go">Navigate ›</span></div>':'')
+    +'<div class="run-seg" onclick="runSeg(event)"><button class="on" data-m="Cash">Cash</button><button data-m="MoMo">MoMo</button><button data-m="Bank">Bank</button></div>'
+    +'<div class="run-act"><button class="run-skip" onclick="runSkip()">Skip</button><button class="run-col" onclick="runCollect()">Collect '+esc(ccy)+' '+bmoney0(s.amount)+'</button></div>'
+    +'</div>';
+}
+function runSeg(e){ var b=e.target.closest('button'); if(!b)return; b.parentNode.querySelectorAll('button').forEach(function(x){x.classList.remove('on')}); b.classList.add('on'); RUN_METHOD=b.dataset.m||'Cash'; }
+function runMaps(i){ var s=RUN.stops[i]; try{ window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((s.city||'')+' '+(s.name||'')),'_blank'); }catch(e){} }
+async function runCollect(){
+  var s=RUN.stops[RUN.i], el=document.getElementById('runamt');
+  var amt=Math.round((parseFloat(el&&el.value)||0)*100)/100; if(!(amt>0)){ toast('Enter an amount',true); return; }
+  var id=OB.uuid(), now=new Date();
+  var item={ id:id, ts:now.getTime(), kind:'collect', customer_id:Number(s.customer_id||0), endpoint:'/papi/payments',
+    body:{ customer_name:s.name, customer_phone:s.phone, order_no:s.order_no, invoice_no:s.invoice_no, kind:'settlement',
+      currency:(s.currency||RUN.cur), amount:amt, method:RUN_METHOD, rate_to_usd:0, discount:0, idempotency_key:id, created_date:now.toISOString() },
+    label:('Collect '+(s.currency||RUN.cur)+' '+bmoney0(amt)) };
+  var synced=false;
+  if(navigator.onLine){ try{ var rr=await post(item.endpoint,item.body); synced=!!(rr&&rr.ok); }catch(e){} }
+  if(!synced){ try{ await OB.add(item); await obBadge(); }catch(e){} }
+  RUN.collected+=amt; RUN.count++; RUN_METHOD='Cash';
+  var el2=document.getElementById('runview');
+  el2.innerHTML=runTop(false)+'<div class="run-ok"><div class="run-check"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div>'
+    +'<div class="run-ok-v">'+(s.currency||RUN.cur)+' '+bmoney0(amt)+'</div>'
+    +'<div class="run-ok-k">'+(synced?'Payment recorded · receipt on WhatsApp':'Saved offline — will sync')+'</div>'
+    +'<button class="run-next" onclick="runAdvance()">'+((RUN.i+1)<RUN.stops.length?'Next stop':'Finish')+' ›</button></div>';
+}
+function runAdvance(){ RUN.i++; runRender(); }
+/* Skip needs a reason + a consequence: capture why, log an offline-safe follow-up, then move on. */
+function runSkip(){
+  var s=RUN.stops[RUN.i], el=document.getElementById('runview');
+  var reasons=['Shop closed','Owner away','Will pay later','Amount disputed','Other'];
+  el.innerHTML=runTop(true)+'<div class="run-k">Stop '+(RUN.i+1)+' of '+RUN.stops.length+'</div>'
+    +'<div class="run-card"><div class="run-skip-h">Why skip '+esc(s.name)+'?</div>'
+    +'<div class="run-skip-s">We’ll log a follow-up so it isn’t forgotten.</div>'
+    +'<div class="run-reasons">'+reasons.map(function(r){ return '<button onclick="runSkipDo('+JSON.stringify(r).replace(/"/g,'&quot;')+')">'+esc(r)+'</button>'; }).join('')+'</div>'
+    +'<button class="run-skip-back" onclick="runRender()">← Back to collect</button></div>';
+}
+function runSkipDo(reason){
+  var s=RUN.stops[RUN.i], cid=Number(s.customer_id||0);
+  if(cid>0){ try{
+    var id=OB.uuid(), now=new Date();
+    var item={ id:id, ts:now.getTime(), kind:'followup', customer_id:cid, endpoint:'/papi/customer-note',
+      body:{ customer_id:cid, kind:'followup',
+        text:'Skipped on collection run — '+reason+' ('+(s.currency||RUN.cur)+' '+bmoney0(s.amount)+' still due)',
+        idempotency_key:id, occurred_at:now.toISOString(), connectivity:(navigator.onLine?'online':'offline') } };
+    if(navigator.onLine){ post(item.endpoint,item.body).then(function(r){ if(!(r&&r.ok)) OB.add(item); }).catch(function(){ OB.add(item); }); }
+    else { OB.add(item); }
+    if(typeof obBadge==='function') obBadge();
+  }catch(e){} }
+  toast('Follow-up logged — '+reason);
+  RUN.i++; runRender();
+}
+function runExit(){ var el=document.getElementById('runview'); if(el){ el.classList.remove('on'); el.innerHTML=''; }
+  if(RUN.count>0){ window._RUN_DONE={amt:RUN.collected,count:RUN.count,cur:RUN.cur}; }
+  try{ if(CUR&&CUR.key==='bos.today') bosToday(); }catch(e){} }
+/* Modern Operations hub (design v1.0): action-first urgency rows + browse grid, from the app's own counts. */
+function bosOperations(){
+  const v=document.getElementById('view');
+  const cnt=function(k){ var c=(CFG.counts)?CFG.counts[(NAVCOUNT[k]||k)]:null; return (c==null||isNaN(Number(c)))?null:Number(c); };
+  const IC={
+    truck:'<path d="M14 18V6a2 2 0 0 0-2-2H2v12M14 9h4l4 4v3h-8"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
+    alert:'<path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>',
+    box:'<path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+    bag:'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+    user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    tag:'<path d="M20.6 13.4 12 22l-9-9V3h10z"/><circle cx="7.5" cy="7.5" r="1.5"/>'
+  };
+  function urow(key,ic,tone,title,sub){
+    if(!hasScreen(key)) return '';
+    var n=cnt(key);
+    var right = (n==null)
+      ? '<svg class="i ops-chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>'
+      : '<div class="ops-n '+(n>0?tone:'zero')+'">'+n+'</div>';
+    return '<div class="ops-row" onclick="route(\''+key+'\')"><div class="ops-ic '+tone+'"><svg class="i" viewBox="0 0 24 24">'+ic+'</svg></div>'
+      +'<div class="ops-bd"><div class="ops-t">'+title+'</div><div class="ops-s">'+sub+'</div></div>'+right+'</div>';
+  }
+  const actions = urow('dispatch',IC.truck,'sky','Deliveries to make','dispatch &amp; drop-off')
+    + urow('warehouse',IC.alert,'red','Low stock','reorder before it runs out')
+    + urow('salesOrders',IC.box,'indigo','Orders to fulfil','pick, pack &amp; send')
+    + urow('purchase.process',IC.bag,'amber','Purchases to receive','from suppliers');
+  function tile(key,ic,title){ if(!hasScreen(key)) return ''; var n=cnt(key);
+    return '<div class="ops-tile" onclick="route(\''+key+'\')"><div class="ops-tic"><svg class="i" viewBox="0 0 24 24">'+ic+'</svg></div>'
+      +'<div class="ops-tv">'+(n==null?'—':n)+'</div><div class="ops-tl">'+title+'</div></div>'; }
+  const grid='<div class="ops-grid">'+tile('products',IC.box,'Products')+tile('suppliers',IC.user,'Suppliers')+tile('categories',IC.tag,'Categories')+'</div>';
+  let html='<div class="bcl-h"><div class="bcl-title">Operations</div></div>';
+  if(actions) html+='<div class="c360-sec"><h3>Needs action</h3></div>'+actions;
+  html+='<div class="c360-sec"><h3>Browse</h3></div>'+grid;
+  v.innerHTML='<div class="mtoday">'+html+'</div>';
+}
+/* Modern Finance hub (design v1.0): cash-on-hand hero (SSOT, per currency) + real section amounts. */
+function finFmt(n){ return Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0}); }
+async function bosFinance(){
+  const v=document.getElementById('view'); v.innerHTML=skeleton();
+  let r; try{ r=await getQuery('/papi/bos-finance',{}); }catch(e){ r=null; }
+  if(!r || r.ok===false){ v.innerHTML=emptyState('dollar','Finance unavailable','The finance overview could not load right now.'); return; }
+  const cash=r.cash||{}, others=(cash.others||[]), cur=r.currency||'USD';
+  const subs = others.length ? others.map(function(o){ return esc(o.ccy)+' '+finFmt(o.amount); }).join('  ·  ') : 'USD cash only';
+  const hero='<div class="fin-hero"><div class="fin-hk">Cash on hand</div><div class="fin-hv">USD '+finFmt(cash.usd)+'</div><div class="fin-hs">'+subs+'</div></div>';
+  const IC={
+    coin:'<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/>',
+    doc:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
+    card:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/>',
+    book:'<path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 0-2 2z"/><path d="M4 5v14"/>',
+    chart:'<path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/>'
+  };
+  function row(ic,bg,fg,t,sub,amt,key){
+    return '<div class="fin-c" onclick="route(\''+key+'\')"><div class="fin-ic" style="background:'+bg+';color:'+fg+'"><svg class="i" viewBox="0 0 24 24">'+ic+'</svg></div>'
+      +'<div class="fin-bd"><div class="fin-t">'+esc(t)+'</div><div class="fin-s">'+esc(sub)+'</div></div>'
+      +'<div class="fin-r">'+(amt!=null?'<b>'+esc(amt)+'</b>':'')+'<svg class="i fin-chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div></div>';
+  }
+  const list='<div class="fin-list">'
+    +row(IC.coin,'#FCF1DE','#DD8500','Collections','money to collect',cur+' '+finFmt(r.to_collect),'collections')
+    +row(IC.doc,'#EDEBFB','#6C5CE7','Invoices',(r.invoices||0)+' open',null,'invoices')
+    +row(IC.card,'#E4F6EC','#0A7A3C','Payments','received this month',cur+' '+finFmt(r.payments),'payments')
+    +row(IC.book,'#E7F3FC','#2C97DE','Cash book','cash in & out',null,'cashbook')
+    +row(IC.chart,'#EAECEF','#0C1420','Profit & Loss','this month',cur+' '+finFmt(r.pnl_month),'pnl')
+    +'</div>';
+  v.innerHTML='<div class="mtoday"><div class="bcl-h"><div class="bcl-title">Finance</div></div>'+hero+list+'</div>';
+}
 /* Modern Customers list (design v1.0): search + owe/overdue filters + tap-to-360. */
 var BCL=[], BCL_F='all';
 async function bosCustomers(){
@@ -1491,9 +1766,9 @@ async function bosTimeline(id){
     +'<button class="fchip" onclick="bosTlf(this,\'visit\')">Visits</button></div>';
   const rows = t.length ? '<div class="c360-tl" id="c360tl">'+t.map(bosTLine).join('')+'</div>'
     : '<div class="btl-empty">No activity yet — actions will appear here as they happen.</div>';
-  v.innerHTML='<div class="crumb"><span onclick="route(\'customers\')" style="cursor:pointer;color:var(--brand-ink)">Customers</span> <span style="color:var(--faint)">/</span> '+esc(c.name||'')
+  v.innerHTML='<div class="c360-wrap"><div class="crumb"><span onclick="route(\'customers\')" style="cursor:pointer;color:var(--brand-ink)">Customers</span> <span style="color:var(--faint)">/</span> '+esc(c.name||'')
     +' <span class="offpill" style="display:'+(navigator.onLine?'none':'inline-block')+'">Offline</span> <span class="obchip" style="display:none"></span></div>'
-    +header+strip+bosJourney(r.journey)+obComposer(Number(c.id||id))+'<div id="obpend"></div>'+chips+rows;
+    +header+strip+bosJourney(r.journey)+obComposer(Number(c.id||id))+'<div id="obpend"></div>'+chips+rows+'</div>';
   renderObPending(); obBadge();
 }
 function bosTlf(btn,tp){ btn.parentNode.querySelectorAll('.fchip').forEach(function(x){x.classList.remove('on')}); btn.classList.add('on');
@@ -1757,8 +2032,20 @@ async function bosToday(){
     ? '<div class="mt-sec"><h3>Waiting</h3></div><div class="mt-pc" onclick="route(\'quotations\')"><div class="mt-av" style="background:#DD8500">'+mtIcon('file')+'</div>'
       +'<div class="mt-bd"><div class="mt-t">'+quotes+' quote'+(quotes>1?'s':'')+' waiting</div><div class="mt-s">confirm or follow up</div></div>'+mtChev()+'</div>'
     : '';
-  v.innerHTML='<div class="mtoday">'+installBanner()+head+hero+list+waiting+'</div>';
+  const runBtn = (!done && acts.length)
+    ? '<button class="mt-run" onclick="runStart()"><span class="mt-run-pl"><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8V4z"/></svg></span>'
+      +'<span class="mt-run-t"><span class="a">Start today’s collection run</span><span class="b">'+acts.length+' stop'+(acts.length>1?'s':'')+' · '+cur+' '+bmoney0(rem)+'</span></span>'
+      +'<span class="mt-run-go"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></span></button>'
+    : '';
+  var celebrate='';
+  if(window._RUN_DONE){ var rd=window._RUN_DONE; window._RUN_DONE=null;
+    celebrate='<div class="mt-celebrate" id="mtcel">🎉 Collected '+rd.cur+' '+bmoney0(rd.amt)+' on your run · '+rd.count+' stop'+(rd.count>1?'s':'')+'</div>'; }
+  v.innerHTML='<div class="mtoday">'+installBanner()+head+celebrate+hero+runBtn+list+waiting+'</div>';
   mtSync();
+  var celEl=document.getElementById('mtcel');
+  if(celEl){ if(window.__celTimer) clearTimeout(window.__celTimer);
+    window.__celTimer=setTimeout(function(){ celEl.style.transition='opacity .5s,transform .5s'; celEl.style.opacity='0'; celEl.style.transform='translateY(-6px)';
+      setTimeout(function(){ if(celEl&&celEl.parentNode) celEl.parentNode.removeChild(celEl); },520); },4500); }
 }
 function bmoney0(v){ return Number(v||0).toLocaleString(undefined,{maximumFractionDigits:0}); }
 function mtChev(){ return '<span class="mt-chev"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></span>'; }
@@ -3113,6 +3400,60 @@ async function sfSaveKits(){
   var d=await post('/papi/kits-save',{kits:SFKITS});
   if(d&&d.ok){ if(Array.isArray(d.kits))SFKITS=d.kits; sfKitsRender(); toast('Kits saved'); } else toast((d&&d.error)||'Could not save',true);
 }
+
+/* ===== Pull-to-refresh (touch) — re-runs the current route. Attaches to the main scroller;
+   engages only at the very top, damped, snaps a spinner, then re-fetches the screen. Field-test on device. ===== */
+(function(){
+  var sc = document.querySelector('main.view');
+  var ind = document.getElementById('ptr');
+  if(!sc || !ind || !('ontouchstart' in window)) return;
+  var startY=0, pulling=false, dist=0, active=false, busy=false;
+  var THRESH=64, MAX=96, DAMP=0.5;
+  function blocked(){
+    var rv=document.getElementById('runview'); if(rv && rv.classList.contains('on')) return true;   // run overlay
+    var ov=document.getElementById('ov');      if(ov && ov.classList.contains('on')) return true;   // modal
+    var qs=document.getElementById('qsheet');  if(qs && qs.classList.contains('on')) return true;   // create sheet
+    var ww=document.getElementById('waweb');   if(ww && ww.classList.contains('open')) return true; // chat
+    if(!CUR || !CUR.key) return true;
+    // iframe-backed screens have nothing to pull-refresh; leave them to native scroll
+    if(CUR.key==='settings'||CUR.key==='payments'||CUR.key==='pnl'||CUR.key==='wa-connect'||CUR.key==='chats') return true;
+    return false;
+  }
+  function setInd(y, spin){
+    if(spin){ ind.classList.remove('drag'); ind.classList.add('spin'); ind.style.opacity='1'; ind.style.transform='translateX(-50%) translateY(0)'; return; }
+    ind.style.transform='translateX(-50%) translateY('+Math.max(-46, y-46)+'px)';
+    ind.style.opacity=String(Math.min(1, y/THRESH));
+  }
+  function reset(){ ind.classList.remove('spin'); ind.classList.remove('drag'); ind.style.opacity=''; ind.style.transform=''; pulling=false; active=false; dist=0; }
+  sc.addEventListener('touchstart', function(e){
+    if(busy) return;
+    if(sc.scrollTop>0 || blocked() || e.touches.length!==1){ active=false; return; }
+    startY=e.touches[0].clientY; active=true; pulling=false; dist=0;
+  }, {passive:true});
+  sc.addEventListener('touchmove', function(e){
+    if(!active || busy) return;
+    var dy=e.touches[0].clientY - startY;
+    if(dy<=0){ if(!pulling) active=false; return; }
+    if(sc.scrollTop>0){ active=false; reset(); return; }
+    if(!pulling && dy<6) return;              // let small vertical taps/flicks scroll normally
+    pulling=true; ind.classList.add('drag');
+    e.preventDefault();                       // own the gesture (needs passive:false) — suppresses native overscroll
+    dist=Math.min(MAX, dy*DAMP);
+    setInd(dist, false);
+  }, {passive:false});
+  function end(){
+    if(!active) return;
+    if(pulling && dist>=THRESH && !busy){
+      busy=true; setInd(0, true);
+      var done=function(){ busy=false; reset(); };
+      var minWait=new Promise(function(r){ setTimeout(r, 520); });   // hold the spinner long enough to read as a refresh
+      var run; try{ run=Promise.resolve(route(CUR.key, CUR.id)); }catch(err){ run=Promise.resolve(); }
+      Promise.all([run, minWait]).then(done, done);
+    } else { reset(); }
+  }
+  sc.addEventListener('touchend', end, {passive:true});
+  sc.addEventListener('touchcancel', function(){ if(!busy) reset(); active=false; }, {passive:true});
+})();
 
 boot();
 </script>

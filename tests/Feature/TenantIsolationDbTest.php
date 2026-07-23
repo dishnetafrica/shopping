@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\CustomerPayment;
 use App\Models\Invoice;
+use App\Models\LedgerJournal;
 use App\Models\Order;
 use App\Models\StockMovement;
 use App\Models\Tenant;
@@ -112,6 +114,48 @@ class TenantIsolationDbTest extends TestCase
         $this->assertFalse(Invoice::where('invoice_no', 'INV-B-1')->exists(), 'LEAK: invoice cross-tenant');
         $this->assertSame(1, StockMovement::count());
         $this->assertFalse(StockMovement::where('sku', 'SUGAR')->exists(), 'LEAK: stock movement cross-tenant');
+    }
+
+    /**
+     * The money five (CustomerPayment, OrderCost, LedgerAccount/Journal/Line) were the last models to be
+     * scoped (batch 3). This proves the trait isolates them at the DB level too — a leak here is a leak of
+     * cash + the general ledger, the worst possible. Covers the payment SSOT and the GL journal head.
+     */
+    public function test_isolation_holds_for_money_models(): void
+    {
+        $this->actAs(null, true);
+        $a = $this->tenant('a');
+        $b = $this->tenant('b');
+
+        CustomerPayment::create(['tenant_id' => $a->id, 'receipt_no' => 'RCP-A1', 'customer_name' => 'A Co', 'currency' => 'USD', 'kind' => 'settlement', 'amount' => 100, 'usd_amount' => 100]);
+        CustomerPayment::create(['tenant_id' => $b->id, 'receipt_no' => 'RCP-B1', 'customer_name' => 'B Co', 'currency' => 'USD', 'kind' => 'settlement', 'amount' => 200, 'usd_amount' => 200]);
+        LedgerJournal::create(['tenant_id' => $a->id, 'source' => 'order_cost', 'amount_usd' => 100, 'status' => 'posted']);
+        LedgerJournal::create(['tenant_id' => $b->id, 'source' => 'order_cost', 'amount_usd' => 200, 'status' => 'posted']);
+
+        // Tenant A sees only its own payment + journal — never B's.
+        $this->actAs($a->id);
+        $this->assertSame(1, CustomerPayment::count(), 'tenant A should see exactly its 1 payment');
+        $this->assertFalse(CustomerPayment::where('receipt_no', 'RCP-B1')->exists(), 'LEAK: cash cross-tenant');
+        $this->assertSame(1, LedgerJournal::count(), 'tenant A should see exactly its 1 journal');
+        $bJournalId = LedgerJournal::withoutGlobalScopes()->where('tenant_id', $b->id)->value('id');
+        $this->assertNull(LedgerJournal::find($bJournalId), 'LEAK: tenant A resolved tenant B\'s GL journal by id');
+
+        // Tenant B sees only its own.
+        $this->actAs($b->id);
+        $this->assertSame(1, CustomerPayment::count());
+        $this->assertFalse(CustomerPayment::where('receipt_no', 'RCP-A1')->exists(), 'LEAK: cash cross-tenant');
+    }
+
+    /** A payment created under an active tenant (as the collect path does) is stamped with that tenant. */
+    public function test_creating_a_payment_stamps_the_active_tenant(): void
+    {
+        $this->actAs(null, true);
+        $a = $this->tenant('a');
+        $this->actAs($a->id);
+
+        // no tenant_id passed — the trait must stamp it from the active context (the field collect path).
+        $p = CustomerPayment::create(['receipt_no' => 'RCP-STAMP', 'customer_name' => 'Nadia', 'currency' => 'USD', 'amount' => 50, 'usd_amount' => 50]);
+        $this->assertSame($a->id, (int) $p->tenant_id, 'creating a payment did not stamp the active tenant_id');
     }
 
     public function test_creating_a_row_stamps_the_active_tenant(): void

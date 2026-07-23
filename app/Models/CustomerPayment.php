@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 
 class CustomerPayment extends Model
 {
+    use BelongsToTenant;
+
     protected $fillable = [
         'tenant_id','receipt_no','customer_name','customer_phone','order_no','invoice_no','kind',
         'currency','amount','rate_to_usd','usd_amount','method','reference','receipt_path',
