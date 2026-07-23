@@ -26,6 +26,7 @@ class RelationshipAttributeCommand extends Command
 
         $linked = 0;
         foreach ($tenants as $t) {
+            app(\App\Support\TenantContext::class)->set((int) $t->id); // scope this tenant's models
             if (! (bool) $t->setting('followups_ai', false)) continue;
             $window = max(1, (int) $t->setting('followup_attribution_days', 7));
 

@@ -1,0 +1,50 @@
+OFFLINE OUTBOX — never delete a failed sync (Constitution v1.0 · P0 Offline / "five risks")
+==========================================================================================
+
+THE BUG (silent field-data loss)
+  In the V3 offline outbox, obFlush() deleted a queued write on ANY non-network response:
+      if (r && r.ok) { OB.del(it.id); }
+      else           { OB.del(it.id); toast('A queued note was rejected and removed.'); }  // <-- data gone
+  So a queued PAYMENT or note that the server rejected (a 422/validation, a transient app error) was
+  thrown away with a toast. In the field (South Sudan, dropped signal) this silently loses collected money.
+
+THE FIX (resilient queue)
+  A rejected item is now KEPT, flagged, and surfaced for the user to act on. Nothing leaves the queue
+  without either succeeding or an explicit user "Discard".
+    • post() returns parsed JSON with no status check, so a non-JSON 5xx/419 throws -> already treated as
+      TRANSIENT (break, retry later). Unchanged and correct.
+    • A definite JSON {ok:false} rejection -> the item is marked status:'failed' with its error, kept in
+      IndexedDB (survives restart), and SKIPPED by future auto-flushes (no re-hammering the server).
+    • The customer timeline shows it as "⚠️ Not sent — <error>" with [Retry] and [Discard] buttons.
+    • The outbox badge shows "⚠ N need attention", and the Today sync pill shows "● N need attention".
+    • Retry clears the flag and flushes immediately; Discard (with confirm) is the ONLY way an unsent item
+      is removed without reaching the server.
+  Idempotency keys are unchanged, so retries never double-count server-side.
+
+FILE CHANGED
+  resources/views/shell.blade.php   (OB.put() added; obFlush rejection path; obBadge; obPendingLine
+                                     failed row; obRetry/obDiscard added; mtSync surfaces failed count)
+
+VERIFICATION DONE HERE
+  • node --check on the extracted outbox JS region: clean.
+  • Behavioural simulation of obFlush/obRetry (8 checks, all pass): rejected item KEPT + flagged; auto-flush
+    skips failed (server not re-hit); manual retry clears on success; network error keeps ALL items and does
+    NOT flag them; explicit discard removes.
+
+DEPLOY
+  git add resources/views/shell.blade.php DEPLOY-OFFLINE-QUEUE-FIX.txt
+  git commit -m "P0 Offline: never delete a failed sync — keep, flag, manual retry/discard"
+  git push  ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear      <-- shell is a Blade view
+
+VERIFY ON A PHONE
+  1. Open a customer, go offline (airplane mode), record a payment -> "Saved offline — will sync" (⏳).
+  2. Back online with a rejection path (e.g. a server-side validation error) -> the row turns to
+     "⚠️ Not sent — <error>" with Retry / Discard; badge reads "⚠ 1 need attention"; Today pill matches.
+  3. Tap Retry after the cause is fixed -> it syncs and disappears. Tap Discard -> confirm, then removed.
+  4. A normal offline collect that the server accepts on reconnect still clears automatically.
+
+SAFETY
+  Client-side only. No server code, no migration, no money-path change. Idempotency keys already prevent
+  double-posting on retry. Worst case a rejected item now PERSISTS (visible) instead of vanishing — which
+  is the entire point.

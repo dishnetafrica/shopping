@@ -27,6 +27,7 @@ class RelationshipReviewCommand extends Command
             ->get();
 
         foreach ($tenants as $t) {
+            app(\App\Support\TenantContext::class)->set((int) $t->id); // scope this tenant's models
             if (! (bool) $t->setting('relationship_memory', false)) continue;
             $this->line('');
             $this->info("═══ {$t->name} — relationship review, last {$days} days ═══");

@@ -1,0 +1,74 @@
+TENANT ISOLATION — automated guard + harness repair (Constitution v1.0 · P0 Security)
+=====================================================================================
+
+WHY
+  Row-level multi-tenancy is enforced by the BelongsToTenant trait's global scope. The catastrophic
+  failure mode is a model that owns a `tenant_id` but forgets the trait — its queries then return
+  EVERY tenant's rows unless each caller remembers `where('tenant_id', …)`. There was no test guarding
+  this. There is now.
+
+TWO REAL FINDINGS THIS SURFACED
+  1. The test suite could not run at all — `tests/TestCase.php` was MISSING, so every test doing
+     `use Tests\TestCase;` (StockLedgerTest, InvoicePayTest, …) failed to load. Restored here.
+  2. 24 tenant-owned models do NOT use the trait — they rely entirely on manual filtering. Confirmed:
+     all 24 `extends Model` directly (none inherit a scope). This is the concrete form of the audit's
+     "160 manual filters" risk. They are frozen as a shrinking debt register in the test.
+
+WHAT SHIPS  (tests only — ZERO behaviour change, safe to deploy immediately)
+  tests/TestCase.php                        NEW/restore — unblocks the whole suite
+  tests/Unit/TenantIsolationTest.php        NEW — structural guard (no DB/factories/app-boot needed)
+  tests/Feature/TenantIsolationDbTest.php   NEW — behavioural proof the scope isolates at the DB level
+
+THE 24 UNSCOPED MODELS (the P0 remediation backlog — fix HIGH first)
+  HIGH  (queried directly across the app; money/core):
+    AuditLog, BotMiss, CustomerPayment, DemandPlan, ExpenseCategory, FieldValidation,
+    FollowupProposal, LedgerAccount, LedgerJournal, LedgerLine, MerchantChangeRequest, OrderCost,
+    Partner, Payment, PushSubscription, SourcingRequest, Supplier, TradePurchaseTick, ValidationRun
+  CHILD (normally reached via a scoped parent relation; lower risk, direct query still leaks):
+    CreditNoteItem, DemandPlanLine, InvoiceItem, PartnerCapital, TradeOrderItem
+
+--------------------------------------------------------------------------------------------------
+DEPLOY (code)
+  git add tests/TestCase.php tests/Unit/TenantIsolationTest.php tests/Feature/TenantIsolationDbTest.php \
+          DEPLOY-TENANT-ISOLATION-TEST.txt
+  git commit -m "P0 Security: tenant-isolation test + restore tests/TestCase (24-model debt register)"
+  git push  ->  EasyPanel Rebuild (or run locally)
+
+RUN
+  # The structural guard needs nothing but PHP + autoload — run it anywhere:
+  php artisan test --filter=TenantIsolationTest
+  #   or: vendor/bin/phpunit tests/Unit/TenantIsolationTest.php
+  # Expected today: GREEN (24 known exceptions match exactly).
+
+  # The behavioural proof needs the migration set to run on the sqlite test DB:
+  php artisan test --filter=TenantIsolationDbTest
+
+HOW THE GUARD BEHAVES GOING FORWARD
+  • Add a NEW model with tenant_id but forget the trait  -> test_every_tenant_owned_model… FAILS
+    (tells you exactly which class to add `use ...BelongsToTenant;` to). This is the regression catch.
+  • FIX one of the 24 (add the trait) but leave it in the list -> test_the_debt_register… FAILS,
+    telling you to delete it from KNOWN_UNSCOPED. This keeps the register shrinking honestly.
+  • Someone deletes the global scope from the trait -> test_belongs_to_tenant_trait… FAILS.
+
+--------------------------------------------------------------------------------------------------
+REMEDIATION PLAN for the 24 (do NOT bulk-apply — each is a behaviour change)
+  Adding BelongsToTenant to a model starts auto-filtering EVERY query on it by the active tenant.
+  That is the fix, but it can change results at call sites that currently return cross-tenant data by
+  design (platform/admin rollups, cron jobs with no tenant context). So, per model, HIGH first:
+    1. Add `use App\Models\Concerns\BelongsToTenant;` to the model.
+    2. Grep its usages; anywhere a deliberate cross-tenant/admin/cron read exists, switch it to
+       `->withoutGlobalScopes()` or run it under super-admin context.
+    3. Delete the model from KNOWN_UNSCOPED and run the suite (must stay green).
+    4. Ship it as its own small PR. Repeat.
+  Money models (CustomerPayment, OrderCost, Payment, Ledger*) get extra care + a manual reconcile
+  check, since they feed cash/accounting figures.
+
+REMAINING HARNESS GAP (separate follow-up)
+  Model factories were never created (database/factories is empty), so the older tests that call
+  `Tenant::factory()` / `User::factory()` still won't run until minimal factories are added. The two
+  new tests here avoid factories on purpose. Adding TenantFactory + UserFactory is a small next step
+  to make the FULL suite runnable.
+
+SAFETY
+  Tests only. No application code, no migration, no flag, no money path touched. Deploying this changes
+  nothing at runtime; it only adds a guard that fails the build if isolation regresses.

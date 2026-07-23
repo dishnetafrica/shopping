@@ -1,0 +1,75 @@
+RBAC — deny-by-default, Phase 0 (dormant) (Constitution v1.0 · P0 Security)
+==========================================================================
+
+WHAT SHIPS (all DORMANT — zero behaviour change on deploy)
+  app/Support/Roles.php                    NEW  canonical role vocabulary + normalize() (folds aliases)
+  app/Http/Middleware/PermissionGate.php   NEW  the route-level gate (mode: off|report|enforce; default OFF)
+  config/permissions.php                   NEW  mode + route→Access-action map (sensitive endpoints)
+  OPERATING-MODEL/RBAC-DESIGN-v1.md        NEW  the full design + phased rollout
+
+  Nothing is wired or active. PermissionGate is not attached to any route yet, and RBAC_MODE defaults
+  to 'off' (pure pass-through). Deploying this changes nothing at runtime.
+
+VERIFICATION DONE HERE
+  php -l clean on all three PHP files. Decision-matrix simulation (8 cases) + Roles::normalize (7 cases)
+  all pass: off=passthrough; report logs but never blocks; enforce 403s a disallowed role; owner always
+  passes; unmapped route passes (no silent 403); unknown action fails closed.
+
+DEPLOY (ship the dormant components)
+  git add app/Support/Roles.php app/Http/Middleware/PermissionGate.php config/permissions.php \
+          OPERATING-MODEL/RBAC-DESIGN-v1.md DEPLOY-RBAC-PHASE0.txt
+  git commit -m "P0 Security: RBAC deny-by-default — dormant Phase-0 (Roles, PermissionGate, config)"
+  git push  ->  EasyPanel Rebuild
+  php artisan optimize:clear   # (config cache picks up config/permissions.php)
+
+================================================================================================
+PHASE 0 ACTIVATION (do when ready — still no enforcement; the gate stays dormant until Phase 1)
+
+  1) Register the middleware alias — bootstrap/app.php, in ->withMiddleware(function ($m){ ... }):
+        $m->alias(['permission' => \App\Http\Middleware\PermissionGate::class]);
+
+  2) Attach it to the two gated groups (it is a NO-OP while RBAC_MODE=off, so this is safe):
+     - routes/web.php, the panel/papi group (currently ~line 90):
+         Route::middleware(['web','auth', SetTenantFromUser::class,
+             ConfineTransportRole::class, ClassicPanelRedirects::class, 'permission'])->group(...)
+     - app/Providers/CapabilityServiceProvider.php, the /v3 + workspace group (~line 41):
+         Route::middleware(['web','auth', SetTenantFromUser::class,
+             ConfineTransportRole::class, 'permission'])->group(...)
+
+  3) Extend the action allow-list — app/Support/Access.php, add to MATRIX (and MODULES), then update
+     tests/Unit/AccessTest.php to include them:
+        'expense.book'    => ['manager','accountant'],
+        'cashbook.write'  => ['manager','cashier','accountant'],
+        'product.delete'  => ['manager','warehouse'],
+        'product.edit'    => ['manager','warehouse','product_staff'],
+        'order.status'    => ['manager','sales','field'],
+        'supplier.manage' => ['manager','procurement'],
+     MODULES: product.* => 'inventory', cashbook.write/expense.book => 'finance',
+              order.status => 'sales', supplier.manage => 'purchases'.
+
+  4) Canonicalize roles — route User role reads and the staff editor (PanelApiController::normStaffRole)
+     through App\Support\Roles::normalize(); use Roles::assignable() for the staff dropdown.
+
+  Deploy again (still RBAC_MODE=off). Confirm nothing changed for any user.
+
+================================================================================================
+PHASE 1 — OBSERVE (report-only)
+  Set env RBAC_MODE=report  ->  rebuild  ->  php artisan config:clear
+  The gate now LOGS (channel: stack, tag 'rbac.would_deny' / 'rbac.unmapped') every request a real RBAC
+  would deny — but blocks NOTHING. Watch the logs 1–2 weeks:
+    • rbac.would_deny for a LEGITIMATE user  -> fix Access::MATRIX (add that role to the action).
+    • rbac.unmapped on a sensitive route     -> add it to config/permissions.php.
+  Iterate until the report log is quiet for real traffic.
+
+PHASE 2 — ENFORCE
+  Set env RBAC_MODE=enforce -> rebuild -> config:clear. Mapped routes now 403 a disallowed role
+  (owner/super-admin always pass; gate errors fail open). Money, deletes, admin are already mapped.
+
+KILL SWITCH
+  Set RBAC_MODE=off at any time to instantly disable the gate everywhere. No redeploy of code needed —
+  just the env change + config:clear.
+
+SAFETY
+  Additive files; the request pipeline is untouched until you do Phase-0 step 2, and even then the gate
+  is a pass-through until RBAC_MODE leaves 'off'. Built on the existing Access allow-list — one source of
+  truth for action permissions, not a parallel system.

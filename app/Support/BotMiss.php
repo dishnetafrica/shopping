@@ -43,7 +43,8 @@ class BotMiss
                 return;
             }
 
-            $row = Row::firstOrNew(['tenant_id' => $tenantId, 'term' => $t]);
+            // Filters tenant_id explicitly and may run outside a tenant context — bypass the scope.
+            $row = Row::withoutGlobalScopes()->firstOrNew(['tenant_id' => $tenantId, 'term' => $t]);
             $row->count = (int) ($row->count ?? 0) + 1;
             $row->last_seen_at = now();
             if ($sample) $row->sample = mb_substr($sample, 0, 200);

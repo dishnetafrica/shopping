@@ -1454,6 +1454,10 @@ const OB = (function(){
     del:function(id){ return store('readwrite').then(function(st){
       if(!st){ _mem=_mem.filter(function(x){return x.id!==id;}); return; }
       return new Promise(function(res){ try{ st.delete(id); st.transaction.oncomplete=function(){res();}; st.transaction.onerror=function(){ _mem=_mem.filter(function(x){return x.id!==id;}); res(); }; }catch(e){ res(); } });
+    }); },
+    put:function(item){ return store('readwrite').then(function(st){   // update in place (keyPath id)
+      if(!st){ let f=false; _mem=_mem.map(function(x){ if(x.id===item.id){f=true;return item;} return x; }); if(!f) _mem.push(item); return item; }
+      return new Promise(function(res){ try{ st.put(item); st.transaction.oncomplete=function(){res(item);}; st.transaction.onerror=function(){ res(item); }; }catch(e){ res(item); } });
     }); }
   };
 })();
@@ -1516,6 +1520,14 @@ function obPendingLine(it){
   let txt, ic='⏳';
   if(k==='collect'){ ic='💵'; txt=esc(it.label||('Collect '+((it.body&&it.body.currency)||'')+' '+bmoney((it.body&&it.body.amount)||0))); }
   else { const lbl=(k==='visit'?'📍 Visit':(k==='followup'?'🔔 Follow-up':'📝 Note')); txt=lbl+' — '+esc((it.body&&it.body.text)||''); }
+  if(it.status==='failed'){
+    return '<div class="btl-row obp"><div class="btl-ic">⚠️</div><div class="btl-body"><div class="btl-txt">'+txt+'</div>'
+      +'<div class="btl-at" style="color:#E24B3B;font-weight:750">Not sent — '+esc(it.error||'rejected')+'</div>'
+      +'<div style="margin-top:7px;display:flex;gap:8px">'
+      +'<button onclick="obRetry(\''+it.id+'\')" style="font:inherit;font-size:12px;font-weight:750;border:0;border-radius:8px;padding:6px 14px;background:#12A150;color:#fff;cursor:pointer">Retry</button>'
+      +'<button onclick="obDiscard(\''+it.id+'\')" style="font:inherit;font-size:12px;font-weight:750;border:0;border-radius:8px;padding:6px 14px;background:#EEF1F4;color:#42505F;cursor:pointer">Discard</button>'
+      +'</div></div></div>';
+  }
   return '<div class="btl-row obp"><div class="btl-ic">'+ic+'</div><div class="btl-body"><div class="btl-txt">'+txt+'</div><div class="btl-at">waiting to sync</div></div></div>';
 }
 async function renderObPending(){
@@ -1525,8 +1537,27 @@ async function renderObPending(){
   box.innerHTML=items.map(obPendingLine).join('');
 }
 async function obBadge(){
-  let n=0; try{ n=(await OB.all()).length; }catch(e){ n=0; }
-  document.querySelectorAll('.obchip').forEach(function(c){ c.textContent='⏳ '+n+' to sync'; c.style.display=n>0?'':'none'; });
+  let items=[]; try{ items=await OB.all(); }catch(e){ items=[]; }
+  const failed=items.filter(function(x){return x.status==='failed';}).length, pend=items.length-failed;
+  document.querySelectorAll('.obchip').forEach(function(c){
+    if(failed>0){ c.textContent='⚠ '+failed+' need attention'+(pend>0?(' · ⏳ '+pend+' to sync'):''); c.style.display=''; }
+    else if(pend>0){ c.textContent='⏳ '+pend+' to sync'; c.style.display=''; }
+    else { c.style.display='none'; }
+  });
+}
+/* Manual retry of a rejected item: clear the failed flag and try to flush now. Field data is never lost silently. */
+async function obRetry(id){
+  try{ const items=await OB.all(); const it=items.filter(function(x){return x.id===id;})[0];
+    if(it){ it.status='pending'; it.error=null; await OB.put(it); } }catch(e){}
+  await renderObPending(); await obBadge();
+  if(navigator.onLine){ obFlush(); } else { toast('Will retry when back online'); }
+}
+/* Explicit user discard — the ONLY way a queued item leaves the outbox without succeeding. */
+async function obDiscard(id){
+  if(!confirm('Discard this unsent item? It has not reached the server and cannot be recovered.')) return;
+  try{ await OB.del(id); }catch(e){}
+  await renderObPending(); await obBadge();
+  toast('Discarded');
 }
 async function obSend(){
   const el=document.getElementById('obtext'); if(!el) return;
@@ -1551,11 +1582,16 @@ async function obFlush(){
     let items=[]; try{ items=await OB.all(); }catch(e){ items=[]; }
     items.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });   // FIFO — preserve field order
     for(let i=0;i<items.length;i++){ const it=items[i];
+      if(it.status==='failed') continue;                         // rejected before — waits for a manual retry, don't re-hammer
       let r=null, neterr=false;
       try{ r=await post(it.endpoint, it.body); }catch(e){ neterr=true; }
-      if(neterr) break;                                          // still unreachable — keep the rest, retry later
+      if(neterr) break;                                          // still unreachable (network or non-JSON 5xx) — keep the rest, retry later
       if(r && r.ok){ await OB.del(it.id); changed=true; }
-      else { await OB.del(it.id); changed=true; toast('A queued note was rejected and removed.', true); }
+      else {
+        // Server returned a definite rejection. NEVER delete field data — keep it, flag it, surface it for manual retry/discard.
+        it.status='failed'; it.attempts=(it.attempts||0)+1; it.error=(r&&r.error)?String(r.error):'rejected'; it.failedAt=Date.now();
+        await OB.put(it); changed=true;
+      }
     }
   } finally { OB_BUSY=false; }
   await obBadge();
@@ -1616,8 +1652,10 @@ function mtCard(a){
 }
 async function mtSync(){
   var el=document.getElementById('mtsync'); if(!el) return;
-  var n=0; try{ n=(await OB.all()).length; }catch(e){}
+  var items=[]; try{ items=await OB.all(); }catch(e){}
+  var failed=items.filter(function(x){return x.status==='failed';}).length, n=items.length;
   if(!navigator.onLine){ el.textContent='● Offline'; el.className='mt-sync off'; }
+  else if(failed>0){ el.textContent='● '+failed+' need attention'; el.className='mt-sync q'; }
   else if(n>0){ el.textContent='● '+n+' queued'; el.className='mt-sync q'; }
   else { el.textContent='● Synced'; el.className='mt-sync ok'; }
 }

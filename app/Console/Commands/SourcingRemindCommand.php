@@ -35,6 +35,7 @@ class SourcingRemindCommand extends Command
         if ($only !== '') $q->where('id', (int) $only);
 
         foreach ($q->get() as $t) {
+            app(\App\Support\TenantContext::class)->set((int) $t->id); // scope this tenant's models
             $phone = preg_replace('/[^0-9]/', '', (string) $t->setting('sourcing_buyer_phone', ''));
             if ($phone === '') continue;
 

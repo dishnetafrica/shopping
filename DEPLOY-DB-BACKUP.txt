@@ -1,0 +1,71 @@
+DATABASE BACKUP + TESTED RESTORE (Constitution v1.0 · P0 Reliability)
+====================================================================
+
+WHY
+  There was no backup/restore story in the repo. A bad deploy, a wrong migration, or a corrupt table
+  had no undo. This adds automatic, verified PostgreSQL backups with an optional offsite copy, and a
+  documented (and tested) restore — the difference between a scare and a disaster.
+
+WHAT SHIPS
+  app/Console/Commands/DbBackup.php   NEW  `php artisan db:backup`
+  Dockerfile                          +1   adds `postgresql-client` (provides pg_dump / pg_restore)
+
+WHAT db:backup DOES
+  1. pg_dump in custom, compressed, restorable format (-Fc) to storage/app/backups/DB_YYYYmmdd_HHMMSS.dump
+  2. --verify: immediately runs `pg_restore --list` and fails (discarding the file) if it can't be read
+     or has 0 tables. A backup you can't list is not a backup.
+  3. --disk=s3 (optional): streams the dump offsite to any configured filesystem disk — REAL disaster
+     recovery. A dump sitting on the same server is not DR.
+  4. --keep=N: rotates, keeping the newest N local dumps.
+
+  Options: --keep=7  --disk=  --verify  --path=
+
+DEPLOY
+  git add app/Console/Commands/DbBackup.php Dockerfile DEPLOY-DB-BACKUP.txt
+  git commit -m "P0 Reliability: db:backup (pg_dump -Fc, verify, rotate, offsite) + postgresql-client"
+  git push  ->  EasyPanel Rebuild   (the Dockerfile change installs pg_dump/pg_restore)
+  php artisan optimize:clear
+
+FIRST RUN (manual smoke)
+  php artisan db:backup --verify
+  # expect: "Verified: dump lists cleanly (N table-data entries)" and "Backup OK: shopbot_… (X MB)"
+  ls -lh storage/app/backups/
+
+SCHEDULE IT (routes/console.php)
+  use Illuminate\Support\Facades\Schedule;
+  Schedule::command('db:backup --verify --keep=14 --disk=s3')->dailyAt('01:00');
+  # Set --disk to a real offsite disk. Without an offsite disk you are one dead server from total loss.
+
+OFFSITE DISK (recommended)
+  Configure an S3-compatible disk in config/filesystems.php (or via env) named e.g. "s3", then pass
+  --disk=s3. Any Laravel disk works (S3, Spaces, R2, Backblaze).
+
+------------------------------------------------------------------------------------------------
+TESTED RESTORE — do this at least once; a restore you have never run is a hope, not a plan.
+
+  A) List what's in a dump (integrity, no changes):
+       pg_restore --list storage/app/backups/shopbot_YYYYmmdd_HHMMSS.dump | head
+
+  B) Restore into a SCRATCH database (safe rehearsal — never touch prod to test):
+       createdb -h $DB_HOST -U $DB_USERNAME shopbot_restore_test
+       pg_restore -h $DB_HOST -U $DB_USERNAME -d shopbot_restore_test --no-owner --no-privileges \
+                  storage/app/backups/shopbot_YYYYmmdd_HHMMSS.dump
+       # sanity check row counts, then drop it:
+       psql -h $DB_HOST -U $DB_USERNAME -d shopbot_restore_test -c "select count(*) from invoices;"
+       dropdb -h $DB_HOST -U $DB_USERNAME shopbot_restore_test
+
+  C) REAL disaster restore into the live database (last resort, after confirming the dump):
+       # put the app in maintenance first
+       php artisan down
+       pg_restore -h $DB_HOST -U $DB_USERNAME -d $DB_DATABASE --clean --if-exists --no-owner \
+                  --no-privileges storage/app/backups/shopbot_YYYYmmdd_HHMMSS.dump
+       php artisan up
+     (--clean --if-exists drops and recreates objects from the dump. Take a fresh db:backup right
+      before doing this, so you can get back to "now" if the restore is wrong.)
+
+  Set a reminder to run rehearsal (B) monthly. That is the "restore testing" the Constitution asks for.
+
+SAFETY
+  Additive: a new command + one package in the image. No app code path, no migration, no data change on
+  a normal run. db:backup only READS the database (pg_dump) and writes dump files; it never writes to
+  the DB. An offsite-upload failure keeps the good local backup and exits non-zero so the schedule alerts.

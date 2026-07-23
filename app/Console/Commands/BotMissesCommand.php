@@ -13,7 +13,8 @@ class BotMissesCommand extends Command
 
     public function handle(): int
     {
-        $q = BotMiss::query()->orderByDesc('count');
+        // Cross-tenant ops digest by design — bypass the tenant scope explicitly.
+        $q = BotMiss::withoutGlobalScopes()->orderByDesc('count');
         if ($this->option('tenant')) $q->where('tenant_id', (int) $this->option('tenant'));
         if (! $this->option('all'))  $q->where('resolved', false);
         $rows = $q->limit((int) $this->option('limit'))->get();

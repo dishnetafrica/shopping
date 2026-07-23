@@ -1,11 +1,14 @@
 <?php
 
 namespace App\Models;
+use App\Models\Concerns\BelongsToTenant;
 
 use Illuminate\Database\Eloquent\Model;
 
 class SourcingRequest extends Model
 {
+    use BelongsToTenant;
+
     protected $fillable = [
         'tenant_id','item_name','note','demand','photo_path','status',
         'quoted_price','currency','supplier_name','availability','price_note','priced_by','priced_at',

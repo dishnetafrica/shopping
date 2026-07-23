@@ -1,0 +1,75 @@
+TENANT ISOLATION — remediation batch 2: scope 3 more models + patch their commands (Constitution v1.0 · P0 Security)
+==================================================================================================================
+
+WHAT THIS DOES
+  Scopes SourcingRequest, FollowupProposal, BotMiss with BelongsToTenant — but FIRST patches the
+  scheduled commands that query them with no tenant context, because once a model is scoped a no-context
+  query returns nothing (the scope ANDs `tenant_id IS NULL`, and an explicit `where('tenant_id',$t)`
+  does NOT rescue it). Isolation debt: 11 -> 8. Remaining 8 = the money five + 3 platform-by-design.
+
+THE PATCH PATTERN (why this is safe)
+  Each scheduled command already loops `foreach ($tenants as $t)`. We set the active tenant at the top
+  of that loop:  app(\App\Support\TenantContext::class)->set((int) $t->id);
+  That makes every query in the loop (and in services it calls, e.g. GoalEngine) correctly scoped to $t.
+  Queries already wrapped in withoutGlobalScopes()/withoutGlobalScope('tenant') (Order, Conversation,
+  CustomerProfile) are unaffected. So the change can only make things MORE correct, never less.
+  One read is cross-tenant BY DESIGN (the bot:misses ops digest) — it now says so with an explicit
+  withoutGlobalScopes().
+
+FILES CHANGED
+  Models scoped (+2 lines each: import + trait use):
+    app/Models/SourcingRequest.php
+    app/Models/FollowupProposal.php
+    app/Models/BotMiss.php
+  Commands patched (set tenant context in the per-tenant loop):
+    app/Console/Commands/SourcingRemindCommand.php        (scheduled HOURLY — was the urgent one)
+    app/Console/Commands/RelationshipAttributeCommand.php (daily)
+    app/Console/Commands/RelationshipAutosendCommand.php  (daily; auto-sends WhatsApp — verify carefully)
+    app/Console/Commands/RelationshipReviewCommand.php    (monthly)
+    app/Console/Commands/RelationshipPlanCommand.php       (daily; fixes GoalEngine downstream)
+  Cross-tenant reads made explicit:
+    app/Console/Commands/BotMissesCommand.php             (BotMiss::withoutGlobalScopes())
+    app/Support/BotMiss.php                               (record() firstOrNew -> withoutGlobalScopes(),
+                                                            robust if ever called without context)
+  Guard updated:
+    tests/Unit/TenantIsolationTest.php                    (debt register 11 -> 8)
+
+VERIFICATION DONE HERE
+  • Enumerated every reader of the 3 models: the ONLY no-context sites are the commands patched above;
+    all Panel/Capability/bot-webhook callers already set context. (BotReplayCommand uses the in-memory
+    App\Support\BotMiss helper, not the model.)
+  • php -l clean on all 11 files. No tenant()/boot method collisions on the 3 models.
+  • Isolation register now equals the live offenders exactly (8: money five + 3 platform).
+
+DEPLOY
+  git add app/Models/SourcingRequest.php app/Models/FollowupProposal.php app/Models/BotMiss.php \
+          app/Support/BotMiss.php app/Console/Commands/BotMissesCommand.php \
+          app/Console/Commands/SourcingRemindCommand.php app/Console/Commands/RelationshipAttributeCommand.php \
+          app/Console/Commands/RelationshipAutosendCommand.php app/Console/Commands/RelationshipReviewCommand.php \
+          app/Console/Commands/RelationshipPlanCommand.php tests/Unit/TenantIsolationTest.php \
+          DEPLOY-TENANT-SCOPE-BATCH-2.txt
+  git commit -m "P0 Security: scope SourcingRequest/FollowupProposal/BotMiss + patch their commands (debt 11 -> 8)"
+  git push  ->  EasyPanel Rebuild
+  php artisan optimize:clear
+
+RUN THE SUITE (required — behaviour change)
+  php artisan test --filter=TenantIsolation
+  php artisan test
+  Smoke, ideally on a low-traffic window:
+    php artisan sourcing:remind --dry        # should list per-tenant nudges, not empty
+    php artisan relationship:plan --tenant=17 # should still produce proposals for tenant 17
+    php artisan bot:misses --limit=10         # should still show misses across tenants
+
+REMAINING DEBT (5) — the money five, held for a dedicated batch with a full test run:
+  CustomerPayment, OrderCost, LedgerAccount, LedgerJournal, LedgerLine
+  Their patch sites (FixPaymentsCommand, RepriceForeignCashCommand, LedgerBackfill->LedgerService,
+  AuditPaymentsCommand) are known; they are held only because they feed cash + the GL and must not be
+  changed without running the suite. PLATFORM_GLOBAL (Payment, ValidationRun, FieldValidation) stay unscoped.
+
+ROLLBACK
+  Remove the 2 trait lines from each model + revert the command edits (each is one added line), and put
+  the 3 names back into KNOWN_UNSCOPED. No data change.
+
+SAFETY
+  No migration, no money-path code, no flag. Setting tenant context in a per-tenant loop is behaviour-
+  neutral for correctly-written sites and corrective for the FollowupProposal/SourcingRequest reads.

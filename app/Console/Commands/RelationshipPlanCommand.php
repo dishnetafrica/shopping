@@ -22,6 +22,7 @@ class RelationshipPlanCommand extends Command
             ->get();
 
         foreach ($tenants as $t) {
+            app(\App\Support\TenantContext::class)->set((int) $t->id); // scope this tenant's models (incl. GoalEngine)
             if (! $engine->enabled($t)) continue;
             $n = $engine->plan($t, max(1, (int) $this->option('cap')));
             $this->info("tenant {$t->id} ({$t->name}): {$n} proposal(s) for today");

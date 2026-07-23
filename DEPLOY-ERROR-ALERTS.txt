@@ -1,0 +1,53 @@
+ERROR ALERTING — dependency-free (Constitution v1.0 · P0 Reliability · observability)
+====================================================================================
+
+WHY
+  You had no way to know when a request 500s in the field. Sentry is already wired in bootstrap/app.php,
+  but it's a no-op until you install the package + set a DSN. This adds a zero-dependency notifier so you
+  are covered TODAY: every server-side error is logged with full request context, and (optionally) posts
+  a rate-limited alert to a Slack/Discord/any webhook.
+
+WHAT SHIPS (default-inert: with no webhook set, it only enriches the log — zero behaviour change)
+  config/errors.php                 NEW  webhook url + throttle + min-status (all env-driven)
+  app/Support/ErrorNotifier.php     NEW  the notifier (guarded, throttled, never throws)
+  bootstrap/app.php                 +5   registers a report() callback in the existing withExceptions block
+
+WHAT IT DOES
+  On an unhandled exception that is a real server-side failure (>= 500; validation/auth/404 are skipped):
+    • writes a STRUCTURED log line — file:line, type, message, "METHOD path", request_id, user, tenant;
+    • if ERROR_WEBHOOK_URL is set, posts one alert (deduped for throttle_minutes on identical errors) like:
+        🔴 CloudBSS error @ PaymentService.php:88
+        BoomException: balance underflow
+        POST papi/payments · user 7 · tenant 17 · rid req-9
+  It never throws, times out the webhook at 4s, and only fires on >=500 (rare), so it won't slow normal traffic.
+
+VERIFICATION DONE HERE
+  php -l clean on all three files. Logic simulation (9 checks) all pass: skips validation/auth/404 and
+  HTTP <500; alerts on 500/503/generic; identical errors share a throttle key (different line ≠); the alert
+  carries route + tenant + request id.
+
+DEPLOY
+  git add config/errors.php app/Support/ErrorNotifier.php bootstrap/app.php DEPLOY-ERROR-ALERTS.txt
+  git commit -m "P0 Reliability: dependency-free error alerting (structured log + optional webhook on 500s)"
+  git push  ->  EasyPanel Rebuild
+  php artisan optimize:clear   # picks up config/errors.php
+
+ACTIVATE ALERTS (optional, recommended)
+  Set in the environment:
+    ERROR_WEBHOOK_URL=https://hooks.slack.com/services/XXX   (or a Discord/other incoming webhook)
+    ERROR_WEBHOOK_THROTTLE=10        # minutes to dedupe identical errors (default 10)
+  Then: php artisan config:clear. Without ERROR_WEBHOOK_URL it stays log-only.
+
+UPGRADE TO SENTRY (when ready — the hook is already in bootstrap/app.php)
+  composer require sentry/sentry-laravel
+  set SENTRY_LARAVEL_DSN=...   in env, then config:clear.
+  Both can run together (Sentry for triage history, the webhook for instant chat alerts).
+
+VERIFY
+  Trigger a safe 500 (e.g. a temporary throw in a scratch route, or watch the next real one) and confirm:
+    • storage/logs shows "unhandled @ file:line" with the context array;
+    • if a webhook is set, the alert lands in the channel (and a repeat within the window does NOT).
+
+SAFETY
+  Additive files + a guarded report() callback. Default behaviour unchanged (no webhook => log-only). The
+  notifier swallows its own errors, so it can never turn one failure into two.

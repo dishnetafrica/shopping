@@ -44,6 +44,12 @@ return Application::configure(basePath: dirname(__DIR__))
             \Sentry\Laravel\Integration::handles($exceptions);
         }
 
+        // Dependency-free alerting (works before Sentry): structured log always; a throttled webhook on
+        // >=500s if ERROR_WEBHOOK_URL is set. Guarded + swallowed — never causes a second failure.
+        $exceptions->report(function (\Throwable $e) {
+            \App\Support\ErrorNotifier::report($e);
+        });
+
         // For API-ish paths, return JSON with a request id instead of an HTML error page,
         // so the frontend and support get a real message + a traceable id (not "Not Found" HTML).
         $exceptions->render(function (\Throwable $e, $request) {

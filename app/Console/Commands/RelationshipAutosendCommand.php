@@ -45,6 +45,7 @@ class RelationshipAutosendCommand extends Command
             ->get();
 
         foreach ($tenants as $t) {
+            app(\App\Support\TenantContext::class)->set((int) $t->id); // scope this tenant's models
             if (! (bool) $t->setting('followups_auto_send', false)) continue;
 
             // rail 2: local business hours

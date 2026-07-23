@@ -23,7 +23,9 @@ use PHPUnit\Framework\TestCase;
  *     the trait is added — otherwise that command silently returns nothing. Drive this list to empty.
  *
  * The guard FAILS if a new unscoped tenant model appears (regression), and FAILS if a listed model is
- * fixed but not delisted (keeps the register honest). History: started at 24; 13 safe models scoped.
+ * fixed but not delisted (keeps the register honest). History: 24 → 11 (batch 1: 13 safe models scoped)
+ * → 8 (batch 2: SourcingRequest, FollowupProposal, BotMiss scoped after patching their scheduled
+ * commands). Remaining debt = the money five, held for a test-gated batch.
  */
 class TenantIsolationTest extends TestCase
 {
@@ -39,14 +41,12 @@ class TenantIsolationTest extends TestCase
      * Each carries the no-tenant-context site that must be patched first (verified in triage):
      */
     private const KNOWN_UNSCOPED = [
-        'BotMiss',          // BotMissesCommand (cross-tenant digest) -> withoutGlobalScopes()
+        // The money five — held for a dedicated batch WITH a full test run (they feed cash + the GL).
         'CustomerPayment',  // AuditPaymentsCommand, FixPaymentsCommand -> set ctx in tenant loop
-        'FollowupProposal', // Relationship{Attribute,Autosend,Review,Plan}Command + GoalEngine::blocked
         'LedgerAccount',    // LedgerBackfill via LedgerService
         'LedgerJournal',    // LedgerBackfill via LedgerService
         'LedgerLine',       // LedgerBackfill via LedgerService
         'OrderCost',        // FixPaymentsCommand, RepriceForeignCashCommand, LedgerBackfill
-        'SourcingRequest',  // SourcingRemindCommand (scheduled HOURLY — patch before scoping)
     ];
 
     public function test_no_new_unscoped_tenant_models(): void
