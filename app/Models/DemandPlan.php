@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Models;
+use App\Models\Concerns\BelongsToTenant;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -11,6 +12,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class DemandPlan extends Model
 {
+    use BelongsToTenant;
+
     protected $fillable = [
         'tenant_id', 'plan_no', 'title', 'plan_date', 'transport_mode', 'cover_days',
         'shipment_ref', 'shipment_id', 'status', 'created_by', 'notes', 'submitted_at',

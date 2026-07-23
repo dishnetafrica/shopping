@@ -1,0 +1,76 @@
+TENANT ISOLATION — remediation batch 1: scope the 13 provably-safe models (Constitution v1.0 · P0 Security)
+=========================================================================================================
+
+WHAT THIS DOES
+  Adds the BelongsToTenant trait (auto tenant global scope) to 13 tenant-owned models whose EVERY call
+  site already runs under tenant context. Cuts the unscoped-model debt from 24 down to 11, and
+  restructures the isolation test's register into two lists (see below).
+
+  This IS a behaviour change (those models now auto-filter by tenant). It was gated by a per-model
+  triage of all call sites. Run the test suite after deploying (below) to confirm.
+
+THE 13 NOW SCOPED
+  Supplier, DemandPlan, DemandPlanLine, Partner, PartnerCapital, MerchantChangeRequest,
+  PushSubscription, ExpenseCategory, AuditLog, TradePurchaseTick, TradeOrderItem, InvoiceItem, CreditNoteItem
+  (Each: added `use App\Models\Concerns\BelongsToTenant;` + `use BelongsToTenant;`. Verified: no call
+   sites in app/Jobs, app/Console/Commands, Bot, Billing, Api, Comms; no tenant()/boot collisions.)
+
+WHY ONLY 13 — THE TRAP THAT SETS THE BOUNDARY
+  Once a model is scoped, a call site with NO active TenantContext runs `where tenant_id = null` →
+  `tenant_id IS NULL` → returns NOTHING. And an explicit `->where('tenant_id', $t->id)` does NOT save it
+  (the scope ANDs `IS NULL` on top). So any model queried from a background command/webhook without ctx
+  must have that site patched FIRST. The 13 above have no such sites; the 8 below do — they are HELD.
+
+STILL UNSCOPED — 11 (tracked in tests/Unit/TenantIsolationTest.php)
+
+  A) KNOWN_UNSCOPED — 8 tenant-owned, MUST be fixed, but each needs a command patched before scoping:
+     BotMiss           BotMissesCommand (intentional cross-tenant digest) -> add ->withoutGlobalScopes()
+     SourcingRequest   SourcingRemindCommand (scheduled HOURLY) -> set ctx in the per-tenant loop
+     FollowupProposal  Relationship{Attribute,Autosend,Review,Plan}Command + GoalEngine::blocked()
+     CustomerPayment   AuditPaymentsCommand, FixPaymentsCommand
+     OrderCost         FixPaymentsCommand, RepriceForeignCashCommand, LedgerBackfill(->LedgerService)
+     LedgerAccount     LedgerBackfill (->LedgerService)
+     LedgerJournal     LedgerBackfill (->LedgerService)
+     LedgerLine        LedgerBackfill (->LedgerService)
+     Pattern for the patch: inside each command's `foreach ($tenants as $t)` loop, call
+       app(\App\Support\TenantContext::class)->set($t->id);
+     which fixes every downstream service query at once (lower-risk than per-query withoutGlobalScopes).
+     The money five (CustomerPayment, OrderCost, Ledger*) are held for a dedicated batch WITH a full
+     test run, because they feed cash + the GL — money paths must never break.
+
+  B) PLATFORM_GLOBAL — 3 intentionally cross-tenant (do NOT scope, ever):
+     Payment          SaaS subscription billing; unauth webhooks resolve the tenant FROM the payment.
+     ValidationRun    platform validation runs; fixtures carry no tenant.
+     FieldValidation  operator/QA program; cross-tenant operator dashboard.
+     Their tenant-facing reads already filter tenant_id explicitly under tenant middleware.
+
+FILES CHANGED
+  app/Models/{Supplier,DemandPlan,DemandPlanLine,Partner,PartnerCapital,MerchantChangeRequest,
+              PushSubscription,ExpenseCategory,AuditLog,TradePurchaseTick,TradeOrderItem,
+              InvoiceItem,CreditNoteItem}.php     (+2 lines each: import + trait use)
+  tests/Unit/TenantIsolationTest.php             (register restructured: PLATFORM_GLOBAL + KNOWN_UNSCOPED)
+
+DEPLOY
+  git add app/Models/Supplier.php app/Models/DemandPlan.php app/Models/DemandPlanLine.php \
+          app/Models/Partner.php app/Models/PartnerCapital.php app/Models/MerchantChangeRequest.php \
+          app/Models/PushSubscription.php app/Models/ExpenseCategory.php app/Models/AuditLog.php \
+          app/Models/TradePurchaseTick.php app/Models/TradeOrderItem.php app/Models/InvoiceItem.php \
+          app/Models/CreditNoteItem.php tests/Unit/TenantIsolationTest.php DEPLOY-TENANT-SCOPE-BATCH-1.txt
+  git commit -m "P0 Security: scope 13 tenant-owned models (isolation debt 24 -> 11)"
+  git push  ->  EasyPanel Rebuild
+  php artisan optimize:clear
+
+RUN THE SUITE (required — this is a behaviour change)
+  php artisan test --filter=TenantIsolation      # structural + behavioural isolation
+  php artisan test                               # full suite, to catch any scoped-model regression
+  Manual smoke on tenant 17: open Suppliers, Demand Plan, an invoice (line items), partner capital,
+  expense categories — all must still list only this tenant's rows (they will; sites are contexted).
+
+ROLLBACK (per model, trivial)
+  Remove the two added lines from the model (`use App\Models\Concerns\BelongsToTenant;` and
+  `use BelongsToTenant;`) and put the class name back into KNOWN_UNSCOPED. No data change.
+
+SAFETY
+  No migration, no money-path code, no flag. The money-adjacent models were deliberately NOT touched.
+  The isolation test now guards this: it fails if a new unscoped tenant model appears, or if any listed
+  model is fixed without being delisted.

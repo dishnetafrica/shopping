@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Models;
+use App\Models\Concerns\BelongsToTenant;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -8,6 +9,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /** One product line on a Demand Plan / Procurement Request. */
 class DemandPlanLine extends Model
 {
+    use BelongsToTenant;
+
     protected $fillable = [
         'tenant_id', 'demand_plan_id', 'product_id', 'name',
         'current_stock', 'in_transit', 'expected_sales', 'suggested_qty', 'requested_qty',

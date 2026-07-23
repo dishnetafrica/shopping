@@ -1,12 +1,15 @@
 <?php
 
 namespace App\Models;
+use App\Models\Concerns\BelongsToTenant;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class InvoiceItem extends Model
 {
+    use BelongsToTenant;
+
     protected $fillable = [
         'invoice_id', 'tenant_id', 'name', 'sku', 'qty', 'unit_price', 'line_total', 'uom', 'pack',
     ];

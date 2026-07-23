@@ -1,12 +1,15 @@
 <?php
 
 namespace App\Models;
+use App\Models\Concerns\BelongsToTenant;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CreditNoteItem extends Model
 {
+    use BelongsToTenant;
+
     protected $fillable = [
         'credit_note_id', 'tenant_id', 'name', 'sku', 'qty', 'unit_price', 'line_total', 'uom', 'pack',
     ];

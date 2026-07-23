@@ -1,10 +1,13 @@
 <?php
 namespace App\Models;
+use App\Models\Concerns\BelongsToTenant;
 
 use Illuminate\Database\Eloquent\Model;
 
 class MerchantChangeRequest extends Model
 {
+    use BelongsToTenant;
+
     protected $fillable = [
         'tenant_id', 'merchant_phone', 'change_type', 'payload_json', 'previous_json',
         'status', 'conversation_id', 'confirmed_at', 'applied_at', 'cancelled_at',
