@@ -1,0 +1,45 @@
+FINANCE 404 FIX — register the /papi/bos-finance (and bos-run) routes on the server
+===================================================================================
+
+THE DIAGNOSIS (from your console)
+  GET https://mycloudbss.com/papi/bos-finance?cur=base   404 (Not Found)
+
+  A 404 means the ROUTE isn't registered on the server (a broken controller would be a 500). When the
+  modern screens were deployed, the routes/web.php that landed had bos-today + bos-customers (that's why
+  Today and Customers work) but NOT bos-finance — and almost certainly not bos-run either (you'll hit
+  that the first time you start a collection run). The frontend is fine; it just has no endpoint to call,
+  so it correctly falls back to "Finance unavailable".
+
+WHAT'S IN THIS FIX
+  routes/web.php                                      — now registers all four:
+                                                        bos-today, bos-customers, bos-finance, bos-run
+  app/Http/Controllers/Panel/BosFinanceController.php — the Finance endpoint (present + lint-clean)
+  app/Http/Controllers/Panel/BosRunController.php     — the Collect Run endpoint (so runs work too)
+
+IMPORTANT — CLEAR THE ROUTE CACHE
+  Laravel caches the route table. Adding a route line does NOTHING until the route cache is cleared, so
+  the deploy MUST end with the clear step below (optimize:clear covers it). If you skip it, it'll still 404.
+
+DEPLOY
+  unzip into repo root
+  git add routes/web.php \
+          app/Http/Controllers/Panel/BosFinanceController.php \
+          app/Http/Controllers/Panel/BosRunController.php \
+          DEPLOY-FINANCE-404-FIX.txt
+  git commit -m "Fix: register /papi/bos-finance + /papi/bos-run routes (Finance was 404)"
+  git push   ->  EasyPanel Rebuild
+  php artisan route:clear && php artisan optimize:clear && php artisan view:clear
+
+VERIFY ON THE SERVER (fastest confirmation)
+  php artisan route:list | grep bos
+  # you should see all FOUR: bos-today, bos-customers, bos-finance, bos-run
+  Then on the phone: tap Finance -> the cash-on-hand hero + Collections/Invoices/Payments/Cash book/P&L.
+
+NOTE ON THE OTHER CONSOLE LINE (not urgent, cosmetic)
+  GET https://mycloudbss.com/icon-192.png 404  — the PWA manifest points at an app icon that isn't on
+  the server. It only affects the "Add to Home Screen" icon, nothing in the app. Drop an icon-192.png
+  (192x192 PNG) into /public whenever convenient, or I can wire the manifest to an icon you already have.
+
+SAFETY
+  Additive: two GET endpoints + their route lines. No migration, no money-write path. routes/web.php here
+  is your current file plus these route lines, so deploying it won't remove anything.
