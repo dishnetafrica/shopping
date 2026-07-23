@@ -1,0 +1,133 @@
+STOCK LEDGER — enable as the single source of inventory truth (Constitution v1.0 · P0 Inventory)
+================================================================================================
+
+GOAL
+  Make the append-only Stock Ledger (stock_movements + StockLedger) the ONE inventory truth, and
+  retire the legacy `products.stock` / `consignment_stock` numbers as sources of on-hand — WITHOUT
+  ever showing a wrong stock figure. The rule for this whole procedure: reconcile BEFORE you switch,
+  and never remove a legacy path until parity has held for several days.
+
+  This bundle ships TOOLING ONLY. It changes no write path and flips no flag. It is safe to deploy
+  with zero behavioural change; enabling is a deliberate, staged operator action (Step 3+).
+
+WHAT'S IN THIS BUNDLE
+  app/Console/Commands/StockReconcile.php        NEW  `php artisan stock:reconcile`  (READ-ONLY parity check)
+  app/Console/Commands/StockBackfillCommand.php  NEW  `php artisan stock:backfill`   (idempotent opening-balance seed)
+  (Laravel 11 auto-discovers both — no Kernel edit needed.)
+
+BACKGROUND — why two flags, and why they flip TOGETHER
+  Two tenant settings gate the ledger:
+    • stock_ledger  — start WRITING receipts/adjustments/consignment movements to the ledger.
+    • stock_v2      — READ on-hand from the ledger (site/bot/Product::onHand) AND, because
+                      OrderStockIssuer is gated on this too, start ISSUING sale/delivery OUT movements.
+  Consequence: if you turn on stock_ledger but leave stock_v2 off, the ledger records receipts but
+  NOT sales, so it OVER-COUNTS and grows more wrong every day. Therefore: seed a fresh backfill and
+  flip BOTH flags together, at a low-activity moment. Do not run split for more than a brief test.
+
+--------------------------------------------------------------------------------------------------
+DEPLOY (code)
+  git add app/Console/Commands/StockReconcile.php app/Console/Commands/StockBackfillCommand.php \
+          DEPLOY-STOCK-LEDGER-ENABLE.txt
+  git commit -m "P0 Inventory: stock:reconcile + stock:backfill tooling (no behaviour change)"
+  git push   ->  EasyPanel Rebuild
+  php artisan optimize:clear
+  # verify the commands registered:
+  php artisan list | grep stock:      # expect stock:reconcile and stock:backfill
+
+--------------------------------------------------------------------------------------------------
+ENABLE — staged rollout for ONE tenant (use tenant 17 first)
+
+STEP 1 — Baseline (read-only, changes nothing)
+  php artisan stock:reconcile 17
+  # This shows the current flags and any drift between legacy and ledger. With the ledger still
+  # dormant you will typically see Juba drift already (demand-plan `procurement_receive` movements
+  # write regardless of flags). Note what you see — this is your starting point.
+
+STEP 2 — Seed opening balances (idempotent; safe to re-run)
+  php artisan stock:backfill 17
+  # Writes ONE opening IN movement per stocked product (Kampala = products.stock) and per
+  # consignment line's remaining qty (Juba). Already-seeded lines are skipped.
+
+STEP 3 — Prove Kampala parity BEFORE flipping anything
+  php artisan stock:reconcile 17 --location=kampala
+  # REQUIRED GATE: Kampala must read "parity" (0 drifting). If products drift here, resolve them
+  # (see KNOWN DRIFT CAUSES) and re-run. Do not proceed until Kampala is clean.
+
+STEP 4 — Flip BOTH flags together (low-activity window)
+  php artisan tinker
+  >>> $t = \App\Models\Tenant::find(17);
+  >>> $t->putSetting('stock_ledger', true);
+  >>> $t->putSetting('stock_v2', true);
+  >>> // stock_issue_on_delivery defaults true; set explicitly if unsure:
+  >>> $t->putSetting('stock_issue_on_delivery', true);
+  # From here: receipts, adjustments, consignment moves AND sale/delivery OUT movements all record,
+  # and every on-hand read (Product::onHand, site, bot, reports) comes from the ledger.
+
+STEP 5 — Verify live, then keep the legacy column aligned during the grace period
+  php artisan stock:reconcile 17
+  # Exercise a real flow: receive stock, make a sale/delivery, reopen the app -> on-hand should move
+  # correctly. Because sales don't touch products.stock, the legacy column will now lag; that's
+  # expected. To keep the legacy Kampala column mirrored (so any un-migrated screen still agrees)
+  # run the existing one-way sync on a schedule during the grace period:
+  #   POST /papi/stock/reconcile-cache   (owner/manager)   — derives products.stock FROM the ledger.
+
+STEP 6 — Schedule the parity watch (optional but recommended)
+  # In routes/console.php:
+  #   Schedule::command('stock:reconcile --json')->dailyAt('02:30');
+  # Exit code 1 on any drift, so it can alarm.
+
+--------------------------------------------------------------------------------------------------
+KNOWN DRIFT CAUSES (what stock:reconcile will surface, and the fix)
+
+  1. Kampala over-count, ledger > legacy, after a split-flag test
+       Cause: stock_ledger on while stock_v2 off (receipts recorded, sales not issued).
+       Fix:   flip stock_v2 on too (Step 4). Re-run backfill only if you had NOT seeded first.
+
+  2. Juba double-count, ledger > legacy remaining
+       Cause: a demand-plan receive wrote a `procurement_receive` IN movement AND the
+              `backfill_consignment` opening balance counted the same received qty.
+       Fix:   for affected consignment lines, delete the redundant opening row, e.g.
+                DELETE FROM stock_movements
+                 WHERE tenant_id=17 AND ref_type='backfill_consignment' AND ref_id=<consignment_stock.id>;
+              then re-run: php artisan stock:reconcile 17 --location=juba
+       (Going forward, Juba is managed by movements; the opening balance is only for lines with no
+        prior movement.)
+
+  3. Kampala under-count, product in legacy but missing from ledger
+       Cause: products created via bulk CSV import (Product::insert bypasses the stock observer).
+       Fix:   php artisan stock:backfill 17   (idempotent — seeds only the missing ones).
+       Habit: ALWAYS run stock:backfill after a bulk product import.
+
+--------------------------------------------------------------------------------------------------
+DUAL-WRITE COVERAGE — assessed (no write-path change in this bundle, on purpose)
+  Every stock-mutating path already mirrors to the ledger when stock_ledger is on, EXCEPT:
+    • ProductImporter bulk insert (Product::insert) — bypasses the observer. Mitigation: the
+      idempotent backfill seeds those products' opening balance. Covered by KNOWN CAUSE 3.
+    • DemandPlanCapability::receiveTo — writes `procurement_receive` to Juba UNCONDITIONALLY (all
+      tenants, any flag). This loses no data; it only creates the Juba double-count on backfill,
+      handled by KNOWN CAUSE 2.
+  Decision: we establish parity tooling first and change no write path until parity is proven and
+  reads are switched. Hardening these two paths (emit ledger movements inside the importer; gate the
+  demand-plan write) is a follow-up, done AFTER this tenant is clean — not before.
+
+--------------------------------------------------------------------------------------------------
+ROLLBACK (instant, non-destructive)
+  php artisan tinker
+  >>> $t = \App\Models\Tenant::find(17);
+  >>> $t->putSetting('stock_v2', false);      // reads fall straight back to products.stock
+  >>> $t->putSetting('stock_ledger', false);  // writes stop mirroring to the ledger
+  # No data is deleted. The stock_movements rows remain (harmless) and can be reused on the next
+  # attempt. The legacy columns were never removed, so on-hand is exactly as before.
+
+--------------------------------------------------------------------------------------------------
+LATER — removing the legacy paths (the actual consolidation; DO NOT do it in this bundle)
+  Only after stock:reconcile has held "parity" for ~1-2 weeks on this tenant:
+    1. Remove the legacy `else` branch in Product::onHand() (ledger becomes the only read).
+    2. Retire direct products.stock / consignment_stock qty writes as truth (keep them only as a
+       mirror cache if any un-migrated screen still needs them, fed by reconcile-cache).
+    3. Demote InventorySnapshot to bot-belief only; never a source of accounting on-hand.
+  Ship that as its own bundle, behind the same reconcile gate, one step at a time.
+
+SAFETY
+  Nothing here moves money. Nothing here deletes data. The enable is reversible with two setting
+  flips. The single hard gate before switching reads is: stock:reconcile must read "parity".
