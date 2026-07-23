@@ -1,0 +1,57 @@
+PAYMENT 500 FIX — run the customer_payments.idempotency_key migration
+=====================================================================
+
+THE SYMPTOM
+  • Collect (Customer 360 / Collect Run) → "Could not record (Something went wrong on our side.)"
+  • Classic "Add payment" → won't save.
+  Both fail the same way because every payment path goes through ONE recorder
+  (App\Services\Money\PaymentService::record).
+
+THE CAUSE
+  "Something went wrong on our side." is the generic message the papi/* error handler returns for ANY
+  server 500 (see bootstrap/app.php). The real error is a database one: PaymentService::record reads and
+  writes a column `idempotency_key` on the `customer_payments` table. That column is added by a migration
+  (2026_07_24_000001_add_idempotency_key_to_customer_payments.php). If the migration hasn't run on your
+  server, the column is missing, so every payment INSERT throws → 500. (Same story as the route cache:
+  the code shipped, the schema step didn't.)
+
+THE FIX (safe — additive, nullable column, guarded by hasColumn)
+  On the server:
+     php artisan migrate:status        # look for the idempotency_key migration marked "Pending"
+     php artisan migrate               # applies it (and any other pending ones)
+
+  If the migration file isn't in your repo yet, this bundle includes it — unzip into repo root first:
+     git add database/migrations/2026_07_24_000001_add_idempotency_key_to_customer_payments.php \
+             DEPLOY-PAYMENT-500-FIX.txt
+     git commit -m "Fix: add customer_payments.idempotency_key (payments were 500ing)"
+     git push   ->  EasyPanel Rebuild
+     php artisan migrate
+
+VERIFY
+  Record a test payment (Collect USD 1.00 on any open invoice) → "Payment recorded".
+  Then, if it was a test: Payments screen → delete it, or use the reprice/rollback tools.
+
+IF IT STILL 500s AFTER MIGRATING — get the REAL error (30 seconds)
+  The exception is logged. On the server:
+     tail -n 40 storage/logs/laravel.log
+  Look for the top line of the most recent stack (e.g. "SQLSTATE... column ... does not exist", or a
+  different column). Paste me that line and I'll pinpoint it — it will name the exact missing piece.
+
+────────────────────────────────────────────────────────────────────────────────────────────────
+YOUR QUESTION — "money received goes to WHICH person's cashbook?"
+  It's credited to the RECEIVER (the "holder") — the person who physically took the cash — and it lands
+  in THAT person's cash-in-hand / cashbook. Right now:
+    • Collect flow (Customer 360 / Collect Run): the receiver is automatically the logged-in user who
+      records it. There is no picker in the collect composer yet, so it always books to whoever is signed
+      in on that phone.
+    • Classic "Add payment": same default (the logged-in user). An owner/manager can set a different
+      receiver via the "receiver" field where the form exposes it.
+  So if a specific staff member collected the cash, sign in as them (or set the receiver) so it hits the
+  right cashbook. If you'd like, I can add a small "Received by ▾" picker to the Collect composer so an
+  owner can attribute a collection to the staff member who actually took the money, per stop — say the
+  word and I'll build it (frontend + pass `receiver` to the same endpoint; no new money path).
+────────────────────────────────────────────────────────────────────────────────────────────────
+
+SAFETY
+  Additive schema change only (one nullable, indexed column). No data rewrite, no money-path logic
+  change. Fully reversible (the migration has a guarded down()).
