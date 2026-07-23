@@ -46,10 +46,16 @@ final class SettingsSchema
                 ]],
             ]],
             ['key' => 'invoicing', 'label' => 'Invoice & tax', 'icon' => 'invoice', 'groups' => [
+                ['label' => 'VAT / Sales tax', 'help' => 'VAT is never hardcoded — set your own rate (or turn it off). Uganda 18%, Kenya 16%, zero-rated: all just configuration.', 'fields' => [
+                    ['key' => 'vat_enabled',        'type' => 'bool',   'label' => 'Charge VAT / sales tax'],
+                    ['key' => 'vat_rate',           'type' => 'number', 'label' => 'VAT rate', 'unit' => '%', 'default' => 0],
+                    ['key' => 'prices_include_vat', 'type' => 'bool',   'label' => 'Catalogue prices already include VAT'],
+                    ['key' => 'vat_label',          'type' => 'text',   'label' => 'Tax label', 'default' => 'VAT'],
+                    ['key' => 'vat_number',         'type' => 'text',   'label' => 'Tax registration no. (shown on invoices)'],
+                ]],
                 ['label' => 'Invoice defaults', 'fields' => [
                     ['key' => 'invoice_title',      'type' => 'text',     'label' => 'Invoice title', 'default' => 'INVOICE'],
                     ['key' => 'invoice_terms_days', 'type' => 'number',   'label' => 'Payment terms', 'unit' => 'days', 'default' => 0],
-                    ['key' => 'vat_rate',           'type' => 'number',   'label' => 'VAT rate', 'unit' => '%', 'default' => 0],
                     ['key' => 'bank_details',       'type' => 'textarea', 'label' => 'Bank details'],
                     ['key' => 'invoice_footer',     'type' => 'textarea', 'label' => 'Invoice footer'],
                 ]],

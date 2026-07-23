@@ -624,6 +624,86 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
   border:1px solid var(--line);font-size:14px;font-weight:600;color:var(--ink);text-align:left;transition:.12s}
 .qadd:active{background:var(--brand-wash);border-color:var(--brand)}
 .qadd .qaic{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:none;background:var(--brand-wash);color:var(--brand-ink)}
+/* Receive-Payment sheet (design v1.0) */
+.paysheet .pay-h{font-size:19px;font-weight:800;letter-spacing:-.012em;color:var(--ink);padding:2px 2px 2px}
+.paysheet .pay-sub{font-size:13px;color:var(--muted);padding:2px 2px 14px}
+.pay-amtrow{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin-bottom:12px;background:var(--surface-2)}
+.pay-amtrow .pay-cur{font-size:14px;font-weight:700;color:var(--muted)}
+.pay-amt{flex:1;border:0;background:transparent;font-size:26px;font-weight:800;letter-spacing:-.012em;color:var(--ink);outline:none;width:100%;font-variant-numeric:tabular-nums}
+.pay-methods{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px}
+.paym{height:44px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-size:14px;font-weight:700;color:var(--ink-2);transition:.12s}
+.paym.on{background:var(--brand-wash);border-color:var(--brand);color:var(--brand-ink)}
+.pay-go{width:100%;height:52px;border-radius:16px;border:0;background:var(--brand);color:#fff;font-size:16px;font-weight:800;letter-spacing:-.012em;box-shadow:var(--sh-lg)}
+.pay-go:disabled{opacity:.7}
+.pay-cancel{width:100%;height:44px;margin-top:8px;border-radius:14px;border:0;background:transparent;color:var(--muted);font-size:14px;font-weight:700}
+.paysheet{max-height:90vh;overflow-y:auto}
+.fs-field{margin-bottom:12px}
+.fs-field label{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:6px}
+.fs-wrap{flex-wrap:wrap}
+.fs-cat{flex:0 0 auto;min-width:0;padding:0 14px;height:38px}
+/* Native Profit & Loss (design v1.0) */
+.pnl-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:4px 14px;box-shadow:var(--sh-sm)}
+.pnl-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line-2)}
+.pnl-card > .pnl-row:first-child{border-top:0}
+.pnl-l{font-size:14px;color:var(--ink-2)}
+.pnl-v{font-size:14px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pnl-row.strong .pnl-l{font-weight:700;color:var(--ink)}
+.pnl-row.strong .pnl-v{font-weight:800}
+.pnl-row.pos .pnl-v{color:var(--brand-ink)}
+.pnl-row.neg .pnl-v{color:var(--danger)}
+.pnl-note{font-size:12px;color:var(--muted);padding:12px 4px 4px;text-align:center}
+.pnl-note.warn{color:var(--warn)}
+/* Quick Invoice (design v1.0) */
+.qinv-hint{font-size:12.5px;color:var(--muted);line-height:1.45;padding:0 2px 12px}
+.qinv-amt{font-size:26px;font-weight:800;letter-spacing:-.012em;color:var(--ink);font-variant-numeric:tabular-nums;padding:2px 2px 8px}
+.qinv-done{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0 6px}
+.qinv-check{width:56px;height:56px;border-radius:50%;background:var(--brand-wash);color:var(--brand-ink);display:grid;place-items:center;margin-bottom:4px}
+.qinv-check .i{width:30px;height:30px}
+/* Phone card mode for classic lists (design v1.0) */
+.dtc-list{display:flex;flex-direction:column;gap:10px;padding:2px 0 4px}
+.dtc{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:13px 14px;box-shadow:var(--sh-sm)}
+.dtc-top{display:flex;align-items:center;gap:11px}
+.dtc-avwrap{flex:none}
+.dtc-av{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:#fff;font-weight:700;font-size:14px;background-size:cover;background-position:center}
+.dtc-main{min-width:0;flex:1}
+.dtc-name{font-weight:700;font-size:15px;color:var(--ink);letter-spacing:-.012em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dtc-sub{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.dtc-r{margin-left:auto;display:flex;align-items:center;gap:6px;flex:none}
+.dtc-amt{font-weight:800;font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.dtc-chev{width:18px;height:18px;color:var(--faint)}
+.dtc-meta{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-top:9px}
+.dtc-kv{font-size:12px;color:var(--muted)}
+.dtc-kv b{color:var(--ink-2);font-weight:700}
+.dtc-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+/* Native Settings screen (design v1.0) */
+.set-wa{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:13px 14px;box-shadow:var(--sh-sm);margin-bottom:2px}
+.set-wa-l{flex:1;min-width:0}
+.set-wa-t{font-weight:700;font-size:14px;color:var(--ink)}
+.set-wa-s{font-size:12.5px;color:var(--muted)}
+.set-wa-b{height:38px;padding:0 16px;border-radius:12px;border:1px solid var(--brand);background:var(--brand-wash);color:var(--brand-ink);font-weight:700;font-size:13px;flex:none}
+.set-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:4px 14px;box-shadow:var(--sh-sm);margin-bottom:10px}
+.set-glabel{font-weight:700;font-size:13px;color:var(--ink-2);padding:12px 0 2px}
+.set-help{font-size:12px;color:var(--muted);padding-bottom:4px;line-height:1.45}
+.set-row{padding:12px 0;border-top:1px solid var(--line-2)}
+.set-card > .set-row:first-child,.set-glabel + .set-row,.set-help + .set-row{border-top:0}
+.set-lbl{font-weight:600;font-size:14px;color:var(--ink);margin-bottom:7px}
+.set-fhelp{font-size:12px;color:var(--muted);line-height:1.45;margin-top:-2px;margin-bottom:6px}
+.set-inwrap{display:flex;align-items:center;gap:8px}
+.set-in{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 12px;font-size:15px;color:var(--ink);background:var(--surface-2);outline:none;box-sizing:border-box}
+.set-in:focus{border-color:var(--brand);background:var(--surface)}
+.set-ta{min-height:70px;resize:vertical;font-family:inherit}
+.set-unit{font-size:13px;font-weight:700;color:var(--muted);flex:none}
+.set-segs{display:flex;gap:8px;flex-wrap:wrap}
+.set-seg{flex:1;min-width:84px;height:42px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-size:13px;font-weight:700;color:var(--ink-2);padding:0 10px}
+.set-seg.on{background:var(--brand-wash);border-color:var(--brand);color:var(--brand-ink)}
+.set-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer}
+.set-toggle .set-l{flex:1;min-width:0}
+.set-sw{width:46px;height:28px;border-radius:16px;background:var(--line);position:relative;flex:none;transition:.16s}
+.set-sw.on{background:var(--brand)}
+.set-knob{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:.16s}
+.set-sw.on .set-knob{left:21px}
+.set-save{position:sticky;bottom:calc(70px + env(safe-area-inset-bottom,0));width:100%;height:52px;border-radius:16px;border:0;background:var(--brand);color:#fff;font-size:16px;font-weight:800;letter-spacing:-.012em;box-shadow:var(--sh-lg);margin-top:8px;z-index:5}
+.set-save:disabled{opacity:.7}
 .qadd .qaic .ic{width:19px;height:19px}
 /* Workspace hubs (Operations / Finance / Me): action-oriented card menu into existing screens. */
 .hubhead{font-size:23px;font-weight:800;letter-spacing:-.01em;margin:2px 2px 3px}
@@ -1509,10 +1589,10 @@ async function route(key, id){
   CUR={key,id}; REC_TAB='overview'; location.hash='#/'+key+(id?'/'+id:''); setActive(key);
   if(key==='transport'){ location.href='/transport'; return; }
   if(key==='chats'){ CUR.key='chats'; CUR.id=id||null; setActive('chats'); waweb(id||null); return; }
-  if(key==='payments'){ document.getElementById('view').innerHTML='<div class="crumb">Payments</div><iframe title="Payments" src="/panel/payments-manager" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
-  if(key==='pnl'){ document.getElementById('view').innerHTML='<div class="crumb">Profit & Loss</div><iframe title="Profit and Loss" src="/panel/pnl-report" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
+  if(key==='payments'){ if(isAppUI()){ bosPayments(); return; } document.getElementById('view').innerHTML='<div class="crumb">Payments</div><iframe title="Payments" src="/panel/payments-manager" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
+  if(key==='pnl'){ if(isAppUI()){ bosPnl(); return; } document.getElementById('view').innerHTML='<div class="crumb">Profit & Loss</div><iframe title="Profit and Loss" src="/panel/pnl-report" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='wa-connect'){ document.getElementById('view').innerHTML='<div class="crumb">Connect WhatsApp</div><iframe title="Connect WhatsApp" src="/panel/setup" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
-  if(key==='settings'){ document.getElementById('view').innerHTML='<iframe title="Settings" src="/panel/settings-manager" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
+  if(key==='settings'){ if(isAppUI()){ bosSettings(); return; } document.getElementById('view').innerHTML='<iframe title="Settings" src="/panel/settings-manager" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='storefront.collections'){ sfCollectionsPage(); return; }
   if(key==='storefront.kits'){ sfKitsPage(); return; }
   if(key==='storefront.delivery'){ sfDeliveryPage(); return; }
@@ -1549,7 +1629,61 @@ function refresh(){ if(CUR.key) route(CUR.key, CUR.id); }
 function toggleNav(){ const a=document.querySelector('.app'); const open=a.classList.toggle('navopen'); document.getElementById('scrim').classList.toggle('on',open); }
 /* Mobile quick-add sheet (the center + in the bottom nav). Each item jumps to its workspace. */
 function closeQuickAdd(){ document.getElementById('qsheet').classList.remove('on'); }
-function quickAdd(key){ closeQuickAdd(); route(key); }
+function quickAdd(key){ closeQuickAdd();
+  // The "+" opens a real modern form for the quick creates, instead of just dropping you on a list.
+  if(key==='customers' && isAppUI()){ custSheetOpen(); return; }
+  if(key==='cashbook' && isAppUI()){ expSheetOpen(); return; }
+  if(key==='invoices' && isAppUI()){ bosQuickInvoice(); return; }
+  route(key);
+}
+/* ===== Quick-add create sheets (design v1.0) — bottom-sheet forms that post to real endpoints. ===== */
+function fsheetEnsure(){ var s=document.getElementById('formsheet'); if(!s){ s=document.createElement('div'); s.id='formsheet'; s.className='qsheet-ov'; s.onclick=function(e){ if(e.target===s) fsheetClose(); }; document.body.appendChild(s); } return s; }
+function fsheetClose(){ var s=document.getElementById('formsheet'); if(s) s.classList.remove('on'); }
+function fsheetOpen(inner){ var s=fsheetEnsure(); s.innerHTML='<div class="qsheet paysheet" role="dialog">'+inner+'</div>'; s.classList.add('on'); }
+function custSheetOpen(){
+  fsheetOpen('<div class="grab"></div><div class="pay-h">New customer</div><div class="pay-sub">Add a customer to your book</div>'
+    +'<div class="fs-field"><label>Name</label><input id="custName" class="set-in" placeholder="e.g. Adel Al-Jili"></div>'
+    +'<div class="fs-field"><label>Phone</label><input id="custPhone" class="set-in" inputmode="tel" placeholder="e.g. 211 900 000"></div>'
+    +'<div class="fs-field"><label>City (optional)</label><input id="custCity" class="set-in" placeholder="e.g. Juba"></div>'
+    +'<button class="pay-go" onclick="custSave(this)">Add customer</button><button class="pay-cancel" onclick="fsheetClose()">Cancel</button>');
+  setTimeout(function(){ var e=document.getElementById('custName'); if(e) e.focus(); },80);
+}
+async function custSave(btn){
+  var name=((document.getElementById('custName')||{}).value||'').trim();
+  var phone=((document.getElementById('custPhone')||{}).value||'').trim();
+  var city=((document.getElementById('custCity')||{}).value||'').trim();
+  if(!name){ toast('Enter a name', true); return; }
+  if(!phone.replace(/[^0-9]/g,'')){ toast('Enter a phone number', true); return; }
+  if(btn){ btn.disabled=true; btn.textContent='Adding…'; }
+  var r=null,neterr=false; try{ r=await getQuery('/papi/customer-save',{name:name, phone:phone, address:city}); }catch(e){ neterr=true; }
+  if(btn){ btn.disabled=false; btn.textContent='Add customer'; }
+  if(!neterr && r && r.ok){ fsheetClose(); toast('Customer added'); if(CUR&&CUR.key==='customers') bosCustomers(); }
+  else { toast((r&&(r.message||r.error==='phone_required'?'A phone number is required':r.error))||'Could not add customer', true); }
+}
+var _EXP={cur:'USD', cat:''};
+function expSheetOpen(){
+  var base=(CFG.currency&&CFG.currency.base)||'USD'; _EXP={cur:base, cat:''};
+  var opts=['USD','UGX','SSP'], cats=['Transport','Rent','Salaries','Utilities','Supplies','Airtime','Other'];
+  fsheetOpen('<div class="grab"></div><div class="pay-h">New expense</div><div class="pay-sub">Cash out — records to your cash book</div>'
+    +'<div class="pay-amtrow"><span class="pay-cur" id="expCurLbl">'+esc(base)+'</span><input id="expAmt" class="pay-amt" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00"></div>'
+    +'<div class="fs-field"><label>Currency</label><div class="set-segs">'+opts.map(function(o){return '<button class="set-seg'+(o===base?' on':'')+'" onclick="expSetCur(this,\''+o+'\')">'+o+'</button>';}).join('')+'</div></div>'
+    +'<div class="fs-field"><label>Category (optional)</label><div class="set-segs fs-wrap">'+cats.map(function(c){return '<button class="set-seg fs-cat" onclick="expSetCat(this,\''+esc(c)+'\')">'+esc(c)+'</button>';}).join('')+'</div></div>'
+    +'<div class="fs-field"><label>Note (optional)</label><input id="expNote" class="set-in" placeholder="What was it for?"></div>'
+    +'<button class="pay-go" onclick="expSave(this)">Record expense</button><button class="pay-cancel" onclick="fsheetClose()">Cancel</button>');
+}
+function expSetCur(btn,c){ _EXP.cur=c; var p=btn.parentNode; p.querySelectorAll('.set-seg').forEach(function(x){ x.classList.remove('on'); }); btn.classList.add('on'); var l=document.getElementById('expCurLbl'); if(l) l.textContent=c; }
+function expSetCat(btn,c){ var was=btn.classList.contains('on'); var p=btn.parentNode; p.querySelectorAll('.set-seg').forEach(function(x){ x.classList.remove('on'); }); if(!was){ btn.classList.add('on'); _EXP.cat=c; } else { _EXP.cat=''; } }
+async function expSave(btn){
+  var amt=Math.round((parseFloat((document.getElementById('expAmt')||{}).value||0))*100)/100;
+  if(!(amt>0)){ toast('Enter an amount', true); return; }
+  var note=((document.getElementById('expNote')||{}).value||'').trim();
+  if(btn){ btn.disabled=true; btn.textContent='Recording…'; }
+  var r=null,neterr=false;
+  try{ r=await post('/papi/trade-cashbook',{dir:'out', native_amount:amt, currency:_EXP.cur, category:_EXP.cat, note:note}); }catch(e){ neterr=true; }
+  if(btn){ btn.disabled=false; btn.textContent='Record expense'; }
+  if(!neterr && r && r.ok){ fsheetClose(); toast('Expense recorded'); if(CUR&&CUR.key==='ws.finance') bosFinance(); }
+  else { toast((r&&(r.message||r.error))||'Could not record the expense', true); }
+}
 
 /* ===== BOS Slice 2 — Customer Timeline: one customer's whole history from the event spine ===== */
 /* ===== Guided Collect Run — the app as an assistant, offline-safe (reuses the OB outbox + /papi/payments) ===== */
@@ -1697,6 +1831,232 @@ async function bosFinance(){
     +row(IC.chart,'#EAECEF','#0C1420','Profit & Loss','this month',cur+' '+finFmt(r.pnl_month),'pnl')
     +'</div>';
   v.innerHTML='<div class="mtoday"><div class="bcl-h"><div class="bcl-title">Finance</div></div>'+hero+list+'</div>';
+}
+/* ===== Modern Receive-Payment screen (design v1.0) — replaces the payments-manager iframe on phones.
+   Pick an open invoice → amount + Cash/MoMo/Bank → Record. Posts to the ONE recorder (/papi/payments),
+   idempotent + offline-safe (same path as the Collect Run). Also lists recent receipts (GET /papi/payments). */
+var PAYLIST=[], PAY_SEL=null, PAY_METHOD='Cash';
+var PAY_COIN='<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/>';
+var PAY_CARD='<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/>';
+async function bosPayments(){
+  const v=document.getElementById('view'); v.innerHTML=skeleton();
+  let run=null, recv=null;
+  try{ run=await getQuery('/papi/bos-run',{}); }catch(e){}
+  try{ recv=await getQuery('/papi/payments',{}); }catch(e){}
+  PAYLIST=(run&&run.stops)||[];
+  const head='<div class="bcl-h"><div class="bcl-title">Receive Payment</div></div>';
+  let open;
+  if(PAYLIST.length){
+    open='<div class="c360-sec"><h3>Open invoices · tap to collect</h3></div><div class="fin-list">'
+      + PAYLIST.map(payRow).join('') + '</div>';
+  } else {
+    open='<div class="btl-empty">No open invoices right now — everyone is settled.</div>';
+  }
+  const rows=(recv&&recv.payments)||[];
+  let recent='';
+  if(rows.length){
+    recent='<div class="c360-sec"><h3>Recent receipts</h3></div><div class="fin-list">'
+      + rows.slice(0,15).map(payReceiptRow).join('') + '</div>';
+  }
+  v.innerHTML='<div class="mtoday">'+head+open+recent+'</div>';
+}
+function payRow(s,i){
+  return '<div class="fin-c" onclick="payOpen('+i+')"><div class="fin-ic" style="background:#FCF1DE;color:#DD8500"><svg class="i" viewBox="0 0 24 24">'+PAY_COIN+'</svg></div>'
+    +'<div class="fin-bd"><div class="fin-t">'+esc(s.name||'Customer')+'</div><div class="fin-s">'+esc(s.invoice_no||s.order_no||'')+(s.city?(' · '+esc(s.city)):'')+'</div></div>'
+    +'<div class="fin-r"><b>'+esc(s.currency||'USD')+' '+finFmt(s.amount)+'</b><svg class="i fin-chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div></div>';
+}
+function payReceiptRow(p){
+  return '<div class="fin-c" style="cursor:default"><div class="fin-ic" style="background:#E4F6EC;color:#0A7A3C"><svg class="i" viewBox="0 0 24 24">'+PAY_CARD+'</svg></div>'
+    +'<div class="fin-bd"><div class="fin-t">'+esc(p.customer||'—')+'</div><div class="fin-s">'+esc(p.receipt_no||'')+' · '+esc(p.method||'Cash')+' · '+esc((p.date||'').slice(0,10))+'</div></div>'
+    +'<div class="fin-r"><b>'+esc(p.currency||'USD')+' '+finFmt(p.amount)+'</b></div></div>';
+}
+function payEnsure(){ var s=document.getElementById('paysheet'); if(!s){ s=document.createElement('div'); s.id='paysheet'; s.className='qsheet-ov'; s.onclick=function(e){ if(e.target===s) payClose(); }; document.body.appendChild(s); } return s; }
+function payOpen(i){
+  PAY_SEL=i; PAY_METHOD='Cash'; var s=PAYLIST[i]; if(!s) return;
+  var sheet=payEnsure();
+  sheet.innerHTML='<div class="qsheet paysheet" role="dialog" aria-label="Receive payment"><div class="grab"></div>'
+    +'<div class="pay-h">Receive from '+esc(s.name||'Customer')+'</div>'
+    +'<div class="pay-sub">'+esc(s.invoice_no||s.order_no||'')+' · '+esc(s.due_label||'balance due')+' · works offline</div>'
+    +'<div class="pay-amtrow"><span class="pay-cur">'+esc(s.currency||'USD')+'</span><input id="payamt" class="pay-amt" type="number" inputmode="decimal" min="0" step="0.01" value="'+Number(s.amount||0).toFixed(2)+'"></div>'
+    +'<div class="pay-methods">'+['Cash','MoMo','Bank'].map(function(m){ return '<button class="paym'+(m==='Cash'?' on':'')+'" onclick="paySetMethod(this,\''+m+'\')">'+m+'</button>'; }).join('')+'</div>'
+    +'<button class="pay-go" onclick="payRecord()">Record payment</button>'
+    +'<button class="pay-cancel" onclick="payClose()">Cancel</button></div>';
+  sheet.classList.add('on');
+}
+function paySetMethod(btn,m){ PAY_METHOD=m; var p=btn.parentNode; p.querySelectorAll('.paym').forEach(function(x){ x.classList.remove('on'); }); btn.classList.add('on'); }
+function payClose(){ var s=document.getElementById('paysheet'); if(s) s.classList.remove('on'); }
+async function payRecord(){
+  if(PAY_SEL==null) return; var s=PAYLIST[PAY_SEL]; if(!s) return;
+  var el=document.getElementById('payamt'); var amt=Math.round((parseFloat(el&&el.value)||0)*100)/100;
+  if(!(amt>0)){ toast('Enter an amount', true); return; }
+  var id=OB.uuid(), now=new Date();
+  var item={ id:id, ts:now.getTime(), kind:'collect', customer_id:Number(s.customer_id||0), endpoint:'/papi/payments',
+    body:{ customer_name:(s.name||'Customer'), customer_phone:s.phone||null, order_no:s.order_no, invoice_no:s.invoice_no,
+      kind:'settlement', currency:s.currency||'USD', amount:amt, method:PAY_METHOD, rate_to_usd:0,
+      idempotency_key:id, created_date:now.toISOString() },
+    label:('Receive '+(s.currency||'USD')+' '+finFmt(amt)) };
+  var btn=document.querySelector('#paysheet .pay-go'); if(btn){ btn.disabled=true; btn.textContent='Recording…'; }
+  if(navigator.onLine){
+    var r=null, neterr=false;
+    try{ r=await post(item.endpoint, item.body); }catch(e){ neterr=true; }
+    if(!neterr && r && r.ok){ payClose(); toast('Payment recorded'); bosPayments(); return; }
+    if(!neterr && r && r.ok===false){ toast('Could not record ('+esc(r.error||'error')+')', true); if(btn){ btn.disabled=false; btn.textContent='Record payment'; } return; }
+    /* network hiccup mid-send → fall through and queue it */
+  }
+  await OB.add(item); if(typeof obBadge==='function') obBadge(); payClose(); toast('Saved offline — will sync'); bosPayments();
+}
+/* ===== Modern Settings screen (design v1.0) — replaces the settings-manager iframe on phones.
+   Generic, schema-driven: renders /papi/settings-hub (sections → text/number/textarea/enum/toggle) and
+   saves via /papi/settings-hub-save. Covers business profile, currency, and the fully-configurable VAT
+   block (rate, on/off, inclusive, label, tax number). Owner-gated by the same endpoints. */
+var SET_DATA=null;
+async function bosSettings(){
+  const v=document.getElementById('view'); v.innerHTML=skeleton();
+  let r=null; try{ r=await getQuery('/papi/settings-hub',{}); }catch(e){}
+  if(!r || r.ok===false){ v.innerHTML='<div class="mtoday"><div class="bcl-h"><div class="bcl-title">Settings</div></div>'+emptyState('bolt','Settings unavailable',(r&&r.message)||'Only an owner or manager can edit settings.')+'</div>'; return; }
+  SET_DATA=r;
+  const wa=r.whatsapp||{};
+  let html='<div class="bcl-h"><div class="bcl-title">Settings</div></div>';
+  html+='<div class="set-wa"><div class="set-wa-l"><div class="set-wa-t">WhatsApp</div><div class="set-wa-s">'+(wa.linked?('Connected'+(wa.number?(' · '+esc(wa.number)):'')):'Not connected')+'</div></div>'
+    +'<button class="set-wa-b" onclick="route(\'wa-connect\')">'+(wa.linked?'Manage':'Connect')+'</button></div>';
+  (r.sections||[]).forEach(function(sec){
+    html+='<div class="c360-sec"><h3>'+esc(sec.label||sec.key)+'</h3></div>';
+    (sec.groups||[]).forEach(function(g){
+      html+='<div class="set-card">';
+      if(g.label) html+='<div class="set-glabel">'+esc(g.label)+'</div>';
+      if(g.help) html+='<div class="set-help">'+esc(g.help)+'</div>';
+      (g.fields||[]).forEach(function(f){ html+=setField(f); });
+      html+='</div>';
+    });
+  });
+  html+='<button class="set-save" onclick="settingsSave(this)">Save changes</button>';
+  v.innerHTML='<div class="mtoday">'+html+'</div>';
+}
+function setField(f){
+  var k=esc(f.key||''), lbl=esc(f.label||f.key||''), val=f.value;
+  var help=f.help?'<div class="set-fhelp">'+esc(f.help)+'</div>':'';
+  if(f.type==='bool'){
+    var on=(val===true||val==='1'||val===1);
+    return '<label class="set-row set-toggle"><div class="set-l"><div class="set-lbl" style="margin:0">'+lbl+'</div>'+help+'</div>'
+      +'<span class="set-sw'+(on?' on':'')+'" data-key="'+k+'" data-type="bool" onclick="setToggle(this)"><span class="set-knob"></span></span></label>';
+  }
+  if(f.type==='enum'){
+    var opts=f.options||[], ol=f.optionLabels||{}, cur=(val!=null?String(val):(f.default!=null?String(f.default):''));
+    var btns=opts.map(function(o){ return '<button class="set-seg'+(String(o)===cur?' on':'')+'" data-val="'+esc(o)+'" onclick="setSeg(this)">'+esc(ol[o]||o)+'</button>'; }).join('');
+    return '<div class="set-row set-col"><div class="set-lbl">'+lbl+'</div>'+help+'<div class="set-segs" data-key="'+k+'" data-type="enum">'+btns+'</div></div>';
+  }
+  if(f.type==='textarea'){
+    return '<div class="set-row set-col"><div class="set-lbl">'+lbl+'</div>'+help+'<textarea class="set-in set-ta" data-key="'+k+'" data-type="text">'+esc(val!=null?val:'')+'</textarea></div>';
+  }
+  var unit=f.unit?'<span class="set-unit">'+esc(f.unit)+'</span>':'';
+  var typ=(f.type==='number')?'number':'text';
+  return '<div class="set-row set-col"><div class="set-lbl">'+lbl+'</div>'+help
+    +'<div class="set-inwrap"><input class="set-in" type="'+typ+'"'+(typ==='number'?' inputmode="decimal"':'')+' data-key="'+k+'" data-type="'+esc(f.type||'text')+'" value="'+esc(val!=null?val:(f.default!=null?f.default:''))+'">'+unit+'</div></div>';
+}
+function setToggle(el){ el.classList.toggle('on'); }
+function setSeg(btn){ var p=btn.parentNode; p.querySelectorAll('.set-seg').forEach(function(x){ x.classList.remove('on'); }); btn.classList.add('on'); }
+async function settingsSave(btn){
+  var vals={};
+  document.querySelectorAll('#view [data-key]').forEach(function(el){
+    var k=el.getAttribute('data-key'), t=el.getAttribute('data-type'); if(!k) return;
+    if(t==='bool'){ vals[k]=el.classList.contains('on'); }
+    else if(t==='enum'){ var on=el.querySelector('.set-seg.on'); vals[k]= on?on.getAttribute('data-val'):''; }
+    else if(el.tagName==='TEXTAREA'||el.tagName==='INPUT'){ vals[k]=el.value; }
+  });
+  if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+  var r=null, neterr=false; try{ r=await post('/papi/settings-hub-save',{values:vals}); }catch(e){ neterr=true; }
+  if(btn){ btn.disabled=false; btn.textContent='Save changes'; }
+  if(!neterr && r && r.ok){ toast(r.message||'Settings saved'); if(typeof bosSettings==='function') bosSettings(); }
+  else { toast((r&&r.message)||'Could not save settings', true); }
+}
+/* ===== Modern Profit & Loss (design v1.0) — replaces the pnl-report iframe on phones. Cash-basis income
+   statement from /papi/cash-pnl (reconciles to the cash book). Owner-gated by the endpoint. ===== */
+async function bosPnl(){
+  const v=document.getElementById('view'); v.innerHTML=skeleton();
+  let r=null; try{ r=await getQuery('/papi/cash-pnl',{}); }catch(e){}
+  if(!r || r.ok===false){ v.innerHTML='<div class="mtoday"><div class="bcl-h"><div class="bcl-title">Profit &amp; Loss</div></div>'+emptyState('chart','P&L unavailable',(r&&r.message)||'Only an owner or manager can view the P&L.')+'</div>'; return; }
+  var is=r.income_statement||{}, eq=r.equity||{}, rec=r.reconciliation||{}, cur=r.currency||'USD';
+  function money(n){ n=Number(n||0); return cur+' '+finFmt(n); }
+  var op=Number(is.operating_profit||0);
+  var hero='<div class="fin-hero"><div class="fin-hk">Operating profit · cash basis</div><div class="fin-hv" style="color:'+(op<0?'#FF6B5E':'#fff')+'">'+money(op)+'</div>'
+    +'<div class="fin-hs">'+(is.gross_margin_pct!=null?('Gross margin '+is.gross_margin_pct+'%'):'since you started trading')+'</div></div>';
+  function srow(label,val,opt){ opt=opt||{}; return '<div class="pnl-row'+(opt.strong?' strong':'')+(opt.tone?(' '+opt.tone):'')+'"><span class="pnl-l">'+esc(label)+'</span><span class="pnl-v">'+money(val)+'</span></div>'; }
+  var rows='<div class="pnl-card">'
+    + srow('Sales revenue', is.sales_revenue)
+    + srow('Cost of goods', -Math.abs(Number(is.cost_of_goods||0)))
+    + srow('Gross profit', is.gross_profit, {strong:true})
+    + srow('Operating expenses', -Math.abs(Number(is.operating_expenses||0)))
+    + (Number(is.other_cash_in_review||0)? srow('Other cash in (to review)', is.other_cash_in_review):'')
+    + (Number(is.other_cash_out_review||0)? srow('Other cash out (to review)', -Math.abs(Number(is.other_cash_out_review||0))):'')
+    + srow('Operating profit', is.operating_profit, {strong:true, tone:(op<0?'neg':'pos')})
+    + '</div>';
+  var extra='';
+  if(Number(eq.capital_introduced||0)||Number(eq.drawings||0)){
+    extra='<div class="c360-sec"><h3>Owner equity (not profit)</h3></div><div class="pnl-card">'
+      + srow('Capital introduced', eq.capital_introduced)
+      + srow('Drawings', -Math.abs(Number(eq.drawings||0)))
+      + '</div>';
+  }
+  var note = (rec.reconciles===false)
+    ? '<div class="pnl-note warn">Some cash rows aren’t classified yet — the “to review” lines show the gap.</div>'
+    : '<div class="pnl-note">Cash basis · reconciles to your cash book.</div>';
+  v.innerHTML='<div class="mtoday"><div class="bcl-h"><div class="bcl-title">Profit &amp; Loss</div></div>'+hero+'<div class="c360-sec"><h3>Income statement</h3></div>'+rows+extra+note+'</div>';
+}
+/* ===== Quick Invoice (design v1.0) — issue a numbered invoice from an existing order. Reuses the
+   EXISTING, idempotent /papi/invoice-issue (derives customer + lines from the order; never double-numbers)
+   and /papi/invoice-send. No new money-write path. ===== */
+var QINV=[], QINV_SEL=null, QINV_RESULT=null;
+async function bosQuickInvoice(){
+  const v=document.getElementById('view'); v.innerHTML=skeleton();
+  let r=null; try{ r=await getQuery('/papi/orders',{}); }catch(e){}
+  QINV=((r&&r.orders)||[]).filter(function(o){ return Number(o.total_ugx||0)>0; }).slice(0,40);
+  var head='<div class="bcl-h"><div class="bcl-title">Issue invoice</div></div>'
+    +'<div class="qinv-hint">Pick an order to turn into a numbered invoice. Already-invoiced orders just return their existing one — no double numbering.</div>';
+  var list = QINV.length ? '<div class="fin-list">'+QINV.map(qinvRow).join('')+'</div>' : '<div class="btl-empty">No orders to invoice right now.</div>';
+  v.innerHTML='<div class="mtoday">'+head+list+'</div>';
+}
+function qinvRow(o,i){
+  var cur=o.sell_currency||'USD';
+  return '<div class="fin-c" onclick="qinvOpen('+i+')"><div class="fin-ic" style="background:#EDEBFB;color:#6C5CE7"><svg class="i" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>'
+    +'<div class="fin-bd"><div class="fin-t">'+esc(o.name||'Customer')+'</div><div class="fin-s">'+esc(o.order_no||'')+(o.status?(' · '+esc(o.status)):'')+'</div></div>'
+    +'<div class="fin-r"><b>'+esc(cur)+' '+finFmt(o.total_ugx)+'</b><svg class="i fin-chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div></div>';
+}
+function qinvOpen(i){
+  QINV_SEL=i; QINV_RESULT=null; var o=QINV[i]; if(!o) return; var cur=o.sell_currency||'USD';
+  var s=fsheetEnsure();
+  s.innerHTML='<div class="qsheet paysheet" role="dialog"><div class="grab"></div>'
+    +'<div class="pay-h">Issue invoice</div><div class="pay-sub">'+esc(o.name||'Customer')+' · '+esc(o.order_no||'')+'</div>'
+    +'<div class="qinv-amt">'+esc(cur)+' '+finFmt(o.total_ugx)+'</div>'
+    +'<div class="pay-sub" style="padding-top:0">A permanent numbered invoice is created from this order’s items. Safe to tap again — it won’t double-number.</div>'
+    +'<button class="pay-go" onclick="qinvIssue(this)">Issue invoice</button><button class="pay-cancel" onclick="fsheetClose()">Cancel</button></div>';
+  s.classList.add('on');
+}
+async function qinvIssue(btn){
+  if(QINV_SEL==null) return; var o=QINV[QINV_SEL]; if(!o) return;
+  if(btn){ btn.disabled=true; btn.textContent='Issuing…'; }
+  var r=null,neterr=false; try{ r=await post('/papi/invoice-issue',{id:o.id}); }catch(e){ neterr=true; }
+  if(!neterr && r && r.ok){
+    QINV_RESULT=r; var s=document.getElementById('formsheet');
+    if(s) s.innerHTML='<div class="qsheet paysheet" role="dialog"><div class="grab"></div>'
+      +'<div class="qinv-done"><div class="qinv-check"><svg class="i" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div>'
+      +'<div class="pay-h" style="text-align:center">Invoice '+esc(r.invoice_no||'')+'</div>'
+      +'<div class="pay-sub" style="text-align:center">Issued for '+esc(o.name||'')+'</div></div>'
+      +'<button class="pay-go" onclick="qinvSend(this)">Send on WhatsApp</button>'
+      +'<button class="pay-cancel" onclick="fsheetClose();bosQuickInvoice()">Done</button></div>';
+    toast('Invoice '+(r.invoice_no||'')+' issued');
+  } else {
+    if(btn){ btn.disabled=false; btn.textContent='Issue invoice'; }
+    var msg=(r&&(r.error==='nothing_to_invoice'?'This order has no items to invoice':(r.error==='pdf_unavailable'?'Invoice PDF isn’t available on the server':(r.message||r.error))))||'Could not issue the invoice';
+    toast(msg, true);
+  }
+}
+async function qinvSend(btn){
+  if(!QINV_RESULT) return; var o=QINV[QINV_SEL]||{};
+  if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
+  var r=null,neterr=false; try{ r=await post('/papi/invoice-send',{id:QINV_RESULT.id, phone:o.phone||''}); }catch(e){ neterr=true; }
+  if(btn){ btn.disabled=false; btn.textContent='Send on WhatsApp'; }
+  if(!neterr && r && r.ok){ toast('Invoice sent on WhatsApp'); fsheetClose(); bosQuickInvoice(); }
+  else { toast((r&&(r.message||r.error))||'Issued — send it from the invoice screen if needed', true); }
 }
 /* Modern Customers list (design v1.0): search + owe/overdue filters + tap-to-360. */
 var BCL=[], BCL_F='all';
@@ -3032,6 +3392,33 @@ function tblFiltered(){
     return (x>y?1:x<y?-1:0)*TBL.dir; }); }
   return rows;
 }
+/* Phone card renderer for any classic list — turns table rows into design-v1.0 cards. Reuses the same
+   cell helpers (cellVal/tone/badge/avatar/row-actions) so a card can't disagree with the table. */
+function tblCardsHtml(pageRows){
+  if(!pageRows.length) return '<div class="empty" style="padding:40px">'+icon('worklist','ic-lg')+'<div style="margin-top:8px">'+esc(TBL.empty||'No matching records')+'</div></div>';
+  var cols=TBL.cols||[], titleCol=cols[0]||{}, badgeCol=null, actCol=null, amtCol=null;
+  for(var i=0;i<cols.length;i++){ var c=cols[i]; if(!badgeCol&&c.type==='badge') badgeCol=c; else if(!actCol&&c.type==='action') actCol=c; }
+  for(var j=cols.length-1;j>0;j--){ var c2=cols[j]; if(c2!==titleCol&&c2!==badgeCol&&c2!==actCol&&(c2.align==='right'||c2.money||c2.type==='strong')){ amtCol=c2; break; } }
+  var subCols=cols.filter(function(c){ return c!==titleCol&&c!==badgeCol&&c!==actCol&&c!==amtCol&&c.key; });
+  return '<div class="dtc-list">'+pageRows.map(function(r){
+    var tv=r[titleCol.key], isAv=titleCol.type==='avatar', name=esc(cellVal(tv)), tsub=(tv&&tv.sub)?esc(tv.sub):'';
+    var av=''; if(isAv){ var img=(tv&&tv.image)||''; av = img
+      ? '<div class="dtc-av" style="background-image:url(\''+esc(img)+'\')"></div>'
+      : '<div class="dtc-av" style="background:'+avColor(cellVal(tv))+'">'+esc(initials(cellVal(tv)))+'</div>'; }
+    var amt=''; if(amtCol){ var avv=cellVal(r[amtCol.key]); if(avv!==''&&avv!=null){ var tcls=(r[amtCol.key]&&r[amtCol.key].tone)?(' '+toneCls(r[amtCol.key].tone)):''; amt='<div class="dtc-amt'+tcls+'">'+esc(avv)+'</div>'; } }
+    var metas=[]; if(badgeCol){ var bc=r[badgeCol.key], bv=cellVal(bc); if(bv){ var bt=(bc&&bc.badge)||'default'; metas.push('<span class="badge '+toneBadge(bt)+'"><span class="d"></span>'+esc(bv)+'</span>'); } }
+    subCols.forEach(function(c){ var v=cellVal(r[c.key]); if(v!==''&&v!=null) metas.push('<span class="dtc-kv">'+esc(c.label)+' <b>'+esc(v)+'</b></span>'); });
+    var acts=''; if(actCol){ var ac=r[actCol.key];
+      if(ac&&ac.buttons&&ac.buttons.length) acts='<div class="dtc-acts" onclick="event.stopPropagation()">'+rowActBtnsHtml(ac.buttons)+'</div>';
+      else if(ac&&ac.href) acts='<div class="dtc-acts" onclick="event.stopPropagation()"><button class="btn sm" onclick="try{window.open(\''+esc(ac.href)+'\',\'_blank\')}catch(e){location.href=\''+esc(ac.href)+'\'}">'+esc(cellVal(ac)||'Open')+'</button></div>'; }
+    var chev=r.link?'<svg class="i dtc-chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>':'';
+    var click=r.link?(' onclick="openLink(\''+esc(r.link)+'\')" style="cursor:pointer"'):'';
+    return '<div class="dtc"'+click+'><div class="dtc-top">'+(av?('<div class="dtc-avwrap">'+av+'</div>'):'')
+      +'<div class="dtc-main"><div class="dtc-name">'+(name||'—')+'</div>'+(tsub?'<div class="dtc-sub">'+tsub+'</div>':'')+'</div>'
+      +'<div class="dtc-r">'+amt+chev+'</div></div>'
+      +(metas.length?'<div class="dtc-meta">'+metas.join('')+'</div>':'')+acts+'</div>';
+  }).join('')+'</div>';
+}
 function renderTable(){
   if(TBL.mode==='agenda'){ renderAgenda(); return; }
   let rows=tblFiltered();
@@ -3047,6 +3434,20 @@ function renderTable(){
   const ps=TBL.pageSize||15, pages=Math.max(1,Math.ceil(filtered/ps));
   if(TBL.page>pages) TBL.page=pages; if(TBL.page<1) TBL.page=1;
   const start=(TBL.page-1)*ps, pageRows=rows.slice(start,start+ps);
+  // Phone card mode: on a phone, render each row as a card instead of a sideways-scrolling table.
+  // Desktop and any bulk-select list keep the classic table (this branch is fully isolated from it).
+  if(isAppUI() && !TBL.selectable){
+    document.getElementById('tbl').innerHTML = tblCardsHtml(pageRows);
+    const tiC=document.getElementById('tinfo'); if(tiC) tiC.textContent=fmtCount(filtered)+(filtered!==TBL.rows.length?' of '+fmtCount(TBL.rows.length):'');
+    const pgC=document.getElementById('pager');
+    if(pgC){ if(filtered>ps){ const a=start+1, b=Math.min(start+ps,filtered);
+        pgC.innerHTML='<span>'+a+'–'+b+' of '+fmtCount(filtered)+'</span>'+
+          '<button onclick="TBL.page--;renderTable()"'+(TBL.page<=1?' disabled':'')+'>Prev</button>'+
+          '<span>Page '+TBL.page+' / '+pages+'</span>'+
+          '<button onclick="TBL.page++;renderTable()"'+(TBL.page>=pages?' disabled':'')+'>Next</button>';
+      } else { pgC.innerHTML=''; } }
+    return;
+  }
   const arrow=k=> TBL.sort===k ? '<span class="sar">'+(TBL.dir>0?'↑':'↓')+'</span>' : '';
   TBL.fltIds=TBL.selectable?rows.map(r=>r.id).filter(x=>x!=null):[];
   TBL.pageIds=TBL.selectable?pageRows.map(r=>r.id):[];
@@ -3402,6 +3803,11 @@ async function sfSaveKits(){
   var d=await post('/papi/kits-save',{kits:SFKITS});
   if(d&&d.ok){ if(Array.isArray(d.kits))SFKITS=d.kits; sfKitsRender(); toast('Kits saved'); } else toast((d&&d.error)||'Could not save',true);
 }
+
+/* Register the service worker for caching — independent of push permission, so repeat opens are fast
+   and the app survives a weak signal even on iOS (where push may be unavailable). Idempotent with the
+   push enrolment above (same /sw.js). */
+if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('/sw.js'); } catch (e) {} }
 
 /* ===== Pull-to-refresh (touch) — re-runs the current route. Attaches to the main scroller;
    engages only at the very top, damped, snaps a spinner, then re-fetches the screen. Field-test on device. ===== */

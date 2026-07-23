@@ -172,7 +172,11 @@ class TradeCashbookController extends Controller
         // Accept either so a supplier payment (e.g. UGX from Jayesh) is not silently rejected as bad_amount.
         $native = (float)$request->input('native_amount', $request->input('amount', 0));
         $rate = (float)$request->input('rate_to_usd', $cur==='USD'?1:0);
-        if ($native<=0 || $rate<=0) return response()->json(['ok'=>false,'error'=>'bad_amount','message'=>'Enter an amount and a rate.']);
+        // If no rate was supplied for a non-USD entry (e.g. the modern quick-expense sheet), resolve it from
+        // the tenant's ONE FX source instead of rejecting — mirrors PaymentController. USD stays 1.
+        if ($rate<=0) { $rate = $cur==='USD' ? 1.0 : (float)\App\Services\Money\Fx::forTenant($t)->ratePerUsd($cur); }
+        if ($rate<=0) $rate = 1.0;
+        if ($native<=0) return response()->json(['ok'=>false,'error'=>'bad_amount','message'=>'Enter an amount.']);
 
         $isPriv = $u->isOwnerLike() || in_array((string)$u->role,['manager'],true);
         $category = trim((string)$request->input('category','')) ?: null;

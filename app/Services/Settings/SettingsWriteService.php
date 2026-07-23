@@ -28,6 +28,8 @@ final class SettingsWriteService
         'ai_persona', 'business_hours', 'delivery_areas', 'faq', 'brand_knowledge', 'languages',
         // Delivery notes shown to customers / staff.
         'delivery_note', 'moq_note',
+        // VAT is fully tenant-configurable (never hardcoded): label + tax registration no.
+        'vat_label', 'vat_number',
     ];
 
     /** Numeric settings: [key => ['int'|'float', min]]. */
@@ -50,6 +52,8 @@ final class SettingsWriteService
         'digest_enabled',   // send the daily digest
         'pay_on_delivery',  // offer pay-on-delivery
         'pay_unify',        // unify payment handling
+        'vat_enabled',          // charge VAT / sales tax (never hardcoded)
+        'prices_include_vat',   // catalogue prices are VAT-inclusive
     ];
 
     /** Enum settings: [key => allowed values]. Document PDF page setup (read by the PDF renderers). */

@@ -6604,6 +6604,10 @@ class PanelApiController extends Controller
                 case 'digest_enabled':       return (bool) $t->setting('digest_enabled', true);
                 case 'pay_on_delivery':      return (bool) $t->setting('pay_on_delivery', true);
                 case 'pay_unify':            return (bool) $t->setting('pay_unify', false);
+                case 'vat_enabled':          return \App\Support\VatConfig::enabled($t);
+                case 'prices_include_vat':   return \App\Support\VatConfig::inclusive($t);
+                case 'vat_label':            return \App\Support\VatConfig::label($t);
+                case 'vat_number':           return \App\Support\VatConfig::number($t);
                 default:                     return $t->setting($k, $def);
             }
         };
