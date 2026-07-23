@@ -48,7 +48,7 @@ class PaymentService
             if ($seen) return ['id' => $seen->id, 'receipt_no' => $seen->receipt_no, 'duplicate' => true];
         }
 
-        $result = DB::transaction(function () use ($t, $d, $orderNo, $costNote, $customer) {
+        $result = DB::transaction(function () use ($t, $d, $orderNo, $costNote, $customer, $idem) {
             // cash side: money IN — credited to the RECEIVER's cash in hand
             $cost = OrderCost::create([
                 'tenant_id' => $t->id, 'order_id' => null, 'order_no' => $orderNo,

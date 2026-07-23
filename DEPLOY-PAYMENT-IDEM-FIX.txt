@@ -1,0 +1,48 @@
+PAYMENT 500 — REAL FIX (one line): $idem not captured in the transaction closure
+=================================================================================
+
+THE REAL ERROR (from your log — thank you)
+  unhandled @ PaymentService.php:67
+  ErrorException: "Undefined variable $idem"   (POST papi/payments)
+
+ROOT CAUSE
+  In App\Services\Money\PaymentService::record, the idempotency key is computed on line 44:
+      $idem = ! empty($d['idempotency_key']) ? (string) $d['idempotency_key'] : null;
+  and then USED inside the DB transaction closure on line 67:
+      'idempotency_key' => $idem,
+  …but the closure's use(...) list did NOT include $idem:
+      DB::transaction(function () use ($t, $d, $orderNo, $costNote, $customer) {   // <-- $idem missing
+  So inside the closure $idem was undefined → ErrorException → 500 → the papi handler's generic
+  "Something went wrong on our side." This hit EVERY payment path that goes through the one recorder
+  (Collect Run, Customer 360 collect, the classic Add-payment form, invoice "Pay", staff cash), which is
+  why nothing could save. It was NOT the migration and NOT the schema — the column exists; the code just
+  couldn't reach the insert.
+
+  Silver lining: the error fired INSIDE the transaction, so every failed attempt rolled back cleanly —
+  no half-written OrderCost/CustomerPayment rows, no double posts. Your data is intact.
+
+THE FIX (one line)
+  app/Services/Money/PaymentService.php, line 51 — add $idem to the closure's use(...) list:
+      DB::transaction(function () use ($t, $d, $orderNo, $costNote, $customer, $idem) {
+
+VERIFICATION DONE HERE
+  php -l clean. Confirmed every variable the closure body references is now either captured
+  ($t, $d, $orderNo, $costNote, $customer, $idem) or a local ($cost, $pay).
+
+DEPLOY (frontend untouched, no migration)
+  unzip into repo root
+  git add app/Services/Money/PaymentService.php DEPLOY-PAYMENT-IDEM-FIX.txt
+  git commit -m "Fix: capture \$idem in PaymentService::record transaction closure (payments were 500ing)"
+  git push   ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear
+
+VERIFY
+  Collect USD 1.00 on any open invoice -> "Payment recorded". Try it once online, then once in airplane
+  mode (it queues) and reconnect (it syncs) -> still exactly one receipt, thanks to the idempotency key
+  that now works. Delete the test payment from the Payments screen afterward.
+
+WHY IT WASN'T CAUGHT EARLIER
+  I can't boot Laravel/hit a DB in my build environment, so a runtime-only error like an uncaptured
+  closure variable slips past php -l (valid syntax) and static review. Your server log named the exact
+  file:line — that's what pinned it. If you want, I can sweep the other money services (Invoice "Pay",
+  staff-cash, cashbook) for the same closure-capture pattern so no sibling path has a hidden twin.
