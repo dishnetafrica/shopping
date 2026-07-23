@@ -1,0 +1,38 @@
+DESKTOP REGRESSION FIX — modern card screens are phone-only again
+=================================================================
+
+WHAT WAS WRONG
+  The modernised V3 screens (Customers, Finance, Operations) were rendering on the LAPTOP too, replacing
+  the classic denser desktop views with the big phone-style cards. That's the "why did Customers change
+  on laptop" you saw — the phone list was showing full-width on a wide screen.
+
+THE FIX (one file: resources/views/shell.blade.php)
+  The router now gates those three modern screens behind isAppUI() — the SAME phone/tablet test the app
+  already uses to decide the landing screen (narrow width OR touch pointer OR mobile browser). So:
+    • Laptop / desktop with a mouse → the classic views come back (Customers = the searchable table with
+      filters + CSV; Finance/Operations = their classic hubs).
+    • Phone / tablet → the modern card design, exactly as before.
+  Customer 360 (bos.timeline) is left as-is: it's only ever opened from the phone app and has no classic
+  desktop route, so gating it would have caused a "Could not load" — it stays the modern view.
+
+  Nothing was removed — the desktop path is the original behaviour, simply restored by letting those
+  routes fall through on desktop.
+
+VERIFICATION DONE HERE
+  node --check clean on the whole shell script. Confirmed 'customers' falls through to the real
+  /customers table on desktop (it's not a "coming soon" stub), and the three guards are in place.
+
+DEPLOY (frontend-only, safe, no DB)
+  git add resources/views/shell.blade.php DEPLOY-DESKTOP-FIX.txt
+  git commit -m "V3: render modern card screens on phones only; keep classic desktop views on laptop"
+  git push   ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear
+
+VERIFY
+  On the laptop: open Customers → you get the classic table back (search + Owes/Overdue as before).
+  On your phone: open Customers → the modern cards are unchanged.
+  (If the laptop still shows cards after deploy, hard-refresh — Cmd+Shift+R — to drop the cached shell.)
+
+NOTE
+  This fix is already folded into resources/views/shell.blade.php in the combined bundle, so it ships
+  together with the interaction pass (page transitions + pull-to-refresh). One commit covers both.

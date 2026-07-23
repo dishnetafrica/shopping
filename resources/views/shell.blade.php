@@ -1516,12 +1516,14 @@ async function route(key, id){
   if(key==='storefront.collections'){ sfCollectionsPage(); return; }
   if(key==='storefront.kits'){ sfKitsPage(); return; }
   if(key==='storefront.delivery'){ sfDeliveryPage(); return; }
-  if(key==='ws.finance'){ bosFinance(); return; }                  // Modern Finance hub (design v1.0)
-  if(key==='ws.operations'){ bosOperations(); return; }            // Modern Operations hub (design v1.0)
+  // The modern card screens are the PHONE app; on a desktop with a mouse we keep the classic denser
+  // views (table + hubs). isAppUI() is the same phone/tablet test the landing uses, so chrome agrees.
+  if(key==='ws.finance' && isAppUI()){ bosFinance(); return; }     // Modern Finance hub — phones only
+  if(key==='ws.operations' && isAppUI()){ bosOperations(); return; } // Modern Operations hub — phones only
   if(key.indexOf('ws.')===0){ renderHub(key.slice(3)); return; }   // mobile workspace hub (Me)
   if(key==='bos.today'){ bosToday(); return; }                     // BOS Slice 3 — the day's work
-  if(key==='bos.timeline'){ bosTimeline(id); return; }             // BOS Slice 2 — customer timeline
-  if(key==='customers'){ bosCustomers(); return; }                 // Modern Customers list (design v1.0)
+  if(key==='bos.timeline'){ bosTimeline(id); return; }             // Customer 360 (no classic desktop route; reached only from the app)
+  if(key==='customers' && isAppUI()){ bosCustomers(); return; }    // Modern Customers list — phones only
   if(SOON[key] && !id){ renderSoon(key); return; }
   document.getElementById('view').innerHTML=skeleton();
   let path='/'+key+(id?'/'+id:'');
