@@ -405,6 +405,25 @@ final class CustomerCapability implements ObjectCapability
                 ->where('customer_phone', $c->phone)->where('status', '!=', 'void')->sum('balance');
         } catch (\Throwable $e) { /* invoices optional */ }
 
+        // Modern Customer-360 strip — all REAL (no mocked figures): lifetime paid, last order, credit standing, score.
+        $lifetime = 0.0;
+        try { $lifetime = (float) \App\Models\CustomerPayment::where('tenant_id', $ctx->tenantId())
+            ->where('customer_phone', $c->phone)->sum('usd_amount'); } catch (\Throwable $e) {}
+        $lastOrder = null;
+        try { $lastOrder = \App\Models\Order::where('tenant_id', $ctx->tenantId())
+            ->where('customer_phone', $c->phone)->max('created_at'); } catch (\Throwable $e) {}
+        $limit = (float) ($c->credit_limit ?? 0);
+        $standing = 'good';
+        if ($limit > 0 && $outstanding > $limit)           $standing = 'over';
+        elseif ($limit > 0 && $outstanding > 0.8 * $limit) $standing = 'watch';
+        // Relationship score 1–5 from REAL behaviour: pays (has lifetime), owes nothing now, within credit.
+        $score = 3;
+        if ($lifetime > 0)         $score++;
+        if ($outstanding <= 0.5)   $score++;
+        if ($standing === 'watch') $score--;
+        if ($standing === 'over')  $score -= 2;
+        $score = max(1, min(5, $score));
+
         $lines = [];
         try { $lines = \App\BOS\Bos::timeline('customer', (int) $c->id, (int) $ctx->tenantId(), 200); }
         catch (\Throwable $e) { $lines = []; }
@@ -420,6 +439,10 @@ final class CustomerCapability implements ObjectCapability
                 'id' => (int) $c->id, 'name' => (string) ($c->name ?: 'Customer'),
                 'phone' => (string) $c->phone, 'city' => (string) ($c->city ?? ''),
                 'outstanding' => round($outstanding, 2),
+                'lifetime' => round($lifetime, 2),
+                'last_order' => $lastOrder ? \Illuminate\Support\Carbon::parse($lastOrder)->format('d M') : null,
+                'credit' => ['limit' => round($limit, 2), 'standing' => $standing],
+                'score' => (int) $score,
             ],
             'journey' => $journey,
             'timeline' => $lines,

@@ -767,6 +767,36 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 .obcol-go{width:100%;margin-top:11px;background:var(--warn);color:#fff;border:0;border-radius:10px;padding:11px 16px;font-size:14px;font-weight:800;cursor:pointer}
 .obdisc{display:flex;align-items:center;gap:8px;margin-top:11px;font-size:12.5px;font-weight:600;color:#9a6a1e;cursor:pointer}
 .obdisc input{width:17px;height:17px;accent-color:var(--warn);flex:none}
+/* ===== Modern Customer 360 (design system v1.0) ===== */
+.c360-hd{display:flex;align-items:center;gap:14px;margin:2px 2px 16px}
+.c360-av{width:56px;height:56px;border-radius:18px;display:grid;place-items:center;color:#fff;font-weight:840;font-size:21px;flex:none}
+.c360-nm{font-size:22px;font-weight:840;letter-spacing:-.02em;color:var(--ink)}
+.c360-sub{font-size:12.5px;color:var(--muted);font-weight:600;margin-top:2px}
+.c360-stars{font-size:14px;color:#DD8500;margin-top:5px;letter-spacing:1px}
+.c360-stars span{color:var(--muted);font-weight:700;font-size:11px;letter-spacing:0;margin-left:5px}
+.c360-strip{display:flex;background:#fff;border-radius:18px;padding:14px 4px;box-shadow:0 1px 2px rgba(12,20,32,.04),0 4px 12px -4px rgba(12,20,32,.06);margin-bottom:16px}
+.c360-c{flex:1;text-align:center;border-right:1px solid var(--line)}
+.c360-c:last-child{border-right:0}
+.c360-cv{font-size:15px;font-weight:840;color:var(--ink);letter-spacing:-.01em}
+.c360-cv.amber{color:#DD8500}.c360-cv.ok{color:#0A7A3C}.c360-cv.red{color:#E24B3B}
+.c360-cl{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-top:3px}
+.c360-sec{margin:18px 4px 10px}.c360-sec h3{font-size:17px;font-weight:820;margin:0;color:var(--ink)}
+.fchips{display:flex;gap:8px;margin:0 2px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.fchip{border:0;background:#F1F3F6;color:var(--ink-2);border-radius:999px;padding:7px 15px;font:inherit;font-size:12.5px;font-weight:750;cursor:pointer;white-space:nowrap}
+.fchip.on{background:var(--ink);color:#fff}
+.c360-tl{display:flex;flex-direction:column}
+.c360-e{display:flex;gap:13px;padding:11px 2px;border-bottom:1px solid var(--line)}
+.c360-e:last-child{border-bottom:0}
+.c360-ci{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;flex:none;background:#F1F3F6;color:var(--ink-2)}
+.c360-ci .i{width:18px;height:18px;stroke-width:1.9}
+.c360-ci.pay{background:var(--brand-wash);color:var(--brand-ink)}
+.c360-ci.inv{background:#EDEBFB;color:#6C5CE7}
+.c360-ci.visit{background:#E7F3FC;color:#2C97DE}
+.c360-bd{flex:1;min-width:0}
+.c360-tt{font-size:14.5px;font-weight:730;color:var(--ink)}
+.c360-big{font-size:17px;font-weight:840;letter-spacing:-.01em;margin:1px 0;color:var(--ink)}
+.c360-big.pay{color:var(--brand-ink)}
+.c360-aa{font-size:12px;color:var(--faint);font-weight:600;margin-top:1px}
 </style>
 </head>
 <body>
@@ -1372,6 +1402,10 @@ function closeQuickAdd(){ document.getElementById('qsheet').classList.remove('on
 function quickAdd(key){ closeQuickAdd(); route(key); }
 
 /* ===== BOS Slice 2 — Customer Timeline: one customer's whole history from the event spine ===== */
+/* Modern Customer-360 (design system v1.0): avatar + score header, real stats strip, O2C rail, filtered history. */
+function bmoneyK(v){ v=Number(v||0); if(v>=1000){ var k=v/1000; return 'USD '+(k>=100?Math.round(k):k.toFixed(k>=10?0:1))+'k'; } return 'USD '+Math.round(v); }
+function bInit(n){ n=(n||'').trim(); if(!n) return '?'; var p=n.split(/\s+/); return ((p[0][0]||'?')+(p[1]?p[1][0]:'')).toUpperCase(); }
+function bStars(s){ s=Math.max(0,Math.min(5,Math.round(Number(s||0)))); return '★★★★★'.slice(0,s)+'☆☆☆☆☆'.slice(0,5-s); }
 async function bosTimeline(id){
   const v=document.getElementById('view'); v.innerHTML=skeleton();
   let r; try{ r=await post(CFG.base+'/customer/'+id+'/timeline', {id:id}); }catch(e){ r=null; }
@@ -1379,14 +1413,33 @@ async function bosTimeline(id){
   const c=r.customer||{}, t=r.timeline||[]; const out=Number(c.outstanding||0);
   OB_CTX={ customer_id:Number(c.id||id), name:(c.name||''), phone:(c.phone||''),
     collect:(r.journey&&r.journey.next&&r.journey.next.collect)||null };
-  const head='<div class="btl-head"><div class="btl-nm">'+esc(c.name||'Customer')+'</div>'
-    +'<div class="btl-sub">'+esc(c.phone||'')+(c.city?' · '+esc(c.city):'')+'</div>'
-    +(out>0.5?'<div class="btl-out">Outstanding <b>USD '+bmoney(out)+'</b></div>':'<div class="btl-out ok">No outstanding balance</div>')
-    +'<span class="obchip" style="display:none"></span></div>';
-  const rows = t.length ? t.map(bosTLine).join('') : '<div class="btl-empty">No activity yet — actions will appear here as they happen.</div>';
-  v.innerHTML='<div class="crumb"><span onclick="route(\'customers\')" style="cursor:pointer;color:var(--brand-ink)">Customers</span> <span style="color:var(--faint)">/</span> '+esc(c.name||'')+' — timeline <span class="offpill" style="display:'+(navigator.onLine?'none':'inline-block')+'">Offline</span></div>'+head+bosJourney(r.journey)+obComposer(Number(c.id||id))+'<div id="obpend"></div><div class="btl">'+rows+'</div>';
+  const cr=c.credit||{}, stand=cr.standing||'good';
+  const standLabel={good:'Good',watch:'Watch',over:'Over'}[stand]||'Good';
+  const scoreWord=Number(c.score)>=4?'Top customer':(Number(c.score)<=2?'Needs attention':'Regular');
+  const header='<div class="c360-hd"><div class="c360-av" style="background:'+avColor(c.name||'?')+'">'+bInit(c.name)+'</div>'
+    +'<div class="c360-id"><div class="c360-nm">'+esc(c.name||'Customer')+'</div>'
+    +'<div class="c360-sub">'+esc((c.city?c.city+' · ':'')+(c.phone||''))+'</div>'
+    +'<div class="c360-stars">'+bStars(c.score)+' <span>'+scoreWord+'</span></div></div></div>';
+  const strip='<div class="c360-strip">'
+    +'<div class="c360-c"><div class="c360-cv '+(out>0.5?'amber':'ok')+'">'+(out>0.5?bmoneyK(out):'—')+'</div><div class="c360-cl">Outstanding</div></div>'
+    +'<div class="c360-c"><div class="c360-cv">'+bmoneyK(c.lifetime)+'</div><div class="c360-cl">Lifetime</div></div>'
+    +'<div class="c360-c"><div class="c360-cv">'+esc(c.last_order||'—')+'</div><div class="c360-cl">Last order</div></div>'
+    +'<div class="c360-c"><div class="c360-cv '+(stand==='good'?'ok':(stand==='over'?'red':'amber'))+'">'+standLabel+'</div><div class="c360-cl">Credit</div></div>'
+    +'</div>';
+  const chips='<div class="c360-sec"><h3>History</h3></div>'
+    +'<div class="fchips"><button class="fchip on" onclick="bosTlf(this,\'all\')">All</button>'
+    +'<button class="fchip" onclick="bosTlf(this,\'pay\')">Payments</button>'
+    +'<button class="fchip" onclick="bosTlf(this,\'inv\')">Invoices</button>'
+    +'<button class="fchip" onclick="bosTlf(this,\'visit\')">Visits</button></div>';
+  const rows = t.length ? '<div class="c360-tl" id="c360tl">'+t.map(bosTLine).join('')+'</div>'
+    : '<div class="btl-empty">No activity yet — actions will appear here as they happen.</div>';
+  v.innerHTML='<div class="crumb"><span onclick="route(\'customers\')" style="cursor:pointer;color:var(--brand-ink)">Customers</span> <span style="color:var(--faint)">/</span> '+esc(c.name||'')
+    +' <span class="offpill" style="display:'+(navigator.onLine?'none':'inline-block')+'">Offline</span> <span class="obchip" style="display:none"></span></div>'
+    +header+strip+bosJourney(r.journey)+obComposer(Number(c.id||id))+'<div id="obpend"></div>'+chips+rows;
   renderObPending(); obBadge();
 }
+function bosTlf(btn,tp){ btn.parentNode.querySelectorAll('.fchip').forEach(function(x){x.classList.remove('on')}); btn.classList.add('on');
+  document.querySelectorAll('#c360tl .c360-e').forEach(function(e){ e.style.display=(tp==='all'||e.dataset.t===tp)?'':'none'; }); }
 /* BOS Slice 4 — Order-to-Cash rail + the single next step (read-only; deep-links to the verb's screen). */
 function bosJourney(j){
   if(!j || !j.steps || !j.steps.length) return '';
@@ -1408,20 +1461,32 @@ function bmoney(v){ return Number(v||0).toLocaleString(undefined,{minimumFractio
 function bwhen(iso){ if(!iso) return ''; try{ const d=new Date(iso); return d.toLocaleDateString(undefined,{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
 function bosTLine(e){
   const d=e.data||{}, cur=d.currency||'USD', amt=(x)=>cur+' '+bmoney(x);
-  const M={
-    CustomerCreated:['👤','New customer'+(d.segment?' — '+esc(d.segment):'')],
-    CustomerVisited:['📍', d.note ? ('Visit — '+esc(d.note)) : ('Visited'+(d.city?' — '+esc(d.city):''))],
-    CustomerNote:['📝','Note — '+esc(d.note||'')],
-    QuoteCreated:['🧾','Quote '+esc(d.quote_no||'')+(d.total?' — '+amt(d.total):'')],
-    QuoteAccepted:['✅','Quote accepted'], QuoteConverted:['🔁','Quote converted to order'],
-    OrderConfirmed:['📦','Order '+esc(d.order_no||'')+' confirmed'], DeliveryCompleted:['🚚','Delivered'],
-    InvoiceIssued:['🧾','Invoice '+esc(d.invoice_no||'')+' — '+amt(d.total)+(Number(d.balance)>0.5?' · balance '+bmoney(d.balance):'')],
-    PaymentReceived:['💵','Payment '+amt(d.amount)+' received'+(d.receipt_no?' · '+esc(d.receipt_no):'')],
-    ReceiptSent:['📄','Receipt sent'],
-    FollowupScheduled:['🔔', d.note ? ('Follow-up — '+esc(d.note)+(d.due?' (by '+esc(d.due)+')':'')) : 'Follow-up scheduled']
+  const IC={
+    card:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/>',
+    doc:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
+    pin:'<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+    pencil:'<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/>',
+    user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
+    box:'<path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>'
   };
-  const m=M[e.event]||['•',esc(e.event)];
-  return '<div class="btl-row"><div class="btl-ic">'+m[0]+'</div><div class="btl-body"><div class="btl-txt">'+m[1]+'</div><div class="btl-at">'+esc(bwhen(e.at))+(e.actor?' · '+esc(e.actor):'')+'</div></div></div>';
+  // event -> [iconKey, category, title, bigAmount]
+  const M={
+    CustomerCreated:['user','visit','New customer'+(d.segment?' — '+esc(d.segment):''),''],
+    CustomerVisited:['pin','visit', d.note?('Visit — '+esc(d.note)):('Visited'+(d.city?' — '+esc(d.city):'')),''],
+    CustomerNote:['pencil','visit','Note — '+esc(d.note||''),''],
+    QuoteCreated:['doc','inv','Quote '+esc(d.quote_no||''), d.total?amt(d.total):''],
+    QuoteAccepted:['doc','inv','Quote accepted',''], QuoteConverted:['doc','inv','Quote → order',''],
+    OrderConfirmed:['box','inv','Order '+esc(d.order_no||'')+' confirmed',''], DeliveryCompleted:['box','inv','Delivered',''],
+    InvoiceIssued:['doc','inv','Invoice '+esc(d.invoice_no||''), amt(d.total)+(Number(d.balance)>0.5?' · bal '+bmoney(d.balance):'')],
+    PaymentReceived:['card','pay','Payment received'+(d.receipt_no?' · '+esc(d.receipt_no):''), amt(d.amount)],
+    ReceiptSent:['card','pay','Receipt sent',''],
+    FollowupScheduled:['bell','visit', d.note?('Follow-up — '+esc(d.note)+(d.due?' (by '+esc(d.due)+')':'')):'Follow-up scheduled','']
+  };
+  const m=M[e.event]||['doc','all',esc(e.event),''];
+  const big=m[3]?'<div class="c360-big '+m[1]+'">'+m[3]+'</div>':'';
+  return '<div class="c360-e" data-t="'+m[1]+'"><div class="c360-ci '+m[1]+'"><svg class="i" viewBox="0 0 24 24">'+IC[m[0]]+'</svg></div>'
+    +'<div class="c360-bd"><div class="c360-tt">'+m[2]+'</div>'+big+'<div class="c360-aa">'+esc(bwhen(e.at))+(e.actor?' · '+esc(e.actor):'')+'</div></div></div>';
 }
 
 /* ===== BOS Slice 5 — Offline outbox: field writes survive no signal, then sync idempotently =====

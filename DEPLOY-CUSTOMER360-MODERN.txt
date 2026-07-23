@@ -1,0 +1,40 @@
+MODERN CUSTOMER 360 — second real-app screen on the design system v1.0
+======================================================================
+
+WHAT
+  The customer screen (bosTimeline) is rebuilt to the frozen design — the same treatment Today got —
+  with REAL data, no mocked figures.
+    • Avatar + name + city·phone header.
+    • ★ relationship score (1–5) computed from real behaviour: has lifetime, owes nothing now, within
+      credit limit. Label: Top customer / Regular / Needs attention.
+    • Stats strip: Outstanding (live invoices) · Lifetime (sum of this customer's payments) · Last order
+      (most recent order date) · Credit standing (Good/Watch/Over vs the profile's credit_limit).
+    • The honest Order-to-Cash rail + next step (unchanged, kept).
+    • History with filter chips (All / Payments / Invoices / Visits) and SVG-icon timeline rows
+      (no functional emoji, per the design freeze), payment/invoice amounts shown large.
+
+FILES CHANGED
+  app/Capability/Object/CustomerCapability.php   bosTimeline() enriched: lifetime, last_order, credit, score
+  resources/views/shell.blade.php                modern bosTimeline() + bosTLine() + bosTlf() + .c360-* CSS
+                                                 (this file also carries the earlier offline-queue fix)
+
+VERIFICATION DONE HERE
+  php -l clean (CustomerCapability). node --check clean (the new JS region). Rendered at 390px through the
+  real stylesheet with mock data — header, strip, rail, chips, and icon timeline all correct (screenshot).
+
+DEPLOY
+  git add app/Capability/Object/CustomerCapability.php resources/views/shell.blade.php DEPLOY-CUSTOMER360-MODERN.txt
+  git commit -m "Modern Customer 360: real score + lifetime + credit strip + filtered history (design v1.0)"
+  git push  ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear     <-- shell is a Blade view
+
+VERIFY ON A PHONE
+  Open a customer -> the new header/score/strip, the rail, and the filter chips. Tap Payments/Invoices/
+  Visits -> the history filters. All figures are live (lifetime rises as payments are recorded).
+
+SAFETY
+  Additive read-only backend query (lifetime/last-order); no migration, no money-path write. The score is
+  a display heuristic from real fields, documented in the code — not a stored/mocked value.
+
+NEXT SCREENS (same treatment, one at a time)
+  Customers list · Operations hub · Finance hub · Me. Say which and it's next.
