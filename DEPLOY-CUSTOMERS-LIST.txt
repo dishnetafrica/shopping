@@ -1,0 +1,42 @@
+MODERN CUSTOMERS LIST — third real-app screen on design system v1.0
+==================================================================
+
+WHAT
+  The Customers list (route 'customers') is now a purpose-built modern screen (not the generic table),
+  with live data and tap-through to the modern Customer 360.
+    • Title + search (client-side: name / city / phone).
+    • Filter chips with live counts: All · N  /  Owes · X  /  Overdue · Y.
+    • Ranked cards (overdue → owes → settled, then by amount): coloured avatar, name with a status dot
+      (red overdue / amber owes / green ok), "city · last order DATE", and USD outstanding + OVERDUE /
+      OWES / SETTLED label. Tap a card → the modern Customer 360.
+
+FILES CHANGED / ADDED
+  app/Http/Controllers/Panel/BosCustomersController.php   NEW  GET /papi/bos-customers (3 grouped queries, no N+1)
+  routes/web.php                                          +1   registers the route beside bos-today
+  resources/views/shell.blade.php                         bosCustomers()/bosCustRow()/filters + .bcl-* CSS,
+                                                          and route('customers') now renders it
+                                                          (this file also carries the Customer 360 + offline fixes)
+
+CREATION IS UNCHANGED
+  "New customer" still goes through the existing global create flow (doAction / the create sheet) — this
+  screen only replaces the LIST view, so nothing about creating a customer changes.
+
+VERIFICATION DONE HERE
+  php -l clean (controller + routes). node --check clean (new JS). Rendered at 390px through the real
+  stylesheet with mock data — title, search, chips, and ranked cards all correct (screenshot).
+
+DEPLOY
+  git add app/Http/Controllers/Panel/BosCustomersController.php routes/web.php \
+          resources/views/shell.blade.php DEPLOY-CUSTOMERS-LIST.txt
+  git commit -m "Modern Customers list: live outstanding/overdue + filters + tap-to-360 (design v1.0)"
+  git push  ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear
+
+VERIFY ON A PHONE
+  Tap Customers -> the modern list; overdue customers sort to the top with a red label. Type in search;
+  tap Owes / Overdue chips; tap a customer -> the 360 opens.
+
+SAFETY
+  Additive read-only endpoint (3 grouped queries); no migration, no money-path write, creation untouched.
+
+NEXT SCREENS (same treatment): Operations hub · Finance hub · Me.

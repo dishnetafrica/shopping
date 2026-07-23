@@ -797,6 +797,24 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 .c360-big{font-size:17px;font-weight:840;letter-spacing:-.01em;margin:1px 0;color:var(--ink)}
 .c360-big.pay{color:var(--brand-ink)}
 .c360-aa{font-size:12px;color:var(--faint);font-weight:600;margin-top:1px}
+/* ===== Modern Customers list ===== */
+.bcl-h{margin:2px 2px 12px}
+.bcl-title{font-size:26px;font-weight:860;letter-spacing:-.02em;color:var(--ink)}
+.bcl-srch{display:flex;align-items:center;gap:9px;background:#fff;border-radius:14px;padding:11px 14px;box-shadow:0 1px 2px rgba(12,20,32,.04),0 4px 12px -4px rgba(12,20,32,.06);margin-bottom:12px}
+.bcl-srch .i{width:18px;height:18px;stroke:var(--faint);flex:none}
+.bcl-srch input{border:0;outline:0;flex:1;font:inherit;font-size:14.5px;background:transparent;color:var(--ink)}
+.bcl-c{display:flex;align-items:center;gap:13px;background:#fff;border-radius:18px;padding:13px 14px;box-shadow:0 1px 2px rgba(12,20,32,.04),0 4px 12px -4px rgba(12,20,32,.06);margin-bottom:10px;cursor:pointer;transition:transform .08s}
+.bcl-c:active{transform:scale(.985)}
+.bcl-av{width:46px;height:46px;border-radius:15px;display:grid;place-items:center;color:#fff;font-weight:820;font-size:17px;flex:none}
+.bcl-bd{flex:1;min-width:0}
+.bcl-nm{font-size:15.5px;font-weight:780;color:var(--ink);display:flex;align-items:center}
+.bcl-dot{width:8px;height:8px;border-radius:50%;margin-right:7px;flex:none;display:inline-block}
+.bcl-s{font-size:12.5px;color:var(--muted);font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bcl-r{text-align:right;flex:none}
+.bcl-r b{font-size:15px;font-weight:840;color:var(--ink);letter-spacing:-.01em}
+.bcl-r b.bcl-set{color:var(--faint)}
+.bcl-lab{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+.bcl-lab.amber{color:#DD8500}.bcl-lab.red{color:#E24B3B}.bcl-lab.ok{color:#0A7A3C}
 </style>
 </head>
 <body>
@@ -1374,6 +1392,7 @@ async function route(key, id){
   if(key.indexOf('ws.')===0){ renderHub(key.slice(3)); return; }   // mobile workspace hub (Operations/Finance/Me)
   if(key==='bos.today'){ bosToday(); return; }                     // BOS Slice 3 — the day's work
   if(key==='bos.timeline'){ bosTimeline(id); return; }             // BOS Slice 2 — customer timeline
+  if(key==='customers'){ bosCustomers(); return; }                 // Modern Customers list (design v1.0)
   if(SOON[key] && !id){ renderSoon(key); return; }
   document.getElementById('view').innerHTML=skeleton();
   let path='/'+key+(id?'/'+id:'');
@@ -1402,6 +1421,45 @@ function closeQuickAdd(){ document.getElementById('qsheet').classList.remove('on
 function quickAdd(key){ closeQuickAdd(); route(key); }
 
 /* ===== BOS Slice 2 — Customer Timeline: one customer's whole history from the event spine ===== */
+/* Modern Customers list (design v1.0): search + owe/overdue filters + tap-to-360. */
+var BCL=[], BCL_F='all';
+async function bosCustomers(){
+  const v=document.getElementById('view'); v.innerHTML=skeleton();
+  let r; try{ r=await getQuery('/papi/bos-customers',{}); }catch(e){ r=null; }
+  if(!r || r.ok===false){ v.innerHTML=emptyState('user','Customers unavailable','The list could not load right now.'); return; }
+  BCL=r.customers||[]; BCL_F='all'; const cn=r.counts||{};
+  const head='<div class="bcl-h"><div class="bcl-title">Customers</div></div>'
+    +'<div class="bcl-srch"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input id="bclq" placeholder="Search customers" oninput="bosCustFilter()"></div>'
+    +'<div class="fchips"><button class="fchip on" onclick="bosCustF(this,\'all\')">All · '+(cn.all||0)+'</button>'
+    +'<button class="fchip" onclick="bosCustF(this,\'owes\')">Owes · '+(cn.owes||0)+'</button>'
+    +'<button class="fchip" onclick="bosCustF(this,\'overdue\')">Overdue · '+(cn.overdue||0)+'</button></div>';
+  v.innerHTML='<div class="mtoday">'+head+'<div id="bcllist">'+bosCustRows(BCL)+'</div></div>';
+}
+function bosCustRow(c){
+  const out=Number(c.outstanding||0), st=c.status||'ok';
+  const dot=st==='overdue'?'var(--red)':(st==='owes'?'var(--amber)':'var(--brand)');
+  const right= out>0.5
+    ? '<b>USD '+bmoney(out)+'</b><div class="bcl-lab '+(st==='overdue'?'red':'amber')+'">'+(st==='overdue'?'Overdue':'Owes')+'</div>'
+    : '<b class="bcl-set">USD 0</b><div class="bcl-lab ok">Settled</div>';
+  const sub=(c.city?esc(c.city):'')+(c.last_order?((c.city?' · ':'')+'last order '+esc(c.last_order)):'');
+  return '<div class="bcl-c" onclick="route(\'bos.timeline\','+Number(c.id)+')">'
+    +'<div class="bcl-av" style="background:'+avColor(c.name||'?')+'">'+bInit(c.name)+'</div>'
+    +'<div class="bcl-bd"><div class="bcl-nm">'+(out>0.5?'<span class="bcl-dot" style="background:'+dot+'"></span>':'')+esc(c.name||'Customer')+'</div>'
+    +'<div class="bcl-s">'+sub+'</div></div>'
+    +'<div class="bcl-r">'+right+'</div></div>';
+}
+function bosCustRows(list){ return list.length ? list.map(bosCustRow).join('') : emptyState('user','No customers','No one matches this filter yet.'); }
+function bosCustF(btn,f){ BCL_F=f; btn.parentNode.querySelectorAll('.fchip').forEach(function(x){x.classList.remove('on')}); btn.classList.add('on'); bosCustFilter(); }
+function bosCustFilter(){
+  const q=(((document.getElementById('bclq')||{}).value)||'').trim().toLowerCase();
+  const rows=BCL.filter(function(c){
+    if(BCL_F==='owes' && !(Number(c.outstanding)>0.5)) return false;
+    if(BCL_F==='overdue' && c.status!=='overdue') return false;
+    if(q){ const hay=((c.name||'')+' '+(c.city||'')+' '+(c.phone||'')).toLowerCase(); if(hay.indexOf(q)<0) return false; }
+    return true;
+  });
+  const box=document.getElementById('bcllist'); if(box) box.innerHTML=bosCustRows(rows);
+}
 /* Modern Customer-360 (design system v1.0): avatar + score header, real stats strip, O2C rail, filtered history. */
 function bmoneyK(v){ v=Number(v||0); if(v>=1000){ var k=v/1000; return 'USD '+(k>=100?Math.round(k):k.toFixed(k>=10?0:1))+'k'; } return 'USD '+Math.round(v); }
 function bInit(n){ n=(n||'').trim(); if(!n) return '?'; var p=n.split(/\s+/); return ((p[0][0]||'?')+(p[1]?p[1][0]:'')).toUpperCase(); }
