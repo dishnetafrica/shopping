@@ -659,6 +659,31 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 .qinv-done{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0 6px}
 .qinv-check{width:56px;height:56px;border-radius:50%;background:var(--brand-wash);color:var(--brand-ink);display:grid;place-items:center;margin-bottom:4px}
 .qinv-check .i{width:30px;height:30px}
+/* Native in-app Task detail (design v1.0) */
+.tkd-head{display:flex;align-items:flex-start;gap:10px;margin:2px 0 12px}
+.tkd-title{font-size:19px;font-weight:800;letter-spacing:-.012em;color:var(--ink);line-height:1.3;flex:1}
+.tkd-meta{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:4px 14px;box-shadow:var(--sh-sm);margin-bottom:12px}
+.tkd-kv{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-top:1px solid var(--line-2);font-size:14px}
+.tkd-meta .tkd-kv:first-child{border-top:0}
+.tkd-kv span{color:var(--muted)}
+.tkd-kv b{color:var(--ink);font-weight:700}
+.tkd-desc{font-size:14px;color:#374151;white-space:pre-wrap;line-height:1.5;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 15px;margin-bottom:6px;box-shadow:var(--sh-sm)}
+.tkd-photo{display:block;width:100%;max-height:280px;object-fit:cover;border-radius:14px;border:1px solid var(--line);margin:2px 0 6px;cursor:pointer}
+.tkd-file{display:inline-block;color:var(--brand-ink);font-weight:700;font-size:14px;text-decoration:none;padding:6px 0}
+.tkd-do{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:var(--sh-sm)}
+.tkd-do .pick{margin-bottom:10px}
+.tkd-do .set-in{margin-bottom:10px}
+.tkd-do .pay-go{margin-top:2px}
+.tkd-complete{text-align:center;background:var(--brand-wash);color:var(--brand-ink);font-weight:700;border-radius:14px;padding:16px;margin:6px 0}
+.tkd-cbox{display:flex;gap:8px;align-items:center}
+.tkd-cbox .set-in{flex:1}
+.set-cbtn{height:44px;padding:0 16px;border-radius:12px;border:0;background:var(--brand);color:#fff;font-weight:700;font-size:14px;flex:none}
+.tkd-tl{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:4px 14px;box-shadow:var(--sh-sm)}
+.tkd-ev{padding:11px 0;border-top:1px solid var(--line-2)}
+.tkd-tl .tkd-ev:first-child{border-top:0}
+.tkd-ev-h{font-size:13px;color:var(--ink-2);text-transform:capitalize}
+.tkd-ev-h span{float:right;color:var(--muted);font-weight:600;text-transform:none}
+.tkd-ev-d{font-size:13px;color:var(--muted);margin-top:3px}
 /* Phone card mode for classic lists (design v1.0) */
 .dtc-list{display:flex;flex-direction:column;gap:10px;padding:2px 0 4px}
 .dtc{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:13px 14px;box-shadow:var(--sh-sm)}
@@ -1604,6 +1629,7 @@ async function route(key, id){
   if(key.indexOf('ws.')===0){ renderHub(key.slice(3)); return; }   // mobile workspace hub (Me)
   if(key==='bos.today'){ bosToday(); return; }                     // BOS Slice 3 — the day's work
   if(key==='bos.timeline'){ bosTimeline(id); return; }             // Customer 360 (no classic desktop route; reached only from the app)
+  if(key==='bos.task'){ bosTaskDetail(id); return; }               // Native in-app task detail
   if(key==='customers' && isAppUI()){ bosCustomers(); return; }    // Modern Customers list — phones only
   if(SOON[key] && !id){ renderSoon(key); return; }
   document.getElementById('view').innerHTML=skeleton();
@@ -2039,6 +2065,68 @@ async function bosPnl(){
     ? '<div class="pnl-note warn">Some cash rows aren’t classified yet — the “to review” lines show the gap.</div>'
     : '<div class="pnl-note">Cash basis · reconciles to your cash book.</div>';
   v.innerHTML='<div class="mtoday"><div class="bcl-h"><div class="bcl-title">Profit &amp; Loss</div></div>'+hero+'<div class="c360-sec"><h3>Income statement</h3></div>'+rows+extra+note+'</div>';
+}
+/* ===== Native in-app Task detail (design v1.0): view description + the uploaded photo + Mark-done
+   (optional photo) + Comment. Reuses /papi/task/show, /complete, /comment. ===== */
+var TASKD=null, TASKD_PHOTO=null;
+async function bosTaskDetail(id){
+  const v=document.getElementById('view'); v.innerHTML=skeleton();
+  var r=null; try{ r=await getQuery('/papi/task/show',{id:id}); }catch(e){}
+  if(!r || r.ok===false || !r.task){ v.innerHTML='<div class="mtoday"><div class="crumb"><span onclick="route(\'tasks\')" style="cursor:pointer;color:var(--brand-ink)">Tasks</span></div>'+emptyState('bolt','Task unavailable',(r&&r.error)||'Could not load this task.')+'</div>'; return; }
+  TASKD=r.task; TASKD_PHOTO=null; var t=r.task;
+  var badge = t.done ? '<span class="badge b-ok"><span class="d"></span>Done</span>'
+    : (t.overdue ? '<span class="badge b-danger"><span class="d"></span>Overdue</span>'
+    : (t.status==='in_progress' ? '<span class="badge b-info"><span class="d"></span>In progress</span>'
+    : '<span class="badge b-warn"><span class="d"></span>'+esc(t.status_label)+'</span>'));
+  var meta='<div class="tkd-meta">'
+    +'<div class="tkd-kv"><span>Assignee</span><b>'+esc(t.assignee)+'</b></div>'
+    +(t.due?('<div class="tkd-kv"><span>Due</span><b'+(t.overdue?' style="color:var(--danger)"':'')+'>'+esc(t.due)+'</b></div>'):'')
+    +'<div class="tkd-kv"><span>Priority</span><b>'+esc(t.priority)+'</b></div></div>';
+  var desc = t.note ? '<div class="tkd-desc">'+esc(t.note)+'</div>' : '';
+  var photo='';
+  if(t.attachment){
+    var isImg=/\.(jpg|jpeg|png|webp)$/i.test(t.attachment);
+    photo='<div class="c360-sec"><h3>Photo</h3></div>'+(isImg?'<img class="tkd-photo" src="'+esc(t.attachment)+'" alt="Task photo" onclick="window.open(this.src,\'_blank\')">':'<a class="tkd-file" href="'+esc(t.attachment)+'" target="_blank">📎 View attached file</a>');
+  }
+  var actions='';
+  if(t.active){
+    actions='<div class="c360-sec"><h3>Complete</h3></div><div class="tkd-do">'
+      +'<label class="pick"><span id="tkdPickText">📷 Add a photo (optional)</span><input type="file" id="tkdPhoto" accept="image/*,application/pdf" onchange="tkdPick()" style="display:none"></label>'
+      +'<img id="tkdPreview" class="tkd-photo" style="display:none" alt="preview">'
+      +'<textarea id="tkdNote" class="set-in set-ta" placeholder="Add a note (optional)…"></textarea>'
+      +'<button class="pay-go" onclick="tkdDone(this)">✓ Mark as done</button></div>';
+  } else if(t.done){ actions='<div class="tkd-complete">✅ This task is complete.</div>'; }
+  var cbox = t.active ? '<div class="c360-sec"><h3>Comment</h3></div><div class="tkd-cbox"><input id="tkdComment" class="set-in" placeholder="Write a comment…"><button class="set-cbtn" onclick="tkdComment(this)">Send</button></div>' : '';
+  var ev=(r.events||[]);
+  var tl = ev.length ? '<div class="c360-sec"><h3>Activity</h3></div><div class="tkd-tl">'+ev.map(function(e){ return '<div class="tkd-ev"><div class="tkd-ev-h"><b>'+esc(e.event)+'</b>'+(e.actor?(' · '+esc(e.actor)):'')+'<span>'+esc(e.when||'')+'</span></div>'+(e.detail?'<div class="tkd-ev-d">'+esc(e.detail)+'</div>':'')+'</div>'; }).join('')+'</div>' : '';
+  v.innerHTML='<div class="mtoday"><div class="crumb"><span onclick="route(\'tasks\')" style="cursor:pointer;color:var(--brand-ink)">‹ Tasks</span></div>'
+    +'<div class="tkd-head"><div class="tkd-title">'+esc(t.title)+'</div>'+badge+'</div>'
+    +meta+desc+photo+actions+cbox+tl+'</div>';
+}
+function tkdPick(){
+  var inp=document.getElementById('tkdPhoto'); var f=inp.files&&inp.files[0]; if(!f) return;
+  if(f.size>15*1024*1024){ toast('Photo too big (max 15 MB)', true); inp.value=''; return; }
+  var rd=new FileReader(); rd.onload=function(){ TASKD_PHOTO={data:rd.result,name:f.name||'photo.jpg'};
+    document.getElementById('tkdPickText').textContent='📷 '+(f.name||'Photo selected');
+    var pv=document.getElementById('tkdPreview'); if(/^image\//.test(f.type)){ pv.src=rd.result; pv.style.display='block'; } };
+  rd.readAsDataURL(f);
+}
+async function tkdDone(btn){
+  if(!TASKD) return; btn.disabled=true; btn.textContent='Saving…';
+  var body={ id:TASKD.id, note:((document.getElementById('tkdNote')||{}).value||'') };
+  if(TASKD_PHOTO){ body.attachment_data=TASKD_PHOTO.data; body.attachment_name=TASKD_PHOTO.name; }
+  var r=null; try{ r=await post('/papi/task/complete', body); }catch(e){}
+  if(r && r.ok){ toast('Task completed'); bosTaskDetail(TASKD.id); }
+  else { btn.disabled=false; btn.textContent='✓ Mark as done'; toast((r&&(r.message||r.error))||'Could not complete', true); }
+}
+async function tkdComment(btn){
+  if(!TASKD) return; var el=document.getElementById('tkdComment'); var text=((el&&el.value)||'').trim();
+  if(!text){ toast('Write a comment', true); return; }
+  btn.disabled=true;
+  var r=null; try{ r=await post('/papi/task/comment',{id:TASKD.id, text:text}); }catch(e){}
+  btn.disabled=false;
+  if(r && r.ok){ toast('Comment added'); bosTaskDetail(TASKD.id); }
+  else { toast((r&&(r.message||r.error))||'Could not comment', true); }
 }
 /* ===== Quick Invoice (design v1.0) — issue a numbered invoice from an existing order. Reuses the
    EXISTING, idempotent /papi/invoice-issue (derives customer + lines from the order; never double-numbers)
@@ -3449,8 +3537,10 @@ function tblCardsHtml(pageRows){
     var acts=''; if(actCol){ var ac=r[actCol.key];
       if(ac&&ac.buttons&&ac.buttons.length) acts='<div class="dtc-acts" onclick="event.stopPropagation()">'+rowActBtnsHtml(ac.buttons)+'</div>';
       else if(ac&&ac.href) acts='<div class="dtc-acts" onclick="event.stopPropagation()"><button class="btn sm" onclick="try{window.open(\''+esc(ac.href)+'\',\'_blank\')}catch(e){location.href=\''+esc(ac.href)+'\'}">'+esc(cellVal(ac)||'Open')+'</button></div>'; }
-    var chev=r.link?'<svg class="i dtc-chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>':'';
-    var click=r.link?(' onclick="openLink(\''+esc(r.link)+'\')" style="cursor:pointer"'):'';
+    var isTask=(TBL.capKey==='tasks' && r.id!=null);   // tasks open the native in-app detail
+    var chev=(r.link||isTask)?'<svg class="i dtc-chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>':'';
+    var click=isTask?(' onclick="route(\'bos.task\','+Number(r.id)+')" style="cursor:pointer"')
+      :(r.link?(' onclick="openLink(\''+esc(r.link)+'\')" style="cursor:pointer"'):'');
     return '<div class="dtc"'+click+'><div class="dtc-top">'+(av?('<div class="dtc-avwrap">'+av+'</div>'):'')
       +'<div class="dtc-main"><div class="dtc-name">'+(name||'—')+'</div>'+(tsub?'<div class="dtc-sub">'+tsub+'</div>':'')+'</div>'
       +'<div class="dtc-r">'+amt+chev+'</div></div>'

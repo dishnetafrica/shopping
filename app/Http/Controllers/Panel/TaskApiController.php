@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Ops\TaskEngine;
 use App\Support\WorkflowConfig;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Read/write API for the Operations Layer UI (My Tasks, Work Queue, timeline, roles).
@@ -159,8 +160,58 @@ class TaskApiController extends Controller
         if ($r->filled('attachment')) $opts['attachment'] = (string) $r->input('attachment');
         if ($r->filled('note'))       $opts['note'] = (string) $r->input('note');
         if ($r->filled('checklist'))  $this->saveChecklist($task, $r->input('checklist'));
+        // Optional proof photo uploaded from the app (base64), same store as the panel/link paths.
+        if ($url = $this->storePhoto($task->tenant_id, $r)) $opts['attachment'] = $url;
         $res = $this->engine->complete($r->user()->tenant, $task, $r->user(), $opts);
         return response()->json($res, $res['ok'] ? 200 : 422);
+    }
+
+    /** GET /papi/task/show?id= — one task's full detail + its event timeline (for the in-app task screen). */
+    public function show(Request $r)
+    {
+        [$task, $err] = $this->guard($r);
+        if ($err) return $err;
+        $t = $r->user()->tenant;
+        $names = $this->engine->assigneeNames($t);
+        $events = OrderTaskEvent::query()->where('tenant_id', $t->id)->where('task_id', $task->id)
+            ->orderByDesc('id')->limit(50)->get()
+            ->map(fn ($e) => [
+                'event'  => (string) $e->event,
+                'actor'  => (string) ($e->actor_name ?: ''),
+                'detail' => (string) ($e->detail ?: ''),
+                'when'   => optional($e->created_at)->format('M j, H:i'),
+            ])->values();
+
+        return response()->json(['ok' => true, 'task' => [
+            'id'             => $task->id,
+            'title'          => (string) $task->title,
+            'note'           => (string) ($task->note ?? ''),
+            'status'         => (string) $task->status,
+            'status_label'   => ucfirst(str_replace('_', ' ', (string) $task->status)),
+            'assignee'       => $names[$task->owner_user_id] ?? '—',
+            'due'            => $task->due_at ? $task->due_at->format('M j, H:i') : null,
+            'priority'       => ucfirst(WorkflowConfig::priorityLabel((int) $task->priority)),
+            'attachment'     => (string) ($task->attachment ?? ''),
+            'overdue'        => (bool) $task->isOverdue(),
+            'active'         => (bool) $task->isActive(),
+            'done'           => $task->status === 'completed',
+            'can_start'      => in_array($task->status, ['offered', 'pending'], true),
+        ], 'events' => $events]);
+    }
+
+    /** Decode a base64 data-URL photo from the request → stored public URL (or null). Same as the link path. */
+    private function storePhoto(int $tenantId, Request $r): ?string
+    {
+        $data = (string) $r->input('attachment_data', '');
+        if ($data === '') return null;
+        if (str_contains($data, ',')) $data = substr($data, strpos($data, ',') + 1);
+        $bin = base64_decode($data, true);
+        if ($bin === false || strlen($bin) > 15 * 1024 * 1024) return null;
+        $ext = strtolower(pathinfo((string) $r->input('attachment_name', 'photo.jpg'), PATHINFO_EXTENSION)) ?: 'jpg';
+        if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'pdf'], true)) return null;
+        $file = 'ops/' . $tenantId . '/' . uniqid('proof_', true) . '.' . $ext;
+        Storage::disk('public')->put($file, $bin);
+        return url(Storage::url($file));
     }
 
     /** Raise an exception: pause (clock freezes) or reassign to another role. */

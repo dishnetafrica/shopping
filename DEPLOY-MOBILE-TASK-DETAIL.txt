@@ -1,0 +1,48 @@
+IN-APP TASK DETAIL — open a task in the PWA, see the photo, mark done, comment
+==============================================================================
+
+Completes the in-app task loop: tap a task in the app and manage it fully — no /task link, no logging out.
+
+WHAT'S NEW
+  On a phone, tapping a task in Operations → Tasks now opens a NATIVE task detail (design v1.0):
+    • Title + status (Overdue / In progress / To do / Done), Assignee, Due, Priority.
+    • The task's description.
+    • The PHOTO your staff attached (thumbnail; tap to open full-size — or a "View file" link for PDFs).
+    • Complete: a "✓ Mark as done" with an OPTIONAL photo of your own + a note.
+    • A Comment box, and the task's Activity timeline (assigned / comments / completed).
+  All in the app, for the owner/manager (and the task's own assignee). Reuses the existing task endpoints.
+
+FILES CHANGED
+  resources/views/shell.blade.php                   bosTaskDetail() + task cards open it + .tkd-* CSS + route
+  app/Http/Controllers/Panel/TaskApiController.php   NEW show() (task detail + timeline) + photo-on-complete
+  routes/web.php                                     + GET /papi/task/show
+
+HOW PHOTOS WORK
+  Same store as the panel/link paths (Storage disk 'public' → ops/{tenant}/..., returned as a URL) and the
+  same OrderTask.attachment field. So a photo a technician uploads via their WhatsApp /task link shows up
+  here in the app, and vice-versa. No new storage setup, no migration.
+
+VERIFICATION DONE HERE
+  php -l clean (controller, routes). node --check clean on the whole shell. Rendered the task detail at
+  390px (screenshot) — header, meta, description, photo, mark-done + optional photo, comment, activity.
+
+DEPLOY (no migration)
+  unzip into repo root
+  git add resources/views/shell.blade.php app/Http/Controllers/Panel/TaskApiController.php routes/web.php \
+          DEPLOY-MOBILE-TASK-DETAIL.txt
+  git commit -m "Mobile: native in-app task detail (photo + mark-done + comment)"
+  git push   ->  EasyPanel Rebuild
+  php artisan route:clear && php artisan optimize:clear && php artisan view:clear
+
+VERIFY ON A PHONE
+  Operations → Tasks → tap a task → the detail opens in the app. If it has a photo, it shows. Add a note
+  (and optionally a photo) → Mark as done, or leave a Comment. Assign one via "+ New Task", have someone
+  complete it with a photo from their /jobs link, then open it here — the photo is visible.
+
+SO THE WHOLE LOOP IS NOW IN-APP FOR YOU
+  Assign ("+ New Task") → track (Operations → Tasks) → open a task → see the photo, comment, mark done.
+  Field staff still use the login-free WhatsApp link; you never leave the PWA.
+
+SAFETY
+  Additive + reversible. Reuses existing task endpoints + the panel's proof-upload storage. No migration,
+  no money path. Owner/manager or the task's assignee only (enforced server-side). `git revert` restores it.

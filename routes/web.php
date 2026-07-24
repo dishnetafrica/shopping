@@ -200,6 +200,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::prefix('task')->group(function () {
             Route::get('summary', [TaskApiController::class, 'summary']);
             Route::get('mine',  [TaskApiController::class, 'mine']);
+            Route::get('show',  [TaskApiController::class, 'show']);   // one task's detail + timeline (in-app screen)
             Route::get('queue', [TaskApiController::class, 'queue']);
             Route::get('assignable', [TaskApiController::class, 'assignable']);
             Route::post('assign', [TaskApiController::class, 'assign']);
