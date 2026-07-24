@@ -1,0 +1,80 @@
+RICHER CASHBOOK DESCRIPTIONS — show which invoice/order a payment settled
+=========================================================================
+
+Answers: "if Asish takes money against an invoice, the cashbook description only shows the
+customer name, not which invoice — enhance it with all possible details."
+
+BEFORE
+  Cashbook line:  Payment from Shop no 58
+  (The receipt showed "Allocated to Invoice INV-2026-0025" — but the cashbook line dropped it.)
+
+AFTER
+  Cashbook line:  Payment from Shop no 58 · Invoice INV-2026-0025 · Cash
+
+  The description now carries, in one line and in this order:
+    • Payment from {customer}   (or "Advance from {customer}" for an unapplied advance)
+    • what it was booked against — Invoice {no} first (matching the receipt), else Order {no},
+      else "on account"; if both an invoice and an order exist it shows "Invoice X (ORD-Y)"
+    • the payment method (Cash / Bank / Mobile Money …)
+    • any reference/note the receiver typed ("· ref …", trimmed if very long)
+
+  More examples:
+    Payment from Adel Al-Jili · Order ORD-59 · Cash · ref MTN MoMo 7712345678
+    Advance from Shop no 58 · on account · Cash
+
+HOW IT WORKS (one source of truth)
+  Added a single formatter, PaymentService::describeNote(), and pointed EVERY money-in path at
+  it so the cashbook reads the same no matter how the payment was taken:
+    • the shared recorder default (Customer 360 "Collect", offline collect, etc.)
+    • the Payments screen "Record payment"           (PaymentController::store)
+    • editing an existing payment                     (PaymentController::update)
+    • the invoice "Pay" button                        (InvoiceController)
+    • the order "Record payment" button               (PanelApiController)
+    • staff-cash "Receive payment"                    (StaffCashController)
+
+WHAT DID NOT CHANGE (money is untouched)
+  Only the human-readable description text changes. No amount, currency, rate, allocation,
+  invoice/order sync, receipt number, or balance is affected — the note is display-only and
+  nothing in the system parses it. Existing cashbook rows keep their old text; only new/edited
+  payments get the richer line.
+
+FILES CHANGED (5 — no migration)
+  app/Services/Money/PaymentService.php               + describeNote(); default note uses it
+  app/Http/Controllers/Panel/PaymentController.php     store + update paths use describeNote
+  app/Http/Controllers/Panel/InvoiceController.php      invoice "Pay" uses describeNote
+  app/Http/Controllers/Panel/PanelApiController.php     order "Record payment" uses describeNote
+  app/Http/Controllers/Panel/StaffCashController.php    staff-cash "Receive" uses describeNote
+
+  Note: PanelApiController.php in this bundle also contains the earlier "multiple product photos
+  from ZIP" change (it's the same file). Both are additive and safe; deploying this file is a
+  superset. If you already deployed the photos bundle, this simply carries it forward.
+
+NO MIGRATION
+  order_costs.note is a TEXT column — the longer description fits with room to spare.
+
+VERIFICATION DONE HERE
+  php -l clean on all 5 files. Formatter simulated across 6 cases (invoice-only, invoice+order,
+  order-only with a long reference, on-account advance, missing customer, legacy no-data) — all
+  produce the expected line, and the screenshot case reproduces exactly:
+  "Payment from Shop no 58 · Invoice INV-2026-0025 · Cash".
+
+DEPLOY (no migration)
+  unzip into repo root
+  git add app/Services/Money/PaymentService.php \
+          app/Http/Controllers/Panel/PaymentController.php \
+          app/Http/Controllers/Panel/InvoiceController.php \
+          app/Http/Controllers/Panel/PanelApiController.php \
+          app/Http/Controllers/Panel/StaffCashController.php \
+          DEPLOY-CASHBOOK-NOTES.txt
+  git commit -m "Cashbook: richer payment descriptions (customer + invoice/order + method + ref)"
+  git push   ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear
+
+VERIFY
+  Take a payment against an invoice (invoice "Pay", or staff "Receive payment" with an invoice
+  chosen). Open Cashbook → the new row reads e.g. "Payment from Shop no 58 · Invoice
+  INV-2026-0025 · Cash" instead of just the customer name.
+
+SAFETY
+  Additive + reversible. Description-only; no money value or allocation is touched. No migration,
+  no money-math change. `git revert` restores the prior descriptions.

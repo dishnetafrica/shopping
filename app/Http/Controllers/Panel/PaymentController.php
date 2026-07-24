@@ -125,7 +125,8 @@ class PaymentController extends Controller
             'holder'        => $holderName,
             'holder_user_id'=> $holderUid,
             'created_by'    => $u->name ?? '',
-            'cost_note'     => 'Payment from '.$customer.($orderNo?(' ('.$orderNo.')'):''),
+            // cost_note omitted on purpose → PaymentService::describeNote builds the rich cashbook line
+            // (customer · invoice/order · method · reference) from the fields above.
             'created_at'    => $createdAt,
             'idempotency_key' => trim((string)$request->input('idempotency_key','')) ?: null,
             // Optional discount ("give USD X off, close the invoice") — applied inside the ONE recorder
@@ -267,7 +268,9 @@ class PaymentController extends Controller
                     $cost->order_no = $orderNo; $cost->currency = $cur; $cost->native_amount = $amount;
                     $cost->rate_to_usd = $rate; $cost->usd_amount = $usd; $cost->paid_native = $amount;
                     $cost->holder = $holderName; $cost->holder_user_id = $holderUid;
-                    $cost->note = 'Payment from '.$customer.($orderNo?(' ('.$orderNo.')'):'');
+                    $cost->note = \App\Services\Money\PaymentService::describeNote([
+                        'customer'=>$customer,'invoice_no'=>$p->invoice_no,'order_no'=>$orderNo,'method'=>$method,'reference'=>$note,'kind'=>$kind,
+                    ]);
                     if ($createdAt) $cost->created_at = $createdAt;
                     $cost->save();
                 }

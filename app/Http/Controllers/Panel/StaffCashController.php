@@ -285,7 +285,9 @@ class StaffCashController extends Controller
                 'tenant_id'=>$t->id,'order_id'=>null,'order_no'=>$orderNo,'stage'=>'customer_payment',
                 'currency'=>$cur,'native_amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
                 'holder'=>$person,'holder_user_id'=>$uid,'pay_status'=>'cash','paid_native'=>$amount,
-                'category'=>'Receipt','note'=>'Payment from '.$customer.($orderNo?(' ('.$orderNo.')'):''),
+                'category'=>'Receipt','note'=>\App\Services\Money\PaymentService::describeNote([
+                    'customer'=>$customer,'invoice_no'=>$invoice,'order_no'=>$orderNo,'method'=>$method,'kind'=>$kind,
+                ]),
                 'status'=>'approved','created_by'=>$u->name ?? '',
             ]);
             $pay = CustomerPayment::create([

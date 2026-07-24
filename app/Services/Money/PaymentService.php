@@ -37,7 +37,7 @@ class PaymentService
     {
         $orderNo  = $d['order_no'] ?? null;
         $customer = (string) ($d['customer'] ?? '');
-        $costNote = $d['cost_note'] ?? ('Payment from ' . $customer . ($orderNo ? (' (' . $orderNo . ')') : ''));
+        $costNote = $d['cost_note'] ?? self::describeNote($d);
 
         // BOS Slice 6 — idempotent replay: a payment queued offline may POST more than once on reconnect.
         // If we've already recorded this client key, return that same receipt instead of a second one.
@@ -127,6 +127,50 @@ class PaymentService
         ], ['actor' => ['type' => 'user', 'name' => (string) ($d['created_by'] ?? '')]]);
 
         return $result;
+    }
+
+    /**
+     * The ONE cashbook description for a customer receipt — used by every money-in path so the
+     * cashbook line reads the same everywhere and carries all the useful context, not just the
+     * customer name. Reads whatever the caller has: customer, what it's allocated to (invoice first,
+     * matching the receipt, else the order, else "on account"), the method, and any reference.
+     *
+     * Examples:
+     *   Payment from Shop no 58 · Invoice INV-2026-0025 · Cash
+     *   Payment from Adel Al-Jili · Order ORD-59 · Bank · ref MTN 771…
+     *   Advance from Shop no 58 · on account · Cash
+     *
+     * Display-only text (nothing parses it), so it is safe to enrich without touching any money value.
+     */
+    public static function describeNote(array $d): string
+    {
+        $customer = trim((string) ($d['customer'] ?? ''));
+        $invoice  = trim((string) ($d['invoice_no'] ?? ''));
+        $order    = trim((string) ($d['order_no'] ?? ''));
+        $method   = trim((string) ($d['method'] ?? ''));
+        $ref      = trim((string) ($d['reference'] ?? ''));
+        $kind     = (string) ($d['kind'] ?? 'settlement');
+
+        $parts = [];
+        $parts[] = ($kind === 'advance' ? 'Advance from ' : 'Payment from ') . ($customer !== '' ? $customer : 'customer');
+
+        // What the money was booked against — invoice first (mirrors the receipt), else the order, else on account.
+        if ($invoice !== '') {
+            $parts[] = 'Invoice ' . $invoice . ($order !== '' ? ' (' . $order . ')' : '');
+        } elseif ($order !== '') {
+            $parts[] = 'Order ' . $order;
+        } else {
+            $parts[] = 'on account';
+        }
+
+        if ($method !== '') $parts[] = $method;
+        if ($ref !== '') {
+            $ref = preg_replace('/\s+/', ' ', $ref);
+            if (mb_strlen($ref) > 48) $ref = mb_substr($ref, 0, 47) . '…';
+            $parts[] = 'ref ' . $ref;
+        }
+
+        return implode(' · ', $parts);
     }
 
     /**

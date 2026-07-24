@@ -345,7 +345,8 @@ class InvoiceController extends Controller
                 'holder'         => (string) ($u->name ?? ''),
                 'holder_user_id' => $u->id,
                 'created_by'     => $u->name ?? '',
-                'cost_note'      => 'Payment on ' . $inv->invoice_no,
+                // cost_note omitted → PaymentService::describeNote builds the rich cashbook line
+                // (Payment from {customer} · Invoice {no} · {method}) from the fields above.
                 'discount'       => $discount,   // recorder applies it to the invoice + linked order
             ]);
             $inv->refresh();

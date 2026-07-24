@@ -2439,10 +2439,23 @@ class PanelApiController extends Controller
         $t = $r->user()->tenant;
         app(\App\Support\TenantContext::class)->set($t->id);
 
+        // Accept EITHER a multipart file upload (classic panel: FormData → $r->file('zip'))
+        // OR a base64 data-URL in the `zip` field (V3 app: JSON body). Same importer either way.
+        $tmp = null;
         $file = $r->file('zip');
-        if (! $file || ! $file->isValid()) return response()->json(['ok' => false, 'error' => 'no_file'], 422);
+        if ($file && $file->isValid()) {
+            $zipPath = $file->getRealPath();
+        } else {
+            $b64 = (string) $r->input('zip', '');
+            if (str_contains($b64, ',')) $b64 = substr($b64, strpos($b64, ',') + 1);
+            $bin = $b64 !== '' ? base64_decode($b64, true) : false;
+            if ($bin === false || $bin === '') return response()->json(['ok' => false, 'error' => 'no_file'], 422);
+            $tmp = tempnam(sys_get_temp_dir(), 'phz');
+            file_put_contents($tmp, $bin);
+            $zipPath = $tmp;
+        }
         $za = new \ZipArchive();
-        if ($za->open($file->getRealPath()) !== true) return response()->json(['ok' => false, 'error' => 'bad_zip'], 422);
+        if ($za->open($zipPath) !== true) { if ($tmp) @unlink($tmp); return response()->json(['ok' => false, 'error' => 'bad_zip'], 422); }
 
         $apply    = (int) $r->input('apply', 0) === 1;
         $override = (int) $r->input('override', 0) === 1;
@@ -2536,6 +2549,7 @@ class PanelApiController extends Controller
             }
         }
         $za->close();
+        if ($tmp) @unlink($tmp);
 
         return response()->json([
             'ok' => true, 'apply' => $apply, 'override' => $override,
@@ -2543,6 +2557,11 @@ class PanelApiController extends Controller
             'with_photo' => $withPhoto, 'without_photo' => $withoutPhoto,
             'updated' => $updated, 'galleries_added' => $galleriesAdded,
             'unmatched' => $unmatched, 'unmatched_samples' => $unmatchedSamples,
+            'message' => ($apply ? 'Added ' : 'Preview: ')
+                . $updated . ' main photo(s)'
+                . ($galleriesAdded ? (' + ' . $galleriesAdded . ' gallery photo(s)') : '')
+                . ' across ' . $matched . ' product(s)'
+                . ($unmatched ? (', ' . $unmatched . ' not matched') : '') . '.',
         ]);
     }
 
@@ -4380,7 +4399,8 @@ class PanelApiController extends Controller
                     'holder'         => $holderName,
                     'holder_user_id' => $holderUserId,
                     'created_by'     => $actorName,
-                    'cost_note'      => 'Payment from ' . (string) ($order->customer_name ?? '') . ' (' . (string) $order->order_no . ')',
+                    // cost_note omitted → PaymentService::describeNote builds the rich cashbook line
+                    // (Payment from {customer} · Order {no} · {method} · ref {note}) from the fields above.
                 ]);
             } catch (\Throwable $e) { /* keep the legacy cashbook payment path working regardless */ }
         }
