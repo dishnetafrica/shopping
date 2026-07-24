@@ -54,6 +54,7 @@ final class SettingsWriteService
         'pay_unify',        // unify payment handling
         'vat_enabled',          // charge VAT / sales tax (never hardcoded)
         'prices_include_vat',   // catalogue prices are VAT-inclusive
+        'task_reminders',       // twice-daily WhatsApp task reminders to assignees
     ];
 
     /** Enum settings: [key => allowed values]. Document PDF page setup (read by the PDF renderers). */

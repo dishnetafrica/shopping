@@ -59,6 +59,12 @@ Schedule::command('credit:reminders')->dailyAt('09:00')->withoutOverlapping()->o
 Schedule::command('tasks:escalate')->everyFifteenMinutes()->between('8:00', '20:00')->withoutOverlapping()->onOneServer();
 Schedule::command('ops:digest')->dailyAt('08:00')->withoutOverlapping()->onOneServer();
 Schedule::command('ops:digest')->dailyAt('14:00')->withoutOverlapping()->onOneServer();
+
+// Twice-daily WhatsApp task reminders to each ASSIGNEE — one consolidated digest per person (overdue
+// first). Opt-in per tenant via the `task_reminders` setting. Morning + early-afternoon nudge, Juba local.
+Schedule::command('tasks:remind')->dailyAt('09:00')->timezone('Africa/Juba')->withoutOverlapping()->onOneServer();
+Schedule::command('tasks:remind')->dailyAt('14:00')->timezone('Africa/Juba')->withoutOverlapping()->onOneServer();
+
 Schedule::command('bot:lead-followup')->everyFiveMinutes()->between('8:00', '20:00')->withoutOverlapping()->onOneServer();
 
 // Sourcing: keep nudging the buyer (Jayesh) for unpriced requests until he replies the price.

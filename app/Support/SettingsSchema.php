@@ -90,6 +90,9 @@ final class SettingsSchema
                     ['key' => 'digest_hour',        'type' => 'number', 'label' => 'Send at hour', 'unit' => '24h', 'default' => 18],
                     ['key' => 'cashbook_digest_to', 'type' => 'text',   'label' => 'Daily cashbook email', 'help' => 'Blank = off'],
                 ]],
+                ['label' => 'Task reminders', 'help' => 'WhatsApp each staff member a digest of their own open tasks twice a day (9am & 2pm, Juba time). Only people with open tasks and a phone number are messaged.', 'fields' => [
+                    ['key' => 'task_reminders', 'type' => 'bool', 'label' => 'Send task reminders to assignees'],
+                ]],
                 ['label' => 'Stock alerts', 'fields' => [
                     ['key' => 'low_stock_threshold', 'type' => 'number', 'label' => 'Low-stock threshold', 'unit' => 'units', 'default' => 5],
                     ['key' => 'reorder_days',        'type' => 'number', 'label' => 'Reorder lead time', 'unit' => 'days', 'default' => 30],

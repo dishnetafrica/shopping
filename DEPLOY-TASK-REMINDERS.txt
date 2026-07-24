@@ -1,0 +1,75 @@
+TASK REMINDERS — twice-daily WhatsApp digest to each assignee
+=============================================================
+
+WHAT IT DOES
+  At 9:00 AM and 2:00 PM (Juba time), every staff member gets ONE WhatsApp message listing their own open
+  tasks — overdue first — like your DishNet "Daily Jobs Update":
+
+    Hi Savan,
+
+    Here are your tasks for today:
+    ⏳ Overdue: 2
+    🟡 Open: 2
+    📋 Total: 4
+
+    ⏳ *Kindly Confirm the price on our site…* — overdue · Jul 23, 17:00
+    ⏳ *Kindly Update photos for counter book…* — overdue · Jul 23, 17:00
+    🟡 *Enter book details in system* — due Jul 25, 17:00
+    🟡 *Verify link task* — due Jul 25, 17:00
+
+    🔗 Open your tasks: https://mycloudbss.com/v3#/tasks
+
+    Please work through your list, starting with anything overdue. Have a productive day! 🛠
+    — Family Shoppers Operations
+
+  • One consolidated message per person (not one per task) — someone with 5 pending jobs gets a single list.
+  • Only people who actually HAVE open tasks AND a phone number are messaged (no "you have 0 tasks" spam).
+  • Overdue vs open is decided the same way the Tasks screen decides it, and the due times match the screen.
+
+HOW IT WORKS
+  New command `tasks:remind` (auto-registered) + two schedule lines in routes/console.php:
+     09:00 and 14:00, Africa/Juba, withoutOverlapping. It uses the same WhatsApp path as your other
+     reminders (credit reminders, digests) and logs each send to the message log.
+
+FILES
+  app/Console/Commands/TaskReminderCommand.php            NEW — the reminder command
+  routes/console.php                                      +2 schedule lines (09:00 & 14:00 Africa/Juba)
+  app/Support/SettingsSchema.php                          "Task reminders" toggle (Notifications section)
+  app/Services/Settings/SettingsWriteService.php          task_reminders added to the write whitelist
+  app/Http/Controllers/Panel/PanelApiController.php       settings-hub resolves the toggle value
+  (the three settings files also carry the VAT config from the mobile bundle — same files, cumulative)
+
+⚠️ TWO THINGS TO SET UP AFTER DEPLOY
+  1. TURN IT ON — it's OFF by default (so it never messages other businesses' staff). In the app:
+     Settings → Notifications → "Send task reminders to assignees" → on → Save.
+     (Or on the server: it reads the tenant setting `task_reminders`.)
+  2. STAFF NEED PHONE NUMBERS — the reminder goes to each assignee's phone on their User record. Make sure
+     savan, Jayesh, etc. have a WhatsApp number set (Settings → Team, or the classic staff screen). Anyone
+     without a number is simply skipped.
+
+DEPLOY (no migration)
+  unzip into repo root
+  git add app/Console/Commands/TaskReminderCommand.php routes/console.php \
+          app/Support/SettingsSchema.php app/Services/Settings/SettingsWriteService.php \
+          app/Http/Controllers/Panel/PanelApiController.php DEPLOY-TASK-REMINDERS.txt
+  git commit -m "Task reminders: twice-daily WhatsApp digest to each assignee (opt-in per tenant)"
+  git push   ->  EasyPanel Rebuild
+  php artisan optimize:clear
+  # schedule cache, if you cache it:  php artisan schedule:clear-cache 2>/dev/null; true
+
+TEST IT NOW (before or after turning the toggle on)
+  Preview who would be reminded (never sends), even with the toggle still off:
+     php artisan tasks:remind --tenant=17 --dry
+  Then, once the toggle is ON, send immediately (real WhatsApp):
+     php artisan tasks:remind --tenant=17
+  You should get the digest on each assignee's WhatsApp. The 9am/2pm fires happen automatically via your
+  existing scheduler (the same one that runs credit:reminders / ops:digest).
+
+NOTES / EASY TWEAKS (tell me and I'll change)
+  • Times: 9:00 & 14:00 Africa/Juba — change the two lines in routes/console.php for different times/zone.
+  • Wording/emoji: all in TaskReminderCommand::message().
+  • It reminds on OPEN statuses (offered/pending/in_progress/exception/paused). Done/cancelled are ignored.
+
+SAFETY
+  Opt-in, staff-only messaging (never customers). No migration, no money path. Reuses the existing WhatsApp
+  sender + message log. `git revert` removes it cleanly.

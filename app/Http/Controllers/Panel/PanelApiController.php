@@ -6608,6 +6608,7 @@ class PanelApiController extends Controller
                 case 'prices_include_vat':   return \App\Support\VatConfig::inclusive($t);
                 case 'vat_label':            return \App\Support\VatConfig::label($t);
                 case 'vat_number':           return \App\Support\VatConfig::number($t);
+                case 'task_reminders':       return (bool) $t->setting('task_reminders', false);
                 default:                     return $t->setting($k, $def);
             }
         };
