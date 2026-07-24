@@ -1,0 +1,50 @@
+TASK REMINDERS v3 — short DishNet-style job links (mycloudbss.com/jobs/Iu6BrElPjG)
+=================================================================================
+
+Same feature as v2 (twice-daily WhatsApp digest + login-free per-person "My Jobs" page), but the link is
+now a SHORT code like DishNet's (e.g. /jobs/Iu6BrElPjG) instead of the long stateless token.
+
+WHAT CHANGED vs v2
+  • The per-person token is now a short random 10-char code stored on the user, stamped with the day it was
+    minted. It rotates DAILY (the morning reminder issues a fresh code; yesterday's dies). Same security
+    scope — it only opens that person's own task list, nothing else.
+  • Requires ONE new migration: two nullable columns on `users` (job_token, job_token_day).
+
+  ⚠️ NEW STEP: run `php artisan migrate` after deploy (adds the two columns). Guarded + additive.
+
+FILES
+  NEW  database/migrations/2026_07_24_000002_add_job_token_to_users.php   job_token + job_token_day columns
+  EDIT app/Support/JobToken.php                                           short DB-backed token (mint/verify)
+  EDIT app/Console/Commands/TaskReminderCommand.php                       link uses JobToken::forUser($u)
+  (unchanged from v2, included so this is one complete deploy:)
+  app/Http/Controllers/JobsController.php, resources/views/jobs-list.blade.php, routes/web.php,
+  routes/console.php, app/Support/SettingsSchema.php,
+  app/Services/Settings/SettingsWriteService.php, app/Http/Controllers/Panel/PanelApiController.php
+
+VERIFICATION DONE HERE
+  php -l clean on all changed files. Confirmed the token is a short alphanumeric code and the /jobs and
+  /task routes stay rate-limited. (The "My Jobs" page + the per-task action page were verified in v2.)
+
+DEPLOY
+  unzip into repo root
+  git add app/Support/JobToken.php \
+          database/migrations/2026_07_24_000002_add_job_token_to_users.php \
+          app/Console/Commands/TaskReminderCommand.php \
+          app/Http/Controllers/JobsController.php resources/views/jobs-list.blade.php routes/web.php \
+          routes/console.php app/Support/SettingsSchema.php \
+          app/Services/Settings/SettingsWriteService.php \
+          app/Http/Controllers/Panel/PanelApiController.php DEPLOY-TASK-REMINDERS-v3.txt
+  git commit -m "Task reminders v3: short DishNet-style job link tokens (DB-backed, daily-rotating)"
+  git push   ->  EasyPanel Rebuild
+  php artisan migrate                         # adds job_token + job_token_day to users  ← don't skip
+  php artisan route:clear && php artisan optimize:clear && php artisan view:clear
+
+TEST
+  php artisan tasks:remind --tenant=17 --dry     # preview
+  Turn the toggle on (Settings → Notifications → task reminders) if you haven't, then:
+  php artisan tasks:remind --tenant=17           # sends; the link is now short, e.g. /jobs/Iu6BrElPjG
+  Tap it → no-login "My Jobs" page → open a task → mark done, all without logging in.
+
+SAFETY
+  Additive migration (two nullable columns) + reversible code. No money path. `git revert` + a down()
+  migration remove it cleanly.

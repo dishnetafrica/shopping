@@ -74,7 +74,7 @@ class TaskReminderCommand extends Command
                     continue;
                 }
 
-                $link = url('/jobs/' . JobToken::mint((int) $t->id, (int) $uid));
+                $link = url('/jobs/' . JobToken::forUser($u));
                 $msg = $this->message($t, (string) $u->name, $list, $link);
                 try {
                     $wa->forTenant($t)->sendText($t->whatsapp_instance, $phone, $msg);

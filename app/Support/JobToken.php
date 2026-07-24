@@ -2,60 +2,60 @@
 
 namespace App\Support;
 
+use App\Models\User;
+use Illuminate\Support\Str;
+
 /**
- * Per-person, login-free "my jobs" link token (the DishNet scheduling-link model).
+ * Per-person, login-free "my jobs" link token (the DishNet scheduling-link model) — short + DB-backed.
  *
- * Stateless + daily: the token encodes {tenant, user, Juba-date} signed with the app key. It authorizes ONE
- * thing — viewing that user's own open task list — never account access or another user's tasks. It changes
- * every day (the date is part of the signed payload), so a leaked link goes stale within ~a day. A 1-day
- * grace window is honoured so a link from yesterday's 2 PM reminder still opens the next morning.
+ * Each user carries a short random token (like DishNet's `3ik6igzoQD`) stamped with the Juba calendar day
+ * it was minted. It authorizes ONE thing — viewing that user's own open task list — never account access or
+ * another user's tasks. It regenerates DAILY: the first reminder of a new day rotates the token, so
+ * yesterday's link dies. Verification accepts today or yesterday (a short grace so an evening link still
+ * opens the next morning until the 9am reminder rotates it).
  *
- * No DB, no migration: verification just recomputes the HMAC. Rate-limited at the route to defeat guessing.
+ * Columns on `users`: job_token (short unique code) + job_token_day (Ymd it was minted).
  */
 final class JobToken
 {
     private const TZ = 'Africa/Juba';
 
-    /** Mint today's token for a (tenant, user). */
-    public static function mint(int $tenantId, int $userId, ?string $ymd = null): string
+    /** Return this user's short token for today, minting/rotating it if the stored one isn't today's. */
+    public static function forUser(User $u): string
     {
-        $ymd = $ymd ?: self::today();
-        $payload = $tenantId . '.' . $userId . '.' . $ymd;
-        $raw = $payload . '.' . self::sig($payload);
-        return rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');
+        $today = self::today();
+        if (! empty($u->job_token) && (string) $u->job_token_day === $today) {
+            return (string) $u->job_token;
+        }
+
+        // A fresh short code, unique across users.
+        do {
+            $tok = Str::random(10);
+        } while (User::withoutGlobalScopes()->where('job_token', $tok)->exists());
+
+        User::withoutGlobalScopes()->where('id', $u->id)->update([
+            'job_token'     => $tok,
+            'job_token_day' => $today,
+        ]);
+        $u->job_token = $tok;
+        $u->job_token_day = $today;
+
+        return $tok;
     }
 
-    /**
-     * Verify a token. Returns [tenantId, userId] if valid (signature ok AND date is today or yesterday),
-     * or null otherwise.
-     */
+    /** Resolve a token to [tenantId, userId], or null if unknown/expired. Today or yesterday only. */
     public static function verify(string $token): ?array
     {
-        $raw = base64_decode(strtr($token, '-_', '+/'), true);
-        if ($raw === false) {
+        $token = trim($token);
+        if ($token === '' || strlen($token) > 40 || ! ctype_alnum($token)) {
             return null;
         }
-        $parts = explode('.', $raw);
-        if (count($parts) !== 4) {
-            return null;
-        }
-        [$tid, $uid, $ymd, $sig] = $parts;
-        if (! ctype_digit($tid) || ! ctype_digit($uid) || ! ctype_digit($ymd)) {
-            return null;
-        }
-        if (! hash_equals(self::sig($tid . '.' . $uid . '.' . $ymd), (string) $sig)) {
-            return null;
-        }
-        if (! in_array($ymd, [self::today(), self::yesterday()], true)) {
-            return null; // expired — a fresh reminder carries a fresh token
-        }
-        return [(int) $tid, (int) $uid];
-    }
+        $u = User::withoutGlobalScopes()
+            ->where('job_token', $token)
+            ->whereIn('job_token_day', [self::today(), self::yesterday()])
+            ->first();
 
-    private static function sig(string $payload): string
-    {
-        $key = (string) config('app.key');
-        return substr(hash_hmac('sha256', $payload, $key), 0, 24);
+        return $u ? [(int) $u->tenant_id, (int) $u->id] : null;
     }
 
     private static function today(): string
