@@ -39,6 +39,7 @@ Route::middleware('throttle:30,1')->group(function () {
     Route::post('/task/{nonce}/accept', [\App\Http\Controllers\TaskLinkController::class, 'accept']);
     Route::post('/task/{nonce}/complete', [\App\Http\Controllers\TaskLinkController::class, 'complete']);
     Route::post('/task/{nonce}/comment', [\App\Http\Controllers\TaskLinkController::class, 'comment']);
+    Route::post('/task/{nonce}/upload', [\App\Http\Controllers\TaskLinkController::class, 'upload']); // optional proof photo
 
     // Per-person, no-login "My Jobs" list (daily token). Each row opens the per-task page above.
     Route::get('/jobs/{token}', [\App\Http\Controllers\JobsController::class, 'list']);

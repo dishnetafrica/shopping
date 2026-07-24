@@ -1,0 +1,49 @@
+TASK PAGE — optional photo upload + richer detail (the DishNet job-page touch)
+=============================================================================
+
+Builds on the login-free task page (/task/{nonce}) that your job links open. Now, like DishNet, a person
+can attach a photo when finishing a job — optional, not required — and the page shows the task's
+description and any photo already attached.
+
+WHAT'S NEW ON THE NO-LOGIN TASK PAGE
+  • DESCRIPTION — the task's note/description now shows at the top (was title + due only).
+  • PHOTO (OPTIONAL) — a "📷 Add a photo" picker (camera or gallery, images or PDF, up to 15 MB):
+      – pick a photo → live preview,
+      – "Attach this photo" adds it right away WITHOUT completing (proof mid-job), OR
+      – it rides along when you tap "Mark as done".
+    A photo is never compulsory (unless a task was explicitly flagged requires_upload) — the page says so.
+  • ATTACHED — if a photo is already on the task, it shows as a thumbnail (or a "View file" link for PDFs).
+
+HOW IT WORKS (reuses what you already have)
+  The upload uses the SAME storage path as your panel's proof upload (Storage disk 'public' →
+  ops/{tenant}/proof_*.jpg, returned as a URL) and the SAME OrderTask.attachment field. No new storage
+  setup, no migration. Actions stay on the existing rate-limited, no-login nonce routes.
+
+FILES CHANGED
+  resources/views/task-link.blade.php               description + photo picker/preview + attached display
+  app/Http/Controllers/TaskLinkController.php        base64 photo handling on complete + a new /upload action
+  app/Services/Ops/TaskEngine.php                    completeByNonce() takes an optional attachment;
+                                                     + attachByNonce() (attach a photo without completing)
+  routes/web.php                                     + POST /task/{nonce}/upload (in the rate-limited group)
+
+VERIFICATION DONE HERE
+  php -l clean on all changed PHP. Rendered the task page at 390px (screenshot) — badge, description, the
+  optional photo picker, note, Mark-as-done. Upload reuses the existing, already-working panel upload path.
+
+DEPLOY (no migration)
+  unzip into repo root
+  git add resources/views/task-link.blade.php app/Http/Controllers/TaskLinkController.php \
+          app/Services/Ops/TaskEngine.php routes/web.php DEPLOY-TASK-PHOTO-UPLOAD.txt
+  git commit -m "Task page: optional photo upload on complete + description/attachment display"
+  git push   ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear
+  # If proof photos ever 404, the public storage symlink isn't set:  php artisan storage:link
+  # (It's almost certainly already set, since the panel's existing proof-upload uses the same path.)
+
+TEST
+  Open any task via its link (from the "My Jobs" page). Add a photo → preview → "Attach this photo" (or
+  just Mark as done with the photo selected). Reopen the task → the photo shows under "Attached".
+
+SAFETY
+  Additive + reversible. Optional upload; existing complete/accept/comment behaviour unchanged. No money
+  path, no migration. `git revert` restores the prior page.

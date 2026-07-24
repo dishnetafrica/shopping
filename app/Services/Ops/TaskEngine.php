@@ -336,15 +336,16 @@ class TaskEngine
     }
 
     /** Complete a task via its public link (no login). */
-    public function completeByNonce(OrderTask $task, ?string $note = null): array
+    public function completeByNonce(OrderTask $task, ?string $note = null, ?string $attachment = null): array
     {
         if (! $task->isActive()) return ['ok' => false, 'error' => 'This task is already closed.'];
-        if ($task->requires_upload && empty($task->attachment)) {
-            return ['ok' => false, 'error' => 'This task needs a file to be uploaded from the panel first.'];
+        if ($task->requires_upload && empty($attachment) && empty($task->attachment)) {
+            return ['ok' => false, 'error' => 'This task needs a photo/file uploaded before it can be closed.'];
         }
         $task->status       = 'completed';
         $task->completed_at = now();
         if ($note) $task->note = mb_substr($note, 0, 500);
+        if ($attachment) $task->attachment = (string) $attachment;   // optional proof photo
         $task->save();
         $tenant = Tenant::withoutGlobalScopes()->find($task->tenant_id);
         if ($tenant) $this->log($tenant, $task->order_id, $task->id, 'completed', null, $task->stage, null,
@@ -361,6 +362,17 @@ class TaskEngine
         if ($tenant) $this->log($tenant, $task->order_id, $task->id, 'comment', null, null, null,
             mb_substr($text, 0, 500));
         return ['ok' => true];
+    }
+
+    /** Attach a proof photo to a task via its public link — WITHOUT changing status (optional, any time). */
+    public function attachByNonce(OrderTask $task, string $url): array
+    {
+        if (! $task->isActive()) return ['ok' => false, 'error' => 'This task is already closed.'];
+        $task->attachment = $url;
+        $task->save();
+        $tenant = Tenant::withoutGlobalScopes()->find($task->tenant_id);
+        if ($tenant) $this->log($tenant, $task->order_id, $task->id, 'comment', null, null, null, 'Photo attached via link');
+        return ['ok' => true, 'attachment' => $url];
     }
 
     // ----------------------------------------------------------------- internals
