@@ -1,0 +1,49 @@
+IN-APP TASKS — assign work from the phone (answering "how do I do it from V3 / the PWA?")
+========================================================================================
+
+Until now, on the phone you could only reach Tasks by opening the menu (☰) → Operations → Tasks, and there
+was no first-class way to CREATE/assign a task. This adds that.
+
+WHAT'S NEW (frontend only — reuses the existing /papi/task endpoints)
+  • "+" → NEW TASK — a modern sheet: type the task, pick who to assign it to (your staff), set an optional
+    due date/time and a priority (Low / Normal / High) → Assign. Posts to /papi/task/assign (the same
+    owner/manager-gated endpoint the desktop "New task" uses). Added to the "+" on Today, Customers and
+    Operations.
+  • OPERATIONS HUB → "Tasks" row (assign & track) so it's one tap from the Operations screen, not buried
+    in the menu.
+
+HOW THE WHOLE THING WORKS NOW, END TO END
+  1. You (owner/manager) assign a task from the phone: "+" → New Task.
+  2. That staff member gets it in their twice-daily WhatsApp digest (9am & 2pm), with their short
+     login-free /jobs/{code} link.
+  3. They open the link → their "My Jobs" list → tap the task → Accept / Mark done, attaching an optional
+     photo — all without logging in.
+  4. You see progress in the app: Operations → Tasks (the list updates as they complete).
+
+FILES CHANGED
+  resources/views/shell.blade.php   New Task sheet (taskSheetOpen/taskSave) + "+" wiring + Operations-hub
+                                    Tasks row (everything else in the app unchanged)
+
+VERIFICATION DONE HERE
+  node --check clean on the whole shell. Rendered the New Task sheet at 390px (screenshot) — task field,
+  assignee picker, due, priority, Assign. No JS errors. Uses the existing, already-deployed assign endpoint.
+
+DEPLOY (frontend-only, no migration)
+  unzip into repo root
+  git add resources/views/shell.blade.php DEPLOY-MOBILE-NEW-TASK.txt
+  git commit -m "Mobile: assign tasks from the app (+ New Task sheet, Tasks in Operations hub)"
+  git push   ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear
+
+VERIFY ON A PHONE
+  "+" → New Task → type a task, pick a staff member, Assign → "Task assigned". Open Operations → Tasks to
+  see it in the list. (If you're not an owner/manager it will say so — the endpoint enforces that.)
+
+NEXT (optional — tell me if you want it)
+  A native in-app TASK DETAIL so you can open a task inside the app and see the photo the staff member
+  uploaded + mark done / comment there too (today you view a task's photo via its /task link). Small build
+  on top of this.
+
+SAFETY
+  Additive + reversible, phone-only surface. No migration, no money path. Reuses the existing task-assign
+  endpoint. `git revert` restores the prior shell.

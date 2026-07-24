@@ -1469,15 +1469,16 @@ const HUBCARD = {
 };
 /* Context-aware create actions per workspace (only real, permitted screens are offered). */
 const WS_ADD = {
-  today:      [['quotations','New Quote'],['invoices','New Invoice'],['payments','Receive Payment'],['cashbook','Expense'],['tasks','Customer Visit'],['customers','New Customer']],
-  customers:  [['customers','New Customer'],['quotations','New Quote'],['payments','Receive Payment'],['tasks','Customer Visit']],
-  operations: [['purchase.process','New Purchase'],['products','New Product'],['salesOrders','New Order']],
+  today:      [['task.new','New Task'],['quotations','New Quote'],['invoices','New Invoice'],['payments','Receive Payment'],['cashbook','Expense'],['customers','New Customer']],
+  customers:  [['customers','New Customer'],['quotations','New Quote'],['payments','Receive Payment'],['task.new','New Task']],
+  operations: [['task.new','New Task'],['purchase.process','New Purchase'],['products','New Product'],['salesOrders','New Order']],
   finance:    [['cashbook','Expense'],['payments','Receive Payment'],['invoices','New Invoice']],
   me:         []
 };
 var WS_CUR = 'today';
 function hasScreen(k){
   var s = CFG.capKeys;
+  if(k==='task.new') return true;   // the "+ New task" action (owner/manager gate is enforced server-side)
   if(k==='pnl') return !!(s && s.has('finance'));
   if(k==='settings' || k==='guide') return true;
   if(SF_KEYS.has(k)) return true;
@@ -1631,10 +1632,45 @@ function toggleNav(){ const a=document.querySelector('.app'); const open=a.class
 function closeQuickAdd(){ document.getElementById('qsheet').classList.remove('on'); }
 function quickAdd(key){ closeQuickAdd();
   // The "+" opens a real modern form for the quick creates, instead of just dropping you on a list.
+  if(key==='task.new'){ taskSheetOpen(); return; }
   if(key==='customers' && isAppUI()){ custSheetOpen(); return; }
   if(key==='cashbook' && isAppUI()){ expSheetOpen(); return; }
   if(key==='invoices' && isAppUI()){ bosQuickInvoice(); return; }
   route(key);
+}
+/* ===== New Task (design v1.0) — assign work to a staff member from the phone. POST /papi/task/assign
+   (owner/manager only). Reuses the assignable-users endpoint for the picker. ===== */
+var TASK_STAFF=[], TASK_PRIO=2;
+async function taskSheetOpen(){
+  var r=null; try{ r=await getQuery('/papi/task/assignable',{}); }catch(e){}
+  if(!r || r.ok===false){ toast((r&&r.error==='forbidden')?'Only an owner or manager can assign tasks':'Could not load staff', true); return; }
+  TASK_STAFF=r.users||[]; TASK_PRIO=2;
+  if(!TASK_STAFF.length){ toast('Add a staff member first (Team settings)', true); return; }
+  var opts=TASK_STAFF.map(function(u){ return '<option value="'+u.id+'">'+esc(u.name)+(u.role?(' · '+esc(u.role)):'')+'</option>'; }).join('');
+  fsheetOpen('<div class="grab"></div><div class="pay-h">New task</div><div class="pay-sub">Assign work to your team</div>'
+    +'<div class="fs-field"><label>Task</label><input id="tkTitle" class="set-in" placeholder="e.g. Update counter-book photos"></div>'
+    +'<div class="fs-field"><label>Assign to</label><select id="tkWho" class="set-in">'+opts+'</select></div>'
+    +'<div class="fs-field"><label>Due (optional)</label><input id="tkDue" class="set-in" type="datetime-local"></div>'
+    +'<div class="fs-field"><label>Priority</label><div class="set-segs" id="tkPrio">'
+      + [['1','Low'],['2','Normal'],['3','High']].map(function(p){ return '<button class="set-seg'+(p[0]==='2'?' on':'')+'" data-v="'+p[0]+'" onclick="taskPrio(this)">'+p[1]+'</button>'; }).join('')
+    +'</div></div>'
+    +'<button class="pay-go" onclick="taskSave(this)">Assign task</button><button class="pay-cancel" onclick="fsheetClose()">Cancel</button>');
+  setTimeout(function(){ var e=document.getElementById('tkTitle'); if(e) e.focus(); },80);
+}
+function taskPrio(btn){ TASK_PRIO=Number(btn.getAttribute('data-v'))||2; var p=btn.parentNode; p.querySelectorAll('.set-seg').forEach(function(x){ x.classList.remove('on'); }); btn.classList.add('on'); }
+async function taskSave(btn){
+  var title=((document.getElementById('tkTitle')||{}).value||'').trim();
+  var who=Number((document.getElementById('tkWho')||{}).value||0);
+  var due=(document.getElementById('tkDue')||{}).value||'';
+  if(!title){ toast('Enter the task', true); return; }
+  if(!who){ toast('Pick who to assign to', true); return; }
+  if(btn){ btn.disabled=true; btn.textContent='Assigning…'; }
+  var body={ assignee_id:who, title:title, priority:TASK_PRIO };
+  if(due) body.due_at=due;
+  var r=null,neterr=false; try{ r=await post('/papi/task/assign', body); }catch(e){ neterr=true; }
+  if(btn){ btn.disabled=false; btn.textContent='Assign task'; }
+  if(!neterr && r && r.ok){ fsheetClose(); toast('Task assigned'); if(CUR&&CUR.key==='tasks') route('tasks'); }
+  else { toast((r&&(r.message||r.error==='forbidden'?'Only an owner or manager can assign tasks':r.error))||'Could not assign the task', true); }
 }
 /* ===== Quick-add create sheets (design v1.0) — bottom-sheet forms that post to real endpoints. ===== */
 function fsheetEnsure(){ var s=document.getElementById('formsheet'); if(!s){ s=document.createElement('div'); s.id='formsheet'; s.className='qsheet-ov'; s.onclick=function(e){ if(e.target===s) fsheetClose(); }; document.body.appendChild(s); } return s; }
@@ -1778,7 +1814,8 @@ function bosOperations(){
     box:'<path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
     bag:'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
     user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
-    tag:'<path d="M20.6 13.4 12 22l-9-9V3h10z"/><circle cx="7.5" cy="7.5" r="1.5"/>'
+    tag:'<path d="M20.6 13.4 12 22l-9-9V3h10z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+    check:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>'
   };
   function urow(key,ic,tone,title,sub){
     if(!hasScreen(key)) return '';
@@ -1789,7 +1826,8 @@ function bosOperations(){
     return '<div class="ops-row" onclick="route(\''+key+'\')"><div class="ops-ic '+tone+'"><svg class="i" viewBox="0 0 24 24">'+ic+'</svg></div>'
       +'<div class="ops-bd"><div class="ops-t">'+title+'</div><div class="ops-s">'+sub+'</div></div>'+right+'</div>';
   }
-  const actions = urow('dispatch',IC.truck,'sky','Deliveries to make','dispatch &amp; drop-off')
+  const actions = urow('tasks',IC.check,'indigo','Tasks','assign &amp; track team work')
+    + urow('dispatch',IC.truck,'sky','Deliveries to make','dispatch &amp; drop-off')
     + urow('warehouse',IC.alert,'red','Low stock','reorder before it runs out')
     + urow('salesOrders',IC.box,'indigo','Orders to fulfil','pick, pack &amp; send')
     + urow('purchase.process',IC.bag,'amber','Purchases to receive','from suppliers');
