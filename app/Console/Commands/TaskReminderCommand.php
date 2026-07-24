@@ -6,6 +6,7 @@ use App\Models\OrderTask;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\WhatsApp\WhatsAppManager;
+use App\Support\JobToken;
 use App\Support\MessageLog;
 use App\Support\TenantContext;
 use Illuminate\Console\Command;
@@ -73,7 +74,8 @@ class TaskReminderCommand extends Command
                     continue;
                 }
 
-                $msg = $this->message($t, (string) $u->name, $list);
+                $link = url('/jobs/' . JobToken::mint((int) $t->id, (int) $uid));
+                $msg = $this->message($t, (string) $u->name, $list, $link);
                 try {
                     $wa->forTenant($t)->sendText($t->whatsapp_instance, $phone, $msg);
                     MessageLog::record($t->id, $phone, $t->whatsapp_instance, 'out', 'system', $msg);
@@ -89,7 +91,7 @@ class TaskReminderCommand extends Command
     }
 
     /** Build the per-person digest (overdue first). Mirrors the Tasks screen's due format + overdue rule. */
-    private function message(Tenant $t, string $name, $list): string
+    private function message(Tenant $t, string $name, $list, string $link): string
     {
         $first = trim((string) strtok(trim($name), ' '));
         if ($first === '') {
@@ -114,15 +116,13 @@ class TaskReminderCommand extends Command
         $more = $total - count($show);
         $body = implode("\n", $show) . ($more > 0 ? "\n…and {$more} more" : '');
 
-        $link = 'https://mycloudbss.com/v3#/tasks';
-
         return "Hi {$first},\n\n"
             . "Here are your tasks for today:\n"
             . "\u{23F3} Overdue: {$overdue}\n"
             . "\u{1F7E1} Open: {$open}\n"
             . "\u{1F4CB} Total: {$total}\n\n"
             . $body . "\n\n"
-            . "\u{1F517} Open your tasks: {$link}\n\n"
+            . "\u{1F517} Open & update your tasks (no login): {$link}\n\n"
             . "Please work through your list, starting with anything overdue. Have a productive day! \u{1F6E0}\n"
             . '— ' . $t->name . ' Operations';
     }

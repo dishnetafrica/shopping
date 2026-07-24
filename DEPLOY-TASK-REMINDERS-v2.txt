@@ -1,0 +1,62 @@
+TASK REMINDERS v2 — now with a login-free, per-person "My Jobs" page (the DishNet model)
+========================================================================================
+
+This SUPERSEDES the first task-reminders bundle. It's the complete feature: the twice-daily WhatsApp
+digest PLUS a tokenized, no-login task page — exactly like DishNet's scheduling links.
+
+THE FLOW NOW
+  1. 09:00 & 14:00 (Juba) each assignee gets their WhatsApp digest (unchanged), but the link now opens…
+  2. …their own "My Jobs" page — NO LOGIN, no token to refresh by hand:
+        https://mycloudbss.com/jobs/{token}
+     A clean mobile page listing only THEIR open tasks (overdue / open counts + each task), styled like
+     DishNet's Job List. The token is per-person and changes every day (a fresh reminder carries a fresh
+     token; yesterday's link still opens for a 1-day grace, then dies).
+  3. Tapping a task opens the existing per-task page (/task/{nonce}) — also NO LOGIN — where they
+     Accept / Start, Mark as done, and add a note. (That page already existed; we just link the list to it.)
+
+  So a staff member never logs into the main portal: they tap the WhatsApp link → see their jobs → open one
+  → mark it done. Independent, token-authenticated, daily-refreshing — the DishNet experience.
+
+WHY IT'S SAFE (login-free but scoped)
+  • The daily token is an HMAC of {tenant, user, date} signed with your APP_KEY — unguessable, and it
+    authorizes ONE thing: viewing that user's own open tasks. It reveals no account access and no one
+    else's tasks. Verified here: valid token round-trips, a tampered token is rejected, an old date is
+    rejected, yesterday's is accepted (grace).
+  • The /jobs and /task routes are rate-limited (throttle:30/min) to defeat guessing.
+  • Task actions (accept/done/comment) run through the existing, already-deployed no-login task path.
+
+FILES
+  NEW  app/Support/JobToken.php                       daily per-person token (mint + verify), no DB
+  NEW  app/Http/Controllers/JobsController.php         GET /jobs/{token} → that person's task list
+  NEW  resources/views/jobs-list.blade.php             the "My Jobs" page (mobile, DishNet-style)
+  EDIT routes/web.php                                  + GET /jobs/{token} (in the rate-limited public group)
+  EDIT app/Console/Commands/TaskReminderCommand.php    reminder link now points to /jobs/{token}
+  (also included so this is one complete, self-contained deploy — same as the first bundle:)
+  routes/console.php, app/Support/SettingsSchema.php, app/Services/Settings/SettingsWriteService.php,
+  app/Http/Controllers/Panel/PanelApiController.php
+
+VERIFICATION DONE HERE
+  php -l clean on all changed PHP. Token mint/verify tested standalone (round-trip, tamper, expiry, grace).
+  Rendered the "My Jobs" page at 390px (screenshot) — counts + task cards + per-task "Open ›". The per-task
+  action page was already live.
+
+DEPLOY (no migration)
+  unzip into repo root
+  git add app/Support/JobToken.php app/Http/Controllers/JobsController.php \
+          resources/views/jobs-list.blade.php routes/web.php \
+          app/Console/Commands/TaskReminderCommand.php routes/console.php \
+          app/Support/SettingsSchema.php app/Services/Settings/SettingsWriteService.php \
+          app/Http/Controllers/Panel/PanelApiController.php DEPLOY-TASK-REMINDERS-v2.txt
+  git commit -m "Task reminders v2: login-free per-person My Jobs page (DishNet-style tokenized link)"
+  git push   ->  EasyPanel Rebuild
+  php artisan route:clear && php artisan optimize:clear && php artisan view:clear
+
+TEST
+  php artisan tasks:remind --tenant=17 --dry        # preview (no send)
+  Then, with the toggle on, send yourself one and tap the link — you should land on the no-login "My Jobs"
+  page, and opening a task should let you mark it done without logging in.
+  (APP_URL must be https://mycloudbss.com so the link builds correctly — it already is, since that's your app.)
+
+SAFETY
+  Additive + reversible. Read-only list page + an existing action path. No migration, no money path.
+  `git revert` removes it cleanly.
