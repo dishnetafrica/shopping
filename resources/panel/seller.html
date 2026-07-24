@@ -3098,7 +3098,8 @@ async function photoImportRun(apply,override){
       '<tr><td>&nbsp;&nbsp;of those, no photo yet</td><td style="text-align:right">'+d.without_photo+'</td></tr>'+
       '<tr><td>&nbsp;&nbsp;of those, already have a photo</td><td style="text-align:right">'+d.with_photo+'</td></tr>'+
       '<tr><td>Not matched</td><td style="text-align:right">'+d.unmatched+'</td></tr>'+
-      (apply?'<tr><td>Photos '+(d.override?'replaced/added':'added')+'</td><td style="text-align:right"><b>'+d.updated+'</b></td></tr>':'')+
+      (apply?'<tr><td>Main photos '+(d.override?'replaced/added':'added')+'</td><td style="text-align:right"><b>'+d.updated+'</b></td></tr>':'')+
+      ((d.galleries_added>0)?'<tr><td>Extra photos &rarr; gallery'+(apply?' added':'')+'</td><td style="text-align:right"><b>'+d.galleries_added+'</b></td></tr>':'')+
       '</table>'+un;
     if(apply){
       $('modalTitle').textContent='Photos updated \u2713';
@@ -3108,7 +3109,7 @@ async function photoImportRun(apply,override){
       $('modalTitle').textContent='Update photos \u2014 preview';
       var btns='<button type="button" class="btn" id="phAdd" style="width:100%;margin-top:10px">Add to the '+d.without_photo+' with no photo</button>';
       if(d.with_photo>0) btns+='<button type="button" class="btn ghost" id="phAll" style="width:100%;margin-top:8px">Replace ALL '+d.matched+' matched (overwrite existing)</button>';
-      $('modalBody').innerHTML='<div class="note" style="margin-bottom:8px">Nothing changed yet. Photos match to products by filename (SKU, barcode or product name).</div>'+rows+btns;
+      $('modalBody').innerHTML='<div class="note" style="margin-bottom:8px">Nothing changed yet. Photos match to products by filename (SKU, barcode or product name). Extra shots of the same product &mdash; name them <b>product-1.jpg</b>, <b>product-2.jpg</b>, <b>product-3.jpg</b> &mdash; are added to that product’s gallery.</div>'+rows+btns;
       if($('phAdd'))$('phAdd').onclick=function(){photoImportRun(1,0);};
       if($('phAll'))$('phAll').onclick=function(){photoImportRun(1,1);};
     }

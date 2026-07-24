@@ -2451,14 +2451,22 @@ class PanelApiController extends Controller
         $q = Product::query()->where('tenant_id', $t->id);
         if (is_array($scope)) $q->whereIn('category', $scope);
         $bySku = []; $byBar = []; $byName = [];
-        foreach ($q->get(['id', 'name', 'sku', 'barcode', 'image_url']) as $p) {
+        foreach ($q->get(['id', 'name', 'sku', 'barcode', 'image_url', 'gallery_1', 'gallery_2', 'gallery_3']) as $p) {
             $byName[$this->normName((string) $p->name)] = $p;
             if (trim((string) $p->sku) !== '')     $bySku[trim((string) $p->sku)] = $p;
             if (trim((string) $p->barcode) !== '') $byBar[trim((string) $p->barcode)] = $p;
         }
 
-        $images = $matched = $withPhoto = $withoutPhoto = $updated = $unmatched = 0;
-        $unmatchedSamples = []; $seen = [];
+        // ---- PASS 1: index every image in the ZIP, grouping shots per product ----
+        // A filename may be a bare product key ("Coke.jpg") OR carry a trailing photo
+        // index ("Coke-2.jpg" = the 2nd photo of "Coke"). We try a FULL-stem match
+        // first (so a product whose name legitimately ends in "-2" still wins), and
+        // only if that fails do we strip a trailing "-N" and match the base name/sku/
+        // barcode — that N becomes the photo's slot order (bare name = 0 = main photo).
+        $shots = [];            // productId => [ ['idx'=>int,'zip'=>int,'ext'=>str,'bn'=>str], ... ]
+        $prodById = [];         // productId => product row (first seen)
+        $images = $unmatched = 0;
+        $unmatchedSamples = [];
         for ($i = 0; $i < $za->numFiles; $i++) {
             $entry = $za->getNameIndex($i); if ($entry === false) continue;
             $bn = basename($entry); if ($bn === '' || str_starts_with($bn, '.')) continue;
@@ -2468,27 +2476,64 @@ class PanelApiController extends Controller
 
             $stem = preg_replace('/\.(jpg|jpeg|png|webp)$/i', '', $bn);
             $stem = preg_replace('/^imgi_\d+_/', '', $stem);
-            $stem = preg_replace('/-\d+x\d+$/', '', $stem);
-            $raw  = trim($stem);
-            $p = $bySku[$raw] ?? $byBar[$raw] ?? ($byName[$this->normName($stem)] ?? null);
+            $stem = preg_replace('/-\d+x\d+$/', '', $stem);   // strip a dimension suffix e.g. -800x600
+            $stem = trim($stem);
+
+            // (a) full-stem match — the whole name is the product key
+            $p = $bySku[$stem] ?? $byBar[$stem] ?? ($byName[$this->normName($stem)] ?? null);
+            $idx = 0;
+            // (b) else strip a trailing "-N" (1..99) photo index and match the base
+            if (! $p && preg_match('/^(.*)-(\d{1,2})$/', $stem, $m)) {
+                $base = trim($m[1]);
+                $p = $bySku[$base] ?? $byBar[$base] ?? ($byName[$this->normName($base)] ?? null);
+                if ($p) $idx = (int) $m[2];
+            }
             if (! $p) { $unmatched++; if (count($unmatchedSamples) < 12) $unmatchedSamples[] = $bn; continue; }
-            if (isset($seen[$p->id])) continue;
-            $seen[$p->id] = 1; $matched++;
 
-            $hasImg = trim((string) $p->image_url) !== '';
-            $hasImg ? $withPhoto++ : $withoutPhoto++;
-            $willUpdate = ! $hasImg || $override;
-            if (! $willUpdate) continue;
+            $prodById[$p->id] = $p;
+            $shots[$p->id][]  = ['idx' => $idx, 'zip' => $i, 'ext' => $ext, 'bn' => $bn];
+        }
 
-            if ($apply) {
-                $bytes = $za->getFromIndex($i);
-                if ($bytes !== false) {
-                    $path = 'products/' . $t->id . '/' . uniqid('ph_', true) . '.' . ($ext === 'jpeg' ? 'jpg' : $ext);
-                    Storage::disk('public')->put($path, $bytes);
-                    Product::where('id', $p->id)->update(['image_url' => url(Storage::url($path))]);
-                    $updated++;
-                }
-            } else { $updated++; }
+        // ---- PASS 2: per product, lowest-index shot → main photo, the rest → gallery_1..3 ----
+        $matched = $withPhoto = $withoutPhoto = $updated = $galleriesAdded = 0;
+        foreach ($prodById as $pid => $p) {
+            $matched++;
+            $shotList = $shots[$pid];
+            usort($shotList, fn ($a, $b) => $a['idx'] <=> $b['idx']);
+
+            $hasMain = trim((string) $p->image_url) !== '';
+            $hasMain ? $withPhoto++ : $withoutPhoto++;
+
+            $mainShot = $shotList[0];                 // lowest index = the main photo
+            $galShots = array_slice($shotList, 1);    // everything else = gallery candidates
+
+            $fields = [];
+
+            // Main photo: never overwrite an existing one unless override is set.
+            if (! $hasMain || $override) {
+                if ($apply) {
+                    $url = $this->storeZipImage($za, $mainShot, $t->id);
+                    if ($url !== null) { $fields['image_url'] = $url; $updated++; }
+                } else { $updated++; }
+            }
+
+            // Gallery slots: fill the first open slots (empty, or all if override).
+            $openSlots = [];
+            foreach (['gallery_1', 'gallery_2', 'gallery_3'] as $col) {
+                if ($override || trim((string) ($p->$col ?? '')) === '') $openSlots[] = $col;
+            }
+            foreach ($galShots as $shot) {
+                if (! $openSlots) break;
+                $col = array_shift($openSlots);
+                if ($apply) {
+                    $url = $this->storeZipImage($za, $shot, $t->id);
+                    if ($url !== null) { $fields[$col] = $url; $galleriesAdded++; }
+                } else { $galleriesAdded++; }
+            }
+
+            if ($apply && $fields) {
+                Product::where('id', $pid)->update($fields);
+            }
         }
         $za->close();
 
@@ -2496,8 +2541,20 @@ class PanelApiController extends Controller
             'ok' => true, 'apply' => $apply, 'override' => $override,
             'images_in_zip' => $images, 'matched' => $matched,
             'with_photo' => $withPhoto, 'without_photo' => $withoutPhoto,
-            'updated' => $updated, 'unmatched' => $unmatched, 'unmatched_samples' => $unmatchedSamples,
+            'updated' => $updated, 'galleries_added' => $galleriesAdded,
+            'unmatched' => $unmatched, 'unmatched_samples' => $unmatchedSamples,
         ]);
+    }
+
+    /** Extract one image from the open ZIP and store it under products/{tenant}/, returning its public URL (or null). */
+    private function storeZipImage(\ZipArchive $za, array $shot, int $tenantId): ?string
+    {
+        $bytes = $za->getFromIndex($shot['zip']);
+        if ($bytes === false) return null;
+        $ext  = $shot['ext'] === 'jpeg' ? 'jpg' : $shot['ext'];
+        $path = 'products/' . $tenantId . '/' . uniqid('ph_', true) . '.' . $ext;
+        Storage::disk('public')->put($path, $bytes);
+        return url(Storage::url($path));
     }
 
     public function deleteProduct(Request $r)

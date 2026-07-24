@@ -1,0 +1,71 @@
+MULTIPLE PHOTOS PER PRODUCT — from one ZIP upload
+=================================================
+
+Answers: "I can't upload multiple photos for the products — how do I do it with the ZIP upload?"
+
+WHAT CHANGED
+  The product photo ZIP importer (Products → Update photos → upload a ZIP) now attaches
+  MORE THAN ONE photo per product. Before, it took only the first photo it matched for a
+  product and set the main image. Now:
+
+    • The MAIN photo works exactly as before — the bare filename.
+    • EXTRA shots of the same product go into that product's gallery (gallery_1 / gallery_2
+      / gallery_3). Name them with a "-1", "-2", "-3" after the product's key:
+
+          Coca Cola 500ml.jpg        -> main photo
+          Coca Cola 500ml-1.jpg      -> gallery photo 1
+          Coca Cola 500ml-2.jpg      -> gallery photo 2
+          Coca Cola 500ml-3.jpg      -> gallery photo 3
+
+      (The "key" is still the product's SKU, barcode, or name — same matching as before.
+      "-1/-2/-3" can follow any of those. Up to 3 gallery photos per product; a 4th+ is
+      ignored. If there's no bare file, the lowest-numbered shot becomes the main.)
+
+  So you keep ONE ZIP for the whole catalogue: one photo per product, or several — the
+  importer sorts them out.
+
+RE-RUN IS SAFE — AND FILLS GALLERIES
+  If a product already HAS a main photo, the importer leaves it untouched and only fills
+  the EMPTY gallery slots. So you can re-upload the SAME ZIP you used before: every
+  product that has "-1/-2/-3" extras in the ZIP gets its gallery filled, and no existing
+  main photo is disturbed. (The "Replace ALL" / override button still rebuilds both the
+  main and the gallery from scratch if you ever want that.)
+
+WHAT THE RESULT SCREEN NOW SHOWS
+  Photos in ZIP / Matched to a product / no photo yet / already have a photo / Not matched,
+  plus two apply lines: "Main photos added" and "Extra photos → gallery added". A preview
+  (dry-run) shows the same counts before anything is written.
+
+FILES CHANGED (2 — no migration)
+  app/Http/Controllers/Panel/PanelApiController.php   two-pass photosImport() + storeZipImage() helper
+  resources/panel/seller.html                         result table shows gallery count + naming hint
+
+NO MIGRATION
+  The gallery_1 / gallery_2 / gallery_3 columns already exist (added 2026-06-21). Nothing
+  to migrate.
+
+VERIFICATION DONE HERE
+  php -l clean on the controller. node --check clean on the whole seller.html script.
+  Logic simulated over 4 cases (fresh import bare+-1/-2/-3; re-run with main already set;
+  dry-run counts with dimension-suffix filenames; override rebuild) — all correct:
+  lowest-index shot -> main (only if empty or override), the rest -> gallery slots in order,
+  extras beyond 3 dropped, re-run leaves the main photo untouched.
+
+DEPLOY (no migration)
+  unzip into repo root
+  git add app/Http/Controllers/Panel/PanelApiController.php resources/panel/seller.html \
+          DEPLOY-PRODUCT-PHOTOS-GALLERY.txt
+  git commit -m "Products: attach multiple photos per product from ZIP (main + gallery_1..3)"
+  git push   ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear
+
+VERIFY
+  Products → Update photos → upload your product ZIP → PREVIEW first (nothing changes yet).
+  You should see "Extra photos → gallery" counting the -1/-2/-3 shots. Then Apply. Open a
+  product with extras → its gallery now has the additional photos; the main image is
+  unchanged. Re-running the same ZIP only fills empty gallery slots.
+
+SAFETY
+  Additive + reversible. Only image_url + gallery_1..3 are written; prices, names and stock
+  are never touched. Existing main photos are preserved unless you choose "Replace ALL".
+  No money path, no migration. `git revert` restores the prior importer.
