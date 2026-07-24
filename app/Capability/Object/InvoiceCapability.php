@@ -105,20 +105,51 @@ final class InvoiceCapability implements ObjectCapability
             $relItems[] = ['icon' => 'cart', 'color' => '#4f46e5', 'title' => 'Order ' . $order->order_no, 'sub' => $fmt($order->total) . ' · ' . ucfirst((string) $order->status), 'right' => '', 'link' => '/api/v1/workspace/salesOrder/' . $order->id];
         }
 
-        $lineRows = [];
-        if ($order) {
-            foreach ($order->items()->get() as $it) {
-                $qty = (float) $it->qty; $price = (float) $it->price;
-                $lineRows[] = ['cells' => [(string) $it->name, rtrim(rtrim(number_format($qty, 2), '0'), '.'), $fmt($price), $fmt($qty * $price)],
-                    'link' => $it->product_id ? '/api/v1/workspace/product/' . $it->product_id : null];
+        // Line items: prefer the INVOICE's OWN captured lines — the billed snapshot the PDF prints
+        // and the real source of truth for what was invoiced. Fall back to the source order's items
+        // only when the invoice itself has none (older invoices, or lump-sum orders without item rows),
+        // so this screen matches the invoice document instead of an empty/edited order.
+        $lineRows = []; $lineSource = null;
+        $invItems = $i->items()->get();
+        if ($invItems->isNotEmpty()) {
+            $lineSource = 'invoice';
+            foreach ($invItems as $it) {
+                $qty = (float) $it->qty; $price = (float) $it->unit_price;
+                $amount = ((float) $it->line_total) ?: ($qty * $price);
+                $lineRows[] = ['cells' => [(string) $it->name, rtrim(rtrim(number_format($qty, 2), '0'), '.'), $fmt($price), $fmt($amount)], 'link' => null];
+            }
+        } elseif ($order) {
+            $lineSource = 'order';
+            // Orders keep their line detail in items_json (the same source the invoice/PDF is built
+            // from); the relational order_items table is often empty. Read items_json first, then fall
+            // back to the table, so the screen matches the document.
+            $ij = $order->items_json;
+            if (is_string($ij)) $ij = json_decode($ij, true);
+            $ij = is_array($ij) ? $ij : [];
+            if ($ij) {
+                foreach ($ij as $it) {
+                    if (! is_array($it)) continue;
+                    $name = trim((string) ($it['name'] ?? '')); if ($name === '') continue;
+                    $qty = (float) ($it['qty'] ?? 1); $price = (float) ($it['price'] ?? ($it['unit'] ?? 0));
+                    $pid = $it['product_id'] ?? ($it['id'] ?? null);
+                    $lineRows[] = ['cells' => [$name, rtrim(rtrim(number_format($qty, 2), '0'), '.'), $fmt($price), $fmt($qty * $price)],
+                        'link' => $pid ? '/api/v1/workspace/product/' . $pid : null];
+                }
+            } else {
+                foreach ($order->items()->get() as $it) {
+                    $qty = (float) $it->qty; $price = (float) $it->price;
+                    $lineRows[] = ['cells' => [(string) $it->name, rtrim(rtrim(number_format($qty, 2), '0'), '.'), $fmt($price), $fmt($qty * $price)],
+                        'link' => $it->product_id ? '/api/v1/workspace/product/' . $it->product_id : null];
+                }
             }
         }
 
         $overviewCards = [
             ['kind' => 'links', 'title' => 'Related', 'items' => $relItems],
-            ['kind' => 'table', 'title' => 'Line items', 'sub' => $order ? ('from order ' . $order->order_no) : '',
+            ['kind' => 'table', 'title' => 'Line items',
+             'sub' => $lineSource === 'invoice' ? 'as billed' : ($order ? ('from order ' . $order->order_no) : ''),
              'columns' => [['label' => 'Product'], ['label' => 'Qty', 'align' => 'right'], ['label' => 'Unit price', 'align' => 'right'], ['label' => 'Amount', 'align' => 'right']],
-             'rows' => $lineRows, 'empty' => $order ? 'No line items on the source order' : 'No linked order'],
+             'rows' => $lineRows, 'empty' => $order ? 'No line items on the source order' : 'No line items on this invoice'],
         ];
 
         // --- payments tab (allocation table) ---

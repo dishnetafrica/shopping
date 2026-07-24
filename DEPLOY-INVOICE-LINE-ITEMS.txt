@@ -1,0 +1,49 @@
+INVOICE SCREEN — show the invoice's own line items (not an empty order table)
+=============================================================================
+
+Answers: "in invoice it's not showing line items" (V3 invoice detail said
+"No line items on the source order").
+
+ROOT CAUSE
+  The V3 invoice screen built its Line-items table from the source ORDER's relational
+  order_items table only — which is usually empty. The real line detail lives in two other
+  places, and the screen ignored both:
+    • the invoice's OWN invoice_items (the billed snapshot the PDF prints), and
+    • the order's items_json column (the JSON the invoice/PDF is actually built from).
+  So an invoice with a correct total and a full PDF still showed an empty table on screen.
+
+THE FIX (read-only, display only)
+  The Line-items table now reads, in order of trust:
+    1. the invoice's own invoice_items (what was billed — matches the PDF exactly),
+    2. else the order's items_json (same source the invoice/PDF is generated from),
+    3. else the legacy order_items table.
+  Whichever is present is shown; only if all are empty do you see "No line items".
+
+FILE CHANGED (1 — no migration)
+  app/Capability/Object/InvoiceCapability.php   line-items table sources invoice_items /
+                                                items_json before the legacy order table
+
+NO MIGRATION, NO MONEY PATH
+  Pure display change on the invoice detail screen. No amount, balance, allocation, PDF, or
+  ledger is touched.
+
+VERIFICATION DONE HERE
+  php -l clean. Row-building simulated for both branches — invoice_items (line_total used, or
+  qty×price when line_total is 0; quantities strip trailing zeros) and items_json (name/qty/
+  price, product links when a product_id is present, blank lines skipped).
+
+DEPLOY (no migration)
+  unzip into repo root
+  git add app/Capability/Object/InvoiceCapability.php DEPLOY-INVOICE-LINE-ITEMS.txt
+  git commit -m "Invoice: show invoice's own line items (invoice_items / items_json), not empty order table"
+  git push   ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear
+
+VERIFY
+  Open the invoice (e.g. /v3#/invoice/25). The Line items card should now list the products,
+  matching what "Download PDF" shows. If a specific invoice's PDF is ALSO empty of lines, that
+  invoice was raised with no captured line detail — tell me the invoice/order number and I'll
+  look at how it was created.
+
+SAFETY
+  Additive + reversible. `git revert` restores the prior screen.
