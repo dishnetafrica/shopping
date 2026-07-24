@@ -117,6 +117,13 @@ final class ProductListCapability implements ProcessCapability
                     'schema' => ['zip' => 'file:.zip,.csv'],
                     'labels' => ['zip' => 'Catalogue file — .zip (CSV + photos) or plain .csv'],
                     'prefill' => [], 'body' => ['apply' => 1]],
+                // Add/refresh photos for products that already exist. Matches each image to a product by
+                // filename (SKU, barcode or name). Extra shots named product-1/-2/-3 fill that product's
+                // gallery. Existing main photos are left untouched (never overwritten here).
+                ['key' => 'update_photos', 'label' => 'Update photos', 'method' => 'POST', 'endpoint' => '/papi/photos-import', 'actor' => 'human', 'tone' => 'default',
+                    'schema' => ['zip' => 'file:.zip'],
+                    'labels' => ['zip' => 'Product photos — .zip. Name each file like the product (SKU, barcode or name); add -1, -2, -3 for extra photos.'],
+                    'body' => ['apply' => 1]],
                 ['key' => 'export_catalog', 'label' => 'Export / download', 'icon' => 'download', 'tone' => 'default', 'chooser' => [
                     ['icon' => 'doc', 'title' => 'Products CSV', 'sub' => 'edit in Excel', 'action' => ['href' => '/api/v1/doc/products-export?format=csv']],
                     ['icon' => 'download', 'title' => 'Catalogue ZIP (CSV + photos)', 'sub' => 'full backup · re-importable', 'tone' => 'move', 'action' => ['href' => '/api/v1/doc/products-export?format=zip']],

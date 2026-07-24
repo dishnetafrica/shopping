@@ -1,0 +1,35 @@
+FINISH THE MULTI-PHOTO DEPLOY — adds the missing "Update photos" button on V3
+=============================================================================
+
+WHY THIS EXISTS
+  Your container already has the gallery IMPORTER (PanelApiController — it came in with the
+  cashbook bundle, same file). What's missing is only the V3 screen BUTTON, which lives in a
+  different file (ProductListCapability.php) that wasn't pushed yet.
+
+  IMPORTANT: do NOT re-deploy the old product-photos-gallery.zip — its PanelApiController.php is
+  OLDER than what's live now and would revert part of your cashbook change. This bundle contains
+  ONLY the two files that are actually missing, so nothing already live is touched.
+
+FILES IN THIS BUNDLE (2 — no migration)
+  app/Capability/Process/ProductListCapability.php   adds the "Update photos" action on V3 Products
+  resources/panel/seller.html                        classic panel: shows the gallery count + hint
+                                                      (cosmetic; the engine already works without it)
+
+DEPLOY (no migration)
+  unzip into repo root (LOCAL repo, not inside the container)
+  git add app/Capability/Process/ProductListCapability.php resources/panel/seller.html \
+          DEPLOY-FINISH-V3-UPDATE-PHOTOS.txt
+  git commit -m "Products: add Update photos button on V3 (engine already live)"
+  git push   ->  EasyPanel Rebuild
+  php artisan optimize:clear && php artisan view:clear
+
+VERIFY IN THE CONTAINER (should now PASS)
+  grep -q update_photos app/Capability/Process/ProductListCapability.php && echo PASS || echo MISSING
+
+VERIFY ON SCREEN
+  Open mycloudbss.com/v3#/products → an "Update photos" button now sits next to "Import products".
+  Tap it → choose a ZIP named product.jpg / product-1.jpg / product-2.jpg → it applies and toasts
+  e.g. "Added 12 main photo(s) + 23 gallery photo(s) across 30 product(s)."
+
+SAFETY
+  Additive + reversible, and does NOT re-ship any file that's already live. `git revert` restores.
