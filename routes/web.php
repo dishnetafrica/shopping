@@ -329,6 +329,13 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('kitchen',         [PanelApiController::class, 'kitchen']);
         Route::get('kitchen-advance', [PanelApiController::class, 'kitchenAdvance']);
         Route::get('products',   [PanelApiController::class, 'products']);
+        // Product Specifications (Asset Lifecycle · core capability)
+        Route::get('spec-definitions',                [\App\Http\Controllers\Panel\ProductSpecController::class, 'definitions']);
+        Route::post('spec-definitions',               [\App\Http\Controllers\Panel\ProductSpecController::class, 'defineDefinition']);
+        Route::post('spec-definitions/seed-solar',    [\App\Http\Controllers\Panel\ProductSpecController::class, 'seedSolar']);
+        Route::get('product-spec-filter',             [\App\Http\Controllers\Panel\ProductSpecController::class, 'filter']);
+        Route::get('products/{product}/specs',        [\App\Http\Controllers\Panel\ProductSpecController::class, 'productSpecs']);
+        Route::put('products/{product}/specs',        [\App\Http\Controllers\Panel\ProductSpecController::class, 'setProductSpecs']);
         Route::get('riders',     [PanelApiController::class, 'riders']);
         Route::get('returns',    [PanelApiController::class, 'returns']);
         Route::get('today',      [PanelApiController::class, 'today']);   // Today / Needs-attention home screen

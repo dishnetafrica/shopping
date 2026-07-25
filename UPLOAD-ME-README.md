@@ -1,42 +1,45 @@
-# Cash Handover — V3 version + cleanup (you uploaded the earlier zip, so read this)
+# S1a · Product Specifications (Asset Lifecycle) — upload to GitHub
 
-You uploaded my earlier `cash-handover.zip`, which added a handover button on the **old Staff Cash
-screen**. This package moves everything to your **V3 Cashbook** (your main app) and cleans up the old
-button so there is ONE handover engine. Two tiny steps:
+The first capability of the Asset Lifecycle extension. Product Specifications is built as a **core
+platform capability** (useful to any business), and the **solar preset** just seeds a starter
+catalogue. This drop is the tested foundation — data, service, API, and the solar seed. The on-screen
+display on product/quote/invoice, filtering in the product list UI, export, and the capability-manifest
+registration come in **S1b** (I want to study the V3 product screen and the workspace layer before
+touching them, so nothing working is edited blind).
 
-## Step 1 — Upload these files (overwrites the old ones)
-Upload everything in this folder to your repository, **keeping the folders**. This:
-- upgrades your V3 "Moved cash between people" to run on the new capability, and
-- removes the old Staff Cash button + its endpoint (by replacing those 3 files with clean versions).
-
-## Step 2 — Delete ONE leftover file (upload can't remove files)
-Open this file on GitHub and delete it (the **trash 🗑 icon**, top-right → **Commit changes**):
-
-    tests/Feature/Kernel/StaffCashHandoverTest.php
-
-Direct link:
-https://github.com/dishnetafrica/shopping/blob/main/tests/Feature/Kernel/StaffCashHandoverTest.php
-
-That test checked the old Staff Cash endpoint we just removed, so it must go — otherwise your check
-turns red. (Its replacement, `TradeCashbookHandoverTest.php`, is included here and tests the V3 path.)
+## What to do
+Upload everything here to your repository, **keeping the folders** (`app/…`, `database/…`, `routes/…`,
+`tests/…`, `docs/…`). Nothing needs deleting.
 
 ## How you'll know it worked
-On the **Actions** tab: **green ✓ "Money kernel (must pass)"**. If it's red, send me a screenshot.
+On the **Actions** tab: **green ✓ "Money kernel (must pass)"**. The new spec tests live under
+`tests/…/Kernel/`, so they run inside that same green check. If it's red, send me a screenshot.
 
-## Then use it (the real proof)
-**V3 Cashbook → Record activity → Moved cash between people.** Record a handover: the giver's cash
-goes down, the receiver's up by the same amount, combined total unchanged. Do it twice quickly — it
-still records once.
+## What it does (verifiable by API today; UI comes in S1b)
+- Define a reusable spec catalogue (Wattage/W/number, Battery Chemistry/pick-list, IP Rating/text…).
+- Set spec values on any product; numbers are stored numerically so you can filter "≥ 400 W".
+- Filter products by spec (numeric range, exact match).
+- Seed the solar starter catalogue in one call (owner/manager only).
+
+Endpoints (all under `/papi`, owner/manager for writes):
+`GET/POST spec-definitions` · `POST spec-definitions/seed-solar` · `GET/PUT products/{id}/specs` ·
+`GET product-spec-filter`.
 
 ## What's inside
-- `app/Kernel/Events/CashHandedOver.php`, `app/Kernel/Capabilities/Cash/HandOverCash.php` — the event
-  + capability (unchanged from before).
-- `app/Http/Controllers/Panel/TradeCashbookController.php` — the V3 "Moved cash between people"
-  endpoint, cut over to the capability (same entries/response; adds event + offline guard + over-hold watch).
-- `app/Http/Controllers/Panel/StaffCashController.php`, `routes/web.php`,
-  `resources/panel/staff_cash.html` — **clean versions** that remove the old Staff Cash handover button/endpoint.
-- `tests/…` — capability + event + V3-endpoint tests.
+- `database/migrations/*spec_definitions*`, `*product_specs*` — two new tables (products table untouched).
+- `app/Models/SpecDefinition.php`, `ProductSpec.php` + a `specs()` relation added to `Product.php`.
+- `app/Services/Catalog/ProductSpecService.php` — the one reader/writer (define, set, read, filter).
+- `app/Http/Controllers/Panel/ProductSpecController.php` + routes.
+- `app/Support/Presets/SolarPreset.php` — the solar starter catalogue + seeder.
+- `docs/asset-lifecycle/DECISIONS.md` — the approved architecture decisions (from your review), so
+  every future session honours them.
+- `tests/…/Kernel/ProductSpec*` — pure coercion + full API tests.
 
 ## Safety
-- The V3 cash entries are byte-for-byte what the old code wrote, so Cash Position / Trade Cashbook and
-  P&L are unchanged. Over-hold is watched, not blocked. Rollback = revert `TradeCashbookController.php`.
+- Additive: two new tables + a read relation; no existing screen, product, quote or invoice changed.
+- Multi-tenant (global tenant scope) and permission-aware (writes are owner/manager).
+- Rollback: drop the two tables and remove these files — you're exactly where you are today.
+
+## Next (S1b)
+Show specs on the product page, quotation and invoice; filter in the product list; export; and register
+the capability in the workspace/module layer with its permission.
