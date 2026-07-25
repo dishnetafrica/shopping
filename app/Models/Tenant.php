@@ -1,11 +1,14 @@
 <?php
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Tenant extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'name','slug','custom_domain','status','plan','trial_ends_at','paid_until','billing_note',
         'whatsapp_driver','whatsapp_instance','whatsapp_number','order_prefix','settings',

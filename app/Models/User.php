@@ -4,12 +4,13 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToTenant;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable implements FilamentUser
 {
-    use Notifiable;
+    use HasFactory, Notifiable;
 
     protected $fillable = ['tenant_id','name','phone','email','password','role','is_super_admin','allowed_categories','allowed_menus'];
     protected $hidden   = ['password','remember_token'];

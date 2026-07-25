@@ -72,15 +72,20 @@ class PaymentService
             return ['id' => $pay->id, 'receipt_no' => $pay->receipt_no];
         });
 
-        // Unify with invoices: reflect this payment on the linked invoice's balance + statement.
-        try { app(InvoiceService::class)->syncByPayment($t, $d['invoice_no'] ?? null, $orderNo); } catch (\Throwable $e) {}
+        // Unify with invoices + keep the order's paid tracker in step. A caller may pass 'sync' => false
+        // to preserve its own gating (3C: staff-cash honours the tenant's pay_unify flag). Every other
+        // caller omits it → default true → always reconcile, exactly as before.
+        if ($d['sync'] ?? true) {
+            // Reflect this payment on the linked invoice's balance + statement.
+            try { app(InvoiceService::class)->syncByPayment($t, $d['invoice_no'] ?? null, $orderNo); } catch (\Throwable $e) {}
 
-        // Keep the ORDER's own paid tracker (orders.amount_paid) in step with the invoice ledger too.
-        // The invoice-based projections (Group A) and the order-based projections (Group B — Customers
-        // directory, cashbook "who owes you", sales-order headline, credit reminders) must never
-        // disagree. Doing this HERE, in the single recorder, guarantees every payment path — invoice
-        // "Pay", Customer 360, the order button, the Payments screen, staff-cash — reconciles both.
-        try { $this->syncOrderPaid($t, $orderNo); } catch (\Throwable $e) {}
+            // Keep the ORDER's own paid tracker (orders.amount_paid) in step with the invoice ledger too.
+            // The invoice-based projections (Group A) and the order-based projections (Group B — Customers
+            // directory, cashbook "who owes you", sales-order headline, credit reminders) must never
+            // disagree. Doing this HERE, in the single recorder, guarantees every payment path — invoice
+            // "Pay", Customer 360, the order button, the Payments screen, staff-cash — reconciles both.
+            try { $this->syncOrderPaid($t, $orderNo); } catch (\Throwable $e) {}
+        }
 
         // Optional discount at collection ("give USD X off, close the invoice"). Applied HERE in the one
         // recorder — after the payment records (fresh only; a duplicate returned early above) — so EVERY

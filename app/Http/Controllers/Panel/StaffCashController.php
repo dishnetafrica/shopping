@@ -280,35 +280,42 @@ class StaffCashController extends Controller
         $cd = trim((string)$request->input('created_date',''));
         if ($cd !== '') { try { $createdAt = \Illuminate\Support\Carbon::parse($cd); } catch (\Throwable $e) { $createdAt = null; } }
 
-        $result = DB::transaction(function () use ($t,$u,$uid,$person,$customer,$phone,$orderNo,$invoice,$kind,$cur,$amount,$rate,$usd,$method,$createdAt) {
-            $cost = OrderCost::create([
-                'tenant_id'=>$t->id,'order_id'=>null,'order_no'=>$orderNo,'stage'=>'customer_payment',
-                'currency'=>$cur,'native_amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
-                'holder'=>$person,'holder_user_id'=>$uid,'pay_status'=>'cash','paid_native'=>$amount,
-                'category'=>'Receipt','note'=>\App\Services\Money\PaymentService::describeNote([
-                    'customer'=>$customer,'invoice_no'=>$invoice,'order_no'=>$orderNo,'method'=>$method,'kind'=>$kind,
-                ]),
-                'status'=>'approved','created_by'=>$u->name ?? '',
-            ]);
-            $pay = CustomerPayment::create([
-                'tenant_id'=>$t->id,'receipt_no'=>'TMP','customer_name'=>$customer,'customer_phone'=>$phone,
-                'order_no'=>$orderNo,'invoice_no'=>$invoice,'kind'=>$kind,'currency'=>$cur,'amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
-                'method'=>$method,'reference'=>null,'receipt_path'=>null,'applied'=>($kind==='settlement'),
-                'order_cost_id'=>$cost->id,'holder'=>$person,'holder_user_id'=>$uid,'created_by'=>$u->name ?? '',
-            ]);
-            $pay->receipt_no = 'RCP-'.str_pad((string)$pay->id, 5, '0', STR_PAD_LEFT);
-            if ($createdAt) { $pay->created_at = $createdAt; $cost->created_at = $createdAt; $cost->save(); }
-            $pay->save();
-            return ['pay_id'=>$pay->id,'receipt_no'=>$pay->receipt_no,'cost_id'=>$cost->id];
-        });
+        // 3C — ONE money-in path. Record through the single, idempotent recorder (PaymentService)
+        // instead of the old inline OrderCost+CustomerPayment write. This closes the duplicate-path
+        // double-record (the recorder carries the replay guard) and routes the fact through the
+        // money.receive capability. The rows produced are field-for-field identical to the prior write.
+        // Sync is gated to preserve StaffCash's EXACT pay_unify behaviour (Option B): only reconcile
+        // the invoice/order when pay_unify is on — StaffReceiveSyncTest still holds both ways.
+        $result = app(\App\Services\Money\PaymentService::class)->record($t, [
+            'customer'        => $customer,
+            'phone'           => $phone,
+            'order_no'        => $orderNo,
+            'invoice_no'      => $invoice,
+            'kind'            => $kind,
+            'currency'        => $cur,
+            'amount'          => $amount,
+            'rate'            => $rate,
+            'usd'             => $usd,
+            'method'          => $method,
+            'reference'       => null,
+            'receipt_path'    => null,
+            'holder'          => $person,
+            'holder_user_id'  => $uid,
+            'created_by'      => $u->name ?? '',
+            'created_at'      => $createdAt,
+            'idempotency_key' => trim((string) $request->input('idempotency_key', '')) ?: null,
+            'sync'            => (bool) $t->setting('pay_unify', false),
+        ]);
 
-        // E4.3 — reflect this staff receipt on the linked invoice/statement (the audit bug: it wasn't).
-        // Gated on pay_unify because enabling it corrects invoice balances that were stale-high.
-        if ((bool) $t->setting('pay_unify', false)) {
-            try { app(\App\Services\Invoicing\InvoiceService::class)->syncByPayment($t, $invoice, $orderNo); } catch (\Throwable $e) {}
-        }
+        // Re-derive cost_id so the response shape is identical to the prior inline write.
+        $costId = (int) (CustomerPayment::withoutGlobalScopes()
+            ->where('tenant_id', $t->id)->where('id', (int) ($result['id'] ?? 0))->value('order_cost_id') ?? 0);
 
-        return response()->json(['ok'=>true,'person'=>$person,'customer'=>$customer,'currency'=>$cur,'amount'=>$amount,'usd'=>$usd] + $result);
+        return response()->json([
+            'ok' => true, 'person' => $person, 'customer' => $customer, 'currency' => $cur,
+            'amount' => $amount, 'usd' => $usd,
+            'pay_id' => $result['id'] ?? null, 'receipt_no' => $result['receipt_no'] ?? null, 'cost_id' => $costId,
+        ]);
     }
 
     /** POST /papi/staff-cash/settle — count a person's cash and record any gap (shortage/overage). */
