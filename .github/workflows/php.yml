@@ -1,9 +1,7 @@
 name: tests
-
 on:
   push:
   pull_request:
-
 jobs:
   money-kernel:
     name: Money kernel (must pass)
@@ -55,6 +53,24 @@ jobs:
         run: php artisan migrate --force
       - name: Money kernel tests (the important ones)
         run: php artisan test tests/Unit/Kernel tests/Feature/Kernel
-      - name: Full suite (informational only)
+      - name: Full suite (informational only — shows what still needs work)
         continue-on-error: true
-        run: php artisan test
+        run: |
+          set +e
+          php artisan test 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tee /tmp/fullsuite.txt
+          echo ""
+          echo "======================================================================"
+          echo "   FULL-SUITE RESULT  —  screenshot from this line down and send to me"
+          echo "======================================================================"
+          grep -E "Tests:|Duration:" /tmp/fullsuite.txt | tail -3
+          echo "----------------------------- FAILING --------------------------------"
+          grep -E "(^| )FAIL |^[[:space:]]*⨯" /tmp/fullsuite.txt | head -120
+          echo "======================================================================"
+      - name: Save full-suite log (optional download)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-suite-log
+          path: /tmp/fullsuite.txt
+          if-no-files-found: ignore
