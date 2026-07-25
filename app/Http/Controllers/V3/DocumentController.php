@@ -293,6 +293,25 @@ final class DocumentController extends Controller
         ]);
     }
 
+    /** GET /api/v1/doc/spec-sheet — export products with their specifications as a CSV (Asset Lifecycle · S1c-1). */
+    public function specSheet(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) {
+            abort(401);
+        }
+        if (! $r->user()->canMenu('products')) {
+            abort(403);
+        }
+        $svc = app(\App\Services\Catalog\CatalogExport::class);
+        $base = 'Specifications-' . preg_replace('/[^A-Za-z0-9]+/', '', (string) ($t->name ?: 'catalog')) . '-' . now()->format('Ymd');
+
+        return response($svc->specSheetCsv($t), 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $base . '.csv"',
+        ]);
+    }
+
     /**
      * GET /api/v1/doc/tasks-export?format=pdf|csv — the team's task/job register (V3 Tasks screen).
      * Optional ?from=&to=&status=open|closed&assignee_id= scope it like the on-screen filters.

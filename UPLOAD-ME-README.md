@@ -1,26 +1,26 @@
-# S1b · Specifications on the product page — upload to GitHub
+# S1c-1 · Spec-sheet export — upload to GitHub
 
-Builds on S1a. Your V3 product detail page now shows a product's specifications, and offers an
-"Edit specifications" action to set them right there — all through the product capability's payload,
-so there is **no change to the V3 front-end**.
+Adds a **separate** product specifications export (products × their spec values) as a CSV. It is kept
+apart from your round-trip catalogue CSV, so the export → edit → re-import flow is untouched.
 
 ## What to do
-Upload these two files, keeping the folders:
-- `app/Http/…` → actually `app/Capability/Object/ProductCapability.php` (the product detail capability)
-- `tests/Feature/Kernel/ProductSpecWorkspaceTest.php` (the test)
+Upload these files, keeping the folders. (S1a + S1b already uploaded.)
 
-Nothing else changes. (S1a must already be uploaded — it is, since it went green.)
+## How to use it
+Download URL (owner/manager): **`/api/v1/doc/spec-sheet`** — returns
+`Specifications-<Business>-<date>.csv`. One row per product, one column per spec (Wattage (W),
+Battery Chemistry, IP Rating, …). A download button in the product screen comes with S1c-2.
 
 ## How you'll know it worked
-- **Green ✓ "Money kernel (must pass)"** — the new S1b tests run inside that same check.
-- In the app: open any product in V3. If it has specs, you'll see them listed; use
-  **Edit specifications** to set/change them. Products with no specs look exactly as before.
+Green ✓ "Money kernel (must pass)" — the export test runs inside that check.
 
 ## What's inside / safety
-- Only `ProductCapability::forId()` and `command()` are extended (additive): specs render via the
-  existing generic "answers" section and the edit uses the same command pattern as Edit/Archive.
-- No front-end file, no other capability, no document touched. Tenants without a spec catalogue are
-  unaffected. Rollback = revert this one file.
+- `CatalogExport.php` — new `specSheetCsv()` method (the existing catalogue CSV is unchanged).
+- `DocumentController.php` — new `specSheet()` download action (mirrors the products export).
+- `CapabilityServiceProvider.php` — one new route: `GET /api/v1/doc/spec-sheet`.
+- `tests/Feature/Kernel/ProductSpecExportTest.php` — proves columns + values export.
+- Additive only; nothing existing changed. Rollback = revert these files.
 
-## Next (S1c)
-Specs on quotations & invoices, product-list filter UI, and export.
+## Next
+S1c-2 (filter products by spec in the list, + a download button for this export), then
+S1c-3 (specs on quotes & invoices via snapshot-at-creation).

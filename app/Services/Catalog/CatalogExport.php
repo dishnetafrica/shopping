@@ -3,6 +3,7 @@
 namespace App\Services\Catalog;
 
 use App\Models\Product;
+use App\Models\ProductSpec;
 use App\Models\Tenant;
 use Illuminate\Support\Facades\Storage;
 
@@ -46,6 +47,43 @@ final class CatalogExport
                 $p->moq !== null ? (string) (0 + $p->moq) : '',
                 $img,
             ]);
+        }
+        rewind($out);
+        $csv = stream_get_contents($out);
+        fclose($out);
+
+        return $csv;
+    }
+
+    /**
+     * Specification sheet (Asset Lifecycle · S1c-1) — a SEPARATE CSV of products × their spec values,
+     * one column per active spec definition. Deliberately distinct from csv() above so the round-trip
+     * catalogue import is never affected. Read-only.
+     */
+    public function specSheetCsv(Tenant $t): string
+    {
+        $defs = ProductSpecService::forTenant($t)->definitions(true); // active, ordered
+
+        $headers = ['Product Name', 'SKU', 'Category'];
+        foreach ($defs as $d) {
+            $headers[] = $d->label . ($d->unit ? ' (' . $d->unit . ')' : '');
+        }
+
+        // All spec values for the tenant in one query, grouped product → definition → value.
+        $byProduct = [];
+        foreach (ProductSpec::where('tenant_id', $t->id)->get(['product_id', 'spec_definition_id', 'value_text']) as $v) {
+            $byProduct[(int) $v->product_id][(int) $v->spec_definition_id] = (string) $v->value_text;
+        }
+
+        $out = fopen('php://temp', 'r+');
+        fputcsv($out, $headers);
+        foreach ($this->products($t) as $p) {
+            $row = [(string) $p->name, (string) ($p->sku ?: ''), (string) ($p->category ?: '')];
+            $pv = $byProduct[(int) $p->id] ?? [];
+            foreach ($defs as $d) {
+                $row[] = $pv[(int) $d->id] ?? '';
+            }
+            fputcsv($out, $row);
         }
         rewind($out);
         $csv = stream_get_contents($out);
