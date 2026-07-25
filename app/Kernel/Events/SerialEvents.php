@@ -15,6 +15,9 @@ final class SerialEvents
     /** Emitted when a unit is first registered. */
     public const REGISTERED = 'SerialRegistered';
 
+    /** OBSERVE-ONLY (decision D2): a serialized product shipped without picked serials. Evidence, never a block. */
+    public const SALE_UNPICKED = 'SerialSaleUnpicked';
+
     /** The audit event emitted when a unit transitions INTO each status. */
     public const ON_STATUS = [
         'in_stock'  => 'SerialRestocked',

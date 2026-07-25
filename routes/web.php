@@ -337,6 +337,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('products/{product}/specs',        [\App\Http\Controllers\Panel\ProductSpecController::class, 'productSpecs']);
         Route::put('products/{product}/specs',        [\App\Http\Controllers\Panel\ProductSpecController::class, 'setProductSpecs']);
         // Serialized inventory (Asset Lifecycle · serialized_inventory)
+        Route::get('products/{product}/serials/reconcile', [\App\Http\Controllers\Panel\SerialController::class, 'reconcile']);
         Route::get('products/{product}/serials',      [\App\Http\Controllers\Panel\SerialController::class, 'index']);
         Route::post('products/{product}/serials',     [\App\Http\Controllers\Panel\SerialController::class, 'register']);
         Route::post('serials/{unit}/status',          [\App\Http\Controllers\Panel\SerialController::class, 'status']);

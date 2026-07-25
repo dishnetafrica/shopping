@@ -108,6 +108,11 @@ final class OrderStockIssuer
             ]);
             $n++;
         }
+
+        // S2b · observe-first (decision D2) — record when a serialized product shipped without picked
+        // serials. Evidence only; guarded so it can never affect the delivery or the stock issue.
+        try { SerialService::forTenant($t)->observeDelivery($order, self::lines($order)); } catch (\Throwable $e) {}
+
         return $n;
     }
 

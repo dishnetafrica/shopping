@@ -5,6 +5,7 @@ namespace App\Services\Inventory;
 use App\BOS\Bos;
 use App\Kernel\Events\SerialEvents;
 use App\Models\InventoryUnit;
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\Tenant;
 use Illuminate\Support\Str;
@@ -110,6 +111,62 @@ class SerialService
         return InventoryUnit::where('tenant_id', $this->tenant->id)->where('product_id', $productId)
             ->selectRaw('status, COUNT(*) as c')->groupBy('status')
             ->pluck('c', 'status')->map(fn ($v) => (int) $v)->all();
+    }
+
+    /**
+     * OBSERVE-FIRST (decision D2): when a serialized product is delivered but no serials were picked
+     * (there is no picking step yet), record it as evidence — never block. One observation per
+     * serialized line. Fully guarded. Called from the delivery stock-issue path.
+     *
+     * @param  array<int,array{product_id:int,qty:float,name:string}>  $lines
+     */
+    public function observeDelivery(Order $order, array $lines): void
+    {
+        try {
+            $pids = array_values(array_unique(array_filter(array_map(fn ($l) => (int) ($l['product_id'] ?? 0), $lines))));
+            if ($pids === []) {
+                return;
+            }
+            $serialized = Product::where('tenant_id', $this->tenant->id)->whereIn('id', $pids)
+                ->where('serialized', true)->pluck('id')->map(fn ($v) => (int) $v)->all();
+            if ($serialized === []) {
+                return;
+            }
+            foreach ($lines as $l) {
+                $pid = (int) ($l['product_id'] ?? 0);
+                if (! in_array($pid, $serialized, true)) {
+                    continue;
+                }
+                Bos::emit(SerialEvents::SALE_UNPICKED, [
+                    'product_id' => $pid, 'order_no' => (string) ($order->order_no ?? ''), 'qty' => (float) ($l['qty'] ?? 0),
+                ], [
+                    'tenant_id' => $this->tenant->id, 'subject_type' => 'order', 'subject_id' => (int) $order->id,
+                    'actor' => ['type' => 'system', 'name' => 'delivery'],
+                ]);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('serial delivery observe failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Reconcile a serialized product: the number of in-stock units should equal the ledger on-hand.
+     * A report (drift + reconciled flag), never a hard block — surfaces where serials and stock diverge.
+     */
+    public function reconcile(int $productId): array
+    {
+        $p = Product::where('tenant_id', $this->tenant->id)->find($productId);
+        $onHand = $p ? (float) $p->onHand() : 0.0;
+        $inStock = (int) InventoryUnit::where('tenant_id', $this->tenant->id)
+            ->where('product_id', $productId)->where('status', 'in_stock')->count();
+
+        return [
+            'product_id'        => $productId,
+            'ledger_on_hand'    => round($onHand, 2),
+            'in_stock_serials'  => $inStock,
+            'drift'             => round($onHand - $inStock, 2),
+            'reconciled'        => abs($onHand - $inStock) < 0.001,
+        ];
     }
 
     /**

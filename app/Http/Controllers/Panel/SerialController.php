@@ -66,6 +66,14 @@ class SerialController extends Controller
         return response()->json(['ok' => true, 'registered' => count($units), 'units' => $units]);
     }
 
+    /** GET /papi/products/{product}/serials/reconcile — in-stock serial count vs ledger on-hand. */
+    public function reconcile(Request $request, int $product)
+    {
+        $u = $this->tenantUser($request);
+        if (! $u) return response()->json(['ok' => false], 403);
+        return response()->json(['ok' => true] + SerialService::forTenant($u->tenant)->reconcile($product));
+    }
+
     /** POST /papi/serials/{unit}/status — move a unit to a new lifecycle status. */
     public function status(Request $request, int $unit)
     {
