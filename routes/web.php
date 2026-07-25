@@ -336,6 +336,10 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('product-spec-filter',             [\App\Http\Controllers\Panel\ProductSpecController::class, 'filter']);
         Route::get('products/{product}/specs',        [\App\Http\Controllers\Panel\ProductSpecController::class, 'productSpecs']);
         Route::put('products/{product}/specs',        [\App\Http\Controllers\Panel\ProductSpecController::class, 'setProductSpecs']);
+        // Serialized inventory (Asset Lifecycle · serialized_inventory)
+        Route::get('products/{product}/serials',      [\App\Http\Controllers\Panel\SerialController::class, 'index']);
+        Route::post('products/{product}/serials',     [\App\Http\Controllers\Panel\SerialController::class, 'register']);
+        Route::post('serials/{unit}/status',          [\App\Http\Controllers\Panel\SerialController::class, 'status']);
         Route::get('riders',     [PanelApiController::class, 'riders']);
         Route::get('returns',    [PanelApiController::class, 'returns']);
         Route::get('today',      [PanelApiController::class, 'today']);   // Today / Needs-attention home screen
