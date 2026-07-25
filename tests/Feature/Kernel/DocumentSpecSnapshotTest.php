@@ -68,7 +68,8 @@ class DocumentSpecSnapshotTest extends TestCase
         $t = $this->boot();
         $q = Quotation::create([
             'tenant_id' => $t->id, 'quote_no' => 'Q-' . substr(md5(uniqid('', true)), 0, 6),
-            'customer_name' => 'Asish', 'currency' => 'USD', 'total' => 200, 'status' => 'draft', 'source' => 'panel',
+            'customer_name' => 'Asish', 'customer_phone' => '211900',  // NOT NULL on quotations
+            'currency' => 'USD', 'total' => 200, 'status' => 'draft', 'source' => 'panel',
         ]);
         $qi = QuotationItem::create([
             'quotation_id' => $q->id, 'name' => 'Panel 550',   // resolves by name
