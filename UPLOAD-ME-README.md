@@ -1,33 +1,29 @@
-# S2b · Serials in the sale — observe-first + reconciliation
+# S2 (complete) — re-upload this whole bundle to fix the failing check
 
-Builds on S2a. This wires serialized inventory into delivery **without changing how delivery works**.
+The check failed with **"relation inventory_units does not exist"** — the table's migration didn't
+run, which means the S2a migration file isn't in your repo (an upload gap; S2b didn't include the
+migrations). This bundle contains **everything for S2 (a + b)** so one upload guarantees all the pieces
+are present together.
 
-Important reality: orders don't capture *which* serials ship (there's no serial-picking step yet). So,
-exactly per your observe-first rule, S2b **observes and reconciles** rather than auto-marking — and
-gathers the evidence that tells us whether a picking step is worth building.
-
-## What it does
-- **Observe (evidence, never blocks):** when a serialized product is delivered without picked serials,
-  a `SerialSaleUnpicked` event is logged. Added as a single guarded call at the end of the delivery
-  stock-issue — it can never affect delivery or stock.
-- **Reconcile (report, never blocks):** `GET /papi/products/{id}/serials/reconcile` compares in-stock
-  serial count vs ledger on-hand and returns the drift, so you can see where serials and stock diverge.
-- You can already mark a unit Sold against an order manually via S2a's status API.
-
-## Deferred (evidence-gated)
-Picking serials at delivery + auto-marking them Sold — build once the observations show it's needed.
-That's the point of observing first.
+> ⚠️ Do NOT create a new inventory_units migration. It already exists here
+> (`database/migrations/2026_07_25_000004_create_inventory_units_table.php`). A second one would fail
+> with "table already exists." Just upload this bundle.
+> (The "database shopbot does not exist" line in the log is the harmless health-check, not the cause.)
 
 ## What to do
-Upload these files (keep folders). Green ✓ "Money kernel (must pass)" confirms it.
+Upload everything in this folder, **keeping the folders** (`database/…`, `app/…`, `routes/…`,
+`tests/…`). It's safe to overwrite — these are the current versions.
 
-## What's inside
-- `SerialEvents.php` — adds the `SerialSaleUnpicked` observation.
-- `SerialService.php` — `observeDelivery()` + `reconcile()`.
-- `OrderStockIssuer.php` — one guarded observe call after the delivery stock-issue (nothing else changed).
-- `SerialController.php` + route — the reconcile endpoint.
-- `tests/Feature/Kernel/SerialSaleObserveTest.php`.
+Then the check should go green.
 
-## Safety
-The delivery path change is a single guarded, additive call that can't affect delivery. Rollback =
-revert `OrderStockIssuer.php`.
+## The one file that matters most
+`database/migrations/2026_07_25_000004_create_inventory_units_table.php` — this is what creates the
+`inventory_units` table. Make sure, after uploading, it appears under `database/migrations/` in GitHub.
+
+## What's in the bundle (all of S2)
+- migrations: create `inventory_units`, add `serialized` to products
+- `app/Models/InventoryUnit.php`, `Product.php`
+- `app/Kernel/Events/SerialEvents.php`
+- `app/Services/Inventory/SerialService.php`, `OrderStockIssuer.php`
+- `app/Http/Controllers/Panel/SerialController.php` + routes
+- tests: `SerialRegistryTest.php`, `SerialSaleObserveTest.php`
