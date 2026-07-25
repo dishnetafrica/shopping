@@ -1,42 +1,42 @@
-# Cash Handover — upload this to GitHub (that's the only step)
+# Cash Handover — V3 version (upload this to GitHub)
 
-This is the new **cash handover** capability we planned: recording cash passing from one person to
-another as a single, provable action. Everything needed is in this folder. No commands to run.
+This is the **corrected** version that fits your V3 app. Instead of adding a new button on the old
+Staff Cash screen, it upgrades the handover you **already have** in the V3 Cashbook
+("Record activity → Moved cash between people") to run on the new capability.
+
+Nothing you see on screen changes. What changes is what happens underneath when you use it:
+it now leaves a permanent record, it's safe if the phone sends it twice, and it quietly watches for
+someone handing over more than they hold.
 
 ## What to do
-Upload these files to your repository, **keeping the folders** (`app/…`, `routes/…`,
-`resources/…`, `tests/…`). They replace/add exactly these 8 files and nothing else.
+Upload these files to your repository, **keeping the folders** (`app/…`, `tests/…`).
+
+> **One-time note:** if you ever uploaded my earlier `cash-handover.zip`, also delete this now-obsolete
+> file: `tests/Feature/Kernel/StaffCashHandoverTest.php` (open it on GitHub → trash 🗑 → Commit).
+> If you never uploaded that earlier zip, there's nothing to delete — skip this line.
 
 ## How you'll know it worked — just a colour
-After you upload, GitHub runs the checks. On the **Actions** tab, the latest run:
+On the **Actions** tab, the latest run:
+- **Green ✓ "Money kernel (must pass)"** → verified. The new handover tests run inside that check.
+- **Red ✗** → send me a screenshot and I'll pinpoint it.
 
-- **Green ✓ "Money kernel (must pass)"** → the new handover work is verified (the new tests run
-  inside that same check). Done.
-- **Red ✗** → send me a screenshot of the Actions page and I'll tell you exactly what it means.
+## Then use it in the app (the real proof)
+In **V3 Cashbook → Record activity → Moved cash between people**, record a handover from one person to
+another and watch: the giver's cash goes **down**, the receiver's goes **up** by the same amount, and
+the **combined cash total stays the same**. Do the same handover twice quickly — it still records once.
 
-## Then try it in the app (the real proof)
-Open **Staff Cash**, pick a person, and you'll see a new **🤝 Hand over** button next to Give / He
-spent / He received / Settle. Record a handover from one person to another and watch:
-
-- the giver's cash in hand go **down** and the receiver's go **up** by the same amount,
-- the **company total stay exactly the same** (money only moved between pockets),
-- one clean entry on each person's history.
-
-If the same handover ever gets sent twice (flaky signal, double-tap), it still records **once**.
-
-## What's inside (you don't need to touch any of it)
-- `app/Kernel/Events/CashHandedOver.php` — the handover fact (the first *custody* event).
-- `app/Kernel/Capabilities/Cash/HandOverCash.php` — the one capability that records it. It only
-  emits the fact; it never writes a row itself.
-- `app/Http/Controllers/Panel/StaffCashController.php` — adds the `handover` action (the give /
-  spend / receive / settle actions are untouched).
-- `routes/web.php` — adds the one new route.
-- `resources/panel/staff_cash.html` — adds the **🤝 Hand over** button + form (nothing existing changed).
-- `tests/…/Cash*` and `tests/…/StaffCashHandover*` — the tests that prove all of the above.
+## What's inside
+- `app/Kernel/Events/CashHandedOver.php` — the handover fact (first *custody* event).
+- `app/Kernel/Capabilities/Cash/HandOverCash.php` — the one capability that records it (emits only).
+- `app/Http/Controllers/Panel/TradeCashbookController.php` — the V3 "Moved cash between people"
+  endpoint, **cut over** to the capability. Same inputs, same entries, same response — now with the
+  event, the offline-retry guard, and the over-hold watch. The "convert & hand to" flow that shares
+  this endpoint keeps working unchanged.
+- `tests/…` — the tests proving conservation, one-event-two-rows, idempotent retry, over-hold observed,
+  and owner/manager permission.
 
 ## Safety notes
-- **Additive only.** No existing money path (give / spend / receive / settle / invoice pay) was changed.
-- **P&L untouched.** A handover is an internal move, so it never counts as income or expense.
-- **Watching, not blocking.** If someone hands over more than the system says they hold, it's logged
-  as evidence — it does **not** stop them yet. We enforce only once the evidence proves it's needed.
-- **Rollback:** remove these files and you're exactly where you are today.
+- **Parity cutover.** The cash entries are byte-for-byte what the old code wrote (same stages, category,
+  notes), so Cash Position / Trade Cashbook are unchanged. P&L is untouched (an internal move).
+- **Watching, not blocking.** Over-hold is logged as evidence; it does not stop anyone yet.
+- **Rollback:** revert `TradeCashbookController.php` and the endpoint returns to its previous inline write.

@@ -362,26 +362,58 @@ class TradeCashbookController extends Controller
         if ($cd !== '') { try { $createdAt = \Illuminate\Support\Carbon::parse($cd); } catch (\Throwable $e) { $createdAt = null; } }
         $status = 'approved'; // owner/manager-gated action -> auto-approved
 
-        $res = DB::transaction(function () use ($t,$u,$giver,$giverUid,$receiver,$recvUid,$cur,$amount,$rate,$usd,$note,$createdAt,$status) {
-            $out = OrderCost::create([
-                'tenant_id'=>$t->id,'stage'=>'cash_out','currency'=>$cur,
-                'native_amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
-                'holder'=>$giver,'holder_user_id'=>$giverUid,'pay_status'=>'cash','paid_native'=>$amount,
-                'category'=>'Transfer',
-                'note'=>($note?($note.' — '):'').'Handed to '.$receiver,
-                'status'=>$status,'created_by'=>$u->name ?? '',
-            ]);
-            $in = OrderCost::create([
-                'tenant_id'=>$t->id,'stage'=>'cash_in','currency'=>$cur,
-                'native_amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
-                'holder'=>$receiver,'holder_user_id'=>$recvUid,'pay_status'=>'cash','paid_native'=>$amount,
-                'category'=>'Transfer',
-                'note'=>($note?($note.' — '):'').'Received from '.$giver,
-                'status'=>$status,'created_by'=>$u->name ?? '',
-            ]);
-            if ($createdAt) { $out->created_at=$createdAt; $out->save(); $in->created_at=$createdAt; $in->save(); }
-            return ['out_id'=>$out->id,'in_id'=>$in->id];
-        });
+        // ── Custody cutover ──────────────────────────────────────────────────────────────────────
+        // This person-to-person handover now flows through the ONE cash.handover capability. The
+        // CashHandedOver event becomes the source-of-truth fact; the paired 'Transfer' rows below are
+        // its projection into the cash ledger every screen reads — written in the SAME transaction as
+        // the emit so the two are atomic, and BYTE-FOR-BYTE identical to the previous inline write
+        // (same stages, category, notes, status) so Cash Position / Trade Cashbook are unchanged.
+        // NEW & additive only: a permanent event, an offline-retry guard (idempotency at the spine),
+        // and the observe-only over-hold watch (R6). Owner/manager permission and the response shape
+        // (ok/from/to/currency/amount/usd/out_id/in_id) are preserved exactly. The "convert & hand to"
+        // flow that also calls this endpoint keeps working unchanged.
+        $idem = trim((string)$request->input('idempotency_key','')) ?: ('transfer:'.$t->id.':'.\Illuminate\Support\Str::uuid());
+        $fromBalance = \App\Services\Money\CashService::forTenant($t)->balance(['holder'=>$giver,'currency'=>$cur]);
+        $capInput = [
+            'from_holder'=>$giver,'to_holder'=>$receiver,
+            'from_holder_user_id'=>$giverUid,'to_holder_user_id'=>$recvUid,
+            'amount'=>$amount,'currency'=>$cur,'usd'=>$usd,'rate'=>$rate,'method'=>'Cash',
+            'note'=>$note,'created_by'=>$u->name ?? '','tenant_id'=>$t->id,
+            'idempotency_key'=>$idem,'from_balance'=>$fromBalance,'occurred_at'=>$createdAt,
+        ];
+
+        try {
+            $res = DB::transaction(function () use ($t,$u,$giver,$giverUid,$receiver,$recvUid,$cur,$amount,$rate,$usd,$note,$createdAt,$status,$capInput) {
+                // Emit first — the capability's only side effect. It reports whether the fact is new.
+                $r = (new \App\Kernel\Capabilities\Cash\HandOverCash())->run($capInput);
+                if (! ($r['ok'] ?? false)) throw new \RuntimeException(implode('; ', $r['errors'] ?? ['transfer failed']));
+                $ids = ['out_id'=>null,'in_id'=>null];
+                if (empty($r['duplicate'])) {   // a retried handover writes NO second pair of rows
+                    $out = OrderCost::create([
+                        'tenant_id'=>$t->id,'stage'=>'cash_out','currency'=>$cur,
+                        'native_amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
+                        'holder'=>$giver,'holder_user_id'=>$giverUid,'pay_status'=>'cash','paid_native'=>$amount,
+                        'category'=>'Transfer',
+                        'note'=>($note?($note.' — '):'').'Handed to '.$receiver,
+                        'status'=>$status,'created_by'=>$u->name ?? '',
+                    ]);
+                    $in = OrderCost::create([
+                        'tenant_id'=>$t->id,'stage'=>'cash_in','currency'=>$cur,
+                        'native_amount'=>$amount,'rate_to_usd'=>$rate,'usd_amount'=>$usd,
+                        'holder'=>$receiver,'holder_user_id'=>$recvUid,'pay_status'=>'cash','paid_native'=>$amount,
+                        'category'=>'Transfer',
+                        'note'=>($note?($note.' — '):'').'Received from '.$giver,
+                        'status'=>$status,'created_by'=>$u->name ?? '',
+                    ]);
+                    if ($createdAt) { $out->created_at=$createdAt; $out->save(); $in->created_at=$createdAt; $in->save(); }
+                    $ids = ['out_id'=>$out->id,'in_id'=>$in->id];
+                }
+                return $ids + ['event_id'=>$r['event_id'] ?? null, 'duplicate'=>(bool)($r['duplicate'] ?? false)];
+            });
+        } catch (\Throwable $e) {
+            \Log::warning('cash transfer failed: '.$e->getMessage());
+            return response()->json(['ok'=>false,'error'=>'save_failed'],500);
+        }
 
         return response()->json(['ok'=>true,'from'=>$giver,'to'=>$receiver,'currency'=>$cur,'amount'=>$amount,'usd'=>$usd] + $res);
     }
