@@ -42,6 +42,12 @@ jobs:
           php-version: '8.4'
           extensions: pdo, pdo_pgsql, mbstring, bcmath, intl, zip, gd
           coverage: none
+      - name: Prepare Laravel writable directories
+        run: |
+          mkdir -p bootstrap/cache
+          mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/framework/testing
+          mkdir -p storage/logs storage/app/public
+          chmod -R 777 bootstrap/cache storage
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
       - name: Prepare environment
