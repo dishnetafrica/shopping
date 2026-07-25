@@ -1,32 +1,38 @@
-# S1c-2 · Filter products by spec + spec-sheet download button
+# S1c-3 · Specs on documents (snapshot at creation) — upload to GitHub
 
-Builds on S1c-1. The V3 **Products** list now:
-- offers **filter dropdowns for your specs** (Wattage, Battery Chemistry, …) right beside the existing
-  Category/Status filters, and
-- has a **"Specifications (CSV)"** item in its Export / download menu (the S1c-1 export).
-
-All of it is delivered through the product-list payload — **no change to the V3 front-end**.
+Completes Product Specifications. When an invoice or quotation line is created, the line's product
+specs are **frozen onto the line** (resolved by SKU on invoices, by name on quotes), and shown on the
+**invoice** as a compact grey sub-line under the item (e.g. `550 W · LiFePO4 · IP65`).
 
 ## What to do
-Upload these two files, keeping the folders. (S1a, S1b, S1c-1 already uploaded.)
-
-## How it behaves
-- Spec values ride along as hidden row data, so filtering works with **no extra table columns**.
-- A spec filter only appears when it's actually useful (two or more different values among the shown
-  products) — so the toolbar never fills with empty dropdowns.
-- Only specs marked "filterable" are offered (all solar-seeded specs are, by default).
+Upload everything here, keeping the folders. (S1a, S1b, S1c-1, S1c-2 already uploaded.)
 
 ## How you'll know it worked
-- Green ✓ "Money kernel (must pass)" — the new test runs inside that check.
-- In the app: open **Products**. With specs set, you'll see spec filter chips; the Export menu now
-  lists **Specifications (CSV)**.
+- Green ✓ "Money kernel (must pass)" — the snapshot + render tests run inside that check.
+- Create an invoice whose line matches a specced product (by SKU) → the specs print under the item.
+  Old/already-issued invoices are unchanged.
 
-## What's inside / safety
-- `ProductListCapability.php` — adds hidden spec cells + declares spec filters + one export item.
-  The existing columns, KPIs, category drill-through and other actions are unchanged.
-- `tests/Feature/Kernel/ProductSpecListFilterTest.php` — proves the filters, hidden cells, and export item.
-- Additive; a tenant with no specs sees the list exactly as before. Rollback = revert this one file.
+## How it works (and why it's safe)
+- **One observer** (`LineSpecSnapshotObserver`) snapshots specs onto invoice AND quote lines at
+  creation — so none of the five document-creation paths were edited.
+- The snapshot is **frozen**: a document keeps the specs as they were when issued (a reissued or
+  historical invoice never silently changes). Guarded so it can never block document creation.
+- Additive nullable column (`specs_summary`) on invoice/quote lines; lines with no product match or no
+  specs stay null → those documents look exactly as before.
 
-## Next
-S1c-3 — specs on quotations & invoices via snapshot-at-creation (planned carefully; it edits document
-generation). That completes Product Specifications end to end.
+## What's inside
+- migration `…add_specs_summary_to_document_items` — the nullable column on both line tables.
+- `app/Observers/LineSpecSnapshotObserver.php` + registration in `CapabilityServiceProvider.php`.
+- `ProductSpecService.php` — new `summaryForProduct()` compact-summary helper.
+- `InvoiceItem.php` / `QuotationItem.php` — `specs_summary` fillable.
+- `InvoiceRenderer.php` — prints the snapshot as a sub-line under the item (invoices only carry it).
+- `tests/Feature/Kernel/DocumentSpecSnapshotTest.php` — snapshot-by-SKU, snapshot-by-name, no-match,
+  and invoice render.
+
+## One remaining piece
+Quotes now **capture** the snapshot, but the quote PDF pipeline is indirect (a doc-generation service),
+so printing specs on the quote PDF is a small follow-up (S1c-3b) once I trace that path — nothing is
+lost, the data is already frozen on each quote line.
+
+## Safety
+Additive throughout. Rollback = revert these files + drop the `specs_summary` column.

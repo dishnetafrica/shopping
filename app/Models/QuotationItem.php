@@ -12,7 +12,7 @@ class QuotationItem extends Model
     use BelongsToTenant;
 
     protected $fillable = [
-        'quotation_id', 'tenant_id', 'name', 'qty',
+        'quotation_id', 'tenant_id', 'name', 'specs_summary', 'qty',
         'unit_price', 'line_total', 'unit_label', 'image_url', 'matched',
     ];
 

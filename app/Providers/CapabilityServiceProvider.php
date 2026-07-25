@@ -38,6 +38,10 @@ final class CapabilityServiceProvider extends ServiceProvider
         \App\Models\Invoice::observe(\App\Observers\SalesBaseCurrencyObserver::class);
         \App\Models\Quotation::observe(\App\Observers\SalesBaseCurrencyObserver::class);
 
+        // Asset Lifecycle · S1c-3 — freeze a line's product spec summary onto invoice/quote lines at creation.
+        \App\Models\InvoiceItem::observe(\App\Observers\LineSpecSnapshotObserver::class);
+        \App\Models\QuotationItem::observe(\App\Observers\LineSpecSnapshotObserver::class);
+
         Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware\ConfineTransportRole::class])->group(function () {
             // The new shell (SPA). Hash-routed, so one entry point serves every workspace.
             Route::get('/v3/{path?}', fn () => view('shell'))->where('path', '.*');

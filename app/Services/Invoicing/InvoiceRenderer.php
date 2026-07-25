@@ -129,6 +129,7 @@ class InvoiceRenderer
         foreach ($inv->items as $it) {
             $lines[] = ['name' => (string) $it->name, 'qty' => (float) $it->qty, 'unit' => (float) $it->unit_price,
                         'amount' => (float) $it->line_total, 'sku' => (string) ($it->sku ?? ''),
+                        'specs' => (string) ($it->specs_summary ?? ''),   // Asset Lifecycle · frozen spec snapshot
                         'uom' => (string) ($it->uom ?? ''), 'pack' => (float) ($it->pack ?? 0)];
         }
         return $this->finish($t, [
@@ -219,6 +220,8 @@ class InvoiceRenderer
             $uom = trim((string) ($l['uom'] ?? ''));
             if ($uom !== '') $qty .= ' ' . strtoupper(e($uom));
             $sku  = ($l['sku'] ?? '') !== '' ? '<div style="font-size:8.5px;color:#777;">' . e($l['sku']) . '</div>' : '';
+            // Asset Lifecycle · frozen product-spec snapshot, shown as a compact grey sub-line (invoices only carry it).
+            $specs = ($l['specs'] ?? '') !== '' ? '<div style="font-size:8.5px;color:#555;">' . e($l['specs']) . '</div>' : '';
             $pack = (float) ($l['pack'] ?? 0);
 
             $unitCell = number_format((float) $l['unit'], $dec);
@@ -230,7 +233,7 @@ class InvoiceRenderer
                 $packTxt  = $pack > 0 ? '&times;' . rtrim(rtrim(number_format($pack, 2), '0'), '.') : '&mdash;';
                 $packCell = '<td class="c">' . $packTxt . '</td>';
             }
-            $rows .= '<tr><td class="c">' . $i . '</td><td>' . e($l['name']) . $sku . '</td>'
+            $rows .= '<tr><td class="c">' . $i . '</td><td>' . e($l['name']) . $sku . $specs . '</td>'
                 . '<td class="c">' . $qty . '</td>' . $packCell
                 . '<td class="r">' . $unitCell . '</td>'
                 . '<td class="r">' . number_format((float) $l['amount'], $dec) . '</td></tr>';
@@ -451,13 +454,15 @@ HTML;
             $uom = trim((string) ($l['uom'] ?? ''));
             if ($uom !== '') $qty .= ' ' . strtoupper(e($uom));
             $sku  = ($l['sku'] ?? '') !== '' ? '<div style="font-size:8.5px;color:#777;">' . e($l['sku']) . '</div>' : '';
+            // Asset Lifecycle · frozen product-spec snapshot, shown as a compact grey sub-line (invoices only carry it).
+            $specs = ($l['specs'] ?? '') !== '' ? '<div style="font-size:8.5px;color:#555;">' . e($l['specs']) . '</div>' : '';
             $pack = (float) ($l['pack'] ?? 0);
             $packCell = '';
             if ($hasPack) {
                 $packTxt  = $pack > 0 ? '&times;' . rtrim(rtrim(number_format($pack, 2), '0'), '.') : '&mdash;';
                 $packCell = '<td class="c">' . $packTxt . '</td>';
             }
-            $rows .= '<tr><td class="c">' . $i . '</td><td>' . e($l['name']) . $sku . '</td>'
+            $rows .= '<tr><td class="c">' . $i . '</td><td>' . e($l['name']) . $sku . $specs . '</td>'
                 . '<td class="c">' . $qty . '</td>' . $packCell
                 . '<td class="r">' . number_format((float) $l['unit'], $dec) . '</td>'
                 . '<td class="r">' . number_format((float) $l['amount'], $dec) . '</td></tr>';

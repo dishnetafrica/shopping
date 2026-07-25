@@ -61,6 +61,35 @@ class ProductSpecService
         return Str::slug($label, '_') ?: 'spec';
     }
 
+    /**
+     * A compact, ordered spec summary for a product — e.g. "550 W · LiFePO4 · IP65" — used to snapshot
+     * a document line at creation. Static + tenant-id keyed so it needs no Tenant object (an observer
+     * has only tenant_id). Returns '' when the product has no populated specs.
+     */
+    public static function summaryForProduct(int $tenantId, int $productId): string
+    {
+        $defs = SpecDefinition::where('tenant_id', $tenantId)->where('active', true)->get()->keyBy('id');
+        if ($defs->isEmpty()) {
+            return '';
+        }
+        $items = [];
+        foreach (ProductSpec::where('tenant_id', $tenantId)->where('product_id', $productId)->get() as $r) {
+            $def = $defs->get($r->spec_definition_id);
+            $val = (string) ($r->value_text ?? '');
+            if (! $def || $val === '') {
+                continue;
+            }
+            $items[] = [
+                'order' => (int) $def->display_order,
+                'label' => (string) $def->label,
+                'text'  => $val . ($def->unit ? ' ' . $def->unit : ''),
+            ];
+        }
+        usort($items, fn ($a, $b) => [$a['order'], $a['label']] <=> [$b['order'], $b['label']]);
+
+        return implode(' · ', array_map(fn ($x) => $x['text'], $items));
+    }
+
     // ── Catalogue ──────────────────────────────────────────────────────────────────────────────
 
     /** @return \Illuminate\Support\Collection<int,SpecDefinition> */

@@ -11,7 +11,7 @@ class InvoiceItem extends Model
     use BelongsToTenant;
 
     protected $fillable = [
-        'invoice_id', 'tenant_id', 'name', 'sku', 'qty', 'unit_price', 'line_total', 'uom', 'pack',
+        'invoice_id', 'tenant_id', 'name', 'sku', 'specs_summary', 'qty', 'unit_price', 'line_total', 'uom', 'pack',
     ];
 
     protected $casts = [
