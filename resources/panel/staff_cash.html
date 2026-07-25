@@ -36,7 +36,7 @@
   .kdbal .m small{color:var(--mut);font-weight:600;}
   .acts{display:flex;gap:8px;padding:13px 15px;flex-wrap:wrap;}
   .act{border:none;border-radius:10px;padding:10px 13px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;color:#fff;flex:1;min-width:110px;}
-  .act.wa{background:#25D366;}.act.give{background:#15803D;}.act.spent{background:#C0392B;}.act.recv{background:#1D4ED8;}.act.settle{background:#16231C;}.act.hand{background:#6D28D9;}.act.soon{background:#eef2ee;color:#8a978e;cursor:not-allowed;flex:0 0 auto;}
+  .act.wa{background:#25D366;}.act.give{background:#15803D;}.act.spent{background:#C0392B;}.act.recv{background:#1D4ED8;}.act.settle{background:#16231C;}.act.soon{background:#eef2ee;color:#8a978e;cursor:not-allowed;flex:0 0 auto;}
   .lbl{padding:8px 15px 4px;font-size:10.5px;font-weight:800;color:var(--mut);text-transform:uppercase;letter-spacing:.4px;border-top:1px solid var(--line);}
   .ent{display:flex;align-items:center;gap:12px;padding:11px 15px;border-top:1px solid #F1F5F2;}
   .ent .d{font-size:11px;color:var(--mut);width:48px;flex:0 0 auto;font-weight:600;line-height:1.3;}
@@ -195,7 +195,7 @@ function renderDetail(d){
       '<div><div class="nm">'+esc(d.person)+'</div><div class="rl">cash in hand</div></div></div>'+
     '<div class="kdbal"><div class="l">Cash in hand</div><div class="b">'+balLine(b)+'</div><div class="m"><span>≈ $'+nf(d.usd)+'</span></div></div>'+
     '<div class="acts"><button class="act wa" onclick="sendBalance()">💬 Send balance</button>'+
-      '<button class="act give" onclick="openGive()">＋ Give cash</button><button class="act spent" onclick="openSpend()">− He spent</button><button class="act recv" onclick="openRecv()">💰 He received</button><button class="act settle" onclick="openSettle()">⚖ Settle</button><button class="act hand" onclick="openHand()">🤝 Hand over</button></div>'+
+      '<button class="act give" onclick="openGive()">＋ Give cash</button><button class="act spent" onclick="openSpend()">− He spent</button><button class="act recv" onclick="openRecv()">💰 He received</button><button class="act settle" onclick="openSettle()">⚖ Settle</button></div>'+
     '<div class="lbl">History (newest first)</div>'+(entries||'<div class="empty">No entries yet.</div>')+'</div>';
   window.__bal=b; window.__usd=d.usd;
 }
@@ -237,42 +237,6 @@ function saveGive(){
         }, 300);
       } else alert('Could not save: '+((r&&r.error)||'error'));
     }).catch(function(){ b.disabled=false; b.textContent='Give cash'; alert('Failed'); });
-}
-
-// ── Hand over cash (custody handover: from one person to another) ──────────────
-var HAND_KEY='';
-function openHand(){
-  var dl=$('gPeople'); if(dl) dl.innerHTML=(PEOPLE||[]).map(function(p){return '<option value="'+esc(p.name)+'">';}).join('');
-  $('hFrom').value=CUR||''; $('hTo').value=''; $('hAmt').value=''; $('hNote').value=''; $('hCur').selectedIndex=0;
-  $('hDate').value=nowLocal();
-  // one stable key per attempt → an offline resend/double-tap records ONCE, never twice
-  HAND_KEY='hand-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
-  hRate();
-  openSheet('hsheet'); setTimeout(function(){$('hAmt').focus();},250);
-}
-function hRate(){ var c=$('hCur').value; $('hRateWrap').style.display=c==='USD'?'none':'flex'; if(c!=='USD') $('hRateI').value=RATES[c]||''; }
-function saveHand(){
-  var from=$('hFrom').value.trim(), to=$('hTo').value.trim();
-  if(!from){ alert('From whom?'); return; }
-  if(!to){ alert('To whom?'); return; }
-  if(from.toLowerCase()===to.toLowerCase()){ alert('Pick two different people.'); return; }
-  var amt=parseFloat(($('hAmt').value||'').replace(/,/g,''))||0; if(amt<=0){ alert('Amount?'); return; }
-  var b=$('hSave'); b.disabled=true; b.textContent='Saving…';
-  var body=new URLSearchParams({from:from, to:to, amount:amt, currency:$('hCur').value,
-    rate_to_usd:($('hCur').value==='USD'?1:($('hRateI').value||'')), note:$('hNote').value.trim(),
-    created_date:$('hDate').value, idempotency_key:HAND_KEY});
-  fetch('/papi/staff-cash/handover',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},credentials:'same-origin',body:body})
-    .then(r=>r.json()).then(function(r){
-      b.disabled=false; b.textContent='Record handover';
-      if(r&&r.ok){
-        closeSheet('hsheet');
-        loadPeople();
-        setTimeout(function(){
-          var txt='*Family Shoppers*\nHandover: '+from+' → '+to+'\n'+r.currency+' '+nf(r.amount)+' (≈ $'+nf(r.usd)+')';
-          if(confirm('Saved. Send WhatsApp note?')) location.href='https://wa.me/?text='+encodeURIComponent(txt);
-        },300);
-      } else alert('Could not save: '+((r&&r.error)||'error'));
-    }).catch(function(){ b.disabled=false; b.textContent='Record handover'; alert('Failed'); });
 }
 
 var ORDERS=[], CUSTS=[], SPEND_MODE='order';
@@ -497,19 +461,5 @@ loadPeople();
   </div>
   <label>Note (optional)</label><input id="xNote" placeholder="reason, if known">
   <button class="gsave" id="xSave" onclick="saveSettle()" style="background:#16231C">Record count</button>
-</div>
-
-<div class="gsheet" id="hsheet">
-  <button class="gx" onclick="closeSheet('hsheet')">✕</button>
-  <h3>Hand over cash</h3>
-  <p style="font-size:12.5px;color:var(--mut);margin:0 0 10px">Record cash physically passing from one person to another. The giver's cash goes down and the receiver's goes up by the same amount — the company total is unchanged.</p>
-  <label>From (who is giving)</label><input id="hFrom" list="gPeople" placeholder="Person giving cash">
-  <label>To (who is receiving)</label><input id="hTo" list="gPeople" placeholder="Person receiving cash">
-  <div class="g2"><div><label>Amount</label><input id="hAmt" inputmode="decimal" placeholder="0"></div>
-  <div style="max-width:110px"><label>Currency</label><select id="hCur" onchange="hRate()"><option>UGX</option><option>USD</option><option>SSP</option></select></div></div>
-  <div class="g2" id="hRateWrap"><div><label>Rate (per 1 USD)</label><input id="hRateI" inputmode="decimal"></div><div></div></div>
-  <label>Note (optional)</label><input id="hNote" placeholder="e.g. end-of-day cash to office">
-  <label>Date</label><input id="hDate" type="datetime-local">
-  <button class="gsave" id="hSave" onclick="saveHand()" style="background:#6D28D9">Record handover</button>
 </div>
 </body></html>

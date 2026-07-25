@@ -1,42 +1,42 @@
-# Cash Handover — V3 version (upload this to GitHub)
+# Cash Handover — V3 version + cleanup (you uploaded the earlier zip, so read this)
 
-This is the **corrected** version that fits your V3 app. Instead of adding a new button on the old
-Staff Cash screen, it upgrades the handover you **already have** in the V3 Cashbook
-("Record activity → Moved cash between people") to run on the new capability.
+You uploaded my earlier `cash-handover.zip`, which added a handover button on the **old Staff Cash
+screen**. This package moves everything to your **V3 Cashbook** (your main app) and cleans up the old
+button so there is ONE handover engine. Two tiny steps:
 
-Nothing you see on screen changes. What changes is what happens underneath when you use it:
-it now leaves a permanent record, it's safe if the phone sends it twice, and it quietly watches for
-someone handing over more than they hold.
+## Step 1 — Upload these files (overwrites the old ones)
+Upload everything in this folder to your repository, **keeping the folders**. This:
+- upgrades your V3 "Moved cash between people" to run on the new capability, and
+- removes the old Staff Cash button + its endpoint (by replacing those 3 files with clean versions).
 
-## What to do
-Upload these files to your repository, **keeping the folders** (`app/…`, `tests/…`).
+## Step 2 — Delete ONE leftover file (upload can't remove files)
+Open this file on GitHub and delete it (the **trash 🗑 icon**, top-right → **Commit changes**):
 
-> **One-time note:** if you ever uploaded my earlier `cash-handover.zip`, also delete this now-obsolete
-> file: `tests/Feature/Kernel/StaffCashHandoverTest.php` (open it on GitHub → trash 🗑 → Commit).
-> If you never uploaded that earlier zip, there's nothing to delete — skip this line.
+    tests/Feature/Kernel/StaffCashHandoverTest.php
 
-## How you'll know it worked — just a colour
-On the **Actions** tab, the latest run:
-- **Green ✓ "Money kernel (must pass)"** → verified. The new handover tests run inside that check.
-- **Red ✗** → send me a screenshot and I'll pinpoint it.
+Direct link:
+https://github.com/dishnetafrica/shopping/blob/main/tests/Feature/Kernel/StaffCashHandoverTest.php
 
-## Then use it in the app (the real proof)
-In **V3 Cashbook → Record activity → Moved cash between people**, record a handover from one person to
-another and watch: the giver's cash goes **down**, the receiver's goes **up** by the same amount, and
-the **combined cash total stays the same**. Do the same handover twice quickly — it still records once.
+That test checked the old Staff Cash endpoint we just removed, so it must go — otherwise your check
+turns red. (Its replacement, `TradeCashbookHandoverTest.php`, is included here and tests the V3 path.)
+
+## How you'll know it worked
+On the **Actions** tab: **green ✓ "Money kernel (must pass)"**. If it's red, send me a screenshot.
+
+## Then use it (the real proof)
+**V3 Cashbook → Record activity → Moved cash between people.** Record a handover: the giver's cash
+goes down, the receiver's up by the same amount, combined total unchanged. Do it twice quickly — it
+still records once.
 
 ## What's inside
-- `app/Kernel/Events/CashHandedOver.php` — the handover fact (first *custody* event).
-- `app/Kernel/Capabilities/Cash/HandOverCash.php` — the one capability that records it (emits only).
+- `app/Kernel/Events/CashHandedOver.php`, `app/Kernel/Capabilities/Cash/HandOverCash.php` — the event
+  + capability (unchanged from before).
 - `app/Http/Controllers/Panel/TradeCashbookController.php` — the V3 "Moved cash between people"
-  endpoint, **cut over** to the capability. Same inputs, same entries, same response — now with the
-  event, the offline-retry guard, and the over-hold watch. The "convert & hand to" flow that shares
-  this endpoint keeps working unchanged.
-- `tests/…` — the tests proving conservation, one-event-two-rows, idempotent retry, over-hold observed,
-  and owner/manager permission.
+  endpoint, cut over to the capability (same entries/response; adds event + offline guard + over-hold watch).
+- `app/Http/Controllers/Panel/StaffCashController.php`, `routes/web.php`,
+  `resources/panel/staff_cash.html` — **clean versions** that remove the old Staff Cash handover button/endpoint.
+- `tests/…` — capability + event + V3-endpoint tests.
 
-## Safety notes
-- **Parity cutover.** The cash entries are byte-for-byte what the old code wrote (same stages, category,
-  notes), so Cash Position / Trade Cashbook are unchanged. P&L is untouched (an internal move).
-- **Watching, not blocking.** Over-hold is logged as evidence; it does not stop anyone yet.
-- **Rollback:** revert `TradeCashbookController.php` and the endpoint returns to its previous inline write.
+## Safety
+- The V3 cash entries are byte-for-byte what the old code wrote, so Cash Position / Trade Cashbook and
+  P&L are unchanged. Over-hold is watched, not blocked. Rollback = revert `TradeCashbookController.php`.
