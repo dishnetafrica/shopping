@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ShopBot Kernel Constitution v1.0</title>
+<style>
+  :root{
+    --brand:#16a34a; --ink:#15803d; --wash:#eafaf0; --line:#e5e7eb; --line2:#d1d5db;
+    --ink0:#0f172a; --muted:#64748b; --danger:#b91c1c; --warn:#b45309; --info:#4f46e5; --paper:#fff; --bg:#f6f8f7; --code:#0b3d2e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:#111827;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;letter-spacing:-.011em;line-height:1.58}
+  .wrap{max-width:1040px;margin:0 auto;padding:44px 30px 90px}
+  .kicker{color:var(--brand);font-weight:700;font-size:12.5px;letter-spacing:.08em;text-transform:uppercase}
+  h1{font-size:36px;margin:8px 0 6px;font-weight:800;letter-spacing:-.02em}
+  .v{display:inline-block;background:var(--ink0);color:#fff;font-size:12px;font-weight:700;border-radius:999px;padding:3px 11px;letter-spacing:.03em}
+  .lede{font-size:17.5px;color:#334155;max-width:840px;margin:14px 0 4px}
+  .meta{color:var(--muted);font-size:13px;margin-top:12px}
+  h2{font-size:13px;letter-spacing:.09em;text-transform:uppercase;color:var(--brand);font-weight:800;margin:46px 0 4px}
+  h2 .art{color:var(--muted);font-weight:700;margin-right:8px}
+  h2 + .sub{color:#334155;font-size:16px;font-weight:600;margin:0 0 14px}
+  h3{font-size:15px;font-weight:700;margin:22px 0 6px}
+  p{margin:8px 0} .small{font-size:13px;color:var(--muted)}
+  .rule{border:none;border-top:1px solid var(--line);margin:8px 0 0}
+  /* TOC */
+  .toc{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 6px}
+  .toc a{font-size:12.5px;color:#1e293b;text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:5px 11px;background:#fff}
+  .toc a:hover{border-color:var(--brand);color:var(--ink)}
+  /* stack */
+  .stack{display:flex;flex-direction:column;gap:0;margin:14px 0 6px;border:1px solid var(--line2);border-radius:16px;overflow:hidden;background:#fff}
+  .row{display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:none}
+  .row .n{font-size:11px;font-weight:800;color:#fff;border-radius:7px;padding:3px 8px;min-width:74px;text-align:center}
+  .row .t{font-weight:700} .row .d{color:var(--muted);font-size:13px;margin-left:auto;text-align:right;max-width:52%}
+  .n-real{background:#64748b}.n-evt{background:#0b3d2e}.n-obj{background:var(--brand)}.n-cap{background:var(--info)}.n-agent{background:#7c3aed}.n-ui{background:#334155}
+  .center-note{background:var(--wash);border:1px dashed var(--brand);border-radius:12px;padding:10px 14px;font-size:13.5px;color:#14532d;margin-top:10px}
+  .center-note b{color:var(--ink)}
+  /* laws */
+  ol.laws{counter-reset:l;list-style:none;padding:0;margin:10px 0}
+  ol.laws li{position:relative;padding:10px 12px 10px 46px;border:1px solid var(--line);border-left:3px solid var(--brand);border-radius:10px;background:#fff;margin-bottom:8px}
+  ol.laws li:before{counter-increment:l;content:"L" counter(l);position:absolute;left:10px;top:10px;font-weight:800;color:var(--brand);font-size:12.5px}
+  ol.laws b{color:#0f172a}
+  /* tables */
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px;background:#fff;border:1px solid var(--line2);border-radius:12px;overflow:hidden}
+  th{background:var(--ink);color:#fff;text-align:left;padding:9px 12px;font-size:12px;letter-spacing:.03em}
+  td{padding:9px 12px;border-top:1px solid var(--line);vertical-align:top}
+  tr:nth-child(even) td{background:#f8fafc}
+  td b{color:#0f172a} td code, .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;color:var(--code);background:#eef5f1;padding:1px 5px;border-radius:5px}
+  pre{background:#0b3d2e;color:#d1fae5;border-radius:12px;padding:14px 16px;overflow:auto;font-size:12.5px;line-height:1.55;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  pre .k{color:#6ee7b7}.pre .c{color:#94a3b8}
+  ul.clean{margin:8px 0;padding-left:20px} ul.clean li{margin:6px 0;font-size:14px}
+  .callout{border:1px solid var(--line);border-left:3px solid var(--info);border-radius:10px;background:#fff;padding:11px 14px;margin:12px 0;font-size:14px}
+  .callout.warn{border-left-color:var(--warn)} .callout.moat{border-left-color:var(--brand)}
+  .mig{counter-reset:m;list-style:none;padding:0;margin:12px 0}
+  .mig li{position:relative;padding:11px 14px 11px 44px;border:1px solid var(--line);border-radius:10px;background:#fff;margin-bottom:8px;font-size:13.8px}
+  .mig li:before{counter-increment:m;content:counter(m);position:absolute;left:12px;top:11px;width:22px;height:22px;background:var(--ink0);color:#fff;border-radius:50%;text-align:center;line-height:22px;font-size:12px;font-weight:800}
+  .foot{margin-top:44px;padding:20px 22px;border:1px solid var(--brand);border-radius:14px;background:linear-gradient(180deg,var(--wash),#fff);color:#14532d;font-size:15px}
+  .foot b{color:var(--ink)}
+  .pill{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--wash);color:var(--ink);margin-left:6px}
+  .pill.rep{background:#f1f5f9;color:#475569}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kicker">ShopBot · Foundational Document</div>
+  <h1>The Kernel Constitution</h1>
+  <div><span class="v">v1.0 — IMMUTABLE</span></div>
+  <p class="lede">The permanent core of ShopBot. Models, channels, screens and ERP integrations will change many times over the next 20 years. The objects, the events, and the laws in this document will not. Every feature, screen, agent workflow and integration is judged against this constitution <b>before</b> any code is written.</p>
+  <div class="meta">Positioned to the world as an <b>AI Operating System for Commerce</b> (surfaced through familiar lenses: Sales · Inventory · Trading · Accounting · Logistics · Customer Service) — but architected as objects over events, not modules over tables.</div>
+
+  <div class="toc">
+    <a href="#stack">The inversion</a>
+    <a href="#i">I · Invariants</a>
+    <a href="#ii">II · Objects</a>
+    <a href="#iii">III · Events</a>
+    <a href="#iv">IV · Capabilities</a>
+    <a href="#v">V · Agent</a>
+    <a href="#vi">VI · Digital Twin</a>
+    <a href="#vii">VII · Extension &amp; ERP adapters</a>
+    <a href="#viii">VIII · Reality commitments</a>
+    <a href="#ix">IX · Governance</a>
+    <a href="#mig">Migration</a>
+  </div>
+
+  <!-- INVERSION -->
+  <h2 id="stack">The inversion</h2>
+  <div class="sub">Business objects and their event history are the center. AI, UI, channels and ERP are replaceable peripherals.</div>
+  <div class="stack">
+    <div class="row"><span class="n n-real">REALITY</span><span class="t">What actually happens in the business</span><span class="d">cash changes hands · boxes move · people talk</span></div>
+    <div class="row"><span class="n n-evt">EVENTS</span><span class="t">Immutable facts, append-only — the system of record</span><span class="d">the bedrock · everything derives from here</span></div>
+    <div class="row"><span class="n n-obj">OBJECTS</span><span class="t">The living business model, projected from events</span><span class="d"><b>THE PERMANENT CORE</b></span></div>
+    <div class="row"><span class="n n-cap">CAPABILITIES</span><span class="t">The only way to change the world — by emitting events</span><span class="d">the instruction set · same for humans &amp; AI</span></div>
+    <div class="row"><span class="n n-agent">AGENT</span><span class="t">Reads the world, proposes and invokes capabilities <span class="pill rep">replaceable</span></span><span class="d">any LLM/provider · swaps without kernel change</span></div>
+    <div class="row"><span class="n n-ui">INTERFACE</span><span class="t">WhatsApp · voice · chat · inspector screens <span class="pill rep">replaceable</span></span><span class="d">thin transports · carry intent in, answers out</span></div>
+  </div>
+  <div class="center-note"><b>The invariant:</b> a Party, a Trade, a Money Movement and a Shipment are the same in 2026 and 2046. The model that will win is not the AI — it is the business reality encoded as objects and events. The AI is how you <i>reason</i> over that model this year; it is expected to be replaced.</div>
+
+  <!-- ARTICLE I -->
+  <h2 id="i"><span class="art">Article I</span>The Invariants</h2>
+  <div class="sub">Nine laws. These do not change. Everything else in the system exists to serve them.</div>
+  <ol class="laws">
+    <li><b>The business is a stream of events.</b> Truth is the append-only event log. Nothing that happened is ever edited or deleted; it is only added to.</li>
+    <li><b>Objects are projections, not records.</b> Every business object is derived by replaying events. If all projections were dropped, they could be rebuilt from the log exactly.</li>
+    <li><b>State changes only by emitting an event.</b> No human, agent, capability, screen or integration mutates an object directly. To change the world you append a fact about it.</li>
+    <li><b>Capabilities are the only actuators.</b> The world changes only through declared capabilities, which validate the invariants and then emit events. There is no side door.</li>
+    <li><b>Business rules live in the kernel, never in the AI or the UI.</b> The agent proposes; the kernel disposes. An invariant the kernel enforces cannot be talked around by a model or a screen.</li>
+    <li><b>The kernel is model-, channel- and vendor-agnostic.</b> No LLM, messaging platform, database engine or ERP may be a dependency of the core. All of them attach at the edges as adapters.</li>
+    <li><b>Cash is the native truth; accounting is derived.</b> Money is recorded as it moves in the real, often bankless world. Double-entry, tax and statutory books are projections and exports — never the primitive the user must feed.</li>
+    <li><b>Every future feature is expressible as new events + new capabilities + new projections.</b> If a feature requires changing a core object or a law, it is rejected or the constitution is formally amended (Article IX). Features never fork the kernel.</li>
+    <li><b>Each tenant is a Digital Twin.</b> A continuously-updated world model derived from events. Agents and humans reason over the Twin; they never query raw tables.</li>
+  </ol>
+
+  <!-- ARTICLE II -->
+  <h2 id="ii"><span class="art">Article II</span>The Object Model</h2>
+  <div class="sub">The smallest vocabulary that describes any commerce business. Eight business objects, three kernel primitives. Nothing else is a first-class noun.</div>
+  <table>
+    <tr><th style="width:15%">Object</th><th style="width:38%">Absorbs (the ERP nouns it replaces)</th><th style="width:47%">Definition &amp; identity</th></tr>
+    <tr><td><b>Party</b></td><td>Customer, Supplier, Vendor, Employee, Transporter, Lead, the Tenant itself</td><td>Any economic actor. <b>Role is an attribute, not a type</b> — the same Party can be a customer today and a supplier tomorrow. One identity, resolved across phone numbers and names.</td></tr>
+    <tr><td><b>Item</b></td><td>Product, SKU, Service, Batch, BOM line</td><td>Anything tradable or movable. <b>Fluid identity</b> — the agent resolves it from natural language; rigid SKU master-data discipline is not required to transact.</td></tr>
+    <tr><td><b>Trade</b></td><td>Quotation, Sales Order, Purchase Order, Invoice, Delivery, Return, Credit Note</td><td>One commercial engagement, end to end. Quote → commit → fulfil → settle are <b>states and facets of a single Trade</b>, not separate documents in separate modules.</td></tr>
+    <tr><td><b>Money&nbsp;Movement</b></td><td>Payment, Receipt, Expense, FX conversion, Transfer, Advance, Settlement, Journal line</td><td>Any transfer of value. The ledger and every balance are <b>derived from these</b>. Each movement is stamped with who, currency, rate, and the real-world custody of the cash.</td></tr>
+    <tr><td><b>Custody</b></td><td>(no ERP equivalent — this is proprietary)</td><td>Who physically holds which Items, where, across each leg of a journey. The primitive that makes Kampala→Juba cross-border trade real. Cash-in-hand-per-person is Custody applied to Money.</td></tr>
+    <tr><td><b>Conversation</b></td><td>WhatsApp thread, Call, Email, SMS, Ticket, CRM note</td><td>The durable, multi-channel thread with a Party. <b>The real interface object</b> — Trades, questions, payments and Tasks are emitted out of Conversations.</td></tr>
+    <tr><td><b>Task</b></td><td>Job, Assignment, Work order, Approval, Follow-up</td><td>A unit of human work with an owner and a lifecycle, reachable by a login-free link. Already correct in today's system.</td></tr>
+    <tr><td><b>Place</b></td><td>Warehouse, Branch, Location, Route, Border</td><td>A referenced location or leg. Kept minimal — it exists to give Custody and Trade legs a geography.</td></tr>
+  </table>
+  <p class="small"><b>Kernel primitives</b> (not business nouns, but constitutional objects): <span class="mono">Event</span> — the immutable fact (Article III); <span class="mono">Capability</span> — a declared, event-emitting action (Article IV); <span class="mono">Twin</span> — the tenant's live world model (Article VI). Notice what is <b>absent</b>: there is no GL Account, no Warehouse-of-record, no separate Journal. Those are projections or exports, not objects.</p>
+
+  <!-- ARTICLE III -->
+  <h2 id="iii"><span class="art">Article III</span>The Event Model</h2>
+  <div class="sub">Immutable, versioned, replayable. The one thing the whole system is built on.</div>
+  <h3>The envelope (every event, forever)</h3>
+<pre><span class="k">Event</span> {
+  id            : uuid              <span class="c">// globally unique, sortable</span>
+  tenant_id     : id                <span class="c">// hard isolation boundary</span>
+  type          : string            <span class="c">// namespaced + versioned: "trade.ordered.v1"</span>
+  subject       : {object, id}      <span class="c">// the object this fact concerns</span>
+  actor         : {kind, id}        <span class="c">// party | agent | system | integration</span>
+  occurred_at   : timestamp         <span class="c">// event time — when it happened in reality</span>
+  recorded_at   : timestamp         <span class="c">// record time — when the kernel learned it</span>
+  payload       : json              <span class="c">// the facts, validated against the type's schema</span>
+  causation_id  : uuid              <span class="c">// the event/command that caused this</span>
+  correlation_id: uuid              <span class="c">// the workflow/intent this belongs to</span>
+  provenance    : {autonomy, approved_by?}  <span class="c">// suggest|draft|auto + human approver if any</span>
+  prev_hash     : hash              <span class="c">// tamper-evident chain within the tenant</span>
+}</pre>
+  <h3>The rules of the log</h3>
+  <ul class="clean">
+    <li><b>Append-only.</b> Events are never updated or deleted. A mistake is corrected by a <i>compensating event</i> (e.g. <span class="mono">money.movement.reversed.v1</span>), so the history of the correction is itself preserved.</li>
+    <li><b>Versioned &amp; additive.</b> Event types carry a version. New versions may add fields; they may never change the meaning of an old one. Old events replay forever.</li>
+    <li><b>Schema-validated.</b> Each type has a registered schema. An event that does not validate is never written — the kernel rejects it at the capability boundary.</li>
+    <li><b>Event-time over batch.</b> Reconciliation is continuous, at event time. There is no "month-end close" as a state the business must reach; the books are always current, and a period is just a query over the log.</li>
+  </ul>
+  <h3>The taxonomy (small, per object)</h3>
+  <table>
+    <tr><th style="width:20%">Family</th><th>Representative event types</th></tr>
+    <tr><td><b>party.*</b></td><td><span class="mono">party.identified</span> · <span class="mono">party.role_observed</span> · <span class="mono">party.merged</span> · <span class="mono">party.credit_agreed</span></td></tr>
+    <tr><td><b>trade.*</b></td><td><span class="mono">trade.quoted</span> · <span class="mono">trade.ordered</span> · <span class="mono">trade.fulfilled</span> · <span class="mono">trade.invoiced</span> · <span class="mono">trade.returned</span> · <span class="mono">trade.settled</span></td></tr>
+    <tr><td><b>money.*</b></td><td><span class="mono">money.received</span> · <span class="mono">money.spent</span> · <span class="mono">money.transferred</span> · <span class="mono">money.converted</span> (FX) · <span class="mono">money.reversed</span></td></tr>
+    <tr><td><b>custody.*</b></td><td><span class="mono">custody.taken</span> · <span class="mono">custody.handed_over</span> · <span class="mono">custody.in_transit</span> · <span class="mono">custody.shortfall_found</span></td></tr>
+    <tr><td><b>conversation.*</b></td><td><span class="mono">conversation.message_in</span> · <span class="mono">conversation.intent_detected</span> · <span class="mono">conversation.reply_sent</span></td></tr>
+    <tr><td><b>task.*</b></td><td><span class="mono">task.raised</span> · <span class="mono">task.assigned</span> · <span class="mono">task.completed</span> (with proof) · <span class="mono">task.escalated</span></td></tr>
+  </table>
+
+  <!-- ARTICLE IV -->
+  <h2 id="iv"><span class="art">Article IV</span>The Capability Model</h2>
+  <div class="sub">A capability is the only actuator in the system. Its <b>only</b> side effect is emitting events.</div>
+<pre><span class="k">Capability</span> {
+  key         : "trade.place_order"
+  reads       : [projections it may consult]        <span class="c">// e.g. party.credit, item.availability</span>
+  emits       : [event types it may produce]        <span class="c">// e.g. trade.ordered.v1</span>
+  invariants  : [rules checked before emitting]     <span class="c">// e.g. credit not exceeded</span>
+  effect      : "reversible" | "irreversible"
+  compensator : "trade.cancel_order"                <span class="c">// how to undo — via a new event, never a delete</span>
+  autonomy    : "eligible" | "human_only"           <span class="c">// may the AI ever run this alone?</span>
+  approvals   : [thresholds requiring a human]       <span class="c">// e.g. amount &gt; X</span>
+}
+
+<span class="k">run</span>(intent, context, twin) ->  validate(invariants)  ->  emit(events)   <span class="c">// or refuse</span></pre>
+  <ul class="clean">
+    <li><b>Pure at the boundary.</b> A capability reads the Twin, checks invariants, and emits events. It writes nothing else. Projections, notifications, documents and ERP exports all react to the emitted events downstream — never inside the capability.</li>
+    <li><b>Undo is an event, not a delete.</b> Every reversible capability names its compensator. "Cancel" and "refund" emit new facts; the original facts remain in the log.</li>
+    <li><b>One guarded write path per effect.</b> There is exactly one capability that can emit <span class="mono">money.received</span>. There are never two code paths that record the same kind of fact — this is the constitutional cure for today's StaffCash double-write.</li>
+    <li><b>Declared, discoverable, typed.</b> The registry of capabilities <i>is</i> the system's API and the agent's action space. A capability that isn't declared cannot be invoked by anyone.</li>
+  </ul>
+
+  <!-- ARTICLE V -->
+  <h2 id="v"><span class="art">Article V</span>The Agent Interaction Model</h2>
+  <div class="sub">How AI acts on the business without ever bypassing its rules — and stays replaceable.</div>
+  <p>The agent has exactly three verbs against the kernel, and no others:</p>
+  <table>
+    <tr><th style="width:22%">Verb</th><th>What it can do</th><th style="width:26%">What it can never do</th></tr>
+    <tr><td><b>READ the Twin</b></td><td>Observe the current world model — cash, inventory, custody, conversations, relationships, tasks, predictions.</td><td>Touch raw tables or the event log directly.</td></tr>
+    <tr><td><b>PROPOSE an Intent</b></td><td>Turn a conversation or a signal into a structured intent ("settle INV-25 with $1,164 cash from Asish").</td><td>Enact the intent itself.</td></tr>
+    <tr><td><b>INVOKE a Capability</b></td><td>Call a declared capability through the Command Bus, which enforces autonomy + invariants.</td><td>Emit an event outside a capability, or skip the invariant checks.</td></tr>
+  </table>
+  <div class="callout"><b>The kernel is the referee.</b> Even at <span class="mono">autonomy = auto</span>, the capability still validates every invariant, and any <b>irreversible</b> or over-threshold action is bounced to a human for approval. The AI cannot reach around a capability to change an object. It plans only over the declared, typed action space, so a hallucinated action simply does not exist to call — and an invalid call is refused, not absorbed.</div>
+  <div class="callout moat"><b>Why this keeps AI replaceable.</b> The agent's entire knowledge of the business is (1) the Twin and (2) the Capability registry — both owned by the kernel. Swap GPT for Claude for a local model, or change providers entirely, and nothing in the object model, event log, or rules changes. The AI is a planner you rent this year, not the asset you own for twenty.</div>
+
+  <!-- ARTICLE VI -->
+  <h2 id="vi"><span class="art">Article VI</span>The Digital Twin</h2>
+  <div class="sub">Each tenant is a living world model. Proactive assistance is the Twin watching itself.</div>
+  <p>The Twin is the union of all projections for one tenant, continuously rebuilt from the event log — never a set of ad-hoc queries. It is what both humans and agents reason over.</p>
+  <table>
+    <tr><th style="width:33%">Twin surface</th><th>Projected from</th></tr>
+    <tr><td><b>Cash position</b> — per currency, per person, per place</td><td><span class="mono">money.*</span> + <span class="mono">custody.*</span></td></tr>
+    <tr><td><b>Inventory position</b> — on hand, in transit, committed</td><td><span class="mono">trade.*</span> + <span class="mono">custody.*</span></td></tr>
+    <tr><td><b>Custody map</b> — who holds what, on which leg, right now</td><td><span class="mono">custody.*</span></td></tr>
+    <tr><td><b>Open conversations &amp; intents</b></td><td><span class="mono">conversation.*</span></td></tr>
+    <tr><td><b>Relationship graph</b> — balances, history, credit, loyalty</td><td><span class="mono">party.*</span> + <span class="mono">trade.*</span> + <span class="mono">money.*</span></td></tr>
+    <tr><td><b>Task queue</b> — who owes what work</td><td><span class="mono">task.*</span></td></tr>
+    <tr><td><b>Predictions</b> — reorder points, late-payment risk, shortfall likelihood, demand</td><td>derived model over all of the above</td></tr>
+  </table>
+  <p class="small"><b>Proactive assistance</b> is not a feature bolted on; it falls out of the model. Rules and agents watch the Twin and, when a threshold trips (cash low, a shipment leg overdue, a customer slipping), they <i>raise an intent</i> — which flows through the same capability + autonomy path as everything else.</p>
+
+  <!-- ARTICLE VII -->
+  <h2 id="vii"><span class="art">Article VII</span>The Extension Model &amp; ERP-as-Adapter</h2>
+  <div class="sub">Closed for modification, open for extension. The kernel never forks.</div>
+  <p>Every new capability, vertical, corridor or integration is added at the edges, in four shapes — and none of them touch the core objects or laws:</p>
+  <ul class="clean">
+    <li><b>New event types</b> (versioned) — new facts the business can record.</li>
+    <li><b>New projections</b> — new read models / Twin surfaces over existing events (a new report is a projection, not a schema change).</li>
+    <li><b>New capabilities</b> — new event-emitting actions, registered into the registry.</li>
+    <li><b>New adapters</b> — new edges: channel adapters (WhatsApp, voice, email), model adapters (any LLM), and integration adapters.</li>
+  </ul>
+  <div class="callout warn"><b>ERP and accounting become optional downstream adapters.</b> A QuickBooks / Odoo / tax-authority adapter <i>subscribes</i> to <span class="mono">money.*</span> and <span class="mono">trade.*</span> events and pushes derived double-entry outward. ERP is a <b>listener, never a writer</b> to the core. A tenant who needs statutory books turns the adapter on; a bankless trader who doesn't never sees it. This is exactly "ERP becomes infrastructure."</div>
+  <div class="callout"><b>Positioning, reconciled.</b> To the market this is an <b>AI Operating System for Commerce</b>, surfaced through the lenses buyers already understand — Sales, Inventory, Trading, Accounting, Logistics, Customer Service, and the AI itself. Those lenses are <b>projections and capability groupings over the same objects</b>, not modules with their own tables. Keep the vocabulary; change only the architecture beneath it.</div>
+
+  <!-- ARTICLE VIII -->
+  <h2 id="viii"><span class="art">Article VIII</span>Commitments to the Reality We Serve</h2>
+  <div class="sub">Conversational, cross-border, cash-first — designed in, not adapted later.</div>
+  <ul class="clean">
+    <li><b>Conversational commerce is first-class.</b> Conversation and Intent are core; the default way a Trade or a Money Movement is born is a message, not a form. Screens are inspectors, and are always optional.</li>
+    <li><b>Cross-border trade is native.</b> Custody + Place + multi-leg Trades model box-level possession across Kampala→Juba; a shortfall is localized to the leg that lost it. No ERP owns this primitive.</li>
+    <li><b>Cash-first, bankless-friendly.</b> Money Movement records real cash in hand and person-to-person handoffs; FX is stamped per movement, never a single global rate; there is no bank-feed assumption. Accounting is derived and exported for those who ask.</li>
+  </ul>
+
+  <!-- ARTICLE IX -->
+  <h2 id="ix"><span class="art">Article IX</span>Governance &amp; Amendment</h2>
+  <div class="sub">What is immutable, what evolves, and how the constitution itself changes.</div>
+  <ul class="clean">
+    <li><b>Immutable</b> without a formal amendment: Article I (the laws), the set and meaning of the core objects (Article II), and event-sourcing itself. These are the promises the next 20 years are built on.</li>
+    <li><b>Freely evolving</b>: capabilities, projections, Twin surfaces, adapters, event <i>types</i> (additively), the AI, and every screen. This is where all product work happens.</li>
+    <li><b>Amendment</b>: a change to an immutable clause requires an explicit, versioned revision (v1.1, v2.0) with a written rationale and a migration plan for existing events. It is rare and deliberate, never incidental.</li>
+    <li><b>The test every proposal must pass</b>: "Can this be built as new events + capabilities + projections + adapters, without changing a core object or a law?" If yes, build it. If no, it is redesigned until it can — or the constitution is formally amended.</li>
+  </ul>
+
+  <!-- MIGRATION -->
+  <h2 id="mig">Migration — from today's repository, without a rewrite</h2>
+  <div class="sub">The current code already contains the seeds. This is a strangler path, not a green field.</div>
+  <ol class="mig">
+    <li><b>Make the event log authoritative.</b> The <span class="mono">BOS</span> event store already exists. Begin dual-writing: every existing money/trade mutation also emits its canonical event, hashed and versioned. This step <i>is</i> the Q3-2026 money-integrity fix from the due diligence — the two efforts are the same first move.</li>
+    <li><b>Route all writes through capabilities.</b> The <span class="mono">CapabilityRegistry</span> + <span class="mono">CommandBus</span> + <span class="mono">AiPolicy</span> seam already exists. Freeze <span class="mono">PanelApiController</span>; every new write is a declared capability that emits events and nothing else. Collapse the second money path (<span class="mono">StaffCashController</span>) into the one <span class="mono">money.received</span> capability.</li>
+    <li><b>Introduce the core objects as projections.</b> Build <span class="mono">Party</span> over customer+supplier+staff, <span class="mono">Trade</span> over order+invoice+delivery, and <span class="mono">Money&nbsp;Movement</span> over the order_costs journal — as read models rebuilt from events, not new tables of record.</li>
+    <li><b>Stand up the Twin, one surface at a time.</b> Start with the cash + custody position (your highest-value, most differentiated data) so the agent has a live world model to reason over.</li>
+    <li><b>Strangle by domain, highest value first.</b> Collections/payments already have a single recorder — convert it fully to capability + events + projection end to end, prove the pattern, then repeat for Trade, then Custody.</li>
+    <li><b>Turn ERP/accounting into a subscriber.</b> Point a derived double-entry projection at the <span class="mono">money.*</span> stream and expose it as an export adapter. The GL leaves the core for good.</li>
+    <li><b>Consolidate the brains.</b> Merge <span class="mono">BotBrain</span> / <span class="mono">AiBrain</span> / n8n into one planner whose only kernel interface is (read Twin, list capabilities, invoke capability). Now the AI is swappable by contract.</li>
+    <li><b>Retire screens to inspectors.</b> As capabilities cover each flow, the classic panel and desktop iframes become optional read views, then are deleted. The interface has become thin.</li>
+  </ol>
+
+  <div class="foot"><b>The one immutable line:</b> ShopBot is not an application and not an ERP — it is a <b>ledger of business reality</b> that a business talks to. Events are its memory, objects are its model of the world, capabilities are the only way to change it, the agent is how it thinks this year, and the interface is just how it listens. Build every feature toward this, and the model outlives every model.</div>
+
+</div>
+</body>
+</html>

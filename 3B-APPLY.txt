@@ -1,0 +1,52 @@
+TICKET 3B — PaymentService dual-writes through money.receive (preserving current behaviour)
+==========================================================================================
+
+WHAT THIS IS
+  The money-in EVENT now flows through the one money.receive capability (Ticket 3A), instead of the
+  ad-hoc Emit call. The authoritative OrderCost + CustomerPayment writes and every sync are UNCHANGED.
+  This is dual-write: table stays the source of truth (existing ADR-001); the capability owns the event.
+  Builds ON 3A — apply 3A first (or together).
+
+APPROVED DECISION — R3 is OBSERVE-ONLY in 3B (Option A)
+  The capability emits for EVERY payment (exact parity, zero behaviour change). If a settlement would
+  violate R3 (amount > balance), it is LOGGED as evidence but never blocks the payment or the event.
+  Fatal R3 arrives only when the capability becomes the front door in Ticket 3C.
+
+HOW PARITY IS GUARANTEED (behaviour is byte-for-byte the same)
+  • Same event name ('PaymentReceived'); payload is a superset of the old one (additive, safe).
+  • Same CUSTOMER subject: PaymentService resolves phone → CustomerProfile id and passes it, so the
+    Customer-360 timeline is unchanged. (This needed a 1-line additive tweak to MoneyReceived::fromInput
+    to honour an explicit subject — ReceiveMoney.php is UNCHANGED from your 3A review; 3A tests still pass.)
+  • Guarded: the emit can never throw into the payment path (ADR-012). If the capability doesn't emit
+    for any reason (R3 observed / error / schema), a fallback mirrors the exact prior emit — so no fact
+    is ever lost, and there is never a double-emit (fallback only fires when the capability didn't).
+  • Idempotent: the event carries the payment's idempotency_key (or its receipt_no), and record()
+    already short-circuits duplicate payments before emitting.
+
+FILES (2 changed, 1 new)
+  app/Kernel/Events/MoneyReceived.php               1-line additive: honour an explicit subject_type
+  app/Services/Money/PaymentService.php             the emit block (lines 121-127) becomes the dual-write
+  tests/Feature/Kernel/PaymentServiceDualWriteTest.php   parity + behaviour-preservation + idempotency
+
+APPLY
+  unzip into repo root (over a tree that already has 3A)
+
+VERIFY (in your env / CI)
+  php -l app/Services/Money/PaymentService.php app/Kernel/Events/MoneyReceived.php
+  php artisan test --filter=Kernel      # 3A + 3B kernel tests
+  php artisan test                      # full suite — must stay green (no regression)
+  Manual: record a payment → confirm exactly ONE PaymentReceived event with subject_type='customer'
+          AND the same OrderCost + CustomerPayment rows as before.
+
+NOTE ON VERIFICATION DONE HERE
+  php -l clean on all three files; reviewed against the real APIs. I could NOT run PHPUnit here (no DB
+  boot), so the green run happens in your CI. Backward-compat checked: the 3A event test still expects
+  'invoice' for invoice-only input (no explicit subject), which the additive change preserves.
+
+ROLLBACK
+  Revert the two changed files to their 3A state (git revert the 3B commit). The capability + its 3A
+  tests remain in place and harmless. No migration, no data change.
+
+NEXT (separate session)
+  3C: point StaffCashController at money.receive as the FRONT DOOR (fatal R3, "book excess as advance"),
+  prove parity against the dual-write stream, then DELETE the duplicate money-in path.

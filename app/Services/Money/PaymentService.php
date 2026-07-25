@@ -118,13 +118,61 @@ class PaymentService
             } catch (\Throwable $e) { \Log::warning('collect discount failed: ' . $e->getMessage()); }
         }
 
-        // BOS spine (Slice 2): record the fact for the customer timeline / Today / Insights. Guarded +
-        // never-throws inside Emit — the payment path is unaffected whether or not the spine exists.
-        \App\BOS\Emit::customerEvent($t->id, 'PaymentReceived', $d['phone'] ?? null, [
-            'receipt_no' => $result['receipt_no'] ?? null, 'amount' => (float) $d['amount'],
-            'currency' => $d['currency'], 'usd' => (float) $d['usd'], 'invoice_no' => $d['invoice_no'] ?? null,
-            'kind' => $d['kind'] ?? 'settlement',
-        ], ['actor' => ['type' => 'user', 'name' => (string) ($d['created_by'] ?? '')]]);
+        // BOS spine — Ticket 3B: the money-in fact now flows through the ONE money.receive capability
+        // (dual-write). The authoritative rows above are unchanged; only the EVENT moves. Guarded so an
+        // emit can never break the payment path (ADR-012). R3 is OBSERVE-ONLY here — a violation is
+        // logged as evidence but never blocks the payment or the event; the fact still lands (exact
+        // parity with the prior unconditional emit). Fatal R3 arrives at the front door in Ticket 3C.
+        //
+        // Resolve the SAME customer subject the prior Emit bridge used, so the Customer-360 timeline is
+        // byte-for-byte unchanged (transitional glue; subject resolution moves into the capability in 3C).
+        $subjectId = 0;
+        $digits = preg_replace('/[^0-9]/', '', (string) ($d['phone'] ?? ''));
+        if ($digits !== '') {
+            $subjectId = (int) (\App\Models\CustomerProfile::withoutGlobalScopes()
+                ->where('tenant_id', $t->id)->where('phone', $digits)->value('id') ?? 0);
+        }
+
+        $emitted = false;
+        try {
+            $res = (new \App\Kernel\Capabilities\Money\ReceiveMoney())->run([
+                'customer'        => $customer,
+                'phone'           => $d['phone'] ?? null,
+                'amount'          => (float) $d['amount'],
+                'currency'        => $d['currency'],
+                'usd'             => (float) $d['usd'],
+                'rate'            => (float) ($d['rate'] ?? 0),
+                'method'          => $d['method'] ?? null,
+                'reference'       => $d['reference'] ?? null,
+                'invoice_no'      => $d['invoice_no'] ?? null,
+                'order_no'        => $orderNo,
+                'kind'            => $d['kind'] ?? 'settlement',
+                'holder'          => $d['holder'] ?? null,
+                'created_by'      => $d['created_by'] ?? '',
+                'receipt_no'      => $result['receipt_no'] ?? null,
+                'tenant_id'       => $t->id,
+                'subject_type'    => 'customer',
+                'subject_id'      => $subjectId,
+                'idempotency_key' => $idem ?: ($result['receipt_no'] ?? null),
+            ]);
+            $emitted = ! empty($res['ok']);
+            if (! $emitted) {
+                \Log::warning('money.receive did not emit (3B schema): ' . implode('; ', $res['errors'] ?? []));
+            }
+        } catch (\App\BOS\Rules\RuleViolation $e) {
+            \Log::warning('money.receive R3 observed (3B dual-write, not enforced): ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            \Log::warning('money.receive emit error (3B, payment unaffected): ' . $e->getMessage());
+        }
+
+        if (! $emitted) {
+            // Parity fallback — mirror the prior unconditional, guarded emit so no fact is ever lost.
+            \App\BOS\Emit::customerEvent($t->id, 'PaymentReceived', $d['phone'] ?? null, [
+                'receipt_no' => $result['receipt_no'] ?? null, 'amount' => (float) $d['amount'],
+                'currency' => $d['currency'], 'usd' => (float) $d['usd'], 'invoice_no' => $d['invoice_no'] ?? null,
+                'kind' => $d['kind'] ?? 'settlement',
+            ], ['actor' => ['type' => 'user', 'name' => (string) ($d['created_by'] ?? '')]]);
+        }
 
         return $result;
     }

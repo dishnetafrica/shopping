@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ShopBot Execution &amp; Evidence System</title>
+<style>
+  :root{--brand:#16a34a;--ink:#15803d;--wash:#eafaf0;--line:#e5e7eb;--line2:#d1d5db;--ink0:#0f172a;--muted:#64748b;--danger:#b91c1c;--warn:#b45309;--info:#4f46e5;--paper:#fff;--bg:#f6f8f7}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:#111827;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;letter-spacing:-.011em;line-height:1.52}
+  .wrap{max-width:960px;margin:0 auto;padding:42px 30px 70px}
+  .kicker{color:var(--brand);font-weight:700;font-size:12px;letter-spacing:.09em;text-transform:uppercase}
+  h1{font-size:30px;margin:6px 0 4px;font-weight:800;letter-spacing:-.02em}
+  .v{display:inline-block;background:var(--ink0);color:#fff;font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 10px}
+  h2{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:800;margin:34px 0 10px;border-bottom:1px solid var(--line);padding-bottom:7px}
+  h2 b{color:var(--brand)}
+  p{margin:8px 0} .small{font-size:12.5px;color:var(--muted)}
+  .banner{border:1px solid var(--brand);border-radius:14px;background:linear-gradient(180deg,var(--wash),#fff);padding:15px 18px;margin:14px 0 2px;font-size:16px;font-weight:700;color:var(--ink)}
+  .banner span{display:block;font-weight:500;color:#334155;font-size:13px;margin-top:5px}
+  table{width:100%;border-collapse:collapse;margin:8px 0;font-size:12.7px;background:#fff;border:1px solid var(--line2);border-radius:12px;overflow:hidden}
+  th{background:var(--ink);color:#fff;text-align:left;padding:8px 11px;font-size:11px;letter-spacing:.03em}
+  td{padding:8px 11px;border-top:1px solid var(--line);vertical-align:top}
+  tr:nth-child(even) td{background:#f8fafc}
+  td b{color:#0f172a} .fal{color:var(--danger);font-weight:600}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:#0b3d2e;background:#eef5f1;padding:1px 5px;border-radius:5px}
+  .adr{border:1px solid var(--line2);border-radius:12px;background:#fff;overflow:hidden;margin:10px 0}
+  .adr .t{background:#0f172a;color:#fff;padding:9px 14px;font-weight:800;font-size:13.5px;display:flex;justify-content:space-between;align-items:center}
+  .adr .t .st{font-size:10.5px;font-weight:700;background:var(--warn);color:#fff;border-radius:999px;padding:2px 9px}
+  .adr .b{padding:12px 14px;font-size:13px}
+  .adr .b .row{margin:7px 0} .adr .b .k{font-weight:700;color:#0f172a}
+  .pending{color:var(--warn);font-weight:700}
+  ol.six{counter-reset:s;list-style:none;padding:0;margin:8px 0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  ol.six li{position:relative;padding:9px 12px 9px 40px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:13px}
+  ol.six li:before{counter-increment:s;content:counter(s);position:absolute;left:11px;top:9px;width:20px;height:20px;background:var(--brand);color:#fff;border-radius:50%;text-align:center;line-height:20px;font-size:11px;font-weight:800}
+  .board{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:8px 0}
+  .bcol{border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+  .bcol .h{padding:8px 11px;color:#fff;font-size:12px;font-weight:800;letter-spacing:.02em}
+  .bcol:nth-child(1) .h{background:#334155}.bcol:nth-child(2) .h{background:var(--info)}.bcol:nth-child(3) .h{background:var(--warn)}.bcol:nth-child(4) .h{background:var(--brand)}
+  .bcol .b{padding:9px 11px;font-size:12px;color:#475569}
+  .doneweek{border:1px solid var(--line);border-left:3px solid var(--brand);border-radius:10px;background:#fff;padding:11px 14px;margin-top:10px;font-size:13px}
+  .doneweek b{color:var(--ink)}
+  .mode{margin-top:26px;padding:13px 16px;border:1px dashed var(--line2);border-radius:12px;background:#fff;color:#334155;font-size:13.5px}
+  .mode b{color:#0f172a}
+  @media(max-width:720px){ol.six{grid-template-columns:1fr}.board{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kicker">ShopBot · From building documents to proving them</div>
+  <h1>Execution &amp; Evidence System</h1>
+  <div><span class="v">v1.0 — LIVING</span></div>
+
+  <div class="banner">Nothing enters the Constitution because it sounds elegant. It enters because reality proved it.
+    <span>Every design document to date is a hypothesis. This system is how each one earns — or loses — its place, against real payments, real tenants, and real replay.</span>
+  </div>
+
+  <!-- HYPOTHESES -->
+  <h2><b>1 ·</b> Hypothesis register — what we are actually testing</h2>
+  <table>
+    <tr><th style="width:22%">Hypothesis</th><th style="width:24%">How we measure it</th><th style="width:20%">Confirms</th><th>Falsifies → what we do</th></tr>
+    <tr><td><b>H1 · Users prefer chat/voice over forms</b></td><td>% of orders &amp; payments originating from WhatsApp/voice vs manual entry, 60 days post-launch</td><td>&gt; 80% from chat</td><td class="fal">&lt; 50% → the "interface is intent" premise weakens; keep forms first-class, revisit thin-UI</td></tr>
+    <tr><td><b>H2 · Trade is one object</b> <span class="small">(the claim I'd bet against)</span></td><td>Count special-case branches / schema exceptions inside the trade capabilities during weeks 7–8</td><td>lifecycle handled with ~0–1 exceptions per capability</td><td class="fal">exceptions pile up along buy vs sell, or quote vs invoice → split Trade into two objects; record in an ADR</td></tr>
+    <tr><td><b>H3 · Money should be event-sourced</b></td><td>Replay reproduces balances exactly · recovery drill · audit reconstruction · latency NFRs (§4)</td><td>replay = ledger, drill passes, NFRs met</td><td class="fal">replay drift or lag &gt; target → CQRS-lite: authoritative table + event log for audit only</td></tr>
+    <tr><td><b>H4 · One AI planner can act safely over the registry</b></td><td>In shadow mode: % of agent-proposed capability calls that are valid &amp; accepted vs rejected/invalid</td><td>high validity, safe refusals</td><td class="fal">frequent invalid plans → tighter planning guardrails, narrower autonomy</td></tr>
+    <tr><td><b>H5 · Projection lag fits real-time chat</b></td><td>p95 projection lag under production load</td><td>&lt; 1s</td><td class="fal">&gt; 1s → synchronous read-through for money/custody; async only for L3</td></tr>
+    <tr><td><b>H6 · Cold-start onboarding produces a usable catalogue</b></td><td>% of chat-mined catalogue an owner accepts without major edits</td><td>high acceptance</td><td class="fal">heavy manual correction → onboarding is assisted, not automatic</td></tr>
+  </table>
+
+  <!-- ADR -->
+  <h2><b>2 ·</b> Architecture Decision Records — one page per major decision</h2>
+  <p class="small">A living log. Two years from now, "why did we build it this way?" has a written answer. Template: <b>Decision · Context · Alternatives considered · Evidence · Tradeoffs · Rejected options · Status</b>. Status stays <span class="pending">PROPOSED</span> until evidence moves it to ACCEPTED.</p>
+  <div class="adr">
+    <div class="t"><span>ADR-001 — Money is event-sourced</span><span class="st">STATUS: PROPOSED</span></div>
+    <div class="b">
+      <div class="row"><span class="k">Context:</span> money-in has multiple write paths today and the due diligence found a double-record. Money's history, audit, and reversibility are the value.</div>
+      <div class="row"><span class="k">Alternatives:</span> (a) relational + audit table; (b) CQRS-lite — authoritative table + event log for audit only; (c) full event-sourced money (chosen).</div>
+      <div class="row"><span class="k">Why (c):</span> one guarded write path, append-only correction, exact rebuild, and a single source every projection and ERP export derives from.</div>
+      <div class="row"><span class="k">Tradeoffs:</span> read-lag, replay time grows with history, higher cognitive load — accepted only for L1 objects, never L2.</div>
+      <div class="row"><span class="k">Evidence:</span> <span class="pending">PENDING</span> — to be filled by the Week 3–5 replay-correctness, recovery-drill, and audit-reconstruction tests, plus the §4 latency measurements. Until then this decision is a hypothesis (see H3), not law.</div>
+    </div>
+  </div>
+  <p class="small">First ADRs to open as implementation begins: <b>ADR-002</b> Trade as one object (tied to H2) · <b>ADR-003</b> Hybrid kernel L1/L2/L3 boundary · <b>ADR-004</b> Single AI planner &amp; autonomy limits (H4) · <b>ADR-005</b> Projection sync vs async (H5).</p>
+
+  <!-- SIX QUESTIONS -->
+  <h2><b>3 ·</b> The six-question feature gate — answered before any code</h2>
+  <ol class="six">
+    <li>Which business effect?</li>
+    <li>Which capability owns it? <span class="small">(exactly one — Rule of One)</span></li>
+    <li>Which events are emitted?</li>
+    <li>Which projections change?</li>
+    <li>Which invariant is enforced?</li>
+    <li>How do we test replay?</li>
+  </ol>
+  <p class="small">If all six can't be answered, the feature isn't ready to build — it goes back to design, not into the sprint.</p>
+
+  <!-- PERFORMANCE -->
+  <h2><b>4 ·</b> Performance targets — non-functional requirements set <i>before</i> we build</h2>
+  <p class="small">Event sourcing changes operational characteristics; these targets are how we keep that a benefit, not a regression. A capability that can't meet its target is not done.</p>
+  <table>
+    <tr><th style="width:38%">Target</th><th>What it guards against</th></tr>
+    <tr><td><b>WhatsApp reply &lt; 2s</b> (intent → reply, p95)</td><td>the full agent + projection path being too slow to feel conversational</td></tr>
+    <tr><td><b>Payment recording &lt; 500ms</b></td><td>event-emit + synchronous money projection adding user-visible lag on the money path</td></tr>
+    <tr><td><b>Projection lag &lt; 1s</b> (p95)</td><td>async read-model staleness — the core risk of CQRS (see H5)</td></tr>
+    <tr><td><b>Twin assembly &lt; 1s</b></td><td>the agent's context read becoming the bottleneck</td></tr>
+    <tr><td><b>Event replay of one tenant &lt; 5 min</b></td><td>replay time growing unbounded with history — recovery must stay feasible</td></tr>
+    <tr><td><b>Cold start &lt; 30s</b></td><td>worker/container warmup as we move off the single-worker deployment</td></tr>
+  </table>
+
+  <!-- BOARD -->
+  <h2><b>5 ·</b> The project board — the only tracker from here</h2>
+  <p class="small">Freeze the design set. Track the work in four columns. Nothing else.</p>
+  <div class="board">
+    <div class="bcol"><div class="h">WEEK</div><div class="b">the one goal for the week (from the Blueprint's 16)</div></div>
+    <div class="bcol"><div class="h">EVIDENCE</div><div class="b">the metric captured — replay result, latency, % from chat, invariant pass</div></div>
+    <div class="bcol"><div class="h">DECISION</div><div class="b">what the evidence changed — a new/updated ADR, or "assumption held"</div></div>
+    <div class="bcol"><div class="h">IMPLEMENTED</div><div class="b">the working, shipped, user-visible feature</div></div>
+  </div>
+  <div class="doneweek"><b>Definition of a done week:</b> a working feature shipped · measurable evidence captured · at least one invariant test passing · an ADR updated if an assumption changed · and — per the covenant — the product more usable than the week before. If any is missing, the week isn't done.</div>
+
+  <div class="mode"><b>Operating mode:</b> the Due Diligence, Vision, Architecture, Constitution, Blueprint and Principles are frozen. This system is the living layer on top. Every conversation from here is <i>"we are implementing Week X — here is the evidence."</i> Architecture matures by surviving implementation, not by accumulating documents.</div>
+
+</div>
+</body>
+</html>

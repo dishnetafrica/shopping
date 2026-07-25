@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ShopBot Kernel Implementation Blueprint v1.0</title>
+<style>
+  :root{--brand:#16a34a;--ink:#15803d;--wash:#eafaf0;--line:#e5e7eb;--line2:#d1d5db;--ink0:#0f172a;--muted:#64748b;--danger:#b91c1c;--warn:#b45309;--info:#4f46e5;--paper:#fff;--bg:#f6f8f7;--code:#0b3d2e}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:#111827;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;letter-spacing:-.011em;line-height:1.56}
+  .wrap{max-width:1080px;margin:0 auto;padding:44px 30px 90px}
+  .kicker{color:var(--brand);font-weight:700;font-size:12.5px;letter-spacing:.08em;text-transform:uppercase}
+  h1{font-size:33px;margin:8px 0 6px;font-weight:800;letter-spacing:-.02em}
+  .v{display:inline-block;background:var(--ink0);color:#fff;font-size:12px;font-weight:700;border-radius:999px;padding:3px 11px}
+  .frozen{display:inline-block;background:#0369a1;color:#fff;font-size:12px;font-weight:700;border-radius:999px;padding:3px 11px;margin-left:6px}
+  .lede{font-size:17px;color:#334155;max-width:860px;margin:14px 0 4px}
+  .meta{color:var(--muted);font-size:13px;margin-top:10px}
+  h2{font-size:13px;letter-spacing:.09em;text-transform:uppercase;color:var(--brand);font-weight:800;margin:44px 0 4px}
+  h2 .p{color:var(--muted);margin-right:8px}
+  h2 + .sub{color:#334155;font-size:16px;font-weight:600;margin:0 0 14px}
+  h3{font-size:14.5px;font-weight:700;margin:20px 0 6px;color:#0f172a}
+  p{margin:8px 0} .small{font-size:12.5px;color:var(--muted)}
+  .toc{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 6px}
+  .toc a{font-size:12.5px;color:#1e293b;text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:5px 11px;background:#fff}
+  .toc a:hover{border-color:var(--brand);color:var(--ink)}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px;background:#fff;border:1px solid var(--line2);border-radius:12px;overflow:hidden}
+  th{background:var(--ink);color:#fff;text-align:left;padding:8px 11px;font-size:11.5px;letter-spacing:.03em}
+  td{padding:8px 11px;border-top:1px solid var(--line);vertical-align:top}
+  tr:nth-child(even) td{background:#f8fafc}
+  td b{color:#0f172a}
+  .mono,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;color:var(--code);background:#eef5f1;padding:1px 5px;border-radius:5px}
+  pre{background:#0b3d2e;color:#d1fae5;border-radius:12px;padding:14px 16px;overflow:auto;font-size:12.5px;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .rule1{border:1px solid var(--brand);border-radius:14px;background:linear-gradient(180deg,var(--wash),#fff);padding:16px 18px;margin:16px 0}
+  .rule1 b{color:var(--ink)}
+  .arrow{color:var(--muted)}
+  ul.clean{margin:8px 0;padding-left:20px} ul.clean li{margin:6px 0;font-size:13.5px}
+  .callout{border:1px solid var(--line);border-left:3px solid var(--info);border-radius:10px;background:#fff;padding:10px 13px;margin:11px 0;font-size:13.5px}
+  .callout.warn{border-left-color:var(--warn)}.callout.moat{border-left-color:var(--brand)}.callout.del{border-left-color:var(--danger)}
+  .wk{counter-reset:w;list-style:none;padding:0;margin:12px 0}
+  .wk li{position:relative;padding:11px 14px 11px 92px;border:1px solid var(--line);border-radius:10px;background:#fff;margin-bottom:8px;font-size:13.4px}
+  .wk li:before{content:attr(data-w);position:absolute;left:12px;top:11px;width:66px;background:var(--ink0);color:#fff;border-radius:7px;text-align:center;font-size:11px;font-weight:800;padding:3px 0}
+  .wk li.fix:before{background:var(--danger)} .wk li.plat:before{background:var(--info)}
+  .tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px;margin-left:6px}
+  .t-fix{background:#fee2e2;color:#b91c1c}.t-keep{background:var(--wash);color:var(--ink)}
+  .del{counter-reset:d;list-style:none;padding:0;margin:10px 0}
+  .del li{position:relative;padding:9px 12px 9px 40px;border:1px solid var(--line);border-left:3px solid var(--danger);border-radius:10px;background:#fff;margin-bottom:7px;font-size:13.3px}
+  .del li:before{counter-increment:d;content:counter(d);position:absolute;left:11px;top:9px;width:20px;height:20px;background:var(--danger);color:#fff;border-radius:50%;text-align:center;line-height:20px;font-size:11px;font-weight:800}
+  .foot{margin-top:42px;padding:18px 22px;border:1px solid var(--brand);border-radius:14px;background:linear-gradient(180deg,var(--wash),#fff);color:#14532d;font-size:14.5px}
+  .foot b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kicker">ShopBot · From architecture to execution</div>
+  <h1>Kernel Implementation Blueprint</h1>
+  <div><span class="v">v1.0 — EXECUTABLE</span><span class="frozen">Constitution I–IX: FROZEN</span></div>
+  <p class="lede">The Constitution is immutable and is not redesigned here. This document does one thing: turn Articles I–IX into engineering decisions against the <b>real repository</b> — every model, controller, table and file gets a destination. It is written to be handed to engineers and executed week by week.</p>
+  <div class="meta">Scope of the live repo mapped here: 112 models · ~119 tables · 77 controllers · 45 capabilities · 31 service namespaces. Nothing is left unmapped.</div>
+
+  <div class="rule1">
+    <div style="font-weight:800;font-size:15px;color:var(--ink)">The Rule of One <span class="small" style="font-weight:600">— the governing law of this migration (operationalizes Constitution Art. IV)</span></div>
+    <p style="margin:8px 0 10px">Every business effect has <b>exactly one owner</b>: one capability, emitting one canonical event, feeding one projection. Never again five code paths recording the same fact.</p>
+    <table>
+      <tr><th style="width:26%">Effect</th><th style="width:24%">The one capability</th><th style="width:24%">The one event</th><th>Kills these duplicate paths</th></tr>
+      <tr><td><b>Receive money</b></td><td><code>money.receive</code></td><td><code>money.received</code></td><td>StaffCashController · PaymentController · PaymentsManagerController · InvoiceController(pay) · cashbook receipt · Payment model</td></tr>
+      <tr><td><b>Spend money</b></td><td><code>money.spend</code></td><td><code>money.spent</code></td><td>ExpenseController · OrderCostController · SupplierPaymentService</td></tr>
+      <tr><td><b>Move money between people</b></td><td><code>money.transfer</code></td><td><code>money.transferred</code></td><td>TradeCashbookController(transfer)</td></tr>
+      <tr><td><b>Convert currency</b></td><td><code>money.convert</code></td><td><code>money.converted</code></td><td>TradeCashbookController(convert) · Fx ad-hoc writes</td></tr>
+      <tr><td><b>Place / progress a trade</b></td><td><code>trade.*</code> (quote·place·invoice·fulfil·settle)</td><td><code>trade.*</code></td><td>Order create · InvoiceController · QuotationController · OrderInvoiceController</td></tr>
+      <tr><td><b>Move stock / transfer custody</b></td><td><code>custody.transfer</code></td><td><code>custody.*</code> / <code>stock.moved</code></td><td>ShipmentController · ConsignmentController · StockMovement writes · DeliveryController</td></tr>
+    </table>
+  </div>
+
+  <div class="toc">
+    <a href="#p1">1 · Object mapping</a>
+    <a href="#p2">2 · Event mapping</a>
+    <a href="#p3">3 · Capability mapping</a>
+    <a href="#p4">4 · Migration order (weeks)</a>
+    <a href="#p5">5 · Delete map</a>
+    <a href="#p6">6 · Repository structure</a>
+    <a href="#p7">7 · Mandatory tests</a>
+  </div>
+
+  <!-- PART 1 -->
+  <h2 id="p1"><span class="p">Part 1</span>Object Mapping — all 112 models</h2>
+  <div class="sub">Every current model lands in exactly one destination: a core-object projection, a Twin/derived read-model, the AI layer, an adapter, kernel-authoritative, delete, or the quarantined vertical.</div>
+  <table>
+    <tr><th style="width:20%">Destination</th><th>Current models that project into it</th></tr>
+    <tr><td><b>Party</b> <span class="small">projection</span></td><td>Customer/CustomerProfile · Supplier · Partner · Rider (transporter role) · Lead (prospect role) · BusinessOpportunity · User (staff role — also kernel-authoritative for identity)</td></tr>
+    <tr><td><b>Item</b> <span class="small">projection</span></td><td>Product · ProductDefault · ProductAliasEntry · ProductWeightVariant · Category · ModifierGroup · ModifierOption · DailyMenu</td></tr>
+    <tr><td><b>Trade</b> <span class="small">projection</span></td><td>Order · OrderItem · Invoice · InvoiceItem · Quotation · QuotationItem · QuotationRevision · CreditNote · CreditNoteItem · ReturnRecord · TradeOrderItem · SourcingRequest (buy-side) · TradePurchaseTick</td></tr>
+    <tr><td><b>Money&nbsp;Movement</b> <span class="small">projection</span></td><td>OrderCost (the canonical cash journal → <code>money.*</code>) · CustomerPayment · Payment (legacy — consolidate) · PartnerCapital · ExpenseCategory (ref data)</td></tr>
+    <tr><td><b>Custody</b> <span class="small">projection</span></td><td>Shipment · ShipmentBox · ShipmentBoxScan · ShipmentEvent · ShipmentException · ShipmentOrder · ConsignmentStock · Delivery (fulfilment leg) · StockMovement (→ <code>stock.moved</code>)</td></tr>
+    <tr><td><b>Conversation</b> <span class="small">projection</span></td><td>Conversation · Message · MessageReceipt · CommMessage · CommEvent · CommCampaign · Campaign · CampaignMessage · OrderDraft · OrderDraftEvent</td></tr>
+    <tr><td><b>Task</b> <span class="small">projection</span></td><td>OrderTask · OrderTaskEvent · OpportunityTask · FollowupProposal</td></tr>
+    <tr><td><b>Place</b> <span class="small">reference</span></td><td>Branch · DeliveryZone</td></tr>
+    <tr><td><b>Twin / derived</b> <span class="small">read-models (rebuildable, never authoritative)</span></td><td>InventorySnapshot · OperationalState · OrderFlowMetric · ActivityFeedItem · ActivityReviewItem · KnowledgeMetric · GoLiveReport · DemandPlan · DemandPlanLine · SearchEvent · OfferEvent · BotMiss</td></tr>
+    <tr><td><b>AI / Knowledge</b> <span class="small">layer (agent memory + onboarding — the moat)</span></td><td>CompanyDna · CompanyMemory · EmployeeMemory · OwnerProfile · KnowledgeFact · KnowledgeEvent · KnowledgeAction · ResolutionClarification · DiscoveryProductCandidate · BusinessDiscovery · FieldValidation · ValidationRun · MerchantChangeRequest · DailyOffer</td></tr>
+    <tr><td><b>Adapters / config</b> <span class="small">(edges, not core)</span></td><td>WhatsappChannel · CommProvider · CommTemplate · CommSuppression · PushSubscription · OrderNotificationRecipient · OrderNotificationSend · MessageReceipt (delivery)</td></tr>
+    <tr><td><b>Kernel-authoritative</b> <span class="small">(stays a table of record)</span></td><td>Tenant · User (identity) · <code>bos_events</code> (the log itself)</td></tr>
+    <tr><td><b>DELETE / supersede</b></td><td>AuditLog (event log supersedes) · OwnerActivityLog (same) · ShadowDiff (migration-era tool) · LedgerAccount · LedgerJournal · LedgerLine (second ledger → derived GL export, not authoritative) · LedgerEntry (→ <code>money.*</code> source then retire)</td></tr>
+    <tr><td><b>Vertical — QUARANTINE</b> <span class="tag t-keep">feature-gated, not deleted</span></td><td>WwCustomer · WwException · WwIndent · WwIndentBlend · WwIndentQc · WwItem · WwMachine · WwMaintOrder · WwMaterial · WwPlanning · WwProductionEntry · WwSalesEvent · WwSalesOrder (Winworld MES — stays behind a flag, never enters the kernel)</td></tr>
+  </table>
+  <p class="small"><b>Which stay authoritative vs become projections:</b> only <code>Tenant</code>, <code>User</code>, and <code>bos_events</code> remain tables of record. Everything else in the core becomes a <i>projection rebuilt from events</i> — its table survives during migration as the write target that also emits events (dual-write), then becomes a pure read-model once events are authoritative.</p>
+
+  <!-- PART 2 -->
+  <h2 id="p2"><span class="p">Part 2</span>Event Mapping — every write emits canonical events</h2>
+  <div class="sub">Each current write service/operation is rewritten to emit one or more canonical events. Projections and the ledger derive from these; nothing writes an object directly.</div>
+  <table>
+    <tr><th style="width:34%">Current write operation</th><th>Canonical events it emits</th></tr>
+    <tr><td><code>PaymentService::record()</code></td><td><code>money.received</code> → (if invoice) <code>trade.settled</code> → party balance &amp; cash position <i>recomputed by projection</i></td></tr>
+    <tr><td><code>StaffCashController::receive()</code> <span class="tag t-fix">Rule of One</span></td><td><code>money.received</code> <i>(same event — folds into the one capability, no second path)</i></td></tr>
+    <tr><td><code>InvoiceService::issueForOrder()</code></td><td><code>trade.invoiced</code></td></tr>
+    <tr><td>Order placement (PanelApiController / SalesProcess)</td><td><code>trade.ordered</code> (+ <code>custody.committed</code>)</td></tr>
+    <tr><td>Quotation create / revise</td><td><code>trade.quoted</code> (revisions = new versioned events)</td></tr>
+    <tr><td><code>CreditNoteService</code></td><td><code>trade.returned</code> + <code>money.reversed</code></td></tr>
+    <tr><td>Expense / OrderCost spend</td><td><code>money.spent</code></td></tr>
+    <tr><td>TradeCashbook transfer / convert</td><td><code>money.transferred</code> / <code>money.converted</code> (rate stamped on the event)</td></tr>
+    <tr><td><code>StockMovement</code> write</td><td><code>stock.moved</code> (+ <code>custody.taken</code>/<code>handed_over</code>)</td></tr>
+    <tr><td>Shipment state machine transitions</td><td><code>custody.taken</code> · <code>custody.in_transit</code> · <code>custody.handed_over</code> · <code>custody.shortfall_found</code></td></tr>
+    <tr><td>Delivery complete</td><td><code>trade.fulfilled</code> + <code>custody.handed_over</code></td></tr>
+    <tr><td>TaskEngine (assign/complete)</td><td><code>task.raised</code> · <code>task.assigned</code> · <code>task.completed</code></td></tr>
+    <tr><td>Bot webhook / message in</td><td><code>conversation.message_in</code> → <code>conversation.intent_detected</code></td></tr>
+    <tr><td>Customer / Supplier / Partner writes</td><td><code>party.identified</code> · <code>party.role_observed</code> · <code>party.merged</code></td></tr>
+  </table>
+
+  <!-- PART 3 -->
+  <h2 id="p3"><span class="p">Part 3</span>Capability Mapping — controllers become capabilities</h2>
+  <div class="sub">Write-controllers collapse into a small set of capabilities (one owner per effect). Read-controllers become projections/Twin queries. The god-controller dissolves.</div>
+  <table>
+    <tr><th style="width:20%">Capability</th><th style="width:44%">Replaces these controllers / entry points</th><th>Owns</th></tr>
+    <tr><td><code>money.receive</code></td><td>StaffCashController · PaymentController · PaymentsManagerController · InvoiceController::pay · PanelApiController(payment methods)</td><td><code>money.received</code></td></tr>
+    <tr><td><code>money.spend</code></td><td>ExpenseController · OrderCostController · AccountingControlsController(spend)</td><td><code>money.spent</code></td></tr>
+    <tr><td><code>money.transfer</code> / <code>money.convert</code></td><td>TradeCashbookController · FxController · CashPositionController(write)</td><td><code>money.transferred</code>/<code>converted</code></td></tr>
+    <tr><td><code>trade.quote</code></td><td>QuotationReviseController · QuotationIntelController · QuotationPortalController(write)</td><td><code>trade.quoted</code></td></tr>
+    <tr><td><code>trade.place</code></td><td>PanelApiController(order create) · SalesProcess · BosRunController · OrderDraft→commit</td><td><code>trade.ordered</code></td></tr>
+    <tr><td><code>trade.invoice</code></td><td>InvoiceController · OrderInvoiceController · InvoiceReportController(issue)</td><td><code>trade.invoiced</code></td></tr>
+    <tr><td><code>trade.credit</code> / <code>trade.return</code></td><td>CreditNoteController</td><td><code>trade.returned</code></td></tr>
+    <tr><td><code>custody.transfer</code></td><td>ShipmentController · ShipmentTrackController(scan) · ConsignmentController · DeliveryController · BuyListController(receive)</td><td><code>custody.*</code></td></tr>
+    <tr><td><code>task.*</code></td><td>TaskApiController · FieldTaskController · TaskLinkController · JobsController · PendingController</td><td><code>task.*</code></td></tr>
+    <tr><td><code>party.*</code></td><td>CustomerController · SupplierController · PartnerController · BosCustomersController</td><td><code>party.*</code></td></tr>
+    <tr><td><code>item.*</code></td><td>PanelApiController(product/photos/import) · CategoryOrderController · RegisterTableController</td><td><code>item.*</code></td></tr>
+    <tr><td><b>Conversation adapter</b> (channel-in)</td><td>Bot/WebhookController · Api/BotBridgeController · Comms/* webhooks</td><td>emits <code>conversation.*</code></td></tr>
+    <tr><td><b>Projections / Twin — no capability</b></td><td>DashboardController · ReportController · NavController · BooksController · LedgerController · CashPositionController(read) · InvoiceReportController · SelfcheckController · StorefrontInsights · MorningBriefing · all *ListController screens</td><td>read-only views over projections</td></tr>
+  </table>
+  <div class="callout warn"><b>PanelApiController (7,580 lines / 173 methods) is dissolved, not refactored.</b> It is frozen on day one (no new methods, ever), and its methods are pulled out one effect at a time into the capabilities above. When the last method leaves, the file is deleted. The existing <code>CapabilityRegistry</code> + <code>CommandBus</code> + <code>AiPolicy</code> are the destination — they already exist.</div>
+  <div class="callout moat"><b>Winworld controllers</b> (9 of them) and the <b>Storefront/Transport</b> controllers are <i>not</i> mapped into the kernel — Winworld is quarantined behind its flag; Storefront/Transport become thin channel adapters (customer portal, tracking links) that read projections and emit <code>conversation.*</code>/<code>custody.*</code>.</div>
+
+  <!-- PART 4 -->
+  <h2 id="p4"><span class="p">Part 4</span>Migration Order — real weeks, not a roadmap</h2>
+  <div class="sub">Sixteen weeks. The first six are also the due-diligence money &amp; tenancy fire drill — the two efforts are the same work.</div>
+  <ol class="wk">
+    <li data-w="Week 1"><b>Freeze &amp; scaffold.</b> Tag Constitution v1.0 immutable. Create <code>app/Kernel/{Events,Objects,Capabilities,Projections,Twin,Rules,Registry}</code>. Stand up CI running the existing 132 test files. <b>Delete the 3 duplicate trees</b> (root <code>/Http</code>, root <code>/Services</code>, root <code>/seller.html</code>) — zero-risk, ends "fixed the wrong copy."</li>
+    <li data-w="Week 2"><b>Harden the event envelope.</b> Extend the existing <code>BOS/EventStore</code> with the Constitution envelope (versioned <code>type</code>, <code>prev_hash</code>, schema validation, provenance). Register the <code>money.received</code> schema. Freeze <code>PanelApiController</code>.</li>
+    <li data-w="Week 3" class="fix"><b>Build the one <code>money.receive</code> capability.</b> <code>PaymentService::record()</code> now emits <code>money.received</code> (dual-write: still writes the table, also appends the event). Seed invariants from the existing <code>BOS/Rules</code> (<code>PaymentNotExceedBalance</code>, <code>ReceiptRequiresPayment</code>).</li>
+    <li data-w="Week 4" class="fix"><b>Kill the second money path.</b> Route <code>StaffCashController</code>, <code>PaymentsManagerController</code> and invoice-pay through <code>money.receive</code>. Add the idempotency key on every money-in. <span class="tag t-fix">closes the DD Fatal double-record</span></li>
+    <li data-w="Week 5"><b>Cash projection + Twin cash surface.</b> Build the cash/Money projection purely from <code>money.*</code> events; flip cash-position &amp; P&amp;L reads to the projection. Prove sum(events) == projection.</li>
+    <li data-w="Week 6" class="fix"><b>Tenancy hardening.</b> Make <code>TenantContext</code> request/job-scoped; reset super-admin at job start/terminate; make <code>BelongsToTenant</code> throw on null-tenant writes; flip <code>perm_enforce</code> default-ON. <span class="tag t-fix">closes the DD tenant-leak</span></li>
+    <li data-w="Week 7"><b>Trade family — capabilities.</b> <code>trade.quote/place/invoice/fulfil/settle</code>; Order/Invoice/Quotation writes emit <code>trade.*</code> (dual-write).</li>
+    <li data-w="Week 8"><b>Trade projection.</b> Rebuild Order+Invoice+Quotation+CreditNote as one Trade read-model; flip trade screens to read it.</li>
+    <li data-w="Week 9"><b>Custody family.</b> Shipment state machine emits <code>custody.*</code>; <code>custody.transfer</code> capability owns all stock/box movement (absorbs StockMovement, Consignment, Delivery legs).</li>
+    <li data-w="Week 10"><b>Custody projection + Twin custody map.</b> Who holds what, on which leg, now — the differentiated surface. Add the box-conservation invariant test.</li>
+    <li data-w="Week 11"><b>Party + Item projections.</b> Unify Customer/Supplier/Staff/Rider/Partner → Party; Product/Alias/Variant/Category → Item. Roles become attributes.</li>
+    <li data-w="Week 12"><b>Conversation as first-class.</b> Bot webhook emits <code>conversation.*</code>; OrderDraft becomes Intent; a Trade can be born from a message end-to-end.</li>
+    <li data-w="Week 13" class="plat"><b>One brain.</b> Merge BotBrain/AiBrain/n8n into a single planner whose only kernel interface is (read Twin · list capabilities · invoke capability). AI is now swappable by contract.</li>
+    <li data-w="Week 14" class="plat"><b>ERP becomes an adapter.</b> A derived double-entry projection subscribes to <code>money.*</code>/<code>trade.*</code> and exports to QuickBooks/Odoo/CSV. Retire <code>ledger_accounts/journals/lines</code> as authoritative.</li>
+    <li data-w="Week 15"><b>Retire screens to inspectors.</b> As capabilities cover each flow, port the remaining <code>/panel/*</code> pages into native V3 read-views; begin deleting <code>seller.html</code> + the desktop iframes.</li>
+    <li data-w="Week 16" class="plat"><b>Carve &amp; scale.</b> Delete the last of <code>PanelApiController</code>; move to a worker pool (Horizon/Redis); commit <code>config/queue+cache+database</code> with a read-replica plan.</li>
+  </ol>
+
+  <!-- PART 5 -->
+  <h2 id="p5"><span class="p">Part 5</span>Delete Map — every file that leaves, in order</h2>
+  <ol class="del">
+    <li><b>Week 1 (zero-risk):</b> root <code>/Http</code> (2 files) · root <code>/Services</code> (1) · root <code>/seller.html</code> — duplicate live-code trees.</li>
+    <li><b>After week 4:</b> the second money-in code inside <code>StaffCashController</code>, <code>PaymentsManagerController</code>, and the ad-hoc cashbook receipt writes — folded into <code>money.receive</code>.</li>
+    <li><b>After week 8:</b> the legacy <code>Payment</code> model/table (superseded by Money Movement) · <code>AuditLog</code> + <code>OwnerActivityLog</code> (event log is the audit trail) · <code>ShadowDiff</code>.</li>
+    <li><b>After week 14:</b> <code>LedgerAccount</code> · <code>LedgerJournal</code> · <code>LedgerLine</code> · <code>LedgerEntry</code> as authoritative — the second ledger becomes a derived export only.</li>
+    <li><b>Weeks 15–16:</b> <code>resources/panel/seller.html</code> (5,493 lines) · the ~60 static <code>resources/panel/*.html</code> screens as V3 reaches parity · the V3 desktop <code>&lt;iframe&gt;</code> embeds · one of the two Filament panels.</li>
+    <li><b>Week 16:</b> <code>PanelApiController.php</code> (7,580 lines) — after its last method is carved out · <code>BOS/LegacyEventBridge</code> once events are authoritative.</li>
+    <li><b>Never deleted — quarantined:</b> <code>app/Services/Winworld</code> (16 files) · 9 Winworld controllers · 13 <code>Ww*</code> models · <code>ww_*</code> tables. Stays feature-gated; not part of the kernel, not integrated into it.</li>
+  </ol>
+
+  <!-- PART 6 -->
+  <h2 id="p6"><span class="p">Part 6</span>Repository Structure — after migration</h2>
+  <div class="sub">The shape the tree converges to. The core is the kernel; AI, channels, ERP and UI hang off the edges.</div>
+<pre>app/
+  Kernel/                      <span style="color:#94a3b8"># the immutable core — objects over events</span>
+    Events/                    <span style="color:#94a3b8"># envelope, versioned types + schemas, EventStore  (from BOS/)</span>
+    Objects/                   <span style="color:#94a3b8"># Party Item Trade MoneyMovement Custody Conversation Task Place</span>
+    Capabilities/              <span style="color:#94a3b8"># money/ trade/ custody/ party/ item/ task/  — ONE owner per effect</span>
+    Projections/               <span style="color:#94a3b8"># read models  (from BOS/Projections/)</span>
+    Twin/                      <span style="color:#94a3b8"># world-model assembly + predictions</span>
+    Rules/                     <span style="color:#94a3b8"># invariants  (from BOS/Rules/ — already exists)</span>
+    Registry/                  <span style="color:#94a3b8"># CapabilityRegistry + manifests  (already exists)</span>
+  Agent/                       <span style="color:#94a3b8"># one planner + AiPolicy autonomy  (replaceable)</span>
+  Adapters/
+    Channels/                  <span style="color:#94a3b8"># WhatsApp Voice Email SMS Push  (from Services/WhatsApp, Comms, Bot webhooks)</span>
+    Models/                    <span style="color:#94a3b8"># LLM providers  (swappable)</span>
+    Accounting/                <span style="color:#94a3b8"># QuickBooks / Odoo / CSV export  ← "ERP" lives here now</span>
+    Storefront/ Transport/     <span style="color:#94a3b8"># customer portal, tracking links</span>
+  Interface/                   <span style="color:#94a3b8"># V3 shell as a thin client + inspector views  (was 3 front-ends)</span>
+  Verticals/
+    Winworld/                  <span style="color:#94a3b8"># quarantined, feature-gated — never imported by Kernel</span>
+  Support/  Models/            <span style="color:#94a3b8"># Tenant + User stay authoritative; other models retire to projections</span></pre>
+  <p class="small"><b>Where today's namespaces go:</b> Services/{Money,Ledger,Finance,Invoicing} → Kernel/Capabilities + Projections · Services/{Bot,Crm,Knowledge,Relationship,Enrichment} → Agent + AI · Services/{WhatsApp,Comms,Push} → Adapters/Channels · Services/{Logistics,Delivery,Inventory,Procurement,Purchasing,Sales,Catalog(ue)} → Kernel/Capabilities · Services/{Winworld} → Verticals.</p>
+
+  <!-- PART 7 -->
+  <h2 id="p7"><span class="p">Part 7</span>Mandatory Tests — the new definition of green</h2>
+  <div class="sub">No capability ships without these. They are what makes an event-sourced money system trustworthy.</div>
+  <table>
+    <tr><th style="width:22%">Test class</th><th>Asserts</th></tr>
+    <tr><td><b>Event replay</b></td><td>Replaying the full log from zero reproduces every current projection byte-for-byte. The log is the truth.</td></tr>
+    <tr><td><b>Projection rebuild</b></td><td>Dropping and rebuilding any projection yields the identical state — projections hold no hidden state.</td></tr>
+    <tr><td><b>Capability invariants</b></td><td>Each capability refuses illegal input: credit exceeded, negative stock, unrated-currency FX, receipt without payment (seed from existing <code>BOS/Rules</code>).</td></tr>
+    <tr><td><b>Idempotency</b> <span class="tag t-fix">Rule of One</span></td><td>The same command key applied twice yields exactly one event and one state change — the offline-retry double-record can never recur.</td></tr>
+    <tr><td><b>Tenant isolation</b></td><td>No capability, projection or replay can read/write across tenants; super-admin is reset between jobs; null-tenant writes throw.</td></tr>
+    <tr><td><b>Money correctness</b></td><td>sum(<code>money.*</code>) == cash position; a reversal exactly offsets its original; no path records money-in except <code>money.receive</code>.</td></tr>
+    <tr><td><b>Custody conservation</b></td><td>boxes taken == boxes handed over + in-transit + shortfall, per leg — the cross-border invariant.</td></tr>
+    <tr><td><b>Agent safety</b></td><td>The agent cannot emit an event outside a capability; irreversible/over-threshold actions require a human even at <code>autonomy=auto</code>.</td></tr>
+  </table>
+
+  <div class="foot"><b>Execution stance:</b> the Constitution says what is true forever; this blueprint says what to do for sixteen weeks. Every ticket is now phrased as "which capability, which event, which projection" — and if a ticket can't be phrased that way, it isn't ready to build. The first four weeks pay for themselves twice: they are the migration's foundation <i>and</i> the due-diligence money-integrity fix. Start there.</div>
+
+</div>
+</body>
+</html>

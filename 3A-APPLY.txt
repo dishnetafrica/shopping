@@ -1,0 +1,47 @@
+TICKET 3A — money.receive: event contract + capability + tests (NO behavioural change)
+======================================================================================
+
+WHAT THIS IS
+  The first implementation step toward the frozen Blueprint's Week 3. It DEFINES the money-in
+  effect as a kernel capability and proves it in isolation. Nothing in production calls it yet, so
+  shipping it changes zero behaviour. Wiring PaymentService to it (dual-write) is ticket 3B;
+  migrating StaffCashController and deleting the duplicate path is ticket 3C.
+
+FILES (6 new — nothing existing is modified)
+  app/Kernel/Contracts/KernelCapability.php              the fine-grained capability contract
+  app/Kernel/Events/MoneyReceived.php                    the money.received event contract (schema + build)
+  app/Kernel/Capabilities/Money/ReceiveMoney.php         the money.receive capability (validate → enforce R3 → emit)
+  tests/Unit/Kernel/MoneyReceivedEventTest.php           schema / payload tests (pure)
+  tests/Feature/Kernel/ReceiveMoneyCapabilityTest.php    happy path, R3 rejection, malformed rejection
+  tests/Feature/Kernel/MoneyReceiveIdempotencyTest.php   same key retried → exactly one event
+
+DECISIONS (as approved)
+  1. Wire event name stays 'PaymentReceived' (what PaymentService already emits); 'money.received'
+     is its canonical alias. No working-code change.
+  2. New additive app/Kernel/ tree; app/BOS/ left in place. (Consolidating BOS→Kernel is a later ticket.)
+  3. Enforces R3 (settlement ≤ balance) only. R2 (ReceiptRequiresPayment) governs the separate
+     receipt-ISSUE effect and is NOT owned here — that is the Rule of One working as intended.
+
+APPLY
+  unzip into repo root (only adds the 6 files above + this note)
+
+VERIFY (in your env / CI — see note below)
+  php -l app/Kernel/Contracts/KernelCapability.php app/Kernel/Events/MoneyReceived.php \
+         app/Kernel/Capabilities/Money/ReceiveMoney.php
+  php artisan test --filter=Kernel                 # the 3 new test files
+  php artisan test                                 # full suite — must stay green (no regression)
+
+NOTE ON VERIFICATION DONE HERE
+  I php -l'd all 6 files (clean) and reviewed them against the real APIs (Bos::emit / Bos::enforce,
+  the R3 rule context, the Event model, RuleViolation, TenantContext). I could NOT run PHPUnit in my
+  environment (no DB / app boot), so the green run happens in your CI — which is exactly what Week 1
+  stood CI up for. One thing already caught and fixed here: the tests use Tenant::create([...]) (not
+  Tenant::factory(), which the repo has no factory for).
+
+ROLLBACK
+  Delete the 6 files. No migration, no wiring, no data written by any production path → instant,
+  total, zero blast radius.
+
+NEXT (do NOT bundle — separate sessions, one capability each)
+  3B: PaymentService dual-writes through money.receive, preserving current behaviour.
+  3C: StaffCashController migrates to money.receive; prove parity; delete the duplicate path.
