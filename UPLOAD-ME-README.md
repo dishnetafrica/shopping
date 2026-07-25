@@ -1,45 +1,26 @@
-# S1a · Product Specifications (Asset Lifecycle) — upload to GitHub
+# S1b · Specifications on the product page — upload to GitHub
 
-The first capability of the Asset Lifecycle extension. Product Specifications is built as a **core
-platform capability** (useful to any business), and the **solar preset** just seeds a starter
-catalogue. This drop is the tested foundation — data, service, API, and the solar seed. The on-screen
-display on product/quote/invoice, filtering in the product list UI, export, and the capability-manifest
-registration come in **S1b** (I want to study the V3 product screen and the workspace layer before
-touching them, so nothing working is edited blind).
+Builds on S1a. Your V3 product detail page now shows a product's specifications, and offers an
+"Edit specifications" action to set them right there — all through the product capability's payload,
+so there is **no change to the V3 front-end**.
 
 ## What to do
-Upload everything here to your repository, **keeping the folders** (`app/…`, `database/…`, `routes/…`,
-`tests/…`, `docs/…`). Nothing needs deleting.
+Upload these two files, keeping the folders:
+- `app/Http/…` → actually `app/Capability/Object/ProductCapability.php` (the product detail capability)
+- `tests/Feature/Kernel/ProductSpecWorkspaceTest.php` (the test)
+
+Nothing else changes. (S1a must already be uploaded — it is, since it went green.)
 
 ## How you'll know it worked
-On the **Actions** tab: **green ✓ "Money kernel (must pass)"**. The new spec tests live under
-`tests/…/Kernel/`, so they run inside that same green check. If it's red, send me a screenshot.
+- **Green ✓ "Money kernel (must pass)"** — the new S1b tests run inside that same check.
+- In the app: open any product in V3. If it has specs, you'll see them listed; use
+  **Edit specifications** to set/change them. Products with no specs look exactly as before.
 
-## What it does (verifiable by API today; UI comes in S1b)
-- Define a reusable spec catalogue (Wattage/W/number, Battery Chemistry/pick-list, IP Rating/text…).
-- Set spec values on any product; numbers are stored numerically so you can filter "≥ 400 W".
-- Filter products by spec (numeric range, exact match).
-- Seed the solar starter catalogue in one call (owner/manager only).
+## What's inside / safety
+- Only `ProductCapability::forId()` and `command()` are extended (additive): specs render via the
+  existing generic "answers" section and the edit uses the same command pattern as Edit/Archive.
+- No front-end file, no other capability, no document touched. Tenants without a spec catalogue are
+  unaffected. Rollback = revert this one file.
 
-Endpoints (all under `/papi`, owner/manager for writes):
-`GET/POST spec-definitions` · `POST spec-definitions/seed-solar` · `GET/PUT products/{id}/specs` ·
-`GET product-spec-filter`.
-
-## What's inside
-- `database/migrations/*spec_definitions*`, `*product_specs*` — two new tables (products table untouched).
-- `app/Models/SpecDefinition.php`, `ProductSpec.php` + a `specs()` relation added to `Product.php`.
-- `app/Services/Catalog/ProductSpecService.php` — the one reader/writer (define, set, read, filter).
-- `app/Http/Controllers/Panel/ProductSpecController.php` + routes.
-- `app/Support/Presets/SolarPreset.php` — the solar starter catalogue + seeder.
-- `docs/asset-lifecycle/DECISIONS.md` — the approved architecture decisions (from your review), so
-  every future session honours them.
-- `tests/…/Kernel/ProductSpec*` — pure coercion + full API tests.
-
-## Safety
-- Additive: two new tables + a read relation; no existing screen, product, quote or invoice changed.
-- Multi-tenant (global tenant scope) and permission-aware (writes are owner/manager).
-- Rollback: drop the two tables and remove these files — you're exactly where you are today.
-
-## Next (S1b)
-Show specs on the product page, quotation and invoice; filter in the product list; export; and register
-the capability in the workspace/module layer with its permission.
+## Next (S1c)
+Specs on quotations & invoices, product-list filter UI, and export.
