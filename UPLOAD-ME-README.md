@@ -1,26 +1,32 @@
-# S1c-1 · Spec-sheet export — upload to GitHub
+# S1c-2 · Filter products by spec + spec-sheet download button
 
-Adds a **separate** product specifications export (products × their spec values) as a CSV. It is kept
-apart from your round-trip catalogue CSV, so the export → edit → re-import flow is untouched.
+Builds on S1c-1. The V3 **Products** list now:
+- offers **filter dropdowns for your specs** (Wattage, Battery Chemistry, …) right beside the existing
+  Category/Status filters, and
+- has a **"Specifications (CSV)"** item in its Export / download menu (the S1c-1 export).
+
+All of it is delivered through the product-list payload — **no change to the V3 front-end**.
 
 ## What to do
-Upload these files, keeping the folders. (S1a + S1b already uploaded.)
+Upload these two files, keeping the folders. (S1a, S1b, S1c-1 already uploaded.)
 
-## How to use it
-Download URL (owner/manager): **`/api/v1/doc/spec-sheet`** — returns
-`Specifications-<Business>-<date>.csv`. One row per product, one column per spec (Wattage (W),
-Battery Chemistry, IP Rating, …). A download button in the product screen comes with S1c-2.
+## How it behaves
+- Spec values ride along as hidden row data, so filtering works with **no extra table columns**.
+- A spec filter only appears when it's actually useful (two or more different values among the shown
+  products) — so the toolbar never fills with empty dropdowns.
+- Only specs marked "filterable" are offered (all solar-seeded specs are, by default).
 
 ## How you'll know it worked
-Green ✓ "Money kernel (must pass)" — the export test runs inside that check.
+- Green ✓ "Money kernel (must pass)" — the new test runs inside that check.
+- In the app: open **Products**. With specs set, you'll see spec filter chips; the Export menu now
+  lists **Specifications (CSV)**.
 
 ## What's inside / safety
-- `CatalogExport.php` — new `specSheetCsv()` method (the existing catalogue CSV is unchanged).
-- `DocumentController.php` — new `specSheet()` download action (mirrors the products export).
-- `CapabilityServiceProvider.php` — one new route: `GET /api/v1/doc/spec-sheet`.
-- `tests/Feature/Kernel/ProductSpecExportTest.php` — proves columns + values export.
-- Additive only; nothing existing changed. Rollback = revert these files.
+- `ProductListCapability.php` — adds hidden spec cells + declares spec filters + one export item.
+  The existing columns, KPIs, category drill-through and other actions are unchanged.
+- `tests/Feature/Kernel/ProductSpecListFilterTest.php` — proves the filters, hidden cells, and export item.
+- Additive; a tenant with no specs sees the list exactly as before. Rollback = revert this one file.
 
 ## Next
-S1c-2 (filter products by spec in the list, + a download button for this export), then
-S1c-3 (specs on quotes & invoices via snapshot-at-creation).
+S1c-3 — specs on quotations & invoices via snapshot-at-creation (planned carefully; it edits document
+generation). That completes Product Specifications end to end.

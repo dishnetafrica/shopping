@@ -8,7 +8,9 @@ use App\Capability\Dto\WorkspacePayload;
 use App\Capability\Support\Money;
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\ProductSpec;
 use App\Services\Catalog\ImageUploadService;
+use App\Services\Catalog\ProductSpecService;
 use App\Services\Catalog\ProductWriteService;
 
 /**
@@ -43,6 +45,24 @@ final class ProductListCapability implements ProcessCapability
             $prodQ->whereRaw("LOWER(COALESCE(category,'')) = ?", [mb_strtolower($scope)]);
         }
         $products = $prodQ->orderBy('name')->limit(self::MAX_ROWS)->get();
+
+        // Asset Lifecycle · S1c-2 — spec values as HIDDEN, filterable row data (no extra columns).
+        // The SPA reads row[key] for a declared filter even when it is not a visible column, and hides
+        // any filter with fewer than two distinct values — so this adds spec-filter dropdowns with no
+        // front-end change and no table bloat. Only 'filterable' specs are offered.
+        $specDefs = ProductSpecService::forTenant($ctx->tenant)->definitions(true)
+            ->filter(fn ($d) => (bool) $d->filterable)->values();
+        $specVals = [];
+        if ($specDefs->isNotEmpty() && $products->isNotEmpty()) {
+            foreach (ProductSpec::where('tenant_id', $t)->whereIn('product_id', $products->pluck('id'))
+                        ->get(['product_id', 'spec_definition_id', 'value_text']) as $v) {
+                $specVals[(int) $v->product_id][(int) $v->spec_definition_id] = (string) $v->value_text;
+            }
+        }
+        $specFilters = $specDefs->map(fn ($d) => [
+            'key' => 'spec_' . $d->key, 'label' => $d->label . ($d->unit ? ' (' . $d->unit . ')' : ''),
+        ])->all();
+
         $rows = [];
         foreach ($products as $p) {
             $price = (float) $p->price;
@@ -63,7 +83,7 @@ final class ProductListCapability implements ProcessCapability
             $badge = $stock <= 0 ? 'danger' : ($low ? 'warn' : 'ok');
             $unit = (string) ($p->unit_label ?: 'units');
 
-            $rows[] = [
+            $row = [
                 'product'  => ['value' => (string) $p->name, 'sub' => (string) $p->sku, 'avatar' => true, 'image' => (string) ($p->image_url ?: '')],
                 'category' => ['value' => (string) ($p->category ?: '—'), 'badge' => 'default'],
                 'cost'     => ['value' => Money::fmt($cost, $cur), 'sort' => $cost],
@@ -73,6 +93,14 @@ final class ProductListCapability implements ProcessCapability
                 'status'   => ['value' => $status, 'badge' => $badge],
                 'link'     => '/api/v1/workspace/product/' . $p->id,
             ];
+            // hidden spec cells for filtering (not columns) — only populated specs are attached
+            foreach ($specDefs as $d) {
+                $val = $specVals[(int) $p->id][(int) $d->id] ?? null;
+                if ($val !== null && $val !== '') {
+                    $row['spec_' . $d->key] = ['value' => $val];
+                }
+            }
+            $rows[] = $row;
         }
 
         $columns = [
@@ -98,10 +126,10 @@ final class ProductListCapability implements ProcessCapability
                 ['key' => 'low', 'label' => 'Low stock', 'value' => $lowCount, 'tone' => $lowCount > 0 ? 'warn' : 'ok', 'foot' => 'at or below reorder point'],
                 ['key' => 'out', 'label' => 'Out of stock', 'value' => $outCount, 'tone' => $outCount > 0 ? 'danger' : 'ok', 'foot' => 'need reordering'],
             ])
-            ->table($columns, $rows, [
+            ->table($columns, $rows, array_merge([
                 ['key' => 'category', 'label' => 'Category'],
                 ['key' => 'status', 'label' => 'Status'],
-            ], [
+            ], $specFilters), [
                 'selectable' => true,
                 'bulk' => [
                     ['label' => 'Export CSV', 'method' => 'GET', 'endpoint' => '/papi/export/products?format=csv'],
@@ -126,6 +154,7 @@ final class ProductListCapability implements ProcessCapability
                     'body' => ['apply' => 1]],
                 ['key' => 'export_catalog', 'label' => 'Export / download', 'icon' => 'download', 'tone' => 'default', 'chooser' => [
                     ['icon' => 'doc', 'title' => 'Products CSV', 'sub' => 'edit in Excel', 'action' => ['href' => '/api/v1/doc/products-export?format=csv']],
+                    ['icon' => 'doc', 'title' => 'Specifications (CSV)', 'sub' => 'products × their specs', 'action' => ['href' => '/api/v1/doc/spec-sheet']],
                     ['icon' => 'download', 'title' => 'Catalogue ZIP (CSV + photos)', 'sub' => 'full backup · re-importable', 'tone' => 'move', 'action' => ['href' => '/api/v1/doc/products-export?format=zip']],
                     ['icon' => 'products', 'title' => 'Product photos (ZIP)', 'sub' => 'all images, named by product', 'action' => ['href' => '/api/v1/doc/products-export?format=photos']],
                 ]],
