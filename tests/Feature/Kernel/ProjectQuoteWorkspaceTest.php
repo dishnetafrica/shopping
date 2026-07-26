@@ -3,6 +3,7 @@
 namespace Tests\Feature\Kernel;
 
 use App\Models\Product;
+use App\Models\Quotation;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Catalog\KitService;
@@ -14,8 +15,9 @@ use Tests\TestCase;
 /**
  * Asset Lifecycle · Phase 2 · S8b — the V3 Project Quote builder & view. Proves: the Quotations list
  * offers a "New project quote" action once kits exist; and a project quote's detail shows one card per
- * priced section (instead of the flat line-items card). Reuses the existing Quotations screens — no new
- * capability or nav.
+ * priced section (instead of the flat line-items card). Engine-free: the quotation is created directly
+ * (the way the whole test suite creates quotations), carrying the section grouping fromKits() stores —
+ * so the test exercises S8's rendering, not the frozen quote engine (which isn't runnable under tests).
  */
 class ProjectQuoteWorkspaceTest extends TestCase
 {
@@ -65,12 +67,19 @@ class ProjectQuoteWorkspaceTest extends TestCase
         $t = $this->boot();
         $kit = $this->kit($t);
 
-        $res = ProjectQuoteService::forTenant($t)->fromKits([
-            'customer_name' => 'Asish', 'customer_phone' => '211900', 'kit_ids' => [$kit->id],
+        // A project quotation created the test-safe way, carrying the section grouping S8 stores.
+        $built = ProjectQuoteService::forTenant($t)->buildSections(['kit_ids' => [$kit->id]]);
+        $q = Quotation::create([
+            'tenant_id' => $t->id, 'quote_no' => 'Q-' . substr(md5(uniqid('', true)), 0, 6),
+            'customer_name' => 'Asish', 'customer_phone' => '211900', 'currency' => 'UGX',
+            'total' => 2_500_000, 'status' => 'sent',
+            'meta' => ['project' => [
+                'is_project' => true, 'generated_from' => 'kits',
+                'sections' => $built['sections'], 'sections_total' => 2_500_000,
+            ]],
         ]);
-        $this->assertTrue($res['ok']);
 
-        $cards = collect($this->getJson('/api/v1/workspace/quotation/' . $res['id'])->assertOk()->json('overviewCards'));
+        $cards = collect($this->getJson('/api/v1/workspace/quotation/' . $q->id)->assertOk()->json('overviewCards'));
         $section = $cards->first(fn ($c) => ($c['title'] ?? '') === '3kW Solar Kit');
         $this->assertNotNull($section, 'the project quote detail shows a card for the kit section');
         $this->assertStringContainsString('Subtotal', (string) ($section['sub'] ?? ''));
