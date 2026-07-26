@@ -360,6 +360,13 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::post('work-orders/{workOrder}/start',  [\App\Http\Controllers\Panel\WorkOrderController::class, 'start']);
         Route::post('work-orders/{workOrder}/complete', [\App\Http\Controllers\Panel\WorkOrderController::class, 'complete']);
         Route::post('work-orders/{workOrder}/cancel', [\App\Http\Controllers\Panel\WorkOrderController::class, 'cancel']);
+        // Maintenance / Service Plans (Asset Lifecycle · Phase 2 · S6) — recurring service
+        Route::get('maintenance-plans/due',           [\App\Http\Controllers\Panel\MaintenancePlanController::class, 'due']);
+        Route::get('maintenance-plans',               [\App\Http\Controllers\Panel\MaintenancePlanController::class, 'index']);
+        Route::post('maintenance-plans',              [\App\Http\Controllers\Panel\MaintenancePlanController::class, 'create']);
+        Route::get('maintenance-plans/{plan}',        [\App\Http\Controllers\Panel\MaintenancePlanController::class, 'show']);
+        Route::post('maintenance-plans/{plan}/log-visit', [\App\Http\Controllers\Panel\MaintenancePlanController::class, 'logVisit']);
+        Route::post('maintenance-plans/{plan}/{action}', [\App\Http\Controllers\Panel\MaintenancePlanController::class, 'transition'])->where('action', 'pause|resume|end');
         Route::get('riders',     [PanelApiController::class, 'riders']);
         Route::get('returns',    [PanelApiController::class, 'returns']);
         Route::get('today',      [PanelApiController::class, 'today']);   // Today / Needs-attention home screen

@@ -54,7 +54,7 @@ there is nothing to migrate — the legacy panel never had them.
 | Warranties (Phase 1) | ✅ | ✅ Done | product default terms + auto-activate on sale/install |
 | Kits / Bundles (Phase 1) | ✅ | ✅ Done | CSV-built; explode-on-sale draws down parts |
 | Jobs / Work Orders (Phase 2 · S5) | ✅ | ✅ Done | engine + API (S5a) + V3 screen in the sidebar under Operations (S5b) |
-| Service Visits (Phase 2 · S6) | ❌ | ❌ Not started | same Jobs engine, `type=service` |
+| Service Visits (Phase 2 · S6) | 🚧 | 🚧 Building | service jobs work via Jobs (type=service); recurring maintenance plans engine + API done (S6a); V3 screen (S6b) next |
 | Warranty Claims (Phase 2 · S7) | ❌ | ❌ Not started | open/approve/reject against a warranty |
 | Project Quotes (Phase 2 · S8) | ❌ | ❌ Not started | multi-section solar project quotes |
 
