@@ -40,7 +40,7 @@ This first pass is derived from two authoritative sources in the code: the `Clas
 | Team | ✅ | 🚧 | 🟡 Verify | staff routes to `settings`; confirm a first-class Team screen |
 | Roles / Permissions | ✅ | ❓ | ❌ Not started | no dedicated V3 home identified yet |
 | Billing | ✅ | ❌ | ❌ Not started | `/panel/billing` has no V3 redirect home yet |
-| Module Manager | ✅ | ❓ | ❌ Not started | `/panel/settings-manager`; no V3 home in the redirect map |
+| Module Manager | ✅ | ✅ | ✅ Done | V3 **Modules** screen (Settings group) — owner toggles feature modules; legacy `/panel/system` redirects to it |
 
 ## V3-native modules (born in V3 — no legacy panel equivalent)
 

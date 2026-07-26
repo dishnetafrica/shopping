@@ -48,7 +48,7 @@ class ClassicPanelRedirects
         '/panel/ads'              => 'ads',
         '/panel/setup'            => 'settings',
         '/panel/staff'            => 'settings',
-        '/panel/system'           => 'settings',
+        '/panel/system'           => 'modules',   // legacy Module Manager → V3 Modules (V3 migration)
         '/panel/consignment'      => 'consignments',
         '/panel/scheduled'        => 'scheduled',
         '/panel/guide'            => 'guide',

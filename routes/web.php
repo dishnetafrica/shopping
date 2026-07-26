@@ -377,6 +377,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         // Project Quotes (Asset Lifecycle · Phase 2 · S8) — sectioned quotes built from kits (frozen engine reused)
         Route::post('project-quotes/from-kits',       [\App\Http\Controllers\Panel\ProjectQuoteController::class, 'fromKits']);
         Route::get('project-quotes/{quotation}',      [\App\Http\Controllers\Panel\ProjectQuoteController::class, 'show']);
+        // Module Manager (V3 Migration — replaces legacy /panel/system); toggle is owner-only
+        Route::get('modules',                         [\App\Http\Controllers\Panel\ModuleController::class, 'index']);
+        Route::post('modules/toggle',                 [\App\Http\Controllers\Panel\ModuleController::class, 'toggle']);
         Route::get('riders',     [PanelApiController::class, 'riders']);
         Route::get('returns',    [PanelApiController::class, 'returns']);
         Route::get('today',      [PanelApiController::class, 'today']);   // Today / Needs-attention home screen

@@ -1,59 +1,67 @@
-# S8b — the Project Quote builder in V3 (Phase 2 complete)
+# Module Manager in V3 (legacy-panel migration)
 
-This makes project quotes clickable in CloudBSS V3 — and it's the **final piece of Phase 2**. There's
-no new screen to learn: it enhances your existing **Quotations** screen.
+This migrates the **Module Manager** to CloudBSS V3 — the screen where you turn a tenant's feature
+modules on or off. It's the first of the remaining legacy-panel gaps the tracker flagged.
 
-## What you can do from V3
+## What you get
 
-- On the **Quotations** screen, a **"New project quote"** button appears (once you have at least one
-  kit). Pick a system/kit and enter the customer — it builds a full sectioned quotation through the
-  normal quote engine (priced, numbered, PDF, WhatsApp — all as usual).
-- Open that quotation and instead of a flat line list you see **one card per section** (e.g. "3kW Solar
-  Kit") with each section's **subtotal**, then the grand total. Ordinary quotes are unchanged.
+A new **Modules** item in the V3 sidebar (under **Settings**). It lists every feature module — Sales,
+Purchases, Stock, Money, Reports, Messaging, Communication, Restaurant — with an **On/Off** status and a
+one-tap toggle. Turning a module off hides all its screens from the menu (for everyone) until it's
+turned back on; turning it on brings them back.
 
-No new sidebar item, no new capability — it rides on the Quotations screen you already have, so there's
-nothing extra to find.
+- It reuses the **existing** backend: the tenant's `settings.modules` map — the exact same setting the
+  menu and the API guards already read. No new data, no new concepts.
+- **Owner-only**: only an owner can flip a module (matches the existing modules.manage rule). Managers
+  and staff can view but not change.
+- Following the Migration Constitution, the legacy page **`/panel/system` now redirects to the V3
+  Modules screen** (for tenants with the `v3_redirects` flag on — the same phased switch used for the
+  other retired pages).
 
 ---
 
-## ⚠️ Upload S8a first
+## ⚠️ Prerequisite
 
-S8b is the UI on top of the **S8a** engine. Upload S8a and see it green before this. As a safety net,
-this zip re-includes the S8a engine (byte-identical), so nothing breaks if part of S8a didn't upload
-cleanly. (Also needs S4 kits, already in your repo.)
+This bundle ships the **cumulative** capability registry (`CoreCapabilityProvider.php`) and V3 shell
+(`shell.blade.php`), which include all the Phase 2 screens (Jobs, Maintenance, Warranty Claims). Make
+sure **S5b–S8b are already uploaded** (they are, if you've been uploading each drop in order) — this
+file supersedes them with the latest, so nothing is lost.
 
-## Files in this zip
+## Files in this zip (8)
 
-**S8b (the UI)**
+**New**
 
-- `app/Capability/Process/QuotationListCapability.php` *(replace)* — adds the "New project quote" action
-- `app/Capability/Object/QuotationCapability.php` *(replace)* — sectioned view on project quotes
-- `tests/Feature/Kernel/ProjectQuoteWorkspaceTest.php` *(new)* — proves the action + sectioned view
-- `docs/v3-migration/MIGRATION-TRACKER.md` *(replace)* — Project Quotes now ✅ Done
+- `app/Capability/Process/ModulesCapability.php` — the Modules screen
+- `app/Http/Controllers/Panel/ModuleController.php` — the owner-only toggle API
+- `tests/Feature/Kernel/ModulesWorkspaceTest.php` — proves it
 
-**S8a engine — safety net (identical to S8a)**
+**Replace**
 
-- `app/Services/Sales/ProjectQuoteService.php`, `app/Http/Controllers/Panel/ProjectQuoteController.php`,
-  and `routes/web.php`.
+- `app/Capability/Registry/CoreCapabilityProvider.php` — registers the Modules screen
+- `resources/views/shell.blade.php` — Modules in the V3 sidebar (Settings)
+- `app/Http/Middleware/ClassicPanelRedirects.php` — `/panel/system` → V3 Modules
+- `routes/web.php` — `/papi/modules` + `/papi/modules/toggle`
+- `docs/v3-migration/MIGRATION-TRACKER.md` — Module Manager now ✅ Done
 
 ---
 
 ## How to upload (GitHub, branch `main`)
 
-Drag the folders (`app`, `routes`, `tests`, `docs`) into your repo at the same paths. If the new test
-doesn't appear, use this link (paste contents, commit):
+Drag the folders (`app`, `resources`, `routes`, `tests`, `docs`) into your repo at the same paths. If a
+new file doesn't appear, use these links (paste contents, commit):
 
-- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/ProjectQuoteWorkspaceTest.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=app/Capability/Process/ModulesCapability.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=app/Http/Controllers/Panel/ModuleController.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/ModulesWorkspaceTest.php`
 
 ## How you know it worked
 
-Green ✓ on **"Money kernel (must pass)"**. Then open V3 → **Quotations** → click **New project quote**,
-pick a kit and a customer, and open the resulting quote to see the sections and subtotals.
+Green ✓ on **"Money kernel (must pass)"**. Then open V3 → **Settings → Modules**, and try toggling a
+module off and on (as the owner).
 
 ---
 
-## 🎉 Phase 2 is complete
+## What's next (remaining legacy-panel gaps)
 
-Installation Work Orders, Service Visits (+ recurring maintenance), Warranty Claims, and Project Quotes
-are all live in V3 — on top of Phase 1 (specs, serials, warranties, kits). The Asset Lifecycle
-extension now covers the full solar journey: quote → sell → install → warranty → service → claim.
+- **Billing** in V3 (plan/subscription — I'd plan-first, it touches payments).
+- **Roles & Permissions** in V3 (team access control — plan-first, high-stakes).
