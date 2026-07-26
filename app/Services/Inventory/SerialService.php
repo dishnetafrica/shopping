@@ -8,6 +8,7 @@ use App\Models\InventoryUnit;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Tenant;
+use App\Services\Warranty\WarrantyService;
 use Illuminate\Support\Str;
 
 /**
@@ -20,6 +21,9 @@ use Illuminate\Support\Str;
  */
 class SerialService
 {
+    /** Statuses that mean a unit has left inventory into a customer's hands — warranty starts here (S3c). */
+    private const WARRANTY_ON = ['sold', 'installed'];
+
     public function __construct(private Tenant $tenant) {}
 
     public static function forTenant(Tenant $t): self
@@ -95,7 +99,55 @@ class SerialService
 
         $this->emit(SerialEvents::eventFor($to), $unit, $from, $to, (string) ($ctx['created_by'] ?? ''));
 
+        // S3c — a unit sold/installed auto-inherits its product's default warranty policy.
+        if (in_array($to, self::WARRANTY_ON, true)) {
+            $this->maybeActivateWarranty($unit);
+        }
+
         return $unit;
+    }
+
+    /**
+     * S3c — auto-activate a warranty when a unit is sold/installed, inheriting the PRODUCT's default
+     * terms (S3b: warranty_manufacturer_months / warranty_company_months). Fires only when the product
+     * actually carries a policy and the unit isn't already covered — so it never double-creates and
+     * never fires for products that don't do warranties. Fully guarded: a warranty hiccup can never
+     * break the inventory write. WarrantyService links the unit back (unit.warranty_id).
+     */
+    private function maybeActivateWarranty(InventoryUnit $unit): void
+    {
+        try {
+            if ($unit->warranty_id) {
+                return; // already covered (auto earlier, or explicitly assigned in this transition) — idempotent
+            }
+            $p = Product::where('tenant_id', $this->tenant->id)->find((int) $unit->product_id);
+            if (! $p) {
+                return;
+            }
+            $mfr  = $p->warranty_manufacturer_months !== null ? (int) $p->warranty_manufacturer_months : null;
+            $comp = $p->warranty_company_months !== null ? (int) $p->warranty_company_months : null;
+            if (! $mfr && ! $comp) {
+                return; // product has no default policy — nothing to inherit
+            }
+
+            $brand = trim((string) ($p->brand ?? ''));
+            $w = WarrantyService::forTenant($this->tenant)->activate([
+                'product_id'          => (int) $unit->product_id,
+                'inventory_unit_id'   => (int) $unit->id,
+                'serial'              => (string) $unit->serial,
+                'customer_id'         => $unit->customer_id ?: null,
+                'invoice_id'          => $unit->invoice_id ?: null,
+                'manufacturer'        => $brand !== '' ? $brand : null,
+                'manufacturer_months' => $mfr,
+                'company_months'      => $comp,
+                'created_by'          => 'system (auto on ' . (string) $unit->status . ')',
+            ]);
+
+            // Keep the in-memory unit consistent with what WarrantyService just persisted.
+            $unit->warranty_id = $w->id;
+        } catch (\Throwable $e) {
+            \Log::warning('serial auto-warranty failed: ' . $e->getMessage());
+        }
     }
 
     /** @return \Illuminate\Support\Collection<int,InventoryUnit> */

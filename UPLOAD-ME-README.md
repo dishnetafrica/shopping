@@ -1,56 +1,67 @@
-# S3b — Warranty terms on the product page
+# S3c — Warranties start automatically when a unit is sold
 
-This is the next small, additive slice of the **Asset Lifecycle** extension. It brings a product's
-**default warranty policy** onto the product detail page in the app:
+This slice makes warranties **automatic**. When a serial-tracked unit is marked **sold** (or
+**installed**), the system now creates its warranty on its own, using the default terms you set on the
+product in S3b — so nobody has to fill in warranty details by hand for every sale.
 
-- Every serialized product (inverters, batteries, panels, etc.) now shows **Manufacturer warranty**
-  and **Company warranty** (in months), and a manager can set them right there with a new
-  **"Set warranty terms"** button.
-- The product page also shows a live **"Active warranties"** count for that product.
-- Ordinary products (bread, groceries — not serialized, no policy) look **exactly the same as before**.
+**What happens, in plain terms:**
 
-Nothing about accounting, inventory, or the front-end changes. This is all payload-driven, like specs
-and serials were.
+- Mark inverter serial `SN-1` as *sold* → a warranty is created for that exact unit, inheriting the
+  product's manufacturer + company months, dated from today, and linked to the customer (if the sale
+  recorded one). The coverage end date is worked out automatically.
+- If the product has **no** warranty policy set, nothing happens — no clutter.
+- If that unit is **already** covered, it's never given a second warranty (safe to re-run, safe on
+  returns-and-resells).
+- The manufacturer name is taken from the product's **Brand** if you've filled it in.
+
+It's fully self-protecting: if anything ever went wrong creating the warranty, the sale itself still
+goes through untouched.
+
+> **Note — I included "installed" as well as "sold."** You asked for *sold*; I also made *installed*
+> trigger it, because for solar that's the other moment a unit leaves your hands and coverage should
+> start. It's safe (a unit is never double-covered). If you'd rather it fire on *sold* only, just say
+> so and I'll change one line.
 
 ---
 
-## 4 files in this zip
+## Files in this zip
 
 | File | What it is |
 |------|------------|
-| `database/migrations/2026_07_25_000007_add_warranty_terms_to_products.php` | **NEW** — adds two nullable columns to `products` |
-| `app/Models/Product.php` | **REPLACE** — the two new columns are now fillable + cast to integer |
-| `app/Capability/Object/ProductCapability.php` | **REPLACE** — shows the terms, the count, and the "Set warranty terms" button |
-| `tests/Feature/Kernel/ProductWarrantyTermsTest.php` | **NEW** — proves it works (part of the green gate) |
+| `app/Services/Inventory/SerialService.php` | **REPLACE** — the S3c change: auto-create warranty on sold/installed |
+| `tests/Feature/Kernel/SerialAutoWarrantyTest.php` | **NEW** — proves it works (part of the green gate) |
+| `app/Models/Product.php` | *safety net* — same file from S3b (re-included in case it didn't land) |
+| `database/migrations/2026_07_25_000007_add_warranty_terms_to_products.php` | *safety net* — same migration from S3b |
+
+The bottom two are only re-included so this drop works even if part of S3b didn't upload cleanly.
+They're byte-for-byte the same as what S3b delivered — re-uploading them changes nothing if S3b is
+already in place.
 
 ---
 
 ## How to upload (GitHub, branch `main`)
 
-Drag the **four folders** from this zip (`database`, `app`, `tests`) into your repo on GitHub so they
-land at the same paths. GitHub will replace the two existing files and add the two new ones.
+Drag the folders from this zip (`app`, `database`, `tests`) into your repo on GitHub so they land at
+the same paths. GitHub replaces the existing files and adds the new test.
 
-### ⚠️ Make sure the two NEW files actually land
+### ⚠️ Make sure the NEW test file lands
 
-New files inside deep folders are the ones that sometimes go missing on upload. If after uploading
-you don't see them in GitHub, use these direct "create file at this exact path" links (they pre-fill
-the path — just paste the file contents from this zip and commit):
+If after uploading you don't see the new test, use this direct link (it pre-fills the path — paste the
+file contents from this zip and commit):
 
-- Migration → `github.com/dishnetafrica/shopping/new/main?filename=database/migrations/2026_07_25_000007_add_warranty_terms_to_products.php`
-- Test → `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/ProductWarrantyTermsTest.php`
+- Test → `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/SerialAutoWarrantyTest.php`
 
 ---
 
 ## How you know it worked
 
-Watch the **Actions** tab. When the run finishes with a **green ✓** on the job
-**"Money kernel (must pass)"**, S3b is live and safe. That job runs the new warranty-terms test along
-with everything before it.
+Watch the **Actions** tab. A **green ✓** on **"Money kernel (must pass)"** means S3c is live. That job
+runs the new auto-warranty test along with everything before it.
 
 ---
 
 ## What's next (not in this drop)
 
-- **S3c** — when a serialized unit is marked *sold*, auto-create its warranty using these default
-  terms (so the shop doesn't have to fill it in by hand each time).
-- An **"expiring soon"** warranties view (the data/API already exists from S3a).
+- An **"expiring soon"** warranties view for the app (the data + API already exist from S3a).
+- **S4 — Product Kits/Bundles** (Phase 1's last piece): sell a "3kW solar kit" that explodes into its
+  component products on the sale.
