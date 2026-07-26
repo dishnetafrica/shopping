@@ -206,6 +206,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
             Route::get('projects/{id}', [\App\Http\Controllers\Advisor\AdvisorController::class, 'showProject'])->where('id', '[0-9]+');
             Route::post('projects/{id}/proposal', [\App\Http\Controllers\Advisor\AdvisorController::class, 'generateProposal'])->where('id', '[0-9]+');
             Route::get('projects/{id}/proposal', [\App\Http\Controllers\Advisor\AdvisorController::class, 'getProposal'])->where('id', '[0-9]+');
+            Route::get('packages', [\App\Http\Controllers\Advisor\AdvisorController::class, 'packages']);
+            Route::post('packages/{key}/start', [\App\Http\Controllers\Advisor\AdvisorController::class, 'startPackage'])->where('key', '[a-z0-9_]+');
         });
         Route::prefix('task')->group(function () {
             Route::get('summary', [TaskApiController::class, 'summary']);

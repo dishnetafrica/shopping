@@ -134,4 +134,33 @@ class AdvisorController extends Controller
         }
         return response()->json(['ok' => true, 'proposal' => $project->proposal]);
     }
+
+    /** GET /papi/advisor/packages?profile=solar — the predefined solution packages (Slice 4). */
+    public function packages(Request $r)
+    {
+        if (! $this->gate($r)) {
+            return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        }
+        $t = $r->user()->tenant;
+        $svc = \App\Services\Advisor\PackageService::forTenant($t);
+        $profile = (string) $r->query('profile', 'solar');
+        return response()->json(['ok' => true, 'packages' => $svc->list($profile)]);
+    }
+
+    /** POST /papi/advisor/packages/{key}/start — create a sized project + proposal from a package. */
+    public function startPackage(Request $r, string $key)
+    {
+        if (! $this->gate($r)) {
+            return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        }
+        $t = $r->user()->tenant;
+        app(\App\Support\TenantContext::class)->set($t->id);
+        $svc = \App\Services\Advisor\PackageService::forTenant($t);
+        $profile = (string) $r->input('profile', 'solar');
+        if (! $svc->get($profile, $key)) {
+            return response()->json(['ok' => false, 'error' => 'unknown_package'], 404);
+        }
+        $res = $svc->start($profile, $key, (array) $r->input('overrides', []), (int) $r->user()->id);
+        return response()->json(['ok' => true, 'project_id' => $res['project']->id, 'proposal' => $res['proposal']]);
+    }
 }

@@ -1,65 +1,68 @@
-# Project Advisor — V3 Wizard + Proposal view (makes it clickable)
+# Project Advisor — Slice 4: Solution Packages
 
-This adds the on-screen experience for the Project Advisor: a **Solar Advisor** item in your V3 sidebar
-that runs the discovery wizard, shows a live sizing calculation, saves the project, and generates and
-displays a full proposal — all inside your existing V3 app.
+Ready-made solution packages so a salesperson can go from nothing to a sized project **and** a full
+proposal in one click, then tailor it.
 
-**This bundle includes the whole Advisor backend (Slices 1–3)**, so uploading just this makes everything
-work. It supersedes the earlier Advisor zips.
+**This bundle is the whole Project Advisor so far (Slices 1–4 + the V3 screen)** — upload just this; it
+supersedes the earlier Advisor zips.
 
-## What you'll see
+## What this slice adds
 
-Open V3 → **Sales → Solar Advisor**:
+Eight predefined packages, each carrying typical loads, a recommended equipment list, and marketing/sales
+copy:
 
-1. **Projects list** with a **New project** button.
-2. **Discovery wizard** — the questionnaire (customer, objective, location, existing power, consumption,
-   an appliance/loads table, backup hours, expansion, budget). Press **Calculate** to see the recommended
-   system (daily energy, PV array + panel count, battery bank, inverter) computed by the deterministic
-   engine, then **Save project**.
-3. **Project page** — the sizing summary, an **equipment editor** (name / qty / unit price), and
-   **Generate proposal**.
-4. **Proposal view** — the full eleven-section proposal rendered on screen (executive summary through
-   terms & conditions), with the commercial offer totals and specs pulled through.
+- **Home Starter** (Residential) · **Small Business** (Commercial) · **Solar Borehole Pump** (Water Pump)
+- **School Power** (School) · **Health Centre** (Government) · **Hotel Backup** (Hotel)
+- **Farm Power** (Farm) · **Solar Street Lighting** (Street Lighting)
 
-Every number comes from the server engine; the screen only collects answers and displays results.
+In V3 → **Sales → Solar Advisor → Start from a package**: pick a package and it (1) creates a project
+sized by the deterministic engine from that package's typical loads, and (2) generates the full
+eleven-section proposal from its equipment — instantly. You then edit anything (loads, equipment, prices)
+and regenerate.
 
-## How it fits your app (safe & additive)
+**Catalogue-aware pricing:** each equipment line has a SKU. If a product with that SKU exists in your
+catalogue, the proposal uses its **real price and Product Specifications**; otherwise the package's
+indicative price is used. So packages get more accurate as you load your catalogue — no re-typing.
 
-The Solar Advisor is a bespoke screen wired into the V3 shell exactly like your other custom screens
-(Storefront pages, Payments): forced into the sidebar and handled by `route()`. It does **not** change
-any existing screen or renderer — it only adds new functions and one nav entry.
+## Architecture
+
+Packages are data (`SolarPackages`) served through a generic `PackageService` (profile registry), reusing
+the existing sizing engine, discovery mapper, and proposal builder. Another industry adds its own package
+set and reuses everything else.
+
+## API (added under `/papi/advisor`)
+
+- `GET  /papi/advisor/packages?profile=solar` — the packages (with marketing + equipment).
+- `POST /papi/advisor/packages/{key}/start` — create a sized project + proposal from a package.
 
 ## Files in this zip
 
+**New (Slice 4)**
+
+- `app/Services/Advisor/SolarPackages.php` — the eight packages (loads, equipment, marketing).
+- `app/Services/Advisor/PackageService.php` — list/get/start + SKU→catalogue resolution.
+- `tests/Unit/Kernel/SolarPackagesTest.php`, `tests/Feature/Kernel/AdvisorPackageTest.php`.
+
 **Replace**
 
-- `resources/views/shell.blade.php` — adds the Solar Advisor nav item + wizard/proposal screens.
-- `routes/web.php` — the `papi/advisor` API routes (from the backend slices).
+- `resources/views/shell.blade.php` — adds the "Start from a package" picker.
+- `app/Http/Controllers/Advisor/AdvisorController.php` — packages + start endpoints.
+- `routes/web.php` — the two package routes.
 
-**New (the Advisor backend — Slices 1–3, included so this works standalone)**
-
-- `app/Services/Advisor/*.php` — sizing engine, discovery profile, advisor + proposal services, templates.
-- `app/Models/AdvisorProject.php`, `app/Http/Controllers/Advisor/AdvisorController.php`
-- `database/migrations/2026_07_26_000002_*`, `2026_07_26_000003_*`
-- `tests/Unit/Kernel/*` and `tests/Feature/Kernel/Advisor*` — engine, mapper, proposal, and API tests.
+**Carried (Slices 1–3 + earlier tests)** — the full advisor backend and V3 screen, so this works standalone.
 
 ## How to upload (GitHub, branch `main`)
 
 Drag the `app`, `database`, `resources`, `tests` folders and `routes/web.php` into your repo at the same
-paths. Migrations run automatically on deploy.
+paths.
 
 ## How you know it worked
 
-1. Green ✓ on **"Money kernel (must pass)"** (covers the backend + tests; the shell is a front-end file
-   and can't affect that check).
-2. By eye: open V3 → **Sales → Solar Advisor**, run **New project**, add a few appliances, **Calculate**,
-   **Save**, add an equipment line, and **Generate proposal** — the eleven-section proposal renders.
-
-Before shipping I syntax-checked the whole shell's JavaScript and ran the real proposal renderer against
-a full proposal (all eleven sections, correct money formatting, specs and warranty shown) — all passed.
+Green ✓ on **"Money kernel (must pass)"**. Then in V3 → Sales → Solar Advisor → **Start from a package**,
+pick e.g. **Home Starter** — it opens a sized project with a full proposal. (Before shipping I sized all
+eight packages through the real engine and syntax-checked the shell's JavaScript — all passed.)
 
 ## What's next
 
-Slice 4 — **Solution Packages** (Home Starter, Borehole, School, Hospital, Hotel, Farm, Street Lighting…)
-so the equipment list fills itself instead of typing it; then Slice 5, the **Knowledge Library**. A
-polished **PDF export** of the proposal is a later front-end step whenever you want it.
+Slice 5 — the **Knowledge Library** (FAQs, objection handling, WhatsApp-ready copy). A branded **PDF
+export** of the proposal remains a nice later add.

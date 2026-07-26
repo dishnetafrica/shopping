@@ -1665,7 +1665,7 @@ async function advisorHome(id){
   v.innerHTML='<div class="crumb">Solar Advisor</div>'+
     '<div class="rec-head"><div class="rec-av" style="background:#d97706">'+icon('advisor','ic-lg')+'</div>'+
     '<div class="idn"><h1>Solar Project Advisor</h1><div class="sub">Guide the customer from discovery to a sized, professional proposal.</div></div>'+
-    '<div class="acts inl" style="margin-left:auto"><button class="btn pri" onclick="advisorNew()">New project</button></div></div>'+
+    '<div class="acts inl" style="margin-left:auto"><button class="btn" onclick="advPackages()">Start from a package</button><button class="btn pri" onclick="advisorNew()">New project</button></div></div>'+
     '<div id="advList" class="card"><div class="b">Loading…</div></div>';
   var r=await getQuery('/papi/advisor/projects',{});
   var rows=(r&&r.projects)||[];
@@ -1685,6 +1685,37 @@ function advProjectRow(p){
     '<div class="sub mut">'+esc(bits.join(' · ')||'Not sized yet')+'</div></div></div>';
 }
 
+/* ---- Solution packages: pick a ready-made solution -> one-click sized project + proposal ---- */
+async function advPackages(){
+  document.getElementById('view').innerHTML=
+    '<div class="crumb" style="cursor:pointer" onclick="route(\'advisor\')">Solar Advisor</div>'+
+    '<div class="rec-head"><div class="idn"><h1>Start from a package</h1><div class="sub">Pick a ready-made solution — it pre-fills a sized project and a full proposal you can tailor.</div></div></div>'+
+    '<div id="advPkgs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">Loading…</div>';
+  var r=await getQuery('/papi/advisor/packages',{profile:'solar'});
+  var pkgs=(r&&r.packages)||[];
+  var el=document.getElementById('advPkgs'); if(!el) return;
+  el.innerHTML = pkgs.length ? pkgs.map(advPkgCard).join('') : '<div class="mut">No packages available.</div>';
+}
+function advPkgCard(p){
+  var m=p.marketing||{};
+  var points=(m.points||[]).map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('');
+  var n=(p.equipment||[]).length;
+  return '<div class="card"><div class="b">'+
+    '<div style="font-weight:700;font-size:15px">'+esc(p.name)+'</div>'+
+    '<div class="mut" style="font-size:12px;margin:2px 0 8px">'+esc(p.segment||'')+' · '+n+' items</div>'+
+    (m.tagline?'<div style="font-style:italic;margin-bottom:6px;color:var(--faint)">“'+esc(m.tagline)+'”</div>':'')+
+    (p.summary?'<div style="font-size:13px;line-height:1.5;margin-bottom:6px">'+esc(p.summary)+'</div>':'')+
+    (points?'<ul style="margin:0 0 10px;padding-left:18px;line-height:1.5;font-size:13px">'+points+'</ul>':'')+
+    '<button class="btn pri" onclick="advStartPackage(\''+esc(p.key)+'\',this)">Use this package</button>'+
+    '</div></div>';
+}
+async function advStartPackage(key,btn){
+  if(btn){ btn.disabled=true; btn.textContent='Building…'; }
+  var r=await post('/papi/advisor/packages/'+encodeURIComponent(key)+'/start',{profile:'solar',overrides:{}});
+  if(!r||!r.ok){ toast('Could not start from package', true); if(btn){ btn.disabled=false; btn.textContent='Use this package'; } return; }
+  toast('Project & proposal created');
+  route('advisor', r.project_id);
+}
 async function advLoadSchema(){ if(ADV.schema) return; var r=await getQuery('/papi/advisor/schema',{profile:'solar'}); ADV.schema=(r&&r.schema)||null; }
 
 async function advisorNew(){
