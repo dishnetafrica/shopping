@@ -11,6 +11,7 @@ use App\Capability\Shared\RecommendationCapability;
 use App\Capability\Support\Money;
 use App\Models\Product;
 use App\Models\Warranty;
+use App\Services\Catalog\KitService;
 use App\Services\Catalog\ProductSpecService;
 use App\Services\Catalog\ProductWriteService;
 use App\Services\Inventory\SerialService;
@@ -143,6 +144,28 @@ final class ProductCapability implements ObjectCapability
             ];
         }
 
+        // Asset Lifecycle · Kits (S4a) — a bundle product lists its parts on the detail page (read-only:
+        // kits are built by CSV import). Rendered via the generic 'answers'/'stats' sections, so the
+        // front-end needs no change. Empty for ordinary products, so their page is unchanged.
+        $kitAnswers = [];
+        $kitStats   = [];
+        if ((bool) $p->is_kit) {
+            $comps = KitService::forTenant($ctx->tenant)->componentsFor((int) $p->id);
+            foreach ($comps as $kc) {
+                $cp  = $kc->component;
+                $qty = (float) $kc->quantity;
+                $qtyLabel = rtrim(rtrim(number_format($qty, 3, '.', ''), '0'), '.');   // 8 not 8.000, 1.5 stays 1.5
+                $kitAnswers[] = [
+                    'q'     => (string) ($cp->name ?? ('#' . $kc->component_product_id)),
+                    'value' => '×' . $qtyLabel,
+                    'sub'   => 'Kit contents',
+                ];
+            }
+            if ($comps->count() > 0) {
+                $kitStats[] = ['key' => 'kit_parts', 'label' => 'Bundle of', 'value' => $comps->count() . ' parts', 'icon' => 'products', 'tone' => 'ok'];
+            }
+        }
+
         $fins = [
             new Financial('price', 'Price', round($price, 2), $cur),
             new Financial('cost', 'Cost', $p->cost_price === null ? '—' : round($cost, 2), $p->cost_price === null ? null : $cur),
@@ -164,8 +187,8 @@ final class ProductCapability implements ObjectCapability
             ->headline(number_format($stock) . ' ' . (string) ($p->unit_label ?: 'units'), 'on hand', $status === 'out' ? 'danger' : ($status === 'low' ? 'warn' : 'ok'))
             ->financials($fins)
             ->related($p->category ? $this->reco->topInCategory($ctx, (string) $p->category, 6, (int) $p->id) : [])
-            ->stats(array_merge($serialStats, $warrantyStats))
-            ->answers(array_merge($specAnswers, $warrantyAnswers))
+            ->stats(array_merge($serialStats, $warrantyStats, $kitStats))
+            ->answers(array_merge($specAnswers, $warrantyAnswers, $kitAnswers))
             ->actions(array_values(array_filter([$edit, $archive, $editSpecs, $addSerials, $editWarranty])))
             ->meta(['capability' => 'product', 'ttl' => 60, 'permissions' => ['menu:products']]);
     }

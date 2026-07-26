@@ -346,6 +346,11 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('warranties',                      [\App\Http\Controllers\Panel\WarrantyController::class, 'index']);
         Route::post('warranties',                     [\App\Http\Controllers\Panel\WarrantyController::class, 'activate']);
         Route::post('warranties/{warranty}/void',     [\App\Http\Controllers\Panel\WarrantyController::class, 'void']);
+        // Kits / Bundles (Asset Lifecycle · kits) — built by CSV import
+        Route::get('kits/template',                   [\App\Http\Controllers\Panel\KitController::class, 'template']);
+        Route::get('kits',                            [\App\Http\Controllers\Panel\KitController::class, 'index']);
+        Route::post('kits/import',                    [\App\Http\Controllers\Panel\KitController::class, 'import']);
+        Route::get('products/{product}/kit',          [\App\Http\Controllers\Panel\KitController::class, 'show']);
         Route::get('riders',     [PanelApiController::class, 'riders']);
         Route::get('returns',    [PanelApiController::class, 'returns']);
         Route::get('today',      [PanelApiController::class, 'today']);   // Today / Needs-attention home screen
