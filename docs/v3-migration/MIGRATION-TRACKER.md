@@ -55,7 +55,7 @@ there is nothing to migrate — the legacy panel never had them.
 | Kits / Bundles (Phase 1) | ✅ | ✅ Done | CSV-built; explode-on-sale draws down parts |
 | Jobs / Work Orders (Phase 2 · S5) | ✅ | ✅ Done | engine + API (S5a) + V3 screen in the sidebar under Operations (S5b) |
 | Service Visits (Phase 2 · S6) | ✅ | ✅ Done | service jobs via Jobs (type=service) + recurring maintenance plans with a V3 Maintenance screen (due list, log visit) under Operations |
-| Warranty Claims (Phase 2 · S7) | 🚧 | 🚧 Building | open/approve/reject/resolve against a warranty — engine + API done (S7a); V3 screen (S7b) next |
+| Warranty Claims (Phase 2 · S7) | ✅ | ✅ Done | open/approve/reject/resolve against a warranty, with a V3 Warranty Claims screen (status + coverage) under Operations |
 | Project Quotes (Phase 2 · S8) | ❌ | ❌ Not started | multi-section solar project quotes |
 
 ## Onboarding

@@ -21,6 +21,8 @@ use App\Capability\Object\WorkOrderCapability;
 use App\Capability\Process\WorkOrderListCapability;
 use App\Capability\Object\MaintenancePlanCapability;
 use App\Capability\Process\MaintenancePlanListCapability;
+use App\Capability\Object\WarrantyClaimCapability;
+use App\Capability\Process\WarrantyClaimListCapability;
 use App\Capability\Process\CampaignListCapability;
 use App\Capability\Process\CashbookCapability;
 use App\Capability\Process\CategoryListCapability;
@@ -138,6 +140,9 @@ final class CoreCapabilityProvider implements CapabilityProvider
         // S6b — recurring maintenance / service plans (V3-native). Same open-permission + /papi-gated pattern.
         $r->register(new MaintenancePlanListCapability(), new CapabilityManifest(key: 'maintenance', type: 'process', owner: 'operations', permission: '', api: '/api/v1/workspace/maintenance'));
         $r->register(new MaintenancePlanCapability(), new CapabilityManifest(key: 'maintenancePlan', type: 'object', owner: 'operations', permission: '', api: '/api/v1/workspace/maintenancePlan/{id}'));
+        // S7b — Warranty Claims (V3-native). Same open-permission + /papi-gated pattern.
+        $r->register(new WarrantyClaimListCapability(), new CapabilityManifest(key: 'claims', type: 'process', owner: 'operations', permission: '', api: '/api/v1/workspace/claims'));
+        $r->register(new WarrantyClaimCapability(), new CapabilityManifest(key: 'warrantyClaim', type: 'object', owner: 'operations', permission: '', api: '/api/v1/workspace/warrantyClaim/{id}'));
 
         // Help & Training — the UCRM-style built-in manual (open to every role).
         $r->register(new GuideCapability(), new CapabilityManifest(key: 'guide', type: 'process', owner: 'management', permission: '', api: '/api/v1/workspace/guide'));
