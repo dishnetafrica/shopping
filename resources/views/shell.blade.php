@@ -1632,6 +1632,7 @@ async function route(key, id){
   if(key==='wa-connect'){ document.getElementById('view').innerHTML='<div class="crumb">Connect WhatsApp</div><iframe title="Connect WhatsApp" src="/panel/setup" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='settings'){ if(isAppUI()){ bosSettings(); return; } document.getElementById('view').innerHTML='<iframe title="Settings" src="/panel/settings-manager" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='advisor'){ advisorHome(id); return; }
+  if(key==='advisor.kb'){ advKnowledge(); return; }
   if(key==='storefront.collections'){ sfCollectionsPage(); return; }
   if(key==='storefront.kits'){ sfKitsPage(); return; }
   if(key==='storefront.delivery'){ sfDeliveryPage(); return; }
@@ -1665,7 +1666,7 @@ async function advisorHome(id){
   v.innerHTML='<div class="crumb">Solar Advisor</div>'+
     '<div class="rec-head"><div class="rec-av" style="background:#d97706">'+icon('advisor','ic-lg')+'</div>'+
     '<div class="idn"><h1>Solar Project Advisor</h1><div class="sub">Guide the customer from discovery to a sized, professional proposal.</div></div>'+
-    '<div class="acts inl" style="margin-left:auto"><button class="btn" onclick="advPackages()">Start from a package</button><button class="btn pri" onclick="advisorNew()">New project</button></div></div>'+
+    '<div class="acts inl" style="margin-left:auto"><button class="btn" onclick="route(\'advisor.kb\')">Knowledge</button><button class="btn" onclick="advPackages()">Start from a package</button><button class="btn pri" onclick="advisorNew()">New project</button></div></div>'+
     '<div id="advList" class="card"><div class="b">Loading…</div></div>';
   var r=await getQuery('/papi/advisor/projects',{});
   var rows=(r&&r.projects)||[];
@@ -1715,6 +1716,56 @@ async function advStartPackage(key,btn){
   if(!r||!r.ok){ toast('Could not start from package', true); if(btn){ btn.disabled=false; btn.textContent='Use this package'; } return; }
   toast('Project & proposal created');
   route('advisor', r.project_id);
+}
+
+/* ---- Knowledge Library: FAQs, learning, objection handling, WhatsApp-ready replies ---- */
+var KB = { type:'', q:'' };
+var KB_TYPE_LABEL = { faq:'FAQ', education:'Learn', objection:'Objection', message:'WhatsApp' };
+function advKnowledge(){
+  setActive('advisor');
+  document.getElementById('view').innerHTML=
+    '<div class="crumb" style="cursor:pointer" onclick="route(\'advisor\')">Solar Advisor</div>'+
+    '<div class="rec-head"><div class="idn"><h1>Knowledge Library</h1><div class="sub">FAQs, talking points, objection handling and ready-to-send WhatsApp replies.</div></div></div>'+
+    '<div class="card"><div class="b">'+
+      '<input id="kbq" class="set-in" placeholder="Search the library…" oninput="kbSearch()" style="margin-bottom:8px">'+
+      '<div id="kbTabs" class="set-segs">'+kbTabs()+'</div>'+
+    '</div></div><div id="kbList">Loading…</div>';
+  kbLoad();
+}
+function kbTabs(){
+  return [['','All'],['faq','FAQs'],['education','Learn'],['objection','Objections'],['message','WhatsApp']]
+    .map(function(t){ return '<button class="set-seg'+(KB.type===t[0]?' on':'')+'" onclick="kbType(\''+t[0]+'\')">'+t[1]+'</button>'; }).join('');
+}
+function kbType(t){ KB.type=t; var el=document.getElementById('kbTabs'); if(el) el.innerHTML=kbTabs(); kbLoad(); }
+var _kbTimer=null;
+function kbSearch(){ KB.q=((document.getElementById('kbq')||{}).value)||''; clearTimeout(_kbTimer); _kbTimer=setTimeout(kbLoad,200); }
+async function kbLoad(){
+  var r=await getQuery('/papi/advisor/knowledge',{ profile:'solar', type:KB.type, q:KB.q });
+  var entries=(r&&r.entries)||[];
+  var el=document.getElementById('kbList'); if(!el) return;
+  el.innerHTML = entries.length ? entries.map(kbCard).join('')
+    : '<div class="card"><div class="b mut" style="text-align:center;padding:30px">No matches. Try another search.</div></div>';
+}
+function kbCard(e){
+  var badge='<span class="cnt" style="background:#eef0f3">'+esc(KB_TYPE_LABEL[e.type]||e.type)+'</span>';
+  var wa = e.whatsapp
+    ? '<div style="background:#f0f7f0;border:1px solid #cfe6cf;border-radius:10px;padding:10px;margin-top:8px;font-size:13px;line-height:1.5">'+esc(e.whatsapp)+
+      '<div style="margin-top:8px"><button class="btn" data-wa="'+esc(e.whatsapp)+'" onclick="kbCopy(this)">Copy message</button></div></div>'
+    : '';
+  return '<div class="card"><div class="b">'+
+    '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="font-weight:700">'+esc(e.title)+'</div>'+badge+'</div>'+
+    '<div class="mut" style="font-size:12px;margin:2px 0 6px">'+esc(e.category||'')+'</div>'+
+    '<div style="font-size:13px;line-height:1.55">'+esc(e.body||'')+'</div>'+wa+'</div></div>';
+}
+function kbCopy(btn){
+  var txt=btn.getAttribute('data-wa')||'';
+  try{ navigator.clipboard.writeText(txt).then(function(){ toast('Copied to clipboard'); }, function(){ kbFallbackCopy(txt); }); }
+  catch(e){ kbFallbackCopy(txt); }
+}
+function kbFallbackCopy(txt){
+  var t=document.createElement('textarea'); t.value=txt; document.body.appendChild(t); t.select();
+  try{ document.execCommand('copy'); toast('Copied to clipboard'); }catch(e){ toast('Copy failed', true); }
+  t.remove();
 }
 async function advLoadSchema(){ if(ADV.schema) return; var r=await getQuery('/papi/advisor/schema',{profile:'solar'}); ADV.schema=(r&&r.schema)||null; }
 

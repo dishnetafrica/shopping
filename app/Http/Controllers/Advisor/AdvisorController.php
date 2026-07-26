@@ -163,4 +163,23 @@ class AdvisorController extends Controller
         $res = $svc->start($profile, $key, (array) $r->input('overrides', []), (int) $r->user()->id);
         return response()->json(['ok' => true, 'project_id' => $res['project']->id, 'proposal' => $res['proposal']]);
     }
+
+    /** GET /papi/advisor/knowledge?profile=solar&type=&category=&q= — the knowledge library (Slice 5). */
+    public function knowledge(Request $r)
+    {
+        if (! $this->gate($r)) {
+            return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        }
+        $lib = new \App\Services\Advisor\KnowledgeLibrary();
+        $profile = (string) $r->query('profile', 'solar');
+        $entries = $lib->search($profile, [
+            'type'     => (string) $r->query('type', ''),
+            'category' => (string) $r->query('category', ''),
+            'q'        => (string) $r->query('q', ''),
+        ]);
+        return response()->json([
+            'ok' => true, 'entries' => $entries,
+            'categories' => $lib->categories($profile), 'types' => \App\Services\Advisor\SolarKnowledge::TYPES,
+        ]);
+    }
 }
