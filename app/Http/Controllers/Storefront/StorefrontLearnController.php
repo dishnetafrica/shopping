@@ -110,6 +110,17 @@ class StorefrontLearnController extends Controller
         return $this->page($t, $a['title'] . ' — ' . $t->name, (string) $a['meta'], $r->url(), $inner, $extra);
     }
 
+    /** GET /{shop}/how — the animated "How Solar Works" + comparisons page. */
+    public function how(Request $r, ?string $shop = null)
+    {
+        $t = $this->shop($shop);
+        $path = resource_path('storefront/how.html');
+        $html = is_file($path) ? (string) file_get_contents($path) : '<h1>Unavailable</h1>';
+        $html = str_replace(['__SHOP_NAME__', '__BASE__', '__CANON__'], [e((string) $t->name), e($this->base($t)), e($r->url())], $html);
+        $html = str_replace('<title>How Solar Works</title>', '<title>How Solar Works — ' . e((string) $t->name) . '</title>', $html);
+        return response($html, 200)->header('Content-Type', 'text/html; charset=utf-8')->header('Cache-Control', 'no-store');
+    }
+
     /** Shared server-rendered shell with SEO head + branding. */
     private function page(Tenant $t, string $title, string $metaDesc, string $canonical, string $inner, string $extraHead = '')
     {
@@ -122,38 +133,47 @@ class StorefrontLearnController extends Controller
             . '<link rel="canonical" href="' . e($canonical) . '">'
             . '<meta property="og:site_name" content="' . $brand . '">'
             . $extraHead
+            . '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+            . '<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">'
             . '<style>'
-            . ':root{--amber:#f59e0b;--amber-d:#d97706;--ink:#1a1a1a;--mut:#6b7280;--line:#ececec;--bg:#fbfaf8}'
-            . '*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6}'
-            . '.wrap{max-width:960px;margin:0 auto;padding:0 18px}'
-            . '.top{background:#fff;border-bottom:1px solid var(--line)}.top .in{max-width:960px;margin:0 auto;padding:12px 18px;display:flex;align-items:center;gap:14px}'
-            . '.top .bn{font-weight:800}.top a{color:var(--ink);text-decoration:none;font-size:14px}.top .sp{margin-left:auto}'
-            . '.top .go{background:var(--amber-d);color:#fff;padding:8px 14px;border-radius:10px;font-weight:700}'
-            . '.hero{background:linear-gradient(135deg,#fff7ed,#fde68a);text-align:center;padding:50px 18px}'
-            . '.hero h1{font-size:32px;margin:0 0 10px;letter-spacing:-.02em}.hero p{color:#7c5a1a;max-width:560px;margin:0 auto 20px;font-size:17px}'
-            . '.btn{display:inline-block;border:0;border-radius:12px;padding:13px 22px;font-weight:700;text-decoration:none;cursor:pointer}'
-            . '.btn.pri{background:var(--amber-d);color:#fff;box-shadow:0 4px 14px rgba(217,119,6,.3)}'
-            . '.cat{font-size:20px;margin:28px 0 12px}'
-            . '.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}'
-            . '.card{display:block;background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;text-decoration:none;color:inherit;transition:.15s}'
-            . '.card:hover{border-color:#fcd34d;transform:translateY(-2px)}'
-            . '.card .ct{font-weight:700;margin-bottom:4px}.card .cx{font-size:13.5px;color:var(--mut);margin-bottom:8px}.card .cm{font-size:12px;color:var(--amber-d);font-weight:700}'
-            . '.faqs details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:2px 16px;margin-bottom:8px}'
-            . '.faqs summary{cursor:pointer;font-weight:600;padding:12px 0}.faqs .fa{color:var(--mut);padding-bottom:12px}'
-            . '.article{max-width:720px}.article h1{font-size:30px;line-height:1.2;margin:6px 0 14px;letter-spacing:-.02em}'
-            . '.article .acat{color:var(--amber-d);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.05em;margin-top:22px}'
-            . '.article .body h2{font-size:20px;margin:22px 0 8px}.article .body p,.article .body li{font-size:16px}.article .body ul{padding-left:20px}'
-            . '.back{display:inline-block;margin-top:18px;color:var(--amber-d);text-decoration:none;font-weight:700;font-size:14px}'
-            . '.cta{display:flex;flex-wrap:wrap;align-items:center;gap:14px;background:linear-gradient(135deg,#1f2937,#111827);color:#fff;border-radius:16px;padding:22px;margin:28px 0}'
-            . '.cta .btn{margin-left:auto}.cta .mut{color:#cbd5e1;font-size:13px}.mut{color:var(--mut)}'
-            . '.foot{text-align:center;color:var(--mut);font-size:12px;padding:30px 0 40px}'
-            . '@media(max-width:600px){.hero h1{font-size:26px}.cta .btn{margin-left:0;width:100%;text-align:center}}'
+            . ':root{--green:#1cb22a;--green-d:#159021;--green-l:#eaf8ec;--yellow:#dad674;--dark:#252525;--ink:#252525;--mut:#6d7278;--line:#e7e7e7;--bg:#ffffff;--soft:#f6f7f5}'
+            . '*{box-sizing:border-box}body{margin:0;font-family:\'Roboto\',-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6}'
+            . 'h1,h2,h3,.cat,.hero h1,.card .ct{font-family:\'Montserrat\',sans-serif}'
+            . '.wrap{max-width:1000px;margin:0 auto;padding:0 20px}'
+            . '.top{background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:40}.top .in{max-width:1000px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:18px}'
+            . '.top .bn{font-family:\'Montserrat\',sans-serif;font-weight:800;font-size:19px}.top .bn .dot{color:var(--green)}.top a{color:#444;text-decoration:none;font-size:14px;font-weight:600}.top a:hover{color:var(--green)}.top .sp{margin-left:auto}'
+            . '.top .go{background:var(--green);color:#fff;padding:9px 16px;border-radius:8px;font-weight:700}'
+            . '.hero{position:relative;color:#fff;text-align:center;padding:60px 18px;background:linear-gradient(180deg,rgba(37,37,37,.6),rgba(37,37,37,.72)),url(\'/img/solar/hero.jpg\') center/cover no-repeat,linear-gradient(135deg,#1cb22a,#0f7a1c)}'
+            . '.hero h1{font-size:38px;margin:0 0 10px;letter-spacing:-.02em;font-weight:800}.hero p{color:rgba(255,255,255,.9);max-width:580px;margin:0 auto 22px;font-size:18px}'
+            . '.btn{display:inline-block;border:0;border-radius:8px;padding:14px 26px;font-weight:700;text-decoration:none;cursor:pointer;font-family:\'Montserrat\',sans-serif}'
+            . '.btn.pri{background:var(--green);color:#fff;box-shadow:0 8px 22px rgba(28,178,42,.3)}.btn.pri:hover{background:var(--green-d)}'
+            . '.cat{font-size:22px;margin:34px 0 14px;font-weight:800}'
+            . '.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}'
+            . '.card{display:block;background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;text-decoration:none;color:inherit;transition:.15s}'
+            . '.card:hover{border-color:var(--green);transform:translateY(-3px);box-shadow:0 10px 24px rgba(0,0,0,.06)}'
+            . '.card .ct{font-weight:700;margin-bottom:5px;font-size:16px}.card .cx{font-size:13.5px;color:var(--mut);margin-bottom:10px}.card .cm{font-size:12px;color:var(--green-d);font-weight:700}'
+            . '.faqs details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:2px 18px;margin-bottom:8px}'
+            . '.faqs summary{cursor:pointer;font-weight:700;padding:14px 0;font-family:\'Montserrat\',sans-serif}.faqs .fa{color:var(--mut);padding-bottom:14px}'
+            . '.article{max-width:740px}.article h1{font-size:34px;line-height:1.15;margin:8px 0 16px;letter-spacing:-.02em;font-weight:800}'
+            . '.article .acat{color:var(--green);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.08em;margin-top:24px}'
+            . '.article .body h2{font-size:22px;margin:26px 0 10px}.article .body p,.article .body li{font-size:16px}.article .body ul{padding-left:20px}'
+            . '.back{display:inline-block;margin-top:20px;color:var(--green-d);text-decoration:none;font-weight:700;font-size:14px}'
+            . '.cta{display:flex;flex-wrap:wrap;align-items:center;gap:16px;background:var(--dark);color:#fff;border-radius:16px;padding:26px;margin:32px 0}'
+            . '.cta .btn{margin-left:auto}.cta .mut{color:#c9cdc9;font-size:14px}.cta b{font-family:\'Montserrat\',sans-serif;font-size:18px}.mut{color:var(--mut)}'
+            . '.footband{background:var(--dark);color:#cfd3cf}.footband .in{max-width:1000px;margin:0 auto;padding:34px 20px;display:flex;flex-wrap:wrap;gap:24px;align-items:center}'
+            . '.footband .bn{font-family:\'Montserrat\',sans-serif;font-weight:800;font-size:20px;color:#fff}.footband .bn .dot{color:var(--green)}'
+            . '.footband .lk{display:flex;gap:20px;margin-left:auto;flex-wrap:wrap}.footband .lk a{color:#cfd3cf;text-decoration:none;font-size:14px;font-weight:600}.footband .lk a:hover{color:#fff}'
+            . '.foot{text-align:center;color:#8b908b;font-size:12px;padding:16px 0 30px;background:var(--dark)}'
+            . '@media(max-width:600px){.hero h1{font-size:28px}.cta .btn{margin-left:0;width:100%;text-align:center}.footband .lk{margin-left:0}}'
             . '</style></head><body>'
-            . '<div class="top"><div class="in"><span class="bn">' . $brand . '</span>'
+            . '<div class="top"><div class="in"><span class="bn">' . $brand . '<span class="dot">.</span></span>'
             . '<a href="' . e($base . '/learn') . '">Learn</a>'
+            . '<a href="' . e($base . '/how') . '">How it works</a>'
             . '<span class="sp"></span><a class="go" href="' . e($base . '/solar') . '">Start assessment →</a></div></div>'
             . $inner
-            . '<div class="foot">' . $brand . ' — clean, reliable solar power.</div>'
+            . '<div class="footband"><div class="in"><span class="bn">' . $brand . '<span class="dot">.</span></span>'
+            . '<div class="lk"><a href="' . e($base . '/learn') . '">Learn</a><a href="' . e($base . '/how') . '">How solar works</a><a href="' . e($base . '/solar') . '">Start assessment</a></div></div></div>'
+            . '<div class="foot">&copy; ' . $brand . ' — clean, reliable solar power.</div>'
             . '</body></html>';
 
         return response($html, 200)->header('Content-Type', 'text/html; charset=utf-8');

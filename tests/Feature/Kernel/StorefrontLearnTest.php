@@ -57,4 +57,17 @@ class StorefrontLearnTest extends TestCase
     {
         $this->get('/no-such-shop-xyz/learn')->assertStatus(404);
     }
+
+    public function test_how_it_works_page_renders(): void
+    {
+        $t = $this->shop();
+        $res = $this->get('/' . $t->slug . '/how');   // public, no auth
+        $res->assertOk();
+        $html = $res->getContent();
+        $this->assertStringContainsString('<title>How Solar Works — GSL Solar</title>', $html);
+        $this->assertStringContainsString('AGM', $html);            // battery comparison
+        $this->assertStringContainsString('Hybrid', $html);         // system comparison
+        $this->assertStringContainsString($t->slug . '/solar', $html); // CTA to assessment
+        $this->assertStringNotContainsString('__BASE__', $html);    // placeholders replaced
+    }
 }

@@ -740,6 +740,7 @@ Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::post('/{shop}/solar/lead',        [\App\Http\Controllers\Storefront\StorefrontSolarController::class, 'lead'])->where('shop', $shopSlug);
     // Public Solar Knowledge Center (server-rendered, SEO).
     Route::get('/{shop}/learn',              [\App\Http\Controllers\Storefront\StorefrontLearnController::class, 'index'])->where('shop', $shopSlug);
+    Route::get('/{shop}/how',                [\App\Http\Controllers\Storefront\StorefrontLearnController::class, 'how'])->where('shop', $shopSlug);
     Route::get('/{shop}/learn/{slug}',       [\App\Http\Controllers\Storefront\StorefrontLearnController::class, 'article'])->where('shop', $shopSlug)->where('slug', '[a-z0-9-]+');
     Route::get('/{shop}',           [\App\Http\Controllers\Storefront\StorefrontController::class, 'landing'])->where('shop', $shopSlug);
     Route::get('/{shop}/shop',      [\App\Http\Controllers\Storefront\StorefrontController::class, 'show'])->where('shop', $shopSlug);
