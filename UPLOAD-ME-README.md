@@ -1,61 +1,61 @@
-# Sell solar properly on your storefront — complete update (one upload)
+# Project Advisor — Slice 1: the deterministic Calculation Engine
 
-Solar can't be sold like grocery. This one bundle makes your storefront treat it properly: product pages
-show specifications, warranty and "what's in the box", and big/made-to-order products get a **"Request a
-quote / installation"** button instead of "Add to cart". Grocery and all normal products are untouched.
+This is the first piece of the **AI-powered Project Advisor** (solar first, reusable for other
+industries later). It is the *technical core*: the deterministic sizing engine that turns a customer's
+needs into engineering numbers a proposal can stand on. By design, **the AI will only ever explain these
+numbers — it never computes or overrides them.**
 
-Everything is in this single zip — backend, storefront page, and tests. Just upload it once.
+## What this slice gives you
 
-## What it does
+A pure, tested calculation engine that produces, from a discovery brief:
 
-- **Per-product sell mode** — every product is `buy` (normal add-to-cart, the default for everything you
-  already have) or `quote` (a solar system, a generator). Set it with a **`Sell Mode`** CSV column on
-  import, or leave blank for `buy`.
-- **Richer product page** — specifications table, warranty, and kit contents, all shown only when the
-  product has them.
-- **Quote flow** — quote-mode products show "Request a quote", wired to your existing quotation portal.
-- **Solar shops get the premium layout automatically** (still overridable).
+- **Connected load** and **critical load** (W)
+- **Daily energy demand** (Wh/day and kWh/day)
+- **Peak demand** (W) — including motor surge
+- **PV array size** (W) and a suggested **panel count**
+- **Battery bank** (Wh and Ah at the system voltage)
+- **Inverter rating** (W and VA)
+- with a **safety margin** and a **future-expansion allowance** applied, and an ordered **steps**
+  breakdown (the working) for the AI narrative and the proposal.
 
-Additive and reversible: the only database change is a nullable `sell_mode` column defaulting to `buy`.
+Every assumption — sun hours, efficiencies, depth-of-discharge, system voltage, safety margin, power
+factor, expansion — is configurable with sensible East-Africa defaults, so the same engine is reusable
+and tunable per tenant or project without code changes.
 
-## Files in this zip
+## Why it's built this way (the architecture)
+
+`SizingEngine` is a **generic contract**, not solar-specific. Solar is the first implementation
+(`SolarSizingService`). To add generators, HVAC, water treatment, etc. later, you add another engine
+that implements the same contract — the rest of the Advisor framework (discovery wizard, proposal
+templates) reuses it unchanged. The engine is pure: same inputs always give the same outputs, no
+database, no network, no randomness — which is exactly what makes the recommendations defensible.
+
+This slice is **standalone and safe**: two new service files plus one test. Nothing existing is touched,
+no database change, nothing is wired into a screen yet (that comes in later slices — Discovery Wizard,
+then the Proposal Generator that reuses your quotation + PDF engine).
+
+## Files in this zip (3)
 
 **New**
 
-- `database/migrations/2026_07_26_000001_add_sell_mode_to_products.php`
-- `tests/Feature/Kernel/StorefrontSolarProductTest.php`
-- `tests/Feature/Kernel/ProductSellModeImportTest.php`
-- `tests/Feature/Kernel/ProductSpecImportTest.php`  *(from the earlier importer upgrade)*
-- `tests/Feature/Kernel/ProductMultiPhotoImportTest.php`  *(from the earlier importer upgrade)*
-
-**Replace**
-
-- `resources/storefront/shop.html` — storefront: product page shows specs/warranty/kit + quote button.
-- `app/Http/Controllers/Storefront/StorefrontProductController.php` — richer product API payload.
-- `app/Http/Controllers/Storefront/StorefrontController.php` — auto premium layout for solar.
-- `app/Http/Controllers/Panel/PanelApiController.php` — importer reads `Sell Mode`; also carries the
-  multi-photo + spec import upgrade. **This bundle supersedes all the earlier importer/storefront zips.**
-- `app/Models/Product.php` — `sell_mode` fillable.
-
-> This is a cumulative superset — it includes the multi-photo import, the spec auto-import, and the whole
-> solar-storefront change. If you upload this, you do **not** need the earlier zips.
+- `app/Services/Advisor/SizingEngine.php` — the generic, reusable sizing contract.
+- `app/Services/Advisor/SolarSizingService.php` — the deterministic solar sizing engine.
+- `tests/Unit/Kernel/SolarSizingTest.php` — proves a full worked example, determinism, safety on empty
+  input, surge handling, config overrides, and that the explainable steps are present.
 
 ## How to upload (GitHub, branch `main`)
 
-Drag the `app`, `database`, `resources` and `tests` folders into your repo at the same paths. The new
-migration runs automatically on deploy. If a new file doesn't appear, use GitHub's "Add file" with the
-same path and paste the contents.
+Drag the `app` and `tests` folders into your repo at the same paths. All three are new files.
 
 ## How you know it worked
 
-1. Green ✓ on **"Money kernel (must pass)"** (covers the backend + tests; the front-end file can't affect
-   it).
-2. By eye: open a **quote-mode** solar product on `mycloudbss.com/gsl` — you'll see the spec table,
-   warranty, "what's in the box", and a **Request a quote** button. A normal product looks as before.
+Green ✓ on **"Money kernel (must pass)"** — the new test runs there. (Before shipping, I also ran the
+real engine against a worked home-system example: 300 W connected load, 1.83 kWh/day, ~586 W of panels,
+~3.87 kWh battery bank, a 375 W / 469 VA inverter — all correct and repeatable.)
 
-The storefront JavaScript was syntax-checked and its new rendering logic simulated before shipping.
+## What's next
 
-## Optional follow-ups (just ask)
-
-- Make the catalogue **grid tiles** also show "Request a quote" for quote-mode products (page already does).
-- Add a **toggle on the product edit screen** so you can flip existing products to quote without re-importing.
+With the numbers trustworthy, the next slices build on top: the **Discovery Wizard** (captures the brief
+this engine consumes), then the **Proposal Generator** (assembles the proposal from brief + these
+numbers + your Product Specifications, rendered through your existing quotation + PDF pipeline), then
+**solution packages** and the **knowledge library**.
