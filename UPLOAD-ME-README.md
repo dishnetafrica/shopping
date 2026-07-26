@@ -1,73 +1,66 @@
-# S6a — Recurring maintenance / service plans
+# S6b — the Maintenance screen in V3
 
-This adds **service contracts** to the platform. Service *visits* already work (they're jobs of type
-"service" — you can create and complete them from the Jobs screen today). S6a adds the recurring part:
-a **maintenance plan** that says "service this customer's system every N months" and tracks when the
-next visit is **due**.
+This puts **Maintenance** on screen in CloudBSS V3, completing Service Visits. A **Maintenance** item
+appears in the V3 sidebar (under **Operations**) — a due-for-service list so nothing slips.
 
-## How it works
+## What you can do from V3
 
-- Create a plan for a customer (optionally tied to a specific installed unit): choose the interval
-  (e.g. every 6 months). The plan computes the **next-due** date.
-- When a visit happens, **log it** — this creates a real, completed **service job** in your Jobs list
-  (so the visit is on record) and rolls the next-due date forward by the interval automatically.
-- A **due list** shows every plan due within N days (and flags overdue ones), so nothing slips. Plans
-  can be paused, resumed, or ended.
+- **See every plan** with its due state: **Overdue** (red), **Due soon** (amber), **Scheduled** (green),
+  plus Paused / Ended — with KPI tiles (overdue / due in 30 days / active plans) and a status filter.
+- **Create a plan** with the "New plan" button (customer, interval in months, first-due date).
+- **Open a plan** and **Log a visit** — which records a real completed service job (in your Jobs list)
+  and rolls the next-due date forward automatically. You can also Pause, Resume, or End a plan.
 
-It's **due-list-driven** — no background scheduler needed; your team works from what's due. (Automatic
-generation of the next visit on a timer can be added later if you want it.)
+Built the V3-native way: the sidebar builds itself from the capability registry, so Maintenance appears
+automatically for every role. Every write re-checks owner/manager permission on the server.
 
-Safe by design: logging a maintenance visit on an already-installed unit **never re-touches its
-warranty** — a service visit only installs/activates nothing; it just records the work.
+With this, **Service Visits are fully done** — one-off service jobs (via the Jobs screen) *and* recurring
+maintenance contracts (here).
 
 ---
 
-## ⚠️ Upload S5 first
+## ⚠️ Upload S5 and S6a first
 
-S6 builds on **S5** (the Jobs / Work Orders engine) — logging a visit creates a service job through it.
-Upload S5a + S5b and see them green first. As a safety net, this zip re-includes S5's engine files
-(byte-identical), so nothing breaks if part of S5 didn't upload cleanly.
+S6b is the screen on top of the **S6a** engine (which itself builds on **S5**). Upload S5a, S5b, S6a and
+see them green before this. As a safety net, this zip re-includes the S6a maintenance engine
+(byte-identical), so nothing breaks if part of S6a didn't upload cleanly.
 
 ## Files in this zip
 
-**S6a (the real changes)**
+**S6b (the screen)**
 
-- `database/migrations/2026_07_25_000012_create_maintenance_plans_table.php` *(new)*
-- `app/Models/MaintenancePlan.php` *(new)*
-- `app/Kernel/Events/MaintenancePlanEvents.php` *(new)*
-- `app/Services/Field/MaintenancePlanService.php` *(new)*
-- `app/Http/Controllers/Panel/MaintenancePlanController.php` *(new)*
-- `tests/Feature/Kernel/MaintenancePlanTest.php` *(new)*
-- `routes/web.php` *(replace)* — adds `/papi/maintenance-plans...`
-- `docs/v3-migration/MIGRATION-TRACKER.md` *(replace)*
+- `app/Capability/Process/MaintenancePlanListCapability.php` *(new)* — the Maintenance list
+- `app/Capability/Object/MaintenancePlanCapability.php` *(new)* — one plan (Log visit / pause / end)
+- `app/Capability/Registry/CoreCapabilityProvider.php` *(replace)* — registers both
+- `resources/views/shell.blade.php` *(replace)* — Maintenance in the V3 sidebar
+- `tests/Feature/Kernel/MaintenanceWorkspaceTest.php` *(new)* — proves the screen
+- `docs/v3-migration/MIGRATION-TRACKER.md` *(replace)* — Service Visits now ✅ Done
 
-**S5 engine — safety net (identical to S5)**
+**S6a engine — safety net (identical to S6a)**
 
-- `app/Models/WorkOrder.php`, `app/Models/WorkOrderItem.php`, `app/Kernel/Events/WorkOrderEvents.php`,
-  `app/Services/Field/WorkOrderService.php`, and the two `work_orders` / `work_order_items` migrations.
+- `app/Models/MaintenancePlan.php`, `app/Kernel/Events/MaintenancePlanEvents.php`,
+  `app/Services/Field/MaintenancePlanService.php`, `app/Http/Controllers/Panel/MaintenancePlanController.php`,
+  the `maintenance_plans` migration, and `routes/web.php`.
 
 ---
 
 ## How to upload (GitHub, branch `main`)
 
-Drag the folders (`database`, `app`, `routes`, `tests`, `docs`) into your repo at the same paths. If a
-new file doesn't appear, use these links (paste contents, commit):
+Drag the folders (`app`, `resources`, `routes`, `database`, `tests`, `docs`) into your repo at the same
+paths. If a new file doesn't appear, use these links (paste contents, commit):
 
-- `github.com/dishnetafrica/shopping/new/main?filename=database/migrations/2026_07_25_000012_create_maintenance_plans_table.php`
-- `github.com/dishnetafrica/shopping/new/main?filename=app/Models/MaintenancePlan.php`
-- `github.com/dishnetafrica/shopping/new/main?filename=app/Services/Field/MaintenancePlanService.php`
-- `github.com/dishnetafrica/shopping/new/main?filename=app/Http/Controllers/Panel/MaintenancePlanController.php`
-- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/MaintenancePlanTest.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=app/Capability/Process/MaintenancePlanListCapability.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=app/Capability/Object/MaintenancePlanCapability.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/MaintenanceWorkspaceTest.php`
 
 ## How you know it worked
 
-Green ✓ on **"Money kernel (must pass)"** — it runs the new maintenance-plan test (create, log-visit
-advances next-due + spawns a service job, due list, pause) with everything before it.
+Green ✓ on **"Money kernel (must pass)"**. Then open V3 — **Maintenance** is in the left sidebar under
+Operations. Create a plan, open it, Log a visit, and check the next-due date jumped forward and a
+service job appeared in Jobs.
 
 ---
 
 ## What's next
 
-- **S6b** — the V3 **Maintenance** screen: a due-for-service list with "New plan" and "Log visit"
-  actions (this drop is the engine + API; S6b makes it visible in the sidebar).
-- Then **S7 Warranty Claims** and **S8 Project Quotes**.
+**S7 — Warranty Claims** (open → approve/reject a claim against a warranty), then **S8 — Project Quotes**.
