@@ -367,6 +367,13 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('maintenance-plans/{plan}',        [\App\Http\Controllers\Panel\MaintenancePlanController::class, 'show']);
         Route::post('maintenance-plans/{plan}/log-visit', [\App\Http\Controllers\Panel\MaintenancePlanController::class, 'logVisit']);
         Route::post('maintenance-plans/{plan}/{action}', [\App\Http\Controllers\Panel\MaintenancePlanController::class, 'transition'])->where('action', 'pause|resume|end');
+        // Warranty Claims (Asset Lifecycle · Phase 2 · S7)
+        Route::get('warranty-claims',                 [\App\Http\Controllers\Panel\WarrantyClaimController::class, 'index']);
+        Route::post('warranty-claims',                [\App\Http\Controllers\Panel\WarrantyClaimController::class, 'open']);
+        Route::get('warranty-claims/{claim}',         [\App\Http\Controllers\Panel\WarrantyClaimController::class, 'show']);
+        Route::post('warranty-claims/{claim}/approve', [\App\Http\Controllers\Panel\WarrantyClaimController::class, 'approve']);
+        Route::post('warranty-claims/{claim}/reject', [\App\Http\Controllers\Panel\WarrantyClaimController::class, 'reject']);
+        Route::post('warranty-claims/{claim}/resolve', [\App\Http\Controllers\Panel\WarrantyClaimController::class, 'resolve']);
         Route::get('riders',     [PanelApiController::class, 'riders']);
         Route::get('returns',    [PanelApiController::class, 'returns']);
         Route::get('today',      [PanelApiController::class, 'today']);   // Today / Needs-attention home screen
