@@ -1,71 +1,73 @@
-# Project Advisor — Slice 2: Discovery Wizard (backend)
+# Project Advisor — Slice 3: Proposal Generator (backend)
 
-The second slice of the AI-powered Project Advisor. Slice 1 was the deterministic calculation engine;
-this adds the **discovery layer** that captures a customer's needs and feeds them into that engine.
+The third slice of the AI-powered Project Advisor. Slice 1 was the calculation engine, Slice 2 the
+discovery wizard; this turns a captured project into a **complete, professional proposal**.
 
-**This bundle includes Slice 1**, so it's the complete Advisor backend so far — upload just this; it
-supersedes the Slice 1 zip.
+**This bundle includes Slices 1 & 2**, so it's the whole Advisor backend so far — upload just this; it
+supersedes the earlier Advisor zips.
 
 ## What this slice adds
 
-- **A data-driven questionnaire** (the "discovery schema"): customer type, objective, location, existing
-  power, monthly consumption/bill, appliances & loads, backup hours, budget, and expansion plans. It's
-  *data*, so the wizard UI is generated from it and a future industry ships a different schema, not new
-  code.
-- **A deterministic mapper** that turns the salesperson's answers into the neutral "brief" the sizing
-  engine consumes (loads normalised, region → local sun hours, expansion choice → allowance). Pure and
-  tested.
-- **Compute + capture** — an API that runs the engine on the answers (live, no save) and one that saves
-  a **captured project** storing both the answers and the sizing snapshot for the proposal stage.
+From a captured project (discovery answers + deterministic sizing) plus a chosen equipment list, it
+assembles a proposal with the eleven standard sections:
 
-The AI's boundary is preserved: the numbers always come from the deterministic engine, never the caller.
+1. Executive summary · 2. Customer requirements · 3. Recommended solution · 4. Equipment list ·
+5. Technical specifications · 6. Estimated system performance · 7. Commercial offer · 8. Warranty ·
+9. Assumptions · 10. Exclusions · 11. Terms & conditions.
 
-## Architecture (why it's generic)
+Key behaviours:
 
-`DiscoveryProfile` (questions + mapping) and `SizingEngine` (maths) are both **contracts**. A profile is
-registered against an engine in `ProjectAdvisorService`. Solar is the first pairing; generators / HVAC /
-water treatment add a new profile + engine and reuse the whole framework — the API, persistence and
-(next) the wizard UI don't change.
+- **Reuses Product Specifications** — the technical section is populated from the specs on the equipment
+  you select (no re-typing), exactly as you asked.
+- **Reuses the quotation engine** — equipment maps to quotation line items, and the commercial maths
+  (subtotal → installation → VAT → total) is computed the same way the quote engine does, so figures
+  stay consistent when the offer is sent as a quotation.
+- **Segment templates** — Residential, Commercial, Industrial, Government, NGO, Hotel, School, Farm,
+  Water Pump, Street Lighting each get the right executive lead, assumptions, exclusions and terms.
+- **Deterministic** — every number comes from the sizing engine and your catalogue prices; the AI may
+  later rewrite the prose, never the figures.
 
-## API (all under `/papi/advisor`, gated to the Sales menu)
+## API (added under `/papi/advisor`, gated to the Sales menu)
 
-- `GET  /papi/advisor/schema?profile=solar` — the questionnaire to render.
-- `POST /papi/advisor/compute` — answers → deterministic sizing (no save; for live preview).
-- `POST /papi/advisor/projects` — save a captured project (answers + sizing snapshot).
-- `GET  /papi/advisor/projects` and `GET /papi/advisor/projects/{id}` — list / read.
+- `POST /papi/advisor/projects/{id}/proposal` — build & store the proposal (body: `equipment` list of
+  `{product_id, qty}` or explicit line items; `opts` for currency / install fee / VAT).
+- `GET  /papi/advisor/projects/{id}/proposal` — the stored proposal.
 
 ## Files in this zip
 
-**New**
+**New (Slice 3)**
 
-- `app/Services/Advisor/DiscoveryProfile.php` — discovery contract.
-- `app/Services/Advisor/SolarDiscoveryProfile.php` — solar questionnaire + mapper.
-- `app/Services/Advisor/ProjectAdvisorService.php` — profile↔engine registry + compute/save.
-- `app/Services/Advisor/SizingEngine.php`, `SolarSizingService.php` — the Slice 1 engine (included).
-- `app/Models/AdvisorProject.php` — captured project.
-- `app/Http/Controllers/Advisor/AdvisorController.php` — the API.
-- `database/migrations/2026_07_26_000002_create_advisor_projects_table.php` — storage.
-- `tests/Unit/Kernel/SolarSizingTest.php`, `SolarDiscoveryProfileTest.php` — engine + schema/mapper.
-- `tests/Feature/Kernel/AdvisorProjectTest.php` — the API end-to-end (schema, compute, save, gating).
+- `app/Services/Advisor/ProposalTemplate.php` — per-segment boilerplate.
+- `app/Services/Advisor/ProposalBuilder.php` — pure assembly of the eleven sections + quotation-line mapping.
+- `app/Services/Advisor/ProposalService.php` — resolves equipment (prices, warranty, specs) and persists.
+- `database/migrations/2026_07_26_000003_add_proposal_to_advisor_projects.php` — stores the proposal.
+- `tests/Unit/Kernel/ProposalBuilderTest.php`, `tests/Feature/Kernel/AdvisorProposalTest.php`.
+
+**Carried (Slices 1 & 2)**
+
+- `app/Services/Advisor/{SizingEngine,SolarSizingService,DiscoveryProfile,SolarDiscoveryProfile,ProjectAdvisorService}.php`
+- `app/Models/AdvisorProject.php`, `app/Http/Controllers/Advisor/AdvisorController.php`
+- `database/migrations/2026_07_26_000002_create_advisor_projects_table.php`
+- the Slice 1 & 2 tests.
 
 **Replace**
 
-- `routes/web.php` — adds the `papi/advisor` routes (nothing else changed).
+- `routes/web.php` — adds the two proposal routes (nothing else changed).
 
 ## How to upload (GitHub, branch `main`)
 
-Drag the `app`, `database`, `tests` folders and `routes/web.php` into your repo at the same paths. The
-new migration runs automatically on deploy.
+Drag the `app`, `database`, `tests` folders and `routes/web.php` into your repo at the same paths.
 
 ## How you know it worked
 
-Green ✓ on **"Money kernel (must pass)"** — the unit and feature tests run there. (Before shipping I ran
-the real mapper + engine against a full sample questionnaire: a Northern-region home with fridge/TV/
-lights → 300 W load, 1.83 kWh/day, 600 W peak with motor surge, a 750 W / 938 VA inverter — all correct.)
+Green ✓ on **"Money kernel (must pass)"**. (Before shipping, I ran the real builder against a full
+example — a Residential Kampala project with a 300 W station + panels, install + 18% VAT → all eleven
+sections in order, UGX 1,640,000 equipment subtotal, UGX 2,171,200 total, specs and warranty pulled
+through — all correct.)
 
 ## What's next
 
-Slice 3 — the **Proposal Generator**: assemble a professional proposal from a captured project (its
-answers + sizing + your Product Specifications), rendered through your existing quotation + PDF pipeline,
-with a template per customer segment. Then solution packages and the knowledge library. (The wizard's V3
-screen — the visual form over this schema — is a small front-end follow-up whenever you want it.)
+Slice 4 — **Solution Packages** (Home Starter, Borehole, School, Hospital, Hotel, Farm, Street Lighting…)
+as ready equipment + content that drop straight into a proposal; then Slice 5, the **Knowledge Library**
+(FAQs, objection handling, WhatsApp-ready copy). The proposal's polished **PDF/portal rendering** and the
+wizard's **V3 screen** are the front-end follow-ups whenever you want them.

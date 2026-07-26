@@ -14,11 +14,13 @@ class AdvisorProject extends Model
     use BelongsToTenant;
 
     protected $fillable = [
-        'tenant_id', 'customer_id', 'created_by', 'profile', 'name', 'status', 'answers', 'sizing',
+        'tenant_id', 'customer_id', 'created_by', 'profile', 'name', 'status',
+        'answers', 'sizing', 'proposal', 'quotation_id',
     ];
 
     protected $casts = [
-        'answers' => 'array',
-        'sizing'  => 'array',
+        'answers'  => 'array',
+        'sizing'   => 'array',
+        'proposal' => 'array',
     ];
 }

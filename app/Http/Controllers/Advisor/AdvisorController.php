@@ -99,4 +99,39 @@ class AdvisorController extends Controller
         }
         return response()->json(['ok' => true, 'project' => $project]);
     }
+
+    /** POST /papi/advisor/projects/{id}/proposal — build & store the proposal (Slice 3). */
+    public function generateProposal(Request $r, int $id)
+    {
+        if (! $this->gate($r)) {
+            return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        }
+        $t = $r->user()->tenant;
+        app(\App\Support\TenantContext::class)->set($t->id);
+        $project = AdvisorProject::where('tenant_id', $t->id)->find($id);
+        if (! $project) {
+            return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        }
+        $proposal = \App\Services\Advisor\ProposalService::forTenant($t)->generate(
+            $project,
+            (array) $r->input('equipment', []),
+            (array) $r->input('opts', [])
+        );
+        return response()->json(['ok' => true, 'proposal' => $proposal, 'project_id' => $project->id]);
+    }
+
+    /** GET /papi/advisor/projects/{id}/proposal — the stored proposal. */
+    public function getProposal(Request $r, int $id)
+    {
+        if (! $this->gate($r)) {
+            return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        }
+        $t = $r->user()->tenant;
+        app(\App\Support\TenantContext::class)->set($t->id);
+        $project = AdvisorProject::where('tenant_id', $t->id)->find($id);
+        if (! $project || ! $project->proposal) {
+            return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        }
+        return response()->json(['ok' => true, 'proposal' => $project->proposal]);
+    }
 }

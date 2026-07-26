@@ -204,6 +204,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
             Route::post('projects', [\App\Http\Controllers\Advisor\AdvisorController::class, 'saveProject']);
             Route::get('projects', [\App\Http\Controllers\Advisor\AdvisorController::class, 'listProjects']);
             Route::get('projects/{id}', [\App\Http\Controllers\Advisor\AdvisorController::class, 'showProject'])->where('id', '[0-9]+');
+            Route::post('projects/{id}/proposal', [\App\Http\Controllers\Advisor\AdvisorController::class, 'generateProposal'])->where('id', '[0-9]+');
+            Route::get('projects/{id}/proposal', [\App\Http\Controllers\Advisor\AdvisorController::class, 'getProposal'])->where('id', '[0-9]+');
         });
         Route::prefix('task')->group(function () {
             Route::get('summary', [TaskApiController::class, 'summary']);
