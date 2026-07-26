@@ -1,58 +1,59 @@
-# S8a — Project Quotes (engine), built from kits
+# S8b — the Project Quote builder in V3 (Phase 2 complete)
 
-The final Phase 2 piece. This lets you turn a **kit** into a full **project quote** — a sectioned
-quotation for a whole solar system — reusing everything you already have.
+This makes project quotes clickable in CloudBSS V3 — and it's the **final piece of Phase 2**. There's
+no new screen to learn: it enhances your existing **Quotations** screen.
 
-## How it works
+## What you can do from V3
 
-- Pick one or more **kits** (which you build in S4). Each kit becomes a **priced section** of the quote,
-  its components listed with prices and a section subtotal (e.g. a "3kW Solar Kit" section = 1 inverter
-  + 8 panels).
-- Add optional **extras** (installation labour, delivery) as their own section.
-- The quote itself is created by your **existing quotation engine** — same pricing, numbering, PDF and
-  WhatsApp send as every other quote. Nothing in quoting or accounting changes.
+- On the **Quotations** screen, a **"New project quote"** button appears (once you have at least one
+  kit). Pick a system/kit and enter the customer — it builds a full sectioned quotation through the
+  normal quote engine (priced, numbered, PDF, WhatsApp — all as usual).
+- Open that quotation and instead of a flat line list you see **one card per section** (e.g. "3kW Solar
+  Kit") with each section's **subtotal**, then the grand total. Ordinary quotes are unchanged.
 
-The clever bit: the section grouping is stored on the quotation's `meta` (a spare data field), so **no
-database table changed and the frozen quote engine wasn't touched at all**. The customer's PDF is the
-normal branded quote for now; showing section headers on the PDF is a later add-on if you want it.
+No new sidebar item, no new capability — it rides on the Quotations screen you already have, so there's
+nothing extra to find.
 
 ---
 
-## Files in this zip (5)
+## ⚠️ Upload S8a first
 
-**New**
+S8b is the UI on top of the **S8a** engine. Upload S8a and see it green before this. As a safety net,
+this zip re-includes the S8a engine (byte-identical), so nothing breaks if part of S8a didn't upload
+cleanly. (Also needs S4 kits, already in your repo.)
 
-- `app/Services/Sales/ProjectQuoteService.php` — builds sectioned quotes from kits
-- `app/Http/Controllers/Panel/ProjectQuoteController.php` — the API
-- `tests/Feature/Kernel/ProjectQuoteTest.php` — proves section math + quote creation
+## Files in this zip
 
-**Replace**
+**S8b (the UI)**
 
-- `routes/web.php` — adds `/papi/project-quotes/from-kits`
-- `docs/v3-migration/MIGRATION-TRACKER.md`
+- `app/Capability/Process/QuotationListCapability.php` *(replace)* — adds the "New project quote" action
+- `app/Capability/Object/QuotationCapability.php` *(replace)* — sectioned view on project quotes
+- `tests/Feature/Kernel/ProjectQuoteWorkspaceTest.php` *(new)* — proves the action + sectioned view
+- `docs/v3-migration/MIGRATION-TRACKER.md` *(replace)* — Project Quotes now ✅ Done
 
-> **Depends on S4 (kits)** and your existing quotation engine — both already in your repo.
+**S8a engine — safety net (identical to S8a)**
+
+- `app/Services/Sales/ProjectQuoteService.php`, `app/Http/Controllers/Panel/ProjectQuoteController.php`,
+  and `routes/web.php`.
 
 ---
 
 ## How to upload (GitHub, branch `main`)
 
-Drag the folders (`app`, `routes`, `tests`, `docs`) into your repo at the same paths. If a new file
-doesn't appear, use these links (paste contents, commit):
+Drag the folders (`app`, `routes`, `tests`, `docs`) into your repo at the same paths. If the new test
+doesn't appear, use this link (paste contents, commit):
 
-- `github.com/dishnetafrica/shopping/new/main?filename=app/Services/Sales/ProjectQuoteService.php`
-- `github.com/dishnetafrica/shopping/new/main?filename=app/Http/Controllers/Panel/ProjectQuoteController.php`
-- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/ProjectQuoteTest.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/ProjectQuoteWorkspaceTest.php`
 
 ## How you know it worked
 
-Green ✓ on **"Money kernel (must pass)"** — it runs the new project-quote test (kits explode into priced
-sections; building a quote records the section grouping) with everything before it.
+Green ✓ on **"Money kernel (must pass)"**. Then open V3 → **Quotations** → click **New project quote**,
+pick a kit and a customer, and open the resulting quote to see the sections and subtotals.
 
 ---
 
-## What's next
+## 🎉 Phase 2 is complete
 
-- **S8b** — the V3 **Project Quote builder**: a "New project quote" action (pick kit + customer) and the
-  sectioned view on the quotation screen. This drop is the engine + API underneath it.
-- That completes **Phase 2** (Jobs, Service Visits, Warranty Claims, Project Quotes).
+Installation Work Orders, Service Visits (+ recurring maintenance), Warranty Claims, and Project Quotes
+are all live in V3 — on top of Phase 1 (specs, serials, warranties, kits). The Asset Lifecycle
+extension now covers the full solar journey: quote → sell → install → warranty → service → claim.

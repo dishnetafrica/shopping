@@ -90,11 +90,38 @@ final class QuotationCapability implements ObjectCapability
             $relItems[] = ['icon' => 'cart', 'color' => '#4f46e5', 'title' => 'Converted order', 'sub' => 'View the sales order', 'right' => '', 'link' => '/api/v1/workspace/salesOrder/' . $q->order_id];
         }
 
-        $overviewCards = [
-            ['kind' => 'links', 'title' => 'Related', 'items' => $relItems],
+        // Asset Lifecycle · S8b — a project quote groups its lines into priced sections (stored in meta).
+        // Show one card per section (with a subtotal) instead of the flat line-items card; ordinary quotes
+        // are unchanged.
+        $project = is_array($q->meta) ? ($q->meta['project'] ?? null) : null;
+        $sectionCards = [];
+        if (is_array($project) && ! empty($project['sections'])) {
+            foreach ($project['sections'] as $sec) {
+                $secRows = [];
+                foreach (($sec['lines'] ?? []) as $ln) {
+                    $sqty = (float) ($ln['qty'] ?? 0);
+                    $secRows[] = ['cells' => [
+                        (string) ($ln['name'] ?? ''),
+                        rtrim(rtrim(number_format($sqty, 2), '0'), '.'),
+                        $fmt($ln['unit_price'] ?? 0),
+                        $fmt($ln['line_total'] ?? 0),
+                    ], 'link' => null];
+                }
+                $sectionCards[] = ['kind' => 'table', 'title' => (string) ($sec['title'] ?? 'Section'),
+                    'sub' => 'Subtotal ' . $fmt($sec['subtotal'] ?? 0),
+                    'columns' => [['label' => 'Item'], ['label' => 'Qty', 'align' => 'right'], ['label' => 'Unit price', 'align' => 'right'], ['label' => 'Amount', 'align' => 'right']],
+                    'rows' => $secRows, 'empty' => '—'];
+            }
+        }
+        $itemCards = $sectionCards !== [] ? $sectionCards : [
             ['kind' => 'table', 'title' => 'Line items', 'sub' => $q->items->count() . ' products',
              'columns' => [['label' => 'Description'], ['label' => 'Qty', 'align' => 'right'], ['label' => 'Unit price', 'align' => 'right'], ['label' => 'Amount', 'align' => 'right']],
              'rows' => $lineRows, 'empty' => 'No priced line items on this quotation'],
+        ];
+
+        $overviewCards = array_merge([
+            ['kind' => 'links', 'title' => 'Related', 'items' => $relItems],
+        ], $itemCards, [
             ['kind' => 'dl', 'title' => 'Summary', 'rows' => array_values(array_filter([
                 ['Total', $fmt($q->total)],
                 ['Currency', $cur],
@@ -102,7 +129,7 @@ final class QuotationCapability implements ObjectCapability
                 $created ? ['Created', $created->format('d M Y')] : null,
                 ['Status', ucfirst($status ?: 'draft')],
             ]))],
-        ];
+        ]);
 
         $docs = [];
         if ($q->pdf_path) {

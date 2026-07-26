@@ -95,6 +95,19 @@ final class QuotationListCapability implements ProcessCapability
             ['key' => 'act',      'label' => '',           'type' => 'action', 'sortable' => false],
         ];
 
+        // Asset Lifecycle · S8b — build a project quote straight from a kit (each kit = a priced section).
+        $projectAction = null;
+        $kitList = \App\Models\Product::where('tenant_id', $t)->where('is_kit', true)->orderBy('name')->limit(50)->get(['id', 'name']);
+        if ($kitList->isNotEmpty()) {
+            $projectAction = [
+                'key' => 'new_project_quote', 'label' => 'New project quote', 'method' => 'POST',
+                'endpoint' => '/papi/project-quotes/from-kits', 'actor' => 'human', 'tone' => 'default',
+                'schema' => ['kit_ids' => 'combo:' . $kitList->map(fn ($k) => $k->id . ' — ' . $k->name)->implode('|'),
+                    'customer_name' => 'text', 'customer_phone' => 'text'],
+                'labels' => ['kit_ids' => 'System / kit', 'customer_name' => 'Customer name', 'customer_phone' => 'Customer WhatsApp'],
+            ];
+        }
+
         return (new WorkspacePayload)
             ->object([
                 'type' => 'list:quotations', 'title' => 'Quotations',
@@ -116,13 +129,14 @@ final class QuotationListCapability implements ProcessCapability
                 'dateKey' => 'created', 'dateLabel' => 'Created', 'currency' => $cur, 'pageSize' => 20,
                 'totals' => [['key' => 'value', 'label' => 'Total value', 'money' => true]],
             ])
-            ->actions([
+            ->actions(array_values(array_filter([
                 ['key' => 'new_quotation', 'label' => 'New quotation', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/quotations/_/create_quotation',
                  'actor' => 'human', 'tone' => 'primary', 'builder' => 'quotation', 'pickCustomer' => true,
                  'customerSearch' => '/api/v1/workspace/customers/_/search', 'productSearch' => '/api/v1/workspace/products/_/search',
                  'currencies' => array_values(array_unique([$cur, 'USD', 'UGX', 'SSP', 'KES'])), 'prefill' => ['currency' => $cur]],
+                $projectAction,
                 ['key' => 'export', 'label' => 'Export', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/quotations', 'actor' => 'human', 'tone' => 'default'],
-            ])
+            ])))
             ->meta(['capability' => 'quotations', 'ttl' => 60, 'permissions' => ['menu:orders'], 'note' => 'Prepared-by column omitted — not in the frozen quotations schema.']);
     }
 
