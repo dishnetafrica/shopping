@@ -126,6 +126,7 @@ class PanelApiController extends Controller
                 'MOQ'          => $p->moq === null ? '' : (int) $p->moq,
                 'PackSize'     => $p->pack_size === null ? '' : (int) $p->pack_size,
                 'Unit'         => (string) ($p->unit_label ?? ''),
+                'Sell_Mode'    => (string) ($p->sell_mode ?? 'buy'),
                 '_row'         => (int) $p->id,
             ];
         });
