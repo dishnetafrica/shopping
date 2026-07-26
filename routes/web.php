@@ -738,6 +738,9 @@ Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::get('/{shop}/solar/config',       [\App\Http\Controllers\Storefront\StorefrontSolarController::class, 'config'])->where('shop', $shopSlug);
     Route::match(['get', 'post'], '/{shop}/solar/estimate', [\App\Http\Controllers\Storefront\StorefrontSolarController::class, 'estimate'])->where('shop', $shopSlug);
     Route::post('/{shop}/solar/lead',        [\App\Http\Controllers\Storefront\StorefrontSolarController::class, 'lead'])->where('shop', $shopSlug);
+    // Public Solar Knowledge Center (server-rendered, SEO).
+    Route::get('/{shop}/learn',              [\App\Http\Controllers\Storefront\StorefrontLearnController::class, 'index'])->where('shop', $shopSlug);
+    Route::get('/{shop}/learn/{slug}',       [\App\Http\Controllers\Storefront\StorefrontLearnController::class, 'article'])->where('shop', $shopSlug)->where('slug', '[a-z0-9-]+');
     Route::get('/{shop}',           [\App\Http\Controllers\Storefront\StorefrontController::class, 'landing'])->where('shop', $shopSlug);
     Route::get('/{shop}/shop',      [\App\Http\Controllers\Storefront\StorefrontController::class, 'show'])->where('shop', $shopSlug);
     Route::get('/{shop}/catalogue', [\App\Http\Controllers\Storefront\StorefrontController::class, 'catalogue'])->where('shop', $shopSlug);

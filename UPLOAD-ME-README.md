@@ -1,54 +1,46 @@
-# Solar Experience Center — v1: the public Assessment funnel
+# Solar Experience Center — v2: the Knowledge Center (your SEO engine)
 
-A customer-facing, no-login **Solar Experience Center** that turns first-time visitors into leads. Instead
-of "Shop products," a visitor picks what they want to power, gets an instant system recommendation with a
-plain-language explanation and a price range, and requests a proposal — all in a few minutes.
+Adds a public, server-rendered **Knowledge Center** — educational articles and FAQs that build trust,
+answer the questions first-time buyers actually ask, and bring organic search traffic. Every page guides
+the reader toward the 3-minute assessment.
 
-It's powered by the **same Advisor engine** you already have (deterministic sizing, packages), with one
-new ingredient: an **appliance library** so customers choose "TV, fridge, AC" instead of kWh.
+**Cumulative** — this bundle includes the whole solar platform (internal Advisor + the v1 assessment
+funnel). Upload just this; it supersedes the earlier zips.
 
-**This bundle includes the full Advisor backend**, so uploading just this makes the whole thing work.
+## What customers get — `mycloudbss.com/<shop>/learn`
 
-## What a customer sees — `mycloudbss.com/<shop>/solar`
+- A hub of educational articles grouped by category (Basics, Batteries, Cost & savings, Technical,
+  By industry, Local) plus an FAQ accordion (reused from your knowledge library).
+- Each article on its own URL (e.g. `/<shop>/learn/how-solar-works`), **server-rendered with a unique
+  title, meta description, canonical link and Open-Graph tags** — so Google can index every one.
+- 12 articles to start: How Solar Works · Do I Need a Battery · Hybrid vs Off-Grid · Battery Guide ·
+  Solar vs Generator · Can Solar Run My AC · How We Size Your System · Solar for Schools · Solar for
+  Clinics · Solar for Farms · 5 Solar Myths · Solar in Uganda. Adding more is just data.
+- A "Learn how solar works" link on the assessment hero, and every article/hub funnels to the assessment.
 
-1. **Hero:** "Design the right solar system … in under 3 minutes" → Start.
-2. **Goal cards:** Home · Business · School · Hospital · Farm · Water Pump · Street Lighting · Factory.
-3. **Appliance picker:** tap the devices they have, with quantities (grouped: Essentials, Comfort, Work,
-   Security, Water, Heavy). No kWh required.
-4. **Backup slider:** how many hours of backup they need.
-5. **Live recommendation:** an energy-flow diagram (Sun → Panels → Inverter → Battery → Home) plus panels,
-   battery, inverter and daily use — updating as they change inputs — with a **"Why this system?"**
-   explanation and a matching **solution package with a "from" price**.
-6. **Convert:** "Get my free proposal" (captures name + phone) or "WhatsApp us". Every lead lands in your
-   staff **V3 → Solar Advisor** as a *sized* project, with a pre-filled WhatsApp hand-off.
+Why it matters: research on solar adoption shows people are far more likely to buy once they *understand*
+the benefits. This turns education into both trust and traffic — and adds no maintenance burden.
 
-A **"Start my free assessment"** strip is added to the top of your storefront homepage for solar shops.
+## Public & SEO-correct
 
-## Public, safe, shop-scoped
-
-New public endpoints (no login), resolved by the shop slug and CSRF-exempt like your other storefront
-POSTs. Nothing recomputes figures — the deterministic engine does the maths; the page only collects
-answers and shows results.
-
-- `GET  /<shop>/solar` — the page · `GET /<shop>/solar/config` — appliances/goals
-- `POST /<shop>/solar/estimate` — recommendation · `POST /<shop>/solar/lead` — capture + WhatsApp link
+Server-rendered HTML (not a JS app), so crawlers get real content with proper meta on each page. Public,
+shop-scoped, no login. Add articles by editing one data file (`SolarArticles`).
 
 ## Files in this zip
 
 **New**
 
-- `resources/storefront/solar.html` — the Experience Center page.
-- `app/Services/Advisor/SolarAppliances.php` — the appliance library.
-- `app/Http/Controllers/Storefront/StorefrontSolarController.php` — the public API.
-- `tests/Unit/Kernel/SolarAppliancesTest.php`, `tests/Feature/Kernel/StorefrontSolarTest.php`.
+- `app/Services/Advisor/SolarArticles.php` — the article content.
+- `app/Http/Controllers/Storefront/StorefrontLearnController.php` — the server-rendered hub + article pages.
+- `tests/Unit/Kernel/SolarArticlesTest.php`, `tests/Feature/Kernel/StorefrontLearnTest.php`.
 
 **Replace**
 
-- `routes/web.php` — the public `/<shop>/solar*` routes.
-- `bootstrap/app.php` — CSRF exemption for `*/solar/*` (matches your other public storefront POSTs).
-- `app/Http/Controllers/Storefront/StorefrontController.php` — the homepage CTA strip for solar shops.
+- `routes/web.php` — the public `/<shop>/learn` routes.
+- `resources/storefront/solar.html` — adds the "Learn how solar works" link.
 
-**Carried** — the complete Advisor backend + V3 screen from the earlier work, so this stands alone.
+**Carried** — the complete Advisor backend, the v1 assessment funnel, the V3 screen and earlier tests, so
+this works standalone.
 
 ## How to upload (GitHub, branch `main`)
 
@@ -57,12 +49,10 @@ same paths.
 
 ## How you know it worked
 
-Green ✓ on **"Money kernel (must pass)"** (public config/estimate/lead tested with no auth). Then open
-`mycloudbss.com/gsl/solar`: pick a goal, add appliances, watch the recommendation update, and submit a
-test lead — it appears in V3 → Solar Advisor.
+Green ✓ on **"Money kernel (must pass)"** (the hub and an article's SEO tags are tested). Then open
+`mycloudbss.com/gsl/learn`, browse an article, and confirm each has its own title in the browser tab.
 
-## Next (the rest of the Experience Center vision)
+## Next in the Experience Center
 
-2. **Knowledge Center** (public, SEO) · 3. **Animated "How Solar Works" + comparisons** ·
-4. **ROI / before-after / case studies** · 5. **Solar Academy + on-page AI assistant** ·
-6. **Richer product pages.** Say the word and I'll build the next one.
+3. **Animated "How Solar Works" + comparisons** · 4. **ROI / before-after / case studies** ·
+5. **Solar Academy + on-page AI assistant** · 6. **Richer product pages.** Say "next" for the next one.

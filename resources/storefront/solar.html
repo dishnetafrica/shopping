@@ -79,6 +79,7 @@
       <h1>Design the right solar system for your home or business in under 3 minutes.</h1>
       <p>No jargon. Pick what you want to power, and we'll show you exactly what you need — and why.</p>
       <button class="btn pri lg" onclick="document.getElementById('step1').scrollIntoView({behavior:'smooth'})">Start my solar assessment →</button>
+      <a class="btn lg" style="margin-left:8px" id="learnBtn" href="#">Learn how solar works</a>
     </div>
   </div>
 
@@ -145,6 +146,7 @@ function toast(m){ var t=el('toast'); t.textContent=m; t.classList.add('on'); se
 
 function init(){
   if(SOLAR && SOLAR.shop){ el('brandBadge').textContent=(SOLAR.shop+' · Solar').toUpperCase(); el('foot').textContent=SOLAR.shop+' — clean, reliable power.'; }
+  var lb=el('learnBtn'); if(lb) lb.href=BASE+'/learn';
   el('goals').innerHTML=(SOLAR.goals||[]).map(function(g){
     return '<div class="goal" data-k="'+esc(g.key)+'" onclick="selectGoal(\''+esc(g.key)+'\')"><span class="ic">'+g.icon+'</span><span class="nm">'+esc(g.label)+'</span></div>';
   }).join('');
