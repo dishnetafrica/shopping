@@ -7,6 +7,7 @@ use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\StockMovement;
 use App\Models\Tenant;
+use App\Services\Catalog\KitService;
 
 /**
  * Perpetual inventory — Step 2 of the operational-audit backlog.
@@ -54,7 +55,7 @@ final class OrderStockIssuer
                 $out[] = ['product_id' => $pid, 'qty' => $qty, 'name' => (string) $it->name];
             }
         }
-        if ($out) return $out;
+        if ($out) return self::explodeKits($order, $out);
 
         foreach ((array) $order->items_json as $l) {
             if (! is_array($l)) continue;
@@ -68,7 +69,62 @@ final class OrderStockIssuer
                 $out[] = ['product_id' => $pid, 'qty' => $qty, 'name' => $name];
             }
         }
-        return $out;
+        return self::explodeKits($order, $out);
+    }
+
+    /**
+     * Asset Lifecycle · S4b — explode any KIT line into its component parts (kit qty × part qty), so a
+     * sold bundle draws its parts down from stock while the customer document still shows the kit as one
+     * line at the kit price. One level deep (a part that is itself a kit is left as-is — rare). Because
+     * issue, reverse and the double-deduct guard all derive from lines(), this single point makes every
+     * one of them kit-correct. Fully guarded: a kit hiccup falls back to the original lines and can never
+     * break the stock issue.
+     *
+     * @param  array<int,array{product_id:int,qty:float,name:string}>  $lines
+     * @return array<int,array{product_id:int,qty:float,name:string}>
+     */
+    private static function explodeKits(Order $order, array $lines): array
+    {
+        try {
+            if ($lines === []) {
+                return $lines;
+            }
+            $pids = array_values(array_unique(array_map(fn ($l) => (int) $l['product_id'], $lines)));
+            $kitIds = Product::where('tenant_id', $order->tenant_id)->whereIn('id', $pids)
+                ->where('is_kit', true)->pluck('id')->map(fn ($v) => (int) $v)->all();
+            if ($kitIds === []) {
+                return $lines;   // nothing to explode — the common case, one cheap query
+            }
+
+            $tenant = Tenant::find($order->tenant_id);
+            if (! $tenant) {
+                return $lines;
+            }
+            $kits = KitService::forTenant($tenant);
+
+            $out = [];
+            foreach ($lines as $ln) {
+                if (in_array((int) $ln['product_id'], $kitIds, true)) {
+                    $parts = $kits->explode((int) $ln['product_id'], (float) $ln['qty']);
+                    if ($parts !== []) {
+                        foreach ($parts as $pt) {
+                            $out[] = [
+                                'product_id' => (int) $pt['product_id'],
+                                'qty'        => (float) $pt['quantity'],
+                                'name'       => (string) $pt['name'] . ' (in ' . $ln['name'] . ')',
+                            ];
+                        }
+                        continue;   // the kit line is replaced by its parts
+                    }
+                    // is_kit but no parts resolved → fall through and issue the kit itself (defensive)
+                }
+                $out[] = $ln;
+            }
+            return $out;
+        } catch (\Throwable $e) {
+            \Log::warning('kit explode on stock issue failed: ' . $e->getMessage());
+            return $lines;
+        }
     }
 
     /** Signed net quantity already issued for this order (issues − reversals), keyed by product. */
