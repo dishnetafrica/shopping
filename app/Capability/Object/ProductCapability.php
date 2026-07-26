@@ -10,6 +10,7 @@ use App\Capability\Process\ProductListCapability;
 use App\Capability\Shared\RecommendationCapability;
 use App\Capability\Support\Money;
 use App\Models\Product;
+use App\Models\Warranty;
 use App\Services\Catalog\ProductSpecService;
 use App\Services\Catalog\ProductWriteService;
 use App\Services\Inventory\SerialService;
@@ -97,6 +98,51 @@ final class ProductCapability implements ObjectCapability
             'labels' => ['serials' => 'Serial numbers — separate with commas or new lines'], 'prefill' => [],
         ];
 
+        // Asset Lifecycle · Warranty (S3b) — a product's DEFAULT warranty policy (manufacturer + company
+        // months) shown on the detail page and editable inline, plus a live count of active warranties on
+        // this product. All rendered via the generic 'answers'/'stats'/'actions' sections (no front-end
+        // change). Kept off ordinary consumer goods: the terms and the editor only appear for serialized
+        // products or products that already carry a policy — so a grocery item's page is unchanged.
+        $mfrM  = $p->warranty_manufacturer_months;
+        $compM = $p->warranty_company_months;
+        $warrantyRelevant = (bool) $p->serialized || $mfrM !== null || $compM !== null;
+
+        $warrantyAnswers = [];
+        if ($warrantyRelevant) {
+            $warrantyAnswers[] = ['q' => 'Manufacturer warranty', 'value' => $mfrM ? $mfrM . ' months' : '—', 'sub' => 'Warranty'];
+            $warrantyAnswers[] = ['q' => 'Company warranty', 'value' => $compM ? $compM . ' months' : '—', 'sub' => 'Warranty'];
+        }
+
+        $warrantyStats = [];
+        $activeWarranties = Warranty::where('tenant_id', $ctx->tenantId())
+            ->where('product_id', (int) $p->id)
+            ->where('status', 'active')
+            ->where(function ($q) {
+                $q->whereNull('warranty_end')->orWhere('warranty_end', '>=', now()->toDateString());
+            })
+            ->count();
+        if ($activeWarranties > 0) {
+            $warrantyStats[] = ['key' => 'w_active', 'label' => 'Active warranties', 'value' => (string) $activeWarranties, 'icon' => 'shield', 'tone' => 'ok'];
+        }
+
+        $editWarranty = null;
+        if ($warrantyRelevant) {
+            $editWarranty = [
+                'key' => 'set_warranty', 'label' => 'Set warranty terms', 'method' => 'POST',
+                'endpoint' => '/api/v1/workspace/product/' . $p->id . '/set_warranty',
+                'actor' => 'human', 'tone' => 'default',
+                'schema' => ['warranty_manufacturer_months' => 'number', 'warranty_company_months' => 'number'],
+                'labels' => [
+                    'warranty_manufacturer_months' => 'Manufacturer warranty (months)',
+                    'warranty_company_months'      => 'Company warranty (months)',
+                ],
+                'prefill' => [
+                    'warranty_manufacturer_months' => $mfrM ?? '',
+                    'warranty_company_months'      => $compM ?? '',
+                ],
+            ];
+        }
+
         $fins = [
             new Financial('price', 'Price', round($price, 2), $cur),
             new Financial('cost', 'Cost', $p->cost_price === null ? '—' : round($cost, 2), $p->cost_price === null ? null : $cur),
@@ -118,9 +164,9 @@ final class ProductCapability implements ObjectCapability
             ->headline(number_format($stock) . ' ' . (string) ($p->unit_label ?: 'units'), 'on hand', $status === 'out' ? 'danger' : ($status === 'low' ? 'warn' : 'ok'))
             ->financials($fins)
             ->related($p->category ? $this->reco->topInCategory($ctx, (string) $p->category, 6, (int) $p->id) : [])
-            ->stats($serialStats)
-            ->answers($specAnswers)
-            ->actions(array_values(array_filter([$edit, $archive, $editSpecs, $addSerials])))
+            ->stats(array_merge($serialStats, $warrantyStats))
+            ->answers(array_merge($specAnswers, $warrantyAnswers))
+            ->actions(array_values(array_filter([$edit, $archive, $editSpecs, $addSerials, $editWarranty])))
             ->meta(['capability' => 'product', 'ttl' => 60, 'permissions' => ['menu:products']]);
     }
 
@@ -136,6 +182,7 @@ final class ProductCapability implements ObjectCapability
             'archive_product' => $this->doArchive($ctx, $p),
             'set_specs' => $this->doSetSpecs($ctx, $p, $input),
             'add_serials' => $this->doAddSerials($ctx, $p, $input),
+            'set_warranty' => $this->doSetWarranty($ctx, $p, $input),
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
     }
@@ -145,6 +192,30 @@ final class ProductCapability implements ObjectCapability
     {
         $parts = preg_split('/[\s,;]+/', trim($s)) ?: [];
         return array_values(array_unique(array_filter(array_map('trim', $parts), fn ($x) => $x !== '')));
+    }
+
+    /** Coerce a months field to a positive int, or null (blank / zero / non-numeric → no policy). */
+    private static function parseMonths($v): ?int
+    {
+        if ($v === null || $v === '') {
+            return null;
+        }
+        $n = (int) $v;
+        return $n > 0 ? $n : null;
+    }
+
+    /**
+     * Set this product's DEFAULT warranty policy (S3b). A plain product-attribute update — the terms a
+     * new warranty inherits when a unit is sold/installed (auto-activation lands in S3c). Owner/manager
+     * gating is enforced upstream by the workspace command route.
+     */
+    private function doSetWarranty(CapabilityContext $ctx, Product $p, array $input): array
+    {
+        $p->warranty_manufacturer_months = self::parseMonths($input['warranty_manufacturer_months'] ?? null);
+        $p->warranty_company_months      = self::parseMonths($input['warranty_company_months'] ?? null);
+        $p->save();
+
+        return ['ok' => true, 'message' => 'Warranty terms updated.'];
     }
 
     private function doAddSerials(CapabilityContext $ctx, Product $p, array $input): array

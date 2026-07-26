@@ -1,39 +1,56 @@
-# S3a · Warranty — the warranty object
+# S3b — Warranty terms on the product page
 
-The foundation of warranty management (Asset Lifecycle). Warranties are now first-class records that
-attach to **either a serial or a non-serialized invoice line**, with derived expiry and an audit trail.
-Builds on S2 (uses the serial units).
+This is the next small, additive slice of the **Asset Lifecycle** extension. It brings a product's
+**default warranty policy** onto the product detail page in the app:
 
-## What to do
-Upload everything here, keeping the folders. (S1 + S2 already uploaded & green.)
-Green ✓ "Money kernel (must pass)" confirms it.
+- Every serialized product (inverters, batteries, panels, etc.) now shows **Manufacturer warranty**
+  and **Company warranty** (in months), and a manager can set them right there with a new
+  **"Set warranty terms"** button.
+- The product page also shows a live **"Active warranties"** count for that product.
+- Ordinary products (bread, groceries — not serialized, no policy) look **exactly the same as before**.
 
-## What it does (API today; on-page view + auto-activation come in S3b)
-- Activate a warranty (owner/manager): `POST /papi/warranties` with `product_id` and EITHER
-  `inventory_unit_id` (a serial) OR `invoice_id`+`invoice_item_id` (a non-serial line), plus customer,
-  `manufacturer`, `warranty_start`, and `manufacturer_months` / `company_months`
-  (warranty_end is computed from the longer term if you don't pass one). Attaching to a serial links
-  that unit back to the warranty.
-- List: `GET /papi/warranties?product_id=&inventory_unit_id=&customer_phone=`.
-- Expiring soon: `GET /papi/warranties/expiring?days=30`.
-- Void: `POST /papi/warranties/{id}/void`.
+Nothing about accounting, inventory, or the front-end changes. This is all payload-driven, like specs
+and serials were.
 
-## How it's built (per your review)
-- `warranties` table is the source of truth (`status` = active | void); **"expired" is derived** from
-  `warranty_end`, so no nightly job. Activation / voiding emit `WarrantyActivated` / `WarrantyVoided`.
-- Manufacturer is a name field for now; the full Manufacturer entity is a later slice (decision #6).
+---
 
-## What's inside
-- migration `create_warranties_table`
-- `app/Models/Warranty.php`, `app/Kernel/Events/WarrantyEvents.php`
-- `app/Services/Warranty/WarrantyService.php` (activate / void / list / expiring / derived status)
-- `app/Http/Controllers/Panel/WarrantyController.php` + routes
-- `tests/Feature/Kernel/WarrantyTest.php`
+## 4 files in this zip
 
-## Safety
-Additive: a new table; no existing screen or path changed. Writes owner/manager-only, tenant-isolated.
-Rollback = drop the table and remove these files.
+| File | What it is |
+|------|------------|
+| `database/migrations/2026_07_25_000007_add_warranty_terms_to_products.php` | **NEW** — adds two nullable columns to `products` |
+| `app/Models/Product.php` | **REPLACE** — the two new columns are now fillable + cast to integer |
+| `app/Capability/Object/ProductCapability.php` | **REPLACE** — shows the terms, the count, and the "Set warranty terms" button |
+| `tests/Feature/Kernel/ProductWarrantyTermsTest.php` | **NEW** — proves it works (part of the green gate) |
 
-## Next
-S3b — show warranties on the product/unit page + auto-activate on sale/installation + "expiring soon"
-view. Then the claims workflow (S7).
+---
+
+## How to upload (GitHub, branch `main`)
+
+Drag the **four folders** from this zip (`database`, `app`, `tests`) into your repo on GitHub so they
+land at the same paths. GitHub will replace the two existing files and add the two new ones.
+
+### ⚠️ Make sure the two NEW files actually land
+
+New files inside deep folders are the ones that sometimes go missing on upload. If after uploading
+you don't see them in GitHub, use these direct "create file at this exact path" links (they pre-fill
+the path — just paste the file contents from this zip and commit):
+
+- Migration → `github.com/dishnetafrica/shopping/new/main?filename=database/migrations/2026_07_25_000007_add_warranty_terms_to_products.php`
+- Test → `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/ProductWarrantyTermsTest.php`
+
+---
+
+## How you know it worked
+
+Watch the **Actions** tab. When the run finishes with a **green ✓** on the job
+**"Money kernel (must pass)"**, S3b is live and safe. That job runs the new warranty-terms test along
+with everything before it.
+
+---
+
+## What's next (not in this drop)
+
+- **S3c** — when a serialized unit is marked *sold*, auto-create its warranty using these default
+  terms (so the shop doesn't have to fill it in by hand each time).
+- An **"expiring soon"** warranties view (the data/API already exists from S3a).
