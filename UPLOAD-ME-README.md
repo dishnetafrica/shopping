@@ -1,61 +1,71 @@
-# Project Advisor — Slice 1: the deterministic Calculation Engine
+# Project Advisor — Slice 2: Discovery Wizard (backend)
 
-This is the first piece of the **AI-powered Project Advisor** (solar first, reusable for other
-industries later). It is the *technical core*: the deterministic sizing engine that turns a customer's
-needs into engineering numbers a proposal can stand on. By design, **the AI will only ever explain these
-numbers — it never computes or overrides them.**
+The second slice of the AI-powered Project Advisor. Slice 1 was the deterministic calculation engine;
+this adds the **discovery layer** that captures a customer's needs and feeds them into that engine.
 
-## What this slice gives you
+**This bundle includes Slice 1**, so it's the complete Advisor backend so far — upload just this; it
+supersedes the Slice 1 zip.
 
-A pure, tested calculation engine that produces, from a discovery brief:
+## What this slice adds
 
-- **Connected load** and **critical load** (W)
-- **Daily energy demand** (Wh/day and kWh/day)
-- **Peak demand** (W) — including motor surge
-- **PV array size** (W) and a suggested **panel count**
-- **Battery bank** (Wh and Ah at the system voltage)
-- **Inverter rating** (W and VA)
-- with a **safety margin** and a **future-expansion allowance** applied, and an ordered **steps**
-  breakdown (the working) for the AI narrative and the proposal.
+- **A data-driven questionnaire** (the "discovery schema"): customer type, objective, location, existing
+  power, monthly consumption/bill, appliances & loads, backup hours, budget, and expansion plans. It's
+  *data*, so the wizard UI is generated from it and a future industry ships a different schema, not new
+  code.
+- **A deterministic mapper** that turns the salesperson's answers into the neutral "brief" the sizing
+  engine consumes (loads normalised, region → local sun hours, expansion choice → allowance). Pure and
+  tested.
+- **Compute + capture** — an API that runs the engine on the answers (live, no save) and one that saves
+  a **captured project** storing both the answers and the sizing snapshot for the proposal stage.
 
-Every assumption — sun hours, efficiencies, depth-of-discharge, system voltage, safety margin, power
-factor, expansion — is configurable with sensible East-Africa defaults, so the same engine is reusable
-and tunable per tenant or project without code changes.
+The AI's boundary is preserved: the numbers always come from the deterministic engine, never the caller.
 
-## Why it's built this way (the architecture)
+## Architecture (why it's generic)
 
-`SizingEngine` is a **generic contract**, not solar-specific. Solar is the first implementation
-(`SolarSizingService`). To add generators, HVAC, water treatment, etc. later, you add another engine
-that implements the same contract — the rest of the Advisor framework (discovery wizard, proposal
-templates) reuses it unchanged. The engine is pure: same inputs always give the same outputs, no
-database, no network, no randomness — which is exactly what makes the recommendations defensible.
+`DiscoveryProfile` (questions + mapping) and `SizingEngine` (maths) are both **contracts**. A profile is
+registered against an engine in `ProjectAdvisorService`. Solar is the first pairing; generators / HVAC /
+water treatment add a new profile + engine and reuse the whole framework — the API, persistence and
+(next) the wizard UI don't change.
 
-This slice is **standalone and safe**: two new service files plus one test. Nothing existing is touched,
-no database change, nothing is wired into a screen yet (that comes in later slices — Discovery Wizard,
-then the Proposal Generator that reuses your quotation + PDF engine).
+## API (all under `/papi/advisor`, gated to the Sales menu)
 
-## Files in this zip (3)
+- `GET  /papi/advisor/schema?profile=solar` — the questionnaire to render.
+- `POST /papi/advisor/compute` — answers → deterministic sizing (no save; for live preview).
+- `POST /papi/advisor/projects` — save a captured project (answers + sizing snapshot).
+- `GET  /papi/advisor/projects` and `GET /papi/advisor/projects/{id}` — list / read.
+
+## Files in this zip
 
 **New**
 
-- `app/Services/Advisor/SizingEngine.php` — the generic, reusable sizing contract.
-- `app/Services/Advisor/SolarSizingService.php` — the deterministic solar sizing engine.
-- `tests/Unit/Kernel/SolarSizingTest.php` — proves a full worked example, determinism, safety on empty
-  input, surge handling, config overrides, and that the explainable steps are present.
+- `app/Services/Advisor/DiscoveryProfile.php` — discovery contract.
+- `app/Services/Advisor/SolarDiscoveryProfile.php` — solar questionnaire + mapper.
+- `app/Services/Advisor/ProjectAdvisorService.php` — profile↔engine registry + compute/save.
+- `app/Services/Advisor/SizingEngine.php`, `SolarSizingService.php` — the Slice 1 engine (included).
+- `app/Models/AdvisorProject.php` — captured project.
+- `app/Http/Controllers/Advisor/AdvisorController.php` — the API.
+- `database/migrations/2026_07_26_000002_create_advisor_projects_table.php` — storage.
+- `tests/Unit/Kernel/SolarSizingTest.php`, `SolarDiscoveryProfileTest.php` — engine + schema/mapper.
+- `tests/Feature/Kernel/AdvisorProjectTest.php` — the API end-to-end (schema, compute, save, gating).
+
+**Replace**
+
+- `routes/web.php` — adds the `papi/advisor` routes (nothing else changed).
 
 ## How to upload (GitHub, branch `main`)
 
-Drag the `app` and `tests` folders into your repo at the same paths. All three are new files.
+Drag the `app`, `database`, `tests` folders and `routes/web.php` into your repo at the same paths. The
+new migration runs automatically on deploy.
 
 ## How you know it worked
 
-Green ✓ on **"Money kernel (must pass)"** — the new test runs there. (Before shipping, I also ran the
-real engine against a worked home-system example: 300 W connected load, 1.83 kWh/day, ~586 W of panels,
-~3.87 kWh battery bank, a 375 W / 469 VA inverter — all correct and repeatable.)
+Green ✓ on **"Money kernel (must pass)"** — the unit and feature tests run there. (Before shipping I ran
+the real mapper + engine against a full sample questionnaire: a Northern-region home with fridge/TV/
+lights → 300 W load, 1.83 kWh/day, 600 W peak with motor surge, a 750 W / 938 VA inverter — all correct.)
 
 ## What's next
 
-With the numbers trustworthy, the next slices build on top: the **Discovery Wizard** (captures the brief
-this engine consumes), then the **Proposal Generator** (assembles the proposal from brief + these
-numbers + your Product Specifications, rendered through your existing quotation + PDF pipeline), then
-**solution packages** and the **knowledge library**.
+Slice 3 — the **Proposal Generator**: assemble a professional proposal from a captured project (its
+answers + sizing + your Product Specifications), rendered through your existing quotation + PDF pipeline,
+with a template per customer segment. Then solution packages and the knowledge library. (The wizard's V3
+screen — the visual form over this schema — is a small front-end follow-up whenever you want it.)

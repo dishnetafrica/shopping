@@ -197,6 +197,14 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
     // JSON API the panel calls. GET for everything (the panel uses query-string
     // writes); upload-image is POST. Tenant scoping is automatic.
     Route::prefix('papi')->group(function () {
+        // Project Advisor (Slice 2 — Discovery): questionnaire schema, deterministic compute, projects.
+        Route::prefix('advisor')->group(function () {
+            Route::get('schema', [\App\Http\Controllers\Advisor\AdvisorController::class, 'schema']);
+            Route::match(['get', 'post'], 'compute', [\App\Http\Controllers\Advisor\AdvisorController::class, 'compute']);
+            Route::post('projects', [\App\Http\Controllers\Advisor\AdvisorController::class, 'saveProject']);
+            Route::get('projects', [\App\Http\Controllers\Advisor\AdvisorController::class, 'listProjects']);
+            Route::get('projects/{id}', [\App\Http\Controllers\Advisor\AdvisorController::class, 'showProject'])->where('id', '[0-9]+');
+        });
         Route::prefix('task')->group(function () {
             Route::get('summary', [TaskApiController::class, 'summary']);
             Route::get('mine',  [TaskApiController::class, 'mine']);
