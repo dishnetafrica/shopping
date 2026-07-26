@@ -1,45 +1,65 @@
-# S8 test fix — make the Project Quote tests green
+# Billing in V3 (view-first)
 
-## What was actually failing (and what wasn't)
+This migrates the **Billing** screen to CloudBSS V3 — the plan/subscription view — **without touching
+payments**. It's the next legacy-panel gap closed.
 
-The pasted diagnosis blamed a **database connection** (`database "shopbot" does not exist`). That's a
-red herring: that line is the Postgres container's health-check probing a default database *before*
-`shopbot_test` is created — harmless noise. If the DB were really down, **every** test would fail. Here
-only **3** failed, and they're all the ones that route through the **frozen quotation engine**
-(`fromKits → createFor → QuotationService::persist`):
+## What you get
 
-- `ProjectQuoteTest::test_from_kits_creates_quote_with_section_meta`
-- `ProjectQuoteTest::test_tenant_isolated`
-- `ProjectQuoteWorkspaceTest::test_project_quote_detail_shows_sections`
+A new **Billing** item in the V3 sidebar (under **Settings**). It shows:
 
-That engine needs Dompdf / live context and **isn't runnable under tests** — which is exactly why every
-other quotation test in the codebase creates quotations with `Quotation::create()` directly, never
-through the engine. My S8 tests broke that convention. **The feature itself is fine** — the storefront
-uses that same engine in production every day.
+- Your **current plan** and status — days left on trial, or the renewal date.
+- **Orders this month** vs your plan's limit.
+- A clear **Free vs Starter vs Pro** comparison — price, order limit, team size, and what each includes,
+  with your current plan flagged.
+- An **Upgrade / manage payment** button that opens your existing secure billing page, where Mobile
+  Money and card payment work exactly as they do today.
 
-## The fix
+**Payments are untouched.** The V3 screen only *shows* plan information (pulled from the same plans
+config and plan methods the app already uses); the actual charging still runs on the existing secure
+page. Rebuilding the payment flow itself inside V3 would be a separate, carefully-planned step.
 
-I rewrote the two test files to cover S8's *own* additions the test-safe way, with **no production code
-changed**:
+---
 
-- **Section math** — proven pure via `buildSections()` (no engine).
-- **Section grouping in meta** — verified by storing the same meta the engine stamps and reading it back
-  with `sectionsFor()`.
-- **Sectioned view** — proven by creating a project quotation directly and rendering it through the V3
-  quotation workspace (the "one card per section" view).
+## ⚠️ Prerequisite
 
-Nothing else changes. `ProjectQuoteService`, the controller, routes, and the capabilities are untouched.
+This bundle ships the **cumulative** capability registry (`CoreCapabilityProvider.php`) and V3 shell
+(`shell.blade.php`) — they include all the earlier V3 screens (Phase 2 + Module Manager). Make sure
+those earlier drops are already uploaded (they are, if you've been uploading in order); this file
+supersedes them with the latest, so nothing is lost.
 
-## Files in this zip (2)
+## Files in this zip (5)
 
-- `tests/Feature/Kernel/ProjectQuoteTest.php` *(replace)*
-- `tests/Feature/Kernel/ProjectQuoteWorkspaceTest.php` *(replace)*
+**New**
+
+- `app/Capability/Process/BillingCapability.php` — the V3 Billing screen
+- `tests/Feature/Kernel/BillingWorkspaceTest.php` — proves it
+
+**Replace**
+
+- `app/Capability/Registry/CoreCapabilityProvider.php` — registers Billing
+- `resources/views/shell.blade.php` — Billing in the V3 sidebar (Settings)
+- `docs/v3-migration/MIGRATION-TRACKER.md`
+
+No new routes, no payment code — the screen reads plan info and links out for payment.
+
+---
 
 ## How to upload (GitHub, branch `main`)
 
-Drag the `tests` folder into your repo so both files land at the same paths (they replace the current
-ones).
+Drag the folders (`app`, `resources`, `tests`, `docs`) into your repo at the same paths. If a new file
+doesn't appear, use these links (paste contents, commit):
+
+- `github.com/dishnetafrica/shopping/new/main?filename=app/Capability/Process/BillingCapability.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/BillingWorkspaceTest.php`
 
 ## How you know it worked
 
-Green ✓ on **"Money kernel (must pass)"** — the Project Quote tests now pass alongside everything else.
+Green ✓ on **"Money kernel (must pass)"**. Then open V3 → **Settings → Billing** to see your plan and
+the comparison; the Upgrade button opens the existing payment page.
+
+---
+
+## What's next
+
+The last legacy-panel gap: **Roles & Permissions in V3** (team access control) — high-stakes, so I'll
+open with its own plan for review.

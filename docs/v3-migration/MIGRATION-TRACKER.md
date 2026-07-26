@@ -39,7 +39,7 @@ This first pass is derived from two authoritative sources in the code: the `Clas
 | WhatsApp (connect/QR) | ✅ | 🚧 | 🟡 Verify | chats live; confirm number connect/QR + channels in V3 |
 | Team | ✅ | 🚧 | 🟡 Verify | staff routes to `settings`; confirm a first-class Team screen |
 | Roles / Permissions | ✅ | ❓ | ❌ Not started | no dedicated V3 home identified yet |
-| Billing | ✅ | ❌ | ❌ Not started | `/panel/billing` has no V3 redirect home yet |
+| Billing | ✅ | 🚧 | 🚧 Building | V3 **Billing** screen (Settings) shows plan + status + Free/Starter/Pro comparison; payment (Mobile Money / card) still runs on the existing secure `/panel/billing` page (a separate, later migration) |
 | Module Manager | ✅ | ✅ | ✅ Done | V3 **Modules** screen (Settings group) — owner toggles feature modules; legacy `/panel/system` redirects to it |
 
 ## V3-native modules (born in V3 — no legacy panel equivalent)
