@@ -12,6 +12,7 @@ use App\Capability\Support\Money;
 use App\Models\Product;
 use App\Services\Catalog\ProductSpecService;
 use App\Services\Catalog\ProductWriteService;
+use App\Services\Inventory\SerialService;
 
 final class ProductCapability implements ObjectCapability
 {
@@ -72,6 +73,30 @@ final class ProductCapability implements ObjectCapability
             'actor' => 'human', 'tone' => 'default', 'schema' => $specSchema, 'prefill' => $specPrefill,
         ];
 
+        // Asset Lifecycle · Serialized Inventory (S2c) — show this product's units by status (via the
+        // generic 'stats' tiles, no front-end change) and offer inline serial registration. Empty for
+        // non-serialized products, so their page is unchanged.
+        $serialStats = [];
+        if ((bool) $p->serialized) {
+            $counts = SerialService::forTenant($ctx->tenant)->counts((int) $p->id);
+            $total  = array_sum($counts);
+            if ($total > 0) {
+                $serialStats[] = ['key' => 'u_total', 'label' => 'Tracked units', 'value' => (string) $total, 'icon' => 'products', 'tone' => 'ok'];
+                foreach (['in_stock' => 'In stock', 'reserved' => 'Reserved', 'sold' => 'Sold', 'installed' => 'Installed', 'returned' => 'Returned', 'replaced' => 'Replaced', 'scrapped' => 'Scrapped'] as $k => $lbl) {
+                    if (! empty($counts[$k])) {
+                        $serialStats[] = ['key' => 'u_' . $k, 'label' => $lbl, 'value' => (string) $counts[$k], 'icon' => 'products',
+                            'tone' => $k === 'in_stock' ? 'ok' : (in_array($k, ['returned', 'scrapped'], true) ? 'warn' : 'default')];
+                    }
+                }
+            }
+        }
+        $addSerials = [
+            'key' => 'add_serials', 'label' => 'Add serials', 'method' => 'POST',
+            'endpoint' => '/api/v1/workspace/product/' . $p->id . '/add_serials',
+            'actor' => 'human', 'tone' => 'default', 'schema' => ['serials' => 'text'],
+            'labels' => ['serials' => 'Serial numbers — separate with commas or new lines'], 'prefill' => [],
+        ];
+
         $fins = [
             new Financial('price', 'Price', round($price, 2), $cur),
             new Financial('cost', 'Cost', $p->cost_price === null ? '—' : round($cost, 2), $p->cost_price === null ? null : $cur),
@@ -93,8 +118,9 @@ final class ProductCapability implements ObjectCapability
             ->headline(number_format($stock) . ' ' . (string) ($p->unit_label ?: 'units'), 'on hand', $status === 'out' ? 'danger' : ($status === 'low' ? 'warn' : 'ok'))
             ->financials($fins)
             ->related($p->category ? $this->reco->topInCategory($ctx, (string) $p->category, 6, (int) $p->id) : [])
+            ->stats($serialStats)
             ->answers($specAnswers)
-            ->actions(array_values(array_filter([$edit, $archive, $editSpecs])))
+            ->actions(array_values(array_filter([$edit, $archive, $editSpecs, $addSerials])))
             ->meta(['capability' => 'product', 'ttl' => 60, 'permissions' => ['menu:products']]);
     }
 
@@ -109,8 +135,27 @@ final class ProductCapability implements ObjectCapability
             'update_product' => $this->doUpdate($ctx, $p, $input),
             'archive_product' => $this->doArchive($ctx, $p),
             'set_specs' => $this->doSetSpecs($ctx, $p, $input),
+            'add_serials' => $this->doAddSerials($ctx, $p, $input),
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
+    }
+
+    /** Split a free-text serials field (commas / new lines / spaces) into a clean, unique list. */
+    private static function parseSerials(string $s): array
+    {
+        $parts = preg_split('/[\s,;]+/', trim($s)) ?: [];
+        return array_values(array_unique(array_filter(array_map('trim', $parts), fn ($x) => $x !== '')));
+    }
+
+    private function doAddSerials(CapabilityContext $ctx, Product $p, array $input): array
+    {
+        $serials = self::parseSerials((string) ($input['serials'] ?? ''));
+        if ($serials === []) {
+            return ['ok' => false, 'error' => 'No serial numbers provided.'];
+        }
+        $units = SerialService::forTenant($ctx->tenant)->bulkRegister((int) $p->id, $serials);
+
+        return ['ok' => true, 'message' => count($units) . ' serial(s) registered.'];
     }
 
     /** Build a spec-edit form schema (key => field type) from the tenant's active spec catalogue. */

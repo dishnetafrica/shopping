@@ -1,29 +1,24 @@
-# S2 (complete) — re-upload this whole bundle to fix the failing check
+# S2c · Serials on the product page — upload to GitHub
 
-The check failed with **"relation inventory_units does not exist"** — the table's migration didn't
-run, which means the S2a migration file isn't in your repo (an upload gap; S2b didn't include the
-migrations). This bundle contains **everything for S2 (a + b)** so one upload guarantees all the pieces
-are present together.
-
-> ⚠️ Do NOT create a new inventory_units migration. It already exists here
-> (`database/migrations/2026_07_25_000004_create_inventory_units_table.php`). A second one would fail
-> with "table already exists." Just upload this bundle.
-> (The "database shopbot does not exist" line in the log is the harmless health-check, not the cause.)
+Builds on S2a/S2b. The V3 product detail page now shows a serialized product's units by status
+(Tracked units · In stock · Sold · …) and offers an **Add serials** action to register units right
+there — paste serial numbers separated by commas or new lines. All through the capability payload, so
+there is **no change to the V3 front-end**.
 
 ## What to do
-Upload everything in this folder, **keeping the folders** (`database/…`, `app/…`, `routes/…`,
-`tests/…`). It's safe to overwrite — these are the current versions.
+Upload these two files, keeping the folders. (S2a + S2b already uploaded.)
 
-Then the check should go green.
+## How you'll know it worked
+- Green ✓ "Money kernel (must pass)" — the S2c test runs inside that check.
+- In the app: open a serialized product → you'll see its unit counts, and **Add serials** lets you
+  register more. A product with no serials looks exactly as before.
 
-## The one file that matters most
-`database/migrations/2026_07_25_000004_create_inventory_units_table.php` — this is what creates the
-`inventory_units` table. Make sure, after uploading, it appears under `database/migrations/` in GitHub.
+## What's inside / safety
+- Only `ProductCapability::forId()` (adds serial 'stats' + an Add-serials action) and `command()`
+  (adds `add_serials`) are extended — additive. Non-serialized products are unaffected.
+- `tests/Feature/Kernel/SerialProductViewTest.php`.
+- Rollback = revert `ProductCapability.php`.
 
-## What's in the bundle (all of S2)
-- migrations: create `inventory_units`, add `serialized` to products
-- `app/Models/InventoryUnit.php`, `Product.php`
-- `app/Kernel/Events/SerialEvents.php`
-- `app/Services/Inventory/SerialService.php`, `OrderStockIssuer.php`
-- `app/Http/Controllers/Panel/SerialController.php` + routes
-- tests: `SerialRegistryTest.php`, `SerialSaleObserveTest.php`
+## Deferred: QR codes
+There is no QR library server-side yet, so rendering the units' QR codes is a small follow-on
+(the `qr_token` is already stored on every unit, so it's ready whenever we add a QR renderer).
