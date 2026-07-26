@@ -91,12 +91,19 @@ class ProjectAdvisorService
 
         $sizing = $this->compute($profile, $answers, $config)['sizing'];
 
+        // Resolve status into a local first: reading $data['status'] inside the ternary when the key is
+        // absent raises "Undefined array key" on PHP 8 (save() is often called with no status).
+        $status = (string) ($data['status'] ?? 'sized');
+        if (! in_array($status, ['draft', 'sized', 'proposed', 'won', 'lost'], true)) {
+            $status = 'sized';
+        }
+
         $attrs = [
             'tenant_id'   => $tenant->id,
             'customer_id' => isset($data['customer_id']) && $data['customer_id'] !== '' ? (int) $data['customer_id'] : null,
             'profile'     => $profile,
             'name'        => ($n = trim((string) ($data['name'] ?? ''))) !== '' ? $n : null,
-            'status'      => in_array(($data['status'] ?? 'sized'), ['draft', 'sized', 'proposed', 'won', 'lost'], true) ? $data['status'] : 'sized',
+            'status'      => $status,
             'answers'     => $answers,
             'sizing'      => $sizing,
         ];
