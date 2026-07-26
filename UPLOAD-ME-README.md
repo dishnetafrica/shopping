@@ -1,70 +1,58 @@
-# Team & Roles in V3 — the last legacy-panel gap
+# Product importer upgrade — multiple photos + auto-fill specifications
 
-This migrates **Team & Roles** (legacy `/panel/staff`) to CloudBSS V3. With it, every remaining
-legacy-panel gap is closed.
+This one update teaches your catalogue importer two new tricks, so a single import can bring a product
+in **complete**: price, stock, up to **4 photos**, and its **specifications** — no hand-typing afterward.
 
-## What you get
+## 1. Up to 4 photos per product
 
-A new **Team & Roles** item in the V3 sidebar (under **Settings**):
+Your product CSV can now have these optional columns:
 
-- **Your team** listed with each person's role and how they sign in, plus your seat usage.
-- **Add staff**, **change a member's role**, and **remove a member** — each posting to your **existing,
-  owner-only staff endpoints**, so all the safety carries over unchanged: only owners can make changes,
-  you can't remove yourself or the last remaining login, and your plan's seat limit is enforced.
-- A read-only **role guide** — what each role (Owner, Manager, Sales, Product staff, Purchaser, Field,
-  Transport, Staff) is for, so you assign confidently.
-- Legacy `/panel/staff` now redirects to this V3 screen.
+- `Gallery 1`, `Gallery 2`, `Gallery 3`
 
-Two deliberate safety choices: I wrote **no new access-control code** (all writes reuse the guarded
-endpoints), and the current user is **excluded from the change-role / remove pickers** so you can't lock
-yourself out. The strict-enforcement switch (which can suddenly block staff) is **left exactly as it is**
-— that's a separate, deliberate decision, not something to bury in a screen.
+Each holds either a **filename inside the ZIP** (like the `Image` column) or a **direct image URL**.
+The main photo still lives in `Image`. Blank cells are ignored.
 
----
+## 2. Specifications fill in automatically
 
-## ⚠️ Prerequisite
+If a CSV column heading matches one of your product **spec fields**, the importer fills that spec in.
+For your solar catalogue that means columns like:
 
-Ships the **cumulative** capability registry (`CoreCapabilityProvider.php`) and V3 shell
-(`shell.blade.php`) — they include all the earlier V3 screens. Upload the earlier drops first (they are,
-if you've followed along); this supersedes them with the latest.
+- `Wattage`, `Voltage`, `Current`, `Power Rating`, `Capacity`, `Battery Chemistry`, `Lumens`
+  (also `Colour Temperature`, `Cable Length`, `IP Rating`)
 
-## Files in this zip (6)
+So instead of opening each product and typing specs into the "Edit specifications" screen, you put them
+in the CSV once and they import with the product.
 
-**New**
+This is **tenant-generic and safe**: it reads whatever spec catalogue a tenant already has (solar seeds
+one), it reuses your existing, tested spec service, it needs **no database change**, and a CSV with no
+spec columns imports **exactly as before**. Nothing outside the importer is touched.
 
-- `app/Capability/Process/TeamCapability.php` — the V3 Team & Roles screen
-- `tests/Feature/Kernel/TeamWorkspaceTest.php` — proves it
+## Files in this zip (3)
 
 **Replace**
 
-- `app/Capability/Registry/CoreCapabilityProvider.php` — registers Team
-- `resources/views/shell.blade.php` — Team in the V3 sidebar (Settings)
-- `app/Http/Middleware/ClassicPanelRedirects.php` — `/panel/staff` → V3 Team
-- `docs/v3-migration/MIGRATION-TRACKER.md` — Team & Roles now ✅ Done
+- `app/Http/Controllers/Panel/PanelApiController.php` — importer now reads `Gallery 1/2/3` and any
+  columns matching your spec fields (both the ZIP import and the CSV-only import).
 
-No new routes and no payment/auth code — the screen reads staff and reuses the existing `/papi/staff`
-endpoints for changes.
+**New**
 
----
+- `tests/Feature/Kernel/ProductMultiPhotoImportTest.php` — proves the 4-photo import.
+- `tests/Feature/Kernel/ProductSpecImportTest.php` — proves specs fill from matching columns, numbers
+  are stored for filtering, blanks are skipped, and a no-spec CSV writes no specs.
+
+> This **supersedes** the earlier "multi-photo" bundle — it contains that change plus the spec-import
+> change. If you already uploaded the multi-photo one, uploading this simply replaces the same file and
+> adds one more test; nothing is lost.
 
 ## How to upload (GitHub, branch `main`)
 
-Drag the folders (`app`, `resources`, `tests`, `docs`) into your repo at the same paths. If a new file
-doesn't appear, use these links (paste contents, commit):
+Drag the `app` and `tests` folders into your repo at the same paths (replaces one file, adds two tests).
+If a new test doesn't appear, use these links (paste contents, commit):
 
-- `github.com/dishnetafrica/shopping/new/main?filename=app/Capability/Process/TeamCapability.php`
-- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/TeamWorkspaceTest.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/ProductMultiPhotoImportTest.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/ProductSpecImportTest.php`
 
 ## How you know it worked
 
-Green ✓ on **"Money kernel (must pass)"**. Then open V3 → **Settings → Team & Roles**: your team lists,
-the role guide shows, and (as owner) you can add / change-role / remove.
-
----
-
-## 🎉 Legacy-panel migration: gaps closed
-
-Dashboard, Orders, Customers, Products, Inventory, Purchasing, Suppliers, Accounting, Messaging,
-Campaigns, Leads, Scheduling, Reports, Settings, **Module Manager**, **Billing** (view — payment stays on
-the secure legacy page), and **Team & Roles** are all in V3. The only piece still on the legacy panel by
-design is the Billing **payment flow** (a separate, careful step). New tenants already start in V3.
+Green ✓ on **"Money kernel (must pass)"** in GitHub Actions. After that, import a product with the new
+columns (use the **solar template** I sent) and it comes in with photos and specs already set.

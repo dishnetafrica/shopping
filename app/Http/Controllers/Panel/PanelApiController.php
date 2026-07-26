@@ -2152,6 +2152,34 @@ class PanelApiController extends Controller
     }
 
     /**
+     * Map CSV header columns to this tenant's product-spec definition keys. Returns [headerIndex => key].
+     * A column matches a definition by its label, its key, the spaced key, or "label unit" (all lower-
+     * cased; $header is already lowercased). Tenant-generic: with no spec catalogue the map is empty and
+     * the importer behaves exactly as before. First match wins; one header column maps to one spec.
+     */
+    private function buildSpecColMap(\App\Services\Catalog\ProductSpecService $svc, array $header): array
+    {
+        $map = [];
+        foreach ($svc->definitions(false) as $def) {
+            $cands = array_unique(array_filter([
+                mb_strtolower(trim((string) $def->label)),
+                mb_strtolower((string) $def->key),
+                str_replace('_', ' ', mb_strtolower((string) $def->key)),
+                $def->unit ? mb_strtolower(trim((string) $def->label)) . ' ' . mb_strtolower((string) $def->unit) : '',
+            ]));
+            foreach ($cands as $cand) {
+                if ($cand === '') continue;
+                $idx = array_search($cand, $header, true);
+                if ($idx !== false && ! array_key_exists($idx, $map)) {
+                    $map[$idx] = $def->key;
+                    break;
+                }
+            }
+        }
+        return $map;
+    }
+
+    /**
      * One-click catalogue import. Upload a ZIP containing a CSV (Product Name, Brand, Category,
      * Price UGX, Stock, Keywords, Image) plus the image files. Creates products with their photos,
      * skips duplicates (same name), respects category scope. Products with no price are created
@@ -2213,12 +2241,56 @@ class PanelApiController extends Controller
         $col = function ($names) use ($header) { foreach ($names as $n) { $i = array_search($n, $header, true); if ($i !== false) return $i; } return null; };
         $iName = $col(['product name', 'name']); $iCat = $col(['category']); $iPrice = $col(['price ugx', 'price usd', 'price (usd)', 'price']);
         $iStock = $col(['stock']); $iKw = $col(['keywords']); $iImg = $col(['image', 'photo']);
+        // Up to 3 extra gallery photos per product (main photo stays in the Image column). Each may be a
+        // filename inside this ZIP or a direct image URL. Missing/blank gallery cells are simply ignored.
+        $iGal1 = $col(['gallery 1', 'gallery_1', 'gallery1', 'image 2', 'photo 2']);
+        $iGal2 = $col(['gallery 2', 'gallery_2', 'gallery2', 'image 3', 'photo 3']);
+        $iGal3 = $col(['gallery 3', 'gallery_3', 'gallery3', 'image 4', 'photo 4']);
         // These columns are written by the export but were previously ignored on import, so a
         // round-trip (export → re-import) silently lost Cost, SKU, Unit, Pack Size and MOQ.
         $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
         $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
         $iBrand = $col(['brand']);
+        // Product specs (Wattage, Voltage, Capacity, Battery Chemistry, …): map any CSV column whose
+        // heading matches a spec definition (by label or key) so specs fill in on import. Tenant-generic
+        // — reads whatever spec catalogue this tenant has (solar seeds one); empty for tenants with none.
+        $specSvc    = \App\Services\Catalog\ProductSpecService::forTenant($t);
+        $specColMap = $this->buildSpecColMap($specSvc, $header);
         if ($iName === null) { $za->close(); @unlink($tmp); return response()->json(['ok' => false, 'error' => 'csv_no_name'], 422); }
+
+        // Resolve one gallery cell (a ZIP filename or a direct image URL) to a stored public URL.
+        // Returns '' when blank, unresolved, or on any fetch error — galleries are optional, never fatal.
+        $resolveImg = function (string $raw) use ($za, $imgIndex, $t): string {
+            $raw = trim($raw);
+            if ($raw === '') return '';
+            if (preg_match('#^https?://#i', $raw)) {
+                try {
+                    $resp = \Illuminate\Support\Facades\Http::timeout(25)->withHeaders(['User-Agent' => 'Mozilla/5.0'])->get($raw);
+                    if ($resp->successful()) {
+                        $ct = strtolower((string) $resp->header('Content-Type'));
+                        $body = $resp->body();
+                        if ($body !== '' && str_contains($ct, 'image')) {
+                            $ext  = str_contains($ct, 'png') ? 'png' : (str_contains($ct, 'webp') ? 'webp' : 'jpg');
+                            $path = 'products/' . $t->id . '/' . uniqid('imp_', true) . '.' . $ext;
+                            Storage::disk('public')->put($path, $body);
+                            return url(Storage::url($path));
+                        }
+                    }
+                } catch (\Throwable $e) {}
+                return '';
+            }
+            $bn = basename(strtolower($raw));
+            if ($bn !== '' && isset($imgIndex[$bn])) {
+                $bytes = $za->getFromIndex($imgIndex[$bn]);
+                if ($bytes !== false) {
+                    $ext  = strtolower(pathinfo($bn, PATHINFO_EXTENSION)) ?: 'jpg';
+                    $path = 'products/' . $t->id . '/' . uniqid('imp_', true) . '.' . $ext;
+                    Storage::disk('public')->put($path, $bytes);
+                    return url(Storage::url($path));
+                }
+            }
+            return '';
+        };
 
         $created = $dup = $noImg = $forbidden = 0; $samples = []; $catsSeen = [];
         foreach ($lines as $ln) {
@@ -2282,14 +2354,23 @@ class PanelApiController extends Controller
             } else { $noImg++; }
 
             if ($apply) {
-                Product::create([
+                $g1 = $iGal1 !== null ? $resolveImg((string) ($c[$iGal1] ?? '')) : '';
+                $g2 = $iGal2 !== null ? $resolveImg((string) ($c[$iGal2] ?? '')) : '';
+                $g3 = $iGal3 !== null ? $resolveImg((string) ($c[$iGal3] ?? '')) : '';
+                $product = Product::create([
                     'tenant_id'  => $t->id, 'name' => $name, 'category' => $cat, 'brand' => ($brand ?: null), 'keywords' => $kw,
                     'sku'        => ($sku ?: null), 'cost_price' => ($cost > 0 ? $cost : null),
                     'unit_label' => ($unit ?: null),
                     'pack_size'  => ($pack > 0 ? $pack : null), 'moq' => ($moq > 0 ? $moq : null),
                     'base_price' => $price, 'price' => $price, 'stock' => $stock, 'image_url' => $url,
+                    'gallery_1'  => ($g1 ?: null), 'gallery_2' => ($g2 ?: null), 'gallery_3' => ($g3 ?: null),
                     'active'     => $price > 0,
                 ]);
+                if ($specColMap) {
+                    $pairs = [];
+                    foreach ($specColMap as $idx => $key) { $pairs[$key] = (string) ($c[$idx] ?? ''); }
+                    $specSvc->setProductSpecs((int) $product->id, $pairs);
+                }
             }
             $created++;
             if ($cat !== '') $catsSeen[$cat] = 1;
@@ -2342,10 +2423,38 @@ class PanelApiController extends Controller
         $col = function ($names) use ($header) { foreach ($names as $n) { $i = array_search($n, $header, true); if ($i !== false) return $i; } return null; };
         $iName = $col(['product name', 'name']); $iCat = $col(['category']); $iPrice = $col(['price ugx', 'price usd', 'price (usd)', 'price']);
         $iStock = $col(['stock']); $iKw = $col(['keywords']); $iImg = $col(['image', 'photo']);
+        // Up to 3 extra gallery photos. In a CSV-only import (no ZIP) these must be direct image URLs.
+        $iGal1 = $col(['gallery 1', 'gallery_1', 'gallery1', 'image 2', 'photo 2']);
+        $iGal2 = $col(['gallery 2', 'gallery_2', 'gallery2', 'image 3', 'photo 3']);
+        $iGal3 = $col(['gallery 3', 'gallery_3', 'gallery3', 'image 4', 'photo 4']);
         $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
         $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
         $iBrand = $col(['brand']);
+        // Product specs (see productsImport): map CSV columns matching this tenant's spec definitions.
+        $specSvc    = \App\Services\Catalog\ProductSpecService::forTenant($t);
+        $specColMap = $this->buildSpecColMap($specSvc, $header);
         if ($iName === null) return response()->json(['ok' => false, 'error' => 'csv_no_name'], 422);
+
+        // Resolve a gallery cell (direct image URL only, since there is no ZIP here) to a stored URL.
+        // Returns '' when blank, not a URL, non-image, or on any fetch error — galleries stay optional.
+        $resolveImg = function (string $raw) use ($t): string {
+            $raw = trim($raw);
+            if ($raw === '' || ! preg_match('#^https?://#i', $raw)) return '';
+            try {
+                $resp = \Illuminate\Support\Facades\Http::timeout(25)->withHeaders(['User-Agent' => 'Mozilla/5.0'])->get($raw);
+                if ($resp->successful()) {
+                    $ct = strtolower((string) $resp->header('Content-Type'));
+                    $body = $resp->body();
+                    if ($body !== '' && str_contains($ct, 'image')) {
+                        $ext  = str_contains($ct, 'png') ? 'png' : (str_contains($ct, 'webp') ? 'webp' : 'jpg');
+                        $path = 'products/' . $t->id . '/' . uniqid('imp_', true) . '.' . $ext;
+                        Storage::disk('public')->put($path, $body);
+                        return url(Storage::url($path));
+                    }
+                }
+            } catch (\Throwable $e) {}
+            return '';
+        };
 
         $created = $dup = $noImg = $forbidden = 0; $samples = []; $catsSeen = [];
         foreach ($lines as $ln) {
@@ -2385,12 +2494,22 @@ class PanelApiController extends Controller
             } elseif ($imgRaw !== '') { $noImg++; }
 
             if ($apply) {
-                Product::create([
+                $g1 = $iGal1 !== null ? $resolveImg((string) ($c[$iGal1] ?? '')) : '';
+                $g2 = $iGal2 !== null ? $resolveImg((string) ($c[$iGal2] ?? '')) : '';
+                $g3 = $iGal3 !== null ? $resolveImg((string) ($c[$iGal3] ?? '')) : '';
+                $product = Product::create([
                     'tenant_id' => $t->id, 'name' => $name, 'category' => $cat, 'brand' => ($brand ?: null), 'keywords' => $kw, 'sku' => ($sku ?: null),
                     'unit_label' => ($unit ?: null), 'pack_size' => ($pack > 0 ? $pack : null), 'moq' => ($moq > 0 ? $moq : null),
                     'base_price' => $price, 'price' => $price, 'cost_price' => ($cost > 0 ? $cost : null),
-                    'stock' => $stock, 'image_url' => $url, 'active' => $price > 0,
+                    'stock' => $stock, 'image_url' => $url,
+                    'gallery_1' => ($g1 ?: null), 'gallery_2' => ($g2 ?: null), 'gallery_3' => ($g3 ?: null),
+                    'active' => $price > 0,
                 ]);
+                if ($specColMap) {
+                    $pairs = [];
+                    foreach ($specColMap as $idx => $key) { $pairs[$key] = (string) ($c[$idx] ?? ''); }
+                    $specSvc->setProductSpecs((int) $product->id, $pairs);
+                }
             }
             $created++;
             if ($cat !== '') $catsSeen[$cat] = 1;
