@@ -761,6 +761,14 @@ class StorefrontController extends Controller
         $name = (string) $tenant->setting('theme', 'default');
         $t = $presets[$name] ?? $presets['default'];
 
+        // Solar / equipment shops get the richer presentation by default (spec chips + premium tiles),
+        // so specifications read well without any manual theme setup. Explicit per-tenant overrides
+        // below still win, so a solar shop can turn either off.
+        if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::SOLAR) {
+            $t['premiumTiles'] = true;
+            $t['specChips']    = true;
+        }
+
         // text overrides — any non-empty tenant setting wins over the preset
         $text = [
             'accent' => 'theme_accent', 'accentDark' => 'theme_accent_dark',

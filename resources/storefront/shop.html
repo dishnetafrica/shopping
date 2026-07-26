@@ -3003,7 +3003,13 @@ async function openDetail(id){
   }catch(e){ el.innerHTML='<div class="dwrap">'+detailHeader()+'<div class="dload">Couldn\u2019t load this product.</div></div>'; }
 }
 function oosDetail(p){ return p.stock!=null && p.stock<=0; }
+/* Quote-mode products (solar systems, generators) are not impulse buys: the primary action is a quote
+   request, routed to the shop's existing quotation portal, carrying the product id for context. */
+function quoteHref(p){ var u=QUOTE_URL||((SHOP_BASE||'')+'/quote'); return u+(u.indexOf('?')>=0?'&':'?')+'p='+encodeURIComponent(p&&p.id!=null?p.id:''); }
+/* One "label : value" row, styled inline so no stylesheet change is needed (specs + kit contents). */
+function specRow(a,b){ return '<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #eee;font-size:13.5px"><span style="color:#666">'+esc(a)+'</span><b>'+esc(b)+'</b></div>'; }
 function detailStepper(p){
+  if(p&&p.sell_mode==='quote') return '<a class="dadd" href="'+esc(quoteHref(p))+'" style="display:block;text-align:center;text-decoration:none">Request a quote</a>';
   if(oosDetail(p)) return '<button class="dadd" disabled>Out of stock</button>';
   var c=CART[p.name];
   if(c&&c.qty>0) return '<div class="dstp"><button onclick="detailDec('+jk(p.name)+')">\u2212</button><span>'+c.qty+'</span><button onclick="detailInc('+jk(p.name)+','+p.price+','+(p.moq||1)+')">+</button></div>';
@@ -3035,12 +3041,18 @@ function renderDetail(d){
   var moq=(p.moq&&p.moq>1)?'<div class="dmoq">Min order: '+p.moq+'</div>':'';
   var desc=p.description?'<div class="dsec"><div class="dsech">Product details</div><div class="dtext">'+esc(p.description).replace(/\n/g,'<br>')+'</div></div>':'';
   var why=(d.why_shop&&d.why_shop.length)?'<div class="dsec"><div class="dsech">Why shop here?</div>'+d.why_shop.map(function(w){return '<div class="dwrow"><div class="dwico">'+whyIcon(w.title)+'</div><div class="dwtx"><b>'+esc(w.title)+'</b><span>'+esc(w.text||'')+'</span></div></div>';}).join('')+'</div>':'';
+  // Solar / equipment: specifications, warranty and kit contents (all degrade to nothing when absent).
+  var specsHtml=(d.specs&&d.specs.length)?'<div class="dsec"><div class="dsech">Specifications</div>'+d.specs.map(function(s){return specRow(s.label,(s.value==null?'':String(s.value))+(s.unit?(' '+s.unit):''));}).join('')+'</div>':'';
+  var wm=(p.warranty&&p.warranty.manufacturer_months)||0, wc=(p.warranty&&p.warranty.company_months)||0;
+  var wparts=[]; if(wm)wparts.push(wm+'-month manufacturer warranty'); if(wc)wparts.push(wc+'-month shop warranty');
+  var warrHtml=wparts.length?'<div class="dsec"><div class="dsech">Warranty</div><div class="dtext">'+esc(wparts.join(' · '))+'</div></div>':'';
+  var kitHtml=(d.kit&&d.kit.length)?'<div class="dsec"><div class="dsech">What’s in the box</div>'+d.kit.map(function(k){return specRow(k.name,'× '+String(k.qty));}).join('')+'</div>':'';
   $('detail').innerHTML='<div class="dwrap">'
     +detailHeader()
     +'<div class="dtop"><div class="dgal">'+main+thumbs+'</div>'
       +'<div class="dinfo"><div class="dcat">'+esc(p.category||'')+'</div><div class="dname">'+esc(p.name)+'</div>'
       +pack+moq+'<div class="dprice">'+ugx(p.price)+' '+mrp+' '+off+'</div></div></div>'
-    +desc+why
+    +desc+specsHtml+warrHtml+kitHtml+why
     +recoRail('Similar products', d.similar)
     +recoRail('Top in '+(p.category||'this category'), d.top_in_category)
     +recoRail('People also bought', d.also_bought)

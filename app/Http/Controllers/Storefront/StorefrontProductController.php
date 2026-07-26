@@ -64,6 +64,10 @@ class StorefrontProductController extends Controller
             abort(404);
         }
         $tenant  = Tenant::withoutGlobalScopes()->find($product->tenant_id);
+        // Pin the tenant context to THIS product's tenant so tenant-scoped reads below (product specs,
+        // kit contents — both use the BelongsToTenant global scope) resolve on this public route, which
+        // otherwise has no tenant context. Single-shop page, so this is correct and leak-free.
+        if ($tenant) app(\App\Support\TenantContext::class)->set($tenant->id);
         $images  = $this->gallery($product);
 
         // Core payload always returns; trust points + rails degrade independently so a
@@ -88,7 +92,24 @@ class StorefrontProductController extends Controller
                 'pack_size'   => $product->pack_size !== null ? (int) $product->pack_size : null,
                 'moq'         => $product->moq !== null ? (int) $product->moq : null,
                 'stock'       => $product->stock === null ? null : (int) $product->stock,
+                // Solar / equipment vertical — how this product is sold on the storefront.
+                'sell_mode'   => in_array($product->sell_mode, ['buy', 'quote'], true) ? $product->sell_mode : 'buy',
+                'is_kit'      => (bool) $product->is_kit,
+                'warranty'    => [
+                    'manufacturer_months' => (int) ($product->warranty_manufacturer_months ?? 0),
+                    'company_months'      => (int) ($product->warranty_company_months ?? 0),
+                ],
             ],
+            // Product specifications (Wattage, Voltage, Battery Chemistry, …) and kit contents. Both
+            // degrade to [] on any failure so a solar-only feature can never blank the product page.
+            'vertical' => $tenant ? \App\Support\Vertical::of($tenant) : 'grocery',
+            'specs'    => $this->safe(fn () => $tenant
+                ? \App\Services\Catalog\ProductSpecService::forTenant($tenant)->specsFor($product->id) : [], []),
+            'kit'      => $this->safe(fn () => ($tenant && $product->is_kit)
+                ? \App\Services\Catalog\KitService::forTenant($tenant)->componentsFor($product->id)
+                    ->map(fn ($c) => ['name' => (string) ($c->component->name ?? ''), 'qty' => (float) $c->quantity])
+                    ->filter(fn ($r) => $r['name'] !== '')->values()
+                : [], []),
             'why_shop'        => $this->safe(fn () => $tenant ? $tenant->whyShop() : [], []),
             'similar'         => $this->safe(fn () => ProductRecommendations::similar($product)->map([$this, 'recoCard'])->values(), []),
             'top_in_category' => $this->safe(fn () => ProductRecommendations::topInCategory($product->tenant_id, (string) $product->category, 10, $product->id)->map([$this, 'recoCard'])->values(), []),

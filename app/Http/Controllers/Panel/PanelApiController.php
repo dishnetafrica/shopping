@@ -1818,6 +1818,10 @@ class PanelApiController extends Controller
         if ($r->has('moq'))        $p->moq        = $r->query('moq') !== '' ? max(1, (int) $r->query('moq')) : null;
         if ($r->has('pack_size'))  $p->pack_size  = $r->query('pack_size') !== '' ? max(1, (int) $r->query('pack_size')) : null;
         if ($r->has('unit_label')) $p->unit_label = trim((string) $r->query('unit_label', '')) ?: null;
+        if ($r->has('sell_mode')) {
+            $sm = strtolower(trim((string) $r->query('sell_mode', '')));
+            $p->sell_mode = in_array($sm, ['buy', 'quote'], true) ? $sm : 'buy';
+        }
         $p->save();
 
         return response()->json(['ok' => true]);
@@ -2251,6 +2255,7 @@ class PanelApiController extends Controller
         $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
         $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
         $iBrand = $col(['brand']);
+        $iSell  = $col(['sell mode', 'sell_mode', 'sales mode']);   // 'buy' (default) or 'quote'
         // Product specs (Wattage, Voltage, Capacity, Battery Chemistry, …): map any CSV column whose
         // heading matches a spec definition (by label or key) so specs fill in on import. Tenant-generic
         // — reads whatever spec catalogue this tenant has (solar seeds one); empty for tenants with none.
@@ -2357,6 +2362,7 @@ class PanelApiController extends Controller
                 $g1 = $iGal1 !== null ? $resolveImg((string) ($c[$iGal1] ?? '')) : '';
                 $g2 = $iGal2 !== null ? $resolveImg((string) ($c[$iGal2] ?? '')) : '';
                 $g3 = $iGal3 !== null ? $resolveImg((string) ($c[$iGal3] ?? '')) : '';
+                $sell = ($iSell !== null && stripos((string) ($c[$iSell] ?? ''), 'quote') !== false) ? 'quote' : 'buy';
                 $product = Product::create([
                     'tenant_id'  => $t->id, 'name' => $name, 'category' => $cat, 'brand' => ($brand ?: null), 'keywords' => $kw,
                     'sku'        => ($sku ?: null), 'cost_price' => ($cost > 0 ? $cost : null),
@@ -2364,6 +2370,7 @@ class PanelApiController extends Controller
                     'pack_size'  => ($pack > 0 ? $pack : null), 'moq' => ($moq > 0 ? $moq : null),
                     'base_price' => $price, 'price' => $price, 'stock' => $stock, 'image_url' => $url,
                     'gallery_1'  => ($g1 ?: null), 'gallery_2' => ($g2 ?: null), 'gallery_3' => ($g3 ?: null),
+                    'sell_mode'  => $sell,
                     'active'     => $price > 0,
                 ]);
                 if ($specColMap) {
@@ -2430,6 +2437,7 @@ class PanelApiController extends Controller
         $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
         $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
         $iBrand = $col(['brand']);
+        $iSell  = $col(['sell mode', 'sell_mode', 'sales mode']);   // 'buy' (default) or 'quote'
         // Product specs (see productsImport): map CSV columns matching this tenant's spec definitions.
         $specSvc    = \App\Services\Catalog\ProductSpecService::forTenant($t);
         $specColMap = $this->buildSpecColMap($specSvc, $header);
@@ -2497,12 +2505,14 @@ class PanelApiController extends Controller
                 $g1 = $iGal1 !== null ? $resolveImg((string) ($c[$iGal1] ?? '')) : '';
                 $g2 = $iGal2 !== null ? $resolveImg((string) ($c[$iGal2] ?? '')) : '';
                 $g3 = $iGal3 !== null ? $resolveImg((string) ($c[$iGal3] ?? '')) : '';
+                $sell = ($iSell !== null && stripos((string) ($c[$iSell] ?? ''), 'quote') !== false) ? 'quote' : 'buy';
                 $product = Product::create([
                     'tenant_id' => $t->id, 'name' => $name, 'category' => $cat, 'brand' => ($brand ?: null), 'keywords' => $kw, 'sku' => ($sku ?: null),
                     'unit_label' => ($unit ?: null), 'pack_size' => ($pack > 0 ? $pack : null), 'moq' => ($moq > 0 ? $moq : null),
                     'base_price' => $price, 'price' => $price, 'cost_price' => ($cost > 0 ? $cost : null),
                     'stock' => $stock, 'image_url' => $url,
                     'gallery_1' => ($g1 ?: null), 'gallery_2' => ($g2 ?: null), 'gallery_3' => ($g3 ?: null),
+                    'sell_mode' => $sell,
                     'active' => $price > 0,
                 ]);
                 if ($specColMap) {

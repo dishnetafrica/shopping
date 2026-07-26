@@ -1,58 +1,61 @@
-# Product importer upgrade — multiple photos + auto-fill specifications
+# Sell solar properly on your storefront — complete update (one upload)
 
-This one update teaches your catalogue importer two new tricks, so a single import can bring a product
-in **complete**: price, stock, up to **4 photos**, and its **specifications** — no hand-typing afterward.
+Solar can't be sold like grocery. This one bundle makes your storefront treat it properly: product pages
+show specifications, warranty and "what's in the box", and big/made-to-order products get a **"Request a
+quote / installation"** button instead of "Add to cart". Grocery and all normal products are untouched.
 
-## 1. Up to 4 photos per product
+Everything is in this single zip — backend, storefront page, and tests. Just upload it once.
 
-Your product CSV can now have these optional columns:
+## What it does
 
-- `Gallery 1`, `Gallery 2`, `Gallery 3`
+- **Per-product sell mode** — every product is `buy` (normal add-to-cart, the default for everything you
+  already have) or `quote` (a solar system, a generator). Set it with a **`Sell Mode`** CSV column on
+  import, or leave blank for `buy`.
+- **Richer product page** — specifications table, warranty, and kit contents, all shown only when the
+  product has them.
+- **Quote flow** — quote-mode products show "Request a quote", wired to your existing quotation portal.
+- **Solar shops get the premium layout automatically** (still overridable).
 
-Each holds either a **filename inside the ZIP** (like the `Image` column) or a **direct image URL**.
-The main photo still lives in `Image`. Blank cells are ignored.
+Additive and reversible: the only database change is a nullable `sell_mode` column defaulting to `buy`.
 
-## 2. Specifications fill in automatically
-
-If a CSV column heading matches one of your product **spec fields**, the importer fills that spec in.
-For your solar catalogue that means columns like:
-
-- `Wattage`, `Voltage`, `Current`, `Power Rating`, `Capacity`, `Battery Chemistry`, `Lumens`
-  (also `Colour Temperature`, `Cable Length`, `IP Rating`)
-
-So instead of opening each product and typing specs into the "Edit specifications" screen, you put them
-in the CSV once and they import with the product.
-
-This is **tenant-generic and safe**: it reads whatever spec catalogue a tenant already has (solar seeds
-one), it reuses your existing, tested spec service, it needs **no database change**, and a CSV with no
-spec columns imports **exactly as before**. Nothing outside the importer is touched.
-
-## Files in this zip (3)
-
-**Replace**
-
-- `app/Http/Controllers/Panel/PanelApiController.php` — importer now reads `Gallery 1/2/3` and any
-  columns matching your spec fields (both the ZIP import and the CSV-only import).
+## Files in this zip
 
 **New**
 
-- `tests/Feature/Kernel/ProductMultiPhotoImportTest.php` — proves the 4-photo import.
-- `tests/Feature/Kernel/ProductSpecImportTest.php` — proves specs fill from matching columns, numbers
-  are stored for filtering, blanks are skipped, and a no-spec CSV writes no specs.
+- `database/migrations/2026_07_26_000001_add_sell_mode_to_products.php`
+- `tests/Feature/Kernel/StorefrontSolarProductTest.php`
+- `tests/Feature/Kernel/ProductSellModeImportTest.php`
+- `tests/Feature/Kernel/ProductSpecImportTest.php`  *(from the earlier importer upgrade)*
+- `tests/Feature/Kernel/ProductMultiPhotoImportTest.php`  *(from the earlier importer upgrade)*
 
-> This **supersedes** the earlier "multi-photo" bundle — it contains that change plus the spec-import
-> change. If you already uploaded the multi-photo one, uploading this simply replaces the same file and
-> adds one more test; nothing is lost.
+**Replace**
+
+- `resources/storefront/shop.html` — storefront: product page shows specs/warranty/kit + quote button.
+- `app/Http/Controllers/Storefront/StorefrontProductController.php` — richer product API payload.
+- `app/Http/Controllers/Storefront/StorefrontController.php` — auto premium layout for solar.
+- `app/Http/Controllers/Panel/PanelApiController.php` — importer reads `Sell Mode`; also carries the
+  multi-photo + spec import upgrade. **This bundle supersedes all the earlier importer/storefront zips.**
+- `app/Models/Product.php` — `sell_mode` fillable.
+
+> This is a cumulative superset — it includes the multi-photo import, the spec auto-import, and the whole
+> solar-storefront change. If you upload this, you do **not** need the earlier zips.
 
 ## How to upload (GitHub, branch `main`)
 
-Drag the `app` and `tests` folders into your repo at the same paths (replaces one file, adds two tests).
-If a new test doesn't appear, use these links (paste contents, commit):
-
-- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/ProductMultiPhotoImportTest.php`
-- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/ProductSpecImportTest.php`
+Drag the `app`, `database`, `resources` and `tests` folders into your repo at the same paths. The new
+migration runs automatically on deploy. If a new file doesn't appear, use GitHub's "Add file" with the
+same path and paste the contents.
 
 ## How you know it worked
 
-Green ✓ on **"Money kernel (must pass)"** in GitHub Actions. After that, import a product with the new
-columns (use the **solar template** I sent) and it comes in with photos and specs already set.
+1. Green ✓ on **"Money kernel (must pass)"** (covers the backend + tests; the front-end file can't affect
+   it).
+2. By eye: open a **quote-mode** solar product on `mycloudbss.com/gsl` — you'll see the spec table,
+   warranty, "what's in the box", and a **Request a quote** button. A normal product looks as before.
+
+The storefront JavaScript was syntax-checked and its new rendering logic simulated before shipping.
+
+## Optional follow-ups (just ask)
+
+- Make the catalogue **grid tiles** also show "Request a quote" for quote-mode products (page already does).
+- Add a **toggle on the product edit screen** so you can flip existing products to quote without re-importing.
