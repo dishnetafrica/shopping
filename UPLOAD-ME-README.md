@@ -1,67 +1,58 @@
-# S7b — the Warranty Claims screen in V3
+# S8a — Project Quotes (engine), built from kits
 
-This puts **Warranty Claims** on screen in CloudBSS V3, completing S7. A **Warranty Claims** item
-appears in the V3 sidebar (under **Operations**).
+The final Phase 2 piece. This lets you turn a **kit** into a full **project quote** — a sectioned
+quotation for a whole solar system — reusing everything you already have.
 
-## What you can do from V3
+## How it works
 
-- **See every claim** with its status (Open / Approved / Rejected / Resolved) and — crucially — whether
-  the warranty is **in coverage** (Active / Expired / Void), so you can decide correctly at a glance.
-  KPI tiles show open / approved / rejected, with filters by status and coverage.
-- **Open a new claim** with the "New claim" button — pick the warranty (the claim inherits its serial &
-  customer) and describe the fault.
-- **Open a claim** to decide it: **Approve** (repair / replace / refund + notes), **Reject** (with a
-  reason), or **Mark resolved** once an approved claim is done.
+- Pick one or more **kits** (which you build in S4). Each kit becomes a **priced section** of the quote,
+  its components listed with prices and a section subtotal (e.g. a "3kW Solar Kit" section = 1 inverter
+  + 8 panels).
+- Add optional **extras** (installation labour, delivery) as their own section.
+- The quote itself is created by your **existing quotation engine** — same pricing, numbering, PDF and
+  WhatsApp send as every other quote. Nothing in quoting or accounting changes.
 
-Built the V3-native way (the sidebar builds itself from the capability registry); every write re-checks
-owner/manager permission on the server.
-
-With this, **Warranty Claims are fully done** — end-to-end from Phase 1's warranties.
+The clever bit: the section grouping is stored on the quotation's `meta` (a spare data field), so **no
+database table changed and the frozen quote engine wasn't touched at all**. The customer's PDF is the
+normal branded quote for now; showing section headers on the PDF is a later add-on if you want it.
 
 ---
 
-## ⚠️ Upload S7a first
+## Files in this zip (5)
 
-S7b is the screen on top of the **S7a** engine. Upload S7a and see it green before this. As a safety
-net, this zip re-includes the S7a claims engine (byte-identical), so nothing breaks if part of S7a
-didn't upload cleanly.
+**New**
 
-## Files in this zip
+- `app/Services/Sales/ProjectQuoteService.php` — builds sectioned quotes from kits
+- `app/Http/Controllers/Panel/ProjectQuoteController.php` — the API
+- `tests/Feature/Kernel/ProjectQuoteTest.php` — proves section math + quote creation
 
-**S7b (the screen)**
+**Replace**
 
-- `app/Capability/Process/WarrantyClaimListCapability.php` *(new)* — the claims list
-- `app/Capability/Object/WarrantyClaimCapability.php` *(new)* — one claim (approve / reject / resolve)
-- `app/Capability/Registry/CoreCapabilityProvider.php` *(replace)* — registers both
-- `resources/views/shell.blade.php` *(replace)* — Warranty Claims in the V3 sidebar
-- `tests/Feature/Kernel/WarrantyClaimWorkspaceTest.php` *(new)* — proves the screen
-- `docs/v3-migration/MIGRATION-TRACKER.md` *(replace)* — Warranty Claims now ✅ Done
+- `routes/web.php` — adds `/papi/project-quotes/from-kits`
+- `docs/v3-migration/MIGRATION-TRACKER.md`
 
-**S7a engine — safety net (identical to S7a)**
-
-- `app/Models/WarrantyClaim.php`, `app/Kernel/Events/WarrantyClaimEvents.php`,
-  `app/Services/Warranty/WarrantyClaimService.php`,
-  `app/Http/Controllers/Panel/WarrantyClaimController.php`, the `warranty_claims` migration, and
-  `routes/web.php`.
+> **Depends on S4 (kits)** and your existing quotation engine — both already in your repo.
 
 ---
 
 ## How to upload (GitHub, branch `main`)
 
-Drag the folders (`app`, `resources`, `routes`, `database`, `tests`, `docs`) into your repo at the same
-paths. If a new file doesn't appear, use these links (paste contents, commit):
+Drag the folders (`app`, `routes`, `tests`, `docs`) into your repo at the same paths. If a new file
+doesn't appear, use these links (paste contents, commit):
 
-- `github.com/dishnetafrica/shopping/new/main?filename=app/Capability/Process/WarrantyClaimListCapability.php`
-- `github.com/dishnetafrica/shopping/new/main?filename=app/Capability/Object/WarrantyClaimCapability.php`
-- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/WarrantyClaimWorkspaceTest.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=app/Services/Sales/ProjectQuoteService.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=app/Http/Controllers/Panel/ProjectQuoteController.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/ProjectQuoteTest.php`
 
 ## How you know it worked
 
-Green ✓ on **"Money kernel (must pass)"**. Then open V3 — **Warranty Claims** is in the left sidebar
-under Operations. Open a claim against a warranty, approve it as "replace," and see the status change.
+Green ✓ on **"Money kernel (must pass)"** — it runs the new project-quote test (kits explode into priced
+sections; building a quote records the section grouping) with everything before it.
 
 ---
 
 ## What's next
 
-The final Phase 2 piece: **S8 — Project Quotes** (multi-section quotes for full solar projects).
+- **S8b** — the V3 **Project Quote builder**: a "New project quote" action (pick kit + customer) and the
+  sectioned view on the quotation screen. This drop is the engine + API underneath it.
+- That completes **Phase 2** (Jobs, Service Visits, Warranty Claims, Project Quotes).

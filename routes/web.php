@@ -374,6 +374,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::post('warranty-claims/{claim}/approve', [\App\Http\Controllers\Panel\WarrantyClaimController::class, 'approve']);
         Route::post('warranty-claims/{claim}/reject', [\App\Http\Controllers\Panel\WarrantyClaimController::class, 'reject']);
         Route::post('warranty-claims/{claim}/resolve', [\App\Http\Controllers\Panel\WarrantyClaimController::class, 'resolve']);
+        // Project Quotes (Asset Lifecycle · Phase 2 · S8) — sectioned quotes built from kits (frozen engine reused)
+        Route::post('project-quotes/from-kits',       [\App\Http\Controllers\Panel\ProjectQuoteController::class, 'fromKits']);
+        Route::get('project-quotes/{quotation}',      [\App\Http\Controllers\Panel\ProjectQuoteController::class, 'show']);
         Route::get('riders',     [PanelApiController::class, 'riders']);
         Route::get('returns',    [PanelApiController::class, 'returns']);
         Route::get('today',      [PanelApiController::class, 'today']);   // Today / Needs-attention home screen
