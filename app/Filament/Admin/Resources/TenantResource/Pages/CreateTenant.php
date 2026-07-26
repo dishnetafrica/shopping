@@ -26,6 +26,7 @@ class CreateTenant extends CreateRecord
     /** Once the Tenant exists, create the owner login from those fields. */
     protected function afterCreate(): void
     {
+        TenantResource::applyVerticalPreset($this->record);
         $user = TenantResource::upsertOwner($this->record, $this->ownerName, $this->ownerPhone);
         if ($user) {
             Notification::make()

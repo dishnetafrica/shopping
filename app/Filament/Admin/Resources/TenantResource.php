@@ -315,6 +315,22 @@ class TenantResource extends Resource
     }
 
     /** Create or update the owner login from the form fields. No-op if no phone given. */
+    /**
+     * Apply per-business-type onboarding after a tenant is saved. For the Solar / equipment vertical
+     * this seeds the starter product-spec catalogue (Wattage, Voltage, IP Rating…). Idempotent and
+     * guarded — safe to run on every save, and never blocks the save.
+     */
+    public static function applyVerticalPreset(Tenant $tenant): void
+    {
+        try {
+            if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::SOLAR) {
+                \App\Support\Presets\SolarPreset::seedSpecCatalogue($tenant);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('vertical preset failed for tenant ' . $tenant->id . ': ' . $e->getMessage());
+        }
+    }
+
     public static function upsertOwner(Tenant $tenant, ?string $name, ?string $phone): ?User
     {
         $phone = trim((string) $phone);

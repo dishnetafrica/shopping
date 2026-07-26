@@ -21,8 +21,9 @@ class Vertical
     public const RESTAURANT = 'restaurant';
     public const SNACKS     = 'snacks';
     public const MANUFACTURER = 'manufacturer';
+    public const SOLAR      = 'solar';           // Asset Lifecycle — equipment dealers (solar, generators, HVAC…)
 
-    public const ALL = [self::GROCERY, self::RESTAURANT, self::SNACKS, self::MANUFACTURER];
+    public const ALL = [self::GROCERY, self::RESTAURANT, self::SNACKS, self::MANUFACTURER, self::SOLAR];
 
     /**
      * feature key => list of verticals where it is shown BY DEFAULT.
@@ -34,8 +35,8 @@ class Vertical
         'item_options'  => [self::RESTAURANT],
         'kitchen_board' => [self::RESTAURANT],
         'daily_thali'   => [self::SNACKS],
-        'riders'        => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER],
-        'pos'           => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER],
+        'riders'        => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER, self::SOLAR],
+        'pos'           => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER, self::SOLAR],
     ];
 
     /** Pretty labels for the admin select. */
@@ -44,6 +45,7 @@ class Vertical
         self::RESTAURANT   => 'Restaurant',
         self::SNACKS       => 'Snacks / advance booking',
         self::MANUFACTURER => 'Manufacturer / wholesale brand',
+        self::SOLAR        => 'Solar / equipment',
     ];
 
     /**

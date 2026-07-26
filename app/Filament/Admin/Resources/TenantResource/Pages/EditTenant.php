@@ -65,9 +65,10 @@ class EditTenant extends EditRecord
         return $data;
     }
 
-    /** Create/update the owner login from those fields. */
+    /** Create/update the owner login from those fields; seed the solar spec catalogue if chosen. */
     protected function afterSave(): void
     {
         TenantResource::upsertOwner($this->record, $this->ownerName, $this->ownerPhone);
+        TenantResource::applyVerticalPreset($this->record);
     }
 }

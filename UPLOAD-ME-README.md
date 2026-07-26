@@ -1,24 +1,27 @@
-# S2c · Serials on the product page — upload to GitHub
+# Solar business type — set a tenant up for solar in one selection
 
-Builds on S2a/S2b. The V3 product detail page now shows a serialized product's units by status
-(Tracked units · In stock · Sold · …) and offers an **Add serials** action to register units right
-there — paste serial numbers separated by commas or new lines. All through the capability payload, so
-there is **no change to the V3 front-end**.
+Adds a **"Solar / equipment"** option to the Business type dropdown in ShopBot Operator
+(tenant edit page). Choosing it and saving:
+- sets the tenant's vertical to solar (so it sees the trading/wholesale surfaces), and
+- **automatically seeds the solar spec catalogue** (Wattage, Voltage, Ah, Lumens, IP Rating, …) —
+  idempotent, so re-saving never duplicates.
+
+Serialized inventory and warranties don't depend on the business type — they work per product — so
+after this, a solar tenant is fully set up: pick the type, save, done.
 
 ## What to do
-Upload these two files, keeping the folders. (S2a + S2b already uploaded.)
+Upload these files (keep folders), then in ShopBot Operator open the business, set **Business type →
+Solar / equipment**, and Save.
 
 ## How you'll know it worked
-- Green ✓ "Money kernel (must pass)" — the S2c test runs inside that check.
-- In the app: open a serialized product → you'll see its unit counts, and **Add serials** lets you
-  register more. A product with no serials looks exactly as before.
+- Green ✓ "Money kernel (must pass)".
+- In Operator, the Business type dropdown now lists **Solar / equipment**.
+- After saving a business as Solar, open its app → products can be given specs (the solar fields are
+  already seeded) and serials.
 
 ## What's inside / safety
-- Only `ProductCapability::forId()` (adds serial 'stats' + an Add-serials action) and `command()`
-  (adds `add_serials`) are extended — additive. Non-serialized products are unaffected.
-- `tests/Feature/Kernel/SerialProductViewTest.php`.
-- Rollback = revert `ProductCapability.php`.
-
-## Deferred: QR codes
-There is no QR library server-side yet, so rendering the units' QR codes is a small follow-on
-(the `qr_token` is already stored on every unit, so it's ready whenever we add a QR renderer).
+- `app/Support/Vertical.php` — adds the `solar` vertical (+ label + trading-surface visibility).
+- `app/Filament/Admin/Resources/TenantResource.php` — `applyVerticalPreset()` (seeds solar specs; guarded).
+- `EditTenant.php` / `CreateTenant.php` — call it after save/create.
+- test: `SolarVerticalPresetTest.php`.
+- Additive; other business types are unchanged. Rollback = revert these files.
