@@ -733,6 +733,11 @@ Route::middleware('web')->group(function () use ($qToken) {
 
 Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::get('/{shop}/product/{product}', [\App\Http\Controllers\Storefront\StorefrontProductController::class, 'show'])->where('shop', $shopSlug)->where('product', '[0-9]+');
+    // Public Solar Experience Center (customer-facing assessment; no login).
+    Route::get('/{shop}/solar',              [\App\Http\Controllers\Storefront\StorefrontSolarController::class, 'page'])->where('shop', $shopSlug);
+    Route::get('/{shop}/solar/config',       [\App\Http\Controllers\Storefront\StorefrontSolarController::class, 'config'])->where('shop', $shopSlug);
+    Route::match(['get', 'post'], '/{shop}/solar/estimate', [\App\Http\Controllers\Storefront\StorefrontSolarController::class, 'estimate'])->where('shop', $shopSlug);
+    Route::post('/{shop}/solar/lead',        [\App\Http\Controllers\Storefront\StorefrontSolarController::class, 'lead'])->where('shop', $shopSlug);
     Route::get('/{shop}',           [\App\Http\Controllers\Storefront\StorefrontController::class, 'landing'])->where('shop', $shopSlug);
     Route::get('/{shop}/shop',      [\App\Http\Controllers\Storefront\StorefrontController::class, 'show'])->where('shop', $shopSlug);
     Route::get('/{shop}/catalogue', [\App\Http\Controllers\Storefront\StorefrontController::class, 'catalogue'])->where('shop', $shopSlug);

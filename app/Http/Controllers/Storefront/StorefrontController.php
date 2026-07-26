@@ -154,6 +154,15 @@ class StorefrontController extends Controller
         }
         $html = str_replace('__SHOP_CONFIG__', json_encode($cfg, JSON_UNESCAPED_UNICODE), $html);
 
+        // Solar Experience Center CTA — a top strip on solar shops linking to the guided assessment.
+        if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::SOLAR) {
+            $cta = '<a href="' . e($base) . '/solar" style="display:block;background:linear-gradient(135deg,#d97706,#f59e0b);'
+                . 'color:#fff;text-align:center;padding:11px 14px;font-weight:700;text-decoration:none;'
+                . 'font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px">'
+                . '☀️ Design your solar system in 3 minutes — Start my free assessment →</a>';
+            $html = str_replace('<body>', '<body>' . $cta, $html);
+        }
+
         // ---- Premium dynamic footer (2026-07-19): trust + navigation + SEO, server-rendered
         //      from the live catalogue. Only links that actually resolve are generated. ----
         // Anchor on the div alone (2026-07-19): the identity injection above already

@@ -1,59 +1,68 @@
-# Project Advisor — Branded PDF export of the proposal
+# Solar Experience Center — v1: the public Assessment funnel
 
-The polish step: a salesperson can now download a professional, tenant-branded **PDF** of any proposal to
-send on WhatsApp, email, or print.
+A customer-facing, no-login **Solar Experience Center** that turns first-time visitors into leads. Instead
+of "Shop products," a visitor picks what they want to power, gets an instant system recommendation with a
+plain-language explanation and a price range, and requests a proposal — all in a few minutes.
 
-**This bundle is the complete Project Advisor (Slices 1–5 + the V3 screen + the `status` fix + this PDF
-export)** — upload just this; it supersedes every earlier Advisor zip.
+It's powered by the **same Advisor engine** you already have (deterministic sizing, packages), with one
+new ingredient: an **appliance library** so customers choose "TV, fridge, AC" instead of kWh.
 
-## What this adds
+**This bundle includes the full Advisor backend**, so uploading just this makes the whole thing work.
 
-- A **Download PDF** button on the proposal view in V3 (Sales → Solar Advisor → open a project → its
-  proposal).
-- A branded A4 PDF with your company name, logo and contact, laying out all eleven proposal sections
-  (executive summary through terms & conditions), with the equipment table, commercial totals, technical
-  specifications and warranty.
+## What a customer sees — `mycloudbss.com/<shop>/solar`
 
-It uses your app's existing PDF engine (dompdf — the same one your invoices and quotations use), so
-there's **no new dependency**. All figures come straight from the stored proposal; nothing is recomputed.
+1. **Hero:** "Design the right solar system … in under 3 minutes" → Start.
+2. **Goal cards:** Home · Business · School · Hospital · Farm · Water Pump · Street Lighting · Factory.
+3. **Appliance picker:** tap the devices they have, with quantities (grouped: Essentials, Comfort, Work,
+   Security, Water, Heavy). No kWh required.
+4. **Backup slider:** how many hours of backup they need.
+5. **Live recommendation:** an energy-flow diagram (Sun → Panels → Inverter → Battery → Home) plus panels,
+   battery, inverter and daily use — updating as they change inputs — with a **"Why this system?"**
+   explanation and a matching **solution package with a "from" price**.
+6. **Convert:** "Get my free proposal" (captures name + phone) or "WhatsApp us". Every lead lands in your
+   staff **V3 → Solar Advisor** as a *sized* project, with a pre-filled WhatsApp hand-off.
 
-## API (added under `/papi/advisor`)
+A **"Start my free assessment"** strip is added to the top of your storefront homepage for solar shops.
 
-- `GET /papi/advisor/projects/{id}/proposal/pdf` — the branded PDF (inline), gated to the Sales menu.
+## Public, safe, shop-scoped
+
+New public endpoints (no login), resolved by the shop slug and CSRF-exempt like your other storefront
+POSTs. Nothing recomputes figures — the deterministic engine does the maths; the page only collects
+answers and shows results.
+
+- `GET  /<shop>/solar` — the page · `GET /<shop>/solar/config` — appliances/goals
+- `POST /<shop>/solar/estimate` — recommendation · `POST /<shop>/solar/lead` — capture + WhatsApp link
 
 ## Files in this zip
 
 **New**
 
-- `app/Services/Advisor/ProposalPdfRenderer.php` — branded HTML + dompdf render.
-- `tests/Unit/Kernel/ProposalPdfRendererTest.php` — the document is branded and complete.
-- `tests/Feature/Kernel/AdvisorProposalPdfTest.php` — the endpoint returns real PDF bytes, 404s with no
-  proposal, and is gated.
+- `resources/storefront/solar.html` — the Experience Center page.
+- `app/Services/Advisor/SolarAppliances.php` — the appliance library.
+- `app/Http/Controllers/Storefront/StorefrontSolarController.php` — the public API.
+- `tests/Unit/Kernel/SolarAppliancesTest.php`, `tests/Feature/Kernel/StorefrontSolarTest.php`.
 
 **Replace**
 
-- `resources/views/shell.blade.php` — the Download PDF button.
-- `app/Http/Controllers/Advisor/AdvisorController.php` — the PDF endpoint.
-- `routes/web.php` — the PDF route.
+- `routes/web.php` — the public `/<shop>/solar*` routes.
+- `bootstrap/app.php` — CSRF exemption for `*/solar/*` (matches your other public storefront POSTs).
+- `app/Http/Controllers/Storefront/StorefrontController.php` — the homepage CTA strip for solar shops.
 
-**Carried** — the full Advisor backend, V3 screen, packages, knowledge library and earlier tests, so this
-works standalone.
+**Carried** — the complete Advisor backend + V3 screen from the earlier work, so this stands alone.
 
 ## How to upload (GitHub, branch `main`)
 
-Drag the `app`, `database`, `resources`, `tests` folders and `routes/web.php` into your repo at the same
-paths.
+Drag the `app`, `bootstrap`, `database`, `resources`, `routes`, `tests` folders/files into your repo at the
+same paths.
 
 ## How you know it worked
 
-Green ✓ on **"Money kernel (must pass)"** (includes a test that the endpoint returns real `%PDF` bytes,
-using the same dompdf your invoice PDFs already run on CI). Then in V3 → Sales → Solar Advisor, open a
-project's proposal and click **Download PDF**.
+Green ✓ on **"Money kernel (must pass)"** (public config/estimate/lead tested with no auth). Then open
+`mycloudbss.com/gsl/solar`: pick a goal, add appliances, watch the recommendation update, and submit a
+test lead — it appears in V3 → Solar Advisor.
 
-## The Project Advisor is complete 🎉
+## Next (the rest of the Experience Center vision)
 
-Deterministic sizing engine · discovery wizard · eleven-section proposal generator · eight solution
-packages · knowledge library · and now branded PDF export — all on screen in V3, all behind guarded APIs,
-built as a generic framework you can extend to other industries. The remaining optional idea is a
-**customer-facing proposal link** (reusing your quotation portal so clients can view/approve online) —
-say the word whenever you'd like it.
+2. **Knowledge Center** (public, SEO) · 3. **Animated "How Solar Works" + comparisons** ·
+4. **ROI / before-after / case studies** · 5. **Solar Academy + on-page AI assistant** ·
+6. **Richer product pages.** Say the word and I'll build the next one.

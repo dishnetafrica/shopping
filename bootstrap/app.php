@@ -30,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/webhook/*', 'papi/*',
             'order', '*/order',
             'quote', '*/quote',
+            'solar/*', '*/solar/*',
             'event', '*/event',
             'auth/*', '*/auth/*',
             'account/*', '*/account/*',
