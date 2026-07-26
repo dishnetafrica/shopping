@@ -47,7 +47,7 @@ class ClassicPanelRedirects
         '/panel/marketing'        => 'campaigns',
         '/panel/ads'              => 'ads',
         '/panel/setup'            => 'settings',
-        '/panel/staff'            => 'settings',
+        '/panel/staff'            => 'team',   // legacy Team & Roles → V3 Team (V3 migration)
         '/panel/system'           => 'modules',   // legacy Module Manager → V3 Modules (V3 migration)
         '/panel/consignment'      => 'consignments',
         '/panel/scheduled'        => 'scheduled',

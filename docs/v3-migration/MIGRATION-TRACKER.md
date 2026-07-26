@@ -37,8 +37,8 @@ This first pass is derived from two authoritative sources in the code: the `Clas
 | Reports | ✅ | 🚧 | 🟡 Verify | `finance`, `pnl-report` cover much; confirm dedicated reports parity |
 | Business Profile | ✅ | 🚧 | 🟡 Verify | likely under `settings`; confirm it's a first-class V3 screen |
 | WhatsApp (connect/QR) | ✅ | 🚧 | 🟡 Verify | chats live; confirm number connect/QR + channels in V3 |
-| Team | ✅ | 🚧 | 🟡 Verify | staff routes to `settings`; confirm a first-class Team screen |
-| Roles / Permissions | ✅ | ❓ | ❌ Not started | no dedicated V3 home identified yet |
+| Team | ✅ | ✅ | ✅ Done | first-class V3 **Team & Roles** screen (see Roles / Permissions row) |
+| Roles / Permissions | ✅ | ✅ | ✅ Done | V3 **Team & Roles** screen (Settings) — list staff, add / change-role / remove via the guarded owner-only /papi/staff endpoints, plus a role guide; legacy `/panel/staff` redirects to it. (Strict-enforcement switch left as-is by design.) |
 | Billing | ✅ | 🚧 | 🚧 Building | V3 **Billing** screen (Settings) shows plan + status + Free/Starter/Pro comparison; payment (Mobile Money / card) still runs on the existing secure `/panel/billing` page (a separate, later migration) |
 | Module Manager | ✅ | ✅ | ✅ Done | V3 **Modules** screen (Settings group) — owner toggles feature modules; legacy `/panel/system` redirects to it |
 

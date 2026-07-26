@@ -1,46 +1,49 @@
-# Billing in V3 (view-first)
+# Team & Roles in V3 — the last legacy-panel gap
 
-This migrates the **Billing** screen to CloudBSS V3 — the plan/subscription view — **without touching
-payments**. It's the next legacy-panel gap closed.
+This migrates **Team & Roles** (legacy `/panel/staff`) to CloudBSS V3. With it, every remaining
+legacy-panel gap is closed.
 
 ## What you get
 
-A new **Billing** item in the V3 sidebar (under **Settings**). It shows:
+A new **Team & Roles** item in the V3 sidebar (under **Settings**):
 
-- Your **current plan** and status — days left on trial, or the renewal date.
-- **Orders this month** vs your plan's limit.
-- A clear **Free vs Starter vs Pro** comparison — price, order limit, team size, and what each includes,
-  with your current plan flagged.
-- An **Upgrade / manage payment** button that opens your existing secure billing page, where Mobile
-  Money and card payment work exactly as they do today.
+- **Your team** listed with each person's role and how they sign in, plus your seat usage.
+- **Add staff**, **change a member's role**, and **remove a member** — each posting to your **existing,
+  owner-only staff endpoints**, so all the safety carries over unchanged: only owners can make changes,
+  you can't remove yourself or the last remaining login, and your plan's seat limit is enforced.
+- A read-only **role guide** — what each role (Owner, Manager, Sales, Product staff, Purchaser, Field,
+  Transport, Staff) is for, so you assign confidently.
+- Legacy `/panel/staff` now redirects to this V3 screen.
 
-**Payments are untouched.** The V3 screen only *shows* plan information (pulled from the same plans
-config and plan methods the app already uses); the actual charging still runs on the existing secure
-page. Rebuilding the payment flow itself inside V3 would be a separate, carefully-planned step.
+Two deliberate safety choices: I wrote **no new access-control code** (all writes reuse the guarded
+endpoints), and the current user is **excluded from the change-role / remove pickers** so you can't lock
+yourself out. The strict-enforcement switch (which can suddenly block staff) is **left exactly as it is**
+— that's a separate, deliberate decision, not something to bury in a screen.
 
 ---
 
 ## ⚠️ Prerequisite
 
-This bundle ships the **cumulative** capability registry (`CoreCapabilityProvider.php`) and V3 shell
-(`shell.blade.php`) — they include all the earlier V3 screens (Phase 2 + Module Manager). Make sure
-those earlier drops are already uploaded (they are, if you've been uploading in order); this file
-supersedes them with the latest, so nothing is lost.
+Ships the **cumulative** capability registry (`CoreCapabilityProvider.php`) and V3 shell
+(`shell.blade.php`) — they include all the earlier V3 screens. Upload the earlier drops first (they are,
+if you've followed along); this supersedes them with the latest.
 
-## Files in this zip (5)
+## Files in this zip (6)
 
 **New**
 
-- `app/Capability/Process/BillingCapability.php` — the V3 Billing screen
-- `tests/Feature/Kernel/BillingWorkspaceTest.php` — proves it
+- `app/Capability/Process/TeamCapability.php` — the V3 Team & Roles screen
+- `tests/Feature/Kernel/TeamWorkspaceTest.php` — proves it
 
 **Replace**
 
-- `app/Capability/Registry/CoreCapabilityProvider.php` — registers Billing
-- `resources/views/shell.blade.php` — Billing in the V3 sidebar (Settings)
-- `docs/v3-migration/MIGRATION-TRACKER.md`
+- `app/Capability/Registry/CoreCapabilityProvider.php` — registers Team
+- `resources/views/shell.blade.php` — Team in the V3 sidebar (Settings)
+- `app/Http/Middleware/ClassicPanelRedirects.php` — `/panel/staff` → V3 Team
+- `docs/v3-migration/MIGRATION-TRACKER.md` — Team & Roles now ✅ Done
 
-No new routes, no payment code — the screen reads plan info and links out for payment.
+No new routes and no payment/auth code — the screen reads staff and reuses the existing `/papi/staff`
+endpoints for changes.
 
 ---
 
@@ -49,17 +52,19 @@ No new routes, no payment code — the screen reads plan info and links out for 
 Drag the folders (`app`, `resources`, `tests`, `docs`) into your repo at the same paths. If a new file
 doesn't appear, use these links (paste contents, commit):
 
-- `github.com/dishnetafrica/shopping/new/main?filename=app/Capability/Process/BillingCapability.php`
-- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/BillingWorkspaceTest.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=app/Capability/Process/TeamCapability.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/TeamWorkspaceTest.php`
 
 ## How you know it worked
 
-Green ✓ on **"Money kernel (must pass)"**. Then open V3 → **Settings → Billing** to see your plan and
-the comparison; the Upgrade button opens the existing payment page.
+Green ✓ on **"Money kernel (must pass)"**. Then open V3 → **Settings → Team & Roles**: your team lists,
+the role guide shows, and (as owner) you can add / change-role / remove.
 
 ---
 
-## What's next
+## 🎉 Legacy-panel migration: gaps closed
 
-The last legacy-panel gap: **Roles & Permissions in V3** (team access control) — high-stakes, so I'll
-open with its own plan for review.
+Dashboard, Orders, Customers, Products, Inventory, Purchasing, Suppliers, Accounting, Messaging,
+Campaigns, Leads, Scheduling, Reports, Settings, **Module Manager**, **Billing** (view — payment stays on
+the secure legacy page), and **Team & Roles** are all in V3. The only piece still on the legacy panel by
+design is the Billing **payment flow** (a separate, careful step). New tenants already start in V3.

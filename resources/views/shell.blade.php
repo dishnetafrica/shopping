@@ -1087,7 +1087,7 @@ const LABELS = { setup:'Get started', chats:'Chats', chat:'Chat', communication:
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', 'procurement.hub':'Procurement Hub', 'demand.plans':'Demand Plans', 'juba.stock':'Juba Stock', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch', transport:'Transport Register', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
   salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings', ads:'Facebook Ads', campaigns:'Campaigns', 'storefront.insights':'Storefront Insights',
-  jobs:'Jobs', workOrder:'Job', maintenance:'Maintenance', maintenancePlan:'Service Plan', claims:'Warranty Claims', warrantyClaim:'Claim', modules:'Modules', billing:'Billing',
+  jobs:'Jobs', workOrder:'Job', maintenance:'Maintenance', maintenancePlan:'Service Plan', claims:'Warranty Claims', warrantyClaim:'Claim', modules:'Modules', billing:'Billing', team:'Team & Roles',
   'storefront.collections':'Shop for Every Need', 'storefront.kits':'Ready-made Kits', 'storefront.delivery':'Delivery & Free Shipping' };
 const GROUPS = [ ['Overview',['setup','briefing','worklist','guide']],
   ['Sales',['customers','leads','followups','salesOrders','scheduled','quotations','invoices','payments','collections']],
@@ -1097,11 +1097,11 @@ const GROUPS = [ ['Overview',['setup','briefing','worklist','guide']],
   ['Operations',['jobs','maintenance','claims','tasks','warehouse','dispatch','transport']],
   ['Finance',['finance','pnl','cashbook']],
   ['Marketing',['ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery']],
-  ['Settings',['settings','modules','billing']] ];
+  ['Settings',['settings','team','modules','billing']] ];
 // Which nav key reads which count from the catalog's counts map.
 const NAVCOUNT = { followups:'followups', diagnostics:'diagnostics', chats:'chats', communication:'communication', consignments:'consignments', scheduled:'scheduled', customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','warehouse','dispatch','tasks','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing']);
+const READY = new Set(['setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','warehouse','dispatch','tasks','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team']);
 // Storefront config pages are client-rendered (not server workspaces) and always available to the owner.
 const SF_KEYS = new Set(['storefront.collections','storefront.kits','storefront.delivery','transport']);
 // Dedicated list views still pending — none; kept for future additions.
@@ -1120,6 +1120,7 @@ const P = {
   shield:'M12 2 4 5v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V5l-8-3z',
   modules:'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   billing:'M2 7h20v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM2 10h20M6 15h4',
+  team:'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
   consignments:'M1 3h15v13H1zM16 8h4l3 3v5h-7zM5.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM18.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
   consignment:'M1 3h15v13H1zM16 8h4l3 3v5h-7z',
   guide:'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z',

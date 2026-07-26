@@ -176,6 +176,8 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register(new \App\Capability\Process\ModulesCapability(), new CapabilityManifest(key: 'modules', type: 'process', owner: 'management', permission: 'menu:settings', api: '/api/v1/workspace/modules'));
         // V3 Migration — Billing (view-first; payment stays on the existing secure /panel/billing page).
         $r->register(new \App\Capability\Process\BillingCapability(), new CapabilityManifest(key: 'billing', type: 'process', owner: 'management', permission: 'menu:settings', api: '/api/v1/workspace/billing'));
+        // V3 Migration — Team & Roles (replaces legacy /panel/staff). Writes reuse the guarded /papi/staff endpoints.
+        $r->register(new \App\Capability\Process\TeamCapability(), new CapabilityManifest(key: 'team', type: 'process', owner: 'management', permission: 'menu:staff', api: '/api/v1/workspace/team'));
 
         $r->register(new WorklistCapability($collections, $sales, $purchase, $warehouse, $dispatch), new CapabilityManifest(
             key: 'worklist', type: 'process', owner: 'management',
