@@ -20,12 +20,25 @@ class Tenant extends Model
         'paid_until'    => 'datetime',
     ];
 
-    /** Every new business starts on a 30-day full-feature trial. */
+    /** Every new business starts on a 30-day full-feature trial — and lands in CloudBSS V3. */
     protected static function booted(): void
     {
         static::creating(function (Tenant $t) {
             if (empty($t->plan)) $t->plan = 'free';
             if (empty($t->trial_ends_at)) $t->trial_ends_at = now()->addDays(30);
+
+            // V3 Migration Constitution · Rule 4 — every NEW tenant begins life in CloudBSS V3.
+            // `order_system_enabled` is the switch LandingController reads to send owners to /v3.
+            // Self-serve signup already set it; this makes it universal (Operator-created tenants
+            // too), at the single point every tenant is born. Additive + reversible: an explicit
+            // value (true OR false) passed at create time is respected, existing tenants are never
+            // touched (creating hook only), and any tenant can be moved back with a settings flag.
+            $s = $t->settings ?? [];
+            if (! is_array($s)) $s = [];
+            if (! array_key_exists('order_system_enabled', $s)) {
+                $s['order_system_enabled'] = true;
+                $t->settings = $s;
+            }
         });
     }
 
