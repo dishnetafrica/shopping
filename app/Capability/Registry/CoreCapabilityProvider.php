@@ -17,6 +17,8 @@ use App\Capability\Object\PurchaseOrderCapability;
 use App\Capability\Object\QuotationCapability;
 use App\Capability\Object\SalesOrderCapability;
 use App\Capability\Object\SupplierCapability;
+use App\Capability\Object\WorkOrderCapability;
+use App\Capability\Process\WorkOrderListCapability;
 use App\Capability\Process\CampaignListCapability;
 use App\Capability\Process\CashbookCapability;
 use App\Capability\Process\CategoryListCapability;
@@ -125,6 +127,12 @@ final class CoreCapabilityProvider implements CapabilityProvider
 
         // Retire-audit tail: scheduled ORDERS (future deliveries; ProcessScheduled cron).
         $r->register(new ScheduledOrdersCapability(), new CapabilityManifest(key: 'scheduled', type: 'process', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/scheduled'));
+
+        // Asset Lifecycle · Phase 2 · S5b — Jobs / Work Orders (V3-native field service; no legacy screen).
+        // Open permission on purpose: the FIELD team works jobs. Every write action posts to
+        // /papi/work-orders, which re-enforces owner/manager server-side.
+        $r->register(new WorkOrderListCapability(), new CapabilityManifest(key: 'jobs', type: 'process', owner: 'operations', permission: '', api: '/api/v1/workspace/jobs'));
+        $r->register(new WorkOrderCapability(), new CapabilityManifest(key: 'workOrder', type: 'object', owner: 'operations', permission: '', api: '/api/v1/workspace/workOrder/{id}'));
 
         // Help & Training — the UCRM-style built-in manual (open to every role).
         $r->register(new GuideCapability(), new CapabilityManifest(key: 'guide', type: 'process', owner: 'management', permission: '', api: '/api/v1/workspace/guide'));

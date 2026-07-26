@@ -53,7 +53,7 @@ there is nothing to migrate — the legacy panel never had them.
 | Serial / Unit tracking (Phase 1) | ✅ | ✅ Done | on the product page (stats) + `/papi/serials` |
 | Warranties (Phase 1) | ✅ | ✅ Done | product default terms + auto-activate on sale/install |
 | Kits / Bundles (Phase 1) | ✅ | ✅ Done | CSV-built; explode-on-sale draws down parts |
-| Jobs / Work Orders (Phase 2 · S5) | 🚧 | 🚧 Building | engine + API done; V3 screen (S5b) next |
+| Jobs / Work Orders (Phase 2 · S5) | ✅ | ✅ Done | engine + API (S5a) + V3 screen in the sidebar under Operations (S5b) |
 | Service Visits (Phase 2 · S6) | ❌ | ❌ Not started | same Jobs engine, `type=service` |
 | Warranty Claims (Phase 2 · S7) | ❌ | ❌ Not started | open/approve/reject against a warranty |
 | Project Quotes (Phase 2 · S8) | ❌ | ❌ Not started | multi-section solar project quotes |

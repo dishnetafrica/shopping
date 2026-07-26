@@ -99,6 +99,16 @@ class WorkOrderController extends Controller
         if (! $wo) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
 
         $items = (array) $request->input('items', []);
+        // Convenience for the V3 form: a free-text `serials` field (commas/spaces) → resolved to units.
+        $serialsText = trim((string) $request->input('serials', ''));
+        if ($serialsText !== '') {
+            foreach (preg_split('/[\s,;]+/', $serialsText) ?: [] as $s) {
+                $s = trim((string) $s);
+                if ($s === '') continue;
+                $unit = \App\Models\InventoryUnit::where('tenant_id', $u->tenant_id)->where('serial', $s)->first();
+                $items[] = $unit ? ['inventory_unit_id' => $unit->id] : ['serial' => $s];
+            }
+        }
         $n = WorkOrderService::forTenant($u->tenant)->addItems($wo, $items);
 
         return response()->json(['ok' => true, 'added' => $n, 'work_order' => $this->present($wo->fresh(), true)]);
