@@ -1937,7 +1937,12 @@ function advRenderProposal(pr){
     if(s.key==='commercial_offer' && s.total!=null) inner+='<div class="r" style="margin-top:6px;font-weight:700"><span class="l">Total</span><span class="v">'+money(s.total)+'</span></div>';
     return '<div class="card"><div class="h">'+esc(s.title)+'</div><div class="b">'+(inner||'<span class="mut">—</span>')+'</div></div>';
   }).join('');
-  el.innerHTML='<div class="crumb" style="margin-top:18px">Proposal</div>'+body;
+  el.innerHTML='<div class="rec-head" style="margin-top:18px"><div class="idn"><div class="crumb">Proposal</div></div>'+
+    '<div class="acts inl" style="margin-left:auto"><button class="btn" onclick="advDownloadPdf()">Download PDF</button></div></div>'+body;
+}
+function advDownloadPdf(){
+  if(!ADV.projectId){ toast('Save the project first', true); return; }
+  window.open('/papi/advisor/projects/'+ADV.projectId+'/proposal/pdf','_blank');
 }
 
 /* Compact number formatter for the advisor screens (thousands separators, ≤2 decimals). */

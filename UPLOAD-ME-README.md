@@ -1,49 +1,43 @@
-# Project Advisor — Slice 5: Knowledge Library (completes the roadmap)
+# Project Advisor — Branded PDF export of the proposal
 
-A reusable library of sales knowledge, searchable inside the advisor: customer **FAQs**, short
-**educational** explainers, **objection-handling** responses, and ready-to-send **WhatsApp** replies.
+The polish step: a salesperson can now download a professional, tenant-branded **PDF** of any proposal to
+send on WhatsApp, email, or print.
 
-**This bundle is the complete Project Advisor (Slices 1–5 + the V3 screen), and it includes the earlier
-`status` bug fix** — upload just this; it supersedes every earlier Advisor zip.
+**This bundle is the complete Project Advisor (Slices 1–5 + the V3 screen + the `status` fix + this PDF
+export)** — upload just this; it supersedes every earlier Advisor zip.
 
-## What this slice adds
+## What this adds
 
-In V3 → **Sales → Solar Advisor → Knowledge**: a searchable library with type tabs (All · FAQs · Learn ·
-Objections · WhatsApp). Every objection and message carries a **ready-to-send WhatsApp reply with a
-one-tap Copy button**, so a salesperson can answer confidently and paste a polished response.
+- A **Download PDF** button on the proposal view in V3 (Sales → Solar Advisor → open a project → its
+  proposal).
+- A branded A4 PDF with your company name, logo and contact, laying out all eleven proposal sections
+  (executive summary through terms & conditions), with the equipment table, commercial totals, technical
+  specifications and warranty.
 
-Content included (24 entries): battery life, cloudy-day output, savings, appliances/surge, install time,
-maintenance, warranty, off-grid vs hybrid; explainers on how solar works, battery types, sizing and
-backup; objection handling for "too expensive", "wait for prices", "sun isn't always out", "batteries
-fail", "generator is cheaper", "no roof space"; and WhatsApp templates for intro, quote follow-up, site
-visit, payment options, after-sale and referrals.
-
-## Architecture
-
-Content is data (`SolarKnowledge`) served through a generic `KnowledgeLibrary` with pure, tested search
-(type + category + free-text). Another industry ships its own content set and reuses the service and UI.
+It uses your app's existing PDF engine (dompdf — the same one your invoices and quotations use), so
+there's **no new dependency**. All figures come straight from the stored proposal; nothing is recomputed.
 
 ## API (added under `/papi/advisor`)
 
-- `GET /papi/advisor/knowledge?profile=solar&type=&category=&q=` — filtered entries, plus the available
-  types and categories.
+- `GET /papi/advisor/projects/{id}/proposal/pdf` — the branded PDF (inline), gated to the Sales menu.
 
 ## Files in this zip
 
-**New (Slice 5)**
+**New**
 
-- `app/Services/Advisor/SolarKnowledge.php` — the content.
-- `app/Services/Advisor/KnowledgeLibrary.php` — the search/filter service.
-- `tests/Unit/Kernel/KnowledgeLibraryTest.php`, `tests/Feature/Kernel/AdvisorKnowledgeTest.php`.
+- `app/Services/Advisor/ProposalPdfRenderer.php` — branded HTML + dompdf render.
+- `tests/Unit/Kernel/ProposalPdfRendererTest.php` — the document is branded and complete.
+- `tests/Feature/Kernel/AdvisorProposalPdfTest.php` — the endpoint returns real PDF bytes, 404s with no
+  proposal, and is gated.
 
 **Replace**
 
-- `resources/views/shell.blade.php` — the Knowledge browser (search, tabs, copy-to-WhatsApp).
-- `app/Http/Controllers/Advisor/AdvisorController.php` — the knowledge endpoint.
-- `routes/web.php` — the knowledge route.
-- `app/Services/Advisor/ProjectAdvisorService.php` — **carries the `status` fix** (Undefined array key).
+- `resources/views/shell.blade.php` — the Download PDF button.
+- `app/Http/Controllers/Advisor/AdvisorController.php` — the PDF endpoint.
+- `routes/web.php` — the PDF route.
 
-**Carried** — the full advisor backend + V3 screen from Slices 1–4, so this works standalone.
+**Carried** — the full Advisor backend, V3 screen, packages, knowledge library and earlier tests, so this
+works standalone.
 
 ## How to upload (GitHub, branch `main`)
 
@@ -52,14 +46,14 @@ paths.
 
 ## How you know it worked
 
-Green ✓ on **"Money kernel (must pass)"** (all advisor tests, including the ones the `status` fix
-repaired). Then V3 → Sales → Solar Advisor → **Knowledge**: search, switch tabs, and copy a WhatsApp
-reply.
+Green ✓ on **"Money kernel (must pass)"** (includes a test that the endpoint returns real `%PDF` bytes,
+using the same dompdf your invoice PDFs already run on CI). Then in V3 → Sales → Solar Advisor, open a
+project's proposal and click **Download PDF**.
 
-## Roadmap — complete 🎉
+## The Project Advisor is complete 🎉
 
-1. ✅ Calculation Engine · 2. ✅ Discovery Wizard · 3. ✅ Proposal Generator · 4. ✅ Solution Packages ·
-5. ✅ Knowledge Library — all on screen in V3.
-
-Optional later polish: a **branded PDF export** of the proposal, and a **customer-facing** proposal link
-(reusing your quotation portal). Say the word whenever you want either.
+Deterministic sizing engine · discovery wizard · eleven-section proposal generator · eight solution
+packages · knowledge library · and now branded PDF export — all on screen in V3, all behind guarded APIs,
+built as a generic framework you can extend to other industries. The remaining optional idea is a
+**customer-facing proposal link** (reusing your quotation portal so clients can view/approve online) —
+say the word whenever you'd like it.

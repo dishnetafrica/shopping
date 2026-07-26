@@ -182,4 +182,26 @@ class AdvisorController extends Controller
             'categories' => $lib->categories($profile), 'types' => \App\Services\Advisor\SolarKnowledge::TYPES,
         ]);
     }
+
+    /** GET /papi/advisor/projects/{id}/proposal/pdf — a branded PDF of the stored proposal (Slice: PDF). */
+    public function proposalPdf(Request $r, int $id)
+    {
+        if (! $this->gate($r)) {
+            abort(403);
+        }
+        $t = $r->user()->tenant;
+        app(\App\Support\TenantContext::class)->set($t->id);
+        $project = AdvisorProject::where('tenant_id', $t->id)->find($id);
+        if (! $project || ! $project->proposal) {
+            abort(404);
+        }
+        $renderer = new \App\Services\Advisor\ProposalPdfRenderer();
+        if (! $renderer->available()) {
+            abort(503, 'PDF engine unavailable');
+        }
+        $pdf = $renderer->pdf($t, (array) $project->proposal);
+        return response($pdf, 200)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'inline; filename="Proposal-' . $id . '.pdf"');
+    }
 }
