@@ -341,6 +341,11 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('products/{product}/serials',      [\App\Http\Controllers\Panel\SerialController::class, 'index']);
         Route::post('products/{product}/serials',     [\App\Http\Controllers\Panel\SerialController::class, 'register']);
         Route::post('serials/{unit}/status',          [\App\Http\Controllers\Panel\SerialController::class, 'status']);
+        // Warranty (Asset Lifecycle · warranty)
+        Route::get('warranties/expiring',             [\App\Http\Controllers\Panel\WarrantyController::class, 'expiring']);
+        Route::get('warranties',                      [\App\Http\Controllers\Panel\WarrantyController::class, 'index']);
+        Route::post('warranties',                     [\App\Http\Controllers\Panel\WarrantyController::class, 'activate']);
+        Route::post('warranties/{warranty}/void',     [\App\Http\Controllers\Panel\WarrantyController::class, 'void']);
         Route::get('riders',     [PanelApiController::class, 'riders']);
         Route::get('returns',    [PanelApiController::class, 'returns']);
         Route::get('today',      [PanelApiController::class, 'today']);   // Today / Needs-attention home screen
