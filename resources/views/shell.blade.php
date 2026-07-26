@@ -1082,7 +1082,7 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 
 <script>
 const CFG = { base:'/api/v1/workspace', csrf: document.querySelector('meta[name=csrf-token]').content, user: @json(['name'=>'']) };
-const LABELS = { setup:'Get started', chats:'Chats', chat:'Chat', communication:'Email Center', guide:'Help & Training', consignments:'Consignments', consignment:'Consignment', scheduled:'Scheduled', briefing:'Today', worklist:'My Work', tasks:'Tasks', followups:'AI Follow-ups', diagnostics:'Bot Diagnostics', customers:'Customers', leads:'Leads', collections:'Collections',
+const LABELS = { advisor:'Solar Advisor', setup:'Get started', chats:'Chats', chat:'Chat', communication:'Email Center', guide:'Help & Training', consignments:'Consignments', consignment:'Consignment', scheduled:'Scheduled', briefing:'Today', worklist:'My Work', tasks:'Tasks', followups:'AI Follow-ups', diagnostics:'Bot Diagnostics', customers:'Customers', leads:'Leads', collections:'Collections',
   salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance', pnl:'Profit & Loss',
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', 'procurement.hub':'Procurement Hub', 'demand.plans':'Demand Plans', 'juba.stock':'Juba Stock', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch', transport:'Transport Register', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
@@ -1090,7 +1090,7 @@ const LABELS = { setup:'Get started', chats:'Chats', chat:'Chat', communication:
   jobs:'Jobs', workOrder:'Job', maintenance:'Maintenance', maintenancePlan:'Service Plan', claims:'Warranty Claims', warrantyClaim:'Claim', modules:'Modules', billing:'Billing', team:'Team & Roles',
   'storefront.collections':'Shop for Every Need', 'storefront.kits':'Ready-made Kits', 'storefront.delivery':'Delivery & Free Shipping' };
 const GROUPS = [ ['Overview',['setup','briefing','worklist','guide']],
-  ['Sales',['customers','leads','followups','salesOrders','scheduled','quotations','invoices','payments','collections']],
+  ['Sales',['advisor','customers','leads','followups','salesOrders','scheduled','quotations','invoices','payments','collections']],
   ['Messaging',['chats','communication','diagnostics']],
   ['Inventory',['products','categories','purchase.process','suppliers','consignments']],
   ['Procurement',['procurement.hub','demand.plans','juba.stock']],
@@ -1101,7 +1101,7 @@ const GROUPS = [ ['Overview',['setup','briefing','worklist','guide']],
 // Which nav key reads which count from the catalog's counts map.
 const NAVCOUNT = { followups:'followups', diagnostics:'diagnostics', chats:'chats', communication:'communication', consignments:'consignments', scheduled:'scheduled', customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','warehouse','dispatch','tasks','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team']);
+const READY = new Set(['advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','warehouse','dispatch','tasks','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team']);
 // Storefront config pages are client-rendered (not server workspaces) and always available to the owner.
 const SF_KEYS = new Set(['storefront.collections','storefront.kits','storefront.delivery','transport']);
 // Dedicated list views still pending — none; kept for future additions.
@@ -1110,6 +1110,7 @@ function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:
 
 /* ---- inline icon set ---- */
 const P = {
+  advisor:'M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1l2.1-2.1M17 7l2.1-2.1M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
   scheduled:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2',
   jobs:'M9 3h6a1 1 0 0 1 1 1v2h3a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3V4a1 1 0 0 1 1-1zM9 11l2 2 4-4',
   workOrder:'M9 3h6a1 1 0 0 1 1 1v2h3a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3V4a1 1 0 0 1 1-1zM9 11l2 2 4-4',
@@ -1455,7 +1456,7 @@ function renderNav(caps){
   // A SOON item shows if its underlying entity exists (has a count) even without a list capability yet.
   /* pnl is a legacy-iframe screen with no capability of its own — gate it on the
      permission-filtered finance capability so restricted roles don't see P&L. */
-  const has = k => (k==='pnl' && keys.has('finance')) || k==='settings' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
+  const has = k => (k==='pnl' && keys.has('finance')) || k==='settings' || k==='advisor' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
   let html='';
   GROUPS.forEach(([g,items])=>{
     const avail=items.filter(has);
@@ -1630,6 +1631,7 @@ async function route(key, id){
   if(key==='pnl'){ if(isAppUI()){ bosPnl(); return; } document.getElementById('view').innerHTML='<div class="crumb">Profit & Loss</div><iframe title="Profit and Loss" src="/panel/pnl-report" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='wa-connect'){ document.getElementById('view').innerHTML='<div class="crumb">Connect WhatsApp</div><iframe title="Connect WhatsApp" src="/panel/setup" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='settings'){ if(isAppUI()){ bosSettings(); return; } document.getElementById('view').innerHTML='<iframe title="Settings" src="/panel/settings-manager" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
+  if(key==='advisor'){ advisorHome(id); return; }
   if(key==='storefront.collections'){ sfCollectionsPage(); return; }
   if(key==='storefront.kits'){ sfKitsPage(); return; }
   if(key==='storefront.delivery'){ sfDeliveryPage(); return; }
@@ -1651,6 +1653,214 @@ async function route(key, id){
   if(p._error){ document.getElementById('view').innerHTML=emptyState('bolt','Could not load','You may not have access to this workspace ('+p._error+').'); return; }
   renderView(p);
 }
+/* ========================= SOLAR PROJECT ADVISOR (Slices 2–3 UI) =========================
+   A bespoke screen (not a capability payload): discovery wizard -> deterministic sizing preview ->
+   save project -> equipment + generate proposal -> proposal view. All figures come from the server
+   engine (/papi/advisor/*); this screen only collects answers and renders results. */
+var ADV = { schema:null, projectId:null };
+
+async function advisorHome(id){
+  if(id){ return advisorOpenProject(id); }
+  var v=document.getElementById('view');
+  v.innerHTML='<div class="crumb">Solar Advisor</div>'+
+    '<div class="rec-head"><div class="rec-av" style="background:#d97706">'+icon('advisor','ic-lg')+'</div>'+
+    '<div class="idn"><h1>Solar Project Advisor</h1><div class="sub">Guide the customer from discovery to a sized, professional proposal.</div></div>'+
+    '<div class="acts inl" style="margin-left:auto"><button class="btn pri" onclick="advisorNew()">New project</button></div></div>'+
+    '<div id="advList" class="card"><div class="b">Loading…</div></div>';
+  var r=await getQuery('/papi/advisor/projects',{});
+  var rows=(r&&r.projects)||[];
+  var body= rows.length ? rows.map(advProjectRow).join('')
+    : '<div class="b" style="padding:40px;text-align:center;color:var(--faint)">No projects yet. Click “New project” to run a discovery.</div>';
+  var el=document.getElementById('advList'); if(el) el.innerHTML='<div class="h">'+icon('advisor','ic-sm')+'Recent projects</div>'+body;
+}
+
+function advProjectRow(p){
+  var r=(p.sizing&&p.sizing.result)||{};
+  var bits=[];
+  if(r.pv_array_w) bits.push('PV '+advN(r.pv_array_w)+' W');
+  if(r.battery_bank_wh) bits.push('Battery '+advN(r.battery_bank_wh)+' Wh');
+  if(r.inverter_w) bits.push('Inverter '+advN(r.inverter_w)+' W');
+  return '<div class="qrow" style="cursor:pointer" onclick="route(\'advisor\',\''+p.id+'\')">'+
+    '<div class="idn"><b>'+esc(p.name||('Project #'+p.id))+'</b> '+statusBadge(p.status)+
+    '<div class="sub mut">'+esc(bits.join(' · ')||'Not sized yet')+'</div></div></div>';
+}
+
+async function advLoadSchema(){ if(ADV.schema) return; var r=await getQuery('/papi/advisor/schema',{profile:'solar'}); ADV.schema=(r&&r.schema)||null; }
+
+async function advisorNew(){
+  await advLoadSchema();
+  ADV.projectId=null;
+  if(!ADV.schema){ toast('Could not load the questionnaire', true); return; }
+  var secs=(ADV.schema.sections||[]).map(function(sec){
+    return '<div class="card"><div class="h">'+esc(sec.title)+'</div><div class="b">'+(sec.fields||[]).map(advField).join('')+'</div></div>';
+  }).join('');
+  document.getElementById('view').innerHTML=
+    '<div class="crumb" style="cursor:pointer" onclick="route(\'advisor\')">Solar Advisor</div>'+
+    '<div class="rec-head"><div class="idn"><h1>New solar project</h1><div class="sub">Answer the discovery questions, then calculate the system.</div></div>'+
+    '<div class="acts inl" style="margin-left:auto"><button class="btn" onclick="advCalculate()">Calculate</button><button class="btn pri" onclick="advSave()">Save project</button></div></div>'+
+    secs+'<div id="advResult"></div>';
+  advAddLoad();
+}
+
+function advField(f){
+  var id='adv_'+f.key;
+  if(f.type==='loads') return advLoadsField(f);
+  var lbl='<label>'+esc(f.label)+(f.required?' *':'')+'</label>';
+  var help=f.help?'<div class="mut" style="font-size:12px;margin-top:3px">'+esc(f.help)+'</div>':'';
+  var input;
+  if(f.type==='enum'){
+    input='<select id="'+id+'" class="set-in"><option value=""></option>'+(f.options||[]).map(function(o){ return '<option value="'+esc(o)+'"'+(f.default===o?' selected':'')+'>'+esc(o)+'</option>'; }).join('')+'</select>';
+  } else if(f.type==='number'){
+    input='<input id="'+id+'" class="set-in" inputmode="decimal"'+(f.unit?(' placeholder="'+esc(f.unit)+'"'):'')+(f.default!=null?(' value="'+esc(f.default)+'"'):'')+'>';
+  } else {
+    input='<input id="'+id+'" class="set-in">';
+  }
+  return '<div class="fs-field">'+lbl+input+help+'</div>';
+}
+
+function advLoadsField(f){
+  return '<div class="fs-field"><label>'+esc(f.label)+'</label>'+
+    (f.help?'<div class="mut" style="font-size:12px;margin-bottom:6px">'+esc(f.help)+'</div>':'')+
+    '<div id="advLoads"></div>'+
+    '<button class="btn" style="margin-top:8px" onclick="advAddLoad()">+ Add appliance</button></div>';
+}
+function advAddLoad(row){
+  row=row||{}; var c=document.getElementById('advLoads'); if(!c) return;
+  var d=document.createElement('div'); d.className='advLoadRow';
+  d.style.cssText='display:grid;grid-template-columns:2fr 1fr .8fr .9fr auto auto;gap:6px;margin-bottom:6px;align-items:center';
+  d.innerHTML='<input class="set-in lr-name" placeholder="Appliance" value="'+esc(row.name||'')+'">'+
+    '<input class="set-in lr-watts" inputmode="decimal" placeholder="Watts" value="'+esc(row.watts||'')+'">'+
+    '<input class="set-in lr-qty" inputmode="numeric" placeholder="Qty" value="'+esc(row.qty||'1')+'">'+
+    '<input class="set-in lr-hours" inputmode="decimal" placeholder="Hrs/day" value="'+esc(row.hours_per_day||'')+'">'+
+    '<label style="font-size:12px;white-space:nowrap"><input type="checkbox" class="lr-crit"'+(row.critical?' checked':'')+'> backup</label>'+
+    '<button class="btn" title="Remove" onclick="this.parentNode.remove()">✕</button>';
+  c.appendChild(d);
+}
+
+function advGatherAnswers(){
+  var a={};
+  (ADV.schema.sections||[]).forEach(function(sec){ (sec.fields||[]).forEach(function(f){
+    if(f.type==='loads'){
+      var loads=[]; document.querySelectorAll('#advLoads .advLoadRow').forEach(function(r){
+        var w=(r.querySelector('.lr-watts')||{}).value||''; if(!w) return;
+        loads.push({ name:(r.querySelector('.lr-name')||{}).value||'', watts:w,
+          qty:(r.querySelector('.lr-qty')||{}).value||'1', hours_per_day:(r.querySelector('.lr-hours')||{}).value||'',
+          critical:(r.querySelector('.lr-crit')||{}).checked?1:0 });
+      });
+      a[f.key]=loads;
+    } else {
+      var el=document.getElementById('adv_'+f.key); if(el && el.value!=='') a[f.key]=el.value;
+    }
+  }); });
+  return a;
+}
+
+async function advCalculate(){
+  var r=await post('/papi/advisor/compute',{ profile:'solar', answers:advGatherAnswers() });
+  if(!r||!r.ok){ toast('Could not calculate', true); return; }
+  advRenderResult(r.sizing);
+}
+function advRenderResult(sizing){
+  var r=(sizing&&sizing.result)||{};
+  function row(l,v){ return '<div class="r"><span class="l">'+esc(l)+'</span><span class="v">'+esc(v)+'</span></div>'; }
+  var el=document.getElementById('advResult'); if(!el) return;
+  el.innerHTML='<div class="card"><div class="h">'+icon('advisor','ic-sm')+'Recommended system</div><div class="b">'+
+    row('Daily energy', advN(r.daily_energy_kwh)+' kWh/day')+
+    row('Connected load', advN(r.connected_load_w)+' W')+
+    row('Peak demand', advN(r.peak_demand_w)+' W')+
+    row('Solar array', advN(r.pv_array_w)+' W'+(r.panel_count?(' ('+r.panel_count+' panels)'):''))+
+    row('Battery bank', advN(r.battery_bank_wh)+' Wh · '+advN(r.battery_bank_ah)+' Ah')+
+    row('Inverter', advN(r.inverter_va)+' VA ('+advN(r.inverter_w)+' W)')+
+    '</div></div>';
+}
+
+async function advSave(){
+  var a=advGatherAnswers();
+  var r=await post('/papi/advisor/projects',{ profile:'solar', name:(a.customer_type||'Solar project'), answers:a });
+  if(!r||!r.ok){ toast('Could not save', true); return; }
+  toast('Project saved');
+  route('advisor', r.project.id);
+}
+
+async function advisorOpenProject(id){
+  document.getElementById('view').innerHTML=skeleton();
+  var r=await getQuery('/papi/advisor/projects/'+id,{});
+  if(!r||!r.project){ document.getElementById('view').innerHTML=emptyState('bolt','Not found','This project could not be loaded.'); return; }
+  var p=r.project; ADV.projectId=p.id;
+  document.getElementById('view').innerHTML=
+    '<div class="crumb" style="cursor:pointer" onclick="route(\'advisor\')">Solar Advisor</div>'+
+    '<div class="rec-head"><div class="rec-av" style="background:#d97706">'+icon('advisor','ic-lg')+'</div>'+
+    '<div class="idn"><h1>'+esc(p.name||'Solar project')+' '+statusBadge(p.status)+'</h1>'+
+    '<div class="sub">'+esc((p.answers&&p.answers.customer_type)||'')+((p.answers&&p.answers.location)?(' · '+esc(p.answers.location)):'')+'</div></div></div>'+
+    '<div id="advResult"></div><div id="advEquip"></div><div id="advProposal"></div>';
+  advRenderResult(p.sizing||{});
+  advRenderEquipEditor();
+  if(p.proposal) advRenderProposal(p.proposal);
+}
+
+function advRenderEquipEditor(){
+  var el=document.getElementById('advEquip'); if(!el) return;
+  el.innerHTML='<div class="card"><div class="h">'+icon('billing','ic-sm')+'Equipment &amp; commercial offer</div><div class="b">'+
+    '<div class="mut" style="font-size:12px;margin-bottom:8px">Add the equipment lines for the proposal (name, quantity, unit price).</div>'+
+    '<div id="advEquipRows"></div>'+
+    '<button class="btn" style="margin-top:8px" onclick="advAddEquip()">+ Add equipment</button>'+
+    '<div style="margin-top:12px"><button class="btn pri" onclick="advGenerateProposal()">Generate proposal</button></div>'+
+    '</div></div>';
+  advAddEquip();
+}
+function advAddEquip(row){
+  row=row||{}; var c=document.getElementById('advEquipRows'); if(!c) return;
+  var d=document.createElement('div'); d.className='advEquipRow';
+  d.style.cssText='display:grid;grid-template-columns:2fr .8fr 1.3fr auto;gap:6px;margin-bottom:6px';
+  d.innerHTML='<input class="set-in eq-name" placeholder="Item" value="'+esc(row.name||'')+'">'+
+    '<input class="set-in eq-qty" inputmode="numeric" placeholder="Qty" value="'+esc(row.qty||'1')+'">'+
+    '<input class="set-in eq-price" inputmode="decimal" placeholder="Unit price" value="'+esc(row.unit_price||'')+'">'+
+    '<button class="btn" title="Remove" onclick="this.parentNode.remove()">✕</button>';
+  c.appendChild(d);
+}
+function advGatherEquip(){
+  var out=[]; document.querySelectorAll('#advEquipRows .advEquipRow').forEach(function(r){
+    var name=(r.querySelector('.eq-name')||{}).value||''; if(!name) return;
+    out.push({ name:name, qty:(r.querySelector('.eq-qty')||{}).value||'1', unit_price:(r.querySelector('.eq-price')||{}).value||'0' });
+  }); return out;
+}
+async function advGenerateProposal(){
+  if(!ADV.projectId){ toast('Save the project first', true); return; }
+  var r=await post('/papi/advisor/projects/'+ADV.projectId+'/proposal',{ equipment:advGatherEquip(), opts:{} });
+  if(!r||!r.ok){ toast('Could not generate proposal', true); return; }
+  advRenderProposal(r.proposal); toast('Proposal generated');
+  var el=document.getElementById('advProposal'); if(el) el.scrollIntoView({behavior:'smooth'});
+}
+
+function advRenderProposal(pr){
+  var el=document.getElementById('advProposal'); if(!el||!pr) return;
+  var cur=pr.currency||'UGX';
+  function money(v){ return cur+' '+advN(v); }
+  var body=(pr.sections||[]).map(function(s){
+    var inner='';
+    if(s.body) inner+='<p style="margin:0 0 8px;line-height:1.55">'+esc(s.body)+'</p>';
+    if(s.rows){ inner+=s.rows.map(function(r){ var v=r.value; if(typeof v==='number') v=money(v); return '<div class="r"><span class="l">'+esc(r.label)+'</span><span class="v">'+esc(v)+'</span></div>'; }).join(''); }
+    if(s.key==='equipment_list' && s.items){
+      inner+='<table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="color:var(--faint);text-align:left"><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit</th><th style="text-align:right">Total</th></tr>'+
+        s.items.map(function(it){ return '<tr><td style="padding:4px 0">'+esc(it.name)+(it.sku?(' <span class="mut">'+esc(it.sku)+'</span>'):'')+'</td><td style="text-align:center">'+esc(it.qty)+'</td><td style="text-align:right">'+money(it.unit_price)+'</td><td style="text-align:right">'+money(it.line_total)+'</td></tr>'; }).join('')+'</table>'+
+        (s.subtotal!=null?('<div class="r" style="margin-top:6px"><span class="l">Subtotal</span><span class="v">'+money(s.subtotal)+'</span></div>'):'')+
+        (s.note?('<div class="mut" style="font-size:12px">'+esc(s.note)+'</div>'):'');
+    } else if(s.groups){
+      inner+=s.groups.map(function(g){ return '<div style="margin-bottom:10px"><b>'+esc(g.product)+'</b>'+(g.specs||[]).map(function(sp){ return '<div class="r"><span class="l">'+esc(sp.label)+'</span><span class="v">'+esc(sp.value)+'</span></div>'; }).join('')+'</div>'; }).join('');
+    } else if(s.key==='warranty' && s.items){
+      inner+=s.items.map(function(w){ return '<div class="r"><span class="l">'+esc(w.product)+'</span><span class="v">'+esc(w.warranty)+'</span></div>'; }).join('');
+    } else if(s.items){
+      inner+='<ul style="margin:0;padding-left:18px;line-height:1.55">'+s.items.map(function(x){ return '<li>'+esc(typeof x==='string'?x:(x.label||JSON.stringify(x)))+'</li>'; }).join('')+'</ul>';
+    }
+    if(s.key==='commercial_offer' && s.total!=null) inner+='<div class="r" style="margin-top:6px;font-weight:700"><span class="l">Total</span><span class="v">'+money(s.total)+'</span></div>';
+    return '<div class="card"><div class="h">'+esc(s.title)+'</div><div class="b">'+(inner||'<span class="mut">—</span>')+'</div></div>';
+  }).join('');
+  el.innerHTML='<div class="crumb" style="margin-top:18px">Proposal</div>'+body;
+}
+
+/* Compact number formatter for the advisor screens (thousands separators, ≤2 decimals). */
+function advN(v){ v=Number(v||0); return (Math.round(v*100)/100).toLocaleString('en-US',{maximumFractionDigits:2}); }
+
 function renderSoon(key){
   const s=SOON[key]; const c=CFG.counts[NAVCOUNT[key]||key];
   document.getElementById('view').innerHTML=
