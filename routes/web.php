@@ -351,6 +351,15 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('kits',                            [\App\Http\Controllers\Panel\KitController::class, 'index']);
         Route::post('kits/import',                    [\App\Http\Controllers\Panel\KitController::class, 'import']);
         Route::get('products/{product}/kit',          [\App\Http\Controllers\Panel\KitController::class, 'show']);
+        // Jobs / Work Orders (Asset Lifecycle · Phase 2 · S5) — V3-native field service
+        Route::get('work-orders',                     [\App\Http\Controllers\Panel\WorkOrderController::class, 'index']);
+        Route::post('work-orders',                    [\App\Http\Controllers\Panel\WorkOrderController::class, 'create']);
+        Route::get('work-orders/{workOrder}',         [\App\Http\Controllers\Panel\WorkOrderController::class, 'show']);
+        Route::post('work-orders/{workOrder}/schedule', [\App\Http\Controllers\Panel\WorkOrderController::class, 'schedule']);
+        Route::post('work-orders/{workOrder}/items',  [\App\Http\Controllers\Panel\WorkOrderController::class, 'items']);
+        Route::post('work-orders/{workOrder}/start',  [\App\Http\Controllers\Panel\WorkOrderController::class, 'start']);
+        Route::post('work-orders/{workOrder}/complete', [\App\Http\Controllers\Panel\WorkOrderController::class, 'complete']);
+        Route::post('work-orders/{workOrder}/cancel', [\App\Http\Controllers\Panel\WorkOrderController::class, 'cancel']);
         Route::get('riders',     [PanelApiController::class, 'riders']);
         Route::get('returns',    [PanelApiController::class, 'returns']);
         Route::get('today',      [PanelApiController::class, 'today']);   // Today / Needs-attention home screen

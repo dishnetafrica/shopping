@@ -42,6 +42,22 @@ This first pass is derived from two authoritative sources in the code: the `Clas
 | Billing | ✅ | ❌ | ❌ Not started | `/panel/billing` has no V3 redirect home yet |
 | Module Manager | ✅ | ❓ | ❌ Not started | `/panel/settings-manager`; no V3 home in the redirect map |
 
+## V3-native modules (born in V3 — no legacy panel equivalent)
+
+These are the Asset Lifecycle / solar modules. They are V3-only from birth (the Constitution in action):
+there is nothing to migrate — the legacy panel never had them.
+
+| Module | V3 | Status | Notes |
+|--------|:--:|--------|-------|
+| Product Specifications (Phase 1) | ✅ | ✅ Done | on the product page (answers) |
+| Serial / Unit tracking (Phase 1) | ✅ | ✅ Done | on the product page (stats) + `/papi/serials` |
+| Warranties (Phase 1) | ✅ | ✅ Done | product default terms + auto-activate on sale/install |
+| Kits / Bundles (Phase 1) | ✅ | ✅ Done | CSV-built; explode-on-sale draws down parts |
+| Jobs / Work Orders (Phase 2 · S5) | 🚧 | 🚧 Building | engine + API done; V3 screen (S5b) next |
+| Service Visits (Phase 2 · S6) | ❌ | ❌ Not started | same Jobs engine, `type=service` |
+| Warranty Claims (Phase 2 · S7) | ❌ | ❌ Not started | open/approve/reject against a warranty |
+| Project Quotes (Phase 2 · S8) | ❌ | ❌ Not started | multi-section solar project quotes |
+
 ## Onboarding
 
 | Item | Status | Notes |

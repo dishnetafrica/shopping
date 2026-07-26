@@ -1,59 +1,75 @@
-# V3 by default for every new tenant + Migration Constitution
+# S5a — Jobs / Work Orders (Phase 2 foundation, V3-native)
 
-Two things in this drop:
+This starts **Phase 2** — the operational layer. It adds a generic **Jobs** system: a job to install,
+service, repair, or inspect equipment at a customer's site. Installations come first; service visits,
+repairs and inspections reuse the exact same system (just a different `type`). It's **V3-native** — a
+brand-new module with no legacy panel version, so it's V3-only from birth.
 
-## 1. Every new tenant now starts in CloudBSS V3
+## What a job holds
 
-One tiny change at the single point where every business is created: a new tenant is now flagged to
-**land in V3** automatically (`order_system_enabled = true`). This covers **both** ways tenants are
-made — self-serve signup (already did this) and the **ShopBot Operator admin** (which is how GSL was
-made, and previously could land a tenant on the old panel).
+A customer + site address, an optional link to the sale it came from, an assigned technician, a
+scheduled date, the specific equipment (serial units) going in, notes, and a status:
+**draft → scheduled → in progress → completed** (or **cancelled**). Each job gets a number (JOB-0001…).
 
-Safe and reversible by design:
+## The payoff — Phase 1 and Phase 2 lock together
 
-- **Existing tenants are untouched.** This only applies to tenants created from now on.
-- **An explicit choice is respected.** If a tenant is ever created with the setting deliberately off,
-  that's honored.
-- **Any tenant can still be flipped back at runtime** with the existing switches — no deploy needed
-  (`order_system_enabled`, `v3_all_roles`, `v3_redirects`, or the `?classic=1` link).
+When you **complete an installation**, every serial unit on that job is automatically marked
+**installed** — which (thanks to the auto-warranty work from S3c) **activates each unit's warranty** from
+the product's default terms. So finishing the job starts the customer's coverage with **zero extra data
+entry**. Completing a *service* visit correctly does none of that — it just closes the visit.
 
-So from now on: *Create tenant → launch V3 → onboard → never touch the old panel.*
+It's all safe: the warranty/serial step on completion is guarded, so it can never block a job from
+closing.
 
-## 2. The Migration Constitution is now written into the codebase
-
-Your direction is recorded as a governing document future work must follow, tied to the migration
-machinery that already exists in the code (the `order_system_enabled` / `v3_redirects` switches, the
-`v3:staff` / `v3:retire` commands, and the legacy→V3 page map). Two docs:
-
-- `docs/v3-migration/CONSTITUTION.md` — the 10 rules + the freeze.
-- `docs/v3-migration/MIGRATION-TRACKER.md` — the single source of truth for what's migrated. A first
-  pass is already filled in from the code: most modules (Dashboard, Orders, Customers, Products,
-  Inventory, Purchasing, Suppliers, Accounting, Messaging, Campaigns, Leads, Scheduling, Consignments,
-  Ads, Guide) already have real V3 homes. The genuine remaining gaps are **Billing, Roles/Permissions,
-  and Module Manager**, plus a few to double-check (Settings, Reports, Business Profile, WhatsApp
-  connect, Team).
+> **Depends on Phase 1** (specs / serials / warranty, including S3c auto-warranty). Those are already in
+> your repo from the earlier drops — just make sure they're in place and green.
 
 ---
 
-## Files in this zip (4)
+## Files in this zip (10)
 
-| File | What it is |
-|------|------------|
-| `app/Models/Tenant.php` | **REPLACE** — new tenants default to V3 |
-| `tests/Feature/Kernel/V3DefaultTenantTest.php` | **NEW** — proves the default (part of the green gate) |
-| `docs/v3-migration/CONSTITUTION.md` | **NEW** — the governing document |
-| `docs/v3-migration/MIGRATION-TRACKER.md` | **NEW** — the migration source of truth |
+**New**
+
+- `database/migrations/2026_07_25_000010_create_work_orders_table.php`
+- `database/migrations/2026_07_25_000011_create_work_order_items_table.php`
+- `app/Models/WorkOrder.php`
+- `app/Models/WorkOrderItem.php`
+- `app/Kernel/Events/WorkOrderEvents.php`
+- `app/Services/Field/WorkOrderService.php`
+- `app/Http/Controllers/Panel/WorkOrderController.php`
+- `tests/Feature/Kernel/WorkOrderTest.php`
+
+**Replace**
+
+- `routes/web.php` (adds the `/papi/work-orders...` routes)
+- `docs/v3-migration/MIGRATION-TRACKER.md` (records the new module)
+
+---
 
 ## How to upload (GitHub, branch `main`)
 
-Drag the folders (`app`, `tests`, `docs`) into your repo so they land at the same paths. If any new
-file doesn't appear, use these direct links (paste contents from the zip, commit):
+Drag the folders (`database`, `app`, `routes`, `tests`, `docs`) into your repo so they land at the same
+paths. If any new file doesn't appear, use these "create file at path" links (paste contents, commit):
 
-- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/V3DefaultTenantTest.php`
-- `github.com/dishnetafrica/shopping/new/main?filename=docs/v3-migration/CONSTITUTION.md`
-- `github.com/dishnetafrica/shopping/new/main?filename=docs/v3-migration/MIGRATION-TRACKER.md`
+- `github.com/dishnetafrica/shopping/new/main?filename=database/migrations/2026_07_25_000010_create_work_orders_table.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=database/migrations/2026_07_25_000011_create_work_order_items_table.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=app/Models/WorkOrder.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=app/Models/WorkOrderItem.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=app/Kernel/Events/WorkOrderEvents.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=app/Services/Field/WorkOrderService.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=app/Http/Controllers/Panel/WorkOrderController.php`
+- `github.com/dishnetafrica/shopping/new/main?filename=tests/Feature/Kernel/WorkOrderTest.php`
 
 ## How you know it worked
 
-Green ✓ on **"Money kernel (must pass)"**. To see it live: create a fresh test tenant in the Operator
-admin and confirm it opens straight into `/v3`.
+Green ✓ on **"Money kernel (must pass)"** — it runs the new work-order test (including the
+complete → installed → warranty-activated flow) with everything before it.
+
+---
+
+## What's next
+
+- **S5b** — the V3 **Jobs screen**: see/create/schedule/complete jobs from the V3 interface (this drop
+  is the engine + API; S5b makes it visible and clickable). I'll study the V3 nav/workspace wiring and
+  build it as its own slice.
+- Then **S6 Service Visits**, **S7 Warranty Claims**, **S8 Project Quotes**.
