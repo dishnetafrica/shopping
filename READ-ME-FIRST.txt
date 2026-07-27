@@ -1,10 +1,17 @@
-UPLOAD TO GITHUB — cleaner icons (Font Awesome instead of emoji)
-================================================================
-Replaced the emoji across the storefront with professional Font Awesome 4.7
-icons (home, search, cart, wrench, truck, shield, whatsapp, etc.). Looks less
-"childish", consistent on every phone. The icon font loads from cdnjs (standard,
-cached CDN). Everything else from the previous steps is unchanged.
+UPLOAD TO GITHUB — friendlier "choose your bike" for first-time visitors
+========================================================================
+Fixes the confusing "+" chip. Now a non-technical customer instantly understands
+how to pick their motorcycle.
 
-FILES: resources/storefront/autoparts.html (icons) + the 4 PHP files (unchanged).
+WHAT CHANGED (customer-facing):
+  • Removed the cryptic "+" in the header.
+  • Under the header on EVERY page: a clear bar —
+        "Which motorcycle do you have?  [ Choose my bike ]"
+    Tapping opens a visual picker (bike PHOTOS + names) — tap your bike, done.
+  • Once chosen it turns green: "Showing parts for <bike> · Change bike",
+    so the customer always knows the site is filtered to their motorcycle.
+  • Works on mobile (bottom sheet) and desktop (centered dialog).
+
+Frontend only (resources/storefront/autoparts.html); PHP unchanged.
 DEPLOY: upload "app" + "resources" -> git pull -> php artisan optimize:clear -> restart -> hard-refresh.
-  Confirm:  fetch(location.href).then(r=>r.text()).then(t=>console.log('Icons live:', t.includes('font-awesome')));  // TRUE
+  Confirm:  fetch(location.href).then(r=>r.text()).then(t=>console.log('Bike picker live:', t.includes('openBikePicker')));  // TRUE
