@@ -1,23 +1,18 @@
-UPLOAD TO GITHUB — Phase 1 · Step 4: Native cart & WhatsApp checkout
+UPLOAD TO GITHUB — "Sell only what we have" (hide out-of-stock parts)
 ====================================================================
-Closes the biggest gap from the audit: there was no real cart. Now customers
-can gather several parts and order them all in ONE WhatsApp message — no more
-one-part-at-a-time, and no hand-off to a different system.
+New on/off switch for a parts business: hide anything you don't have in stock.
 
-WHAT CHANGED (customer-facing):
-  • "Add to cart" on part cards, product pages, and diagram lists (was one-off order).
-  • Live cart badge (count) in the header and on the mobile bottom bar; add-to-cart toast.
-  • New Cart page: line items, quantity +/- , live total, your saved bike, and your
-    delivery / payment / genuine promises.
-  • "Place order on WhatsApp" sends the whole basket (items, quantities, total, bike)
-    in one prefilled message. Clear note: "no payment is taken online."
-  • The header/bottom "Cart" now opens this native cart (was linking to the ERP shop).
-  • Instant "Order now" (single part on WhatsApp) is still available on product pages.
+  v3 → Settings → Storefront → Availability →
+      [ Show only parts in stock (hide out-of-stock) ]   ON / OFF
 
-Frontend only (resources/storefront/autoparts.html); PHP unchanged.
+  • ON  = any part with 0 stock disappears from listings, search and browse.
+          Parts with NO stock number set (untracked) still show as "to order".
+  • OFF = everything shows (current behaviour).
+  Exploded diagrams still show every part regardless (so the diagram stays complete).
 
+Set your stock numbers on the Products page (or via import); the storefront follows.
+
+FILES: app/Support/SettingsSchema.php, app/Services/Settings/SettingsWriteService.php,
+       app/Http/Controllers/Storefront/StorefrontController.php, resources/storefront/autoparts.html
 DEPLOY: upload "app" + "resources" -> git pull -> php artisan optimize:clear -> restart -> hard-refresh.
-  Confirm:  fetch(location.href).then(r=>r.text()).then(t=>console.log('Cart live:', t.includes('function waCartOrder')));  // TRUE
-
-NOTE: checkout completes on WhatsApp (mobile money / pay-on-delivery agreed with your
-team). A fully in-app mobile-money checkout (M-Pesa/MTN APIs) is the next backend step.
+  Confirm:  fetch(location.href).then(r=>r.text()).then(t=>console.log('OOS toggle live:', t.includes('CFG.hideOOS')));  // TRUE

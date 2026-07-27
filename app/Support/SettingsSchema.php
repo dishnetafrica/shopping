@@ -107,6 +107,9 @@ final class SettingsSchema
                     ['key' => 'show_model_ct125hd',    'type' => 'bool', 'label' => 'CT 125 HD',     'default' => true],
                     ['key' => 'show_model_boxer150x',  'type' => 'bool', 'label' => 'Boxer BM150 X', 'default' => true],
                 ]],
+                ['label' => 'Availability', 'help' => 'For a parts business — sell only what you actually have.', 'fields' => [
+                    ['key' => 'sf_hide_oos', 'type' => 'bool', 'label' => 'Show only parts in stock (hide out-of-stock)', 'default' => false, 'help' => 'When ON, any part with 0 stock is hidden from listings, search and browse. Parts with no stock number set (untracked) still show as “to order”.'],
+                ]],
                 ['label' => 'Trust & delivery promises', 'help' => 'Shown on your product pages and homepage to reassure customers before they buy. Leave blank to use sensible defaults.', 'fields' => [
                     ['key' => 'sf_genuine',      'type' => 'text', 'label' => 'Genuine-parts promise', 'help' => 'e.g. 100% genuine Bajaj — verify the hologram, or your money back.'],
                     ['key' => 'sf_delivery_eta', 'type' => 'text', 'label' => 'Delivery time', 'help' => 'e.g. Same-day in town · 24–48h upcountry'],

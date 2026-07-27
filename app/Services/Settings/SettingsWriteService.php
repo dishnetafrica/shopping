@@ -60,6 +60,7 @@ final class SettingsWriteService
         // Storefront: per-model show/hide toggles (default on). Read by StorefrontController.
         'show_model_boxer100', 'show_model_boxer125hd', 'show_model_boxer150',
         'show_model_boxer125x', 'show_model_ct125hd', 'show_model_boxer150x',
+        'sf_hide_oos',  // storefront: hide out-of-stock parts (sell only what you have)
     ];
 
     /** Enum settings: [key => allowed values]. Document PDF page setup (read by the PDF renderers). */
