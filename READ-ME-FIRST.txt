@@ -1,23 +1,23 @@
-UPLOAD TO GITHUB — Phase 0 · Step 3: The AI Mechanic (symptom -> part)
-=====================================================================
-Turns the near-empty "AI Assistant" into a real guided diagnosis, and makes it
-the fastest path for a broken-down rider.
+UPLOAD TO GITHUB — Phase 1 · Step 4: Native cart & WhatsApp checkout
+====================================================================
+Closes the biggest gap from the audit: there was no real cart. Now customers
+can gather several parts and order them all in ONE WhatsApp message — no more
+one-part-at-a-time, and no hand-off to a different system.
 
 WHAT CHANGED (customer-facing):
-  • AI Mechanic page: type (or SPEAK 🎤) the problem in plain language
-    -> it finds the likely causes with probabilities
-    -> each cause links to the REAL genuine part (price + "fits your bike" + Order on WhatsApp)
-    -> plus "check these yourself" steps and a "send a photo on WhatsApp" human fallback.
-  • Honest framing: "Auto-diagnosis · a real person can confirm on WhatsApp" (no fake "Online").
-  • Bike-aware: uses your saved motorcycle to fit-check the suggested parts.
-  • Homepage hero now promotes it: "Bike won't start or making a noise? Describe the problem ->".
-  • Homepage search box also accepts plain-language problems.
+  • "Add to cart" on part cards, product pages, and diagram lists (was one-off order).
+  • Live cart badge (count) in the header and on the mobile bottom bar; add-to-cart toast.
+  • New Cart page: line items, quantity +/- , live total, your saved bike, and your
+    delivery / payment / genuine promises.
+  • "Place order on WhatsApp" sends the whole basket (items, quantities, total, bike)
+    in one prefilled message. Clear note: "no payment is taken online."
+  • The header/bottom "Cart" now opens this native cart (was linking to the ERP shop).
+  • Instant "Order now" (single part on WhatsApp) is still available on product pages.
 
-No new settings. Frontend only (resources/storefront/autoparts.html); PHP unchanged.
+Frontend only (resources/storefront/autoparts.html); PHP unchanged.
 
 DEPLOY: upload "app" + "resources" -> git pull -> php artisan optimize:clear -> restart -> hard-refresh.
-  Confirm:  fetch(location.href).then(r=>r.text()).then(t=>console.log('Step3 live:', t.includes('function askAI')));  // TRUE
+  Confirm:  fetch(location.href).then(r=>r.text()).then(t=>console.log('Cart live:', t.includes('function waCartOrder')));  // TRUE
 
-This completes Phase 0 (the "Uptime Engine"): Step 1 buyable-on-a-phone, Step 2 trust & fitment,
-Step 3 AI Mechanic. Next horizon (needs backend): in-app mobile-money checkout, genuine-scan
-authenticity, live delivery tracking, real part photos.
+NOTE: checkout completes on WhatsApp (mobile money / pay-on-delivery agreed with your
+team). A fully in-app mobile-money checkout (M-Pesa/MTN APIs) is the next backend step.
