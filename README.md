@@ -2,12 +2,8 @@
 
 EA Auto Part is the storefront brand (the seller); the parts sold are **genuine
 Bajaj Boxer spares**. This repo is the front-end for the CloudBSS **`auto_parts`
-vertical** — see `platform-integration/`.
-
-**Data is separated from design.** Pages are *assembled* from one design system
-plus structured content — never hand-drawn page by page. Change a token in
-`design-system.json` / `data/tenant.json`, or a data value, and every page
-re-renders consistently.
+vertical** (see `platform-integration/`). The Boxer 100 is **fully catalogued**:
+45 exploded-diagram plates and 543 unique part numbers (`parts-import.csv`).
 
 ## Quick start
 
@@ -17,11 +13,18 @@ python3 build/build_parts.py  # rebuild parts DB + parts-import.csv
 open dist/index.html
 ```
 
-`data/tenant.json` holds the EA Auto Part brand (colour, currency, hero copy,
-models). Swap it (see `data/tenant-speedparts.json`) to re-skin for another
-tenant with zero code changes.
+The prebuilt pages in `dist/` reference images from `assets/`, so open them from
+inside the repo. To regenerate fully self-contained pages instead, run
+`EMBED_IMAGES=1 python3 build/generate.py`.
 
+`data/tenant.json` holds the EA Auto Part brand (colour, currency, hero copy).
+Swap it (see `data/tenant-speedparts.json`) to re-skin for another tenant.
 
+---
+
+**Data is separated from design.** Pages are *assembled* from one design system
+plus structured content — never hand-drawn page by page. Change a token or a data
+value and every page re-renders consistently.
 
 ```
 design-system.json  ─┐
