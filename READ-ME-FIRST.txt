@@ -1,17 +1,11 @@
-UPLOAD TO GITHUB — friendlier "choose your bike" for first-time visitors
-========================================================================
-Fixes the confusing "+" chip. Now a non-technical customer instantly understands
-how to pick their motorcycle.
-
-WHAT CHANGED (customer-facing):
-  • Removed the cryptic "+" in the header.
-  • Under the header on EVERY page: a clear bar —
-        "Which motorcycle do you have?  [ Choose my bike ]"
-    Tapping opens a visual picker (bike PHOTOS + names) — tap your bike, done.
-  • Once chosen it turns green: "Showing parts for <bike> · Change bike",
-    so the customer always knows the site is filtered to their motorcycle.
-  • Works on mobile (bottom sheet) and desktop (centered dialog).
+UPLOAD TO GITHUB — vehicle filter is now clearly OPTIONAL
+=========================================================
+Picking a vehicle was never required, but now it's obvious:
+  • Default bar: "Which motorcycle do you have? … or just browse everything below"
+    with a ✕ to hide it.
+  • Hidden: a slim line "You're browsing all parts · Pick your motorcycle to filter".
+  • After choosing: "Showing parts for <bike> · Change · Show all parts" (one tap to unfilter).
+Nothing is gated — customers can shop the whole catalogue without ever choosing a vehicle.
 
 Frontend only (resources/storefront/autoparts.html); PHP unchanged.
 DEPLOY: upload "app" + "resources" -> git pull -> php artisan optimize:clear -> restart -> hard-refresh.
-  Confirm:  fetch(location.href).then(r=>r.text()).then(t=>console.log('Bike picker live:', t.includes('openBikePicker')));  // TRUE

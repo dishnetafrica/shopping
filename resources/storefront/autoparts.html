@@ -217,7 +217,12 @@ a{text-decoration:none;color:inherit}
 .bikebar .bl{line-height:1.35}.bikebar .bl b{color:#3a2c06}
 .bikebar .bbtn{flex:none;background:var(--accent);color:#fff;font-weight:700;padding:8px 14px;border-radius:22px;white-space:nowrap;font-size:13px}
 .bikebar.has{background:#E7F6EE;border-color:#bfe6cf;color:#0d7a42}.bikebar.has b{color:#0b5e34}
-.bikebar.has .bchg{flex:none;color:var(--accent);font-weight:700;white-space:nowrap;cursor:pointer}
+.bikebar.has .bacts{display:flex;gap:14px;flex:none}
+.bikebar.has .bchg{color:var(--accent);font-weight:700;white-space:nowrap;cursor:pointer}
+.bikebar.has .ball{color:var(--muted);white-space:nowrap;cursor:pointer;font-size:13px}
+.bikebar .bx{flex:none;color:#b89440;cursor:pointer;padding:4px 6px;font-size:15px}
+.bikebar.slim{background:#F3F5F8;border-color:var(--line);color:var(--muted);font-size:13px}
+.bikebar.slim a{color:var(--accent);font-weight:600;cursor:pointer}
 .bikepick{position:fixed;inset:0;z-index:85;background:rgba(8,12,20,.55);display:none;align-items:flex-end;justify-content:center}
 .bikepick.on{display:flex}
 .bpbox{background:#fff;width:100%;max-width:720px;max-height:86vh;overflow:auto;border-radius:18px 18px 0 0;padding:18px 16px 26px}
@@ -402,11 +407,15 @@ function activeModels(){
 }
 
 /* ---------- shell ---------- */
-/* Clear, non-technical "which bike do you have?" bar — shown under the header everywhere. */
+/* Optional, non-technical vehicle filter — never a gate. Customers can pick a bike,
+   browse everything, or hide the bar entirely. */
+function barDismissed(){ try{return localStorage.getItem('ea_bikebar')==='off';}catch(e){return false;} }
+function dismissBikeBar(){ try{localStorage.setItem('ea_bikebar','off');}catch(e){} render(); }
 function bikeBar(){
   var b=getBike();
-  if(b) return '<div class="bikebar has"><span class="bl"><i class="fa fa-check-circle"></i> Showing parts for <b>'+esc(b.name)+'</b></span><a class="bchg" onclick="openBikePicker()">Change bike</a></div>';
-  return '<div class="bikebar" onclick="openBikePicker()"><span class="bl"><b>Which motorcycle do you have?</b> Tap to pick it — we’ll show only parts that fit.</span><span class="bbtn">Choose my bike</span></div>';
+  if(b) return '<div class="bikebar has"><span class="bl"><i class="fa fa-check-circle"></i> Showing parts for <b>'+esc(b.name)+'</b></span><span class="bacts"><a class="bchg" onclick="openBikePicker()">Change</a><a class="ball" onclick="clearBike()">Show all parts</a></span></div>';
+  if(barDismissed()) return '<div class="bikebar slim"><span>You’re browsing all parts.</span><a onclick="openBikePicker()">Pick your motorcycle to filter ›</a></div>';
+  return '<div class="bikebar"><span class="bl" onclick="openBikePicker()"><b>Which motorcycle do you have?</b> Pick it to see only parts that fit — or just browse everything below.</span><span class="bbtn" onclick="openBikePicker()">Choose</span><i class="fa fa-times bx" onclick="dismissBikeBar()" title="Hide"></i></div>';
 }
 function nav(){
   return '<header class="nav"><div class="wrap">'
