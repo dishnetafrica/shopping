@@ -799,7 +799,7 @@ class StorefrontController extends Controller
         \Illuminate\Support\Facades\RateLimiter::hit($ipKey, 60);
 
         $event = strtolower(trim((string) $r->input('event', 'view')));
-        if (! in_array($event, ['view', 'add', 'gallery', 'checkout'], true)) {
+        if (! in_array($event, ['view', 'add', 'gallery', 'checkout', 'search', 'whatsapp'], true)) {
             $event = 'view';
         }
 

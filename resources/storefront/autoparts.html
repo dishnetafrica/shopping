@@ -380,10 +380,20 @@ function cartTotal(){ return cartGet().reduce(function(s,i){return s+(i.price||0
 function cartAdd(id){ var p=STATE.products.filter(function(x){return String(x.id)===String(id);})[0]; if(!p)return;
   var c=cartGet(); var e=c.filter(function(i){return String(i.id)===String(p.id);})[0];
   if(e)e.qty++; else c.push({id:p.id,name:p.name,pn:partNo(p.kw),price:p.price||0,qty:1});
-  cartSave(c); toast('“'+p.name+'” added to cart'); }
+  cartSave(c); track('add',{product_id:p.id}); toast('“'+p.name+'” added to cart'); }
 function cartSet(id,d){ var c=cartGet(); for(var i=0;i<c.length;i++){ if(String(c[i].id)===String(id)){ c[i].qty=Math.max(0,c[i].qty+d); if(!c[i].qty)c.splice(i,1); break; } } cartSave(c); render(); }
 function updateCartBadge(){ var n=(function(){try{return cartCount();}catch(e){return 0;}})(); Array.prototype.forEach.call(document.querySelectorAll('.cartn'),function(el){ el.textContent=n; el.style.display=n?'inline-flex':'none'; }); }
 function toast(msg){ var t=document.getElementById('toast'); if(!t){t=document.createElement('div');t.id='toast';document.body.appendChild(t);} t.textContent=msg; t.classList.add('on'); clearTimeout(window._tt); window._tt=setTimeout(function(){t.classList.remove('on');},1900); }
+/* ---------- analytics (fire-and-forget to the shop's /event log) ---------- */
+function eventUrl(){ return CFG.eventUrl || (CFG.catalogueUrl? CFG.catalogueUrl.replace(/\/catalogue(\?.*)?$/,'/event') : '/event'); }
+function track(ev, payload){
+  try{
+    var body=JSON.stringify(Object.assign({event:ev}, payload||{}));
+    var url=eventUrl();
+    if(navigator.sendBeacon){ navigator.sendBeacon(url, new Blob([body],{type:'application/json'})); }
+    else { fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true,credentials:'same-origin'}).catch(function(){}); }
+  }catch(e){}
+}
 function waCartOrder(){ var c=cartGet(); if(!c.length)return waLink(); var b=getBike();
   var lines=c.map(function(i){return '• '+i.qty+'x '+i.name+(i.pn?(' ('+i.pn+')'):'')+(i.price>0?(' — '+money(i.price*i.qty)):'');}).join('%0a');
   var t='Hello '+(CFG.name||'')+', I want to order these genuine parts:%0a'+lines+'%0a%0aTotal: '+money(cartTotal())+(b?('%0aMy motorcycle: '+b.name):'')+'%0a%0aPlease confirm stock, delivery time and payment.';
@@ -554,13 +564,14 @@ function vPart(id){
   var pl=STATE.pnPlate[normPn(pn)];
   var diagBtn=pl?('<a class="btn btn-o" onclick="go(\'plate/'+pl+'\')"><i class="fa fa-wrench"></i> Show on diagram</a>'):'';
   var fg=fitGuide(p);
+  track('view',{product_id:p.id});
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › <a onclick="go(\'parts\')">Parts</a> › '+esc(p.name)+'</div>'
    +'<section class="page wrap"><div class="pd"><div class="big">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
    +'<div><span class="chip g">✓ Genuine Bajaj</span> <h1 style="margin-top:8px">'+esc(p.name)+'</h1>'+(pn?'<div class="mono" style="margin-top:4px">Part No: '+esc(pn)+'</div>':'')
    +'<div class="price">'+(priced?money(p.price):'<span class="askp">Ask for price</span>')+'</div><div class="stock '+(inS?'y':'n')+'" style="margin-bottom:12px">'+(inS?('✓ In stock'+(p.stock!=null&&p.stock>0?(' ('+p.stock+')'):'')):'Available to order')+'</div>'
    +fitLine
    +(p.desc?'<p style="color:var(--muted);margin:14px 0 16px">'+esc(p.desc)+'</p>':'<div style="height:6px"></div>')
-   +'<div class="buyrow"><button class="btn btn-p" onclick="cartAdd(\''+String(p.id).replace(/\x27/g,"")+'\')"><i class="fa fa-shopping-cart"></i> Add to cart</button><a class="btn btn-w" href="'+esc(waOrder(p))+'" target="_blank" rel="noopener">Order now</a>'+diagBtn+'</div>'
+   +'<div class="buyrow"><button class="btn btn-p" onclick="cartAdd(\''+String(p.id).replace(/\x27/g,"")+'\')"><i class="fa fa-shopping-cart"></i> Add to cart</button><a class="btn btn-w" href="'+esc(waOrder(p))+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:[\''+String(p.id).replace(/\x27/g,"")+'\']})">Order now</a>'+diagBtn+'</div>'
    +'<div class="qa-grid">'
      +'<div class="qa-b"><h4><i class="fa fa-check-circle"></i> Genuine guarantee</h4><p>'+esc(CFG.genuineLine||'100% genuine — or your money back.')+'</p></div>'
      +'<div class="qa-b"><h4><i class="fa fa-truck"></i> Delivery &amp; payment</h4><p>'+esc(CFG.deliveryEta||'Fast delivery')+'<br><b>'+esc(CFG.payMethods||'Mobile Money · Pay on Delivery')+'</b></p></div>'
@@ -640,6 +651,7 @@ function scrollTo2(id){var e=document.getElementById(id); if(e)e.scrollIntoView(
 function vSearch(q){
   q=decodeURIComponent(q||'').toLowerCase();
   var res=vehFilter(STATE.products).filter(function(p){return (p.name+' '+p.kw+' '+p.cat).toLowerCase().indexOf(q)>=0;});
+  track('search',{q:q,results:res.length});
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › Search</div>'
    +'<section class="blk wrap"><div class="hd"><div><h2>Results for "'+esc(q)+'"</h2><div class="sub">'+res.length+' parts found</div></div></div>'
    +(res.length?'<div class="g5">'+res.slice(0,60).map(prodCard).join('')+'</div>':
@@ -756,7 +768,7 @@ function vCart(){
    +'<div class="cartwrap"><div class="citems">'+rows+'</div>'
    +'<div class="csum"><div class="csr"><span>Items</span><b>'+cartCount()+'</b></div><div class="csr total"><span>Total</span><b>'+money(cartTotal())+'</b></div>'
    +'<div class="cnote"><i class="fa fa-truck"></i> '+esc(CFG.deliveryEta||'Fast delivery')+'<br><i class="fa fa-credit-card"></i> '+esc(CFG.payMethods||'Mobile Money · Pay on Delivery')+'<br><i class="fa fa-check-circle"></i> '+esc(CFG.genuineLine||'100% genuine or money back')+'</div>'
-   +'<a class="btn btn-w big" href="'+esc(waCartOrder())+'" target="_blank" rel="noopener"><i class="fa fa-whatsapp"></i> Place order on WhatsApp</a>'
+   +'<a class="btn btn-w big" href="'+esc(waCartOrder())+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:cartGet().map(function(i){return i.id;})})"><i class="fa fa-whatsapp"></i> Place order on WhatsApp</a>'
    +'<div class="cfine">You’ll confirm stock, delivery and payment with our team on WhatsApp. No payment is taken online.</div>'
    +'<a class="link" onclick="go(\'\')" style="display:block;text-align:center;margin-top:10px"><i class="fa fa-plus"></i> Add more parts</a></div></div></section>'+foot();
 }
@@ -786,7 +798,7 @@ function render(){
   window.scrollTo(0,0);
   updateCartBadge();
   var r=document.documentElement.style; if(CFG.accent)r.setProperty('--accent',CFG.accent); if(CFG.accentDark)r.setProperty('--accent-d',CFG.accentDark);
-  var wf=document.getElementById('waFloat'); if(wf)wf.href=waLink();
+  var wf=document.getElementById('waFloat'); if(wf){wf.href=waLink(); wf.onclick=function(){track('whatsapp',{source:'float'});};}
   var bc=document.getElementById('botCart'); if(bc)bc.href=CFG.shopUrl||'#';
 }
 window.addEventListener('hashchange',render);

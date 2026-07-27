@@ -1,24 +1,51 @@
-UPLOAD TO GITHUB — vehicle picker that scales to CARS (+ real filter, universal parts)
-======================================================================================
-The vehicle chooser is now future-proof and does real filtering.
+EA AUTO PART — HARDENING MILESTONE 1 (upload package)
+=====================================================
 
-WHAT CHANGED (customer-facing):
-  • Picker now has a SEARCH box ("Type your vehicle…") on top of the photo grid.
-  • When only motorcycles exist (today): title "Choose your motorcycle", photo grid.
-  • The day you add CAR models: it auto-becomes "Choose your vehicle" with
-    "Motorcycles / Cars" tabs, and long lists switch to compact searchable rows —
-    no rebuild needed. Copy across the site switches from "motorcycle" to "vehicle"
-    automatically when more than one vehicle type is loaded.
-  • Choosing a vehicle now REALLY filters browse/search/popular to parts that fit it,
-    with a one-tap "Show all parts" to unfilter. Nothing is gated.
-  • UNIVERSAL parts (engine oil, tools, generic bearings) always show, whatever
-    vehicle is selected — mark a part universal by putting "Universal" (or "fits all"
-    / "all models") in its Category or Keywords on import.
+This package answers the production-readiness review ("freeze new feature work and
+modularize the storefront with automated tests, analytics, and production observability").
 
-HOW TO ADD CARS LATER (data only, no code):
-  • Add car models to the model list (id, name, type:"Car", make, photo).
-  • Import car parts whose Keywords start with the car's name (same as bikes).
-  • The picker, tabs, wording and filter adapt automatically.
+WHAT CHANGED
+------------
+Backend (app/):
+  * StorefrontController.php  — recordEvent() now also accepts 'search' and 'whatsapp'
+                                events (was: view/add/gallery/checkout only).
+  * SettingsSchema.php, SettingsWriteService.php, Vertical.php — carried forward unchanged
+                                from the previous package (per-model storefront toggles,
+                                trust/delivery settings, hide-out-of-stock).
 
-Frontend only (resources/storefront/autoparts.html); PHP unchanged.
-DEPLOY: upload "app" + "resources" -> git pull -> php artisan optimize:clear -> restart -> hard-refresh.
+Storefront (resources/storefront/autoparts.html):
+  * Analytics now fire from the client via navigator.sendBeacon('/event'):
+      view      — opening a product page
+      add       — Add to cart
+      checkout  — "Order now" (single) and "Place order on WhatsApp" (cart)
+      search    — a search, with query + result count
+      whatsapp  — the floating WhatsApp button
+  * This is the REBUILT deployable file (data baked in; only config/SEO injected at runtime).
+
+New in this package:
+  * build_storefront.py   — reproducible build: autoparts_spa.html template + build/*.json
+                            -> resources/storefront/autoparts.html, with placeholder validation.
+  * storefront-tests/     — Playwright e2e suite (14 tests, desktop + 360px mobile) that runs
+                            the REAL built file and asserts every critical path + analytics event.
+  * HARDENING-PLAN.md     — corrects the review's few inaccuracies (with code evidence),
+                            records what shipped, and lays out the prioritized roadmap.
+
+HOW TO DEPLOY
+-------------
+Copy the app/ and resources/ trees over your repo (same paths) and deploy as usual.
+The deploy reliably syncs app/; make sure resources/storefront/autoparts.html ships too.
+
+HOW TO REBUILD THE STOREFRONT (if you edit the template)
+--------------------------------------------------------
+  python3 build_storefront.py          # writes resources/storefront/autoparts.html
+
+HOW TO RUN THE TESTS
+--------------------
+  cd storefront-tests
+  npm install
+  npx playwright test                  # all 14 should pass
+
+VERIFY ANALYTICS IS LIVE (browser console on eaautopart.com)
+------------------------------------------------------------
+  Open DevTools > Network, filter "event". Add a part to cart / open a product /
+  search — you should see POST /event fire with the matching event name.
