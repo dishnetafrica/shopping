@@ -1,36 +1,18 @@
 UPLOAD THIS TO GITHUB (this is the ONLY zip that goes to GitHub)
 ================================================================
-It contains the code files + the storefront's brand photos, at their exact repo paths:
+3 files. The storefront is SELF-CONTAINED — every photo is embedded inside
+autoparts.html, so there is nothing else to deploy and no image can 404.
+This fixes the broken-image issue.
 
-  app/Support/Vertical.php                                  -> adds "Auto Parts" business type
-  app/Http/Controllers/Storefront/StorefrontController.php  -> serves the storefront
-  resources/storefront/autoparts.html                       -> the customer storefront (now ~85 KB)
-  public/storefront/autoparts/*.jpg                         -> the bike & system photos (38 files)
+  app/Support/Vertical.php
+  app/Http/Controllers/Storefront/StorefrontController.php
+  resources/storefront/autoparts.html   (photos embedded)
 
-WHAT CHANGED (photos are now hosted files, not baked into the HTML)
-  The storefront used to carry every photo embedded inside autoparts.html, which
-  pushed the file to ~2.9 MB. Those photos now live as normal image files under
-  public/storefront/autoparts/ and the page references them by URL, so the HTML
-  is back down to ~85 KB and loads fast. To swap or add a photo later, just
-  replace the matching file in public/storefront/autoparts/ — no rebuild needed.
+UPLOAD:  GitHub -> Add file -> Upload files -> drag the "app" and "resources"
+         folders from this zip (they replace the existing files).
+DEPLOY:  git pull  ->  php artisan optimize:clear  ->  restart
+         Then hard-refresh the storefront (Cmd/Ctrl+Shift+R) to drop the old
+         cached copy that was pointing at the missing image files.
 
-  The page looks for photos at  /storefront/autoparts/  by default. If you ever
-  need them somewhere else, set  'assetBase' => '/your/path/'  in the storefront
-  config the controller builds (the $cfg array) — the page will use that instead.
-
-HOW TO UPLOAD
-  GitHub repo -> Add file -> Upload files -> drag the "app", "resources" and
-  "public" folders from this zip. GitHub places each file at the right path and
-  commits. (These REPLACE the same files if they already exist — that's expected.)
-
-THEN DEPLOY
-  git pull  ->  php artisan optimize:clear  ->  restart the app
-  Confirm one photo loads:  https://<your-store>/storefront/autoparts/img-boxer100.jpg
-
-IMPORTANT — these do NOT go to GitHub:
-  - ea-parts-v3-import.zip  -> load it in the app: Products -> Import products
-  - boxer100-photos.zip     -> just image files; only a backup
-
-NOTE on StorefrontController.php: this is based on the version in the code you
-shared. If your LIVE controller changed since then, don't overwrite it — instead
-paste the 3 blocks marked "AUTO_PARTS" (search the file) into your live copy.
+Do NOT go to GitHub:  ea-parts-v3-import.zip / ea-parts-extra-import.zip
+                      (load via Products -> Import products)
