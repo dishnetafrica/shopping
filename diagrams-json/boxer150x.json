@@ -1,0 +1,4514 @@
+{
+ "model": "boxer150x",
+ "modelName": "Boxer BM150 X",
+ "description": "Boxer BM150 X COMPLETE exploded-diagram spare-parts catalogue \u2014 all 45 plates, verbatim Bajaj part numbers. Prices to be set from supplier cost.",
+ "plates": [
+  {
+   "plate": 1,
+   "name": "Cover Cylinder Head",
+   "system": "engine",
+   "page": 1,
+   "diagram": "boxer150x-plate-01.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "JZ 5110 21",
+     "desc": "Cover Cylinder Head Assly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "JV 5410 07",
+     "desc": "Bolt Flange",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "JD 5110 10",
+     "desc": "Gasket Head Cover",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "JA 5110 08",
+     "desc": "Bolt Head Mounting",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "PA 5110 39",
+     "desc": "Plate Cylinder Head",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "JA 5110 11",
+     "desc": "Hose Breather",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "DP 1210 25",
+     "desc": "Clamp",
+     "qty": "3",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "PF 5110 21",
+     "desc": "Flange Bolt",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 2,
+   "name": "Cylinder Head",
+   "system": "engine",
+   "page": 2,
+   "diagram": "boxer150x-plate-02.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "36 PF00 01",
+     "desc": "Kit Asly Cylinder Head",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "JA 5110 28",
+     "desc": "Stud",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "JZ 5110 16",
+     "desc": "Gasket Cylinder Head",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "PF 5814 01",
+     "desc": "Intake Manifold",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "JA 5814 06",
+     "desc": "Bolt Flange",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "PF 5814 02",
+     "desc": "Sleeve (Carb - Duct Rubber)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "DH 1210 38",
+     "desc": "Clamp",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "39 2539 21",
+     "desc": "\u2018O\u2019 Ring (Intake Pipe)",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 3,
+   "name": "Valve",
+   "system": "engine",
+   "page": 3,
+   "diagram": "boxer150x-plate-03.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "JA 5112 11",
+     "desc": "Shaft Rocker Arm",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "JZ 5112 03",
+     "desc": "Rocker Arm with Roller",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "DG 1010 29",
+     "desc": "Cotter Valve (Collet)",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "36 JZ00 01",
+     "desc": "Valve Kit",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "36 JZ00 04",
+     "desc": "Valve Repair Kit",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "39 2017 19",
+     "desc": "Seal Valve Stem",
+     "qty": "2",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 4,
+   "name": "Camshaft / Tensioner",
+   "system": "engine",
+   "page": 4,
+   "diagram": "boxer150x-plate-04.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "JZ 5110 04",
+     "desc": "Camshaft Complete",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "JA 5112 16",
+     "desc": "Spacer Cam Sprocket",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "DS 1012 76",
+     "desc": "Sprocket Cam Shaft - 32 T",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "59 0400 31",
+     "desc": "Hexagon Socket Head Cap Bolt",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "DH 1010 48",
+     "desc": "Special Washer Cam Shaft",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "36 JE00 03",
+     "desc": "Guide Chain Kit",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "DH 1013 92",
+     "desc": "Cam chain Tensioner Pivot Bolt",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "JV 5210 03",
+     "desc": "Adjuster Chain Silver",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "CS 1011 28",
+     "desc": "Gasket",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "DD 1010 62",
+     "desc": "Bolt M6 Chain Tensioner",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "39 1673 04",
+     "desc": "Bolt M6 X 20 Silver",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "39 0594 17",
+     "desc": "Circlip for Camshaft",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "39 2669 21",
+     "desc": "\u2018O\u2019 Ring (Tensioner)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "DS 1099 05",
+     "desc": "Cam Chain (94 Link)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 15,
+     "partNo": "39 1880 20",
+     "desc": "Bearing Ball - Small 15 X 32 X 9",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 16,
+     "partNo": "39 2683 20",
+     "desc": "Bearing Ball - Big 17 X 35 X 10",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 5,
+   "name": "Cylinder and Piston",
+   "system": "engine",
+   "page": 5,
+   "diagram": "boxer150x-plate-05.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "JD 5210 02",
+     "desc": "Gasket Cylinder Block",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "39 1000 06",
+     "desc": "Dowel Pin",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "36 PF01 16",
+     "desc": "Piston Ring Set",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "DP 1011 65",
+     "desc": "Ring Snap",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "36 PF00 02",
+     "desc": "Kit Cylinder Block / Piston Assly.",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "JA 5210 15",
+     "desc": "Damper Cylinder Block",
+     "qty": "3",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 6,
+   "name": "Crankshaft",
+   "system": "engine",
+   "page": 6,
+   "diagram": "boxer150x-plate-06.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "59 1500 14",
+     "desc": "Flange Nut",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "31 1011 73",
+     "desc": "Key Woodruff",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "PF 5310 00",
+     "desc": "Crank Shaft Assly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "JE 5310 01",
+     "desc": "Ball Bearing 56 X 22 X 16",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "DS 1011 54",
+     "desc": "Parallel Key",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "36 JZ00 03",
+     "desc": "Set Primary Drive / Driven",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "JA 531012",
+     "desc": "Spring",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "JA 5310 15",
+     "desc": "Pin Crank Shaft Plunger",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "JB 5310 21",
+     "desc": "Plunger Oil Crank Shaft",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 7,
+   "name": "Transmission",
+   "system": "transmission",
+   "page": 7,
+   "diagram": "boxer150x-plate-07.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 5510 02",
+     "desc": "Shaft Input Transmission (Drive)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "PF 5512 02",
+     "desc": "Gear 4th Drive",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "39 0987 17",
+     "desc": "Ring Snap (17.2 X 20.5 X 1.5)",
+     "qty": "5",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "JA 5510 02",
+     "desc": "Spline Washer (17.2 X 20.5 X 1.5)",
+     "qty": "3",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "PF 5512 01",
+     "desc": "Gear 3rd Drive",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "PF 5512 00",
+     "desc": "Gear 2nd Drive",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "JA 5510 04",
+     "desc": "Washer Thrust 2nd Drive",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "PF 5510 03",
+     "desc": "Shaft Output Transmission (Driven)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "PF 5512 06",
+     "desc": "2nd Driven Washer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "PF 5512 03",
+     "desc": "Gear 2nd Driven",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "PF 5512 04",
+     "desc": "Gear 3rd Driven",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "PF 5512 05",
+     "desc": "Gear 4th Driven",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "JZ 5512 05",
+     "desc": "Bush 1st Driven",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "JZ 5512 04",
+     "desc": "Gear 1st Driven",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 15,
+     "partNo": "JA 5510 08",
+     "desc": "Washer Thrust 1st Driven",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 16,
+     "partNo": "JA 5510 09",
+     "desc": "Collar Sprocket Drive",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 17,
+     "partNo": "59 2100 24",
+     "desc": "\u2018O\u2019 Ring Collar Sprocket (13.8 X 1.9)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 18,
+     "partNo": "JZ 5510 04",
+     "desc": "Sprocket Drive (Engine Sprocket)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 19,
+     "partNo": "DU 1012 13",
+     "desc": "Plate Lock Sprocket",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 20,
+     "partNo": "39 1981 04",
+     "desc": "Socket Head Bolt",
+     "qty": "2",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 8,
+   "name": "Change Drum / Shift Fork",
+   "system": "transmission",
+   "page": 8,
+   "diagram": "boxer150x-plate-08.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 5610 00",
+     "desc": "Drum Complete Gear Shift",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "39 0992 06",
+     "desc": "Dowel (Pin Drum Change)",
+     "qty": "5",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "JA 5610 02",
+     "desc": "Cam Drum Change",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "JD 5610 11",
+     "desc": "Special Bolt Drum Change",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "PF 5610 02",
+     "desc": "Shaft Gear Shift Fork",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "JD 5610 04",
+     "desc": "Fork Gear Shift Output",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "JZ 5610 02",
+     "desc": "Fork Gear Shift Input",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 9,
+   "name": "Gear Change Mechanism",
+   "system": "transmission",
+   "page": 9,
+   "diagram": "boxer150x-plate-09.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 5612 00",
+     "desc": "Lever Gear Shift Comp",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "JW 5612 06",
+     "desc": "Extension Spring",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "JW 5612 08",
+     "desc": "Spring Gear Shift Return",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "JA 5612 07",
+     "desc": "Inhibitor Complete Gear Shift",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "JA 5612 08",
+     "desc": "Spring Inhibitor",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "JA 5612 09",
+     "desc": "Step Washer (Collar)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "39 2704 11",
+     "desc": "Plain Washer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "39 0817 15",
+     "desc": "Hex Nut / Flange - M6",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "JZ 5614 01",
+     "desc": "Lever Gear Shift (Gear Pedal)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "DH 1015 09",
+     "desc": "Damper",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "DG 1013 39",
+     "desc": "Damper",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "39 1902 04",
+     "desc": "Flange Bolt",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 10,
+   "name": "Engine Assembly / Crankcase RH",
+   "system": "engine",
+   "page": 10,
+   "diagram": "boxer150x-plate-10.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 5010 04",
+     "desc": "Engine Assly SS BM-150 4 Speed",
+     "qty": "1",
+     "remarks": "N.I."
+    },
+    {
+     "no": 2,
+     "partNo": "36 PF00 05",
+     "desc": "Kit Asly C\u2019case RH BM150",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "59 2000 36",
+     "desc": "6203 Ball Bearing",
+     "qty": "1",
+     "remarks": "For I/P Shaft."
+    },
+    {
+     "no": 4,
+     "partNo": "JA 5410 11",
+     "desc": "Needle Roller Bearing",
+     "qty": "1",
+     "remarks": "For O/P Shaft."
+    },
+    {
+     "no": 5,
+     "partNo": "JA 5410 10",
+     "desc": "Stopper Plate",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "39 1000 06",
+     "desc": "Dowel Pin",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "PF 5410 18",
+     "desc": "Bushing Drum BM-150",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "DH 1013 80",
+     "desc": "Screw",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "52 JA00 27",
+     "desc": "Stud Inhibitor Mounting",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "JV 5412 16",
+     "desc": "Bolt M6 X 85 Silver",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "JV 5410 07",
+     "desc": "Flange Bolt",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "52 JA00 29",
+     "desc": "Bolt Shift Change",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "JA 5410 12",
+     "desc": "Guide Kick",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "39 1964 04",
+     "desc": "Flange Bolt - Small",
+     "qty": "2",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 11,
+   "name": "Crankcase LH",
+   "system": "engine",
+   "page": 11,
+   "diagram": "boxer150x-plate-11.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "36 PF00 04",
+     "desc": "Kit Asly C\u2019case Magneto Side BM-150",
+     "qty": "",
+     "remarks": "1 NRB + Bush"
+    },
+    {
+     "no": 2,
+     "partNo": "39 2562 20",
+     "desc": "Needle Roller Bearing",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "59 2000 36",
+     "desc": "6203 Ball Bearing",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "39 1715 19",
+     "desc": "Seal Oil",
+     "qty": "1",
+     "remarks": "Output Shaft"
+    },
+    {
+     "no": 5,
+     "partNo": "31 2010 81",
+     "desc": "Switch Complete",
+     "qty": "1",
+     "remarks": "Neutral Switch"
+    },
+    {
+     "no": 6,
+     "partNo": "DH 1017 84",
+     "desc": "Gasket Neutral Switch (T.I.S)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "39 2190 19",
+     "desc": "Oil Seal",
+     "qty": "1",
+     "remarks": "Shifter Shaft"
+    },
+    {
+     "no": 8,
+     "partNo": "JA 5410 05",
+     "desc": "Bush Bendix",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "39 0747 01",
+     "desc": "Screw Pan Cross M6",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "JA 5410 34",
+     "desc": "Stopper Gear Starter Aluminium",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "39 1000 06",
+     "desc": "Pin Dowel",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "39 0999 06",
+     "desc": "Hollow Dowel Pin",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "JG 5710 24",
+     "desc": "Mesh Oil Filter Assembly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "LJ A000 04",
+     "desc": "\u2018O\u2019 Ring Strainer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 15,
+     "partNo": "JV 5410 06",
+     "desc": "Cap Oil Filter",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 16,
+     "partNo": "JV 5410 07",
+     "desc": "Flange - Bolt",
+     "qty": "6",
+     "remarks": ""
+    },
+    {
+     "no": 17,
+     "partNo": "39 1759 04",
+     "desc": "Bolt (M6 X 1 X 55L)",
+     "qty": "1",
+     "remarks": "Crankcase Mounting"
+    },
+    {
+     "no": 18,
+     "partNo": "59 2100 23",
+     "desc": "Ring \u2018O\u2019",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 19,
+     "partNo": "JE 5410 38",
+     "desc": "Damper Crankshaft",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 12,
+   "name": "Cover RH",
+   "system": "engine",
+   "page": 12,
+   "diagram": "boxer150x-plate-12.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "36 PF00 08",
+     "desc": "Kit Asly Cl Cover BM-150",
+     "qty": "1",
+     "remarks": "Gauge + Circlip"
+    },
+    {
+     "no": 2,
+     "partNo": "PF 5412 17",
+     "desc": "Label Cover Boxer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "39 1041 19",
+     "desc": "Oil Seal Clutch Lever",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "30 1011 42",
+     "desc": "Oil Seal (Kick Shaft)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "JV 5412 08",
+     "desc": "Shaft Clutch Release",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "JE 5514 01",
+     "desc": "Rod Push",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "DG 1014 18",
+     "desc": "Gauge",
+     "qty": "1",
+     "remarks": "Oil Level Check"
+    },
+    {
+     "no": 8,
+     "partNo": "DS 1012 15",
+     "desc": "Wire Circilp",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "39 2443 11",
+     "desc": "Plain Washer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "JE 5412 14",
+     "desc": "Spring Torsion Clutch Lever",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "JA 5412 11",
+     "desc": "Cap Oil Filler",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "JA 5412 25",
+     "desc": "\u2018O\u2019 Ring Cap Oil Filler",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "JK 5412 12",
+     "desc": "Damper Clutch Cover PL BM-150",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "JA 5412 16",
+     "desc": "Plate Damper",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 15,
+     "partNo": "DH 1013 88",
+     "desc": "Bolt Flange",
+     "qty": "3",
+     "remarks": ""
+    },
+    {
+     "no": 16,
+     "partNo": "JA 5412 12",
+     "desc": "Gasket Clutch Cover",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 17,
+     "partNo": "JV 5410 07",
+     "desc": "Bolt Flange",
+     "qty": "8",
+     "remarks": ""
+    },
+    {
+     "no": 18,
+     "partNo": "JV 5412 09",
+     "desc": "Bracket Clutch Cable",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 19,
+     "partNo": "DD 1211 81",
+     "desc": "Oil Filter Element",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 20,
+     "partNo": "39 1671 21",
+     "desc": "\u2018O\u2019 Ring",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 21,
+     "partNo": "JV 5412 05",
+     "desc": "Cap Filter",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 22,
+     "partNo": "JA 5210 19",
+     "desc": "Bolt Flange",
+     "qty": "3",
+     "remarks": ""
+    },
+    {
+     "no": 23,
+     "partNo": "14 1510 33",
+     "desc": "Bearing- Ball",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 24,
+     "partNo": "39 0999 06",
+     "desc": "Pin Hollow Dowel",
+     "qty": "2",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 13,
+   "name": "Cover Magneto",
+   "system": "engine",
+   "page": 13,
+   "diagram": "boxer150x-plate-13.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "36 PF00 07",
+     "desc": "Kit Assly Cover Magneto",
+     "qty": "1",
+     "remarks": "With Bush"
+    },
+    {
+     "no": 2,
+     "partNo": "JV 5412 15",
+     "desc": "Bolt M8 Silver colour",
+     "qty": "8",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "JA 5412 05",
+     "desc": "Gasket Magneto Cover",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "JV 5410 07",
+     "desc": "Bolt",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "JV 5412 12",
+     "desc": "Cover LH Rear Complete",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "JK 5412 13",
+     "desc": "Damper Cover Magneto",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "DH 1013 88",
+     "desc": "Flanged Bolt",
+     "qty": "3",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "JA 5412 21",
+     "desc": "Plate Damper Cover Magneto",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "JA 5410 05",
+     "desc": "Bush",
+     "qty": "1",
+     "remarks": "For Drive Gear Assly"
+    },
+    {
+     "no": 10,
+     "partNo": "JV 5412 07",
+     "desc": "Cap TDC Finder",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "30 1011 95",
+     "desc": "\u2018O\u2019 Ring",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "DS 1611 50",
+     "desc": "Sticker Gear Shifting",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "JK 5412 14",
+     "desc": "Decal",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 14,
+   "name": "Clutch",
+   "system": "transmission",
+   "page": 14,
+   "diagram": "boxer150x-plate-14.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 5514 03",
+     "desc": "Clutch Assembly Complete",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "JD 5514 00",
+     "desc": "Spacer Clutch Assly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "JA 5514 06",
+     "desc": "Collar Clutch",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "39 2600 11",
+     "desc": "Washer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "36 PF00 09",
+     "desc": "Kit Plate Friction",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "JA 5514 14",
+     "desc": "Wheel Clutch",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "JA 5514 19",
+     "desc": "Plate Clutch (Steel Plate)",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "JA 5514 15",
+     "desc": "Hub Clutch",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "PF 5514 05",
+     "desc": "Compression Spring",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "PF 5514 06",
+     "desc": "Holder Clutch",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "39 1553 04",
+     "desc": "Bolt Flange M6",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "39 2200 11",
+     "desc": "Belleville Washer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "39 0240 11",
+     "desc": "Plain Washer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "DH 1016 48",
+     "desc": "Nut Special Clutch Center Lock",
+     "qty": "1",
+     "remarks": "L.H. Threads"
+    },
+    {
+     "no": 15,
+     "partNo": "14 1510 33",
+     "desc": "Bearing - Ball",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 16,
+     "partNo": "36 JZ00 03",
+     "desc": "Set Primary Drive & Driven",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 15,
+   "name": "Kick Starter Mechanism",
+   "system": "transmission",
+   "page": 15,
+   "diagram": "boxer150x-plate-15.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "JA 6212 01",
+     "desc": "Lever Assly Kick",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "JA 6212 06",
+     "desc": "Bolt Special",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "36 DU10 07",
+     "desc": "Boss Kick Set",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "22 1502 41",
+     "desc": "Plain Washer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "39 0993 11",
+     "desc": "Plain Washer Small",
+     "qty": "3",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "39 0738 17",
+     "desc": "Circlip Shaft",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "JA 6210 01",
+     "desc": "Shaft Kick",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "DS 1011 17",
+     "desc": "Spring Kick Starter Ratchet",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "JA 6210 02",
+     "desc": "Ratchet",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "JZ 6210 00",
+     "desc": "Gear Kick Pinion",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "JA 6210 06",
+     "desc": "Washer Thrust (16.2 X 25 X 0.5)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "39 2408 17",
+     "desc": "Circlip",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "DD 1010 97",
+     "desc": "Kick Rubber",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "JE 5410 08",
+     "desc": "Spring Kick Starter Return",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 16,
+   "name": "Carburettor",
+   "system": "fuel",
+   "page": 16,
+   "diagram": "boxer150x-plate-16.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 5812 00",
+     "desc": "Carburettor Assly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "JA 5812 23",
+     "desc": "Mixing Cap Assembly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "DH 1211 69",
+     "desc": "Pilot Screw Kit",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "36 PF00 21",
+     "desc": "Kit Jet BM 150",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "36 JZ00 16",
+     "desc": "Idling Screw Kit",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "JA 5812 21",
+     "desc": "Needle Valve Assembly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "24 1213 65",
+     "desc": "Float Complete",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "CB 1210 42",
+     "desc": "Screw Washers Bowl M4x14",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "39 1062 04",
+     "desc": "Screw TPS",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "JB 5812 02",
+     "desc": "Throttle Position Sensor",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "JB 5812 04",
+     "desc": "\"O\" Ring (TPS)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "36 PF00 22",
+     "desc": "Kit Piston Valve BM 150",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "36 PF00 24",
+     "desc": "Kit Carburetor Gasket/O Ring",
+     "qty": "1",
+     "remarks": "N.I."
+    },
+    {
+     "no": 14,
+     "partNo": "24 1210 69",
+     "desc": "Arm Pin Float",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 15,
+     "partNo": "JA 5813 14",
+     "desc": "Drain Screw",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 16,
+     "partNo": "JZ 5812 20",
+     "desc": "Hose Drain",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 17,
+     "partNo": "JZ 5812 16",
+     "desc": "Spring",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 18,
+     "partNo": "JA 5812 91",
+     "desc": "Cable Adjuster",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 19,
+     "partNo": "36 PF00 23",
+     "desc": "Kit Choke Plunger BM 150",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 20,
+     "partNo": "30 1210 04",
+     "desc": "RING - SNAP",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 17,
+   "name": "Air Cleaner Complete",
+   "system": "fuel",
+   "page": 17,
+   "diagram": "boxer150x-plate-17.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 5810 03",
+     "desc": "Air Filter Assly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "PF 5810 02",
+     "desc": "Duct Air Intake",
+     "qty": "1",
+     "remarks": "Intake"
+    },
+    {
+     "no": 3,
+     "partNo": "DF 1614 26",
+     "desc": "Bolt - Stepped with Flange",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "PF 5810 12",
+     "desc": "Element Air Filter",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "JA 5810 09",
+     "desc": "Flame Arrester",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "JA 5810 12",
+     "desc": "Tube Drain",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "DS 1211 26",
+     "desc": "Plug",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "DP 1210 25",
+     "desc": "Clamp",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "JA 5110 11",
+     "desc": "Hose Breather",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "JB 5810 01",
+     "desc": "Air Intake Duct",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "JA 5810 13",
+     "desc": "Cartridge Cover Assly.",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "JA 5810 11",
+     "desc": "\u2018O\u2019 Ring Cartridge Cover",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "39 1773 04",
+     "desc": "Flange Bolt",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "DH 1210 38",
+     "desc": "Clamp",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 15,
+     "partNo": "39 1779 02",
+     "desc": "Self Tapping Screw",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 16,
+     "partNo": "39 1677 04",
+     "desc": "Hex Head Screw",
+     "qty": "2",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 18,
+   "name": "Silencer Assembly",
+   "system": "engine",
+   "page": 18,
+   "diagram": "boxer150x-plate-18.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 5910 17",
+     "desc": "Silencer Assly",
+     "qty": "1",
+     "remarks": "CAT,Wire Shield"
+    },
+    {
+     "no": 2,
+     "partNo": "CB 1011 14",
+     "desc": "Gasket Exhaust Mounting",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "39 2295 15",
+     "desc": "Flange Nut",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "39 2754 04",
+     "desc": "Bolt Hex with Flange M5",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "39 2492 11",
+     "desc": "Plain Washer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "39 2722 04",
+     "desc": "Bolt M10 x 1.25",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "JB 1130 05",
+     "desc": "Washer",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "PF 5910 45",
+     "desc": "Shield Muffler",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "DH 1016 07",
+     "desc": "Truss Screw",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "PF 5910 43",
+     "desc": "Wire Shield",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 19,
+   "name": "Oil Pump",
+   "system": "engine",
+   "page": 19,
+   "diagram": "boxer150x-plate-19.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 5710 00",
+     "desc": "Oil Pump Assly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "JA 5410 16",
+     "desc": "Gasket Case Oil Pump",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "FD 1010 78",
+     "desc": "Pan Head Screw M6 X 1 X 3DL",
+     "qty": "3",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "39 0999 06",
+     "desc": "Dowel",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "PF 5710 01",
+     "desc": "Gear Oil Pump",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 20,
+   "name": "Starter Assembly",
+   "system": "engine",
+   "page": 20,
+   "diagram": "boxer150x-plate-20.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "JA 6214 14",
+     "desc": "Body Complete Starter Clutch",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "DH 1017 81",
+     "desc": "Plate Roller Clutch",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "JA 6214 10",
+     "desc": "Gear Starter Clutch",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "JA 6214 02",
+     "desc": "Washer",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "JA 6214 06",
+     "desc": "Starter Drive Assly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "36 JZ00 08",
+     "desc": "Starter Clutch Repair Kit",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "PF 3516 00",
+     "desc": "Motor Assly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "DH 1013 80",
+     "desc": "Screw - Pan - Precoated",
+     "qty": "3",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "JA 3516 06",
+     "desc": "Sealing Ring (Flash)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "LA D000 11",
+     "desc": "Flange Bolt M6x20",
+     "qty": "2",
+     "remarks": "Motor Mounting"
+    },
+    {
+     "no": 11,
+     "partNo": "JA 3516 02",
+     "desc": "\u2018O\u2019 Ring For Spigot (Flash)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "JA 3516 08",
+     "desc": "+ve Brush Holder Assly (Flash)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "JA 3516 09",
+     "desc": "-ve Brush Holder Assly (Flash)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "JA 3516 18",
+     "desc": "Brush & Earth Plate Assly",
+     "qty": "1",
+     "remarks": "N.I (Lucas-TVS)"
+    },
+    {
+     "no": 15,
+     "partNo": "JA 3516 24",
+     "desc": "Brush Spring (Lucas-TVS)",
+     "qty": "1",
+     "remarks": "N.I."
+    },
+    {
+     "no": 16,
+     "partNo": "JA 3516 19",
+     "desc": "Terminal Assly (Lucas-TVS)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 17,
+     "partNo": "39 0849 14",
+     "desc": "Washer lock - Toothed",
+     "qty": "3",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 21,
+   "name": "Magneto, CDI & H.T. Coil",
+   "system": "electrical",
+   "page": 21,
+   "diagram": "boxer150x-plate-21.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 3510 03",
+     "desc": "Rotor Assly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "PF 3510 04",
+     "desc": "Stater Assly Complete",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "39 1674 04",
+     "desc": "Bolt Flange M6 X 28",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "DH 1013 80",
+     "desc": "Pan Head Screw M6 X 12",
+     "qty": "3",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "JV 3512 04",
+     "desc": "H. T. Coil With Cable",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "PF 3512 01",
+     "desc": "C.D.I. Assly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "DD 1110 18",
+     "desc": "Spark Plug PRZ9 HC",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "DD 1110 48",
+     "desc": "Spark Plug Cap",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "DD 1110 11",
+     "desc": "Grommet Spark Plug Cap",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "DD 1110 12",
+     "desc": "Grommet for HT Cable",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "39 1943 04",
+     "desc": "Bolt Flange M6",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "JN 4020 00",
+     "desc": "DC Regulator With Capacitor",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "JA 5410 28",
+     "desc": "Lock Plate",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "59 0400 14",
+     "desc": "Bolt Flange (N.I.)",
+     "qty": "4",
+     "remarks": "For HT Coil"
+    }
+   ]
+  },
+  {
+   "plate": 22,
+   "name": "Seat Assembly",
+   "system": "frame",
+   "page": 22,
+   "diagram": "boxer150x-plate-22.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 1910 00",
+     "desc": "Seat assly. complete (Profile Seat)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "FD 2110 06",
+     "desc": "Grommet Seat",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "FD 2110 07",
+     "desc": "Spacer Seat",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "39 1211 11",
+     "desc": "Washer Plain",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "LA C000 21",
+     "desc": "Bolt Hexagon Socket Head",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "PF 2314 05",
+     "desc": "Grip Frame",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "39 1556 04",
+     "desc": "Bolt Flange",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "DP 2110 09",
+     "desc": "Damper For Seat",
+     "qty": "7",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 23,
+   "name": "Engine Mountings",
+   "system": "frame",
+   "page": 23,
+   "diagram": "boxer150x-plate-23.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 1134 02",
+     "desc": "Bracket Engine Hanger",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "JA 1134 02",
+     "desc": "Engine Mounting Bracket Front",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "39 2723 15",
+     "desc": "Hex Nut Flanged",
+     "qty": "2",
+     "remarks": "for engine mtg. Rear"
+    },
+    {
+     "no": 4,
+     "partNo": "JA 1134 03",
+     "desc": "Bolt Flanged",
+     "qty": "2",
+     "remarks": "for engine mtg. Rear"
+    },
+    {
+     "no": 5,
+     "partNo": "39 2312 04",
+     "desc": "Bolt Flanged",
+     "qty": "3",
+     "remarks": "for engine mtg. Top"
+    },
+    {
+     "no": 6,
+     "partNo": "39 1970 15",
+     "desc": "Nut Flanged",
+     "qty": "7",
+     "remarks": "for engine"
+    },
+    {
+     "no": 7,
+     "partNo": "59 0400 17",
+     "desc": "Hex Bolt Flanged",
+     "qty": "4",
+     "remarks": "for engine mtg."
+    }
+   ]
+  },
+  {
+   "plate": 24,
+   "name": "Frame and Frame Fittings",
+   "system": "frame",
+   "page": 24,
+   "diagram": "boxer150x-plate-24.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 1110 00",
+     "desc": "Frame Assly.",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "DS 1810 18",
+     "desc": "Nut with Dust Cap",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "36 3140 01",
+     "desc": "Bearing cone Kit",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "DJ 1811 15",
+     "desc": "Cage Bearing",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "DH 1810 14",
+     "desc": "Cup Steering",
+     "qty": "1",
+     "remarks": "N.I."
+    }
+   ]
+  },
+  {
+   "plate": 25,
+   "name": "Swing Arm / Rear Shock Absorber",
+   "system": "suspension",
+   "page": 25,
+   "diagram": "boxer150x-plate-25.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "JB 1220 16",
+     "desc": "Hex Bolt / Flange - M10",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "39 0714 11",
+     "desc": "Plain Washer",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "39 2349 11",
+     "desc": "Plain Washer",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "PF 1220 04",
+     "desc": "Rear Shock Absorber",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "52 PF02 19",
+     "desc": "Kit Asly Swing Arm",
+     "qty": "1",
+     "remarks": "With Bush"
+    },
+    {
+     "no": 6,
+     "partNo": "DP 1710 06",
+     "desc": "Bushing Rubber",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "39 2366 15",
+     "desc": "Domed Cap Nut",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "39 0789 12",
+     "desc": "Spring Washer",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "JB 1220 03",
+     "desc": "Chain Slider",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "39 0553 02",
+     "desc": "Screw",
+     "qty": "2",
+     "remarks": "For Chain Sider"
+    },
+    {
+     "no": 11,
+     "partNo": "39 0454 11",
+     "desc": "Plain Washer",
+     "qty": "2",
+     "remarks": "For Chain Sider"
+    },
+    {
+     "no": 12,
+     "partNo": "JA 1210 03",
+     "desc": "Shaft Swing Arm",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "39 0939 15",
+     "desc": "Nylock Nut",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "DJ 1510 36",
+     "desc": "Adjuster Chain LH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 15,
+     "partNo": "DJ 1510 37",
+     "desc": "Adjuster Chain RH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 16,
+     "partNo": "39 0292 15",
+     "desc": "Hexagon Nut",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 17,
+     "partNo": "DJ 1510 47",
+     "desc": "Plate Chain Adjuster",
+     "qty": "2",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 26,
+   "name": "Rider Foot Rest / Pillion Foot Rest",
+   "system": "frame",
+   "page": 26,
+   "diagram": "boxer150x-plate-26.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 1130 00",
+     "desc": "Main Step LH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "KA DF08 22",
+     "desc": "Bolt Flanged",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "PF 1130 01",
+     "desc": "Main Step RH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "DF 1614 13",
+     "desc": "Rubber Main Step",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "DH 1611 94",
+     "desc": "Kick Stopper",
+     "qty": "1",
+     "remarks": "For Kick stopper"
+    },
+    {
+     "no": 6,
+     "partNo": "PF 1130 02",
+     "desc": "Stay LH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "PF 1130 03",
+     "desc": "Stay RH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "DP 1611 70",
+     "desc": "Step RH / LH",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "JK 1130 08",
+     "desc": "Rubber Pillion Step",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "30 1710 22",
+     "desc": "Pin Pillion Step",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "DP 1611 63",
+     "desc": "Washer for foot step",
+     "qty": "2",
+     "remarks": "For Rear Footrest"
+    },
+    {
+     "no": 12,
+     "partNo": "39 0784 08",
+     "desc": "Split Pin",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "39 2481 04",
+     "desc": "Bolt Hex With Flange M8",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "39 2659 12",
+     "desc": "Washer - Spring",
+     "qty": "4",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 27,
+   "name": "Mudguard - Front & Rear",
+   "system": "frame",
+   "page": 27,
+   "diagram": "boxer150x-plate-27.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 1814 30",
+     "desc": "Front Fender Front",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "30 2110 05",
+     "desc": "Collar",
+     "qty": "3",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "DD 2010 11",
+     "desc": "Damper",
+     "qty": "3",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "KA DF06 25",
+     "desc": "Bolt Flange",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "PF 1814 31",
+     "desc": "Bkt Mtg Front Fender Front",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "KA DF06 12",
+     "desc": "Bolt Flanged",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "DJ 1810 65",
+     "desc": "Clip nut",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "PF 1814 32",
+     "desc": "Front Fender Rear",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "DJ 1610 69",
+     "desc": "Nail Cable Guide",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "DS 1611 25",
+     "desc": "Cable Guide",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "PF 1814 33",
+     "desc": "Brace Front Fender Rear",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "KA DF08 20",
+     "desc": "Bolt Flanged",
+     "qty": "3",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "KA DF06 30",
+     "desc": "Bolt",
+     "qty": "2",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 28,
+   "name": "Stand Assembly",
+   "system": "frame",
+   "page": 28,
+   "diagram": "boxer150x-plate-28.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 1132 02",
+     "desc": "Center Stand",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "JA 1132 01",
+     "desc": "Shaft Stand",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "39 0797 08",
+     "desc": "Pin Cotter",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "DH 1611 21",
+     "desc": "Spring Stand Center",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "JA 1132 02",
+     "desc": "Stand Side",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "DH 1610 66",
+     "desc": "Spring Side Stand",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "DF 1611 02",
+     "desc": "Bolt",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "39 0422 15",
+     "desc": "Nut Nyloc M10",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "DG 1611 24",
+     "desc": "Damper Main Stand",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 29,
+   "name": "Tube / Tyre / Rim",
+   "system": "wheels",
+   "page": 29,
+   "diagram": "boxer150x-plate-29.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 1310 33",
+     "desc": "Wheel Rim Front",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "PF 1310 08",
+     "desc": "Tyre Front 3 X 17 RIM with Tube",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "JZ 1312 06",
+     "desc": "Wheel Rim Rear 2.15 X 17",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "PF 1312 15",
+     "desc": "Tyre Rear 100 x 90, 17, 55P with",
+     "qty": "Tube",
+     "remarks": "1"
+    }
+   ]
+  },
+  {
+   "plate": 30,
+   "name": "Front Hub",
+   "system": "wheels",
+   "page": 30,
+   "diagram": "boxer150x-plate-30.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "59 1500 03",
+     "desc": "U Nut",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "JB 1310 18",
+     "desc": "Plain Washer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "DS 1510 56",
+     "desc": "Dust Seal",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "DS 1510 60",
+     "desc": "Spacer Assy",
+     "qty": "1",
+     "remarks": "(N.I.)"
+    },
+    {
+     "no": 5,
+     "partNo": "KP BB62 02",
+     "desc": "Bearing Ball",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "30 1510 33",
+     "desc": "Oil Seal",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "30 1510 32",
+     "desc": "Collar Bearing",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "KP BB63 02",
+     "desc": "Ball Bearing",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "JN 1318 11",
+     "desc": "Shoe- Brake Assly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "30 1510 69",
+     "desc": "Spring",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "14 1510 21",
+     "desc": "Oil Seal",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "DS 1510 89",
+     "desc": "Cam Brake Assly.",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "30 1510 38",
+     "desc": "Ring \u2018O\u2019",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "DS 1510 91",
+     "desc": "Wear Indicator",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 15,
+     "partNo": "KA EF06 30",
+     "desc": "Bolt",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 16,
+     "partNo": "DS 1510 92",
+     "desc": "Lever Brake",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 17,
+     "partNo": "DS 1510 94",
+     "desc": "Nut",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 18,
+     "partNo": "KB BM04 08",
+     "desc": "Screw Pan Cross M4",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 19,
+     "partNo": "39 0732 12",
+     "desc": "Washer Spring",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 20,
+     "partNo": "30 1511 18",
+     "desc": "Stopper for Bushing",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 21,
+     "partNo": "LD B000 01",
+     "desc": "Screw",
+     "qty": "1",
+     "remarks": "To Secure Speedo Cable"
+    },
+    {
+     "no": 22,
+     "partNo": "36 DS15 02",
+     "desc": "Speedometer Gear Kit",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 23,
+     "partNo": "30 1510 35",
+     "desc": "Seal Oil",
+     "qty": "1",
+     "remarks": "N.I"
+    },
+    {
+     "no": 24,
+     "partNo": "39 0242 11",
+     "desc": "Washer Plain",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 25,
+     "partNo": "39 1013 21",
+     "desc": "\u2018O\u2019 Ring",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 26,
+     "partNo": "JA 1316 06",
+     "desc": "Bushing Speedo Gear",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 27,
+     "partNo": "PF 1318 11",
+     "desc": "Panel Assy FR",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 31,
+   "name": "Rear Hub",
+   "system": "wheels",
+   "page": 31,
+   "diagram": "boxer150x-plate-31.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "DJ 1510 53",
+     "desc": "Drive Chain Lock",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "36 PF00 10",
+     "desc": "Chain Sprocket Kit",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "39 0801 15",
+     "desc": "Nut",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "39 2567 11",
+     "desc": "Plain Washer",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "DJ 1510 35",
+     "desc": "Collar",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "KP BC60 04",
+     "desc": "Bearing Ball",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "DS 1510 68",
+     "desc": "Coupling",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "DS 1510 73",
+     "desc": "\u2018D\u2019 Bolt",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "LC B000 05",
+     "desc": "Hex Lock Nut",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "PF 1312 20",
+     "desc": "Washer",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "DJ 1510 33",
+     "desc": "Sleeve",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "KP BC62 02",
+     "desc": "Bearing Ball",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "30 1510 75",
+     "desc": "Collar Bearing",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "DK 1510 94",
+     "desc": "Coupling Rubber",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 15,
+     "partNo": "KP BC63 02",
+     "desc": "Bearing Ball",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 16,
+     "partNo": "30 1510 69",
+     "desc": "Spring",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 17,
+     "partNo": "JN 1318 12",
+     "desc": "Shoe- Brake Kit",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 18,
+     "partNo": "DJ 1510 92",
+     "desc": "Panel Rear Brake",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 19,
+     "partNo": "DS 1510 89",
+     "desc": "Cam Brake Assly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 20,
+     "partNo": "30 1510 38",
+     "desc": "Ring \u2018O\u2019",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 21,
+     "partNo": "DS 1510 90",
+     "desc": "Indicator",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 22,
+     "partNo": "JW 1316 01",
+     "desc": "Lever Brake",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 23,
+     "partNo": "KA EF06 30",
+     "desc": "Bolt",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 24,
+     "partNo": "PF 1312 45",
+     "desc": "Axle",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 25,
+     "partNo": "DX 1510 22",
+     "desc": "Collar",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 26,
+     "partNo": "DS 1510 94",
+     "desc": "Nut M6",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 27,
+     "partNo": "DJ 1710 33",
+     "desc": "U Nut Swing Arm",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 32,
+   "name": "Rear Brake Pedal",
+   "system": "brakes",
+   "page": 32,
+   "diagram": "boxer150x-plate-32.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 1610 02",
+     "desc": "Brake Pedal",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "PF 1610 01",
+     "desc": "Rod brake",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "30 1910 38",
+     "desc": "Pin",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "DS 1910 35",
+     "desc": "Packing Brake rod",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "39 0198 11",
+     "desc": "Plain washer",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "39 0808 08",
+     "desc": "Split pin",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "39 0805 11",
+     "desc": "Plain Washer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "39 0797 08",
+     "desc": "Pin Cotter",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "JV 1610 14",
+     "desc": "Brake Pedal Return Spring",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "39 0198 11",
+     "desc": "Washer Plain",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "30 1910 35",
+     "desc": "Spring",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "JB 1610 02",
+     "desc": "Pin Brake Rod",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "30 1910 36",
+     "desc": "Nut Brake Adjuster",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "JW 1220 04",
+     "desc": "Rod Torque",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 15,
+     "partNo": "DH 1510 29",
+     "desc": "Step Bolt Torque Rod",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 16,
+     "partNo": "39 1540 11",
+     "desc": "Plain Washer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 17,
+     "partNo": "39 0789 12",
+     "desc": "Spring Washer",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 18,
+     "partNo": "39 0694 15",
+     "desc": "Hex. Lock Nut M8 x 1.25",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 19,
+     "partNo": "39 0807 08",
+     "desc": "Split Pin",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 20,
+     "partNo": "30 1510 95",
+     "desc": "Bolt Hex.",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 21,
+     "partNo": "39 0708 15",
+     "desc": "Nut Hex. M10 X 1",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 22,
+     "partNo": "DD 1610 78",
+     "desc": "DAMPER",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 33,
+   "name": "Handle Bar",
+   "system": "controls",
+   "page": 33,
+   "diagram": "boxer150x-plate-33.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "DU 1810 21",
+     "desc": "Handle Bar",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "DS 1810 22",
+     "desc": "Switch Ignition Assly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "DJ 2210 03",
+     "desc": "Mirror Assly. LH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "DJ 2210 04",
+     "desc": "Mirror Assly. RH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "DJ 1910 83",
+     "desc": "Lever Control LH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "DJ 1910 81",
+     "desc": "Holder LH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "DS 1910 52",
+     "desc": "Boot For Lever LH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "DU 1910 09",
+     "desc": "Grip LH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "JB 4014 00",
+     "desc": "Control Switch LH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "JZ 4014 05",
+     "desc": "Clutch Switch",
+     "qty": "1",
+     "remarks": "N.I"
+    },
+    {
+     "no": 11,
+     "partNo": "DD 1911 47",
+     "desc": "Screw for Cable Adjuster",
+     "qty": "2",
+     "remarks": "N.S"
+    },
+    {
+     "no": 12,
+     "partNo": "39 1553 04",
+     "desc": "Flanged Bolt",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "36 DS18 01",
+     "desc": "Holder Handle Set",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "DS 1910 52",
+     "desc": "Boot For Lever RH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 15,
+     "partNo": "DD 1911 42",
+     "desc": "Lever RH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 16,
+     "partNo": "PF 4014 17",
+     "desc": "Control Switch RH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 17,
+     "partNo": "DU 1910 03",
+     "desc": "Hand Grip Assly RH",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 18,
+     "partNo": "DS 1810 07",
+     "desc": "Washer Handle Upper",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 19,
+     "partNo": "DS 1810 08",
+     "desc": "Damper Handle Upper",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 23,
+     "partNo": "39 0422 15",
+     "desc": "Nut Nyloc M10",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 24,
+     "partNo": "30 1910 48",
+     "desc": "Band",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 25,
+     "partNo": "39 1943 04",
+     "desc": "Flange Bolt",
+     "qty": "2",
+     "remarks": "For Ignition Switch"
+    },
+    {
+     "no": 26,
+     "partNo": "DS 1910 33",
+     "desc": "Holder RH",
+     "qty": "13",
+     "remarks": ""
+    },
+    {
+     "no": 27,
+     "partNo": "36 DK00 37",
+     "desc": "Kit Mirror Holder",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 28,
+     "partNo": "DD 2011 70",
+     "desc": "Front Brake Switch",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 34,
+   "name": "Front Fork (For Fairing Version)",
+   "system": "suspension",
+   "page": 34,
+   "diagram": "boxer150x-plate-34.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 1210 80",
+     "desc": "Fork Front",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "36 DK00 20",
+     "desc": "Front Fork Seal Kit",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "30 1810 26",
+     "desc": "Gasket",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "39 1813 04",
+     "desc": "Bolt",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "PF 1210 17",
+     "desc": "Fork Pipe Inner",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "DS 1810 84",
+     "desc": "Spring Front Fork",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "59 0400 06",
+     "desc": "Bolt Fork",
+     "qty": "2",
+     "remarks": "With Washer"
+    },
+    {
+     "no": 8,
+     "partNo": "DS 1810 15",
+     "desc": "Cap Nut Fork",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "DS 1810 16",
+     "desc": "Plain Washer",
+     "qty": "1",
+     "remarks": "For Cap Nut"
+    },
+    {
+     "no": 10,
+     "partNo": "DS 1810 05",
+     "desc": "Bracket Upper Front Fork",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "DH 1810 25",
+     "desc": "Bearing Cone",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "PF 1210 85",
+     "desc": "Holder Assly Front Fork Comp",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "39 0789 12",
+     "desc": "Spring Washer",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "39 1813 04",
+     "desc": "Bolt",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 15,
+     "partNo": "PF 1210 18",
+     "desc": "Pipe Left Fork Outer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 16,
+     "partNo": "PF 1210 19",
+     "desc": "Pipe Right Fork Outer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 17,
+     "partNo": "DE 1810 33",
+     "desc": "Cylinder Complete Fork",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 18,
+     "partNo": "DM 1810 08",
+     "desc": "Rebound Spring",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 19,
+     "partNo": "DS 1810 12",
+     "desc": "Bolt Fork",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 20,
+     "partNo": "30 1810 29",
+     "desc": "\u2018O\u2019 Ring",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 21,
+     "partNo": "PF 1210 24",
+     "desc": "Lamp Shade Assly.",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 22,
+     "partNo": "DJ 1810 51",
+     "desc": "Cover Trail A",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 23,
+     "partNo": "PF 1210 28",
+     "desc": "Damper Cover Fork",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 24,
+     "partNo": "DJ 1810 52",
+     "desc": "Cover Trail B",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 25,
+     "partNo": "DJ 1810 85",
+     "desc": "Cushion Rubber",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 26,
+     "partNo": "DS 1810 70",
+     "desc": "Bush Guide",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 27,
+     "partNo": "DS 1810 72",
+     "desc": "Washer Guide Bush",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 28,
+     "partNo": "PF 1210 83",
+     "desc": "Bellow Front Fork",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 29,
+     "partNo": "PF 1210 54",
+     "desc": "Clamp For Bellow",
+     "qty": "2",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 35,
+   "name": "Painted Parts and Decals",
+   "system": "frame",
+   "page": 35,
+   "diagram": "boxer150x-plate-35.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 1812 09",
+     "desc": "Wind Shield",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "52 PF05 89",
+     "desc": "Tank Ebony Black Wh Dcl",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "52 PF05 84",
+     "desc": "Sd Cvr LH Pla Sil Wh El. Blue",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "52 PF05 85",
+     "desc": "Sd Cvr RH Pla Sil Wh El. Blue",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "PF 7401 X3",
+     "desc": "Cowling Painted",
+     "qty": "1",
+     "remarks": "Ebony Black"
+    },
+    {
+     "no": 6,
+     "partNo": "36 PF00 76",
+     "desc": "Kit Tank Decal Electron Blue",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "36 PF00 77",
+     "desc": "Kit Side Cover Decal Electron Blue",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 36,
+   "name": "Fuell Tank, Cap Tank and Gauge Fuel",
+   "system": "fuel",
+   "page": 36,
+   "diagram": "boxer150x-plate-36.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "DS 1410 09",
+     "desc": "Cap Assly. Tank",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "39 0761 01",
+     "desc": "Screw Pan Cross",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "39 2179 24",
+     "desc": "Washer",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "PF 1718 00",
+     "desc": "Fuel Tap",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "PF 2326 01",
+     "desc": "3 In 1 Lock Set with Key",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "PF 4026 00",
+     "desc": "Sensor Fuel Level",
+     "qty": "1",
+     "remarks": "With \u2018O\u2019 Ring"
+    },
+    {
+     "no": 7,
+     "partNo": "39 2758 21",
+     "desc": "\u2018O\u2019 Ring",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "39 2484 15",
+     "desc": "Flanged Nut",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "PF 1718 03",
+     "desc": "Pipe Fuel",
+     "qty": "1",
+     "remarks": "Cock to Carburetor"
+    },
+    {
+     "no": 10,
+     "partNo": "DK 1410 41",
+     "desc": "Pipe Clip",
+     "qty": "2",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 37,
+   "name": "Fittings - Fuel Tank, Side Covers & Cover Seat",
+   "system": "fuel",
+   "page": 37,
+   "diagram": "boxer150x-plate-37.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "36 DS14 01",
+     "desc": "Grommet Kit for Side Cover",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "DG 1611 21",
+     "desc": "Screw",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "DU 1611 02",
+     "desc": "Damper",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "JV 1710 01",
+     "desc": "Damper Tank Rear",
+     "qty": "1",
+     "remarks": "For Tank"
+    },
+    {
+     "no": 5,
+     "partNo": "39 1789 24",
+     "desc": "Washer Nylon",
+     "qty": "3",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "39 0983 08",
+     "desc": "Pin Snap",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "39 1054 11",
+     "desc": "Plain Washer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "DJ 1410 08",
+     "desc": "Damper Front",
+     "qty": "2",
+     "remarks": "For Tank Mounting"
+    }
+   ]
+  },
+  {
+   "plate": 38,
+   "name": "Meter Assembly",
+   "system": "electrical",
+   "page": 38,
+   "diagram": "boxer150x-plate-38.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 4024 00",
+     "desc": "Speedometer Assly.",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "PF 4024 01",
+     "desc": "Speedometer Machine With Dial",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "PF 4024 05",
+     "desc": "Fuel Gauge Machine with dial",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "PF 4024 02",
+     "desc": "Speedo meter Top Cover",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "PF 4024 06",
+     "desc": "Speedo meter Bottom Cover",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "PF 4024 03",
+     "desc": "Speedometer wiring harness",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "CL 2010 42",
+     "desc": "Bulb 12V - 2 W",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "DH 1910 37",
+     "desc": "Bulb 12V - 3 W",
+     "qty": "3",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "PF 4024 04",
+     "desc": "Speedometer Bracket",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "39 0798 15",
+     "desc": "Flanged Nut",
+     "qty": "2",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 39,
+   "name": "Control Cables",
+   "system": "controls",
+   "page": 39,
+   "diagram": "boxer150x-plate-39.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 1612 17",
+     "desc": "Cable Accelerator",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "PF 1612 12",
+     "desc": "Cable Clutch",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "PF 1612 08",
+     "desc": "Cable Speedometer",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "PF 1612 09",
+     "desc": "Cable Speedometer Inner",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "PF 1612 13",
+     "desc": "Cable front Brake",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "39 1561 21",
+     "desc": "\u2018O\u2019 Ring",
+     "qty": "1",
+     "remarks": "N.I."
+    }
+   ]
+  },
+  {
+   "plate": 40,
+   "name": "Chain Case",
+   "system": "transmission",
+   "page": 40,
+   "diagram": "boxer150x-plate-40.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "36 PF00 11",
+     "desc": "Kit Chain Case",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "15 1610 69",
+     "desc": "Rubber Cap",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "JB 1812 39",
+     "desc": "Bolt M6",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "JB 1812 20",
+     "desc": "Flange Bolt M6 X 1P X 62 L",
+     "qty": "2",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 41,
+   "name": "Head Lamp (With Fairing)",
+   "system": "electrical",
+   "page": 41,
+   "diagram": "boxer150x-plate-41.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 4010 00",
+     "desc": "Head light assly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "DL 1810 10",
+     "desc": "Nut-well M5",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "39 2141 24",
+     "desc": "Washer (Non Metallic Washer)",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "DU 2010 29",
+     "desc": "Special Screw",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "DS 2010 19",
+     "desc": "Collar",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "DS 2010 20",
+     "desc": "Damper I",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "DS 2010 21",
+     "desc": "Damper II",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "39 2582 04",
+     "desc": "Flange Bolt M-8 L 35",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "39 1970 15",
+     "desc": "Flange Nut M-8",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "CL 2010 23",
+     "desc": "Lamp 12 V 35/35 W HS1",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "PF 4010 09",
+     "desc": "Lamp Holder (Socket) Assly.",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "PF 1210 25",
+     "desc": "Fairing Structure",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 13,
+     "partNo": "JW 1812 32",
+     "desc": "Bolt Flange M6",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "JW 1812 29",
+     "desc": "Plain Washer",
+     "qty": "6",
+     "remarks": ""
+    },
+    {
+     "no": 15,
+     "partNo": "JB 1510 12",
+     "desc": "Grommet Fairing Mounting",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 16,
+     "partNo": "JB 1510 13",
+     "desc": "Sleeve Fairing Mounting",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 17,
+     "partNo": "39 0798 15",
+     "desc": "Hex Nut",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 18,
+     "partNo": "35 1610 60",
+     "desc": "Nut - Clip",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 19,
+     "partNo": "39 1765 11",
+     "desc": "Washer - Plain",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 20,
+     "partNo": "39 2238 01",
+     "desc": "Screw - Pan Head",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 21,
+     "partNo": "PF 1812 11",
+     "desc": "Grommet - Cowling Mtg",
+     "qty": "2",
+     "remarks": "N.I."
+    },
+    {
+     "no": 22,
+     "partNo": "PF 1812 09",
+     "desc": "Windshield",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 23,
+     "partNo": "DL 1810 09",
+     "desc": "Screw - M5 X L 16",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 24,
+     "partNo": "DJ 2010 51",
+     "desc": "Reflector with Lens",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 42,
+   "name": "Indicator Light Assembly",
+   "system": "electrical",
+   "page": 42,
+   "diagram": "boxer150x-plate-42.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 4010 01",
+     "desc": "Dir. ind. Front LH with Lamp",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "PF 4010 02",
+     "desc": "Dir. ind. Front RH with Lamp",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "PF 4010 03",
+     "desc": "Dir. ind. Rear LH with Lamp",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "PF 4010 04",
+     "desc": "Dir. ind. Rear RH with Lamp",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "06 2010 83",
+     "desc": "Lamp 12 V - 10W",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "DU 2010 16",
+     "desc": "Lens",
+     "qty": "4",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "39 1225 15",
+     "desc": "Hex. Nut",
+     "qty": "4",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 43,
+   "name": "Tail Lamp Assly / Front Number Plate",
+   "system": "electrical",
+   "page": 43,
+   "diagram": "boxer150x-plate-43.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "PF 4010 05",
+     "desc": "Tail Light Assly.",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "CL 2010 23",
+     "desc": "Lamp 12 V, 10/5W",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "39 2430 15",
+     "desc": "Hex Nut. / Flange",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "DD 2010 11",
+     "desc": "Damper",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "31 2010 01",
+     "desc": "Collar",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "39 2429 11",
+     "desc": "Plain Washer",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "PF 2314 01",
+     "desc": "Bracket Tail Light Assly",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "39 1956 04",
+     "desc": "Bolt Flange Small (for No. Plate)",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "DF 1612 52",
+     "desc": "Plate No. Rear Black",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "39 2765 01",
+     "desc": "Screw Truss M6",
+     "qty": "2",
+     "remarks": ""
+    },
+    {
+     "no": 11,
+     "partNo": "DM 2010 26",
+     "desc": "Boot",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 12,
+     "partNo": "30 2010 69",
+     "desc": "Reflector Reflex",
+     "qty": "1",
+     "remarks": "N.I."
+    },
+    {
+     "no": 13,
+     "partNo": "39 1972 15",
+     "desc": "Nut Hexagon with Flange M5",
+     "qty": "1",
+     "remarks": "N.I Reflector Mtg."
+    }
+   ]
+  },
+  {
+   "plate": 44,
+   "name": "Electrical Equipments",
+   "system": "electrical",
+   "page": 44,
+   "diagram": "boxer150x-plate-44.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "JV 4016 02",
+     "desc": "DC Horn",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 2,
+     "partNo": "39 1689 04",
+     "desc": "Flange Bolt (M8)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 3,
+     "partNo": "PF 4022 13",
+     "desc": "Wiring Harness",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 4,
+     "partNo": "PF 4014 04",
+     "desc": "Rear Brake Switch",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 5,
+     "partNo": "PF 4014 03",
+     "desc": "Spring Brake Switch",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 6,
+     "partNo": "DS 2010 82",
+     "desc": "Battery 5 MF dry Charged",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 7,
+     "partNo": "JV 4018 01",
+     "desc": "Case Battery",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 8,
+     "partNo": "JA 4018 01",
+     "desc": "Band Battery",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 9,
+     "partNo": "DS 2010 25",
+     "desc": "Assly DC Flasher",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 10,
+     "partNo": "JK 3516 00",
+     "desc": "Starter Relay",
+     "qty": "1",
+     "remarks": "With Grommet"
+    },
+    {
+     "no": 11,
+     "partNo": "30 2011 04",
+     "desc": "Fuse Box Assly",
+     "qty": "2",
+     "remarks": "For Light Main Fuse"
+    },
+    {
+     "no": 12,
+     "partNo": "GF 2010 53",
+     "desc": "Fuse (10 Amp.)",
+     "qty": "2",
+     "remarks": "Light & Main Fuse"
+    },
+    {
+     "no": 13,
+     "partNo": "JV 4022 04",
+     "desc": "Starter Relay to Motor Relay",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 14,
+     "partNo": "JV 4022 05",
+     "desc": "Cable Assly. (Battery to Earth)",
+     "qty": "1",
+     "remarks": ""
+    },
+    {
+     "no": 15,
+     "partNo": "39 1942 04",
+     "desc": "Bolt Flanged",
+     "qty": "1",
+     "remarks": ""
+    }
+   ]
+  },
+  {
+   "plate": 45,
+   "name": "Tool Kit",
+   "system": "accessories",
+   "page": 45,
+   "diagram": "boxer150x-plate-45.jpg",
+   "parts": [
+    {
+     "no": 1,
+     "partNo": "DM 2210 13",
+     "desc": "Tool Kit",
+     "qty": "1",
+     "remarks": "For Reference Only"
+    }
+   ]
+  }
+ ]
+}

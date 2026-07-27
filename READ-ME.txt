@@ -1,0 +1,33 @@
+EA AUTO PART — 3 more Boxer catalogues (BM125X, BM150, BM150 X)
+================================================================
+Extracted verbatim from the official Bajaj Spare Parts Catalogues you shared.
+Every part number was checked back against the source PDF: 100% match (0 errors).
+
+WHAT'S HERE
+  products.csv          1,654 products across 3 models, columns:
+                        Name, SKU, Category, Price, Cost, Stock, MOQ, Unit, Image, Keywords
+  images/               135 exploded-diagram pictures (45 plates x 3 models)
+  diagrams-json/        boxer125x.json / boxer150.json / boxer150x.json
+                        (structured plate + part data — for the exploded-diagram view)
+
+COUNTS
+  Boxer BM125X   45 plates   517 unique parts
+  Boxer BM150    45 plates   588 unique parts
+  Boxer BM150 X  45 plates   549 unique parts
+
+HOW TO LOAD THE PRODUCTS
+  In the app:  Products -> Import products -> upload THIS zip.
+  The importer reads products.csv and attaches each part's plate diagram
+  (the Image column names a file inside images/).
+
+BEFORE SELLING — set your prices
+  Price and Cost are intentionally left blank. Fill Cost with your supplier
+  price and set Price (or use your markup %) so margins are correct. Stock is
+  blank too — set it for your fast movers.
+
+NOTE — "Boxer 125 HD"
+  There is NO spare-parts catalogue for the 125 HD — only a 2-page marketing
+  brochure. BM125X is the 125cc parts catalogue (many parts are shared). If your
+  125 HD needs its own parts list, we'd need Bajaj's 125 HD SPC PDF.
+
+This zip is for IMPORT — it does NOT go to GitHub.
