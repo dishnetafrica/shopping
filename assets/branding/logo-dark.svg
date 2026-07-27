@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 48" role="img" aria-label="Bajaj Genuine Parts">
+  <g fill="none">
+    <rect x="4" y="6" width="36" height="36" rx="9" fill="#1552CC"/>
+    <path d="M13 14 L22 24 L13 34 L17 34 L26 24 L17 14 Z" fill="#fff"/>
+    <path d="M20 14 L29 24 L20 34 L24 34 L33 24 L24 14 Z" fill="#F5B301"/>
+  </g>
+  <text x="50" y="24" font-family="Inter, Segoe UI, sans-serif" font-weight="800" font-size="19" letter-spacing="1.5" fill="#0C1220">BAJAJ</text>
+  <text x="50" y="39" font-family="Inter, Segoe UI, sans-serif" font-weight="600" font-size="10" letter-spacing="3.4" fill="#8A94A6">GENUINE PARTS</text>
+</svg>
