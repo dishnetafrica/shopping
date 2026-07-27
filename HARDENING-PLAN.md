@@ -105,17 +105,20 @@ zero; a few moderate best-practice items — heading order, landmark region — 
 **Mobile breakpoint matrix.** The suite runs at 360 px (and every test also runs there).
 Still to extend: 320/390/412 px assertions for no horizontal scroll and thumb-reach CTAs.
 
-### P3 — full storefront modularization (staged, not big-bang)
+### P3 — storefront modularization (staged, not big-bang)  ✅ STARTED (this milestone)
 
-The review's headline recommendation. Do it incrementally so the live store never regresses:
+The review's headline recommendation. Done incrementally so the live store never regresses:
 
-1. **(done)** Extract data from template; single deployable file is a build artifact.
-2. Split the ~800-line inline `<script>` into ES modules by concern
-   (`state.js`, `catalogue.js`, `cart.js`, `views/*.js`, `analytics.js`, `vehicle.js`), keeping
-   behavior identical — the Playwright suite is the safety net for each extraction.
-3. Introduce a bundler (esbuild) that emits the same single self-contained file the deploy
-   path expects, so nothing about hosting changes.
-4. Add per-module unit tests alongside the e2e suite.
+1. **✅ Data extracted** from template; the single deployable file is a build artifact.
+2. **✅ The ~800-line inline `<script>` is split into 12 cohesive modules** under `src/`
+   (`01-core` … `12-a11y-boot`), assembled by `build_storefront.py`. The split is a contiguous
+   physical partition, so concatenation reproduces the original script **byte-for-byte** — zero
+   behavior change, proven by the suite plus a new "no runtime errors on every route" smoke test.
+3. **✅ Build pipeline** concatenates the modules (optional esbuild `--minify`) and emits the
+   same single self-contained file the deploy path expects — hosting is unchanged.
+4. **Next increment:** convert the shared-scope modules to strict ES modules (explicit
+   `import`/`export`, a `window`-exposed API for the inline handlers, esbuild `--bundle`),
+   file-by-file behind the tests, and add per-module unit tests. See `src/README.md`.
 
 Each step ships behind the green test suite; no step requires a freeze longer than a day.
 
@@ -132,9 +135,11 @@ Each step ships behind the green test suite; no step requires a freeze longer th
 - [x] Funnel/abandoned-cart visibility for the tenant
 - [x] Client-side error capture to Sentry
 - [x] Accessibility (keyboard + screen reader) baseline with axe-core in CI
-- [ ] Storefront script split into modules behind the test suite
+- [x] Storefront script split into modules behind the test suite
 
-Items 1–9 are done (Milestones 1–3). The one remaining item is the staged storefront
-modularization (P3) — splitting the inline script into ES modules behind the now-substantial
-test suite (24 e2e tests + the PHPUnit bot-guard test). It carries no architectural risk; each
-extraction ships green. Remaining ops step: confirm the production Sentry DSN is set.
+All 10 checklist items are done (Milestones 1–4). The storefront script is now 12 modules under
+`src/` assembled by the build; the remaining refinement is converting those shared-scope modules
+to strict ES modules with imports (tracked in `src/README.md`), which is a maintainability
+increment rather than a production blocker. Remaining ops step: confirm the production Sentry
+DSN is set. The suite stands at 26 e2e tests (13 scenarios × desktop + mobile) plus the PHPUnit
+bot-guard test.

@@ -25,6 +25,22 @@ async function events(page) {
   return await page.evaluate(async () => (await fetch('/__events')).json());
 }
 
+test('every route renders with no console/runtime errors', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  const routes = ['/', '/#/parts', '/#/part/101', '/#/system/Engine', '/#/model/boxer100',
+    '/#/plate', '/#/diagrams', '/#/search/brake', '/#/ai', '/#/cart'];
+  for (const r of routes) {
+    await page.goto(base + r);
+    await waitLoaded(page);
+    await page.waitForTimeout(60);
+  }
+  // ignore benign favicon/resource 404s; only fail on real JS errors
+  const real = errors.filter((e) => !/favicon|net::ERR|status of 404/i.test(e));
+  expect(real, 'runtime errors across routes').toEqual([]);
+});
+
 test('catalogue loads and hides out-of-stock parts', async ({ page }) => {
   await page.goto(base + '/');
   await waitLoaded(page);

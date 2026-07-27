@@ -302,6 +302,12 @@ var SYSCOVER = {"engine":"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wB
   Object.keys(SYSCOVER||{}).forEach(function(k){ SYSCOVER[k]=px(SYSCOVER[k]); });
   Object.keys(GAL||{}).forEach(function(k){ GAL[k]=(GAL[k]||[]).map(px); });
 })();
+</script>
+<script>
+// EA Auto Part storefront — module: 01-core.js
+// STATE, DOM helper, money/esc/sid, partNo, shop links
+// NOTE: these src/ files share one runtime scope; build_storefront.py concatenates them
+// in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 var STATE = { products:[], byCat:{}, byPn:{}, bySys:{}, pnPlate:{}, loaded:false, error:false };
 function normPn(s){return String(s||'').replace(/\s+/g,'').toUpperCase();}
 var $ = function(s,r){return (r||document).querySelector(s);};
@@ -318,6 +324,11 @@ function partNo(kw){
 function shopAdd(id){return (CFG.shopUrl||'#')+'?add='+encodeURIComponent(id);}
 function shopCat(c){return (CFG.shopUrl||'#')+'?cat='+encodeURIComponent(c);}
 
+
+// EA Auto Part storefront — module: 02-catalogue.js
+// normalize + loadCatalogue + indexes
+// NOTE: these src/ files share one runtime scope; build_storefront.py concatenates them
+// in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- data ---------- */
 function normalize(json){
   var arr = Array.isArray(json)?json:(json.rows||json.products||json.items||json.data||[]);
@@ -360,11 +371,21 @@ function systemsWithCounts(){
     return {id:s.id,name:s.name,count:list.length,cover:cov};
   });
 }
+
+// EA Auto Part storefront — module: 03-garage.js
+// saved bike (My Garage) + fitment
+// NOTE: these src/ files share one runtime scope; build_storefront.py concatenates them
+// in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- My Garage (saved bike) + fitment ---------- */
 function getBike(){ try{ var id=localStorage.getItem('ea_bike'); return (MODELS||[]).filter(function(m){return m.id===id;})[0]||null; }catch(e){ return null; } }
 function setBike(id){ try{ localStorage.setItem('ea_bike',id); }catch(e){} }
 function clearBike(){ try{ localStorage.removeItem('ea_bike'); }catch(e){} render(); }
 function fitsBike(p){ var b=getBike(); if(!b) return null; var seg=nk(String(p.kw||'').split('|')[0]); return seg===nk(b.catName||b.name); }
+
+// EA Auto Part storefront — module: 04-vehicle.js
+// vehicle taxonomy (scales to cars)
+// NOTE: these src/ files share one runtime scope; build_storefront.py concatenates them
+// in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- vehicle taxonomy (scales to cars) ---------- */
 function vehTypes(){ var t={}; (MODELS||[]).forEach(function(m){ if(m.type)t[m.type]=1; }); return Object.keys(t); }
 function vehWord(){ return vehTypes().length>1 ? 'vehicle' : 'motorcycle'; }
@@ -381,6 +402,11 @@ function fitGuide(p){
     transmission:['Advanced','Clutch/chain tools — mechanic advised'],engine:['Advanced','Workshop — mechanic recommended']};
   var m=map[sys]||['Medium','Basic hand tools']; return {level:m[0],tools:m[1]};
 }
+
+// EA Auto Part storefront — module: 05-whatsapp.js
+// order on WhatsApp (single part)
+// NOTE: these src/ files share one runtime scope; build_storefront.py concatenates them
+// in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- order on WhatsApp (owns the checkout) ---------- */
 function waOrder(p){
   var b=getBike(); var pn=partNo(p.kw);
@@ -389,6 +415,11 @@ function waOrder(p){
     +'%0a%0aIs it in stock and how soon can I get it?';
   return CFG.waNumber?('https://wa.me/'+CFG.waNumber+'?text='+t):'#';
 }
+
+// EA Auto Part storefront — module: 06-cart.js
+// native cart (checkout via WhatsApp)
+// NOTE: these src/ files share one runtime scope; build_storefront.py concatenates them
+// in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- native cart (checkout via WhatsApp) ---------- */
 function cartGet(){ try{return JSON.parse(localStorage.getItem('ea_cart')||'[]');}catch(e){return [];} }
 function cartSave(c){ try{localStorage.setItem('ea_cart',JSON.stringify(c));}catch(e){} updateCartBadge(); }
@@ -401,6 +432,11 @@ function cartAdd(id){ var p=STATE.products.filter(function(x){return String(x.id
 function cartSet(id,d){ var c=cartGet(); for(var i=0;i<c.length;i++){ if(String(c[i].id)===String(id)){ c[i].qty=Math.max(0,c[i].qty+d); if(!c[i].qty)c.splice(i,1); break; } } cartSave(c); render(); }
 function updateCartBadge(){ var n=(function(){try{return cartCount();}catch(e){return 0;}})(); Array.prototype.forEach.call(document.querySelectorAll('.cartn'),function(el){ el.textContent=n; el.style.display=n?'inline-flex':'none'; }); }
 function toast(msg){ var t=document.getElementById('toast'); if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');t.setAttribute('aria-live','polite');document.body.appendChild(t);} t.textContent=msg; t.classList.add('on'); clearTimeout(window._tt); window._tt=setTimeout(function(){t.classList.remove('on');},1900); }
+
+// EA Auto Part storefront — module: 07-analytics.js
+// analytics beacons to /event
+// NOTE: these src/ files share one runtime scope; build_storefront.py concatenates them
+// in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- analytics (fire-and-forget to the shop's /event log) ---------- */
 function eventUrl(){ return CFG.eventUrl || (CFG.catalogueUrl? CFG.catalogueUrl.replace(/\/catalogue(\?.*)?$/,'/event') : '/event'); }
 function track(ev, payload){
@@ -411,6 +447,11 @@ function track(ev, payload){
     else { fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true,credentials:'same-origin'}).catch(function(){}); }
   }catch(e){}
 }
+
+// EA Auto Part storefront — module: 08-errors.js
+// client-side error capture + misc helpers
+// NOTE: these src/ files share one runtime scope; build_storefront.py concatenates them
+// in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- client-side error capture (surfaces JS crashes server-side/Sentry) ---------- */
 function errorUrl(){ return CFG.errorUrl || (CFG.catalogueUrl? CFG.catalogueUrl.replace(/\/catalogue(\?.*)?$/,'/clienterror') : '/clienterror'); }
 var _sentErrs=0;
@@ -468,6 +509,11 @@ function activeModels(){
   return all.slice(0,5);
 }
 
+
+// EA Auto Part storefront — module: 09-shell.js
+// nav / bike bar / product cards / shell
+// NOTE: these src/ files share one runtime scope; build_storefront.py concatenates them
+// in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- shell ---------- */
 /* Optional, non-technical vehicle filter — never a gate. Customers can pick a bike,
    browse everything, or hide the bar entirely. */
@@ -534,6 +580,11 @@ function trust(){
   return '<div class="wrap"><div class="trust">'+items.map(function(t){return '<div><span class="d">'+t[0]+'</span><div><b>'+esc(t[1])+'</b><i>'+esc(t[2])+'</i></div></div>';}).join('')+'</div></div>';
 }
 
+
+// EA Auto Part storefront — module: 10-views.js
+// all route views (v*)
+// NOTE: these src/ files share one runtime scope; build_storefront.py concatenates them
+// in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- views ---------- */
 function vHome(){
   var models=activeModels().slice(0,6).map(function(m){
@@ -808,6 +859,11 @@ function vCart(){
    +'<div class="cfine">You’ll confirm stock, delivery and payment with our team on WhatsApp. No payment is taken online.</div>'
    +'<a class="link" onclick="go(\'\')" style="display:block;text-align:center;margin-top:10px"><i class="fa fa-plus"></i> Add more parts</a></div></div></section>'+foot();
 }
+
+// EA Auto Part storefront — module: 11-router.js
+// router: render/go/search helpers
+// NOTE: these src/ files share one runtime scope; build_storefront.py concatenates them
+// in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- router ---------- */
 function waLink(){return CFG.waNumber?('https://wa.me/'+CFG.waNumber):'#';}
 function openSearch(){var s=document.getElementById('ssheet');if(s){s.classList.add('on');var i=document.getElementById('ssin');if(i){i.value='';setTimeout(function(){i.focus();},50);i.onkeydown=function(e){if(e.key==='Enter')doSheetSearch();if(e.key==='Escape')closeSearch();};}}}
@@ -838,6 +894,11 @@ function render(){
   var bc=document.getElementById('botCart'); if(bc)bc.href=CFG.shopUrl||'#';
   enhanceA11y();
 }
+
+// EA Auto Part storefront — module: 12-a11y-boot.js
+// accessibility enhancement + boot
+// NOTE: these src/ files share one runtime scope; build_storefront.py concatenates them
+// in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- accessibility: make onclick elements keyboard-operable + labelled ---------- */
 function enhanceA11y(){
   try{
@@ -872,6 +933,7 @@ document.addEventListener('keydown',function(e){
 window.addEventListener('hashchange',render);
 (function(){var r=document.documentElement.style;if(CFG.accent)r.setProperty('--accent',CFG.accent);if(CFG.accentDark)r.setProperty('--accent-d',CFG.accentDark);
  document.getElementById('waFloat').href=waLink(); render(); loadCatalogue();})();
+
 </script>
 </body>
 </html>
