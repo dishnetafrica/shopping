@@ -1,11 +1,24 @@
-UPLOAD TO GITHUB — vehicle filter is now clearly OPTIONAL
-=========================================================
-Picking a vehicle was never required, but now it's obvious:
-  • Default bar: "Which motorcycle do you have? … or just browse everything below"
-    with a ✕ to hide it.
-  • Hidden: a slim line "You're browsing all parts · Pick your motorcycle to filter".
-  • After choosing: "Showing parts for <bike> · Change · Show all parts" (one tap to unfilter).
-Nothing is gated — customers can shop the whole catalogue without ever choosing a vehicle.
+UPLOAD TO GITHUB — vehicle picker that scales to CARS (+ real filter, universal parts)
+======================================================================================
+The vehicle chooser is now future-proof and does real filtering.
+
+WHAT CHANGED (customer-facing):
+  • Picker now has a SEARCH box ("Type your vehicle…") on top of the photo grid.
+  • When only motorcycles exist (today): title "Choose your motorcycle", photo grid.
+  • The day you add CAR models: it auto-becomes "Choose your vehicle" with
+    "Motorcycles / Cars" tabs, and long lists switch to compact searchable rows —
+    no rebuild needed. Copy across the site switches from "motorcycle" to "vehicle"
+    automatically when more than one vehicle type is loaded.
+  • Choosing a vehicle now REALLY filters browse/search/popular to parts that fit it,
+    with a one-tap "Show all parts" to unfilter. Nothing is gated.
+  • UNIVERSAL parts (engine oil, tools, generic bearings) always show, whatever
+    vehicle is selected — mark a part universal by putting "Universal" (or "fits all"
+    / "all models") in its Category or Keywords on import.
+
+HOW TO ADD CARS LATER (data only, no code):
+  • Add car models to the model list (id, name, type:"Car", make, photo).
+  • Import car parts whose Keywords start with the car's name (same as bikes).
+  • The picker, tabs, wording and filter adapt automatically.
 
 Frontend only (resources/storefront/autoparts.html); PHP unchanged.
 DEPLOY: upload "app" + "resources" -> git pull -> php artisan optimize:clear -> restart -> hard-refresh.
