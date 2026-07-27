@@ -57,7 +57,7 @@ final class SettingsWriteService
         'task_reminders',       // twice-daily WhatsApp task reminders to assignees
         // Storefront: per-model show/hide toggles (default on). Read by StorefrontController.
         'show_model_boxer100', 'show_model_boxer125hd', 'show_model_boxer150',
-        'show_model_boxer125x', 'show_model_boxer150x',
+        'show_model_boxer125x', 'show_model_ct125hd', 'show_model_boxer150x',
     ];
 
     /** Enum settings: [key => allowed values]. Document PDF page setup (read by the PDF renderers). */

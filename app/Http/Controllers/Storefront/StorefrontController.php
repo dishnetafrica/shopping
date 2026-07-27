@@ -362,6 +362,7 @@ class StorefrontController extends Controller
                 'boxer125hd' => (bool) $tenant->setting('show_model_boxer125hd', true) ? 'boxer125hd' : null,
                 'boxer150'   => (bool) $tenant->setting('show_model_boxer150', true)   ? 'boxer150'   : null,
                 'boxer125x'  => (bool) $tenant->setting('show_model_boxer125x', true)  ? 'boxer125x'  : null,
+                'ct125hd'    => (bool) $tenant->setting('show_model_ct125hd', true)    ? 'ct125hd'    : null,
                 'boxer150x'  => (bool) $tenant->setting('show_model_boxer150x', true)  ? 'boxer150x'  : null,
             ])),
         ];

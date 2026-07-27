@@ -104,6 +104,7 @@ final class SettingsSchema
                     ['key' => 'show_model_boxer125hd', 'type' => 'bool', 'label' => 'Boxer 125 HD',  'default' => true],
                     ['key' => 'show_model_boxer150',   'type' => 'bool', 'label' => 'Boxer BM150',   'default' => true],
                     ['key' => 'show_model_boxer125x',  'type' => 'bool', 'label' => 'Boxer BM125X',  'default' => true],
+                    ['key' => 'show_model_ct125hd',    'type' => 'bool', 'label' => 'CT 125 HD',     'default' => true],
                     ['key' => 'show_model_boxer150x',  'type' => 'bool', 'label' => 'Boxer BM150 X', 'default' => true],
                 ]],
             ]],

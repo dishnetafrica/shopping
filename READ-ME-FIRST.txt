@@ -1,27 +1,20 @@
-UPLOAD TO GITHUB — friendly per-model ON/OFF toggles
-=====================================================
-Settings → Storefront now shows a switch for each bike model (no more typing names):
-    Boxer 100 KS      [ON]
-    Boxer 125 HD      [ON]
-    Boxer BM150       [ON]
-    Boxer BM125X      [ON]
-    Boxer BM150 X     [ON]
-Flip one OFF to hide that model from the website, ON to show it, then Save.
+UPLOAD TO GITHUB — adds the CT 125 HD model (real photos + specs)
+=================================================================
+New bike model "CT 125 HD" added to the storefront with its official photos,
+gallery, full spec sheet, and its own ON/OFF switch in Settings → Storefront.
+Nothing existing was removed — you now have 6 models; use the toggles to show
+only the ones you want.
 
-FILES (drag BOTH the "app" AND "resources" folders — they replace existing files):
+FILES (drag BOTH "app" AND "resources" — they replace existing files):
   app/Support/Vertical.php
-  app/Support/SettingsSchema.php                             (toggles replace the text box)
-  app/Services/Settings/SettingsWriteService.php             (saves the toggles)
-  app/Http/Controllers/Storefront/StorefrontController.php   (reads the toggles)
-  resources/storefront/autoparts.html                        (self-contained storefront)
+  app/Support/SettingsSchema.php                             (+ CT 125 HD toggle)
+  app/Services/Settings/SettingsWriteService.php             (saves the toggle)
+  app/Http/Controllers/Storefront/StorefrontController.php   (reads the toggle)
+  resources/storefront/autoparts.html                        (CT 125 HD photos + specs, self-contained)
 
-** IMPORTANT — the resources file must land too **
-Last time the admin updated but the website did not. That means your deploy
-picked up the app/ folder but NOT resources/storefront/autoparts.html.
-After deploying, confirm the website file updated by opening the storefront and,
-in the Console (F12), running:
-    fetch(location.href).then(r=>r.text()).then(t=>console.log('site updated:', t.includes('function activeModels')));
-It must print TRUE. If it prints FALSE, the resources/ folder didn't deploy —
-make sure that folder is included in your upload/commit.
+** The resources file MUST deploy too ** (last time only app/ landed). After deploy,
+in the storefront Console run:
+    fetch(location.href).then(r=>r.text()).then(t=>console.log('CT live:', t.includes('CT 125 HD')));
+It must print TRUE.
 
-DEPLOY:  git pull  ->  php artisan optimize:clear  ->  restart  ->  hard-refresh (Cmd/Ctrl+Shift+R)
+DEPLOY:  git pull  ->  php artisan optimize:clear  ->  restart  ->  hard-refresh
