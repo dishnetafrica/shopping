@@ -99,8 +99,12 @@ final class SettingsSchema
                 ]],
             ]],
             ['key' => 'storefront', 'label' => 'Storefront', 'icon' => 'doc', 'groups' => [
-                ['label' => 'Bike models on the website', 'help' => 'Controls which motorcycle models appear on your customer website. Leave blank to show every model that has parts loaded in your catalogue (recommended). To pick a specific set or order, list the model names — one per line or comma-separated, e.g. Boxer 100 KS, Boxer BM150.', 'fields' => [
-                    ['key' => 'storefront_models', 'type' => 'textarea', 'label' => 'Models to show', 'help' => 'Blank = automatic. Otherwise the exact models listed here, in this order.'],
+                ['label' => 'Bike models on the website', 'help' => 'Turn a model ON to show it on your customer website, OFF to hide it. Changes take effect as soon as you save. Tip: keep at least one model on.', 'fields' => [
+                    ['key' => 'show_model_boxer100',   'type' => 'bool', 'label' => 'Boxer 100 KS',  'default' => true],
+                    ['key' => 'show_model_boxer125hd', 'type' => 'bool', 'label' => 'Boxer 125 HD',  'default' => true],
+                    ['key' => 'show_model_boxer150',   'type' => 'bool', 'label' => 'Boxer BM150',   'default' => true],
+                    ['key' => 'show_model_boxer125x',  'type' => 'bool', 'label' => 'Boxer BM125X',  'default' => true],
+                    ['key' => 'show_model_boxer150x',  'type' => 'bool', 'label' => 'Boxer BM150 X', 'default' => true],
                 ]],
             ]],
             ['key' => 'delivery', 'label' => 'Delivery', 'icon' => 'truck', 'groups' => [

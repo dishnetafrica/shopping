@@ -28,8 +28,6 @@ final class SettingsWriteService
         'ai_persona', 'business_hours', 'delivery_areas', 'faq', 'brand_knowledge', 'languages',
         // Delivery notes shown to customers / staff.
         'delivery_note', 'moq_note',
-        // Storefront: which bike models to show (blank = auto by parts). Comma/newline separated.
-        'storefront_models',
         // VAT is fully tenant-configurable (never hardcoded): label + tax registration no.
         'vat_label', 'vat_number',
     ];
@@ -57,6 +55,9 @@ final class SettingsWriteService
         'vat_enabled',          // charge VAT / sales tax (never hardcoded)
         'prices_include_vat',   // catalogue prices are VAT-inclusive
         'task_reminders',       // twice-daily WhatsApp task reminders to assignees
+        // Storefront: per-model show/hide toggles (default on). Read by StorefrontController.
+        'show_model_boxer100', 'show_model_boxer125hd', 'show_model_boxer150',
+        'show_model_boxer125x', 'show_model_boxer150x',
     ];
 
     /** Enum settings: [key => allowed values]. Document PDF page setup (read by the PDF renderers). */

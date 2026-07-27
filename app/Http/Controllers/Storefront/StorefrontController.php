@@ -354,13 +354,16 @@ class StorefrontController extends Controller
             'panelUrl'    => url('/panel'),
             'systems'     => $tenant->setting('epc_systems', $defaultSystems),
             'models'      => $tenant->setting('epc_models', $defaultModels),
-            // Which bike models the storefront shows. Blank = automatic (show every model
-            // that has parts in the catalogue). Otherwise a manual list of model names/ids
-            // (comma / newline separated), edited in Settings → Storefront.
-            'enabledModels' => array_values(array_filter(array_map(
-                'trim',
-                preg_split('/[\n,]+/', (string) $tenant->setting('storefront_models', '')) ?: []
-            ), fn ($s) => $s !== '')),
+            // Which bike models the storefront shows — driven by the per-model on/off toggles
+            // in Settings → Storefront (each defaults to ON). Only models toggled on are listed;
+            // the storefront shows exactly these, in this order.
+            'enabledModels' => array_values(array_filter([
+                'boxer100'   => (bool) $tenant->setting('show_model_boxer100', true)   ? 'boxer100'   : null,
+                'boxer125hd' => (bool) $tenant->setting('show_model_boxer125hd', true) ? 'boxer125hd' : null,
+                'boxer150'   => (bool) $tenant->setting('show_model_boxer150', true)   ? 'boxer150'   : null,
+                'boxer125x'  => (bool) $tenant->setting('show_model_boxer125x', true)  ? 'boxer125x'  : null,
+                'boxer150x'  => (bool) $tenant->setting('show_model_boxer150x', true)  ? 'boxer150x'  : null,
+            ])),
         ];
 
         $title = $tenant->name . ' — Genuine Motorcycle Spare Parts';

@@ -1,28 +1,27 @@
-UPLOAD THIS TO GITHUB — enable/disable which bike models show on the website
-============================================================================
-Storefront stays SELF-CONTAINED (all photos embedded in autoparts.html — nothing
-can 404). This adds a real on/off control for the model cards.
+UPLOAD TO GITHUB — friendly per-model ON/OFF toggles
+=====================================================
+Settings → Storefront now shows a switch for each bike model (no more typing names):
+    Boxer 100 KS      [ON]
+    Boxer 125 HD      [ON]
+    Boxer BM150       [ON]
+    Boxer BM125X      [ON]
+    Boxer BM150 X     [ON]
+Flip one OFF to hide that model from the website, ON to show it, then Save.
 
-FILES (drag the "app" and "resources" folders to GitHub — they replace existing):
-  app/Support/Vertical.php                                   (unchanged, for completeness)
-  app/Support/SettingsSchema.php                             + new "Storefront" settings section
-  app/Services/Settings/SettingsWriteService.php             + allows saving the new setting
-  app/Http/Controllers/Storefront/StorefrontController.php   + passes the setting to the site
-  resources/storefront/autoparts.html                        + shows only the chosen models
+FILES (drag BOTH the "app" AND "resources" folders — they replace existing files):
+  app/Support/Vertical.php
+  app/Support/SettingsSchema.php                             (toggles replace the text box)
+  app/Services/Settings/SettingsWriteService.php             (saves the toggles)
+  app/Http/Controllers/Storefront/StorefrontController.php   (reads the toggles)
+  resources/storefront/autoparts.html                        (self-contained storefront)
 
-HOW IT WORKS — two ways, both live at once:
-  1) AUTOMATIC (default, nothing to configure): a bike model appears on the site
-     ONLY if it has parts loaded in your catalogue. Import a model's parts and it
-     shows up; remove them and it disappears. So the Products page you already use
-     is the on/off switch.
-  2) MANUAL override: v3 → Settings → Storefront → "Models to show". Type the model
-     names (one per line or comma-separated), e.g.
-         Boxer 100 KS
-         Boxer BM150
-     The site then shows exactly those, in that order. Leave the box blank to go
-     back to automatic.
+** IMPORTANT — the resources file must land too **
+Last time the admin updated but the website did not. That means your deploy
+picked up the app/ folder but NOT resources/storefront/autoparts.html.
+After deploying, confirm the website file updated by opening the storefront and,
+in the Console (F12), running:
+    fetch(location.href).then(r=>r.text()).then(t=>console.log('site updated:', t.includes('function activeModels')));
+It must print TRUE. If it prints FALSE, the resources/ folder didn't deploy —
+make sure that folder is included in your upload/commit.
 
-DEPLOY:  git pull  ->  php artisan optimize:clear  ->  restart
-         Then hard-refresh the storefront (Cmd/Ctrl+Shift+R).
-
-Do NOT go to GitHub:  the parts import zips (Products -> Import products).
+DEPLOY:  git pull  ->  php artisan optimize:clear  ->  restart  ->  hard-refresh (Cmd/Ctrl+Shift+R)
