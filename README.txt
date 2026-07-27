@@ -2,7 +2,7 @@ EA AUTO PART — full customer-facing storefront (drop-in)
 ========================================================
 This REPLACES the earlier resources/storefront/autoparts.html with the FULL
 design: home, motorcycle overview, browse-by-system, parts listing, part detail
-(with compatibility + "also bought"), search, and AI assistant — all responsive.
+(with compatibility + "also bought"), exploded-diagram browser (plate nav → diagram → clickable numbered part list), search, and AI assistant — all responsive.
 
 It renders from your LIVE catalogue: on load it fetches the tenant's
 `/{shop}/catalogue` feed (the controller already passes catalogueUrl), groups
