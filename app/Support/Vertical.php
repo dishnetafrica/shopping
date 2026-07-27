@@ -3,7 +3,8 @@ namespace App\Support;
 
 /**
  * Single source of truth for which surfaces a tenant sees, driven by its `vertical`
- * profile (grocery | restaurant | snacks) instead of scattered boolean flags.
+ * profile (grocery | restaurant | snacks | manufacturer | solar | auto_parts) instead
+ * of scattered boolean flags.
  *
  * decide() is pure (no framework, no DB, no auth) and is what qa/vertical_visibility.php
  * exercises. shows() is the thin runtime wrapper that pulls the vertical + overrides off a
@@ -22,8 +23,9 @@ class Vertical
     public const SNACKS     = 'snacks';
     public const MANUFACTURER = 'manufacturer';
     public const SOLAR      = 'solar';           // Asset Lifecycle — equipment dealers (solar, generators, HVAC…)
+    public const AUTO_PARTS = 'auto_parts';       // EPC catalogue — motorcycle / auto spare-parts dealers
 
-    public const ALL = [self::GROCERY, self::RESTAURANT, self::SNACKS, self::MANUFACTURER, self::SOLAR];
+    public const ALL = [self::GROCERY, self::RESTAURANT, self::SNACKS, self::MANUFACTURER, self::SOLAR, self::AUTO_PARTS];
 
     /**
      * feature key => list of verticals where it is shown BY DEFAULT.
@@ -35,8 +37,8 @@ class Vertical
         'item_options'  => [self::RESTAURANT],
         'kitchen_board' => [self::RESTAURANT],
         'daily_thali'   => [self::SNACKS],
-        'riders'        => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER, self::SOLAR],
-        'pos'           => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER, self::SOLAR],
+        'riders'        => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER, self::SOLAR, self::AUTO_PARTS],
+        'pos'           => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER, self::SOLAR, self::AUTO_PARTS],
     ];
 
     /** Pretty labels for the admin select. */
@@ -46,6 +48,7 @@ class Vertical
         self::SNACKS       => 'Snacks / advance booking',
         self::MANUFACTURER => 'Manufacturer / wholesale brand',
         self::SOLAR        => 'Solar / equipment',
+        self::AUTO_PARTS   => 'Auto Parts / EPC catalogue',
     ];
 
     /**
