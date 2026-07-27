@@ -6,6 +6,7 @@
 <title>__SEO_TITLE__</title>
 __SEO_META__
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
 :root{--accent:#C8102E;--accent-d:#9B0C23;--ink:#0C1220;--ink2:#141B2D;--muted:#5A6472;--line:#E6EAF0;--soft:#F3F5F8;--ok:#128A4B}
@@ -221,17 +222,18 @@ a{text-decoration:none;color:inherit}
 @media(min-width:981px){.buybar{display:none!important}}
 @media(max-width:560px){.nav .brand i{display:none}.nav .brand b{font-size:15px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .gchip{margin-left:8px;font-size:12px;padding:4px 9px;max-width:150px;overflow:hidden}.nav .wrap{flex-wrap:nowrap}}
+.botbar .fa,.miniadd .fa{font-size:18px}.btn .fa,.dxchip .fa{margin-right:5px}.trust .d .fa,.qa-b h4 .fa{margin-right:2px}.imph .fa{font-size:38px}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <a class="wa btn btn-w" id="waFloat" target="_blank" rel="noopener">WhatsApp</a>
 <nav class="botbar" id="botbar">
-  <a onclick="go('')"><span>🏠</span>Home</a>
-  <a onclick="openSearch()"><span>🔍</span>Search</a>
-  <a onclick="go('diagrams')"><span>🧩</span>Diagrams</a>
-  <a onclick="go('ai')"><span>🤖</span>Assistant</a>
-  <a onclick="go('cart')"><span>🛒<i class="cartn"></i></span>Cart</a>
+  <a onclick="go('')"><span><i class="fa fa-home"></i></span>Home</a>
+  <a onclick="openSearch()"><span><i class="fa fa-search"></i></span>Search</a>
+  <a onclick="go('diagrams')"><span><i class="fa fa-sitemap"></i></span>Diagrams</a>
+  <a onclick="go('ai')"><span><i class="fa fa-comments"></i></span>Assistant</a>
+  <a onclick="go('cart')"><span><i class="fa fa-shopping-cart"></i><i class="cartn"></i></span>Cart</a>
 </nav>
 <div class="ssheet" id="ssheet"><div class="ssbox"><input id="ssin" type="search" placeholder="Search part, number, or problem…" autocomplete="off"><button onclick="doSheetSearch()">Go</button><span class="ssx" onclick="closeSearch()">✕</span></div></div>
 <script>
@@ -383,8 +385,8 @@ function activeModels(){
 /* ---------- shell ---------- */
 function garageChip(){
   var b=getBike();
-  if(b) return '<span class="gchip" onclick="go(\'\')" title="Your saved motorcycle">🏍️ '+esc(b.name)+' <i onclick="event.stopPropagation();clearBike()">✕</i></span>';
-  return '<span class="gchip add" onclick="go(\'\')">＋ Add your bike</span>';
+  if(b) return '<span class="gchip" onclick="go(\'\')" title="Your saved motorcycle"><i class="fa fa-tachometer"></i> '+esc(b.name)+' <i onclick="event.stopPropagation();clearBike()">✕</i></span>';
+  return '<span class="gchip add" onclick="go(\'\')"><i class="fa fa-plus"></i> Add your bike</span>';
 }
 function nav(){
   return '<header class="nav"><div class="wrap">'
@@ -403,10 +405,10 @@ function foot(){
 }
 function trust(){
   var items=[
-    ['✅','Genuine or money back', CFG.genuineLine||'100% genuine Bajaj parts'],
-    ['🚚','Fast delivery', CFG.deliveryEta||'Same-day in town'],
-    ['💳','Easy payment', CFG.payMethods||'Mobile Money · Pay on Delivery'],
-    ['🛡️','Warranty & returns', (CFG.warranty||'1-year warranty')+' · '+(CFG.returns||'easy returns')]
+    ['<i class="fa fa-check-circle"></i>','Genuine or money back', CFG.genuineLine||'100% genuine Bajaj parts'],
+    ['<i class="fa fa-truck"></i>','Fast delivery', CFG.deliveryEta||'Same-day in town'],
+    ['<i class="fa fa-credit-card"></i>','Easy payment', CFG.payMethods||'Mobile Money · Pay on Delivery'],
+    ['<i class="fa fa-shield"></i>','Warranty & returns', (CFG.warranty||'1-year warranty')+' · '+(CFG.returns||'easy returns')]
   ];
   return '<div class="wrap"><div class="trust">'+items.map(function(t){return '<div><span class="d">'+t[0]+'</span><div><b>'+esc(t[1])+'</b><i>'+esc(t[2])+'</i></div></div>';}).join('')+'</div></div>';
 }
@@ -425,7 +427,7 @@ function vHome(){
   return nav()
    +'<section class="hero"><div class="g wrap"><div><h1>'+esc(CFG.heroTitle||'Find. Understand. Buy.')+'</h1><p>'+esc(CFG.heroText||'')+'</p>'
      +'<form class="hsearch" onsubmit="return doSearch(event)"><input id="q" placeholder="Search part, number, or describe the problem…"><button class="btn btn-p" type="submit">Search</button></form>'
-     +'<a class="herobroke" onclick="go(\'ai\')">🛠️ Bike won\'t start or making a noise? <b>Describe the problem →</b></a>'
+     +'<a class="herobroke" onclick="go(\'ai\')"><i class="fa fa-wrench"></i> Bike won\'t start or making a noise? <b>Describe the problem →</b></a>'
      +'<div class="pop"><span>Popular:</span><a onclick="qsearch(\'Clutch\')">Clutch Plate</a><a onclick="qsearch(\'Filter\')">Air Filter</a><a onclick="qsearch(\'Spark\')">Spark Plug</a><a onclick="qsearch(\'Brake\')">Brake Shoe</a></div>'
    +'</div><div style="text-align:center"><img class="hph" src="'+(IMG.hero||'')+'" alt=""></div></div></section>'
    +trust()
@@ -443,11 +445,11 @@ function fitBadge(p){
 function prodCard(p){
   var pn=partNo(p.kw); var inS=p.stock===null||p.stock>0; var priced=p.price>0;
   var sys=String(p.cat||'').split('>').slice(-1)[0].trim()||'';
-  return '<div class="card pc" onclick="go(\'part/'+p.id+'\')"><div class="im">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'" loading="lazy">':'<div class="imph">🔩</div>')+'</div>'
+  return '<div class="card pc" onclick="go(\'part/'+p.id+'\')"><div class="im">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'" loading="lazy">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
     +'<div class="bd"><h4>'+esc(p.name)+'</h4>'+fitBadge(p)
     +'<div class="cat">'+esc(sys)+(pn?' · <span class="mono">'+esc(pn)+'</span>':'')+'</div>'
     +'<div class="ft"><b>'+(priced?money(p.price):'<span class="askp">Ask price</span>')+'</b><span class="stock '+(inS?'y':'n')+'">'+(inS?'In stock':'To order')+'</span></div>'
-    +'<button class="btn btn-p btn-sm add" onclick="event.stopPropagation();cartAdd(\''+String(p.id).replace(/\x27/g,"")+'\')">＋ Add to cart</button></div></div>';
+    +'<button class="btn btn-p btn-sm add" onclick="event.stopPropagation();cartAdd(\''+String(p.id).replace(/\x27/g,"")+'\')"><i class="fa fa-plus"></i> Add to cart</button></div></div>';
 }
 function vParts(){
   var sys=systemsWithCounts();
@@ -470,29 +472,29 @@ function vPart(id){
   var b=getBike(); var f=fitsBike(p);
   var fitLine = b ? (f?'<div class="fitbig ok">✓ Fits your '+esc(b.name)+' — guaranteed, or free return.</div>'
                         :'<div class="fitbig no">This part is listed for a different model, not your '+esc(b.name)+'. <a onclick="go(\'ai\')">Check what fits ›</a></div>')
-                  : '<div class="fitbig ask" onclick="go(\'\')">＋ Add your motorcycle to confirm this fits</div>';
+                  : '<div class="fitbig ask" onclick="go(\'\')"><i class="fa fa-plus"></i> Add your motorcycle to confirm this fits</div>';
   var also=partsInSystem(String(p.cat||'').split('>').slice(-1)[0].trim()).filter(function(x){return x.id!==p.id;}).slice(0,4).map(prodCard).join('');
   if(!also) also=STATE.products.filter(function(x){return x.id!==p.id;}).slice(0,4).map(prodCard).join('');
   var pl=STATE.pnPlate[normPn(pn)];
-  var diagBtn=pl?('<a class="btn btn-o" onclick="go(\'plate/'+pl+'\')">🔧 Show on diagram</a>'):'';
+  var diagBtn=pl?('<a class="btn btn-o" onclick="go(\'plate/'+pl+'\')"><i class="fa fa-wrench"></i> Show on diagram</a>'):'';
   var fg=fitGuide(p);
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › <a onclick="go(\'parts\')">Parts</a> › '+esc(p.name)+'</div>'
-   +'<section class="page wrap"><div class="pd"><div class="big">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'">':'<div class="imph">🔩</div>')+'</div>'
+   +'<section class="page wrap"><div class="pd"><div class="big">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
    +'<div><span class="chip g">✓ Genuine Bajaj</span> <h1 style="margin-top:8px">'+esc(p.name)+'</h1>'+(pn?'<div class="mono" style="margin-top:4px">Part No: '+esc(pn)+'</div>':'')
    +'<div class="price">'+(priced?money(p.price):'<span class="askp">Ask for price</span>')+'</div><div class="stock '+(inS?'y':'n')+'" style="margin-bottom:12px">'+(inS?('✓ In stock'+(p.stock!=null&&p.stock>0?(' ('+p.stock+')'):'')):'Available to order')+'</div>'
    +fitLine
    +(p.desc?'<p style="color:var(--muted);margin:14px 0 16px">'+esc(p.desc)+'</p>':'<div style="height:6px"></div>')
-   +'<div class="buyrow"><button class="btn btn-p" onclick="cartAdd(\''+String(p.id).replace(/\x27/g,"")+'\')">🛒 Add to cart</button><a class="btn btn-w" href="'+esc(waOrder(p))+'" target="_blank" rel="noopener">Order now</a>'+diagBtn+'</div>'
+   +'<div class="buyrow"><button class="btn btn-p" onclick="cartAdd(\''+String(p.id).replace(/\x27/g,"")+'\')"><i class="fa fa-shopping-cart"></i> Add to cart</button><a class="btn btn-w" href="'+esc(waOrder(p))+'" target="_blank" rel="noopener">Order now</a>'+diagBtn+'</div>'
    +'<div class="qa-grid">'
-     +'<div class="qa-b"><h4>✅ Genuine guarantee</h4><p>'+esc(CFG.genuineLine||'100% genuine — or your money back.')+'</p></div>'
-     +'<div class="qa-b"><h4>🚚 Delivery &amp; payment</h4><p>'+esc(CFG.deliveryEta||'Fast delivery')+'<br><b>'+esc(CFG.payMethods||'Mobile Money · Pay on Delivery')+'</b></p></div>'
-     +'<div class="qa-b"><h4>🛠️ Fitting</h4><p>Difficulty: <b>'+esc(fg.level)+'</b><br>Tools: '+esc(fg.tools)+'<br><a href="'+esc(waLink())+'" target="_blank" rel="noopener">Ask for a fitting guide ›</a></p></div>'
-     +'<div class="qa-b"><h4>↩️ Warranty &amp; returns</h4><p>'+esc(CFG.warranty||'1-year warranty')+'<br>'+esc(CFG.returns||'Returns on unfitted parts')+'</p></div>'
+     +'<div class="qa-b"><h4><i class="fa fa-check-circle"></i> Genuine guarantee</h4><p>'+esc(CFG.genuineLine||'100% genuine — or your money back.')+'</p></div>'
+     +'<div class="qa-b"><h4><i class="fa fa-truck"></i> Delivery &amp; payment</h4><p>'+esc(CFG.deliveryEta||'Fast delivery')+'<br><b>'+esc(CFG.payMethods||'Mobile Money · Pay on Delivery')+'</b></p></div>'
+     +'<div class="qa-b"><h4><i class="fa fa-wrench"></i> Fitting</h4><p>Difficulty: <b>'+esc(fg.level)+'</b><br>Tools: '+esc(fg.tools)+'<br><a href="'+esc(waLink())+'" target="_blank" rel="noopener">Ask for a fitting guide ›</a></p></div>'
+     +'<div class="qa-b"><h4><i class="fa fa-undo"></i> Warranty &amp; returns</h4><p>'+esc(CFG.warranty||'1-year warranty')+'<br>'+esc(CFG.returns||'Returns on unfitted parts')+'</p></div>'
    +'</div>'
    +'</div></div>'
    +(also?'<div class="blk"><div class="hd"><div><h2>Commonly replaced together</h2></div></div><div class="g4">'+also+'</div></div>':'')
    +'</section>'
-   +'<div class="buybar"><div class="bb-l"><b>'+(priced?money(p.price):'Ask price')+'</b><span>'+esc(p.name)+'</span></div><button class="btn btn-p" onclick="cartAdd(\''+String(p.id).replace(/\x27/g,"")+'\')">🛒 Add to cart</button></div>'
+   +'<div class="buybar"><div class="bb-l"><b>'+(priced?money(p.price):'Ask price')+'</b><span>'+esc(p.name)+'</span></div><button class="btn btn-p" onclick="cartAdd(\''+String(p.id).replace(/\x27/g,"")+'\')"><i class="fa fa-shopping-cart"></i> Add to cart</button></div>'
    +foot();
 }
 function galleryFor(id){ var g=(GAL&&GAL[id])||[]; if(!g.length&&IMG[id])g=[IMG[id]]; return g; }
@@ -531,10 +533,10 @@ function vModel(id){
        +'<p style="color:var(--muted);font-size:17px;margin-top:4px">'+esc(m.tagline)+'</p>'
        +'<div class="ovks">'+ks+'</div>'
        +'<p style="color:var(--muted);margin:6px 0 18px;max-width:52ch">'+esc(m.summary||'')+'</p>'
-       +'<div class="mybike">🏍️ Saved as <b>your motorcycle</b> — parts are now checked to fit '+esc(m.name)+'.</div>'
-       +'<a class="btn btn-p" onclick="go(\'parts\')">Explore Parts & Diagrams ›</a> <a class="btn btn-o" onclick="go(\'ai\')">🤖 Describe a problem</a>'
+       +'<div class="mybike"><i class="fa fa-tachometer"></i> Saved as <b>your motorcycle</b> — parts are now checked to fit '+esc(m.name)+'.</div>'
+       +'<a class="btn btn-p" onclick="go(\'parts\')">Explore Parts & Diagrams ›</a> <a class="btn btn-o" onclick="go(\'ai\')"><i class="fa fa-comments"></i> Describe a problem</a>'
      +'</div>'
-     +'<div class="ovh-media"><div class="ovh-main">'+(main?'<img id="ovMain" class="zoomable" title="Click to zoom" onclick="zoom(this.src)" src="'+main+'"><span class="zhint">⤢ Zoom</span>':'')+'</div><div class="ovh-thumbs">'+thumbs+'</div></div>'
+     +'<div class="ovh-media"><div class="ovh-main">'+(main?'<img id="ovMain" class="zoomable" title="Click to zoom" onclick="zoom(this.src)" src="'+main+'"><span class="zhint"><i class="fa fa-search-plus"></i> Zoom</span>':'')+'</div><div class="ovh-thumbs">'+thumbs+'</div></div>'
    +'</div></section>'
    +'<div class="wrap"><nav class="tabs">'+tabH+'</nav></div>'
    +'<section class="page wrap ov-body">'
@@ -548,11 +550,11 @@ function vModel(id){
        +'<div class="hd" style="margin-top:30px"><div><h2 id="ov-man">Manuals & guides</h2><div class="sub">Owner manual and service guides — request on WhatsApp.</div></div></div>'
      +'</div>'
      +'<aside class="ov-right"><div class="card"><b>Quick Actions</b>'
-       +'<a class="qa" onclick="go(\'parts\')"><span>🔍</span><div><b>Search Parts</b><i>Find parts by number</i></div></a>'
-       +'<a class="qa" onclick="go(\'ai\')"><span>🤖</span><div><b>Ask AI Assistant</b><i>Get help for your bike</i></div></a>'
-       +'<a class="qa" href="'+esc(waLink())+'" target="_blank"><span>📷</span><div><b>Upload Photo</b><i>Identify parts</i></div></a>'
-       +'<a class="qa" onclick="go(\'diagrams\')"><span>🧩</span><div><b>Part Compatibility</b><i>Check fitment</i></div></a>'
-       +'<a class="qa" onclick="go(\'ai\')"><span>🗓️</span><div><b>Service Schedule</b><i>View maintenance plan</i></div></a></div>'
+       +'<a class="qa" onclick="go(\'parts\')"><span><i class="fa fa-search"></i></span><div><b>Search Parts</b><i>Find parts by number</i></div></a>'
+       +'<a class="qa" onclick="go(\'ai\')"><span><i class="fa fa-comments"></i></span><div><b>Ask AI Assistant</b><i>Get help for your bike</i></div></a>'
+       +'<a class="qa" href="'+esc(waLink())+'" target="_blank"><span><i class="fa fa-camera"></i></span><div><b>Upload Photo</b><i>Identify parts</i></div></a>'
+       +'<a class="qa" onclick="go(\'diagrams\')"><span><i class="fa fa-sitemap"></i></span><div><b>Part Compatibility</b><i>Check fitment</i></div></a>'
+       +'<a class="qa" onclick="go(\'ai\')"><span><i class="fa fa-calendar"></i></span><div><b>Service Schedule</b><i>View maintenance plan</i></div></a></div>'
        +'<div class="card need"><b>Need help?</b><p>Our experts are ready to help you find the right part.</p><a class="btn btn-w" href="'+esc(waLink())+'" target="_blank">Chat on WhatsApp</a></div></aside>'
    +'</section>'
    +'<section class="blk wrap"><div class="hd"><div><h2>Popular parts for '+esc(m.name)+'</h2></div><span class="link" onclick="go(\'parts\')">View all parts ›</span></div><div class="g5">'+pop+'</div></section>'
@@ -566,9 +568,9 @@ function vSearch(q){
    +'<section class="blk wrap"><div class="hd"><div><h2>Results for "'+esc(q)+'"</h2><div class="sub">'+res.length+' parts found</div></div></div>'
    +(res.length?'<div class="g5">'+res.slice(0,60).map(prodCard).join('')+'</div>':
      '<div class="norec"><div class="nrh">No parts matched “'+esc(q)+'”.</div><p>Don’t worry — we’ll find it for you.</p>'
-     +'<div class="nrb"><a class="btn btn-w" href="'+esc(waLink())+'" target="_blank" rel="noopener">💬 Ask us on WhatsApp</a>'
-     +'<a class="btn btn-o" onclick="go(\'ai\')">🤖 Describe the problem</a>'
-     +'<a class="btn btn-o" onclick="go(\'\')">🏍️ Browse by motorcycle</a></div></div>')+'</section>'+foot();
+     +'<div class="nrb"><a class="btn btn-w" href="'+esc(waLink())+'" target="_blank" rel="noopener"><i class="fa fa-whatsapp"></i> Ask us on WhatsApp</a>'
+     +'<a class="btn btn-o" onclick="go(\'ai\')"><i class="fa fa-comments"></i> Describe the problem</a>'
+     +'<a class="btn btn-o" onclick="go(\'\')"><i class="fa fa-tachometer"></i> Browse by motorcycle</a></div></div>')+'</section>'+foot();
 }
 function plateImg(pl){ for(var i=0;i<(pl.parts||[]).length;i++){var pr=STATE.byPn[normPn(pl.parts[i].pn)]; if(pr&&pr.img)return pr.img;} return ''; }
 function vDiagram(plateNo){
@@ -589,7 +591,7 @@ function vDiagram(plateNo){
     var open=pr?('onclick="go(\'part/'+pr.id+'\')"'):'';
     var thumb=img?'<img src="'+esc(img)+'">':'<span class="pno-b">'+esc(x.no)+'</span>';
     var priceHtml=pr?('<b>'+money(pr.price)+'</b>'+(inS!=null?'<span class="stock '+(inS?'y':'n')+'">'+(inS?'In stock':'On order')+'</span>':'')):'<span class="tbd">Ask us</span>';
-    var add=pr?('<button class="miniadd" onclick="event.stopPropagation();cartAdd(\''+String(pr.id).replace(/\x27/g,"")+'\')" title="Add to cart">＋ Add</button>'):'';
+    var add=pr?('<button class="miniadd" onclick="event.stopPropagation();cartAdd(\''+String(pr.id).replace(/\x27/g,"")+'\')" title="Add to cart"><i class="fa fa-plus"></i> Add</button>'):'';
     return '<div class="prow" '+open+(pr?' role="button"':'')+'>'
       +'<span class="prn">'+esc(x.no)+'</span>'
       +'<span class="pthumb">'+thumb+'</span>'
@@ -618,15 +620,15 @@ function aiPartLink(name){
 function vAI(){
   var b=getBike();
   var chips=(TB.problems||[]).map(function(p){return '<span class="dxchip" onclick="dx(\''+p.id+'\')">'+esc(p.label)+'</span>';}).join('');
-  var bikebar=b?('<div class="aibike">🏍️ Helping with <b>'+esc(b.name)+'</b> · <a onclick="clearBike()">change</a></div>')
-               :('<div class="aibike ask" onclick="go(\'\')">🏍️ Add your motorcycle for exact-fit answers ›</div>');
-  return nav()+'<section class="page wrap"><div class="ai"><div class="hdr"><span class="av">🤖</span><div><b>'+esc(CFG.name||'')+' — AI Mechanic</b><div style="font-size:12px;color:var(--muted)">Auto-diagnosis · a real person can confirm on WhatsApp</div></div></div>'
+  var bikebar=b?('<div class="aibike"><i class="fa fa-tachometer"></i> Helping with <b>'+esc(b.name)+'</b> · <a onclick="clearBike()">change</a></div>')
+               :('<div class="aibike ask" onclick="go(\'\')"><i class="fa fa-tachometer"></i> Add your motorcycle for exact-fit answers ›</div>');
+  return nav()+'<section class="page wrap"><div class="ai"><div class="hdr"><span class="av"><i class="fa fa-comments"></i></span><div><b>'+esc(CFG.name||'')+' — AI Mechanic</b><div style="font-size:12px;color:var(--muted)">Auto-diagnosis · a real person can confirm on WhatsApp</div></div></div>'
    +bikebar
    +'<div class="msg b">'+esc(TB.greeting||'Tell me what\'s wrong and I\'ll point you to the likely cause and the genuine part.')+'</div>'
-   +'<div class="aiask"><input id="aiq" placeholder="Describe the problem… e.g. it won\'t start" autocomplete="off"><button id="aimic" onclick="micAI()" title="Speak">🎤</button><button class="btn btn-p" onclick="submitAI()">Ask</button></div>'
+   +'<div class="aiask"><input id="aiq" placeholder="Describe the problem… e.g. it won\'t start" autocomplete="off"><button id="aimic" onclick="micAI()" title="Speak"><i class="fa fa-microphone"></i></button><button class="btn btn-p" onclick="submitAI()">Ask</button></div>'
    +'<div style="margin:10px 0 2px"><span style="font-size:12px;color:var(--muted)">Common problems:</span> '+chips+'</div>'
    +'<div id="dxout"></div>'
-   +'<div class="aihelp">Not sure? <a class="btn btn-w btn-sm" href="'+esc(waLink())+'" target="_blank" rel="noopener">💬 Chat with a person on WhatsApp</a></div>'
+   +'<div class="aihelp">Not sure? <a class="btn btn-w btn-sm" href="'+esc(waLink())+'" target="_blank" rel="noopener"><i class="fa fa-whatsapp"></i> Chat with a person on WhatsApp</a></div>'
    +'</div></section>'+foot();
 }
 function submitAI(){ var i=document.getElementById('aiq'); askAI((i&&i.value||'').trim()); }
@@ -666,7 +668,7 @@ function dx(id, userText){
 
 function vCart(){
   var c=cartGet();
-  if(!c.length) return nav()+'<section class="page wrap"><div class="emptycart"><div class="ec">🛒</div><h2>Your cart is empty</h2><p>Add the parts you need, then send the whole order on WhatsApp in one message.</p><a class="btn btn-p" onclick="go(\'\')">Find parts for my bike</a></div></section>'+foot();
+  if(!c.length) return nav()+'<section class="page wrap"><div class="emptycart"><div class="ec"><i class="fa fa-shopping-cart"></i></div><h2>Your cart is empty</h2><p>Add the parts you need, then send the whole order on WhatsApp in one message.</p><a class="btn btn-p" onclick="go(\'\')">Find parts for my bike</a></div></section>'+foot();
   var b=getBike();
   var rows=c.map(function(i){ var id=String(i.id).replace(/'/g,'');
     return '<div class="crow"><div class="ci"><b>'+esc(i.name)+'</b>'+(i.pn?'<span class="mono">'+esc(i.pn)+'</span>':'')+'<span class="cp">'+(i.price>0?money(i.price):'Ask price')+' each</span></div>'
@@ -674,13 +676,13 @@ function vCart(){
      +'<div class="clt">'+(i.price>0?money(i.price*i.qty):'—')+'</div></div>'; }).join('');
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › Cart</div>'
    +'<section class="page wrap"><h2 style="margin:0 0 4px">Your order</h2>'
-   +(b?'<div class="mybike" style="max-width:520px">🏍️ For your <b>'+esc(b.name)+'</b> — parts checked to fit.</div>':'')
+   +(b?'<div class="mybike" style="max-width:520px"><i class="fa fa-tachometer"></i> For your <b>'+esc(b.name)+'</b> — parts checked to fit.</div>':'')
    +'<div class="cartwrap"><div class="citems">'+rows+'</div>'
    +'<div class="csum"><div class="csr"><span>Items</span><b>'+cartCount()+'</b></div><div class="csr total"><span>Total</span><b>'+money(cartTotal())+'</b></div>'
-   +'<div class="cnote">🚚 '+esc(CFG.deliveryEta||'Fast delivery')+'<br>💳 '+esc(CFG.payMethods||'Mobile Money · Pay on Delivery')+'<br>✅ '+esc(CFG.genuineLine||'100% genuine or money back')+'</div>'
-   +'<a class="btn btn-w big" href="'+esc(waCartOrder())+'" target="_blank" rel="noopener">💬 Place order on WhatsApp</a>'
+   +'<div class="cnote"><i class="fa fa-truck"></i> '+esc(CFG.deliveryEta||'Fast delivery')+'<br><i class="fa fa-credit-card"></i> '+esc(CFG.payMethods||'Mobile Money · Pay on Delivery')+'<br><i class="fa fa-check-circle"></i> '+esc(CFG.genuineLine||'100% genuine or money back')+'</div>'
+   +'<a class="btn btn-w big" href="'+esc(waCartOrder())+'" target="_blank" rel="noopener"><i class="fa fa-whatsapp"></i> Place order on WhatsApp</a>'
    +'<div class="cfine">You’ll confirm stock, delivery and payment with our team on WhatsApp. No payment is taken online.</div>'
-   +'<a class="link" onclick="go(\'\')" style="display:block;text-align:center;margin-top:10px">＋ Add more parts</a></div></div></section>'+foot();
+   +'<a class="link" onclick="go(\'\')" style="display:block;text-align:center;margin-top:10px"><i class="fa fa-plus"></i> Add more parts</a></div></div></section>'+foot();
 }
 /* ---------- router ---------- */
 function waLink(){return CFG.waNumber?('https://wa.me/'+CFG.waNumber):'#';}
