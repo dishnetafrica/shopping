@@ -184,6 +184,13 @@ a{text-decoration:none;color:inherit}
 .ssbox .ssx{color:var(--muted);padding:6px;cursor:pointer;font-size:18px}
 @media(max-width:980px){.botbar{display:flex}.buybar{display:flex;bottom:56px}.wa{display:none}
   #app{padding-bottom:64px}}
+.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+.qa-b{border:1px solid var(--line);border-radius:11px;padding:11px 13px;background:#fff}
+.qa-b h4{margin:0 0 4px;font-size:13.5px}
+.qa-b p{margin:0;font-size:13px;color:var(--muted);line-height:1.5}
+.qa-b a{color:var(--accent)}
+.trust i{display:block;font-style:normal;font-size:12px;color:var(--muted);font-weight:500;margin-top:1px}
+@media(max-width:560px){.qa-grid{grid-template-columns:1fr}}
 @media(min-width:981px){.buybar{display:none!important}}
 @media(max-width:560px){.nav .brand i{display:none}.nav .brand b{font-size:15px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .gchip{margin-left:8px;font-size:12px;padding:4px 9px;max-width:150px;overflow:hidden}.nav .wrap{flex-wrap:nowrap}}
@@ -277,6 +284,15 @@ function setBike(id){ try{ localStorage.setItem('ea_bike',id); }catch(e){} }
 function clearBike(){ try{ localStorage.removeItem('ea_bike'); }catch(e){} render(); }
 function fitsBike(p){ var b=getBike(); if(!b) return null; var seg=nk(String(p.kw||'').split('|')[0]); return seg===nk(b.catName||b.name); }
 function partsInSystem(name){ return (STATE.bySys&&STATE.bySys[nk(name)])||STATE.byCat[name]||[]; }
+/* fitting guide — difficulty + tools inferred from the part's system (a guide, not a rule) */
+function fitGuide(p){
+  var sys=nk(String(p.kw||'').split('|')[1]||'')||nk(String(p.cat||'').split('>').slice(-2)[0]||'');
+  var map={brakes:['Easy','Spanner set, pliers'],electrical:['Easy','Screwdriver, spanner'],controls:['Easy','Spanner, pliers'],
+    fuelsystem:['Easy','Screwdriver, spanner'],accessories:['Easy','Basic hand tools'],frameandbody:['Medium','Spanner set, screwdriver'],
+    wheels:['Medium','Spanner, tyre levers, stand'],wheelsandtyres:['Medium','Spanner, tyre levers, stand'],suspension:['Medium','Spanner set, stand'],
+    transmission:['Advanced','Clutch/chain tools — mechanic advised'],engine:['Advanced','Workshop — mechanic recommended']};
+  var m=map[sys]||['Medium','Basic hand tools']; return {level:m[0],tools:m[1]};
+}
 /* ---------- order on WhatsApp (owns the checkout) ---------- */
 function waOrder(p){
   var b=getBike(); var pn=partNo(p.kw);
@@ -341,8 +357,13 @@ function foot(){
   return '<footer class="foot"><div class="wrap"><div><b>'+esc(CFG.name||'')+'</b> · '+esc(CFG.eyebrow||'')+'<div style="font-size:12px;margin-top:4px">'+cc.join(' · ')+'</div></div><div style="font-size:12px">Genuine parts guarantee · 1 Year Warranty</div></div></footer>';
 }
 function trust(){
-  var items=(CFG.trustLine||'100% Genuine Parts · Interactive Diagrams · Fast Delivery · Expert Support').split('·');
-  return '<div class="wrap"><div class="trust">'+items.map(function(t){t=t.trim();return t?'<div><span class="d">✓</span><div><b>'+esc(t)+'</b></div></div>':'';}).join('')+'</div></div>';
+  var items=[
+    ['✅','Genuine or money back', CFG.genuineLine||'100% genuine Bajaj parts'],
+    ['🚚','Fast delivery', CFG.deliveryEta||'Same-day in town'],
+    ['💳','Easy payment', CFG.payMethods||'Mobile Money · Pay on Delivery'],
+    ['🛡️','Warranty & returns', (CFG.warranty||'1-year warranty')+' · '+(CFG.returns||'easy returns')]
+  ];
+  return '<div class="wrap"><div class="trust">'+items.map(function(t){return '<div><span class="d">'+t[0]+'</span><div><b>'+esc(t[1])+'</b><i>'+esc(t[2])+'</i></div></div>';}).join('')+'</div></div>';
 }
 
 /* ---------- views ---------- */
@@ -408,6 +429,7 @@ function vPart(id){
   if(!also) also=STATE.products.filter(function(x){return x.id!==p.id;}).slice(0,4).map(prodCard).join('');
   var pl=STATE.pnPlate[normPn(pn)];
   var diagBtn=pl?('<a class="btn btn-o" onclick="go(\'plate/'+pl+'\')">🔧 Show on diagram</a>'):'';
+  var fg=fitGuide(p);
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › <a onclick="go(\'parts\')">Parts</a> › '+esc(p.name)+'</div>'
    +'<section class="page wrap"><div class="pd"><div class="big">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'">':'<div class="imph">🔩</div>')+'</div>'
    +'<div><span class="chip g">✓ Genuine Bajaj</span> <h1 style="margin-top:8px">'+esc(p.name)+'</h1>'+(pn?'<div class="mono" style="margin-top:4px">Part No: '+esc(pn)+'</div>':'')
@@ -415,7 +437,12 @@ function vPart(id){
    +fitLine
    +(p.desc?'<p style="color:var(--muted);margin:14px 0 16px">'+esc(p.desc)+'</p>':'<div style="height:6px"></div>')
    +'<div class="buyrow"><a class="btn btn-w" href="'+esc(waOrder(p))+'" target="_blank" rel="noopener">💬 Order on WhatsApp</a>'+diagBtn+'</div>'
-   +'<div class="guar"><span>✓ 100% genuine or money back</span><span>✓ Fast delivery</span><span>✓ 1-year warranty</span></div>'
+   +'<div class="qa-grid">'
+     +'<div class="qa-b"><h4>✅ Genuine guarantee</h4><p>'+esc(CFG.genuineLine||'100% genuine — or your money back.')+'</p></div>'
+     +'<div class="qa-b"><h4>🚚 Delivery &amp; payment</h4><p>'+esc(CFG.deliveryEta||'Fast delivery')+'<br><b>'+esc(CFG.payMethods||'Mobile Money · Pay on Delivery')+'</b></p></div>'
+     +'<div class="qa-b"><h4>🛠️ Fitting</h4><p>Difficulty: <b>'+esc(fg.level)+'</b><br>Tools: '+esc(fg.tools)+'<br><a href="'+esc(waLink())+'" target="_blank" rel="noopener">Ask for a fitting guide ›</a></p></div>'
+     +'<div class="qa-b"><h4>↩️ Warranty &amp; returns</h4><p>'+esc(CFG.warranty||'1-year warranty')+'<br>'+esc(CFG.returns||'Returns on unfitted parts')+'</p></div>'
+   +'</div>'
    +'</div></div>'
    +(also?'<div class="blk"><div class="hd"><div><h2>Commonly replaced together</h2></div></div><div class="g4">'+also+'</div></div>':'')
    +'</section>'

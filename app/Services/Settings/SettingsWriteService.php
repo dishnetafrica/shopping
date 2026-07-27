@@ -28,6 +28,8 @@ final class SettingsWriteService
         'ai_persona', 'business_hours', 'delivery_areas', 'faq', 'brand_knowledge', 'languages',
         // Delivery notes shown to customers / staff.
         'delivery_note', 'moq_note',
+        // Storefront trust & delivery promises (shown on product pages / homepage).
+        'sf_genuine', 'sf_delivery_eta', 'sf_pay_methods', 'sf_warranty', 'sf_returns',
         // VAT is fully tenant-configurable (never hardcoded): label + tax registration no.
         'vat_label', 'vat_number',
     ];

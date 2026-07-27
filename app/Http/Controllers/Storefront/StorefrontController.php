@@ -365,6 +365,12 @@ class StorefrontController extends Controller
                 'ct125hd'    => (bool) $tenant->setting('show_model_ct125hd', true)    ? 'ct125hd'    : null,
                 'boxer150x'  => (bool) $tenant->setting('show_model_boxer150x', true)  ? 'boxer150x'  : null,
             ])),
+            // Trust & delivery promises shown across the storefront (editable in Settings → Storefront).
+            'genuineLine' => (string) ($tenant->setting('sf_genuine', '') ?: '100% genuine Bajaj — verify the hologram, or your money back.'),
+            'deliveryEta' => (string) ($tenant->setting('sf_delivery_eta', '') ?: 'Same-day in town · 24–48h upcountry'),
+            'payMethods'  => (string) ($tenant->setting('sf_pay_methods', '') ?: 'Mobile Money · Pay on Delivery'),
+            'warranty'    => (string) ($tenant->setting('sf_warranty', '') ?: '1-year genuine-parts warranty'),
+            'returns'     => (string) ($tenant->setting('sf_returns', '') ?: '7-day returns on unfitted parts'),
         ];
 
         $title = $tenant->name . ' — Genuine Motorcycle Spare Parts';

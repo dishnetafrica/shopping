@@ -107,6 +107,13 @@ final class SettingsSchema
                     ['key' => 'show_model_ct125hd',    'type' => 'bool', 'label' => 'CT 125 HD',     'default' => true],
                     ['key' => 'show_model_boxer150x',  'type' => 'bool', 'label' => 'Boxer BM150 X', 'default' => true],
                 ]],
+                ['label' => 'Trust & delivery promises', 'help' => 'Shown on your product pages and homepage to reassure customers before they buy. Leave blank to use sensible defaults.', 'fields' => [
+                    ['key' => 'sf_genuine',      'type' => 'text', 'label' => 'Genuine-parts promise', 'help' => 'e.g. 100% genuine Bajaj — verify the hologram, or your money back.'],
+                    ['key' => 'sf_delivery_eta', 'type' => 'text', 'label' => 'Delivery time', 'help' => 'e.g. Same-day in town · 24–48h upcountry'],
+                    ['key' => 'sf_pay_methods',  'type' => 'text', 'label' => 'Payment methods', 'help' => 'e.g. Mobile Money · Pay on Delivery'],
+                    ['key' => 'sf_warranty',     'type' => 'text', 'label' => 'Warranty', 'help' => 'e.g. 1-year genuine-parts warranty'],
+                    ['key' => 'sf_returns',      'type' => 'text', 'label' => 'Returns policy', 'help' => 'e.g. 7-day returns on unfitted parts'],
+                ]],
             ]],
             ['key' => 'delivery', 'label' => 'Delivery', 'icon' => 'truck', 'groups' => [
                 ['label' => 'Delivery', 'fields' => [

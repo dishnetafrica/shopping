@@ -1,29 +1,27 @@
-UPLOAD TO GITHUB — Phase 0 · Step 1: "Make it buyable on a phone"
-================================================================
-Storefront upgrade (self-contained autoparts.html — photos embedded). PHP files
-unchanged from the last bundle but included so the upload is complete.
+UPLOAD TO GITHUB — Phase 0 · Step 2: Trust & fitment layer
+==========================================================
+Builds on Step 1. Removes the fear that stops people buying expensive parts online.
 
 WHAT CHANGED (customer-facing):
-  • Fixed the "0 parts" bug — systems now show real part counts.
-  • Fixed part-number display (was showing the model name on newer catalogues).
-  • Part cards + product page now lead with PHOTO + plain NAME + price + stock;
-    the OEM code is demoted.
-  • FITMENT CONFIRMATION: pick your bike once and every part shows
-    "✓ Fits your <bike> — guaranteed, or free return."
-  • MY GARAGE: your motorcycle is remembered (saved on the device); a chip in the
-    header shows it; visiting a model saves it.
-  • OWN THE CHECKOUT: every buy button is now "Order on WhatsApp" with the part,
-    price and your bike pre-filled — no more hand-off to the ERP shop.
-  • MOBILE: bottom navigation bar (Home/Search/Diagrams/Assistant/Cart), a search
-    overlay, and a sticky "Order on WhatsApp" bar on product pages.
-  • Removed FAKE data (Reviews (256), the hard-coded 18,450 km odometer).
-  • Zero-search-results now offers WhatsApp / AI / browse-by-bike instead of a dead end.
-  • Genuine-or-money-back + warranty reassurance on the product page.
+  • Product page now answers every buyer question in a 4-card block:
+      ✅ Genuine guarantee   🚚 Delivery & payment
+      🛠️ Fitting (difficulty + tools + "ask for a guide")   ↩️ Warranty & returns
+  • Homepage trust strip now shows REAL promises (genuine / delivery / payment / warranty).
+  • Fitting difficulty & tools are inferred from the part's system (a helpful guide).
 
-DEPLOY:  upload "app" + "resources" -> git pull -> php artisan optimize:clear ->
-         restart -> hard-refresh. Confirm on the storefront console:
-   fetch(location.href).then(r=>r.text()).then(t=>console.log('Step1 live:', t.includes('function waOrder')));
-   (must print TRUE)
+NEW SETTINGS (v3 → Settings → Storefront → "Trust & delivery promises"):
+  • Genuine-parts promise      (default: 100% genuine Bajaj — verify the hologram, or your money back)
+  • Delivery time              (default: Same-day in town · 24–48h upcountry)
+  • Payment methods            (default: Mobile Money · Pay on Delivery)
+  • Warranty                   (default: 1-year genuine-parts warranty)
+  • Returns policy             (default: 7-day returns on unfitted parts)
+  Edit these to match your real policies — they show across the storefront.
 
-NEXT: Step 2 = trust & fitment layer (genuine guarantee scan, returns/warranty,
-delivery ETA, mobile-money/POD badges). Step 3 = the AI Mechanic + find-my-part wizard.
+FILES: app/Support/SettingsSchema.php, app/Services/Settings/SettingsWriteService.php,
+       app/Http/Controllers/Storefront/StorefrontController.php, resources/storefront/autoparts.html
+       (Vertical.php included, unchanged.)
+
+DEPLOY: upload "app" + "resources" -> git pull -> php artisan optimize:clear -> restart -> hard-refresh.
+  Confirm:  fetch(location.href).then(r=>r.text()).then(t=>console.log('Step2 live:', t.includes('qa-grid')));  // TRUE
+
+NEXT: Step 3 = AI Mechanic v1 (symptom -> part) promoted to the homepage + a 3-tap find-my-part wizard.
