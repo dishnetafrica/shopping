@@ -1,20 +1,29 @@
-UPLOAD TO GITHUB — adds the CT 125 HD model (real photos + specs)
-=================================================================
-New bike model "CT 125 HD" added to the storefront with its official photos,
-gallery, full spec sheet, and its own ON/OFF switch in Settings → Storefront.
-Nothing existing was removed — you now have 6 models; use the toggles to show
-only the ones you want.
+UPLOAD TO GITHUB — Phase 0 · Step 1: "Make it buyable on a phone"
+================================================================
+Storefront upgrade (self-contained autoparts.html — photos embedded). PHP files
+unchanged from the last bundle but included so the upload is complete.
 
-FILES (drag BOTH "app" AND "resources" — they replace existing files):
-  app/Support/Vertical.php
-  app/Support/SettingsSchema.php                             (+ CT 125 HD toggle)
-  app/Services/Settings/SettingsWriteService.php             (saves the toggle)
-  app/Http/Controllers/Storefront/StorefrontController.php   (reads the toggle)
-  resources/storefront/autoparts.html                        (CT 125 HD photos + specs, self-contained)
+WHAT CHANGED (customer-facing):
+  • Fixed the "0 parts" bug — systems now show real part counts.
+  • Fixed part-number display (was showing the model name on newer catalogues).
+  • Part cards + product page now lead with PHOTO + plain NAME + price + stock;
+    the OEM code is demoted.
+  • FITMENT CONFIRMATION: pick your bike once and every part shows
+    "✓ Fits your <bike> — guaranteed, or free return."
+  • MY GARAGE: your motorcycle is remembered (saved on the device); a chip in the
+    header shows it; visiting a model saves it.
+  • OWN THE CHECKOUT: every buy button is now "Order on WhatsApp" with the part,
+    price and your bike pre-filled — no more hand-off to the ERP shop.
+  • MOBILE: bottom navigation bar (Home/Search/Diagrams/Assistant/Cart), a search
+    overlay, and a sticky "Order on WhatsApp" bar on product pages.
+  • Removed FAKE data (Reviews (256), the hard-coded 18,450 km odometer).
+  • Zero-search-results now offers WhatsApp / AI / browse-by-bike instead of a dead end.
+  • Genuine-or-money-back + warranty reassurance on the product page.
 
-** The resources file MUST deploy too ** (last time only app/ landed). After deploy,
-in the storefront Console run:
-    fetch(location.href).then(r=>r.text()).then(t=>console.log('CT live:', t.includes('CT 125 HD')));
-It must print TRUE.
+DEPLOY:  upload "app" + "resources" -> git pull -> php artisan optimize:clear ->
+         restart -> hard-refresh. Confirm on the storefront console:
+   fetch(location.href).then(r=>r.text()).then(t=>console.log('Step1 live:', t.includes('function waOrder')));
+   (must print TRUE)
 
-DEPLOY:  git pull  ->  php artisan optimize:clear  ->  restart  ->  hard-refresh
+NEXT: Step 2 = trust & fitment layer (genuine guarantee scan, returns/warranty,
+delivery ETA, mobile-money/POD badges). Step 3 = the AI Mechanic + find-my-part wizard.
