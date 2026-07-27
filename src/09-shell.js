@@ -23,6 +23,22 @@ function nav(){
    +'<a class="cart" onclick="go(\'cart\')">Cart <span class="cartn"></span></a>'
    +'</div></header>'+bikeBar();
 }
+/* Left filter sidebar for listing pages: jump between systems + narrow by stock/fit. */
+function filterSidebar(active){
+  var sys=systemsWithCounts(); var b=getBike(); var f=STATE.filters||{};
+  var rows=sys.map(function(s){
+    var on=nk(s.name)===nk(active||'');
+    return '<a class="srow'+(on?' on':'')+'" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')">'+esc(s.name)+'<span>'+s.count+'</span></a>';
+  }).join('');
+  function chk(k,label){ return '<label class="fchk"><input type="checkbox" onchange="toggleFilter(\''+k+'\')"'+(f[k]?' checked':'')+'> '+label+'</label>'; }
+  return '<aside class="side" aria-label="Filters">'
+    +'<div class="sblock"><div class="slabel">Categories</div>'
+      +'<a class="srow'+(!active?' on':'')+'" onclick="go(\'parts\')">All categories</a>'+rows+'</div>'
+    +'<div class="sblock"><div class="slabel">Refine</div>'
+      +chk('stock','In stock only')
+      +(b? chk('fit','Fits my '+esc(b.name)) : '<div class="fhint">Pick your '+vehWord()+' to filter by fit</div>')
+    +'</div></aside>';
+}
 var PICK_TYPE=null;
 function openBikePicker(){
   var el=document.getElementById('bikepick'); if(!el)return;

@@ -28,9 +28,11 @@ function vHome(){
    +foot();
 }
 function fitBadge(p){
-  var f=fitsBike(p); if(f===null) return '';
-  var b=getBike();
-  return f?'<span class="fitb ok">✓ Fits your '+esc(b.name)+'</span>':'<span class="fitb no">Not for your '+esc(b.name)+'</span>';
+  var b=getBike(); if(!b) return '';
+  var f=fitsBike(p);
+  if(f===true) return '<span class="fitb ok">✓ Fits your '+esc(b.name)+'</span>';
+  if(f===false) return '<span class="fitb no">Different model</span>';
+  return ''; // unknown fit — show nothing rather than a scary "not for"
 }
 function prodCard(p){
   var pn=partNo(p.kw); var inS=p.stock===null||p.stock>0; var priced=p.price>0;
@@ -50,19 +52,22 @@ function vParts(){
     +'<section class="blk wrap"><div class="hd"><div><h2>Parts — browse by category</h2><div class="sub">'+STATE.products.length+' genuine parts across '+sys.length+' systems.</div></div><span class="link" onclick="go(\'diagrams\')">View exploded diagrams ›</span></div><div class="g4">'+cards+'</div></section>'+foot();
 }
 function vSystem(cat){
-  var list=partsInSystem(cat);
+  var list=applyListFilters(partsInSystem(cat));
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › <a onclick="go(\'parts\')">Parts</a> › '+esc(cat)+'</div>'
-    +'<section class="blk wrap"><div class="hd"><div><h2>'+esc(cat)+'</h2><div class="sub">'+list.length+' parts</div></div></div>'
-    +(list.length?'<div class="g5">'+list.map(prodCard).join('')+'</div>':'<div class="empty">No parts in this system yet.</div>')+'</section>'+foot();
+    +'<section class="blk wrap listlayout">'+filterSidebar(cat)
+    +'<div class="listmain"><div class="hd"><div><h2>'+esc(cat)+'</h2><div class="sub">'+list.length+' parts</div></div></div>'
+    +(list.length?'<div class="pgrid">'+list.map(prodCard).join('')+'</div>':'<div class="empty">No parts match these filters. <a onclick="clearListFilters()">Clear filters</a></div>')
+    +'</div></section>'+foot();
 }
 function vPart(id){
   var p=STATE.products.filter(function(x){return String(x.id)===String(id);})[0];
   if(!p) return nav()+'<div class="empty">Part not found.</div>'+foot();
   var pn=partNo(p.kw); var inS=p.stock===null||p.stock>0; var priced=p.price>0;
   var b=getBike(); var f=fitsBike(p);
-  var fitLine = b ? (f?'<div class="fitbig ok">✓ Fits your '+esc(b.name)+' — guaranteed, or free return.</div>'
-                        :'<div class="fitbig no">This part is listed for a different model, not your '+esc(b.name)+'. <a onclick="go(\'ai\')">Check what fits ›</a></div>')
-                  : '<div class="fitbig ask" onclick="go(\'\')"><i class="fa fa-plus"></i> Add your motorcycle to confirm this fits</div>';
+  var fitLine = !b ? '<div class="fitbig ask" onclick="go(\'\')"><i class="fa fa-plus"></i> Add your motorcycle to confirm this fits</div>'
+                   : (f===true ? '<div class="fitbig ok">✓ Fits your '+esc(b.name)+' — guaranteed, or free return.</div>'
+                   : (f===false ? '<div class="fitbig no">This part is listed for a different model, not your '+esc(b.name)+'. <a onclick="go(\'ai\')">Check what fits ›</a></div>'
+                   : '<div class="fitbig ask">Not sure this fits your '+esc(b.name)+'? <a href="'+esc(waLink())+'" target="_blank" rel="noopener">Confirm on WhatsApp ›</a></div>'));
   var also=partsInSystem(String(p.cat||'').split('>').slice(-1)[0].trim()).filter(function(x){return x.id!==p.id;}).slice(0,4).map(prodCard).join('');
   if(!also) also=STATE.products.filter(function(x){return x.id!==p.id;}).slice(0,4).map(prodCard).join('');
   var pl=STATE.pnPlate[normPn(pn)];
@@ -154,15 +159,16 @@ function vModel(id){
 function scrollTo2(id){var e=document.getElementById(id); if(e)e.scrollIntoView({behavior:'smooth',block:'start'});}
 function vSearch(q){
   q=decodeURIComponent(q||'').toLowerCase();
-  var res=vehFilter(STATE.products).filter(function(p){return (p.name+' '+p.kw+' '+p.cat).toLowerCase().indexOf(q)>=0;});
+  var res=applyListFilters(vehFilter(STATE.products).filter(function(p){return (p.name+' '+p.kw+' '+p.cat).toLowerCase().indexOf(q)>=0;}));
   track('search',{q:q,results:res.length});
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › Search</div>'
-   +'<section class="blk wrap"><div class="hd"><div><h2>Results for "'+esc(q)+'"</h2><div class="sub">'+res.length+' parts found</div></div></div>'
-   +(res.length?'<div class="g5">'+res.slice(0,60).map(prodCard).join('')+'</div>':
+   +'<section class="blk wrap listlayout">'+filterSidebar('')
+   +'<div class="listmain"><div class="hd"><div><h2>Results for "'+esc(q)+'"</h2><div class="sub">'+res.length+' parts found</div></div></div>'
+   +(res.length?'<div class="pgrid">'+res.slice(0,60).map(prodCard).join('')+'</div>':
      '<div class="norec"><div class="nrh">No parts matched “'+esc(q)+'”.</div><p>Don’t worry — we’ll find it for you.</p>'
      +'<div class="nrb"><a class="btn btn-w" href="'+esc(waLink())+'" target="_blank" rel="noopener"><i class="fa fa-whatsapp"></i> Ask us on WhatsApp</a>'
      +'<a class="btn btn-o" onclick="go(\'ai\')"><i class="fa fa-comments"></i> Describe the problem</a>'
-     +'<a class="btn btn-o" onclick="go(\'\')"><i class="fa fa-tachometer"></i> Browse by motorcycle</a></div></div>')+'</section>'+foot();
+     +'<a class="btn btn-o" onclick="go(\'\')"><i class="fa fa-tachometer"></i> Browse by motorcycle</a></div></div>')+'</div></section>'+foot();
 }
 function plateImg(pl){ for(var i=0;i<(pl.parts||[]).length;i++){var pr=STATE.byPn[normPn(pl.parts[i].pn)]; if(pr&&pr.img)return pr.img;} return ''; }
 function vDiagram(plateNo){

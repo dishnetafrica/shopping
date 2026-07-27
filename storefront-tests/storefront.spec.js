@@ -70,6 +70,42 @@ test('primary checkout CTA is reachable on a 320px phone', async ({ page }) => {
   expect(box.width, 'checkout button fits the viewport').toBeLessThanOrEqual(320);
 });
 
+test('category sidebar renders on listing pages and filters work', async ({ page }) => {
+  await page.goto(base + '/#/system/Engine');
+  await waitLoaded(page);
+  // sidebar present with category rows + the in-stock filter
+  await expect(page.locator('.side')).toHaveCount(1);
+  await expect(page.locator('.side .srow', { hasText: 'Engine' }).first()).toBeVisible();
+  await expect(page.locator('.side .fchk', { hasText: 'In stock only' })).toBeVisible();
+  // toggling a filter updates STATE and re-renders without error
+  await page.locator('.side .fchk:has-text("In stock only") input').check();
+  const stockOn = await page.evaluate(() => window.STATE.filters.stock);
+  expect(stockOn).toBe(true);
+  // search page also gets the sidebar
+  await page.goto(base + '/#/search/bearing');
+  await waitLoaded(page);
+  await expect(page.locator('.side')).toHaveCount(1);
+});
+
+test('smart fitment: generic parts fit any bike, no false "not for"', async ({ page }) => {
+  await page.goto(base + '/');
+  await waitLoaded(page);
+  const r = await page.evaluate(() => {
+    localStorage.setItem('ea_bike', 'ct125hd'); // a real model
+    const bearing = { id: 1, name: '6004 Bearing', kw: 'BOXER | Engine | 6004 BEARING', cat: 'BOXER > Engine' };
+    const ctPart = { id: 2, name: 'Head Cylinder', kw: 'CT 125 HD | Engine | Cover', cat: 'CT 125 HD > Engine' };
+    const otherModel = { id: 3, name: 'Assembly Silencer', kw: 'Boxer 100 | Engine | Silencer', cat: 'Boxer 100 > Engine' };
+    return {
+      bearing: window.fitsBike(bearing),   // generic -> fits
+      ct: window.fitsBike(ctPart),         // same model -> fits
+      other: window.fitsBike(otherModel),  // names a different model -> no
+    };
+  });
+  expect(r.bearing).toBe(true);
+  expect(r.ct).toBe(true);
+  expect(r.other).toBe(false);
+});
+
 test('catalogue loads and hides out-of-stock parts', async ({ page }) => {
   await page.goto(base + '/');
   await waitLoaded(page);

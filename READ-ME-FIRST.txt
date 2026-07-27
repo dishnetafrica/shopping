@@ -1,51 +1,44 @@
-EA AUTO PART — HARDENING MILESTONES 1–5 (upload package)
-========================================================
+EA AUTO PART — HARDENING + FITMENT FIX + CATEGORY SIDEBAR (upload package)
+=========================================================================
 
-Answers the production-readiness review. All 10 "production ready" checklist items are done,
-plus mobile-breakpoint hardening and a measured performance strategy. See HARDENING-PLAN.md.
+Includes all prior hardening (analytics, self-hosted fonts, XSS, a11y, bot guard, client-error
+capture, funnel/abandoned-cart, modularization, mobile breakpoints, perf) PLUS the two items
+from your latest screenshots.
 
-BACKEND (app/)
-  StorefrontController.php  — recordEvent() accepts 'search'/'whatsapp' and writes search text
-                              to search_events; botGuard() (honeypot + rate limit) on order/quote;
-                              clientError() captures front-end JS errors (log + Sentry).
-  StorefrontInsightsCapability.php — "Abandoned" metric + tab (added, never bought).
-  routes/web.php            — POST /clienterror (+ /{shop}/clienterror).
-  bootstrap/app.php         — 'clienterror' CSRF-exempt.
+THIS UPDATE
+-----------
+1) FITMENT BUG FIXED (the "Not for your CT 125 HD" on every part).
+   Root cause: your supplier stock is tagged generically (e.g. "BOXER | Engine | 6004 BEARING"),
+   but the old check demanded an exact match to the selected model, so CT 125 HD matched nothing
+   and the code fell back to showing everything stamped "Not for your CT 125 HD".
+   New behaviour (src/03-garage.js, src/04-vehicle.js): smart 3-state fitment —
+     • FITS  — the model or its family (BOXER/CT/…) is named, OR it's universal/generic hardware
+               (bearing, bolt, seal, cable, filter, chain, sprocket…). Shows "✓ Fits your …".
+     • DIFFERENT MODEL — only when the part clearly names another specific model. Subtle badge.
+     • UNKNOWN — shows NO scary badge; part stays visible.
+   Lists now hide only confident non-fits, so generic stock is no longer wrongly rejected.
 
-STOREFRONT (resources/storefront/autoparts.html — REBUILT, self-contained)
-  - Analytics + client-error beacons.
-  - Self-hosted Font Awesome + fonts (no CDN).
-  - XSS hardening (esc() escapes quotes; ids via sid()).
-  - Accessibility: keyboard-operable controls, focus rings, aria, <main>, AA contrast.
-  - Mobile: no horizontal overflow at 320/360/390/412px (fixed a 320px AI-page overflow).
-  - Performance: all <img> lazy-loaded.
-  resources/storefront/shop.html — hidden honeypot on checkout/quote form.
+2) LEFT CATEGORY SIDEBAR (from your EAS Africa mockup) on the Parts / system / search pages.
+   Categories with live counts + active highlight, plus "In stock only" and "Fits my bike"
+   filters. Collapses to chips on mobile. (src/09-shell.js, src/04-vehicle.js, src/10-views.js
+   + CSS in resources/storefront/autoparts.html.)
 
-MODULARIZATION (src/)
-  The storefront app script split into 12 modules (01-core … 12-a11y-boot). build_storefront.py
-  concatenates them + bakes catalogue data into ONE self-contained autoparts.html.
-  Byte-for-byte behavior-preserving; proven by a "no runtime errors on every route" smoke test.
+NOTE ON DEEPER FIX: the generic tagging ("BOXER") is a DATA issue. The smart fitment copes with
+it well, but the best long-term fix is to tag each supplier part with the models it actually
+fits (a "Compatible Models" list, like your mockup). Happy to build that import once you decide.
+
+STANDING FEATURES (unchanged)
+  - Analytics + client-error beacons; self-hosted Font Awesome + fonts (no CDN); XSS hardening;
+    accessibility (keyboard/focus/aria/<main>/AA contrast); order/quote bot guard; abandoned-cart
+    Insights tab; 12-module src/ build; lazy-loaded images; no 320–412px overflow.
 
 TESTS
-  storefront-tests/   Playwright: 30 tests (desktop + 360px). All-routes smoke, catalogue,
-                      breakpoint overflow (320–412px), view/add/cart/checkout/search/whatsapp,
-                      XSS, client-error capture, no-third-party-requests, axe-core.
-  tests/Feature/StorefrontBotGuardTest.php  — PHPUnit: honeypot + rate limit.
-
-PERFORMANCE — DECISION NEEDED
-  autoparts.html is 4.0 MB; 3.58 MB of that is 45 base64 images downloaded on every first visit.
-  Because they're inlined they can't be lazy-loaded. The storefront already supports HOSTED
-  images (px() + CFG.assetBase). Serving them as files from resources/ (which syncs — only
-  public/ was the earlier problem) via an app/ route would cut first load to ~0.5 MB. This
-  changes production image delivery, so it's flagged for your go-ahead — I can ship it as an
-  opt-in build mode. See HARDENING-PLAN.md "P2.5 — performance strategy".
+  storefront-tests/   Playwright: 34 tests (desktop + 360px) — now incl. smart-fitment and
+                      category-sidebar tests. tests/Feature/StorefrontBotGuardTest.php (PHPUnit).
 
 DEPLOY
-  Copy app/, resources/, routes/, bootstrap/ over your repo. routes/web.php and bootstrap/app.php
-  have only 1–2 line additions — merge by hand if your copies diverged. src/ + *.py are dev
-  tooling to rebuild autoparts.html; the shipped autoparts.html is already self-contained.
+  Copy app/, resources/, routes/, bootstrap/ over your repo. src/ + *.py rebuild autoparts.html
+  (python3 build_storefront.py); the shipped autoparts.html is already self-contained.
 
-RUN TESTS / REBUILD
-  cd storefront-tests && npm install && npx playwright test     # 30 pass
-  php artisan test --filter StorefrontBotGuardTest              # in your app (vendor/DB)
-  python3 build_storefront.py                                  # rebuild autoparts.html from src/
+RUN TESTS
+  cd storefront-tests && npm install && npx playwright test     # 34 pass

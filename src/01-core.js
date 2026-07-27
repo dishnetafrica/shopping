@@ -2,7 +2,7 @@
 // STATE, DOM helper, money/esc/sid, partNo, shop links
 // NOTE: these src/ files share one runtime scope; build_storefront.py concatenates them
 // in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
-var STATE = { products:[], byCat:{}, byPn:{}, bySys:{}, pnPlate:{}, loaded:false, error:false };
+var STATE = { products:[], byCat:{}, byPn:{}, bySys:{}, pnPlate:{}, loaded:false, error:false, filters:{stock:false, fit:false} };
 function normPn(s){return String(s||'').replace(/\s+/g,'').toUpperCase();}
 var $ = function(s,r){return (r||document).querySelector(s);};
 function money(n){var c=(CFG.currency&&CFG.currency.symbol)||CFG.currency||'UGX';return c+' '+Number(n||0).toLocaleString('en-US');}
