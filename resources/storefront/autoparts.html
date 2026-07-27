@@ -184,6 +184,15 @@ a{text-decoration:none;color:inherit}
 .ssbox .ssx{color:var(--muted);padding:6px;cursor:pointer;font-size:18px}
 @media(max-width:980px){.botbar{display:flex}.buybar{display:flex;bottom:56px}.wa{display:none}
   #app{padding-bottom:64px}}
+.herobroke{display:inline-block;margin-top:10px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.22);color:#fff;border-radius:24px;padding:9px 16px;font-size:14px;cursor:pointer}
+.herobroke b{color:#fff}
+.aibike{background:#F3F5F8;border-radius:9px;padding:8px 12px;font-size:13px;color:var(--muted);margin:2px 0 10px}
+.aibike.ask{color:var(--accent);cursor:pointer;border:1px dashed #d9b3b3}.aibike a{color:var(--accent);cursor:pointer}
+.aiask{display:flex;gap:8px;align-items:center;margin:8px 0}
+.aiask input{flex:1;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:15px;outline:none}
+.aiask #aimic{background:#F3F5F8;border:1px solid var(--line);border-radius:10px;width:44px;height:44px;font-size:18px;cursor:pointer}
+.aihelp{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
+.btn-sm{padding:6px 12px;font-size:13px}
 .qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
 .qa-b{border:1px solid var(--line);border-radius:11px;padding:11px 13px;background:#fff}
 .qa-b h4{margin:0 0 4px;font-size:13.5px}
@@ -379,7 +388,8 @@ function vHome(){
         || STATE.products.slice(0,5).map(prodCard).join('');
   return nav()
    +'<section class="hero"><div class="g wrap"><div><h1>'+esc(CFG.heroTitle||'Find. Understand. Buy.')+'</h1><p>'+esc(CFG.heroText||'')+'</p>'
-     +'<form class="hsearch" onsubmit="return doSearch(event)"><input id="q" placeholder="Search by part number, name or keyword..."><button class="btn btn-p" type="submit">Search</button></form>'
+     +'<form class="hsearch" onsubmit="return doSearch(event)"><input id="q" placeholder="Search part, number, or describe the problem…"><button class="btn btn-p" type="submit">Search</button></form>'
+     +'<a class="herobroke" onclick="go(\'ai\')">🛠️ Bike won\'t start or making a noise? <b>Describe the problem →</b></a>'
      +'<div class="pop"><span>Popular:</span><a onclick="qsearch(\'Clutch\')">Clutch Plate</a><a onclick="qsearch(\'Filter\')">Air Filter</a><a onclick="qsearch(\'Spark\')">Spark Plug</a><a onclick="qsearch(\'Brake\')">Brake Shoe</a></div>'
    +'</div><div style="text-align:center"><img class="hph" src="'+(IMG.hero||'')+'" alt=""></div></div></section>'
    +trust()
@@ -560,21 +570,62 @@ function vDiagram(plateNo){
    +'<div class="plist">'+rows+'</div></div>'
    +'</div></section>'+foot();
 }
-function vAI(){
-  var chips=(TB.problems||[]).map(function(p){return '<span class="dxchip" onclick="dx(\''+p.id+'\')">'+esc(p.label)+'</span>';}).join('');
-  return nav()+'<section class="page wrap"><div class="ai"><div class="hdr"><span class="av">AI</span><div><b>'+esc(CFG.name||'')+' Assistant</b><div style="font-size:12px;color:var(--ok)">● Online</div></div></div>'
-   +'<div class="msg b">'+esc(TB.greeting||'Describe the symptom and I\'ll point you to the likely cause and the genuine part.')+'</div>'
-   +'<div style="margin:8px 0"><span style="font-size:12px;color:var(--muted)">Common issues:</span> '+chips+'</div>'
-   +'<div id="dxout"></div></div></section>'+foot();
+function aiPartLink(name){
+  var b=getBike(); var words=String(name||'').toLowerCase().split(/[^a-z0-9]+/).filter(function(w){return w.length>2;});
+  if(!words.length) return null;
+  var any=null;
+  for(var i=0;i<STATE.products.length;i++){ var p=STATE.products[i]; var hay=(p.name+' '+p.kw).toLowerCase();
+    var hit=words.filter(function(w){return hay.indexOf(w)>=0;}).length;
+    if(hit){ if(!any||hit>any._h){any=p;any._h=hit;} if(b&&fitsBike(p)&&hit>=Math.min(2,words.length)){ return p; } } }
+  return any;
 }
-function dx(id){
+function vAI(){
+  var b=getBike();
+  var chips=(TB.problems||[]).map(function(p){return '<span class="dxchip" onclick="dx(\''+p.id+'\')">'+esc(p.label)+'</span>';}).join('');
+  var bikebar=b?('<div class="aibike">🏍️ Helping with <b>'+esc(b.name)+'</b> · <a onclick="clearBike()">change</a></div>')
+               :('<div class="aibike ask" onclick="go(\'\')">🏍️ Add your motorcycle for exact-fit answers ›</div>');
+  return nav()+'<section class="page wrap"><div class="ai"><div class="hdr"><span class="av">🤖</span><div><b>'+esc(CFG.name||'')+' — AI Mechanic</b><div style="font-size:12px;color:var(--muted)">Auto-diagnosis · a real person can confirm on WhatsApp</div></div></div>'
+   +bikebar
+   +'<div class="msg b">'+esc(TB.greeting||'Tell me what\'s wrong and I\'ll point you to the likely cause and the genuine part.')+'</div>'
+   +'<div class="aiask"><input id="aiq" placeholder="Describe the problem… e.g. it won\'t start" autocomplete="off"><button id="aimic" onclick="micAI()" title="Speak">🎤</button><button class="btn btn-p" onclick="submitAI()">Ask</button></div>'
+   +'<div style="margin:10px 0 2px"><span style="font-size:12px;color:var(--muted)">Common problems:</span> '+chips+'</div>'
+   +'<div id="dxout"></div>'
+   +'<div class="aihelp">Not sure? <a class="btn btn-w btn-sm" href="'+esc(waLink())+'" target="_blank" rel="noopener">💬 Chat with a person on WhatsApp</a></div>'
+   +'</div></section>'+foot();
+}
+function submitAI(){ var i=document.getElementById('aiq'); askAI((i&&i.value||'').trim()); }
+function micAI(){ var SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR){ var i=document.getElementById('aiq'); if(i){i.focus();} return; }
+  var r=new SR(); r.lang='en-US'; r.onresult=function(ev){ var t=ev.results[0][0].transcript; var i=document.getElementById('aiq'); if(i)i.value=t; askAI(t); }; try{r.start();}catch(e){} }
+function askAI(text){
+  if(!text) return; var t=text.toLowerCase();
+  var best=null,bestScore=0;
+  (TB.problems||[]).forEach(function(p){
+    var hay=(p.label+' '+p.query+' '+(p.causes||[]).map(function(c){return c.name+' '+c.partName;}).join(' ')).toLowerCase();
+    var toks=hay.split(/[^a-z0-9]+/).filter(function(w){return w.length>3;});
+    var score=0, seen={}; toks.forEach(function(w){ if(!seen[w]&&t.indexOf(w)>=0){seen[w]=1;score++;} });
+    // small synonym boost
+    ['start','brake','noise','power','smoke','leak','clutch','chain','light','horn'].forEach(function(w){ if(t.indexOf(w)>=0&&hay.indexOf(w)>=0)score++; });
+    if(score>bestScore){bestScore=score;best=p;}
+  });
+  if(best && bestScore>0){ dx(best.id, text); }
+  else { go('search/'+encodeURIComponent(text)); }  // hands off to search (which has WhatsApp/AI recovery)
+}
+function dx(id, userText){
   var p=(TB.problems||[]).filter(function(x){return x.id===id;})[0]; if(!p)return;
   var cards=(p.causes||[]).map(function(c){
-    return '<div class="dxcard"><div style="flex:1"><div style="display:flex;justify-content:space-between"><b>'+esc(c.name)+'</b><b style="color:var(--accent)">'+c.probability+'%</b></div><div class="bar"><i style="width:'+c.probability+'%"></i></div><div style="font-size:12px;color:var(--muted)">'+esc(c.partName||'')+'</div><div style="margin-top:6px"><a class="btn btn-p btn-sm" onclick="qsearch(\''+esc((c.partName||c.name).split(" ")[0])+'\')">View parts</a></div></div></div>';
+    var pr=aiPartLink(c.partName||c.name);
+    var fitH=pr?fitBadge(pr):''; var priceH=pr&&pr.price>0?(' · '+money(pr.price)):'';
+    var actH=pr?('<a class="btn btn-p btn-sm" onclick="go(\'part/'+pr.id+'\')">View part</a> <a class="btn btn-w btn-sm" href="'+esc(waOrder(pr))+'" target="_blank" rel="noopener">Order</a>')
+               :('<a class="btn btn-o btn-sm" onclick="qsearch(\''+esc((c.partName||c.name).split(" ")[0])+'\')">Find parts</a>');
+    return '<div class="dxcard"><div style="flex:1"><div style="display:flex;justify-content:space-between"><b>'+esc(c.name)+'</b><b style="color:var(--accent)">'+c.probability+'%</b></div><div class="bar"><i style="width:'+c.probability+'%"></i></div><div style="font-size:12px;color:var(--muted)">→ '+esc((pr&&pr.name)||c.partName||'')+priceH+' '+fitH+'</div><div style="margin-top:7px">'+actH+'</div></div></div>';
   }).join('');
   var steps=(p.steps||[]).map(function(s){return '<li>'+esc(s)+'</li>';}).join('');
-  $('#dxout').innerHTML='<div class="msg u">'+esc(p.query)+'</div><div class="msg b"><p>'+esc(p.intro)+'</p>'+cards+(steps?'<div style="border:1px dashed var(--line);border-radius:10px;padding:10px 14px;margin-top:6px"><b style="font-size:13px">Suggested next steps</b><ol style="margin:6px 0 0 18px;font-size:13px;color:var(--muted)">'+steps+'</ol></div>':'')+'</div>';
-  $('#dxout').scrollIntoView({behavior:'smooth',block:'nearest'});
+  var out=document.getElementById('dxout'); if(!out)return;
+  out.innerHTML='<div class="msg u">'+esc(userText||p.query)+'</div><div class="msg b"><p>'+esc(p.intro)+'</p>'+cards
+    +(steps?'<div style="border:1px dashed var(--line);border-radius:10px;padding:10px 14px;margin-top:6px"><b style="font-size:13px">Check these yourself first</b><ol style="margin:6px 0 0 18px;font-size:13px;color:var(--muted)">'+steps+'</ol></div>':'')
+    +'<div style="margin-top:10px;font-size:13px;color:var(--muted)">Not sure which one? <a href="'+esc(waLink())+'" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Send us a photo on WhatsApp ›</a></div></div>';
+  var q=document.getElementById('aiq'); if(q)q.value='';
+  out.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
 /* ---------- router ---------- */

@@ -1,27 +1,23 @@
-UPLOAD TO GITHUB — Phase 0 · Step 2: Trust & fitment layer
-==========================================================
-Builds on Step 1. Removes the fear that stops people buying expensive parts online.
+UPLOAD TO GITHUB — Phase 0 · Step 3: The AI Mechanic (symptom -> part)
+=====================================================================
+Turns the near-empty "AI Assistant" into a real guided diagnosis, and makes it
+the fastest path for a broken-down rider.
 
 WHAT CHANGED (customer-facing):
-  • Product page now answers every buyer question in a 4-card block:
-      ✅ Genuine guarantee   🚚 Delivery & payment
-      🛠️ Fitting (difficulty + tools + "ask for a guide")   ↩️ Warranty & returns
-  • Homepage trust strip now shows REAL promises (genuine / delivery / payment / warranty).
-  • Fitting difficulty & tools are inferred from the part's system (a helpful guide).
+  • AI Mechanic page: type (or SPEAK 🎤) the problem in plain language
+    -> it finds the likely causes with probabilities
+    -> each cause links to the REAL genuine part (price + "fits your bike" + Order on WhatsApp)
+    -> plus "check these yourself" steps and a "send a photo on WhatsApp" human fallback.
+  • Honest framing: "Auto-diagnosis · a real person can confirm on WhatsApp" (no fake "Online").
+  • Bike-aware: uses your saved motorcycle to fit-check the suggested parts.
+  • Homepage hero now promotes it: "Bike won't start or making a noise? Describe the problem ->".
+  • Homepage search box also accepts plain-language problems.
 
-NEW SETTINGS (v3 → Settings → Storefront → "Trust & delivery promises"):
-  • Genuine-parts promise      (default: 100% genuine Bajaj — verify the hologram, or your money back)
-  • Delivery time              (default: Same-day in town · 24–48h upcountry)
-  • Payment methods            (default: Mobile Money · Pay on Delivery)
-  • Warranty                   (default: 1-year genuine-parts warranty)
-  • Returns policy             (default: 7-day returns on unfitted parts)
-  Edit these to match your real policies — they show across the storefront.
-
-FILES: app/Support/SettingsSchema.php, app/Services/Settings/SettingsWriteService.php,
-       app/Http/Controllers/Storefront/StorefrontController.php, resources/storefront/autoparts.html
-       (Vertical.php included, unchanged.)
+No new settings. Frontend only (resources/storefront/autoparts.html); PHP unchanged.
 
 DEPLOY: upload "app" + "resources" -> git pull -> php artisan optimize:clear -> restart -> hard-refresh.
-  Confirm:  fetch(location.href).then(r=>r.text()).then(t=>console.log('Step2 live:', t.includes('qa-grid')));  // TRUE
+  Confirm:  fetch(location.href).then(r=>r.text()).then(t=>console.log('Step3 live:', t.includes('function askAI')));  // TRUE
 
-NEXT: Step 3 = AI Mechanic v1 (symptom -> part) promoted to the homepage + a 3-tap find-my-part wizard.
+This completes Phase 0 (the "Uptime Engine"): Step 1 buyable-on-a-phone, Step 2 trust & fitment,
+Step 3 AI Mechanic. Next horizon (needs backend): in-app mobile-money checkout, genuine-scan
+authenticity, live delivery tracking, real part photos.
