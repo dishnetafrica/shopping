@@ -99,6 +99,29 @@ final class StorefrontInsightsCapability implements ProcessCapability
 
         $convPct = $totV > 0 ? (int) round($totC / $totV * 100) : 0;
 
+        // ---- Abandoned carts: added to cart but never checked out ----
+        // Cart-level session ids aren't logged, so we use the item-level proxy the funnel already
+        // has: adds that never became a checkout, and the products behind them (the actionable list).
+        $abandoned = max(0, $totA - $totC);
+        $abPct = $totA > 0 ? (int) round($abandoned / $totA * 100) : 0;
+        $abRows = [];
+        foreach ($evArr as $r) {
+            $a = (int) $r->adds; $c = (int) $r->checkouts;
+            if ($a > 0 && $c === 0) {
+                $abRows[] = ['cells' => [
+                    (string) ($names[(int) $r->product_id] ?? ('#' . $r->product_id)),
+                    (int) $r->views, $a,
+                    ['value' => 'not bought', 'tone' => 'warn'],
+                ]];
+            }
+        }
+        usort($abRows, fn ($x, $y) => $y['cells'][2] <=> $x['cells'][2]);
+        $abRows = array_slice($abRows, 0, 60);
+        $abCols = [
+            ['label' => 'Product'], ['label' => 'Views', 'align' => 'right'],
+            ['label' => 'Added', 'align' => 'right'], ['label' => 'Outcome'],
+        ];
+
         return (new WorkspacePayload)
             ->object(['type' => 'process:storefront.insights', 'title' => 'Storefront Insights', 'subtitle' => 'Shopper activity · last 30 days'])
             ->financials([
@@ -106,9 +129,11 @@ final class StorefrontInsightsCapability implements ProcessCapability
                 ['key' => 'adds', 'label' => 'Add to cart', 'value' => $totA, 'tone' => $totA > 0 ? 'ok' : 'default', 'foot' => 'items added'],
                 ['key' => 'checkouts', 'label' => 'Checkouts', 'value' => $totC, 'tone' => $totC > 0 ? 'ok' : 'default', 'foot' => 'orders placed'],
                 ['key' => 'conv', 'label' => 'View → buy', 'value' => $convPct . '%', 'tone' => $convPct >= 10 ? 'ok' : ($convPct > 0 ? 'warn' : 'default'), 'foot' => 'conversion'],
+                ['key' => 'abandoned', 'label' => 'Abandoned', 'value' => $abandoned, 'tone' => $abandoned > 0 ? 'warn' : 'default', 'foot' => 'added, not bought (' . $abPct . '%)'],
             ])
             ->tabs([
                 ['key' => 'products', 'label' => 'Products', 'count' => count($prodRows)],
+                ['key' => 'abandoned', 'label' => 'Abandoned', 'count' => count($abRows)],
                 ['key' => 'searches', 'label' => 'Searches', 'count' => count($searchRows)],
                 ['key' => 'gaps', 'label' => 'Search gaps', 'count' => count($zeroRows)],
             ])
@@ -117,6 +142,11 @@ final class StorefrontInsightsCapability implements ProcessCapability
                     'kind' => 'table', 'title' => 'Product performance', 'sub' => 'views → cart → checkout (last 30 days)',
                     'searchable' => true, 'columns' => $prodCols, 'rows' => $prodRows,
                     'empty' => 'No product activity yet — this fills in as shoppers browse the storefront.',
+                ]],
+                'abandoned' => [[
+                    'kind' => 'table', 'title' => 'Added to cart but never bought', 'sub' => 'follow up on WhatsApp, check price, or confirm stock',
+                    'searchable' => true, 'columns' => $abCols, 'rows' => $abRows,
+                    'empty' => 'No abandoned carts — everything added to a cart was checked out.',
                 ]],
                 'searches' => [[
                     'kind' => 'table', 'title' => 'Top searches', 'sub' => 'what shoppers are looking for',

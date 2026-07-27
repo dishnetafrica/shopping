@@ -32,6 +32,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'quote', '*/quote',
             'solar/*', '*/solar/*',
             'event', '*/event',
+            'clienterror', '*/clienterror',
             'auth/*', '*/auth/*',
             'account/*', '*/account/*',
             'q/*', '*/q/*',

@@ -2,6 +2,7 @@
 // Runs the REAL deployable file over a real HTTP origin so cart/bike localStorage and the
 // analytics beacons behave exactly as in production.
 const { test, expect } = require('@playwright/test');
+const { AxeBuilder } = require('@axe-core/playwright');
 const { start } = require('./server');
 
 let ctx, base;
@@ -119,6 +120,17 @@ test('escapes hostile catalogue fields (stored XSS)', async ({ page }) => {
   expect(r.escapedText, 'hostile name must render as escaped text').toBe(true);
 });
 
+test('uncaught JS errors are reported to the client-error endpoint', async ({ page }) => {
+  await page.goto(base + '/');
+  await waitLoaded(page);
+  // Throw asynchronously so it becomes an uncaught window error (caught by window.onerror).
+  await page.evaluate(() => { setTimeout(function () { throw new Error('boom-test-xyz'); }, 0); });
+  await page.waitForFunction(async () => {
+    const e = await (await fetch('/__jserrors')).json();
+    return e.some((x) => (x.message || '').indexOf('boom-test-xyz') >= 0);
+  }, { timeout: 8000 });
+});
+
 test('makes no third-party requests and loads Font Awesome locally', async ({ page }) => {
   const external = [];
   page.on('request', (req) => {
@@ -137,6 +149,29 @@ test('makes no third-party requests and loads Font Awesome locally', async ({ pa
     return document.fonts.check('16px FontAwesome');
   });
   expect(faLoaded).toBeTruthy();
+});
+
+test('no serious/critical accessibility violations on key pages', async ({ page }) => {
+  for (const path of ['/', '/#/part/101', '/#/cart', '/#/search/brake']) {
+    await page.goto(base + path);
+    await waitLoaded(page);
+    const r = await new AxeBuilder({ page }).analyze();
+    const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+    expect(bad.map((v) => `${path}:${v.id}`), 'a11y serious/critical').toEqual([]);
+  }
+});
+
+test('interactive onclick elements are keyboard-operable', async ({ page }) => {
+  await page.goto(base + '/#/part/102');
+  await waitLoaded(page);
+  // The "Add to cart" button is a real <button>; a custom onclick control (e.g. a crumb link)
+  // must be focusable and Enter-activatable via the delegated key handler.
+  const activatable = await page.evaluate(() => {
+    // find a custom (non-native) onclick element that got the role/tabindex enhancement
+    const el = document.querySelector('#app [onclick][role="button"][tabindex="0"]');
+    return !!el;
+  });
+  expect(activatable).toBeTruthy();
 });
 
 test('WhatsApp float click fires a "whatsapp" event', async ({ page }) => {

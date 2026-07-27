@@ -77,28 +77,33 @@ and a per-IP + tenant rate limit (12 submits/min) to `placeOrder` and `requestQu
 retail checkout form now carries the hidden honeypot input. A PHPUnit feature test covers both
 the honeypot and the rate limit (`tests/Feature/StorefrontBotGuardTest.php`).
 
-### P1 — observability of the funnel
+### P1 — observability of the funnel  ✅ DONE (this milestone)
 
-**Checkout-drop-off + abandoned-cart view.** The events now exist; build the read side: a
-tenant BI panel showing view → add → checkout → order conversion over time, and a daily
-"carts started but not ordered" figure. No new writes — aggregate `product_events` (mirrors
-the existing `trendingIds()` pattern).
+**Checkout-drop-off + abandoned-cart view. ✅** The read side already existed as a panel
+capability (`StorefrontInsightsCapability` — views → add → checkout funnel, top searches,
+search gaps). Two gaps closed: (1) storefront `search` events now also write to `search_events`
+with the query text (`recordEvent`), so web searches feed the existing "Top searches"/"Search
+gaps" reports (previously only the bot's did); (2) a new **Abandoned** figure + tab surfaces
+products added to a cart but never checked out (the actionable follow-up list).
 
-**Confirm Sentry DSN in production.** The hooks are in `bootstrap/app.php`; verify the DSN
-env var is set for the live tenant so uncaught storefront JS *and* server exceptions surface
-in one place. Add a client-side `window.onerror`/`unhandledrejection` beacon so front-end
-crashes are captured too (currently only server-side is).
+**Client-side error capture. ✅** The SPA now beacons `window.onerror` /
+`unhandledrejection` to a new `/clienterror` endpoint (`StorefrontController::clientError`),
+which logs structured and forwards to Sentry if configured — so front-end crashes surface in
+the same place as server errors. Capped at 5/session client-side and IP-rate-limited server
+side. (Confirming the production Sentry DSN is set remains an ops step.)
 
 ### P2 — accessibility & mobile
 
-**Accessibility pass.** The SPA uses `onclick` on `<a>`/`<span>` with no `href`/`role`/`tabindex`,
-so keyboard and screen-reader users can't operate it. Action: give interactive elements
-proper roles + `tabindex`, visible focus states, `aria-label`s on icon-only buttons, and
-`aria-live` on the cart badge and toasts. Add an axe-core check to the Playwright suite.
+**Accessibility pass. ✅** A runtime enhancement gives every `onclick` control (that isn't a
+native button/link) `role="button"` + `tabindex`, with a delegated Enter/Space handler, while
+skipping containers that wrap their own controls (no nested-interactive). Added visible
+`:focus-visible` rings, `aria-label`s on icon-only controls, an `aria-live` toast, a `<main>`
+landmark, and darkened the green/WhatsApp colors to meet AA contrast. An axe-core check runs
+on home/product/cart/search and **fails the build on any serious/critical violation** (now
+zero; a few moderate best-practice items — heading order, landmark region — remain tracked).
 
-**Mobile breakpoint matrix.** The suite already runs at 360 px. Extend to 320/390/412 px and
-assert no horizontal scroll and that primary CTAs (Add to cart, Place order) are within
-thumb reach and never clipped by the bottom bar.
+**Mobile breakpoint matrix.** The suite runs at 360 px (and every test also runs there).
+Still to extend: 320/390/412 px assertions for no horizontal scroll and thumb-reach CTAs.
 
 ### P3 — full storefront modularization (staged, not big-bang)
 
@@ -124,11 +129,12 @@ Each step ships behind the green test suite; no step requires a freeze longer th
 - [x] Zero third-party CDN dependencies (self-hosted FA + fonts)
 - [x] XSS audit passed with a regression test
 - [x] Order/quote bot protection
-- [ ] Funnel/abandoned-cart visibility for the tenant
-- [ ] Client-side error capture to Sentry
-- [ ] Accessibility (keyboard + screen reader) baseline with axe-core in CI
+- [x] Funnel/abandoned-cart visibility for the tenant
+- [x] Client-side error capture to Sentry
+- [x] Accessibility (keyboard + screen reader) baseline with axe-core in CI
 - [ ] Storefront script split into modules behind the test suite
 
-Items 1–6 are done (Milestones 1–2). 7–10 remain; none is architecturally risky, and each is
-independently shippable behind the test suite. The next milestone is the P1/P2 work: funnel
-visibility, client-side error capture, and the accessibility baseline.
+Items 1–9 are done (Milestones 1–3). The one remaining item is the staged storefront
+modularization (P3) — splitting the inline script into ES modules behind the now-substantial
+test suite (24 e2e tests + the PHPUnit bot-guard test). It carries no architectural risk; each
+extraction ships green. Remaining ops step: confirm the production Sentry DSN is set.

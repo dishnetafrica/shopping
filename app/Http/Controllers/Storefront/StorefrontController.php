@@ -844,6 +844,68 @@ class StorefrontController extends Controller
             \App\Support\ProductEvents::log($tenant->id, $pid ?: null, $event);
         }
 
+        // A storefront search also carries its query + result count — feed it into search_events so
+        // it shows up in the existing "Top searches" and "Search gaps" panel reports (which read that
+        // table). product_events has nowhere to keep the query text; search_events does.
+        if ($event === 'search') {
+            $q = trim((string) $r->input('q', ''));
+            $results = (int) $r->input('results', 0);
+            try {
+                \App\Models\SearchEvent::create([
+                    'tenant_id'  => $tenant->id,
+                    'type'       => $results > 0 ? 'search' : 'zero_result',
+                    'query'      => $q !== '' ? mb_substr($q, 0, 180) : null,
+                    'results'    => max(0, $results),
+                    'created_at' => now(),
+                ]);
+            } catch (\Throwable $e) {
+                // best-effort analytics
+            }
+        }
+
+        return response()->json(['ok' => true])->header('Cache-Control', 'no-store');
+    }
+
+    /**
+     * Capture a front-end JavaScript error from the storefront so client crashes surface in the
+     * same place as server errors (structured log + Sentry if configured) — previously only
+     * server-side exceptions were visible. Fire-and-forget, tightly IP-rate-limited, never trusts
+     * the payload beyond a few short strings.
+     */
+    public function clientError(Request $r, ?string $shop = null)
+    {
+        [$tenant] = $this->resolveShop($shop);
+
+        $ipKey = 'sfjserr:' . $tenant->id . ':' . $r->ip();
+        if (\Illuminate\Support\Facades\RateLimiter::tooManyAttempts($ipKey, 60)) {
+            return response()->json(['ok' => true])->header('Cache-Control', 'no-store'); // silently drop floods
+        }
+        \Illuminate\Support\Facades\RateLimiter::hit($ipKey, 60);
+
+        $cut = fn ($v, $n) => mb_substr(trim((string) $v), 0, $n);
+        $ctx = [
+            'tenant_id' => $tenant->id,
+            'message'   => $cut($r->input('message'), 500),
+            'source'    => $cut($r->input('source'), 300),
+            'line'      => (int) $r->input('line', 0),
+            'col'       => (int) $r->input('col', 0),
+            'stack'     => $cut($r->input('stack'), 2000),
+            'url'       => $cut($r->input('url'), 500),
+            'ua'        => $cut($r->userAgent(), 300),
+        ];
+
+        if ($ctx['message'] !== '') {
+            \Illuminate\Support\Facades\Log::warning('storefront.js_error', $ctx);
+            if (function_exists('Sentry\\captureMessage')) {
+                try {
+                    \Sentry\configureScope(function ($scope) use ($ctx) { $scope->setContext('storefront', $ctx); });
+                    \Sentry\captureMessage('Storefront JS error: ' . $ctx['message']);
+                } catch (\Throwable $e) {
+                    // never let error reporting throw
+                }
+            }
+        }
+
         return response()->json(['ok' => true])->header('Cache-Control', 'no-store');
     }
 

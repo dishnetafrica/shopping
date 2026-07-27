@@ -725,6 +725,7 @@ Route::middleware('web')->group(function () use ($qToken) {
     Route::post('/q/{token}/approve',[\App\Http\Controllers\Storefront\QuotationPortalController::class, 'approve'])->where('token', $qToken);
     Route::post('/q/{token}/revise', [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'revise'])->where('token', $qToken);
     Route::post('/event',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'recordEvent']);
+    Route::post('/clienterror',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'clientError']);
     Route::post('/auth/request',   [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'request']);
     Route::post('/auth/verify',    [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'verify']);
     Route::post('/account/orders', [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'myOrders']);
@@ -756,6 +757,7 @@ Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::post('/{shop}/q/{token}/approve',[\App\Http\Controllers\Storefront\QuotationPortalController::class, 'approve'])->where('shop', $shopSlug)->where('token', $qToken);
     Route::post('/{shop}/q/{token}/revise', [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'revise'])->where('shop', $shopSlug)->where('token', $qToken);
     Route::post('/{shop}/event',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'recordEvent'])->where('shop', $shopSlug);
+    Route::post('/{shop}/clienterror', [\App\Http\Controllers\Storefront\StorefrontController::class, 'clientError'])->where('shop', $shopSlug);
     Route::post('/{shop}/auth/request', [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'request'])->where('shop', $shopSlug);
     Route::post('/{shop}/auth/verify',  [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'verify'])->where('shop', $shopSlug);
     Route::post('/{shop}/account/orders',  [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'myOrders'])->where('shop', $shopSlug);

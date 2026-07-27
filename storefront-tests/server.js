@@ -54,6 +54,7 @@ const CONFIG = {
 };
 
 const events = [];
+const jsErrors = [];
 
 function injectRuntime(html) {
   return html
@@ -74,15 +75,20 @@ function start(port = 0) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify(CATALOGUE));
     }
-    if (req.method === 'POST' && url === '/event') {
+    if (req.method === 'POST' && (url === '/event' || url === '/clienterror')) {
+      const bucket = url === '/clienterror' ? jsErrors : events;
       let body = '';
       req.on('data', (c) => (body += c));
       req.on('end', () => {
-        try { events.push(JSON.parse(body || '{}')); } catch (e) { events.push({ parseError: true }); }
+        try { bucket.push(JSON.parse(body || '{}')); } catch (e) { bucket.push({ parseError: true }); }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       });
       return;
+    }
+    if (req.method === 'GET' && url === '/__jserrors') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify(jsErrors));
     }
     if (req.method === 'GET' && url === '/__events') {
       res.writeHead(200, { 'Content-Type': 'application/json' });

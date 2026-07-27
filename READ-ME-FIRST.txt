@@ -1,57 +1,51 @@
-EA AUTO PART — HARDENING MILESTONES 1 & 2 (upload package)
-==========================================================
+EA AUTO PART — HARDENING MILESTONES 1–3 (upload package)
+========================================================
 
-Answers the production-readiness review ("freeze features; modularize the storefront with
-automated tests, analytics, and production observability"). All P0 items are now done.
+Answers the production-readiness review. 9 of the 10 "production ready" checklist items are
+now done; only the staged storefront modularization (P3) remains. See HARDENING-PLAN.md.
 
-WHAT CHANGED
-------------
-Backend (app/):
-  * StorefrontController.php
-      - recordEvent() also accepts 'search' and 'whatsapp' events.
-      - NEW botGuard(): honeypot + per-IP rate limit (12/min) on placeOrder() and requestQuote().
-  * SettingsSchema.php, SettingsWriteService.php, Vertical.php — unchanged (storefront model
-    toggles, trust/delivery settings, hide-out-of-stock).
+WHAT CHANGED (by file)
+----------------------
+app/Http/Controllers/Storefront/StorefrontController.php
+  - recordEvent(): accepts 'search' + 'whatsapp'; a 'search' event now also writes the query
+    to search_events so web searches appear in the Storefront Insights reports.
+  - botGuard(): honeypot + per-IP rate limit on placeOrder() and requestQuote().
+  - clientError(): NEW — captures front-end JS errors (log + Sentry).
+app/Capability/Process/StorefrontInsightsCapability.php
+  - NEW "Abandoned" metric + tab: products added to cart but never checked out.
+app/Support/*, app/Services/Settings/*  — unchanged (storefront toggles, trust settings).
+routes/web.php          — adds POST /clienterror and /{shop}/clienterror (2 lines).
+bootstrap/app.php       — adds 'clienterror' to the CSRF-exempt list (1 line).
+resources/storefront/autoparts.html   (REBUILT, deployable)
+  - Analytics beacons (view/add/checkout/search/whatsapp) + client-error beacon.
+  - Self-hosted Font Awesome + Inter + JetBrains Mono (no cdnjs / Google Fonts).
+  - XSS hardening (esc() escapes quotes; ids via sid() whitelist).
+  - Accessibility: keyboard-operable onclick controls, focus rings, aria, <main> landmark,
+    AA-contrast greens.
+resources/storefront/shop.html         — hidden honeypot field on the checkout/quote form.
 
-Storefront:
-  * resources/storefront/autoparts.html  (REBUILT, deployable)
-      - Analytics fire via sendBeacon('/event'): view, add, checkout (x2), search, whatsapp.
-      - Font Awesome 4.7 + Inter + JetBrains Mono are now SELF-HOSTED (embedded woff2). No
-        cdnjs / Google Fonts — works on a blocked or slow CDN (South Sudan connectivity).
-      - XSS hardening: esc() now escapes single quotes; ids run through a sid() whitelist so a
-        hostile product id can't break out of an onclick handler.
-  * resources/storefront/shop.html
-      - Hidden honeypot field on the checkout/quote form (feeds botGuard).
+TESTS
+  storefront-tests/        Playwright: 24 tests (desktop + 360px). Covers catalogue,
+                           view/add/cart/checkout/search/whatsapp, XSS, client-error capture,
+                           zero-third-party-requests, and axe-core (fails on serious/critical).
+  tests/Feature/StorefrontBotGuardTest.php   PHPUnit: honeypot + rate limit.
 
-Tests:
-  * storefront-tests/            — Playwright e2e (18 tests, desktop + 360px), all green.
-                                   Covers catalogue, view/add/cart/checkout/search/whatsapp,
-                                   XSS escaping, and "zero third-party requests + FA loads".
-  * tests/Feature/StorefrontBotGuardTest.php — PHPUnit: honeypot + rate limit (runs in your CI).
-
-Tooling:
-  * build_storefront.py  — reproducible build (template + build/*.json -> autoparts.html,
-                           with placeholder validation).
-  * vendor_fonts.py      — vendors FA + fonts into the template (idempotent).
-
-  * HARDENING-PLAN.md    — corrected review, what shipped, and the remaining P1/P2 roadmap.
+TOOLING
+  build_storefront.py   reproducible build (template + build/*.json -> autoparts.html).
+  vendor_fonts.py       vendors FA + fonts into the template.
+  HARDENING-PLAN.md     corrected review, what shipped, remaining roadmap.
 
 DEPLOY
 ------
-Copy app/ and resources/ over your repo (same paths) and deploy. Ensure
-resources/storefront/autoparts.html and shop.html ship.
-
-REBUILD THE STOREFRONT (after editing the template)
----------------------------------------------------
-  python3 vendor_fonts.py         # (only if re-vendoring fonts)
-  python3 build_storefront.py     # writes resources/storefront/autoparts.html
+Copy app/, resources/, routes/, bootstrap/ over your repo. routes/web.php and bootstrap/app.php
+each have only a 1–2 line addition — merge by hand if your copies have diverged since upload.
 
 RUN TESTS
 ---------
-  cd storefront-tests && npm install && npx playwright test     # 18 pass
-  php artisan test --filter StorefrontBotGuardTest              # in your app (needs vendor/DB)
+  cd storefront-tests && npm install && npx playwright test        # 24 pass
+  php artisan test --filter StorefrontBotGuardTest                 # in your app (vendor/DB)
 
 VERIFY LIVE (browser console on eaautopart.com)
 -----------------------------------------------
-  DevTools > Network: filter "event" (analytics fire), and confirm NO requests to
-  cdnjs.cloudflare.com or fonts.googleapis.com (fully self-hosted).
+  Network tab: analytics fire to /event; NO requests to cdnjs / fonts.googleapis.com.
+  The tenant panel's Storefront Insights now has an "Abandoned" tab once traffic accrues.
