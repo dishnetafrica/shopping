@@ -1,0 +1,21 @@
+{
+  "meta": {
+    "description": "Compatibility is derived, not hardcoded. A part fits a model when they share the same OEM part number. Given a part's OEM number, resolve fitment by matching every model catalogue that lists it. This file caches those resolved edges for fast rendering.",
+    "rule": ["part.partNo", "->", "match models whose catalogue contains partNo", "->", "compatible"]
+  },
+  "byPart": {
+    "JR 1110 55": ["boxer100", "boxer125hd", "boxer125x", "boxer150"],
+    "JZ 5110 21": ["boxer100"],
+    "JB 5110 11": ["boxer100", "boxer125x", "boxer150"],
+    "PF 5814 00": ["boxer100", "boxer125hd"]
+  },
+  "modelYearRanges": {
+    "boxer100":   "2012–Present",
+    "boxer125hd": "2018–Present",
+    "boxer125x":  "2016–Present",
+    "boxer150":   "2014–Present",
+    "boxer150x":  "2019–Present",
+    "v15":        "2016–Present",
+    "v12":        "2016–Present"
+  }
+}

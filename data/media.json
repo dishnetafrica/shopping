@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "description": "Image-upload manifest. Every image on the platform is an UPLOAD SLOT identified by a stable key. The v3 admin portal writes an image_url here when a photo is uploaded (exactly like Family Shoppers stores image_url per product). When a slot has a url, it overrides the bundled default asset; when empty, the generator falls back to the asset path defined in the data files.",
+    "slotKeyFormat": [
+      "motorcycle gallery: '<modelId>:<imageId>'   e.g. 'boxer100:studio_right'",
+      "system cover:      'system:<systemId>'       e.g. 'system:engine'",
+      "product image:     'product:<productId>:<imageId>'  e.g. 'product:clutch_plate:main'"
+    ],
+    "portalMapping": {
+      "storesLike": "WwItem.image_url (Family Shoppers seller/admin panel upload)",
+      "resolution": "uploads[slotKey] -> else data-file asset path -> else placeholder",
+      "url": "may be an absolute CDN url or an app-relative /storage/... path written by the portal",
+      "reimportSafe": "empty/missing keys never wipe an existing upload (same rule as ProductImporter)"
+    }
+  },
+  "uploads": {
+    "boxer125hd:hero": "assets/motorcycles/boxer125hd/hero-uploaded.jpg"
+  }
+}

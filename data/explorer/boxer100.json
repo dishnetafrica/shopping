@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "description": "360° explorer config. `frames` is the ordered set of studio angles the viewer cycles through on drag. `hotspots` are clickable points (percentage coordinates over the default right-side frame) that jump to that system's parts/diagram.",
+    "model": "boxer100"
+  },
+  "frames": [
+    { "id": "right",     "asset": "assets/motorcycles/boxer100/studio_right.jpg" },
+    { "id": "3q_front",  "asset": "assets/motorcycles/boxer100/studio_3q_front.jpg" },
+    { "id": "front",     "asset": "assets/motorcycles/boxer100/studio_front.jpg" },
+    { "id": "rear",      "asset": "assets/motorcycles/boxer100/studio_rear.jpg" },
+    { "id": "3q_rear",   "asset": "assets/motorcycles/boxer100/studio_3q_rear.jpg" },
+    { "id": "left",      "asset": "assets/motorcycles/boxer100/studio_left.jpg" }
+  ],
+  "hotspots": [
+    { "system": "electrical",   "x": 83, "y": 34, "label": "Electrical",   "href": "boxer100-parts.html" },
+    { "system": "controls",     "x": 78, "y": 24, "label": "Controls",     "href": "boxer100-parts.html" },
+    { "system": "fuel_system",  "x": 57, "y": 40, "label": "Fuel System",  "href": "boxer100-parts.html" },
+    { "system": "frame_body",   "x": 40, "y": 40, "label": "Frame & Body", "href": "boxer100-parts.html" },
+    { "system": "engine",       "x": 52, "y": 66, "label": "Engine",       "href": "boxer100-diagram.html" },
+    { "system": "transmission", "x": 45, "y": 70, "label": "Transmission", "href": "boxer100-diagram.html" },
+    { "system": "suspension",   "x": 30, "y": 60, "label": "Suspension",   "href": "boxer100-parts.html" },
+    { "system": "brakes",       "x": 82, "y": 80, "label": "Brakes",       "href": "boxer100-parts.html" }
+  ]
+}

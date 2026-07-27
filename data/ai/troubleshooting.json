@@ -1,0 +1,58 @@
+{
+  "meta": {
+    "description": "Symptom → cause knowledge base powering the AI Assistant / visual diagnosis. Each cause links to a system, an exploded-diagram plate and (where available) a purchasable part, so the assistant can 'Show on Diagram' and 'View Part'.",
+    "model": "boxer100",
+    "disclaimer": "Probabilities are indicative guidance, not a workshop diagnosis. Always confirm with a qualified mechanic."
+  },
+  "greeting": "Hi! Describe the symptom and I'll point you to the likely cause, show it on the exploded diagram, and link the genuine part.",
+  "problems": [
+    {
+      "id": "hard_start",
+      "label": "Hard to start in the morning",
+      "query": "My bike is hard to start in the morning",
+      "intro": "That's usually one of these. Tap a part to inspect it or show it on the diagram:",
+      "causes": [
+        { "name": "Weak / discharged battery", "probability": 80, "system": "electrical", "plate": 43, "part": "battery", "partName": "Battery (12V)", "price": 95000, "img": "assets/systems/electrical.jpg" },
+        { "name": "Faulty / fouled spark plug", "probability": 60, "system": "electrical", "plate": 21, "part": "spark_plug", "partName": "Spark Plug", "price": 8000, "img": "assets/products/spark_plug/main.jpg" },
+        { "name": "Clogged air filter", "probability": 40, "system": "fuel_system", "plate": 17, "part": "air_filter", "partName": "Air Filter Element", "price": 9500, "img": "assets/products/air_filter/main.jpg" }
+      ],
+      "steps": ["Check battery charge and terminals", "Inspect, clean or replace the spark plug", "Clean or replace the air filter", "Confirm fuel is flowing from the tap"]
+    },
+    {
+      "id": "clicking_start",
+      "label": "Clicking noise when starting",
+      "query": "There's a clicking noise when I press the starter",
+      "intro": "A click on start-up usually points to the starter drive. Most common causes:",
+      "causes": [
+        { "name": "Worn starter clutch", "probability": 80, "system": "transmission", "plate": 14, "part": "clutch_plate", "partName": "Starter Clutch", "price": 68000, "img": "assets/products/clutch_plate/installed.jpg" },
+        { "name": "Weak starter gear", "probability": 50, "system": "electrical", "plate": 20, "part": "starter", "partName": "Starter Assembly", "price": 120000, "img": "assets/systems/transmission.jpg" },
+        { "name": "Loose flywheel nut", "probability": 40, "system": "engine", "plate": 13, "part": "magneto", "partName": "Cover Magneto", "price": 42000, "img": "assets/systems/engine.jpg" }
+      ],
+      "steps": ["Listen: single click vs rapid clicks", "Check battery voltage under load", "Inspect starter clutch and gear", "Torque-check the flywheel nut"]
+    },
+    {
+      "id": "brake_noise",
+      "label": "Noise when braking",
+      "query": "The brakes make a squealing / clicking noise",
+      "intro": "Brake noise on the Boxer is almost always the rear drum assembly. Likely causes:",
+      "causes": [
+        { "name": "Worn brake shoes", "probability": 75, "system": "brakes", "plate": 28, "part": "brake_shoes", "partName": "Rear Brake Shoes", "price": 12500, "img": "assets/products/front_brake/main.jpg" },
+        { "name": "Glazed / scored brake drum", "probability": 45, "system": "brakes", "plate": 28, "part": "rear_hub", "partName": "Rear Hub", "price": 55000, "img": "assets/systems/brakes.jpg" },
+        { "name": "Loose wheel / axle", "probability": 30, "system": "wheels", "plate": 26, "part": "axle", "partName": "Wheel Axle", "price": 9000, "img": "assets/systems/wheels.jpg" }
+      ],
+      "steps": ["Inspect shoe lining thickness", "Check drum surface for glazing", "Confirm axle and spokes are tight", "Adjust brake free-play"]
+    },
+    {
+      "id": "low_power",
+      "label": "Losing power / poor pickup",
+      "query": "The bike is losing power and pickup is poor",
+      "intro": "Power loss usually comes from the clutch or fuelling. Start here:",
+      "causes": [
+        { "name": "Worn clutch friction plates", "probability": 70, "system": "transmission", "plate": 14, "part": "clutch_plate", "partName": "Clutch Plate (Friction)", "price": 18000, "img": "assets/products/clutch_plate/main.jpg" },
+        { "name": "Dirty / mis-tuned carburetor", "probability": 55, "system": "fuel_system", "plate": 16, "part": "carburetor", "partName": "Carburetor", "price": 78000, "img": "assets/systems/fuel-system.jpg" },
+        { "name": "Worn cylinder / piston rings", "probability": 35, "system": "engine", "plate": 5, "part": "piston", "partName": "Cylinder & Piston Kit", "price": 145000, "img": "assets/systems/engine.jpg" }
+      ],
+      "steps": ["Check clutch slip under load", "Clean the carburetor and set idle", "Test cylinder compression", "Replace worn friction plates if slipping"]
+    }
+  ]
+}

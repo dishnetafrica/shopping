@@ -1,0 +1,32 @@
+--- a/app/Support/Vertical.php
++++ b/app/Support/Vertical.php
+@@ class Vertical
+     public const MANUFACTURER = 'manufacturer';
+     public const SOLAR      = 'solar';           // Asset Lifecycle — equipment dealers (solar, generators, HVAC…)
++    public const AUTO_PARTS = 'auto_parts';       // EPC catalogue — motorcycle / auto spare-parts dealers
+
+-    public const ALL = [self::GROCERY, self::RESTAURANT, self::SNACKS, self::MANUFACTURER, self::SOLAR];
++    public const ALL = [self::GROCERY, self::RESTAURANT, self::SNACKS, self::MANUFACTURER, self::SOLAR, self::AUTO_PARTS];
+
+     public const MATRIX = [
+         'item_options'  => [self::RESTAURANT],
+         'kitchen_board' => [self::RESTAURANT],
+         'daily_thali'   => [self::SNACKS],
+-        'riders'        => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER, self::SOLAR],
+-        'pos'           => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER, self::SOLAR],
++        'riders'        => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER, self::SOLAR, self::AUTO_PARTS],
++        'pos'           => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER, self::SOLAR, self::AUTO_PARTS],
+     ];
+
+     public const LABELS = [
+         self::GROCERY      => 'Grocery',
+         self::RESTAURANT   => 'Restaurant',
+         self::SNACKS       => 'Snacks / advance booking',
+         self::MANUFACTURER => 'Manufacturer / wholesale brand',
+         self::SOLAR        => 'Solar / equipment',
++        self::AUTO_PARTS   => 'Auto Parts / EPC catalogue',
+     ];
+
+# Nothing else in Vertical.php changes: decide(), of(), overrides(), shows() all
+# already handle a new vertical generically. `auto_parts` gets riders + POS and,
+# like every vertical, only the features that name it — everything else stays OFF.

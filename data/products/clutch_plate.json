@@ -1,0 +1,28 @@
+{
+  "id": "clutch_plate",
+  "name": "Clutch Plate (Friction)",
+  "partNo": "JR 1110 55",
+  "system": "transmission",
+  "plate": 14,
+  "badges": ["genuine", "bestseller"],
+  "price": { "amount": 18000, "currency": "UGX" },
+  "stock": { "status": "in_stock", "qty": 504 },
+  "shortDescription": "Genuine friction clutch plate for the Bajaj Boxer family. High-quality friction composite for long life and smooth engagement.",
+  "attributes": {
+    "Material": "Friction Composite",
+    "Weight": "0.16 kg",
+    "Country of Origin": "India",
+    "Fitment": "OE Replacement",
+    "Sold As": "Each"
+  },
+  "images": [
+    { "id": "white",     "label": "White Background", "asset": "assets/products/clutch_plate/main.jpg" },
+    { "id": "installed", "label": "Installed View",   "asset": "assets/products/clutch_plate/installed.jpg" },
+    { "id": "packaging", "label": "Packaging",        "asset": "assets/products/clutch_plate/packaging.jpg" },
+    { "id": "angle",     "label": "Angle View",       "asset": "assets/products/clutch_plate/angle.jpg" },
+    { "id": "closeup",   "label": "Close Up",         "asset": "assets/products/clutch_plate/closeup.jpg" },
+    { "id": "dimension", "label": "Dimensions",       "asset": "assets/products/clutch_plate/dimension.jpg" }
+  ],
+  "compatibleModels": ["boxer100", "boxer125hd", "boxer125x", "boxer150"],
+  "alsoBought": ["clutch_center", "clutch_spring", "clutch_housing", "clutch_gear"]
+}

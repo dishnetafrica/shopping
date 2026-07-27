@@ -1,0 +1,54 @@
+{
+  "id": "boxer125hd",
+  "name": "Boxer 125 HD",
+  "family": "Boxer",
+  "fullName": "Bajaj Boxer 125 HD",
+  "tagline": "The heavy-duty champion",
+  "summary": "More power, more load. A superior 125cc engine with 5 gears, stronger suspension, a longer seat and stronger carrier — built to earn you more per trip.",
+  "badges": ["new"],
+  "status": "active",
+  "yearRange": "2018–Present",
+  "rating": { "value": 4.5, "count": 132 },
+  "colors": [
+    { "id": "red",   "name": "Red",   "hex": "#B22222", "asset": "assets/motorcycles/boxer125hd/color-red.jpg" },
+    { "id": "black", "name": "Black", "hex": "#1A1A1A", "asset": "assets/motorcycles/boxer125hd/color-black.jpg" }
+  ],
+  "keySpecs": [
+    { "label": "Engine",       "value": "125 cc",  "sub": "4-Stroke, SOHC", "icon": "engine" },
+    { "label": "Max Power",    "value": "10 PS",   "sub": "@ 7500 rpm",     "icon": "power" },
+    { "label": "Transmission", "value": "5 Speed", "sub": "",               "icon": "transmission" },
+    { "label": "Load",         "value": "+30%",    "sub": "More load",      "icon": "carrier" }
+  ],
+  "specifications": {
+    "Engine": {
+      "Type": "4-Stroke, Air-cooled, Single Cylinder, SOHC, Single Plug",
+      "Displacement": "124.45 cc",
+      "Stroke": "58.60 mm",
+      "Max Power": "10 PS @ 7500 rpm",
+      "Max Torque": "10.49 Nm @ 5500 rpm",
+      "Starting": "Electric Start + Kick Start"
+    },
+    "Transmission": { "Gearbox": "5-Speed", "Final Drive": "Chain" },
+    "Chassis & Suspension": {
+      "Frame Type": "Tubular",
+      "Front Suspension": "Hydraulic (Telescopic)",
+      "Rear Suspension": "SNS"
+    },
+    "Wheels & Tyres": { "Front Tyre": "2.75 - 17", "Rear Tyre": "3.00 - 17" },
+    "Dimensions & Weight": {
+      "Length": "2016 mm", "Width": "740 mm", "Height": "1134 mm",
+      "Wheelbase": "1295 mm", "Kerb Weight": "120 kg", "Fuel Tank Capacity": "11.0 Litres"
+    },
+    "Electricals": { "System": "12 Volts DC", "Battery": "12 V 6Ah VRLA" }
+  },
+  "highlights": ["Superior 125cc Engine with 5 Gears", "Robust Chassis", "Stronger Suspension", "Longer Seat", "Stronger Carrier", "3 Year Engine Warranty"],
+  "gallery": { "hero": "assets/motorcycles/boxer125hd/hero.jpg" },
+  "systems": [
+    { "id": "engine", "partCount": 50 }, { "id": "fuel_system", "partCount": 16 },
+    { "id": "electrical", "partCount": 27 }, { "id": "transmission", "partCount": 34 },
+    { "id": "brakes", "partCount": 12 }, { "id": "suspension", "partCount": 14 },
+    { "id": "frame_body", "partCount": 30 }, { "id": "controls", "partCount": 20 },
+    { "id": "wheels", "partCount": 18 }, { "id": "accessories", "partCount": 14 }
+  ],
+  "diagramPlateCount": 45
+}

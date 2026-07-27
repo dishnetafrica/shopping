@@ -1,0 +1,45 @@
+{
+  "id": "v12",
+  "brandId": "V12",
+  "name": "Bajaj V12",
+  "family": "V",
+  "fullName": "Bajaj V12",
+  "tagline": "The invincible commuter",
+  "summary": "A 125cc V-series commuter with fuel-efficient SAI engine and EVAP, sharing the V15's bold silhouette in a lighter, thriftier package.",
+  "badges": [],
+  "status": "active",
+  "yearRange": "2016–Present",
+  "rating": { "value": 4.3, "count": 58 },
+  "catalogue": { "type": "Spare Parts Catalogue (Export)" },
+  "colors": [
+    { "id": "black", "name": "Black", "hex": "#1A1A1A", "asset": "assets/motorcycles/v12/color-black.jpg" },
+    { "id": "red",   "name": "Red",   "hex": "#B22222", "asset": "assets/motorcycles/v12/color-red.jpg" }
+  ],
+  "keySpecs": [
+    { "label": "Engine",       "value": "125 cc",  "sub": "4-Stroke, SAI",  "icon": "engine" },
+    { "label": "Max Power",    "value": "10.7 PS", "sub": "@ 7500 rpm",     "icon": "power" },
+    { "label": "Transmission", "value": "5 Speed", "sub": "",               "icon": "transmission" },
+    { "label": "Mileage",      "value": "60 km/l", "sub": "Class-leading",  "icon": "fuel" }
+  ],
+  "specifications": {
+    "Engine": {
+      "Type": "4-Stroke, Air-cooled, Single Cylinder, SOHC, SAI",
+      "Displacement": "124.6 cc",
+      "Max Power": "10.7 PS @ 7500 rpm",
+      "Max Torque": "11.0 Nm @ 5500 rpm",
+      "Starting": "Electric + Kick"
+    },
+    "Transmission": { "Gearbox": "5-Speed", "Final Drive": "Chain" },
+    "Chassis & Suspension": { "Frame Type": "Tubular", "Front Suspension": "Telescopic", "Rear Suspension": "Twin Shock" }
+  },
+  "highlights": ["SAI Fuel-efficient Engine", "EVAP System", "V-series Styling", "Low Running Cost"],
+  "gallery": { "hero": "assets/motorcycles/v12/hero.jpg" },
+  "systems": [
+    { "id": "engine", "partCount": 55 }, { "id": "fuel_system", "partCount": 20 },
+    { "id": "electrical", "partCount": 29 }, { "id": "transmission", "partCount": 34 },
+    { "id": "brakes", "partCount": 14 }, { "id": "suspension", "partCount": 14 },
+    { "id": "frame_body", "partCount": 34 }, { "id": "controls", "partCount": 22 },
+    { "id": "wheels", "partCount": 18 }, { "id": "accessories", "partCount": 16 }
+  ],
+  "diagramPlateCount": 54
+}

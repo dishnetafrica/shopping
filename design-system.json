@@ -1,0 +1,238 @@
+{
+  "$schema": "./design-system.schema.json",
+  "meta": {
+    "name": "Bajaj Genuine Parts Design System",
+    "version": "1.0.0",
+    "description": "Single source of truth for tokens + component specs. Every page is assembled from this file so the whole platform reads as one system.",
+    "market": "Uganda",
+    "currency": { "code": "UGX", "symbol": "UGX", "position": "before", "thousands": "," }
+  },
+
+  "color": {
+    "brand": {
+      "blue":        "#1552CC",
+      "blueDark":    "#0E3A94",
+      "blueDeep":    "#0B2A6B",
+      "ink":         "#0C1220",
+      "inkSoft":     "#141B2D",
+      "accent":      "#F5B301",
+      "accentDeep":  "#D99900"
+    },
+    "surface": {
+      "page":        "#F5F7FA",
+      "card":        "#FFFFFF",
+      "raised":      "#FFFFFF",
+      "sunken":      "#EEF1F6",
+      "ink":         "#141B2D",
+      "inkSoft":     "#1C2740",
+      "header":      "#0C1220",
+      "footer":      "#0C1220",
+      "overlay":     "rgba(12,18,32,0.55)"
+    },
+    "text": {
+      "primary":     "#0C1220",
+      "secondary":   "#4A5568",
+      "muted":       "#8A94A6",
+      "onDark":      "#FFFFFF",
+      "onDarkMuted": "#AEB8CC",
+      "link":        "#1552CC"
+    },
+    "line": {
+      "subtle":      "#E6EAF0",
+      "default":     "#D7DDE6",
+      "strong":      "#B9C2D0"
+    },
+    "state": {
+      "success":     "#128A4B",
+      "successBg":   "#E4F4EC",
+      "warning":     "#C77700",
+      "warningBg":   "#FDF3E2",
+      "danger":      "#C62828",
+      "dangerBg":    "#FCE9E9",
+      "info":        "#1552CC",
+      "infoBg":      "#E8F0FF"
+    },
+    "badge": {
+      "genuine":     { "fg": "#128A4B", "bg": "#E4F4EC" },
+      "bestseller":  { "fg": "#C77700", "bg": "#FDF3E2" },
+      "new":         { "fg": "#0E3A94", "bg": "#E8F0FF" },
+      "popular":     { "fg": "#FFFFFF", "bg": "#1552CC" },
+      "instock":     { "fg": "#128A4B", "bg": "#E4F4EC" },
+      "outofstock":  { "fg": "#C62828", "bg": "#FCE9E9" }
+    }
+  },
+
+  "typography": {
+    "fontFamily": {
+      "sans": "'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",
+      "display": "'Inter', 'Segoe UI', system-ui, sans-serif",
+      "mono": "'JetBrains Mono', 'SFMono-Regular', ui-monospace, monospace"
+    },
+    "scale": {
+      "display": { "size": "3.25rem", "line": "1.05", "weight": 800, "tracking": "-0.02em" },
+      "h1":      { "size": "2.25rem", "line": "1.12", "weight": 800, "tracking": "-0.02em" },
+      "h2":      { "size": "1.625rem", "line": "1.2", "weight": 700, "tracking": "-0.01em" },
+      "h3":      { "size": "1.25rem", "line": "1.3", "weight": 700, "tracking": "0" },
+      "h4":      { "size": "1.0625rem", "line": "1.4", "weight": 700, "tracking": "0" },
+      "body":    { "size": "1rem", "line": "1.6", "weight": 400, "tracking": "0" },
+      "small":   { "size": "0.875rem", "line": "1.5", "weight": 400, "tracking": "0" },
+      "caption": { "size": "0.75rem", "line": "1.4", "weight": 500, "tracking": "0.01em" },
+      "overline":{ "size": "0.6875rem", "line": "1.2", "weight": 700, "tracking": "0.12em", "transform": "uppercase" }
+    }
+  },
+
+  "space": {
+    "0": "0", "1": "4px", "2": "8px", "3": "12px", "4": "16px",
+    "5": "20px", "6": "24px", "8": "32px", "10": "40px", "12": "48px",
+    "16": "64px", "20": "80px", "24": "96px"
+  },
+
+  "radius": {
+    "sm": "6px", "md": "10px", "lg": "16px", "xl": "22px", "pill": "999px", "round": "50%"
+  },
+
+  "shadow": {
+    "xs": "0 1px 2px rgba(12,18,32,0.06)",
+    "sm": "0 1px 3px rgba(12,18,32,0.08), 0 1px 2px rgba(12,18,32,0.04)",
+    "md": "0 4px 12px rgba(12,18,32,0.08), 0 2px 4px rgba(12,18,32,0.04)",
+    "lg": "0 12px 28px rgba(12,18,32,0.12), 0 4px 8px rgba(12,18,32,0.06)",
+    "focus": "0 0 0 3px rgba(21,82,204,0.35)"
+  },
+
+  "layout": {
+    "maxWidth": "1240px",
+    "gutter": "24px",
+    "grid": { "columns": 12, "gap": "24px" },
+    "breakpoints": { "sm": "640px", "md": "768px", "lg": "1024px", "xl": "1280px" },
+    "headerHeight": "68px"
+  },
+
+  "motion": {
+    "fast": "140ms cubic-bezier(0.4,0,0.2,1)",
+    "base": "220ms cubic-bezier(0.4,0,0.2,1)",
+    "slow": "360ms cubic-bezier(0.4,0,0.2,1)"
+  },
+
+  "buttons": {
+    "primary":   { "bg": "brand.blue", "bgHover": "brand.blueDark", "fg": "text.onDark", "radius": "md", "padY": "12px", "padX": "22px", "weight": 700, "shadow": "sm" },
+    "secondary": { "bg": "surface.card", "bgHover": "surface.sunken", "fg": "text.primary", "border": "line.default", "radius": "md", "padY": "12px", "padX": "22px", "weight": 700 },
+    "accent":    { "bg": "brand.accent", "bgHover": "brand.accentDeep", "fg": "brand.ink", "radius": "md", "padY": "12px", "padX": "22px", "weight": 700 },
+    "ghost":     { "bg": "transparent", "bgHover": "surface.sunken", "fg": "text.link", "radius": "md", "padY": "10px", "padX": "16px", "weight": 700 },
+    "whatsapp":  { "bg": "#25D366", "bgHover": "#1FB855", "fg": "#FFFFFF", "radius": "md", "padY": "12px", "padX": "20px", "weight": 700 },
+    "sizes": { "sm": { "padY": "8px", "padX": "16px", "font": "small" }, "md": { "padY": "12px", "padX": "22px", "font": "body" }, "lg": { "padY": "15px", "padX": "28px", "font": "h4" } }
+  },
+
+  "iconSet": {
+    "family": "line",
+    "stroke": "1.75",
+    "size": { "sm": "16", "md": "20", "lg": "24", "xl": "32" },
+    "systems": {
+      "engine": "engine", "fuel_system": "fuel", "electrical": "electrical",
+      "transmission": "transmission", "brakes": "brake", "suspension": "suspension",
+      "frame_body": "frame", "controls": "controls", "wheels": "tyre",
+      "exhaust": "exhaust", "lubrication": "oil", "accessories": "accessories"
+    }
+  },
+
+  "components": {
+    "navbar": {
+      "height": "layout.headerHeight",
+      "bg": "surface.header",
+      "fg": "text.onDark",
+      "logo": { "asset": "assets/branding/logo-white.svg", "height": "30px" },
+      "links": ["Motorcycles", "Parts", "Diagrams", "Manuals", "AI Assistant", "Offers"],
+      "search": { "placeholder": "Search by part number, name or keyword...", "width": "360px", "radius": "md" },
+      "actions": ["country", "account", "cart"],
+      "sticky": true
+    },
+    "hero": {
+      "bg": "surface.header",
+      "layout": "split",
+      "headline": { "font": "display", "color": "text.onDark" },
+      "subhead": { "font": "body", "color": "text.onDarkMuted" },
+      "search": { "variant": "prominent", "radius": "md", "height": "56px" },
+      "popularSearches": true,
+      "image": { "position": "right", "treatment": "full-bleed" }
+    },
+    "motorcycleCard": {
+      "surface": "surface.card",
+      "radius": "lg",
+      "shadow": "sm",
+      "shadowHover": "lg",
+      "border": "line.subtle",
+      "image": { "ratio": "4/3", "fit": "contain", "bg": "surface.sunken" },
+      "fields": ["badge", "name", "tagline", "cta"],
+      "cta": { "label": "Explore Motorcycle", "variant": "ghost", "icon": "chevron-right" }
+    },
+    "systemCard": {
+      "surface": "surface.ink",
+      "radius": "md",
+      "image": { "ratio": "16/10", "fit": "cover", "overlay": "surface.overlay" },
+      "label": { "font": "h4", "color": "text.onDark", "icon": true },
+      "sub": { "font": "caption", "color": "text.onDarkMuted", "template": "{count} Parts" }
+    },
+    "productCard": {
+      "surface": "surface.card",
+      "radius": "md",
+      "shadow": "xs",
+      "shadowHover": "md",
+      "border": "line.subtle",
+      "image": { "ratio": "1/1", "fit": "contain", "bg": "surface.card" },
+      "fields": ["badges", "name", "partNo", "price", "stock", "actions"],
+      "actions": ["addToCart", "wishlist"],
+      "wishlist": true
+    },
+    "compatibilityCard": {
+      "surface": "surface.card",
+      "radius": "md",
+      "border": "line.subtle",
+      "image": { "ratio": "4/3", "fit": "contain", "bg": "surface.sunken" },
+      "fields": ["name", "yearRange"]
+    },
+    "specTable": {
+      "surface": "surface.card",
+      "radius": "md",
+      "border": "line.subtle",
+      "rowStripe": "surface.sunken",
+      "labelColor": "text.secondary",
+      "valueColor": "text.primary",
+      "labelWeight": 500,
+      "valueWeight": 600
+    },
+    "partListTable": {
+      "columns": ["no", "partNo", "description", "qty", "price"],
+      "headerBg": "surface.sunken",
+      "monoColumns": ["partNo"],
+      "rowHover": "surface.sunken"
+    },
+    "gallery": {
+      "layout": "thumbs-left",
+      "main": { "ratio": "4/3", "fit": "contain", "bg": "surface.sunken", "radius": "lg" },
+      "thumbs": { "size": "64px", "radius": "sm", "activeBorder": "brand.blue" },
+      "badge360": true
+    },
+    "aiChatWidget": {
+      "surface": "surface.card",
+      "radius": "lg",
+      "header": { "bg": "brand.blue", "fg": "text.onDark", "title": "AI Assistant" },
+      "bubble": { "user": "brand.blue", "assistant": "surface.sunken" },
+      "input": { "placeholder": "Type your question...", "radius": "pill" },
+      "quickActions": ["Show on Diagram", "Watch Video", "View Parts"]
+    },
+    "trustBar": {
+      "surface": "surface.card",
+      "items": [
+        { "icon": "shield-check", "title": "100% Genuine Parts", "sub": "Factory-quality you can trust" },
+        { "icon": "diagram", "title": "Interactive Diagrams", "sub": "Find the right part easily" },
+        { "icon": "ai", "title": "AI Vehicle Assistant", "sub": "Ask. Diagnose. Get solutions." },
+        { "icon": "truck", "title": "Fast Delivery", "sub": "Across Uganda" },
+        { "icon": "headset", "title": "Expert Support", "sub": "We're here to help." }
+      ]
+    },
+    "footer": {
+      "bg": "surface.footer",
+      "fg": "text.onDarkMuted",
+      "columns": ["Motorcycles", "Parts & Systems", "Support", "Company"]
+    }
+  }
+}

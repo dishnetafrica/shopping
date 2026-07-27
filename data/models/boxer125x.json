@@ -1,0 +1,45 @@
+{
+  "id": "boxer125x",
+  "brandId": "BM125X",
+  "name": "Boxer BM125X",
+  "family": "Boxer",
+  "fullName": "Bajaj Boxer BM 125X",
+  "tagline": "Tough and dependable",
+  "summary": "A rugged 125cc commuter engineered for mixed terrain — long-travel suspension and a durable chassis that keeps going where the road ends.",
+  "badges": [],
+  "status": "active",
+  "yearRange": "2016–Present",
+  "rating": { "value": 4.4, "count": 88 },
+  "catalogue": { "type": "Spare Parts Catalogue (Export)" },
+  "colors": [
+    { "id": "red",   "name": "Red",   "hex": "#B22222", "asset": "assets/motorcycles/boxer125x/color-red.jpg" },
+    { "id": "blue",  "name": "Blue",  "hex": "#1B3A8B", "asset": "assets/motorcycles/boxer125x/color-blue.jpg" }
+  ],
+  "keySpecs": [
+    { "label": "Engine",       "value": "125 cc",  "sub": "4-Stroke, SOHC", "icon": "engine" },
+    { "label": "Max Power",    "value": "10.8 PS", "sub": "@ 7500 rpm",     "icon": "power" },
+    { "label": "Transmission", "value": "5 Speed", "sub": "",               "icon": "transmission" },
+    { "label": "Terrain",      "value": "Mixed",   "sub": "On/Off road",    "icon": "suspension" }
+  ],
+  "specifications": {
+    "Engine": {
+      "Type": "4-Stroke, Air-cooled, Single Cylinder, SOHC",
+      "Displacement": "124.5 cc",
+      "Max Power": "10.8 PS @ 7500 rpm",
+      "Max Torque": "11.0 Nm @ 5500 rpm",
+      "Starting": "Kick / Electric + Kick"
+    },
+    "Transmission": { "Gearbox": "5-Speed", "Final Drive": "Chain" },
+    "Chassis & Suspension": { "Frame Type": "Tubular", "Front Suspension": "Telescopic", "Rear Suspension": "Twin Shock, long travel" }
+  },
+  "highlights": ["Long-travel Suspension", "Durable Chassis", "High Ground Clearance", "Mixed-terrain Ready"],
+  "gallery": { "hero": "assets/motorcycles/boxer125x/hero.jpg" },
+  "systems": [
+    { "id": "engine", "partCount": 49 }, { "id": "fuel_system", "partCount": 16 },
+    { "id": "electrical", "partCount": 26 }, { "id": "transmission", "partCount": 33 },
+    { "id": "brakes", "partCount": 12 }, { "id": "suspension", "partCount": 14 },
+    { "id": "frame_body", "partCount": 28 }, { "id": "controls", "partCount": 20 },
+    { "id": "wheels", "partCount": 18 }, { "id": "accessories", "partCount": 13 }
+  ],
+  "diagramPlateCount": 45
+}

@@ -1,0 +1,19 @@
+{
+  "meta": { "description": "Demo second auto_parts tenant — proves the storefront rebrands from tenant config alone (no code change). In production this tenant would carry its own catalogue." },
+  "id": "speedparts",
+  "vertical": "auto_parts",
+  "brand": { "name": "SPEEDPARTS", "wordmark": "AUTO SPARES", "emblem": "chevron" },
+  "theme": { "accent": "#0E7A3B", "accentDark": "#0A5C2C", "secondary": "#F5A623" },
+  "market": {
+    "country": "Kenya",
+    "code": "KE",
+    "flag": "🇰🇪",
+    "currency": { "code": "KES", "symbol": "KSh", "position": "before", "thousands": "," }
+  },
+  "contact": { "whatsapp": "+254 700 000 000", "website": "https://speedparts.co.ke" },
+  "hero": {
+    "headline": "The right part.\nEvery ride.",
+    "sub": "Genuine two-wheeler spares, exploded diagrams and expert help — across Kenya."
+  },
+  "models": ["boxer100", "boxer150", "v15", "boxer125hd"]
+}

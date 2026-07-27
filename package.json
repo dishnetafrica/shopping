@@ -1,0 +1,15 @@
+{
+  "name": "ea-auto-part",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EA Auto Part — genuine motorcycle spares storefront (CloudBSS auto_parts vertical). Static site assembled from design-system.json + /data by a Python generator.",
+  "scripts": {
+    "build": "python3 build/generate.py",
+    "build:demo": "ONLY_PAGES=index.html python3 build/generate.py data/tenant-speedparts.json dist-demo/speedparts",
+    "parts": "python3 build/build_parts.py",
+    "shot": "node build/shot.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0"
+  }
+}

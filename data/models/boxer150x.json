@@ -1,0 +1,45 @@
+{
+  "id": "boxer150x",
+  "brandId": "BM150X",
+  "name": "Boxer BM150 X",
+  "family": "Boxer",
+  "fullName": "Bajaj Boxer BM 150 X (Off Roader)",
+  "tagline": "Xtra power. Xtra tough.",
+  "summary": "The off-roader in the Boxer family — raised suspension, protective bash plate and knobbly-ready wheels for the roughest routes.",
+  "badges": ["new"],
+  "status": "active",
+  "yearRange": "2019–Present",
+  "rating": { "value": 4.5, "count": 96 },
+  "catalogue": { "type": "Spare Parts Catalogue (Export)" },
+  "colors": [
+    { "id": "red",   "name": "Red",   "hex": "#B22222", "asset": "assets/motorcycles/boxer150x/color-red.jpg" },
+    { "id": "black", "name": "Black", "hex": "#1A1A1A", "asset": "assets/motorcycles/boxer150x/color-black.jpg" }
+  ],
+  "keySpecs": [
+    { "label": "Engine",       "value": "150 cc",  "sub": "4-Stroke, SOHC", "icon": "engine" },
+    { "label": "Max Power",    "value": "11.8 PS", "sub": "@ 7500 rpm",     "icon": "power" },
+    { "label": "Transmission", "value": "5 Speed", "sub": "",               "icon": "transmission" },
+    { "label": "Terrain",      "value": "Off-Road","sub": "Raised setup",   "icon": "suspension" }
+  ],
+  "specifications": {
+    "Engine": {
+      "Type": "4-Stroke, Air-cooled, Single Cylinder, SOHC",
+      "Displacement": "144.8 cc",
+      "Max Power": "11.8 PS @ 7500 rpm",
+      "Max Torque": "12.0 Nm @ 5000 rpm",
+      "Starting": "Kick / Electric + Kick"
+    },
+    "Transmission": { "Gearbox": "5-Speed", "Final Drive": "Chain" },
+    "Chassis & Suspension": { "Frame Type": "Tubular", "Front Suspension": "Long-travel Telescopic", "Rear Suspension": "Long-travel Twin Shock" }
+  },
+  "highlights": ["Off-Road Ready", "Raised Suspension", "Protective Bash Plate", "Xtra Ground Clearance"],
+  "gallery": { "hero": "assets/motorcycles/boxer150x/hero.jpg" },
+  "systems": [
+    { "id": "engine", "partCount": 51 }, { "id": "fuel_system", "partCount": 16 },
+    { "id": "electrical", "partCount": 27 }, { "id": "transmission", "partCount": 34 },
+    { "id": "brakes", "partCount": 12 }, { "id": "suspension", "partCount": 15 },
+    { "id": "frame_body", "partCount": 30 }, { "id": "controls", "partCount": 20 },
+    { "id": "wheels", "partCount": 18 }, { "id": "accessories", "partCount": 15 }
+  ],
+  "diagramPlateCount": 46
+}

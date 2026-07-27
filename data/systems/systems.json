@@ -1,0 +1,88 @@
+{
+  "meta": {
+    "description": "Canonical system taxonomy for the whole platform. Each catalogue plate maps to exactly one system via `plateGroups`. Models reference these ids and supply their own part counts + plate lists.",
+    "source": "Bajaj Provisional Spare Parts Catalogue (Export) — pictorial index groupings"
+  },
+  "systems": [
+    {
+      "id": "engine",
+      "name": "Engine",
+      "icon": "engine",
+      "cover": "assets/systems/engine.jpg",
+      "blurb": "Cylinder head, block, valvetrain, crankshaft and covers.",
+      "plateGroups": ["Cover Cylinder Head", "Cylinder Head", "Valve", "Camshaft / Tensioner", "Cylinder & Piston", "Crankshaft", "Cover RH", "Cover Magneto", "Engine Assly & Crankcase RH", "Engine Assly / Crankcase RH", "Engine Mountings", "Crankcase LH", "SAI Unit"]
+    },
+    {
+      "id": "transmission",
+      "name": "Transmission",
+      "icon": "transmission",
+      "cover": "assets/systems/transmission.jpg",
+      "blurb": "Gearbox, clutch, change drum and kick starter.",
+      "plateGroups": ["Transmission", "Change Drum / Shift Fork", "Gear Change Mechanism", "Clutch", "Clutch Cover", "Cover Clutch", "Clutch Assembly", "Kick Starter Mechanism", "Kick Assembly", "Oil Pump"]
+    },
+    {
+      "id": "fuel_system",
+      "name": "Fuel System",
+      "icon": "fuel",
+      "cover": "assets/systems/fuel-system.jpg",
+      "blurb": "Carburettor, air cleaner, fuel tank and fuel lines.",
+      "plateGroups": ["Carburettor", "Carburetor", "Carburetor Assembly - V12", "Air Cleaner Complete", "Petrol Tank, Cap Tank and Gauge Fuel", "Petrol Tank, Cap Tank & Gauge Fuel", "Fuell Tank, Cap Tank and Gauge Fuel", "Fittings - Petrol Tank, Side Covers & Cover Seat", "Fittings - Fuel Tank, Side Covers & Cover Seat", "EVAP Mechanism", "Side Covers Fitment"]
+    },
+    {
+      "id": "electrical",
+      "name": "Electrical",
+      "icon": "electrical",
+      "cover": "assets/systems/electrical.jpg",
+      "blurb": "Magneto, CDI, coils, lamps, meter and wiring.",
+      "plateGroups": ["Magneto / C.D.I. / H.T. Coil", "H.T. Coil & Regulator Assembly", "Starter Assembly", "Starter Assly", "Meter Assly", "Meter Assembly", "Head Lamp Assly", "Head Lamp", "Head Lamp & Fairing", "Head Lamp (With Fairing)", "Turn Signal Lamp", "Indicator Light Assembly", "Tail Lamp Assly & Number Plate", "Tail Lamp Assembly / Front Number Plate", "Electrics Equipments", "Electrical Equipments", "Fairing Structure And Speedometer"]
+    },
+    {
+      "id": "brakes",
+      "name": "Brakes",
+      "icon": "brake",
+      "cover": "assets/systems/brakes.jpg",
+      "blurb": "Front & rear brakes, hubs, master cylinder and pedal.",
+      "plateGroups": ["Front Hub", "Front Hub -V12", "Rear Hub", "Brake Pedal", "Rear Brake Pedal", "Front Master Cylinder", "Front Disc Brake"]
+    },
+    {
+      "id": "suspension",
+      "name": "Suspension",
+      "icon": "suspension",
+      "cover": "assets/systems/suspension.jpg",
+      "blurb": "Front fork, swing arm and rear shock absorbers.",
+      "plateGroups": ["Front Fork", "Swing Arm / Rear Shock Absorber"]
+    },
+    {
+      "id": "frame_body",
+      "name": "Frame & Body",
+      "icon": "frame",
+      "cover": "assets/systems/frame-body.jpg",
+      "blurb": "Frame, mudguards, seat, painted parts and grab handle.",
+      "plateGroups": ["Frame & Frame Fitting", "Frame and Frame Fitting", "Fender - Front & Rear", "Mudguard Front & Rear", "Mudguard- Front & Rear", "Mudguard - Front & Rear", "Painted Parts", "Painted Parts & Decals", "Painted Parts and Decals", "Painted Parts & Decals V15", "Painted Parts and Decals - V12", "Seat Assly & Grip Frame", "Seat Assly / Grip Frame", "Seat Assly", "Fitting Seat Cover & Tail Lamp", "Chain Case", "Fairing", "Grab Handle , Leg Guard & Saree Guard", "Mirror Assembly & Number Plate", "Chassis & Body"]
+    },
+    {
+      "id": "controls",
+      "name": "Controls",
+      "icon": "controls",
+      "cover": "assets/systems/controls.jpg",
+      "blurb": "Handlebar, control cables, foot rests and stand.",
+      "plateGroups": ["Handle Bar", "Handle Bar Assly", "Control Cablea", "Control Cables", "Foot Rest / Holder / Stand", "Rider Foot Rest / Pillion Foot Rest", "Pillion Foot Rest / Holder", "Stand Assembly", "Tool Kit"]
+    },
+    {
+      "id": "wheels",
+      "name": "Wheels & Tyres",
+      "icon": "tyre",
+      "cover": "assets/systems/wheels.jpg",
+      "blurb": "Rims, spokes, tyres and tubes, front & rear.",
+      "plateGroups": ["Wheel Rim/ Spoke / Tyre / Tube", "Tyre / Tube / Rim", "Tube / Tyre / Rim", "Tyre/ Tube / Rim"]
+    },
+    {
+      "id": "accessories",
+      "name": "Accessories",
+      "icon": "accessories",
+      "cover": "assets/systems/accessories.jpg",
+      "blurb": "Kits, add-ons and genuine accessory fitments.",
+      "plateGroups": ["Accessories", "Accessories / Grab Handle", "Kits List", "Kit List"]
+    }
+  ]
+}

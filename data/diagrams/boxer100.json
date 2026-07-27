@@ -1,0 +1,3104 @@
+{
+  "meta": {
+    "model": "boxer100",
+    "brandId": "001MC643",
+    "description": "Boxer 100 (ES/KS) exploded-diagram plates + verbatim part lists. Batches 1-2: Engine, Transmission, Fuel, Electrical, Starting (plates 1-21). Prices are starter UGX retail estimates.",
+    "source": "BM 100 ES & KS SPC_18052012.pdf",
+    "coverage": "plates 1-21 of 45 (Batches 1-2)"
+  },
+  "plates": [
+    {
+      "plate": 1,
+      "name": "Cover Cylinder Head",
+      "system": "engine",
+      "page": 2,
+      "diagram": "assets/diagrams/boxer100/plate-01-cover-cylinder-head.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "JZ 5110 21",
+          "description": "Cover Cylinder Head Assly",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 45000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "JV 5410 07",
+          "description": "Bolt Flange",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 2000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "JD 5110 10",
+          "description": "Gasket Head Cover",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "JB 5110 11",
+          "description": "Bolt Head Mounting",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 1500,
+          "remarks": "M8 X 1.25 X 190L"
+        },
+        {
+          "no": "5",
+          "partNo": "JZ 5110 20",
+          "description": "Plate Cylinder Head",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "JA 5110 11",
+          "description": "Hose Breather",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "DP 1210 25",
+          "description": "Clamp (ID 12.5 MM)",
+          "qty": {
+            "KS": 3,
+            "ES": 3
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "JB 5110 15",
+          "description": "Flange Bolt",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1200,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 2,
+      "name": "Cylinder Head",
+      "system": "engine",
+      "page": 4,
+      "diagram": "assets/diagrams/boxer100/plate-02-cylinder-head.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "36 PF00 37",
+          "description": "Kit Assly. Cylinder Head",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 185000,
+          "remarks": "Ref. Page No."
+        },
+        {
+          "no": "2",
+          "partNo": "JA 5110 28",
+          "description": "Stud",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 1500,
+          "remarks": "M8 X 25 Silver"
+        },
+        {
+          "no": "3",
+          "partNo": "JB 5110 19",
+          "description": "Gasket Cylinder Head",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 7500,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "PF 5814 00",
+          "description": "Intake Manifold",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 14000,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "JA 5814 06",
+          "description": "Bolt Flange",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 2000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "39 1283 21",
+          "description": "'O' Ring (Intake Pipe)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1200,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "JB 5812 71",
+          "description": "Insulator PTE-16",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3500,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "JB 5812 72",
+          "description": "'O' Ring Insulator",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1000,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 3,
+      "name": "Valve",
+      "system": "engine",
+      "page": 6,
+      "diagram": "assets/diagrams/boxer100/plate-03-valve.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "JA 5112 11",
+          "description": "Shaft Rocker Arm",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 9000,
+          "remarks": "48.2 mm"
+        },
+        {
+          "no": "2",
+          "partNo": "JA 5112 04",
+          "description": "Rocker Arm with Roller",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 16000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "DG 1010 29",
+          "description": "Cotter Valve (Collet)",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "36 PA00 04",
+          "description": "Valve Kit",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 28000,
+          "remarks": "Refer Page No. 92"
+        },
+        {
+          "no": "5",
+          "partNo": "36 JA00 03",
+          "description": "Valve Repair Kit",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 35000,
+          "remarks": "Refer Page No. 91"
+        },
+        {
+          "no": "6",
+          "partNo": "39 2017 19",
+          "description": "Seal Valve Stem",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 2500,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 4,
+      "name": "Camshaft / Tensioner",
+      "system": "engine",
+      "page": 8,
+      "diagram": "assets/diagrams/boxer100/plate-04-camshaft-tensioner.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 5112 00",
+          "description": "Assly. Camshaft Complete",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 55000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "JA 5112 16",
+          "description": "Spacer Cam Sprocket",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "DS 1012 76",
+          "description": "Sprocket Cam Shaft - 32 T",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "DH 1013 87",
+          "description": "Hex Head Bolt",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "DH 1010 48",
+          "description": "Special Washer Cam Shaft",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": "'O' Washer"
+        },
+        {
+          "no": "6",
+          "partNo": "36 PA00 02",
+          "description": "Guide Chain Kit",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 14000,
+          "remarks": "Ref. Page No. 91"
+        },
+        {
+          "no": "7",
+          "partNo": "DH 1013 92",
+          "description": "Cam chain Tensioner Pivot Bolt",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "JV 5210 03",
+          "description": "Adjuster Chain Silver",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 9000,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "CS 1011 28",
+          "description": "Gasket",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 700,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "JA 5210 18",
+          "description": "Bolt M6 Chain Tensioner",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "JA 5210 19",
+          "description": "Bolt M6 X 20 Silver",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 700,
+          "remarks": "Adjuster Mounting"
+        },
+        {
+          "no": "12",
+          "partNo": "39 0594 17",
+          "description": "Circlip for Camshaft",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "39 2669 21",
+          "description": "'O' Ring (Tensioner)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "JA 5310 11",
+          "description": "Cam Chain (94 Link)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 22000,
+          "remarks": ""
+        },
+        {
+          "no": "15",
+          "partNo": "39 1988 20",
+          "description": "Bearing Ball - Small 12 X 28 X 8",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": "W X OD X ID"
+        },
+        {
+          "no": "16",
+          "partNo": "39 2683 20",
+          "description": "Bearing Ball - Big 17 X 35 X 10",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 5,
+      "name": "Cylinder and Piston",
+      "system": "engine",
+      "page": 10,
+      "diagram": "assets/diagrams/boxer100/plate-05-cylinder-piston.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "JD 5210 02",
+          "description": "Gasket Cylinder Block",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "39 1000 06",
+          "description": "Dowel Pin",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "36 PF00 28",
+          "description": "Piston Ring Set",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 22000,
+          "remarks": "Refer Page No. 92"
+        },
+        {
+          "no": "4",
+          "partNo": "JB 5212 11",
+          "description": "Wire Clip Piston",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "36 PF00 27",
+          "description": "Kit Cylinder Block / Piston Assly.",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 145000,
+          "remarks": "Refer Page No. 92"
+        }
+      ]
+    },
+    {
+      "plate": 6,
+      "name": "Crankshaft",
+      "system": "engine",
+      "page": 12,
+      "diagram": "assets/diagrams/boxer100/plate-06-crankshaft.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "59 1500 14",
+          "description": "Flange Nut",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "2A",
+          "partNo": "59 1200 03",
+          "description": "Belleville Washer",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "2B",
+          "partNo": "59 1100 08",
+          "description": "Plain Washer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "31 1011 73",
+          "description": "Key Woodruff",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "PF 5310 02",
+          "description": "Crank Shaft Assly",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 165000,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "39 1864 20",
+          "description": "Ball Bearing 20 X 52 X 15",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 14000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "DS 1011 54",
+          "description": "Parallel Key",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "36 JZ00 23",
+          "description": "Set Primary Drive / Driven",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 48000,
+          "remarks": "Refer Page No. 91"
+        },
+        {
+          "no": "8",
+          "partNo": "JA 5310 12",
+          "description": "Spring",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 900,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "JA 5310 15",
+          "description": "Pin Crank Shaft Plunger",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "JB 5310 21",
+          "description": "Plunger Oil Crank Shaft",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1200,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 7,
+      "name": "Transmission",
+      "system": "transmission",
+      "page": 14,
+      "diagram": "assets/diagrams/boxer100/plate-07-transmission.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 5510 02",
+          "description": "Shaft Input Transmission (Drive)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 42000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "PF 5512 02",
+          "description": "Gear 4th Drive",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 16000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "39 0987 17",
+          "description": "Ring Snap (17.2 X 20.5 X 1.5)",
+          "qty": {
+            "KS": 5,
+            "ES": 5
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "JA 5510 02",
+          "description": "Spline Washer (17.2 X 20.5 X 1.5)",
+          "qty": {
+            "KS": 3,
+            "ES": 3
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "PF 5512 01",
+          "description": "Gear 3rd Drive",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 16000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "PF 5512 00",
+          "description": "Gear 2nd Drive",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 16000,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "JA 5510 04",
+          "description": "Washer Thrust 2nd Drive",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "PF 5510 03",
+          "description": "Shaft Output Transmission (Driven)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 42000,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "PF 5512 06",
+          "description": "2nd Driven Washer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "PF 5512 03",
+          "description": "Gear 2nd Driven",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 17000,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "PF 5512 04",
+          "description": "Gear 3rd Driven",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 17000,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "PF 5512 05",
+          "description": "Gear 4th Driven",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 17000,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "JZ 5512 05",
+          "description": "Bush 1st Driven",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "JZ 5512 04",
+          "description": "Gear 1st Driven",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": ""
+        },
+        {
+          "no": "15",
+          "partNo": "JA 5510 08",
+          "description": "Washer Thrust 1st Driven",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "16",
+          "partNo": "JA 5510 09",
+          "description": "Collar Sprocket Drive",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "17",
+          "partNo": "59 2100 24",
+          "description": "'O' Ring Collar Sprocket (13.8 X 1.9)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "18",
+          "partNo": "JZ 5510 04",
+          "description": "Sprocket Drive (Engine Sprocket)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": "14 Teeth"
+        },
+        {
+          "no": "19",
+          "partNo": "DU 1012 13",
+          "description": "Plate Lock Sprocket",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "20",
+          "partNo": "39 1981 04",
+          "description": "Socket Head Bolt",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 600,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 8,
+      "name": "Change Drum / Shift Fork",
+      "system": "transmission",
+      "page": 16,
+      "diagram": "assets/diagrams/boxer100/plate-08-change-drum-shift-fork.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 5610 00",
+          "description": "Drum Complete Gear Shift",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 28000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "39 0992 06",
+          "description": "Dowel (Pin Drum Change)",
+          "qty": {
+            "KS": 5,
+            "ES": 5
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "JA 5610 02",
+          "description": "Cam Drum Change",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "JD 5610 11",
+          "description": "Special Bolt Drum Change",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": "M6 X 1"
+        },
+        {
+          "no": "5",
+          "partNo": "PF 5610 02",
+          "description": "Shaft Gear Shift Fork",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 4000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "JD 5610 04",
+          "description": "Fork Gear Shift Output",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 9000,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "JZ 5610 02",
+          "description": "Fork Gear Shift Input",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 9000,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 9,
+      "name": "Gear Change Mechanism",
+      "system": "transmission",
+      "page": 18,
+      "diagram": "assets/diagrams/boxer100/plate-09-gear-change-mechanism.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 5612 00",
+          "description": "Lever Gear Shift Comp",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 14000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "JW 5612 06",
+          "description": "Extension Spring",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "JW 5612 08",
+          "description": "Spring Gear Shift Return",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 900,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "JA 5612 07",
+          "description": "Inhibitor Complete Gear Shift",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "JA 5612 08",
+          "description": "Spring Inhibitor",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 700,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "JA 5612 09",
+          "description": "Step Washer (Collar)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 700,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "39 2704 11",
+          "description": "Plain Washer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "39 0817 15",
+          "description": "Hex Nut / Flange - M6",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "JZ 5614 01",
+          "description": "Lever Gear Shift (Gear Pedal)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "DH 1015 09",
+          "description": "Damper",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1200,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "DG 1013 39",
+          "description": "Damper",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1200,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "JA 5612 11",
+          "description": "Flange Bolt",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 700,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 10,
+      "name": "Engine Assembly / Crankcase RH",
+      "system": "engine",
+      "page": 20,
+      "diagram": "assets/diagrams/boxer100/plate-10-engine-assly-crankcase-rh.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 5010 06",
+          "description": "Engine Assly KS 4 Speed",
+          "qty": {
+            "KS": 1,
+            "ES": 0
+          },
+          "price": 1100000,
+          "remarks": "N.I. — KS variant"
+        },
+        {
+          "no": "1",
+          "partNo": "PF 5010 05",
+          "description": "Engine Assly ES 4 Speed",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 1150000,
+          "remarks": "N.I. — ES variant"
+        },
+        {
+          "no": "2",
+          "partNo": "36 PF00 40",
+          "description": "Kit Crankcase RH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 95000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "59 2000 36",
+          "description": "6203 Ball Bearing",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": "For I/P Shaft"
+        },
+        {
+          "no": "4",
+          "partNo": "JA 5410 11",
+          "description": "Needle Roller Bearing",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": "For O/P Shaft"
+        },
+        {
+          "no": "5",
+          "partNo": "JA 5410 10",
+          "description": "Stopper Plate",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "39 1000 06",
+          "description": "Dowel Pin",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "PF 5410 18",
+          "description": "Bushing Drum BM-150",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "DH 1013 80",
+          "description": "Screw",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "52 JA00 27",
+          "description": "Stud Inhibitor Mounting",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 900,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "JV 5412 16",
+          "description": "Bolt M6 X 85 Silver",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 900,
+          "remarks": "Crankcase Mounting"
+        },
+        {
+          "no": "11",
+          "partNo": "JV 5410 07",
+          "description": "Flange Bolt",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 700,
+          "remarks": "Crankcase Mounting"
+        },
+        {
+          "no": "12",
+          "partNo": "52 JA00 29",
+          "description": "Bolt Shift Change",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 900,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "JA 5410 12",
+          "description": "Guide Kick",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2000,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "39 1964 04",
+          "description": "Flange Bolt - Small",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 600,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 11,
+      "name": "Crankcase LH",
+      "system": "engine",
+      "page": 22,
+      "diagram": "assets/diagrams/boxer100/plate-11-crankcase-lh.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "36 PF00 39",
+          "description": "Kit Crankcase Magneto Side KS",
+          "qty": {
+            "KS": 1,
+            "ES": 0
+          },
+          "price": 95000,
+          "remarks": "KS variant"
+        },
+        {
+          "no": "1",
+          "partNo": "36 PF00 38",
+          "description": "Kit Crankcase Magneto Side ES",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 98000,
+          "remarks": "ES variant"
+        },
+        {
+          "no": "2",
+          "partNo": "39 2562 20",
+          "description": "Needle Roller Bearing",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "59 2000 36",
+          "description": "6203 Ball Bearing",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "39 1715 19",
+          "description": "Seal Oil",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": "Output Shaft"
+        },
+        {
+          "no": "5",
+          "partNo": "31 2010 81",
+          "description": "Switch Complete",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": "Neutral Switch"
+        },
+        {
+          "no": "6",
+          "partNo": "DH 1017 84",
+          "description": "Gasket Neutral Switch (T.I.S)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "39 2190 19",
+          "description": "Oil Seal",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": "Shifter Shaft"
+        },
+        {
+          "no": "8",
+          "partNo": "JA 5410 05",
+          "description": "Bush Bendix",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 2000,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "39 0747 01",
+          "description": "Screw Pan Cross M6",
+          "qty": {
+            "KS": 0,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "JA 5410 34",
+          "description": "Stopper Gear Starter Aluminium",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 2000,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "39 1000 06",
+          "description": "Pin Dowel",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "39 0999 06",
+          "description": "Hollow Dowel Pin",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "JG 5710 24",
+          "description": "Mesh Oil Filter",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4000,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "LJ A000 04",
+          "description": "'O' Ring Strainer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "15",
+          "partNo": "JV 5410 06",
+          "description": "Cap Strainer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2000,
+          "remarks": ""
+        },
+        {
+          "no": "16",
+          "partNo": "JV 5410 07",
+          "description": "Flange - Bolt",
+          "qty": {
+            "KS": 6,
+            "ES": 6
+          },
+          "price": 700,
+          "remarks": "Crankcase Mounting"
+        },
+        {
+          "no": "17",
+          "partNo": "39 1759 04",
+          "description": "Bolt (M6 X 1 X 55L)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 700,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 12,
+      "name": "Clutch Cover",
+      "system": "transmission",
+      "page": 24,
+      "diagram": "assets/diagrams/boxer100/plate-12-clutch-cover.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "36 PF00 08",
+          "description": "Kit Cover Clutch Assly. Complete",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 65000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "JK 5412 14",
+          "description": "Decal",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "39 1041 19",
+          "description": "Oil Seal Clutch Lever",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "30 1011 42",
+          "description": "Oil Seal (Kick Shaft)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "JV 5412 08",
+          "description": "Shaft Clutch Release Assly",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "DP 1012 69",
+          "description": "Rod Push",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "DG 1014 18",
+          "description": "Gauge",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4000,
+          "remarks": "Oil Level Check"
+        },
+        {
+          "no": "8",
+          "partNo": "DS 1012 15",
+          "description": "Wire Circlip",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "JA 5412 36",
+          "description": "Plain Washer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "JA 5412 37",
+          "description": "Spring Torsion Clutch Lever",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "JA 5412 11",
+          "description": "Cap Oil Filler",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2000,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "JA 5412 25",
+          "description": "'O' Ring Cap Oil Filler",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "JA 5412 12",
+          "description": "Gasket Clutch Cover",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4000,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "JV 5412 15",
+          "description": "Bolt M6X40 Silver Color",
+          "qty": {
+            "KS": 8,
+            "ES": 8
+          },
+          "price": 700,
+          "remarks": ""
+        },
+        {
+          "no": "15",
+          "partNo": "JV 5412 09",
+          "description": "Bracket Clutch Cable",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "16",
+          "partNo": "DD 1211 81",
+          "description": "Oil Filter Element",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "17",
+          "partNo": "39 1671 21",
+          "description": "'O' Ring",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "18",
+          "partNo": "JV 5412 05",
+          "description": "Cap Filter",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "19",
+          "partNo": "JA 5210 19",
+          "description": "Bolt Flange",
+          "qty": {
+            "KS": 3,
+            "ES": 3
+          },
+          "price": 700,
+          "remarks": ""
+        },
+        {
+          "no": "20",
+          "partNo": "39 0999 06",
+          "description": "Pin Hollow Dowel",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 13,
+      "name": "Cover Magneto",
+      "system": "engine",
+      "page": 26,
+      "diagram": "assets/diagrams/boxer100/plate-13-cover-magneto.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 5412 11",
+          "description": "Cover Magneto KS",
+          "qty": {
+            "KS": 1,
+            "ES": 0
+          },
+          "price": 42000,
+          "remarks": "KS variant"
+        },
+        {
+          "no": "1",
+          "partNo": "36 PF00 07",
+          "description": "Kit Cover Magneto Assly ES",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 58000,
+          "remarks": "ES variant"
+        },
+        {
+          "no": "2",
+          "partNo": "JV 5412 15",
+          "description": "Bolt M8 Silver colour",
+          "qty": {
+            "KS": 8,
+            "ES": 8
+          },
+          "price": 700,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "JP 5412 08",
+          "description": "Gasket Magneto Cover KS",
+          "qty": {
+            "KS": 1,
+            "ES": 0
+          },
+          "price": 4000,
+          "remarks": "KS variant"
+        },
+        {
+          "no": "3",
+          "partNo": "JA 5412 05",
+          "description": "Gasket Magneto Cover ES",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 4000,
+          "remarks": "ES variant"
+        },
+        {
+          "no": "4",
+          "partNo": "JV 5410 07",
+          "description": "Bolt",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 700,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "JV 5412 06",
+          "description": "Cover LH Rear Complete (KS)",
+          "qty": {
+            "KS": 1,
+            "ES": 0
+          },
+          "price": 12000,
+          "remarks": "KS variant"
+        },
+        {
+          "no": "5",
+          "partNo": "JV 5412 12",
+          "description": "Cover LH Rear Complete (ES)",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": "ES variant"
+        },
+        {
+          "no": "6",
+          "partNo": "JA 5410 05",
+          "description": "Bush",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 2000,
+          "remarks": "For Drive Gear Assly"
+        },
+        {
+          "no": "7",
+          "partNo": "JA 5412 33",
+          "description": "Cap TDC Finder",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "30 1011 95",
+          "description": "'O' Ring",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "DS 1611 50",
+          "description": "Sticker Gear Shifting",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "JK 5412 14",
+          "description": "Decal Magneto Cover",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 14,
+      "name": "Clutch Assembly",
+      "system": "transmission",
+      "page": 28,
+      "diagram": "assets/diagrams/boxer100/plate-14-clutch-assembly.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "JZ 5514 13",
+          "description": "Clutch Assembly Complete",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 95000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "JA 5514 06",
+          "description": "Collar Clutch",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "39 2600 11",
+          "description": "Washer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "36 JZ00 37",
+          "description": "Kit Plate Friction",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 22000,
+          "remarks": "Refer Page No. 91"
+        },
+        {
+          "no": "5",
+          "partNo": "JB 5514 08",
+          "description": "Wheel Clutch",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 28000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "30 1010 96",
+          "description": "Plate Clutch (Steel Plate)",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 3500,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "JB 5514 11",
+          "description": "Hub Clutch (Modified)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 24000,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "JZ 5514 15",
+          "description": "Spring Clutch",
+          "qty": {
+            "KS": 6,
+            "ES": 6
+          },
+          "price": 900,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "JB 5514 06",
+          "description": "Holder Clutch (Modified)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "39 0980 04",
+          "description": "Bolt Hexagon Head",
+          "qty": {
+            "KS": 6,
+            "ES": 6
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "39 1057 11",
+          "description": "Belleville Washer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 700,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "JA 5514 20",
+          "description": "Plain Washer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "52 JA00 28",
+          "description": "Nut Special M14",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "39 1001 20",
+          "description": "Bearing Ball",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "15",
+          "partNo": "36 JZ00 23",
+          "description": "Set Primary Drive & Driven",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 48000,
+          "remarks": "Refer Page No. 91"
+        }
+      ]
+    },
+    {
+      "plate": 15,
+      "name": "Kick Starter Mechanism",
+      "system": "transmission",
+      "page": 30,
+      "diagram": "assets/diagrams/boxer100/plate-15-kick-starter-mechanism.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "JA 6212 01",
+          "description": "Lever Assly Kick",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 14000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "JA 6212 06",
+          "description": "Bolt Flange",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 700,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "36 DU10 07",
+          "description": "Boss",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": "Refer Page No. 91"
+        },
+        {
+          "no": "4",
+          "partNo": "22 1502 41",
+          "description": "Plain Washer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "39 0993 11",
+          "description": "Plain Washer Small",
+          "qty": {
+            "KS": 3,
+            "ES": 3
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "39 0738 17",
+          "description": "Circlip Shaft",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "JA 6210 01",
+          "description": "Shaft Kick",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "DS 1011 17",
+          "description": "Spring Kick Starter Ratchet",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 900,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "JA 6210 02",
+          "description": "Ratchet",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "JZ 6210 00",
+          "description": "Gear Kick Pinion",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "JA 6210 06",
+          "description": "Washer Thrust (16.2 X 25 X 0.5)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "39 2408 17",
+          "description": "Circlip",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "DD 1010 97",
+          "description": "Kick Rubber",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "JE 5410 08",
+          "description": "Spring Kick Starter Return",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 16,
+      "name": "Carburettor",
+      "system": "fuel_system",
+      "page": 32,
+      "diagram": "assets/diagrams/boxer100/plate-16-carburettor.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 5813 00",
+          "description": "Carburettor assly.",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 78000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "JB 5812 37",
+          "description": "Adjuster throttle cable",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "JB 5812 38",
+          "description": "Nut adjuster",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "36 PF00 33",
+          "description": "Air screw Kit",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3500,
+          "remarks": "Refer Page No. 93"
+        },
+        {
+          "no": "5",
+          "partNo": "36 PF00 32",
+          "description": "Kit Jet Needle",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4500,
+          "remarks": "Refer Page No. 93"
+        },
+        {
+          "no": "6",
+          "partNo": "36 PA00 13",
+          "description": "Idling screw kit",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": "Refer Page No. 92"
+        },
+        {
+          "no": "7",
+          "partNo": "JB 5812 29",
+          "description": "Valve complete float (Float pin)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "JB 5812 30",
+          "description": "Float complete",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 5000,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "JB 5812 32",
+          "description": "Screw washers M4x14",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "JB 5812 02",
+          "description": "Throttle position sensor",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 22000,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "JB 5812 04",
+          "description": "'O' Ring (TPS)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "PF 5813 08",
+          "description": "Tube",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "JB 5812 59",
+          "description": "Clip",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "36 PF00 34",
+          "description": "Throttle Value Kit",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": "Refer Page No. 93"
+        },
+        {
+          "no": "15",
+          "partNo": "36 PA00 15",
+          "description": "Carb. Gasket 'O' ring",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": "N.I. Refer Page No. 92"
+        },
+        {
+          "no": "16",
+          "partNo": "JB 5812 56",
+          "description": "Arm Pin Float",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "17",
+          "partNo": "JB 5812 60",
+          "description": "Drain Screw",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "18",
+          "partNo": "PF 5813 09",
+          "description": "Lever Complete Starter",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4000,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 17,
+      "name": "Air Cleaner Complete",
+      "system": "fuel_system",
+      "page": 34,
+      "diagram": "assets/diagrams/boxer100/plate-17-air-cleaner-complete.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 5810 00",
+          "description": "Assembly Air Filter",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 35000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "JB 5810 01",
+          "description": "Duct Air Intake",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "JA 5810 05",
+          "description": "Assly Catridge Air filter",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 9000,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "JA 5810 06",
+          "description": "Element Air Filter",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 9500,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "JA 5810 09",
+          "description": "Flame Arrester",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "JA 5810 12",
+          "description": "Tube Drain",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "DS 1211 26",
+          "description": "Plug",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "DP 1210 25",
+          "description": "Clamp",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "JA 5110 11",
+          "description": "Hose Breather",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "JB 5810 01",
+          "description": "Air Intake Duct",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "JA 5810 13",
+          "description": "Cartridge Cover Assly",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "JA 5810 11",
+          "description": "'O' Ring Cartridge Cover",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "39 1773 04",
+          "description": "Flange Bolt",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "DH 1210 38",
+          "description": "Clamp",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "15",
+          "partNo": "DF 1614 26",
+          "description": "Bolt - Stepped with Flange",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 700,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 18,
+      "name": "Silencer Assembly",
+      "system": "engine",
+      "page": 36,
+      "diagram": "assets/diagrams/boxer100/plate-18-silencer-assembly.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 5910 00",
+          "description": "Assembly Silencer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 62000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "CB 1011 14",
+          "description": "Gasket Exhaust Mounting",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "39 2295 15",
+          "description": "Flange Nut",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "JB 2312 06",
+          "description": "Bolt Hex. Socket Head",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 700,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 19,
+      "name": "Oil Pump",
+      "system": "engine",
+      "page": 38,
+      "diagram": "assets/diagrams/boxer100/plate-19-oil-pump.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 5710 00",
+          "description": "Oil Pump Assly",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 32000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "JA 5410 16",
+          "description": "Gasket Case Oil Pump",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "FD 1010 78",
+          "description": "Pan Head Screw M6 X 1 X 3DL",
+          "qty": {
+            "KS": 3,
+            "ES": 3
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "39 0999 06",
+          "description": "Dowel",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "PF 5710 01",
+          "description": "Gear Oil Pump",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 20,
+      "name": "Starter Assembly",
+      "system": "electrical",
+      "page": 40,
+      "diagram": "assets/diagrams/boxer100/plate-20-starter-assembly.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "JA 6214 14",
+          "description": "Body comp. starter clutch",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 45000,
+          "remarks": "ES only"
+        },
+        {
+          "no": "2",
+          "partNo": "DH 1017 81",
+          "description": "Plate roller clutch",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": "ES only"
+        },
+        {
+          "no": "3",
+          "partNo": "JA 6214 10",
+          "description": "Gear starter clutch",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": "ES only"
+        },
+        {
+          "no": "4",
+          "partNo": "JA 6214 02",
+          "description": "Washer",
+          "qty": {
+            "KS": 0,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": "ES only"
+        },
+        {
+          "no": "5",
+          "partNo": "39 2437 04",
+          "description": "Bolt socket",
+          "qty": {
+            "KS": 0,
+            "ES": 3
+          },
+          "price": 600,
+          "remarks": "ES only"
+        },
+        {
+          "no": "6",
+          "partNo": "JA 6214 06",
+          "description": "Starter drive assly.",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 22000,
+          "remarks": "ES only"
+        },
+        {
+          "no": "7",
+          "partNo": "JV 3516 00",
+          "description": "Motor Assly",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 120000,
+          "remarks": "ES only"
+        },
+        {
+          "no": "8",
+          "partNo": "JA 3516 04",
+          "description": "'O' Ring For Tie Bolt (Flash)",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": "ES only"
+        },
+        {
+          "no": "9",
+          "partNo": "JA 3516 06",
+          "description": "Sealing Ring (Flash)",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": "ES only"
+        },
+        {
+          "no": "9",
+          "partNo": "JA 3516 26",
+          "description": "Sealing Ring (Lucas-TVS)",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": "ES only"
+        },
+        {
+          "no": "10",
+          "partNo": "DH 1011 63",
+          "description": "Flange Bolt (Flash)",
+          "qty": {
+            "KS": 0,
+            "ES": 2
+          },
+          "price": 600,
+          "remarks": "ES only"
+        },
+        {
+          "no": "11",
+          "partNo": "JA 3516 02",
+          "description": "'O' Ring For Spigot (Flash)",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": "ES only"
+        },
+        {
+          "no": "11",
+          "partNo": "JA 3516 27",
+          "description": "'O' Ring For Spigot (Lucas-TVS)",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": "ES only"
+        },
+        {
+          "no": "12",
+          "partNo": "JA 3516 08",
+          "description": "+ve Brush Holder Assly (Flash)",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": "ES only"
+        },
+        {
+          "no": "13",
+          "partNo": "JA 3516 09",
+          "description": "-ve Brush Holder Assly (Flash)",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": "ES only"
+        },
+        {
+          "no": "14",
+          "partNo": "JA 3516 18",
+          "description": "Brush & Earth Plate Assly",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 9000,
+          "remarks": "N.I. (Lucas-TVS)"
+        },
+        {
+          "no": "15",
+          "partNo": "JA 3516 24",
+          "description": "Brush Spring (Lucas-TVS)",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": "N.I."
+        },
+        {
+          "no": "16",
+          "partNo": "JA 3516 19",
+          "description": "Terminal Assly (Lucas-TVS)",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": "ES only"
+        },
+        {
+          "no": "17",
+          "partNo": "36 JW0014",
+          "description": "Starter Clutch Repair Kit",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": "Refer Page No. 91"
+        }
+      ]
+    },
+    {
+      "plate": 21,
+      "name": "Magneto, CDI & H.T. Coil",
+      "system": "electrical",
+      "page": 42,
+      "diagram": "assets/diagrams/boxer100/plate-21-magneto-cdi-ht-coil.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 3510 07",
+          "description": "Rotor Assly (KS)",
+          "qty": {
+            "KS": 1,
+            "ES": 0
+          },
+          "price": 65000,
+          "remarks": "KS variant"
+        },
+        {
+          "no": "1",
+          "partNo": "PF 3510 05",
+          "description": "Rotor Assly (ES)",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 68000,
+          "remarks": "ES variant"
+        },
+        {
+          "no": "2",
+          "partNo": "PF 3510 04",
+          "description": "Stater Assly Complete1 (KS)",
+          "qty": {
+            "KS": 1,
+            "ES": 0
+          },
+          "price": 55000,
+          "remarks": "KS variant"
+        },
+        {
+          "no": "2",
+          "partNo": "PF 3510 06",
+          "description": "Stater Assly Complete (ES)",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 58000,
+          "remarks": "ES variant"
+        },
+        {
+          "no": "3",
+          "partNo": "39 1674 04",
+          "description": "Bolt Flange M6 X 28",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 700,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "DH 1013 80",
+          "description": "Pan Head Screw M6 X 12",
+          "qty": {
+            "KS": 2,
+            "ES": 3
+          },
+          "price": 400,
+          "remarks": "Lock Plate & Pick Up Coil Mounting"
+        },
+        {
+          "no": "5",
+          "partNo": "JV 3512 04",
+          "description": "H. T. Coil With Cable",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 16000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "PF 3512 00",
+          "description": "CDI AC STEP UP",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 45000,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "DD 1110 18",
+          "description": "Spark Plug PRZ9 HC / UR4AC",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "DD 1110 48",
+          "description": "Spark Plug Cap LH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "DD 1110 11",
+          "description": "Grommet Spark Plug Cap LH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "DD 1110 12",
+          "description": "Grommet for HT Cable",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "39 1943 04",
+          "description": "Bolt Flange M6",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "JN 4020 00",
+          "description": "Regulator With Capacitor",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 28000,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "JA 5410 28",
+          "description": "Lock Plate",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": "ES only"
+        }
+      ]
+    }
+  ]
+}

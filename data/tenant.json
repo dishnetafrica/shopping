@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "description": "Per-tenant config for the auto_parts vertical. EA Auto Part is the storefront brand (the seller); the parts sold are genuine Bajaj Boxer spares. Maps to CloudBSS tenant settings (vertical=auto_parts + theme_* + brand fields)."
+  },
+  "id": "ea-auto-part",
+  "vertical": "auto_parts",
+  "brand": {
+    "name": "EA AUTO PART",
+    "wordmark": "GENUINE MOTORCYCLE SPARES",
+    "emblem": "chevron"
+  },
+  "theme": {
+    "accent": "#C8102E",
+    "accentDark": "#9B0C23",
+    "secondary": "#F2A413"
+  },
+  "market": {
+    "country": "East Africa",
+    "code": "UG",
+    "flag": "🇺🇬",
+    "currency": { "code": "UGX", "symbol": "UGX", "position": "before", "thousands": "," }
+  },
+  "contact": { "whatsapp": "+256 700 000 000", "website": "https://eaautopart.com" },
+  "hero": {
+    "headline": "The right part.\nRight away.",
+    "sub": "EA Auto Part — genuine motorcycle spares, exploded diagrams and expert help across East Africa."
+  },
+  "models": ["boxer100", "boxer125hd", "boxer150", "boxer125x", "boxer150x", "v15", "v12"]
+}

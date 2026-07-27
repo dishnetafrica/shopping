@@ -1,0 +1,46 @@
+{
+  "id": "boxer150",
+  "brandId": "BM150",
+  "name": "Boxer BM150",
+  "family": "Boxer",
+  "fullName": "Bajaj Boxer BM 150",
+  "tagline": "More power. More load.",
+  "summary": "The 150cc workhorse for riders who carry more and travel further. Bigger engine, stronger frame and the legendary Boxer reliability.",
+  "badges": ["popular"],
+  "status": "active",
+  "yearRange": "2014–Present",
+  "rating": { "value": 4.6, "count": 174 },
+  "catalogue": { "type": "Spare Parts Catalogue (Export)" },
+  "colors": [
+    { "id": "red",   "name": "Red",   "hex": "#B22222", "asset": "assets/motorcycles/boxer150/color-red.jpg" },
+    { "id": "black", "name": "Black", "hex": "#1A1A1A", "asset": "assets/motorcycles/boxer150/color-black.jpg" }
+  ],
+  "keySpecs": [
+    { "label": "Engine",       "value": "150 cc",   "sub": "4-Stroke, SOHC", "icon": "engine" },
+    { "label": "Max Power",    "value": "11.8 PS",  "sub": "@ 7500 rpm",     "icon": "power" },
+    { "label": "Transmission", "value": "5 Speed",  "sub": "",               "icon": "transmission" },
+    { "label": "Top Speed",    "value": "100 km/h", "sub": "",               "icon": "speed" }
+  ],
+  "specifications": {
+    "Engine": {
+      "Type": "4-Stroke, Air-cooled, Single Cylinder, SOHC",
+      "Displacement": "144.8 cc",
+      "Max Power": "11.8 PS @ 7500 rpm",
+      "Max Torque": "12.0 Nm @ 5000 rpm",
+      "Starting": "Kick / Electric + Kick"
+    },
+    "Transmission": { "Gearbox": "5-Speed", "Final Drive": "Chain" },
+    "Chassis & Suspension": { "Frame Type": "Tubular", "Front Suspension": "Telescopic Hydraulic", "Rear Suspension": "SNS Twin Shock" },
+    "Dimensions & Weight": { "Kerb Weight": "121 kg", "Fuel Tank Capacity": "11.5 Litres" }
+  },
+  "highlights": ["150cc Power", "Heavy Load Capacity", "Strong Tubular Frame", "Long-lasting Reliability"],
+  "gallery": { "hero": "assets/motorcycles/boxer150/hero.jpg" },
+  "systems": [
+    { "id": "engine", "partCount": 51 }, { "id": "fuel_system", "partCount": 16 },
+    { "id": "electrical", "partCount": 27 }, { "id": "transmission", "partCount": 34 },
+    { "id": "brakes", "partCount": 12 }, { "id": "suspension", "partCount": 14 },
+    { "id": "frame_body", "partCount": 30 }, { "id": "controls", "partCount": 20 },
+    { "id": "wheels", "partCount": 18 }, { "id": "accessories", "partCount": 15 }
+  ],
+  "diagramPlateCount": 46
+}
