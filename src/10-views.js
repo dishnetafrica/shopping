@@ -5,11 +5,11 @@
 /* ---------- views ---------- */
 function vHome(){
   var models=activeModels().slice(0,6).map(function(m){
-    return '<div class="card mc" onclick="go(\'model/'+m.id+'\')"><div class="im"><img src="'+(IMG[m.id]||'')+'" alt=""></div><div class="bd"><b>'+esc(m.name)+'</b><p>'+esc(m.tagline)+'</p><span class="go">Explore parts ›</span></div></div>';
+    return '<div class="card mc" onclick="go(\'model/'+m.id+'\')"><div class="im"><img src="'+(IMG[m.id]||'')+'" alt="" loading="lazy"></div><div class="bd"><b>'+esc(m.name)+'</b><p>'+esc(m.tagline)+'</p><span class="go">Explore parts ›</span></div></div>';
   }).join('');
   var sys=systemsWithCounts().map(function(s){
-    var bg=s.cover?'<img src="'+esc(s.img||s.cover)+'" alt="">':'<div class="ph">'+esc(s.name)+'</div>';
-    return '<div class="sc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')">'+ (s.cover?'<img src="'+esc(s.cover)+'">':'')+'<div class="ph" style="'+(s.cover?'display:none':'')+'"></div><div class="m"><b>'+esc(s.name)+'</b><span>'+s.count+' parts</span></div></div>';
+    var bg=s.cover?'<img src="'+esc(s.img||s.cover)+'" alt="" loading="lazy">':'<div class="ph">'+esc(s.name)+'</div>';
+    return '<div class="sc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')">'+ (s.cover?'<img src="'+esc(s.cover)+'" loading="lazy">':'')+'<div class="ph" style="'+(s.cover?'display:none':'')+'"></div><div class="m"><b>'+esc(s.name)+'</b><span>'+s.count+' parts</span></div></div>';
   }).join('');
   var popSrc=vehFilter(STATE.products);
   var pop=popSrc.slice().sort(function(a,b){return (b.price)-(a.price);}).slice(0,5).map(prodCard).join('')
@@ -19,7 +19,7 @@ function vHome(){
      +'<form class="hsearch" onsubmit="return doSearch(event)"><input id="q" placeholder="Search part, number, or describe the problem…"><button class="btn btn-p" type="submit">Search</button></form>'
      +'<a class="herobroke" onclick="go(\'ai\')"><i class="fa fa-wrench"></i> Bike won\'t start or making a noise? <b>Describe the problem →</b></a>'
      +'<div class="pop"><span>Popular:</span><a onclick="qsearch(\'Clutch\')">Clutch Plate</a><a onclick="qsearch(\'Filter\')">Air Filter</a><a onclick="qsearch(\'Spark\')">Spark Plug</a><a onclick="qsearch(\'Brake\')">Brake Shoe</a></div>'
-   +'</div><div style="text-align:center"><img class="hph" src="'+(IMG.hero||'')+'" alt=""></div></div></section>'
+   +'</div><div style="text-align:center"><img class="hph" src="'+(IMG.hero||'')+'" alt="" loading="lazy"></div></div></section>'
    +trust()
    +'<section class="blk wrap"><div class="hd"><div><h2>Which motorcycle do you own?</h2><div class="sub">Select your model to explore parts.</div></div></div><div class="g5">'+models+'</div></section>'
    +'<section class="blk wrap"><div class="hd"><div><h2>Browse by system</h2><div class="sub">Jump straight to the parts for each system.</div></div><span class="link" onclick="go(\'parts\')">View all parts ›</span></div><div class="g5">'+sys+'</div></section>'
@@ -44,7 +44,7 @@ function prodCard(p){
 function vParts(){
   var sys=systemsWithCounts();
   var cards=sys.map(function(s){
-    return '<div class="card mc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')"><div class="im" style="background:var(--ink)">'+(s.cover?'<img src="'+esc(s.cover)+'">':'')+'</div><div class="bd"><b>'+esc(s.name)+'</b><p>'+s.count+' parts</p><span class="go">View parts ›</span></div></div>';
+    return '<div class="card mc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')"><div class="im" style="background:var(--ink)">'+(s.cover?'<img src="'+esc(s.cover)+'" loading="lazy">':'')+'</div><div class="bd"><b>'+esc(s.name)+'</b><p>'+s.count+' parts</p><span class="go">View parts ›</span></div></div>';
   }).join('');
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › Parts</div>'
     +'<section class="blk wrap"><div class="hd"><div><h2>Parts — browse by category</h2><div class="sub">'+STATE.products.length+' genuine parts across '+sys.length+' systems.</div></div><span class="link" onclick="go(\'diagrams\')">View exploded diagrams ›</span></div><div class="g4">'+cards+'</div></section>'+foot();
@@ -70,7 +70,7 @@ function vPart(id){
   var fg=fitGuide(p);
   track('view',{product_id:p.id});
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › <a onclick="go(\'parts\')">Parts</a> › '+esc(p.name)+'</div>'
-   +'<section class="page wrap"><div class="pd"><div class="big">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
+   +'<section class="page wrap"><div class="pd"><div class="big">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'" loading="lazy">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
    +'<div><span class="chip g">✓ Genuine Bajaj</span> <h1 style="margin-top:8px">'+esc(p.name)+'</h1>'+(pn?'<div class="mono" style="margin-top:4px">Part No: '+esc(pn)+'</div>':'')
    +'<div class="price">'+(priced?money(p.price):'<span class="askp">Ask for price</span>')+'</div><div class="stock '+(inS?'y':'n')+'" style="margin-bottom:12px">'+(inS?('✓ In stock'+(p.stock!=null&&p.stock>0?(' ('+p.stock+')'):'')):'Available to order')+'</div>'
    +fitLine
@@ -97,12 +97,12 @@ function findParts(words,n){
   return out;
 }
 function ovMain(el){ var m=document.getElementById('ovMain'); if(m&&el.dataset.src)m.src=el.dataset.src; document.querySelectorAll('.ovthumb').forEach(function(t){t.classList.remove('on');}); el.classList.add('on'); }
-function zoom(src){ if(!src)return; var z=document.getElementById('zoomer'); if(!z){z=document.createElement('div');z.id='zoomer';z.onclick=function(){z.classList.remove('on');};document.body.appendChild(z);} z.innerHTML='<span class="zx">✕</span><img src="'+src+'">'; z.classList.add('on'); }
+function zoom(src){ if(!src)return; var z=document.getElementById('zoomer'); if(!z){z=document.createElement('div');z.id='zoomer';z.onclick=function(){z.classList.remove('on');};document.body.appendChild(z);} z.innerHTML='<span class="zx">✕</span><img src="'+src+'" loading="lazy">'; z.classList.add('on'); }
 function vModel(id){
   var m=(MODELS||[]).filter(function(x){return x.id===id;})[0]; if(!m) return go('');
   setBike(id);
   var g=galleryFor(id);
-  var thumbs=g.slice(0,4).map(function(src,i){return '<div class="ovthumb'+(i===0?' on':'')+'" data-src="'+src+'" onclick="ovMain(this)"><img src="'+src+'"></div>';}).join('')
+  var thumbs=g.slice(0,4).map(function(src,i){return '<div class="ovthumb'+(i===0?' on':'')+'" data-src="'+src+'" onclick="ovMain(this)"><img src="'+src+'" loading="lazy"></div>';}).join('')
     + (g.length>4?'<div class="ovthumb more">+'+(g.length-4)+'<span>View more</span></div>':'');
   var ks=(m.keySpecs||[]).slice(0,4).map(function(k){return '<div class="ks1"><b>'+esc(k.v)+'</b><span>'+esc(k.l)+'</span></div>';}).join('');
   var tabs=[['Overview','ov-top'],['Systems & Parts','ov-sys'],['Diagrams','diagrams'],['Specifications','ov-spec']];
@@ -110,8 +110,8 @@ function vModel(id){
     var oc = t[1]==='diagrams'?'go(\'diagrams\')':'scrollTo2(\''+t[1]+'\')';
     return '<span class="tab'+(i===0?' on':'')+'" onclick="'+oc+'">'+esc(t[0])+'</span>';
   }).join('');
-  var sys=systemsWithCounts().map(function(s){return '<div class="sc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')">'+(s.cover?'<img src="'+esc(s.cover)+'">':'')+'<div class="m"><b>'+esc(s.name)+'</b></div></div>';}).join('');
-  var common=findParts(['clutch','chain','brake shoe'],3).map(function(p){return '<a class="cmp" onclick="go(\'part/'+sid(p.id)+'\')">'+(p.img?'<img src="'+esc(p.img)+'">':'')+'<span>'+esc(p.name)+'</span></a>';}).join('');
+  var sys=systemsWithCounts().map(function(s){return '<div class="sc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')">'+(s.cover?'<img src="'+esc(s.cover)+'" loading="lazy">':'')+'<div class="m"><b>'+esc(s.name)+'</b></div></div>';}).join('');
+  var common=findParts(['clutch','chain','brake shoe'],3).map(function(p){return '<a class="cmp" onclick="go(\'part/'+sid(p.id)+'\')">'+(p.img?'<img src="'+esc(p.img)+'" loading="lazy">':'')+'<span>'+esc(p.name)+'</span></a>';}).join('');
   var mineParts=STATE.products.filter(function(p){return nk(String(p.kw||'').split('|')[0])===nk(m.catName||m.name);});
   var popSrc=(mineParts.length?mineParts:STATE.products).slice();
   var pop=popSrc.sort(function(a,b){return (b.price||0)-(a.price||0);}).slice(0,6).map(prodCard).join('');
@@ -127,7 +127,7 @@ function vModel(id){
        +'<div class="mybike"><i class="fa fa-tachometer"></i> Saved as <b>your motorcycle</b> — parts are now checked to fit '+esc(m.name)+'.</div>'
        +'<a class="btn btn-p" onclick="go(\'parts\')">Explore Parts & Diagrams ›</a> <a class="btn btn-o" onclick="go(\'ai\')"><i class="fa fa-comments"></i> Describe a problem</a>'
      +'</div>'
-     +'<div class="ovh-media"><div class="ovh-main">'+(main?'<img id="ovMain" class="zoomable" title="Click to zoom" onclick="zoom(this.src)" src="'+main+'"><span class="zhint"><i class="fa fa-search-plus"></i> Zoom</span>':'')+'</div><div class="ovh-thumbs">'+thumbs+'</div></div>'
+     +'<div class="ovh-media"><div class="ovh-main">'+(main?'<img id="ovMain" class="zoomable" title="Click to zoom" onclick="zoom(this.src)" src="'+main+'" loading="lazy"><span class="zhint"><i class="fa fa-search-plus"></i> Zoom</span>':'')+'</div><div class="ovh-thumbs">'+thumbs+'</div></div>'
    +'</div></section>'
    +'<div class="wrap"><nav class="tabs">'+tabH+'</nav></div>'
    +'<section class="page wrap ov-body">'
@@ -181,7 +181,7 @@ function vDiagram(plateNo){
     var img=pr&&pr.img;
     var inS=pr?(pr.stock===null||pr.stock>0):null;
     var open=pr?('onclick="go(\'part/'+sid(pr.id)+'\')"'):'';
-    var thumb=img?'<img src="'+esc(img)+'">':'<span class="pno-b">'+esc(x.no)+'</span>';
+    var thumb=img?'<img src="'+esc(img)+'" loading="lazy">':'<span class="pno-b">'+esc(x.no)+'</span>';
     var priceHtml=pr?('<b>'+money(pr.price)+'</b>'+(inS!=null?'<span class="stock '+(inS?'y':'n')+'">'+(inS?'In stock':'On order')+'</span>':'')):'<span class="tbd">Ask us</span>';
     var add=pr?('<button class="miniadd" onclick="event.stopPropagation();cartAdd(\''+String(pr.id).replace(/\x27/g,"")+'\')" title="Add to cart"><i class="fa fa-plus"></i> Add</button>'):'';
     return '<div class="prow" '+open+(pr?' role="button"':'')+'>'
@@ -195,7 +195,7 @@ function vDiagram(plateNo){
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › <a onclick="go(\'parts\')">Parts</a> › Diagrams › '+esc(cur.system)+'</div>'
    +'<section class="page wrap"><div class="diag">'
    +'<aside class="dnav">'+navHtml+'</aside>'
-   +'<div class="dframe">'+(img?'<img src="'+esc(img)+'">':'<div class="empty">Diagram appears once parts are imported.</div>')+'<span class="dbadge">Plate '+cur.plate+'</span></div>'
+   +'<div class="dframe">'+(img?'<img src="'+esc(img)+'" loading="lazy">':'<div class="empty">Diagram appears once parts are imported.</div>')+'<span class="dbadge">Plate '+cur.plate+'</span></div>'
    +'<div class="dlist"><div class="dtitle"><b>'+esc(cur.system)+' › '+esc(cur.name)+'</b><div class="mono">Plate '+cur.plate+' · '+(cur.parts||[]).length+' parts · tap any part to view or add it</div></div>'
    +'<div class="plist">'+rows+'</div></div>'
    +'</div></section>'+foot();

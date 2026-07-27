@@ -1,56 +1,51 @@
-EA AUTO PART — HARDENING MILESTONES 1–4 (upload package)
+EA AUTO PART — HARDENING MILESTONES 1–5 (upload package)
 ========================================================
 
-Answers the production-readiness review. ALL 10 "production ready" checklist items are now
-done. See HARDENING-PLAN.md for the full status and the corrected review.
+Answers the production-readiness review. All 10 "production ready" checklist items are done,
+plus mobile-breakpoint hardening and a measured performance strategy. See HARDENING-PLAN.md.
 
-WHAT CHANGED (by file)
-----------------------
-app/Http/Controllers/Storefront/StorefrontController.php
-  - recordEvent(): accepts 'search' + 'whatsapp'; a 'search' also writes its query to
-    search_events so web searches appear in Storefront Insights.
-  - botGuard(): honeypot + per-IP rate limit on placeOrder()/requestQuote().
-  - clientError(): captures front-end JS errors (log + Sentry).
-app/Capability/Process/StorefrontInsightsCapability.php
-  - "Abandoned" metric + tab (added to cart, never checked out).
-app/Support/*, app/Services/Settings/*   — storefront model toggles, trust settings (prior).
-routes/web.php        — POST /clienterror (+ /{shop}/clienterror).
-bootstrap/app.php     — 'clienterror' CSRF-exempt.
-resources/storefront/autoparts.html   (REBUILT, deployable, self-contained)
-  - Analytics + client-error beacons; self-hosted Font Awesome + fonts (no CDN);
-    XSS hardening; accessibility (keyboard, focus, aria, <main>, AA contrast).
-resources/storefront/shop.html         — hidden honeypot on checkout/quote form.
+BACKEND (app/)
+  StorefrontController.php  — recordEvent() accepts 'search'/'whatsapp' and writes search text
+                              to search_events; botGuard() (honeypot + rate limit) on order/quote;
+                              clientError() captures front-end JS errors (log + Sentry).
+  StorefrontInsightsCapability.php — "Abandoned" metric + tab (added, never bought).
+  routes/web.php            — POST /clienterror (+ /{shop}/clienterror).
+  bootstrap/app.php         — 'clienterror' CSRF-exempt.
 
-MODULARIZATION (P3)
-  src/                  The storefront app script split into 12 modules (01-core … 12-a11y-boot).
-                        build_storefront.py concatenates them (filename order) and bakes the
-                        catalogue data into ONE self-contained autoparts.html. Byte-for-byte
-                        behavior-preserving; proven by a "no runtime errors on every route"
-                        smoke test. Next step (strict ES modules) is in src/README.md.
+STOREFRONT (resources/storefront/autoparts.html — REBUILT, self-contained)
+  - Analytics + client-error beacons.
+  - Self-hosted Font Awesome + fonts (no CDN).
+  - XSS hardening (esc() escapes quotes; ids via sid()).
+  - Accessibility: keyboard-operable controls, focus rings, aria, <main>, AA contrast.
+  - Mobile: no horizontal overflow at 320/360/390/412px (fixed a 320px AI-page overflow).
+  - Performance: all <img> lazy-loaded.
+  resources/storefront/shop.html — hidden honeypot on checkout/quote form.
+
+MODULARIZATION (src/)
+  The storefront app script split into 12 modules (01-core … 12-a11y-boot). build_storefront.py
+  concatenates them + bakes catalogue data into ONE self-contained autoparts.html.
+  Byte-for-byte behavior-preserving; proven by a "no runtime errors on every route" smoke test.
 
 TESTS
-  storefront-tests/     Playwright: 26 tests (desktop + 360px). Catalogue, all-routes smoke,
-                        view/add/cart/checkout/search/whatsapp, XSS, client-error capture,
-                        zero-third-party-requests, axe-core (fails on serious/critical).
-  tests/Feature/StorefrontBotGuardTest.php   PHPUnit: honeypot + rate limit.
+  storefront-tests/   Playwright: 30 tests (desktop + 360px). All-routes smoke, catalogue,
+                      breakpoint overflow (320–412px), view/add/cart/checkout/search/whatsapp,
+                      XSS, client-error capture, no-third-party-requests, axe-core.
+  tests/Feature/StorefrontBotGuardTest.php  — PHPUnit: honeypot + rate limit.
 
-TOOLING
-  build_storefront.py   src/*.js -> __APP_BUNDLE__ + build/*.json -> autoparts.html
-                        (--minify optional via esbuild; --check to dry-run).
-  vendor_fonts.py       vendors Font Awesome + fonts into the template.
+PERFORMANCE — DECISION NEEDED
+  autoparts.html is 4.0 MB; 3.58 MB of that is 45 base64 images downloaded on every first visit.
+  Because they're inlined they can't be lazy-loaded. The storefront already supports HOSTED
+  images (px() + CFG.assetBase). Serving them as files from resources/ (which syncs — only
+  public/ was the earlier problem) via an app/ route would cut first load to ~0.5 MB. This
+  changes production image delivery, so it's flagged for your go-ahead — I can ship it as an
+  opt-in build mode. See HARDENING-PLAN.md "P2.5 — performance strategy".
 
 DEPLOY
-------
-Copy app/, resources/, routes/, bootstrap/ over your repo. routes/web.php and bootstrap/app.php
-each have only a 1–2 line addition — merge by hand if your copies diverged since upload.
-src/ and the *.py are dev tooling (to rebuild autoparts.html); the shipped autoparts.html is
-already self-contained.
+  Copy app/, resources/, routes/, bootstrap/ over your repo. routes/web.php and bootstrap/app.php
+  have only 1–2 line additions — merge by hand if your copies diverged. src/ + *.py are dev
+  tooling to rebuild autoparts.html; the shipped autoparts.html is already self-contained.
 
-RUN TESTS
----------
-  cd storefront-tests && npm install && npx playwright test        # 26 pass
-  php artisan test --filter StorefrontBotGuardTest                 # in your app (vendor/DB)
-
-REBUILD THE STOREFRONT (after editing a src/ module)
-----------------------------------------------------
-  python3 build_storefront.py           # writes resources/storefront/autoparts.html
+RUN TESTS / REBUILD
+  cd storefront-tests && npm install && npx playwright test     # 30 pass
+  php artisan test --filter StorefrontBotGuardTest              # in your app (vendor/DB)
+  python3 build_storefront.py                                  # rebuild autoparts.html from src/

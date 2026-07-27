@@ -102,8 +102,41 @@ landmark, and darkened the green/WhatsApp colors to meet AA contrast. An axe-cor
 on home/product/cart/search and **fails the build on any serious/critical violation** (now
 zero; a few moderate best-practice items — heading order, landmark region — remain tracked).
 
-**Mobile breakpoint matrix.** The suite runs at 360 px (and every test also runs there).
-Still to extend: 320/390/412 px assertions for no horizontal scroll and thumb-reach CTAs.
+**Mobile breakpoint matrix. ✅** The suite now asserts **no horizontal overflow** at 320 / 360
+/ 390 / 412 px across eight routes, and that the checkout CTA fits a 320 px phone. This caught
+and fixed a real bug: the AI-assistant input row overflowed at 320 px (a flex child without
+`min-width:0`). Every test also still runs at 360 px.
+
+### P2.5 — performance strategy (measured)
+
+The review noted "no performance strategy." Here it is, with numbers. The deployed
+`autoparts.html` is **4.04 MB**, and the breakdown is the whole story:
+
+| Part | Size | Notes |
+|---|---|---|
+| Inlined images (45 base64) | **3.58 MB** | downloaded on *every* first visit |
+| Fonts (7 woff2) | 0.29 MB | self-hosted, `font-display:swap` |
+| Markup + JS + CSS + catalogue JSON | 0.16 MB | the actual app |
+
+So ~89% of first-load weight is images that are inlined as base64 — which means they **cannot
+be lazy-loaded** and every visitor pays for all 45 up front, even the diagram/gallery images
+they may never open. On weak South Sudan connectivity that is the single biggest cost.
+
+Done now (safe): all 16 `<img>` tags carry `loading="lazy"`, and the storefront already has a
+hosted-image path built in (`px()` + `CFG.assetBase`) — so the moment images become URLs, only
+the visible ones load.
+
+Recommended next (high impact, needs your go-ahead — it changes production image delivery,
+which broke once before): **serve the 45 images as files instead of base64.** The earlier
+breakage was specifically `public/` not syncing on deploy; `resources/` *does* sync (it's where
+`autoparts.html` itself lives and has updated all along). So the safe design is: ship the images
+under `resources/storefront/autoparts-assets/`, add a small `app/` controller route
+`/storefront/asset/{file}` (app/ always syncs) that streams them with a far-future cache header,
+and set `CFG.assetBase` to that route. Expected result: **first load ~4.0 MB → ~0.5 MB**, with
+images arriving lazily as the shopper scrolls. Both pieces live in deploy-synced territory, so
+it won't repeat the `public/` failure. I can implement this as an opt-in build mode
+(`build_storefront.py --hosted-images`) so the proven self-contained file stays the default
+until you've verified a hosted deploy.
 
 ### P3 — storefront modularization (staged, not big-bang)  ✅ STARTED (this milestone)
 

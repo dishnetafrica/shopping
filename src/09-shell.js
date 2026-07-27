@@ -46,9 +46,9 @@ function renderPickerList(){
   var grid=document.getElementById('bikepick').querySelector('.bpgrid');
   if(!list.length){ grid.className='bpgrid'; grid.innerHTML='<div class="bpnone">No match for that. <a onclick="waPick()">Ask us on WhatsApp ›</a></div>'; return; }
   if(list.length<=12){ grid.className='bpgrid';
-    grid.innerHTML=list.map(function(m){return '<div class="bpc" onclick="pickBike(\''+String(m.id).replace(/\x27/g,"")+'\')"><div class="bpi"><img src="'+(IMG[m.id]||'')+'" alt="'+esc(m.name)+'"></div><b>'+esc(m.name)+'</b><span>'+esc(m.tagline||m.make||'')+'</span></div>';}).join('');
+    grid.innerHTML=list.map(function(m){return '<div class="bpc" onclick="pickBike(\''+String(m.id).replace(/\x27/g,"")+'\')"><div class="bpi"><img src="'+(IMG[m.id]||'')+'" alt="'+esc(m.name)+'" loading="lazy"></div><b>'+esc(m.name)+'</b><span>'+esc(m.tagline||m.make||'')+'</span></div>';}).join('');
   } else { grid.className='bpgrid rows';
-    grid.innerHTML=list.map(function(m){return '<div class="bprow" onclick="pickBike(\''+String(m.id).replace(/\x27/g,"")+'\')"><img src="'+(IMG[m.id]||'')+'" alt=""><div><b>'+esc(m.name)+'</b><span>'+esc((m.make||'')+(m.type?(' · '+m.type):''))+'</span></div><i class="fa fa-chevron-right"></i></div>';}).join('');
+    grid.innerHTML=list.map(function(m){return '<div class="bprow" onclick="pickBike(\''+String(m.id).replace(/\x27/g,"")+'\')"><img src="'+(IMG[m.id]||'')+'" alt="" loading="lazy"><div><b>'+esc(m.name)+'</b><span>'+esc((m.make||'')+(m.type?(' · '+m.type):''))+'</span></div><i class="fa fa-chevron-right"></i></div>';}).join('');
   }
 }
 function waPick(){ closeBikePick(); window.open(waLink(),'_blank'); }

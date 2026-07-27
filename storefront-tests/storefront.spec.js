@@ -41,6 +41,35 @@ test('every route renders with no console/runtime errors', async ({ page }) => {
   expect(real, 'runtime errors across routes').toEqual([]);
 });
 
+test('no horizontal overflow across small viewports', async ({ page }) => {
+  const widths = [320, 360, 390, 412];
+  const routes = ['/', '/#/parts', '/#/part/101', '/#/cart', '/#/search/brake', '/#/ai', '/#/model/boxer100', '/#/diagrams'];
+  const overflows = [];
+  for (const w of widths) {
+    await page.setViewportSize({ width: w, height: 800 });
+    for (const r of routes) {
+      await page.goto(base + r);
+      await waitLoaded(page);
+      await page.waitForTimeout(40);
+      const over = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+      if (over) overflows.push(`@${w}${r}`);
+    }
+  }
+  expect(overflows, 'pages must not scroll horizontally on phones').toEqual([]);
+});
+
+test('primary checkout CTA is reachable on a 320px phone', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto(base + '/#/part/101');
+  await waitLoaded(page);
+  await page.click('button.btn-p:has-text("Add to cart")');
+  await page.goto(base + '/#/cart');
+  const btn = page.locator('a.btn-w.big');
+  await expect(btn).toBeVisible();
+  const box = await btn.boundingBox();
+  expect(box.width, 'checkout button fits the viewport').toBeLessThanOrEqual(320);
+});
+
 test('catalogue loads and hides out-of-stock parts', async ({ page }) => {
   await page.goto(base + '/');
   await waitLoaded(page);
