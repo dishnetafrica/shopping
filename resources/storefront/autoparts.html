@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__SEO_TITLE__</title>
+__SEO_META__
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--accent:#C8102E;--accent-d:#9B0C23;--ink:#0C1220;--muted:#5A6472;--line:#E6EAF0;--soft:#F3F5F8}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,Segoe UI,sans-serif;color:var(--ink);background:#fff;line-height:1.55}
+a{text-decoration:none;color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+.btn{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:10px;font-weight:700;cursor:pointer;padding:12px 20px;font-size:15px}
+.btn-p{background:var(--accent);color:#fff}.btn-p:hover{background:var(--accent-d)}
+.btn-w{background:#25D366;color:#fff}
+.btn-o{background:#fff;color:var(--ink);border:1px solid var(--line)}
+/* nav */
+.nav{background:var(--ink);color:#fff}
+.nav .wrap{display:flex;align-items:center;gap:16px;height:64px}
+.brand{display:flex;align-items:center;gap:10px}
+.emblem{width:38px;height:38px;border-radius:9px;background:var(--accent);display:grid;place-items:center;color:#fff;font-weight:800;font-size:15px}
+.brand b{font-size:16px;letter-spacing:.5px}.brand i{display:block;font-style:normal;font-size:9px;letter-spacing:2px;color:#aeb8cc}
+.nav .sp{flex:1}
+.nav a.lnk{color:#dfe5f0;font-weight:600;font-size:14px;margin-left:18px}
+/* hero */
+.hero{background:var(--ink);color:#fff;padding:44px 0 56px}
+.hero h1{font-size:44px;font-weight:800;line-height:1.05;letter-spacing:-.02em}
+.hero p{color:#aeb8cc;font-size:18px;margin:14px 0 24px;max-width:52ch}
+.search{display:flex;gap:8px;background:#fff;border-radius:12px;padding:8px 8px 8px 16px;max-width:560px;align-items:center}
+.search input{flex:1;border:0;outline:0;font-size:16px;font-family:inherit;color:var(--ink)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.chip{background:#1b2436;border:1px solid #29344a;color:#dfe5f0;border-radius:99px;padding:6px 12px;font-size:13px;font-weight:600}
+/* trust */
+.trust{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 4px 12px rgba(12,18,32,.06);margin-top:-28px;position:relative;z-index:2;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:18px 22px}
+.trust div{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+.trust .dot{width:34px;height:34px;border-radius:8px;background:var(--soft);color:var(--accent);display:grid;place-items:center;font-weight:800;flex:none}
+/* blocks */
+.block{padding:44px 0 8px}
+.block h2{font-size:26px;font-weight:800;letter-spacing:-.01em}
+.block .sub{color:var(--muted);margin:6px 0 20px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(12,18,32,.06);transition:transform .18s,box-shadow .18s}
+.card:hover{transform:translateY(-4px);box-shadow:0 12px 28px rgba(12,18,32,.12)}
+.mcard .top{aspect-ratio:4/3;background:linear-gradient(135deg,var(--soft),#e7edf5);display:grid;place-items:center;color:var(--ink)}
+.mcard .top svg{width:70%;opacity:.85}
+.mcard .bd{padding:14px 16px}.mcard .bd b{font-size:16px}.mcard .bd p{color:var(--muted);font-size:13px;margin:2px 0 8px}
+.mcard .go{color:var(--accent);font-weight:700;font-size:13px}
+.scard{position:relative;height:118px;border-radius:12px;overflow:hidden;background:var(--ink);display:flex;align-items:flex-end;padding:14px;color:#fff}
+.scard::after{content:"";position:absolute;inset:0;background:linear-gradient(135deg,rgba(200,16,46,.20),rgba(12,18,32,.55))}
+.scard .m{position:relative;z-index:2}.scard .m b{font-size:16px}.scard .m span{display:block;font-size:12px;color:#dfe5f0}
+.grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+/* cta */
+.cta{margin:44px 0 8px;background:linear-gradient(135deg,#101a30,#1a2340);border-radius:20px;padding:36px;color:#fff;display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+.cta h3{font-size:24px;font-weight:800}.cta p{color:#aeb8cc;margin-top:6px}
+/* footer */
+.foot{background:var(--ink);color:#aeb8cc;margin-top:44px;padding:34px 0}
+.foot .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center}
+.foot b{color:#fff}
+.wa-float{position:fixed;right:18px;bottom:18px;z-index:50}
+@media(max-width:900px){.grid4,.grid5{grid-template-columns:repeat(2,1fr)}.trust{grid-template-columns:repeat(2,1fr)}.hero h1{font-size:34px}.nav a.lnk{display:none}}
+@media(max-width:560px){.grid4,.grid5,.trust{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="#" id="brandLink"><span class="emblem" id="emblem"></span><span><b id="bName"></b><i id="bWord"></i></span></a>
+  <span class="sp"></span>
+  <a class="lnk" href="#models">Motorcycles</a>
+  <a class="lnk" href="#systems">Parts</a>
+  <a class="lnk" id="navShop" href="#">Shop</a>
+</div></header>
+
+<section class="hero"><div class="wrap">
+  <h1 id="heroTitle"></h1>
+  <p id="heroText"></p>
+  <form id="searchForm" class="search" method="get">
+    <input name="q" id="q" placeholder="Search by part number, name or keyword...">
+    <button class="btn btn-p" type="submit">Search</button>
+  </form>
+  <div class="chips">
+    <span style="color:#aeb8cc;font-size:13px;align-self:center">Popular:</span>
+    <a class="chip" data-q="Clutch Plate">Clutch Plate</a>
+    <a class="chip" data-q="Air Filter">Air Filter</a>
+    <a class="chip" data-q="Spark Plug">Spark Plug</a>
+    <a class="chip" data-q="Brake Shoe">Brake Shoe</a>
+  </div>
+</div></section>
+
+<div class="wrap"><div class="trust" id="trust"></div></div>
+
+<section class="block wrap" id="models">
+  <h2>Which motorcycle do you own?</h2>
+  <div class="sub">Select your model to explore parts, diagrams and more.</div>
+  <div class="grid4" id="modelGrid"></div>
+</section>
+
+<section class="block wrap" id="systems">
+  <h2>Browse by system</h2>
+  <div class="sub">Jump straight to the parts for each system.</div>
+  <div class="grid5" id="sysGrid"></div>
+</section>
+
+<section class="wrap"><div class="cta">
+  <div><h3>Not sure which part you need?</h3><p>Send us the part number or your bike’s symptom on WhatsApp — we’ll find the exact genuine part.</p></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <a class="btn btn-p" id="ctaShop" href="#">Explore all parts</a>
+    <a class="btn btn-w" id="ctaWa" target="_blank" rel="noopener">Chat on WhatsApp</a>
+  </div>
+</div></section>
+
+<footer class="foot"><div class="wrap">
+  <div><b id="fName"></b> · <span id="fEye"></span><div style="font-size:13px;margin-top:4px" id="fContact"></div></div>
+  <div style="font-size:13px">Genuine parts guarantee · Powered by ShopBot</div>
+</div></footer>
+
+<a class="wa-float btn btn-w" id="waFloat" target="_blank" rel="noopener">WhatsApp</a>
+
+<script>
+var CFG = __AUTOPARTS_CONFIG__;
+(function(){
+  var bikeSVG = '<svg viewBox="0 0 400 220" xmlns="http://www.w3.org/2000/svg"><g fill="none" stroke="#8a94a6" stroke-width="6" stroke-linecap="round"><circle cx="95" cy="160" r="42"/><circle cx="305" cy="160" r="42"/></g><path d="M95 160 L175 150 L235 120 L300 108" stroke="#20293a" stroke-width="6" fill="none" stroke-linecap="round"/><path d="M175 150 C 175 120 210 118 240 120 C 250 124 250 138 238 143 C 210 150 185 150 175 145 Z" fill="'+(CFG.accent||"#C8102E")+'"/><path d="M120 150 h70 l-10 22 h-40 z" fill="#1a1f2b"/><circle cx="300" cy="108" r="12" fill="#f2f4f8" stroke="#20293a" stroke-width="3"/></svg>';
+  var r = document.documentElement.style;
+  if (CFG.accent) r.setProperty('--accent', CFG.accent);
+  if (CFG.accentDark) r.setProperty('--accent-d', CFG.accentDark);
+  var $=function(id){return document.getElementById(id);};
+  $('emblem').textContent = CFG.initials || (CFG.name||'EA').slice(0,2).toUpperCase();
+  $('bName').textContent = CFG.name || 'Auto Part';
+  $('bWord').textContent = (CFG.eyebrow||'GENUINE SPARES').toUpperCase();
+  $('heroTitle').textContent = CFG.heroTitle || 'The right part. Right away.';
+  $('heroText').textContent = CFG.heroText || 'Genuine motorcycle spares, exploded diagrams and expert help.';
+  var shop = CFG.shopUrl || '#';
+  $('navShop').href = shop; $('brandLink').href = shop; $('ctaShop').href = shop;
+  $('searchForm').action = shop;
+  // trust strip
+  (CFG.trustLine||'100% Genuine Parts · Interactive Diagrams · Fast Delivery · Expert Support').split('·').forEach(function(t){
+    t=t.trim(); if(!t) return;
+    var d=document.createElement('div'); d.innerHTML='<span class="dot">✓</span><span>'+t+'</span>'; $('trust').appendChild(d);
+  });
+  // models
+  (CFG.models||[]).forEach(function(m){
+    var a=document.createElement('a'); a.className='card mcard'; a.href=shop;
+    a.innerHTML='<div class="top">'+bikeSVG+'</div><div class="bd"><b>'+(m.name||'')+'</b><p>'+(m.tagline||'')+'</p><span class="go">Explore parts ›</span></div>';
+    $('modelGrid').appendChild(a);
+  });
+  // systems -> shop filtered by category
+  (CFG.systems||[]).forEach(function(s){
+    var a=document.createElement('a'); a.className='scard'; a.href=shop+'?cat='+encodeURIComponent(s.id||s.name);
+    a.innerHTML='<div class="m"><b>'+(s.name||'')+'</b><span>View parts ›</span></div>';
+    $('sysGrid').appendChild(a);
+  });
+  // chips
+  document.querySelectorAll('.chip').forEach(function(c){ c.href = shop+'?q='+encodeURIComponent(c.getAttribute('data-q')); });
+  // whatsapp
+  var wa = CFG.waNumber ? ('https://wa.me/'+CFG.waNumber) : '#';
+  $('ctaWa').href=wa; $('waFloat').href=wa;
+  // footer
+  $('fName').textContent = CFG.name||''; $('fEye').textContent = CFG.eyebrow||'';
+  var cc=[]; if(CFG.phone) cc.push(CFG.phone); if(CFG.email) cc.push(CFG.email); if(CFG.website) cc.push(CFG.website);
+  $('fContact').textContent = cc.join(' · ');
+})();
+</script>
+</body>
+</html>

@@ -67,6 +67,7 @@ class StorefrontController extends Controller
         $tenant = Tenant::byCustomDomain(request()->getHost());
         if ($tenant && ($tenant->status ?? 'active') !== 'suspended') {
             app(TenantContext::class)->set($tenant->id);
+            if ($this->autoPartsEnabled($tenant)) { return $this->autoParts('', $tenant, ''); } // AUTO_PARTS
             return $this->brandSiteEnabled($tenant) ? $this->brand('', $tenant, '') : $this->renderShop($tenant, '');
         }
         return app(\App\Http\Controllers\Marketing\MarketingController::class)->home(request());
@@ -199,6 +200,7 @@ class StorefrontController extends Controller
     public function landing(?string $shop = null)
     {
         [$tenant, $base] = $this->resolveShop($shop);
+        if ($this->autoPartsEnabled($tenant)) { return $this->autoParts($shop, $tenant, $base); } // AUTO_PARTS
         return $this->brandSiteEnabled($tenant) ? $this->brand($shop, $tenant, $base) : $this->renderShop($tenant, $base);
     }
 
@@ -208,6 +210,15 @@ class StorefrontController extends Controller
         if ($flag !== null && $flag !== '') return filter_var($flag, FILTER_VALIDATE_BOOLEAN);
         return \App\Support\Vertical::of($tenant) === \App\Support\Vertical::MANUFACTURER;
     }
+
+    // >>> AUTO_PARTS: auto-parts tenants get the EPC storefront at /{shop}; the shop (cart) stays at /{shop}/shop
+    private function autoPartsEnabled($tenant): bool
+    {
+        $flag = $tenant->setting('auto_parts_site', null);
+        if ($flag !== null && $flag !== '') return filter_var($flag, FILTER_VALIDATE_BOOLEAN);
+        return \App\Support\Vertical::of($tenant) === \App\Support\Vertical::AUTO_PARTS;
+    }
+    // <<< AUTO_PARTS
 
     /** Manufacturer brand site — content from tenant settings with sensible defaults. */
     public function brand(?string $shop = null, $tenant = null, ?string $base = null)
@@ -301,6 +312,67 @@ class StorefrontController extends Controller
             ->header('Content-Type', 'text/html; charset=utf-8')
             ->header('Cache-Control', 'no-store');
     }
+
+    // >>> AUTO_PARTS: EPC storefront (genuine spare parts). Mirrors brand(); one cart at /{shop}/shop.
+    public function autoParts(?string $shop = null, $tenant = null, ?string $base = null)
+    {
+        if ($tenant === null) { [$tenant, $base] = $this->resolveShop($shop); }
+        if ($base === null)   { $base = '/' . (string) $tenant->slug; }
+        $theme = $this->resolveTheme($tenant);
+
+        $defaultSystems = [
+            ['id' => 'engine', 'name' => 'Engine'], ['id' => 'transmission', 'name' => 'Transmission'],
+            ['id' => 'fuel', 'name' => 'Fuel System'], ['id' => 'electrical', 'name' => 'Electrical'],
+            ['id' => 'brakes', 'name' => 'Brakes'], ['id' => 'suspension', 'name' => 'Suspension'],
+            ['id' => 'frame', 'name' => 'Frame & Body'], ['id' => 'controls', 'name' => 'Controls'],
+            ['id' => 'wheels', 'name' => 'Wheels & Tyres'], ['id' => 'accessories', 'name' => 'Accessories'],
+        ];
+        $defaultModels = [
+            ['name' => 'Boxer 100', 'tagline' => 'The reliable workhorse'],
+            ['name' => 'Boxer 125 HD', 'tagline' => 'The heavy-duty champion'],
+            ['name' => 'Boxer 150', 'tagline' => 'More power. More load.'],
+            ['name' => 'Bajaj V15', 'tagline' => 'Power ahead'],
+        ];
+
+        $cfg = [
+            'name'        => (string) $tenant->name,
+            'initials'    => $this->initials((string) $tenant->name),
+            'logo'        => $tenant->setting('logo', '') ? $this->imageUrl((string) $tenant->setting('logo', '')) : '',
+            'accent'      => $theme['accent'],
+            'accentDark'  => $theme['accentDark'],
+            'eyebrow'     => $theme['eyebrow'] ?: 'Genuine Motorcycle Spares',
+            'heroTitle'   => (string) ($tenant->setting('hero_title', '') ?: 'The right part. Right away.'),
+            'heroText'    => (string) ($tenant->setting('hero_text', '') ?: ($tenant->setting('tagline', '') ?: 'Genuine motorcycle spares, exploded diagrams and expert help.')),
+            'trustLine'   => $theme['trustLine'] ?: '100% Genuine Parts · Interactive Diagrams · Fast Delivery · Expert Support',
+            'phone'       => (string) ($tenant->setting('public_phone', '') ?: $tenant->whatsapp_number),
+            'email'       => (string) $tenant->setting('public_email', ''),
+            'website'     => (string) $tenant->setting('website', ''),
+            'waNumber'    => preg_replace('/[^0-9]/', '', (string) ($tenant->whatsapp_number ?? '')),
+            'currency'    => $this->currency($tenant),
+            'shopUrl'     => $base . '/shop',
+            'catalogueUrl'=> $base . '/catalogue',
+            'panelUrl'    => url('/panel'),
+            'systems'     => $tenant->setting('epc_systems', $defaultSystems),
+            'models'      => $tenant->setting('epc_models', $defaultModels),
+        ];
+
+        $title = $tenant->name . ' — Genuine Motorcycle Spare Parts';
+        $desc  = (string) ($tenant->setting('meta_description', '') ?: (
+            $tenant->name . ' — genuine Bajaj Boxer motorcycle spare parts with exploded diagrams and part numbers. Fast delivery. Order on WhatsApp.'
+        ));
+        $meta = '<meta name="description" content="' . e($desc) . '"><meta name="robots" content="index,follow">';
+
+        $path = resource_path('storefront/autoparts.html');
+        $html = is_file($path) ? file_get_contents($path) : '<h1>Store unavailable</h1>';
+        $html = str_replace('__SEO_TITLE__', e($title), $html);
+        $html = str_replace('__SEO_META__', $meta, $html);
+        $html = str_replace('__AUTOPARTS_CONFIG__', json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $html);
+
+        return response($html, 200)
+            ->header('Content-Type', 'text/html; charset=utf-8')
+            ->header('Cache-Control', 'no-store');
+    }
+    // <<< AUTO_PARTS
 
     /** Public catalogue feed (same JSON shape the panel/products feed uses). */
     public function catalogue(?string $shop = null)
