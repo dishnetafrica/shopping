@@ -91,6 +91,54 @@ test('search fires a "search" event and shows results', async ({ page }) => {
   expect(e.some((x) => x.event === 'search')).toBeTruthy();
 });
 
+test('escapes hostile catalogue fields (stored XSS)', async ({ page }) => {
+  await page.goto(base + '/');
+  await waitLoaded(page);
+  const r = await page.evaluate(() => {
+    window.__xss = 0;
+    // 1) name/desc must be escaped when rendered into innerHTML.
+    const hostile = {
+      id: 555, name: '<img src=x onerror="window.__xss=1">', kw: '', cat: 'Engine',
+      price: 100, stock: 5, img: '', desc: "<script>window.__xss=1<\/script>",
+    };
+    const host = document.createElement('div');
+    host.innerHTML = window.prodCard(hostile);
+    document.body.appendChild(host);
+    // 2) a hostile id must not break out of the onclick JS string.
+    const idCard = window.prodCard({ id: "1');window.__xss=1;//", name: 'ok', kw: '', cat: 'Engine', price: 1, stock: 1, img: '' });
+    return {
+      breakout: /'\);window/.test(idCard),                  // id sink escaped?
+      escapedText: window.prodCard(hostile).indexOf('&lt;img') >= 0, // name shown as text?
+    };
+  });
+  // give any (accidentally created) <img onerror> a chance to fire before asserting.
+  await page.waitForTimeout(150);
+  const xss = await page.evaluate(() => window.__xss);
+  expect(xss, 'no injected payload should execute').toBe(0);
+  expect(r.breakout, 'hostile id must not break the onclick handler').toBe(false);
+  expect(r.escapedText, 'hostile name must render as escaped text').toBe(true);
+});
+
+test('makes no third-party requests and loads Font Awesome locally', async ({ page }) => {
+  const external = [];
+  page.on('request', (req) => {
+    const u = req.url();
+    if (!u.startsWith(base) && !u.startsWith('data:') && !u.startsWith('blob:')) {
+      external.push(u);
+    }
+  });
+  await page.goto(base + '/');
+  await waitLoaded(page);
+  // No cdnjs / Google Fonts / any off-origin fetch.
+  expect(external, 'storefront must be fully self-contained: ' + external.join(', ')).toEqual([]);
+  // Font Awesome is available as a self-hosted face.
+  const faLoaded = await page.evaluate(async () => {
+    await document.fonts.ready;
+    return document.fonts.check('16px FontAwesome');
+  });
+  expect(faLoaded).toBeTruthy();
+});
+
 test('WhatsApp float click fires a "whatsapp" event', async ({ page }) => {
   await page.goto(base + '/');
   await waitLoaded(page);

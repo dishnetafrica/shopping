@@ -537,10 +537,39 @@ class StorefrontController extends Controller
         ];
     }
 
+    /**
+     * Cheap, dependency-free abuse guard for the public order/quote POST endpoints.
+     *
+     * Two layers: (1) a honeypot — hidden form fields a real customer never sees or fills;
+     * a non-empty value means a bot, and we return a fake success so it doesn't learn it was
+     * caught. (2) a per-IP + tenant rate limit so a script can't hammer the endpoint even
+     * without tripping the honeypot. Returns a response to short-circuit on abuse, else null.
+     */
+    private function botGuard(Request $r, Tenant $tenant, string $action): ?\Illuminate\Http\JsonResponse
+    {
+        foreach (['website', 'company_url', 'hp_email'] as $trap) {
+            if (trim((string) $r->input($trap, '')) !== '') {
+                return response()->json(['ok' => true])->header('Cache-Control', 'no-store');
+            }
+        }
+
+        $key = 'sf' . $action . ':' . $tenant->id . ':' . $r->ip();
+        if (\Illuminate\Support\Facades\RateLimiter::tooManyAttempts($key, 12)) {
+            return response()->json(['ok' => false, 'error' => 'Too many attempts. Please wait a minute and try again.'], 429);
+        }
+        \Illuminate\Support\Facades\RateLimiter::hit($key, 60);
+
+        return null;
+    }
+
     /** Create a real order from the web cart. */
     public function placeOrder(Request $r, ?string $shop = null)
     {
         [$tenant] = $this->resolveShop($shop);
+
+        if ($resp = $this->botGuard($r, $tenant, 'order')) {
+            return $resp;
+        }
 
         $name  = trim((string) $r->input('name', ''));
         $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));
@@ -693,6 +722,10 @@ class StorefrontController extends Controller
     public function requestQuote(Request $r, ?string $shop = null)
     {
         [$tenant, $base] = $this->resolveShop($shop);
+
+        if ($resp = $this->botGuard($r, $tenant, 'quote')) {
+            return $resp;
+        }
 
         $name  = trim((string) $r->input('name', ''));
         $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));

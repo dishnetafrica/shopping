@@ -3147,6 +3147,8 @@ function openCheckout(){
   var saved=!!(name && phone && (IS_PICKUP || addr));
   var de=deliveryEstimateText(), sub=cartTotal();
   var fields=''
+    // Honeypot: hidden from real users; bots that auto-fill every input trip the server guard.
+    +'<input id="coHP" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0" value="">'
     +'<div class="field"><label>Your name</label><input id="coName" value="'+esc(name)+'" placeholder="Full name"></div>'
     +'<div class="field"><label>WhatsApp number</label><input id="coPhone" inputmode="numeric" value="'+esc(phone)+'" placeholder="2567 number"></div>'
     +(IS_PICKUP
@@ -3206,7 +3208,7 @@ async function placeOrder(){
   if(!IS_PICKUP && !addr && !GEO){toast('Add your delivery address or share your location','err');return;}
   var onCredit=/credit/i.test(pay);
   var dNote=deliveryNote(); var noteOut=note?(note+' | '+dNote):dNote;
-  var payload={name:name,phone:phone,location:addr,payment:pay,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),when:when,on_credit:onCredit?1:0,items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal(),channel:'web'};
+  var payload={name:name,phone:phone,location:addr,payment:pay,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),when:when,on_credit:onCredit?1:0,website:(($('coHP')||{}).value||''),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal(),channel:'web'};
   if(GEO){payload.geo=GEO.lat+','+GEO.lng;payload.maps_url=mapsUrl(GEO);}
   var btn=$('placeBtn');btn.disabled=true;btn.textContent='Placing…';
   try{
@@ -3235,7 +3237,7 @@ async function requestQuotation(){
   if(!name){toast('Please enter your name','err');return;}
   if(phone.length<7){toast('Please enter your WhatsApp number','err');return;}
   var dNote=deliveryNote(); var noteOut=note?(note+' | '+dNote):dNote;
-  var payload={name:name,phone:phone,location:addr,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal()};
+  var payload={name:name,phone:phone,location:addr,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),website:(($('coHP')||{}).value||''),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal()};
   if(GEO){payload.maps_url=mapsUrl(GEO);}
   var btn=$('placeBtn');if(btn){btn.disabled=true;btn.textContent='Preparing your quotation…';}
   try{

@@ -30,6 +30,10 @@ DATA = {
 # Left for the controller to inject at request time.
 RUNTIME = {"__AUTOPARTS_CONFIG__", "__SEO_TITLE__", "__SEO_META__"}
 
+# Non-placeholder tokens that legitimately match the __NAME__ shape and stay in the output
+# (e.g. the vendored-fonts CSS comment markers). Not injected, not an error.
+ALLOWED_TOKENS = {"__VENDORED_FONTS_START__", "__VENDORED_FONTS_END__"}
+
 
 def build(check_only=False):
     html = TEMPLATE.read_text()
@@ -44,7 +48,7 @@ def build(check_only=False):
 
     # No DATA placeholder may survive; only the runtime ones are allowed to remain.
     import re
-    leftover = set(re.findall(r"__[A-Z_]+__", html)) - RUNTIME
+    leftover = set(re.findall(r"__[A-Z_]+__", html)) - RUNTIME - ALLOWED_TOKENS
     if leftover:
         raise SystemExit(f"ERROR: unresolved placeholders after build: {sorted(leftover)}")
     for r in RUNTIME:

@@ -1,51 +1,57 @@
-EA AUTO PART — HARDENING MILESTONE 1 (upload package)
-=====================================================
+EA AUTO PART — HARDENING MILESTONES 1 & 2 (upload package)
+==========================================================
 
-This package answers the production-readiness review ("freeze new feature work and
-modularize the storefront with automated tests, analytics, and production observability").
+Answers the production-readiness review ("freeze features; modularize the storefront with
+automated tests, analytics, and production observability"). All P0 items are now done.
 
 WHAT CHANGED
 ------------
 Backend (app/):
-  * StorefrontController.php  — recordEvent() now also accepts 'search' and 'whatsapp'
-                                events (was: view/add/gallery/checkout only).
-  * SettingsSchema.php, SettingsWriteService.php, Vertical.php — carried forward unchanged
-                                from the previous package (per-model storefront toggles,
-                                trust/delivery settings, hide-out-of-stock).
+  * StorefrontController.php
+      - recordEvent() also accepts 'search' and 'whatsapp' events.
+      - NEW botGuard(): honeypot + per-IP rate limit (12/min) on placeOrder() and requestQuote().
+  * SettingsSchema.php, SettingsWriteService.php, Vertical.php — unchanged (storefront model
+    toggles, trust/delivery settings, hide-out-of-stock).
 
-Storefront (resources/storefront/autoparts.html):
-  * Analytics now fire from the client via navigator.sendBeacon('/event'):
-      view      — opening a product page
-      add       — Add to cart
-      checkout  — "Order now" (single) and "Place order on WhatsApp" (cart)
-      search    — a search, with query + result count
-      whatsapp  — the floating WhatsApp button
-  * This is the REBUILT deployable file (data baked in; only config/SEO injected at runtime).
+Storefront:
+  * resources/storefront/autoparts.html  (REBUILT, deployable)
+      - Analytics fire via sendBeacon('/event'): view, add, checkout (x2), search, whatsapp.
+      - Font Awesome 4.7 + Inter + JetBrains Mono are now SELF-HOSTED (embedded woff2). No
+        cdnjs / Google Fonts — works on a blocked or slow CDN (South Sudan connectivity).
+      - XSS hardening: esc() now escapes single quotes; ids run through a sid() whitelist so a
+        hostile product id can't break out of an onclick handler.
+  * resources/storefront/shop.html
+      - Hidden honeypot field on the checkout/quote form (feeds botGuard).
 
-New in this package:
-  * build_storefront.py   — reproducible build: autoparts_spa.html template + build/*.json
-                            -> resources/storefront/autoparts.html, with placeholder validation.
-  * storefront-tests/     — Playwright e2e suite (14 tests, desktop + 360px mobile) that runs
-                            the REAL built file and asserts every critical path + analytics event.
-  * HARDENING-PLAN.md     — corrects the review's few inaccuracies (with code evidence),
-                            records what shipped, and lays out the prioritized roadmap.
+Tests:
+  * storefront-tests/            — Playwright e2e (18 tests, desktop + 360px), all green.
+                                   Covers catalogue, view/add/cart/checkout/search/whatsapp,
+                                   XSS escaping, and "zero third-party requests + FA loads".
+  * tests/Feature/StorefrontBotGuardTest.php — PHPUnit: honeypot + rate limit (runs in your CI).
 
-HOW TO DEPLOY
--------------
-Copy the app/ and resources/ trees over your repo (same paths) and deploy as usual.
-The deploy reliably syncs app/; make sure resources/storefront/autoparts.html ships too.
+Tooling:
+  * build_storefront.py  — reproducible build (template + build/*.json -> autoparts.html,
+                           with placeholder validation).
+  * vendor_fonts.py      — vendors FA + fonts into the template (idempotent).
 
-HOW TO REBUILD THE STOREFRONT (if you edit the template)
---------------------------------------------------------
-  python3 build_storefront.py          # writes resources/storefront/autoparts.html
+  * HARDENING-PLAN.md    — corrected review, what shipped, and the remaining P1/P2 roadmap.
 
-HOW TO RUN THE TESTS
---------------------
-  cd storefront-tests
-  npm install
-  npx playwright test                  # all 14 should pass
+DEPLOY
+------
+Copy app/ and resources/ over your repo (same paths) and deploy. Ensure
+resources/storefront/autoparts.html and shop.html ship.
 
-VERIFY ANALYTICS IS LIVE (browser console on eaautopart.com)
-------------------------------------------------------------
-  Open DevTools > Network, filter "event". Add a part to cart / open a product /
-  search — you should see POST /event fire with the matching event name.
+REBUILD THE STOREFRONT (after editing the template)
+---------------------------------------------------
+  python3 vendor_fonts.py         # (only if re-vendoring fonts)
+  python3 build_storefront.py     # writes resources/storefront/autoparts.html
+
+RUN TESTS
+---------
+  cd storefront-tests && npm install && npx playwright test     # 18 pass
+  php artisan test --filter StorefrontBotGuardTest              # in your app (needs vendor/DB)
+
+VERIFY LIVE (browser console on eaautopart.com)
+-----------------------------------------------
+  DevTools > Network: filter "event" (analytics fire), and confirm NO requests to
+  cdnjs.cloudflare.com or fonts.googleapis.com (fully self-hosted).

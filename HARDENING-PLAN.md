@@ -55,24 +55,27 @@ The weak spot the review correctly identified is the **storefront delivery layer
 
 ## 3. Roadmap (prioritized)
 
-### P0 — before scaling traffic
+### P0 — before scaling traffic  ✅ DONE (this milestone)
 
-**Self-host Font Awesome and fonts.** The storefront currently loads FA 4.7 from
-`cdnjs.cloudflare.com` and Inter/JetBrains Mono from Google Fonts. On weak or filtered
-connectivity (a real concern for South Sudan) a blocked CDN means broken icons and a font
-flash. Vendor the FA CSS + webfont and the two font families into the app and reference them
-locally, removing all three third-party origins. This also improves first paint and privacy.
+**Self-host Font Awesome and fonts. ✅** FA 4.7, Inter (5 weights) and JetBrains Mono are now
+vendored into the storefront as embedded woff2 `@font-face` rules (`vendor_fonts.py`), and the
+three third-party origins (`cdnjs.cloudflare.com`, `fonts.googleapis.com`, `fonts.gstatic.com`)
+are gone. A blocked or slow CDN — a real risk on South Sudan connectivity — no longer breaks
+icons or fonts. A test asserts the storefront makes **zero** off-origin requests and that
+FontAwesome loads locally.
 
-**XSS audit of the SPA.** The storefront builds DOM via string concatenation. `esc()` is used
-in 107 places, but catalogue fields (name, keywords, description) come from tenant-editable
-data and must be escaped at *every* interpolation. Action: a scripted audit that flags any
-`+p.name`/`+p.desc`/`+p.kw`/`+q` not wrapped in `esc()`, plus a test that injects
-`<img onerror>` payloads into a mock catalogue and asserts no execution.
+**XSS audit of the SPA. ✅** `esc()` now also escapes single quotes. Product/plate/problem
+**ids** — which flow into single-quoted JS strings inside `onclick` handlers — are run through
+a new `sid()` whitelist (`[^\w-]` stripped), closing the one real stored-XSS vector (a product
+id like `');...//` breaking out of the handler). Display fields (name, desc, keywords) were
+already `esc()`'d. A regression test injects `<img onerror>` / `<script>` into name/desc and a
+breakout payload into an id, and asserts nothing executes.
 
-**Order-path bot protection.** `/event` is rate-limited; `/order` and `/quote` are not
-obviously protected against automated spam. Add a honeypot field + per-IP throttle to the
-order/quote submit, and consider a lightweight proof-of-work or hCaptcha only if abuse
-appears (avoid adding friction pre-emptively for low-literacy customers).
+**Order-path bot protection. ✅** `StorefrontController::botGuard()` adds a honeypot (hidden
+`website`/`company_url`/`hp_email` fields → fake success so bots don't learn they were caught)
+and a per-IP + tenant rate limit (12 submits/min) to `placeOrder` and `requestQuote`. The
+retail checkout form now carries the hidden honeypot input. A PHPUnit feature test covers both
+the honeypot and the rate limit (`tests/Feature/StorefrontBotGuardTest.php`).
 
 ### P1 — observability of the funnel
 
@@ -118,13 +121,14 @@ Each step ships behind the green test suite; no step requires a freeze longer th
 - [x] Analytics events fire for view/add/checkout/search/whatsapp and reach the backend
 - [x] Reproducible build with placeholder validation
 - [x] Automated e2e tests on desktop + mobile, all green
-- [ ] Zero third-party CDN dependencies (self-hosted FA + fonts)
-- [ ] XSS audit passed with a regression test
-- [ ] Order/quote bot protection
+- [x] Zero third-party CDN dependencies (self-hosted FA + fonts)
+- [x] XSS audit passed with a regression test
+- [x] Order/quote bot protection
 - [ ] Funnel/abandoned-cart visibility for the tenant
 - [ ] Client-side error capture to Sentry
 - [ ] Accessibility (keyboard + screen reader) baseline with axe-core in CI
 - [ ] Storefront script split into modules behind the test suite
 
-Items 1–3 are done. 4–10 are the remaining path; none is architecturally risky, and each is
-independently shippable behind the test suite.
+Items 1–6 are done (Milestones 1–2). 7–10 remain; none is architecturally risky, and each is
+independently shippable behind the test suite. The next milestone is the P1/P2 work: funnel
+visibility, client-side error capture, and the accessibility baseline.
