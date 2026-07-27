@@ -2,9 +2,9 @@
   "meta": {
     "model": "boxer100",
     "brandId": "001MC643",
-    "description": "Boxer 100 (ES/KS) exploded-diagram plates + verbatim part lists. Batches 1-2: Engine, Transmission, Fuel, Electrical, Starting (plates 1-21). Prices are starter UGX retail estimates.",
+    "description": "Boxer 100 (ES/KS) COMPLETE exploded-diagram catalogue + verbatim part lists — all 45 plates, every system. Prices are starter UGX retail estimates.",
     "source": "BM 100 ES & KS SPC_18052012.pdf",
-    "coverage": "plates 1-21 of 45 (Batches 1-2)"
+    "coverage": "plates 1-45 of 45 (COMPLETE)"
   },
   "plates": [
     {
@@ -1489,6 +1489,3742 @@
           },
           "price": 700,
           "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 34,
+      "name": "Petrol Tank, Cap Tank and Gauge Fuel",
+      "system": "fuel_system",
+      "page": 68,
+      "diagram": "assets/diagrams/boxer100/plate-34-petrol-tank-cap-gauge.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "DS 1410 09",
+          "description": "Cap Assly. Tank",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "39 0761 01",
+          "description": "Screw Pan Cross",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "39 2179 24",
+          "description": "Washer",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "3A",
+          "partNo": "30 1410 31",
+          "description": "'O' Ring",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "PF 1718 00",
+          "description": "Fuel Tap",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "DF 1810 24",
+          "description": "4 in 1 Lock Set with Key",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "PF 1718 03",
+          "description": "Pipe Fuel",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": "Cock to Carburettor"
+        },
+        {
+          "no": "7",
+          "partNo": "30 1410 15",
+          "description": "Pipe Clip",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 300,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 35,
+      "name": "Side Covers",
+      "system": "frame_body",
+      "page": 70,
+      "diagram": "assets/diagrams/boxer100/plate-35-side-covers.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "30 1611 69",
+          "description": "Grommet Side Cover Rear RH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "DH 1611 33",
+          "description": "Grommet Side Cover Rear LH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "DG 1611 21",
+          "description": "Screw",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "39 1789 24",
+          "description": "Washer Nylon",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "DU 1611 02",
+          "description": "Damper for Lock",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 36,
+      "name": "Chain Case",
+      "system": "frame_body",
+      "page": 72,
+      "diagram": "assets/diagrams/boxer100/plate-36-chain-case.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "36 PF00 11",
+          "description": "Kit Chain Case",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": "Refer Page No. 92"
+        },
+        {
+          "no": "2",
+          "partNo": "15 1610 69",
+          "description": "Rubber Cap",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "JB 1812 39",
+          "description": "Bolt M6",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "JB 1812 20",
+          "description": "Flange Bolt M6 X 1P X 62 L",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "JB 1812 21",
+          "description": "Flange Bolt M6 X 1P X 50 L",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 37,
+      "name": "Meter Assly",
+      "system": "electrical",
+      "page": 74,
+      "diagram": "assets/diagrams/boxer100/plate-37-meter-assly.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "31 1910 12",
+          "description": "Meter Assly / Lamp",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 35000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "31 1910 21",
+          "description": "Cover Meter Lower Black",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "31 1910 18",
+          "description": "Speedometer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "30 2010 29",
+          "description": "Lamp 12V 4W",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "30 2011 29",
+          "description": "Lamp 12V 2W",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "30 2010 84",
+          "description": "Lamp 12V 4W",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "DF 1810 24",
+          "description": "Lock Set (4 in 1)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": "N.I."
+        },
+        {
+          "no": "8",
+          "partNo": "39 0798 15",
+          "description": "Nut",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "DF 1810 24",
+          "description": "Lock Set Steering, P.Tank, Side cover, DC Ign.",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "31 1910 17",
+          "description": "Cover meter case upper",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": "Black"
+        },
+        {
+          "no": "11",
+          "partNo": "31 1910 20",
+          "description": "Cover (white)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "31 1910 14",
+          "description": "Bracket Meter",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "31 1910 19",
+          "description": "Gasket Rubber",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 38,
+      "name": "Head Lamp Assly",
+      "system": "electrical",
+      "page": 76,
+      "diagram": "assets/diagrams/boxer100/plate-38-head-lamp-assly.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 4010 00",
+          "description": "Head light assly",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 28000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "DJ 2010 46",
+          "description": "Head Light Rim",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "DJ 2010 51",
+          "description": "Reflector with Lens",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "DU 2010 29",
+          "description": "Special Screw",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "DS 2010 19",
+          "description": "Collar",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "DS 2010 20",
+          "description": "Damper I",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "DS 2010 21",
+          "description": "Damper II",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "39 2582 04",
+          "description": "Flange Bolt M-8 L 35",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "39 1970 15",
+          "description": "Flange Nut M-8",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "CL 2010 23",
+          "description": "Lamp 12 V 35/35 W HS1",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4000,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "DF 2010 58",
+          "description": "Lamp Holder (Socket) Assly.",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 39,
+      "name": "Control Cables",
+      "system": "controls",
+      "page": 78,
+      "diagram": "assets/diagrams/boxer100/plate-39-control-cables.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 1612 01",
+          "description": "Cable Throttle",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "PF 1612 04",
+          "description": "Clutch Cable",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 5000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "PF 1612 02",
+          "description": "Brake Cable",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4500,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "DZ 1910 14",
+          "description": "Cable Speedo Meter",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4000,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 40,
+      "name": "Turn Signal Lamps",
+      "system": "electrical",
+      "page": 80,
+      "diagram": "assets/diagrams/boxer100/plate-40-turn-signal-lamps.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "DU 2010 14",
+          "description": "Lamp - Dir. Indicator: FR-LH & RR-RH",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 4000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "DU 2010 12",
+          "description": "Lamp - Dir. Indicator: FR-RH & RR-LH",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 4000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "06 2010 83",
+          "description": "Lamp 12 V 10 W",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "39 1225 15",
+          "description": "Hex. Nut Flange M-10",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 300,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 41,
+      "name": "Tail Lamp Assly & Number Plate",
+      "system": "electrical",
+      "page": 82,
+      "diagram": "assets/diagrams/boxer100/plate-41-tail-lamp-number-plate.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "DF 2011 38",
+          "description": "Tail Light Assly. with lamp",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "31 2010 28",
+          "description": "Lamp 12 V, 10/5W",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "39 2430 15",
+          "description": "Hex Nut / Flange",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "DD 2010 11",
+          "description": "Damper",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": "For Mtg. Tail light"
+        },
+        {
+          "no": "5",
+          "partNo": "31 2010 01",
+          "description": "Collar",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": "For Mtg. Tail light"
+        },
+        {
+          "no": "6",
+          "partNo": "39 2429 11",
+          "description": "Plain Washer",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "PF 2314 01",
+          "description": "Bracket Tail Light Assly",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "39 1956 04",
+          "description": "Bolt Flange Small (for No. Plate)",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "DF 1612 52",
+          "description": "Plate No. Rear Black",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "39 2765 01",
+          "description": "Screw Truss M6",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 300,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 42,
+      "name": "Seat Assly & Grip Frame",
+      "system": "frame_body",
+      "page": 84,
+      "diagram": "assets/diagrams/boxer100/plate-42-seat-grip-frame.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "JV 1910 01",
+          "description": "Seat assly. complete",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 55000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "PF 2314 05",
+          "description": "Grip Frame",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 22000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "39 1556 04",
+          "description": "Hex. Head Bolt / Flange M8",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "39 1211 11",
+          "description": "Washer Plain",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 300,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 43,
+      "name": "Electric Equipments",
+      "system": "electrical",
+      "page": 86,
+      "diagram": "assets/diagrams/boxer100/plate-43-electric-equipments.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "JV 4016 00",
+          "description": "Horn",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "39 1689 04",
+          "description": "Flange Bolt M8",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "PF 4022 04",
+          "description": "Wiring Harness (KS)",
+          "qty": {
+            "KS": 1,
+            "ES": 0
+          },
+          "price": 45000,
+          "remarks": "KS variant"
+        },
+        {
+          "no": "3",
+          "partNo": "PF 4022 01",
+          "description": "Wiring Harness (ES)",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 48000,
+          "remarks": "ES variant"
+        },
+        {
+          "no": "4",
+          "partNo": "31 2010 79",
+          "description": "Rear Brake Switch",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "PF 4014 03",
+          "description": "Spring Brake Switch",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "31 2010 27",
+          "description": "Battery (2.5 Ah)",
+          "qty": {
+            "KS": 1,
+            "ES": 0
+          },
+          "price": 65000,
+          "remarks": "KS variant"
+        },
+        {
+          "no": "6",
+          "partNo": "DS 2010 82",
+          "description": "Battery MF Dry Charged 5Ah",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 95000,
+          "remarks": "ES variant"
+        },
+        {
+          "no": "7",
+          "partNo": "JV 4018 01",
+          "description": "Case Battery",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4000,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "JV 4018 02",
+          "description": "Band Battery (KS)",
+          "qty": {
+            "KS": 1,
+            "ES": 0
+          },
+          "price": 500,
+          "remarks": "KS variant"
+        },
+        {
+          "no": "8",
+          "partNo": "JA 4018 01",
+          "description": "Band Battery (ES)",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": "ES variant"
+        },
+        {
+          "no": "9",
+          "partNo": "DS 1612 24",
+          "description": "Stepped Bolt",
+          "qty": {
+            "KS": 3,
+            "ES": 3
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "DS 2010 25",
+          "description": "Assly D.C. Flasher",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 44,
+      "name": "Tool Kit",
+      "system": "controls",
+      "page": 88,
+      "diagram": "assets/diagrams/boxer100/plate-44-tool-kit.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "DM 221013",
+          "description": "Tool Kit with Value Engineered Tools",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 45,
+      "name": "Accessories",
+      "system": "accessories",
+      "page": 90,
+      "diagram": "assets/diagrams/boxer100/plate-45-accessories.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 1130 08",
+          "description": "Footrest Third LH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "PF 1130 09",
+          "description": "Footrest Third RH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "39 1298 04",
+          "description": "Screw Hex. Socket M8x1.25x35",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "JB 2312 06",
+          "description": "Bolt Socket Head",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "PF 2312 01",
+          "description": "Leg Guard",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 28000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "JA 2312 01",
+          "description": "Hook Leg Guard",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "JA 2312 02",
+          "description": "Spacer Leg Guard",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "39 0798 15",
+          "description": "Nut Hex with Flange M6",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "36 JW00 13",
+          "description": "Leg Guard Hardware Kit",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": "Kit: Sr. No. 6,7,8"
+        }
+      ]
+    },
+    {
+      "plate": 22,
+      "name": "Frame & Frame Fitting",
+      "system": "frame_body",
+      "page": 44,
+      "diagram": "assets/diagrams/boxer100/plate-22-frame-frame-fitting.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 1110 00",
+          "description": "Frame Assly.",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 320000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "DF 1810 90",
+          "description": "Nut Steering Bearing",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "36 3140 01",
+          "description": "Bearing cone Kit",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": "Ref. Page No. 91"
+        },
+        {
+          "no": "4",
+          "partNo": "DJ 1811 15",
+          "description": "Cage Bearing",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "PF 1134 00",
+          "description": "Bracket engine hanger LH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "PF 1134 01",
+          "description": "Bracket engine hanger RH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "JA 1134 02",
+          "description": "Engine Mounting bracket front",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "39 2723 15",
+          "description": "Hex Nut Flanged",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": "for engine mtg. Rear"
+        },
+        {
+          "no": "8",
+          "partNo": "JA 1134 03",
+          "description": "Bolt Flanged",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 900,
+          "remarks": "for engine mtg. Rear"
+        },
+        {
+          "no": "9",
+          "partNo": "39 2312 04",
+          "description": "Bolt Flanged",
+          "qty": {
+            "KS": 3,
+            "ES": 3
+          },
+          "price": 900,
+          "remarks": "for engine mtg. Top"
+        },
+        {
+          "no": "10",
+          "partNo": "39 1970 15",
+          "description": "Nut Flanged",
+          "qty": {
+            "KS": 7,
+            "ES": 7
+          },
+          "price": 500,
+          "remarks": "for engine mtg. Top & Front"
+        },
+        {
+          "no": "11",
+          "partNo": "59 0400 17",
+          "description": "Hex Bolt Flanged",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 1200,
+          "remarks": "for engine mtg. Front"
+        }
+      ]
+    },
+    {
+      "plate": 23,
+      "name": "Swing Arm / Rear Shock Absorber",
+      "system": "suspension",
+      "page": 46,
+      "diagram": "assets/diagrams/boxer100/plate-23-swing-arm-rear-shock.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "JB 1220 16",
+          "description": "Hex. Bolt / Flange",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 900,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "39 0714 11",
+          "description": "Plain washer",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "39 2349 11",
+          "description": "Plain washer",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "PF 1220 04",
+          "description": "Rear Shock Absorber (SNS)",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 45000,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "36 PF00 14",
+          "description": "Assly. Swing Arm",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 55000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "39 2366 15",
+          "description": "Domed Cap Nut",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "39 0789 12",
+          "description": "Spring Washer",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "JB 1220 03",
+          "description": "Chain slider",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3500,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "39 0553 02",
+          "description": "Self Tapping Screw",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "39 0454 11",
+          "description": "Plain washer",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "JA 1210 03",
+          "description": "Shaft Swing Arm",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "39 0939 15",
+          "description": "Special Nylock Nut",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "DJ 1510 36",
+          "description": "Adjuster chain LH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "DJ 1510 37",
+          "description": "Adjuster chain RH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "15",
+          "partNo": "39 0292 15",
+          "description": "Hexagon nut",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "16",
+          "partNo": "DJ 1510 47",
+          "description": "Plate Chain Adjuster",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 1000,
+          "remarks": ""
+        },
+        {
+          "no": "17",
+          "partNo": "DP 1710 06",
+          "description": "Silent bush",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 2000,
+          "remarks": ""
+        },
+        {
+          "no": "18",
+          "partNo": "39 0781 11",
+          "description": "Washer Plain",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 400,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 24,
+      "name": "Fender - Front & Rear",
+      "system": "frame_body",
+      "page": 48,
+      "diagram": "assets/diagrams/boxer100/plate-24-fender-front-rear.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "DF 1612 42",
+          "description": "Fender Front",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "DF 1612 45",
+          "description": "Mud Flap Front",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "22 1504 35",
+          "description": "Bolt",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "01 1106 09",
+          "description": "Washer Plain",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "39 2484 15",
+          "description": "Nut Flange M5",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "DF 1910 20",
+          "description": "Clamp",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "39 2473 04",
+          "description": "Bolt Flange",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "39 2222 04",
+          "description": "Bolt Flange M8",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "JV 1814 08",
+          "description": "Fender Rear (Combined)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 22000,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "JV 1814 10",
+          "description": "Flap Fender Rear",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "39 2420 01",
+          "description": "Screw Pan Head",
+          "qty": {
+            "KS": 3,
+            "ES": 3
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "39 1839 11",
+          "description": "Washer Plain",
+          "qty": {
+            "KS": 6,
+            "ES": 6
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "39 0326 15",
+          "description": "Nut Nyloc M5 X 0.8",
+          "qty": {
+            "KS": 3,
+            "ES": 3
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "39 1943 04",
+          "description": "Bolt Flange",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "15",
+          "partNo": "39 0211 11",
+          "description": "Washer Plain",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "16",
+          "partNo": "39 1556 04",
+          "description": "Hex. Bolt Flange M8",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "17",
+          "partNo": "39 1507 11",
+          "description": "Washer Plain",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 300,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 25,
+      "name": "Foot Rest / Holder / Stand",
+      "system": "controls",
+      "page": 50,
+      "diagram": "assets/diagrams/boxer100/plate-25-foot-rest-holder-stand.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 1132 00",
+          "description": "Center Stand",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 28000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "DG 1611 24",
+          "description": "Damper Stand",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1200,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "JA 1132 01",
+          "description": "Shaft Stand",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "39 0797 08",
+          "description": "Pin Cotter",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "DH 1611 21",
+          "description": "Spring Main Stand",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "JA 1132 02",
+          "description": "Side Stand",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "DF 1611 02",
+          "description": "Bolt for Side Stand Mtg.",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 700,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "39 0422 15",
+          "description": "Nut Nyloc M10",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "DH 1610 66",
+          "description": "Spring Side Stand",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2000,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "PF 1130 00",
+          "description": "Main Step LH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "KA DF08 22",
+          "description": "Bolt Flanged",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "PF 1130 01",
+          "description": "Main Step RH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "DF 1614 13",
+          "description": "Rubber Main Step",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "DH 1611 94",
+          "description": "Kick Stopper",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": "For Kick stopper"
+        },
+        {
+          "no": "15",
+          "partNo": "PF 1130 02",
+          "description": "Stay LH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "16",
+          "partNo": "PF 1130 03",
+          "description": "Stay RH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "17",
+          "partNo": "DP 1611 70",
+          "description": "Step RH / LH",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 5000,
+          "remarks": ""
+        },
+        {
+          "no": "18",
+          "partNo": "JK 1130 08",
+          "description": "Rubber Pillion Step",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 2000,
+          "remarks": ""
+        },
+        {
+          "no": "19",
+          "partNo": "30 1710 22",
+          "description": "Pin Pillion Step",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "20",
+          "partNo": "DP 1611 63",
+          "description": "Washer for foot step",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": "For Rear Footrest"
+        },
+        {
+          "no": "21",
+          "partNo": "39 0784 08",
+          "description": "Split Pin",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "22",
+          "partNo": "39 2481 04",
+          "description": "Bolt Hex With Flange M8",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "23",
+          "partNo": "39 2659 12",
+          "description": "Washer - Spring",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 300,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 26,
+      "name": "Wheel Rim / Spokes / Tyre / Tube",
+      "system": "wheels",
+      "page": 52,
+      "diagram": "assets/diagrams/boxer100/plate-26-wheel-rim-spoke-tyre-tube.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "16 1510 66",
+          "description": "Nipple Spoke",
+          "qty": {
+            "KS": 72,
+            "ES": 72
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "DU 1510 25",
+          "description": "Spoke Inner Front (Drum)",
+          "qty": {
+            "KS": 18,
+            "ES": 18
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "DU 1510 26",
+          "description": "Spoke Outer Front",
+          "qty": {
+            "KS": 18,
+            "ES": 18
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "DM 1510 29",
+          "description": "Rim - 1.60 X 17 Drum brake - Dia. 110",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 32000,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "DM 1510 25",
+          "description": "Tyre 2.75-17, 4 PR, RIB Pattern",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 42000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "DS 1510 49",
+          "description": "Tube - 2.75 X 17",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "DM 1510 28",
+          "description": "Tyre 3.00-17, 6PR, Stud Pattern",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 55000,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "DS 1510 46",
+          "description": "Rim 1.85 X 17 Rear",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 35000,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "DG 1510 22",
+          "description": "Band Rim",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "DS 1510 09",
+          "description": "Spoke Inner Rear",
+          "qty": {
+            "KS": 18,
+            "ES": 18
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "DS 1510 10",
+          "description": "Spoke Outer Rear",
+          "qty": {
+            "KS": 18,
+            "ES": 18
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "DS 1510 53",
+          "description": "Tube - 3 X 17",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 13000,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "DS 1510 47",
+          "description": "Tyre and Tube Front",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 52000,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "DM 1510 27",
+          "description": "Tyre and Tube Rear",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 66000,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 27,
+      "name": "Front Hub",
+      "system": "brakes",
+      "page": 54,
+      "diagram": "assets/diagrams/boxer100/plate-27-front-hub.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "39 2680 20",
+          "description": "Ball Bearing 10X35X11",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": "6300 1RS/C3"
+        },
+        {
+          "no": "1A",
+          "partNo": "39 2681 20",
+          "description": "Ball Bearing 10X30X9",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": "6200 1RS/C3"
+        },
+        {
+          "no": "2",
+          "partNo": "DF 1510 03",
+          "description": "Drum Front",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 45000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "31 1510 04",
+          "description": "Spacer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "14 1510 21",
+          "description": "Oil Seal 30 X 17 X 6",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "DU 1510 05",
+          "description": "Collar Assly Axle",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "39 0248 11",
+          "description": "Plain washer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "DU 1510 31",
+          "description": "Nut - U M10 X 1.25",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "DZ 1510 12",
+          "description": "Axle Front",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "DZ 1510 27",
+          "description": "Panel Front Brake",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "31 1510 60",
+          "description": "Shoe Brake",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12500,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "JB 1318 04",
+          "description": "Shoe Brake (Non Asbestos)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 13000,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "30 1510 69",
+          "description": "Spring",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "31 1510 11",
+          "description": "Cam Brake",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4000,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "30 1510 38",
+          "description": "'O' Ring",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "DD 1510 09",
+          "description": "Indicator Front",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "15",
+          "partNo": "DD 1510 08",
+          "description": "Lever Brake Cam",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "16",
+          "partNo": "39 0775 04",
+          "description": "Bolt M6 X 30",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "17",
+          "partNo": "39 0798 15",
+          "description": "Nut Hex. Flange M6",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "18",
+          "partNo": "31 1510 14",
+          "description": "Seal Oil",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2000,
+          "remarks": ""
+        },
+        {
+          "no": "19",
+          "partNo": "31 1510 64",
+          "description": "Gear Speedometer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4000,
+          "remarks": ""
+        },
+        {
+          "no": "20",
+          "partNo": "30 1510 41",
+          "description": "Gear Meter Screw",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2000,
+          "remarks": ""
+        },
+        {
+          "no": "21",
+          "partNo": "30 1510 42",
+          "description": "Washer for Speedo Gear",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "22",
+          "partNo": "JA 1316 06",
+          "description": "Bush for Speedo Gear",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "23",
+          "partNo": "39 0840 01",
+          "description": "Screw Pan Cross M4 for Speedo Cable",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 28,
+      "name": "Rear Hub",
+      "system": "brakes",
+      "page": 56,
+      "diagram": "assets/diagrams/boxer100/plate-28-rear-hub.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 1312 13",
+          "description": "Coupling Assly.",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 35000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "39 2240 20",
+          "description": "Ball Bearing",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "DJ 1510 33",
+          "description": "Sleeve Rear Axle",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "DJ 1510 35",
+          "description": "Collar Coupling Side",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "39 2567 11",
+          "description": "Washer Plain",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "39 0801 15",
+          "description": "Nut Hex. M20 X 1",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "PF 1410 02",
+          "description": "Chain 124 Links (Cross Slit)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 45000,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "DS 1510 67",
+          "description": "Drum Rear (4 Rubber)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 55000,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "39 2686 20",
+          "description": "Bearing Sprocket Side",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "39 2687 20",
+          "description": "Bearing Brake Side",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "30 1510 75",
+          "description": "Collar Bearing",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "DK 1510 94",
+          "description": "Damper Shock",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "DS 1510 76",
+          "description": "Panel Rear Brake",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "30 1511 05",
+          "description": "Shoe Brake",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12500,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "JN 1318 12",
+          "description": "Shoe Brake (Non Asbestos)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 13000,
+          "remarks": ""
+        },
+        {
+          "no": "15",
+          "partNo": "30 1510 69",
+          "description": "Spring",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "16",
+          "partNo": "30 1510 11",
+          "description": "Cam Brake Assly. Rear",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4000,
+          "remarks": ""
+        },
+        {
+          "no": "17",
+          "partNo": "30 1510 38",
+          "description": "Ring 'O'",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "18",
+          "partNo": "DD 1510 09",
+          "description": "Indicator Wear",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "19",
+          "partNo": "JW 1316 01",
+          "description": "Lever Brake Rear",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "20",
+          "partNo": "39 0775 04",
+          "description": "Hex. Head Bolt M6",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "21",
+          "partNo": "39 0798 15",
+          "description": "Nut M6",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "22",
+          "partNo": "PF 1312 08",
+          "description": "Axle Rear Wheel (Dia.15)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        },
+        {
+          "no": "23",
+          "partNo": "PF 1312 04",
+          "description": "Spacer Panel Side",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "24",
+          "partNo": "39 2566 11",
+          "description": "Washer Plain",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "25",
+          "partNo": "DH 1710 19",
+          "description": "Nut 'U' M14 Swing Arm",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "26",
+          "partNo": "DS 1510 68",
+          "description": "Coupling",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "27",
+          "partNo": "DS 1510 74",
+          "description": "Washer 4 Rubber",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "28",
+          "partNo": "39 0794 15",
+          "description": "Nut Hex Fine M10 x 1.25",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "29",
+          "partNo": "DS 1510 73",
+          "description": "Stud 4 Rubber",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "30",
+          "partNo": "DX 1510 21",
+          "description": "Sprocket 46 T - 4 Rubber",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 32000,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 29,
+      "name": "Brake Pedal",
+      "system": "brakes",
+      "page": 58,
+      "diagram": "assets/diagrams/boxer100/plate-29-brake-pedal.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 1610 02",
+          "description": "Brake Pedal",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "PF 1610 01",
+          "description": "Rod brake",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "30 1910 38",
+          "description": "Pin",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "DS 1910 35",
+          "description": "Packing Brake rod",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "39 0198 11",
+          "description": "Plain washer",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "39 0808 08",
+          "description": "Split pin",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "39 0805 11",
+          "description": "Plain Washer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "39 0797 08",
+          "description": "Pin Cotter",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "JV 1610 14",
+          "description": "Brake Pedal Return Spring",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "39 0198 11",
+          "description": "Washer Plain",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "30 1910 35",
+          "description": "Spring",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "JB 1610 02",
+          "description": "Pin Brake Rod",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "30 1910 36",
+          "description": "Nut Brake Adjuster",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "JW 1220 04",
+          "description": "Rod Torque",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 4000,
+          "remarks": ""
+        },
+        {
+          "no": "15",
+          "partNo": "DH 1510 29",
+          "description": "Step Bolt Torque Rod",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 700,
+          "remarks": ""
+        },
+        {
+          "no": "16",
+          "partNo": "39 1540 11",
+          "description": "Plain Washer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "17",
+          "partNo": "39 0789 12",
+          "description": "Spring Washer",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "18",
+          "partNo": "39 0694 15",
+          "description": "Hex. Lock Nut M8 x 1.25",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "19",
+          "partNo": "39 0807 08",
+          "description": "Split Pin",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "20",
+          "partNo": "30 1510 95",
+          "description": "Bolt Hex.",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "21",
+          "partNo": "39 0708 15",
+          "description": "Nut Hex. M10 X 1.25",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 30,
+      "name": "Handle Bar",
+      "system": "controls",
+      "page": 60,
+      "diagram": "assets/diagrams/boxer100/plate-30-handle-bar.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 1510 00",
+          "description": "Handle Bar",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "PF 4014 00",
+          "description": "Control Switch LH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 22000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "PF 4014 02",
+          "description": "Control Switch RH (KS)",
+          "qty": {
+            "KS": 1,
+            "ES": 0
+          },
+          "price": 22000,
+          "remarks": "KS variant"
+        },
+        {
+          "no": "3",
+          "partNo": "PF 4014 01",
+          "description": "Control Switch RH (ES)",
+          "qty": {
+            "KS": 0,
+            "ES": 1
+          },
+          "price": 24000,
+          "remarks": "ES variant"
+        },
+        {
+          "no": "4",
+          "partNo": "JV 1610 01",
+          "description": "Grip LH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2500,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "JV 1610 02",
+          "description": "Grip Assly. RH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3500,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "PF 1610 03",
+          "description": "Lever Control LH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3500,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "PF 1612 03",
+          "description": "Boot for Lever LH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "PF 1610 04",
+          "description": "Lever Control RH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3500,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "PF 1612 05",
+          "description": "Boot for Lever RH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "PF 2316 00",
+          "description": "Mirror LH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "PF 2316 01",
+          "description": "Mirror RH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "FD 1810 30",
+          "description": "Holder Handle Upper",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "FD 1810 31",
+          "description": "Holder Handle Lower",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "39 1074 04",
+          "description": "Bolt Flanged Small",
+          "qty": {
+            "KS": 4,
+            "ES": 4
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "15",
+          "partNo": "DF 1810 91",
+          "description": "Damper Handle Upper",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "16",
+          "partNo": "DF 1810 92",
+          "description": "Damper Handle Lower",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "17",
+          "partNo": "39 0422 15",
+          "description": "Nut- Nyloc M-10",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "18",
+          "partNo": "30 1910 48",
+          "description": "Band",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "19",
+          "partNo": "DF 1810 24",
+          "description": "Lock Set - Steering, P.Tank, Side Cover, DC IGN",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": ""
+        },
+        {
+          "no": "20",
+          "partNo": "39 1943 04",
+          "description": "Bolt Flanged",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "21",
+          "partNo": "JV 4014 09",
+          "description": "Front Brake Switch",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 31,
+      "name": "Front Fork",
+      "system": "suspension",
+      "page": 62,
+      "diagram": "assets/diagrams/boxer100/plate-31-front-fork.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 1210 01",
+          "description": "Front Fork Assly",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 95000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "DL 1810 80",
+          "description": "Front Fork Oil Seal",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "2A",
+          "partNo": "31 1811 08",
+          "description": "Ring Snap",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "2B",
+          "partNo": "DD 1810 32",
+          "description": "Seal Dust",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "30 1810 26",
+          "description": "Gasket",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "30 1810 25",
+          "description": "Socket Head Bolt",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "5",
+          "partNo": "PF 1210 10",
+          "description": "Fork Pipe Inner",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 28000,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "DE 1810 31",
+          "description": "Spring Front Fork",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "31 1811 20",
+          "description": "Bolt Fork with Washer",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "FD 1810 12",
+          "description": "Cap Nut Fork",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 2000,
+          "remarks": ""
+        },
+        {
+          "no": "9",
+          "partNo": "DF 1810 89",
+          "description": "Plain Washer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "10",
+          "partNo": "DF 1810 77",
+          "description": "Holder Fork Upper",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": ""
+        },
+        {
+          "no": "11",
+          "partNo": "30 1810 09",
+          "description": "Bearing Cone Fork",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "12",
+          "partNo": "DF 1810 83",
+          "description": "Holder Assly Fork Under",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 22000,
+          "remarks": ""
+        },
+        {
+          "no": "13",
+          "partNo": "39 0789 12",
+          "description": "Spring Washer",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "14",
+          "partNo": "39 1813 04",
+          "description": "Bolt M10X1.25",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 600,
+          "remarks": ""
+        },
+        {
+          "no": "15",
+          "partNo": "DD 1810 31",
+          "description": "Pipe Left Fork Outer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": ""
+        },
+        {
+          "no": "16",
+          "partNo": "DD 1810 34",
+          "description": "Pipe Right Fork Outer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 18000,
+          "remarks": ""
+        },
+        {
+          "no": "17",
+          "partNo": "DE 1810 33",
+          "description": "Cylinder Fork",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 4000,
+          "remarks": ""
+        },
+        {
+          "no": "17A",
+          "partNo": "31 1810 99",
+          "description": "Spring front fork - Two Pitch",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 6000,
+          "remarks": ""
+        },
+        {
+          "no": "18",
+          "partNo": "DF 1810 85",
+          "description": "Seat Fork Spring",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 1000,
+          "remarks": ""
+        },
+        {
+          "no": "19",
+          "partNo": "30 1810 29",
+          "description": "O Ring",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "20",
+          "partNo": "PF 1210 02",
+          "description": "Lamp Shade LH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "21",
+          "partNo": "PF 1210 03",
+          "description": "Lamp Shade RH",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 3000,
+          "remarks": ""
+        },
+        {
+          "no": "22",
+          "partNo": "PF 1210 11",
+          "description": "Collar",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 1500,
+          "remarks": ""
+        },
+        {
+          "no": "23",
+          "partNo": "DM 1810 10",
+          "description": "Washer",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 400,
+          "remarks": ""
+        }
+      ]
+    },
+    {
+      "plate": 32,
+      "name": "Painted Parts",
+      "system": "frame_body",
+      "page": 64,
+      "diagram": "assets/diagrams/boxer100/plate-32-painted-parts.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "PF 7102 X3",
+          "description": "Fuel Tank Ebony Black Decal",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 45000,
+          "remarks": ""
+        },
+        {
+          "no": "1",
+          "partNo": "PF 7102 3E",
+          "description": "Fuel Tank Electron Blue Decal",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 45000,
+          "remarks": ""
+        },
+        {
+          "no": "1",
+          "partNo": "PF 7102 3F",
+          "description": "Fuel Tank Flame Red Decal",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 45000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "PF 7303 X3",
+          "description": "Side Cover LH Ebony Black Decal",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "PF 7303 3E",
+          "description": "Side Cover LH Electron Blue Decal",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "PF 7303 3F",
+          "description": "Side Cover LH Flame Red Decal",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "PF 7304 X3",
+          "description": "Side Cover RH Ebony Black Decal",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "PF 7304 3E",
+          "description": "Side Cover RH Electron Blue Decal",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "PF 7304 3F",
+          "description": "Side Cover RH Flame Red Decal",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 8000,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "36 PF00 15",
+          "description": "Kit Decal Tank Red",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": "Ref. Page No. 93"
+        },
+        {
+          "no": "4",
+          "partNo": "36 PF00 16",
+          "description": "Kit Decal Tank Blue",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": "Ref. Page No. 93"
+        },
+        {
+          "no": "4",
+          "partNo": "36 PF00 17",
+          "description": "Kit Decal Tank Black",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 12000,
+          "remarks": "Ref. Page No. 93"
+        },
+        {
+          "no": "5",
+          "partNo": "36 PF00 29",
+          "description": "Kit Decal Side Cover Red (BM100)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 9000,
+          "remarks": "Ref. Page No. 92"
+        },
+        {
+          "no": "5",
+          "partNo": "36 PF00 30",
+          "description": "Kit Decal Side Cover Blue (BM100)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 9000,
+          "remarks": "Ref. Page No. 92"
+        },
+        {
+          "no": "5",
+          "partNo": "36 PF00 31",
+          "description": "Kit Decal Side Cover Black (BM100)",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 9000,
+          "remarks": "Ref. Page No. 92"
+        }
+      ]
+    },
+    {
+      "plate": 33,
+      "name": "Fittings - Petrol Tank, Side Covers & Cover Seat",
+      "system": "fuel_system",
+      "page": 66,
+      "diagram": "assets/diagrams/boxer100/plate-33-fittings-petrol-tank.png",
+      "parts": [
+        {
+          "no": "1",
+          "partNo": "DS 1410 12",
+          "description": "Grommet Side Cover Front",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "1A",
+          "partNo": "DH 1611 33",
+          "description": "Grommet Side Cover Rear",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 500,
+          "remarks": ""
+        },
+        {
+          "no": "2",
+          "partNo": "DG 1611 21",
+          "description": "Screw",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "3",
+          "partNo": "DU 1611 02",
+          "description": "Damper",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 800,
+          "remarks": ""
+        },
+        {
+          "no": "4",
+          "partNo": "JV 1710 01",
+          "description": "Damper Tank Rear",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 1200,
+          "remarks": "For Tank"
+        },
+        {
+          "no": "5",
+          "partNo": "39 1789 24",
+          "description": "Washer Nylon",
+          "qty": {
+            "KS": 3,
+            "ES": 3
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "6",
+          "partNo": "39 0983 08",
+          "description": "Pin Snap",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 400,
+          "remarks": ""
+        },
+        {
+          "no": "7",
+          "partNo": "39 1054 11",
+          "description": "Plain Washer",
+          "qty": {
+            "KS": 1,
+            "ES": 1
+          },
+          "price": 300,
+          "remarks": ""
+        },
+        {
+          "no": "8",
+          "partNo": "DJ 1410 08",
+          "description": "Damper Front",
+          "qty": {
+            "KS": 2,
+            "ES": 2
+          },
+          "price": 1000,
+          "remarks": "For Tank Mounting"
         }
       ]
     },

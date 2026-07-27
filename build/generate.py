@@ -42,10 +42,14 @@ def apply_tenant(ds, tenant):
         ds["meta"]["currency"] = cur
     return ds
 
-# When True, referenced images are inlined as base64 data URIs so the generated
-# index.html is a single self-contained file (previews anywhere, no asset folder
-# needed). For the Laravel port, flip this off and emit real asset paths.
-EMBED_IMAGES = True
+# When True, referenced images are inlined as base64 data URIs so each page is a
+# single self-contained file (previews anywhere). Set EMBED_IMAGES=0 in the env to
+# emit real asset paths instead (small HTML that loads images from ../assets when
+# the page is opened inside the repo). For the Laravel port, use the path mode too.
+EMBED_IMAGES = os.environ.get("EMBED_IMAGES", "1") != "0"
+# Pages are written into dist/, assets live at the repo root, so path-mode <img>
+# needs to climb one level.
+WEB_PREFIX = "" if EMBED_IMAGES else "../"
 
 
 def data_uri(relpath):
@@ -59,7 +63,10 @@ def data_uri(relpath):
 def img(relpath, alt="", cls="", style="", attrs=""):
     """<img> from an asset path; embeds as data URI when EMBED_IMAGES, else src=path.
     Falls back to a neutral placeholder box if the file is missing."""
-    src = data_uri(relpath) if EMBED_IMAGES else relpath
+    if EMBED_IMAGES:
+        src = data_uri(relpath)
+    else:
+        src = (WEB_PREFIX + relpath) if (ROOT / relpath).exists() else None
     if src is None:
         return f'<div class="imgph {cls}" style="{style}" aria-label="{html.escape(alt)}"></div>'
     st = f' style="{style}"' if style else ""
@@ -82,8 +89,8 @@ def img_slot(slot_key, default_asset, alt="", cls="", style="", attrs=""):
     a = (attrs + f' data-slot="{html.escape(slot_key)}"').strip()
     if url:
         remote = url.startswith(("http://", "https://", "//", "/storage"))
-        if EMBED_IMAGES and not remote and data_uri(url):
-            # portal-uploaded local file -> embed so the standalone preview shows it
+        if not remote:
+            # portal-uploaded local file -> embed (or ../path) exactly like any asset
             return img(url, alt, cls, style, a)
         # remote CDN or app-relative /storage path written by the portal -> verbatim
         st = f' style="{style}"' if style else ""
