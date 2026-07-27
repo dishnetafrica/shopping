@@ -28,6 +28,8 @@ final class SettingsWriteService
         'ai_persona', 'business_hours', 'delivery_areas', 'faq', 'brand_knowledge', 'languages',
         // Delivery notes shown to customers / staff.
         'delivery_note', 'moq_note',
+        // Storefront: which bike models to show (blank = auto by parts). Comma/newline separated.
+        'storefront_models',
         // VAT is fully tenant-configurable (never hardcoded): label + tax registration no.
         'vat_label', 'vat_number',
     ];

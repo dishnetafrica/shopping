@@ -98,6 +98,11 @@ final class SettingsSchema
                     ['key' => 'reorder_days',        'type' => 'number', 'label' => 'Reorder lead time', 'unit' => 'days', 'default' => 30],
                 ]],
             ]],
+            ['key' => 'storefront', 'label' => 'Storefront', 'icon' => 'doc', 'groups' => [
+                ['label' => 'Bike models on the website', 'help' => 'Controls which motorcycle models appear on your customer website. Leave blank to show every model that has parts loaded in your catalogue (recommended). To pick a specific set or order, list the model names — one per line or comma-separated, e.g. Boxer 100 KS, Boxer BM150.', 'fields' => [
+                    ['key' => 'storefront_models', 'type' => 'textarea', 'label' => 'Models to show', 'help' => 'Blank = automatic. Otherwise the exact models listed here, in this order.'],
+                ]],
+            ]],
             ['key' => 'delivery', 'label' => 'Delivery', 'icon' => 'truck', 'groups' => [
                 ['label' => 'Delivery', 'fields' => [
                     ['key' => 'delivery_areas', 'type' => 'textarea', 'label' => 'Delivery areas'],

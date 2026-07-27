@@ -1,18 +1,28 @@
-UPLOAD THIS TO GITHUB (this is the ONLY zip that goes to GitHub)
-================================================================
-3 files. The storefront is SELF-CONTAINED — every photo is embedded inside
-autoparts.html, so there is nothing else to deploy and no image can 404.
-This fixes the broken-image issue.
+UPLOAD THIS TO GITHUB — enable/disable which bike models show on the website
+============================================================================
+Storefront stays SELF-CONTAINED (all photos embedded in autoparts.html — nothing
+can 404). This adds a real on/off control for the model cards.
 
-  app/Support/Vertical.php
-  app/Http/Controllers/Storefront/StorefrontController.php
-  resources/storefront/autoparts.html   (photos embedded)
+FILES (drag the "app" and "resources" folders to GitHub — they replace existing):
+  app/Support/Vertical.php                                   (unchanged, for completeness)
+  app/Support/SettingsSchema.php                             + new "Storefront" settings section
+  app/Services/Settings/SettingsWriteService.php             + allows saving the new setting
+  app/Http/Controllers/Storefront/StorefrontController.php   + passes the setting to the site
+  resources/storefront/autoparts.html                        + shows only the chosen models
 
-UPLOAD:  GitHub -> Add file -> Upload files -> drag the "app" and "resources"
-         folders from this zip (they replace the existing files).
+HOW IT WORKS — two ways, both live at once:
+  1) AUTOMATIC (default, nothing to configure): a bike model appears on the site
+     ONLY if it has parts loaded in your catalogue. Import a model's parts and it
+     shows up; remove them and it disappears. So the Products page you already use
+     is the on/off switch.
+  2) MANUAL override: v3 → Settings → Storefront → "Models to show". Type the model
+     names (one per line or comma-separated), e.g.
+         Boxer 100 KS
+         Boxer BM150
+     The site then shows exactly those, in that order. Leave the box blank to go
+     back to automatic.
+
 DEPLOY:  git pull  ->  php artisan optimize:clear  ->  restart
-         Then hard-refresh the storefront (Cmd/Ctrl+Shift+R) to drop the old
-         cached copy that was pointing at the missing image files.
+         Then hard-refresh the storefront (Cmd/Ctrl+Shift+R).
 
-Do NOT go to GitHub:  ea-parts-v3-import.zip / ea-parts-extra-import.zip
-                      (load via Products -> Import products)
+Do NOT go to GitHub:  the parts import zips (Products -> Import products).

@@ -354,6 +354,13 @@ class StorefrontController extends Controller
             'panelUrl'    => url('/panel'),
             'systems'     => $tenant->setting('epc_systems', $defaultSystems),
             'models'      => $tenant->setting('epc_models', $defaultModels),
+            // Which bike models the storefront shows. Blank = automatic (show every model
+            // that has parts in the catalogue). Otherwise a manual list of model names/ids
+            // (comma / newline separated), edited in Settings → Storefront.
+            'enabledModels' => array_values(array_filter(array_map(
+                'trim',
+                preg_split('/[\n,]+/', (string) $tenant->setting('storefront_models', '')) ?: []
+            ), fn ($s) => $s !== '')),
         ];
 
         $title = $tenant->name . ' — Genuine Motorcycle Spare Parts';
