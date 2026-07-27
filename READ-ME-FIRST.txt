@@ -1,0 +1,23 @@
+UPLOAD THIS TO GITHUB (this is the ONLY zip that goes to GitHub)
+================================================================
+It contains 3 code files at their exact repo paths:
+
+  app/Support/Vertical.php                                  -> adds "Auto Parts" business type
+  app/Http/Controllers/Storefront/StorefrontController.php  -> serves the storefront
+  resources/storefront/autoparts.html                       -> the full customer storefront (latest)
+
+HOW TO UPLOAD
+  GitHub repo -> Add file -> Upload files -> drag the "app" and "resources"
+  folders from this zip. GitHub places each file at the right path and commits.
+  (These REPLACE the same files if they already exist — that's expected.)
+
+THEN DEPLOY
+  git pull  ->  php artisan optimize:clear  ->  restart the app
+
+IMPORTANT — these do NOT go to GitHub:
+  - ea-parts-v3-import.zip  -> load it in the app: Products -> Import products
+  - boxer100-photos.zip     -> just image files; already baked into autoparts.html
+
+NOTE on StorefrontController.php: this is based on the version in the code you
+shared. If your LIVE controller changed since then, don't overwrite it — instead
+paste the 3 blocks marked "AUTO_PARTS" (search the file) into your live copy.
