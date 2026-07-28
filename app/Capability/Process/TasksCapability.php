@@ -108,6 +108,24 @@ final class TasksCapability implements ProcessCapability
             ->whereIn('id', $ids)->pluck('order_no', 'id')->toArray();
     }
 
+    /** customer_id → customer name, for tasks created off a customer page (one query). */
+    private function customerMap($tasks, int $tenantId): array
+    {
+        $ids = $tasks->pluck('customer_id')->filter(fn ($v) => (int) $v > 0)->unique()->values()->all();
+        if (! $ids) return [];
+        return \App\Models\CustomerProfile::withoutGlobalScopes()->where('tenant_id', $tenantId)
+            ->whereIn('id', $ids)->pluck('name', 'id')->toArray();
+    }
+
+    /** Client column: a linked customer wins, else the order number, else a dash. */
+    private function clientCell(OrderTask $x, array $clients, array $customers): string
+    {
+        if ((int) ($x->customer_id ?? 0) > 0 && ! empty($customers[$x->customer_id])) {
+            return (string) $customers[$x->customer_id];
+        }
+        return (string) ($clients[$x->order_id] ?? '—');
+    }
+
     public function project(CapabilityContext $ctx): WorkspacePayload
     {
         $t = $ctx->tenant; $u = $ctx->user;
@@ -124,14 +142,15 @@ final class TasksCapability implements ProcessCapability
             $overdueN = $active->filter(fn ($x) => $x->isOverdue())->count();
             $names = $this->engine->assigneeNames($t);
             $clients = $this->clientMap($all, $t->id);
+            $customers = $this->customerMap($all, $t->id);
             $comments = $this->commentCounts($all, $t->id);
 
-            $rows = $all->map(function (OrderTask $x) use ($names, $clients, $comments) {
+            $rows = $all->map(function (OrderTask $x) use ($names, $clients, $customers, $comments) {
                 return [
                     'id'       => $x->id,
                     'ref'      => ['value' => '#' . ($x->ref_no ?: $x->id), 'sort' => (int) ($x->ref_no ?: $x->id)],
                     'task'     => $x->title,
-                    'client'   => (string) ($clients[$x->order_id] ?? '—'),
+                    'client'   => $this->clientCell($x, $clients, $customers),
                     'assignee' => $names[$x->owner_user_id] ?? ($x->owner_user_id ? ('User ' . $x->owner_user_id) : '—'),
                     'due'      => $this->dueCell($x),
                     'duration' => $this->durationText($x),
@@ -213,14 +232,15 @@ final class TasksCapability implements ProcessCapability
         // Staff: personal list (same shape, no assignee column, no bulk).
         $mine = $this->engine->myTasks($t, $u);
         $clients = $this->clientMap($mine, $t->id);
+        $customers = $this->customerMap($mine, $t->id);
         $names = $this->engine->assigneeNames($t);
         $comments = $this->commentCounts($mine, $t->id);
-        $rows = $mine->map(function (OrderTask $x) use ($clients, $names, $comments) {
+        $rows = $mine->map(function (OrderTask $x) use ($clients, $customers, $names, $comments) {
             return [
                 'id'       => $x->id,
                 'ref'      => ['value' => '#' . ($x->ref_no ?: $x->id), 'sort' => (int) ($x->ref_no ?: $x->id)],
                 'task'     => $x->title,
-                'client'   => (string) ($clients[$x->order_id] ?? '—'),
+                'client'   => $this->clientCell($x, $clients, $customers),
                 'due'      => $this->dueCell($x),
                 'duration' => $this->durationText($x),
                 'priority' => ucfirst(WorkflowConfig::priorityLabel((int) $x->priority)),

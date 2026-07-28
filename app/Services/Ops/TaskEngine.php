@@ -259,7 +259,8 @@ class TaskEngine
         ?\Illuminate\Support\Carbon $due = null,
         int $priority = 2,
         ?User $by = null,
-        int $slaMinutes = 0
+        int $slaMinutes = 0,
+        ?int $customerId = null
     ): array {
         $title = trim($title);
         if ($title === '') return ['ok' => false, 'error' => 'Task title is required.'];
@@ -292,6 +293,8 @@ class TaskEngine
         $table = (new OrderTask)->getTable();
         if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'requires_upload')) $attrs['requires_upload'] = false;
         if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'checklist'))       $attrs['checklist']       = [];
+        // Optional customer link (set only if the column exists and a customer was given).
+        if ($customerId && \Illuminate\Support\Facades\Schema::hasColumn($table, 'customer_id')) $attrs['customer_id'] = $customerId;
         if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'priority'))        $attrs['priority']        = max(0, min(3, $priority));
         // Tokenized link so the assignee can open/accept/complete from the WhatsApp nudge (no login).
         if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'link_nonce'))      $attrs['link_nonce']      = \Illuminate\Support\Str::random(16);

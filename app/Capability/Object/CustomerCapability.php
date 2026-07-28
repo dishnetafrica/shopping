@@ -106,6 +106,28 @@ final class CustomerCapability implements ObjectCapability
             'customer' => (string) ($c->name ?: 'Customer'), 'prefill' => ['id' => (int) $c->id, 'currency' => $cur],
         ];
 
+        // "New task" — assign a follow-up/collection task tied to THIS customer. Amount is optional and,
+        // when given, is folded into the task title (e.g. "Collect USD 68 from Mehul Patel").
+        $staffOpts = \App\Models\User::where('tenant_id', $ctx->tenantId())->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn ($x) => '#' . $x->id . ' ' . str_replace(',', ' ', $x->name ?: ('User ' . $x->id)))
+            ->all();
+        $newTask = [
+            'key' => 'assign_task', 'label' => 'New task', 'method' => 'POST',
+            'endpoint' => $endpoint . '/assign_task', 'actor' => 'human', 'tone' => 'default',
+            'submitLabel' => 'Create task',
+            'schema' => [
+                'assignee' => 'enum:' . implode(',', $staffOpts ?: ['#0 No staff']),
+                'title'    => 'text',
+                'amount'   => 'money',
+                'currency' => 'enum:' . $cur . ',USD,UGX,SSP,KES',
+                'due_at'   => 'datetime',
+                'priority' => 'enum:Normal,High,Low',
+            ],
+            'labels' => ['assignee' => 'Assign to', 'title' => 'Task', 'amount' => 'Amount to collect (optional)', 'due_at' => 'Due (optional)', 'priority' => 'Priority'],
+            'prefill' => ['id' => (int) $c->id, 'title' => 'Collect from ' . ($c->name ?: 'customer'), 'currency' => $cur, 'priority' => 'Normal'],
+        ];
+
         $primary = $balance > 0 ? $payAction : $newQuote;
 
         // --- answers grid ---
@@ -215,7 +237,30 @@ final class CustomerCapability implements ObjectCapability
             $disp($n->total, (string) $n->currency, $n->issued_at ? Carbon::parse($n->issued_at)->format('Y-m-d') : null),
         ], 'link' => null])->all();
 
+        // This customer's tasks (collection / follow-up), newest & still-open first.
+        $custTasks = \App\Models\OrderTask::where('tenant_id', $ctx->tenantId())
+            ->where('customer_id', $c->id)
+            ->orderByRaw("(status = 'completed')")   // open (false) before done (true)
+            ->orderByDesc('id')->limit(50)->get();
+        $taskNames = app(\App\Services\Ops\TaskEngine::class)->assigneeNames($ctx->tenant);
+        $taskRows = $custTasks->map(function ($tk) use ($taskNames) {
+            $s = (string) $tk->status;
+            $badge = $s === 'completed' ? 'ok' : ($s === 'in_progress' ? 'info' : ($s === 'exception' ? 'danger' : 'warn'));
+            $label = $s === 'completed' ? 'Done' : ($s === 'in_progress' ? 'In progress' : ($s === 'exception' ? 'Blocked' : 'Open'));
+            return ['cells' => [
+                '#' . ($tk->ref_no ?: $tk->id),
+                (string) $tk->title,
+                $taskNames[$tk->owner_user_id] ?? '—',
+                $tk->due_at ? Carbon::parse($tk->due_at)->format('d M Y') : '—',
+                ['badge' => $badge, 'value' => $label],
+            ], 'ts' => $tk->created_at ? Carbon::parse($tk->created_at)->timestamp : 0, 'link' => null];
+        })->all();
+        $openTaskCount = $custTasks->where('status', '!=', 'completed')->count();
+
         $tabSections = [
+            'tasks' => [['kind' => 'table', 'title' => 'Tasks', 'sub' => $custTasks->count() . ' total', 'searchable' => true,
+                'columns' => [['label' => '#'], ['label' => 'Task'], ['label' => 'Assignee'], ['label' => 'Due'], ['label' => 'Status']],
+                'rows' => $taskRows, 'empty' => 'No tasks yet — use “New task” above']],
             'quotations' => [['kind' => 'table', 'title' => 'Quotations', 'sub' => $quotes->count() . ' total', 'searchable' => true, 'dateFilter' => true,
                 'columns' => [['label' => 'Quote #'], ['label' => 'Created'], ['label' => 'Valid to'], ['label' => 'Value', 'align' => 'right'], ['label' => 'Status']],
                 'rows' => $quoteRows, 'empty' => 'No quotations yet — use “New quotation” above']],
@@ -328,10 +373,11 @@ final class CustomerCapability implements ObjectCapability
                 ['key' => 'orders', 'label' => 'Sales orders', 'count' => $orders->count()],
                 ['key' => 'invoices', 'label' => 'Invoices', 'count' => $allInv->count()],
                 ['key' => 'payments', 'label' => 'Payments', 'count' => $pays->count()],
+                ['key' => 'tasks', 'label' => 'Tasks', 'count' => $openTaskCount],
                 ['key' => 'financials', 'label' => 'Account statement'],
                 ['key' => 'timeline', 'label' => 'Timeline', 'count' => count($timelineEvents)],
             ])
-            ->actions([$primary, ['key' => 'bos_timeline', 'label' => '🕑 Timeline', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/bos.timeline/' . $c->id, 'actor' => 'human', 'tone' => 'default']])
+            ->actions([$primary, $newTask, ['key' => 'bos_timeline', 'label' => '🕑 Timeline', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/bos.timeline/' . $c->id, 'actor' => 'human', 'tone' => 'default']])
             ->more(array_values(array_filter([
                 $editAction,
                 (bool) $ctx->tenant->setting('relationship_memory', false) ? [
@@ -362,6 +408,54 @@ final class CustomerCapability implements ObjectCapability
             ->meta(['capability' => 'customer', 'ttl' => 60, 'layout' => 'record', 'permissions' => ['menu:customers']]);
     }
 
+    /**
+     * Create a follow-up / collection task tied to this customer. A given amount is folded into the
+     * title ("Collect USD 68 from Mehul Patel"); the task then flows through the normal Tasks screen,
+     * the assignee's WhatsApp nudge, and — on completion — the done-confirmation to owner + assignee.
+     */
+    private function assignTask(CapabilityContext $ctx, array $input): array
+    {
+        $u = $ctx->user;
+        if (! ($u->isOwnerLike() || $u->role === 'manager')) {
+            return ['ok' => false, 'error' => 'Only a manager or owner can assign tasks.'];
+        }
+
+        $c = CustomerProfile::where('tenant_id', $ctx->tenantId())->find((int) ($input['id'] ?? 0));
+        if (! $c) return ['ok' => false, 'error' => 'Customer not found.'];
+
+        // Assignee arrives as "#id Name" from the enum; accept a raw id too.
+        $raw = (string) ($input['assignee'] ?? $input['assignee_id'] ?? '');
+        $assignee = preg_match('/#?(\d+)/', $raw, $m)
+            ? \App\Models\User::where('tenant_id', $ctx->tenantId())->find((int) $m[1])
+            : null;
+        if (! $assignee) return ['ok' => false, 'error' => 'Pick a staff member to assign the task to.'];
+
+        $title = trim((string) ($input['title'] ?? ''));
+        if ($title === '') $title = 'Follow up with ' . ($c->name ?: 'customer');
+
+        // Fold an optional "amount to collect" into the title so it reads naturally and shows everywhere.
+        $amount = (float) ($input['amount'] ?? 0);
+        if ($amount > 0) {
+            $curr  = strtoupper(trim((string) ($input['currency'] ?? '')));
+            $amt   = rtrim(rtrim(number_format($amount, 2, '.', ''), '0'), '.');   // 68 / 68.5
+            $money = trim(($curr ? $curr . ' ' : '') . $amt);
+            if (preg_match('/^collect from /i', $title)) {
+                $title = 'Collect ' . $money . ' from ' . mb_substr($title, strlen('Collect from '));
+            } else {
+                $title = $title . ' (' . $money . ')';
+            }
+        }
+
+        $due = ! empty($input['due_at']) ? Carbon::parse($input['due_at']) : null;
+        $prioMap  = ['low' => 0, 'normal' => 1, 'high' => 2];
+        $priority = $prioMap[strtolower(trim((string) ($input['priority'] ?? 'normal')))] ?? 1;
+
+        $res = app(\App\Services\Ops\TaskEngine::class)
+            ->assignAdHoc($ctx->tenant, $assignee, $title, $due, $priority, $u, 0, (int) $c->id);
+        if (! empty($res['ok'])) $res['message'] = 'Task assigned to ' . ($assignee->name ?: 'staff') . ' — ' . $title;
+        return $res;
+    }
+
     private function orderTone(string $status): string
     {
         $s = strtolower($status);
@@ -382,6 +476,7 @@ final class CustomerCapability implements ObjectCapability
             'log_contact' => $this->touch($ctx, $input, 'contact'),
             'log_whatsapp' => $this->touch($ctx, $input, 'whatsapp'),
             'create_quotation' => $this->createQuotation($ctx, $input),
+            'assign_task' => $this->assignTask($ctx, $input),
             'send_statement' => $this->sendStatement($ctx, $input),
             'send_reminder' => ['ok' => true, 'sent' => true, 'message' => 'Reminder sent.'],
             'timeline' => $this->bosTimeline($ctx, $input),
