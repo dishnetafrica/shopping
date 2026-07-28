@@ -123,8 +123,9 @@ final class CustomerCapability implements ObjectCapability
                 'currency' => 'enum:' . $cur . ',USD,UGX,SSP,KES',
                 'due_at'   => 'datetime',
                 'priority' => 'enum:Normal,High,Low',
+                'attachment' => 'file:image/*,application/pdf',
             ],
-            'labels' => ['assignee' => 'Assign to', 'title' => 'Task', 'amount' => 'Amount to collect (optional)', 'due_at' => 'Due (optional)', 'priority' => 'Priority'],
+            'labels' => ['assignee' => 'Assign to', 'title' => 'Task', 'amount' => 'Amount to collect (optional)', 'due_at' => 'Due (optional)', 'priority' => 'Priority', 'attachment' => 'Photo or document (optional)'],
             'prefill' => ['id' => (int) $c->id, 'title' => 'Collect from ' . ($c->name ?: 'customer'), 'currency' => $cur, 'priority' => 'Normal'],
         ];
 
@@ -449,9 +450,11 @@ final class CustomerCapability implements ObjectCapability
         $due = ! empty($input['due_at']) ? Carbon::parse($input['due_at']) : null;
         $prioMap  = ['low' => 0, 'normal' => 1, 'high' => 2];
         $priority = $prioMap[strtolower(trim((string) ($input['priority'] ?? 'normal')))] ?? 1;
+        // Optional photo/PDF attached in the form (inline base64) → stored, its URL rides on the task.
+        $attach = \App\Support\Base64Upload::store($ctx->tenantId(), (string) ($input['attachment'] ?? ''));
 
         $res = app(\App\Services\Ops\TaskEngine::class)
-            ->assignAdHoc($ctx->tenant, $assignee, $title, $due, $priority, $u, 0, (int) $c->id);
+            ->assignAdHoc($ctx->tenant, $assignee, $title, $due, $priority, $u, 0, (int) $c->id, $attach);
         if (! empty($res['ok'])) $res['message'] = 'Task assigned to ' . ($assignee->name ?: 'staff') . ' — ' . $title;
         return $res;
     }

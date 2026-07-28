@@ -210,8 +210,9 @@ final class TasksCapability implements ProcessCapability
                             'due_at'   => 'datetime',
                             'duration' => 'enum:—,30 min,1 hr,1 hr 30 min,2 hr,3 hr,Half day (4 hr),Full day (8 hr)',
                             'priority' => 'enum:Normal,High,Low',
+                            'attachment' => 'file:image/*,application/pdf',
                         ],
-                        'labels' => ['assignee' => 'Assign to', 'title' => 'Task', 'due_at' => 'Due (date & time, optional)', 'duration' => 'Duration', 'priority' => 'Priority'],
+                        'labels' => ['assignee' => 'Assign to', 'title' => 'Task', 'due_at' => 'Due (date & time, optional)', 'duration' => 'Duration', 'priority' => 'Priority', 'attachment' => 'Photo or document (optional)'],
                     ],
                     ['key' => 'export-pdf', 'label' => 'Export PDF', 'href' => '/api/v1/doc/tasks-export?format=pdf', 'exportScope' => $exportScope],
                 ])
@@ -347,8 +348,10 @@ final class TasksCapability implements ProcessCapability
             $priority = $prioMap[$rawPrio] ?? (is_numeric($rawPrio) ? (int) $rawPrio : 1);
 
             $sla = $this->durationToMinutes((string) ($input['duration'] ?? ''));
+            // Optional photo/PDF attached in the form (inline base64) → stored, its URL rides on the task.
+            $attach = \App\Support\Base64Upload::store($t->id, (string) ($input['attachment'] ?? ''));
 
-            $res = $this->engine->assignAdHoc($t, $assignee, (string) ($input['title'] ?? ''), $due, $priority, $u, $sla);
+            $res = $this->engine->assignAdHoc($t, $assignee, (string) ($input['title'] ?? ''), $due, $priority, $u, $sla, null, $attach);
             if (! empty($res['ok'])) $res['message'] = 'Task assigned to ' . ($assignee->name ?: 'staff');
             return $res;
         }

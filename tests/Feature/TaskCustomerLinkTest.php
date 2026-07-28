@@ -48,4 +48,14 @@ class TaskCustomerLinkTest extends TestCase
         $task = OrderTask::find($res['task_id']);
         $this->assertNull($task->customer_id);
     }
+
+    public function test_attachment_url_is_persisted(): void
+    {
+        $url = 'https://files.example/ops/1/task_abc.pdf';
+        $res = app(TaskEngine::class)->assignAdHoc(
+            $this->tenant, $this->assignee, 'With a doc', null, 1, null, 0, 77, $url
+        );
+        $task = OrderTask::find($res['task_id']);
+        $this->assertSame($url, $task->attachment);
+    }
 }
