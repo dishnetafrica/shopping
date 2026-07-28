@@ -1,53 +1,51 @@
-# Task ID numbers + activity markers (Tasks screen)
+# Task completion confirmations (WhatsApp)
 
-Adds a human-facing task number, makes the manager Tasks list clickable into the
-existing detail page, and surfaces comments + who-completed at a glance.
+When a manually-assigned task is completed — from the app, the no-login WhatsApp
+link, or the panel's Done button — the system now sends two best-effort WhatsApps:
 
-## What changed for the user
-1. **Per-shop task ID** — every task now shows a number in a new "#" column that
-   restarts at #1 for each shop (Family Shoppers #1, #2, #3…; EA Auto Part #1, #2…).
-   Staff can quote it on WhatsApp ("done with #7"). It also appears on the task
-   detail header.
-2. **Click a task to see details** — the manager "All team tasks" register was a
-   plain table before (rows weren't clickable). Now clicking any task row opens the
-   in-app detail page that already existed: description, photo, comment box, a
-   "Mark as done" button, and the full **Activity timeline** (every comment +
-   completion, including ones made through the no-login WhatsApp link).
-3. **At-a-glance "Updates" column** — shows a 💬 comment count, and for finished
-   tasks shows "✓ <who completed it>". Completion done via the no-login link (which
-   leaves no logged-in user) falls back to the assignee's name.
+1. **Receipt to the person who completed it** — proof the system received it and
+   logged it, echoing whatever note they left:
+   > ✅ Got it! *Buy stock* (#7) is marked done and saved in Family Shoppers.
+   > Your note: bought 5 boxes
+   > Thank you — nothing more needed.
+
+2. **Alert to your owner-alert number(s)** — who finished what, plus their note:
+   > ✅ *Savan* completed *Buy stock* (#7).
+   > Note: bought 5 boxes
+   > Jul 28, 14:00 · logged in the portal.
+
+If the person who completed it is also the owner-alert number, only one message
+is sent (no duplicate).
+
+## Scope & controls (keeps it from becoming noise)
+- **Only manually-assigned (ad-hoc) tasks** trigger this — the "New task" ones you
+  send out. Routine order-workflow stage completions do NOT notify.
+- **On/off switch:** the tenant setting `task_done_alerts` (default ON). Set it to
+  false to mute all completion alerts for a shop.
+- Uses your existing WhatsApp connection and owner-alert number(s); nothing new to
+  configure. If a shop has no WhatsApp linked, it's silently skipped.
+- Best-effort: a messaging hiccup never blocks or reverses the completion itself.
 
 ## Files changed
-- `database/migrations/2026_07_28_000001_add_ref_no_to_order_tasks_table.php` (NEW)
-  Adds `ref_no` (unsigned int, nullable) + a `(tenant_id, ref_no)` index, and
-  backfills every existing task 1..N per shop in creation order.
-- `app/Models/OrderTask.php`
-  `ref_no` fillable + integer cast; a `creating` hook assigns the next per-tenant
-  number on insert (never overwrites an explicit value; no-op if the column is
-  absent). New `refLabel()` helper ("#7", falls back to id if unnumbered).
-- `app/Capability/Process/TasksCapability.php`
-  New "#" and "Updates" columns for both the manager and staff task lists; one
-  grouped query for comment counts; completed-by resolution.
-- `app/Http/Controllers/Panel/TaskApiController.php`
-  `/papi/task/show` now returns `ref`, `completed_by`, `completed_at`.
-- `resources/views/shell.blade.php`
-  Manager (selectable) table rows now open the task detail on click (previously
-  only the phone-card view did). Detail header shows the "#" reference and a
-  "Completed by" line.
-- `tests/Feature/TaskRefNumberTest.php` (NEW) — regression tests for per-tenant
-  sequential numbering.
+- `app/Services/Ops/TaskEngine.php`
+  New private `notifyCompleted()`; called from `complete()` (after commit),
+  `completeByNonce()` (the link), and `setStatusById()` (panel Done, on the real
+  open→completed transition only, so re-saving a done task never re-notifies).
+- `tests/Feature/TaskCompletionAlertTest.php` (NEW) — regression tests: ad-hoc
+  completion notifies both, link completion notifies, workflow completion does not,
+  and the setting mutes it.
 
 ## Deploy
-    php artisan migrate        # adds ref_no + backfills existing tasks per shop
+No migration. Just deploy the file and clear caches:
+
     php artisan config:clear
     php artisan route:clear
     php artisan view:clear
 
-The migration is additive and idempotent (guards on column existence); `down()`
-drops the column and index. No existing data is modified other than filling the
-new ref_no. Numbering is by DB id order, so existing tasks keep a stable order.
+If you run a queue worker (WhatsApp sends are queued jobs), restart it so it picks
+up the new code:  `php artisan queue:restart`
 
-## Note on numbering
-New numbers are assigned as `max(ref_no for that shop) + 1` at insert time. Under
-normal single-writer task creation this is exact; two tasks created in the very
-same instant is not a concern at this volume.
+## Turning it off later
+    php artisan tinker
+    >>> $t = \App\Models\Tenant::where('slug','family-shoppers...')->first();
+    >>> $t->putSetting('task_done_alerts', false);

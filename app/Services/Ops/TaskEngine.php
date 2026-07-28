@@ -74,7 +74,7 @@ class TaskEngine
             return ['ok' => false, 'error' => 'This step needs a file (e.g. invoice or proof of delivery).'];
         }
 
-        return DB::transaction(function () use ($tenant, $task, $by, $opts) {
+        $res = DB::transaction(function () use ($tenant, $task, $by, $opts) {
             $task->status       = 'completed';
             $task->completed_at = now();
             $task->completed_by = $by->id;
@@ -102,6 +102,12 @@ class TaskEngine
             $newTask = $this->openStage($tenant, $order, $next);
             return ['ok' => true, 'done' => false, 'next' => $newTask];
         });
+
+        // Confirmation WhatsApps fire AFTER commit so a queued/sync job never reads an uncommitted row.
+        if (! empty($res['ok'])) {
+            $this->notifyCompleted($tenant, $task, $by, $opts['note'] ?? null);
+        }
+        return $res;
     }
 
     /**
@@ -217,6 +223,12 @@ class TaskEngine
 
         $this->log($tenant, $task->order_id, $task->id, 'status', $by, $from, $status,
             $task->title . ' → ' . $status);
+
+        // Panel "Done" on an ad-hoc task lands here (not complete()). Fire the confirmation on the
+        // real open→completed transition only, so re-saving a completed task never re-notifies.
+        if ($status === 'completed' && $from !== 'completed') {
+            $this->notifyCompleted($tenant, $task, $by, null);
+        }
 
         return ['ok' => true, 'status' => $status];
     }
@@ -348,8 +360,12 @@ class TaskEngine
         if ($attachment) $task->attachment = (string) $attachment;   // optional proof photo
         $task->save();
         $tenant = Tenant::withoutGlobalScopes()->find($task->tenant_id);
-        if ($tenant) $this->log($tenant, $task->order_id, $task->id, 'completed', null, $task->stage, null,
-            $task->title . ' completed via link' . ($note ? ' — ' . $note : ''));
+        if ($tenant) {
+            $this->log($tenant, $task->order_id, $task->id, 'completed', null, $task->stage, null,
+                $task->title . ' completed via link' . ($note ? ' — ' . $note : ''));
+            // No logged-in user on the link path → completedBy null; notifyCompleted falls back to the assignee.
+            $this->notifyCompleted($tenant, $task, null, $note);
+        }
         return ['ok' => true];
     }
 
@@ -470,6 +486,57 @@ class TaskEngine
             NotifyOwner::dispatch($tenant->id, $msg, $u->phone);
         } catch (\Throwable $e) {
             // notification is best-effort; the task still exists in the owner's inbox
+        }
+    }
+
+    /**
+     * Best-effort WhatsApp confirmations when a MANUALLY-ASSIGNED (ad-hoc) task is completed, from
+     * any path (the app, the no-login link, or the panel's Done button):
+     *   1) a receipt to the person who did it — proof the system received it and logged it, echoing
+     *      whatever note they left ("Got it! … saved in <Shop>");
+     *   2) an alert to the shop's owner-alert number(s) — who finished what, plus their note.
+     *
+     * Scoped to ad-hoc tasks (order_id 0) so routine order-workflow stage completions don't spam.
+     * Gated by the `task_done_alerts` setting (default ON). Never throws — the completion + timeline
+     * log have already succeeded by the time this runs.
+     */
+    private function notifyCompleted(Tenant $tenant, OrderTask $task, ?User $completedBy, ?string $note): void
+    {
+        try {
+            if ((int) $task->order_id !== 0) return;                       // only ad-hoc/assigned tasks
+            if (! $tenant->whatsapp_instance) return;
+            if (! (bool) $tenant->setting('task_done_alerts', true)) return;
+
+            $assignee = $task->owner_user_id
+                ? User::withoutGlobalScopes()->where('tenant_id', $tenant->id)->find($task->owner_user_id)
+                : null;
+            $doerName = ($completedBy?->name) ?: ($assignee?->name ?: 'Someone');
+            // Inline (not refLabel()) so this file is safe to deploy even without the task-ref change;
+            // ref_no is null when that migration hasn't run, and we fall back to the system id.
+            $ref      = '#' . ($task->ref_no ?: $task->id);
+            $title    = (string) $task->title;
+            $noteTxt  = $note !== null ? trim($note) : '';
+            $when     = now()->format('M j, H:i');
+
+            // 1) Receipt to the person who completed it.
+            $assigneePhone = ($assignee && $assignee->phone) ? preg_replace('/[^0-9]/', '', (string) $assignee->phone) : '';
+            if ($assigneePhone !== '') {
+                $receipt = "✅ Got it! *{$title}* ({$ref}) is marked done and saved in " . $tenant->name . '.'
+                         . ($noteTxt !== '' ? "\nYour note: " . $noteTxt : '')
+                         . "\n\nThank you — nothing more needed.";
+                NotifyOwner::dispatch($tenant->id, $receipt, $assigneePhone);
+            }
+
+            // 2) Alert to owner/managers — skip the assignee's own number so they don't get two messages.
+            $alert = "✅ *{$doerName}* completed *{$title}* ({$ref})."
+                   . ($noteTxt !== '' ? "\nNote: " . $noteTxt : '')
+                   . "\n{$when} · logged in the portal.";
+            foreach ($tenant->ownerAlertNumbers() as $n) {
+                if ($n === $assigneePhone) continue;
+                NotifyOwner::dispatch($tenant->id, $alert, $n);
+            }
+        } catch (\Throwable $e) {
+            // best-effort notification; the completion itself already succeeded
         }
     }
 
