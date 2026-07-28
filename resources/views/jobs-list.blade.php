@@ -57,7 +57,10 @@
       $due  = $t->due_at ? $t->due_at->format('M j, H:i') : null;
     @endphp
     @if($t->link_nonce)
-      <a class="card" href="{{ url('/task/'.$t->link_nonce) }}">
+      {{-- Relative link: stays on whatever host the jobs list was opened on (custom domain
+           familyshoppers.net when the WhatsApp link used it), so the session/nonce flow never
+           jumps to the raw app host mid-way. --}}
+      <a class="card" href="/task/{{ $t->link_nonce }}">
     @else
       <div class="card">
     @endif

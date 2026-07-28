@@ -74,7 +74,8 @@ class TaskReminderCommand extends Command
                     continue;
                 }
 
-                $link = url('/jobs/' . JobToken::forUser($u));
+                // Use the tenant's own domain (familyshoppers.net) when set — not the raw app host.
+                $link = $t->publicUrl('/jobs/' . JobToken::forUser($u));
                 $msg = $this->message($t, (string) $u->name, $list, $link);
                 try {
                     $wa->forTenant($t)->sendText($t->whatsapp_instance, $phone, $msg);

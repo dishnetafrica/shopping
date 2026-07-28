@@ -33,6 +33,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'solar/*', '*/solar/*',
             'event', '*/event',
             'clienterror', '*/clienterror',
+            // No-login task links: actions are authorized by the unguessable nonce + rate-limit,
+            // not by a session CSRF token (which a public, session-less visitor may not have).
+            'task/*', '*/task/*',
             'auth/*', '*/auth/*',
             'account/*', '*/account/*',
             'q/*', '*/q/*',
