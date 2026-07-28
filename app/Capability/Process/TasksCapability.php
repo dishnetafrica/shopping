@@ -7,6 +7,7 @@ use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\WorkspacePayload;
 use App\Models\Order;
 use App\Models\OrderTask;
+use App\Models\OrderTaskEvent;
 use App\Models\User;
 use App\Services\Ops\TaskEngine;
 use App\Support\WorkflowConfig;
@@ -67,6 +68,37 @@ final class TasksCapability implements ProcessCapability
         return $buttons;
     }
 
+    /** task_id → number of comment events, for the shown tasks (one grouped query). */
+    private function commentCounts($tasks, int $tenantId): array
+    {
+        $ids = $tasks->pluck('id')->filter()->unique()->values()->all();
+        if (! $ids) return [];
+        return OrderTaskEvent::query()->where('tenant_id', $tenantId)
+            ->whereIn('task_id', $ids)->where('event', 'comment')
+            ->selectRaw('task_id, COUNT(*) as n')->groupBy('task_id')
+            ->pluck('n', 'task_id')->toArray();
+    }
+
+    /**
+     * The "Updates" cell: a 💬 comment count and, for closed tasks, who completed it. Lets a
+     * manager scan activity without opening each task. Completion via the no-login link leaves
+     * completed_by null, so we fall back to the assignee (whose personal link it was).
+     */
+    private function activityCell(OrderTask $x, array $names, array $comments): array
+    {
+        $n = (int) ($comments[$x->id] ?? 0);
+        $chat = $n > 0 ? ('💬 ' . $n) : '';
+
+        if ($x->status === 'completed') {
+            $who = $names[$x->completed_by] ?? ($names[$x->owner_user_id] ?? '');
+            $done = '✓ ' . ($who !== '' ? $who : 'done');
+            $val = $done . ($chat !== '' ? ' · ' . $chat : '');
+            return ['value' => $val, 'sort' => $n, 'tone' => 'ok'];
+        }
+
+        return ['value' => $chat !== '' ? $chat : '—', 'sort' => $n];
+    }
+
     /** order_id → order_no map for the Client column (one query, tenant-scoped). */
     private function clientMap($tasks, int $tenantId): array
     {
@@ -92,10 +124,12 @@ final class TasksCapability implements ProcessCapability
             $overdueN = $active->filter(fn ($x) => $x->isOverdue())->count();
             $names = $this->engine->assigneeNames($t);
             $clients = $this->clientMap($all, $t->id);
+            $comments = $this->commentCounts($all, $t->id);
 
-            $rows = $all->map(function (OrderTask $x) use ($names, $clients) {
+            $rows = $all->map(function (OrderTask $x) use ($names, $clients, $comments) {
                 return [
                     'id'       => $x->id,
+                    'ref'      => ['value' => '#' . ($x->ref_no ?: $x->id), 'sort' => (int) ($x->ref_no ?: $x->id)],
                     'task'     => $x->title,
                     'client'   => (string) ($clients[$x->order_id] ?? '—'),
                     'assignee' => $names[$x->owner_user_id] ?? ($x->owner_user_id ? ('User ' . $x->owner_user_id) : '—'),
@@ -103,11 +137,13 @@ final class TasksCapability implements ProcessCapability
                     'duration' => $this->durationText($x),
                     'priority' => ucfirst(WorkflowConfig::priorityLabel((int) $x->priority)),
                     'status'   => $this->statusCell($x),
+                    'activity' => $this->activityCell($x, $names, $comments),
                     'act'      => ['buttons' => $this->rowButtons($x)],
                 ];
             })->values()->all();
 
             $cols = [
+                ['key' => 'ref',      'label' => '#'],
                 ['key' => 'task',     'label' => 'Task', 'type' => 'strong'],
                 ['key' => 'client',   'label' => 'Client'],
                 ['key' => 'assignee', 'label' => 'Assignee'],
@@ -115,6 +151,7 @@ final class TasksCapability implements ProcessCapability
                 ['key' => 'duration', 'label' => 'Duration'],
                 ['key' => 'priority', 'label' => 'Priority'],
                 ['key' => 'status',   'label' => 'Status', 'type' => 'badge'],
+                ['key' => 'activity', 'label' => 'Updates'],
                 ['key' => 'act',      'label' => '', 'type' => 'action', 'sortable' => false],
             ];
             $filters = [
@@ -176,25 +213,31 @@ final class TasksCapability implements ProcessCapability
         // Staff: personal list (same shape, no assignee column, no bulk).
         $mine = $this->engine->myTasks($t, $u);
         $clients = $this->clientMap($mine, $t->id);
-        $rows = $mine->map(function (OrderTask $x) use ($clients) {
+        $names = $this->engine->assigneeNames($t);
+        $comments = $this->commentCounts($mine, $t->id);
+        $rows = $mine->map(function (OrderTask $x) use ($clients, $names, $comments) {
             return [
                 'id'       => $x->id,
+                'ref'      => ['value' => '#' . ($x->ref_no ?: $x->id), 'sort' => (int) ($x->ref_no ?: $x->id)],
                 'task'     => $x->title,
                 'client'   => (string) ($clients[$x->order_id] ?? '—'),
                 'due'      => $this->dueCell($x),
                 'duration' => $this->durationText($x),
                 'priority' => ucfirst(WorkflowConfig::priorityLabel((int) $x->priority)),
                 'status'   => $this->statusCell($x),
+                'activity' => $this->activityCell($x, $names, $comments),
                 'act'      => ['buttons' => $this->rowButtons($x)],
             ];
         })->values()->all();
         $cols = [
+            ['key' => 'ref',      'label' => '#'],
             ['key' => 'task',     'label' => 'Task', 'type' => 'strong'],
             ['key' => 'client',   'label' => 'Client'],
             ['key' => 'due',      'label' => 'Due'],
             ['key' => 'duration', 'label' => 'Duration'],
             ['key' => 'priority', 'label' => 'Priority'],
             ['key' => 'status',   'label' => 'Status', 'type' => 'badge'],
+            ['key' => 'activity', 'label' => 'Updates'],
             ['key' => 'act',      'label' => '', 'type' => 'action', 'sortable' => false],
         ];
 

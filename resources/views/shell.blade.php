@@ -2389,7 +2389,9 @@ async function bosTaskDetail(id){
   var meta='<div class="tkd-meta">'
     +'<div class="tkd-kv"><span>Assignee</span><b>'+esc(t.assignee)+'</b></div>'
     +(t.due?('<div class="tkd-kv"><span>Due</span><b'+(t.overdue?' style="color:var(--danger)"':'')+'>'+esc(t.due)+'</b></div>'):'')
-    +'<div class="tkd-kv"><span>Priority</span><b>'+esc(t.priority)+'</b></div></div>';
+    +'<div class="tkd-kv"><span>Priority</span><b>'+esc(t.priority)+'</b></div>'
+    +(t.done&&t.completed_by?('<div class="tkd-kv"><span>Completed by</span><b>'+esc(t.completed_by)+(t.completed_at?(' · '+esc(t.completed_at)):'')+'</b></div>'):'')
+    +'</div>';
   var desc = t.note ? '<div class="tkd-desc">'+esc(t.note)+'</div>' : '';
   var photo='';
   if(t.attachment){
@@ -2408,7 +2410,7 @@ async function bosTaskDetail(id){
   var ev=(r.events||[]);
   var tl = ev.length ? '<div class="c360-sec"><h3>Activity</h3></div><div class="tkd-tl">'+ev.map(function(e){ return '<div class="tkd-ev"><div class="tkd-ev-h"><b>'+esc(e.event)+'</b>'+(e.actor?(' · '+esc(e.actor)):'')+'<span>'+esc(e.when||'')+'</span></div>'+(e.detail?'<div class="tkd-ev-d">'+esc(e.detail)+'</div>':'')+'</div>'; }).join('')+'</div>' : '';
   v.innerHTML='<div class="mtoday"><div class="crumb"><span onclick="route(\'tasks\')" style="cursor:pointer;color:var(--brand-ink)">‹ Tasks</span></div>'
-    +'<div class="tkd-head"><div class="tkd-title">'+esc(t.title)+'</div>'+badge+'</div>'
+    +'<div class="tkd-head"><div class="tkd-title">'+(t.ref?('<span style="color:var(--muted);font-weight:600;margin-right:6px">'+esc(t.ref)+'</span>'):'')+esc(t.title)+'</div>'+badge+'</div>'
     +meta+desc+photo+actions+cbox+tl+'</div>';
 }
 function tkdPick(){
@@ -3892,7 +3894,10 @@ function renderTable(){
   const selTh=TBL.selectable?('<th class="selh"><input type="checkbox" id="selAllCb" aria-label="Select all on this page" onclick="event.stopPropagation();tselPage(this.checked)"'+(pageAll?' checked':'')+'></th>'):'';
   const th=selTh+TBL.cols.map(c=>'<th class="'+(c.align==='right'?'num':'')+(c.sortable!==false?' srt':'')+(TBL.sort===c.key?' sorted':'')+'"'+(c.sortable!==false?' onclick="sortBy(\''+c.key+'\')"':'')+'><span class="thc">'+esc(c.label)+arrow(c.key)+'</span></th>').join('');
   const selTd=(r,i)=>TBL.selectable?('<td class="selc" onclick="event.stopPropagation()"><input type="checkbox" aria-label="Select row"'+(TBL.sel[r.id]?' checked':'')+' onclick="tselClick(event,\''+esc(String(r.id))+'\','+i+')"></td>'):'';
-  const body = pageRows.length ? pageRows.map((r,i)=>'<tr'+(TBL.selectable&&TBL.sel[r.id]?' class="sel"':'')+(r.link?' onclick="openLink(\''+esc(r.link)+'\')"':'')+'>'+selTd(r,i)+TBL.cols.map(c=>cellHtml(r[c.key],c)).join('')+'</tr>').join('')
+  // Tasks open the native in-app detail (comments + timeline + completion) on row click — the
+  // same route the phone cards use — so the manager register is clickable, not just the phone view.
+  const rowClickAttr=r=>{ if(TBL.capKey==='tasks' && r.id!=null) return ' onclick="route(\'bos.task\','+Number(r.id)+')" style="cursor:pointer"'; return r.link?(' onclick="openLink(\''+esc(r.link)+'\')" style="cursor:pointer"'):''; };
+  const body = pageRows.length ? pageRows.map((r,i)=>'<tr'+(TBL.selectable&&TBL.sel[r.id]?' class="sel"':'')+rowClickAttr(r)+'>'+selTd(r,i)+TBL.cols.map(c=>cellHtml(r[c.key],c)).join('')+'</tr>').join('')
     : '<tr><td colspan="'+(TBL.cols.length+(TBL.selectable?1:0))+'"><div class="empty" style="padding:40px">'+icon('worklist','ic-lg')+'<div style="margin-top:8px">'+esc(TBL.empty||'No matching records')+'</div></div></td></tr>';
   const nsel=Object.keys(TBL.sel).length;
   let bulkBar='';

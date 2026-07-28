@@ -1,49 +1,53 @@
-# Task reminder link fix — custom domain + no-login actions
+# Task ID numbers + activity markers (Tasks screen)
 
-Two problems in the WhatsApp "Daily Jobs Update" flow are fixed here.
+Adds a human-facing task number, makes the manager Tasks list clickable into the
+existing detail page, and surfaces comments + who-completed at a glance.
 
-## Problem 1 — link used the raw app host, not familyshoppers.net
-The reminder message linked to `https://evo-shopbot.1gk84r.easypanel.host/jobs/...`.
-The reminder runs as a scheduled **console command**, which has no incoming HTTP
-request, so `url()` falls back to `APP_URL` (the easypanel host) instead of the
-tenant's own domain.
-
-**Fix:** build the link with the existing `Tenant::publicUrl()` helper, which uses
-the tenant's `custom_domain` when set (→ `https://familyshoppers.net/jobs/...`),
-and only falls back to `url()` when no custom domain is configured.
-
-- `app/Console/Commands/TaskReminderCommand.php` (line ~78)
-
-## Problem 2 — could not close / update a task from the link (as an end user)
-The per-task page (`/task/{nonce}`) posts complete/accept/comment/upload actions.
-These routes run in Laravel's `web` group, so they were subject to **CSRF session
-verification**. A public visitor opening the link on the custom domain has no
-matching session cookie (cookie domain differs from the app host), so the token
-comparison failed with a 419 and the "Mark as done" button silently did nothing.
-
-**Fix:** exempt the nonce-authorized task endpoints from CSRF. They are already
-authorized by an unguessable 16-char nonce + a 30/min rate limit — the session
-CSRF token adds nothing for a deliberately session-less public link.
-
-- `bootstrap/app.php` — added `'task/*', '*/task/*'` to the CSRF `except` list
-  (covers both the custom domain `task/...` and the platform slug `{shop}/task/...`).
-
-Plus a hardening tweak so the two domains never get crossed mid-flow:
-
-- `resources/views/jobs-list.blade.php` — the per-task link is now **relative**
-  (`/task/{nonce}`), so it stays on whatever host the jobs list was opened on
-  (familyshoppers.net) instead of being rebuilt against the app host.
+## What changed for the user
+1. **Per-shop task ID** — every task now shows a number in a new "#" column that
+   restarts at #1 for each shop (Family Shoppers #1, #2, #3…; EA Auto Part #1, #2…).
+   Staff can quote it on WhatsApp ("done with #7"). It also appears on the task
+   detail header.
+2. **Click a task to see details** — the manager "All team tasks" register was a
+   plain table before (rows weren't clickable). Now clicking any task row opens the
+   in-app detail page that already existed: description, photo, comment box, a
+   "Mark as done" button, and the full **Activity timeline** (every comment +
+   completion, including ones made through the no-login WhatsApp link).
+3. **At-a-glance "Updates" column** — shows a 💬 comment count, and for finished
+   tasks shows "✓ <who completed it>". Completion done via the no-login link (which
+   leaves no logged-in user) falls back to the assignee's name.
 
 ## Files changed
-- app/Console/Commands/TaskReminderCommand.php
-- bootstrap/app.php
-- resources/views/jobs-list.blade.php
+- `database/migrations/2026_07_28_000001_add_ref_no_to_order_tasks_table.php` (NEW)
+  Adds `ref_no` (unsigned int, nullable) + a `(tenant_id, ref_no)` index, and
+  backfills every existing task 1..N per shop in creation order.
+- `app/Models/OrderTask.php`
+  `ref_no` fillable + integer cast; a `creating` hook assigns the next per-tenant
+  number on insert (never overwrites an explicit value; no-op if the column is
+  absent). New `refLabel()` helper ("#7", falls back to id if unnumbered).
+- `app/Capability/Process/TasksCapability.php`
+  New "#" and "Updates" columns for both the manager and staff task lists; one
+  grouped query for comment counts; completed-by resolution.
+- `app/Http/Controllers/Panel/TaskApiController.php`
+  `/papi/task/show` now returns `ref`, `completed_by`, `completed_at`.
+- `resources/views/shell.blade.php`
+  Manager (selectable) table rows now open the task detail on click (previously
+  only the phone-card view did). Detail header shows the "#" reference and a
+  "Completed by" line.
+- `tests/Feature/TaskRefNumberTest.php` (NEW) — regression tests for per-tenant
+  sequential numbering.
 
 ## Deploy
-Copy the three files over the same paths and clear caches:
-
+    php artisan migrate        # adds ref_no + backfills existing tasks per shop
     php artisan config:clear
     php artisan route:clear
     php artisan view:clear
 
-No migration, no data change. Reversible by restoring the three files.
+The migration is additive and idempotent (guards on column existence); `down()`
+drops the column and index. No existing data is modified other than filling the
+new ref_no. Numbering is by DB id order, so existing tasks keep a stable order.
+
+## Note on numbering
+New numbers are assigned as `max(ref_no for that shop) + 1` at insert time. Under
+normal single-writer task creation this is exact; two tasks created in the very
+same instant is not a concern at this volume.

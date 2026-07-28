@@ -11,7 +11,7 @@ class OrderTask extends Model
     use BelongsToTenant;
 
     protected $fillable = [
-        'tenant_id', 'order_id', 'seq', 'stage', 'role', 'owner_user_id', 'title', 'status',
+        'tenant_id', 'ref_no', 'order_id', 'seq', 'stage', 'role', 'owner_user_id', 'title', 'status',
         'sla_minutes', 'paused_minutes', 'assigned_at', 'started_at', 'due_at', 'paused_at',
         'completed_at', 'completed_by', 'exception_type', 'exception_reason',
         'requires_upload', 'attachment', 'note', 'escalated', 'checklist', 'priority', 'waiting_for',
@@ -20,6 +20,7 @@ class OrderTask extends Model
     ];
 
     protected $casts = [
+        'ref_no' => 'integer',
         'seq' => 'integer', 'sla_minutes' => 'integer', 'paused_minutes' => 'integer',
         'requires_upload' => 'boolean', 'escalated' => 'boolean',
         'checklist' => 'array',
@@ -30,6 +31,26 @@ class OrderTask extends Model
 
     /** A task is "active" while it still needs work (the order's single live task). */
     public const ACTIVE = ['offered', 'pending', 'in_progress', 'exception', 'paused'];
+
+    protected static function booted(): void
+    {
+        // Assign the next per-tenant reference number on insert. Runs AFTER BelongsToTenant's
+        // creating hook (which stamps tenant_id), so tenant_id is available here. Guarded so it
+        // never overwrites an explicit value and stays a no-op if the ref_no column isn't there yet
+        // (e.g. before this migration has run on an older database).
+        static::creating(function (OrderTask $task) {
+            if (! empty($task->ref_no) || empty($task->tenant_id)) return;
+            if (! \Illuminate\Support\Facades\Schema::hasColumn($task->getTable(), 'ref_no')) return;
+            $max = static::withoutGlobalScopes()->where('tenant_id', $task->tenant_id)->max('ref_no');
+            $task->ref_no = (int) $max + 1;
+        });
+    }
+
+    /** Human-facing reference like "#7" (falls back to the system id if not yet numbered). */
+    public function refLabel(): string
+    {
+        return '#' . ($this->ref_no ?: $this->id);
+    }
 
     public function order(): BelongsTo { return $this->belongsTo(Order::class); }
     public function owner(): BelongsTo { return $this->belongsTo(User::class, 'owner_user_id'); }

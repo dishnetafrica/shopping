@@ -182,9 +182,17 @@ class TaskApiController extends Controller
                 'when'   => optional($e->created_at)->format('M j, H:i'),
             ])->values();
 
+        $completedBy = $task->completed_by ? ($names[$task->completed_by] ?? '') : '';
+        if ($completedBy === '' && $task->status === 'completed') {
+            $completedBy = $names[$task->owner_user_id] ?? '';   // no-login link leaves completed_by null
+        }
+
         return response()->json(['ok' => true, 'task' => [
             'id'             => $task->id,
+            'ref'            => '#' . ($task->ref_no ?: $task->id),
             'title'          => (string) $task->title,
+            'completed_by'   => $completedBy,
+            'completed_at'   => $task->completed_at ? $task->completed_at->format('M j, H:i') : null,
             'note'           => (string) ($task->note ?? ''),
             'status'         => (string) $task->status,
             'status_label'   => ucfirst(str_replace('_', ' ', (string) $task->status)),
