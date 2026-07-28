@@ -32,11 +32,9 @@ final class MoneyTimingCapability
             $receivable += (float) $inv->balance / ($rate ?: 1.0);
         }
 
-        // Per-row owed / rate_to_usd → USD. NULLIF guards rows without a rate (they contribute 0).
-        $payable = (float) OrderCost::where('tenant_id', $ctx->tenantId())
-            ->where('stage', 'purchase')->where('status', '!=', 'void')
-            ->selectRaw('COALESCE(SUM((native_amount - COALESCE(paid_native,0)) / NULLIF(rate_to_usd,0)),0) as owed')
-            ->value('owed');
+        // Net of supplier payments (which live as separate order_cost rows and never touch paid_native).
+        // Shared with the dashboard so every "you owe" figure matches the supplier statement.
+        $payable = \App\Services\Finance\PayablesCalculator::totalUsd($ctx->tenantId());
 
         $dailyBurn = $payable > 0 ? max(1.0, $payable / 30.0) : 0.0;
         $runway = ($cash > 0 && $dailyBurn > 0) ? (int) floor($cash / $dailyBurn) : null;

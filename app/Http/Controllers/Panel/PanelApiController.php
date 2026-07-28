@@ -6484,14 +6484,11 @@ class PanelApiController extends Controller
         foreach (\App\Models\Invoice::with('order:id,order_no')->where('tenant_id', $t->id)->where('status', '!=', 'void')->get() as $inv) {
             $receivable += $toUsd((float) $inv->balance, \App\Services\Money\SalesBaseCurrency::txnCurrency($inv, $t));
         }
-        $payable = 0.0; $payAge = [];
-        foreach (\App\Models\OrderCost::where('tenant_id', $t->id)->where('pay_status', 'credit')
-                    ->whereNotIn('status', ['void', 'rejected'])->get(['native_amount', 'paid_native', 'rate_to_usd', 'created_at']) as $c) {
-            $out = ((float) $c->native_amount - (float) $c->paid_native) / ((float) $c->rate_to_usd ?: 1);
-            if ($out <= 0.01) continue;
-            $payable += $out;
-            $payAge[$this->ageBucket($c->created_at)] = ($payAge[$this->ageBucket($c->created_at)] ?? 0) + $out;
-        }
+        // Net payable = credit bills MINUS supplier payments (payments live as separate order_cost rows,
+        // they do not touch paid_native — so a raw native-paid_native sum overstates by every payment made).
+        // PayablesCalculator subtracts them and ages the remainder oldest-first. One source of truth.
+        $payAge  = \App\Services\Finance\PayablesCalculator::agedUsd($t->id, fn ($d) => $this->ageBucket($d));
+        $payable = array_sum($payAge);
 
         // Receivables ageing (by invoice date)
         $recvAge = [];

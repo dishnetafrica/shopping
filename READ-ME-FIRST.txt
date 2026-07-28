@@ -1,48 +1,33 @@
-EA AUTO PART — COMPATIBLE MODELS (authoritative fitment) + all prior hardening
-==============================================================================
+FAMILY SHOPPERS / CloudBSS — PAYABLES OVERSTATEMENT FIX
+======================================================
 
-This adds the proper per-part fitment data model you approved: each part now knows which
-motorcycle models it fits, sourced from the OFFICIAL Bajaj SPC catalogues (not guessed).
+BUG
+  The dashboard "you owe", working-capital, and cash-runway figures computed supplier payables
+  as (native_amount - paid_native). But when you pay a credit bill via "Pay supplier", CloudBSS
+  creates a SEPARATE order_cost row (stage=supplier_payment) and never updates paid_native on the
+  bill. So those screens counted NONE of your payments and showed GROSS bills.
+  Example: Nura bhai showed $5,667.03 owed instead of the true $538.44 (overstated by 18,990,000 UGX
+  — exactly the payments being ignored). Profit was NOT affected (it is cash-basis and excludes
+  credit bills); only the balance-sheet "you owe" figures were wrong.
 
-HOW IT WORKS
-------------
-A part number that appears in several models' catalogues fits all of them. I scanned the
-official catalogues (Boxer 100, Boxer BM125X, BM150, BM150 X, CT 125 HD) and built a
-cross-reference: 1,305 part numbers, 676 of which fit more than one model.
-  build-data/pnfits_data.json   part number -> [compatible model ids]
+FIX
+  New  app/Services/Finance/PayablesCalculator.php
+       One source of truth: nets credit bills against supplier_payment rows (like
+       SupplierController::owedBySupplierUsd), applies payments oldest-first for ageing, floors
+       overpaid suppliers at 0. Matches the supplier statement to the penny.
+  Edit app/Http/Controllers/Panel/PanelApiController.php   (dashboard payable + ageing)
+  Edit app/Capability/Shared/MoneyTimingCapability.php     (payable / runway)
+  Test tests/Feature/PayablesCalculatorTest.php            (regression guard)
 
-The storefront now:
-  • Reads this cross-reference (baked into autoparts.html). For any part with a Bajaj part
-    number, fitment is AUTHORITATIVE — it fits a bike only if the catalogue says so. No more
-    guessing, no false "Not for".
-  • Shows a "COMPATIBLE MODELS (N)" panel on the product page (like your EAS Africa mockup),
-    with tappable model chips; the customer's own bike is highlighted.
-  • Falls back to the smart heuristic (family / universal-hardware) only for parts that have
-    no catalogue part number (e.g. some generic supplier items).
-  Files: src/03-garage.js (fitsBike, compatibleModels), src/10-views.js (PDP UI),
-         resources/storefront/autoparts.html (CSS + baked data), build_storefront.py.
-
-COVERAGE NOTE (important)
-  Your full Bajaj catalogue products (which carry part numbers) get authoritative fitment now.
-  The ~53 hand-entered supplier items whose keywords have NO Bajaj part number (e.g.
-  "6004 Bearing") can't be cross-referenced, so they use the smart heuristic. To make THOSE
-  authoritative too, add each one's Bajaj part number to its product keywords and they'll be
-  picked up automatically. Send me the supplier part numbers and I'll produce the updated import.
-
-ALSO IN THIS PACKAGE (unchanged, from earlier milestones)
-  - Fitment bug fix (smart 3-state) + LEFT CATEGORY SIDEBAR on Parts/system/search pages.
-  - Analytics + client-error capture; self-hosted Font Awesome + fonts (no CDN); XSS hardening;
-    accessibility (keyboard/focus/aria/<main>/AA contrast); order/quote bot guard; abandoned-cart
-    Insights tab; 12-module src/ build; lazy images; no 320–412px overflow.
-
-TESTS
-  storefront-tests/  Playwright: 36 tests (desktop + 360px) — incl. authoritative-fitment +
-                     Compatible-Models tests. tests/Feature/StorefrontBotGuardTest.php (PHPUnit).
+  These are computation-only changes (no data writes, no migration). Existing data is untouched;
+  the numbers simply render correctly.
 
 DEPLOY
-  Copy app/, resources/, routes/, bootstrap/ over your repo. The shipped autoparts.html already
-  has the cross-reference baked in. To rebuild: put build-data/pnfits_data.json (and your other
-  build/*.json) in bajaj-genuine-parts/build/ and run python3 build_storefront.py.
+  Copy the app/ and tests/ trees over your repo and deploy. Then hard-refresh the panel.
+  Verify:  php artisan test --filter PayablesCalculatorTest
 
-RUN TESTS
-  cd storefront-tests && npm install && npx playwright test     # 36 pass
+REMAINING (lower priority, optional)
+  - PurchaseOrderCapability / PurchasesExport still show a single bill's "owed" from paid_native,
+    which reads as unpaid even when the account is settled (payments aren't linked to specific bills).
+    The proper long-term fix is to allocate supplier payments to bills (update paid_native) at
+    payment time; that would make every paid_native-based calc correct at the source.
