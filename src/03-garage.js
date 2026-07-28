@@ -18,8 +18,18 @@ function bikeSeries(b){ var m=String((b&&(b.catName||b.name))||'').toLowerCase()
  *   null  -> unknown: don't hide it, don't badge it negatively.
  * This copes with real supplier data where stock is tagged by series ("BOXER") or left generic.
  */
+// Compatible model ids for a part, from the official catalogue cross-reference (or null if the
+// part number isn't in it). This is authoritative multi-model fitment.
+function compatIds(p){ var pn=normPn(partNo(p.kw||'')); return (pn && PNFITS && PNFITS[pn])||null; }
+var _pnfitsModels=null;
+function pnfitsCovers(id){ if(!_pnfitsModels){ _pnfitsModels={}; for(var k in (PNFITS||{})){ (PNFITS[k]||[]).forEach(function(m){_pnfitsModels[m]=1;}); } } return !!_pnfitsModels[id]; }
+function compatibleModels(p){ var ids=compatIds(p); if(!ids) return []; return (MODELS||[]).filter(function(m){return ids.indexOf(m.id)>=0;}); }
 function fitsBike(p){
   var b=getBike(); if(!b) return null;
+  // Authoritative: if the part is in the catalogue cross-reference AND this model has a catalogue,
+  // trust the cross-reference exactly (fits iff the model is listed).
+  var ids=compatIds(p);
+  if(ids && pnfitsCovers(b.id)) return ids.indexOf(b.id)>=0;
   var hay=nk(String(p.kw||'')+' '+String(p.cat||''));
   var model=nk(b.catName||b.name);
   if(model && hay.indexOf(model)>=0) return true;      // explicit model match anywhere

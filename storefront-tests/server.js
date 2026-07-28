@@ -17,7 +17,7 @@ const HTML_PATH = process.env.STOREFRONT_HTML ||
 const CATALOGUE = {
   rows: [
     { id: 101, name: 'Clutch Plate Set', category: 'Boxer 100 > Engine > Clutch Assembly',
-      price: 45000, stock: 12, keywords: 'Engine | Clutch Assembly | DF 1810 24', image: '',
+      price: 45000, stock: 12, keywords: 'Boxer 100 | Engine | Clutch Assembly | JV 5110 23 | plate 1', image: '',
       description: 'Genuine friction plate set.' },
     { id: 102, name: 'Front Brake Shoe', category: 'Boxer 100 > Brakes > Front Brake',
       price: 22000, stock: 5, keywords: 'Brakes | Front Brake | HB 2201 10', image: '',

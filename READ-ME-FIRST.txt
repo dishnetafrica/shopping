@@ -1,44 +1,48 @@
-EA AUTO PART — HARDENING + FITMENT FIX + CATEGORY SIDEBAR (upload package)
-=========================================================================
+EA AUTO PART — COMPATIBLE MODELS (authoritative fitment) + all prior hardening
+==============================================================================
 
-Includes all prior hardening (analytics, self-hosted fonts, XSS, a11y, bot guard, client-error
-capture, funnel/abandoned-cart, modularization, mobile breakpoints, perf) PLUS the two items
-from your latest screenshots.
+This adds the proper per-part fitment data model you approved: each part now knows which
+motorcycle models it fits, sourced from the OFFICIAL Bajaj SPC catalogues (not guessed).
 
-THIS UPDATE
------------
-1) FITMENT BUG FIXED (the "Not for your CT 125 HD" on every part).
-   Root cause: your supplier stock is tagged generically (e.g. "BOXER | Engine | 6004 BEARING"),
-   but the old check demanded an exact match to the selected model, so CT 125 HD matched nothing
-   and the code fell back to showing everything stamped "Not for your CT 125 HD".
-   New behaviour (src/03-garage.js, src/04-vehicle.js): smart 3-state fitment —
-     • FITS  — the model or its family (BOXER/CT/…) is named, OR it's universal/generic hardware
-               (bearing, bolt, seal, cable, filter, chain, sprocket…). Shows "✓ Fits your …".
-     • DIFFERENT MODEL — only when the part clearly names another specific model. Subtle badge.
-     • UNKNOWN — shows NO scary badge; part stays visible.
-   Lists now hide only confident non-fits, so generic stock is no longer wrongly rejected.
+HOW IT WORKS
+------------
+A part number that appears in several models' catalogues fits all of them. I scanned the
+official catalogues (Boxer 100, Boxer BM125X, BM150, BM150 X, CT 125 HD) and built a
+cross-reference: 1,305 part numbers, 676 of which fit more than one model.
+  build-data/pnfits_data.json   part number -> [compatible model ids]
 
-2) LEFT CATEGORY SIDEBAR (from your EAS Africa mockup) on the Parts / system / search pages.
-   Categories with live counts + active highlight, plus "In stock only" and "Fits my bike"
-   filters. Collapses to chips on mobile. (src/09-shell.js, src/04-vehicle.js, src/10-views.js
-   + CSS in resources/storefront/autoparts.html.)
+The storefront now:
+  • Reads this cross-reference (baked into autoparts.html). For any part with a Bajaj part
+    number, fitment is AUTHORITATIVE — it fits a bike only if the catalogue says so. No more
+    guessing, no false "Not for".
+  • Shows a "COMPATIBLE MODELS (N)" panel on the product page (like your EAS Africa mockup),
+    with tappable model chips; the customer's own bike is highlighted.
+  • Falls back to the smart heuristic (family / universal-hardware) only for parts that have
+    no catalogue part number (e.g. some generic supplier items).
+  Files: src/03-garage.js (fitsBike, compatibleModels), src/10-views.js (PDP UI),
+         resources/storefront/autoparts.html (CSS + baked data), build_storefront.py.
 
-NOTE ON DEEPER FIX: the generic tagging ("BOXER") is a DATA issue. The smart fitment copes with
-it well, but the best long-term fix is to tag each supplier part with the models it actually
-fits (a "Compatible Models" list, like your mockup). Happy to build that import once you decide.
+COVERAGE NOTE (important)
+  Your full Bajaj catalogue products (which carry part numbers) get authoritative fitment now.
+  The ~53 hand-entered supplier items whose keywords have NO Bajaj part number (e.g.
+  "6004 Bearing") can't be cross-referenced, so they use the smart heuristic. To make THOSE
+  authoritative too, add each one's Bajaj part number to its product keywords and they'll be
+  picked up automatically. Send me the supplier part numbers and I'll produce the updated import.
 
-STANDING FEATURES (unchanged)
-  - Analytics + client-error beacons; self-hosted Font Awesome + fonts (no CDN); XSS hardening;
+ALSO IN THIS PACKAGE (unchanged, from earlier milestones)
+  - Fitment bug fix (smart 3-state) + LEFT CATEGORY SIDEBAR on Parts/system/search pages.
+  - Analytics + client-error capture; self-hosted Font Awesome + fonts (no CDN); XSS hardening;
     accessibility (keyboard/focus/aria/<main>/AA contrast); order/quote bot guard; abandoned-cart
-    Insights tab; 12-module src/ build; lazy-loaded images; no 320–412px overflow.
+    Insights tab; 12-module src/ build; lazy images; no 320–412px overflow.
 
 TESTS
-  storefront-tests/   Playwright: 34 tests (desktop + 360px) — now incl. smart-fitment and
-                      category-sidebar tests. tests/Feature/StorefrontBotGuardTest.php (PHPUnit).
+  storefront-tests/  Playwright: 36 tests (desktop + 360px) — incl. authoritative-fitment +
+                     Compatible-Models tests. tests/Feature/StorefrontBotGuardTest.php (PHPUnit).
 
 DEPLOY
-  Copy app/, resources/, routes/, bootstrap/ over your repo. src/ + *.py rebuild autoparts.html
-  (python3 build_storefront.py); the shipped autoparts.html is already self-contained.
+  Copy app/, resources/, routes/, bootstrap/ over your repo. The shipped autoparts.html already
+  has the cross-reference baked in. To rebuild: put build-data/pnfits_data.json (and your other
+  build/*.json) in bajaj-genuine-parts/build/ and run python3 build_storefront.py.
 
 RUN TESTS
-  cd storefront-tests && npm install && npx playwright test     # 34 pass
+  cd storefront-tests && npm install && npx playwright test     # 36 pass

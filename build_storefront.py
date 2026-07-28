@@ -32,6 +32,7 @@ DATA = {
     "__DIAG_DATA__":     BUILD / "diag_extracted.json",
     "__GAL_DATA__":      BUILD / "gal_data.json",
     "__SYSCOVER_DATA__": BUILD / "syscover_data.json",
+    "__PNFITS_DATA__":   BUILD / "pnfits_data.json",
 }
 
 # Left for the controller to inject at request time.

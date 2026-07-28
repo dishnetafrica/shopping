@@ -73,12 +73,16 @@ function vPart(id){
   var pl=STATE.pnPlate[normPn(pn)];
   var diagBtn=pl?('<a class="btn btn-o" onclick="go(\'plate/'+sid(pl)+'\')"><i class="fa fa-wrench"></i> Show on diagram</a>'):'';
   var fg=fitGuide(p);
+  var cm=compatibleModels(p);
+  var cmH = cm.length ? '<div class="compat"><span class="cmh"><i class="fa fa-motorcycle"></i> Compatible models ('+cm.length+')</span><span class="cmchips">'
+     +cm.map(function(m){return '<span class="cmchip'+(b&&m.id===b.id?' me':'')+'" role="button" tabindex="0" onclick="go(\'model/'+sid(m.id)+'\')">'+esc(m.name)+'</span>';}).join('')+'</span></div>' : '';
   track('view',{product_id:p.id});
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › <a onclick="go(\'parts\')">Parts</a> › '+esc(p.name)+'</div>'
    +'<section class="page wrap"><div class="pd"><div class="big">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'" loading="lazy">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
    +'<div><span class="chip g">✓ Genuine Bajaj</span> <h1 style="margin-top:8px">'+esc(p.name)+'</h1>'+(pn?'<div class="mono" style="margin-top:4px">Part No: '+esc(pn)+'</div>':'')
    +'<div class="price">'+(priced?money(p.price):'<span class="askp">Ask for price</span>')+'</div><div class="stock '+(inS?'y':'n')+'" style="margin-bottom:12px">'+(inS?('✓ In stock'+(p.stock!=null&&p.stock>0?(' ('+p.stock+')'):'')):'Available to order')+'</div>'
    +fitLine
+   +cmH
    +(p.desc?'<p style="color:var(--muted);margin:14px 0 16px">'+esc(p.desc)+'</p>':'<div style="height:6px"></div>')
    +'<div class="buyrow"><button class="btn btn-p" onclick="cartAdd(\''+sid(p.id)+'\')"><i class="fa fa-shopping-cart"></i> Add to cart</button><a class="btn btn-w" href="'+esc(waOrder(p))+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:[\''+sid(p.id)+'\']})">Order now</a>'+diagBtn+'</div>'
    +'<div class="qa-grid">'

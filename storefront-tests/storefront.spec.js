@@ -70,6 +70,29 @@ test('primary checkout CTA is reachable on a 320px phone', async ({ page }) => {
   expect(box.width, 'checkout button fits the viewport').toBeLessThanOrEqual(320);
 });
 
+test('authoritative fitment from catalogue cross-reference + Compatible Models UI', async ({ page }) => {
+  await page.goto(base + '/');
+  await waitLoaded(page);
+  const r = await page.evaluate(() => {
+    const ctPart = { id: 1, name: 'X', kw: 'CT 125 HD | Engine | Cover | JV 5110 23 | plate 1', cat: 'CT 125 HD > Engine' }; // fits ct125hd + boxer125x
+    const boxOnly = { id: 2, name: 'Y', kw: 'Boxer 100 | Engine | Z | PF 5910 00', cat: 'Boxer 100 > Engine' };              // boxer100 only
+    localStorage.setItem('ea_bike', 'ct125hd');
+    const ctView = { fitsCt: window.fitsBike(ctPart), fitsBoxOnly: window.fitsBike(boxOnly), compat: window.compatibleModels(ctPart).map((m) => m.id).sort() };
+    localStorage.setItem('ea_bike', 'boxer100');
+    const boxView = { fitsBoxOnly: window.fitsBike(boxOnly), fitsCt: window.fitsBike(ctPart) };
+    return { ctView, boxView };
+  });
+  expect(r.ctView.fitsCt).toBe(true);
+  expect(r.ctView.fitsBoxOnly).toBe(false);          // catalogue says this part is Boxer-100 only
+  expect(r.ctView.compat).toEqual(['boxer125x', 'ct125hd']);
+  expect(r.boxView.fitsBoxOnly).toBe(true);
+  expect(r.boxView.fitsCt).toBe(false);
+  // The PDP renders a Compatible Models block for a part with a catalogue part number.
+  await page.goto(base + '/#/part/101');
+  await waitLoaded(page);
+  await expect(page.locator('.compat .cmh')).toContainText('Compatible models');
+});
+
 test('category sidebar renders on listing pages and filters work', async ({ page }) => {
   await page.goto(base + '/#/system/Engine');
   await waitLoaded(page);
