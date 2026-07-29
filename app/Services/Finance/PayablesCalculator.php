@@ -3,6 +3,10 @@
 namespace App\Services\Finance;
 
 use App\Models\OrderCost;
+use App\Models\Supplier;
+use App\Models\Tenant;
+use App\Services\Money\Fx;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Single source of truth for SUPPLIER PAYABLES in USD.
@@ -48,6 +52,45 @@ final class PayablesCalculator
         }
 
         return [$bills, $paid];
+    }
+
+    /**
+     * Net payable PER SUPPLIER in USD: credit bills − supplier payments (+ opening balance), using the
+     * stored usd_amount (same field the supplier detail page sums). Raw net — NOT floored — so an
+     * overpaid supplier reads negative, exactly like the detail page. This is the single source of
+     * truth shared by the supplier detail (SupplierController::owedBySupplierUsd) AND the supplier list,
+     * so the two screens can never disagree again.
+     *
+     * @return array<int,float> supplier_id => net owed USD
+     */
+    public static function bySupplierUsd(int $tid): array
+    {
+        $out = [];
+
+        foreach (OrderCost::where('tenant_id', $tid)->whereNotNull('supplier_id')
+                     ->where('pay_status', 'credit')->whereNotIn('status', ['rejected', 'void'])
+                     ->select('supplier_id', DB::raw('SUM(usd_amount) as usd'))->groupBy('supplier_id')->get() as $c) {
+            $out[(int) $c->supplier_id] = ($out[(int) $c->supplier_id] ?? 0.0) + (float) $c->usd;
+        }
+
+        foreach (OrderCost::where('tenant_id', $tid)->whereNotNull('supplier_id')
+                     ->where('stage', 'supplier_payment')->whereNotIn('status', ['rejected', 'void'])
+                     ->select('supplier_id', DB::raw('SUM(usd_amount) as usd'))->groupBy('supplier_id')->get() as $p) {
+            $out[(int) $p->supplier_id] = ($out[(int) $p->supplier_id] ?? 0.0) - (float) $p->usd;
+        }
+
+        $openings = Supplier::where('tenant_id', $tid)->whereNotNull('opening_balance')
+            ->where('opening_balance', '>', 0)->get(['id', 'opening_balance', 'opening_currency']);
+        if ($openings->isNotEmpty()) {
+            $fx = Fx::forTenant(Tenant::find($tid));
+            foreach ($openings as $s) {
+                $rate = $fx->ratePerUsd(strtoupper((string) ($s->opening_currency ?: 'USD')));
+                if ($rate <= 0) $rate = 1;
+                $out[(int) $s->id] = ($out[(int) $s->id] ?? 0.0) + ((float) $s->opening_balance / $rate);
+            }
+        }
+
+        return $out;
     }
 
     /** Total net payable in USD (never negative). */

@@ -75,4 +75,24 @@ class PayablesCalculatorTest extends TestCase
         $aged = PayablesCalculator::agedUsd($this->tid, fn ($d) => 'Current');
         $this->assertEqualsWithDelta(538.44, array_sum($aged), 0.01);
     }
+
+    public function test_by_supplier_nets_payments_per_supplier(): void
+    {
+        // Supplier 1 (AVION-like): billed then partly paid → net owed. Supplier 2: unpaid.
+        $this->bill(1, 2787.40);
+        $this->payment(1, 1617.28);
+        $this->bill(2, 500.00);
+
+        $map = PayablesCalculator::bySupplierUsd($this->tid);
+        $this->assertEqualsWithDelta(1170.12, $map[1], 0.01);   // NOT the gross 2787.40
+        $this->assertEqualsWithDelta(500.00, $map[2], 0.01);
+    }
+
+    public function test_by_supplier_is_negative_when_paid_before_billed(): void
+    {
+        // Exactly the AVION-before-bills state: payments recorded, no bills yet → supplier owes YOU.
+        $this->payment(7, 1617.28);
+        $map = PayablesCalculator::bySupplierUsd($this->tid);
+        $this->assertEqualsWithDelta(-1617.28, $map[7], 0.01);
+    }
 }

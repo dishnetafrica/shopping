@@ -28,14 +28,18 @@ final class SupplierListCapability implements ProcessCapability
         $t = $ctx->tenantId();
         $cur = $ctx->baseCurrency();
 
-        $agg = OrderCost::where('tenant_id', $t)
+        // Net owed per supplier — SAME calc as the supplier detail page (credit bills MINUS the separate
+        // supplier_payment rows, plus opening balance). The old query summed only purchase rows with
+        // (native_amount − paid_native), so payments (which live as separate rows) never reduced it and
+        // the list read GROSS — e.g. a supplier fully covered by payments still showed the full bill.
+        $owedMap = \App\Services\Finance\PayablesCalculator::bySupplierUsd($t);
+
+        // Open-PO count per supplier (unchanged) — just the purchase-row tally for the "POs" column.
+        $posMap = OrderCost::where('tenant_id', $t)
             ->where('stage', 'purchase')->where('status', '!=', 'void')
             ->whereNotNull('supplier_id')
-            ->selectRaw('supplier_id')
-            ->selectRaw('COALESCE(SUM((native_amount - COALESCE(paid_native,0)) / NULLIF(rate_to_usd,0)),0) as owed')
-            ->selectRaw('COUNT(*) as pos')
-            ->groupBy('supplier_id')
-            ->get()->keyBy('supplier_id');
+            ->selectRaw('supplier_id')->selectRaw('COUNT(*) as pos')
+            ->groupBy('supplier_id')->pluck('pos', 'supplier_id');
 
         $suppliers = Supplier::where('tenant_id', $t)->orderBy('name')->limit(self::MAX_ROWS)->get();
 
@@ -50,9 +54,8 @@ final class SupplierListCapability implements ProcessCapability
         $totalPayable = 0.0; $active = 0; $withBalance = 0;
         $rows = [];
         foreach ($suppliers as $s) {
-            $a = $agg[$s->id] ?? null;
-            $owed = max(0.0, (float) ($a->owed ?? 0));
-            $pos = (int) ($a->pos ?? 0);
+            $owed = max(0.0, (float) ($owedMap[$s->id] ?? 0));
+            $pos = (int) ($posMap[$s->id] ?? 0);
             $isActive = $s->active !== false;
             if ($isActive) { $active++; }
             $totalPayable += $owed;

@@ -94,26 +94,9 @@ class SupplierController extends Controller
     /** Helper: net owed (USD) per supplier = credit purchases + opening − supplier payments. */
     protected function owedBySupplierUsd(int $tid): array
     {
-        $out = [];
-        $credit = OrderCost::where('tenant_id',$tid)->whereNotNull('supplier_id')
-            ->where('pay_status','credit')->whereNotIn('status',['rejected','void'])
-            ->select('supplier_id', DB::raw('SUM(usd_amount) as usd'))->groupBy('supplier_id')->get();
-        foreach ($credit as $c) $out[$c->supplier_id] = ($out[$c->supplier_id] ?? 0) + (float)$c->usd;
-        $paid = OrderCost::where('tenant_id',$tid)->whereNotNull('supplier_id')
-            ->where('stage','supplier_payment')->whereNotIn('status',['rejected','void'])
-            ->select('supplier_id', DB::raw('SUM(usd_amount) as usd'))->groupBy('supplier_id')->get();
-        foreach ($paid as $p) $out[$p->supplier_id] = ($out[$p->supplier_id] ?? 0) - (float)$p->usd;
-        // opening balances (converted to USD via tenant rates)
-        $openings = Supplier::where('tenant_id',$tid)->whereNotNull('opening_balance')->where('opening_balance','>',0)
-            ->get(['id','opening_balance','opening_currency']);
-        $fx = \App\Services\Money\Fx::forTenant(\App\Models\Tenant::find($tid)); // E3.4 — one FX source (hoisted out of the loop)
-        foreach ($openings as $s) {
-            $cur = strtoupper((string)($s->opening_currency ?: 'USD'));
-            $rate = $fx->ratePerUsd($cur);
-            if ($rate <= 0) $rate = 1;
-            $out[$s->id] = ($out[$s->id] ?? 0) + ((float)$s->opening_balance / $rate);
-        }
-        return $out;
+        // Single source of truth, shared with the supplier LIST screen so detail and list can never
+        // disagree (the list previously summed gross credit bills and ignored the separate payment rows).
+        return \App\Services\Finance\PayablesCalculator::bySupplierUsd($tid);
     }
 
     /** GET /papi/suppliers/{id} — one supplier + recent purchases & payments (the view page). */

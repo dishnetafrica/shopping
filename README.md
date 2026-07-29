@@ -1,30 +1,33 @@
-# Fix — empty morning cashbook (and task) digest
+# Fix — supplier LIST showed gross owed (ignored payments)
 
 ## Symptom
-The daily WhatsApp cashbook digest read "Combined cash: $0.00" with no holders/movement,
-even though the live cashbook holds real money (~$4,950 combined). Only the Facebook-ad
-line showed numbers.
+On the Suppliers list, the OWED column showed the GROSS of a supplier's credit bills
+and ignored payments made against them. Clicking into the supplier showed the correct
+(net) figure. E.g. AVION showed "2,787 UGX" (gross bills) instead of ~$1,170 net;
+Nura showed "$5,667" instead of "$538".
 
 ## Cause
-A scheduled Artisan command runs with NO TenantContext. `OrderCost` (and `OrderTask`)
-carry a global tenant scope that, when the context is unset, appends `AND tenant_id = NULL`
-to every query — matching zero rows. So `CashbookExport` saw no cash. The ad line was the
-only survivor because it uses a raw `DB::table()` query, which the Eloquent scope doesn't touch.
+`SupplierListCapability` computed owed as
+  SUM((native_amount − paid_native) / rate)  over stage='purchase' rows only.
+Credit bills keep paid_native = 0, and supplier PAYMENTS live as separate
+stage='supplier_payment' rows that this query never included — so payments never
+reduced the list figure. (Same class of bug as the dashboard payables overstatement.)
 
 ## Fix
-Set the tenant context per tenant inside the command loop (one line), exactly like
-`TaskReminderCommand` already does. The `TaskDigestCommand` had the identical bug and is fixed too.
-
-Other morning digests (Bot / OrderPending / StorefrontGaps / Demand) were audited and are safe.
+One shared source of truth: `PayablesCalculator::bySupplierUsd()` returns net owed per
+supplier (credit bills − supplier_payments + opening balance, using stored usd_amount).
+The supplier LIST now uses it, and the supplier DETAIL (SupplierController::owedBySupplierUsd)
+delegates to it too — so the two screens can never disagree again.
 
 ## Files
-- app/Console/Commands/CashbookDigestCommand.php
-- app/Console/Commands/TaskDigestCommand.php
-- tests/Feature/CashbookDigestScopeTest.php (new)
+- app/Services/Finance/PayablesCalculator.php        (new bySupplierUsd())
+- app/Capability/Process/SupplierListCapability.php  (uses it; keeps PO-count query)
+- app/Http/Controllers/Panel/SupplierController.php  (detail delegates to it)
+- tests/Feature/PayablesCalculatorTest.php           (net + overpaid regression)
 
 ## Deploy
-Copy the files, then:  no migration needed.
-    php artisan config:clear
-Test tomorrow's digest immediately (safe, sends to the configured number):
-    php artisan cashbook:digest --tenant=<FamilyShoppersId> --force
-It should now show the real combined cash and per-person balances.
+No migration. Copy files, then:
+    php artisan config:clear && php artisan route:clear && php artisan view:clear
+Verify:
+    php artisan test --filter=PayablesCalculatorTest
+The list will then match each supplier's detail page (AVION ~$1,170, Nura $538, etc.).
