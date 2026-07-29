@@ -1083,7 +1083,7 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 <script>
 const CFG = { base:'/api/v1/workspace', csrf: document.querySelector('meta[name=csrf-token]').content, user: @json(['name'=>'']) };
 const LABELS = { advisor:'Solar Advisor', setup:'Get started', chats:'Chats', chat:'Chat', communication:'Email Center', guide:'Help & Training', consignments:'Consignments', consignment:'Consignment', scheduled:'Scheduled', briefing:'Today', worklist:'My Work', tasks:'Tasks', followups:'AI Follow-ups', diagnostics:'Bot Diagnostics', customers:'Customers', leads:'Leads', collections:'Collections',
-  salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance', pnl:'Profit & Loss',
+  salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance', pnl:'Profit & Loss', books:'Books',
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', 'procurement.hub':'Procurement Hub', 'demand.plans':'Demand Plans', 'juba.stock':'Juba Stock', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch', transport:'Transport Register', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
   salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings', ads:'Facebook Ads', campaigns:'Campaigns', 'storefront.insights':'Storefront Insights',
@@ -1095,13 +1095,13 @@ const GROUPS = [ ['Overview',['setup','briefing','worklist','guide']],
   ['Inventory',['products','categories','purchase.process','suppliers','consignments']],
   ['Procurement',['procurement.hub','demand.plans','juba.stock']],
   ['Operations',['jobs','maintenance','claims','tasks','warehouse','dispatch','transport']],
-  ['Finance',['finance','pnl','cashbook']],
+  ['Finance',['finance','pnl','books','cashbook']],
   ['Marketing',['ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery']],
   ['Settings',['settings','team','modules','billing']] ];
 // Which nav key reads which count from the catalog's counts map.
 const NAVCOUNT = { followups:'followups', diagnostics:'diagnostics', chats:'chats', communication:'communication', consignments:'consignments', scheduled:'scheduled', customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','warehouse','dispatch','tasks','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team']);
+const READY = new Set(['advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','books','warehouse','dispatch','tasks','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team']);
 // Storefront config pages are client-rendered (not server workspaces) and always available to the owner.
 const SF_KEYS = new Set(['storefront.collections','storefront.kits','storefront.delivery','transport']);
 // Dedicated list views still pending — none; kept for future additions.
@@ -1171,6 +1171,7 @@ const P = {
   ban:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM5 5l14 14',
   trend:'M23 6l-9.5 9.5-5-5L1 18M17 6h6v6',
   book:'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z',
+  books:'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2zM8.5 7h7M8.5 10.5h7M8.5 14h4',
   phone:'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.94.36 1.86.7 2.73a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.35-1.35a2 2 0 0 1 2.11-.45c.87.34 1.79.57 2.73.7A2 2 0 0 1 22 16.92z',
   edit:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z',
   bell:'M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0',
@@ -1456,7 +1457,7 @@ function renderNav(caps){
   // A SOON item shows if its underlying entity exists (has a count) even without a list capability yet.
   /* pnl is a legacy-iframe screen with no capability of its own — gate it on the
      permission-filtered finance capability so restricted roles don't see P&L. */
-  const has = k => (k==='pnl' && keys.has('finance')) || k==='settings' || k==='advisor' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
+  const has = k => (k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || k==='settings' || k==='advisor' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
   let html='';
   GROUPS.forEach(([g,items])=>{
     const avail=items.filter(has);
@@ -1489,7 +1490,7 @@ const WS = {
   operations: { label:'Operations', hub:true, sub:'Stock, orders & fulfilment',
                 members:['salesOrders','products','categories','purchase.process','suppliers','warehouse','dispatch','consignments','procurement.hub','demand.plans','juba.stock','scheduled'] },
   finance:    { label:'Finance',    hub:true, sub:'Money in & money out',
-                members:['collections','invoices','payments','quotations','cashbook','finance','pnl'] },
+                members:['collections','invoices','payments','quotations','cashbook','finance','pnl','books'] },
   me:         { label:'Me',         hub:true, sub:'', members:[] }
 };
 const WS_ORDER = ['today','customers','operations','finance','me'];
@@ -1497,7 +1498,7 @@ const WS_ORDER = ['today','customers','operations','finance','me'];
 const HUBCARD = {
   collections:{t:'Money to Collect',c:'overdue & due'}, invoices:{t:'Waiting for Payment',c:'issued'},
   payments:{t:'Receipts',c:'money received'}, quotations:{t:'Quotes Waiting',c:'to confirm'},
-  cashbook:{t:'Cash Book',c:'cash in & out'}, finance:{t:'Finance',c:'overview'}, pnl:{t:'Profit & Loss',c:''},
+  cashbook:{t:'Cash Book',c:'cash in & out'}, finance:{t:'Finance',c:'overview'}, pnl:{t:'Profit & Loss',c:''}, books:{t:'Books',c:'full report'},
   salesOrders:{t:'Open Orders',c:'to fulfil'}, products:{t:'Products',c:'catalogue'}, categories:{t:'Categories',c:''},
   'purchase.process':{t:'Items to Receive',c:'purchasing'}, suppliers:{t:'Suppliers',c:''},
   warehouse:{t:'Low Stock',c:'reorder'}, dispatch:{t:'To Deliver',c:'dispatch'}, consignments:{t:'Consignments',c:''},
@@ -1517,6 +1518,7 @@ function hasScreen(k){
   var s = CFG.capKeys;
   if(k==='task.new') return true;   // the "+ New task" action (owner/manager gate is enforced server-side)
   if(k==='pnl') return !!(s && s.has('finance'));
+  if(k==='books') return !!(s && s.has('finance'));
   if(k==='settings' || k==='guide') return true;
   if(SF_KEYS.has(k)) return true;
   if(s && s.has(k)) return true;
@@ -1629,6 +1631,7 @@ async function route(key, id){
   if(key==='chats'){ CUR.key='chats'; CUR.id=id||null; setActive('chats'); waweb(id||null); return; }
   if(key==='payments'){ if(isAppUI()){ bosPayments(); return; } document.getElementById('view').innerHTML='<div class="crumb">Payments</div><iframe title="Payments" src="/panel/payments-manager" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='pnl'){ if(isAppUI()){ bosPnl(); return; } document.getElementById('view').innerHTML='<div class="crumb">Profit & Loss</div><iframe title="Profit and Loss" src="/panel/pnl-report" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
+  if(key==='books'){ document.getElementById('view').innerHTML='<div class="crumb">Books</div><iframe title="Books" src="/panel/situation-report" style="width:100%;height:calc(100vh - 130px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='wa-connect'){ document.getElementById('view').innerHTML='<div class="crumb">Connect WhatsApp</div><iframe title="Connect WhatsApp" src="/panel/setup" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='settings'){ if(isAppUI()){ bosSettings(); return; } document.getElementById('view').innerHTML='<iframe title="Settings" src="/panel/settings-manager" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='advisor'){ advisorHome(id); return; }
@@ -4265,7 +4268,7 @@ if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('/sw.
     var ww=document.getElementById('waweb');   if(ww && ww.classList.contains('open')) return true; // chat
     if(!CUR || !CUR.key) return true;
     // iframe-backed screens have nothing to pull-refresh; leave them to native scroll
-    if(CUR.key==='settings'||CUR.key==='payments'||CUR.key==='pnl'||CUR.key==='wa-connect'||CUR.key==='chats') return true;
+    if(CUR.key==='settings'||CUR.key==='payments'||CUR.key==='pnl'||CUR.key==='books'||CUR.key==='wa-connect'||CUR.key==='chats') return true;
     return false;
   }
   function setInd(y, spin){

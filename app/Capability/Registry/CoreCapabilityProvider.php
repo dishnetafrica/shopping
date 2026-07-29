@@ -44,7 +44,6 @@ use App\Capability\Process\PaymentListCapability;
 use App\Capability\Process\ProductListCapability;
 use App\Capability\Process\QuotationListCapability;
 use App\Capability\Process\FinanceCapability;
-use App\Capability\Process\BooksCapability;
 use App\Capability\Process\MorningBriefingCapability;
 use App\Capability\Process\PurchaseProcessCapability;
 use App\Capability\Process\SalesOrderListCapability;
@@ -165,9 +164,6 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register(new StorefrontInsightsCapability(), new CapabilityManifest(key: 'storefront.insights', type: 'process', owner: 'management', permission: 'menu:products', api: '/api/v1/workspace/storefront.insights'));
         $r->register(app(TasksCapability::class), new CapabilityManifest(key: 'tasks', type: 'process', owner: 'management', permission: 'menu:tasks', commands: [['key' => 'assign', 'actor' => 'human'], ['key' => 'assignable', 'actor' => 'human'], ['key' => 'complete', 'actor' => 'human'], ['key' => 'start', 'actor' => 'human'], ['key' => 'done', 'actor' => 'human'], ['key' => 'bulk-done', 'actor' => 'human']], api: '/api/v1/workspace/tasks'));
         $r->register(new FinanceCapability($money), new CapabilityManifest(key: 'finance', type: 'process', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/finance'));
-        // Books — real financial statements (P&L incl. loan interest, balance sheet, equity, loan schedule).
-        // Read-only projection; the only writes are the owner-only save_config command (stock value + lender).
-        $r->register(new BooksCapability(), new CapabilityManifest(key: 'books', type: 'process', owner: 'accounts', permission: 'menu:finance', commands: [['key' => 'save_config', 'actor' => 'human']], api: '/api/v1/workspace/books'));
         $r->register(new CashbookCapability(), new CapabilityManifest(key: 'cashbook', type: 'process', owner: 'accounts', permission: 'menu:cash', api: '/api/v1/workspace/cashbook'));
         $r->register($ads, new CapabilityManifest(key: 'ads', type: 'process', owner: 'management', permission: '', api: '/api/v1/workspace/ads'));
         $r->register(new CampaignListCapability(), new CapabilityManifest(key: 'campaigns', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/campaigns'));

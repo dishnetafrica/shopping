@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Family Shoppers — Company Situation</title>
+<style>
+  :root{ --surface:#fcfcfb;--plane:#f9f9f7;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--baseline:#c3c2b7;
+    --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--good:#0ca30c;--crit:#d03b3b;--warn:#b45309}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--plane);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+  .rep{max-width:980px;margin:0 auto;padding:20px 20px 40px}
+  .rep-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:4px}
+  h1{font-size:22px;margin:0;color:#15803d}
+  .sub{color:var(--ink2);font-size:13px;margin-top:2px}
+  .rep-btns button{font:inherit;font-size:13px;border:1px solid var(--grid);background:#fff;color:var(--ink2);border-radius:8px;padding:7px 12px;cursor:pointer;margin-left:6px}
+  .rep-btns button:hover{background:#f0f4f1}
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:16px 0}
+  .kpi{background:var(--surface);border:1px solid var(--grid);border-radius:12px;padding:12px}
+  .kpi .kv{font-size:18px;font-weight:700;letter-spacing:-.01em}
+  .kpi .kl{font-size:11px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.03em}
+  .kpi.ok .kv{color:#15803d}.kpi.bad .kv{color:var(--crit)}.kpi.warn .kv{color:#b45309}
+  .card{background:var(--surface);border:1px solid var(--grid);border-radius:14px;padding:16px 18px;margin-top:12px}
+  .card h2{font-size:14px;margin:0 0 2px}
+  .cap{font-size:12px;color:var(--muted);margin:0 0 10px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .bar-row{display:flex;align-items:center;gap:10px;margin:8px 0}
+  .bar-lab{width:44px;font-size:12px;color:var(--ink2);font-weight:600}
+  .bar-track{flex:1;height:16px;background:#eef1ee;border-radius:6px;overflow:hidden}
+  .bar-fill{display:block;height:100%;background:var(--s1);border-radius:6px}
+  .bar-val{width:96px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;color:var(--ink)}
+  table.mini{width:100%;border-collapse:collapse;font-size:13px}
+  table.mini td{padding:5px 2px;border-bottom:1px solid var(--grid)}
+  table.mini td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+  table.mini tr.tot td{font-weight:700;border-top:1.5px solid var(--baseline)}
+  .foot{font-size:11px;color:var(--muted);text-align:center;margin-top:16px}
+  .state{max-width:520px;margin:60px auto;text-align:center;color:var(--ink2);font-size:15px}
+  @media(max-width:760px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+  @media print{.rep-btns{display:none}body{background:#fff}}
+</style>
+</head>
+<body>
+<div id="app"><div class="state">Loading your books…</div></div>
+<script>
+(async () => {
+  const app = document.getElementById('app');
+  const get = (u) => fetch(u, { credentials: 'same-origin', headers: { Accept: 'application/json' } }).then(r => r.json()).catch(() => null);
+  const STOCK_USD = 3798.33;            // manual stock value until it tracks from purchases (Books > Set stock value)
+  const RATE = 0.03, LENDER = /bhavin/i;
+
+  const [pnl, fin, ct, cb] = await Promise.all([
+    get('/papi/cash-pnl'), get('/papi/finance-overview'), get('/papi/capital-trace'), get('/papi/trade-cashbook/all'),
+  ]);
+  if (!pnl || !pnl.ok) { app.innerHTML = '<div class="state">Please open this while signed in as the owner.</div>'; return; }
+  const is = pnl.income_statement || {}, kpi = (fin && fin.kpis) || {};
+
+  const today = new Date();
+  const days = (d) => Math.max(0, Math.floor((today - new Date(d)) / 86400000));
+  const adv = ((ct && ct.entries) || []).filter(e => LENDER.test((e.holder || '') + ' ' + (e.note || '')));
+  let loanP = 0, loanI = 0;
+  adv.forEach(e => { const p = +e.usd || 0; loanP += p; loanI += p * (Math.pow(1 + RATE, days(e.date) / 30) - 1); });
+  let intPaid = 0, prinPaid = 0;
+  ((cb && cb.entries) || []).forEach(e => {
+    const txt = (e.holder || '') + ' ' + (e.note || '') + ' ' + (e.category || '');
+    if (+e.out > 0 && (e.status || '').toLowerCase() !== 'void' && LENDER.test(txt) && /loan|interest|repay|return/i.test(txt))
+      { if (/interest/i.test(txt)) intPaid += +e.usd || 0; else prinPaid += +e.usd || 0; }
+  });
+  const loanOwed = loanP + loanI - intPaid - prinPaid;
+  const financeCost = loanI - intPaid;
+
+  const eq = {};
+  ((ct && ct.by_partner) ? Object.entries(ct.by_partner) : []).forEach(([n, v]) => { if (!LENDER.test(n)) eq[n] = (eq[n] || 0) + (+v || 0); });
+  const equityContributed = Object.values(eq).reduce((a, b) => a + b, 0);
+
+  const rev = +is.sales_revenue || 0, cogs = +is.cost_of_goods || 0, gross = +is.gross_profit || 0;
+  const opex = +is.operating_expenses || 0, oOut = +is.other_cash_out_review || 0, oIn = +is.other_cash_in_review || 0;
+  const op = +is.operating_profit || (gross - opex - oOut + oIn);
+  const net = op - financeCost;
+  const margin = rev > 0 ? (gross / rev * 100) : 0;
+  const cash = +kpi.cash_on_hand || 0, recv = +kpi.receivable || 0, pay = +kpi.payable || 0;
+  const assets = cash + STOCK_USD + recv, liab = pay + loanOwed, equity = assets - liab;
+  const byCur = (fin && fin.cash_by_currency) || [];
+
+  const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const k = (n) => '$' + Math.round(Number(n || 0)).toLocaleString('en-US');
+  const esc = (s) => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+  const waterfall = () => {
+    const steps = [
+      { l: 'Revenue', v: rev, t: 'start' }, { l: 'Cost of goods', v: -cogs, t: 'sub' }, { l: 'Gross profit', v: gross, t: 'total' },
+      { l: 'Expenses', v: -opex, t: 'sub' }, { l: 'Transport & other', v: -oOut, t: 'sub' },
+      ...(oIn ? [{ l: 'Other in', v: oIn, t: 'add' }] : []),
+      { l: 'Operating profit', v: op, t: 'total' }, { l: 'Loan interest', v: -financeCost, t: 'sub' }, { l: 'NET PROFIT', v: net, t: 'net' },
+    ];
+    const W = 860, H = 300, padT = 24, padB = 64, padL = 8, padR = 8;
+    const max = Math.max(rev, op, gross) * 1.08, plotH = H - padT - padB, bw = (W - padL - padR) / steps.length - 14;
+    const y = (val) => padT + plotH * (1 - val / max);
+    let run = 0, bars = '', prevY = y(0);
+    steps.forEach((s, i) => {
+      const x = padL + i * ((W - padL - padR) / steps.length) + 7;
+      let top, bot, col;
+      if (s.t === 'total' || s.t === 'net' || s.t === 'start') { top = y(Math.max(0, s.v)); bot = y(0); run = s.v; col = s.t === 'net' ? 'var(--good)' : 'var(--s1)'; }
+      else { const from = run; run += s.v; top = y(Math.max(from, run)); bot = y(Math.min(from, run)); col = s.v < 0 ? 'var(--crit)' : 'var(--s6)'; }
+      const h = Math.max(2, bot - top);
+      bars += `<rect x="${x}" y="${top}" width="${bw}" height="${h}" rx="4" fill="${col}"/>`;
+      if (i > 0) bars += `<line x1="${x - 7}" y1="${prevY}" x2="${x}" y2="${prevY}" stroke="var(--grid)" stroke-width="1.5"/>`;
+      prevY = (s.t === 'total' || s.t === 'net' || s.t === 'start') ? y(s.v) : y(run);
+      bars += `<text x="${x + bw / 2}" y="${top - 6}" text-anchor="middle" font-size="12" font-weight="600" fill="var(--ink)">${s.v < 0 ? '−' : ''}${k(Math.abs(s.v))}</text>`;
+      bars += `<text x="${x + bw / 2}" y="${H - padB + 18}" text-anchor="middle" font-size="11" fill="var(--muted)">${esc(s.l.split(' ')[0])}</text>`;
+      bars += `<text x="${x + bw / 2}" y="${H - padB + 32}" text-anchor="middle" font-size="11" fill="var(--muted)">${esc(s.l.split(' ').slice(1).join(' '))}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Profit and loss waterfall">${bars}</svg>`;
+  };
+
+  const balanceChart = () => {
+    const W = 520, H = 300, padT = 20, padB = 70, colW = 120, gap = 150, plotH = H - padT - padB;
+    const x1 = 70, x2 = x1 + gap + colW, scale = plotH / assets;
+    const seg = (segs, x) => {
+      let yy = padT + plotH, out = '';
+      segs.forEach(s => { if (s.v <= 0) return; const h = s.v * scale; yy -= h;
+        out += `<rect x="${x}" y="${yy + 1}" width="${colW}" height="${Math.max(1, h - 2)}" fill="${s.c}"/>`;
+        if (h > 18) out += `<text x="${x + colW / 2}" y="${yy + h / 2 + 4}" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">${esc(s.l)} ${k(s.v)}</text>`; });
+      return out;
+    };
+    const A = seg([{ l: 'Cash', v: cash, c: 'var(--s1)' }, { l: 'Stock', v: STOCK_USD, c: 'var(--s2)' }, ...(recv > 1 ? [{ l: 'Recv', v: recv, c: 'var(--s3)' }] : [])], x1);
+    const L = seg([{ l: 'Payables', v: pay, c: 'var(--s4)' }, { l: 'Loan', v: loanOwed, c: 'var(--s5)' }, { l: 'Equity', v: equity, c: 'var(--s6)' }], x2);
+    const base = padT + plotH;
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Balance sheet">${A}${L}
+      <line x1="40" y1="${base}" x2="${W - 20}" y2="${base}" stroke="var(--baseline)" stroke-width="1.5"/>
+      <text x="${x1 + colW / 2}" y="${base + 20}" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">ASSETS</text>
+      <text x="${x1 + colW / 2}" y="${base + 36}" text-anchor="middle" font-size="12" fill="var(--ink2)">${k(assets)}</text>
+      <text x="${x2 + colW / 2}" y="${base + 20}" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">LIABILITIES + EQUITY</text>
+      <text x="${x2 + colW / 2}" y="${base + 36}" text-anchor="middle" font-size="12" fill="var(--ink2)">${k(liab + equity)}</text></svg>`;
+  };
+
+  const cashChart = () => {
+    if (!byCur.length) return '<p class="cap">No currency split available.</p>';
+    const rows = byCur.map(c => ({ cur: c.currency, usd: +c.usd || 0 })).filter(r => Math.abs(r.usd) > 0.5).sort((a, b) => b.usd - a.usd);
+    const max = Math.max(...rows.map(r => Math.abs(r.usd)), 1);
+    return rows.map(r => `<div class="bar-row"><span class="bar-lab">${esc(r.cur)}</span>
+      <span class="bar-track"><span class="bar-fill" style="width:${Math.max(2, Math.abs(r.usd) / max * 100)}%"></span></span>
+      <span class="bar-val">${money(r.usd)}</span></div>`).join('');
+  };
+
+  const tone = (v) => v >= 0 ? 'ok' : 'bad';
+  const kpi_ = (label, val, t) => `<div class="kpi ${t || ''}"><div class="kv">${money(val)}</div><div class="kl">${label}</div></div>`;
+  const stamp = today.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const balances = Math.abs(assets - (liab + equity)) < 0.5;
+
+  app.innerHTML = `<div class="rep">
+    <div class="rep-head"><div><h1>Family Shoppers</h1><div class="sub">Company situation · as at ${stamp}</div></div>
+      <div class="rep-btns"><button onclick="window.print()">⭳ Save PDF</button><button onclick="location.reload()">↻ Refresh</button></div></div>
+    <div class="kpis">
+      ${kpi_('Net profit', net, tone(net))}${kpi_('Cash (all currencies)', cash, 'ok')}${kpi_('Owed to suppliers', pay, 'warn')}
+      ${kpi_('Loan owed (Bhavin)', loanOwed, 'warn')}${kpi_('Owners’ equity', equity, '')}
+      <div class="kpi"><div class="kv">${margin.toFixed(1)}%</div><div class="kl">Gross margin</div></div></div>
+    <div class="card"><h2>How the profit is made</h2>
+      <p class="cap">From cash received to net profit — blue = totals, red = money out, green = what's left.</p>${waterfall()}</div>
+    <div class="grid2">
+      <div class="card"><h2>What we own vs what we owe</h2>
+        <p class="cap">The two columns match — the books balance ${balances ? '✓' : '(check)'}.</p>${balanceChart()}</div>
+      <div class="card"><h2>Where the cash sits</h2>
+        <p class="cap">Cash on hand by currency, valued in USD.</p><div>${cashChart()}</div>
+        <h2 style="margin-top:18px">Loan — Bhavin</h2>
+        <table class="mini">
+          <tr><td>Principal</td><td>${money(loanP)}</td></tr>
+          <tr><td>Interest to date</td><td>${money(loanI)}</td></tr>
+          ${intPaid ? `<tr><td>Interest paid</td><td>−${money(intPaid)}</td></tr>` : ''}
+          ${prinPaid ? `<tr><td>Principal repaid</td><td>−${money(prinPaid)}</td></tr>` : ''}
+          <tr class="tot"><td>Balance owed</td><td>${money(loanOwed)}</td></tr>
+          <tr><td>Interest next month ≈</td><td>${money(loanOwed * RATE)}</td></tr></table></div></div>
+    <div class="foot">Live from your cashbook · stock is the manual value (${money(STOCK_USD)}) until it tracks from purchases · read-only</div>
+  </div>`;
+})();
+</script>
+</body>
+</html>

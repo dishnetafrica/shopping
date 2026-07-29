@@ -173,6 +173,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
     Route::post('/papi/comms/campaigns/save-simple',     [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignSaveSimple']);
     Route::post('/papi/comms/campaigns/estimate-simple', [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignEstimateSimple']);
     Route::get('/panel/pnl-report', [\App\Http\Controllers\Panel\PanelApiController::class, 'pnlReportPage']);
+    Route::get('/panel/situation-report', [\App\Http\Controllers\Panel\PanelApiController::class, 'situationReportPage']);
     Route::get('/panel/sourcing', [\App\Http\Controllers\Panel\SourcingController::class, 'page']);
     Route::get('/panel/customers360', [\App\Http\Controllers\Panel\CustomerController::class, 'page']);
     Route::get('/panel/staff-cash', [\App\Http\Controllers\Panel\StaffCashController::class, 'page']);

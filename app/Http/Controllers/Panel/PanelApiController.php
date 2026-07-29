@@ -6554,6 +6554,19 @@ class PanelApiController extends Controller
             ->header('Cache-Control', 'no-store');
     }
 
+    /** GET /panel/situation-report — serves the visual "Books / Company Situation" report (owner-only).
+     *  Self-contained page; it fetches the live /papi endpoints same-origin and draws the P&L waterfall,
+     *  balance sheet, cash-by-currency and loan. Read-only. Rendered inside the v3 shell as the Books screen. */
+    public function situationReportPage(Request $r)
+    {
+        if ($g = $this->ownerGate($r)) return $g;
+        $path = resource_path('panel/situation-report.html');
+        $html = is_file($path) ? (string) file_get_contents($path) : '<h1>Report unavailable</h1>';
+        return response($html, 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
+    }
+
     /**
      * POST /papi/backfill-order-currency[?commit=1] — infer and stamp each order's real transaction
      * currency into sell_currency, WITHOUT touching any total. Orders store their total in the same
