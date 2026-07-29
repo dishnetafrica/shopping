@@ -520,30 +520,65 @@ class AiBrain
         }
         $qArr = ['lines' => $lines, 'currency' => $cur, 'total' => (float) ($quote['total'] ?? 0)];
 
+        // Big / wholesale order guard. Over the tenant's threshold (USD) we must NOT hand the customer a
+        // firm RETAIL total — on a wholesale quantity that reads as "too expensive" and kills the deal.
+        // Instead: skip auto-sending the retail PDF, flag the quotation as a high-value lead, alert the
+        // owner immediately, and give a wholesale holding reply that asks the delivery question.
+        $threshold = (float) $tenant->setting('bot_wholesale_threshold_usd', 5000);
+        $totalUsd = 0.0;
+        try { $totalUsd = \App\Services\Money\Fx::forTenant($tenant)->toUsd((float) ($quote['total'] ?? 0), $cur); } catch (\Throwable $e) { $totalUsd = 0.0; }
+        $isBig = $threshold > 0 && $totalUsd >= $threshold;
+
         $qNo = null;
         try {
             $doc = $svc->available() ? $svc->generate($tenant, $from, $name, $qArr) : null;
             if ($doc) {
                 $qNo = (string) ($doc['no'] ?? '');
-                try {
-                    $gw = app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($tenant);
-                    if (method_exists($gw, 'sendDocument') && $tenant->whatsapp_instance) {
-                        $media = ($doc['url'] ?? '') ?: ($doc['b64'] ?? '');
-                        $gw->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], 'Your quotation ' . $qNo);
+                // Only auto-send the retail PDF for normal-sized orders; a wholesale order is priced by staff.
+                if (! $isBig) {
+                    try {
+                        $gw = app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($tenant);
+                        if (method_exists($gw, 'sendDocument') && $tenant->whatsapp_instance) {
+                            $media = ($doc['url'] ?? '') ?: ($doc['b64'] ?? '');
+                            $gw->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], 'Your quotation ' . $qNo);
+                        }
+                    } catch (\Throwable $e) {
+                        Log::warning('AiBrain quote-first send failed: ' . $e->getMessage());
                     }
-                } catch (\Throwable $e) {
-                    Log::warning('AiBrain quote-first send failed: ' . $e->getMessage());
                 }
                 $q = $svc->persist($tenant, $from, $name, $qArr, $doc, 'bot');
-                if ($q && $delivery !== '') {
-                    try { $q->update(['meta' => array_merge((array) ($q->meta ?? []), ['delivery' => $delivery])]); } catch (\Throwable $e) { /* meta optional */ }
+                if ($q) {
+                    $add = [];
+                    if ($delivery !== '') $add['delivery'] = $delivery;
+                    if ($isBig) { $add['wholesale'] = true; $add['high_value'] = true; }
+                    if ($add) { try { $q->update(['meta' => array_merge((array) ($q->meta ?? []), $add)]); } catch (\Throwable $e) { /* meta optional */ } }
                 }
             }
         } catch (\Throwable $e) {
             Log::warning('AiBrain quote-first build failed: ' . $e->getMessage());
         }
 
-        \App\Support\BotTrace::log($tenant->id, 'ai-order', $from, 'quote_sent', ($qNo ?: '') . ' — ' . $itemsText);
+        \App\Support\BotTrace::log($tenant->id, 'ai-order', $from, $isBig ? 'wholesale_lead' : 'quote_sent', ($qNo ?: '') . ' — ' . $itemsText . ($isBig ? ' — ~USD ' . number_format($totalUsd, 0) : ''));
+
+        if ($isBig) {
+            // Owner alert (WhatsApp) + the flagged quotation record above = "both" per the shop's setting.
+            try {
+                $who   = $name !== '' ? $name : $from;
+                $alert = "🔔 *Big order lead* — {$who}\n{$itemsText}\n~ USD " . number_format($totalUsd, 0) . ' at list price'
+                       . ($delivery !== '' ? "\nDeliver to: {$delivery}" : '')
+                       . "\nSend them a wholesale price" . ($qNo ? " (quote {$qNo})" : '') . '.';
+                foreach ($tenant->ownerAlertNumbers() as $n) {
+                    \App\Jobs\NotifyOwner::dispatch($tenant->id, $alert, $n);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('AiBrain wholesale owner-alert failed: ' . $e->getMessage());
+            }
+
+            $conf = "\n\n🙏 Thank you — that's a *wholesale quantity*! Our team will prepare a *special bulk price* for you"
+                  . ($delivery !== '' ? " and confirm delivery to *{$delivery}*" : '') . '.';
+            $conf .= "\nTo price it right, would you like it *delivered*, or will you *collect from Kampala* yourself?";
+            return $clean . $conf;
+        }
 
         $totalTxt = number_format((float) ($quote['total'] ?? 0), \App\Services\Pricing::decimalsForCurrency($cur)) . ' ' . $cur;
         $conf = "\n\n📄 *Quotation" . ($qNo ? ' ' . $qNo : '') . " prepared*\n" . $itemsText;
@@ -912,6 +947,33 @@ class AiBrain
                     : " and we'll arrange delivery.");
             $caption = "📄 Quotation {$doc['no']} — Total {$cur} {$amt}. Valid {$days} days. Reply to confirm" . $tail;
 
+            // Big / wholesale order guard (mirror of captureOrderAsQuote): over the tenant's USD threshold,
+            // do NOT hand the customer a firm retail PDF — record + flag the quote, alert the owner, and
+            // send a wholesale holding reply that asks the delivery question. Best-effort; fail-safe.
+            $bigUsd = 0.0;
+            try { $bigUsd = \App\Services\Money\Fx::forTenant($tenant)->toUsd((float) $doc['total'], (string) $cur); } catch (\Throwable $e) { $bigUsd = 0.0; }
+            $bigThresh = (float) $tenant->setting('bot_wholesale_threshold_usd', 5000);
+            if ($bigThresh > 0 && $bigUsd >= $bigThresh) {
+                $quoteRow = $svc->persist($tenant, $from, (string) ($convoRow->customer_name ?? ''), $quote, $doc, 'bot');
+                if ($quoteRow) { try { $quoteRow->meta = array_merge((array) ($quoteRow->meta ?? []), (array) ($meta ?? []), ['wholesale' => true, 'high_value' => true]); $quoteRow->save(); } catch (\Throwable $e) { /* meta optional */ } }
+                Cache::put($cacheKey, ['sig' => $sig, 'no' => $doc['no']], now()->addMinutes(30));
+                $itemsTxt = implode(', ', array_map(fn ($l) => ((int) ($l['qty'] ?? 1)) . ' x ' . (string) ($l['name'] ?? ''), $matched));
+                try {
+                    $who = trim((string) ($convoRow->customer_name ?? '')) ?: $from;
+                    $al  = "🔔 *Big order lead* — {$who}\n{$itemsTxt}\n~ USD " . number_format($bigUsd, 0) . " at list price\nSend them a wholesale price (quote {$doc['no']}).";
+                    foreach ($tenant->ownerAlertNumbers() as $n) { \App\Jobs\NotifyOwner::dispatch($tenant->id, $al, $n); }
+                } catch (\Throwable $e) { /* alert best-effort */ }
+                $hold = ($clean !== '' ? rtrim($clean) . "\n\n" : '')
+                      . "🙏 That's a *wholesale quantity* — our team will send you a *special bulk price* and confirm delivery shortly."
+                      . "\nWould you like it *delivered*, or will you *collect from " . $basisCity . "* yourself?";
+                try {
+                    $gateway->sendText($tenant->whatsapp_instance, $from, $hold);
+                    MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $hold, null, null, ['via' => 'ai', 'kind' => 'wholesale_hold']);
+                } catch (\Throwable $e) { /* best effort */ }
+                \App\Support\QuotationPipeline::stage($tenant->id, $from, 'wholesale_hold', true, (string) $doc['no'], 'big order — held for a staff wholesale price');
+                return ['reply' => '', 'sent' => true];
+            }
+
             // Text first, THEN the document, so the conversation reads in the right order on WhatsApp.
             if ($clean !== '') {
                 $gateway->sendText($tenant->whatsapp_instance, $from, $clean);
@@ -1162,6 +1224,7 @@ class AiBrain
         }
         $p .= "- If the customer asks for a quotation / quote / proforma, first make sure you know the exact product(s) and quantity(ies) — ask if it's unclear. Once you know them, emit the <<QUOTE>> line described below and the system builds & sends the branded PDF with exact totals. Never paste the prices yourself, and never send a quote with items the customer didn't ask for. CRITICAL: when the customer confirms or asks you to send the formal quotation, you MUST emit the <<QUOTE>> line in that same reply — saying \"preparing your quotation\" WITHOUT the <<QUOTE>> line does nothing (no PDF is generated). Do NOT compute or state any currency-conversion or USD total yourself in prose; emit <<QUOTE>> and the system prices it (in USD when the customer wants USD/export).\n";
         $p .= "- NEVER INVENT QUANTITIES OR SIZES. If the customer lists items WITHOUT saying how many — e.g. \"rice, oil, beans and sugar\" — you MUST ask \"how many (or how much) of each?\" and you MUST NOT emit a <<QUOTE>> line yet. Do not fill in amounts like \"50 bags\" or pack sizes like \"25kg\" that the customer never stated, and do not assume a pack/carton size the customer didn't give. Only put a quantity in <<QUOTE>> that the customer actually told you.\n";
+        $p .= "- LARGE / WHOLESALE ORDERS: for a big quantity (hundreds or thousands of units), do NOT promise or state a firm price yourself — say our team will send a special *wholesale* price, and ask whether they want it *delivered* or will *collect it themselves*. Still emit the <<QUOTE>> line so the system records it and alerts the owner. Also, do not promise a specific brand/product is available if you're unsure — say we'll confirm availability.\n";
         $p .= "- NEVER WRITE THE QUOTATION YOURSELF. Do NOT type out the quotation as a message, and NEVER invent a quotation number (e.g. \"Quotation ORD-Q...\") — only the system creates the numbered PDF. When the customer wants the quotation for a clear product (even just one, quantity 1), emit the <<QUOTE>> line in that same reply; keep your visible text to one short sentence like \"Sure — sending your quotation now 📄\". If you write \"quotation prepared/here is your quotation\" WITHOUT a <<QUOTE>> line, NO PDF is sent and the customer gets nothing.\n";
         $p .= "- If the customer sends an image (e.g. a product, a receipt, a damaged item), look at it and respond helpfully; for our products match it to the list, for payments confirm you've noted it and the team will verify.\n";
         if ((bool) $tenant->setting('send_product_images', true)) {
