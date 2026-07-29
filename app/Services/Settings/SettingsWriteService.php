@@ -57,6 +57,8 @@ final class SettingsWriteService
         'vat_enabled',          // charge VAT / sales tax (never hardcoded)
         'prices_include_vat',   // catalogue prices are VAT-inclusive
         'task_reminders',       // twice-daily WhatsApp task reminders to assignees
+        'combo_recommendations', // bot "Goes well with" / "Often bought together" cross-sell suggestions
+        'send_product_images',   // bot sends product photos with replies
         // Storefront: per-model show/hide toggles (default on). Read by StorefrontController.
         'show_model_boxer100', 'show_model_boxer125hd', 'show_model_boxer150',
         'show_model_boxer125x', 'show_model_ct125hd', 'show_model_boxer150x',

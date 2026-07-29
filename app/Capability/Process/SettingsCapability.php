@@ -100,6 +100,21 @@ final class SettingsCapability implements ProcessCapability
             ['Guidance', $ledgerOn ? ($liveStockOn ? 'Fully live.' : 'Building up — switch on “live stock” once your on-hand counts are trusted.') : 'Turn the ledger on to start accumulating real stock from goods receipts.'],
         ]];
 
+        // --- bot automation toggles (item suggestions, product photos) ---
+        $comboOn = (bool) $t->setting('combo_recommendations', true);
+        $photosOn = (bool) $t->setting('send_product_images', true);
+        $editAutomation = [
+            'key' => 'edit_automation', 'label' => 'Bot suggestions & photos', 'method' => 'POST', 'endpoint' => $ep . '/save_settings', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['combo_recommendations' => 'enum:off,on', 'send_product_images' => 'enum:off,on'],
+            'labels' => ['combo_recommendations' => 'Item suggestions ("Goes well with" / "Often bought together")', 'send_product_images' => 'Send product photos with replies'],
+            'prefill' => ['combo_recommendations' => $comboOn ? 'on' : 'off', 'send_product_images' => $photosOn ? 'on' : 'off'],
+        ];
+        $automationCard = ['kind' => 'dl', 'title' => 'Bot automation', 'rows' => [
+            ['Item suggestions', $comboOn ? 'On — "Goes well with" & combos' : 'Off — no cross-sell suggestions'],
+            ['Product photos', $photosOn ? 'On — sends product images' : 'Off — text only'],
+            ['Note', 'Item suggestions learn from real past orders and can lift basket size; turn off if you don\'t want the bot cross-selling.'],
+        ]];
+
         // --- display cards ---
         $profileCard = ['kind' => 'dl', 'title' => 'Business profile', 'rows' => [
             ['Business name', $name],
@@ -202,7 +217,7 @@ final class SettingsCapability implements ProcessCapability
                 ['key' => 'mode', 'label' => 'Report mode', 'value' => $mode === 'original' ? 'Original' : 'Consolidated'],
                 ['key' => 'terms', 'label' => 'Payment terms', 'value' => ($s('invoice_terms_days', '0') ?: '0') . ' days'],
             ])
-            ->quickActions([$editProfile, $editCurrency, $editRates, $editInvoicing, $editDocuments, $connectWa, $editBot, $addMember])
+            ->quickActions([$editProfile, $editCurrency, $editRates, $editInvoicing, $editDocuments, $connectWa, $editBot, $editAutomation, $addMember])
             ->overviewCards([$profileCard, $currencyCard, $invoiceCard])
             ->tabSections([
                 'business' => [$profileCard],
@@ -210,7 +225,7 @@ final class SettingsCapability implements ProcessCapability
                 'invoicing' => [$invoiceCard],
                 'documents' => [$documentsCard],
                 'inventory' => [$stockCard],
-                'whatsapp' => [$connCard, $botCard],
+                'whatsapp' => [$connCard, $botCard, $automationCard],
                 'team' => [$teamCard, $teamNote],
             ])
             ->tabs([
@@ -224,7 +239,7 @@ final class SettingsCapability implements ProcessCapability
                 ['key' => 'team', 'label' => 'Team', 'count' => $members->count()],
             ])
             ->actions([$editProfile])
-            ->more([$editStock, $editCurrency, $editRates, $editInvoicing, $editDocuments, $connectWa, $editBot, $addMember])
+            ->more([$editStock, $editAutomation, $editCurrency, $editRates, $editInvoicing, $editDocuments, $connectWa, $editBot, $addMember])
             ->meta(['capability' => 'settings', 'ttl' => 20, 'layout' => 'record', 'listKey' => 'settings', 'permissions' => []]);
     }
 
