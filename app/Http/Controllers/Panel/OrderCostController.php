@@ -262,6 +262,17 @@ class OrderCostController extends Controller
 
         $raw   = $request->input('lines');
         $lines = is_array($raw) ? $raw : json_decode((string) $raw, true);
+        // Single-line convenience: a flat product_id/qty/unit_cost (e.g. the supplier screen's
+        // "Buy product" action) is wrapped into one line so the same product-linked pipeline runs.
+        if (! is_array($lines) || ! count($lines)) {
+            $pid   = (int) $request->input('product_id', 0);
+            $fqty  = (float) $request->input('qty', 0);
+            $funit = (float) $request->input('unit_cost', 0);
+            $fname = trim((string) $request->input('name', ''));
+            if ($fqty > 0 && $funit >= 0 && ($pid > 0 || $fname !== '')) {
+                $lines = [['product_id' => $pid ?: null, 'qty' => $fqty, 'unit_cost' => $funit, 'name' => $fname]];
+            }
+        }
         if (! is_array($lines) || ! count($lines)) return response()->json(['ok'=>false,'error'=>'no_lines'],422);
 
         $payStatus = strtolower((string) $request->input('pay_status','cash')) === 'credit' ? 'credit' : 'cash';

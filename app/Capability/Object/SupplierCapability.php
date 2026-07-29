@@ -68,6 +68,15 @@ final class SupplierCapability implements ObjectCapability
         if ($me !== '') { $members = array_values(array_unique(array_merge([$me], $members))); }
         $comboPeople = 'combo:' . (count($members) ? implode('|', $members) : ($me ?: 'Me'));
 
+        // --- product pick-list (name → id) so a purchase on THIS supplier links to a catalogue product ---
+        $prodMap = []; $prodNames = [];
+        foreach (\App\Models\Product::where('tenant_id', $t)->whereNull('archived_at')->orderBy('name')->limit(1000)->get(['id', 'name']) as $p) {
+            $nm = trim((string) $p->name);
+            if ($nm === '' || isset($prodMap[$nm])) continue;
+            $prodMap[$nm] = $p->id; $prodNames[] = $nm;
+        }
+        $productCombo = 'combo:' . (count($prodNames) ? implode('|', $prodNames) : 'Product');
+
         // --- purchases (bills) list with edit/delete per row ---
         $bills = OrderCost::where('tenant_id', $t)->where('supplier_id', $s->id)
             ->where('stage', '!=', 'supplier_payment')->orderByDesc('id')->limit(100)->get();
@@ -136,6 +145,16 @@ final class SupplierCapability implements ObjectCapability
             'body' => ['stage' => 'purchase', 'supplier_id' => $s->id],
             'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
             'autoNote' => ['template' => 'Purchase from ' . $s->name, 'watch' => []]];
+        // Product-linked purchase: pick a catalogue product + qty + unit cost. Posts to /papi/purchases,
+        // which books the cost to THIS supplier (credit/cash), links the product, and updates its cost.
+        $buyProduct = ['key' => 'record_product_purchase', 'label' => 'Buy product', 'method' => 'POST', 'endpoint' => '/papi/purchases', 'actor' => 'human', 'tone' => 'primary',
+            'schema' => ['product' => $productCombo, 'qty' => 'number', 'unit_cost' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'pay_status' => 'enum:credit,cash', 'holder' => $comboPeople],
+            'labels' => ['product' => 'Product (from your catalogue)', 'qty' => 'Quantity (e.g. cartons / bags)', 'unit_cost' => 'Cost per unit', 'rate_to_usd' => 'Rate (native per $1)', 'pay_status' => 'Credit (owe) or cash (paid now)', 'holder' => 'Paid by (if cash)'],
+            'prefill' => ['currency' => $baseCur, 'rate_to_usd' => $rateMap[$baseCur] ?? 1, 'pay_status' => 'credit', 'holder' => $me],
+            'body' => ['supplier_id' => $s->id, 'update_cost' => true],
+            'valueMap' => ['field' => 'product', 'into' => 'product_id', 'map' => $prodMap, 'error' => 'Pick a product from the list (or add it in Products first).'],
+            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
+            'autoNote' => ['template' => 'Bought: {product}', 'watch' => ['product']]];
         $paySupplier = ['key' => 'pay_supplier', 'label' => 'Pay supplier', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'default',
             'schema' => ['amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'holder' => $comboPeople, 'note' => 'text'],
             'labels' => ['amount' => 'Amount paid', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => 'Paid by (whose cash)', 'note' => 'Note'],
@@ -153,8 +172,8 @@ final class SupplierCapability implements ObjectCapability
             'confirm' => 'Send ' . $s->name . '\'s statement as a WhatsApp document to ' . ($s->phone ? $s->phone : 'the owner number') . '?'];
         $deleteSup = ['key' => 'delete_supplier', 'label' => 'Delete supplier', 'tone' => 'danger', 'post' => '/papi/suppliers/' . $s->id . '/delete', 'confirm' => 'Delete supplier ' . $s->name . '? (kept & deactivated if it has history)'];
 
-        $header = $canEdit ? [$recordBill, $paySupplier] : [];
-        $quick = $canEdit ? [$recordBill, $paySupplier, $statement, $editSupplier] : [$statement];
+        $header = $canEdit ? [$buyProduct, $recordBill, $paySupplier] : [];
+        $quick = $canEdit ? [$buyProduct, $recordBill, $paySupplier, $statement, $editSupplier] : [$statement];
         $more = $canEdit ? [$statement, $sendStatement, $editSupplier, $deleteSup] : [$statement];
 
         return (new WorkspacePayload)
