@@ -13,9 +13,20 @@ final class MoneyTimingCapability
     /** @return array{cash:float,receivable:float,payable:float,runway:?int} */
     public function position(CapabilityContext $ctx): array
     {
+        // Cash on hand across ALL currencies, valued in USD (cost basis) — the same figure the Books
+        // screen and /papi/finance-overview report and the audit reconciled to. The frozen CashService
+        // intentionally returns per-currency NATIVE balances (its "one rule"), and its no-arg balance()
+        // defaults to the USD wallet ONLY — which under-reported a multi-currency trader's real cash by
+        // ignoring UGX + SSP holdings. Totalling to USD is a reporting concern, so we do it here in the
+        // capability layer rather than changing CashService. IN_STAGES reused so the sign rule stays shared.
         $cash = 0.0;
         try {
-            $cash = (float) (new CashService($ctx->tenant))->balance([]);
+            foreach (OrderCost::where('tenant_id', $ctx->tenantId())
+                        ->whereNotIn('status', ['void', 'rejected'])
+                        ->where(fn ($w) => $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status'))
+                        ->get(['stage', 'usd_amount']) as $c) {
+                $cash += (in_array((string) $c->stage, CashService::IN_STAGES, true) ? 1 : -1) * (float) $c->usd_amount;
+            }
         } catch (\Throwable $e) {
             $cash = 0.0;
         }

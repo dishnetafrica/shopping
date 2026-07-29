@@ -49,8 +49,15 @@ No migration needed (config lives in the existing tenant settings JSON).
 Remove the one `$r->register(new BooksCapability()...)` line (or delete the two files) and
 `php artisan config:clear`. Nothing else is affected — it's a read-only screen.
 
+## Also in this package: Finance "Cash on hand" tile now counts all currencies
+- File: `app/Capability/Shared/MoneyTimingCapability.php`
+- The Finance dashboard tile (and Morning Briefing) previously showed the **USD wallet only**,
+  ignoring UGX + SSP cash. It now totals all three currencies in USD — the same figure as Books
+  and the audit. **Expect the tile to jump** from ~$2,207 to ~$4,949, and Runway to recalculate
+  accordingly. This is a display/reporting fix; no ledger data changes. The frozen `CashService`
+  is untouched (the USD-total is done in the capability layer, per its design note).
+
 ## Notes
 - **Inventory** is the manual value you set, until purchases are logged against products; then it
   can go live. Every other line is already live.
-- **Cash here is higher than the Finance tile** because the Finance "Cash on hand" tile shows only
-  the **USD wallet**; Books totals USD+UGX+SSP in USD (the correct figure for a balance sheet).
+- After this fix, **Books cash and the Finance tile agree** (both all-currency USD).
