@@ -599,12 +599,13 @@ class AiBrain
     {
         $town = trim($delivery);
         if ($town === '') return '';
-        $free = array_values(array_filter(array_map('trim', explode(',', (string) $tenant->setting('free_delivery_towns', 'Juba')))));
+        $free = array_values(array_filter(array_map('trim', explode(',', (string) $tenant->setting('free_delivery_towns',
+            'Juba, Konyo Konyo, Custom, Jebel, Munuki, Gudele, Hai, Malakia, Gumbo, Sherikat, Thongping, Nimra Talata, Suk')))));
         foreach ($free as $f) {
-            if ($f !== '' && stripos($town, $f) !== false) return "\n\u{2705} Delivery to " . $town . " is *free*.";
+            if ($f !== '' && stripos($town, $f) !== false) return "\n\u{2705} Delivery to " . $town . " is *free* (from our store).";
         }
-        $city = trim((string) $tenant->setting('export_basis_city', 'Kampala')) ?: 'Kampala';
-        return "\n\u{1F69A} Transport to " . $town . " is arranged separately — our team will confirm the cost, or you can collect from " . $city . ".";
+        $from = trim((string) $tenant->setting('delivery_from_city', 'Juba')) ?: 'Juba';
+        return "\n\u{1F69A} " . $town . " is outside our free-delivery area — our team will confirm the transport from our " . $from . " store, or you can collect from " . $from . ".";
     }
 
     private function captureOrder(Tenant $tenant, Conversation $convo, string $from, string $reply): string
@@ -958,10 +959,11 @@ class AiBrain
             // prices ARE the local/Juba price (no conversion).
             $terms   = trim((string) $tenant->setting('quote_terms', ''));
             $basisCity = trim((string) $tenant->setting('export_basis_city', 'Kampala')) ?: 'Kampala';
+            $deliverFrom = trim((string) $tenant->setting('delivery_from_city', 'Juba')) ?: 'Juba';
             $tail    = $terms !== ''
                 ? ' — ' . $terms
                 : (($ss && $cur === 'USD' && ! $pricer->isNativeBasis($tenant))
-                    ? " — price is ex-{$basisCity}; onward transport to your town is arranged after the order (tell us your usual transporter, or if you'll collect)."
+                    ? " — goods available at our {$deliverFrom} store; delivery within {$deliverFrom} is free, and onward transport to any other town is arranged after the order (tell us your usual transporter, or if you'll collect from {$deliverFrom})."
                     : " and we'll arrange delivery.");
             $caption = "📄 Quotation {$doc['no']} — Total {$cur} {$amt}. Valid {$days} days. Reply to confirm" . $tail;
 
@@ -983,7 +985,7 @@ class AiBrain
                 } catch (\Throwable $e) { /* alert best-effort */ }
                 $hold = ($clean !== '' ? rtrim($clean) . "\n\n" : '')
                       . "🙏 That's a *wholesale quantity* — our team will send you a *special bulk price* and confirm delivery shortly."
-                      . "\nWould you like it *delivered*, or will you *collect from " . $basisCity . "* yourself?";
+                      . "\nWould you like it *delivered*, or will you *collect from our " . (trim((string) $tenant->setting('delivery_from_city', 'Juba')) ?: 'Juba') . " store* yourself?";
                 try {
                     $gateway->sendText($tenant->whatsapp_instance, $from, $hold);
                     MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $hold, null, null, ['via' => 'ai', 'kind' => 'wholesale_hold']);
@@ -1203,6 +1205,7 @@ class AiBrain
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
         $p .= "- Each PRODUCT shows a stock tag in [brackets]. Reflect it honestly: \"in stock: N\" → you may say it's available (you can state N); \"usually available — confirm\" → say it's usually available but you'll confirm before placing the order; \"stock unknown — confirm before promising\" → do NOT promise availability, say you'll confirm with the team first; \"OUT OF STOCK\" → tell the customer it's currently unavailable and offer to note it. Never state a stock number that isn't shown as \"in stock: N\".\n";
         $basisCity = trim((string) $tenant->setting('export_basis_city', 'Kampala')) ?: 'Kampala';
+        $deliverFrom = trim((string) $tenant->setting('delivery_from_city', 'Juba')) ?: 'Juba';
         $usdRate = (float) $tenant->setting('usdUgx', 0);
         // E3.4 — quote at the canonical FX rate when fx_v2 is on so the bot's stated rate matches the
         // invoice/ledger rate. Flag OFF (default) => legacy usdUgx (unchanged). Gate (usdUgx>0) preserved.
@@ -1214,11 +1217,11 @@ class AiBrain
             $ssPct = (float) $tenant->setting('ssMarkupPct', 0);
             $rateStr = rtrim(rtrim(number_format($usdRate, 2), '0'), '.');
             $p .= "- PRICING & CURRENCY: base prices are UGX, and you DO know the exchange rate — 1 USD = {$rateStr} UGX. If the customer asks for a USD price, or mentions export or a South Sudan destination (Juba OR any other town), you can quote in USD: emit the <<QUOTE>> line as usual and the system converts at this rate"
-                . ($ssPct > 0 ? " and applies the South Sudan markup" : "") . " and sends the PDF. The USD price is ex-{$basisCity} (goods ready at our {$basisCity} point); onward transport to the customer's own town is arranged AFTER the order and is NOT in the quote. NEVER say you don't have the exchange rate or that it needs confirming — you have it.\n";
+                . ($ssPct > 0 ? " and applies the South Sudan markup" : "") . " and sends the PDF. The USD price is the listed price with goods available at our {$deliverFrom} store; delivery within {$deliverFrom} is FREE, and onward transport to any OTHER town is arranged AFTER the order and is NOT in the quote. NEVER say you don't have the exchange rate or that it needs confirming — you have it.\n";
         }
         // South Sudan cities awareness + salesperson-style logistics discovery.
-        $p .= "- SOUTH SUDAN IS MORE THAN JUBA: Wau, Malakal, Bor, Yei, Aweil, Bentiu, Rumbek, Torit, Kuajok, Renk, Nimule, Nasir, Maridi, Yambio, Bentiu and others are ALL in South Sudan. Treat any of them (or 'South Sudan' / 'export') as a South Sudan destination priced in USD ex-{$basisCity}. NEVER assume the goods are delivered free to their town, and never invent a delivery fee.\n";
-        $p .= "- LEARN THEIR ROUTE (act like a real salesperson): once the items are agreed and the customer is NOT in {$basisCity}, ask ONE short, warm question about how they normally receive goods — for example: \"Do you have a transporter or route you use from {$basisCity}, or will you send someone to collect from our {$basisCity} store?\" Then use their answer: if they have a transporter/route, tell them we'll hand the goods to it in {$basisCity} on their behalf; if they'll collect, confirm the {$basisCity} pickup point. ALWAYS record their delivery method, transporter name and any contact in the ORDER note so our team can arrange it. Let their route decide the onward cost — don't force a delivery fee.\n";
+        $p .= "- SOUTH SUDAN IS MORE THAN JUBA: Wau, Malakal, Bor, Yei, Aweil, Bentiu, Rumbek, Torit, Kuajok, Renk, Nimule, Nasir, Maridi, Yambio and others are ALL in South Sudan, and are NOT the same as {$deliverFrom}. Delivery within {$deliverFrom} and its markets/areas (e.g. Konyo Konyo, Custom, Jebel, Munuki, Gudele) is FREE from our {$deliverFrom} store. For any OTHER South Sudan town, the goods go from our {$deliverFrom} store and onward transport is arranged separately (negotiated per shipment) — do NOT promise free delivery to those towns, and never invent a delivery fee.\n";
+        $p .= "- LEARN THEIR ROUTE (act like a real salesperson): once the items are agreed and the customer is in a town OTHER than {$deliverFrom}, ask ONE short, warm question about how they normally receive goods — for example: \"Do you have a transporter or route you use, or will you send someone to collect from our {$deliverFrom} store?\" Then use their answer: if they have a transporter/route, tell them we'll hand the goods to it from our {$deliverFrom} store on their behalf; if they'll collect, confirm our {$deliverFrom} store as the pickup point. ALWAYS record their delivery method, transporter name and any contact in the ORDER note so our team can arrange it. Let their route decide the onward cost — don't force a delivery fee. NEVER tell a customer to collect from Kampala.\n";
         $p .= "- Never invent, promise, or imply a discount, \"bulk price\" or \"special price\". Quote the listed prices. If the customer asks for a bulk discount and none is offered, say the price is as listed and offer a formal quotation — the team can review bulk pricing separately. Do not claim a discount exists unless it is actually shown here.\n";
         $p .= "- Some items show \"price on request\" (e.g. jumbo parent reels) — these have no fixed price. Don't guess a figure: capture what they need (type, grade, GSM, quantity, origin) and tell them the team will send a quote.\n";
         $p .= "- Use the recent conversation for context; don't re-ask what the customer already told you.\n";
@@ -1243,7 +1246,7 @@ class AiBrain
         $p .= "- If the customer asks for a quotation / quote / proforma, first make sure you know the exact product(s) and quantity(ies) — ask if it's unclear. Once you know them, emit the <<QUOTE>> line described below and the system builds & sends the branded PDF with exact totals. Never paste the prices yourself, and never send a quote with items the customer didn't ask for. CRITICAL: when the customer confirms or asks you to send the formal quotation, you MUST emit the <<QUOTE>> line in that same reply — saying \"preparing your quotation\" WITHOUT the <<QUOTE>> line does nothing (no PDF is generated). Do NOT compute or state any currency-conversion or USD total yourself in prose; emit <<QUOTE>> and the system prices it (in USD when the customer wants USD/export).\n";
         $p .= "- NEVER INVENT QUANTITIES OR SIZES. If the customer lists items WITHOUT saying how many — e.g. \"rice, oil, beans and sugar\" — you MUST ask \"how many (or how much) of each?\" and you MUST NOT emit a <<QUOTE>> line yet. Do not fill in amounts like \"50 bags\" or pack sizes like \"25kg\" that the customer never stated, and do not assume a pack/carton size the customer didn't give. Only put a quantity in <<QUOTE>> that the customer actually told you.\n";
         $p .= "- LARGE / WHOLESALE ORDERS: for a big quantity (hundreds or thousands of units), do NOT promise or state a firm price yourself — say our team will send a special *wholesale* price, and ask whether they want it *delivered* or will *collect it themselves*. Still emit the <<QUOTE>> line so the system records it and alerts the owner. Also, do not promise a specific brand/product is available if you're unsure — say we'll confirm availability.\n";
-        $p .= "- DELIVERY: delivery to " . (trim((string) $tenant->setting('free_delivery_towns', 'Juba')) ?: 'Juba') . " is FREE (included in the price). For any OTHER town (Wau, etc.), transport is arranged separately and negotiated per shipment — tell the customer our team will confirm the transport cost, or they can collect from " . (trim((string) $tenant->setting('export_basis_city', 'Kampala')) ?: 'Kampala') . ". NEVER quote a transport/freight price yourself.\n";
+        $p .= "- DELIVERY: we deliver from our {$deliverFrom} store. Delivery within {$deliverFrom} and its markets/areas (Konyo Konyo, Custom, Jebel, Munuki, Gudele, etc.) is FREE. For any OTHER town (Wau, Malakal, etc.), transport from our {$deliverFrom} store is arranged separately and negotiated — tell the customer our team will confirm the transport cost, or they can collect from our {$deliverFrom} store. NEVER tell a customer to collect from Kampala, and never quote a transport/freight price yourself.\n";
         $p .= "- NEVER WRITE THE QUOTATION YOURSELF. Do NOT type out the quotation as a message, and NEVER invent a quotation number (e.g. \"Quotation ORD-Q...\") — only the system creates the numbered PDF. When the customer wants the quotation for a clear product (even just one, quantity 1), emit the <<QUOTE>> line in that same reply; keep your visible text to one short sentence like \"Sure — sending your quotation now 📄\". If you write \"quotation prepared/here is your quotation\" WITHOUT a <<QUOTE>> line, NO PDF is sent and the customer gets nothing.\n";
         $p .= "- If the customer sends an image (e.g. a product, a receipt, a damaged item), look at it and respond helpfully; for our products match it to the list, for payments confirm you've noted it and the team will verify.\n";
         if ((bool) $tenant->setting('send_product_images', true)) {

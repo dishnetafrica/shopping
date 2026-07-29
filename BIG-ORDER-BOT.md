@@ -24,7 +24,8 @@ handles big orders and product availability more carefully in its own wording.
 |---|---|---|
 | `bot_wholesale_threshold_usd` | `5000` | Orders at/above this USD value are treated as wholesale. Set `0` to disable. |
 | `owner_alert_phone` | (your number) | Where the "Big order lead" WhatsApp goes. **Must be set** for the alert to reach you — it uses the same owner-alert numbers as your other notifications. |
-| `free_delivery_towns` | `Juba` | Comma list of towns that get **free delivery**. Every other town → transport is negotiated per shipment (the bot never quotes a freight price itself). Add towns like `Juba, Yei` to extend. |
+| `free_delivery_towns` | `Juba, Konyo Konyo, Custom, Jebel, Munuki, Gudele, …` | Comma list of places that get **free delivery** (Juba + its markets/areas). Every other town → transport negotiated per shipment. Add any Juba area a customer types that isn't listed. |
+| `delivery_from_city` | `Juba` | The store you **deliver from / customers collect from**. The bot uses this everywhere it talks about delivery or pickup — it will **never** tell a customer to collect from Kampala (Kampala is only where you source). |
 
 To change the threshold later, set `bot_wholesale_threshold_usd` in the tenant settings (e.g. to
 3000 or 10000). No code change needed.
@@ -47,14 +48,18 @@ normal quotation. Check the quotation record shows the `wholesale` flag.
 Set `bot_wholesale_threshold_usd = 0` in settings — the guard switches off and the bot reverts to
 its previous behaviour immediately, no redeploy needed.
 
-## Delivery / transport rule (now handled)
-The bot now follows your model automatically on every quote:
-- **Juba → free.** It tells the customer "Delivery to Juba is free."
-- **Any other town (Wau, etc.) → negotiated.** It says transport is arranged separately and our
-  team will confirm the cost (or they can collect from Kampala). It never invents a freight price.
+## Delivery / transport rule (Juba-store model)
+The bot delivers **from your Juba store**, and follows your model automatically on every quote and in
+free conversation:
+- **Juba + its markets/areas (Konyo Konyo, Custom, Jebel, Munuki, Gudele, …) → free.**
+- **Any other South Sudan town (Wau, Malakal, etc.) → negotiated.** Goods go from your Juba store; the
+  team confirms transport, or the customer collects from **Juba** (never Kampala). It never invents a freight price.
 
-Change the free towns anytime via the `free_delivery_towns` setting. The bot's own wording follows
-the same rule (added to its instructions), so it also answers naturally mid-conversation.
+Fix included this round: the bot used to treat every South Sudan address — even Juba's own markets like
+**Konyo Konyo** — as "priced ex-Kampala, collect from Kampala." It now recognises Juba's areas as free and
+always refers to your **Juba store** for delivery/pickup. Kampala is treated purely as where you *buy*,
+never mentioned to customers. Extend the free areas via `free_delivery_towns`; set your store city via
+`delivery_from_city`.
 
 ## Not included (say the word and I'll add)
 - A visible **"Wholesale" badge** on the Quotations list (right now the flag lives in the record's
