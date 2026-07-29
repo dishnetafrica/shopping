@@ -133,7 +133,7 @@ final class QuotationCapability implements ObjectCapability
 
         $docs = [];
         if ($q->pdf_path) {
-            $docs[] = ['type' => 'quotation', 'title' => 'Quotation ' . $q->quote_no . ' (PDF)', 'url' => $this->publicUrl((string) $q->pdf_path)];
+            $docs[] = ['type' => 'quotation', 'title' => 'Quotation ' . $q->quote_no . ' (PDF)', 'url' => '/papi/quotation-pdf?id=' . $q->id];
         }
 
         $rail = [
