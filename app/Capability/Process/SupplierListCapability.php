@@ -97,8 +97,11 @@ final class SupplierListCapability implements ProcessCapability
                 'supplier' => ['value' => (string) ($s->name ?: $s->business_name ?: 'Supplier'), 'sub' => (string) ($s->contact_name ?: ''), 'avatar' => true],
                 'contact'  => (string) ($s->phone ?: $s->email ?: '—'),
                 'terms'    => $s->pay_term_days ? ('Net ' . $s->pay_term_days) : 'Cash',
+                // $owed is a USD figure (from PayablesCalculator) — always format it in the base/report
+                // currency, never the supplier's opening currency, or a $ amount gets mislabelled (e.g.
+                // AVION's opening currency is UGX, which showed "1,170 UGX" on a real value of $1,170).
                 'owed'     => $owed > 0
-                    ? ['value' => Money::fmt($owed, (string) ($s->opening_currency ?: $cur)), 'tone' => 'warn', 'sort' => $owed]
+                    ? ['value' => Money::fmt($owed, $cur), 'tone' => 'warn', 'sort' => $owed]
                     : ['value' => '—', 'sort' => 0],
                 'status'   => ['value' => $isActive ? 'Active' : 'Inactive', 'badge' => $isActive ? 'ok' : 'default'],
                 'act'      => ['buttons' => $rowBtns],
