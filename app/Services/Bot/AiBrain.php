@@ -576,17 +576,35 @@ class AiBrain
 
             $conf = "\n\n🙏 Thank you — that's a *wholesale quantity*! Our team will prepare a *special bulk price* for you"
                   . ($delivery !== '' ? " and confirm delivery to *{$delivery}*" : '') . '.';
-            $conf .= "\nTo price it right, would you like it *delivered*, or will you *collect from Kampala* yourself?";
+            $conf .= $delivery !== '' ? $this->deliveryNote($tenant, $delivery)
+                : "\nWhere should we deliver? Delivery to Juba is free; for other towns we'll confirm transport.";
             return $clean . $conf;
         }
 
         $totalTxt = number_format((float) ($quote['total'] ?? 0), \App\Services\Pricing::decimalsForCurrency($cur)) . ' ' . $cur;
         $conf = "\n\n📄 *Quotation" . ($qNo ? ' ' . $qNo : '') . " prepared*\n" . $itemsText;
         if (((float) ($quote['total'] ?? 0)) > 0) { $conf .= "\nEstimated total: " . $totalTxt; }
-        if ($delivery !== '') { $conf .= "\nDeliver to: " . $delivery; }
+        if ($delivery !== '') { $conf .= "\nDeliver to: " . $delivery . $this->deliveryNote($tenant, $delivery); }
         $conf .= "\nOur team will confirm availability & prices, then send you the order to complete. 🙏";
 
         return $clean . $conf;
+    }
+
+    /**
+     * Delivery-cost line for a destination. Free-delivery towns (setting free_delivery_towns, default
+     * "Juba") ship free; every other town is negotiated per shipment (the bot never quotes a freight
+     * price itself). Returns '' when no destination is known.
+     */
+    private function deliveryNote(Tenant $tenant, string $delivery): string
+    {
+        $town = trim($delivery);
+        if ($town === '') return '';
+        $free = array_values(array_filter(array_map('trim', explode(',', (string) $tenant->setting('free_delivery_towns', 'Juba')))));
+        foreach ($free as $f) {
+            if ($f !== '' && stripos($town, $f) !== false) return "\n\u{2705} Delivery to " . $town . " is *free*.";
+        }
+        $city = trim((string) $tenant->setting('export_basis_city', 'Kampala')) ?: 'Kampala';
+        return "\n\u{1F69A} Transport to " . $town . " is arranged separately — our team will confirm the cost, or you can collect from " . $city . ".";
     }
 
     private function captureOrder(Tenant $tenant, Conversation $convo, string $from, string $reply): string
@@ -1225,6 +1243,7 @@ class AiBrain
         $p .= "- If the customer asks for a quotation / quote / proforma, first make sure you know the exact product(s) and quantity(ies) — ask if it's unclear. Once you know them, emit the <<QUOTE>> line described below and the system builds & sends the branded PDF with exact totals. Never paste the prices yourself, and never send a quote with items the customer didn't ask for. CRITICAL: when the customer confirms or asks you to send the formal quotation, you MUST emit the <<QUOTE>> line in that same reply — saying \"preparing your quotation\" WITHOUT the <<QUOTE>> line does nothing (no PDF is generated). Do NOT compute or state any currency-conversion or USD total yourself in prose; emit <<QUOTE>> and the system prices it (in USD when the customer wants USD/export).\n";
         $p .= "- NEVER INVENT QUANTITIES OR SIZES. If the customer lists items WITHOUT saying how many — e.g. \"rice, oil, beans and sugar\" — you MUST ask \"how many (or how much) of each?\" and you MUST NOT emit a <<QUOTE>> line yet. Do not fill in amounts like \"50 bags\" or pack sizes like \"25kg\" that the customer never stated, and do not assume a pack/carton size the customer didn't give. Only put a quantity in <<QUOTE>> that the customer actually told you.\n";
         $p .= "- LARGE / WHOLESALE ORDERS: for a big quantity (hundreds or thousands of units), do NOT promise or state a firm price yourself — say our team will send a special *wholesale* price, and ask whether they want it *delivered* or will *collect it themselves*. Still emit the <<QUOTE>> line so the system records it and alerts the owner. Also, do not promise a specific brand/product is available if you're unsure — say we'll confirm availability.\n";
+        $p .= "- DELIVERY: delivery to " . (trim((string) $tenant->setting('free_delivery_towns', 'Juba')) ?: 'Juba') . " is FREE (included in the price). For any OTHER town (Wau, etc.), transport is arranged separately and negotiated per shipment — tell the customer our team will confirm the transport cost, or they can collect from " . (trim((string) $tenant->setting('export_basis_city', 'Kampala')) ?: 'Kampala') . ". NEVER quote a transport/freight price yourself.\n";
         $p .= "- NEVER WRITE THE QUOTATION YOURSELF. Do NOT type out the quotation as a message, and NEVER invent a quotation number (e.g. \"Quotation ORD-Q...\") — only the system creates the numbered PDF. When the customer wants the quotation for a clear product (even just one, quantity 1), emit the <<QUOTE>> line in that same reply; keep your visible text to one short sentence like \"Sure — sending your quotation now 📄\". If you write \"quotation prepared/here is your quotation\" WITHOUT a <<QUOTE>> line, NO PDF is sent and the customer gets nothing.\n";
         $p .= "- If the customer sends an image (e.g. a product, a receipt, a damaged item), look at it and respond helpfully; for our products match it to the list, for payments confirm you've noted it and the team will verify.\n";
         if ((bool) $tenant->setting('send_product_images', true)) {

@@ -24,6 +24,7 @@ handles big orders and product availability more carefully in its own wording.
 |---|---|---|
 | `bot_wholesale_threshold_usd` | `5000` | Orders at/above this USD value are treated as wholesale. Set `0` to disable. |
 | `owner_alert_phone` | (your number) | Where the "Big order lead" WhatsApp goes. **Must be set** for the alert to reach you — it uses the same owner-alert numbers as your other notifications. |
+| `free_delivery_towns` | `Juba` | Comma list of towns that get **free delivery**. Every other town → transport is negotiated per shipment (the bot never quotes a freight price itself). Add towns like `Juba, Yei` to extend. |
 
 To change the threshold later, set `bot_wholesale_threshold_usd` in the tenant settings (e.g. to
 3000 or 10000). No code change needed.
@@ -46,8 +47,15 @@ normal quotation. Check the quotation record shows the `wholesale` flag.
 Set `bot_wholesale_threshold_usd = 0` in settings — the guard switches off and the bot reverts to
 its previous behaviour immediately, no redeploy needed.
 
+## Delivery / transport rule (now handled)
+The bot now follows your model automatically on every quote:
+- **Juba → free.** It tells the customer "Delivery to Juba is free."
+- **Any other town (Wau, etc.) → negotiated.** It says transport is arranged separately and our
+  team will confirm the cost (or they can collect from Kampala). It never invents a freight price.
+
+Change the free towns anytime via the `free_delivery_towns` setting. The bot's own wording follows
+the same rule (added to its instructions), so it also answers naturally mid-conversation.
+
 ## Not included (say the word and I'll add)
 - A visible **"Wholesale" badge** on the Quotations list (right now the flag lives in the record's
   meta + bot trace, not as a list badge).
-- **Auto transport pricing** to Wau/Juba — the bot now *asks* delivered-vs-collect and hands the
-  transport quote to you; it doesn't yet calculate cross-border freight (that needs your route rates).
