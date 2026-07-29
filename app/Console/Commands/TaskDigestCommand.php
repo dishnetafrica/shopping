@@ -33,6 +33,10 @@ class TaskDigestCommand extends Command
             foreach ($tenants as $t) {
                 if (! WorkflowConfig::enabled($t)) continue;
 
+                // Scope the tenant global scope to THIS tenant — a console run has no TenantContext, so
+                // OrderTask/User queries would otherwise get `AND tenant_id = NULL` and return nothing.
+                app(\App\Support\TenantContext::class)->set($t->id);
+
                 $active = OrderTask::query()->where('tenant_id', $t->id)->whereIn('status', OrderTask::ACTIVE)->get();
 
                 $fieldStages = [];

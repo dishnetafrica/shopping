@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Tenant;
 use App\Services\Finance\CashbookExport;
 use App\Services\WhatsApp\WhatsAppManager;
+use App\Support\TenantContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -33,7 +34,7 @@ final class CashbookDigestCommand extends Command
 
     protected $description = 'Email + WhatsApp a daily cashbook digest (yesterday) to the owner.';
 
-    public function handle(WhatsAppManager $wa, CashbookExport $export): int
+    public function handle(WhatsAppManager $wa, CashbookExport $export, TenantContext $ctx): int
     {
         $tenants = $this->option('tenant')
             ? Tenant::where('id', (int) $this->option('tenant'))->get()
@@ -41,6 +42,12 @@ final class CashbookDigestCommand extends Command
 
         $sent = 0;
         foreach ($tenants as $t) {
+            // CRITICAL: scope the tenant global scope to THIS tenant. Without it, a console run has no
+            // TenantContext, so every OrderCost query (in CashbookExport) gets `AND tenant_id = NULL` and
+            // returns zero rows — which is why the digest read $0.00 with empty holders/movement while
+            // the raw-SQL ad line still showed numbers. Mirrors TaskReminderCommand.
+            $ctx->set($t->id);
+
             $to = trim((string) ($this->option('to') ?: $t->setting('cashbook_digest_to', '')));
             if ($to === '' && ! $this->option('force')) {
                 continue; // not opted in
