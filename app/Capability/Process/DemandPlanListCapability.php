@@ -89,7 +89,7 @@ final class DemandPlanListCapability implements ProcessCapability
             ->actions([[
                 'key' => 'create_plan', 'label' => 'New daily request', 'method' => 'POST',
                 'endpoint' => '/api/v1/workspace/demand.plans/_/create_plan', 'actor' => 'human', 'tone' => 'primary',
-                'schema' => ['plan_date' => 'text', 'transport_mode' => 'enum:bus,lorry', 'cover_days' => 'number', 'title' => 'text', 'shipment_ref' => 'text', 'autofill' => 'enum:Yes — suggest quantities,No — start empty'],
+                'schema' => ['plan_date' => 'date', 'transport_mode' => 'enum:bus,lorry', 'cover_days' => 'number', 'title' => 'text', 'shipment_ref' => 'text', 'autofill' => 'enum:Yes — suggest quantities,No — start empty'],
                 'labels' => ['plan_date' => 'Dispatch date (YYYY-MM-DD)', 'transport_mode' => 'Sending by', 'cover_days' => 'Days of demand to cover (1 = today only)', 'title' => 'Title (optional — auto from date & transport)', 'shipment_ref' => 'Shipment ref (optional, e.g. SJ-2026-015)', 'autofill' => 'Auto-suggest quantities from stock & sales?'],
                 'prefill' => ['plan_date' => now()->format('Y-m-d'), 'transport_mode' => 'bus', 'cover_days' => 1, 'autofill' => 'Yes — suggest quantities'],
             ]])

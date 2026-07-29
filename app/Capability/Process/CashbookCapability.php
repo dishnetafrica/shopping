@@ -169,9 +169,9 @@ final class CashbookCapability implements ProcessCapability
             if ($canEdit && $editable) {
                 $btns[] = ['icon' => 'edit', 'title' => 'Edit entry', 'action' => [
                     'key' => 'edit_cash', 'label' => 'Edit ' . ($stageLabels[$c->stage] ?? 'entry') . ' ' . $ref, 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook/' . $c->id . '/update', 'actor' => 'human', 'tone' => 'primary',
-                    'schema' => ['amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'category' => 'combo:' . self::CATEGORIES, 'holder' => $comboPeople, 'note' => 'text', 'created_date' => 'text'],
-                    'labels' => ['amount' => 'Amount', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => $isSupPay ? 'Paid by (whose cash)' : 'Held by', 'category' => 'Category', 'note' => 'Note', 'created_date' => 'Date & time (fix ordering; YYYY-MM-DD HH:MM)'],
-                    'prefill' => ['amount' => round($native, 2), 'currency' => $cur, 'rate_to_usd' => (float) $c->rate_to_usd, 'category' => (string) $c->category, 'holder' => (string) $c->holder, 'note' => (string) $c->note, 'created_date' => $when ? $when->format('Y-m-d H:i') : ''],
+                    'schema' => ['amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'category' => 'combo:' . self::CATEGORIES, 'holder' => $comboPeople, 'note' => 'text', 'created_date' => 'datetime'],
+                    'labels' => ['amount' => 'Amount', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => $isSupPay ? 'Paid by (whose cash)' : 'Held by', 'category' => 'Category', 'note' => 'Note', 'created_date' => 'Date & time (pick — fixes ordering)'],
+                    'prefill' => ['amount' => round($native, 2), 'currency' => $cur, 'rate_to_usd' => (float) $c->rate_to_usd, 'category' => (string) $c->category, 'holder' => (string) $c->holder, 'note' => (string) $c->note, 'created_date' => $when ? $when->format('Y-m-d\TH:i') : ''],
                     'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
                 ]];
                 $btns[] = ['icon' => 'trash', 'title' => 'Delete entry', 'tone' => 'danger', 'post' => '/papi/trade-cashbook/' . $c->id . '/delete',

@@ -77,7 +77,7 @@ final class WorkOrderCapability implements ObjectCapability
         $actions = [];
         if (! in_array($st, ['completed', 'cancelled'], true)) {
             $actions[] = ['key' => 'schedule', 'label' => 'Schedule', 'method' => 'POST', 'endpoint' => $base . '/schedule',
-                'actor' => 'human', 'schema' => ['scheduled_for' => 'text', 'assigned_to' => 'text'],
+                'actor' => 'human', 'schema' => ['scheduled_for' => 'datetime', 'assigned_to' => 'text'],
                 'labels' => ['scheduled_for' => 'Scheduled (e.g. ' . now()->addDay()->format('Y-m-d') . ' 10:00)', 'assigned_to' => 'Technician']];
             $actions[] = ['key' => 'add_items', 'label' => 'Add equipment', 'method' => 'POST', 'endpoint' => $base . '/items',
                 'actor' => 'human', 'schema' => ['serials' => 'text'],

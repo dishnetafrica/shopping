@@ -112,7 +112,7 @@ final class LeadListCapability implements ProcessCapability
         ];
 
         $addLead = ['key' => 'add_lead', 'label' => 'Add lead', 'queryWrite' => true, 'method' => 'GET', 'endpoint' => '/papi/lead-save', 'actor' => 'human', 'tone' => 'primary',
-            'schema' => ['name' => 'text', 'phone' => 'text', 'company' => 'text', 'interest' => 'text', 'source' => 'enum:' . self::SOURCES, 'status' => 'enum:' . self::STATUSES, 'lead_score' => 'number', 'tag' => 'text', 'next_followup' => 'text', 'notes' => 'text'],
+            'schema' => ['name' => 'text', 'phone' => 'text', 'company' => 'text', 'interest' => 'text', 'source' => 'enum:' . self::SOURCES, 'status' => 'enum:' . self::STATUSES, 'lead_score' => 'number', 'tag' => 'text', 'next_followup' => 'date', 'notes' => 'text'],
             'labels' => ['name' => 'Name', 'phone' => 'Phone (required)', 'interest' => 'Interest / what they want', 'lead_score' => 'Score (0–100)', 'next_followup' => 'Next follow-up (e.g. 2026-07-20)', 'notes' => 'Notes'],
             'prefill' => ['source' => 'manual', 'status' => 'new', 'lead_score' => 50]];
 
@@ -144,7 +144,7 @@ final class LeadListCapability implements ProcessCapability
         $fu = $l->next_followup_at ? Carbon::parse($l->next_followup_at)->format('Y-m-d') : '';
 
         return ['key' => 'edit_lead', 'label' => 'Edit lead — ' . ($l->customer_name ?: $l->customer_phone), 'queryWrite' => true, 'method' => 'GET', 'endpoint' => '/papi/lead-save', 'actor' => 'human', 'tone' => 'primary',
-            'schema' => ['name' => 'text', 'phone' => 'text', 'company' => 'text', 'interest' => 'text', 'source' => 'enum:' . self::SOURCES, 'status' => 'enum:' . self::STATUSES, 'lead_score' => 'number', 'tag' => 'text', 'next_followup' => 'text', 'notes' => 'text'],
+            'schema' => ['name' => 'text', 'phone' => 'text', 'company' => 'text', 'interest' => 'text', 'source' => 'enum:' . self::SOURCES, 'status' => 'enum:' . self::STATUSES, 'lead_score' => 'number', 'tag' => 'text', 'next_followup' => 'date', 'notes' => 'text'],
             'labels' => ['name' => 'Name', 'phone' => 'Phone', 'interest' => 'Interest', 'lead_score' => 'Score (0–100)', 'next_followup' => 'Next follow-up (YYYY-MM-DD, blank to clear)', 'notes' => 'Notes'],
             'prefill' => [
                 'name' => (string) $l->customer_name, 'phone' => (string) $l->customer_phone, 'company' => (string) $l->company,

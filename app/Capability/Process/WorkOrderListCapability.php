@@ -64,7 +64,7 @@ final class WorkOrderListCapability implements ProcessCapability
             'schema' => [
                 'type' => 'combo:installation|service|repair|inspection',
                 'customer_name' => 'text', 'customer_phone' => 'text', 'site_address' => 'text',
-                'scheduled_for' => 'text', 'assigned_to' => 'text', 'notes' => 'text',
+                'scheduled_for' => 'datetime', 'assigned_to' => 'text', 'notes' => 'text',
             ],
             'labels' => [
                 'type' => 'Job type', 'customer_name' => 'Customer name', 'customer_phone' => 'Customer WhatsApp',

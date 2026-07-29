@@ -66,7 +66,7 @@ final class ScheduledOrdersCapability implements ProcessCapability
                 'endpoint' => '/papi/schedule-order', 'actor' => 'human', 'tone' => 'primary',
                 'schema' => [
                     'order_id' => 'combo:'.$candidates->map(fn ($o) => $o->id.' — '.$o->order_no.' · '.$o->customer_name)->implode('|'),
-                    'when' => 'text',
+                    'when' => 'datetime',
                 ],
                 'labels' => [
                     'order_id' => 'Order to schedule',
@@ -76,7 +76,7 @@ final class ScheduledOrdersCapability implements ProcessCapability
         if ($queueCombo) {
             $actions[] = ['key' => 'reschedule', 'label' => 'Change a delivery time', 'method' => 'POST',
                 'endpoint' => '/papi/schedule-order', 'actor' => 'human',
-                'schema' => ['order_id' => 'combo:'.implode('|', array_slice($queueCombo, 0, 30)), 'when' => 'text'],
+                'schema' => ['order_id' => 'combo:'.implode('|', array_slice($queueCombo, 0, 30)), 'when' => 'datetime'],
                 'labels' => ['order_id' => 'Scheduled order', 'when' => 'New time (e.g. '.$now->copy()->addDay()->format('Y-m-d').' 14:00)']];
             $actions[] = ['key' => 'release', 'label' => 'Send now (unschedule)', 'method' => 'POST',
                 'endpoint' => '/papi/schedule-order', 'actor' => 'human',

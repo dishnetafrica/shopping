@@ -124,7 +124,7 @@ final class CampaignListCapability implements ProcessCapability
     private function editForm(?Campaign $c, string $comboCats, array $typeLabels, array $audLabels, string $business = 'Your business', string $curCode = 'UGX', int $curDec = 0): array
     {
         $isEdit = $c !== null;
-        $whenPrefill = ($isEdit && $c->scheduled_for) ? Carbon::parse($c->scheduled_for)->format('Y-m-d H:i') : '';
+        $whenPrefill = ($isEdit && $c->scheduled_for) ? Carbon::parse($c->scheduled_for)->format('Y-m-d\TH:i') : '';
 
         // On edit, resolve any already-attached products so the picker shows them as chips (with photos).
         $attached = [];
@@ -141,13 +141,13 @@ final class CampaignListCapability implements ProcessCapability
             'method' => 'POST', 'endpoint' => '/papi/campaign/save', 'actor' => 'human', 'tone' => 'primary',
             'schema' => [
                 'name' => 'text', 'type' => 'enum:' . self::TYPES, 'audience' => 'enum:' . self::AUDIENCES,
-                'category' => $comboCats, 'message' => 'textarea', 'cta' => 'text', 'image_url' => 'mediapick', 'scheduled_for' => 'text',
+                'category' => $comboCats, 'message' => 'textarea', 'cta' => 'text', 'image_url' => 'mediapick', 'scheduled_for' => 'datetime',
             ],
             'labels' => [
                 'name' => 'Campaign name', 'type' => 'Type', 'audience' => 'Send to (audience)',
                 'category' => 'Category (only if audience = "Bought a category")', 'message' => 'Message',
                 'cta' => 'Call to action', 'image_url' => 'Photo (pick a product, upload, or paste a link)',
-                'scheduled_for' => 'Schedule for (YYYY-MM-DD HH:MM · blank = save as draft)',
+                'scheduled_for' => 'Schedule for (pick a date & time · leave blank to save as draft)',
             ],
             // The picker reads these to seed chips on edit and to search/upload under the
             // campaigns permission (menu:customers) — NOT the products capability, which a
