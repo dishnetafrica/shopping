@@ -262,15 +262,23 @@ class OrderCostController extends Controller
 
         $raw   = $request->input('lines');
         $lines = is_array($raw) ? $raw : json_decode((string) $raw, true);
-        // Single-line convenience: a flat product_id/qty/unit_cost (e.g. the supplier screen's
-        // "Buy product" action) is wrapped into one line so the same product-linked pipeline runs.
+        // Flat-fields convenience (the supplier "Buy product" form): build the lines from up to four
+        // product slots — product/qty/unit_cost and product2../product3../product4.. — so several
+        // items can be bought in one bill. Slot 1 carries a mapped product_id; extra slots arrive as
+        // product NAMES, resolved to their catalogue id here. Existing multi-line callers are untouched.
         if (! is_array($lines) || ! count($lines)) {
-            $pid   = (int) $request->input('product_id', 0);
-            $fqty  = (float) $request->input('qty', 0);
-            $funit = (float) $request->input('unit_cost', 0);
-            $fname = trim((string) $request->input('name', ''));
-            if ($fqty > 0 && $funit >= 0 && ($pid > 0 || $fname !== '')) {
-                $lines = [['product_id' => $pid ?: null, 'qty' => $fqty, 'unit_cost' => $funit, 'name' => $fname]];
+            $lines = [];
+            foreach (['', '2', '3', '4'] as $sfx) {
+                $qty  = (float) $request->input('qty' . $sfx, 0);
+                $unit = (float) $request->input('unit_cost' . $sfx, 0);
+                if ($qty <= 0 || $unit < 0) continue;
+                $pname = trim((string) $request->input('product' . $sfx, ''));
+                $pid   = $sfx === '' ? (int) $request->input('product_id', 0) : 0;
+                if (! $pid && $pname !== '') {
+                    $pid = (int) (\App\Models\Product::where('tenant_id', $t->id)->where('name', $pname)->value('id') ?? 0);
+                }
+                if (! $pid && $pname === '') continue;
+                $lines[] = ['product_id' => $pid ?: null, 'qty' => $qty, 'unit_cost' => $unit, 'name' => $pname];
             }
         }
         if (! is_array($lines) || ! count($lines)) return response()->json(['ok'=>false,'error'=>'no_lines'],422);

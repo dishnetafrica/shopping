@@ -148,8 +148,18 @@ final class SupplierCapability implements ObjectCapability
         // Product-linked purchase: pick a catalogue product + qty + unit cost. Posts to /papi/purchases,
         // which books the cost to THIS supplier (credit/cash), links the product, and updates its cost.
         $buyProduct = ['key' => 'record_product_purchase', 'label' => 'Buy product', 'method' => 'POST', 'endpoint' => '/papi/purchases', 'actor' => 'human', 'tone' => 'primary',
-            'schema' => ['product' => $productCombo, 'qty' => 'number', 'unit_cost' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'pay_status' => 'enum:credit,cash', 'holder' => $comboPeople],
-            'labels' => ['product' => 'Product (from your catalogue)', 'qty' => 'Quantity (e.g. cartons / bags)', 'unit_cost' => 'Cost per unit', 'rate_to_usd' => 'Rate (native per $1)', 'pay_status' => 'Credit (owe) or cash (paid now)', 'holder' => 'Paid by (if cash)'],
+            'schema' => [
+                'product' => $productCombo, 'qty' => 'number', 'unit_cost' => 'money',
+                'product2' => $productCombo, 'qty2' => 'number', 'unit_cost2' => 'money',
+                'product3' => $productCombo, 'qty3' => 'number', 'unit_cost3' => 'money',
+                'product4' => $productCombo, 'qty4' => 'number', 'unit_cost4' => 'money',
+                'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'pay_status' => 'enum:credit,cash', 'holder' => $comboPeople],
+            'labels' => [
+                'product' => 'Product (from your catalogue)', 'qty' => 'Quantity (e.g. cartons / bags)', 'unit_cost' => 'Cost per unit',
+                'product2' => 'Product 2 (optional)', 'qty2' => 'Quantity 2', 'unit_cost2' => 'Cost per unit 2',
+                'product3' => 'Product 3 (optional)', 'qty3' => 'Quantity 3', 'unit_cost3' => 'Cost per unit 3',
+                'product4' => 'Product 4 (optional)', 'qty4' => 'Quantity 4', 'unit_cost4' => 'Cost per unit 4',
+                'rate_to_usd' => 'Rate (native per $1)', 'pay_status' => 'Credit (owe) or cash (paid now)', 'holder' => 'Paid by (if cash)'],
             'prefill' => ['currency' => $baseCur, 'rate_to_usd' => $rateMap[$baseCur] ?? 1, 'pay_status' => 'credit', 'holder' => $me],
             'body' => ['supplier_id' => $s->id, 'update_cost' => true],
             'valueMap' => ['field' => 'product', 'into' => 'product_id', 'map' => $prodMap, 'error' => 'Pick a product from the list (or add it in Products first).'],

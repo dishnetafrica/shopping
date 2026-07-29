@@ -8,6 +8,10 @@ free-text description, you can now **pick a product from your catalogue**, enter
 - **links the purchase to the product** (so purchases are no longer free text — the root fix for stock),
 - **updates the product's cost price** automatically.
 
+**Multiple items in one go:** the form has slots for **up to 4 products** (Product 2/3/4 are optional).
+Fill in as many as you bought from that supplier and hit Save once — each becomes its own product-linked
+line on the same purchase. Leave the extra slots blank to buy just one.
+
 The old **Record purchase** (money-only bill) button stays for odd costs you don't want in the catalogue
 (packaging charge, a transport fee, etc.).
 
