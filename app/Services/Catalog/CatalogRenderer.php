@@ -242,26 +242,37 @@ final class CatalogRenderer
         }
 
         $out = [];
-        $fetch = [];   // url => cache path (missing from disk cache)
+        $fetch = [];   // url => cache base path (missing from disk cache)
         foreach (array_keys($urls) as $u) {
-            $cache = 'catalog-thumbs/' . $tenant->id . '/' . md5($u) . '.jpg';
-            try {
-                $bytes = Storage::disk('public')->exists($cache) ? Storage::disk('public')->get($cache) : null;
-            } catch (\Throwable $e) {
-                $bytes = null;
+            $base = 'catalog-thumbs/' . $tenant->id . '/' . md5($u);
+            $hit = null;
+            foreach (['jpg' => 'image/jpeg', 'png' => 'image/png'] as $ext => $mime) {
+                try {
+                    if (Storage::disk('public')->exists("$base.$ext")) {
+                        $bytes = Storage::disk('public')->get("$base.$ext");
+                        if ($bytes) {
+                            $hit = 'data:' . $mime . ';base64,' . base64_encode($bytes);
+                        }
+                        break;
+                    }
+                } catch (\Throwable $e) {
+                    break;
+                }
             }
-            if ($bytes) {
-                $out[$u] = 'data:image/jpeg;base64,' . base64_encode($bytes);
+            if ($hit !== null) {
+                $out[$u] = $hit;
             } else {
-                $fetch[$u] = $cache;
+                $fetch[$u] = $base;
             }
         }
 
         foreach ($this->fetchMany(array_keys($fetch)) as $u => $raw) {
-            $jpeg = $raw !== null ? $this->normalise($raw) : null;
-            if ($jpeg !== null) {
-                try { Storage::disk('public')->put($fetch[$u], $jpeg); } catch (\Throwable $e) { /* cache only */ }
-                $out[$u] = 'data:image/jpeg;base64,' . base64_encode($jpeg);
+            $enc = $raw !== null ? $this->normalise($raw) : null;
+            if ($enc !== null) {
+                [$bytes, $mime] = $enc;
+                $ext = $mime === 'image/png' ? 'png' : 'jpg';
+                try { Storage::disk('public')->put($fetch[$u] . '.' . $ext, $bytes); } catch (\Throwable $e) { /* cache only */ }
+                $out[$u] = 'data:' . $mime . ';base64,' . base64_encode($bytes);
             } else {
                 $out[$u] = '';   // fetch/decode failed → drawn placeholder, never a broken-image box
             }
@@ -331,8 +342,8 @@ final class CatalogRenderer
         return $res;
     }
 
-    /** Contain-fit raw image bytes onto a white 4:3 canvas → JPEG bytes (null if undecodable). */
-    private function normalise(string $raw): ?string
+    /** Contain-fit raw image bytes onto a white 4:3 canvas → [bytes, mime] (null if undecodable). */
+    private function normalise(string $raw): ?array
     {
         if (! $this->decodable($raw)) {
             return null;   // would exhaust memory_limit mid-decode — a FATAL, not an exception
@@ -354,12 +365,62 @@ final class CatalogRenderer
             (int) ((self::THUMB_W - $dw) / 2), (int) ((self::THUMB_H - $dh) / 2), 0, 0, $dw, $dh, $sw, $sh);
         imagedestroy($src);
 
-        ob_start();
-        imagejpeg($canvas, null, 80);
+        $out = $this->encodeCanvas($canvas);
         imagedestroy($canvas);
-        $jpeg = ob_get_clean();
 
-        return $jpeg !== false && $jpeg !== '' ? $jpeg : null;
+        return $out;
+    }
+
+    /**
+     * Encode a GD canvas with the best encoder THIS PHP build has. Some containers compile GD
+     * without JPEG (docker-php-ext-install gd with no --with-jpeg — exactly the production
+     * fatal `Call to undefined function imagejpeg()`), so the ladder is:
+     * JPEG (best for photos) → Imagick-JPEG → 8-bit palette PNG (universally available).
+     *
+     * @return array{0:string,1:string}|null [bytes, mime]
+     */
+    private function encodeCanvas(\GdImage $canvas): ?array
+    {
+        if (function_exists('imagejpeg') && ! getenv('CATALOG_FORCE_NO_JPEG')) {
+            ob_start();
+            imagejpeg($canvas, null, 80);
+            $b = ob_get_clean();
+            if ($b) {
+                return [$b, 'image/jpeg'];
+            }
+        }
+        if (class_exists(\Imagick::class)) {
+            try {
+                ob_start();
+                imagepng($canvas, null, 1);
+                $png = ob_get_clean();
+                if ($png) {
+                    $im = new \Imagick();
+                    $im->readImageBlob($png);
+                    $im->setImageFormat('jpeg');
+                    $im->setImageCompressionQuality(80);
+                    $b = $im->getImagesBlob();
+                    $im->clear();
+                    if ($b) {
+                        return [$b, 'image/jpeg'];
+                    }
+                }
+            } catch (\Throwable $e) {
+                // fall through to PNG
+            }
+        }
+        if (function_exists('imagepng')) {
+            // 8-bit palette + dithering keeps photo thumbs ~40-70 KB instead of ~200 KB truecolor
+            imagetruecolortopalette($canvas, true, 255);
+            ob_start();
+            imagepng($canvas, null, 9);
+            $b = ob_get_clean();
+            if ($b) {
+                return [$b, 'image/png'];
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -399,13 +460,15 @@ final class CatalogRenderer
         if ($url === '') {
             return '';
         }
-        $mime = $asIs ? 'png' : 'jpg';
-        $cache = 'catalog-thumbs/' . $tenant->id . '/asset-' . md5($url . ($asIs ? ':raw' : ':' . $maxDim . ':' . ($cropRatio ?? 0))) . '.' . $mime;
+        $base = 'catalog-thumbs/' . $tenant->id . '/asset-' . md5($url . ($asIs ? ':raw' : ':' . $maxDim . ':' . ($cropRatio ?? 0)));
         try {
-            if (Storage::disk('public')->exists($cache)) {
-                $bytes = Storage::disk('public')->get($cache);
-                if ($bytes) {
-                    return 'data:image/' . ($asIs ? 'png' : 'jpeg') . ';base64,' . base64_encode($bytes);
+            foreach (['png' => 'image/png', 'jpg' => 'image/jpeg'] as $ext => $mime) {
+                if (Storage::disk('public')->exists("$base.$ext")) {
+                    $bytes = Storage::disk('public')->get("$base.$ext");
+                    if ($bytes) {
+                        return 'data:' . $mime . ';base64,' . base64_encode($bytes);
+                    }
+                    break;
                 }
             }
         } catch (\Throwable $e) {
@@ -416,9 +479,13 @@ final class CatalogRenderer
             return '';
         }
         if ($asIs || ! extension_loaded('gd')) {
-            try { Storage::disk('public')->put($cache, $raw); } catch (\Throwable $e) { }
+            $ext = $asIs ? 'png' : 'jpg';
+            try { Storage::disk('public')->put("$base.$ext", $raw); } catch (\Throwable $e) { }
 
             return 'data:image/' . ($asIs ? 'png' : 'jpeg') . ';base64,' . base64_encode($raw);
+        }
+        if (! $this->decodable($raw)) {
+            return '';
         }
 
         $src = @imagecreatefromstring($raw);
@@ -444,16 +511,16 @@ final class CatalogRenderer
             imagecopyresampled($dst, $src, 0, 0, 0, 0, $dw, $dh, $sw, $sh);
         }
         imagedestroy($src);
-        ob_start();
-        imagejpeg($dst, null, 84);
+        $enc = $this->encodeCanvas($dst);
         imagedestroy($dst);
-        $jpeg = ob_get_clean();
-        if (! $jpeg) {
+        if ($enc === null) {
             return '';
         }
-        try { Storage::disk('public')->put($cache, $jpeg); } catch (\Throwable $e) { }
+        [$bytes, $mime] = $enc;
+        $ext = $mime === 'image/png' ? 'png' : 'jpg';
+        try { Storage::disk('public')->put("$base.$ext", $bytes); } catch (\Throwable $e) { }
 
-        return 'data:image/jpeg;base64,' . base64_encode($jpeg);
+        return 'data:' . $mime . ';base64,' . base64_encode($bytes);
     }
 
     /** WhatsApp order QR: explicit setting wins; else generated once via quickchart and cached. */

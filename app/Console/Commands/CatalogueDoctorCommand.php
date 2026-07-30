@@ -45,7 +45,11 @@ final class CatalogueDoctorCommand extends Command
             . ' · max_execution_time=' . ini_get('max_execution_time'));
         $this->check('dompdf installed', class_exists(\Dompdf\Dompdf::class));
         $this->check('GD extension', extension_loaded('gd'));
-        $this->check('GD JPEG support', function_exists('imagecreatefromjpeg'));
+        $this->check('GD JPEG support', function_exists('imagejpeg'),
+            function_exists('imagejpeg') ? '' : 'thumbnails fall back to PNG/Imagick — rebuild with the updated Dockerfile (--with-jpeg) for best size');
+        $this->check('GD PNG support', function_exists('imagepng'));
+        $this->check('GD WebP support', function_exists('imagewebp'));
+        $this->check('Imagick extension', class_exists(\Imagick::class), class_exists(\Imagick::class) ? '' : 'optional');
         $this->check('curl extension', function_exists('curl_multi_init'));
 
         // 2. Storage probe (the thumb cache lives on the public disk)
@@ -122,7 +126,8 @@ final class CatalogueDoctorCommand extends Command
                     $this->line('  (none found in the last ' . count($tail) . ' log lines)');
                 }
             } else {
-                $this->line('  laravel.log not found at ' . $log);
+                $this->line('  laravel.log not found (LOG_CHANNEL=' . config('logging.default') . ') — logs go to the container stderr.');
+                $this->line('  See them with: docker logs <container> 2>&1 | grep -a CatalogRenderer | tail -12');
             }
         } catch (\Throwable $e) {
             $this->line('  could not read log: ' . $e->getMessage());

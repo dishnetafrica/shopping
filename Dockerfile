@@ -42,7 +42,11 @@ RUN composer dump-autoload --optimize --no-interaction --ignore-platform-reqs
 FROM php:8.3-fpm-bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends \
         nginx supervisor libpq-dev libzip-dev libpng-dev libonig-dev libicu-dev unzip \
+        libjpeg62-turbo-dev libwebp-dev libfreetype6-dev \
         postgresql-client \
+    # GD must be configured BEFORE install or it builds PNG-only (no imagejpeg() —
+    # exactly the fatal that broke catalogue thumbnails in production).
+    && docker-php-ext-configure gd --with-jpeg --with-webp --with-freetype \
     && docker-php-ext-install pdo pdo_pgsql pgsql gd zip intl bcmath opcache pcntl \
     && pecl install redis && docker-php-ext-enable redis \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
