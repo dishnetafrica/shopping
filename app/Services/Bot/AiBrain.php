@@ -51,6 +51,7 @@ class AiBrain
 
         $imageB64 = (string) ($media['imageB64'] ?? '');
         $mime     = (string) ($media['mime'] ?? 'image/jpeg');
+        $quoted   = trim((string) ($media['quoted'] ?? ''));
 
         // Nothing we can read (sticker / contact / empty) → ask politely instead of feeding junk to the AI.
         if (trim($text) === '' && $imageB64 === '') {
@@ -72,12 +73,19 @@ class AiBrain
         $prior = $this->historyMessages($tenant->id, $from, 12);
         if (! empty($prior) && end($prior)['role'] === 'user') array_pop($prior);
 
+        // The customer tapped Reply on one of OUR earlier messages: give the model that message
+        // as explicit context, so "it"/"this one"/"BUY" resolve to the right product or quotation.
+        $modelText = $text !== '' ? $text : '(no text)';
+        if ($quoted !== '') {
+            $modelText = '[Customer is REPLYING to this earlier message from us: "'
+                . mb_substr($quoted, 0, 240) . '"]' . "\n" . $modelText;
+        }
         $current = $imageB64 !== ''
             ? ['role' => 'user', 'content' => [
-                ['type' => 'text', 'text' => $text !== '' ? $text : '(customer sent an image — look at it and help)'],
+                ['type' => 'text', 'text' => $text !== '' ? $modelText : '(customer sent an image — look at it and help)'],
                 ['type' => 'image_url', 'image_url' => ['url' => "data:{$mime};base64,{$imageB64}"]],
               ]]
-            : ['role' => 'user', 'content' => $text !== '' ? $text : '(no text)'];
+            : ['role' => 'user', 'content' => $modelText];
 
         $planning = (bool) $tenant->setting('ai_planning', false);
         $messages = array_merge([['role' => 'system', 'content' => $this->systemPrompt($tenant)
@@ -649,6 +657,43 @@ class AiBrain
             return $clean; // nothing priceable — let the model's own text go out
         }
         $qArr = ['lines' => $lines, 'currency' => $cur, 'total' => (float) ($quote['total'] ?? 0)];
+
+        // One order = ONE quotation (real incident 2026-07-30: the same 630 USD order was
+        // re-quoted four times across three days while the customer kept saying "yes"). If we
+        // already quoted this customer this same total recently, they are CONFIRMING: flag the
+        // quotation, alert the owner ONCE to convert it, and never mint a duplicate.
+        try {
+            $recent = \App\Models\Quotation::where('tenant_id', $tenant->id)
+                ->where('customer_phone', preg_replace('/[^0-9]/', '', $from))
+                ->where('created_at', '>=', now()->subDays(3))
+                ->orderByDesc('id')->first();
+            if ($recent && abs((float) $recent->total - (float) ($quote['total'] ?? 0)) < 0.01) {
+                $meta = (array) ($recent->meta ?? []);
+                if (empty($meta['confirmed'])) {
+                    $meta['confirmed'] = true;
+                    $meta['confirmed_at'] = now()->toDateTimeString();
+                    if ($delivery !== '') $meta['delivery'] = $delivery;
+                    try { $recent->update(['meta' => $meta]); } catch (\Throwable $e) { }
+                    try {
+                        $who = ((string) ($convo->customer_name ?? '')) ?: $from;
+                        $alert = "\u{2705} *Customer confirmed quotation {$recent->quote_no}* — {$who}\n{$itemsText}"
+                            . "\nTotal: " . number_format((float) $recent->total, 2) . ' ' . $recent->currency
+                            . ($delivery !== '' ? "\nDeliver to: {$delivery}" : '')
+                            . "\nConvert it to an order from Quotations.";
+                        $gw = app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($tenant);
+                        foreach ($tenant->ownerAlertNumbers() as $n) {
+                            try { $gw->sendText($tenant->whatsapp_instance, $n, $alert); } catch (\Throwable $e) { }
+                        }
+                    } catch (\Throwable $e) { }
+                }
+                \App\Support\BotTrace::log($tenant->id, 'ai-order', $from, 'quote_confirmed', (string) $recent->quote_no);
+
+                return "\u{2705} Your order (quotation {$recent->quote_no}) is already with our team — "
+                    . "they'll confirm availability and delivery shortly. No need to order again \u{1F64F}";
+            }
+        } catch (\Throwable $e) {
+            // dedupe is best-effort — fall through to normal quotation creation
+        }
 
         // Big / wholesale order guard. Over the tenant's threshold (USD) we must NOT hand the customer a
         // firm RETAIL total — on a wholesale quantity that reads as "too expensive" and kills the deal.

@@ -432,7 +432,11 @@ class ProcessIncomingMessage implements ShouldQueue
 
             $ok = app(\App\Services\Bot\AiBrain::class)->handle(
                 $tenant, $convo, $from, $aiText, $gateway,
-                ['imageB64' => $imageB64, 'mime' => (string) ($this->incoming['media_mime'] ?? 'image/jpeg')]
+                ['imageB64' => $imageB64, 'mime' => (string) ($this->incoming['media_mime'] ?? 'image/jpeg'),
+                 // Quoted-reply context (2026-07-30): when the customer taps Reply on one of our
+                 // earlier messages (product push, quotation, …), the AI must know WHICH message —
+                 // otherwise "when will you deliver it" has no referent.
+                 'quoted' => (string) ($this->incoming['quoted_text'] ?? '')]
             );
             BotTrace::log($this->tenantId, $trace, $from, $ok ? 'ai_replied' : 'ai_no_reply');
             return;
