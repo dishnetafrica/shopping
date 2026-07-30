@@ -552,6 +552,9 @@ final class CatalogRenderer
         $tagline = e((string) ($tenant->setting('tagline', '') ?: $tenant->setting('address', '') ?: ''));
         $phone = trim((string) ($tenant->setting('public_phone', '') ?: $tenant->whatsapp_number));
         $email = trim((string) $tenant->setting('public_email', $tenant->setting('email', '')));
+        $webRaw = trim((string) ($tenant->setting('public_website', '') ?: $tenant->setting('bot_website_link', '')));
+        $webText = $webRaw !== '' ? preg_replace('~^https?://~i', '', rtrim($webRaw, '/')) : '';
+        $webHref = $webRaw !== '' ? (preg_match('~^https?://~i', $webRaw) ? $webRaw : 'https://' . $webRaw) : '';
         $logo = (string) $tenant->setting('logo', '');
         $date = now()->format('F Y');
         $dateFull = now()->format('d M Y');
@@ -578,7 +581,7 @@ final class CatalogRenderer
         }
 
         $cover = $this->coverHtml($tenant, $plan, $company, $tagline, $logo, $phone, $email,
-            $date, $coverImg, $qr, $totalItems, $showOverview);
+            $date, $coverImg, $qr, $totalItems, $showOverview, $webText, $webHref);
         $overview = $showOverview
             ? $this->overviewHtml($company, $logo, $date, $plan, $thumbs, $brandD, $promoImg)
             : '';
@@ -601,13 +604,13 @@ final class CatalogRenderer
                     . $this->pageHeader($company, $logo, $date, $brandD)
                     . $head
                     . $this->grid($items, $currency, $withPrices, $thumbs, $badges)
-                    . $this->pageFooter($phone, $currency, $dateFull, $withPrices)
+                    . $this->pageFooter($phone, $currency, $dateFull, $withPrices, $webText, $webHref)
                     . '</div>';
             }
         }
 
         $back = $this->backHtml($company, $logo, $date, $phone, $email, $currency, $dateFull,
-            $withPrices, $showOverview ? '' : $promoImg, $qr, ! $showOverview);
+            $withPrices, $showOverview ? '' : $promoImg, $qr, ! $showOverview, $webText, $webHref);
 
         return <<<HTML
 <!doctype html><html><head><meta charset="utf-8"><style>
@@ -729,8 +732,11 @@ HTML;
 
     private function coverHtml(Tenant $tenant, array $plan, string $company, string $tagline,
         string $logo, string $phone, string $email, string $date, string $coverImg, string $qr,
-        int $totalItems, bool $showOverview): string
+        int $totalItems, bool $showOverview, string $webText = '', string $webHref = ''): string
     {
+        $webLine = $webText !== ''
+            ? '<a href="' . e($webHref) . '" style="color:#d1fae5;text-decoration:none;font-weight:bold">' . e($webText) . '</a>'
+            : '';
         $brand = self::BRAND; $brandD = self::BRAND_DARK;
         $logoBlockDark = $logo !== ''
             ? '<img src="' . e($logo) . '" style="height:40px;max-width:150px">'
@@ -741,6 +747,7 @@ HTML;
                 . '<td style="padding:10px 6px;color:#ffffff;font-size:10px;font-weight:bold;width:120px">SCAN TO ORDER<br>ON WHATSAPP</td>' : '')
             . '<td style="padding:10px 14px;text-align:right;color:#d1fae5;font-size:9.5px;font-weight:bold">'
             . ($phone !== '' ? '☎ ' . e($phone) . '<br>' : '') . ($email !== '' ? '✉ ' . e($email) : '')
+            . ($webLine !== '' ? ($phone !== '' || $email !== '' ? '<br>' : '') . $webLine : '')
             . '</td></tr></table>';
 
         if ($coverImg !== '') {
@@ -817,6 +824,7 @@ HTML;
                 . '<div style="font-size:8.5px;font-weight:bold;color:#94a3b8;letter-spacing:1px;margin-top:5px">SCAN TO ORDER ON WHATSAPP</div></div>' : '')
             . '<table class="coverfoot"><tr><td>' . $company
             . ($phone ? ' &nbsp;·&nbsp; ' . e($phone) : '') . ($email ? ' &nbsp;·&nbsp; ' . e($email) : '')
+            . ($webText !== '' ? ' &nbsp;·&nbsp; <a href="' . e($webHref) . '" style="color:#0f7a37;text-decoration:none">' . e($webText) . '</a>' : '')
             . '</td></tr></table>'
             . '</div>';
     }
@@ -957,7 +965,7 @@ HTML;
             . $hero
             . $pickRow
             . $feat
-            . $this->pageFooter($phone, $currency, $dateFull, $withPrices)
+            . $this->pageFooter($phone, $currency, $dateFull, $withPrices, '', '')
             . '</div>';
     }
 
@@ -998,7 +1006,7 @@ HTML;
 
     private function backHtml(string $company, string $logo, string $date, string $phone,
         string $email, string $currency, string $dateFull, bool $withPrices, string $promoImg,
-        string $qr, bool $withPromo = true): string
+        string $qr, bool $withPromo = true, string $webText = '', string $webHref = ''): string
     {
         $ink = self::INK; $brandD = self::BRAND_DARK;
         $promo = $withPromo ? $this->promoBand($promoImg) : '';
@@ -1028,6 +1036,9 @@ HTML;
             . '<div style="font-size:10px;font-weight:bold;letter-spacing:1.5px;color:#bbf7d0">ORDER ON WHATSAPP</div>'
             . '<div style="font-size:19px;font-weight:bold;color:#ffffff;margin-top:6px">' . ($phone !== '' ? e($phone) : $company) . '</div>'
             . ($email !== '' ? '<div style="font-size:10.5px;color:#d1fae5;margin-top:8px">' . e($email) . '</div>' : '')
+            . ($webText !== '' ? '<div style="font-size:11px;margin-top:9px;padding-top:9px;border-top:1px solid #ffffff33">'
+                . '<span style="font-size:8px;font-weight:bold;letter-spacing:1.5px;color:#bbf7d0">OR ORDER ONLINE</span><br>'
+                . '<a href="' . e($webHref) . '" style="color:#ffffff;font-weight:bold;text-decoration:none;font-size:13px">' . e($webText) . '</a></div>' : '')
             . '</td>'
             . ($qr !== '' ? '<td style="width:74px;text-align:right;vertical-align:top"><span class="qrbox"><img src="' . e($qr) . '" style="height:62px;width:62px"></span></td>' : '')
             . '</tr></table>'
@@ -1133,13 +1144,20 @@ HTML;
         return mb_strlen($s, 'UTF-8') > $max ? rtrim(mb_substr($s, 0, $max - 1, 'UTF-8')) . '…' : $s;
     }
 
-    private function pageFooter(string $phone, string $currency, string $dateFull, bool $withPrices): string
+    private function pageFooter(string $phone, string $currency, string $dateFull, bool $withPrices,
+        string $webText = '', string $webHref = ''): string
     {
         $left = $withPrices
             ? 'Prices in ' . e($currency) . ' · valid as of ' . e($dateFull) . ' · subject to change'
             : 'Product catalogue · ' . e($dateFull);
-        $right = $phone !== '' ? 'Order on WhatsApp: ' . e($phone) : '';
+        $parts = [];
+        if ($phone !== '') {
+            $parts[] = 'Order on WhatsApp: ' . e($phone);
+        }
+        if ($webText !== '') {
+            $parts[] = '<a href="' . e($webHref) . '" style="color:#0f7a37;text-decoration:none">' . e($webText) . '</a>';
+        }
 
-        return '<table class="pfoot"><tr><td>' . $left . '</td><td class="wa">' . $right . '</td></tr></table>';
+        return '<table class="pfoot"><tr><td>' . $left . '</td><td class="wa">' . implode(' &nbsp;·&nbsp; ', $parts) . '</td></tr></table>';
     }
 }

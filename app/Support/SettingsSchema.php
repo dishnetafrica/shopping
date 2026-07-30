@@ -24,6 +24,7 @@ final class SettingsSchema
                 ['label' => 'Contact', 'fields' => [
                     ['key' => 'public_phone', 'type' => 'text', 'label' => 'Public phone'],
                     ['key' => 'public_email', 'type' => 'text', 'label' => 'Public email'],
+                    ['key' => 'public_website', 'type' => 'text', 'label' => 'Website', 'help' => 'e.g. familyshoppers.net — shown on the catalogue (clickable) so customers can also order online.'],
                     ['key' => 'address',      'type' => 'text', 'label' => 'Address'],
                     ['key' => 'city',         'type' => 'text', 'label' => 'City'],
                     ['key' => 'country',      'type' => 'text', 'label' => 'Country'],
