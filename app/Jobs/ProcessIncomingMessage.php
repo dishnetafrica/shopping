@@ -358,17 +358,55 @@ class ProcessIncomingMessage implements ShouldQueue
             // Image → hand the bytes to the AI (vision).
             $imageB64 = '';
             if (! empty($this->incoming['has_image'] ?? false)) {
-                // Image-burst guard: a customer dumping many photos must NOT get a reply per photo.
-                // Count photos in a short rolling window (per chat): answer the FIRST normally, send ONE
-                // "which ones?" nudge on the SECOND, then stay silent for the rest of the burst. The
-                // window resets on each photo, so a slow dump is still treated as one burst. A photo that
-                // arrives after ~40s of quiet is a fresh #1 again. Skip when the customer typed a caption
-                // (a single captioned photo is a genuine question, not a dump).
-                $hasCaption = trim((string) ($this->incoming['image_caption'] ?? '')) !== '';
-                if (! $hasCaption) {
-                    $burstKey = 'imgburst:' . $this->tenantId . ':' . $from;
-                    $seen = (int) \Illuminate\Support\Facades\Cache::get($burstKey, 0) + 1;
-                    \Illuminate\Support\Facades\Cache::put($burstKey, $seen, now()->addSeconds(40));
+                // A photo dump must not get a reply per photo. First work out WHO is sending:
+                //  • a SUPPLIER offering goods (their number is in Suppliers, or selling words in the
+                //    caption) → one "we'll review" reply + an owner alert, then silence.
+                //  • a BUYER → one "which items?" nudge, then silence.
+                // Either way we answer ONCE per burst (rolling 40s window) and stay quiet after.
+                $cap    = trim((string) ($this->incoming['image_caption'] ?? ''));
+                $digits = (string) preg_replace('/[^0-9]/', '', (string) $from);
+                $tail   = strlen($digits) >= 9 ? substr($digits, -9) : $digits;
+
+                $isSupplier = false;
+                try {
+                    if ($tail !== '') {
+                        foreach (\App\Models\Supplier::where('tenant_id', $tenant->id)->whereNotNull('phone')->pluck('phone') as $ph) {
+                            $pd = (string) preg_replace('/[^0-9]/', '', (string) $ph);
+                            if ($pd !== '' && str_contains($pd, $tail)) { $isSupplier = true; break; }
+                        }
+                    }
+                } catch (\Throwable $e) { /* detection is best-effort */ }
+                if (! $isSupplier) {
+                    $blob = mb_strtolower($cap . ' ' . $aiText);
+                    if (preg_match('/\b(we sell|we supply|supplier|distributor|wholesaler?|manufacturer|we deal|selling to you|sell (?:to|on) (?:you|your)|supply (?:to )?you|price list|catalog(?:ue)?|offer you|we are selling|sell on your platform|do you (?:buy|import|stock these))\b/', $blob)) {
+                        $isSupplier = true;
+                    }
+                }
+
+                $burstKey = 'imgburst:' . $this->tenantId . ':' . $from;
+                $seen = (int) \Illuminate\Support\Facades\Cache::get($burstKey, 0) + 1;
+                \Illuminate\Support\Facades\Cache::put($burstKey, $seen, now()->addSeconds(40));
+
+                if ($isSupplier) {
+                    if ($seen === 1) {
+                        $reply = trim((string) $tenant->setting('image_supplier_reply',
+                            "🙏 Thank you for sharing these! I've passed them to our purchasing team — they'll review your items and get back to you about pricing and stocking."));
+                        if ($reply !== '') {
+                            $gateway->sendText($tenant->whatsapp_instance, $from, $reply);
+                            MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $reply);
+                        }
+                        try {
+                            NotifyOwner::dispatch($this->tenantId, "🧾 A supplier (+{$from}) is offering products — they sent product photos on WhatsApp. Open Chats to review and reply.");
+                        } catch (\Throwable $e) { /* alert best-effort */ }
+                        BotTrace::log($this->tenantId, $trace, $from, 'supplier_offer', 'photos from a supplier — team notified');
+                    } else {
+                        BotTrace::log($this->tenantId, $trace, $from, 'supplier_offer', "suppressed photo #{$seen}");
+                    }
+                    return;
+                }
+
+                // Buyer: only nudge/suppress an UNCAPTIONED dump (a single captioned photo is a real question).
+                if ($cap === '') {
                     if ($seen === 2) {
                         $nudge = trim((string) $tenant->setting('image_burst_reply',
                             "📷 I see you've sent a few photos! Tell me which items you'd like and how many, and I'll put the order together for you."));
@@ -384,6 +422,7 @@ class ProcessIncomingMessage implements ShouldQueue
                         return;
                     }
                 }
+
                 $imageB64 = (string) ($this->incoming['image_b64'] ?? '');
                 if ($imageB64 === '' && ! empty($this->incoming['media_key'] ?? null) && method_exists($gateway, 'getMediaBase64')) {
                     $imageB64 = (string) ($gateway->getMediaBase64($tenant->whatsapp_instance, $this->incoming['media_key']) ?? '');
