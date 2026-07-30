@@ -1,0 +1,3 @@
+// ─── Inventory Trust v1 (append to routes/console.php) ────────────────────────
+// Daily owner digest + queue at 06:45 EAT (after cashbook:digest at 06:30).
+Schedule::command('trust:daily --send')->dailyAt('03:45')->timezone('UTC'); // 06:45 Africa/Kampala

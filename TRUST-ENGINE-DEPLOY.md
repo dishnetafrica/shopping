@@ -76,3 +76,49 @@ Removing the copied files restores the tree exactly — nothing else references 
 - Off-hours uses server local time; if app tz ≠ EAT, set `APP_TIMEZONE=Africa/Kampala`.
 - The actor scorecard **routes review only** — spec §5.2 / §7 of the frozen spec:
   never display as a ranking, never drive personnel action.
+
+
+---
+
+# v1.1 — RUNTIME LAYER (this same drop)
+
+Adds live scoring + the owner's daily loop on top of the backtest:
+
+```
+app/Services/Trust/TrustRuntime.php          ← live scoring, variance registration,
+                                               record-confidence decay, count pick list
+app/Console/Commands/TrustDailyCommand.php   ← trust:daily — queue + WhatsApp digest
+app/Console/Commands/TrustResolveCommand.php ← trust:resolve — outcomes = ML labels
+TRUST-console-append-to-console.php.txt      ← daily schedule (06:45 EAT)
+```
+
+## Daily loop
+
+```bash
+php artisan trust:daily --tenant=17 --force            # print digest, build queue (test)
+php artisan trust:daily --tenant=17 --send --force     # + WhatsApp to owner numbers
+php artisan trust:resolve --tenant=17                  # list open investigations
+php artisan trust:resolve --tenant=17 12 confirmed_loss --value=180000 --notes="short delivery"
+```
+
+Opt-in per tenant: setting `trust_digest` = 1 (extra recipients: `trust_digest_numbers`).
+Append the schedule line from `TRUST-console-append-to-console.php.txt` to `routes/console.php`.
+
+## What the queue is
+
+Top-K (default 7) recent movements by expected loss = (1−T)·value, plus up to 3 ε-random
+spot checks drawn from clean-looking auto-posts (thresholds must stay unlearnable — Spec §7.3).
+Every item becomes a `trust_investigations` row; **resolving it is the label factory** — clean
+outcomes lift the actor's reputation, confirmed losses lower it (severity ∝ value), and `error`
+deliberately changes no reputation (process fault, not person). Records confidence decays nightly
+(fast movers come due for a count ≈ weekly, quiet items monthly) and the digest carries the
+count pick list = (1−confidence) × on-hand value.
+
+## Order of operations for the pilot
+
+1. Deploy → `migrate --force` → `trust:backtest --tenant=17 --write` (GATE-1 with Rupesh).
+2. Enable `trust_digest` for Family Shoppers only → silent two weeks: read the digest, resolve
+   items, DON'T change staff workflow yet (Phase B0).
+3. Then switch on blind-receiving behaviour and evidence attachment (Phase B1) — the
+   `scale_weight` / `grn_photo` signals are already defined and scoreable the moment the
+   receiving flow writes `trust_evidence_items` rows.
