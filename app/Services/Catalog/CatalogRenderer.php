@@ -730,8 +730,12 @@ final class CatalogRenderer
             }
         }
 
+        $fromCity = trim((string) $tenant->setting('delivery_from_city', 'Juba')) ?: 'Juba';
+        $deliveryLine = trim((string) $tenant->setting('delivery_note', ''))
+            ?: 'Free delivery within ' . $fromCity . ' — outside ' . $fromCity . ', transport is confirmed at order';
         $back = $this->backHtml($company, $logo, $date, $phone, $email, $currency, $dateFull,
-            $withPrices, $showOverview ? '' : $promoImg, $qr, ! $showOverview, $webText, $webHref);
+            $withPrices, $showOverview ? '' : $promoImg, $qr, ! $showOverview, $webText, $webHref,
+            $deliveryLine);
 
         return <<<HTML
 <!doctype html><html><head><meta charset="utf-8"><style>
@@ -1135,7 +1139,8 @@ HTML;
 
     private function backHtml(string $company, string $logo, string $date, string $phone,
         string $email, string $currency, string $dateFull, bool $withPrices, string $promoImg,
-        string $qr, bool $withPromo = true, string $webText = '', string $webHref = ''): string
+        string $qr, bool $withPromo = true, string $webText = '', string $webHref = '',
+        string $deliveryLine = ''): string
     {
         $ink = self::INK; $brandD = self::BRAND_DARK;
         $promo = $withPromo ? $this->promoBand($promoImg) : '';
@@ -1143,7 +1148,7 @@ HTML;
         $steps = [
             ['1', 'Send your order on WhatsApp', $phone !== '' ? e($phone) : 'our WhatsApp line'],
             ['2', 'We confirm stock &amp; total', 'You get an order confirmation with the amount'],
-            ['3', 'Pick up or delivery', 'Collect at the store or ask about delivery'],
+            ['3', 'Pick up or delivery', $deliveryLine !== '' ? e($this->clipLine($deliveryLine, 110)) : 'Collect at the store or ask about delivery'],
         ];
         $stepHtml = '';
         foreach ($steps as [$n, $t, $s]) {

@@ -409,7 +409,10 @@ class AiBrain
                 'products', 'prices', 'with', 'need', 'want', 'have', 'what', 'much', 'many',
                 'thank', 'thanks', 'your', 'full', 'share', 'give', 'about', 'rate', 'rates',
                 'cost', 'item', 'items', 'order', 'quantity', 'minimum', 'available', 'stock',
-                'this', 'that', 'them', 'from', 'sheet', 'pricelist', 'ratelist', 'other', 'styles'];
+                'this', 'that', 'them', 'from', 'sheet', 'pricelist', 'ratelist', 'other', 'styles',
+                'boxes', 'packs', 'pages', 'pieces', 'carton', 'cartons', 'each', 'ship', 'shipping',
+                'deliver', 'delivery', 'transport', 'freight', 'quote', 'quotation', 'sample',
+                'samples', 'also', 'more', 'some', 'kindly', 'best', 'good', 'cheap'];
             $words = [];
             foreach (preg_split('/[^a-z0-9]+/i', $t) ?: [] as $w) {
                 if (mb_strlen($w, 'UTF-8') < 4 || in_array($w, $stop, true)) {
@@ -437,8 +440,8 @@ class AiBrain
                 ->groupBy('category')->orderByDesc('n')->limit(2)->get();
 
             $top = $counts->first();
-            if (! $top || (int) $top->n < 2) {
-                return null;
+            if (! $top || (int) $top->n < 3) {
+                return null;   // fewer than 3 matching products = too weak a signal to pick a section
             }
             $second = $counts->skip(1)->first();
             if ($second && (int) $second->n * 2 > (int) $top->n) {
@@ -478,12 +481,32 @@ class AiBrain
         $asks = false;
         foreach ($triggers as $w) if (str_contains($t, $w)) { $asks = true; break; }
         if (! $asks) return false;
+
+        // STRONG ask = the customer explicitly wants a document (catalogue/list/menu) — not just
+        // a sentence containing price words. Only strong asks may trigger the category document.
+        $strongTriggers = ['price list', 'pricelist', 'rate list', 'ratelist', 'price sheet', 'rate sheet',
+            'list of products', 'list of the products', 'product list', 'products and prices', 'send me list',
+            'full list', 'menu', 'catalog', 'catalogue', 'brochure', 'orodha ya bei', 'liste de prix',
+            'قائمة الأسعار', 'bhaav patrak', 'bhav patrak', 'rate patrak'];
+        $strongAsk = false;
+        foreach ($strongTriggers as $w) if (str_contains($t, $w)) { $strongAsk = true; break; }
+
+        // Logistics question ("how much to SHIP 20 boxes to Accra?") — price words appear, but
+        // the customer wants a transport answer, not a PDF. Let the AI answer in text.
+        foreach (['ship', 'freight', 'transport', 'deliver', 'cargo'] as $w) {
+            if (! $strongAsk && str_contains($t, $w)) return false;
+        }
+
+        // One document per customer per few minutes, across ALL document types — a burst of
+        // different questions must not become a burst of PDFs (real incident, 2026-07-30).
+        if (Cache::get("doc_sent_any:{$tenant->id}:{$from}")) return false;
         }
 
         // Category-specific ask ("catalog for the exercise books", "spices price list") →
         // send JUST that section as its own compact catalogue. Its anti-spam key is per
-        // category, so it works even minutes after the full list went out.
-        $catAsk = $this->detectCategoryAsk($tenant, $text);
+        // category, so it works even minutes after the full list went out — but ONLY on a
+        // strong, explicit document ask.
+        $catAsk = ($force || ! empty($strongAsk)) ? $this->detectCategoryAsk($tenant, $text) : null;
         if ($catAsk !== null) {
             $ckey = "pricelist_sent:{$tenant->id}:{$from}:cat:" . md5(mb_strtolower($catAsk, 'UTF-8'));
             if ($force || ! Cache::get($ckey)) {
@@ -497,6 +520,7 @@ class AiBrain
                             '[price-list:' . $catAsk . '] ' . $cdoc['fileName'], null, null,
                             ['via' => 'ai', 'kind' => 'price_list_category', 'category' => $catAsk]);
                         Cache::put($ckey, 1, now()->addMinutes(10));
+                        Cache::put("doc_sent_any:{$tenant->id}:{$from}", 1, now()->addMinutes(3));
 
                         return true;
                     } catch (\Throwable $e) {
@@ -528,6 +552,7 @@ class AiBrain
             $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], $caption);
             MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', '[price-list] ' . $doc['fileName'], null, null, ['via' => 'ai', 'kind' => 'price_list']);
             Cache::put($plKey, 1, now()->addMinutes(10));
+            Cache::put("doc_sent_any:{$tenant->id}:{$from}", 1, now()->addMinutes(3));
         } catch (\Throwable $e) {
             Log::warning('AiBrain price-list send failed: ' . $e->getMessage());
             return false;
@@ -1289,6 +1314,20 @@ class AiBrain
             }
             if (is_array($langs) && count($langs)) {
                 $p .= "- Customers mostly speak: " . implode(', ', $langs) . ". Still mirror whatever language each customer writes in.\n";
+            }
+            // Delivery & pricing policy — stated EXPLICITLY so the model never improvises lines
+            // like "prices do not include shipping" (real incident, 2026-07-30). Owner override
+            // via the delivery_note setting; default is built from the free-delivery towns.
+            $dnote = trim((string) $tenant->setting('delivery_note', ''));
+            $fromCity = trim((string) $tenant->setting('delivery_from_city', 'Juba')) ?: 'Juba';
+            if ($dnote !== '') {
+                $p .= "- DELIVERY & PRICING POLICY (state it exactly like this, never contradict it): {$dnote}\n";
+            } else {
+                $freeTowns = array_values(array_filter(array_map('trim', explode(',', (string) $tenant->setting('free_delivery_towns',
+                    'Juba, Konyo Konyo, Custom, Jebel, Munuki, Gudele, Hai, Malakia, Gumbo, Sherikat, Thongping, Nimra Talata, Suk')))));
+                $p .= "- DELIVERY & PRICING POLICY: listed prices ALREADY INCLUDE free delivery within {$fromCity} and our free-delivery areas ("
+                    . implode(', ', array_slice($freeTowns, 0, 6)) . (count($freeTowns) > 6 ? ', …' : '') . "). "
+                    . "NEVER say prices exclude shipping or delivery. For destinations outside the free-delivery areas, our team confirms the transport cost separately at order time — never invent or estimate a freight price yourself.\n";
             }
             $p .= "\n";
         }

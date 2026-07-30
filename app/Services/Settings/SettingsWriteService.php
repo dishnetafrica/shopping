@@ -33,7 +33,7 @@ final class SettingsWriteService
         // VAT is fully tenant-configurable (never hardcoded): label + tax registration no.
         'vat_label', 'vat_number',
         // Catalogue PDF artwork + highlights (image fields hold URLs; /papi/branding-upload fills them).
-        'public_website',
+        'public_website', 'free_delivery_towns', 'delivery_from_city',
         'catalog_cover_image', 'catalog_promo_image', 'catalog_qr_image',
         'catalog_best_sellers', 'catalog_hot_deals', 'catalog_audience',
     ];

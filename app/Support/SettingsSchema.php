@@ -34,6 +34,11 @@ final class SettingsSchema
                     ['key' => 'tagline', 'type' => 'text', 'label' => 'Tagline'],
                     ['key' => 'logo',    'type' => 'image', 'label' => 'Logo', 'help' => 'Upload a PNG/JPG or paste a link. Shown on documents and the catalogue.'],
                 ]],
+                ['label' => 'Delivery', 'help' => 'What the bot AND the catalogue say about delivery and transport.', 'fields' => [
+                    ['key' => 'delivery_note', 'type' => 'textarea', 'label' => 'Delivery policy', 'help' => 'One or two sentences, e.g. "All prices include free delivery within Juba. Outside Juba, our team confirms transport cost when you order." Leave blank to auto-build from the towns below.'],
+                    ['key' => 'free_delivery_towns', 'type' => 'text', 'label' => 'Free-delivery areas', 'help' => 'Comma-separated. Default: Juba, Konyo Konyo, Custom, Jebel, Munuki, Gudele, Hai, Malakia, Gumbo, Sherikat, Thongping, Nimra Talata, Suk'],
+                    ['key' => 'delivery_from_city', 'type' => 'text', 'label' => 'Delivering from', 'help' => 'Default: Juba'],
+                ]],
                 ['label' => 'Catalogue', 'help' => 'Artwork and highlights for the photo catalogue PDF customers receive on WhatsApp.', 'fields' => [
                     ['key' => 'catalog_cover_image', 'type' => 'image', 'label' => 'Cover photo', 'help' => 'Portrait photo (about 4:5, no text in the image) for the front page.'],
                     ['key' => 'catalog_promo_image', 'type' => 'image', 'label' => 'Promo photo', 'help' => 'Wide photo for the "Need a product you don\'t see?" band (optional).'],
