@@ -2,3 +2,10 @@
 // Vision Gateway → CloudBSS event ingestion (shared-secret header X-Vision-Token).
 // Configure in .env:  VISION_WEBHOOK_TOKEN=<long random>   VISION_TENANT_ID=17
 Route::post('/vision/events', [\App\Http\Controllers\Api\VisionEventController::class, 'store']);
+
+// ─── v1.2: receiving + blind-count nonce pages (append to routes/web.php, next to /task/{nonce}) ──
+Route::get('/receive/{nonce}', [\App\Http\Controllers\TrustReceivingController::class, 'show']);
+Route::get('/receive/{nonce}/products', [\App\Http\Controllers\TrustReceivingController::class, 'products']);
+Route::post('/receive/{nonce}/submit', [\App\Http\Controllers\TrustReceivingController::class, 'submit']);
+Route::get('/count/{nonce}', [\App\Http\Controllers\TrustCountController::class, 'show']);
+Route::post('/count/{nonce}/submit', [\App\Http\Controllers\TrustCountController::class, 'submit']);

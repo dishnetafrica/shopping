@@ -1,3 +1,5 @@
 // ─── Inventory Trust v1 (append to routes/console.php) ────────────────────────
 // Daily owner digest + queue at 06:45 EAT (after cashbook:digest at 06:30).
 Schedule::command('trust:daily --send')->dailyAt('03:45')->timezone('UTC'); // 06:45 Africa/Kampala
+// v1.2: fresh blind-count link to staff every morning, after the digest computed confidences.
+Schedule::command('trust:links --tenant=17 --count --send')->dailyAt('04:00')->timezone('UTC'); // 07:00 EAT — one line per pilot tenant

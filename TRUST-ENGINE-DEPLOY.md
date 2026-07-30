@@ -122,3 +122,47 @@ count pick list = (1−confidence) × on-hand value.
 3. Then switch on blind-receiving behaviour and evidence attachment (Phase B1) — the
    `scale_weight` / `grn_photo` signals are already defined and scoreable the moment the
    receiving flow writes `trust_evidence_items` rows.
+
+
+---
+
+# v1.2 — RECEIVING + BLIND COUNT FLOWS (this same drop)
+
+The evidence generators (Pilot Plan Phase B1) — public nonce pages, same pattern as /task/{nonce}:
+
+```
+database/migrations/2026_07_30_000002_create_trust_session_tables.php
+app/Http/Controllers/TrustReceivingController.php + resources/views/trust-receiving.blade.php
+app/Http/Controllers/TrustCountController.php     + resources/views/trust-count.blade.php
+app/Services/Trust/TrustNotifier.php
+app/Console/Commands/TrustLinksCommand.php
+```
+
+Append the v1.2 route block to **routes/web.php** (they are web pages, not API) and the schedule
+line to routes/console.php. Needs `php artisan storage:link` once if not already done (photos).
+
+## Daily rhythm at Family Shoppers
+
+```bash
+php artisan trust:links --tenant=17 --receiving --supplier="Mukwano" --send   # per delivery
+# count link is scheduled daily 07:00 EAT to trust_staff_numbers automatically
+```
+
+- **Receiving** (`/receive/{nonce}`): receiver types name, adds lines by search, enters counted
+  qty + weight (kg) + photo per line. No expected quantities are shown anywhere — blind by
+  construction. Submit → StockLedger IN movements (ref trust_receiving) + scale_weight/grn_photo
+  evidence rows + live scores + owner WhatsApp naming every ⚠ gap, before the driver leaves.
+- **Blind count** (`/count/{nonce}`): the engine's pick list, names only, never the book number.
+  Submit → signed ADJUSTs for differences (ref trust_count), confidence reset, variance report to
+  the owner. Negative variances flow into the reputation machinery automatically.
+- Legacy on-hand stays truthful either way: ledger-read tenants get the E6.5 cache re-derive;
+  pre-cutover tenants get a direct products.stock update for Kampala (mirrors E6.2 intent).
+
+Settings: `trust_staff_numbers` (who gets the links) alongside the existing
+`trust_digest` / `trust_digest_numbers`.
+
+## The loop, now complete
+
+receive (evidence in) → score → daily queue [#id] → owner WhatsApp → trust:resolve #id (label)
+→ reputation update → tomorrow's scores sharpen → count list keeps the book honest.
+Every component the Pilot Plan's Phase B0/B1 requires is now deployed code, not documentation.

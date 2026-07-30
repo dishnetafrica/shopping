@@ -97,12 +97,11 @@ final class TrustDailyCommand extends Command
         $queue = [];
         foreach ([['queue', $top], ['random', $random]] as [$source, $set]) {
             foreach ($set as $row) {
-                DB::table('trust_investigations')->insert([
+                $invId = DB::table('trust_investigations')->insertGetId([
                     'tenant_id' => $t->id, 'stock_movement_id' => $row->stock_movement_id,
                     'source' => $source, 'expected_loss' => $row->expected_loss,
                     'created_at' => now(), 'updated_at' => now()]);
-                $queue[] = ['source' => $source, 'row' => $row,
-                            'id' => (int) DB::getPdo()->lastInsertId()];
+                $queue[] = ['source' => $source, 'row' => $row, 'id' => $invId];
             }
         }
 
@@ -152,8 +151,8 @@ final class TrustDailyCommand extends Command
                 $reasons = json_decode((string) $r->reason_codes, true) ?: [];
                 $why = $reasons ? str_replace('_', ' ', $reasons[0]['code']) : '';
                 $tag = $q['source'] === 'random' ? ' _(spot check)_' : '';
-                $l[] = sprintf('%d. %s %s ×%s @ %s — T %s, ~%s at risk. %s%s',
-                    $i++, $r->type, $r->sku ?: ('#' . $r->product_id), rtrim(rtrim((string) $r->qty, '0'), '.'),
+                $l[] = sprintf('%d. [#%d] %s %s ×%s @ %s — T %s, ~%s at risk. %s%s',
+                    $i++, $q['id'], $r->type, $r->sku ?: ('#' . $r->product_id), rtrim(rtrim((string) $r->qty, '0'), '.'),
                     $r->location, $r->trust, number_format((float) $r->expected_loss),
                     $why ? ucfirst($why) . '.' : '', $tag);
             }
