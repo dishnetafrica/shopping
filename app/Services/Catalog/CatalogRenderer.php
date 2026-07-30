@@ -8,29 +8,34 @@ use Illuminate\Support\Facades\Storage;
 /**
  * Branded PRODUCT CATALOGUE PDF — a photo-first brochure the wholesaler sends to customers.
  *
- * v2 layout (same public API as v1): cover with brand band + accurate category index, one
- * category per page (3×3 product cards), a "How to order" back page, and real page numbers.
+ * v3 "rich" layout (same public API as v1/v2). Every rich element is optional and degrades
+ * gracefully, so the catalogue always renders even with zero setup:
  *
- * What v2 fixes over v1 (all reproduced with dompdf 3 on sample data):
- *   1. Cover no longer orphans its contact line onto a near-blank page 2 (fixed-height hack gone).
- *   2. A full 9-card page no longer overflows A4 and dumps its footer on an orphan page —
- *      the whole page fits a strict height budget under an explicit @page margin.
- *   3. No trailing blank page (pages use page-break-BEFORE; nothing breaks after the last page).
- *   4. Index page numbers are correct (cover=1, back page counted) and every page is numbered
- *      "Page N of T" via the canvas page_script.
- *   5. Product photos are pre-fetched and normalised onto identical 4:3 white canvases
- *      (GD, cached on disk, embedded as data URIs) — uniform grid, no broken-image boxes
- *      when a URL 404s, dramatically smaller PDFs than embedding full-size remote images.
- *   6. Cards are strictly equal height (name/unit/MOQ zones are fixed) so price rows align,
- *      and names clip at a line boundary instead of slicing glyphs.
+ *   cover        photographic cover when the `catalog_cover_image` setting is set (hero photo,
+ *                audience checklist, product count, QR) — else the clean brand-band cover.
+ *   overview     "Explore our categories" page (photo card per category + page numbers) when
+ *                there are ≥2 categories; single-category catalogues keep the index on the cover.
+ *   category     first page opens with a hero band (name, count, top-seller mini-strip, hero
+ *                photo) + 6 cards; continuation pages carry 9 cards.
+ *   badges       BEST SELLER / HOT DEAL chips on cards, driven by the `catalog_best_sellers`
+ *                and `catalog_hot_deals` settings (comma-separated SKUs or exact names).
+ *   QR           WhatsApp order QR (wa.me link) — `catalog_qr_image` setting if provided, else
+ *                fetched once from quickchart.io and cached; omitted silently if unreachable.
+ *   back page    promo band ("Need a product you don't see?" + optional `catalog_promo_image`),
+ *                3 ordering steps, big WhatsApp block, QR.
  *
- * dompdf has no flex/grid engine, so everything stays tables + block flow. Renders only;
- * reads product data and prices as-is. Degrades gracefully: no GD → original URLs are
- * embedded exactly like v1; fetch failure → drawn "no photo" placeholder.
+ * Inherited from v2 (all verified against dompdf 3): strict page budgets (no orphan/blank
+ * pages), correct index page numbers, "Page N of T" numbering, photos pre-fetched in parallel
+ * and normalised onto identical 4:3 white canvases (disk-cached, data-URI embedded — a 33 MB
+ * v1 document becomes ~3-4 MB), deterministic two-line names, equal-height cards, font
+ * subsetting. dompdf has no flex/grid engine, so everything is tables + block flow.
+ * Renders only; reads product data and prices as-is. Degrades gracefully without GD.
  */
 final class CatalogRenderer
 {
-    private const PER_PAGE = 9;           // 3 columns × 3 rows per category page
+    private const PER_PAGE = 9;           // product grid pages: 3 × 3
+    private const INTRO_MIN = 7;          // categories this big open with a full intro page
+                                          // (slim-band pages hold ≤6 cards — band + 3 card rows overflows A4)
     private const BRAND = '#16a34a';
     private const BRAND_DARK = '#0f7a37';
     private const INK = '#0f172a';
@@ -309,6 +314,94 @@ final class CatalogRenderer
         return $jpeg !== false && $jpeg !== '' ? $jpeg : null;
     }
 
+    /**
+     * Fetch a standalone artwork asset (cover hero / promo / QR), downscale keeping its own
+     * aspect ratio, cache on disk, return a data URI ('' when missing or unreachable — every
+     * caller has a no-asset fallback). $asIs keeps original bytes (QR codes must stay crisp).
+     */
+    private function asset(Tenant $tenant, string $url, int $maxDim = 1000, bool $asIs = false, ?float $cropRatio = null): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+        $mime = $asIs ? 'png' : 'jpg';
+        $cache = 'catalog-thumbs/' . $tenant->id . '/asset-' . md5($url . ($asIs ? ':raw' : ':' . $maxDim . ':' . ($cropRatio ?? 0))) . '.' . $mime;
+        try {
+            if (Storage::disk('public')->exists($cache)) {
+                $bytes = Storage::disk('public')->get($cache);
+                if ($bytes) {
+                    return 'data:image/' . ($asIs ? 'png' : 'jpeg') . ';base64,' . base64_encode($bytes);
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        $raw = $this->fetchMany([$url])[$url] ?? null;
+        if ($raw === null) {
+            return '';
+        }
+        if ($asIs || ! extension_loaded('gd')) {
+            try { Storage::disk('public')->put($cache, $raw); } catch (\Throwable $e) { }
+
+            return 'data:image/' . ($asIs ? 'png' : 'jpeg') . ';base64,' . base64_encode($raw);
+        }
+
+        $src = @imagecreatefromstring($raw);
+        if (! $src) {
+            return '';
+        }
+        $sw = imagesx($src); $sh = imagesy($src);
+        if ($cropRatio !== null && $cropRatio > 0) {
+            // cover-crop to the exact target ratio (w/h) so the layout slot is always filled
+            $dw = (int) min($maxDim * min($cropRatio, 1.0), 1200);
+            $dh = (int) round($dw / $cropRatio);
+            $scale = max($dw / $sw, $dh / $sh);
+            $cw = (int) round($dw / $scale); $ch = (int) round($dh / $scale);
+            $sx = (int) (($sw - $cw) / 2); $sy = (int) (($sh - $ch) / 2);
+            $dst = imagecreatetruecolor($dw, $dh);
+            imagecopyresampled($dst, $src, 0, 0, $sx, $sy, $dw, $dh, $cw, $ch);
+        } else {
+            $scale = min($maxDim / max($sw, 1), $maxDim / max($sh, 1), 1.0);
+            $dw = max(1, (int) round($sw * $scale)); $dh = max(1, (int) round($sh * $scale));
+            $dst = imagecreatetruecolor($dw, $dh);
+            $white = imagecolorallocate($dst, 255, 255, 255);
+            imagefill($dst, 0, 0, $white);
+            imagecopyresampled($dst, $src, 0, 0, 0, 0, $dw, $dh, $sw, $sh);
+        }
+        imagedestroy($src);
+        ob_start();
+        imagejpeg($dst, null, 84);
+        imagedestroy($dst);
+        $jpeg = ob_get_clean();
+        if (! $jpeg) {
+            return '';
+        }
+        try { Storage::disk('public')->put($cache, $jpeg); } catch (\Throwable $e) { }
+
+        return 'data:image/jpeg;base64,' . base64_encode($jpeg);
+    }
+
+    /** WhatsApp order QR: explicit setting wins; else generated once via quickchart and cached. */
+    private function qr(Tenant $tenant, string $phone): string
+    {
+        $own = (string) $tenant->setting('catalog_qr_image', '');
+        if ($own !== '') {
+            $uri = $this->asset($tenant, $own, 300, true);
+            if ($uri !== '') {
+                return $uri;
+            }
+        }
+        $digits = preg_replace('/\D+/', '', $phone);
+        if ($digits === '') {
+            return '';
+        }
+
+        return $this->asset($tenant,
+            'https://quickchart.io/qr?text=' . urlencode('https://wa.me/' . $digits) . '&size=280&margin=1',
+            300, true);
+    }
+
     // ─────────────────────────── document ───────────────────────────
 
     /** @param array<int,array<string,mixed>> $groups */
@@ -323,102 +416,57 @@ final class CatalogRenderer
         $dateFull = now()->format('d M Y');
         $brand = self::BRAND; $brandD = self::BRAND_DARK; $ink = self::INK;
 
-        // --- paginate categories; cover = page 1, back page = last (index stays accurate) ---
+        $badges = $this->badgeMap($tenant);
+        $coverImg = $this->asset($tenant, (string) $tenant->setting('catalog_cover_image', ''), 1100, false, 0.62);
+        $promoImg = $this->asset($tenant, (string) $tenant->setting('catalog_promo_image', ''), 800);
+        $qr = $this->qr($tenant, $phone);
+        $totalItems = 0;
+        foreach ($groups as $g) $totalItems += count($g['items']);
+
+        // --- pagination plan: cover(1) [overview(2)] categories... back page(last) ---
+        $showOverview = count($groups) >= 2;
         $plan = [];
-        $page = 2;
+        $page = $showOverview ? 3 : 2;
         foreach ($groups as $g) {
-            $chunks = array_chunk($g['items'], self::PER_PAGE);
-            if (! $chunks) { $chunks = [[]]; }
-            $plan[] = ['category' => $g['category'], 'chunks' => $chunks, 'startPage' => $page, 'count' => count($g['items'])];
-            $page += count($chunks);
+            $items = $g['items'];
+            $chunks = $items ? array_chunk($items, self::PER_PAGE) : [[]];
+            $intro = count($items) >= self::INTRO_MIN;
+            $plan[] = ['category' => $g['category'], 'items' => $items, 'chunks' => $chunks,
+                'intro' => $intro, 'startPage' => $page, 'count' => count($items)];
+            $page += count($chunks) + ($intro ? 1 : 0);
         }
 
-        // --- cover ---
-        $logoBlock = $logo !== ''
-            ? '<div style="background:#ffffff;border-radius:10px;padding:12px 20px;display:inline-block"><img src="' . e($logo) . '" style="height:56px;max-width:170px"></div>'
-            : '<div style="font-size:30px;font-weight:bold;color:#ffffff;letter-spacing:-.5px">' . $company . '</div>';
-
-        $rows = [];
-        foreach ($plan as $i => $p) {
-            $bg = $i % 2 === 0 ? '#ffffff' : '#f8faf8';
-            $rows[] = '<tr>'
-                . '<td style="padding:8px 12px;background:' . $bg . ';font-weight:bold;font-size:11.5px;color:' . $ink . '">' . e($p['category']) . '</td>'
-                . '<td style="padding:8px 6px;background:' . $bg . ';color:#94a3b8;font-size:10px;white-space:nowrap">' . (int) $p['count'] . ' items</td>'
-                . '<td style="padding:8px 12px;background:' . $bg . ';text-align:right;color:' . $brandD . ';font-weight:bold;font-size:11px;white-space:nowrap">p.' . (int) $p['startPage'] . '</td>'
-                . '</tr>';
-        }
-        $idxHead = '<tr><th style="text-align:left;padding:7px 12px">Category</th><th style="text-align:left;padding:7px 6px">Items</th><th style="text-align:right;padding:7px 12px">Page</th></tr>';
-        if (count($rows) > 14) {   // two-column index for catalogue-heavy shops — never overflows the cover
-            $half = (int) ceil(count($rows) / 2);
-            $colA = '<table class="idx">' . $idxHead . implode('', array_slice($rows, 0, $half)) . '</table>';
-            $colB = '<table class="idx">' . $idxHead . implode('', array_slice($rows, $half)) . '</table>';
-            $index = '<table style="width:100%;border-collapse:separate;border-spacing:12px 0"><tr>'
-                . '<td style="width:50%;vertical-align:top">' . $colA . '</td>'
-                . '<td style="width:50%;vertical-align:top">' . $colB . '</td></tr></table>';
-        } else {
-            $index = '<table class="idx" style="width:78%;margin:0 auto">' . $idxHead . implode('', $rows) . '</table>';
-        }
-
-        $cover = '<div class="cover">'
-            . '<table class="band"><tr><td style="text-align:center;padding:44px 30px 40px">'
-            . $logoBlock
-            . ($tagline ? '<div style="margin-top:14px;font-size:12px;color:#d1fae5;font-weight:bold;letter-spacing:.6px">' . $tagline . '</div>' : '')
-            . '</td></tr></table>'
-            . '<div style="text-align:center;margin-top:38px">'
-            . '<div class="ctitle">PRODUCT CATALOGUE</div>'
-            . '<div style="margin-top:8px"><span class="datechip">' . $date . '</span></div>'
-            . '</div>'
-            . '<div style="margin-top:30px">' . $index . '</div>'
-            . '<table class="coverfoot"><tr><td>'
-            . $company . ($phone ? ' &nbsp;·&nbsp; ' . e($phone) : '') . ($email ? ' &nbsp;·&nbsp; ' . e($email) : '')
-            . '</td></tr></table>'
-            . '</div>';
+        $cover = $this->coverHtml($tenant, $plan, $company, $tagline, $logo, $phone, $email,
+            $date, $coverImg, $qr, $totalItems, $showOverview);
+        $overview = $showOverview
+            ? $this->overviewHtml($company, $logo, $date, $plan, $thumbs, $brandD, $promoImg)
+            : '';
 
         // --- category pages ---
         $body = '';
         foreach ($plan as $p) {
+            if ($p['intro']) {
+                $body .= $this->categoryIntro($p, $thumbs, $badges, $currency, $withPrices,
+                    $company, $logo, $date, $phone, $dateFull);
+            }
             $total = count($p['chunks']);
             foreach ($p['chunks'] as $ci => $items) {
                 $contLabel = $total > 1 ? ' <span style="font-weight:normal;color:#bbf7d0;font-size:10px">&nbsp;' . ($ci + 1) . ' / ' . $total . '</span>' : '';
+                $head = (! $p['intro'] && $ci === 0)
+                    ? $this->categoryHero($p, $thumbs, $badges)
+                    : '<table class="catband"><tr><td>' . e($p['category']) . $contLabel . '</td>'
+                        . '<td style="text-align:right"><span class="pill">' . (int) $p['count'] . ' products</span></td></tr></table>';
                 $body .= '<div class="page">'
                     . $this->pageHeader($company, $logo, $date, $brandD)
-                    . '<table class="catband"><tr><td>' . e($p['category']) . $contLabel . '</td>'
-                    . '<td style="text-align:right"><span class="pill">' . (int) $p['count'] . ' products</span></td></tr></table>'
-                    . $this->grid($items, $currency, $withPrices, $thumbs)
+                    . $head
+                    . $this->grid($items, $currency, $withPrices, $thumbs, $badges)
                     . $this->pageFooter($phone, $currency, $dateFull, $withPrices)
                     . '</div>';
             }
         }
 
-        // --- back page: how to order (also prevents any trailing-blank-page break) ---
-        $steps = [
-            ['1', 'Send your order on WhatsApp', $phone !== '' ? e($phone) : 'our WhatsApp line' ],
-            ['2', 'We confirm stock &amp; total', 'You get an order confirmation with the amount'],
-            ['3', 'Pick up or delivery', 'Collect at the store or ask about delivery'],
-        ];
-        $stepHtml = '';
-        foreach ($steps as [$n, $t, $s]) {
-            $stepHtml .= '<table class="step"><tr>'
-                . '<td style="width:34px"><div class="stepn">' . $n . '</div></td>'
-                . '<td><div style="font-size:13px;font-weight:bold;color:' . $ink . '">' . $t . '</div>'
-                . '<div style="font-size:10.5px;color:#64748b;margin-top:2px">' . $s . '</div></td>'
-                . '</tr></table>';
-        }
-        $back = '<div class="backpage">'
-            . $this->pageHeader($company, $logo, $date, $brandD)
-            . '<table class="catband"><tr><td>How to order</td></tr></table>'
-            . '<table style="width:100%;border-collapse:collapse"><tr><td style="width:55%;vertical-align:top;padding-right:16px">' . $stepHtml . '</td>'
-            . '<td style="vertical-align:top">'
-            . '<div class="ordercard">'
-            . '<div style="font-size:10px;font-weight:bold;letter-spacing:1.5px;color:#bbf7d0">ORDER ON WHATSAPP</div>'
-            . '<div style="font-size:19px;font-weight:bold;color:#ffffff;margin-top:6px">' . ($phone !== '' ? e($phone) : $company) . '</div>'
-            . ($email !== '' ? '<div style="font-size:10.5px;color:#d1fae5;margin-top:8px">' . e($email) . '</div>' : '')
-            . '</div>'
-            . '</td></tr></table>'
-            . '<div style="margin-top:22px;font-size:9px;color:#94a3b8">'
-            . ($withPrices ? 'All prices in ' . e($currency) . ', valid as of ' . e($dateFull) . ' and subject to change without notice. ' : '')
-            . 'Availability confirmed on order. Thank you for your business.</div>'
-            . '</div>';
+        $back = $this->backHtml($company, $logo, $date, $phone, $email, $currency, $dateFull,
+            $withPrices, $showOverview ? '' : $promoImg, $qr, ! $showOverview);
 
         return <<<HTML
 <!doctype html><html><head><meta charset="utf-8"><style>
@@ -427,11 +475,16 @@ final class CatalogRenderer
 body{margin:0;padding:0;color:{$ink};}
 .band{width:100%;border-collapse:collapse;background:{$brand};border-radius:12px;}
 .ctitle{font-size:27px;font-weight:bold;letter-spacing:5px;color:{$ink};}
+.ctitle2{font-size:31px;font-weight:bold;letter-spacing:1px;color:{$ink};line-height:1.12;}
 .datechip{display:inline-block;background:#f0fdf4;border:1px solid #bbf7d0;color:{$brandD};font-size:10.5px;font-weight:bold;padding:5px 14px;border-radius:12px;letter-spacing:1px;}
 table.idx{border-collapse:collapse;width:100%;border:1px solid #e2e8f0;border-radius:8px;}
 table.idx th{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;border-bottom:2px solid {$brand};background:#ffffff;}
-.coverfoot{width:100%;border-collapse:collapse;margin-top:34px;border-top:1px solid #e2e8f0;}
+.coverfoot{width:100%;border-collapse:collapse;margin-top:26px;border-top:1px solid #e2e8f0;}
 .coverfoot td{padding-top:12px;text-align:center;font-size:9.5px;color:#94a3b8;font-weight:bold;}
+.coverfix{position:relative;height:1056px;}
+.coverbar{position:absolute;top:966px;left:0;width:100%;}
+.coverfeat{position:absolute;top:872px;left:0;width:100%;}
+.featsub{font-size:8px;color:#94a3b8;font-weight:normal;margin-top:2px;}
 .page{page-break-before:always;}
 .backpage{page-break-before:always;}
 .phead{width:100%;border-collapse:collapse;border-bottom:2px solid {$brand};}
@@ -442,14 +495,26 @@ table.idx th{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#94
 table.catband{width:100%;border-collapse:collapse;margin:12px 0 4px;background:{$brandD};border-radius:8px;}
 table.catband td{padding:9px 14px;vertical-align:middle;font-size:16px;font-weight:bold;color:#ffffff;letter-spacing:-.2px;}
 .pill{background:#ffffff;color:{$brandD};font-size:9px;font-weight:bold;padding:3px 10px;border-radius:9px;letter-spacing:.5px;}
+.pillg{background:{$brandD};color:#ffffff;font-size:9px;font-weight:bold;padding:3px 10px;border-radius:9px;letter-spacing:.5px;}
+table.hero{width:100%;border-collapse:collapse;margin:12px 0 4px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;}
+table.ihero{width:100%;border-collapse:collapse;margin:12px 0 4px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;}
+table.hero td{padding:14px 16px;vertical-align:middle;}
+.heroname{font-size:21px;font-weight:bold;letter-spacing:-.3px;}
+.ts{font-size:8px;font-weight:bold;letter-spacing:1.5px;color:{$brandD};}
+table.tsrow{border-collapse:separate;border-spacing:6px 0;margin-top:8px;}
+table.tsrow td{background:#ffffff;border:1px solid #dcfce7;border-radius:8px;padding:3px;}
+table.tsrow img{height:44px;max-width:56px;}
+.heroimg img{max-height:120px;max-width:160px;}
 table.grid{width:100%;border-collapse:separate;border-spacing:8px;table-layout:fixed;}
 td.cell{width:33%;border:1px solid #e2e8f0;border-radius:8px;vertical-align:top;padding:0;background:#ffffff;}
 td.cellpad{border:none;background:none;}
+.bstrip{height:17px;padding:3px 6px 0;}
+.badge{display:inline-block;color:#ffffff;font-size:7.5px;font-weight:bold;letter-spacing:.8px;padding:2px 7px;border-radius:8px;}
 table.phw{width:100%;border-collapse:collapse;}
-table.phw td{height:132px;text-align:center;vertical-align:middle;padding:4px 4px 0;}
+table.phw td{height:132px;text-align:center;vertical-align:middle;padding:0 4px;}
 table.phw img{max-height:126px;max-width:100%;}
-.noimg{display:inline-block;color:#cbd5e1;font-size:8px;font-weight:bold;letter-spacing:1.5px;border:1px dashed #e2e8f0;border-radius:6px;padding:26px 18px;background:#f8fafc;}
-.pbody{padding:7px 10px 9px;}
+.noimg{display:inline-block;color:#cbd5e1;font-size:8px;font-weight:bold;letter-spacing:1.5px;border:1px dashed #e2e8f0;border-radius:6px;padding:22px 16px;background:#f8fafc;}
+.pbody{padding:6px 10px 9px;}
 .pn1{font-weight:bold;font-size:11px;height:16px;overflow:hidden;}
 .pu{font-size:9.5px;color:#64748b;font-weight:bold;height:13px;overflow:hidden;margin-top:2px;}
 .pm{font-size:9px;color:#94a3b8;height:12px;overflow:hidden;margin-top:1px;}
@@ -464,12 +529,373 @@ table.prow td{padding-top:5px;vertical-align:bottom;}
 .step{width:100%;border-collapse:collapse;margin:0 0 14px;}
 .stepn{width:26px;height:26px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:13px;color:{$brandD};font-weight:bold;font-size:13px;text-align:center;line-height:26px;}
 .ordercard{background:{$brandD};border-radius:10px;padding:18px 20px;}
+.chk{width:15px;height:15px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;color:{$brandD};font-weight:bold;font-size:9px;text-align:center;line-height:15px;}
+.statbox{background:{$brandD};border-radius:10px;padding:13px 18px;color:#ffffff;}
+table.ovg{width:100%;border-collapse:separate;border-spacing:9px;table-layout:fixed;}
+td.ovcell{border:1px solid #e2e8f0;border-radius:10px;vertical-align:top;padding:0;background:#ffffff;}
+table.ovph{width:100%;border-collapse:collapse;}
+table.ovph td{height:104px;text-align:center;vertical-align:middle;background:#f8fafc;border-bottom:1px solid #f1f5f9;}
+table.ovph img{max-height:96px;max-width:90%;}
+.ovbody{padding:9px 12px 11px;}
+.ovname{font-weight:bold;font-size:12px;height:16px;overflow:hidden;}
+table.feat{width:100%;border-collapse:collapse;margin-top:14px;background:#f8faf8;border:1px solid #eef2ee;border-radius:10px;}
+table.feat td{padding:10px 12px;font-size:9.5px;color:#475569;font-weight:bold;}
+.promo{width:100%;border-collapse:collapse;background:{$brandD};border-radius:10px;margin:12px 0 14px;}
+.promo td{padding:16px 18px;vertical-align:middle;}
+.promoimg img{max-height:86px;max-width:150px;border-radius:6px;}
+.qrbox{background:#ffffff;border-radius:8px;padding:6px;display:inline-block;}
 </style></head><body>
 {$cover}
+{$overview}
 {$body}
 {$back}
 </body></html>
 HTML;
+    }
+
+    /** Comma-separated settings → [normalised sku/name => badge]. */
+    private function badgeMap(Tenant $tenant): array
+    {
+        $map = [];
+        $lists = [
+            ['keys' => (string) $tenant->setting('catalog_best_sellers', ''), 'label' => 'BEST SELLER', 'bg' => self::BRAND],
+            ['keys' => (string) $tenant->setting('catalog_hot_deals', ''), 'label' => 'HOT DEAL', 'bg' => '#ea580c'],
+        ];
+        foreach ($lists as $l) {
+            foreach (explode(',', $l['keys']) as $k) {
+                $k = mb_strtolower(trim($k), 'UTF-8');
+                if ($k !== '') $map[$k] = ['label' => $l['label'], 'bg' => $l['bg']];
+            }
+        }
+
+        return $map;
+    }
+
+    private function badgeFor(array $item, array $badges): ?array
+    {
+        if (! $badges) {
+            return null;
+        }
+        foreach ([(string) ($item['sku'] ?? ''), (string) ($item['name'] ?? '')] as $key) {
+            $k = mb_strtolower(trim($key), 'UTF-8');
+            if ($k !== '' && isset($badges[$k])) {
+                return $badges[$k];
+            }
+        }
+
+        return null;
+    }
+
+    private function coverHtml(Tenant $tenant, array $plan, string $company, string $tagline,
+        string $logo, string $phone, string $email, string $date, string $coverImg, string $qr,
+        int $totalItems, bool $showOverview): string
+    {
+        $brand = self::BRAND; $brandD = self::BRAND_DARK;
+        $logoBlockDark = $logo !== ''
+            ? '<img src="' . e($logo) . '" style="height:40px;max-width:150px">'
+            : '<div style="font-size:19px;font-weight:bold;color:' . $brandD . '">' . $company . '</div>';
+
+        $contactBar = '<table style="width:100%;border-collapse:collapse;background:' . $brandD . ';border-radius:10px;margin-top:16px"><tr>'
+            . ($qr !== '' ? '<td style="width:74px;padding:10px 0 10px 14px"><span class="qrbox"><img src="' . e($qr) . '" style="height:52px;width:52px"></span></td>'
+                . '<td style="padding:10px 6px;color:#ffffff;font-size:10px;font-weight:bold;width:120px">SCAN TO ORDER<br>ON WHATSAPP</td>' : '')
+            . '<td style="padding:10px 14px;text-align:right;color:#d1fae5;font-size:9.5px;font-weight:bold">'
+            . ($phone !== '' ? '☎ ' . e($phone) . '<br>' : '') . ($email !== '' ? '✉ ' . e($email) : '')
+            . '</td></tr></table>';
+
+        if ($coverImg !== '') {
+            // Photographic cover: text column left, hero photo right, contact/QR bar bottom.
+            $audience = array_filter(array_map('trim', explode(',',
+                (string) $tenant->setting('catalog_audience', 'Hotels,Restaurants,Supermarkets,Retailers'))));
+            $audRows = '';
+            foreach (array_slice($audience, 0, 5) as $a) {
+                $audRows .= '<table style="border-collapse:collapse;margin-top:7px"><tr>'
+                    . '<td style="width:21px"><div class="chk">✓</div></td>'
+                    . '<td style="font-size:11px;font-weight:bold;color:#334155;padding-left:4px">For ' . e($a) . '</td></tr></table>';
+            }
+
+            $features = '<div class="coverfeat"><table class="feat"><tr>'
+                . '<td style="width:25%">✓ Great prices<div class="featsub">Best wholesale rates</div></td>'
+                . '<td style="width:25%">✓ Quality assured<div class="featsub">Genuine products</div></td>'
+                . '<td style="width:25%">✓ Fast-moving lines<div class="featsub">High-demand stock</div></td>'
+                . '<td style="width:25%">✓ Reliable supply<div class="featsub">Consistent availability</div></td>'
+                . '</tr></table></div>';
+
+            return '<div class="cover coverfix">'
+                . '<table style="width:100%;border-collapse:collapse"><tr><td style="padding:2px 0 10px">' . $logoBlockDark
+                . ($tagline ? '<div style="font-size:9.5px;color:#64748b;font-weight:bold;margin-top:3px">' . $tagline . '</div>' : '')
+                . '</td></tr></table>'
+                . '<table style="width:100%;border-collapse:collapse"><tr>'
+                . '<td style="width:47%;vertical-align:top;padding-top:22px">'
+                . '<div style="font-size:15px;font-weight:bold;letter-spacing:3px;color:#64748b">WHOLESALE</div>'
+                . '<div class="ctitle2" style="color:' . $brandD . '">PRODUCT<br>CATALOGUE</div>'
+                . '<div style="margin-top:14px"><span class="datechip">' . $date . '</span></div>'
+                . '<div style="margin-top:20px">' . $audRows . '</div>'
+                . '<table style="border-collapse:collapse;margin-top:24px"><tr><td><div class="statbox">'
+                . '<div style="font-size:22px;font-weight:bold">' . number_format($totalItems) . '+</div>'
+                . '<div style="font-size:8px;font-weight:bold;letter-spacing:1.5px;color:#bbf7d0">WHOLESALE PRODUCTS</div>'
+                . '</div></td></tr></table>'
+                . '</td>'
+                . '<td style="width:53%;vertical-align:top;padding:12px 0 0 16px">'
+                . '<img src="' . e($coverImg) . '" style="width:100%;border-radius:12px">'
+                . '</td></tr></table>'
+                . $features
+                . '<div class="coverbar">' . $contactBar . '</div>'
+                . '</div>';
+        }
+
+        // Brand-band cover (no artwork needed). Single-category catalogues keep the index here.
+        $logoBlock = $logo !== ''
+            ? '<div style="background:#ffffff;border-radius:10px;padding:12px 20px;display:inline-block"><img src="' . e($logo) . '" style="height:56px;max-width:170px"></div>'
+            : '<div style="font-size:30px;font-weight:bold;color:#ffffff;letter-spacing:-.5px">' . $company . '</div>';
+
+        $middle = '';
+        if (! $showOverview) {
+            $rows = '';
+            foreach ($plan as $i => $p) {
+                $bg = $i % 2 === 0 ? '#ffffff' : '#f8faf8';
+                $rows .= '<tr><td style="padding:8px 12px;background:' . $bg . ';font-weight:bold;font-size:11.5px">' . e($p['category']) . '</td>'
+                    . '<td style="padding:8px 6px;background:' . $bg . ';color:#94a3b8;font-size:10px">' . (int) $p['count'] . ' items</td>'
+                    . '<td style="padding:8px 12px;background:' . $bg . ';text-align:right;color:' . $brandD . ';font-weight:bold;font-size:11px">p.' . (int) $p['startPage'] . '</td></tr>';
+            }
+            $middle = '<div style="margin-top:26px"><table class="idx" style="width:78%;margin:0 auto">'
+                . '<tr><th style="text-align:left;padding:7px 12px">Category</th><th style="text-align:left;padding:7px 6px">Items</th><th style="text-align:right;padding:7px 12px">Page</th></tr>'
+                . $rows . '</table></div>';
+        } else {
+            $middle = '<div style="text-align:center;margin-top:26px;font-size:11px;color:#64748b;font-weight:bold">'
+                . number_format($totalItems) . ' products · ' . count($plan) . ' categories — see the category guide on page 2</div>';
+        }
+
+        return '<div class="cover">'
+            . '<table class="band"><tr><td style="text-align:center;padding:44px 30px 40px">' . $logoBlock
+            . ($tagline ? '<div style="margin-top:14px;font-size:12px;color:#d1fae5;font-weight:bold;letter-spacing:.6px">' . $tagline . '</div>' : '')
+            . '</td></tr></table>'
+            . '<div style="text-align:center;margin-top:34px"><div class="ctitle">PRODUCT CATALOGUE</div>'
+            . '<div style="margin-top:8px"><span class="datechip">' . $date . '</span></div></div>'
+            . $middle
+            . ($qr !== '' ? '<div style="text-align:center;margin-top:26px"><span class="qrbox" style="border:1px solid #e2e8f0"><img src="' . e($qr) . '" style="height:74px;width:74px"></span>'
+                . '<div style="font-size:8.5px;font-weight:bold;color:#94a3b8;letter-spacing:1px;margin-top:5px">SCAN TO ORDER ON WHATSAPP</div></div>' : '')
+            . '<table class="coverfoot"><tr><td>' . $company
+            . ($phone ? ' &nbsp;·&nbsp; ' . e($phone) : '') . ($email ? ' &nbsp;·&nbsp; ' . e($email) : '')
+            . '</td></tr></table>'
+            . '</div>';
+    }
+
+    private function overviewHtml(string $company, string $logo, string $date, array $plan,
+        array $thumbs, string $brandD, string $promoImg = ''): string
+    {
+        // >12 categories: compact two-column text index (photo cards would overflow the page)
+        if (count($plan) > 12) {
+            $rows = [];
+            foreach ($plan as $i => $p) {
+                $bg = $i % 2 === 0 ? '#ffffff' : '#f8faf8';
+                $rows[] = '<tr><td style="padding:7px 10px;background:' . $bg . ';font-weight:bold;font-size:10.5px">' . e($this->clipLine($p['category'], 26)) . '</td>'
+                    . '<td style="padding:7px 4px;background:' . $bg . ';color:#94a3b8;font-size:9px;white-space:nowrap">' . (int) $p['count'] . '</td>'
+                    . '<td style="padding:7px 10px;background:' . $bg . ';text-align:right;color:' . $brandD . ';font-weight:bold;font-size:10px;white-space:nowrap">p.' . (int) $p['startPage'] . '</td></tr>';
+            }
+            $head = '<tr><th style="text-align:left;padding:6px 10px">Category</th><th style="text-align:left;padding:6px 4px">Items</th><th style="text-align:right;padding:6px 10px">Page</th></tr>';
+            $half = (int) ceil(count($rows) / 2);
+            $index = '<table style="width:100%;border-collapse:separate;border-spacing:12px 0"><tr>'
+                . '<td style="width:50%;vertical-align:top"><table class="idx">' . $head . implode('', array_slice($rows, 0, $half)) . '</table></td>'
+                . '<td style="width:50%;vertical-align:top"><table class="idx">' . $head . implode('', array_slice($rows, $half)) . '</table></td></tr></table>';
+
+            return '<div class="page">'
+                . $this->pageHeader($company, $logo, $date, $brandD)
+                . '<div style="margin:14px 0 2px;font-size:19px;font-weight:bold;color:' . $brandD . '">Explore our categories</div>'
+                . '<div style="font-size:10px;color:#94a3b8;font-weight:bold;margin-bottom:8px">Everything your business needs, in one place.</div>'
+                . $index
+                . $this->promoBand($promoImg)
+                . '</div>';
+        }
+
+        $perRow = count($plan) <= 6 ? 2 : 3;
+        $cells = [];
+        foreach ($plan as $p) {
+            $src = '';
+            foreach ($p['items'] as $it) {
+                $img = trim((string) ($it['image'] ?? ''));
+                if ($img !== '' && ($thumbs[$img] ?? '') !== '') { $src = $thumbs[$img]; break; }
+            }
+            $photo = $src !== ''
+                ? '<table class="ovph"><tr><td><img src="' . e($src) . '"></td></tr></table>'
+                : '<table class="ovph"><tr><td><span class="noimg">' . e(mb_strtoupper(mb_substr($p['category'], 0, 14))) . '</span></td></tr></table>';
+            $ph = $perRow === 2 ? ' style="height:158px"' : '';
+            $cells[] = '<td class="ovcell">' . str_replace('<td>', '<td' . $ph . '>', $photo)
+                . '<div class="ovbody"><div class="ovname">' . e($this->clipLine($p['category'], $perRow === 2 ? 34 : 24)) . '</div>'
+                . '<table style="width:100%;border-collapse:collapse;margin-top:6px"><tr>'
+                . '<td><span class="pillg">' . (int) $p['count'] . ' products</span></td>'
+                . '<td style="text-align:right;font-size:10px;font-weight:bold;color:' . $brandD . '">p.' . (int) $p['startPage'] . ' →</td>'
+                . '</tr></table></div></td>';
+        }
+        while (count($cells) % $perRow !== 0) {
+            $cells[] = '<td class="ovcell" style="border:none;background:none"></td>';
+        }
+        $rows = '';
+        foreach (array_chunk($cells, $perRow) as $row) {
+            $rows .= '<tr>' . implode('', $row) . '</tr>';
+        }
+
+        $feat = '<table class="feat"><tr>'
+            . '<td style="width:25%">✓ Wholesale prices</td><td style="width:25%">✓ Genuine brands</td>'
+            . '<td style="width:25%">✓ Bulk discounts</td><td style="width:25%">✓ Delivery on request</td>'
+            . '</tr></table>';
+
+        return '<div class="page">'
+            . $this->pageHeader($company, $logo, $date, $brandD)
+            . '<div style="margin:14px 0 2px;font-size:19px;font-weight:bold;color:' . $brandD . '">Explore our categories</div>'
+            . '<div style="font-size:10px;color:#94a3b8;font-weight:bold;margin-bottom:6px">Everything your business needs, in one place.</div>'
+            . '<table class="ovg">' . $rows . '</table>'
+            . $feat
+            . $this->promoBand($promoImg)
+            . '</div>';
+    }
+
+    /** The "Need a product you don't see?" green band (promo photo optional). */
+    private function promoBand(string $promoImg): string
+    {
+        return '<table class="promo"><tr>'
+            . '<td><div style="font-size:16px;font-weight:bold;color:#ffffff">Need a product you don\'t see?</div>'
+            . '<div style="font-size:10.5px;color:#d1fae5;margin-top:5px;font-weight:bold">Chat with us on WhatsApp — we source it for you.</div></td>'
+            . ($promoImg !== '' ? '<td style="width:170px;text-align:right" class="promoimg"><img src="' . e($promoImg) . '"></td>' : '')
+            . '</tr></table>';
+    }
+
+    /**
+     * Full intro page for a big category (≥ INTRO_MIN items): headline band, hero photo,
+     * top-picks card row, feature strip. Mirrors the marketing-mock structure while staying
+     * inside the dompdf page budget.
+     */
+    private function categoryIntro(array $p, array $thumbs, array $badges, string $currency,
+        bool $withPrices, string $company, string $logo, string $date, string $phone,
+        string $dateFull): string
+    {
+        $brandD = self::BRAND_DARK;
+
+        // hero photo: first badged item with a photo, else first item with a photo
+        $heroSrc = '';
+        foreach ($p['items'] as $it) {
+            $img = trim((string) ($it['image'] ?? ''));
+            $uri = $img !== '' ? ($thumbs[$img] ?? '') : '';
+            if ($uri !== '' && $this->badgeFor($it, $badges)) { $heroSrc = $uri; break; }
+            if ($uri !== '' && $heroSrc === '') $heroSrc = $uri;
+        }
+
+        // top picks: badged items first, then fill from the front (3 cards)
+        $picks = [];
+        foreach ($p['items'] as $it) {
+            if ($this->badgeFor($it, $badges)) $picks[] = $it;
+        }
+        foreach ($p['items'] as $it) {
+            if (count($picks) >= 3) break;
+            if (! in_array($it, $picks, true)) $picks[] = $it;
+        }
+        $picks = array_slice($picks, 0, 3);
+
+        $hero = '<table class="ihero"><tr>'
+            . '<td style="vertical-align:middle;padding:22px 24px">'
+            . '<div style="font-size:26px;font-weight:bold;letter-spacing:-.4px">' . e($p['category']) . '</div>'
+            . '<div style="margin-top:9px"><span class="pillg">' . (int) $p['count'] . ' products</span>'
+            . '&nbsp;&nbsp;<span style="font-size:9px;color:#64748b;font-weight:bold">pages ' . (int) $p['startPage'] . '–' . ((int) $p['startPage'] + count($p['chunks'])) . '</span></div>'
+            . '<div style="margin-top:14px;font-size:10.5px;color:#475569;font-weight:bold;line-height:1.6">'
+            . 'Wholesale prices on every pack size ·<br>stock confirmed on order.</div>'
+            . '</td>'
+            . ($heroSrc !== '' ? '<td style="width:280px;text-align:center;vertical-align:middle;padding:14px"><div style="background:#ffffff;border:1px solid #dcfce7;border-radius:12px;padding:10px"><img src="' . e($heroSrc) . '" style="max-height:218px;max-width:100%"></div></td>' : '')
+            . '</tr></table>';
+
+        $pickRow = $picks
+            ? '<div style="margin:14px 0 2px;font-size:9px;font-weight:bold;letter-spacing:2px;color:' . $brandD . '">★ TOP SELLERS IN ' . e(mb_strtoupper($p['category'])) . '</div>'
+                . $this->grid($picks, $currency, $withPrices, $thumbs, $badges)
+            : '';
+
+        $feat = '<table class="feat"><tr>'
+            . '<td style="width:25%">✓ Great prices</td><td style="width:25%">✓ Quality assured</td>'
+            . '<td style="width:25%">✓ Fast-moving lines</td><td style="width:25%">✓ Reliable supply</td>'
+            . '</tr></table>';
+
+        return '<div class="page">'
+            . $this->pageHeader($company, $logo, $date, self::BRAND_DARK)
+            . $hero
+            . $pickRow
+            . $feat
+            . $this->pageFooter($phone, $currency, $dateFull, $withPrices)
+            . '</div>';
+    }
+
+    /** First page of a category: light hero band — name, count, top-seller strip, hero photo. */
+    private function categoryHero(array $p, array $thumbs, array $badges): string
+    {
+        $heroSrc = '';
+        $tops = [];
+        foreach ($p['items'] as $it) {
+            $img = trim((string) ($it['image'] ?? ''));
+            $uri = $img !== '' ? ($thumbs[$img] ?? '') : '';
+            if ($uri === '') {
+                continue;
+            }
+            if ($this->badgeFor($it, $badges)) {
+                if ($heroSrc === '') $heroSrc = $uri;
+                if (count($tops) < 3) $tops[] = $uri;
+            }
+            if ($heroSrc === '') $heroSrc = $uri;
+        }
+
+        $strip = '';
+        if ($tops) {
+            $tds = '';
+            foreach ($tops as $t) $tds .= '<td><img src="' . e($t) . '"></td>';
+            $strip = '<div class="ts" style="margin-top:10px">★ TOP SELLERS</div><table class="tsrow"><tr>' . $tds . '</tr></table>';
+        }
+        $total = count($p['chunks']);
+        $cont = $total > 1 ? ' <span style="font-weight:normal;color:#94a3b8;font-size:10px">1 / ' . $total . '</span>' : '';
+
+        return '<table class="hero"><tr>'
+            . '<td><div class="heroname">' . e($p['category']) . $cont . '</div>'
+            . '<div style="margin-top:7px"><span class="pillg">' . (int) $p['count'] . ' products</span></div>'
+            . $strip . '</td>'
+            . ($heroSrc !== '' ? '<td style="width:175px;text-align:right" class="heroimg"><img src="' . e($heroSrc) . '"></td>' : '')
+            . '</tr></table>';
+    }
+
+    private function backHtml(string $company, string $logo, string $date, string $phone,
+        string $email, string $currency, string $dateFull, bool $withPrices, string $promoImg,
+        string $qr, bool $withPromo = true): string
+    {
+        $ink = self::INK; $brandD = self::BRAND_DARK;
+        $promo = $withPromo ? $this->promoBand($promoImg) : '';
+
+        $steps = [
+            ['1', 'Send your order on WhatsApp', $phone !== '' ? e($phone) : 'our WhatsApp line'],
+            ['2', 'We confirm stock &amp; total', 'You get an order confirmation with the amount'],
+            ['3', 'Pick up or delivery', 'Collect at the store or ask about delivery'],
+        ];
+        $stepHtml = '';
+        foreach ($steps as [$n, $t, $s]) {
+            $stepHtml .= '<table class="step"><tr>'
+                . '<td style="width:34px"><div class="stepn">' . $n . '</div></td>'
+                . '<td><div style="font-size:13px;font-weight:bold;color:' . $ink . '">' . $t . '</div>'
+                . '<div style="font-size:10.5px;color:#64748b;margin-top:2px">' . $s . '</div></td>'
+                . '</tr></table>';
+        }
+
+        return '<div class="backpage">'
+            . $this->pageHeader($company, $logo, $date, $brandD)
+            . '<table class="catband"><tr><td>How to order</td></tr></table>'
+            . $promo
+            . '<table style="width:100%;border-collapse:collapse"><tr><td style="width:55%;vertical-align:top;padding-right:16px">' . $stepHtml . '</td>'
+            . '<td style="vertical-align:top">'
+            . '<div class="ordercard">'
+            . '<table style="width:100%;border-collapse:collapse"><tr><td>'
+            . '<div style="font-size:10px;font-weight:bold;letter-spacing:1.5px;color:#bbf7d0">ORDER ON WHATSAPP</div>'
+            . '<div style="font-size:19px;font-weight:bold;color:#ffffff;margin-top:6px">' . ($phone !== '' ? e($phone) : $company) . '</div>'
+            . ($email !== '' ? '<div style="font-size:10.5px;color:#d1fae5;margin-top:8px">' . e($email) . '</div>' : '')
+            . '</td>'
+            . ($qr !== '' ? '<td style="width:74px;text-align:right;vertical-align:top"><span class="qrbox"><img src="' . e($qr) . '" style="height:62px;width:62px"></span></td>' : '')
+            . '</tr></table>'
+            . '</div>'
+            . '</td></tr></table>'
+            . '<div style="margin-top:22px;font-size:9px;color:#94a3b8">'
+            . ($withPrices ? 'All prices in ' . e($currency) . ', valid as of ' . e($dateFull) . ' and subject to change without notice. ' : '')
+            . 'Availability confirmed on order. Thank you for your business.</div>'
+            . '</div>';
     }
 
     private function pageHeader(string $company, string $logo, string $date, string $brandD): string
@@ -484,7 +910,7 @@ HTML;
     }
 
     /** @param array<int,array<string,mixed>> $items */
-    private function grid(array $items, string $currency, bool $withPrices, array $thumbs): string
+    private function grid(array $items, string $currency, bool $withPrices, array $thumbs, array $badges = []): string
     {
         $cells = [];
         foreach ($items as $it) {
@@ -494,6 +920,11 @@ HTML;
                 ? '<table class="phw"><tr><td><img src="' . e($src) . '"></td></tr></table>'
                 : '<table class="phw"><tr><td><span class="noimg">PHOTO<br>COMING SOON</span></td></tr></table>';
 
+            $b = $this->badgeFor($it, $badges);
+            $bstrip = '<div class="bstrip">'
+                . ($b ? '<span class="badge" style="background:' . $b['bg'] . '">' . $b['label'] . '</span>' : '&nbsp;')
+                . '</div>';
+
             $unit = trim((string) ($it['unit'] ?? ''));
             $moq = ! empty($it['moq'])
                 ? 'Min order: ' . e((string) $it['moq']) . ' &times; ' . e($unit !== '' ? $unit : 'units')
@@ -502,7 +933,7 @@ HTML;
                 ? '<div class="pfrom">FROM</div><div class="pr">' . $this->money((float) $it['price'], $currency) . '</div>'
                 : '<div class="pr" style="color:#94a3b8;font-size:10px">Ask for price</div>';
 
-            $cells[] = '<td class="cell">' . $photo
+            $cells[] = '<td class="cell">' . $bstrip . $photo
                 . '<div class="pbody">'
                 . $this->nameLines((string) $it['name'])
                 . '<div class="pu">' . ($unit !== '' ? e($unit) : '&nbsp;') . '</div>'
@@ -552,6 +983,13 @@ HTML;
         }
 
         return '<div class="pn1">' . e($l1) . '</div><div class="pn1">' . ($l2 !== '' ? e($l2) : '&nbsp;') . '</div>';
+    }
+
+    private function clipLine(string $s, int $max): string
+    {
+        $s = trim($s);
+
+        return mb_strlen($s, 'UTF-8') > $max ? rtrim(mb_substr($s, 0, $max - 1, 'UTF-8')) . '…' : $s;
     }
 
     private function pageFooter(string $phone, string $currency, string $dateFull, bool $withPrices): string
