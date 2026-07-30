@@ -49,11 +49,10 @@ class BrandingUploadController extends Controller
             return response()->json(['ok' => false, 'error' => 'Could not store the file.'], 500);
         }
 
-        // Absolute URL — the catalogue image fetcher only follows http(s), never relative paths.
-        $url = Storage::disk('public')->url($path);
-        if (! preg_match('~^https?://~i', $url)) {
-            $url = rtrim((string) config('app.url'), '/') . '/' . ltrim($url, '/');
-        }
+        // Absolute URL built from the host the OWNER is browsing on (mycloudbss.com / custom
+        // domain) — NOT from APP_URL, which on some deploys points at an internal container
+        // hostname (e.g. *.easypanel.host) that is wrong for public links.
+        $url = $request->getSchemeAndHttpHost() . '/storage/' . ltrim($path, '/');
 
         return response()->json(['ok' => true, 'url' => $url, 'key' => $data['key']]);
     }

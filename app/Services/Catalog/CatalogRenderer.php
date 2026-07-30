@@ -289,6 +289,8 @@ final class CatalogRenderer
         foreach ($urls as $u) {
             if (is_file($u)) {
                 $res[$u] = @file_get_contents($u) ?: null;
+            } elseif (($own = $this->ownStorageBytes($u)) !== null) {
+                $res[$u] = $own;   // our own /storage/ file — read from disk, skip HTTP entirely
             } elseif (preg_match('~^https?://~i', $u)) {
                 $remote[] = $u;
             } else {
@@ -340,6 +342,33 @@ final class CatalogRenderer
         }
 
         return $res;
+    }
+
+    /**
+     * If a URL points at THIS app's public storage (any hostname — the canonical domain, a
+     * custom domain, or an internal container host like *.easypanel.host that a misconfigured
+     * APP_URL may have baked into saved settings), read the bytes straight from the disk.
+     * Faster than HTTP for every product photo, and immune to domain/ingress problems.
+     */
+    private function ownStorageBytes(string $url): ?string
+    {
+        if (! preg_match('~^https?://[^/]+/storage/(.+)$~i', $url, $m)) {
+            return null;
+        }
+        $rel = urldecode($m[1]);
+        if (str_contains($rel, '..')) {
+            return null;
+        }
+        try {
+            if (Storage::disk('public')->exists($rel)) {
+                $bytes = Storage::disk('public')->get($rel);
+
+                return ($bytes !== null && $bytes !== '') ? $bytes : null;
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return null;
     }
 
     /** Contain-fit raw image bytes onto a white 4:3 canvas → [bytes, mime] (null if undecodable). */
