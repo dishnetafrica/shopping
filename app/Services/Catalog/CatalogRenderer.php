@@ -59,7 +59,13 @@ final class CatalogRenderer
         $html = $this->html($tenant, $groups, $currency, $withPrices, $thumbs);
 
         try {
-            $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true, 'isHtml5ParserEnabled' => true]);
+            $dompdf = new \Dompdf\Dompdf([
+                'isRemoteEnabled' => true,
+                'isHtml5ParserEnabled' => true,
+                // Embed only the glyphs actually used instead of whole font files — shaves a few
+                // hundred KB off every document for free.
+                'isFontSubsettingEnabled' => true,
+            ]);
             $dompdf->loadHtml($html);
             $dompdf->setPaper('A4');
             $dompdf->render();
