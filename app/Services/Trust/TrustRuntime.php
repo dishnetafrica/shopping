@@ -274,4 +274,59 @@ final class TrustRuntime
              'unverified_value' => 0, 'last_counted_at' => now(),
              'created_at' => now(), 'updated_at' => now()]);
     }
+
+    /**
+     * Resolve an investigation with a human outcome — the label factory (Spec §7.2 / §10).
+     * Same semantics as `trust:resolve`, exposed for the panel (T6): clean ↑ actor reputation,
+     * confirmed_loss ↓ scaled by value severity, `error` is process-not-person → no reputation
+     * change. Unlike the artisan path this refuses to overwrite an already-resolved item
+     * (double-tap protection in a browser).
+     */
+    public function resolveInvestigation(int $invId, string $outcome, ?float $value, string $notes, string $by): array
+    {
+        if (! in_array($outcome, ['clean', 'error', 'confirmed_loss', 'unresolved'], true)) {
+            return ['ok' => false, 'error' => 'bad_outcome'];
+        }
+        $tid = (int) $this->tenant->id;
+        $inv = DB::table('trust_investigations')->where('tenant_id', $tid)->where('id', $invId)->first();
+        if (! $inv) {
+            return ['ok' => false, 'error' => 'not_found'];
+        }
+        if ($inv->outcome !== null) {
+            return ['ok' => false, 'error' => 'already_resolved'];
+        }
+
+        DB::table('trust_investigations')->where('id', $inv->id)->update([
+            'outcome' => $outcome,
+            'outcome_value' => $value,
+            'resolved_by' => $by,
+            'resolved_at' => now(),
+            'notes' => $notes,
+            'updated_at' => now(),
+        ]);
+
+        $m = DB::table('stock_movements')->where('id', $inv->stock_movement_id)->first();
+        if ($m && $m->created_by && in_array($outcome, ['clean', 'confirmed_loss'], true)) {
+            $stat = DB::table('trust_entity_stats')->where([
+                'tenant_id' => $tid, 'entity_type' => 'actor',
+                'entity_key' => $m->created_by, 'txn_type' => '*'])->first();
+            $s = $stat ? ['alpha' => (float) $stat->alpha, 'beta' => (float) $stat->beta]
+                       : EntityTrust::coldStart();
+            if ($outcome === 'clean') {
+                $s = EntityTrust::update($s['alpha'], $s['beta'], true);
+            } else {
+                $sev = ($value ?? 0) > 0
+                    ? min(1.0, (float) $value / max($this->medianValue() * 4, 0.01))
+                    : 0.6;
+                $s = EntityTrust::update($s['alpha'], $s['beta'], false, $sev);
+            }
+            DB::table('trust_entity_stats')->updateOrInsert(
+                ['tenant_id' => $tid, 'entity_type' => 'actor',
+                 'entity_key' => $m->created_by, 'txn_type' => '*'],
+                ['alpha' => $s['alpha'], 'beta' => $s['beta'],
+                 'created_at' => now(), 'updated_at' => now()]);
+        }
+
+        return ['ok' => true];
+    }
 }

@@ -1,0 +1,198 @@
+<!DOCTYPE html><html lang="en"><head>
+  <link rel="stylesheet" href="/panel/shared/tokens.css">
+  <script src="/panel/shared/ui.js"></script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inventory Trust</title>
+<style>
+:root{--dark:#1B3A2B;--green:#15803D;--red:#C0392B;--amber:#b45309;--line:#e4e9e4;--muted:#6b7280;--bg:#f6f8f6}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1B211D;background:var(--bg)}
+.top{background:var(--dark);color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between}
+.top h1{font-size:18px;margin:0;font-weight:800}.back{background:#ffffff22;border:none;color:#fff;border-radius:9px;padding:8px 12px;font-weight:700;cursor:pointer}
+.top .tn{font-size:12px;opacity:.8}
+.wrap{max-width:1040px;margin:0 auto;padding:14px}
+.card{background:#fff;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 1px 3px #0000000d}
+h2{font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 12px}
+.btn{background:var(--green);color:#fff;border:none;border-radius:10px;padding:9px 14px;font-weight:800;cursor:pointer}
+.btn.alt{background:#eef2f7;color:#334155}.btn.danger{background:#fdecea;color:var(--red)}.btn.sm{padding:6px 10px;font-size:12px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.tile{background:#fff;border-radius:14px;padding:14px;box-shadow:0 1px 3px #0000000d}
+.tile .v{font-size:24px;font-weight:800}.tile .l{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-top:3px}
+.tile .m{font-size:10px;color:#98a1ad}
+.ok{color:var(--green);font-weight:800}.bad{color:var(--red);font-weight:800}.warn{color:var(--amber);font-weight:800}
+.pill{display:inline-block;font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;background:#eef4ee;color:var(--green)}
+.pill.hold{background:#fdecea;color:var(--red)}.pill.step_up{background:#fef3e2;color:var(--amber)}.pill.gray{background:#eef2f7;color:#475569}
+.pill.on{background:#eaf6ee;color:var(--green)}.pill.off{background:#fdecea;color:var(--red)}
+input,select,textarea{padding:9px;border:1.5px solid var(--line);border-radius:9px;font-size:14px;font-family:inherit}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px;font-size:11px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--line)}
+td{padding:8px;border-top:1px solid var(--line);vertical-align:top}
+.note{font-size:12px;color:var(--muted)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.bar{height:16px;background:#fdecea;border-radius:8px;overflow:hidden;min-width:40px}
+.bar>i{display:block;height:100%;background:var(--red)}
+.wf{display:grid;grid-template-columns:190px 1fr 110px;gap:8px;align-items:center;font-size:13px;margin-top:6px}
+.resolve{background:#f8faf8;border:1px dashed var(--line);border-radius:10px;padding:10px;margin-top:6px}
+code{background:#f0f4f0;padding:1px 5px;border-radius:5px;font-size:12px}
+</style></head>
+<body>
+<div class="top"><button class="back" onclick="history.back()">‹ Back</button><h1>🛡 Inventory Trust</h1><span class="tn">{{TENANT}}</span></div>
+<div class="wrap">
+
+  <div class="tiles" id="tiles">
+    <div class="tile"><div class="v" id="tVerified">…</div><div class="l">Verified stock</div><div class="m">M9 · % of stock value counted &amp; trusted</div></div>
+    <div class="tile"><div class="v" id="tShrink">…</div><div class="l">Shrink</div><div class="m">M1 · % of sales, this window</div></div>
+    <div class="tile"><div class="v" id="tAttr">…</div><div class="l">Attributed</div><div class="m">M3 · loss tied to a stage/person</div></div>
+    <div class="tile"><div class="v" id="tPrec">…</div><div class="l">Queue precision</div><div class="m">M5 · resolved items that found something</div></div>
+    <div class="tile"><div class="v" id="tCov">…</div><div class="l">Evidence coverage</div><div class="m">M6 · received value with hard evidence</div></div>
+    <div class="tile"><div class="v" id="tOpen">…</div><div class="l">Open queue</div><div class="m" id="tScored">&nbsp;</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Shrink waterfall</h2>
+    <div class="row"><select id="days" onchange="loadSummary()"><option value="7">Last 7 days</option><option value="14">Last 14 days</option><option value="28">Last 28 days</option></select>
+    <span class="note" id="wfTotal"></span></div>
+    <div id="wf"><div class="note" style="padding:8px 0">Loading…</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Today's queue — check these, resolve each one</h2>
+    <div class="note" style="margin-bottom:8px">Resolving is the label factory: <b>clean</b> lifts the actor's reputation, <b>confirmed loss</b> lowers it (by value), <b>error</b> is a process fault — it never taxes a person.</div>
+    <div style="overflow:auto"><table><thead><tr><th>#</th><th>E[loss]</th><th>Item</th><th>Type</th><th>Qty</th><th>Loc</th><th>Actor</th><th>When</th><th></th></tr></thead><tbody id="qRows"><tr><td colspan="9" class="note" style="padding:14px">Loading…</td></tr></tbody></table></div>
+    <div id="recentBox" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Recent trust scores</h2>
+    <div class="row" style="margin-bottom:8px"><select id="fDec" onchange="loadScores()"><option value="">All decisions</option><option value="hold">hold</option><option value="step_up">step_up</option><option value="auto_post">auto_post</option></select>
+    <span class="note">Silent mode: decisions are informational — nothing is blocked in Phase B0.</span></div>
+    <div style="overflow:auto"><table><thead><tr><th>Trust</th><th>Needed</th><th>Decision</th><th>Item</th><th>Type</th><th>Qty</th><th>Actor</th><th>E[loss]</th><th>When</th></tr></thead><tbody id="sRows"><tr><td colspan="9" class="note" style="padding:14px">Loading…</td></tr></tbody></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Vision boxes (shelf cameras)</h2>
+    <div class="row" style="margin-bottom:10px">
+      <input id="cCode" placeholder="Claim code from box screen" style="text-transform:uppercase;width:210px" maxlength="12">
+      <input id="cStore" placeholder="Store label (e.g. kampala)" style="width:190px">
+      <button class="btn" onclick="claimBox()">Claim box</button>
+      <span class="note">The code shows on the box's screen after it boots with internet.</span>
+    </div>
+    <div style="overflow:auto"><table><thead><tr><th>Box</th><th>Store</th><th>Status</th><th>Last seen</th><th>FW</th><th>IP</th><th></th></tr></thead><tbody id="bRows"><tr><td colspan="7" class="note" style="padding:14px">Loading…</td></tr></tbody></table></div>
+    <h2 style="margin-top:16px">Latest shelf events</h2>
+    <div style="overflow:auto"><table><thead><tr><th>When</th><th>Event</th><th>Zone</th><th>Camera</th><th>Fill</th><th>Change</th></tr></thead><tbody id="eRows"><tr><td colspan="6" class="note" style="padding:14px">No events yet.</td></tr></tbody></table></div>
+  </div>
+
+  <div class="note" style="margin:4px 4px 20px">Actor information routes <b>review only</b> — it is never a ranking and never an accusation (Spec §5.2). The daily WhatsApp digest (06:45) and this screen show the same queue.</div>
+</div>
+
+<script>
+var $=function(id){return document.getElementById(id);};
+function api(u,opt){opt=opt||{};opt.headers=Object.assign({'X-Requested-With':'XMLHttpRequest'},opt.headers||{});opt.credentials='same-origin';opt.cache='no-store';return fetch(u,opt).then(function(r){return r.json();});}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function num(x){return x==null?'—':Number(x).toLocaleString();}
+function pct(x){return (x==null||isNaN(x))?'—':(Math.round(x*10)/10)+'%';}
+function post(u,params){return api(u,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(params)});}
+
+function loadSummary(){
+  api('/papi/trust-summary?days='+($('days').value||7)).then(function(d){
+    if(!d||!d.ok){$('wf').innerHTML='<span class="bad">Could not load.</span>';return;}
+    var m=d.metrics||{};
+    $('tVerified').textContent=pct(m.M9_verified_stock_pct); $('tVerified').className='v '+((m.M9_verified_stock_pct||0)>=90?'ok':'warn');
+    $('tShrink').textContent=pct(m.shrink_pct_of_sales); $('tShrink').className='v '+((m.shrink_pct_of_sales||0)<=1?'ok':'bad');
+    $('tAttr').textContent=pct(m.M3_attribution_pct);
+    $('tPrec').textContent=pct(m.M5_queue_precision_pct);
+    $('tCov').textContent=pct(m.M6_evidence_coverage_pct);
+    $('tOpen').textContent=num(d.open_queue); $('tOpen').className='v '+(d.open_queue>0?'warn':'ok');
+    $('tScored').textContent=num(d.scored_7d)+' movements scored · '+num(d.vision_events_24h)+' shelf events (24h)';
+    var bd=(m.shrink_breakdown)||{}, tot=Number(m.shrink_total||0);
+    var labels={revealed_by_counts:'Revealed by counts',declared_write_offs:'Declared write-offs',confirmed_receiving:'Receiving (confirmed)',confirmed_sales_floor:'Sales floor / till',confirmed_transfers:'Transfers',confirmed_adjustments:'Adjustments'};
+    $('wfTotal').textContent=tot>0?('Total: '+num(tot)+' ('+pct(m.shrink_pct_of_sales)+' of '+num(m.sales_value)+' sales)'):'No shrink recorded in this window ✓';
+    var rows=Object.keys(labels).map(function(k){var v=Number(bd[k]||0);if(v<=0)return '';var w=tot>0?Math.max(2,Math.round(100*v/tot)):0;
+      return '<div class="wf"><span>'+labels[k]+'</span><span class="bar"><i style="width:'+w+'%"></i></span><span style="text-align:right">'+num(v)+'</span></div>';}).join('');
+    $('wf').innerHTML=rows||'<div class="note" style="padding:6px 0">Nothing to show — clean window.</div>';
+  });
+}
+
+function loadQueue(){
+  api('/papi/trust-queue').then(function(d){
+    if(!d||!d.ok){$('qRows').innerHTML='<tr><td colspan="9" class="note">Could not load.</td></tr>';return;}
+    var open=d.open||[];
+    $('qRows').innerHTML=open.length?open.map(function(r){
+      var item=esc(r.product||r.sku||'—');
+      return '<tr id="q'+r.id+'"><td><code>#'+r.id+'</code><div class="note">'+esc(r.source)+'</div></td>'
+        +'<td class="bad">'+num(r.expected_loss)+'</td><td>'+item+'</td><td><span class="pill gray">'+esc(r.type)+'</span></td>'
+        +'<td>'+num(r.qty)+'</td><td>'+esc(r.location||'—')+'</td><td>'+esc(r.actor||'—')+'</td>'
+        +'<td class="note">'+esc(String(r.moved_at||'').slice(0,16))+'</td>'
+        +'<td><button class="btn sm alt" onclick="toggleResolve('+r.id+')">Resolve…</button></td></tr>'
+        +'<tr id="qr'+r.id+'" style="display:none"><td colspan="9"><div class="resolve row">'
+        +'<select id="o'+r.id+'"><option value="clean">clean — checked, all fine</option><option value="error">error — process fault, not a person</option><option value="confirmed_loss">confirmed loss</option><option value="unresolved">unresolved</option></select>'
+        +'<input id="v'+r.id+'" type="number" min="0" placeholder="Loss value (if any)" style="width:160px">'
+        +'<input id="n'+r.id+'" placeholder="Notes (what you found)" style="flex:1;min-width:180px">'
+        +'<button class="btn" onclick="doResolve('+r.id+')">Save outcome</button></div></td></tr>';
+    }).join(''):'<tr><td colspan="9" class="note" style="padding:14px">No open investigations. 🎉 The 06:45 digest builds tomorrow\'s queue.</td></tr>';
+    var rec=d.recent||[];
+    $('recentBox').innerHTML=rec.length?('<div class="note" style="margin-bottom:6px">Recently resolved:</div>'+rec.map(function(r){
+      var cls=r.outcome==='confirmed_loss'?'hold':(r.outcome==='error'?'step_up':'');
+      return '<div class="note" style="padding:3px 0"><code>#'+r.id+'</code> <span class="pill '+cls+'">'+esc(r.outcome)+'</span> '
+        +esc(r.product||r.sku||'—')+(r.outcome_value?(' · '+num(r.outcome_value)):'')+' · by '+esc(r.resolved_by||'—')+(r.notes?(' — '+esc(r.notes)):'')+'</div>';
+    }).join('')):'';
+  });
+}
+function toggleResolve(id){var el=$('qr'+id);el.style.display=el.style.display==='none'?'':'none';}
+function doResolve(id){
+  var o=$('o'+id).value,v=$('v'+id).value,n=$('n'+id).value;
+  if(o==='confirmed_loss'&&!v&&!confirm('No loss value entered — save confirmed loss without a value?'))return;
+  post('/papi/trust-resolve',{id:id,outcome:o,value:v||'',notes:n||''}).then(function(r){
+    if(r&&r.ok){loadQueue();loadSummary();}else alert('Could not save: '+((r&&r.error)||'error'));
+  });
+}
+
+function loadScores(){
+  api('/papi/trust-scores?decision='+($('fDec').value||'')).then(function(d){
+    if(!d||!d.ok){$('sRows').innerHTML='<tr><td colspan="9" class="note">Could not load.</td></tr>';return;}
+    var s=d.scores||[];
+    $('sRows').innerHTML=s.length?s.map(function(r){
+      var okT=Number(r.trust)>=Number(r.trust_required);
+      return '<tr><td class="'+(okT?'ok':'bad')+'">'+Number(r.trust).toFixed(1)+'</td><td class="note">'+Number(r.trust_required).toFixed(0)+'</td>'
+        +'<td><span class="pill '+esc(r.decision)+'">'+esc(r.decision)+'</span></td>'
+        +'<td>'+esc(r.product||r.sku||'—')+'</td><td><span class="pill gray">'+esc(r.type)+'</span></td>'
+        +'<td>'+num(r.qty)+'</td><td>'+esc(r.actor||'—')+'</td><td>'+num(r.expected_loss)+'</td>'
+        +'<td class="note">'+esc(String(r.moved_at||'').slice(0,16))+'</td></tr>';
+    }).join(''):'<tr><td colspan="9" class="note" style="padding:14px">Nothing scored yet — run the backtest or wait for live movements.</td></tr>';
+  });
+}
+
+function loadVision(){
+  api('/papi/vision-status').then(function(d){
+    if(!d||!d.ok){$('bRows').innerHTML='<tr><td colspan="7" class="note">Could not load.</td></tr>';return;}
+    var b=d.boxes||[];
+    $('bRows').innerHTML=b.length?b.map(function(x){
+      return '<tr><td><code>'+esc(x.uid_short)+'…</code><div class="note">'+esc(x.hw||'')+'</div></td><td>'+esc(x.store||'—')+'</td>'
+        +'<td><span class="pill '+(x.status==='claimed'?(x.online?'on':'step_up'):'off')+'">'+esc(x.status)+(x.status==='claimed'?(x.online?' · online':' · offline'):'')+'</span></td>'
+        +'<td class="note">'+esc(x.last_seen||'never')+'</td><td class="note">'+esc(x.fw||'—')+'</td><td class="note">'+esc(x.ip||'—')+'</td>'
+        +'<td>'+(x.status==='claimed'?('<button class="btn sm danger" onclick="revokeBox(\''+esc(x.uid)+'\')">Revoke</button>'):'')+'</td></tr>';
+    }).join(''):'<tr><td colspan="7" class="note" style="padding:14px">No boxes yet. Plug a box in at the store, then type its on-screen code above.</td></tr>';
+    var e=d.events||[];
+    $('eRows').innerHTML=e.length?e.map(function(x){
+      var cls=x.event&&x.event.indexOf('out_of_stock')>-1?'hold':(x.event&&x.event.indexOf('low')>-1?'step_up':'');
+      return '<tr><td class="note">'+esc(String(x.occurred_at||'').slice(0,16))+'</td><td><span class="pill '+cls+'">'+esc(x.event)+'</span></td>'
+        +'<td>'+esc(x.zone||'—')+'</td><td class="note">'+esc(x.camera||'—')+'</td>'
+        +'<td>'+(x.fill!=null?Math.round(x.fill*100)+'%':'—')+'</td><td class="note">'+esc(x.from_state||'')+' → '+esc(x.to_state||'')+'</td></tr>';
+    }).join(''):'<tr><td colspan="6" class="note" style="padding:14px">No shelf events yet — they appear once a claimed box has enrolled zones.</td></tr>';
+  });
+}
+function claimBox(){
+  var code=$('cCode').value.trim();if(!code){alert('Type the code from the box screen');return;}
+  post('/papi/vision-claim',{code:code,store:$('cStore').value.trim()}).then(function(r){
+    if(r&&r.ok){$('cCode').value='';loadVision();alert('Box claimed ✓ It will configure itself within ~10 seconds.');}
+    else alert((r&&r.error)||'Could not claim.');
+  });
+}
+function revokeBox(uid){
+  if(!confirm('Revoke this box? Its events stop being accepted until re-registered.'))return;
+  post('/papi/vision-box-revoke',{uid:uid}).then(function(r){if(r&&r.ok)loadVision();else alert('Could not revoke.');});
+}
+
+loadSummary();loadQueue();loadScores();loadVision();
+setInterval(loadVision,60000);
+</script>
+</body></html>

@@ -126,6 +126,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
     Route::get('/panel/chats', [SellerPanelController::class, 'chats']);
     Route::get('/panel/cashbook', [SellerPanelController::class, 'cashbook']);
     Route::get('/panel/books', [\App\Http\Controllers\Panel\BooksController::class, 'page']);
+    Route::get('/panel/trust', [\App\Http\Controllers\Panel\TrustPanelController::class, 'page']); // Inventory Trust (T6)
     Route::get('/panel/cash-position', [\App\Http\Controllers\Panel\CashPositionController::class, 'page']);
     Route::get('/panel/book-cost', [\App\Http\Controllers\Panel\OrderCostController::class, 'page']);
     Route::get('/panel/purchases', [\App\Http\Controllers\Panel\OrderCostController::class, 'purchasePage']);
@@ -418,6 +419,14 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::match(['get','post'], 'invoice-send', [\App\Http\Controllers\Panel\InvoiceController::class, 'send']);
         Route::post('receipt-send', [\App\Http\Controllers\Panel\PaymentController::class, 'send']); // WhatsApp a receipt PDF to the customer
         Route::get('bos-today', [\App\Http\Controllers\Panel\BosTodayController::class, 'show']); // BOS Slice 3 — the day's work (greeting + KPIs + activities)
+        // Inventory Trust panel (T6) — same queue as the 06:45 WhatsApp digest, plus vision fleet.
+        Route::get('trust-summary',     [\App\Http\Controllers\Panel\TrustPanelController::class, 'summary']);
+        Route::get('trust-queue',       [\App\Http\Controllers\Panel\TrustPanelController::class, 'queue']);
+        Route::post('trust-resolve',    [\App\Http\Controllers\Panel\TrustPanelController::class, 'resolve']);
+        Route::get('trust-scores',      [\App\Http\Controllers\Panel\TrustPanelController::class, 'scores']);
+        Route::get('vision-status',     [\App\Http\Controllers\Panel\TrustPanelController::class, 'vision']);
+        Route::post('vision-claim',     [\App\Http\Controllers\Panel\TrustPanelController::class, 'visionClaim']);
+        Route::post('vision-box-revoke',[\App\Http\Controllers\Panel\TrustPanelController::class, 'visionRevoke']);
         Route::get('bos-customers', [\App\Http\Controllers\Panel\BosCustomersController::class, 'show']); // Modern Customers list
         Route::get('bos-finance', [\App\Http\Controllers\Panel\BosFinanceController::class, 'show']); // Modern Finance hub
         Route::get('bos-run', [\App\Http\Controllers\Panel\BosRunController::class, 'show']); // Guided Collect Run
