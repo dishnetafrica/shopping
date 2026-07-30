@@ -32,6 +32,9 @@ final class SettingsWriteService
         'sf_genuine', 'sf_delivery_eta', 'sf_pay_methods', 'sf_warranty', 'sf_returns',
         // VAT is fully tenant-configurable (never hardcoded): label + tax registration no.
         'vat_label', 'vat_number',
+        // Catalogue PDF artwork + highlights (image fields hold URLs; /papi/branding-upload fills them).
+        'catalog_cover_image', 'catalog_promo_image', 'catalog_qr_image',
+        'catalog_best_sellers', 'catalog_hot_deals', 'catalog_audience',
     ];
 
     /** Numeric settings: [key => ['int'|'float', min]]. */

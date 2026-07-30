@@ -78,6 +78,14 @@
       var ol=f.optionLabels||{};
       return '<select data-key="'+k+'">'+(f.options||[]).map(function(o){return '<option value="'+esc(o)+'"'+(String(v)===String(o)?' selected':'')+'>'+esc(ol[o]||o)+'</option>';}).join('')+'</select>';
     }
+    if(f.type==='image'){
+      return '<div style="width:100%">'
+        +'<input type="text" data-key="'+k+'" value="'+esc(v)+'" placeholder="Upload below, or paste an image link" style="margin-bottom:6px">'
+        +'<div style="display:flex;gap:8px;align-items:center">'
+        +'<button class="btn sec" type="button" onclick="pickImg(\''+k+'\')">Upload image…</button>'
+        +(v?'<img src="'+esc(v)+'" alt="" style="height:34px;max-width:96px;border:1px solid var(--line);border-radius:6px;background:#fff;object-fit:contain">':'')
+        +'</div></div>';
+    }
     if(f.type==='textarea') return '<textarea data-key="'+k+'">'+esc(v)+'</textarea>';
     if(f.type==='number') return '<input type="number" data-key="'+k+'" value="'+esc(v)+'">'+(f.unit?'<span class="unit">'+esc(f.unit)+'</span>':'');
     if(f.type==='bool') return '<select data-key="'+k+'"><option value="1"'+(v?' selected':'')+'>On</option><option value="0"'+(!v?' selected':'')+'>Off</option></select>';
@@ -106,6 +114,26 @@
     }
     html+='<div class="bar"><button class="btn" id="save" onclick="save()">Save changes</button><span class="msg" id="msg"></span></div>';
     main.innerHTML=html;
+  }
+
+  function pickImg(key){
+    var inp=document.createElement('input'); inp.type='file'; inp.accept='image/png,image/jpeg,image/webp,image/gif';
+    inp.onchange=function(){
+      if(!inp.files||!inp.files[0]) return;
+      if(inp.files[0].size>6*1024*1024){ alert('Image is too big — keep it under 6 MB.'); return; }
+      var fd=new FormData(); fd.append('key',key); fd.append('file',inp.files[0]);
+      var msg=document.getElementById('msg'); if(msg){ msg.className='msg'; msg.textContent='Uploading…'; }
+      fetch('/papi/branding-upload',{method:'POST',credentials:'include',headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'},body:fd})
+        .then(function(r){ return r.json(); })
+        .then(function(r){
+          if(r&&r.ok){
+            var el=document.querySelector('#main [data-key="'+key+'"]'); if(el) el.value=r.url;
+            if(msg){ msg.className='msg ok'; msg.textContent='Uploaded ✓ — now click Save changes.'; }
+          } else if(msg){ msg.className='msg err'; msg.textContent=(r&&(r.message||r.error))||'Upload failed.'; }
+        })
+        .catch(function(){ if(msg){ msg.className='msg err'; msg.textContent='Upload failed.'; } });
+    };
+    inp.click();
   }
 
   function save(){

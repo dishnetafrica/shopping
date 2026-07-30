@@ -31,7 +31,14 @@ final class SettingsSchema
                 ]],
                 ['label' => 'Branding', 'fields' => [
                     ['key' => 'tagline', 'type' => 'text', 'label' => 'Tagline'],
-                    ['key' => 'logo',    'type' => 'text', 'label' => 'Logo URL'],
+                    ['key' => 'logo',    'type' => 'image', 'label' => 'Logo', 'help' => 'Upload a PNG/JPG or paste a link. Shown on documents and the catalogue.'],
+                ]],
+                ['label' => 'Catalogue', 'help' => 'Artwork and highlights for the photo catalogue PDF customers receive on WhatsApp.', 'fields' => [
+                    ['key' => 'catalog_cover_image', 'type' => 'image', 'label' => 'Cover photo', 'help' => 'Portrait photo (about 4:5, no text in the image) for the front page.'],
+                    ['key' => 'catalog_promo_image', 'type' => 'image', 'label' => 'Promo photo', 'help' => 'Wide photo for the "Need a product you don\'t see?" band (optional).'],
+                    ['key' => 'catalog_best_sellers', 'type' => 'text', 'label' => 'Best sellers', 'help' => 'Comma-separated SKUs or exact product names → green BEST SELLER badge.'],
+                    ['key' => 'catalog_hot_deals', 'type' => 'text', 'label' => 'Hot deals', 'help' => 'Comma-separated SKUs or exact names → orange HOT DEAL badge.'],
+                    ['key' => 'catalog_audience', 'type' => 'text', 'label' => 'Cover checklist', 'help' => 'Comma list, e.g. Hotels,Restaurants,Supermarkets,Retailers.'],
                 ]],
             ]],
             ['key' => 'currency', 'label' => 'Currency & rates', 'icon' => 'dollar', 'groups' => [

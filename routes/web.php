@@ -491,6 +491,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::match(['get', 'post'], 'supplier-reconcile', [PanelApiController::class, 'supplierReconcile']);
         Route::get('settings-hub', [PanelApiController::class, 'settingsHub']);
         Route::post('settings-hub-save', [PanelApiController::class, 'settingsHubSave']);
+        Route::post('branding-upload', [\App\Http\Controllers\Panel\BrandingUploadController::class, 'upload']); // image upload for Settings image fields
         Route::get('bot/quote-diagnostics', [PanelApiController::class, 'botQuoteDiagnostics']);
         Route::match(['get', 'post'], 'backfill-customers', [PanelApiController::class, 'backfillCustomers']);
         Route::match(['get', 'post'], 'merge-customers', [PanelApiController::class, 'mergeCustomers']);
