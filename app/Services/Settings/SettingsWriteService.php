@@ -49,6 +49,7 @@ final class SettingsWriteService
         'low_stock_threshold' => ['int', 0],
         'reorder_days' => ['int', 0],
         'min_order' => ['float', 0.0],
+        'ai_catalogue_limit' => ['int', 1],
     ];
 
     /** On/off toggle settings (stored as booleans). */

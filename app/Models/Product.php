@@ -43,6 +43,29 @@ class Product extends Model
                 $p->base_price = $p->price;
             }
         });
+
+        // Catalogue freshness (2026-07-30): any product change invalidates the cached PDF
+        // catalogues (whole-shop + this product's category) and the bot's 60s grounded list,
+        // so a newly added or re-priced product reaches customers on the very next ask —
+        // no waiting for the 6h TTL, no manual catalogue:flush.
+        $flush = function (self $p): void {
+            try {
+                $id = (int) $p->tenant_id;
+                if (! $id) return;
+                \Illuminate\Support\Facades\Cache::forget("ai_catalogue:{$id}");
+                \Illuminate\Support\Facades\Cache::forget("catalog_pdf:{$id}:p");
+                \Illuminate\Support\Facades\Cache::forget("catalog_pdf:{$id}:np");
+                foreach (array_unique(array_filter([(string) $p->category, (string) $p->getOriginal('category')])) as $c) {
+                    $h = md5(mb_strtolower(trim($c), 'UTF-8'));
+                    \Illuminate\Support\Facades\Cache::forget("catalog_pdf:{$id}:cat:{$h}:p");
+                    \Illuminate\Support\Facades\Cache::forget("catalog_pdf:{$id}:cat:{$h}:np");
+                }
+            } catch (\Throwable $e) {
+                // cache invalidation is best-effort — never block a product save
+            }
+        };
+        static::saved($flush);
+        static::deleted($flush);
     }
 
     /**

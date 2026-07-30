@@ -34,6 +34,9 @@ final class SettingsSchema
                     ['key' => 'tagline', 'type' => 'text', 'label' => 'Tagline'],
                     ['key' => 'logo',    'type' => 'image', 'label' => 'Logo', 'help' => 'Upload a PNG/JPG or paste a link. Shown on documents and the catalogue.'],
                 ]],
+                ['label' => 'AI knowledge', 'help' => 'How much of the product list the AI carries in its head during chats.', 'fields' => [
+                    ['key' => 'ai_catalogue_limit', 'type' => 'number', 'label' => 'Products the AI knows', 'help' => 'The AI is given this many products (alphabetical) as ground truth in every chat. Set it ABOVE your product count (you have ~351 → use 400). Max 600.'],
+                ]],
                 ['label' => 'Delivery', 'help' => 'What the bot AND the catalogue say about delivery and transport.', 'fields' => [
                     ['key' => 'delivery_note', 'type' => 'textarea', 'label' => 'Delivery policy', 'help' => 'One or two sentences, e.g. "All prices include free delivery within Juba. Outside Juba, our team confirms transport cost when you order." Leave blank to auto-build from the towns below.'],
                     ['key' => 'free_delivery_towns', 'type' => 'text', 'label' => 'Free-delivery areas', 'help' => 'Comma-separated. Default: Juba, Konyo Konyo, Custom, Jebel, Munuki, Gudele, Hai, Malakia, Gumbo, Sherikat, Thongping, Nimra Talata, Suk'],
