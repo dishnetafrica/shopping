@@ -47,7 +47,13 @@ final class CatalogRenderer
 
     public function available(): bool
     {
-        return class_exists(\Dompdf\Dompdf::class);
+        if (! class_exists(\Dompdf\Dompdf::class)) {
+            \Log::warning('CatalogRenderer: dompdf/dompdf is not installed (composer)');
+
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -64,9 +70,22 @@ final class CatalogRenderer
         // PHP's default 30-60s web time limit kill the request halfway (fatal 500, uncatchable).
         @set_time_limit(300);
 
+        // Two-stage: try the rich pipeline (thumbnails, cover art, QR, badges); if ANYTHING in it
+        // throws, log the exact spot and retry in plain mode (v1-style direct image URLs, no
+        // artwork fetches) so the customer still receives a catalogue.
+        $html = null;
         try {
             $thumbs = $this->thumbs($tenant, $groups);
             $html = $this->html($tenant, $groups, $currency, $withPrices, $thumbs);
+        } catch (\Throwable $e) {
+            \Log::warning('CatalogRenderer rich path failed: ' . $e->getMessage()
+                . ' @ ' . basename($e->getFile()) . ':' . $e->getLine() . ' — falling back to plain render');
+        }
+
+        try {
+            if ($html === null) {
+                $html = $this->html($tenant, $groups, $currency, $withPrices, [], true);
+            }
             $dompdf = new \Dompdf\Dompdf([
                 'isRemoteEnabled' => true,
                 'isHtml5ParserEnabled' => true,
@@ -442,7 +461,7 @@ final class CatalogRenderer
     // ─────────────────────────── document ───────────────────────────
 
     /** @param array<int,array<string,mixed>> $groups */
-    private function html(Tenant $tenant, array $groups, string $currency, bool $withPrices, array $thumbs): string
+    private function html(Tenant $tenant, array $groups, string $currency, bool $withPrices, array $thumbs, bool $plain = false): string
     {
         $company = e((string) $tenant->name);
         $tagline = e((string) ($tenant->setting('tagline', '') ?: $tenant->setting('address', '') ?: ''));
@@ -453,10 +472,10 @@ final class CatalogRenderer
         $dateFull = now()->format('d M Y');
         $brand = self::BRAND; $brandD = self::BRAND_DARK; $ink = self::INK;
 
-        $badges = $this->badgeMap($tenant);
-        $coverImg = $this->asset($tenant, (string) $tenant->setting('catalog_cover_image', ''), 1100, false, 0.62);
-        $promoImg = $this->asset($tenant, (string) $tenant->setting('catalog_promo_image', ''), 800);
-        $qr = $this->qr($tenant, $phone);
+        $badges = $plain ? [] : $this->badgeMap($tenant);
+        $coverImg = $plain ? '' : $this->asset($tenant, (string) $tenant->setting('catalog_cover_image', ''), 1100, false, 0.62);
+        $promoImg = $plain ? '' : $this->asset($tenant, (string) $tenant->setting('catalog_promo_image', ''), 800);
+        $qr = $plain ? '' : $this->qr($tenant, $phone);
         $totalItems = 0;
         foreach ($groups as $g) $totalItems += count($g['items']);
 
