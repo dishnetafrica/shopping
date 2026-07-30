@@ -10,8 +10,11 @@ use Illuminate\Http\Request;
 /**
  * Receives events from the CloudBSS Vision Gateway (M1 frozen event schema) into vision_events.
  *
- * Auth: shared secret header X-Vision-Token, compared against services.vision.token
- * (config/services.php → 'vision' => ['token' => env('VISION_WEBHOOK_TOKEN'), 'tenant_id' => ...]).
+ * Auth: shared secret header X-Vision-Token. Two accepted forms, tried in order:
+ *   1. A per-box webhook_token minted at claim time (vision_boxes, status=claimed) — the fleet
+ *      path. Tenant + fallback store label come from the box row; box heartbeat is refreshed.
+ *   2. The legacy global token from config('vision.token') + config('vision.tenant_id') — the
+ *      hand-configured single-box pilot path. (config/vision.php, survives config:cache.)
  * Thumbnails are dropped before storage (size); everything else is kept verbatim in payload.
  *
  * v1 scope: STORAGE ONLY. Joining shelf events to stock movements as passive P-class evidence is
@@ -21,14 +24,28 @@ class VisionEventController extends Controller
 {
     public function store(Request $request): JsonResponse
     {
-        $token = (string) config('services.vision.token', env('VISION_WEBHOOK_TOKEN', ''));
-        if ($token === '' || ! hash_equals($token, (string) $request->header('X-Vision-Token'))) {
+        $token = (string) $request->header('X-Vision-Token');
+        if ($token === '') {
             return response()->json(['error' => 'unauthorized'], 401);
         }
 
-        $tenantId = (int) config('services.vision.tenant_id', env('VISION_TENANT_ID', 0));
+        $tenantId = 0;
+        $box      = null;
+
+        $box = \App\Models\VisionBox::where('webhook_token', $token)->where('status', 'claimed')->first();
+        if ($box) {
+            $tenantId = (int) $box->tenant_id;
+            $box->forceFill(['last_seen_at' => now(), 'last_ip' => (string) $request->ip()])->save();
+        } else {
+            $legacy = (string) config('vision.token', '');
+            if ($legacy === '' || ! hash_equals($legacy, $token)) {
+                return response()->json(['error' => 'unauthorized'], 401);
+            }
+            $tenantId = (int) config('vision.tenant_id', 0);
+        }
+
         if (! $tenantId) {
-            return response()->json(['error' => 'VISION_TENANT_ID not configured'], 500);
+            return response()->json(['error' => 'vision tenant not configured'], 500);
         }
 
         $data = $request->validate([
@@ -44,11 +61,14 @@ class VisionEventController extends Controller
 
         $payload = $request->all();
         unset($payload['thumbnail']);   // never store base64 frames in the row
+        if ($box) {
+            $payload['_box_uid'] = $box->box_uid;   // provenance without a schema change
+        }
 
         $ev = VisionEvent::create([
             'tenant_id' => $tenantId,
             'event' => $data['event'],
-            'store' => $data['store'] ?? null,
+            'store' => $data['store'] ?? ($box->store ?? null),
             'camera' => $data['camera'] ?? null,
             'zone' => $data['zone'] ?? null,
             'from_state' => $data['from_state'] ?? null,

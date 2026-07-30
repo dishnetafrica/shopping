@@ -43,6 +43,15 @@ Route::middleware('throttle:30,1')->group(function () {
 
     // Per-person, no-login "My Jobs" list (daily token). Each row opens the per-task page above.
     Route::get('/jobs/{token}', [\App\Http\Controllers\JobsController::class, 'list']);
+
+    // ─── Inventory Trust v1.2: receiving + blind-count nonce pages ───────────
+    // Same pattern as /task/{nonce}: public, authorized by the unguessable nonce,
+    // rate-limited by this group to defeat nonce guessing. Minted by `trust:links`.
+    Route::get('/receive/{nonce}', [\App\Http\Controllers\TrustReceivingController::class, 'show']);
+    Route::get('/receive/{nonce}/products', [\App\Http\Controllers\TrustReceivingController::class, 'products']);
+    Route::post('/receive/{nonce}/submit', [\App\Http\Controllers\TrustReceivingController::class, 'submit']);
+    Route::get('/count/{nonce}', [\App\Http\Controllers\TrustCountController::class, 'show']);
+    Route::post('/count/{nonce}/submit', [\App\Http\Controllers\TrustCountController::class, 'submit']);
 });
 
 // Public customer order-tracking page (no auth — order id + secret token are the key).

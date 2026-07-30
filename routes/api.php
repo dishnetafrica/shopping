@@ -18,3 +18,16 @@ Route::get('/tenant/{tenant}/catalog', [BotBridgeController::class, 'catalog']);
 use App\Http\Controllers\Billing\BillingController;
 Route::post('/billing/flutterwave/webhook', [BillingController::class, 'flutterwaveWebhook']);
 Route::post('/billing/stripe/webhook',      [BillingController::class, 'stripeWebhook']);
+
+// ─── Inventory Trust v1 ───────────────────────────────────────────────────────
+// Vision Gateway → CloudBSS event ingestion (shared-secret header X-Vision-Token).
+// Fleet boxes use their per-box token from vision:claim; legacy fallback pair in .env:
+//   VISION_WEBHOOK_TOKEN=<long random>   VISION_TENANT_ID=17     (config/vision.php)
+Route::post('/vision/events', [\App\Http\Controllers\Api\VisionEventController::class, 'store']);
+
+// Vision box zero-touch provisioning (handover §8): factory-identical boxes register here,
+// show a claim code on screen, and poll until `php artisan vision:claim CODE --tenant=N`.
+Route::middleware('throttle:60,1')->group(function () {
+    Route::post('/vision/box/hello', [\App\Http\Controllers\Api\VisionBoxController::class, 'hello']);
+    Route::post('/vision/box/poll',  [\App\Http\Controllers\Api\VisionBoxController::class, 'poll']);
+});

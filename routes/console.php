@@ -84,3 +84,13 @@ Schedule::command('comms:email-sweep')->everyMinute()->withoutOverlapping()->onO
 
 // Communication Center: campaign batches — one throttle-sized batch per due campaign per minute.
 Schedule::command('comms:campaign-sweep')->everyMinute()->withoutOverlapping()->onOneServer();
+
+// ─── Inventory Trust v1 ───────────────────────────────────────────────────────
+// Daily owner digest + queue at 06:45 EAT (after cashbook:digest at 06:30). Tenant gate is the
+// `trust_digest` setting, so no --tenant here — it sweeps every opted-in tenant.
+Schedule::command('trust:daily --send')->dailyAt('06:45')->timezone('Africa/Kampala')->withoutOverlapping()->onOneServer();
+// v1.2: fresh blind-count link to staff every morning, after the digest computed confidences.
+// One line per pilot tenant (trust:links requires an explicit --tenant).
+Schedule::command('trust:links --tenant=17 --count --send')->dailyAt('07:00')->timezone('Africa/Kampala')->withoutOverlapping()->onOneServer();
+// v1.3: weekly shrink waterfall + pilot metrics, Monday 07:15 EAT. Archive the --json output weekly.
+Schedule::command('trust:weekly --tenant=17 --send')->weeklyOn(1, '07:15')->timezone('Africa/Kampala')->withoutOverlapping()->onOneServer();
