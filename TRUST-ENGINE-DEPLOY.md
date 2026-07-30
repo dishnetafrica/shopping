@@ -166,3 +166,26 @@ Settings: `trust_staff_numbers` (who gets the links) alongside the existing
 receive (evidence in) → score → daily queue [#id] → owner WhatsApp → trust:resolve #id (label)
 → reputation update → tomorrow's scores sharpen → count list keeps the book honest.
 Every component the Pilot Plan's Phase B0/B1 requires is now deployed code, not documentation.
+
+
+---
+
+# v1.3 — WEEKLY REPORT + PILOT METRICS ENGINE (this same drop)
+
+```
+app/Console/Commands/TrustWeeklyCommand.php     ← trust:weekly
+```
+
+```bash
+php artisan trust:weekly --tenant=17 --send            # owner WhatsApp: waterfall + verified stock %
+php artisan trust:weekly --tenant=17 --json > week-$(date +%V).json   # archive for the gate review
+```
+
+Computes the Pilot Plan gate metrics every week instead of once at week 20:
+M1 shrink % of sales with the waterfall (revealed-by-counts / declared write-offs / confirmed by
+stage), M3 attribution %, M5 queue precision + open count, M6 evidence coverage of received value,
+M9 Verified Stock Value %. Plus the 28-day repeat-variance watchlist. Scheduled Monday 07:15 EAT.
+
+**This is the sales artifact.** The weekly WhatsApp message — "Verified stock: 94% · Shrink 0.4%
+of sales · 82% attributed" — is exactly the one-pager's promise made real, and the thing you
+screenshot for the next pilot store owner.
