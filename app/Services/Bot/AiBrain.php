@@ -357,10 +357,8 @@ class AiBrain
     {
         $svc = app(\App\Services\Bot\PriceListService::class);
         if (! $svc->available() || ! method_exists($gateway, 'sendDocument')) return false;
-
-        // Anti-spam: don't re-send the price list if we already sent it to this customer recently.
-        $plKey = "pricelist_sent:{$tenant->id}:{$from}";
-        if (Cache::get($plKey)) return false;
+        // (anti-spam moved into deliverPriceList — it is now per-scope, so a category-specific
+        //  ask is never blocked just because the FULL list went out a few minutes earlier)
 
         $flag = $tenant->setting('price_list_enabled', null);
         if ($flag === null) {
@@ -376,6 +374,84 @@ class AiBrain
     }
 
     /**
+     * Which category is this message really asking about? Two passes over the tenant's OWN data:
+     *   1. the category name itself appears in the text ("spices", "stationery", "cleaning");
+     *   2. product-word vote — words like "exercise books" match many products whose category
+     *      is Stationery; if one category clearly dominates the matches, that's the ask.
+     * Conservative on purpose: ambiguous or generic asks return null → full catalogue.
+     */
+    private function detectCategoryAsk(Tenant $tenant, string $text): ?string
+    {
+        try {
+            $t = mb_strtolower($text, 'UTF-8');
+            if (trim($t) === '') {
+                return null;
+            }
+
+            $cats = \App\Models\Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)->where('active', true)->where('price', '>', 0)
+                ->whereNotNull('category')->where('category', '!=', '')
+                ->distinct()->pluck('category')->all();
+            if (count($cats) < 2) {
+                return null;   // single-category shops: the full list IS the category
+            }
+
+            // pass 1: direct category-name mention
+            foreach ($cats as $c) {
+                $cl = mb_strtolower(trim((string) $c), 'UTF-8');
+                if ($cl !== '' && mb_strlen($cl, 'UTF-8') >= 4 && str_contains($t, $cl)) {
+                    return (string) $c;
+                }
+            }
+
+            // pass 2: product-word vote
+            $stop = ['price', 'list', 'send', 'sends', 'catalog', 'catalogue', 'please', 'product',
+                'products', 'prices', 'with', 'need', 'want', 'have', 'what', 'much', 'many',
+                'thank', 'thanks', 'your', 'full', 'share', 'give', 'about', 'rate', 'rates',
+                'cost', 'item', 'items', 'order', 'quantity', 'minimum', 'available', 'stock',
+                'this', 'that', 'them', 'from', 'sheet', 'pricelist', 'ratelist', 'other', 'styles'];
+            $words = [];
+            foreach (preg_split('/[^a-z0-9]+/i', $t) ?: [] as $w) {
+                if (mb_strlen($w, 'UTF-8') < 4 || in_array($w, $stop, true)) {
+                    continue;
+                }
+                $words[$w] = true;
+                if (str_ends_with($w, 's')) {
+                    $words[substr($w, 0, -1)] = true;   // "books" should match "Book"
+                }
+            }
+            $words = array_slice(array_keys($words), 0, 8);
+            if (! $words) {
+                return null;
+            }
+
+            $counts = \App\Models\Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)->where('active', true)->where('price', '>', 0)
+                ->whereNotNull('category')->where('category', '!=', '')
+                ->where(function ($q) use ($words) {
+                    foreach ($words as $w) {
+                        $q->orWhereRaw('LOWER(name) LIKE ?', ['%' . mb_strtolower($w, 'UTF-8') . '%']);
+                    }
+                })
+                ->selectRaw('category, COUNT(*) as n')
+                ->groupBy('category')->orderByDesc('n')->limit(2)->get();
+
+            $top = $counts->first();
+            if (! $top || (int) $top->n < 2) {
+                return null;
+            }
+            $second = $counts->skip(1)->first();
+            if ($second && (int) $second->n * 2 > (int) $top->n) {
+                return null;   // no clear winner → don't guess
+            }
+
+            return (string) $top->category;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
      * The actual delivery (2026-07-18): callable by the intent path AND by the AI's own
      * <<SEND>> promise block. force=true = an explicit promise MUST be honoured — skip
      * the intent gate, the recent-send suppression and the count heuristic.
@@ -385,7 +461,6 @@ class AiBrain
         $svc = app(\App\Services\Bot\PriceListService::class);
         if (! method_exists($gateway, 'sendDocument')) return false;
         $plKey = "pricelist_sent:{$tenant->id}:{$from}";
-        if (! $force && Cache::get($plKey)) return false;
 
         if (! $force) {
         $t = mb_strtolower($text);
@@ -404,6 +479,36 @@ class AiBrain
         foreach ($triggers as $w) if (str_contains($t, $w)) { $asks = true; break; }
         if (! $asks) return false;
         }
+
+        // Category-specific ask ("catalog for the exercise books", "spices price list") →
+        // send JUST that section as its own compact catalogue. Its anti-spam key is per
+        // category, so it works even minutes after the full list went out.
+        $catAsk = $this->detectCategoryAsk($tenant, $text);
+        if ($catAsk !== null) {
+            $ckey = "pricelist_sent:{$tenant->id}:{$from}:cat:" . md5(mb_strtolower($catAsk, 'UTF-8'));
+            if ($force || ! Cache::get($ckey)) {
+                $cdoc = app(\App\Services\Catalog\CatalogRenderer::class)->forCategory($tenant, $catAsk);
+                if ($cdoc) {
+                    $ccaption = "Here's our *" . $catAsk . "* catalogue \u{1F4C4} Tell me the items and quantities and I'll send you a quotation.";
+                    try {
+                        $media = $cdoc['b64'] !== '' ? $cdoc['b64'] : $cdoc['url'];
+                        $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, $cdoc['fileName'], $ccaption);
+                        MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot',
+                            '[price-list:' . $catAsk . '] ' . $cdoc['fileName'], null, null,
+                            ['via' => 'ai', 'kind' => 'price_list_category', 'category' => $catAsk]);
+                        Cache::put($ckey, 1, now()->addMinutes(10));
+
+                        return true;
+                    } catch (\Throwable $e) {
+                        Log::warning('AiBrain category price-list send failed: ' . $e->getMessage());
+                        // fall through to the full list
+                    }
+                }
+            }
+        }
+
+        // Full list from here on — keep the original anti-spam window.
+        if (! $force && Cache::get($plKey)) return false;
 
         // Photo-first (2026-07-18): when a customer asks for prices, send the branded
         // PHOTO catalogue (photos + prices, one category per page). `price_list_style`

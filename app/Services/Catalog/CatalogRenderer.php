@@ -203,6 +203,67 @@ final class CatalogRenderer
         }
     }
 
+    /**
+     * One category as its own compact catalogue (cover + product pages + how-to-order), for the
+     * bot answering "send me the catalogue for X". Cached 6 h per category, invalidated by
+     * catalogue:flush. Category match is case-insensitive on the exact stored name.
+     */
+    public function forCategory(Tenant $tenant, string $category, bool $withPrices = true): ?array
+    {
+        try {
+            $cat = trim($category);
+            if ($cat === '') {
+                return null;
+            }
+            $key = 'catalog_pdf:' . $tenant->id . ':cat:' . md5(mb_strtolower($cat, 'UTF-8')) . ':' . ($withPrices ? 'p' : 'np');
+            $meta = \Illuminate\Support\Facades\Cache::get($key);
+            if (is_array($meta) && ! empty($meta['path'])) {
+                try {
+                    $bytes = Storage::disk('public')->get($meta['path']);
+                    if ($bytes !== null && $bytes !== '') {
+                        return ['path' => $meta['path'], 'url' => $this->url($meta['path']),
+                                'b64' => base64_encode($bytes), 'fileName' => $meta['fileName']];
+                    }
+                } catch (\Throwable $e) {
+                }
+            }
+
+            $products = \App\Models\Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)->where('active', true)->where('price', '>', 0)
+                ->whereRaw("LOWER(COALESCE(category, '')) = ?", [mb_strtolower($cat, 'UTF-8')])
+                ->orderBy('name')->get();
+            if ($products->isEmpty()) {
+                return null;
+            }
+
+            $cur = (string) ($tenant->setting('currency', 'UGX') ?: 'UGX');
+            $catName = trim((string) $products->first()->category) ?: $cat;
+            $items = [];
+            foreach ($products as $p) {
+                $items[] = [
+                    'name' => (string) $p->name,
+                    'unit' => (string) ($p->unit_label ?: ''),
+                    'moq' => $p->moq ? (int) $p->moq : null,
+                    'price' => (float) $p->price,
+                    'sku' => (string) ($p->sku ?: ''),
+                    'image' => (string) ($p->image_url ?: ''),
+                ];
+            }
+
+            $doc = $this->pdf($tenant, [['category' => $catName, 'items' => $items]], $cur, $withPrices);
+            if ($doc) {
+                \Illuminate\Support\Facades\Cache::put($key,
+                    ['path' => $doc['path'], 'fileName' => $doc['fileName']], now()->addHours(6));
+            }
+
+            return $doc;
+        } catch (\Throwable $e) {
+            \Log::warning('CatalogRenderer::forCategory failed: ' . $e->getMessage());
+
+            return null;
+        }
+    }
+
     private function url(string $path): string
     {
         try { return Storage::disk('public')->url($path); } catch (\Throwable $e) { return ''; }

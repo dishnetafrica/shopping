@@ -29,6 +29,14 @@ class CatalogueFlushCommand extends Command
             Cache::forget("catalogue:{$id}");
             Cache::forget("catalog_pdf:{$id}:p");    // photo-catalogue PDF (with prices)
             Cache::forget("catalog_pdf:{$id}:np");   // photo-catalogue PDF (no prices)
+            // per-category catalogue PDFs (bot's "send me the X catalogue" answers)
+            $cats = \App\Models\Product::withoutGlobalScopes()->where('tenant_id', $id)
+                ->whereNotNull('category')->where('category', '!=', '')->distinct()->pluck('category');
+            foreach ($cats as $c) {
+                $h = md5(mb_strtolower(trim((string) $c), 'UTF-8'));
+                Cache::forget("catalog_pdf:{$id}:cat:{$h}:p");
+                Cache::forget("catalog_pdf:{$id}:cat:{$h}:np");
+            }
         }
 
         $this->info('Flushed catalogue + catalogue-PDF cache for ' . count($ids) . ' shop(s). Sessions untouched.');
