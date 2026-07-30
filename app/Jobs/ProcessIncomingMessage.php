@@ -358,6 +358,32 @@ class ProcessIncomingMessage implements ShouldQueue
             // Image → hand the bytes to the AI (vision).
             $imageB64 = '';
             if (! empty($this->incoming['has_image'] ?? false)) {
+                // Image-burst guard: a customer dumping many photos must NOT get a reply per photo.
+                // Count photos in a short rolling window (per chat): answer the FIRST normally, send ONE
+                // "which ones?" nudge on the SECOND, then stay silent for the rest of the burst. The
+                // window resets on each photo, so a slow dump is still treated as one burst. A photo that
+                // arrives after ~40s of quiet is a fresh #1 again. Skip when the customer typed a caption
+                // (a single captioned photo is a genuine question, not a dump).
+                $hasCaption = trim((string) ($this->incoming['image_caption'] ?? '')) !== '';
+                if (! $hasCaption) {
+                    $burstKey = 'imgburst:' . $this->tenantId . ':' . $from;
+                    $seen = (int) \Illuminate\Support\Facades\Cache::get($burstKey, 0) + 1;
+                    \Illuminate\Support\Facades\Cache::put($burstKey, $seen, now()->addSeconds(40));
+                    if ($seen === 2) {
+                        $nudge = trim((string) $tenant->setting('image_burst_reply',
+                            "📷 I see you've sent a few photos! Tell me which items you'd like and how many, and I'll put the order together for you."));
+                        if ($nudge !== '') {
+                            $gateway->sendText($tenant->whatsapp_instance, $from, $nudge);
+                            MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $nudge);
+                        }
+                        BotTrace::log($this->tenantId, $trace, $from, 'image_burst', 'nudged on 2nd photo');
+                        return;
+                    }
+                    if ($seen >= 3) {
+                        BotTrace::log($this->tenantId, $trace, $from, 'image_burst', "suppressed photo #{$seen}");
+                        return;
+                    }
+                }
                 $imageB64 = (string) ($this->incoming['image_b64'] ?? '');
                 if ($imageB64 === '' && ! empty($this->incoming['media_key'] ?? null) && method_exists($gateway, 'getMediaBase64')) {
                     $imageB64 = (string) ($gateway->getMediaBase64($tenant->whatsapp_instance, $this->incoming['media_key']) ?? '');

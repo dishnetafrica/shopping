@@ -22,6 +22,7 @@ Settings file was actually diverged — but a quick diff review is the safe habi
 **Edited files (review diff, then overwrite):**
 - **Quotation PDF fix (new this round):** `app/Capability/Object/QuotationCapability.php` — the Documents-tab link now opens the PDF via `/papi/quotation-pdf` instead of the broken storage URL.
 - Bot: `app/Services/Bot/AiBrain.php` (big-order handling + Juba-store delivery language)
+- Bot image-burst guard: `app/Jobs/ProcessIncomingMessage.php` — when a customer sends many photos at once, the bot answers the first, sends ONE "which items?" nudge on the second, then stays quiet (instead of replying to every photo). Tunable via the `image_burst_reply` setting.
 - Supplier "Buy product": `app/Capability/Object/SupplierCapability.php`, `app/Http/Controllers/Panel/OrderCostController.php`
 - Date pickers: `CampaignListCapability`, `CashbookCapability`, `ScheduledOrdersCapability`, `WorkOrderCapability`, `WorkOrderListCapability`, `LeadListCapability`, `DemandPlanListCapability`
 - Finance fixes: `MoneyTimingCapability` (cash tile all-currencies), `PayablesCalculator`, `SupplierController`, `SupplierListCapability`
