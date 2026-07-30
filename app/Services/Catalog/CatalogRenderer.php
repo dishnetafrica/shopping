@@ -8,19 +8,37 @@ use Illuminate\Support\Facades\Storage;
 /**
  * Branded PRODUCT CATALOGUE PDF — a photo-first brochure the wholesaler sends to customers.
  *
- * Layout: a cover page (logo, title, date, category index with page numbers), then ONE CATEGORY PER
- * PAGE, each a 3-across grid of product cards (photo, name, pack/unit, MOQ, price, SKU). A category
- * with more than nine products flows onto continuation pages, and the index page numbers account for
- * that, so the contents list is always accurate.
+ * v2 layout (same public API as v1): cover with brand band + accurate category index, one
+ * category per page (3×3 product cards), a "How to order" back page, and real page numbers.
  *
- * dompdf has no fl[ex]/grid engine, so the whole thing is built with tables + block flow (the same
- * engine-safe approach as PriceListRenderer). Renders only; reads product data and prices as-is.
+ * What v2 fixes over v1 (all reproduced with dompdf 3 on sample data):
+ *   1. Cover no longer orphans its contact line onto a near-blank page 2 (fixed-height hack gone).
+ *   2. A full 9-card page no longer overflows A4 and dumps its footer on an orphan page —
+ *      the whole page fits a strict height budget under an explicit @page margin.
+ *   3. No trailing blank page (pages use page-break-BEFORE; nothing breaks after the last page).
+ *   4. Index page numbers are correct (cover=1, back page counted) and every page is numbered
+ *      "Page N of T" via the canvas page_script.
+ *   5. Product photos are pre-fetched and normalised onto identical 4:3 white canvases
+ *      (GD, cached on disk, embedded as data URIs) — uniform grid, no broken-image boxes
+ *      when a URL 404s, dramatically smaller PDFs than embedding full-size remote images.
+ *   6. Cards are strictly equal height (name/unit/MOQ zones are fixed) so price rows align,
+ *      and names clip at a line boundary instead of slicing glyphs.
+ *
+ * dompdf has no flex/grid engine, so everything stays tables + block flow. Renders only;
+ * reads product data and prices as-is. Degrades gracefully: no GD → original URLs are
+ * embedded exactly like v1; fetch failure → drawn "no photo" placeholder.
  */
 final class CatalogRenderer
 {
     private const PER_PAGE = 9;           // 3 columns × 3 rows per category page
     private const BRAND = '#16a34a';
     private const BRAND_DARK = '#0f7a37';
+    private const INK = '#0f172a';
+
+    private const THUMB_W = 440;          // 4:3 canvas every photo is normalised onto
+    private const THUMB_H = 330;
+    private const FETCH_TIMEOUT = 4;      // per-image seconds
+    private const FETCH_PARALLEL = 10;    // curl_multi lanes
 
     public function available(): bool
     {
@@ -36,13 +54,31 @@ final class CatalogRenderer
         if (! $this->available()) {
             return null;
         }
-        $html = $this->html($tenant, $groups, $currency, $withPrices);
+
+        $thumbs = $this->thumbs($tenant, $groups);
+        $html = $this->html($tenant, $groups, $currency, $withPrices, $thumbs);
 
         try {
             $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true, 'isHtml5ParserEnabled' => true]);
             $dompdf->loadHtml($html);
             $dompdf->setPaper('A4');
             $dompdf->render();
+
+            // "Page N of T" on every page except the cover.
+            try {
+                $canvas = $dompdf->getCanvas();
+                $font = $dompdf->getFontMetrics()->getFont('DejaVu Sans', 'normal');
+                $w = $canvas->get_width();
+                $canvas->page_script(function ($pageNumber, $pageCount, $c) use ($font, $w) {
+                    if ($pageNumber > 1) {
+                        $c->text($w / 2 - 30, $c->get_height() - 22,
+                            'Page ' . $pageNumber . ' of ' . $pageCount, $font, 7.5, [0.58, 0.64, 0.71]);
+                    }
+                });
+            } catch (\Throwable $e) {
+                // page numbers are cosmetic — never fail the document over them
+            }
+
             $pdf = $dompdf->output();
         } catch (\Throwable $e) {
             \Log::warning('CatalogRenderer failed: ' . $e->getMessage());
@@ -129,8 +165,148 @@ final class CatalogRenderer
         return $sym . number_format($n, $dec) . ($sym ? '' : ' ' . $cur);
     }
 
+    // ─────────────────────────── photo pipeline ───────────────────────────
+
+    /**
+     * Pre-fetch every product image (parallel, cached on disk) and normalise each onto an
+     * identical 4:3 white canvas → data URI. Returns [imageUrl => dataUri|''] ('' = use
+     * the drawn placeholder). Without GD this returns [] and cards embed original URLs (v1
+     * behaviour) so nothing regresses on a slim PHP build.
+     */
+    private function thumbs(Tenant $tenant, array $groups): array
+    {
+        if (! extension_loaded('gd')) {
+            return [];
+        }
+
+        $urls = [];
+        foreach ($groups as $g) {
+            foreach ($g['items'] as $it) {
+                $u = trim((string) ($it['image'] ?? ''));
+                if ($u !== '') $urls[$u] = true;
+            }
+        }
+        if (! $urls) {
+            return [];
+        }
+
+        $out = [];
+        $fetch = [];   // url => cache path (missing from disk cache)
+        foreach (array_keys($urls) as $u) {
+            $cache = 'catalog-thumbs/' . $tenant->id . '/' . md5($u) . '.jpg';
+            try {
+                $bytes = Storage::disk('public')->exists($cache) ? Storage::disk('public')->get($cache) : null;
+            } catch (\Throwable $e) {
+                $bytes = null;
+            }
+            if ($bytes) {
+                $out[$u] = 'data:image/jpeg;base64,' . base64_encode($bytes);
+            } else {
+                $fetch[$u] = $cache;
+            }
+        }
+
+        foreach ($this->fetchMany(array_keys($fetch)) as $u => $raw) {
+            $jpeg = $raw !== null ? $this->normalise($raw) : null;
+            if ($jpeg !== null) {
+                try { Storage::disk('public')->put($fetch[$u], $jpeg); } catch (\Throwable $e) { /* cache only */ }
+                $out[$u] = 'data:image/jpeg;base64,' . base64_encode($jpeg);
+            } else {
+                $out[$u] = '';   // fetch/decode failed → drawn placeholder, never a broken-image box
+            }
+        }
+
+        return $out;
+    }
+
+    /** @return array<string,?string> url => raw bytes (null on failure). Local paths supported (harness/tests). */
+    private function fetchMany(array $urls): array
+    {
+        $res = [];
+        $remote = [];
+        foreach ($urls as $u) {
+            if (is_file($u)) {
+                $res[$u] = @file_get_contents($u) ?: null;
+            } elseif (preg_match('~^https?://~i', $u)) {
+                $remote[] = $u;
+            } else {
+                $res[$u] = null;
+            }
+        }
+        if (! $remote) {
+            return $res;
+        }
+        if (! function_exists('curl_multi_init')) {
+            foreach ($remote as $u) {
+                $ctx = stream_context_create(['http' => ['timeout' => self::FETCH_TIMEOUT]]);
+                $res[$u] = @file_get_contents($u, false, $ctx) ?: null;
+            }
+
+            return $res;
+        }
+
+        foreach (array_chunk($remote, self::FETCH_PARALLEL) as $batch) {
+            $mh = curl_multi_init();
+            $handles = [];
+            foreach ($batch as $u) {
+                $ch = curl_init($u);
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 3,
+                    CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_TIMEOUT => self::FETCH_TIMEOUT,
+                    CURLOPT_SSL_VERIFYPEER => false, CURLOPT_USERAGENT => 'CloudBSS-Catalog/2.0',
+                ]);
+                curl_multi_add_handle($mh, $ch);
+                $handles[$u] = $ch;
+            }
+            do {
+                curl_multi_exec($mh, $running);
+                if ($running) curl_multi_select($mh, 0.2);
+            } while ($running);
+            foreach ($handles as $u => $ch) {
+                $body = curl_multi_getcontent($ch);
+                $code = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+                $res[$u] = ($code >= 200 && $code < 300 && $body !== '' && $body !== false) ? $body : null;
+                curl_multi_remove_handle($mh, $ch);
+                curl_close($ch);
+            }
+            curl_multi_close($mh);
+        }
+
+        return $res;
+    }
+
+    /** Contain-fit raw image bytes onto a white 4:3 canvas → JPEG bytes (null if undecodable). */
+    private function normalise(string $raw): ?string
+    {
+        $src = @imagecreatefromstring($raw);
+        if (! $src) {
+            return null;
+        }
+        $sw = imagesx($src); $sh = imagesy($src);
+        if ($sw < 2 || $sh < 2) { imagedestroy($src); return null; }
+
+        $canvas = imagecreatetruecolor(self::THUMB_W, self::THUMB_H);
+        $white = imagecolorallocate($canvas, 255, 255, 255);
+        imagefill($canvas, 0, 0, $white);
+
+        $scale = min((self::THUMB_W - 20) / $sw, (self::THUMB_H - 20) / $sh, 1.5);
+        $dw = (int) round($sw * $scale); $dh = (int) round($sh * $scale);
+        imagecopyresampled($canvas, $src,
+            (int) ((self::THUMB_W - $dw) / 2), (int) ((self::THUMB_H - $dh) / 2), 0, 0, $dw, $dh, $sw, $sh);
+        imagedestroy($src);
+
+        ob_start();
+        imagejpeg($canvas, null, 80);
+        imagedestroy($canvas);
+        $jpeg = ob_get_clean();
+
+        return $jpeg !== false && $jpeg !== '' ? $jpeg : null;
+    }
+
+    // ─────────────────────────── document ───────────────────────────
+
     /** @param array<int,array<string,mixed>> $groups */
-    private function html(Tenant $tenant, array $groups, string $currency, bool $withPrices): string
+    private function html(Tenant $tenant, array $groups, string $currency, bool $withPrices, array $thumbs): string
     {
         $company = e((string) $tenant->name);
         $tagline = e((string) ($tenant->setting('tagline', '') ?: $tenant->setting('address', '') ?: ''));
@@ -139,9 +315,9 @@ final class CatalogRenderer
         $logo = (string) $tenant->setting('logo', '');
         $date = now()->format('F Y');
         $dateFull = now()->format('d M Y');
-        $brand = self::BRAND; $brandD = self::BRAND_DARK;
+        $brand = self::BRAND; $brandD = self::BRAND_DARK; $ink = self::INK;
 
-        // --- paginate categories and compute index page numbers (cover = page 1) ---
+        // --- paginate categories; cover = page 1, back page = last (index stays accurate) ---
         $plan = [];
         $page = 2;
         foreach ($groups as $g) {
@@ -151,29 +327,45 @@ final class CatalogRenderer
             $page += count($chunks);
         }
 
-        // --- cover: logo, title, index ---
+        // --- cover ---
         $logoBlock = $logo !== ''
-            ? '<img src="' . e($logo) . '" style="height:70px;max-width:180px;object-fit:contain">'
-            : '<div style="font-size:34px;font-weight:bold;color:' . $brand . '">' . $company . '</div>';
+            ? '<div style="background:#ffffff;border-radius:10px;padding:12px 20px;display:inline-block"><img src="' . e($logo) . '" style="height:56px;max-width:170px"></div>'
+            : '<div style="font-size:30px;font-weight:bold;color:#ffffff;letter-spacing:-.5px">' . $company . '</div>';
 
-        $indexRows = '';
-        foreach ($plan as $p) {
-            $indexRows .= '<tr>'
-                . '<td style="padding:7px 4px;border-bottom:1px solid #eee;font-weight:bold;font-size:12px">' . e($p['category']) . '</td>'
-                . '<td style="padding:7px 4px;border-bottom:1px solid #eee;color:#666;font-size:11px">' . (int) $p['count'] . ' products</td>'
-                . '<td style="padding:7px 4px;border-bottom:1px solid #eee;text-align:right;color:' . $brandD . ';font-weight:bold;font-size:11px">p.' . (int) $p['startPage'] . '</td>'
+        $rows = [];
+        foreach ($plan as $i => $p) {
+            $bg = $i % 2 === 0 ? '#ffffff' : '#f8faf8';
+            $rows[] = '<tr>'
+                . '<td style="padding:8px 12px;background:' . $bg . ';font-weight:bold;font-size:11.5px;color:' . $ink . '">' . e($p['category']) . '</td>'
+                . '<td style="padding:8px 6px;background:' . $bg . ';color:#94a3b8;font-size:10px;white-space:nowrap">' . (int) $p['count'] . ' items</td>'
+                . '<td style="padding:8px 12px;background:' . $bg . ';text-align:right;color:' . $brandD . ';font-weight:bold;font-size:11px;white-space:nowrap">p.' . (int) $p['startPage'] . '</td>'
                 . '</tr>';
+        }
+        $idxHead = '<tr><th style="text-align:left;padding:7px 12px">Category</th><th style="text-align:left;padding:7px 6px">Items</th><th style="text-align:right;padding:7px 12px">Page</th></tr>';
+        if (count($rows) > 14) {   // two-column index for catalogue-heavy shops — never overflows the cover
+            $half = (int) ceil(count($rows) / 2);
+            $colA = '<table class="idx">' . $idxHead . implode('', array_slice($rows, 0, $half)) . '</table>';
+            $colB = '<table class="idx">' . $idxHead . implode('', array_slice($rows, $half)) . '</table>';
+            $index = '<table style="width:100%;border-collapse:separate;border-spacing:12px 0"><tr>'
+                . '<td style="width:50%;vertical-align:top">' . $colA . '</td>'
+                . '<td style="width:50%;vertical-align:top">' . $colB . '</td></tr></table>';
+        } else {
+            $index = '<table class="idx" style="width:78%;margin:0 auto">' . $idxHead . implode('', $rows) . '</table>';
         }
 
         $cover = '<div class="cover">'
-            . '<div style="margin-top:150px">' . $logoBlock . '</div>'
-            . '<div style="margin-top:18px;font-size:13px;color:#555;font-weight:bold">' . ($tagline ?: 'Wholesale') . '</div>'
+            . '<table class="band"><tr><td style="text-align:center;padding:44px 30px 40px">'
+            . $logoBlock
+            . ($tagline ? '<div style="margin-top:14px;font-size:12px;color:#d1fae5;font-weight:bold;letter-spacing:.6px">' . $tagline . '</div>' : '')
+            . '</td></tr></table>'
+            . '<div style="text-align:center;margin-top:38px">'
             . '<div class="ctitle">PRODUCT CATALOGUE</div>'
-            . '<div style="font-size:13px;color:#666;margin-bottom:40px">' . $date . '</div>'
-            . '<table class="idx"><tr>'
-            . '<th style="text-align:left">Category</th><th style="text-align:left">Items</th><th style="text-align:right">Page</th>'
-            . '</tr>' . $indexRows . '</table>'
-            . '<div class="coverfoot">' . e($company) . ($phone ? ' &nbsp;·&nbsp; ' . e($phone) : '') . ($email ? ' &nbsp;·&nbsp; ' . e($email) : '') . '</div>'
+            . '<div style="margin-top:8px"><span class="datechip">' . $date . '</span></div>'
+            . '</div>'
+            . '<div style="margin-top:30px">' . $index . '</div>'
+            . '<table class="coverfoot"><tr><td>'
+            . $company . ($phone ? ' &nbsp;·&nbsp; ' . e($phone) : '') . ($email ? ' &nbsp;·&nbsp; ' . e($email) : '')
+            . '</td></tr></table>'
             . '</div>';
 
         // --- category pages ---
@@ -181,93 +373,142 @@ final class CatalogRenderer
         foreach ($plan as $p) {
             $total = count($p['chunks']);
             foreach ($p['chunks'] as $ci => $items) {
-                $contLabel = $total > 1 ? ' <span style="font-weight:normal;color:#94a3b8;font-size:11px">(' . ($ci + 1) . '/' . $total . ')</span>' : '';
+                $contLabel = $total > 1 ? ' <span style="font-weight:normal;color:#bbf7d0;font-size:10px">&nbsp;' . ($ci + 1) . ' / ' . $total . '</span>' : '';
                 $body .= '<div class="page">'
-                    . $this->pageHeader($company, $logo, $date, $brand, $brandD)
+                    . $this->pageHeader($company, $logo, $date, $brandD)
                     . '<table class="catband"><tr><td>' . e($p['category']) . $contLabel . '</td>'
                     . '<td style="text-align:right"><span class="pill">' . (int) $p['count'] . ' products</span></td></tr></table>'
-                    . $this->grid($items, $currency, $withPrices, $brandD)
+                    . $this->grid($items, $currency, $withPrices, $thumbs)
                     . $this->pageFooter($phone, $currency, $dateFull, $withPrices)
                     . '</div>';
             }
         }
 
+        // --- back page: how to order (also prevents any trailing-blank-page break) ---
+        $steps = [
+            ['1', 'Send your order on WhatsApp', $phone !== '' ? e($phone) : 'our WhatsApp line' ],
+            ['2', 'We confirm stock &amp; total', 'You get an order confirmation with the amount'],
+            ['3', 'Pick up or delivery', 'Collect at the store or ask about delivery'],
+        ];
+        $stepHtml = '';
+        foreach ($steps as [$n, $t, $s]) {
+            $stepHtml .= '<table class="step"><tr>'
+                . '<td style="width:34px"><div class="stepn">' . $n . '</div></td>'
+                . '<td><div style="font-size:13px;font-weight:bold;color:' . $ink . '">' . $t . '</div>'
+                . '<div style="font-size:10.5px;color:#64748b;margin-top:2px">' . $s . '</div></td>'
+                . '</tr></table>';
+        }
+        $back = '<div class="backpage">'
+            . $this->pageHeader($company, $logo, $date, $brandD)
+            . '<table class="catband"><tr><td>How to order</td></tr></table>'
+            . '<table style="width:100%;border-collapse:collapse"><tr><td style="width:55%;vertical-align:top;padding-right:16px">' . $stepHtml . '</td>'
+            . '<td style="vertical-align:top">'
+            . '<div class="ordercard">'
+            . '<div style="font-size:10px;font-weight:bold;letter-spacing:1.5px;color:#bbf7d0">ORDER ON WHATSAPP</div>'
+            . '<div style="font-size:19px;font-weight:bold;color:#ffffff;margin-top:6px">' . ($phone !== '' ? e($phone) : $company) . '</div>'
+            . ($email !== '' ? '<div style="font-size:10.5px;color:#d1fae5;margin-top:8px">' . e($email) . '</div>' : '')
+            . '</div>'
+            . '</td></tr></table>'
+            . '<div style="margin-top:22px;font-size:9px;color:#94a3b8">'
+            . ($withPrices ? 'All prices in ' . e($currency) . ', valid as of ' . e($dateFull) . ' and subject to change without notice. ' : '')
+            . 'Availability confirmed on order. Thank you for your business.</div>'
+            . '</div>';
+
         return <<<HTML
 <!doctype html><html><head><meta charset="utf-8"><style>
+@page { margin: 26px 30px 34px; }
 *{font-family:"DejaVu Sans",Arial,sans-serif;}
-body{margin:0;padding:0;color:#0f172a;}
-.cover{text-align:center;padding:0 60px;page-break-after:always;height:1020px;}
-.ctitle{font-size:30px;font-weight:bold;letter-spacing:4px;color:{$brand};margin:26px 0 6px;}
-table.idx{width:70%;margin:10px auto 0;border-collapse:collapse;}
-table.idx th{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;border-bottom:2px solid {$brand};padding:6px 4px;}
-.coverfoot{margin-top:60px;font-size:10px;color:#94a3b8;}
-.page{page-break-after:always;padding:0;}
+body{margin:0;padding:0;color:{$ink};}
+.band{width:100%;border-collapse:collapse;background:{$brand};border-radius:12px;}
+.ctitle{font-size:27px;font-weight:bold;letter-spacing:5px;color:{$ink};}
+.datechip{display:inline-block;background:#f0fdf4;border:1px solid #bbf7d0;color:{$brandD};font-size:10.5px;font-weight:bold;padding:5px 14px;border-radius:12px;letter-spacing:1px;}
+table.idx{border-collapse:collapse;width:100%;border:1px solid #e2e8f0;border-radius:8px;}
+table.idx th{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;border-bottom:2px solid {$brand};background:#ffffff;}
+.coverfoot{width:100%;border-collapse:collapse;margin-top:34px;border-top:1px solid #e2e8f0;}
+.coverfoot td{padding-top:12px;text-align:center;font-size:9.5px;color:#94a3b8;font-weight:bold;}
+.page{page-break-before:always;}
+.backpage{page-break-before:always;}
 .phead{width:100%;border-collapse:collapse;border-bottom:2px solid {$brand};}
-.phead td{padding:10px 6px 8px;vertical-align:middle;}
-.pcompany{font-size:15px;font-weight:bold;}
-.pdoc{font-size:10px;font-weight:bold;letter-spacing:2px;color:{$brandD};text-transform:uppercase;}
-.pdate{font-size:9px;color:#94a3b8;}
-table.catband{width:100%;border-collapse:collapse;margin:14px 0 10px;background:#f0fdf4;border:1px solid #dcfce7;}
-table.catband td{padding:11px 14px;vertical-align:middle;font-size:19px;font-weight:bold;letter-spacing:-.3px;}
-.pill{background:{$brand};color:#fff;font-size:10px;font-weight:bold;padding:4px 10px;border-radius:9px;letter-spacing:.5px;}
-table.grid{width:100%;border-collapse:separate;border-spacing:9px;table-layout:fixed;}
-td.cell{width:33%;border:1px solid #e5e7eb;vertical-align:top;padding:0;}
-.ph{height:150px;background:#f1f5f9;text-align:center;}
-.ph img{max-height:150px;max-width:100%;object-fit:contain;}
-.ph .noimg{display:inline-block;padding-top:60px;color:#b6c0cc;font-size:9px;font-weight:bold;letter-spacing:1px;}
-.pbody{padding:9px 10px 11px;}
-.pn{font-weight:bold;font-size:12px;line-height:1.25;height:31px;overflow:hidden;}
-.pu{font-size:10px;color:#64748b;font-weight:bold;margin-top:2px;}
-.pm{font-size:9.5px;color:#475569;margin-top:3px;}
-.pr{margin-top:7px;color:{$brandD};font-weight:bold;font-size:14px;}
-.pr .from{font-size:8px;color:#94a3b8;font-weight:bold;display:block;letter-spacing:.5px;}
-.sku{float:right;font-size:9px;color:#94a3b8;font-weight:bold;margin-top:5px;}
-.pfoot{width:100%;border-collapse:collapse;border-top:1px solid #e5e7eb;margin-top:14px;}
-.pfoot td{padding:9px 6px;font-size:9.5px;color:#64748b;font-weight:bold;}
+.phead td{padding:0 0 7px;vertical-align:bottom;}
+.pcompany{font-size:14px;font-weight:bold;}
+.pdoc{font-size:9px;font-weight:bold;letter-spacing:2px;color:{$brandD};text-transform:uppercase;}
+.pdate{font-size:8.5px;color:#94a3b8;}
+table.catband{width:100%;border-collapse:collapse;margin:12px 0 4px;background:{$brandD};border-radius:8px;}
+table.catband td{padding:9px 14px;vertical-align:middle;font-size:16px;font-weight:bold;color:#ffffff;letter-spacing:-.2px;}
+.pill{background:#ffffff;color:{$brandD};font-size:9px;font-weight:bold;padding:3px 10px;border-radius:9px;letter-spacing:.5px;}
+table.grid{width:100%;border-collapse:separate;border-spacing:8px;table-layout:fixed;}
+td.cell{width:33%;border:1px solid #e2e8f0;border-radius:8px;vertical-align:top;padding:0;background:#ffffff;}
+td.cellpad{border:none;background:none;}
+table.phw{width:100%;border-collapse:collapse;}
+table.phw td{height:132px;text-align:center;vertical-align:middle;padding:4px 4px 0;}
+table.phw img{max-height:126px;max-width:100%;}
+.noimg{display:inline-block;color:#cbd5e1;font-size:8px;font-weight:bold;letter-spacing:1.5px;border:1px dashed #e2e8f0;border-radius:6px;padding:26px 18px;background:#f8fafc;}
+.pbody{padding:7px 10px 9px;}
+.pn1{font-weight:bold;font-size:11px;height:16px;overflow:hidden;}
+.pu{font-size:9.5px;color:#64748b;font-weight:bold;height:13px;overflow:hidden;margin-top:2px;}
+.pm{font-size:9px;color:#94a3b8;height:12px;overflow:hidden;margin-top:1px;}
+table.prow{width:100%;border-collapse:collapse;margin-top:6px;border-top:1px solid #f1f5f9;}
+table.prow td{padding-top:5px;vertical-align:bottom;}
+.pr{color:{$brandD};font-weight:bold;font-size:13.5px;white-space:nowrap;}
+.pfrom{font-size:7.5px;color:#94a3b8;font-weight:bold;letter-spacing:.5px;}
+.sku{text-align:right;font-size:8.5px;color:#94a3b8;font-weight:bold;}
+.pfoot{width:100%;border-collapse:collapse;border-top:1px solid #e2e8f0;margin-top:8px;}
+.pfoot td{padding:7px 2px 0;font-size:9px;color:#94a3b8;font-weight:bold;}
 .pfoot .wa{text-align:right;color:{$brandD};}
+.step{width:100%;border-collapse:collapse;margin:0 0 14px;}
+.stepn{width:26px;height:26px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:13px;color:{$brandD};font-weight:bold;font-size:13px;text-align:center;line-height:26px;}
+.ordercard{background:{$brandD};border-radius:10px;padding:18px 20px;}
 </style></head><body>
 {$cover}
 {$body}
+{$back}
 </body></html>
 HTML;
     }
 
-    private function pageHeader(string $company, string $logo, string $date, string $brand, string $brandD): string
+    private function pageHeader(string $company, string $logo, string $date, string $brandD): string
     {
-        $logoTag = $logo !== '' ? '<img src="' . e($logo) . '" style="height:34px;max-width:100px;object-fit:contain">' : '';
+        $logoTag = $logo !== '' ? '<img src="' . e($logo) . '" style="height:26px;max-width:90px">' : '';
 
         return '<table class="phead"><tr>'
             . '<td><div class="pcompany">' . $company . '</div></td>'
-            . '<td style="text-align:right"><div class="pdoc">Product Catalogue</div><div class="pdate">' . $date . '</div>' . ($logoTag ? '<div style="margin-top:2px">' . $logoTag . '</div>' : '') . '</td>'
+            . '<td style="text-align:right">' . ($logoTag !== '' ? $logoTag
+                : '<div class="pdoc">Product Catalogue</div><div class="pdate">' . $date . '</div>') . '</td>'
             . '</tr></table>';
     }
 
     /** @param array<int,array<string,mixed>> $items */
-    private function grid(array $items, string $currency, bool $withPrices, string $brandD): string
+    private function grid(array $items, string $currency, bool $withPrices, array $thumbs): string
     {
         $cells = [];
         foreach ($items as $it) {
             $img = trim((string) ($it['image'] ?? ''));
-            $photo = $img !== ''
-                ? '<div class="ph"><img src="' . e($img) . '"></div>'
-                : '<div class="ph"><span class="noimg">PRODUCT PHOTO</span></div>';
+            $src = $img !== '' ? ($thumbs === [] ? $img : ($thumbs[$img] ?? '')) : '';
+            $photo = $src !== ''
+                ? '<table class="phw"><tr><td><img src="' . e($src) . '"></td></tr></table>'
+                : '<table class="phw"><tr><td><span class="noimg">PHOTO<br>COMING SOON</span></td></tr></table>';
+
+            $unit = trim((string) ($it['unit'] ?? ''));
             $moq = ! empty($it['moq'])
-                ? '<div class="pm">Min order: ' . e((string) $it['moq']) . ' &times; ' . e((string) ($it['unit'] ?: 'units')) . '</div>'
-                : '';
-            $priceBlock = $withPrices
-                ? '<div class="pr"><span class="from">FROM</span>' . $this->money((float) $it['price'], $currency)
-                  . ($it['sku'] ? '<span class="sku">' . e((string) $it['sku']) . '</span>' : '') . '</div>'
-                : ($it['sku'] ? '<div class="pr" style="color:#94a3b8;font-size:10px">' . e((string) $it['sku']) . '</div>' : '');
+                ? 'Min order: ' . e((string) $it['moq']) . ' &times; ' . e($unit !== '' ? $unit : 'units')
+                : '&nbsp;';
+            $priceCell = $withPrices
+                ? '<div class="pfrom">FROM</div><div class="pr">' . $this->money((float) $it['price'], $currency) . '</div>'
+                : '<div class="pr" style="color:#94a3b8;font-size:10px">Ask for price</div>';
 
             $cells[] = '<td class="cell">' . $photo
-                . '<div class="pbody"><div class="pn">' . e((string) $it['name']) . '</div>'
-                . '<div class="pu">' . e((string) ($it['unit'] ?: '—')) . '</div>'
-                . $moq . $priceBlock . '</div></td>';
+                . '<div class="pbody">'
+                . $this->nameLines((string) $it['name'])
+                . '<div class="pu">' . ($unit !== '' ? e($unit) : '&nbsp;') . '</div>'
+                . '<div class="pm">' . $moq . '</div>'
+                . '<table class="prow"><tr><td>' . $priceCell . '</td>'
+                . '<td class="sku">' . ($it['sku'] ? e((string) $it['sku']) : '') . '</td></tr></table>'
+                . '</div></td>';
         }
 
         // pad the final row to 3 columns so the table layout stays aligned
         while (count($cells) % 3 !== 0) {
-            $cells[] = '<td class="cell" style="border:none;background:transparent"></td>';
+            $cells[] = '<td class="cell cellpad"></td>';
         }
 
         $rows = '';
@@ -276,6 +517,35 @@ HTML;
         }
 
         return '<table class="grid">' . $rows . '</table>';
+    }
+
+    /**
+     * Product name as EXACTLY two fixed-height single-line divs (second may be blank).
+     * dompdf's line boxes ignore CSS line-height enough to glyph-slice a clipped multi-line
+     * block, so we do the wrapping ourselves: greedy word wrap at a char budget per line,
+     * ellipsis if it can't fit two lines. Every card gets the same 32px name zone.
+     */
+    private function nameLines(string $name, int $perLine = 30): string
+    {
+        $words = preg_split('/\s+/u', trim($name)) ?: [];
+        $l1 = '';
+        $l2 = '';
+        foreach ($words as $w) {
+            if ($l2 === '' && mb_strlen(($l1 === '' ? $w : "$l1 $w"), 'UTF-8') <= $perLine) {
+                $l1 = $l1 === '' ? $w : "$l1 $w";
+            } elseif (mb_strlen(($l2 === '' ? $w : "$l2 $w"), 'UTF-8') <= $perLine) {
+                $l2 = $l2 === '' ? $w : "$l2 $w";
+            } else {
+                $l2 = rtrim(mb_substr($l2 === '' ? $w : "$l2 $w", 0, $perLine - 1, 'UTF-8')) . '…';
+                break;
+            }
+        }
+        if ($l1 !== '' && $l2 === '' && mb_strlen($l1, 'UTF-8') > $perLine) {
+            $l2 = rtrim(mb_substr($l1, $perLine, $perLine - 1, 'UTF-8')) . '…';
+            $l1 = mb_substr($l1, 0, $perLine, 'UTF-8');
+        }
+
+        return '<div class="pn1">' . e($l1) . '</div><div class="pn1">' . ($l2 !== '' ? e($l2) : '&nbsp;') . '</div>';
     }
 
     private function pageFooter(string $phone, string $currency, string $dateFull, bool $withPrices): string

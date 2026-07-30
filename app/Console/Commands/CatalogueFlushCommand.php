@@ -27,9 +27,11 @@ class CatalogueFlushCommand extends Command
 
         foreach ($ids as $id) {
             Cache::forget("catalogue:{$id}");
+            Cache::forget("catalog_pdf:{$id}:p");    // photo-catalogue PDF (with prices)
+            Cache::forget("catalog_pdf:{$id}:np");   // photo-catalogue PDF (no prices)
         }
 
-        $this->info('Flushed catalogue cache for ' . count($ids) . ' shop(s). Sessions untouched.');
+        $this->info('Flushed catalogue + catalogue-PDF cache for ' . count($ids) . ' shop(s). Sessions untouched.');
         return self::SUCCESS;
     }
 }
