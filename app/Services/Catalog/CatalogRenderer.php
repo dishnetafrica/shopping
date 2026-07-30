@@ -523,6 +523,37 @@ final class CatalogRenderer
         return 'data:' . $mime . ';base64,' . base64_encode($bytes);
     }
 
+    /**
+     * Cover artwork, mode-aware. A PORTRAIT image (like a fully-designed A4/2:3 cover exported
+     * from an AI tool, text and QR already in the picture) becomes the ENTIRE cover page,
+     * untouched. A landscape/square image is treated as a hero PHOTO and cover-cropped into the
+     * composed layout (headline, checklist, stat box drawn by us).
+     * @return array{0:string,1:string} [dataUri|'', 'full'|'hero']
+     */
+    private function coverAsset(Tenant $tenant, string $url): array
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return ['', 'hero'];
+        }
+        $ratio = null;   // w/h
+        try {
+            $raw = $this->fetchMany([$url])[$url] ?? null;
+            if ($raw !== null) {
+                $info = @getimagesizefromstring($raw);
+                if ($info && $info[0] > 1 && $info[1] > 1) {
+                    $ratio = $info[0] / $info[1];
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        if ($ratio !== null && $ratio < 0.87) {   // clearly portrait → full-page cover art
+            return [$this->asset($tenant, $url, 1400), 'full'];
+        }
+
+        return [$this->asset($tenant, $url, 1100, false, 0.62), 'hero'];
+    }
+
     /** WhatsApp order QR: explicit setting wins; else generated once via quickchart and cached. */
     private function qr(Tenant $tenant, string $phone): string
     {
@@ -561,7 +592,7 @@ final class CatalogRenderer
         $brand = self::BRAND; $brandD = self::BRAND_DARK; $ink = self::INK;
 
         $badges = $plain ? [] : $this->badgeMap($tenant);
-        $coverImg = $plain ? '' : $this->asset($tenant, (string) $tenant->setting('catalog_cover_image', ''), 1100, false, 0.62);
+        [$coverImg, $coverMode] = $plain ? ['', 'hero'] : $this->coverAsset($tenant, (string) $tenant->setting('catalog_cover_image', ''));
         $promoImg = $plain ? '' : $this->asset($tenant, (string) $tenant->setting('catalog_promo_image', ''), 800);
         $qr = $plain ? '' : $this->qr($tenant, $phone);
         $totalItems = 0;
@@ -581,7 +612,7 @@ final class CatalogRenderer
         }
 
         $cover = $this->coverHtml($tenant, $plan, $company, $tagline, $logo, $phone, $email,
-            $date, $coverImg, $qr, $totalItems, $showOverview, $webText, $webHref);
+            $date, $coverImg, $qr, $totalItems, $showOverview, $webText, $webHref, $coverMode);
         $overview = $showOverview
             ? $this->overviewHtml($company, $logo, $date, $plan, $thumbs, $brandD, $promoImg)
             : '';
@@ -732,8 +763,16 @@ HTML;
 
     private function coverHtml(Tenant $tenant, array $plan, string $company, string $tagline,
         string $logo, string $phone, string $email, string $date, string $coverImg, string $qr,
-        int $totalItems, bool $showOverview, string $webText = '', string $webHref = ''): string
+        int $totalItems, bool $showOverview, string $webText = '', string $webHref = '',
+        string $coverMode = 'hero'): string
     {
+        // Fully-designed portrait artwork = the whole first page, nothing drawn over it.
+        if ($coverImg !== '' && $coverMode === 'full') {
+            return '<div class="cover" style="text-align:center">'
+                . '<img src="' . e($coverImg) . '" style="max-width:100%;max-height:1046px;border-radius:10px">'
+                . '</div>';
+        }
+
         $webLine = $webText !== ''
             ? '<a href="' . e($webHref) . '" style="color:#d1fae5;text-decoration:none;font-weight:bold">' . e($webText) . '</a>'
             : '';
