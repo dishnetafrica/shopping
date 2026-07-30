@@ -60,10 +60,13 @@ final class CatalogRenderer
             return null;
         }
 
-        $thumbs = $this->thumbs($tenant, $groups);
-        $html = $this->html($tenant, $groups, $currency, $withPrices, $thumbs);
+        // First render of a big catalogue downloads + resizes hundreds of photos — do not let
+        // PHP's default 30-60s web time limit kill the request halfway (fatal 500, uncatchable).
+        @set_time_limit(300);
 
         try {
+            $thumbs = $this->thumbs($tenant, $groups);
+            $html = $this->html($tenant, $groups, $currency, $withPrices, $thumbs);
             $dompdf = new \Dompdf\Dompdf([
                 'isRemoteEnabled' => true,
                 'isHtml5ParserEnabled' => true,
@@ -256,7 +259,12 @@ final class CatalogRenderer
             return $res;
         }
 
+        $deadline = microtime(true) + 120;   // whole-fetch budget; stragglers become placeholders
         foreach (array_chunk($remote, self::FETCH_PARALLEL) as $batch) {
+            if (microtime(true) > $deadline) {
+                foreach ($batch as $u) $res[$u] = null;
+                continue;
+            }
             $mh = curl_multi_init();
             $handles = [];
             foreach ($batch as $u) {
@@ -289,6 +297,9 @@ final class CatalogRenderer
     /** Contain-fit raw image bytes onto a white 4:3 canvas → JPEG bytes (null if undecodable). */
     private function normalise(string $raw): ?string
     {
+        if (! $this->decodable($raw)) {
+            return null;   // would exhaust memory_limit mid-decode — a FATAL, not an exception
+        }
         $src = @imagecreatefromstring($raw);
         if (! $src) {
             return null;
@@ -312,6 +323,32 @@ final class CatalogRenderer
         $jpeg = ob_get_clean();
 
         return $jpeg !== false && $jpeg !== '' ? $jpeg : null;
+    }
+
+    /**
+     * A 20-megapixel phone photo needs ~100 MB of GD buffer; decoding it inside a 128 MB
+     * memory_limit dies with an uncatchable fatal. Check dimensions BEFORE decoding and skip
+     * anything that will not comfortably fit in the remaining headroom (placeholder instead).
+     */
+    private function decodable(string $raw): bool
+    {
+        $info = @getimagesizefromstring($raw);
+        if (! $info || $info[0] < 2 || $info[1] < 2) {
+            return false;
+        }
+        $needed = $info[0] * $info[1] * 5 + strlen($raw);          // truecolor buffer + raw bytes
+        $limit = ini_get('memory_limit');
+        $bytes = match (strtoupper(substr((string) $limit, -1))) {
+            'G' => (int) $limit * 1073741824,
+            'M' => (int) $limit * 1048576,
+            'K' => (int) $limit * 1024,
+            default => (int) $limit,
+        };
+        if ($bytes <= 0) {
+            return $needed < 256 * 1048576;                        // memory_limit=-1 → sane cap
+        }
+
+        return memory_get_usage(true) + $needed < $bytes - 32 * 1048576;   // keep 32 MB headroom
     }
 
     /**
