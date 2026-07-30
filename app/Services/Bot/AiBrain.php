@@ -669,7 +669,10 @@ class AiBrain
                     try {
                         $gw = app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($tenant);
                         if (method_exists($gw, 'sendDocument') && $tenant->whatsapp_instance) {
-                            $media = ($doc['url'] ?? '') ?: ($doc['b64'] ?? '');
+                            // b64 FIRST: embedding always works; a URL depends on APP_URL being a
+                            // publicly correct host (real 2026-07-30 incident: internal container
+                            // hostname → WhatsApp could not fetch → quotation text without the PDF).
+                            $media = ($doc['b64'] ?? '') ?: ($doc['url'] ?? '');
                             $gw->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], 'Your quotation ' . $qNo);
                         }
                     } catch (\Throwable $e) {
@@ -735,7 +738,7 @@ class AiBrain
             if ($f !== '' && stripos($town, $f) !== false) return "\n\u{2705} Delivery to " . $town . " is *free* (from our store).";
         }
         $from = trim((string) $tenant->setting('delivery_from_city', 'Juba')) ?: 'Juba';
-        return "\n\u{1F69A} " . $town . " is outside our free-delivery area — our team will confirm the transport from our " . $from . " store, or you can collect from " . $from . ".";
+        return "\n\u{1F69A} " . $town . " is outside our free-delivery area — our team will confirm whether we can deliver there and the transport cost from our " . $from . " store, or you can collect from " . $from . ".";
     }
 
     private function captureOrder(Tenant $tenant, Conversation $convo, string $from, string $reply): string
