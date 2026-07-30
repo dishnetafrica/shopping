@@ -70,16 +70,34 @@ final class CatalogRenderer
         // PHP's default 30-60s web time limit kill the request halfway (fatal 500, uncatchable).
         @set_time_limit(300);
 
-        // Two-stage: try the rich pipeline (thumbnails, cover art, QR, badges); if ANYTHING in it
-        // throws, log the exact spot and retry in plain mode (v1-style direct image URLs, no
-        // artwork fetches) so the customer still receives a catalogue.
-        $html = null;
+        // Three-stage ladder. Each stage narrows the failure domain and is logged with file:line,
+        // so laravel.log names the broken feature while the customer still gets a catalogue:
+        //   1. rich        thumbnails + cover art + QR + badges
+        //   2. thumbs-only same thumbnails, no artwork/QR/badges  (small PDF preserved)
+        //   3. plain       direct image URLs, zero external deps  (fat but never fails)
+        $thumbs = [];
         try {
             $thumbs = $this->thumbs($tenant, $groups);
+        } catch (\Throwable $e) {
+            \Log::warning('CatalogRenderer thumbnail pipeline failed: ' . $e->getMessage()
+                . ' @ ' . basename($e->getFile()) . ':' . $e->getLine() . ' — images will embed at full size');
+            $thumbs = [];
+        }
+
+        $html = null;
+        try {
             $html = $this->html($tenant, $groups, $currency, $withPrices, $thumbs);
         } catch (\Throwable $e) {
-            \Log::warning('CatalogRenderer rich path failed: ' . $e->getMessage()
-                . ' @ ' . basename($e->getFile()) . ':' . $e->getLine() . ' — falling back to plain render');
+            \Log::warning('CatalogRenderer rich layout failed: ' . $e->getMessage()
+                . ' @ ' . basename($e->getFile()) . ':' . $e->getLine() . ' — retrying without artwork/QR/badges');
+        }
+        if ($html === null) {
+            try {
+                $html = $this->html($tenant, $groups, $currency, $withPrices, $thumbs, true);
+            } catch (\Throwable $e) {
+                \Log::warning('CatalogRenderer thumbs-only layout failed: ' . $e->getMessage()
+                    . ' @ ' . basename($e->getFile()) . ':' . $e->getLine() . ' — retrying plain');
+            }
         }
 
         try {
