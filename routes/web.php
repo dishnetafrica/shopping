@@ -461,6 +461,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('pos-quotes',       [\App\Http\Controllers\Panel\PosController::class, 'quotes']);
         Route::get('pos-quote-load',   [\App\Http\Controllers\Panel\PosController::class, 'quoteLoad']);
         Route::get('pos-customers',    [\App\Http\Controllers\Panel\PosController::class, 'customers']);   // v4.3 customer picker
+        // WhatsApp on the customer record (v4.4): thread tail + AI-personalised draft (send reuses chats/send).
+        Route::get('wa-thread',        [\App\Http\Controllers\Panel\CustomerWaController::class, 'thread']);
+        Route::post('wa-ai-draft',     [\App\Http\Controllers\Panel\CustomerWaController::class, 'aiDraft']);
         Route::get('bos-customers', [\App\Http\Controllers\Panel\BosCustomersController::class, 'show']); // Modern Customers list
         Route::get('bos-finance', [\App\Http\Controllers\Panel\BosFinanceController::class, 'show']); // Modern Finance hub
         Route::get('bos-run', [\App\Http\Controllers\Panel\BosRunController::class, 'show']); // Guided Collect Run

@@ -1972,7 +1972,73 @@ const ACTICON={record_payment:'card',log_contact:'phone',log_whatsapp:'mail',edi
 function actIcon(a){ return (a&&(a.icon||ACTICON[a.key]))||'chev'; }
 function actJson(a){ return JSON.stringify(a).replace(/'/g,'&#39;'); }
 
-function renderRecord(p){ LAST_REC=p; document.getElementById('view').innerHTML=recordHtml(p); hydrateCardTables(); }
+function renderRecord(p){ LAST_REC=p; document.getElementById('view').innerHTML=recordHtml(p); hydrateCardTables(); try{ waCustCard(p); }catch(e){} }
+
+/* ===== WhatsApp on the customer record (v4.4) =====
+   One place for the customer's chat: tail + composer (posts the PROVEN /papi/chats/send,
+   which also makes the bot yield the chat) + ✨ AI draft from the relationship memory.
+   The AI only DRAFTS into the box — a human always reviews and presses Send. */
+function recPhone(p){
+  try{
+    if(p&&p.object&&p.object.phone) return String(p.object.phone).replace(/[^0-9]/g,'');
+    const m=JSON.stringify(p||{}).match(/"phone"\s*:\s*"\+?([0-9][0-9 ()-]{7,17})"/i);
+    return m?m[1].replace(/[^0-9]/g,''):'';
+  }catch(e){ return ''; }
+}
+function waCustCard(p){
+  const cap=(p&&p.meta&&p.meta.capability)||CUR.key;
+  if(cap!=='customer'&&CUR.key!=='customers') return;
+  const phone=recPhone(p); if(!phone) return;
+  const v=document.getElementById('view'); if(!v||document.getElementById('waCard')) return;
+  const d=document.createElement('div');
+  d.className='card'; d.id='waCard'; d.style.marginTop='14px';
+  d.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">'
+    +'<h3 style="margin:0;font-size:15px">💬 WhatsApp</h3>'
+    +'<button class="btn sm" onclick="openChatFor(\''+phone+'\')">Open full chat</button></div>'
+    +'<div id="waTail" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:2px 0">Loading…</div>'
+    +'<div style="display:flex;gap:8px;margin-top:10px;align-items:center">'
+    +'<input id="waMsg" placeholder="Message to this customer…" style="flex:1;padding:10px 12px;border:1px solid var(--line,#e2e6ea);border-radius:10px;font:inherit" onkeydown="if(event.key===\'Enter\')waSendTo(\''+phone+'\')">'
+    +'<button class="btn sm" onclick="waAiDraft(\''+phone+'\')" title="AI writes a personalised draft from what this customer is looking for — you review, then send">✨ AI draft</button>'
+    +'<button class="btn sm pri" onclick="waSendTo(\''+phone+'\')">Send</button></div>';
+  v.appendChild(d);
+  waTailLoad(phone);
+}
+function waTailLoad(phone){
+  getQuery('/papi/wa-thread',{phone:phone}).then(function(d){
+    const el=document.getElementById('waTail'); if(!el) return;
+    if(!d||!d.ok){ el.innerHTML='<span style="color:#8a94a0;font-size:13px">Could not load the conversation.</span>'; return; }
+    const ms=d.messages||[];
+    el.innerHTML=ms.length?ms.map(function(m){
+      const out=m.dir!=='in';
+      return '<div style="align-self:'+(out?'flex-end':'flex-start')+';max-width:82%;background:'+(out?'#dcf3e3':'#f1f3f5')+';border-radius:12px;padding:7px 11px;font-size:13px;line-height:1.4">'
+        +esc(m.body||'')+'<div style="font-size:10px;color:#8a94a0;margin-top:2px;text-align:right">'+esc(m.at||'')+(out&&m.who?' · '+esc(m.who):'')+'</div></div>';
+    }).join(''):'<span style="color:#8a94a0;font-size:13px">No WhatsApp messages with this customer yet — say hello below.</span>';
+    el.scrollTop=el.scrollHeight;
+    window.__WA_CONV=d.conversation_id||null;
+  }).catch(function(){});
+}
+function openChatFor(phone){
+  getQuery('/papi/wa-thread',{phone:phone}).then(function(d){
+    route('chats',(d&&d.conversation_id)||null);
+  }).catch(function(){ route('chats',null); });
+}
+async function waSendTo(phone){
+  const inp=document.getElementById('waMsg'); const txt=(inp&&inp.value||'').trim(); if(!txt) return;
+  inp.disabled=true;
+  const res=await post('/papi/chats/send',{phone:phone,body:txt});
+  inp.disabled=false;
+  if(res&&res.ok){ inp.value=''; toast('Sent'); waTailLoad(phone); }
+  else toast((res&&(res.error||res.message))||'Could not send',true);
+}
+async function waAiDraft(phone){
+  const hint=window.prompt('What should this message achieve? (optional — e.g. "offer aluminum foil containers, 10% off this week")','')||'';
+  const btns=document.querySelectorAll('#waCard .btn'); btns.forEach(function(b){b.disabled=true;});
+  const res=await post('/papi/wa-ai-draft',{phone:phone,hint:hint});
+  btns.forEach(function(b){b.disabled=false;});
+  const inp=document.getElementById('waMsg');
+  if(res&&res.ok&&res.draft&&inp){ inp.value=res.draft; inp.focus(); toast('Draft ready — edit if needed, then Send'); }
+  else toast((res&&res.error)||'AI draft failed',true);
+}
 function setRecTab(k){ REC_TAB=k; if(LAST_REC){ document.getElementById('view').innerHTML=recordHtml(LAST_REC); hydrateCardTables(); } }
 
 function recordHtml(p){
