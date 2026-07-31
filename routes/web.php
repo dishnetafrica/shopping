@@ -32,6 +32,24 @@ Route::get('/v3-manifest.webmanifest', function () {
     ]), 200, ['Content-Type' => 'application/manifest+json', 'Cache-Control' => 'public, max-age=86400']);
 });
 
+// V3 shell assets — SELF-HEALING (v3.9.1). Normally nginx serves public/assets/v3/* directly and
+// this route never fires (try_files). If the public/ copy is missing on a deploy (the exact
+// incident of 31 Jul: blade uploaded, public/ folder missed → blank V3), Laravel serves the
+// SAME files from resources/v3/ — which ships in every drop alongside the blade. Either copy
+// arriving is enough; the app can no longer go blank from a half-upload.
+Route::get('/assets/v3/{file}', function (string $file) {
+    abort_unless(in_array($file, ['shell.css', 'shell.js'], true), 404);
+    foreach ([public_path('assets/v3/' . $file), resource_path('v3/' . $file)] as $p) {
+        if (is_file($p)) {
+            return response(file_get_contents($p), 200, [
+                'Content-Type'  => str_ends_with($file, '.css') ? 'text/css; charset=UTF-8' : 'application/javascript; charset=UTF-8',
+                'Cache-Control' => 'public, max-age=604800',
+            ]);
+        }
+    }
+    abort(404);
+})->where('file', '[A-Za-z0-9._-]+');
+
 // Public, no-login task links (tokenized nonce). Rate-limited to defeat nonce guessing.
 // The nonce authorizes only task-scoped actions on that one task — never account access.
 Route::middleware('throttle:30,1')->group(function () {

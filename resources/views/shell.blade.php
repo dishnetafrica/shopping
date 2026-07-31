@@ -14,9 +14,10 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <title>CloudBSS</title>
-{{-- V3 assets are static files (V3-FIRST.md §split): deploy them TOGETHER with this blade.
-     filemtime = automatic cache-busting, no manual version bumps. --}}
-<link rel="stylesheet" href="/assets/v3/shell.css?v={{ @filemtime(public_path('assets/v3/shell.css')) ?: 1 }}">
+{{-- V3 assets are static files (V3-FIRST.md §split). Served from public/assets/v3/ when present,
+     else the /assets/v3/{file} fallback route streams the resources/v3/ copy — either is enough.
+     filemtime (of whichever copy exists) = automatic cache-busting, no manual version bumps. --}}
+<link rel="stylesheet" href="/assets/v3/shell.css?v={{ @filemtime(public_path('assets/v3/shell.css')) ?: (@filemtime(resource_path('v3/shell.css')) ?: 1) }}">
 </head>
 <body>
 <div class="app">
@@ -70,6 +71,6 @@
   </div>
 </div>
 
-<script src="/assets/v3/shell.js?v={{ @filemtime(public_path('assets/v3/shell.js')) ?: 1 }}"></script>
+<script src="/assets/v3/shell.js?v={{ @filemtime(public_path('assets/v3/shell.js')) ?: (@filemtime(resource_path('v3/shell.js')) ?: 1) }}"></script>
 </body>
 </html>

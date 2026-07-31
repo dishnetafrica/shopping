@@ -26,9 +26,12 @@ assets — **no build step, deploy the files together**:
 
 - `public/assets/v3/shell.css` — all V3 styles
 - `public/assets/v3/shell.js`  — all V3 JavaScript (router, nav, screens)
+- `resources/v3/shell.css` + `shell.js` — IDENTICAL copies (self-healing, since v3.9.1): if the
+  public/ copy is missing on a deploy, the `/assets/v3/{file}` fallback route in routes/web.php
+  serves the resources/ copy, so a half-upload can no longer blank V3 (31 Jul incident).
 
-Cache-busting is automatic (`?v=filemtime`). ⚠️ When a drop touches the shell, upload the
-blade AND both asset files in the same drop — a blade without its assets is a blank app.
+Cache-busting is automatic (`?v=filemtime` of whichever copy exists). ⚠️ When a drop touches
+the shell, update BOTH copies of each asset (public/ + resources/) — they must stay identical.
 Longer-term direction: when a module (customers, tasks, finance…) gets its next real feature,
 its functions move out of shell.js into their own static file loaded after it — the shell
 shrinks opportunistically, never in a big-bang rewrite.
