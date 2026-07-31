@@ -128,6 +128,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
     Route::get('/panel/books', [\App\Http\Controllers\Panel\BooksController::class, 'page']);
     Route::get('/panel/trust', [\App\Http\Controllers\Panel\TrustPanelController::class, 'page']); // Inventory Trust (T6)
     Route::get('/panel/pos', [\App\Http\Controllers\Panel\PosController::class, 'page']); // POS till (supermarket checkout)
+    Route::get('/panel/training', [\App\Http\Controllers\Panel\TrainingController::class, 'page']); // in-product Training Center
     Route::get('/panel/cash-position', [\App\Http\Controllers\Panel\CashPositionController::class, 'page']);
     Route::get('/panel/book-cost', [\App\Http\Controllers\Panel\OrderCostController::class, 'page']);
     Route::get('/panel/purchases', [\App\Http\Controllers\Panel\OrderCostController::class, 'purchasePage']);

@@ -31,6 +31,8 @@ return [
         'key' => 'home', 'label' => 'Home',
         'items' => [
             ['key' => 'dashboard', 'label' => 'Dashboard', 'route' => '/panel', 'icon' => '🏠', 'menu' => 'dashboard'],
+            // In-product Training Center — every screen explained + the usual confusions. All roles.
+            ['key' => 'training',  'label' => 'Training',  'route' => '/panel/training', 'icon' => '🎓', 'menu' => 'dashboard'],
         ],
     ],
 

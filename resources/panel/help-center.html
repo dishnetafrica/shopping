@@ -1,0 +1,313 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Training — {{TENANT}}</title>
+<style>
+:root{--dark:#1B3A2B;--green:#15803D;--green2:#0f6b33;--red:#C0392B;--amber:#b45309;--line:#e4e9e4;--muted:#6b7280;--bg:#f6f8f6}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1B211D;background:var(--bg)}
+.top{background:var(--dark);color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.top h1{font-size:18px;margin:0;font-weight:800}
+.top .tn{font-size:12px;opacity:.8}
+.back{background:#ffffff22;border:none;color:#fff;border-radius:9px;padding:8px 12px;font-weight:700;cursor:pointer}
+.wrap{max-width:920px;margin:0 auto;padding:14px 14px 60px}
+
+.controls{position:sticky;top:0;background:var(--bg);padding:10px 0 8px;z-index:5}
+#q{width:100%;padding:12px 14px;border:2px solid var(--line);border-radius:12px;font-size:15px;outline:none;background:#fff}
+#q:focus{border-color:var(--green)}
+.roles{display:flex;gap:6px;overflow-x:auto;padding-top:8px;scrollbar-width:thin}
+.role{border:1.5px solid var(--line);background:#fff;border-radius:20px;padding:6px 13px;font-size:12.5px;font-weight:700;color:#475569;cursor:pointer;white-space:nowrap}
+.role.on{background:var(--dark);border-color:var(--dark);color:#fff}
+
+.grp{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:800;margin:26px 2px 10px}
+.card{background:#fff;border-radius:14px;padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 3px #0000000d;scroll-margin-top:120px}
+.card h2{font-size:16.5px;margin:0 0 2px;display:flex;align-items:center;gap:8px}
+.card .where{font-size:12px;color:var(--green2);font-weight:700;margin:0 0 8px}
+.card p{margin:7px 0;font-size:14px;line-height:1.55}
+.card ol,.card ul{margin:7px 0;padding-left:20px;font-size:14px;line-height:1.6}
+.card li{margin:3px 0}
+.card b{color:#0f172a}
+.warn{background:#fff8f0;border:1px solid #f3dfc4;border-radius:10px;padding:9px 12px;font-size:13px;margin-top:9px;line-height:1.5}
+.warn b{color:var(--amber)}
+.tip{background:#f4faf5;border:1px solid #dcefe0;border-radius:10px;padding:9px 12px;font-size:13px;margin-top:9px;line-height:1.5}
+.tip b{color:var(--green2)}
+kbd,code{background:#f0f4f0;padding:1px 6px;border-radius:5px;font-size:12.5px;font-family:ui-monospace,Menlo,monospace}
+.none{display:none;color:var(--muted);text-align:center;padding:30px 10px;font-size:14px}
+.hid{display:none !important}
+.printbtn{background:#eef2f7;border:none;border-radius:9px;padding:8px 12px;font-weight:700;color:#334155;cursor:pointer}
+a{color:var(--green2)}
+mark{background:#fdf2c7;border-radius:3px;padding:0 1px}
+@media print{.top,.controls{display:none}.card{box-shadow:none;border:1px solid var(--line);page-break-inside:avoid}}
+</style></head>
+<body>
+<div class="top">
+  <div style="display:flex;align-items:center;gap:10px"><button class="back" onclick="history.back()">‹ Back</button>
+  <div><h1>🎓 Training</h1><div class="tn">{{TENANT}} — how to use every screen</div></div></div>
+  <button class="printbtn" onclick="window.print()">🖨 Print</button>
+</div>
+<div class="wrap">
+
+<div class="controls">
+  <input type="search" id="q" placeholder="Search — e.g. barcode, credit, catalogue, count, quotation…">
+  <div class="roles" id="roles">
+    <button class="role on" data-role="">Everyone</button>
+    <button class="role" data-role="cashier">Cashier</button>
+    <button class="role" data-role="sales">Sales &amp; WhatsApp</button>
+    <button class="role" data-role="store">Storekeeper</button>
+    <button class="role" data-role="buy">Purchasing</button>
+    <button class="role" data-role="money">Accounts</button>
+    <button class="role" data-role="owner">Owner</button>
+  </div>
+</div>
+
+<div id="list">
+
+<div class="grp">Start here</div>
+
+<div class="card" id="start" data-role="" data-kw="start menu missing role module login basics navigation">
+  <h2>🧭 How the system fits together</h2>
+  <p>There are two halves. The <b>WhatsApp assistant</b> talks to customers day and night — prices, catalogues, quotations, orders. The <b>panel</b> (what you are in now) is where the team works: the till, orders, stock, money and settings. Everything both halves do lands in the same place, so a sale at the till and a sale on WhatsApp end up in the same stock ledger, the same invoices, the same cashbook.</p>
+  <p>Use the <b>left menu</b> to move around. Each person's login only shows the menus their role needs.</p>
+  <div class="warn"><b>"I can't see a menu the trainer mentioned."</b> That is normal, not broken — your role does not include it. The owner controls this per person in <b>Settings → Team &amp; Roles</b>. If a whole group is missing for <i>everyone</i>, that module is switched off for the business.</div>
+</div>
+
+<div class="card" id="day" data-role="" data-kw="daily routine morning evening today what first">
+  <h2>📅 A good daily rhythm</h2>
+  <ol>
+    <li><b>Morning:</b> the owner/manager opens <b>Inventory Trust</b> and clears the day's check queue (5 minutes). Cashier opens the <b>POS Till</b>.</li>
+    <li><b>All day:</b> WhatsApp orders flow in by themselves; the till rings walk-in sales; deliveries go out with a signed <b>delivery note</b>.</li>
+    <li><b>Evening:</b> cashier taps <b>TODAY</b> on the till and matches the total against the cash drawer. Accounts checks <b>Cashbook</b>.</li>
+  </ol>
+</div>
+
+<div class="grp">Sales</div>
+
+<div class="card" id="pos" data-role="cashier" data-kw="pos till checkout scan barcode scanner cash momo card credit change receipt walk-in supermarket">
+  <h2>🛒 POS Till — ring up a sale</h2>
+  <p class="where">Open: Menu → Sales → POS Till</p>
+  <ol>
+    <li><b>Add items.</b> Scan the barcode (the scanner types it and presses Enter for you — the item jumps into the cart), or type part of the name, or tap the product tiles. Category chips narrow the grid.</li>
+    <li><b>Check the cart.</b> Use <b>−</b> / <b>+</b> or type the quantity (decimals are fine for weighed items). ✕ removes a line. Discount box takes an amount off the whole sale.</li>
+    <li><b>Take the money.</b> <b>CASH</b>: tap the note the customer gave (or type it) — the screen shows the change, and repeats it after saving so you can't forget. <b>MOMO</b> / <b>CARD</b>: confirm once the money has arrived. <b>CREDIT</b>: only with the customer's name or phone — the sale is saved as an unpaid invoice to collect later.</li>
+    <li><b>Receipt.</b> Tap 🖨 Print receipt — it prints as a small 80&nbsp;mm slip on a thermal printer.</li>
+  </ol>
+  <div class="tip"><b>Scanner tip:</b> you never need to click into the search box — start scanning or typing anywhere and the box catches it.</div>
+  <div class="warn"><b>"It let me sell an item marked out of stock."</b> Deliberate. The till never blocks a customer standing at the counter — the stock number simply goes negative and the morning Trust queue asks someone to check that item. Sell first, investigate later.</div>
+  <div class="warn"><b>Credit sales:</b> never press CREDIT without a real name or phone number — that money has no owner otherwise. Collection happens later from the order/invoice with <b>Record payment</b>.</div>
+</div>
+
+<div class="card" id="orders" data-role="sales owner" data-kw="orders margin create order status delivered record payment delivery note sign">
+  <h2>🧾 Orders — every sale in one register</h2>
+  <p class="where">Open: Menu → Sales → Orders</p>
+  <p>All orders land here no matter where they were born — WhatsApp bot, the till (channel "pos"), or <b>Create order</b> typed by you. The margin view shows what each order earns after costs.</p>
+  <ul>
+    <li><b>Move the order along</b> as it really happens; when it becomes <b>Delivered</b>, stock is deducted and the invoice is issued automatically. Cancel returns the stock.</li>
+    <li><b>Record payment</b> whenever money arrives — part payments are fine; the invoice tracks the balance.</li>
+    <li><b>Delivery note:</b> open the order → <b>⋯ more → Print delivery note</b>. It shows quantities only (never prices), with signature boxes — the customer signs, the driver brings it back. Keep the signed copy.</li>
+  </ul>
+  <div class="warn"><b>"The bot said a customer confirmed a quotation."</b> That is your cue: the bot never converts by itself. Open the quotation and turn it into an order — until you do, no stock moves and no invoice exists.</div>
+</div>
+
+<div class="card" id="customers" data-role="sales owner" data-kw="customers 360 history balance who owes">
+  <h2>👥 Customers — who buys, who owes</h2>
+  <p class="where">Open: Menu → Sales → Customers</p>
+  <p>One card per customer: their orders, invoices, payments and balance. Customers are filed automatically from every sale (till and WhatsApp), so you rarely create one by hand. Use it before calling anyone about money — the balance and history are already there.</p>
+</div>
+
+<div class="card" id="invoices" data-role="money owner" data-kw="invoices issue send credit note numbered paid part paid">
+  <h2>📄 Invoices — the numbered money record</h2>
+  <p class="where">Open: Menu → Sales → Invoices</p>
+  <ul>
+    <li>Invoices are <b>issued automatically</b> when an order is delivered (numbered like INV-2026-0001). You can also <b>Issue one from an order</b> manually.</li>
+    <li><b>Record payment</b> here or on the order — same money, same place. Status moves Paid / Part-paid by itself.</li>
+    <li><b>Send</b> WhatsApps the PDF straight to the customer. Mistake on an invoice? <b>Issue credit note</b> — never delete.</li>
+  </ul>
+</div>
+
+<div class="grp">Purchases</div>
+
+<div class="card" id="purchases" data-role="buy owner" data-kw="buy list purchase supplier sourcing stock in goods received costs">
+  <h2>🛒 Buying stock — list → purchase → shelf</h2>
+  <p class="where">Open: Menu → Purchases</p>
+  <ul>
+    <li><b>Buy List</b> — the shared shopping list. Anyone who spots something running low adds it here, so nothing lives in someone's head.</li>
+    <li><b>Purchases → New Purchase</b> — record what was actually bought and what it cost. This is where cost prices (and later margins) come from, so type real numbers.</li>
+    <li><b>Suppliers</b> — who you buy from; <b>Suppliers We Owe</b> shows unpaid supplier balances so nothing is forgotten.</li>
+    <li><b>Sourcing Requests</b> — things a customer wants that you don't stock yet.</li>
+  </ul>
+  <div class="warn"><b>Why does my purchase wait in Cost Approvals?</b> Spending above the limit needs a second pair of eyes, and nobody can approve <i>their own</i> spend. That is protection for you, not distrust — an approved purchase can never be questioned later.</div>
+</div>
+
+<div class="grp">Stock</div>
+
+<div class="card" id="inventory" data-role="store owner" data-kw="stock count inventory counting save physical">
+  <h2>📦 Stock count — tell the system what's really on the shelf</h2>
+  <p class="where">Open: Menu → Stock → Inventory · or the count link sent to you on WhatsApp</p>
+  <ol>
+    <li>Count what is <b>physically there</b> — do not peek at the system number first, and never copy it.</li>
+    <li>Type the counted quantity and <b>Save</b>. A difference is fine — that is exactly what the count is for.</li>
+  </ol>
+  <div class="tip"><b>Counts are how the system learns to trust the shelf.</b> An honest "short by 3" today saves hours of searching at month end. Differences go to the Trust queue for a calm check — they are not an automatic blame.</div>
+</div>
+
+<div class="card" id="trust" data-role="owner store" data-kw="trust shrink queue resolve clean error confirmed loss vision camera box claim receive verify">
+  <h2>🛡️ Inventory Trust — the owner's 5-minute morning habit</h2>
+  <p class="where">Open: Menu → Stock → Inventory Trust (same list as the 06:45 WhatsApp digest)</p>
+  <p>The engine watches every stock movement and lines up the few items worth checking today, ranked by expected loss. The tiles in plain words: <b>Verified stock</b> — how much of your stock value has been counted and confirmed recently. <b>Shrink</b> — value that disappeared without being sold, as % of sales. <b>Attributed</b> — how much of that loss is explained (a stage, a process, a person). <b>Queue precision</b> — of the items you checked, how many found something real.</p>
+  <ol>
+    <li>Each morning, open the queue and check the listed items physically.</li>
+    <li>Resolve each one: <b>clean</b> (all fine — raises that person's reputation), <b>error</b> (paperwork/process mistake — taxes nobody), or <b>confirmed loss</b> (type the value).</li>
+    <li><b>Receiving:</b> when goods arrive, staff use the WhatsApp link to confirm quantities received — that evidence is what keeps their score strong.</li>
+  </ol>
+  <p><b>Shelf cameras:</b> when a vision box arrives, plug it in with internet; a claim code appears on its screen — type it into "Claim box" here. Camera events then feed the same queue.</p>
+  <div class="warn"><b>Say it the way the system means it:</b> a queue item is a question, never an accusation. "Clean" answers most of them. Using it to blame people will make staff stop counting honestly — and then the numbers are worth nothing.</div>
+</div>
+
+<div class="card" id="stockmove" data-role="store owner" data-kw="consignment deliveries transport kampala juba movement">
+  <h2>🚚 Consignments &amp; Deliveries — goods on the move</h2>
+  <p class="where">Open: Menu → Stock → Consignments / Deliveries</p>
+  <p><b>Consignments</b> track goods sent to be sold elsewhere (e.g. Kampala → Juba): what left, what arrived, what sold. <b>Deliveries</b> is the day's outbound board. Long-haul movements also have the <b>Transport register</b> (open <code>/transport</code> on a phone) for the movement ledger.</p>
+</div>
+
+<div class="grp">Money</div>
+
+<div class="card" id="money" data-role="money owner" data-kw="payments cashbook cash position staff cash my cash received by expenses">
+  <h2>💰 Payments &amp; Cashbook — money always has a name</h2>
+  <p class="where">Open: Menu → Money → Payments / Cashbook</p>
+  <p><b>Payments Received</b> lists every payment recorded anywhere — till, order, invoice. The one rule that confuses people: when recording a payment, <b>"received by" means whoever physically took the money</b>, not whoever typed it in. That is why Cashbook has tabs — <b>Cashbook</b> (the trade ledger), <b>Cash Position</b> (where money sits right now), <b>Staff Cash</b> (each person's pocket balance to hand over), <b>My Cash</b> (your own).</p>
+  <ul>
+    <li>Evening routine: each person's <b>Staff Cash</b> balance is what they hand to the safe. It should reach zero.</li>
+    <li><b>Expenses</b> — record spending the moment it happens, with a note. P&amp;L is only as honest as this screen.</li>
+  </ul>
+</div>
+
+<div class="card" id="reports" data-role="owner money" data-kw="reports profit loss pnl margin month">
+  <h2>📊 Reports — Profit &amp; Loss</h2>
+  <p class="where">Open: Menu → Reports</p>
+  <p>Sales minus cost of goods minus expenses, by period. If a number looks wrong here, the cause is almost always upstream: a purchase without a cost, an expense never typed in, or an order stuck in the wrong status.</p>
+</div>
+
+<div class="grp">WhatsApp &amp; Messaging</div>
+
+<div class="card" id="bot" data-role="sales owner" data-kw="bot assistant ai answers catalogue category quotation pdf delivery policy fresh products teach">
+  <h2>🤖 The WhatsApp assistant — what it does on its own</h2>
+  <p>It answers customers using <b>your live product list</b> — new products and price changes reach it within a minute, automatically. It quotes your <b>delivery policy</b> from Settings word-for-word. Ask it for a price list and it sends the catalogue; name a category ("exercise books price list") and it sends <b>just that category's</b> PDF. When a customer confirms an order, it prepares a <b>quotation PDF</b> and alerts the owner.</p>
+  <ul>
+    <li><b>It will not</b> attach catalogues to shipping-cost questions, spam documents (one document per few minutes), or quote the same order twice — a repeat "yes" becomes a <b>confirmation alert to the owner</b> instead.</li>
+    <li><b>Teach it</b> in Settings → Business profile: FAQ, brand knowledge, and the Delivery policy box (exact wording it must use).</li>
+  </ul>
+  <div class="warn"><b>The bot cannot finish a sale.</b> A confirmed quotation still needs a human to convert it to an order — that step is yours.</div>
+</div>
+
+<div class="card" id="chats" data-role="sales owner" data-kw="chats take over human jump in reply myself">
+  <h2>💬 Chats — jump in whenever you want</h2>
+  <p class="where">Open: Menu → Messaging → Chats</p>
+  <p>Every conversation, live. Press <b>Take over</b> to reply yourself; the assistant reads what you wrote so it stays consistent when it resumes. Customers never see a difference except the answer quality you add.</p>
+</div>
+
+<div class="card" id="marketing" data-role="sales owner" data-kw="leads campaigns broadcast scheduled ads marketing">
+  <h2>📣 Leads, Campaigns, Scheduled, Ads</h2>
+  <p class="where">Open: Menu → Messaging</p>
+  <p><b>Leads</b> — potential customers (add or import); work them until they order. <b>Campaigns</b> — broadcast messages to chosen customer groups; send less, target better. <b>Scheduled</b> — future deliveries the bot arranged. <b>Ads</b> — promo material.</p>
+  <div class="warn">Before a broadcast, skim for customers with an <b>open confirmed quotation</b> — a marketing push mid-negotiation reads badly.</div>
+</div>
+
+<div class="card" id="email" data-role="owner" data-kw="email center campaign template provider">
+  <h2>📧 Email Center</h2>
+  <p class="where">Open: Menu → Communication → Email</p>
+  <p>Email campaigns and templates, separate from WhatsApp. Add a provider once under its Providers tab, then reuse templates.</p>
+</div>
+
+<div class="grp">Catalogue &amp; Settings</div>
+
+<div class="card" id="catalogue" data-role="owner" data-kw="catalogue pdf cover promo logo badges best seller hot deal website qr size">
+  <h2>📕 The PDF catalogue — how to make it beautiful</h2>
+  <p class="where">Set up in: Settings → Business profile → Branding / Catalogue / Contact</p>
+  <ul>
+    <li><b>Logo</b> and <b>cover image</b>: use <b>Upload image…</b> then press <b>Save changes</b> — uploading alone is not saved yet.</li>
+    <li><b>Cover art:</b> a <b>portrait</b> image (taller than wide, e.g. 1024×1536) becomes the full front page exactly as designed. Landscape images are used as a cropped banner instead. Don't bake product counts into the art — they go stale.</li>
+    <li><b>Badges:</b> list product names under Best sellers / Hot deals to print BEST SELLER / HOT DEAL flashes.</li>
+    <li><b>Phone &amp; Website</b> (Contact group) print on the cover and every footer, with a scan-to-WhatsApp QR.</li>
+    <li>The catalogue <b>updates itself</b> when products change. Customers asking about one category get that category's small PDF automatically.</li>
+  </ul>
+  <div class="tip">First generation after many product changes takes up to a minute (it rebuilds photo thumbnails once), then it's fast and small (a few MB, not 30+).</div>
+</div>
+
+<div class="card" id="settings" data-role="owner" data-kw="settings business profile delivery policy ai knowledge limit team roles modules billing advanced diagnostics">
+  <h2>⚙️ Settings — the five minutes that steer everything</h2>
+  <p class="where">Open: Menu → Settings</p>
+  <ul>
+    <li><b>Business profile</b> — name, address, TIN (prints on receipts, invoices, delivery notes); Branding &amp; Catalogue images; <b>Delivery policy</b> (the exact sentence the bot and catalogue use — e.g. "All prices include free delivery within Juba…"); <b>AI knowledge → Products the AI knows</b>: set it <b>above</b> your product count or the bot literally cannot see products late in the alphabet.</li>
+    <li><b>WhatsApp</b> — connect the number the assistant answers on.</li>
+    <li><b>Team &amp; Roles</b> — one login per person, menus per role. Nobody shares a login: payments and counts are recorded <i>by name</i>.</li>
+    <li><b>Modules</b> — switch whole areas of the product on/off; <b>Billing</b> — your plan; <b>Advanced</b> — bot diagnostics for the owner when something looks off.</li>
+  </ul>
+</div>
+
+<div class="grp">When something looks wrong</div>
+
+<div class="card" id="faq" data-role="" data-kw="problem wrong missing not showing help fix why">
+  <h2>🧯 Quick answers to the usual confusions</h2>
+  <ul>
+    <li><b>"I uploaded an image but the catalogue doesn't show it."</b> Press <b>Save changes</b> after uploading, then regenerate the catalogue. Cover art must be portrait to take the full page.</li>
+    <li><b>"The bot doesn't know my new product."</b> It learns within a minute — check the product is <b>Active</b> with a price above zero, and that <i>Products the AI knows</i> (Settings → AI knowledge) is set higher than your product count.</li>
+    <li><b>"The bot didn't send the catalogue when I expected."</b> It only sends documents when clearly asked (catalogue / price list / menu), never for shipping-cost questions, and at most one document every few minutes per chat. That's protection against spamming customers, not a fault.</li>
+    <li><b>"Customer said yes to a quotation — now what?"</b> The owner gets one alert; open the quotation and <b>convert it to an order</b>. Nothing moves until a human does this.</li>
+    <li><b>"Stock shows a minus number."</b> Something sold that the system didn't think was there. The till allows it on purpose; the Trust queue will ask someone to check that item. Count it, resolve, move on.</li>
+    <li><b>"Where is the delivery note?"</b> Open the order → <b>⋯ more → Print delivery note</b>. Quantities only, three signature boxes.</li>
+    <li><b>"A credit sale — where do I collect?"</b> It became an unpaid invoice. When the customer pays, <b>Record payment</b> on the order or invoice — never just pocket-and-remember.</li>
+    <li><b>"I recorded a payment but the invoice still shows part-paid."</b> Check the amount and who it was recorded under; part payments are normal and the balance is shown on the invoice.</li>
+    <li><b>"I can't see a menu / a button others have."</b> Role permissions — ask the owner (Settings → Team &amp; Roles). Not a bug.</li>
+    <li><b>Still stuck?</b> The owner can run bot diagnostics under Settings → Advanced, and every screen's numbers can be traced back to an order, a purchase, an expense or a count — find which of those is missing and the mystery usually solves itself.</li>
+  </ul>
+</div>
+
+<div class="card" id="cheat" data-role="cashier store" data-kw="cheat sheet print one page summary">
+  <h2>📌 One-line cheat sheets (print this page for the wall)</h2>
+  <p><b>Cashier:</b> scan → check cart → CASH tap the note, give the change shown → print receipt → CREDIT only with a name/phone → end of day: TODAY total = drawer.</p>
+  <p><b>Storekeeper:</b> count what you SEE, never the system number → Save → confirm goods received from the WhatsApp link the moment a truck arrives.</p>
+  <p><b>Sales:</b> watch Chats, Take over when a human touch wins → convert confirmed quotations to orders the same day → record every payment with the right "received by".</p>
+  <p><b>Owner, daily:</b> Trust queue (5 min) → confirmed quotations → Staff Cash to zero → glance at Today.</p>
+</div>
+
+</div>
+<div class="none" id="none">Nothing found — try another word (e.g. "credit", "count", "catalogue").</div>
+</div>
+
+<script>
+var $=function(id){return document.getElementById(id);};
+var role='';
+function apply(){
+  var q=($('q').value||'').trim().toLowerCase();
+  var any=false;
+  document.querySelectorAll('#list .card').forEach(function(c){
+    var okRole=!role||(c.dataset.role||'').split(' ').indexOf(role)>=0||c.dataset.role==='';
+    var hay=(c.textContent+' '+(c.dataset.kw||'')).toLowerCase();
+    var okQ=!q||hay.indexOf(q)>=0;
+    c.classList.toggle('hid',!(okRole&&okQ));
+    if(okRole&&okQ)any=true;
+  });
+  document.querySelectorAll('.grp').forEach(function(g){
+    var n=g.nextElementSibling,show=false;
+    while(n&&!n.classList.contains('grp')){if(n.classList&&n.classList.contains('card')&&!n.classList.contains('hid'))show=true;n=n.nextElementSibling;}
+    g.classList.toggle('hid',!show);
+  });
+  $('none').style.display=any?'none':'block';
+}
+$('q').addEventListener('input',apply);
+document.querySelectorAll('.role').forEach(function(b){
+  b.addEventListener('click',function(){
+    document.querySelectorAll('.role').forEach(function(x){x.classList.remove('on');});
+    b.classList.add('on');role=b.dataset.role||'';apply();
+  });
+});
+// Deep link: /panel/training#pos scrolls to and briefly highlights that card.
+function goHash(){
+  if(!location.hash)return;
+  var el=document.getElementById(location.hash.slice(1));
+  if(el){setTimeout(function(){el.scrollIntoView({behavior:'smooth',block:'start'});
+    el.style.outline='3px solid #15803D';setTimeout(function(){el.style.outline='';},2500);},80);}
+}
+window.addEventListener('hashchange',goHash);
+goHash();
+</script>
+</body></html>

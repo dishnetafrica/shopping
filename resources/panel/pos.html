@@ -106,6 +106,17 @@ button{font-family:inherit}
 
 .toast{position:fixed;left:50%;top:64px;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 18px;border-radius:12px;font-size:13.5px;font-weight:700;z-index:60;display:none;box-shadow:0 4px 14px #0003}
 
+/* first-run quick tour */
+.helpb{background:#ffffff18;border:none;color:#fff;border-radius:10px;padding:7px 13px;font-weight:800;cursor:pointer;font-size:15px}
+.tourOv{position:fixed;inset:0;z-index:70;display:none}
+.tourOv.show{display:block}
+.tourRing{position:absolute;border:3px solid #4ade80;border-radius:14px;box-shadow:0 0 0 9999px rgba(15,23,42,.6);transition:all .25s ease;pointer-events:none}
+.tourCard{position:fixed;background:#fff;border-radius:14px;padding:16px 18px;width:min(340px,88vw);box-shadow:0 10px 40px #0006}
+.tourCard h3{margin:2px 0 6px;font-size:16px}
+.tourCard p{margin:0 0 4px;font-size:13.5px;line-height:1.5;color:#334155}
+.tourStep{font-size:10.5px;font-weight:800;letter-spacing:1px;color:#94a3b8}
+.tourLink{display:inline-block;margin-top:10px;font-size:12.5px;font-weight:700;color:var(--green2);text-decoration:none}
+
 /* ---------- 80 mm receipt (print only) ---------- */
 #receipt{display:none}
 @media print{
@@ -134,6 +145,7 @@ button{font-family:inherit}
   <button class="back" onclick="location.href='/panel/app'">‹</button>
   <div><h1>🧾 POS</h1><div class="tn">{{TENANT}} · {{OPERATOR}}</div></div>
   <button class="today" onclick="openToday()"><small>TODAY</small><span id="todaySum">…</span></button>
+  <button class="helpb" onclick="startTour()" title="Quick tour">?</button>
 </div>
 
 <div class="main">
@@ -205,6 +217,20 @@ button{font-family:inherit}
 
 <div class="toast" id="toast"></div>
 <div id="receipt"></div>
+
+<!-- first-run quick tour (also via the ? button) -->
+<div class="tourOv" id="tourOv">
+  <div class="tourRing" id="tourRing"></div>
+  <div class="tourCard" id="tourCard">
+    <div class="tourStep" id="tourStepN"></div>
+    <h3 id="tourH"></h3><p id="tourP"></p>
+    <div class="mrow" style="margin-top:10px">
+      <button class="mb no" onclick="endTour()">Skip</button>
+      <button class="mb go" id="tourNextB" onclick="tourNext()">Next</button>
+    </div>
+    <a class="tourLink" href="/panel/training#pos">📖 Open full training</a>
+  </div>
+</div>
 
 <script>
 var CUR='{{CURRENCY}}', SHOP='{{TENANT}}', OPER='{{OPERATOR}}', ADDR='{{ADDRESS}}', SPHONE='{{PHONE}}', TIN='{{TIN}}';
@@ -439,5 +465,32 @@ document.addEventListener('keydown',function(e){
 });
 
 paint();loadProducts('');loadToday();focusQ();
+
+/* ---------------- quick tour (3 steps, first visit + ? button) ---------------- */
+var TOUR=[
+  {sel:'#q',        h:'Add items here',   p:'Scan a barcode with the scanner, or type the product name. You can also just tap the product tiles below.'},
+  {sel:'.right',    h:'The cart',         p:'Check quantities with − and +, remove a line with ✕, and give a whole-sale discount at the bottom.'},
+  {sel:'.pays',     h:'Take the money',   p:'CASH shows the change to give. MOMO and CARD confirm once the money arrived. CREDIT needs the customer’s name or phone — it becomes an unpaid invoice to collect later.'}
+], tourI=0;
+function tourShow(){
+  var t=TOUR[tourI], el=document.querySelector(t.sel);
+  if(!el){endTour();return;}
+  var r=el.getBoundingClientRect(), ring=$('tourRing'), card=$('tourCard');
+  ring.style.left=(r.left-6)+'px'; ring.style.top=(r.top-6)+'px';
+  ring.style.width=(r.width+12)+'px'; ring.style.height=(r.height+12)+'px';
+  $('tourStepN').textContent='STEP '+(tourI+1)+' OF '+TOUR.length;
+  $('tourH').textContent=t.h; $('tourP').textContent=t.p;
+  $('tourNextB').textContent=(tourI===TOUR.length-1)?'DONE':'Next';
+  // Card placement: below the target if there is room, else above; clamped to the viewport.
+  var ch=card.offsetHeight||200, cw=Math.min(340,window.innerWidth*.88);
+  var top=(r.bottom+14+ch<window.innerHeight)?(r.bottom+14):Math.max(12,r.top-ch-14);
+  var left=Math.min(Math.max(12,r.left+r.width/2-cw/2),window.innerWidth-cw-12);
+  card.style.top=top+'px'; card.style.left=left+'px';
+}
+function startTour(){tourI=0;$('tourOv').classList.add('show');tourShow();}
+function tourNext(){if(tourI>=TOUR.length-1){endTour();return;}tourI++;tourShow();}
+function endTour(){$('tourOv').classList.remove('show');try{localStorage.setItem('pos_tour_v1','1');}catch(e){}focusQ();}
+window.addEventListener('resize',function(){if($('tourOv').classList.contains('show'))tourShow();});
+try{if(!localStorage.getItem('pos_tour_v1'))setTimeout(startTour,900);}catch(e){}
 </script>
 </body></html>
