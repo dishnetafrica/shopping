@@ -208,6 +208,9 @@ class AiBrain
                 }
                 foreach (array_slice($imgs, 0, 3) as $im) {
                     if (empty($im['media'])) continue;
+                    // Per-product cooldown (31 Jul incident: same Rock Salt card twice in one
+                    // minute): the SAME image never goes to the SAME customer twice in 10 min.
+                    if (! Cache::add('imgcool:' . $tenant->id . ':' . $from . ':' . md5((string) $im['media']), 1, 600)) continue;
                     $gateway->sendImage($tenant->whatsapp_instance, $from, $im['media'], (string) ($im['caption'] ?? ''));
                     MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', '[photo] ' . (string) ($im['caption'] ?? ''), null, null, ['via' => 'ai', 'kind' => 'product_image']);
                 }
@@ -1429,6 +1432,9 @@ class AiBrain
         $p .= "- ANSWER FIRST, completely and exactly what was asked — then STOP. A price question deserves the price, not a pitch. A stock question deserves the stock answer. Do not append suggestions to answers.\n";
         $p .= "- Suggest another item AT MOST ONCE per conversation, and ONLY when one of these is true: (a) it directly complements something they are actually buying (cups → lids), (b) they asked for ideas/recommendations, or (c) they are finalising an order — one relevant attach, briefly.\n";
         $p .= "- NEVER suggest anything during: complaints, delivery/payment questions, greetings, or support topics. And after ONE decline or ignored suggestion, suggesting is CLOSED for this conversation — pushing twice destroys trust.\n";
+        $p .= "- TOPIC CONTINUITY (critical): short follow-ups — \"for fish\", \"the big one\", \"how much\", a size or colour — REFINE the topic of the last few messages; they are NOT a new product search. Example: while discussing takeaway containers, \"for fish\" means a container FOR fish, NEVER fish spices. If a fragment is genuinely ambiguous, ask ONE short clarifying question instead of guessing a different product.\n";
+        $p .= "- \"SAMPLES\" from a trade customer means product PHOTOS (or a small trial order). Ask WHICH products they want to see — never pick a product they didn't mention.\n";
+        $p .= "- If the customer asks to CALL or says nobody picks up the phone: apologise in one short line, give the phone number from BUSINESS DETAILS if one is listed, and offer to sort it right here on WhatsApp. Do not attach any product to that reply.\n";
         $p .= "- MIRROR the customer: terse customer → short answers. Do not volunteer paragraphs to someone sending three words.\n";
         $p .= "- When they are ordering: capture quantity and delivery area naturally. If a clearly BIG buyer orders retail quantities, you may mention ONCE that the carton price saves money — and drop it if not taken.\n";
         $p .= "- Do NOT calculate multi-item order totals yourself. If the customer asks for a total, acknowledge it and let them know you're adding it up — the exact total is computed and appended by the system from the price list.\n";

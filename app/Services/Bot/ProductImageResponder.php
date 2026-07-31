@@ -38,6 +38,10 @@ class ProductImageResponder
         if (preg_match('/\b(checkout|check out|cart|basket|total|pay|payment|confirm|cancel|remove|delete|order now|done|finish)\b/u', $t)) return [];
         // Greetings / yes-no / menu.
         if (preg_match('/^(hi+|hello|hey+|ok(ay)?|yes|no|y|n|thanks|thank you|thx|menu|help|start)\W*$/u', $t)) return [];
+        // SERVICE / META turns — calls, location, delivery, complaints. These are never product
+        // asks; fuzzy search on them produced absurd cards ("why are you not PICKING the call"
+        // → Butter CHICKEN, real incident 31 Jul). Hard stop before any matching.
+        if (preg_match('/\b(call|calling|called|phone|ring|pick(ing)?\s+(up|the)|location|address|where\s+(are|is)|deliver|delivery|deliveries|transport|shipping|complain|complaint|problem|wrong|refund|late|angry|manager|human|agent|person|speak|talk)\b/u', $t)) return [];
 
         $cur = (string) $tenant->setting('currency', 'UGX');
 
@@ -198,22 +202,32 @@ class ProductImageResponder
         elseif (preg_match('/\b(what\s*is|what\'?s|whats|tell me about|about)\b/u', $t))        $P = 85;
         elseif (preg_match('/\b(do you have|you have|got|have you|available|in stock|stock)\b/u', $t)) $P = 90;
         elseif (preg_match('/\b(price|cost|how much|rate)\b/u', $t))                            $P = 95;
-        else                                                                                   $P = 100;
+        elseif (preg_match('/\b(i need|need|i want|want|looking for|buy|buying)\b/u', $t))      $P = 88;   // explicit purchase intent
+        else                                                                                   $P = 70;   // a plain sentence is NOT automatic product intent (was 100 — "picking the call" scored max)
 
         $name = mb_strtolower((string) $hits->first()->name);
         $ask  = trim((string) preg_replace('/\b(show me|show|send|see|need|want|i want|i need|price of|price|cost|how much|do you have|you have|got|have|tell me about|what is|what\'?s|whats|about|the|some|any|me|a|of)\b/u', ' ', $clean));
         $ask  = trim((string) preg_replace('/\s+/u', ' ', $ask));
 
-        if ($hits->count() === 1) {
-            $M = 100;
-        } elseif ($ask !== '' && mb_strpos($name, $ask) !== false) {
-            $M = 95;
-        } else {
-            $hit = false;
-            foreach (preg_split('/\s+/u', $ask) as $w) {
-                if (mb_strlen($w) >= 3 && mb_strpos($name, $w) !== false) { $hit = true; break; }
-            }
-            $M = $hit ? 85 : 60;
+        // HARD GATE (31 Jul incident): at least one REAL word the customer typed must appear in
+        // the matched product's name. Fuzzy search alone is not evidence — "samples" is not
+        // "Salt", "picking" is not "Chicken". Without word overlap there is no image, ever.
+        $overlap = false;
+        $askWords = array_filter(preg_split('/\s+/u', mb_strtolower($ask)), fn ($w) => mb_strlen($w) >= 3);
+        foreach ($askWords as $w) {
+            if (mb_strpos($name, $w) !== false) { $overlap = true; break; }
+        }
+        if (! $overlap) return 0;
+
+        // A long free sentence with no purchase-intent pattern is conversation, not a product name.
+        if ($P === 70 && count($askWords) > 5) return 0;
+
+        if ($ask !== '' && mb_strpos($name, $ask) !== false) {
+            $M = 100;              // the whole ask is inside the product name — unambiguous
+        } elseif ($hits->count() === 1) {
+            $M = 90;               // single hit AND word overlap (the overlap is what earns trust —
+        } else {                   // a lone fuzzy hit no longer auto-scores 100)
+            $M = 85;
         }
 
         return (int) round(($P + $M) / 2);
