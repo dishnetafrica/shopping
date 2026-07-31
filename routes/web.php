@@ -454,6 +454,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('pos-shift',        [\App\Http\Controllers\Panel\PosController::class, 'shift']);       // v3.9 shift control
         Route::post('pos-shift-open',  [\App\Http\Controllers\Panel\PosController::class, 'shiftOpen']);
         Route::post('pos-shift-close', [\App\Http\Controllers\Panel\PosController::class, 'shiftClose']);
+        Route::get('pos-find-sale',    [\App\Http\Controllers\Panel\PosController::class, 'findSale']);    // v4.0 returns
+        Route::post('pos-return',      [\App\Http\Controllers\Panel\PosController::class, 'processReturn']);
         Route::get('bos-customers', [\App\Http\Controllers\Panel\BosCustomersController::class, 'show']); // Modern Customers list
         Route::get('bos-finance', [\App\Http\Controllers\Panel\BosFinanceController::class, 'show']); // Modern Finance hub
         Route::get('bos-run', [\App\Http\Controllers\Panel\BosRunController::class, 'show']); // Guided Collect Run

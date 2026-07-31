@@ -156,6 +156,20 @@ button{font-family:inherit}
 .pinbox{display:flex;justify-content:center;margin:10px 0}
 .pinbox input{width:170px;text-align:center;font-size:24px;letter-spacing:8px;font-weight:800}
 
+/* v4.0 — returns */
+.retline{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f3f0}
+.retline .ri{flex:1;min-width:0}
+.retline .rn{font-size:13px;font-weight:700;line-height:1.25}
+.retline .rm{font-size:10.5px;color:var(--muted)}
+.retline .rt{flex:0 0 76px;text-align:right;font-size:13px;font-weight:800}
+.seg{display:flex;gap:6px;margin:10px 0 4px}
+.seg button{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:10px 4px;font-size:12px;font-weight:800;color:#475569;cursor:pointer}
+.seg button.on{background:var(--dark);border-color:var(--dark);color:#fff}
+.retTot{display:flex;justify-content:space-between;font-size:17px;font-weight:800;border-top:2px solid var(--line);padding-top:8px;margin-top:6px}
+.findrow{display:flex;justify-content:space-between;gap:8px;padding:9px 6px;border-bottom:1px solid #f0f3f0;cursor:pointer;border-radius:8px}
+.findrow:hover{background:#f4faf5}
+.findrow .fm{font-size:11px;color:var(--muted)}
+
 /* ---------- 80 mm receipt (print only) ---------- */
 #receipt{display:none}
 @media print{
@@ -185,6 +199,7 @@ button{font-family:inherit}
   <div><h1>🧾 POS</h1><div class="tn">{{TENANT}} · {{OPERATOR}}</div></div>
   <span class="net" id="netChip" style="display:none" onclick="openSync()" title="Tap to see sales waiting to sync"></span>
   <button class="today" onclick="openToday()"><small>TODAY</small><span id="todaySum">…</span></button>
+  <button class="helpb" onclick="openReturns('')" title="Return items from a past sale">↩</button>
   <button class="helpb" id="fsBtn" style="display:none" onclick="window.open('/panel/pos','_blank')" title="Open full screen">⛶</button>
   <button class="helpb" onclick="startTour()" title="Quick tour">?</button>
 </div>
@@ -316,6 +331,33 @@ button{font-family:inherit}
   <div class="mrow">
     <button class="mb no" onclick="$('pinOv').classList.remove('show')">Cancel</button>
     <button class="mb go" onclick="submitPin()">APPROVE</button>
+  </div>
+</div></div>
+
+<!-- returns -->
+<div class="ov" id="retOv"><div class="md">
+  <h3>↩ Return items</h3>
+  <div id="retFind">
+    <label>Receipt number or customer phone</label>
+    <div style="display:flex;gap:8px"><input id="retQ" autocomplete="off" placeholder="e.g. FS-1042 or 2119…" style="flex:1">
+    <button class="mb go" style="flex:0 0 auto;padding:10px 16px" onclick="findSaleQ()">Find</button></div>
+    <div id="retResults" style="margin-top:8px"></div>
+  </div>
+  <div id="retSale" style="display:none">
+    <div class="chg" style="font-size:12.5px;text-align:left;margin-bottom:4px" id="retHead"></div>
+    <div id="retLines"></div>
+    <div class="seg" id="retSeg">
+      <button data-m="cash" class="on" onclick="retMeth('cash')">💵 CASH BACK</button>
+      <button data-m="momo" onclick="retMeth('momo')">📱 MOMO</button>
+      <button data-m="store_credit" onclick="retMeth('store_credit')">🎫 STORE CREDIT</button>
+    </div>
+    <div id="retPhoneWrap" style="display:none"><label>Customer phone (for the store credit)</label><input id="retPhone" inputmode="tel" autocomplete="off"></div>
+    <label>Reason (optional)</label><input id="retReason" autocomplete="off" placeholder="e.g. damaged pack">
+    <div class="retTot"><span>REFUND</span><span id="retTot">0 {{CURRENCY}}</span></div>
+  </div>
+  <div class="mrow">
+    <button class="mb no" onclick="$('retOv').classList.remove('show');focusQ()">Close</button>
+    <button class="mb go" id="retGo" onclick="submitReturn()" disabled>PROCESS RETURN</button>
   </div>
 </div></div>
 
@@ -540,9 +582,7 @@ function confirmPay(){
   }
   // Big-discount gate: over the limit → manager PIN first (server re-checks — this is UX, not security).
   if(PINSET && t.disc>0 && t.sub>0 && (t.disc/t.sub*100)>DISCLIMIT && !MPIN){
-    $('pinWhy').textContent='Discount of '+money(t.disc)+' '+CUR+' is above the '+DISCLIMIT+'% till limit.';
-    $('pinIn').value='';$('pinOv').classList.add('show');
-    setTimeout(function(){$('pinIn').focus();},60);
+    askPin('Discount of '+money(t.disc)+' '+CUR+' is above the '+DISCLIMIT+'% till limit.',confirmPay);
     return;
   }
   // One idempotency ref per sale: however many times this checkout retries (or syncs from the
@@ -557,7 +597,7 @@ function confirmPay(){
   busy=true;$('payGo').disabled=true;$('payGo').textContent='Saving…';
   var unlock=function(){busy=false;$('payGo').disabled=false;$('payGo').textContent='COMPLETE SALE';};
   postJson('/papi/pos-checkout',body).then(function(d){
-    if(d&&!d.ok&&d.need_pin){unlock();MPIN=null;$('pinWhy').textContent='Wrong PIN — try again.';$('pinIn').value='';$('pinOv').classList.add('show');setTimeout(function(){$('pinIn').focus();},60);return;}
+    if(d&&!d.ok&&d.need_pin){unlock();MPIN=null;askPin('Wrong PIN — try again.',confirmPay);return;}
     if(!d||!d.ok){unlock();toast(d&&d.error?d.error:'Could not save the sale');return;}
     NET_DOWN=false;
     var after=function(){unlock();finishSale({id:d.id,no:d.order_no,tot:d.total,sub:d.subtotal!=null?d.subtotal:t.sub,disc:d.discount!=null?d.discount:t.disc},paylist,false);};
@@ -596,7 +636,10 @@ function showOk(){
   $('okOv').classList.add('show');
 }
 function newSale(){cart=[];SALE_REF=null;MPIN=null;$('disc').value='';$('cName').value='';$('cPhone').value='';paint();$('okOv').classList.remove('show');focusQ();}
-function submitPin(){MPIN=$('pinIn').value.trim()||null;$('pinOv').classList.remove('show');if(MPIN)confirmPay();}
+// One PIN modal, many callers (discounts, returns): askPin(reason, retryFn).
+var PIN_CB=null;
+function askPin(why,cb){PIN_CB=cb||null;$('pinWhy').textContent=why;$('pinIn').value='';$('pinOv').classList.add('show');setTimeout(function(){$('pinIn').focus();},60);}
+function submitPin(){MPIN=$('pinIn').value.trim()||null;$('pinOv').classList.remove('show');if(MPIN&&PIN_CB)PIN_CB();}
 
 /* ---------------- receipt (80mm) ---------------- */
 function buildReceipt(){
@@ -653,6 +696,7 @@ function loadToday(){
       h+='<div class="drow"><div><b>'+esc(r.order_no||('#'+r.id))+'</b> · '+esc(r.customer_name||'Walk-in')+'<div class="t">'+tm+' · '+esc(r.payment||'')+'</div></div>'
         +'<div style="display:flex;align-items:center;gap:8px"><span class="r b">'+money(r.total)+'</span>'
         +(r.items_json&&r.items_json.length?'<button class="rp" onclick="reprint('+i+')" title="Reprint receipt">🖨</button>':'')
+        +(r.order_no?'<button class="rp" onclick="$(\'drawer\').classList.remove(\'show\');openReturns(\''+esc(r.order_no)+'\')" title="Return items from this sale">↩</button>':'')
         +'</div></div>';
     });
     $('dRows').innerHTML=h||'<div class="cartEmpty">No POS sales yet today.</div>';
@@ -837,6 +881,113 @@ function printCashup(d){
   $('receipt').innerHTML=h;window.print();
 }
 
+/* ---------------- returns (v4.0): find sale → pick lines → refund ---------------- */
+var RET={sale:null,qty:{},meth:'cash',found:[]};
+function openReturns(pref){
+  if(NET_DOWN||!navigator.onLine){toast('Returns need internet — the sale must be verified first');return;}
+  RET={sale:null,qty:{},meth:'cash',found:[]};
+  $('retQ').value=pref||'';$('retResults').innerHTML='';$('retReason').value='';$('retPhone').value='';
+  $('retFind').style.display='';$('retSale').style.display='none';$('retGo').disabled=true;
+  retMeth('cash');
+  $('retOv').classList.add('show');
+  setTimeout(function(){$('retQ').focus();},60);
+  if(pref)findSaleQ();
+}
+function findSaleQ(){
+  var q=$('retQ').value.trim();if(!q)return;
+  $('retResults').innerHTML='<div class="cartEmpty">Searching…</div>';
+  api('/papi/pos-find-sale?q='+encodeURIComponent(q)).then(function(d){
+    if(!d||!d.ok){$('retResults').innerHTML='<div class="cartEmpty">'+esc((d&&d.error)||'Could not search.')+'</div>';return;}
+    RET.found=d.sales||[];
+    if(!RET.found.length){$('retResults').innerHTML='<div class="cartEmpty">No sale found in the last 60 days for "'+esc(q)+'".</div>';return;}
+    if(RET.found.length===1){pickSale(0);return;}
+    $('retResults').innerHTML=RET.found.map(function(s,i){
+      return '<div class="findrow" onclick="pickSale('+i+')"><div><b>'+esc(s.order_no||('#'+s.id))+'</b> · '+esc(s.customer||'Walk-in')
+        +'<div class="fm">'+esc(s.date||'')+' · '+esc(s.channel||'')+'</div></div><b>'+money(s.total)+' '+CUR+'</b></div>';
+    }).join('');
+  }).catch(function(){$('retResults').innerHTML='<div class="cartEmpty">Network problem.</div>';});
+}
+function pickSale(i){
+  var s=RET.found[i];if(!s)return;
+  RET.sale=s;RET.qty={};
+  $('retFind').style.display='none';$('retSale').style.display='';
+  $('retHead').innerHTML='<b>'+esc(s.order_no||('#'+s.id))+'</b> · '+esc(s.customer||'Walk-in')+' · '+esc(s.date||'')+' · sold total '+money(s.total)+' '+CUR;
+  $('retPhone').value=s.phone||'';
+  $('retLines').innerHTML=(s.lines||[]).map(function(l,li){
+    var max=Math.max(0,(l.qty||0)-(l.returned||0));
+    return '<div class="retline"><div class="ri"><div class="rn">'+esc(l.name)+'</div>'
+      +'<div class="rm">sold '+l.qty+(l.returned?' · already returned '+l.returned:'')+' · '+money(l.price)+' each</div></div>'
+      +(max>0
+        ?'<div class="qty"><button class="qb" onclick="retCh('+li+',-1)">−</button><span class="qv" id="rq'+li+'">0</span><button class="qb" onclick="retCh('+li+',1)">+</button></div>'
+        :'<span class="rm">all returned</span>')
+      +'<div class="rt" id="rt'+li+'"></div></div>';
+  }).join('')||'<div class="cartEmpty">This sale has no returnable lines.</div>';
+  paintRet();
+}
+function retCh(li,d){
+  var l=RET.sale.lines[li];if(!l)return;
+  var max=Math.max(0,(l.qty||0)-(l.returned||0));
+  var v=Math.min(max,Math.max(0,(RET.qty[li]||0)+d));
+  RET.qty[li]=v;$('rq'+li).textContent=v;
+  $('rt'+li).textContent=v>0?money(v*l.price):'';
+  paintRet();
+}
+function retMeth(m){
+  RET.meth=m;
+  document.querySelectorAll('#retSeg button').forEach(function(b){b.classList.toggle('on',b.dataset.m===m);});
+  $('retPhoneWrap').style.display=m==='store_credit'?'':'none';
+}
+function retTotal(){
+  var t=0;if(RET.sale)Object.keys(RET.qty).forEach(function(li){t+=(RET.qty[li]||0)*(RET.sale.lines[li].price||0);});
+  return Math.round(t*100)/100;
+}
+function paintRet(){
+  var t=retTotal();
+  $('retTot').textContent=money(t)+' '+CUR;
+  $('retGo').disabled=!(RET.sale&&t>0);
+}
+function submitReturn(){
+  var t=retTotal();if(!RET.sale||t<=0)return;
+  var lines=[];Object.keys(RET.qty).forEach(function(li){
+    if(RET.qty[li]>0){var l=RET.sale.lines[li];lines.push({product_id:l.product_id||0,name:l.name,price:l.price,qty:RET.qty[li]});}
+  });
+  var body={order_id:RET.sale.id,lines:lines,refund_method:RET.meth,
+            reason:$('retReason').value.trim(),phone:$('retPhone').value.trim()};
+  if(MPIN)body.manager_pin=MPIN;
+  $('retGo').disabled=true;
+  postJson('/papi/pos-return',body).then(function(d){
+    $('retGo').disabled=false;
+    if(d&&!d.ok&&d.need_pin){MPIN=null;askPin(d.error||'Returns need the manager PIN.',submitReturn);return;}
+    if(!d||!d.ok){toast(d&&d.error?d.error:'Could not process the return');return;}
+    MPIN=null;
+    printReturnSlip(d,lines);
+    $('retOv').classList.remove('show');
+    toast('↩ Refund '+money(d.amount)+' '+CUR+(d.credit_note_no?' · '+d.credit_note_no:''));
+    loadToday();loadShift();focusQ();
+  }).catch(function(){$('retGo').disabled=false;toast('Network problem — the return was NOT saved');});
+}
+function printReturnSlip(d,lines){
+  var pad=function(n){return(n<10?'0':'')+n;},now=new Date();
+  var when=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+' '+pad(now.getHours())+':'+pad(now.getMinutes());
+  var rows='';lines.forEach(function(l){
+    rows+='<tr><td colspan="2">'+esc(l.name)+'</td></tr>'
+        +'<tr><td>&nbsp;&nbsp;'+l.qty+' x '+money(l.price)+'</td><td class="r">-'+money(l.price*l.qty)+'</td></tr>';
+  });
+  var mlab={cash:'CASH REFUND',momo:'MOBILE MONEY REFUND',store_credit:'STORE CREDIT'}[d.refund_method]||d.refund_method;
+  var h='<div class="c shop">'+esc(SHOP)+'</div><div class="c b">*** RETURN ***</div>';
+  if(ADDR)h+='<div class="c">'+esc(ADDR)+'</div>';
+  h+='<hr><table><tr><td>Original sale</td><td class="r b">'+esc(d.order_no||'')+'</td></tr>'
+    +(d.credit_note_no?'<tr><td>Credit note</td><td class="r b">'+esc(d.credit_note_no)+'</td></tr>':'')
+    +'<tr><td>Date</td><td class="r">'+when+'</td></tr>'
+    +'<tr><td>Processed by</td><td class="r">'+esc(OPER)+'</td></tr></table><hr>'
+    +'<table>'+rows+'</table><hr>'
+    +'<table><tr><td class="tot">'+mlab+'</td><td class="r tot">'+money(d.amount)+' '+CUR+'</td></tr></table>'
+    +(d.refund_method==='store_credit'?'<div class="c">Credit is linked to phone '+esc(d.phone||'')+'</div>':'')
+    +'<hr><br><div>Customer signature: ________________</div>'
+    +'<div class="c" style="margin-top:6px">Goods received back in good condition.</div>';
+  $('receipt').innerHTML=h;window.print();
+}
+
 /* ---------------- offline sync panel ---------------- */
 function openSync(){
   var q=qload(),bad=[];try{bad=JSON.parse(localStorage.getItem('pos_qbad')||'[]');}catch(e){}
@@ -866,6 +1017,8 @@ document.addEventListener('keydown',function(e){
   var payOpen=$('payOv').classList.contains('show'),okOpen=$('okOv').classList.contains('show');
   if(e.key==='Enter'&&$('pinOv').classList.contains('show')){e.preventDefault();submitPin();return;}
   if(e.key==='Enter'&&$('soOv').classList.contains('show')){e.preventDefault();submitShiftOpen();return;}
+  if(e.key==='Enter'&&$('retOv').classList.contains('show')&&$('retFind').style.display!=='none'){e.preventDefault();findSaleQ();return;}
+  if($('retOv').classList.contains('show'))return;
   if(e.key==='Enter'&&payOpen){e.preventDefault();confirmPay();return;}
   if(e.key==='Enter'&&okOpen){e.preventDefault();newSale();return;}
   if(payOpen||okOpen)return;
@@ -903,7 +1056,7 @@ $('q').addEventListener('keydown',function(e){
     .catch(function(){NET_DOWN=true;paintNet();settle(offSearch(v,''));});   // scanner works offline too
 });
 document.addEventListener('keydown',function(e){
-  if(e.key==='Escape'){['payOv','okOv','heldOv','soOv','scOv','pinOv','syncOv'].forEach(function(id){$(id).classList.remove('show');});$('drawer').classList.remove('show');}
+  if(e.key==='Escape'){['payOv','okOv','heldOv','soOv','scOv','pinOv','syncOv','retOv'].forEach(function(id){$(id).classList.remove('show');});$('drawer').classList.remove('show');}
   // Any bare typing outside an input refocuses the search box → the barcode scanner always works.
   if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1&&document.activeElement.tagName!=='INPUT'&&!$('payOv').classList.contains('show')&&!$('okOv').classList.contains('show')){$('q').focus();}
 });

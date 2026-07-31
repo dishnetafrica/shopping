@@ -11,6 +11,8 @@ class ReturnRecord extends Model
     use BelongsToTenant;
 
     protected $table = 'order_returns';
-    protected $fillable = ['tenant_id', 'order_id', 'customer_phone', 'customer_name', 'items_text', 'amount', 'resolution', 'reason'];
-    protected $casts = ['amount' => 'float'];
+    protected $fillable = ['tenant_id', 'order_id', 'customer_phone', 'customer_name', 'items_text', 'amount', 'resolution', 'reason',
+        // POS returns (v4.0): structured lines, refund method, CN linkage, operator (shift math).
+        'items_json', 'refund_method', 'credit_note_no', 'order_no', 'user_id', 'operator'];
+    protected $casts = ['amount' => 'float', 'items_json' => 'array'];
 }

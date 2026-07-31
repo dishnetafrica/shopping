@@ -264,6 +264,248 @@ class PosController extends Controller
         ]);
     }
 
+    /* ------------- returns (v4.0): find receipt → select lines → stock back + credit note ------------- */
+
+    /** Per-product quantities already returned against an order (from structured POS returns). */
+    private function returnedMap(int $orderId, int $tenantId): array
+    {
+        $map = [];
+        try {
+            foreach (\App\Models\ReturnRecord::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)->where('order_id', $orderId)->get() as $r) {
+                foreach ((array) ($r->items_json ?? []) as $l) {
+                    $key = (int) ($l['product_id'] ?? 0) ?: ('n:' . mb_strtolower((string) ($l['name'] ?? '')));
+                    $map[$key] = ($map[$key] ?? 0) + (float) ($l['qty'] ?? 0);
+                }
+            }
+        } catch (\Throwable $e) { /* legacy rows without items_json simply don't restrict */ }
+
+        return $map;
+    }
+
+    public function findSale(Request $request)
+    {
+        $t = $request->user()?->tenant;
+        if (! $t) {
+            return response()->json(['ok' => false], 401);
+        }
+        $q = trim((string) $request->query('q', ''));
+        if ($q === '') {
+            return response()->json(['ok' => false, 'error' => 'Type a receipt number or phone.'], 422);
+        }
+
+        $base = Order::withoutGlobalScopes()->where('tenant_id', $t->id)
+            ->where('created_at', '>=', now()->subDays(60));
+        $digits = preg_replace('/[^0-9]/', '', $q);
+        $orders = (clone $base)->where('order_no', $q)->orderByDesc('id')->limit(5)->get();
+        if ($orders->isEmpty() && ctype_digit($q)) {
+            $orders = (clone $base)->where('id', (int) $q)->limit(1)->get();
+        }
+        if ($orders->isEmpty() && strlen($digits) >= 6) {
+            $orders = (clone $base)->where('customer_phone', 'LIKE', '%' . substr($digits, -9) . '%')
+                ->orderByDesc('id')->limit(5)->get();
+        }
+        if ($orders->isEmpty()) {
+            return response()->json(['ok' => true, 'sales' => []]);
+        }
+
+        $sales = [];
+        foreach ($orders as $o) {
+            $returned = $this->returnedMap($o->id, $t->id);
+            $lines = [];
+            foreach (\App\Services\Inventory\OrderStockIssuer::lines($o) as $ln) {
+                $key = $ln['product_id'] ?: ('n:' . mb_strtolower($ln['name']));
+                $lines[] = [
+                    'product_id' => $ln['product_id'], 'name' => $ln['name'], 'qty' => $ln['qty'],
+                    'returned' => round((float) ($returned[$key] ?? 0), 3),
+                ];
+            }
+            // Unit prices come from the order's own lines (items_json / OrderItems), never today's list.
+            $prices = [];
+            foreach ((array) $o->items_json as $l) {
+                if (is_array($l)) {
+                    $k = (int) ($l['product_id'] ?? 0) ?: ('n:' . mb_strtolower((string) ($l['name'] ?? '')));
+                    $prices[$k] = (float) ($l['price'] ?? 0);
+                }
+            }
+            foreach (OrderItem::where('order_id', $o->id)->get() as $it) {
+                $prices[(int) $it->product_id] = (float) $it->price;
+            }
+            foreach ($lines as &$ln) {
+                $k = $ln['product_id'] ?: ('n:' . mb_strtolower($ln['name']));
+                $ln['price'] = round((float) ($prices[$k] ?? 0), 2);
+            }
+            unset($ln);
+            $sales[] = [
+                'id' => $o->id, 'order_no' => (string) $o->order_no,
+                'date' => optional($o->created_at)->format('Y-m-d H:i'),
+                'customer' => (string) ($o->customer_name ?? ''), 'phone' => (string) ($o->customer_phone ?? ''),
+                'total' => (float) $o->total, 'channel' => (string) $o->channel, 'lines' => $lines,
+            ];
+        }
+
+        return response()->json(['ok' => true, 'sales' => $sales]);
+    }
+
+    public function processReturn(Request $request)
+    {
+        $u = $request->user();
+        $t = $u?->tenant;
+        if (! $t) {
+            return response()->json(['ok' => false], 401);
+        }
+        $data = $request->validate([
+            'order_id'        => 'required|integer',
+            'lines'           => 'required|array|min:1',
+            'lines.*.product_id' => 'nullable|integer',
+            'lines.*.name'    => 'required|string|max:200',
+            'lines.*.price'   => 'required|numeric|min:0',
+            'lines.*.qty'     => 'required|numeric|min:0.001',
+            'refund_method'   => 'required|string|in:cash,momo,store_credit',
+            'reason'          => 'nullable|string|max:300',
+            'phone'           => 'nullable|string|max:40',
+            'manager_pin'     => 'nullable|string|max:20',
+        ]);
+
+        $o = Order::withoutGlobalScopes()->where('tenant_id', $t->id)->find((int) $data['order_id']);
+        if (! $o) {
+            return response()->json(['ok' => false, 'error' => 'Sale not found.'], 404);
+        }
+
+        // EVERY return needs the manager PIN when one is configured — returns are the classic
+        // till-fraud vector, and they move real cash out of the drawer.
+        $pin = trim((string) $t->setting('pos_manager_pin', ''));
+        if ($pin !== '' && ! hash_equals($pin, trim((string) ($data['manager_pin'] ?? '')))) {
+            return response()->json(['ok' => false, 'need_pin' => true, 'error' => 'Returns need the manager PIN.'], 422);
+        }
+
+        // Validate each line against what was SOLD minus what was ALREADY returned.
+        $sold = [];
+        foreach (\App\Services\Inventory\OrderStockIssuer::lines($o) as $ln) {
+            $key = $ln['product_id'] ?: ('n:' . mb_strtolower($ln['name']));
+            $sold[$key] = ($sold[$key] ?? 0) + $ln['qty'];
+        }
+        $returned = $this->returnedMap($o->id, $t->id);
+        $amount = 0.0;
+        $clean = [];
+        foreach ($data['lines'] as $l) {
+            $key = (int) ($l['product_id'] ?? 0) ?: ('n:' . mb_strtolower((string) $l['name']));
+            $max = (float) ($sold[$key] ?? 0) - (float) ($returned[$key] ?? 0);
+            if ((float) $l['qty'] > $max + 0.0001) {
+                return response()->json(['ok' => false, 'error' => 'Cannot return ' . $l['qty'] . ' × ' . $l['name'] . ' — only ' . max(0, $max) . ' left to return on this sale.'], 422);
+            }
+            $clean[] = ['product_id' => (int) ($l['product_id'] ?? 0), 'name' => (string) $l['name'],
+                        'price' => round((float) $l['price'], 2), 'qty' => (float) $l['qty']];
+            $amount += (float) $l['price'] * (float) $l['qty'];
+        }
+        $amount = round($amount, 2);
+        if ($amount <= 0) {
+            return response()->json(['ok' => false, 'error' => 'Nothing to refund.'], 422);
+        }
+
+        $phone = preg_replace('/[^0-9]/', '', (string) ($data['phone'] ?? '')) ?: preg_replace('/[^0-9]/', '', (string) ($o->customer_phone ?? ''));
+        if ($data['refund_method'] === 'store_credit' && $phone === '') {
+            return response()->json(['ok' => false, 'error' => 'Store credit needs the customer phone number.'], 422);
+        }
+
+        try {
+            $ret = \App\Models\ReturnRecord::create([
+                'tenant_id'      => $t->id,
+                'order_id'       => $o->id,
+                'order_no'       => (string) $o->order_no,
+                'customer_phone' => $phone,
+                'customer_name'  => (string) ($o->customer_name ?? ''),
+                'items_text'     => collect($clean)->map(fn ($l) => rtrim(rtrim(number_format($l['qty'], 2), '0'), '.') . 'x ' . $l['name'])->implode(', '),
+                'items_json'     => $clean,
+                'amount'         => $amount,
+                // 'credit' feeds the EXISTING store-credit-per-phone map; cash/momo are pure refunds.
+                'resolution'     => $data['refund_method'] === 'store_credit' ? 'credit' : 'refund',
+                'refund_method'  => $data['refund_method'],
+                'reason'         => trim((string) ($data['reason'] ?? '')) ?: null,
+                'user_id'        => $u->id,
+                'operator'       => (string) ($u->name ?? ''),
+            ]);
+        } catch (\Throwable $e) {
+            \Log::warning('pos-return record failed: ' . $e->getMessage());
+
+            return response()->json(['ok' => false, 'error' => 'Could not save the return.'], 500);
+        }
+
+        // The ACCOUNTING reverse: a numbered credit note (statement-visible, PDF stored),
+        // linked to this return and to the sale's invoice when one exists. Best-effort:
+        // the return record stands even if CN issuing hiccups (logged for follow-up).
+        $cnNo = null;
+        try {
+            $inv = \App\Models\Invoice::withoutGlobalScopes()->where('tenant_id', $t->id)->where('order_id', $o->id)->orderByDesc('id')->first();
+            $cn = app(\App\Services\Invoicing\CreditNoteService::class)->issue($t, [
+                'customer'    => (string) ($o->customer_name ?? ''),
+                'phone'       => $phone,
+                'cur'         => \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t),
+                'total'       => $amount,
+                'reason_code' => 'return',
+                'notes'       => 'POS return on ' . $o->order_no . ($data['reason'] ?? null ? ' — ' . $data['reason'] : ''),
+                'invoice_id'  => $inv?->id,
+                'invoice_no'  => $inv?->invoice_no,
+                'order_id'    => $o->id,
+                'return_id'   => $ret->id,
+                'lines'       => array_map(fn ($l) => [
+                    'name' => $l['name'], 'qty' => $l['qty'], 'unit' => $l['price'],
+                    'amount' => round($l['price'] * $l['qty'], 2),
+                ], $clean),
+            ], 'pos');
+            $cnNo = (string) $cn->credit_note_no;
+            $ret->credit_note_no = $cnNo;
+            $ret->save();
+        } catch (\Throwable $e) {
+            \Log::warning('pos-return credit note failed: ' . $e->getMessage());
+        }
+
+        // Stock back on the shelf — SAME ledger the sale used, so Trust sees returns too.
+        // Symmetric with the sale path: when the ledger is off, the sale didn't move stock
+        // and neither does the return.
+        $restocked = 0;
+        try {
+            if (\App\Services\Inventory\OrderStockIssuer::active($t)) {
+                $sl = \App\Services\Inventory\StockLedger::forTenant($t);
+                foreach ($clean as $l) {
+                    if ($l['product_id'] > 0) {
+                        $sl->receive([
+                            'product_id' => $l['product_id'], 'sku' => null,
+                            'location'   => \App\Services\Inventory\StockLedger::LOC_KAMPALA,
+                            'qty'        => $l['qty'],
+                            'ref_type'   => 'pos_return', 'ref_id' => $ret->id,
+                            'note'       => 'POS return ' . ($cnNo ?: ('#' . $ret->id)) . ' on ' . $o->order_no . ' — ' . $l['name'],
+                            'created_by' => (string) ($u->name ?? 'pos'),
+                        ]);
+                        $restocked++;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('pos-return restock failed: ' . $e->getMessage());
+        }
+
+        // Cash/momo leaves the drawer — mirror it into the legacy cashbook (best-effort; the
+        // credit note above is the authoritative accounting document either way).
+        if (in_array($data['refund_method'], ['cash', 'momo'], true)) {
+            try {
+                \App\Models\LedgerEntry::create([
+                    'type' => 'out', 'category' => 'refund', 'order_id' => $o->id,
+                    'amount' => $amount, 'currency' => \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t),
+                    'method' => $data['refund_method'], 'received_by' => (string) ($u->name ?? ''),
+                    'note' => 'POS return ' . ($cnNo ?: ('#' . $ret->id)) . ' on ' . $o->order_no,
+                ]);
+            } catch (\Throwable $e) { /* cashbook mirror only */ }
+        }
+
+        return response()->json([
+            'ok' => true, 'return_id' => $ret->id, 'credit_note_no' => $cnNo,
+            'amount' => $amount, 'refund_method' => $data['refund_method'],
+            'order_no' => (string) $o->order_no, 'restocked_lines' => $restocked,
+            'customer' => (string) ($o->customer_name ?? ''), 'phone' => $phone,
+        ]);
+    }
+
     /* ------------- shifts (v3.9): float in → sales → denomination count → variance ------------- */
 
     private function currentShift(Request $request): ?\App\Models\PosShift
@@ -286,12 +528,23 @@ class PosController extends Controller
                 return 0.0;
             }
 
-            return (float) \App\Models\CustomerPayment::withoutGlobalScopes()->where('tenant_id', $t->id)
+            $in = (float) \App\Models\CustomerPayment::withoutGlobalScopes()->where('tenant_id', $t->id)
                 ->where('method', 'cash')
                 ->where('holder_user_id', $u->id)
                 ->where('created_at', '>=', $s->opened_at)
                 ->whereIn('order_no', $posNos)
                 ->sum('amount');
+            // Cash refunds THIS operator paid out of the drawer during the shift (v4.0 returns).
+            $out = 0.0;
+            try {
+                $out = (float) \App\Models\ReturnRecord::withoutGlobalScopes()->where('tenant_id', $t->id)
+                    ->where('user_id', $u->id)
+                    ->where('refund_method', 'cash')
+                    ->where('created_at', '>=', $s->opened_at)
+                    ->sum('amount');
+            } catch (\Throwable $e) { /* pre-migration tenants: no refund column yet */ }
+
+            return round($in - $out, 2);
         } catch (\Throwable $e) {
             \Log::warning('pos shiftCash failed: ' . $e->getMessage());
 
