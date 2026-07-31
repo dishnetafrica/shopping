@@ -149,7 +149,9 @@ class SalesCadenceCommand extends Command
             $reorderDays = max(3, (int) $t->setting('sales_reorder_days', 21));
             $lastOrder   = $ctx['lastOrderAt'];
             if (! $lastOrder) return null;
-            $daysSince = $lastOrder->diffInDays($now);
+            // Carbon 3's diffInDays returns a FLOAT — a customer literally received
+            // "It's been 10.005576970544 days since your last order" (real incident).
+            $daysSince = (int) floor($lastOrder->diffInDays($now));
             if ($daysSince < $reorderDays) return null;
 
             // throttle: at most one reorder nudge per reorder window
@@ -217,8 +219,7 @@ class SalesCadenceCommand extends Command
         $last = $orders->first();
         if ($last) {
             $lastOrderAt = $last->delivered_at ?: $last->created_at;
-            $lastItems   = trim((string) ($last->items_text ?? ''));
-            if (mb_strlen($lastItems) > 60) $lastItems = mb_substr($lastItems, 0, 57) . '…';
+            $lastItems   = $this->humanItems((string) ($last->items_text ?? ''));
         }
 
         // Interest: an open lead's interest, else the last thing they were shown/asked.
@@ -232,12 +233,60 @@ class SalesCadenceCommand extends Command
         }
 
         return [
-            'name'       => $name,
+            'name'       => $this->firstName($name),
             'interest'   => $interest,
             'orderCount' => $orders->count(),
             'lastOrderAt'=> $lastOrderAt,
             'lastItems'  => $lastItems,
         ];
+    }
+
+    /**
+     * A human greets "Hi Abdifatah" — never "Hi Abdifatah Ahmed Shop No 48" (real incident:
+     * WhatsApp contact names carry shop labels). Take the leading name words, stop at
+     * shop/number tokens, max two words.
+     */
+    private function firstName(string $name): string
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return '';
+        }
+        $out = [];
+        foreach (preg_split('/\s+/u', $name) as $w) {
+            if (preg_match('/^(shop|store|stall|duka|no\.?|nr\.?|#|\p{N})/iu', $w)) {
+                break;   // "Shop No 48" and friends are labels, not names
+            }
+            $out[] = $w;
+            if (count($out) >= 2) {
+                break;
+            }
+        }
+
+        $first = $out ? $out[0] : $name;   // first name alone reads warmest
+        if (preg_match('/^\p{Lu}{3,}$/u', $first)) {
+            $first = mb_convert_case(mb_strtolower($first), MB_CASE_TITLE, 'UTF-8');   // "ABDI" → "Abdi"
+        }
+
+        return $first;
+    }
+
+    /**
+     * Turn a raw order line ("20x ALUMINIUM FOIL 45CM GOLDEN (CARTON OF 6PC, MIN 5 CARTON)")
+     * into something a person would type ("20x Aluminium Foil 45cm Golden"): drop the
+     * parenthetical catalogue metadata, soften SHOUTING CAPS, keep it short.
+     */
+    private function humanItems(string $s): string
+    {
+        $s = trim(preg_replace('/\s*\([^)]*\)/u', '', $s) ?? '');        // kill (CARTON OF 6PC, MIN 5 CARTON)
+        $s = trim(preg_replace('/\s+/u', ' ', $s) ?? '');
+        // Title-case words that are fully SHOUTING (3+ letters); keep short unit tokens as-is.
+        $s = preg_replace_callback('/\b\p{Lu}{3,}\b/u', fn ($m) => mb_convert_case(mb_strtolower($m[0]), MB_CASE_TITLE, 'UTF-8'), $s) ?? $s;
+        if (mb_strlen($s) > 60) {
+            $s = mb_substr($s, 0, 57) . '…';
+        }
+
+        return $s;
     }
 
     /** Fill a message template: {name} {items} {days}. Custom tenant text wins over the default. */
