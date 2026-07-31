@@ -71,6 +71,9 @@ class PosController extends Controller
 
         $q = trim((string) $request->query('q', ''));
         $cat = trim((string) $request->query('category', ''));
+        // ?all=1 → the till downloads the whole active catalogue ONCE and keeps it in
+        // localStorage, so scanning and selling keep working when the internet drops.
+        $all = (string) $request->query('all', '') === '1';
 
         $query = Product::withoutGlobalScopes()
             ->where('tenant_id', $t->id)->where('active', true)->where('price', '>', 0);
@@ -85,7 +88,7 @@ class PosController extends Controller
                   ->orWhere('barcode', $q);
             });
         }
-        $items = $query->orderBy('display_order')->orderBy('name')->limit(40)
+        $items = $query->orderBy('display_order')->orderBy('name')->limit($all ? 1000 : 40)
             ->get(['id', 'name', 'price', 'sku', 'barcode', 'unit_label', 'stock', 'category', 'image_url']);
 
         // Exact scan hit: barcode or SKU matches the query verbatim → the till adds it instantly.
@@ -123,8 +126,14 @@ class PosController extends Controller
             'customer_name'    => 'nullable|string|max:120',
             'customer_phone'   => 'nullable|string|max:40',
             'discount'         => 'nullable|numeric|min:0',
-            'method'           => 'required|string|in:cash,momo,card,credit',
+            'method'           => 'required|string|in:cash,momo,card,credit,split',
+            'payments'         => 'nullable|array',            // split tender: [{method, amount}]
+            'payments.*.method' => 'required_with:payments|string|in:cash,momo,card',
+            'payments.*.amount' => 'required_with:payments|numeric|min:0.01',
             'note'             => 'nullable|string|max:300',
+            // Offline-queue idempotency: the till generates one ref per sale; retries with the
+            // same ref can NEVER create a second order (orders.idempotency_key is unique).
+            'client_ref'       => 'nullable|string|max:100',
         ]);
 
         $sub = 0.0;
@@ -137,8 +146,31 @@ class PosController extends Controller
         $method = (string) $data['method'];
         $name = trim((string) ($data['customer_name'] ?? ''));
         $phone = trim((string) ($data['customer_phone'] ?? ''));
-        if ($method === 'credit' && $phone === '' && $name === '') {
+        $tendered = 0.0;
+        foreach ((array) ($data['payments'] ?? []) as $p) {
+            $tendered += (float) $p['amount'];
+        }
+        // A sale that is not fully paid NOW (pure credit, or a split that leaves a balance)
+        // must belong to a named customer — otherwise the debt has no owner.
+        $short = ($method === 'credit') || ($method === 'split' && $tendered + 0.01 < $total);
+        if ($short && $phone === '' && $name === '') {
             return response()->json(['ok' => false, 'error' => 'Credit sale needs the customer name or phone.'], 422);
+        }
+
+        $ref = trim((string) ($data['client_ref'] ?? ''));
+        $idem = $ref !== '' ? ('pos:' . $t->id . ':' . $ref) : null;
+        if ($idem !== null) {
+            // Fast path for offline-queue retries: the sale already exists → return it, and tell
+            // the till how much is already recorded so it never double-books a payment.
+            $dup = Order::withoutGlobalScopes()->where('tenant_id', $t->id)->where('idempotency_key', $idem)->first();
+            if ($dup) {
+                return response()->json([
+                    'ok' => true, 'duplicate' => true, 'id' => $dup->id,
+                    'order_no' => (string) $dup->order_no, 'total' => (float) $dup->total,
+                    'paid' => (float) $dup->amount_paid,
+                    'record_payment' => $method !== 'credit' && (float) $dup->amount_paid <= 0,
+                ]);
+            }
         }
 
         $itemsText = collect($data['items'])
@@ -154,12 +186,13 @@ class PosController extends Controller
             // auto-invoice, and file the customer. (Same as the legacy Filament POS.)
             $order = Order::create([
                 'tenant_id'      => $t->id,
+                'idempotency_key' => $idem,
                 'customer_name'  => $name !== '' ? $name : 'Walk-in',
                 'customer_phone' => $phone !== '' ? $phone : null,
                 'items_text'     => $itemsText,
                 'items_json'     => $data['items'],
                 'total'          => $total,
-                'payment'        => $method === 'credit' ? 'credit' : $method,
+                'payment'        => $method,
                 'status'         => 'Delivered',
                 'channel'        => 'pos',
                 'notes'          => $noteBits ? implode(' · ', $noteBits) : null,
@@ -174,6 +207,23 @@ class PosController extends Controller
                     'qty'        => (float) $l['qty'],
                 ]);
             }
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Race on the unique idempotency key (two sync attempts at once) → same answer as
+            // the fast path above: return the existing sale, never a duplicate.
+            if ($idem !== null && str_contains((string) $e->getMessage(), 'idempotency')) {
+                $dup = Order::withoutGlobalScopes()->where('tenant_id', $t->id)->where('idempotency_key', $idem)->first();
+                if ($dup) {
+                    return response()->json([
+                        'ok' => true, 'duplicate' => true, 'id' => $dup->id,
+                        'order_no' => (string) $dup->order_no, 'total' => (float) $dup->total,
+                        'paid' => (float) $dup->amount_paid,
+                        'record_payment' => $method !== 'credit' && (float) $dup->amount_paid <= 0,
+                    ]);
+                }
+            }
+            \Log::warning('pos-checkout failed: ' . $e->getMessage());
+
+            return response()->json(['ok' => false, 'error' => 'Could not save the sale.'], 500);
         } catch (\Throwable $e) {
             \Log::warning('pos-checkout failed: ' . $e->getMessage());
 
@@ -181,13 +231,15 @@ class PosController extends Controller
         }
 
         return response()->json([
-            'ok'       => true,
-            'id'       => $order->id,
-            'order_no' => (string) $order->order_no,
-            'total'    => $total,
-            'discount' => $discount,
-            'subtotal' => round($sub, 2),
-            // cash/momo/card: the screen now records the payment via /papi/record-payment
+            'ok'        => true,
+            'duplicate' => false,
+            'id'        => $order->id,
+            'order_no'  => (string) $order->order_no,
+            'total'     => $total,
+            'discount'  => $discount,
+            'subtotal'  => round($sub, 2),
+            'paid'      => 0.0,
+            // cash/momo/card/split: the screen records each tender via /papi/record-payment
             // (order id + amount + method) so the cashbook and invoice stay correct.
             'record_payment' => $method !== 'credit',
         ]);
@@ -200,10 +252,11 @@ class PosController extends Controller
             return response()->json(['ok' => false], 401);
         }
 
+        // items_json rides along so the drawer can REPRINT any receipt of the day.
         $rows = Order::where('tenant_id', $t->id)->where('channel', 'pos')
             ->whereDate('created_at', now()->toDateString())
             ->orderByDesc('id')->limit(15)
-            ->get(['id', 'order_no', 'customer_name', 'total', 'payment', 'created_at']);
+            ->get(['id', 'order_no', 'customer_name', 'total', 'payment', 'created_at', 'items_json', 'notes']);
         $sum = Order::where('tenant_id', $t->id)->where('channel', 'pos')
             ->whereDate('created_at', now()->toDateString())
             ->where('status', '!=', 'Cancelled')->sum('total');

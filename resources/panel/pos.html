@@ -118,6 +118,21 @@ button{font-family:inherit}
 .tourStep{font-size:10.5px;font-weight:800;letter-spacing:1px;color:#94a3b8}
 .tourLink{display:inline-block;margin-top:10px;font-size:12.5px;font-weight:700;color:var(--green2);text-decoration:none}
 
+/* v3.8 — offline chip, hold, split tender, reprint */
+.net{font-size:11px;font-weight:800;letter-spacing:.5px;padding:5px 10px;border-radius:20px;background:#eaf6ee;color:var(--green);white-space:nowrap}
+.net.off{background:#b45309;color:#fff}
+.holdb{background:none;border:none;color:var(--amber);font-weight:700;font-size:12px;cursor:pointer;padding:4px}
+.pay.splitb{grid-column:1/-1;background:#0f172a;padding:9px 4px;font-size:12.5px}
+.srow{display:flex;align-items:center;gap:10px;margin:8px 0}
+.srow label{flex:0 0 110px;font-size:13px;font-weight:700;color:#334155;margin:0;text-transform:none;letter-spacing:0}
+.srow input{flex:1;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-size:16px;font-weight:700;text-align:right;width:auto}
+.sRemain{text-align:center;font-size:14px;font-weight:800;margin:8px 0 2px}
+.sRemain.due{color:var(--amber)} .sRemain.ok{color:var(--green2)} .sRemain.over{color:var(--red)}
+.hrow{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid #f0f3f0}
+.hrow .hi{flex:1;min-width:0}
+.hrow .hn{font-size:13.5px;font-weight:700} .hrow .hm{font-size:11px;color:var(--muted)}
+.rp{background:#eef2f7;border:none;border-radius:8px;padding:5px 9px;cursor:pointer;font-size:13px}
+
 /* ---------- 80 mm receipt (print only) ---------- */
 #receipt{display:none}
 @media print{
@@ -145,6 +160,7 @@ button{font-family:inherit}
 <div class="top">
   <button class="back" id="backBtn" onclick="location.href='/panel/app'">‹</button>
   <div><h1>🧾 POS</h1><div class="tn">{{TENANT}} · {{OPERATOR}}</div></div>
+  <span class="net" id="netChip" style="display:none"></span>
   <button class="today" onclick="openToday()"><small>TODAY</small><span id="todaySum">…</span></button>
   <button class="helpb" id="fsBtn" style="display:none" onclick="window.open('/panel/pos','_blank')" title="Open full screen">⛶</button>
   <button class="helpb" onclick="startTour()" title="Quick tour">?</button>
@@ -159,7 +175,11 @@ button{font-family:inherit}
 
   <div class="right">
     <div class="cartHead"><b>Cart <span id="cn" style="color:var(--muted);font-weight:600"></span></b>
-      <button class="void" onclick="voidCart()">✕ Clear</button></div>
+      <span style="display:flex;gap:2px;align-items:center">
+        <button class="holdb" id="heldBtn" onclick="openHeld()" style="display:none">▤ Held</button>
+        <button class="holdb" onclick="holdSale()" title="Hold this sale, serve the next customer (F4)">⏸ Hold</button>
+        <button class="void" onclick="voidCart()">✕ Clear</button>
+      </span></div>
     <div class="lines" id="lines"><div class="cartEmpty">Tap products or scan a barcode<br>to start a sale.</div></div>
     <div class="totals">
       <div class="trow"><span>Subtotal</span><span id="sub">0</span></div>
@@ -167,10 +187,11 @@ button{font-family:inherit}
       <div class="trow total"><span>TOTAL</span><span id="tot">0</span></div>
     </div>
     <div class="pays">
-      <button class="pay cash"   id="payCash"   onclick="startPay('cash')">CASH<small>&nbsp;</small></button>
-      <button class="pay momo"   id="payMomo"   onclick="startPay('momo')">MOMO<small>MOBILE MONEY</small></button>
-      <button class="pay card"   id="payCard"   onclick="startPay('card')">CARD<small>&nbsp;</small></button>
-      <button class="pay credit" id="payCredit" onclick="startPay('credit')">CREDIT<small>PAY LATER</small></button>
+      <button class="pay cash"   id="payCash"   onclick="startPay('cash')">CASH<small>F5</small></button>
+      <button class="pay momo"   id="payMomo"   onclick="startPay('momo')">MOMO<small>MOBILE MONEY · F6</small></button>
+      <button class="pay card"   id="payCard"   onclick="startPay('card')">CARD<small>F7</small></button>
+      <button class="pay credit" id="payCredit" onclick="startPay('credit')">CREDIT<small>PAY LATER · F8</small></button>
+      <button class="pay splitb" id="paySplit"  onclick="startPay('split')">⇄ SPLIT / PARTIAL PAY<small>CASH + MOMO + CARD IN ONE SALE · F9</small></button>
     </div>
   </div>
 </div>
@@ -185,10 +206,16 @@ button{font-family:inherit}
     <div class="qk" id="qkBtns"></div>
     <div class="chg" id="chg">&nbsp;</div>
   </div>
+  <div id="splitPart" style="display:none">
+    <div class="srow"><label>💵 Cash</label><input id="sAmtCash" type="number" min="0" step="any" inputmode="decimal" oninput="paintSplit()"></div>
+    <div class="srow"><label>📱 Mobile money</label><input id="sAmtMomo" type="number" min="0" step="any" inputmode="decimal" oninput="paintSplit()"></div>
+    <div class="srow"><label>💳 Card</label><input id="sAmtCard" type="number" min="0" step="any" inputmode="decimal" oninput="paintSplit()"></div>
+    <div class="sRemain" id="sRemain">&nbsp;</div>
+  </div>
   <div id="credPart" style="display:none">
     <label>Customer name</label><input id="cName" autocomplete="off">
     <label>Customer phone (WhatsApp)</label><input id="cPhone" autocomplete="off" inputmode="tel" placeholder="2567…">
-    <div class="chg" style="margin-top:8px;font-size:12px">The sale is saved as unpaid — collect later from the invoice.</div>
+    <div class="chg" style="margin-top:8px;font-size:12px" id="credNote">The sale is saved as unpaid — collect later from the invoice.</div>
   </div>
   <div class="mrow">
     <button class="mb no" onclick="closePay()">Cancel</button>
@@ -206,6 +233,13 @@ button{font-family:inherit}
     <button class="mb no" onclick="printReceipt()">🖨 Print receipt</button>
     <button class="mb go" onclick="newSale()">NEW SALE</button>
   </div>
+</div></div>
+
+<!-- held sales -->
+<div class="ov" id="heldOv"><div class="md">
+  <h3>▤ Held sales</h3>
+  <div id="heldList"></div>
+  <div class="mrow"><button class="mb no" onclick="$('heldOv').classList.remove('show');focusQ()">Close</button></div>
 </div></div>
 
 <!-- today drawer -->
@@ -247,19 +281,48 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return
 function money(x){return Number(x||0).toLocaleString(undefined,{minimumFractionDigits:DP,maximumFractionDigits:DP});}
 function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(function(){t.style.display='none';},2200);}
 
-/* ---------------- catalogue ---------------- */
-var cart=[], curCat='', prods=[], lastSale=null, busy=false;
+/* ---------------- catalogue (online + offline cache) ---------------- */
+var cart=[], curCat='', prods=[], lastSale=null, busy=false, SALE_REF=null, NET_DOWN=false;
 
+// Whole active catalogue cached locally once per load → scanning & selling survive internet drops.
+var ALLPROD=null;
+function cacheAll(){
+  api('/papi/pos-products?all=1&q=&category=').then(function(d){
+    if(d&&d.ok){ALLPROD={items:d.items||[],categories:d.categories||[]};
+      try{localStorage.setItem('pos_cat1',JSON.stringify(ALLPROD));}catch(e){}}
+  }).catch(function(){loadCachePersist();});
+}
+function loadCachePersist(){if(!ALLPROD){try{ALLPROD=JSON.parse(localStorage.getItem('pos_cat1'))||null;}catch(e){}}return ALLPROD;}
+function offSearch(q,cat){
+  if(!loadCachePersist())return null;
+  var ql=String(q||'').toLowerCase(), cl=String(cat||'').toLowerCase();
+  var items=ALLPROD.items.filter(function(p){
+    if(cl && String(p.category||'').toLowerCase()!==cl)return false;
+    if(!ql)return true;
+    return String(p.name).toLowerCase().indexOf(ql)>=0
+        || String(p.sku||'').toLowerCase().indexOf(ql)>=0
+        || String(p.barcode||'')===String(q);
+  }).slice(0,40);
+  var exact=null;
+  if(ql)items.forEach(function(p){if(!exact&&(String(p.barcode||'')===String(q)||String(p.sku||'').toLowerCase()===ql))exact=p.id;});
+  return {ok:true,items:items,exact:exact,categories:ALLPROD.categories||[]};
+}
+function handleProducts(d,q){
+  if(!d||!d.ok){$('grid').innerHTML='<div class="empty">Could not load products.</div>';return;}
+  prods=d.items||[];
+  renderCats(d.categories||[]);
+  // Scanner flow: exact barcode/SKU hit → straight into the cart, clear the box, stay focused.
+  if(q && d.exact){var p=prods.find(function(x){return x.id===d.exact;});if(p){addToCart(p);$('q').value='';loadProducts('');return;}}
+  renderGrid();
+}
 function loadProducts(q){
   var u='/papi/pos-products?q='+encodeURIComponent(q||'')+'&category='+encodeURIComponent(curCat);
-  api(u).then(function(d){
-    if(!d||!d.ok){$('grid').innerHTML='<div class="empty">Could not load products.</div>';return;}
-    prods=d.items||[];
-    renderCats(d.categories||[]);
-    // Scanner flow: exact barcode/SKU hit → straight into the cart, clear the box, stay focused.
-    if(q && d.exact){var p=prods.find(function(x){return x.id===d.exact;});if(p){addToCart(p);$('q').value='';loadProducts('');return;}}
-    renderGrid();
-  }).catch(function(){$('grid').innerHTML='<div class="empty">Network problem.</div>';});
+  api(u).then(function(d){NET_DOWN=false;paintNet();handleProducts(d,q);})
+  .catch(function(){
+    NET_DOWN=true;paintNet();
+    var d=offSearch(q,curCat);
+    if(d){handleProducts(d,q);}else{$('grid').innerHTML='<div class="empty">Network problem — and no offline product cache yet.</div>';}
+  });
 }
 function renderCats(cats){
   var el=$('cats');if(el._done&&!cats.length)return;
@@ -329,7 +392,7 @@ function paintTotals(){
   $('sub').textContent=money(t.sub);
   $('tot').textContent=money(t.tot)+' '+CUR;
   $('cn').textContent=cart.length?('· '+cart.length+' item'+(cart.length>1?'s':'')):'';
-  ['payCash','payMomo','payCard','payCredit'].forEach(function(id){$(id).disabled=!cart.length;});
+  ['payCash','payMomo','payCard','payCredit','paySplit'].forEach(function(id){$(id).disabled=!cart.length;});
 }
 
 /* ---------------- pay ---------------- */
@@ -337,11 +400,13 @@ var payMethod='cash';
 function startPay(m){
   if(!cart.length)return;
   payMethod=m;var t=totals();
-  $('payTitle').textContent={cash:'Cash payment',momo:'Mobile money',card:'Card payment',credit:'Credit sale (pay later)'}[m];
+  $('payTitle').textContent={cash:'Cash payment',momo:'Mobile money',card:'Card payment',credit:'Credit sale (pay later)',split:'Split / partial payment'}[m];
   $('payTotal').textContent=money(t.tot)+' '+CUR;
-  var isCash=(m==='cash'), isCred=(m==='credit');
+  var isCash=(m==='cash'), isCred=(m==='credit'), isSplit=(m==='split');
   $('cashPart').style.display=isCash?'':'none';
+  $('splitPart').style.display=isSplit?'':'none';
   $('credPart').style.display=isCred?'':'none';
+  $('credNote').textContent='The sale is saved as unpaid — collect later from the invoice.';
   if(isCash){
     $('tender').value='';paintChange();
     // Quick-tender buttons: exact, then rounded-up handy notes.
@@ -349,9 +414,24 @@ function startPay(m){
     base.forEach(function(b){var r=Math.ceil(v/b)*b;if(r>v&&steps.indexOf(r)<0&&steps.length<6)steps.push(r);});
     $('qkBtns').innerHTML=steps.map(function(s){return '<button onclick="$(\'tender\').value='+s+';paintChange()">'+money(s)+'</button>';}).join('');
   }
+  if(isSplit){['sAmtCash','sAmtMomo','sAmtCard'].forEach(function(id){$(id).value='';});paintSplit();}
   $('payGo').disabled=false;
   $('payOv').classList.add('show');
-  setTimeout(function(){if(isCash)$('tender').focus();if(isCred)$('cName').focus();},60);
+  setTimeout(function(){if(isCash)$('tender').focus();if(isCred)$('cName').focus();if(isSplit)$('sAmtCash').focus();},60);
+}
+function splitList(){
+  var out=[];
+  [['cash','sAmtCash'],['momo','sAmtMomo'],['card','sAmtCard']].forEach(function(x){
+    var v=parseFloat($(x[1]).value)||0;if(v>0)out.push({method:x[0],amount:Math.round(v*100)/100});
+  });
+  return out;
+}
+function paintSplit(){
+  var t=totals(),paid=splitList().reduce(function(a,p){return a+p.amount;},0);
+  var rem=Math.round((t.tot-paid)*100)/100, el=$('sRemain');
+  if(rem>0.009){el.className='sRemain due';el.textContent='Remaining '+money(rem)+' '+CUR+' → goes on CREDIT';$('credPart').style.display='';$('credNote').textContent='Balance of '+money(rem)+' '+CUR+' is saved as customer debt.';}
+  else if(rem<-0.009){el.className='sRemain over';el.textContent='Paid '+money(-rem)+' '+CUR+' too much — reduce an amount';$('credPart').style.display='none';}
+  else{el.className='sRemain ok';el.textContent='✓ Fully paid';$('credPart').style.display='none';}
 }
 function paintChange(){
   var t=totals(),v=parseFloat($('tender').value)||0,c=v-t.tot,el=$('chg');
@@ -365,39 +445,67 @@ function confirmPay(){
   if(busy)return;
   var t=totals();
   var name=$('cName').value.trim(),phone=$('cPhone').value.trim();
-  if(payMethod==='credit'&&!name&&!phone){toast('Credit sale needs the customer name or phone');$('cName').focus();return;}
-  busy=true;$('payGo').disabled=true;$('payGo').textContent='Saving…';
+  var paylist=[];
+  if(payMethod==='split'){
+    paylist=splitList();
+    var paid=paylist.reduce(function(a,p){return a+p.amount;},0);
+    if(paid<=0){toast('Enter at least one amount');$('sAmtCash').focus();return;}
+    if(paid>t.tot+0.009){toast('Paid more than the total — reduce an amount');return;}
+    if(paid+0.009<t.tot&&!name&&!phone){toast('The remaining balance goes on credit — enter the customer name or phone');$('cName').focus();return;}
+  } else if(payMethod==='credit'){
+    if(!name&&!phone){toast('Credit sale needs the customer name or phone');$('cName').focus();return;}
+  } else {
+    paylist=[{method:payMethod,amount:t.tot}];
+  }
+  // One idempotency ref per sale: however many times this checkout retries (or syncs from the
+  // offline queue), the server can only ever create ONE order for it.
+  SALE_REF=SALE_REF||('w'+Date.now().toString(36)+Math.random().toString(36).slice(2,8));
+  var needName=(payMethod==='credit'||payMethod==='split');
   var body={items:cart.map(function(l){return{product_id:l.product_id,name:l.name,price:l.price,qty:l.qty};}),
-            discount:t.disc,method:payMethod,
-            customer_name:payMethod==='credit'?name:'',customer_phone:payMethod==='credit'?phone:''};
+            discount:t.disc,method:payMethod,client_ref:SALE_REF,
+            customer_name:needName?name:'',customer_phone:needName?phone:''};
+  if(payMethod==='split')body.payments=paylist;
+  busy=true;$('payGo').disabled=true;$('payGo').textContent='Saving…';
+  var unlock=function(){busy=false;$('payGo').disabled=false;$('payGo').textContent='COMPLETE SALE';};
   postJson('/papi/pos-checkout',body).then(function(d){
-    if(!d||!d.ok){busy=false;$('payGo').disabled=false;$('payGo').textContent='COMPLETE SALE';toast(d&&d.error?d.error:'Could not save the sale');return;}
-    lastSale={id:d.id,no:d.order_no,tot:d.total,sub:d.subtotal,disc:d.discount,method:payMethod,
-              items:JSON.parse(JSON.stringify(cart)),
-              tender:payMethod==='cash'?(parseFloat($('tender').value)||0):0,
-              when:new Date()};
-    var after=function(){
-      busy=false;$('payGo').disabled=false;$('payGo').textContent='COMPLETE SALE';
-      $('payOv').classList.remove('show');showOk();loadToday();
-    };
-    if(d.record_payment){
-      // Book the money against the auto-issued invoice + cashbook. No `cur` param on purpose:
+    if(!d||!d.ok){unlock();toast(d&&d.error?d.error:'Could not save the sale');return;}
+    NET_DOWN=false;
+    var after=function(){unlock();finishSale({id:d.id,no:d.order_no,tot:d.total,sub:d.subtotal!=null?d.subtotal:t.sub,disc:d.discount!=null?d.discount:t.disc},paylist,false);};
+    if(d.record_payment&&paylist.length){
+      // Book each tender against the auto-issued invoice + cashbook. No `cur` param on purpose:
       // record-payment then books in the ORDER's own currency = the currency this till displays.
-      postJson('/papi/record-payment',{order:String(d.id),amount:d.total,method:payMethod,notify:'0',note:'POS'})
-        .then(after).catch(function(){after();toast('Sale saved — payment record failed, record it from the order.');});
+      var chain=Promise.resolve();
+      paylist.forEach(function(p){chain=chain.then(function(){return postJson('/papi/record-payment',{order:String(d.id),amount:p.amount,method:p.method,notify:'0',note:'POS'});});});
+      chain.then(after).catch(function(){after();toast('Sale saved — a payment record failed, record it from the order.');});
     } else after();
-  }).catch(function(){busy=false;$('payGo').disabled=false;$('payGo').textContent='COMPLETE SALE';toast('Network problem — sale NOT saved');});
+  }).catch(function(){
+    // NETWORK DOWN → the sale is NOT lost: queue it locally, print the receipt, keep selling.
+    NET_DOWN=true;
+    var q=qload();q.push({ref:SALE_REF,body:body,paylist:paylist,when:Date.now()});qsave(q);
+    unlock();
+    finishSale({id:null,no:null,tot:t.tot,sub:t.sub,disc:t.disc},paylist,true);
+    paintNet();
+  });
+}
+function finishSale(d,paylist,offline){
+  lastSale={id:d.id,no:d.no,tot:d.tot,sub:d.sub,disc:d.disc,method:payMethod,
+            items:JSON.parse(JSON.stringify(cart)),paylist:paylist,
+            tender:payMethod==='cash'?(parseFloat($('tender').value)||0):0,
+            offline:!!offline,when:new Date()};
+  $('payOv').classList.remove('show');showOk();
+  if(!offline)loadToday();
 }
 
 function showOk(){
   var s=lastSale;if(!s)return;
-  $('okNo').textContent=(s.no?('#'+s.no+' · '):'')+({cash:'Cash',momo:'Mobile money',card:'Card',credit:'CREDIT — unpaid'}[s.method]);
+  var m={cash:'Cash',momo:'Mobile money',card:'Card',credit:'CREDIT — unpaid',split:'Split payment'}[s.method]||s.method;
+  $('okNo').textContent=s.offline?('⚡ SAVED OFFLINE — will sync automatically · '+m):((s.no?('#'+s.no+' · '):'')+m);
   $('okTot').textContent=money(s.tot)+' '+CUR;
   $('okChg').textContent=(s.method==='cash'&&s.tender>s.tot)?('Give change: '+money(s.tender-s.tot)+' '+CUR):'';
   buildReceipt();
   $('okOv').classList.add('show');
 }
-function newSale(){cart=[];$('disc').value='';$('cName').value='';$('cPhone').value='';paint();$('okOv').classList.remove('show');focusQ();}
+function newSale(){cart=[];SALE_REF=null;$('disc').value='';$('cName').value='';$('cPhone').value='';paint();$('okOv').classList.remove('show');focusQ();}
 
 /* ---------------- receipt (80mm) ---------------- */
 function buildReceipt(){
@@ -409,18 +517,30 @@ function buildReceipt(){
     rows+='<tr><td colspan="2">'+esc(l.name)+'</td></tr>'
         +'<tr><td>&nbsp;&nbsp;'+l.qty+' x '+money(l.price)+'</td><td class="r">'+money(l.price*l.qty)+'</td></tr>';
   });
+  var mlabel={cash:'cash',momo:'mobile money',card:'card',credit:'ON CREDIT',split:'split'};
+  var payRows='';
+  if(s.paylist&&s.paylist.length){
+    var paid=0;
+    s.paylist.forEach(function(p){paid+=p.amount;payRows+='<tr><td>Paid — '+(mlabel[p.method]||p.method)+'</td><td class="r">'+money(p.amount)+'</td></tr>';});
+    var bal=Math.round((s.tot-paid)*100)/100;
+    if(bal>0.009)payRows+='<tr><td class="b">Balance ON CREDIT</td><td class="r b">'+money(bal)+'</td></tr>';
+  }else{
+    payRows='<tr><td>Paid — '+(mlabel[s.method]||s.method)+'</td><td class="r">'+(s.method==='credit'?'0':money(s.tot))+'</td></tr>';
+    if(s.method==='credit')payRows+='<tr><td class="b">Balance ON CREDIT</td><td class="r b">'+money(s.tot)+'</td></tr>';
+  }
   var h='<div class="c shop">'+esc(SHOP)+'</div>';
   if(ADDR)h+='<div class="c">'+esc(ADDR)+'</div>';
   if(SPHONE)h+='<div class="c">Tel: '+esc(SPHONE)+'</div>';
   if(TIN)h+='<div class="c">TIN: '+esc(TIN)+'</div>';
-  h+='<hr><table><tr><td>Receipt</td><td class="r b">'+esc(s.no||s.id)+'</td></tr>'
+  if(s.reprint)h+='<div class="c b">*** REPRINT ***</div>';
+  h+='<hr><table><tr><td>Receipt</td><td class="r b">'+esc(s.no||s.id||'PENDING SYNC')+'</td></tr>'
     +'<tr><td>Date</td><td class="r">'+when+'</td></tr>'
     +'<tr><td>Served by</td><td class="r">'+esc(OPER)+'</td></tr></table><hr>'
     +'<table>'+rows+'</table><hr><table>'
     +'<tr><td>Subtotal</td><td class="r">'+money(s.sub)+'</td></tr>'
     +(s.disc>0?'<tr><td>Discount</td><td class="r">-'+money(s.disc)+'</td></tr>':'')
     +'<tr><td class="tot">TOTAL '+CUR+'</td><td class="r tot">'+money(s.tot)+'</td></tr>'
-    +'<tr><td>Paid — '+({cash:'cash',momo:'mobile money',card:'card',credit:'ON CREDIT'}[s.method])+'</td><td class="r">'+(s.method==='credit'?'0':money(s.tot))+'</td></tr>'
+    +payRows
     +(s.method==='cash'&&s.tender>0?'<tr><td>Cash</td><td class="r">'+money(s.tender)+'</td></tr><tr><td>Change</td><td class="r">'+money(Math.max(0,s.tender-s.tot))+'</td></tr>':'')
     +'</table><hr><div class="c">Thank you for shopping with us!</div>';
   $('receipt').innerHTML=h;
@@ -428,20 +548,131 @@ function buildReceipt(){
 function printReceipt(){buildReceipt();window.print();}
 
 /* ---------------- today ---------------- */
+var RECENT=[];
 function loadToday(){
   api('/papi/pos-today').then(function(d){
     if(!d||!d.ok)return;
+    NET_DOWN=false;paintNet();
+    RECENT=d.recent||[];
     $('todaySum').textContent=money(d.total)+' '+CUR;
     $('dTot').textContent=money(d.total)+' '+CUR;
     $('dCnt').textContent=d.count||0;
-    var h='';(d.recent||[]).forEach(function(r){
+    var h='';RECENT.forEach(function(r,i){
       var tm=r.created_at?String(r.created_at).replace('T',' ').slice(11,16):'';
-      h+='<div class="drow"><div><b>'+esc(r.order_no||('#'+r.id))+'</b> · '+esc(r.customer_name||'Walk-in')+'<div class="t">'+tm+' · '+esc(r.payment||'')+'</div></div><div class="r b">'+money(r.total)+'</div></div>';
+      h+='<div class="drow"><div><b>'+esc(r.order_no||('#'+r.id))+'</b> · '+esc(r.customer_name||'Walk-in')+'<div class="t">'+tm+' · '+esc(r.payment||'')+'</div></div>'
+        +'<div style="display:flex;align-items:center;gap:8px"><span class="r b">'+money(r.total)+'</span>'
+        +(r.items_json&&r.items_json.length?'<button class="rp" onclick="reprint('+i+')" title="Reprint receipt">🖨</button>':'')
+        +'</div></div>';
     });
     $('dRows').innerHTML=h||'<div class="cartEmpty">No POS sales yet today.</div>';
-  });
+  }).catch(function(){NET_DOWN=true;paintNet();});
 }
 function openToday(){loadToday();$('drawer').classList.add('show');}
+// Reprint any of today's receipts (lost receipt, customer request, accounts copy).
+function reprint(i){
+  var r=RECENT[i];if(!r||!r.items_json||!r.items_json.length)return;
+  var sub=0;r.items_json.forEach(function(l){sub+=(+l.price||0)*(+l.qty||0);});
+  sub=Math.round(sub*100)/100;
+  lastSale={id:r.id,no:r.order_no,tot:+r.total,sub:sub,disc:Math.max(0,Math.round((sub-r.total)*100)/100),
+            method:(r.payment||'cash'),items:r.items_json,paylist:null,tender:0,reprint:true,
+            when:r.created_at?new Date(String(r.created_at).replace(' ','T')):new Date()};
+  buildReceipt();window.print();
+}
+
+/* ---------------- hold / recall ---------------- */
+function hload(){try{return JSON.parse(localStorage.getItem('pos_h1')||'[]');}catch(e){return[];}}
+function hsave(a){try{localStorage.setItem('pos_h1',JSON.stringify(a));}catch(e){}}
+function holdSale(){
+  if(!cart.length){toast('Cart is empty — nothing to hold');return;}
+  var h=hload();
+  h.push({when:Date.now(),items:JSON.parse(JSON.stringify(cart)),disc:$('disc').value||''});
+  hsave(h);
+  cart=[];SALE_REF=null;$('disc').value='';paint();paintHeld();
+  toast('Sale held — tap ▤ Held to bring it back');focusQ();
+}
+function paintHeld(){
+  var n=hload().length,b=$('heldBtn');
+  b.style.display=n?'':'none';b.textContent='▤ Held ('+n+')';
+}
+function openHeld(){
+  var h=hload();
+  if(!h.length){paintHeld();return;}
+  var html='';h.forEach(function(s,i){
+    var tot=0;s.items.forEach(function(l){tot+=l.price*l.qty;});
+    var d=new Date(s.when),pad=function(n){return(n<10?'0':'')+n;};
+    html+='<div class="hrow"><div class="hi"><div class="hn">'+s.items.length+' item'+(s.items.length>1?'s':'')+' · '+money(tot)+' '+CUR+'</div>'
+      +'<div class="hm">held at '+pad(d.getHours())+':'+pad(d.getMinutes())+' · '+esc(s.items.map(function(l){return l.name;}).join(', ').slice(0,60))+'</div></div>'
+      +'<button class="mb go" style="flex:0 0 auto;padding:8px 14px;font-size:13px" onclick="recallHeld('+i+')">Recall</button>'
+      +'<button class="x" onclick="discardHeld('+i+')">✕</button></div>';
+  });
+  $('heldList').innerHTML=html;
+  $('heldOv').classList.add('show');
+}
+function recallHeld(i){
+  var h=hload(),s=h[i];if(!s)return;
+  if(cart.length){h.push({when:Date.now(),items:JSON.parse(JSON.stringify(cart)),disc:$('disc').value||''});toast('Current sale was held too');}
+  h.splice(i,1);hsave(h);
+  cart=s.items;$('disc').value=s.disc||'';SALE_REF=null;
+  paint();paintHeld();$('heldOv').classList.remove('show');focusQ();
+}
+function discardHeld(i){
+  if(!confirm('Throw away this held sale?'))return;
+  var h=hload();h.splice(i,1);hsave(h);paintHeld();
+  if(h.length)openHeld();else $('heldOv').classList.remove('show');
+}
+
+/* ---------------- offline queue + sync ---------------- */
+function qload(){try{return JSON.parse(localStorage.getItem('pos_q1')||'[]');}catch(e){return[];}}
+function qsave(a){try{localStorage.setItem('pos_q1',JSON.stringify(a));}catch(e){}}
+function paintNet(){
+  var q=qload().length,off=NET_DOWN||!navigator.onLine,el=$('netChip');
+  if(!off&&!q){el.style.display='none';return;}
+  el.style.display='';el.className='net'+(off?' off':'');
+  el.textContent=off?('⚡ OFFLINE'+(q?' · '+q+' queued':' — still selling')):(q+' syncing…');
+}
+var SYNCING=false;
+function syncQueue(){
+  if(SYNCING)return;
+  var q=qload();if(!q.length){paintNet();return;}
+  SYNCING=true;
+  var item=q[0];
+  postJson('/papi/pos-checkout',item.body).then(function(d){
+    if(!d){throw 0;}
+    if(d.ok){
+      NET_DOWN=false;
+      // Record the tenders ONLY when the server says none were booked yet (paid<=0) —
+      // a replayed sale that already has money on it is never double-recorded.
+      var pays=(d.record_payment&&!(d.paid>0))?(item.paylist||[]):[];
+      var chain=Promise.resolve();
+      pays.forEach(function(p){chain=chain.then(function(){return postJson('/papi/record-payment',{order:String(d.id),amount:p.amount,method:p.method,notify:'0',note:'POS offline sync'});});});
+      return chain.then(function(){
+        var q2=qload();q2.shift();qsave(q2);
+        toast('✓ Offline sale synced'+(d.order_no?' — #'+d.order_no:''));
+        SYNCING=false;paintNet();loadToday();syncQueue();
+      });
+    }
+    // Server rejected it (validation) — park it aside so the queue never jams.
+    var q2=qload(),bad=q2.shift();qsave(q2);
+    try{var f=JSON.parse(localStorage.getItem('pos_qbad')||'[]');f.push(bad);localStorage.setItem('pos_qbad',JSON.stringify(f));}catch(e){}
+    toast('⚠ One offline sale was rejected — show the owner (saved under pos_qbad)');
+    SYNCING=false;paintNet();syncQueue();
+  }).catch(function(){NET_DOWN=true;SYNCING=false;paintNet();});
+}
+setInterval(syncQueue,20000);
+window.addEventListener('online',function(){NET_DOWN=false;paintNet();syncQueue();});
+window.addEventListener('offline',paintNet);
+
+/* ---------------- keyboard shortcuts (F-keys like a real till) ---------------- */
+document.addEventListener('keydown',function(e){
+  var payOpen=$('payOv').classList.contains('show'),okOpen=$('okOv').classList.contains('show');
+  if(e.key==='Enter'&&payOpen){e.preventDefault();confirmPay();return;}
+  if(e.key==='Enter'&&okOpen){e.preventDefault();newSale();return;}
+  if(payOpen||okOpen)return;
+  if(e.key==='F3'){e.preventDefault();$('disc').focus();return;}
+  if(e.key==='F4'){e.preventDefault();holdSale();return;}
+  var fm={F5:'cash',F6:'momo',F7:'card',F8:'credit',F9:'split'};
+  if(fm[e.key]){e.preventDefault();startPay(fm[e.key]);return;}
+});
 
 /* ---------------- search / scanner wiring ---------------- */
 var qTimer=null;
@@ -457,24 +688,28 @@ $('q').addEventListener('keydown',function(e){
   // Enter = scanner terminator (or a quick keyboard pick): exact hit auto-adds inside loadProducts;
   // otherwise, if exactly one product is showing, take it.
   var self=this;
-  api('/papi/pos-products?q='+encodeURIComponent(v)+'&category=').then(function(d){
-    if(!d||!d.ok)return;
+  var settle=function(d){
+    if(!d||!d.ok){toast('No product for "'+v+'"');return;}
     prods=d.items||[];
     var hit=null;
     if(d.exact)hit=prods.find(function(x){return x.id===d.exact;});
     if(!hit&&prods.length===1)hit=prods[0];
     if(hit){addToCart(hit);self.value='';loadProducts('');}
     else{renderGrid();if(!prods.length)toast('No product for "'+v+'"');}
-  });
+  };
+  api('/papi/pos-products?q='+encodeURIComponent(v)+'&category=')
+    .then(function(d){NET_DOWN=false;paintNet();settle(d);})
+    .catch(function(){NET_DOWN=true;paintNet();settle(offSearch(v,''));});   // scanner works offline too
 });
 document.addEventListener('keydown',function(e){
-  if(e.key==='Escape'){['payOv','okOv'].forEach(function(id){$(id).classList.remove('show');});$('drawer').classList.remove('show');}
+  if(e.key==='Escape'){['payOv','okOv','heldOv'].forEach(function(id){$(id).classList.remove('show');});$('drawer').classList.remove('show');}
   // Any bare typing outside an input refocuses the search box → the barcode scanner always works.
   if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1&&document.activeElement.tagName!=='INPUT'&&!$('payOv').classList.contains('show')&&!$('okOv').classList.contains('show')){$('q').focus();}
 });
 
 if(EMBED){$('backBtn').style.display='none';$('fsBtn').style.display='';}
 paint();loadProducts('');loadToday();focusQ();
+cacheAll();paintHeld();paintNet();syncQueue();
 
 /* ---------------- quick tour (3 steps, first visit + ? button) ---------------- */
 var TOUR=[
