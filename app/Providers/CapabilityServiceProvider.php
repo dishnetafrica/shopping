@@ -55,6 +55,7 @@ final class CapabilityServiceProvider extends ServiceProvider
             // Direct PDF streaming for docs without a legacy-panel route (receipt, price list).
             Route::prefix('api/v1/doc')->group(function () {
                 Route::get('receipt/{id}', [\App\Http\Controllers\V3\DocumentController::class, 'receipt'])->whereNumber('id');
+                Route::get('delivery-note/{id}', [\App\Http\Controllers\V3\DocumentController::class, 'deliveryNote'])->whereNumber('id');
                 Route::get('price-list', [\App\Http\Controllers\V3\DocumentController::class, 'priceList']);
                 Route::get('catalog', [\App\Http\Controllers\V3\DocumentController::class, 'catalog']);
                 Route::get('cashbook-export', [\App\Http\Controllers\V3\DocumentController::class, 'cashbookExport']);

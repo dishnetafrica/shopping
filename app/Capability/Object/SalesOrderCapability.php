@@ -89,6 +89,8 @@ final class SalesOrderCapability implements ObjectCapability
         $createInvoice = ['key' => 'create_invoice', 'label' => 'Create invoice', 'method' => 'POST', 'endpoint' => $ep . '/create_invoice', 'actor' => 'human', 'tone' => 'primary'];
         $openInvoice = $inv ? ['key' => 'open_invoice', 'label' => 'Open invoice', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/invoice/' . $inv->id, 'actor' => 'human', 'tone' => 'primary'] : null;
         $openCustomer = $profile ? ['key' => 'open_customer', 'label' => 'Open customer', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customer/' . $profile->id, 'actor' => 'human', 'tone' => 'default'] : null;
+        // Signature paper for the driver: quantities only, received-by / delivered-by blocks.
+        $deliveryNote = ['key' => 'delivery_note', 'label' => 'Print delivery note', 'href' => '/api/v1/doc/delivery-note/' . $o->id, 'actor' => 'human', 'tone' => 'default'];
 
         if (! $delivered && ! $cancelled) {
             $primary = $markDelivered;
@@ -211,7 +213,9 @@ final class SalesOrderCapability implements ObjectCapability
             ->overviewCards($overviewCards)
             ->financialsCards($financialsCards)
             ->timeline($tl)
-            ->documents([])
+            ->documents([
+                ['type' => 'delivery_note', 'title' => 'Delivery note (customer signs on delivery)', 'url' => '/api/v1/doc/delivery-note/' . $o->id],
+            ])
             ->tabs([
                 ['key' => 'overview', 'label' => 'Overview'],
                 ['key' => 'timeline', 'label' => 'Timeline', 'count' => count($tl)],
@@ -219,7 +223,7 @@ final class SalesOrderCapability implements ObjectCapability
                 ['key' => 'documents', 'label' => 'Documents'],
             ])
             ->actions(array_values(array_filter([$primary])))
-            ->more(array_values(array_filter([$changeStatus, $recordPayment, $openCustomer, $openInvoice, $cancelOrder])))
+            ->more(array_values(array_filter([$changeStatus, $recordPayment, $deliveryNote, $openCustomer, $openInvoice, $cancelOrder])))
             ->meta(['capability' => 'salesOrder', 'ttl' => 30, 'layout' => 'record', 'listKey' => 'salesOrders', 'permissions' => ['menu:orders']]);
     }
 

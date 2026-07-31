@@ -38,6 +38,58 @@ final class DocumentController extends Controller
         return $this->stream($doc, 'Receipt-' . ($p->receipt_no ?: $p->id) . '.pdf');
     }
 
+    /**
+     * GET /api/v1/doc/delivery-note/{id} — signature-ready delivery note for an order
+     * (quantities only, no prices; received-by / delivered-by / authorized-signatory blocks).
+     */
+    public function deliveryNote(Request $r, int $id)
+    {
+        $t = $r->user()->tenant;
+        $o = \App\Models\Order::where('tenant_id', $t->id)->find($id);
+        if (! $o) {
+            abort(404);
+        }
+
+        // Items: the relation is the source of truth; fall back to the legacy items_json blob
+        // (older bot orders) so every order can print a note.
+        $items = [];
+        try {
+            foreach ($o->items()->get() as $it) {
+                $unit = '';
+                try { $unit = (string) (optional(\App\Models\Product::where('tenant_id', $t->id)->find($it->product_id))->unit_label ?: ''); } catch (\Throwable $e) { }
+                $items[] = ['name' => (string) $it->name, 'qty' => (float) $it->qty, 'unit' => $unit];
+            }
+        } catch (\Throwable $e) {
+        }
+        if (! $items) {
+            $legacy = is_array($o->items_json) ? $o->items_json : (json_decode((string) $o->items_json, true) ?: []);
+            foreach ($legacy as $it) {
+                if (is_array($it) && ! empty($it['name'])) {
+                    $items[] = ['name' => (string) $it['name'], 'qty' => (float) ($it['qty'] ?? 1), 'unit' => (string) ($it['unit'] ?? '')];
+                }
+            }
+        }
+        if (! $items) {
+            abort(404, 'This order has no line items to print.');
+        }
+
+        $doc = app(\App\Services\Sales\DeliveryNoteRenderer::class)->pdf($t, [
+            'order_no'      => (string) ($o->order_no ?: ('#' . $o->id)),
+            'order_date'    => optional($o->created_at)->format('d M Y') ?? '',
+            'delivery_date' => now()->format('d M Y'),
+            'customer_name' => (string) ($o->customer_name ?: ''),
+            'customer_phone'=> (string) ($o->customer_phone ?: ''),
+            'deliver_to'    => (string) ($o->location ?: ''),
+            'notes'         => (string) ($o->notes ?: ''),
+            'items'         => $items,
+        ]);
+        if (! $doc) {
+            abort(404, 'PDF engine unavailable');
+        }
+
+        return $this->stream($doc, $doc['fileName']);
+    }
+
     /** GET /api/v1/doc/price-list — category-grouped price list of active products. */
     public function priceList(Request $r)
     {
