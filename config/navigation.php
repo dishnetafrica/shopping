@@ -40,6 +40,8 @@ return [
             // The Order-Trading "Orders & Margin" page is gated by the tenant setting
             // order_system_enabled (OrderCostController::ordersPage aborts 404 when off).
             // Gate the menu link on the SAME setting so we never show a link that 404s.
+            // POS till — fast supermarket checkout (scan/search → cart → cash/momo/card/credit).
+            ['key' => 'pos',       'label' => 'POS Till',  'route' => '/panel/pos',          'icon' => '🛒', 'menu' => 'orders'],
             ['key' => 'orders',    'label' => 'Orders',    'route' => '/panel/orders-costs', 'icon' => '🧾', 'menu' => 'orders', 'setting' => 'order_system_enabled'],
             ['key' => 'customers', 'label' => 'Customers', 'route' => '/panel/customers360', 'icon' => '👥', 'menu' => 'customers', 'setting' => 'order_system_enabled'],
             ['key' => 'invoices',  'label' => 'Invoices',  'route' => '/panel/invoices',     'icon' => '📄', 'menu' => 'finance'],

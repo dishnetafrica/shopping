@@ -127,6 +127,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
     Route::get('/panel/cashbook', [SellerPanelController::class, 'cashbook']);
     Route::get('/panel/books', [\App\Http\Controllers\Panel\BooksController::class, 'page']);
     Route::get('/panel/trust', [\App\Http\Controllers\Panel\TrustPanelController::class, 'page']); // Inventory Trust (T6)
+    Route::get('/panel/pos', [\App\Http\Controllers\Panel\PosController::class, 'page']); // POS till (supermarket checkout)
     Route::get('/panel/cash-position', [\App\Http\Controllers\Panel\CashPositionController::class, 'page']);
     Route::get('/panel/book-cost', [\App\Http\Controllers\Panel\OrderCostController::class, 'page']);
     Route::get('/panel/purchases', [\App\Http\Controllers\Panel\OrderCostController::class, 'purchasePage']);
@@ -427,6 +428,10 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('vision-status',     [\App\Http\Controllers\Panel\TrustPanelController::class, 'vision']);
         Route::post('vision-claim',     [\App\Http\Controllers\Panel\TrustPanelController::class, 'visionClaim']);
         Route::post('vision-box-revoke',[\App\Http\Controllers\Panel\TrustPanelController::class, 'visionRevoke']);
+        // POS till — search/scan, checkout (Delivered + channel pos → observers do stock/invoice), day tally.
+        Route::get('pos-products',  [\App\Http\Controllers\Panel\PosController::class, 'products']);
+        Route::post('pos-checkout', [\App\Http\Controllers\Panel\PosController::class, 'checkout']);
+        Route::get('pos-today',     [\App\Http\Controllers\Panel\PosController::class, 'today']);
         Route::get('bos-customers', [\App\Http\Controllers\Panel\BosCustomersController::class, 'show']); // Modern Customers list
         Route::get('bos-finance', [\App\Http\Controllers\Panel\BosFinanceController::class, 'show']); // Modern Finance hub
         Route::get('bos-run', [\App\Http\Controllers\Panel\BosRunController::class, 'show']); // Guided Collect Run
