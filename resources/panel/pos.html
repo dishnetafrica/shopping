@@ -170,6 +170,12 @@ button{font-family:inherit}
 .findrow:hover{background:#f4faf5}
 .findrow .fm{font-size:11px;color:var(--muted)}
 
+/* v4.3 — customer on the sale */
+.custrow{padding:7px 12px;border-bottom:1px solid #f0f3f0;background:#fbfcfb;flex:0 0 auto}
+.custchip{display:inline-flex;align-items:center;gap:7px;border:1.5px dashed var(--line);background:#fff;border-radius:20px;padding:5px 13px;font-size:12.5px;font-weight:700;color:#475569;cursor:pointer;max-width:100%}
+.custchip.set{border-style:solid;border-color:var(--green);color:var(--green2);background:#f4faf5}
+.custchip .cx{color:#94a3b8;font-weight:800;margin-left:2px}
+
 /* ---------- 80 mm receipt (print only) ---------- */
 #receipt{display:none}
 @media print{
@@ -222,6 +228,7 @@ button{font-family:inherit}
         <button class="holdb" onclick="holdSale()" title="Hold this sale, serve the next customer (F4)">⏸ Hold</button>
         <button class="void" onclick="voidCart()">✕ Clear</button>
       </span></div>
+    <div class="custrow"><button class="custchip" id="custBtn" onclick="openCust()">👤 Walk-in customer ▾</button></div>
     <div class="lines" id="lines"><div class="cartEmpty">Tap products or scan a barcode<br>to start a sale.</div></div>
     <div class="totals">
       <div class="trow"><span>Subtotal</span><span id="sub">0</span></div>
@@ -300,6 +307,25 @@ button{font-family:inherit}
     <div id="hRows" style="display:none"></div>
   </div>
 </div>
+
+<!-- customer picker -->
+<div class="ov" id="custOv"><div class="md">
+  <h3>👤 Customer for this sale</h3>
+  <div id="custSearchWrap">
+    <label>Search by phone or name</label>
+    <input id="custQ" autocomplete="off" placeholder="e.g. 2119… or Yakob" oninput="custSearchDebounced()">
+    <div id="custResults" style="margin-top:8px;max-height:220px;overflow-y:auto"></div>
+  </div>
+  <div id="custNew" style="display:none">
+    <label>Name</label><input id="cnName" autocomplete="off">
+    <label>Phone (WhatsApp)</label><input id="cnPhone" autocomplete="off" inputmode="tel" placeholder="2119…">
+    <label>Address (optional)</label><input id="cnAddr" autocomplete="off">
+  </div>
+  <div class="mrow">
+    <button class="mb no" id="custAlt" onclick="custToggleNew()">＋ New customer</button>
+    <button class="mb go" id="custGo" onclick="custPrimary()">WALK-IN (NO CUSTOMER)</button>
+  </div>
+</div></div>
 
 <!-- quotation from cart -->
 <div class="ov" id="qOv"><div class="md">
@@ -552,6 +578,8 @@ function startPay(m){
   $('payTitle').textContent={cash:'Cash payment',momo:'Mobile money',card:'Card payment',credit:'Credit sale (pay later)',split:'Split / partial payment'}[m];
   $('payTotal').textContent=money(t.tot)+' '+CUR;
   var isCash=(m==='cash'), isCred=(m==='credit'), isSplit=(m==='split');
+  // Attached customer prefills the credit fields (still editable).
+  if(CUST){if(!$('cName').value)$('cName').value=CUST.name||'';if(!$('cPhone').value)$('cPhone').value=CUST.phone||'';}
   $('cashPart').style.display=isCash?'':'none';
   $('splitPart').style.display=isSplit?'':'none';
   $('credPart').style.display=isCred?'':'none';
@@ -597,14 +625,16 @@ function confirmPay(){
   var t=totals();
   var name=$('cName').value.trim(),phone=$('cPhone').value.trim();
   var paylist=[];
+  var custN=CUST?(CUST.name||''):'', custP=CUST?(CUST.phone||''):'';
+  var hasCust=!!(name||phone||custN||custP);
   if(payMethod==='split'){
     paylist=splitList();
     var paid=paylist.reduce(function(a,p){return a+p.amount;},0);
     if(paid<=0){toast('Enter at least one amount');$('sAmtCash').focus();return;}
     if(paid>t.tot+0.009){toast('Paid more than the total — reduce an amount');return;}
-    if(paid+0.009<t.tot&&!name&&!phone){toast('The remaining balance goes on credit — enter the customer name or phone');$('cName').focus();return;}
+    if(paid+0.009<t.tot&&!hasCust){toast('The remaining balance goes on credit — enter the customer name or phone');$('cName').focus();return;}
   } else if(payMethod==='credit'){
-    if(!name&&!phone){toast('Credit sale needs the customer name or phone');$('cName').focus();return;}
+    if(!hasCust){toast('Credit sale needs the customer name or phone');$('cName').focus();return;}
   } else {
     paylist=[{method:payMethod,amount:t.tot}];
   }
@@ -616,10 +646,11 @@ function confirmPay(){
   // One idempotency ref per sale: however many times this checkout retries (or syncs from the
   // offline queue), the server can only ever create ONE order for it.
   SALE_REF=SALE_REF||('w'+Date.now().toString(36)+Math.random().toString(36).slice(2,8));
-  var needName=(payMethod==='credit'||payMethod==='split');
+  // Customer on the sale: modal-typed values win, else the attached customer chip — for EVERY
+  // method (a named cash sale files/updates the customer automatically via the order).
   var body={items:cart.map(function(l){return{product_id:l.product_id,name:l.name,price:l.price,qty:l.qty};}),
             discount:t.disc,method:payMethod,client_ref:SALE_REF,
-            customer_name:needName?name:'',customer_phone:needName?phone:''};
+            customer_name:(name||custN),customer_phone:(phone||custP)};
   if(payMethod==='split')body.payments=paylist;
   if(MPIN)body.manager_pin=MPIN;
   busy=true;$('payGo').disabled=true;$('payGo').textContent='Saving…';
@@ -648,6 +679,7 @@ function confirmPay(){
 function finishSale(d,paylist,offline){
   lastSale={id:d.id,no:d.no,tot:d.tot,sub:d.sub,disc:d.disc,method:payMethod,
             items:JSON.parse(JSON.stringify(cart)),paylist:paylist,
+            cust:($('cName').value.trim()||(CUST?(CUST.name||CUST.phone):'')),
             tender:payMethod==='cash'?(parseFloat($('tender').value)||0):0,
             offline:!!offline,when:new Date()};
   $('payOv').classList.remove('show');showOk();
@@ -664,7 +696,7 @@ function showOk(){
   buildReceipt();
   $('okOv').classList.add('show');
 }
-function newSale(){cart=[];SALE_REF=null;MPIN=null;$('disc').value='';$('cName').value='';$('cPhone').value='';paint();$('okOv').classList.remove('show');focusQ();}
+function newSale(){cart=[];SALE_REF=null;MPIN=null;CUST=null;paintCust();$('disc').value='';$('cName').value='';$('cPhone').value='';paint();$('okOv').classList.remove('show');focusQ();}
 // One PIN modal, many callers (discounts, returns): askPin(reason, retryFn).
 var PIN_CB=null;
 function askPin(why,cb){PIN_CB=cb||null;$('pinWhy').textContent=why;$('pinIn').value='';$('pinOv').classList.add('show');setTimeout(function(){$('pinIn').focus();},60);}
@@ -698,7 +730,9 @@ function buildReceipt(){
   if(s.reprint)h+='<div class="c b">*** REPRINT ***</div>';
   h+='<hr><table><tr><td>Receipt</td><td class="r b">'+esc(s.no||s.id||'PENDING SYNC')+'</td></tr>'
     +'<tr><td>Date</td><td class="r">'+when+'</td></tr>'
-    +'<tr><td>Served by</td><td class="r">'+esc(OPER)+'</td></tr></table><hr>'
+    +'<tr><td>Served by</td><td class="r">'+esc(OPER)+'</td></tr>'
+    +(s.cust?'<tr><td>Customer</td><td class="r">'+esc(s.cust)+'</td></tr>':'')
+    +'</table><hr>'
     +'<table>'+rows+'</table><hr><table>'
     +'<tr><td>Subtotal</td><td class="r">'+money(s.sub)+'</td></tr>'
     +(s.disc>0?'<tr><td>Discount</td><td class="r">-'+money(s.disc)+'</td></tr>':'')
@@ -764,7 +798,9 @@ function loadQuoteToCart(id){
     if(!d.lines.length){toast('None of the quoted items match current products — check names');return;}
     if(cart.length){holdSale();}          // never destroy a live cart — hold it first
     cart=d.lines.map(function(l){return{product_id:l.product_id,name:l.name,price:l.price,qty:l.qty,unit:''};});
-    SALE_REF=null;MPIN=null;paint();
+    SALE_REF=null;MPIN=null;
+    CUST=(d.customer||d.phone)?{name:d.customer||'',phone:d.phone||''}:null;paintCust();
+    paint();
     $('drawer').classList.remove('show');
     toast('⤵ '+esc(d.quote_no)+' loaded'+(d.skipped&&d.skipped.length?' — '+d.skipped.length+' item(s) skipped (no matching product)':''));
     focusQ();
@@ -783,11 +819,72 @@ function paintDraftTab(){
   }).join(''):'<div class="cartEmpty">No held sales — press ⏸ Hold (F4) to park a cart here.</div>';
 }
 
+/* ---------------- customer on the sale (v4.3) ---------------- */
+var CUST=null, CUSTFOUND=[], custT=null, CUSTMODE='search';
+function paintCust(){
+  var b=$('custBtn');
+  if(CUST&&(CUST.name||CUST.phone)){
+    b.className='custchip set';
+    b.innerHTML='👤 '+esc(CUST.name||CUST.phone)+(CUST.name&&CUST.phone?' · '+esc(CUST.phone):'')+' <span class="cx" onclick="event.stopPropagation();clearCust()">✕</span>';
+  }else{b.className='custchip';b.textContent='👤 Walk-in customer ▾';}
+}
+function clearCust(){CUST=null;paintCust();}
+function openCust(){
+  CUSTMODE='search';$('custNew').style.display='none';$('custSearchWrap').style.display='';
+  $('custAlt').textContent='＋ New customer';$('custGo').textContent='WALK-IN (NO CUSTOMER)';
+  $('custQ').value='';$('custResults').innerHTML='';
+  $('custOv').classList.add('show');
+  if(NET_DOWN||!navigator.onLine){$('custResults').innerHTML='<div class="cartEmpty">Offline — use ＋ New customer to type name &amp; phone (the sale files them when it syncs).</div>';}
+  else custSearch('');
+  setTimeout(function(){$('custQ').focus();},60);
+}
+function custSearchDebounced(){clearTimeout(custT);var v=$('custQ').value;custT=setTimeout(function(){custSearch(v);},250);}
+function custSearch(q){
+  api('/papi/pos-customers?q='+encodeURIComponent(q||'')).then(function(d){
+    if(!d||!d.ok){$('custResults').innerHTML='<div class="cartEmpty">Could not search.</div>';return;}
+    CUSTFOUND=d.customers||[];
+    $('custResults').innerHTML=CUSTFOUND.length?CUSTFOUND.map(function(c,i){
+      return '<div class="findrow" onclick="pickCust('+i+')"><div><b>'+esc(c.name||'(no name)')+'</b><div class="fm">'+esc(c.phone)+(c.address?' · '+esc(c.address):'')+'</div></div></div>';
+    }).join(''):'<div class="cartEmpty">'+(q?'No customer found — tap ＋ New customer.':'No customers yet — tap ＋ New customer.')+'</div>';
+  }).catch(function(){$('custResults').innerHTML='<div class="cartEmpty">Network problem — use ＋ New customer.</div>';});
+}
+function pickCust(i){
+  var c=CUSTFOUND[i];if(!c)return;
+  CUST={name:c.name||'',phone:c.phone||''};paintCust();
+  $('custOv').classList.remove('show');
+  toast('👤 '+(c.name||c.phone)+' attached to this sale');focusQ();
+}
+function custToggleNew(){
+  if(CUSTMODE==='search'){
+    CUSTMODE='new';$('custSearchWrap').style.display='none';$('custNew').style.display='';
+    $('custAlt').textContent='← Back to search';$('custGo').textContent='SAVE & ATTACH';
+    $('cnName').value='';$('cnPhone').value=$('custQ').value.replace(/[^0-9]/g,'');$('cnAddr').value='';
+    setTimeout(function(){$('cnName').focus();},60);
+  }else{
+    CUSTMODE='search';$('custNew').style.display='none';$('custSearchWrap').style.display='';
+    $('custAlt').textContent='＋ New customer';$('custGo').textContent='WALK-IN (NO CUSTOMER)';
+  }
+}
+function custPrimary(){
+  if(CUSTMODE==='search'){CUST=null;paintCust();$('custOv').classList.remove('show');focusQ();return;}
+  var name=$('cnName').value.trim(),phone=$('cnPhone').value.replace(/[^0-9]/g,'');
+  if(!name&&!phone){toast('Type at least a name or a phone');return;}
+  CUST={name:name,phone:phone};paintCust();$('custOv').classList.remove('show');
+  // Details save via the existing customer-save endpoint (phone-keyed). No phone or offline →
+  // just attach: CustomerMasterService files them from the order automatically.
+  if(phone&&!(NET_DOWN||!navigator.onLine)){
+    api('/papi/customer-save?phone='+encodeURIComponent(phone)+'&name='+encodeURIComponent(name)+'&address='+encodeURIComponent($('cnAddr').value.trim()))
+      .then(function(d){toast(d&&d.ok?'👤 '+(name||phone)+' saved & attached':'👤 Attached to this sale');})
+      .catch(function(){toast('👤 Attached — will be filed with the sale');});
+  }else{toast('👤 Attached — will be filed with the sale');}
+  focusQ();
+}
+
 /* ---------------- quotation from the cart (v4.2) ---------------- */
 function openQuote(){
   if(!cart.length){toast('Cart is empty — add the items to quote first');return;}
   if(NET_DOWN||!navigator.onLine){toast('Quotations need internet');return;}
-  $('qName').value='';$('qPhone').value='';
+  $('qName').value=CUST?(CUST.name||''):'';$('qPhone').value=CUST?(CUST.phone||''):'';
   $('qOv').classList.add('show');
   setTimeout(function(){$('qName').focus();},60);
 }
@@ -826,9 +923,9 @@ function hsave(a){try{localStorage.setItem('pos_h1',JSON.stringify(a));}catch(e)
 function holdSale(){
   if(!cart.length){toast('Cart is empty — nothing to hold');return;}
   var h=hload();
-  h.push({when:Date.now(),items:JSON.parse(JSON.stringify(cart)),disc:$('disc').value||''});
+  h.push({when:Date.now(),items:JSON.parse(JSON.stringify(cart)),disc:$('disc').value||'',cust:CUST});
   hsave(h);
-  cart=[];SALE_REF=null;$('disc').value='';paint();paintHeld();
+  cart=[];SALE_REF=null;CUST=null;paintCust();$('disc').value='';paint();paintHeld();
   toast('Sale held — tap ▤ Held to bring it back');focusQ();
 }
 function paintHeld(){
@@ -853,7 +950,7 @@ function recallHeld(i){
   var h=hload(),s=h[i];if(!s)return;
   if(cart.length){h.push({when:Date.now(),items:JSON.parse(JSON.stringify(cart)),disc:$('disc').value||''});toast('Current sale was held too');}
   h.splice(i,1);hsave(h);
-  cart=s.items;$('disc').value=s.disc||'';SALE_REF=null;
+  cart=s.items;$('disc').value=s.disc||'';SALE_REF=null;CUST=s.cust||null;paintCust();
   paint();paintHeld();$('heldOv').classList.remove('show');focusQ();
 }
 function discardHeld(i){
@@ -1124,7 +1221,7 @@ document.addEventListener('keydown',function(e){
   if(e.key==='Enter'&&$('pinOv').classList.contains('show')){e.preventDefault();submitPin();return;}
   if(e.key==='Enter'&&$('soOv').classList.contains('show')){e.preventDefault();submitShiftOpen();return;}
   if(e.key==='Enter'&&$('retOv').classList.contains('show')&&$('retFind').style.display!=='none'){e.preventDefault();findSaleQ();return;}
-  if($('retOv').classList.contains('show'))return;
+  if(['retOv','qOv','custOv','heldOv','scOv','syncOv'].some(function(id){return $(id).classList.contains('show');}))return;
   if(e.key==='Enter'&&payOpen){e.preventDefault();confirmPay();return;}
   if(e.key==='Enter'&&okOpen){e.preventDefault();newSale();return;}
   if(payOpen||okOpen)return;
@@ -1162,7 +1259,7 @@ $('q').addEventListener('keydown',function(e){
     .catch(function(){NET_DOWN=true;paintNet();settle(offSearch(v,''));});   // scanner works offline too
 });
 document.addEventListener('keydown',function(e){
-  if(e.key==='Escape'){['payOv','okOv','heldOv','soOv','scOv','pinOv','syncOv','retOv','qOv'].forEach(function(id){$(id).classList.remove('show');});$('drawer').classList.remove('show');}
+  if(e.key==='Escape'){['payOv','okOv','heldOv','soOv','scOv','pinOv','syncOv','retOv','qOv','custOv'].forEach(function(id){$(id).classList.remove('show');});$('drawer').classList.remove('show');}
   // Any bare typing outside an input refocuses the search box → the barcode scanner always works.
   if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1&&document.activeElement.tagName!=='INPUT'&&!$('payOv').classList.contains('show')&&!$('okOv').classList.contains('show')){$('q').focus();}
 });

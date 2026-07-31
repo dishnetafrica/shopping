@@ -460,6 +460,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::post('pos-quote',       [\App\Http\Controllers\Panel\PosController::class, 'quoteCreate']); // v4.2 counter quotes
         Route::get('pos-quotes',       [\App\Http\Controllers\Panel\PosController::class, 'quotes']);
         Route::get('pos-quote-load',   [\App\Http\Controllers\Panel\PosController::class, 'quoteLoad']);
+        Route::get('pos-customers',    [\App\Http\Controllers\Panel\PosController::class, 'customers']);   // v4.3 customer picker
         Route::get('bos-customers', [\App\Http\Controllers\Panel\BosCustomersController::class, 'show']); // Modern Customers list
         Route::get('bos-finance', [\App\Http\Controllers\Panel\BosFinanceController::class, 'show']); // Modern Finance hub
         Route::get('bos-run', [\App\Http\Controllers\Panel\BosRunController::class, 'show']); // Guided Collect Run

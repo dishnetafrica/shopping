@@ -298,6 +298,39 @@ class PosController extends Controller
         ]);
     }
 
+    /* ------------- customer on the sale (v4.3) ------------- */
+
+    /**
+     * GET /papi/pos-customers?q= — phone/name lookup for the till's customer picker.
+     * Empty q → the most recently active customers (fast pick for regulars). Attaching a
+     * customer to a sale needs NO create step: CustomerMasterService files/refreshes the
+     * CustomerProfile from the order automatically; /papi/customer-save adds richer details.
+     */
+    public function customers(Request $request)
+    {
+        $t = $request->user()?->tenant;
+        if (! $t) {
+            return response()->json(['ok' => false], 401);
+        }
+        $q = trim((string) $request->query('q', ''));
+        $query = \App\Models\CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id);
+        if ($q !== '') {
+            $digits = preg_replace('/[^0-9]/', '', $q);
+            $like = '%' . mb_strtolower($q) . '%';
+            $query->where(function ($w) use ($digits, $like) {
+                $w->whereRaw('LOWER(COALESCE(name, \'\')) LIKE ?', [$like]);
+                if (strlen($digits) >= 4) {
+                    $w->orWhere('phone', 'LIKE', '%' . $digits . '%');
+                }
+            });
+        }
+        $rows = $query->orderByDesc('updated_at')->limit(8)
+            ->get(['phone', 'name', 'address'])
+            ->map(fn ($c) => ['phone' => (string) $c->phone, 'name' => (string) ($c->name ?? ''), 'address' => (string) ($c->address ?? '')]);
+
+        return response()->json(['ok' => true, 'customers' => $rows]);
+    }
+
     /* ------------- quotations at the counter (v4.2): cart → numbered quote PDF ------------- */
 
     public function quoteCreate(Request $request)
