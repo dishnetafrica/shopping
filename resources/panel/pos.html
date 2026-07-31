@@ -25,11 +25,12 @@ button{font-family:inherit}
 .cats{display:flex;gap:6px;overflow-x:auto;padding:10px 0 8px;flex:0 0 auto;scrollbar-width:thin}
 .cat{border:1.5px solid var(--line);background:#fff;border-radius:20px;padding:6px 13px;font-size:12.5px;font-weight:700;color:#475569;cursor:pointer;white-space:nowrap}
 .cat.on{background:var(--dark);border-color:var(--dark);color:#fff}
-.grid{flex:1 1 auto;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:9px;align-content:start;padding-bottom:12px}
-.p{background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:10px;cursor:pointer;display:flex;flex-direction:column;gap:5px;min-height:96px;user-select:none}
+.grid{flex:1 1 auto;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:9px;align-content:start;padding-bottom:12px}
+.p{background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:8px 10px 10px;cursor:pointer;display:flex;flex-direction:column;gap:5px;user-select:none}
 .p:active{border-color:var(--green);background:#f4faf5}
-.p .im{height:56px;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:8px;background:#f7f9f7}
-.p .im img{max-height:56px;max-width:100%;object-fit:contain}
+.p .im{height:86px;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:8px;background:#f4f7f4}
+.p .im img{height:86px;width:100%;object-fit:contain}
+.p .im .ph{font-size:30px;opacity:.3}
 .p .nm{font-size:12.5px;font-weight:700;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:31px}
 .p .pr{font-size:13.5px;font-weight:800;color:var(--green2)}
 .p .st{font-size:10px;color:var(--muted)}
@@ -142,9 +143,10 @@ button{font-family:inherit}
 <body>
 
 <div class="top">
-  <button class="back" onclick="location.href='/panel/app'">‹</button>
+  <button class="back" id="backBtn" onclick="location.href='/panel/app'">‹</button>
   <div><h1>🧾 POS</h1><div class="tn">{{TENANT}} · {{OPERATOR}}</div></div>
   <button class="today" onclick="openToday()"><small>TODAY</small><span id="todaySum">…</span></button>
+  <button class="helpb" id="fsBtn" style="display:none" onclick="window.open('/panel/pos','_blank')" title="Open full screen">⛶</button>
   <button class="helpb" onclick="startTour()" title="Quick tour">?</button>
 </div>
 
@@ -234,6 +236,9 @@ button{font-family:inherit}
 
 <script>
 var CUR='{{CURRENCY}}', SHOP='{{TENANT}}', OPER='{{OPERATOR}}', ADDR='{{ADDRESS}}', SPHONE='{{PHONE}}', TIN='{{TIN}}';
+// Embedded inside the V3 shell (#/pos → iframe /panel/pos?embed=1): V3 provides the chrome, so
+// hide the back button and offer a full-screen launcher for dedicated till stations instead.
+var EMBED=/[?&]embed=1/.test(location.search);
 var DP = (CUR==='USD')?2:0;                     // USD shows cents; UGX/SSP whole numbers
 var $=function(id){return document.getElementById(id);};
 function api(u,opt){opt=opt||{};opt.headers=Object.assign({'X-Requested-With':'XMLHttpRequest'},opt.headers||{});opt.credentials='same-origin';opt.cache='no-store';return fetch(u,opt).then(function(r){return r.json();});}
@@ -268,8 +273,12 @@ function renderGrid(){
   var h='';
   prods.forEach(function(p,i){
     var st=Number(p.stock||0);
+    // Photo-first cards (UltimatePOS-style): every tile shows the product photo, or a soft
+    // placeholder — so the grid reads visually and cashiers find items by sight.
     h+='<div class="p" onclick="addIdx('+i+')">'
-      +(p.image_url?'<div class="im"><img loading="lazy" src="'+esc(p.image_url)+'" onerror="this.parentNode.style.display=\'none\'"></div>':'')
+      +'<div class="im">'+(p.image_url
+          ? '<img loading="lazy" src="'+esc(p.image_url)+'" onerror="this.outerHTML=\'<span class=ph>🧺</span>\'">'
+          : '<span class="ph">🧺</span>')+'</div>'
       +'<div class="nm">'+esc(p.name)+'</div>'
       +'<div class="pr">'+money(p.price)+' '+CUR+'</div>'
       +'<div class="st'+(st<=0?' zero':'')+'">'+(st<=0?'out of stock':('stock: '+st))+(p.unit_label?' · '+esc(p.unit_label):'')+'</div>'
@@ -464,6 +473,7 @@ document.addEventListener('keydown',function(e){
   if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1&&document.activeElement.tagName!=='INPUT'&&!$('payOv').classList.contains('show')&&!$('okOv').classList.contains('show')){$('q').focus();}
 });
 
+if(EMBED){$('backBtn').style.display='none';$('fsBtn').style.display='';}
 paint();loadProducts('');loadToday();focusQ();
 
 /* ---------------- quick tour (3 steps, first visit + ? button) ---------------- */

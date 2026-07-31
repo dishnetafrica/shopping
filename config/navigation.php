@@ -2,7 +2,11 @@
 
 /*
 |--------------------------------------------------------------------------
-| CloudBSS Navigation (single source of truth for the left menu)
+| CloudBSS Navigation (single source of truth for the CLASSIC left menu)
+|--------------------------------------------------------------------------
+| ⛔ FROZEN FOR NEW WORK (V3-FIRST.md, 31 Jul 2026): the classic panel is being
+| retired. Do NOT add new menu entries here — new screens ship inside V3
+| (resources/views/shell.blade.php). Bug fixes to existing entries only.
 |--------------------------------------------------------------------------
 | Roadmap Epic 1 / Task E1.1. This file is the ONE definition of the panel
 | navigation, matching Product Architecture v2 §1. Every screen appears

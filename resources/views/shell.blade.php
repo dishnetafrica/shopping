@@ -75,6 +75,11 @@ svg{display:block}
 .sp{flex:1}
 .tbtn{width:37px;height:37px;border-radius:8px;display:grid;place-items:center;color:var(--ink-2);transition:.12s}
 .tbtn:hover{background:var(--line-2);color:var(--ink)}
+/* Prominent POS launcher in the top bar (UltimatePOS-style) */
+.posbtn{display:flex;align-items:center;gap:7px;height:34px;padding:0 14px;border-radius:8px;background:var(--accent,#15803D);color:#fff;font-weight:800;font-size:13px;letter-spacing:.4px;cursor:pointer;border:none;transition:.12s}
+.posbtn:hover{filter:brightness(1.08)}
+.posbtn .ic{width:16px;height:16px}
+@media(max-width:560px){.posbtn span{display:none}.posbtn{padding:0 10px}}
 .curpick{display:flex;align-items:center;gap:6px;height:34px;padding:0 4px 0 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--ink-2);font-size:12.5px}
 .curpick .cl{display:flex;align-items:center;gap:5px;font-weight:600;color:var(--ink)}
 .curpick .cl svg{color:var(--brand)}
@@ -1046,6 +1051,9 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
         <input id="search" placeholder="Open a record…  e.g. customer 5">
       </div>
       <div class="sp"></div>
+      <button class="posbtn" id="posTop" onclick="route('pos')" title="Open the till" style="display:none">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3h16v9H4zM8 12v3M16 12v3M2 15h20v6H2zM6 18h5"/></svg><span>POS</span>
+      </button>
       <div class="curpick" id="curpick" title="How money is shown across reports"></div>
       <button class="tbtn" onclick="refresh()" title="Refresh"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
       <div class="acct">
@@ -1082,7 +1090,7 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 
 <script>
 const CFG = { base:'/api/v1/workspace', csrf: document.querySelector('meta[name=csrf-token]').content, user: @json(['name'=>'']) };
-const LABELS = { advisor:'Solar Advisor', setup:'Get started', chats:'Chats', chat:'Chat', communication:'Email Center', guide:'Help & Training', consignments:'Consignments', consignment:'Consignment', scheduled:'Scheduled', briefing:'Today', worklist:'My Work', tasks:'Tasks', followups:'AI Follow-ups', diagnostics:'Bot Diagnostics', customers:'Customers', leads:'Leads', collections:'Collections',
+const LABELS = { pos:'POS Till', advisor:'Solar Advisor', setup:'Get started', chats:'Chats', chat:'Chat', communication:'Email Center', guide:'Help & Training', consignments:'Consignments', consignment:'Consignment', scheduled:'Scheduled', briefing:'Today', worklist:'My Work', tasks:'Tasks', followups:'AI Follow-ups', diagnostics:'Bot Diagnostics', customers:'Customers', leads:'Leads', collections:'Collections',
   salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance', pnl:'Profit & Loss', books:'Books',
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', 'procurement.hub':'Procurement Hub', 'demand.plans':'Demand Plans', 'juba.stock':'Juba Stock', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch', transport:'Transport Register', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
@@ -1090,7 +1098,7 @@ const LABELS = { advisor:'Solar Advisor', setup:'Get started', chats:'Chats', ch
   jobs:'Jobs', workOrder:'Job', maintenance:'Maintenance', maintenancePlan:'Service Plan', claims:'Warranty Claims', warrantyClaim:'Claim', modules:'Modules', billing:'Billing', team:'Team & Roles',
   'storefront.collections':'Shop for Every Need', 'storefront.kits':'Ready-made Kits', 'storefront.delivery':'Delivery & Free Shipping' };
 const GROUPS = [ ['Overview',['setup','briefing','worklist','guide']],
-  ['Sales',['advisor','customers','leads','followups','salesOrders','scheduled','quotations','invoices','payments','collections']],
+  ['Sales',['pos','advisor','customers','leads','followups','salesOrders','scheduled','quotations','invoices','payments','collections']],
   ['Messaging',['chats','communication','diagnostics']],
   ['Inventory',['products','categories','purchase.process','suppliers','consignments']],
   ['Procurement',['procurement.hub','demand.plans','juba.stock']],
@@ -1101,7 +1109,7 @@ const GROUPS = [ ['Overview',['setup','briefing','worklist','guide']],
 // Which nav key reads which count from the catalog's counts map.
 const NAVCOUNT = { followups:'followups', diagnostics:'diagnostics', chats:'chats', communication:'communication', consignments:'consignments', scheduled:'scheduled', customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','books','warehouse','dispatch','tasks','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team']);
+const READY = new Set(['pos','advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','books','warehouse','dispatch','tasks','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team']);
 // Storefront config pages are client-rendered (not server workspaces) and always available to the owner.
 const SF_KEYS = new Set(['storefront.collections','storefront.kits','storefront.delivery','transport']);
 // Dedicated list views still pending — none; kept for future additions.
@@ -1110,6 +1118,7 @@ function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:
 
 /* ---- inline icon set ---- */
 const P = {
+  pos:'M4 3h16v9H4zM8 12v3M16 12v3M2 15h20v6H2zM6 18h5',
   advisor:'M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1l2.1-2.1M17 7l2.1-2.1M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
   scheduled:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2',
   jobs:'M9 3h6a1 1 0 0 1 1 1v2h3a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3V4a1 1 0 0 1 1-1zM9 11l2 2 4-4',
@@ -1457,7 +1466,9 @@ function renderNav(caps){
   // A SOON item shows if its underlying entity exists (has a count) even without a list capability yet.
   /* pnl is a legacy-iframe screen with no capability of its own — gate it on the
      permission-filtered finance capability so restricted roles don't see P&L. */
-  const has = k => (k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || k==='settings' || k==='advisor' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
+  const has = k => (k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
+  // The top-bar POS launcher follows the same gate as the menu entry.
+  try{ var pb=document.getElementById('posTop'); if(pb) pb.style.display = has('pos') ? 'flex' : 'none'; }catch(e){}
   let html='';
   GROUPS.forEach(([g,items])=>{
     const avail=items.filter(has);
@@ -1519,7 +1530,7 @@ function hasScreen(k){
   if(k==='task.new') return true;   // the "+ New task" action (owner/manager gate is enforced server-side)
   if(k==='pnl') return !!(s && s.has('finance'));
   if(k==='books') return !!(s && s.has('finance'));
-  if(k==='settings' || k==='guide') return true;
+  if(k==='settings' || k==='guide' || k==='pos') return true;
   if(SF_KEYS.has(k)) return true;
   if(s && s.has(k)) return true;
   return !!(SOON[k] && CFG.counts && CFG.counts[NAVCOUNT[k]||k]!=null);
@@ -1634,6 +1645,10 @@ async function route(key, id){
   if(key==='books'){ document.getElementById('view').innerHTML='<div class="crumb">Books</div><iframe title="Books" src="/panel/situation-report" style="width:100%;height:calc(100vh - 130px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='wa-connect'){ document.getElementById('view').innerHTML='<div class="crumb">Connect WhatsApp</div><iframe title="Connect WhatsApp" src="/panel/setup" style="width:100%;height:calc(100vh - 150px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='settings'){ if(isAppUI()){ bosSettings(); return; } document.getElementById('view').innerHTML='<iframe title="Settings" src="/panel/settings-manager" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
+  // POS till — V3 is the front door (V3-FIRST.md); the till screen embeds edge-to-edge like Settings.
+  if(key==='pos'){ document.getElementById('view').innerHTML='<iframe title="POS Till" src="/panel/pos?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
+  // Help & Training — the in-product Training Center (replaces the old server guide workspace).
+  if(key==='guide'){ document.getElementById('view').innerHTML='<iframe title="Training" src="/panel/training" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='advisor'){ advisorHome(id); return; }
   if(key==='advisor.kb'){ advKnowledge(); return; }
   if(key==='storefront.collections'){ sfCollectionsPage(); return; }
