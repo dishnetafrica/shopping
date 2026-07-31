@@ -147,6 +147,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
     Route::get('/panel/trust', [\App\Http\Controllers\Panel\TrustPanelController::class, 'page']); // Inventory Trust (T6)
     Route::get('/panel/pos', [\App\Http\Controllers\Panel\PosController::class, 'page']); // POS till (supermarket checkout)
     Route::get('/panel/pos-display', [\App\Http\Controllers\Panel\PosController::class, 'display']); // customer-facing second screen (v4.1)
+    Route::get('/panel/ai-campaign', [\App\Http\Controllers\Panel\AiCampaignController::class, 'page']); // AI campaign generator (v4.5, owner)
     Route::get('/panel/training', [\App\Http\Controllers\Panel\TrainingController::class, 'page']); // in-product Training Center
     Route::get('/panel/cash-position', [\App\Http\Controllers\Panel\CashPositionController::class, 'page']);
     Route::get('/panel/book-cost', [\App\Http\Controllers\Panel\OrderCostController::class, 'page']);
@@ -464,6 +465,13 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         // WhatsApp on the customer record (v4.4): thread tail + AI-personalised draft (send reuses chats/send).
         Route::get('wa-thread',        [\App\Http\Controllers\Panel\CustomerWaController::class, 'thread']);
         Route::post('wa-ai-draft',     [\App\Http\Controllers\Panel\CustomerWaController::class, 'aiDraft']);
+        // AI campaign generator (v4.5, owner-gated in controller).
+        Route::get('aic-audience',     [\App\Http\Controllers\Panel\AiCampaignController::class, 'audience']);
+        Route::post('aic-generate',    [\App\Http\Controllers\Panel\AiCampaignController::class, 'generate']);
+        Route::get('aic-list',         [\App\Http\Controllers\Panel\AiCampaignController::class, 'list']);
+        Route::post('aic-set',         [\App\Http\Controllers\Panel\AiCampaignController::class, 'set']);
+        Route::post('aic-approve-all', [\App\Http\Controllers\Panel\AiCampaignController::class, 'approveAll']);
+        Route::post('aic-start',       [\App\Http\Controllers\Panel\AiCampaignController::class, 'start']);
         Route::get('bos-customers', [\App\Http\Controllers\Panel\BosCustomersController::class, 'show']); // Modern Customers list
         Route::get('bos-finance', [\App\Http\Controllers\Panel\BosFinanceController::class, 'show']); // Modern Finance hub
         Route::get('bos-run', [\App\Http\Controllers\Panel\BosRunController::class, 'show']); // Guided Collect Run

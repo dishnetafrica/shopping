@@ -1,5 +1,5 @@
 const CFG = { base:'/api/v1/workspace', csrf: document.querySelector('meta[name=csrf-token]').content, user: {"name":""} };
-const LABELS = { pos:'POS Till', advisor:'Solar Advisor', setup:'Get started', chats:'Chats', chat:'Chat', communication:'Email Center', guide:'Help & Training', consignments:'Consignments', consignment:'Consignment', scheduled:'Scheduled', briefing:'Today', worklist:'My Work', tasks:'Tasks', followups:'AI Follow-ups', diagnostics:'Bot Diagnostics', customers:'Customers', leads:'Leads', collections:'Collections',
+const LABELS = { pos:'POS Till', 'ai.campaign':'AI Campaign', advisor:'Solar Advisor', setup:'Get started', chats:'Chats', chat:'Chat', communication:'Email Center', guide:'Help & Training', consignments:'Consignments', consignment:'Consignment', scheduled:'Scheduled', briefing:'Today', worklist:'My Work', tasks:'Tasks', followups:'AI Follow-ups', diagnostics:'Bot Diagnostics', customers:'Customers', leads:'Leads', collections:'Collections',
   salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance', pnl:'Profit & Loss', books:'Books',
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', 'procurement.hub':'Procurement Hub', 'demand.plans':'Demand Plans', 'juba.stock':'Juba Stock', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch', transport:'Transport Register', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
@@ -13,12 +13,12 @@ const GROUPS = [ ['Overview',['setup','briefing','worklist','guide']],
   ['Procurement',['procurement.hub','demand.plans','juba.stock']],
   ['Operations',['jobs','maintenance','claims','tasks','warehouse','dispatch','transport']],
   ['Finance',['finance','pnl','books','cashbook']],
-  ['Marketing',['ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery']],
+  ['Marketing',['ai.campaign','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery']],
   ['Settings',['settings','team','modules','billing']] ];
 // Which nav key reads which count from the catalog's counts map.
 const NAVCOUNT = { followups:'followups', diagnostics:'diagnostics', chats:'chats', communication:'communication', consignments:'consignments', scheduled:'scheduled', customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['pos','advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','books','warehouse','dispatch','tasks','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team']);
+const READY = new Set(['pos','ai.campaign','advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','books','warehouse','dispatch','tasks','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team']);
 // Storefront config pages are client-rendered (not server workspaces) and always available to the owner.
 const SF_KEYS = new Set(['storefront.collections','storefront.kits','storefront.delivery','transport']);
 // Dedicated list views still pending — none; kept for future additions.
@@ -28,6 +28,7 @@ function fmtCount(n){ n=Number(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:
 /* ---- inline icon set ---- */
 const P = {
   pos:'M4 3h16v9H4zM8 12v3M16 12v3M2 15h20v6H2zM6 18h5',
+  'ai.campaign':'M12 3l1.8 4.6L18 9.4l-4.2 1.8L12 16l-1.8-4.8L6 9.4l4.2-1.8zM19 15l.9 2.3 2.1.9-2.1.9L19 21l-.9-1.9-2.1-.9 2.1-.9zM5 15l.9 2.3 2.1.9-2.1.9L5 21l-.9-1.9-2.1-.9 2.1-.9z',
   advisor:'M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1l2.1-2.1M17 7l2.1-2.1M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
   scheduled:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2',
   jobs:'M9 3h6a1 1 0 0 1 1 1v2h3a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3V4a1 1 0 0 1 1-1zM9 11l2 2 4-4',
@@ -375,7 +376,7 @@ function renderNav(caps){
   // A SOON item shows if its underlying entity exists (has a count) even without a list capability yet.
   /* pnl is a legacy-iframe screen with no capability of its own — gate it on the
      permission-filtered finance capability so restricted roles don't see P&L. */
-  const has = k => (k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
+  const has = k => (k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || k==='ai.campaign' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
   // The top-bar POS launcher follows the same gate as the menu entry.
   try{ var pb=document.getElementById('posTop'); if(pb) pb.style.display = has('pos') ? 'flex' : 'none'; }catch(e){}
   let html='';
@@ -439,7 +440,7 @@ function hasScreen(k){
   if(k==='task.new') return true;   // the "+ New task" action (owner/manager gate is enforced server-side)
   if(k==='pnl') return !!(s && s.has('finance'));
   if(k==='books') return !!(s && s.has('finance'));
-  if(k==='settings' || k==='guide' || k==='pos') return true;
+  if(k==='settings' || k==='guide' || k==='pos' || k==='ai.campaign') return true;
   if(SF_KEYS.has(k)) return true;
   if(s && s.has(k)) return true;
   return !!(SOON[k] && CFG.counts && CFG.counts[NAVCOUNT[k]||k]!=null);
@@ -556,6 +557,8 @@ async function route(key, id){
   if(key==='settings'){ if(isAppUI()){ bosSettings(); return; } document.getElementById('view').innerHTML='<iframe title="Settings" src="/panel/settings-manager" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   // POS till — V3 is the front door (V3-FIRST.md); the till screen embeds edge-to-edge like Settings.
   if(key==='pos'){ document.getElementById('view').innerHTML='<iframe title="POS Till" src="/panel/pos?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
+  // AI Campaign generator (v4.5) — owner tool; embedded like settings/pos.
+  if(key==='ai.campaign'){ document.getElementById('view').innerHTML='<iframe title="AI Campaign" src="/panel/ai-campaign?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   // Help & Training — the in-product Training Center (replaces the old server guide workspace).
   if(key==='guide'){ document.getElementById('view').innerHTML='<iframe title="Training" src="/panel/training" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='advisor'){ advisorHome(id); return; }

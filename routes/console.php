@@ -84,6 +84,8 @@ Schedule::command('comms:email-sweep')->everyMinute()->withoutOverlapping()->onO
 
 // Communication Center: campaign batches — one throttle-sized batch per due campaign per minute.
 Schedule::command('comms:campaign-sweep')->everyMinute()->withoutOverlapping()->onOneServer();
+// AI campaigns (v4.5): paced sender — 2 approved drafts per tenant per minute, daytime only.
+Schedule::command('aic:send-tick')->everyMinute()->withoutOverlapping()->onOneServer();
 
 // ─── Inventory Trust v1 ───────────────────────────────────────────────────────
 // Daily owner digest + queue at 06:45 EAT (after cashbook:digest at 06:30). Tenant gate is the

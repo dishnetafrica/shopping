@@ -1,0 +1,199 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Campaign — {{TENANT}}</title>
+<style>
+:root{--dark:#1B3A2B;--green:#15803D;--green2:#0f6b33;--red:#C0392B;--amber:#b45309;--line:#e4e9e4;--muted:#6b7280;--bg:#f6f8f6}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1B211D;background:var(--bg)}
+.top{background:var(--dark);color:#fff;padding:14px 18px;display:flex;align-items:center;gap:12px}
+.top h1{font-size:17px;margin:0;font-weight:800}
+.top .tn{font-size:12px;opacity:.8}
+.back{background:#ffffff22;border:none;color:#fff;border-radius:9px;padding:8px 12px;font-weight:700;cursor:pointer}
+.wrap{max-width:860px;margin:0 auto;padding:14px 14px 60px}
+.card{background:#fff;border-radius:14px;padding:16px 18px;margin-bottom:14px;box-shadow:0 1px 3px #0000000d}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0 0 12px}
+label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:10px 0 4px}
+input,select,textarea{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;font-family:inherit;outline:none}
+input:focus,textarea:focus,select:focus{border-color:var(--green)}
+textarea{min-height:64px;resize:vertical}
+.row{display:flex;gap:10px}.row>div{flex:1}
+.btn{background:var(--green);color:#fff;border:none;border-radius:10px;padding:11px 16px;font-weight:800;cursor:pointer;font-size:13.5px}
+.btn.alt{background:#eef2f7;color:#334155}.btn.warn{background:var(--amber)}.btn:disabled{opacity:.5;cursor:default}
+.note{font-size:12px;color:var(--muted);line-height:1.5}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.chip{background:#eef4ee;color:var(--green2);border-radius:14px;padding:3px 10px;font-size:11.5px;font-weight:700}
+.cnt{font-size:15px;font-weight:800;margin-top:8px}
+.stat{display:inline-block;font-size:11.5px;font-weight:800;border-radius:14px;padding:3px 10px;margin-right:6px}
+.s-draft{background:#eef2f7;color:#475569}.s-approved{background:#eaf6ee;color:var(--green2)}
+.s-sent{background:#dcf3e3;color:var(--green2)}.s-skipped{background:#fdf2c7;color:var(--amber)}.s-failed{background:#fdecea;color:var(--red)}
+.draft{border:1.5px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+.draft.approved{border-color:var(--green)}.draft.sent{background:#f4faf5;border-color:#dcefe0}
+.draft.skipped{opacity:.55}
+.dh{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.dh b{font-size:13.5px}.dh .ph{font-size:11.5px;color:var(--muted)}
+.draft textarea{font-size:13.5px;min-height:56px}
+.da{display:flex;gap:6px;margin-top:8px;align-items:center}
+.da .st{margin-left:auto;font-size:11px;font-weight:800;color:var(--muted)}
+.mini{padding:7px 12px;font-size:12px}
+.banner{background:#fff8f0;border:1px solid #f3dfc4;color:#7c4a03;border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:12px;line-height:1.5;display:none}
+.toast{position:fixed;left:50%;top:64px;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 18px;border-radius:12px;font-size:13.5px;font-weight:700;z-index:60;display:none;box-shadow:0 4px 14px #0003}
+</style></head>
+<body>
+<div class="top">
+  <button class="back" id="backBtn" onclick="history.back()">‹ Back</button>
+  <div><h1>✨ AI Campaign</h1><div class="tn">{{TENANT}} — personalised messages, human-approved, sent slowly</div></div>
+</div>
+<div class="wrap">
+
+<div class="banner" id="banner"></div>
+
+<div class="card">
+  <h2>1 · Who is this for?</h2>
+  <div class="row">
+    <div><label>Relationship stage</label>
+      <select id="fStage"><option value="ANY">Any stage</option><option>NEW</option><option selected>INTERESTED</option><option>NEGOTIATING</option><option>CUSTOMER</option><option>DORMANT</option></select></div>
+    <div><label>Looking for / usually buys (contains)</label><input id="fContains" placeholder="e.g. foil containers"></div>
+    <div><label>Active in the last … days (0 = any)</label><input id="fDays" type="number" min="0" value="60"></div>
+  </div>
+  <div style="margin-top:12px"><button class="btn alt" onclick="checkAudience()">Check audience</button></div>
+  <div class="cnt" id="audCnt"></div>
+  <div class="chips" id="audSample"></div>
+</div>
+
+<div class="card">
+  <h2>2 · What are we saying?</h2>
+  <label>Campaign name (internal)</label><input id="cTitle" placeholder="e.g. Foil containers week — Aug">
+  <label>What are we promoting? (the AI personalises around this)</label>
+  <textarea id="cBrief" placeholder="e.g. New stock of Aluminum Foil Containers Big-83120 arrived — great for restaurants and fish sellers. We deliver free within Juba."></textarea>
+  <label>Exact offer line (optional — used word-for-word, never invented)</label>
+  <input id="cOffer" placeholder="e.g. 10% off any foil container carton until Saturday">
+  <div class="row" style="margin-top:12px;align-items:center">
+    <div style="flex:0 0 130px"><label>Drafts to generate</label>
+      <select id="cLimit"><option>10</option><option selected>20</option><option>40</option></select></div>
+    <div style="align-self:flex-end"><button class="btn" id="genBtn" onclick="generate()">✨ Generate drafts</button></div>
+  </div>
+  <div class="note" style="margin-top:8px">Each customer gets their OWN message written from what they're looking for. Nothing is sent yet — every draft waits for your approval below. Customers mid-deal (confirmed quotation) are skipped automatically.</div>
+</div>
+
+<div class="card">
+  <h2>3 · Review &amp; send</h2>
+  <div class="row" style="align-items:flex-end">
+    <div><label>Campaign</label><select id="campSel" onchange="loadList(this.value)"></select></div>
+    <div style="flex:0 0 auto"><button class="btn alt mini" onclick="loadList()">↻ Refresh</button></div>
+  </div>
+  <div style="margin:10px 0" id="countsRow"></div>
+  <div id="drafts"><div class="note">Generate drafts above, or pick a campaign.</div></div>
+  <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+    <button class="btn alt" onclick="approveAll()">✓ Approve all drafts</button>
+    <button class="btn" id="startBtn" onclick="startSend()">▶ START SENDING (paced)</button>
+  </div>
+  <div class="note" style="margin-top:8px">Sending runs ~2 messages a minute, 08:00–20:00 only, with random gaps — slow on purpose, to protect your WhatsApp number. You can keep approving while it sends.</div>
+</div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+var $=function(id){return document.getElementById(id);};
+function api(u){return fetch(u,{credentials:'same-origin',headers:{'X-Requested-With':'XMLHttpRequest','Accept':'application/json'},cache:'no-store'}).then(function(r){return r.json();});}
+function postJson(u,b){return fetch(u,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest','Accept':'application/json'},body:JSON.stringify(b||{})}).then(function(r){return r.json();});}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(function(){t.style.display='none';},2600);}
+if(/[?&]embed=1/.test(location.search))$('backBtn').style.display='none';
+
+var CID=0, POLL=null;
+
+function filters(){return {stage:$('fStage').value,contains:$('fContains').value.trim(),active_days:parseInt($('fDays').value)||0};}
+
+function checkAudience(){
+  var f=filters();
+  $('audCnt').textContent='Counting…';$('audSample').innerHTML='';
+  api('/papi/aic-audience?stage='+encodeURIComponent(f.stage)+'&contains='+encodeURIComponent(f.contains)+'&active_days='+f.active_days).then(function(d){
+    if(!d||!d.ok){$('audCnt').textContent=(d&&d.error)||'Could not count.';return;}
+    $('audCnt').textContent=d.count+' customer'+(d.count===1?'':'s')+' match'+(d.suppressed?' · '+d.suppressed+' mid-deal (will be skipped)':'');
+    $('audSample').innerHTML=(d.sample||[]).map(function(c){return '<span class="chip">'+esc(c.name)+(c.stage?' · '+esc(c.stage):'')+'</span>';}).join('');
+  }).catch(function(){$('audCnt').textContent='Network problem.';});
+}
+
+function generate(){
+  var f=filters(),title=$('cTitle').value.trim(),brief=$('cBrief').value.trim();
+  if(!title){toast('Give the campaign a name');$('cTitle').focus();return;}
+  if(!brief){toast('Describe what we are promoting');$('cBrief').focus();return;}
+  $('genBtn').disabled=true;$('genBtn').textContent='Writing drafts… (up to a minute)';
+  postJson('/papi/aic-generate',{title:title,brief:brief,offer:$('cOffer').value.trim(),
+    stage:f.stage,contains:f.contains,active_days:f.active_days,
+    limit:parseInt($('cLimit').value)||20,campaign_id:CID||undefined}).then(function(d){
+    $('genBtn').disabled=false;$('genBtn').textContent='✨ Generate drafts';
+    if(!d||!d.ok){toast((d&&d.error)||'Could not generate');return;}
+    CID=d.campaign_id;
+    toast('✨ '+d.made+' draft'+(d.made===1?'':'s')+' written'+(d.skipped?' · '+d.skipped+' skipped':'')+(d.failed?' · '+d.failed+' failed':''));
+    loadList(CID);
+  }).catch(function(){$('genBtn').disabled=false;$('genBtn').textContent='✨ Generate drafts';toast('Network problem');});
+}
+
+function loadList(cid){
+  if(cid)CID=parseInt(cid)||CID;
+  api('/papi/aic-list?campaign_id='+(CID||'')).then(function(d){
+    if(!d||!d.ok){toast((d&&d.error)||'Could not load');return;}
+    CID=d.campaign_id||CID;
+    $('campSel').innerHTML=(d.campaigns||[]).map(function(c){
+      return '<option value="'+c.id+'"'+(c.id===CID?' selected':'')+'>'+esc(c.name)+' · '+esc(c.status)+' · '+esc(c.date)+'</option>';
+    }).join('')||'<option value="">(none yet)</option>';
+    var k=d.counts||{};
+    $('countsRow').innerHTML=['draft','approved','sent','skipped','failed'].map(function(s){
+      return (k[s]?'<span class="stat s-'+s+'">'+k[s]+' '+s+'</span>':'');
+    }).join('');
+    var ds=d.drafts||[];
+    $('drafts').innerHTML=ds.length?ds.map(function(x){
+      var editable=(x.status==='draft'||x.status==='approved'||x.status==='skipped');
+      return '<div class="draft '+esc(x.status)+'" id="d'+x.id+'">'
+        +'<div class="dh"><b>'+esc(x.name||'(no name)')+'</b><span class="ph">'+esc(x.phone)+'</span></div>'
+        +(editable
+          ?'<textarea id="b'+x.id+'">'+esc(x.body)+'</textarea>'
+           +'<div class="da">'
+           +(x.status!=='approved'?'<button class="btn mini" onclick="setD('+x.id+',\'approved\')">✓ Approve</button>':'<button class="btn alt mini" onclick="setD('+x.id+',\'draft\')">↩ Un-approve</button>')
+           +(x.status!=='skipped'?'<button class="btn alt mini" onclick="setD('+x.id+',\'skipped\')">Skip</button>':'<button class="btn alt mini" onclick="setD('+x.id+',\'draft\')">Restore</button>')
+           +'<button class="btn alt mini" onclick="saveD('+x.id+')">Save edit</button>'
+           +'<span class="st">'+esc(x.status.toUpperCase())+'</span></div>'
+          :'<div style="font-size:13.5px;line-height:1.5;white-space:pre-wrap">'+esc(x.body)+'</div>'
+           +'<div class="da"><span class="st">'+esc(x.status.toUpperCase())+(x.sent_at?' · '+esc(x.sent_at):'')+'</span></div>')
+        +'</div>';
+    }).join(''):'<div class="note">No drafts in this campaign yet.</div>';
+    if(d.campaign_status==='sending'){$('banner').style.display='block';$('banner').textContent='▶ Sending in progress — paced at ~2 messages/minute, daytime only. This page refreshes itself.';schedulePoll();}
+    else{$('banner').style.display='none';clearTimeout(POLL);}
+  }).catch(function(){toast('Network problem');});
+}
+function schedulePoll(){clearTimeout(POLL);POLL=setTimeout(function(){loadList();},20000);}
+
+function setD(id,status){
+  postJson('/papi/aic-set',{id:id,status:status,body:($('b'+id)?$('b'+id).value:null)}).then(function(d){
+    if(!d||!d.ok){toast((d&&d.error)||'Could not update');return;}
+    loadList();
+  });
+}
+function saveD(id){
+  postJson('/papi/aic-set',{id:id,body:$('b'+id).value}).then(function(d){
+    toast(d&&d.ok?'Saved':'Could not save');
+  });
+}
+function approveAll(){
+  if(!CID){toast('No campaign selected');return;}
+  postJson('/papi/aic-approve-all',{campaign_id:CID}).then(function(d){
+    if(!d||!d.ok){toast((d&&d.error)||'Failed');return;}
+    toast('✓ '+d.approved+' draft'+(d.approved===1?'':'s')+' approved');loadList();
+  });
+}
+function startSend(){
+  if(!CID){toast('No campaign selected');return;}
+  if(!confirm('Start sending the APPROVED messages? They go out slowly (about 2 per minute, daytime only).'))return;
+  $('startBtn').disabled=true;
+  postJson('/papi/aic-start',{campaign_id:CID}).then(function(d){
+    $('startBtn').disabled=false;
+    if(!d||!d.ok){toast((d&&d.error)||'Could not start');return;}
+    toast('▶ '+(d.note||'Sending started'));loadList();
+  }).catch(function(){$('startBtn').disabled=false;toast('Network problem');});
+}
+
+loadList();
+</script>
+</body></html>
