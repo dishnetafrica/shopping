@@ -19,9 +19,23 @@ classic-panel screens, no new links into the classic panel chrome.
 4. **Every drop that changes a screen updates the Training Center card**
    (`resources/panel/help-center.html`) for that screen in the same drop.
 
+## Where the shell lives (since the v3.7 split)
+
+`resources/views/shell.blade.php` is now ~75 lines of HTML only. The code moved to static
+assets — **no build step, deploy the files together**:
+
+- `public/assets/v3/shell.css` — all V3 styles
+- `public/assets/v3/shell.js`  — all V3 JavaScript (router, nav, screens)
+
+Cache-busting is automatic (`?v=filemtime`). ⚠️ When a drop touches the shell, upload the
+blade AND both asset files in the same drop — a blade without its assets is a blank app.
+Longer-term direction: when a module (customers, tasks, finance…) gets its next real feature,
+its functions move out of shell.js into their own static file loaded after it — the shell
+shrinks opportunistically, never in a big-bang rewrite.
+
 ## How to add a screen to V3 (the house pattern)
 
-All edits in `resources/views/shell.blade.php`:
+All JS edit points below are now in `public/assets/v3/shell.js` (markup, if any, in the blade):
 
 1. `LABELS`  → add `mykey:'My Screen'`
 2. `GROUPS`  → add `'mykey'` to the right group array (order = menu order)
