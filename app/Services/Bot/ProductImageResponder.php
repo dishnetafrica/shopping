@@ -42,6 +42,9 @@ class ProductImageResponder
         // asks; fuzzy search on them produced absurd cards ("why are you not PICKING the call"
         // → Butter CHICKEN, real incident 31 Jul). Hard stop before any matching.
         if (preg_match('/\b(call|calling|called|phone|ring|pick(ing)?\s+(up|the)|location|address|where\s+(are|is)|deliver|delivery|deliveries|transport|shipping|complain|complaint|problem|wrong|refund|late|angry|manager|human|agent|person|speak|talk)\b/u', $t)) return [];
+        // Frustration / rejection turns — "you don't have what I want", "never mind" — a product
+        // card here reads as mockery (real incident: card attached right after that sentence).
+        if (preg_match('/\b(don\'?t\s+have|not\s+what\s+i|never\s*mind|forget\s+it|no\s+thanks|cancel)\b/u', $t)) return [];
 
         $cur = (string) $tenant->setting('currency', 'UGX');
 
@@ -209,18 +212,32 @@ class ProductImageResponder
         $ask  = trim((string) preg_replace('/\b(show me|show|send|see|need|want|i want|i need|price of|price|cost|how much|do you have|you have|got|have|tell me about|what is|what\'?s|whats|about|the|some|any|me|a|of)\b/u', ' ', $clean));
         $ask  = trim((string) preg_replace('/\s+/u', ' ', $ask));
 
-        // HARD GATE (31 Jul incident): at least one REAL word the customer typed must appear in
+        // HARD GATE (31 Jul incidents): at least one REAL word the customer typed must appear in
         // the matched product's name. Fuzzy search alone is not evidence — "samples" is not
-        // "Salt", "picking" is not "Chicken". Without word overlap there is no image, ever.
+        // "Salt", "picking" is not "Chicken", and "BUT now you don't…" is not "BUTter" (second
+        // incident, same evening: conversational filler matched as a 3-char substring). Overlap
+        // words must be ≥4 chars AND not conversational filler. Without overlap: no image, ever.
+        static $chatter = ['this','that','with','have','want','need','from','they','will','what','when','where','which','your','yours','just','told','tell','dont','cant','wont','didnt','about','them','then','than','some','very','much','here','there','also','only','still','wrong','good','okay','please','thanks','thank','hello','into','over','again','more','less','give','take','know','like','said','says','sorry','because','something','anything','everything','nothing'];
         $overlap = false;
-        $askWords = array_filter(preg_split('/\s+/u', mb_strtolower($ask)), fn ($w) => mb_strlen($w) >= 3);
+        $askWords = array_values(array_filter(
+            preg_split('/\s+/u', mb_strtolower($ask)),
+            fn ($w) => mb_strlen($w) >= 3
+        ));
         foreach ($askWords as $w) {
+            if (mb_strlen($w) < 4) continue;
+            if (in_array(str_replace(["'", '’'], '', $w), $chatter, true)) continue;
             if (mb_strpos($name, $w) !== false) { $overlap = true; break; }
         }
         if (! $overlap) return 0;
 
         // A long free sentence with no purchase-intent pattern is conversation, not a product name.
         if ($P === 70 && count($askWords) > 5) return 0;
+        // A SHORT message that overlaps the product name and doesn't start with a preposition
+        // ("butter chicken masala", "rock salt") IS the ask — treat it as real intent. Fragments
+        // like "for fish" keep the low default (they refine the current topic; the model handles it).
+        if ($P === 70 && count($askWords) <= 3 && ! preg_match('/^(for|with|and|but|to|in|on|at|from|about)\b/u', mb_strtolower($ask))) {
+            $P = 85;
+        }
 
         if ($ask !== '' && mb_strpos($name, $ask) !== false) {
             $M = 100;              // the whole ask is inside the product name — unambiguous

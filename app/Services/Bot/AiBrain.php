@@ -70,7 +70,10 @@ class AiBrain
         // 2. assemble the prompt + conversation. The current inbound is already logged, so it is the
         //    last user turn in history — drop it and append an explicit current turn (so we can attach
         //    an image to it for vision).
-        $prior = $this->historyMessages($tenant->id, $from, 12);
+        // 20 turns, media markers excluded (31 Jul incident: a customer who quote-echoes every
+        // reply burns 2 slots per exchange + [photo] rows ate the rest → the bot "forgot" a
+        // delivery location given 4 exchanges earlier and asked again).
+        $prior = $this->historyMessages($tenant->id, $from, 20);
         if (! empty($prior) && end($prior)['role'] === 'user') array_pop($prior);
 
         // The customer tapped Reply on one of OUR earlier messages: give the model that message
@@ -1432,6 +1435,8 @@ class AiBrain
         $p .= "- ANSWER FIRST, completely and exactly what was asked — then STOP. A price question deserves the price, not a pitch. A stock question deserves the stock answer. Do not append suggestions to answers.\n";
         $p .= "- Suggest another item AT MOST ONCE per conversation, and ONLY when one of these is true: (a) it directly complements something they are actually buying (cups → lids), (b) they asked for ideas/recommendations, or (c) they are finalising an order — one relevant attach, briefly.\n";
         $p .= "- NEVER suggest anything during: complaints, delivery/payment questions, greetings, or support topics. And after ONE decline or ignored suggestion, suggesting is CLOSED for this conversation — pushing twice destroys trust.\n";
+        $p .= "- WE ARE THE SHOP: you represent OUR shop. NEVER refer a customer to other shops, markets, or competitors (never \"check the shops in Konyo Konyo market\" — WE serve them). If we don't stock what they want: offer the closest item we DO stock, offer a SPECIAL ORDER (our team sources items on request), or say the team will confirm availability — the business always stays with us.\n";
+        $p .= "- USE WHAT THEY ALREADY TOLD YOU: before asking for a quantity or delivery location, re-read the conversation — if the customer already gave it, USE it and repeat it back to confirm (\"delivering to UNMISS gate area, correct?\"). Asking again for something they already said is the fastest way to lose them. Only if it is truly nowhere in the conversation, ask once, apologising: \"sorry, just to confirm — which area?\"\n";
         $p .= "- TOPIC CONTINUITY (critical): short follow-ups — \"for fish\", \"the big one\", \"how much\", a size or colour — REFINE the topic of the last few messages; they are NOT a new product search. Example: while discussing takeaway containers, \"for fish\" means a container FOR fish, NEVER fish spices. If a fragment is genuinely ambiguous, ask ONE short clarifying question instead of guessing a different product.\n";
         $p .= "- \"SAMPLES\" from a trade customer means product PHOTOS (or a small trial order). Ask WHICH products they want to see — never pick a product they didn't mention.\n";
         $p .= "- If the customer asks to CALL or says nobody picks up the phone: apologise in one short line, give the phone number from BUSINESS DETAILS if one is listed, and offer to sort it right here on WhatsApp. Do not attach any product to that reply.\n";
@@ -1544,7 +1549,11 @@ class AiBrain
     private function historyMessages(int $tenantId, string $phone, int $limit): array
     {
         return Message::where('tenant_id', $tenantId)->where('customer_phone', $phone)
-            ->latest('id')->take($limit)->get()->reverse()->values()
+            ->latest('id')->take($limit + 8)->get()->reverse()->values()
+            // Media marker rows ([photo] …) are log entries, not dialogue — they waste history
+            // slots the model needs for real facts like the delivery location.
+            ->filter(fn ($m) => ! preg_match('/^\[(photo|image|file|document|audio|video)\]/i', trim((string) $m->body)))
+            ->take(-$limit)->values()
             ->map(fn ($m) => ['role' => $m->direction === 'in' ? 'user' : 'assistant', 'content' => (string) $m->body])
             ->all();
     }
