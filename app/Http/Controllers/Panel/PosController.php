@@ -298,6 +298,116 @@ class PosController extends Controller
         ]);
     }
 
+    /* ------------- quotations at the counter (v4.2): cart → numbered quote PDF ------------- */
+
+    public function quoteCreate(Request $request)
+    {
+        $u = $request->user();
+        $t = $u?->tenant;
+        if (! $t) {
+            return response()->json(['ok' => false], 401);
+        }
+        $data = $request->validate([
+            'items'            => 'required|array|min:1',
+            'items.*.name'     => 'required|string|max:200',
+            'items.*.price'    => 'required|numeric|min:0',
+            'items.*.qty'      => 'required|numeric|min:0.001',
+            'customer_name'    => 'nullable|string|max:120',
+            'customer_phone'   => 'nullable|string|max:40',
+        ]);
+
+        $svc = app(\App\Services\Bot\QuotationService::class);
+        if (! $svc->available()) {
+            return response()->json(['ok' => false, 'error' => 'PDF engine unavailable.'], 422);
+        }
+
+        // Same document pipeline as the WhatsApp bot (QuotationService) — the counter and the
+        // bot produce IDENTICAL numbered quotes, PDFs, and customer-timeline events.
+        $lines = [];
+        $sub = 0.0;
+        foreach ($data['items'] as $l) {
+            $sum = round((float) $l['price'] * (float) $l['qty'], 2);
+            $sub += $sum;
+            $lines[] = ['matched' => true, 'name' => (string) $l['name'], 'qty' => (float) $l['qty'],
+                        'price' => (float) $l['price'], 'sum' => $sum];
+        }
+        $quote = [
+            'lines'    => $lines,
+            'currency' => strtoupper((string) \App\Services\Money\SalesBaseCurrency::nativeCurrency($t)),
+            'total'    => round($sub, 2),
+        ];
+        $name = trim((string) ($data['customer_name'] ?? ''));
+        $phone = trim((string) ($data['customer_phone'] ?? ''));
+
+        $doc = $svc->generate($t, $phone, $name !== '' ? $name : 'Walk-in', $quote);
+        if (! $doc) {
+            return response()->json(['ok' => false, 'error' => 'Could not build the quotation PDF.'], 500);
+        }
+        $q = $svc->persist($t, $phone, $name !== '' ? $name : 'Walk-in', $quote, $doc, 'pos');
+
+        return response()->json([
+            'ok' => true,
+            'id' => $q?->id,
+            'quote_no' => (string) $doc['no'],
+            'total' => (float) $doc['total'],
+            'currency' => (string) $doc['currency'],
+            'pdf_url' => $q ? ('/papi/quotation-pdf?id=' . $q->id) : (string) ($doc['url'] ?? ''),
+        ]);
+    }
+
+    public function quotes(Request $request)
+    {
+        $t = $request->user()?->tenant;
+        if (! $t) {
+            return response()->json(['ok' => false], 401);
+        }
+        $rows = \App\Models\Quotation::withoutGlobalScopes()->where('tenant_id', $t->id)
+            ->orderByDesc('id')->limit(15)
+            ->get(['id', 'quote_no', 'customer_name', 'customer_phone', 'total', 'currency', 'status', 'source', 'created_at'])
+            ->map(fn ($q) => [
+                'id' => $q->id, 'quote_no' => (string) $q->quote_no,
+                'customer' => (string) ($q->customer_name ?? ''), 'phone' => (string) ($q->customer_phone ?? ''),
+                'total' => (float) $q->total, 'currency' => (string) $q->currency,
+                'status' => (string) $q->status, 'source' => (string) $q->source,
+                'date' => optional($q->created_at)->format('Y-m-d H:i'),
+                'pdf_url' => '/papi/quotation-pdf?id=' . $q->id,
+            ]);
+
+        return response()->json(['ok' => true, 'quotes' => $rows]);
+    }
+
+    /** Load a quotation's lines back into the till cart (quote → sale at the counter). */
+    public function quoteLoad(Request $request)
+    {
+        $t = $request->user()?->tenant;
+        if (! $t) {
+            return response()->json(['ok' => false], 401);
+        }
+        $q = \App\Models\Quotation::withoutGlobalScopes()->where('tenant_id', $t->id)->find((int) $request->query('id'));
+        if (! $q) {
+            return response()->json(['ok' => false, 'error' => 'Quotation not found.'], 404);
+        }
+        $lines = [];
+        $skipped = [];
+        foreach (\App\Models\QuotationItem::withoutGlobalScopes()->where('tenant_id', $t->id)->where('quotation_id', $q->id)->get() as $it) {
+            // The cart needs a product_id (checkout validates it) — resolve by exact name.
+            $pid = (int) (Product::withoutGlobalScopes()->where('tenant_id', $t->id)
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower((string) $it->name)])->value('id') ?? 0);
+            if ($pid > 0) {
+                $lines[] = ['product_id' => $pid, 'name' => (string) $it->name,
+                            'price' => (float) $it->unit_price, 'qty' => (float) $it->qty];
+            } else {
+                $skipped[] = (string) $it->name;
+            }
+        }
+
+        return response()->json([
+            'ok' => true, 'quote_no' => (string) $q->quote_no,
+            'customer' => (string) ($q->customer_name ?? ''), 'phone' => (string) ($q->customer_phone ?? ''),
+            'lines' => $lines, 'skipped' => $skipped,
+        ]);
+    }
+
     /* ------------- returns (v4.0): find receipt → select lines → stock back + credit note ------------- */
 
     /** Per-product quantities already returned against an order (from structured POS returns). */

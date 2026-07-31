@@ -218,6 +218,7 @@ button{font-family:inherit}
     <div class="cartHead"><b>Cart <span id="cn" style="color:var(--muted);font-weight:600"></span></b>
       <span style="display:flex;gap:2px;align-items:center">
         <button class="holdb" id="heldBtn" onclick="openHeld()" style="display:none">▤ Held</button>
+        <button class="holdb" onclick="openQuote()" title="Turn this cart into a numbered quotation PDF" style="color:var(--green2)">📝 Quote</button>
         <button class="holdb" onclick="holdSale()" title="Hold this sale, serve the next customer (F4)">⏸ Hold</button>
         <button class="void" onclick="voidCart()">✕ Clear</button>
       </span></div>
@@ -289,9 +290,28 @@ button{font-family:inherit}
   <div class="db">
     <div class="shiftBox" id="shiftBox" style="display:none"></div>
     <div class="dsum"><div class="v" id="dTot">…</div><div class="l"><span id="dCnt">0</span> sales · POS · today</div></div>
+    <div class="cats" style="padding:2px 0 8px">
+      <button class="cat on" id="tabSales" onclick="recentTab('sales')">Sales</button>
+      <button class="cat" id="tabQuotes" onclick="recentTab('quotes')">Quotations</button>
+      <button class="cat" id="tabDrafts" onclick="recentTab('drafts')">Drafts / Held</button>
+    </div>
     <div id="dRows"></div>
+    <div id="qRows" style="display:none"></div>
+    <div id="hRows" style="display:none"></div>
   </div>
 </div>
+
+<!-- quotation from cart -->
+<div class="ov" id="qOv"><div class="md">
+  <h3>📝 Quotation from this cart</h3>
+  <label>Customer name</label><input id="qName" autocomplete="off" placeholder="Walk-in">
+  <label>Customer phone (WhatsApp)</label><input id="qPhone" autocomplete="off" inputmode="tel" placeholder="2119…">
+  <div class="chg" style="margin-top:8px;font-size:12px;text-align:left">Creates a numbered quotation PDF (same format the WhatsApp assistant sends). The cart is cleared afterwards — recall it any time from Recent → Quotations → ⤵ Load.</div>
+  <div class="mrow">
+    <button class="mb no" onclick="$('qOv').classList.remove('show');focusQ()">Cancel</button>
+    <button class="mb go" id="qGo" onclick="submitQuote()">CREATE QUOTATION</button>
+  </div>
+</div></div>
 
 <!-- open shift -->
 <div class="ov" id="soOv"><div class="md">
@@ -711,7 +731,84 @@ function loadToday(){
     $('dRows').innerHTML=h||'<div class="cartEmpty">No POS sales yet today.</div>';
   }).catch(function(){NET_DOWN=true;paintNet();});
 }
-function openToday(){loadToday();$('drawer').classList.add('show');}
+function openToday(){recentTab('sales');loadToday();$('drawer').classList.add('show');}
+
+/* ---------------- recent panel tabs (v4.2): sales / quotations / drafts ---------------- */
+function recentTab(which){
+  [['tabSales','dRows','sales'],['tabQuotes','qRows','quotes'],['tabDrafts','hRows','drafts']].forEach(function(x){
+    var on=(x[2]===which);
+    $(x[0]).classList.toggle('on',on);
+    $(x[1]).style.display=on?'':'none';
+  });
+  if(which==='quotes')loadQuotes();
+  if(which==='drafts')paintDraftTab();
+}
+function loadQuotes(){
+  $('qRows').innerHTML='<div class="cartEmpty">Loading…</div>';
+  api('/papi/pos-quotes').then(function(d){
+    if(!d||!d.ok){$('qRows').innerHTML='<div class="cartEmpty">Could not load quotations.</div>';return;}
+    var qs=d.quotes||[];
+    $('qRows').innerHTML=qs.length?qs.map(function(q,i){
+      return '<div class="drow"><div><b>'+esc(q.quote_no)+'</b> · '+esc(q.customer||'Walk-in')
+        +'<div class="t">'+esc(q.date||'')+' · '+esc(q.source||'')+' · '+esc(q.status||'')+'</div></div>'
+        +'<div style="display:flex;align-items:center;gap:8px"><span class="r b">'+money(q.total)+'</span>'
+        +'<button class="rp" onclick="window.open(\''+esc(q.pdf_url)+'\',\'_blank\')" title="Open the quotation PDF">🖨</button>'
+        +'<button class="rp" onclick="loadQuoteToCart('+q.id+')" title="Load these items into the cart to make the sale">⤵</button>'
+        +'</div></div>';
+    }).join(''):'<div class="cartEmpty">No quotations yet — build a cart and tap 📝 Quote.</div>';
+  }).catch(function(){$('qRows').innerHTML='<div class="cartEmpty">Network problem.</div>';});
+}
+function loadQuoteToCart(id){
+  api('/papi/pos-quote-load?id='+id).then(function(d){
+    if(!d||!d.ok){toast(d&&d.error?d.error:'Could not load the quotation');return;}
+    if(!d.lines.length){toast('None of the quoted items match current products — check names');return;}
+    if(cart.length){holdSale();}          // never destroy a live cart — hold it first
+    cart=d.lines.map(function(l){return{product_id:l.product_id,name:l.name,price:l.price,qty:l.qty,unit:''};});
+    SALE_REF=null;MPIN=null;paint();
+    $('drawer').classList.remove('show');
+    toast('⤵ '+esc(d.quote_no)+' loaded'+(d.skipped&&d.skipped.length?' — '+d.skipped.length+' item(s) skipped (no matching product)':''));
+    focusQ();
+  }).catch(function(){toast('Network problem');});
+}
+function paintDraftTab(){
+  var h=hload();
+  $('hRows').innerHTML=h.length?h.map(function(s,i){
+    var tot=0;s.items.forEach(function(l){tot+=l.price*l.qty;});
+    var d=new Date(s.when),pad=function(n){return(n<10?'0':'')+n;};
+    return '<div class="drow"><div><b>'+s.items.length+' item'+(s.items.length>1?'s':'')+'</b> · held '+pad(d.getHours())+':'+pad(d.getMinutes())
+      +'<div class="t">'+esc(s.items.map(function(l){return l.name;}).join(', ').slice(0,50))+'</div></div>'
+      +'<div style="display:flex;align-items:center;gap:8px"><span class="r b">'+money(tot)+'</span>'
+      +'<button class="rp" onclick="$(\'drawer\').classList.remove(\'show\');recallHeld('+i+')" title="Bring this sale back">⤵</button>'
+      +'<button class="x" onclick="discardHeld('+i+');paintDraftTab()">✕</button></div></div>';
+  }).join(''):'<div class="cartEmpty">No held sales — press ⏸ Hold (F4) to park a cart here.</div>';
+}
+
+/* ---------------- quotation from the cart (v4.2) ---------------- */
+function openQuote(){
+  if(!cart.length){toast('Cart is empty — add the items to quote first');return;}
+  if(NET_DOWN||!navigator.onLine){toast('Quotations need internet');return;}
+  $('qName').value='';$('qPhone').value='';
+  $('qOv').classList.add('show');
+  setTimeout(function(){$('qName').focus();},60);
+}
+function submitQuote(){
+  if(!cart.length)return;
+  // Open the tab NOW (inside the user gesture) so the PDF isn't popup-blocked; point it after.
+  var w=null;try{w=window.open('','_blank');}catch(e){}
+  $('qGo').disabled=true;
+  postJson('/papi/pos-quote',{
+    items:cart.map(function(l){return{name:l.name,price:l.price,qty:l.qty};}),
+    customer_name:$('qName').value.trim(),customer_phone:$('qPhone').value.trim()
+  }).then(function(d){
+    $('qGo').disabled=false;
+    if(!d||!d.ok){if(w)w.close();toast(d&&d.error?d.error:'Could not create the quotation');return;}
+    if(w&&d.pdf_url)w.location=d.pdf_url;else if(w)w.close();
+    $('qOv').classList.remove('show');
+    cart=[];SALE_REF=null;$('disc').value='';paint();
+    toast('📝 '+d.quote_no+' created — '+money(d.total)+' '+CUR);
+    focusQ();
+  }).catch(function(){$('qGo').disabled=false;if(w)w.close();toast('Network problem — quotation NOT created');});
+}
 // Reprint any of today's receipts (lost receipt, customer request, accounts copy).
 function reprint(i){
   var r=RECENT[i];if(!r||!r.items_json||!r.items_json.length)return;
@@ -1065,7 +1162,7 @@ $('q').addEventListener('keydown',function(e){
     .catch(function(){NET_DOWN=true;paintNet();settle(offSearch(v,''));});   // scanner works offline too
 });
 document.addEventListener('keydown',function(e){
-  if(e.key==='Escape'){['payOv','okOv','heldOv','soOv','scOv','pinOv','syncOv','retOv'].forEach(function(id){$(id).classList.remove('show');});$('drawer').classList.remove('show');}
+  if(e.key==='Escape'){['payOv','okOv','heldOv','soOv','scOv','pinOv','syncOv','retOv','qOv'].forEach(function(id){$(id).classList.remove('show');});$('drawer').classList.remove('show');}
   // Any bare typing outside an input refocuses the search box → the barcode scanner always works.
   if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1&&document.activeElement.tagName!=='INPUT'&&!$('payOv').classList.contains('show')&&!$('okOv').classList.contains('show')){$('q').focus();}
 });
