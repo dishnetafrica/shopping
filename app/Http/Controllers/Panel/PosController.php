@@ -67,6 +67,40 @@ class PosController extends Controller
             ->header('Cache-Control', 'no-store');
     }
 
+    /**
+     * GET /panel/pos-display — the CUSTOMER-facing second screen (v4.1). Opened from the till's
+     * 🖥 button into its own window (drag to the second monitor, F11). No polling, no sockets:
+     * the till broadcasts every change via localStorage and this page listens to the browser's
+     * cross-window 'storage' events — same machine, same origin, effectively zero latency.
+     */
+    public function display(Request $request)
+    {
+        $user = $request->user();
+        if (! $user || ! $user->tenant_id) {
+            return redirect('/app/login');
+        }
+        $path = resource_path('panel/pos-display.html');
+        if (! is_file($path)) {
+            abort(500, 'Display asset missing.');
+        }
+        $t = $user->tenant;
+        $cur = strtoupper((string) \App\Services\Money\SalesBaseCurrency::nativeCurrency($t));
+        $html = str_replace(
+            ['{{TENANT}}', '{{CURRENCY}}', '{{LOGO}}', '{{TAGLINE}}'],
+            [
+                e((string) ($t->name ?? 'CloudBSS')),
+                e($cur),
+                e(trim((string) $t->setting('logo', ''))),
+                e(trim((string) ($t->setting('tagline', '') ?: 'Welcome — thank you for shopping with us'))),
+            ],
+            file_get_contents($path)
+        );
+
+        return response($html, 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
+    }
+
     public function products(Request $request)
     {
         $t = $request->user()?->tenant;

@@ -199,6 +199,7 @@ button{font-family:inherit}
   <div><h1>🧾 POS</h1><div class="tn">{{TENANT}} · {{OPERATOR}}</div></div>
   <span class="net" id="netChip" style="display:none" onclick="openSync()" title="Tap to see sales waiting to sync"></span>
   <button class="today" onclick="openToday()"><small>TODAY</small><span id="todaySum">…</span></button>
+  <button class="helpb" onclick="openDisplay()" title="Open the customer display (drag it to the second screen)">🖥</button>
   <button class="helpb" onclick="openReturns('')" title="Return items from a past sale">↩</button>
   <button class="helpb" id="fsBtn" style="display:none" onclick="window.open('/panel/pos','_blank')" title="Open full screen">⛶</button>
   <button class="helpb" onclick="startTour()" title="Quick tour">?</button>
@@ -516,7 +517,12 @@ function paintTotals(){
   $('tot').textContent=money(t.tot)+' '+CUR;
   $('cn').textContent=cart.length?('· '+cart.length+' item'+(cart.length>1?'s':'')):'';
   ['payCash','payMomo','payCard','payCredit','paySplit'].forEach(function(id){$(id).disabled=!cart.length;});
+  disp({state:cart.length?'cart':'idle',items:cart.slice(-7).map(function(l){return{name:l.name,qty:l.qty,price:l.price};}),total:t.tot,disc:t.disc});
 }
+
+/* ---------------- customer display (v4.1): broadcast via localStorage ---------------- */
+function disp(o){try{o.ts=Date.now();localStorage.setItem('pos_disp',JSON.stringify(o));}catch(e){}}
+function openDisplay(){window.open('/panel/pos-display','posdisp','popup=yes,width=1000,height=650');toast('Drag the new window to the customer screen, then press F11');}
 
 /* ---------------- pay ---------------- */
 var payMethod='cash';
@@ -540,6 +546,7 @@ function startPay(m){
   if(isSplit){['sAmtCash','sAmtMomo','sAmtCard'].forEach(function(id){$(id).value='';});paintSplit();}
   $('payGo').disabled=false;
   $('payOv').classList.add('show');
+  disp({state:'pay',items:cart.slice(-7).map(function(l){return{name:l.name,qty:l.qty,price:l.price};}),total:t.tot,disc:t.disc});
   setTimeout(function(){if(isCash)$('tender').focus();if(isCred)$('cName').focus();if(isSplit)$('sAmtCash').focus();},60);
 }
 function splitList(){
@@ -558,6 +565,7 @@ function paintSplit(){
 }
 function paintChange(){
   var t=totals(),v=parseFloat($('tender').value)||0,c=v-t.tot,el=$('chg');
+  disp({state:'pay',items:cart.slice(-7).map(function(l){return{name:l.name,qty:l.qty,price:l.price};}),total:t.tot,disc:t.disc,tendered:v});
   if(!$('tender').value){el.innerHTML='&nbsp;';el.className='chg';return;}
   el.className='chg'+(c<0?' neg':'');
   el.innerHTML=c<0?('Still needs <b>'+money(-c)+' '+CUR+'</b>'):('Change <b>'+money(c)+' '+CUR+'</b>');
@@ -623,6 +631,7 @@ function finishSale(d,paylist,offline){
             tender:payMethod==='cash'?(parseFloat($('tender').value)||0):0,
             offline:!!offline,when:new Date()};
   $('payOv').classList.remove('show');showOk();
+  disp({state:'done',total:d.tot,change:(payMethod==='cash'&&lastSale.tender>d.tot)?Math.round((lastSale.tender-d.tot)*100)/100:0});
   if(!offline)loadToday();
 }
 
