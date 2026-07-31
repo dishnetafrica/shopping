@@ -147,6 +147,13 @@ final class SettingsSchema
                     ['key' => 'pay_on_delivery', 'type' => 'bool', 'label' => 'Offer pay on delivery'],
                     ['key' => 'pay_unify',       'type' => 'bool', 'label' => 'Unified payment handling'],
                 ]],
+                // POS till controls (v3.9) — discount authorisation + shift discipline.
+                ['label' => 'POS till', 'help' => 'Controls for the supermarket checkout.', 'fields' => [
+                    ['key' => 'pos_discount_limit', 'type' => 'number', 'label' => 'Discount limit without manager (%)', 'default' => 5,
+                     'help' => 'A POS discount above this percent of the sale needs the manager PIN. 0 = every discount needs the PIN; leave the PIN empty to disable the check.'],
+                    ['key' => 'pos_manager_pin', 'type' => 'text', 'label' => 'Manager PIN (4–8 digits)',
+                     'help' => 'Asked at the till for big discounts. Only the owner sees this page.'],
+                ]],
             ]],
             ['key' => 'team', 'label' => 'Team', 'icon' => 'user', 'special' => 'team'],
         ];

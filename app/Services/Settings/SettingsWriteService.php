@@ -36,6 +36,8 @@ final class SettingsWriteService
         'public_website', 'free_delivery_towns', 'delivery_from_city',
         'catalog_cover_image', 'catalog_promo_image', 'catalog_qr_image',
         'catalog_best_sellers', 'catalog_hot_deals', 'catalog_audience',
+        // POS till controls (v3.9).
+        'pos_manager_pin',
     ];
 
     /** Numeric settings: [key => ['int'|'float', min]]. */
@@ -50,6 +52,7 @@ final class SettingsWriteService
         'reorder_days' => ['int', 0],
         'min_order' => ['float', 0.0],
         'ai_catalogue_limit' => ['int', 1],
+        'pos_discount_limit' => ['float', 0.0],   // % of sale a cashier may discount without the manager PIN
     ];
 
     /** On/off toggle settings (stored as booleans). */

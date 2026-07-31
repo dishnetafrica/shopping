@@ -41,8 +41,11 @@ class PosController extends Controller
         // which means the follow-up /papi/record-payment (no `cur` param) books the payment in the
         // exact currency the till displayed. One currency end-to-end, no conversion surprises.
         $cur = strtoupper((string) \App\Services\Money\SalesBaseCurrency::nativeCurrency($t));
+        // POS discount control: limit % + whether a manager PIN is configured (never the PIN itself).
+        $discLimit = (float) ($t->setting('pos_discount_limit', 5) ?: 5);
+        $pinSet = trim((string) $t->setting('pos_manager_pin', '')) !== '' ? '1' : '';
         $html = str_replace(
-            ['{{TENANT}}', '{{CURRENCY}}', '{{OPERATOR}}', '{{ADDRESS}}', '{{PHONE}}', '{{TIN}}'],
+            ['{{TENANT}}', '{{CURRENCY}}', '{{OPERATOR}}', '{{ADDRESS}}', '{{PHONE}}', '{{TIN}}', '{{DISCLIMIT}}', '{{PINSET}}'],
             [
                 e((string) ($t->name ?? 'CloudBSS')),
                 e($cur),
@@ -53,6 +56,8 @@ class PosController extends Controller
                 ])))),
                 e(trim((string) ($t->setting('public_phone', '') ?: $t->whatsapp_number))),
                 e(trim((string) $t->setting('tin', ''))),
+                e((string) $discLimit),
+                $pinSet,
             ],
             file_get_contents($path)
         );
@@ -131,6 +136,7 @@ class PosController extends Controller
             'payments.*.method' => 'required_with:payments|string|in:cash,momo,card',
             'payments.*.amount' => 'required_with:payments|numeric|min:0.01',
             'note'             => 'nullable|string|max:300',
+            'manager_pin'      => 'nullable|string|max:20',
             // Offline-queue idempotency: the till generates one ref per sale; retries with the
             // same ref can NEVER create a second order (orders.idempotency_key is unique).
             'client_ref'       => 'nullable|string|max:100',
@@ -170,6 +176,19 @@ class PosController extends Controller
                     'paid' => (float) $dup->amount_paid,
                     'record_payment' => $method !== 'credit' && (float) $dup->amount_paid <= 0,
                 ]);
+            }
+        }
+
+        // Manager authorisation for big discounts — enforced SERVER-side (a till UI can be
+        // bypassed; this cannot). Zero-setup default: no PIN configured → no gate. Checked
+        // AFTER the duplicate fast-path above so replays of already-created sales always
+        // resolve even if the owner changes the PIN later.
+        $pin = trim((string) $t->setting('pos_manager_pin', ''));
+        if ($pin !== '' && $discount > 0 && $sub > 0) {
+            $limitPct = (float) $t->setting('pos_discount_limit', 5);
+            if (($discount / $sub) * 100 > $limitPct
+                && ! hash_equals($pin, trim((string) ($data['manager_pin'] ?? '')))) {
+                return response()->json(['ok' => false, 'need_pin' => true, 'error' => 'This discount needs the manager PIN.'], 422);
             }
         }
 
@@ -242,6 +261,145 @@ class PosController extends Controller
             // cash/momo/card/split: the screen records each tender via /papi/record-payment
             // (order id + amount + method) so the cashbook and invoice stay correct.
             'record_payment' => $method !== 'credit',
+        ]);
+    }
+
+    /* ------------- shifts (v3.9): float in → sales → denomination count → variance ------------- */
+
+    private function currentShift(Request $request): ?\App\Models\PosShift
+    {
+        $u = $request->user();
+
+        return \App\Models\PosShift::where('tenant_id', $u->tenant_id)
+            ->where('user_id', $u->id)->whereNull('closed_at')
+            ->orderByDesc('id')->first();
+    }
+
+    /** Cash THIS operator took for POS sales since the shift opened (from the unified payment ledger). */
+    private function shiftCash(\App\Models\PosShift $s, $t, $u): float
+    {
+        try {
+            $posNos = Order::withoutGlobalScopes()->where('tenant_id', $t->id)
+                ->where('channel', 'pos')->where('created_at', '>=', $s->opened_at)
+                ->pluck('order_no')->filter()->values();
+            if (! count($posNos)) {
+                return 0.0;
+            }
+
+            return (float) \App\Models\CustomerPayment::withoutGlobalScopes()->where('tenant_id', $t->id)
+                ->where('method', 'cash')
+                ->where('holder_user_id', $u->id)
+                ->where('created_at', '>=', $s->opened_at)
+                ->whereIn('order_no', $posNos)
+                ->sum('amount');
+        } catch (\Throwable $e) {
+            \Log::warning('pos shiftCash failed: ' . $e->getMessage());
+
+            return 0.0;
+        }
+    }
+
+    public function shift(Request $request)
+    {
+        $u = $request->user();
+        $t = $u?->tenant;
+        if (! $t) {
+            return response()->json(['ok' => false], 401);
+        }
+        $s = $this->currentShift($request);
+        if (! $s) {
+            return response()->json(['ok' => true, 'open' => false]);
+        }
+        $cash = $this->shiftCash($s, $t, $u);
+
+        return response()->json([
+            'ok' => true, 'open' => true, 'id' => $s->id,
+            'opened_at' => $s->opened_at?->format('Y-m-d H:i'),
+            'float' => (float) $s->opening_float,
+            'cash_sales' => round($cash, 2),
+            'expected' => round((float) $s->opening_float + $cash, 2),
+        ]);
+    }
+
+    public function shiftOpen(Request $request)
+    {
+        $u = $request->user();
+        $t = $u?->tenant;
+        if (! $t) {
+            return response()->json(['ok' => false], 401);
+        }
+        if ($this->currentShift($request)) {
+            return response()->json(['ok' => false, 'error' => 'You already have an open shift — close it first.'], 422);
+        }
+        $data = $request->validate(['float' => 'nullable|numeric|min:0']);
+        $s = \App\Models\PosShift::create([
+            'tenant_id' => $t->id, 'user_id' => $u->id,
+            'operator' => (string) ($u->name ?? ''),
+            'opened_at' => now(),
+            'opening_float' => round((float) ($data['float'] ?? 0), 2),
+            'currency' => strtoupper((string) \App\Services\Money\SalesBaseCurrency::nativeCurrency($t)),
+        ]);
+
+        return response()->json(['ok' => true, 'id' => $s->id, 'opened_at' => $s->opened_at->format('Y-m-d H:i'), 'float' => (float) $s->opening_float]);
+    }
+
+    public function shiftClose(Request $request)
+    {
+        $u = $request->user();
+        $t = $u?->tenant;
+        if (! $t) {
+            return response()->json(['ok' => false], 401);
+        }
+        $s = $this->currentShift($request);
+        if (! $s) {
+            return response()->json(['ok' => false, 'error' => 'No open shift.'], 422);
+        }
+        $data = $request->validate([
+            'denominations'   => 'nullable|array',       // {"1000": 15, "500": 20}
+            'denominations.*' => 'numeric|min:0',
+            'other'           => 'nullable|numeric|min:0', // coins / odd notes as one amount
+            'note'            => 'nullable|string|max:300',
+        ]);
+
+        // The SERVER does the arithmetic — the slip's counted total can never disagree
+        // with what was typed, and the denomination sheet is stored for audit.
+        $counted = round((float) ($data['other'] ?? 0), 2);
+        $denoms = [];
+        foreach ((array) ($data['denominations'] ?? []) as $note => $cnt) {
+            $noteVal = (float) $note;
+            $cnt = (float) $cnt;
+            if ($noteVal <= 0 || $cnt <= 0) {
+                continue;
+            }
+            $denoms[(string) $note] = $cnt;
+            $counted += $noteVal * $cnt;
+        }
+        if ((float) ($data['other'] ?? 0) > 0) {
+            $denoms['other'] = round((float) $data['other'], 2);
+        }
+        $counted = round($counted, 2);
+
+        $cash = $this->shiftCash($s, $t, $u);
+        $expected = round((float) $s->opening_float + $cash, 2);
+        $variance = round($counted - $expected, 2);
+
+        $s->fill([
+            'closed_at' => now(),
+            'expected_cash' => $expected,
+            'counted_cash' => $counted,
+            'variance' => $variance,
+            'denominations' => $denoms ?: null,
+            'note' => trim((string) ($data['note'] ?? '')) ?: null,
+        ])->save();
+
+        return response()->json([
+            'ok' => true, 'id' => $s->id,
+            'opened_at' => $s->opened_at?->format('Y-m-d H:i'),
+            'closed_at' => $s->closed_at?->format('Y-m-d H:i'),
+            'float' => (float) $s->opening_float,
+            'cash_sales' => round($cash, 2),
+            'expected' => $expected, 'counted' => $counted, 'variance' => $variance,
+            'denominations' => $denoms,
         ]);
     }
 

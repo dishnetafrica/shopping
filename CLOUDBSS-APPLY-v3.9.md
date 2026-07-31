@@ -1,0 +1,570 @@
+# CLOUDBSS-APPLY v3.9 — everything + shift control, manager PIN, sync panel
+**Supersedes ALL earlier zips. One zip, upload everything to GitHub.**
+Base: shoppingmain 41. Complete files, never diffs. Additive; php -l + node --check clean.
+
+## Contents
+
+**Trust v1.3 wiring** — routes/api.php · routes/web.php · routes/console.php
+(nonce pages in the /task/{nonce} throttle group; schedules at 06:45 / 07:00 / Mon 07:15 EAT).
+
+**Vision box claim backend (V4, CloudBSS half)** — vision_boxes migration · config/vision.php ·
+VisionBox model · VisionBoxController (hello/poll) · VisionEventController (per-box tokens) ·
+vision:claim + vision:boxes commands.
+
+**NEW — Inventory Trust screen (backlog T6):**
+- app/Http/Controllers/Panel/TrustPanelController.php  ← page + 7 papi endpoints
+- resources/panel/trust.html                           ← the screen (house tokens.css/ui.js style)
+- app/Services/Trust/TrustRuntime.php                  ← + resolveInvestigation() (additive method;
+  same semantics as trust:resolve — clean ↑ reputation, confirmed_loss ↓ by value, error = no change,
+  plus double-resolve protection)
+- config/navigation.php                                ← menu entry: Stock → Inventory Trust
+- routes/web.php                                       ← /panel/trust + papi routes (refreshed file)
+
+## The screen — open /panel/trust after deploy (bookmark it)
+
+Tiles: Verified stock (M9) · Shrink % (M1) · Attributed (M3) · Queue precision (M5) ·
+Evidence coverage (M6) · Open queue. Shrink waterfall (7/14/28d). Today's queue with
+one-tap resolve (clean / error / confirmed loss + value + notes — the label factory, no
+artisan needed). Recent trust scores with decision filter. Vision: claim a box by typing
+its on-screen code, fleet table with online/offline + revoke, live shelf-events feed.
+It also appears in the left menu (Stock → Inventory Trust) where the nav config is wired.
+
+## Deploy (same as before)
+
+1. Upload extracted files to GitHub over the repo root (replaces 6, adds 9).
+2. EasyPanel **Rebuild** → `php artisan migrate --force` → `php artisan storage:link` (once).
+3. `.env`: `APP_TIMEZONE=Africa/Kampala` (+ optional legacy VISION_WEBHOOK_TOKEN/VISION_TENANT_ID).
+4. Tenant 17 settings: `trust_digest=1` · `trust_staff_numbers` · optional `trust_digest_numbers`.
+5. Open `/panel/trust` → tiles show "—" until the backtest/live scoring writes data:
+   `php artisan trust:backtest --tenant=17 --months=12 --top=20 --write`
+
+Actor data on the screen routes review only — never a ranking, never an accusation (Spec §5.2).
+
+---
+
+## NEW in v1.6 — Catalogue PDF v2 (bug fix + redesign)
+
+`app/Services/Catalog/CatalogRenderer.php` (same public API; verified against dompdf 3 with
+sample data, before/after screenshots in chat) + `CatalogueFlushCommand` now also clears the
+PDF cache.
+
+Bugs fixed (all reproduced from the old code):
+1. Cover orphaned its contact line onto a near-blank page 2 → every index page number was wrong.
+2. Every FULL category page (9 cards) overflowed A4 and dumped its footer on an orphan junk page.
+3. Trailing blank page at the end of the document.
+4. Broken-image ✕ boxes when a product image URL failed; wildly mixed photo sizes.
+5. Product names glyph-sliced mid-line; price rows misaligned between cards.
+
+Redesign: brand-band cover with accurate (auto two-column) index · dark category bands ·
+equal-height cards on normalised 4:3 photo thumbnails (pre-fetched in parallel, disk-cached,
+data-URI embedded → smaller PDFs, WhatsApp-safe) · deterministic two-line names with ellipsis ·
+"How to order" back page · "Page N of T" numbering. Degrades gracefully without GD.
+
+**After deploy:** `php artisan catalogue:flush --tenant=17` (old cached PDF lives up to 6h otherwise).
+First render re-downloads photos once into `catalog-thumbs/` cache; after that it's fast.
+
+## v1.7 — catalogue PDF size fix (33 MB → ~3-4 MB)
+
+The old renderer embedded every product photo at ORIGINAL resolution — a 33 MB document is
+just the sum of the original photos. v2 embeds normalised 440×330 q80 thumbnails instead,
+plus font subsetting (isFontSubsettingEnabled). Measured on identical heavy-photo sample data:
+**old 9.09 MB → new 0.24 MB (38× smaller)**; extrapolated to ~265 products ≈ **3-4 MB total**
+(avg thumb 11.5 KB) — safe for WhatsApp and cheap on customer mobile data.
+
+First render after deploy still takes 30-60 s (downloads each photo once, builds the thumb
+cache in storage/catalog-thumbs/); every render after that reuses the cache and is fast.
+Remember: `php artisan catalogue:flush --tenant=17` once after deploy.
+
+## v1.8 — catalogue v3 "rich" (marketing-mock layout)
+
+CatalogRenderer now renders the designed brochure: photographic cover (headline, audience
+checklist, product-count stat box, hero photo, pinned QR/contact bar) · "Explore our categories"
+overview page (photo cards ≤12 categories, compact 2-col index above that) · full intro page per
+category with ≥7 items (hero photo + ★ top-sellers row + feature strip; smaller categories get a
+slim hero band) · BEST SELLER / HOT DEAL badges on cards · WhatsApp QR (auto-generated from the
+tenant's number via quickchart, cached; silently omitted offline) · "Need a product you don't
+see?" promo band · richer How-to-Order page. Every element degrades gracefully — with zero setup
+the v2 clean layout still renders. Verified end-to-end with dompdf 3 (9-page sample, no orphan
+or blank pages; 246 KB).
+
+**New tenant settings (all optional):**
+- `catalog_cover_image`  — URL of the cover hero photo (portrait ~4:5; auto center-cropped)
+- `catalog_promo_image`  — URL of the promo-band photo (landscape ~16:7)
+- `catalog_qr_image`     — URL of a pre-made QR (else auto wa.me QR from the WhatsApp number)
+- `catalog_best_sellers` — comma-separated SKUs or exact names → green BEST SELLER badge
+- `catalog_hot_deals`    — comma-separated SKUs or exact names → orange HOT DEAL badge
+- `catalog_audience`     — comma list for the cover checklist (default Hotels,Restaurants,Supermarkets,Retailers)
+
+After deploy: `php artisan catalogue:flush --tenant=17` to rebuild.
+
+## v1.9 — catalogue 500-error hardening (production fatals)
+
+Fixes the `{"ok":false,...,"status":500}` on /api/v1/doc/catalog:
+1. **Giant photos**: a 20-30 MP phone photo needs more GD decode memory than memory_limit —
+   an UNCATCHABLE fatal. Dimensions are now checked BEFORE decoding (real headroom math);
+   oversized photos get the placeholder. Verified: 31 MP photo under 128M limit → clean render, peak 30 MB.
+2. **Timeouts**: first render of a big catalogue fetches every photo; set_time_limit(300) +
+   a 120 s whole-fetch budget (stragglers become placeholders instead of killing the request).
+3. Thumbnail + HTML build now run inside the try — any residual error returns the endpoint's
+   clean 404 message, never a generic 500.
+
+If a click still fails after this: EasyPanel console → `tail -n 80 storage/logs/laravel.log`
+and search the request_id from the error JSON — paste those lines in chat.
+
+## v2.0 — catalogue self-healing render ("PDF engine unavailable" fix)
+
+The 404 "PDF engine unavailable" means pdf() returned null — either dompdf missing (now logged
+explicitly) or an exception inside the rich photo pipeline (previously the 500; caught since v1.9).
+pdf() is now TWO-STAGE: rich attempt → on any exception it logs the exact file:line
+("CatalogRenderer rich path failed: ... — falling back to plain render") and retries in PLAIN
+mode: no thumbnails, no cover art, no QR, no network/GD/Storage dependency at all — dompdf
+embeds product image URLs directly (v1 behaviour). A catalogue is always delivered; the log
+tells us which rich feature to fix. Both paths regression-tested.
+
+Diagnosis after deploy, if needed (EasyPanel console):
+  tail -n 100 storage/logs/laravel.log | grep -a CatalogRenderer
+
+## v2.1 — three-stage render ladder + catalogue:doctor
+
+36 MB output = the plain fallback fired (rich pipeline still throwing on the server). Changes:
+1. Fallback is now a LADDER: rich → thumbs-only (keeps the small thumbnails, drops artwork/QR/
+   badges) → plain (fat, last resort). Each stage logs its exact failure with file:line, and the
+   thumbnail pipeline is probed separately from the layout — so a broken QR fetch can no longer
+   drag the document back to 36 MB.
+2. NEW `php artisan catalogue:doctor --tenant=17` — one command that checks dompdf, GD/JPEG,
+   curl, storage write, fetches 3 real product image URLs (flags relative/broken URLs and
+   megapixel sizes), probes the QR service, does a real 2-product mini render, and prints the
+   renderer's recent log lines. Run it and paste the whole output when anything misbehaves.
+
+## v2.2 — ROOT CAUSE FIXED: GD built without JPEG (catalogue:doctor diagnosis)
+
+Doctor output showed it precisely: `Call to undefined function imagejpeg()` @ CatalogRenderer:358 —
+the production PHP container compiles GD with PNG only (`docker-php-ext-install gd` without
+`--with-jpeg`). Every catalogue failure this session traced back to that one missing function.
+
+Two-level fix, both in this zip:
+1. **Dockerfile** (root of repo — upload it too): adds libjpeg62-turbo-dev + libwebp-dev +
+   libfreetype6-dev and `docker-php-ext-configure gd --with-jpeg --with-webp --with-freetype`
+   before the gd install. Next Rebuild gives PHP real JPEG support.
+2. **CatalogRenderer**: encoder ladder JPEG → Imagick-JPEG → 8-bit palette PNG, mime-aware
+   thumb/asset caching (.jpg/.png). The catalogue now renders small on ANY PHP build:
+   measured — his scenario (1.9 MB PNG products, PNG-only GD): **399 KB** (was 36 MB);
+   with JPEG enabled: smaller still. asset()/cover art got the same treatment (was the next
+   landmine once catalog_cover_image is set). catalogue:doctor now probes PNG/WebP/Imagick
+   and prints the docker-logs command when laravel.log is absent (LOG_CHANNEL=stderr).
+
+Deploy: upload ALL files incl. Dockerfile → Rebuild (takes longer once — GD recompiles) →
+`php artisan catalogue:flush --tenant=17` → generate. Also: tenant 17 has NO WhatsApp number
+set (doctor warning) — set the `public_phone` setting to get the QR + footer number.
+
+## v2.3 — upload images from Settings (no more URL pasting)
+
+Settings → Business profile now has real **Upload image…** buttons:
+- Branding → **Logo** (was "Logo URL" text-only)
+- NEW **Catalogue** group → Cover photo · Promo photo · Best sellers · Hot deals · Cover checklist
+  (the ChatGPT artwork + badge lists all live here now)
+
+Flow: Upload image… → file stored under branding/{tenant}/ on the public disk → absolute URL
+dropped into the field → **Save changes** persists it (normal settings save; owner-only).
+
+Files: SettingsSchema.php ('image' field type + Catalogue group) · SettingsWriteService.php
+(whitelists the 6 new keys) · BrandingUploadController.php (POST /papi/branding-upload,
+owner-gated, 6 MB max, png/jpg/webp/gif) · settings-manager.html (image control + uploader) ·
+routes/web.php (one route). After changing catalogue images: `php artisan catalogue:flush --tenant=17`.
+
+## v2.4 — Website on the catalogue
+
+New Settings field: Business profile → Contact → **Website** (`public_website`; falls back to the
+bot's `bot_website_link` if that's already set). The catalogue shows it as a CLICKABLE link:
+cover contact bar + cover footer, the right side of every page footer ("Order on WhatsApp: … ·
+familyshoppers.net"), and an "OR ORDER ONLINE" block inside the WhatsApp card on the How-to-Order
+page. Entered without https:// it still links correctly. After setting it:
+`php artisan catalogue:flush --tenant=17`.
+
+## v2.5 — fully-designed cover support (auto-detected)
+
+The cover image now has two automatic modes, chosen by the image's shape:
+- **Portrait image** (taller than wide, e.g. a complete AI-designed cover exported at 1024×1536
+  with title/QR/contacts already in the picture) → becomes the ENTIRE first page, untouched.
+- **Landscape/square image** → treated as a hero PHOTO and cover-cropped into the composed
+  layout (headline, checklist, stat box, QR bar drawn by the system).
+
+Upload flow reminder (why an uploaded image may not appear): Upload image… fills the field →
+you MUST click **Save changes** → then `php artisan catalogue:flush --tenant=17` (the PDF is
+cached 6 h) → regenerate.
+
+## v2.6 — wrong-host upload URLs fixed (APP_URL misconfiguration)
+
+Diagnosed live: uploads were saved as https://evo-shopbot.1gk84r.easypanel.host/storage/... —
+APP_URL on the server points at the INTERNAL EasyPanel hostname, so Storage::url() built wrong
+links and the renderer couldn't fetch the cover/logo. Two fixes:
+1. BrandingUploadController now builds URLs from the host the owner is browsing on
+   (request host = mycloudbss.com), never APP_URL.
+2. CatalogRenderer::ownStorageBytes(): any URL whose path is /storage/... (REGARDLESS of
+   hostname) is read directly from the public disk — no HTTP. Already-saved wrong-host URLs
+   work without re-uploading, and all 351 product-photo fetches get faster too.
+   Verified: wrong-host cover URL → full-page cover art renders.
+
+**ALSO DO (server env, EasyPanel → app → Environment):** set `APP_URL=https://mycloudbss.com`
+and redeploy. It affects more than the catalogue: trust:links receiving/count URLs, the vision
+box claim webhook_url, and storefront links all come from APP_URL.
+
+## v2.7 — bot sends CATEGORY-WISE catalogues
+
+Real conversation showed the gap: "send me a product catalog for the exercise books" → bot sent
+the full 68-page file. Now:
+- `CatalogRenderer::forCategory()` — one category as its own compact catalogue, cached 6 h per
+  category (catalogue:flush clears these too).
+- `AiBrain::detectCategoryAsk()` — matches the tenant's OWN data two ways: the category name
+  in the message ("spices price list"), or a product-word vote ("exercise books" → most matching
+  products are Stationery → Stationery). Ambiguous asks stay conservative → full catalogue.
+- Category sends have their own 10-min anti-spam key, so asking for a section minutes after
+  receiving the full list still works (exactly the Chinese-agent conversation pattern).
+- Caption: "Here's our *Stationery* catalogue 📄 Tell me the items and quantities…"
+
+Files touched: CatalogRenderer.php, AiBrain.php, CatalogueFlushCommand.php. No new settings.
+
+## v2.8 — bot delivery-policy fix ("prices do not include shipping" incident)
+
+The bot improvised delivery/pricing statements because its prompt never stated the policy.
+Now the system prompt carries an explicit DELIVERY & PRICING POLICY rule:
+- Default (no setup needed): "listed prices ALREADY INCLUDE free delivery within Juba and our
+  free-delivery areas (Juba, Konyo Konyo, Custom, Jebel, Munuki, Gudele, …). NEVER say prices
+  exclude shipping. Outside those areas the team confirms transport separately — never invent
+  a freight price."
+- Owner override: Settings → Business profile → NEW **Delivery** group — Delivery policy
+  (free text, exact wording the bot must use), Free-delivery areas, Delivering from.
+- The catalogue's How-to-Order step 3 prints the same line, so chat and PDF always agree.
+
+Files: AiBrain.php, SettingsSchema.php, SettingsWriteService.php, CatalogRenderer.php.
+After deploy: `php artisan catalogue:flush --tenant=17` to refresh the printed line.
+
+## v2.9 — stop unwanted catalogue sends (over-triggering fix)
+
+Real incident: "How much does it cost to ship 20 boxes of A4 paper to Accra?" → bot attached a
+(wrongly-matched) Bakery Product catalogue. Causes: generic price words ('cost', 'how much')
+counted as document requests, and the v2.7 category path bypassed the old 10-min suppression.
+Fixes in AiBrain (all dry-run tested against the real conversation):
+1. Documents split into STRONG asks (catalog/catalogue/price list/product list/menu/brochure…)
+   vs weak price words. Category documents fire ONLY on strong asks; weak asks keep the old
+   full-list behaviour with its 10-min suppression.
+2. Logistics questions (ship/freight/transport/deliver/cargo without a strong ask) NEVER get a
+   document — the AI answers in text.
+3. Global 3-min cooldown: max one document per customer per 3 minutes, across all types.
+4. Category word-vote hardened: more stopwords (boxes, pages, carton, each, shipping, …) and
+   the winning category now needs ≥3 matching products (tiny 2-item categories can no longer
+   win by fluke; they can still be requested by NAME).
+
+## v3.0 — quotation PDF not arriving (URL-first send) + delivery honesty
+
+Incident: quotation ORD-Q260730-AEB1 announced in chat but no PDF arrived. The quote path sent
+media by URL — built from APP_URL, which still points at the internal container host, so
+WhatsApp's server-side fetch failed silently. Fix: quote PDFs now embed the file (b64) first,
+URL only as fallback — identical to the price-list path that already works.
+
+Also: the order-confirmation transport line no longer implies we deliver anywhere on earth —
+"our team will confirm WHETHER we can deliver there and the transport cost" (Accra/Ghana incident).
+
+⚠️ STILL REQUIRED (server env): APP_URL=https://mycloudbss.com in EasyPanel → Environment, then
+redeploy. Broken APP_URL also affects order track links, trust receiving/count links, and the
+vision claim flow. The code fixes reduce the blast radius; the env fix removes it.
+
+RECOMMENDED SETTING (Settings → Business profile → Delivery → Delivery policy):
+"All prices include free delivery within Juba. We deliver within South Sudan and Uganda only —
+we do not ship internationally. For areas outside our free-delivery zone, our team confirms
+transport cost when you order."
+
+## v3.1 — quoted-reply context + one-order-one-quotation
+
+Real conversation (B One Shop): customer replied to old messages ("when are you going to
+deliver IT") and confirmed the same 630 USD order repeatedly — the bot minted FOUR identical
+quotations over three days and never converted any to an order.
+
+1. **Quoted-reply context**: WhatsApp reply-quotes were parsed but only used for Status replies.
+   Now every quoted reply reaches the AI as explicit context ("[Customer is REPLYING to this
+   earlier message from us: …]") — so "it", "this one", and "BUY" replies to product pushes
+   resolve to the right product or quotation. (ProcessIncomingMessage + AiBrain.)
+2. **Quotation dedupe**: if the same customer was quoted the same total within 3 days, a repeat
+   "yes/proceed" is treated as CONFIRMATION: the quotation is flagged confirmed, the owner gets
+   ONE alert ("✅ Customer confirmed quotation ORD-X — convert it to an order"), and the customer
+   is told their order is with the team — no duplicate quotation is created.
+
+Known remaining niggle (not in this drop): two rapid greetings still get two separate bot
+replies (2-second debounce only) — a proper message-coalescing window is a future improvement.
+
+## v3.2 — product-data freshness (answer + fixes)
+
+How fresh is product data, per layer (as of this build):
+- **Bot chat knowledge**: 60-second cache → new/edited products reach the AI within a minute,
+  and now INSTANTLY (see below).
+- **Quotation pricing**: always live from the database — never stale.
+- **PDF catalogues** (full + per-category): were cached 6 h with manual catalogue:flush — now
+  auto-refreshed on any product change.
+
+Changes:
+1. **Product model auto-flush**: any product save/delete instantly clears the bot's grounded
+   list, the whole-shop PDF cache, and the affected category's PDF cache(s) (old + new category
+   when a product moves). Add a product → the very next "price list" ask has it.
+2. **Found: the AI only "knows" the first 200 products alphabetically** (ai_catalogue_limit
+   default) — Family Shoppers has 351, so products later in the alphabet were invisible in chat.
+   New Settings field: Business profile → AI knowledge → "Products the AI knows".
+   **ACTION for tenant 17: set it to 400** (cap 600). Note: bigger list = slightly higher AI
+   token cost per message.
+
+## v3.3 — Delivery Note (print & sign)
+
+New signature-ready DELIVERY NOTE per order — quantities only, never prices (the invoice
+handles money). Header with logo/address/TIN, order + delivery dates, DELIVER TO block,
+items table with a "Received ✓" tick column, "Above mentioned items received in good
+condition.", optional order-notes band, and three signature boxes: RECEIVED BY (customer) ·
+DELIVERED BY · AUTHORIZED SIGNATORY. Footer clarifies it is not a tax invoice.
+
+Where it appears in V3: open any order → **⋯ more → Print delivery note** (also listed in the
+order's Documents tab). Opens the PDF in a new tab → print → driver carries it → customer signs.
+Endpoint: GET /api/v1/doc/delivery-note/{orderId} (tenant-scoped; falls back to legacy
+items_json for old bot orders).
+
+Files: app/Services/Sales/DeliveryNoteRenderer.php (new) · V3/DocumentController.php ·
+CapabilityServiceProvider.php · Capability/Object/SalesOrderCapability.php.
+
+## v3.4 — POS till (supermarket checkout)
+
+The last missing piece for running a supermarket: a fast checkout screen at **/panel/pos**
+(left menu: **Sales → POS Till**). Built for a touch screen or keyboard + USB barcode scanner.
+
+**The flow** — scan or tap products → cart on the right → CASH / MOMO / CARD / CREDIT:
+- **Scanner ready**: a USB scanner "types" the barcode + Enter — the product jumps straight
+  into the cart and the box clears for the next scan. Typing anywhere refocuses the search box,
+  so the scanner never misses. Search also matches name and SKU; category chips filter the grid.
+- **Cash**: quick-tender note buttons (exact, 10, 20, 50…) + live change calculation, and the
+  change is repeated on the success screen so the cashier can't forget it.
+- **Credit (pay later)**: requires customer name or phone; saved as an UNPAID invoice to
+  collect from the order/invoice screen later.
+- **Receipt**: 80 mm thermal-style receipt (shop name, address, TIN, receipt no, operator,
+  items, discount, paid/tendered/change) — prints via the browser print dialog, works with any
+  thermal printer driver set to 80 mm.
+- **Today at the till**: the header shows today's POS total; tap it for the drawer with every
+  sale of the day (time, method, amount).
+
+**Under the hood — zero new money/stock logic.** Checkout creates a real Order exactly like
+the proven walk-in recipe (`status=Delivered`, `channel=pos`) so the EXISTING observer chain
+does everything: OrderStockIssuer moves stock in the ledger (the Trust engine sees POS sales
+too), AutoIssueInvoice numbers the invoice, CustomerMasterService files the customer. For
+cash/momo/card the screen then calls the existing `/papi/record-payment` — cashbook, per-person
+cash ledger and invoice paid-status all behave exactly like a payment recorded anywhere else.
+Prices and totals are in the tenant's local operating currency end-to-end (USD for tenant 17).
+
+Notes by design: out-of-stock products can still be sold (a till must never block on stock
+drift — the ledger simply goes negative and the Trust queue surfaces it); the discount is a
+whole-sale amount in currency, not per-line; any panel user whose role has the `orders` menu
+sees POS Till (cashiers included).
+
+Files: app/Http/Controllers/Panel/PosController.php (new) · resources/panel/pos.html (new) ·
+routes/web.php (refreshed: /panel/pos + 3 papi routes) · config/navigation.php (refreshed).
+No migration needed — upload + Rebuild is enough. Tested headless (Chromium): 27/27 checks
+pass — scan-to-cart, qty edit, discount math, cash change, credit guard, receipt build,
+payment recording (screenshots in chat).
+
+## v3.5 — In-product Training Center + quick tours
+
+Training lives INSIDE the system now (Bhavin's ask: "training docs and quick training on each
+menu… inside system not separately").
+
+**Training Center — /panel/training** (left menu: **Home → Training**, visible to every role):
+one searchable page teaching every menu in simple staff English — how the system fits together,
+a daily rhythm, POS till, Orders (incl. delivery notes + "convert confirmed quotations"),
+Customers, Invoices/credit notes, the whole Purchases flow (+ why Cost Approvals exists),
+Stock count honesty rules, Inventory Trust in plain words (tiles, resolve = clean/error/
+confirmed loss, receiving links, camera claim, "a queue item is a question, never an
+accusation"), Consignments/Deliveries/Transport, Payments & Cashbook ("received by = whoever
+physically took the money", Staff Cash to zero), Reports, the WhatsApp assistant (what it does
+alone, what it never does, how to teach it), Chats Take-over, Leads/Campaigns/Scheduled/Ads,
+Email Center, Catalogue & branding how-to, Settings tour — plus a troubleshooting section built
+from the real incidents of this deployment (image uploaded but not showing → Save changes;
+bot doesn't know a product → active/price/AI-knowledge limit; bot "didn't send" a catalogue →
+strong-ask + cooldown rules; negative stock meaning; credit collection; "I can't see a menu" →
+roles). Ends with printable one-line cheat sheets per role (Print button top-right).
+Filters: live search + role chips (Cashier / Sales & WhatsApp / Storekeeper / Purchasing /
+Accounts / Owner). Deep links: /panel/training#pos #trust #settings #faq … (highlighted on arrival).
+
+**Contextual help where confusion actually happens:**
+- POS till: first visit auto-plays a 3-step spotlight tour (search → cart → payment) with a
+  "📖 Open full training" link; the **?** button in the header replays it anytime. Seen-flag is
+  per device (localStorage), so each new till/computer shows it once.
+- Inventory Trust: **?** in the header → training #trust.
+- Settings: "🎓 How settings work" link in the sidebar → training #settings.
+
+Files: app/Http/Controllers/Panel/TrainingController.php (new) ·
+resources/panel/help-center.html (new — NOT the pre-existing training.html, which belongs to
+the Win World MES vertical and is untouched) · resources/panel/pos.html (tour + ? button) ·
+resources/panel/trust.html + settings-manager.html (help links) · routes/web.php
+(/panel/training) · config/navigation.php (Home → Training). The old thin /panel/guide page
+stays as-is. No migration — upload + Rebuild. Tested headless: tour auto-open/replay/persist,
+search + role filters, deep-link highlight (fresh load AND hash change), till regression
+(barcode add still works) — all green.
+
+Content update policy: the Training Center is one static HTML file
+(resources/panel/help-center.html) — when a future drop changes how a screen works, update the
+matching card in the same drop.
+
+## v3.6 — POS lives in V3 now + photo tiles + V3-FIRST rule
+
+Bhavin: POS button + menu placement like UltimatePOS, product photos on the till, everything in
+V3, classic panel to be retired ("make rule so any future development come under v3").
+
+**1. POS in V3 (resources/views/shell.blade.php):**
+- Green **POS** button in the V3 top bar (UltimatePOS-style, next to the currency picker;
+  label collapses to icon-only on small phones). Same visibility gate as the menu entry.
+- **Sales → POS Till** menu entry (first item in the Sales group) with a till icon; `#/pos`
+  deep link works.
+- Both open the till EMBEDDED in the V3 shell (iframe `/panel/pos?embed=1`, edge-to-edge like
+  Settings — the exact house pattern already used by settings/payments/pnl/books). In embed
+  mode the till hides its own back button and shows **⛶ Open full screen** instead — for a
+  dedicated till computer, ⛶ opens the naked till in its own tab.
+- **Help & Training in V3** (`#/guide`) now opens the Training Center (`/panel/training`)
+  instead of the old server guide workspace — one training surface everywhere.
+
+**2. Photo-first till tiles (resources/panel/pos.html):** every product card now leads with an
+86px photo (object-fit contain, lazy-loaded; soft 🧺 placeholder when a product has no photo,
+and on broken URLs). Grid unchanged otherwise — verified in-browser: photos render, placeholders
+render, embed mode hides back/shows ⛶, tap-to-cart still works, no JS errors.
+
+**3. THE RULE — V3-FIRST.md (new, repo root):** classic panel is FROZEN for new work; every new
+screen/button/action ships inside V3 — either as a native capability workspace or as a
+full-screen page embedded via the house iframe pattern (the file documents the exact 6 edit
+points in shell.blade.php with code). Full-screen operational pages (till, counts, training)
+are allowed but V3 must be their front door and they must support `?embed=1`. Every drop that
+changes a screen updates its Training Center card in the same drop. config/navigation.php now
+carries a "⛔ FROZEN FOR NEW WORK" header pointing at V3-FIRST.md. Migration is opportunistic:
+when a classic screen gets its next real feature, that's when it moves behind V3.
+
+Files: resources/views/shell.blade.php (POS button/menu/route + guide→Training; JS
+syntax-checked with blade stripped) · resources/panel/pos.html (photo tiles + embed mode) ·
+config/navigation.php (frozen header) · V3-FIRST.md (new). No migration — upload + Rebuild.
+After deploy: open /v3 → green POS button top bar, Sales → POS Till, Help & Training opens the
+Training Center.
+
+## v3.7 — shell.blade.php split into static assets (response to the code audit)
+
+The audit was right that 4,313 lines in one blade is a growing risk. This drop does the SAFE
+version of the fix — a mechanical, provable split with NO build tool and NO behaviour change:
+
+- resources/views/shell.blade.php  → now ~78 lines: HTML skeleton + two asset links only.
+- public/assets/v3/shell.css (NEW) → all V3 styles (≈89 KB), byte-identical to the old block.
+- public/assets/v3/shell.js  (NEW) → all V3 JavaScript (≈262 KB), byte-identical except the one
+  blade @json constant, now written literally. node --check clean.
+
+Proof of equivalence: re-inlining the two files into the new blade reproduces the ORIGINAL
+file byte-for-byte (verified by script). Then the split shell was BOOTED headless in Chromium
+against a mocked workspace catalog: styles applied, boot() ran, sidebar + counts + the v3.6
+POS button and Sales → POS Till entry rendered, clicking POS routed to #/pos and embedded the
+till iframe — 8/8 checks green, no page errors.
+
+Cache-busting is automatic (?v=filemtime of the asset) — no manual version bumps, browsers
+pick up new JS/CSS on every deploy.
+
+⚠️ DEPLOY WARNING — upload these THREE together, always: shell.blade.php +
+public/assets/v3/shell.css + public/assets/v3/shell.js. The blade without its assets is a
+blank V3. (This zip contains all three; Rebuild as usual.)
+
+Why not the audit's full plan (Vite, Blade components, JS modules, @yield workspaces)?
+- @yield-per-workspace would turn the client-side SPA into server-rendered pages — that is a
+  rewrite of V3, not a refactor, with weeks of regression risk on a live business.
+- Vite would introduce the project's FIRST build pipeline into a GitHub-upload + EasyPanel
+  Rebuild workflow — a new class of deploy failure for a solo operator.
+- Merge conflicts / unit-test arguments assume a multi-developer team.
+The audit's valid core — stop the growth, separate concerns — is covered by V3-FIRST.md
+(new screens live in their own files; the shell gains ~10 lines per screen) plus this split.
+Next steps per V3-FIRST.md: when a module (customers, tasks, finance…) gets its next real
+feature, its functions move from shell.js into their own static file — opportunistic
+shrinking, never big-bang. V3-FIRST.md updated with the new file locations.
+
+## v3.8 — POS speed pack + offline selling (response to the POS audit)
+
+The POS audit's realistic asks, built and tested (29/29 browser assertions green):
+
+**Keyboard-only checkout.** F5 cash · F6 mobile money · F7 card · F8 credit · F9 split ·
+F4 hold · F3 discount · Enter confirms the payment AND starts the next sale · Esc cancels.
+Key hints are printed on the buttons. A whole sale = scan, F5, Enter, Enter. Zero mouse.
+
+**Hold / Recall (F4).** Customer forgot an item → hold the sale, serve the next customer,
+tap ▤ Held to bring it back exactly as it was (survives browser restarts; per till).
+
+**Split / partial payment (F9).** Cash + mobile money + card amounts in ONE sale with a live
+"Remaining" line. Pays short → the balance automatically becomes customer credit (name/phone
+required) and the invoice shows part-paid. Each tender is recorded separately in the cashbook
+with its own method — end-of-day cash vs momo vs card totals stay truthful.
+Server side: checkout accepts payments[] and method=split (whitelisted); short-paid split
+without a customer name/phone is rejected exactly like a pure credit sale.
+
+**OFFLINE SELLING.** The big one for Juba internet:
+- The till downloads the whole active catalogue once (localStorage) — scanning and searching
+  keep working with no connection.
+- Checkout while offline: the sale saves into a local queue, the receipt still prints
+  (numbered PENDING SYNC), change is still calculated, and an orange ⚡ OFFLINE chip shows the
+  queue count. Selling never stops.
+- When connection returns (or every 20s), queued sales sync automatically: order created,
+  tenders recorded, receipt number assigned, toast confirms each one.
+- SAFETY: every sale carries a client_ref; the server writes it into orders.idempotency_key
+  (UNIQUE index — already in your schema). A replayed sale returns the EXISTING order with
+  duplicate=true + how much is already paid, so retries can never create a second order or
+  double-record a payment. Verified in-browser: replaying a synced sale returned
+  duplicate=true, record_payment=false.
+
+**Receipt reprint.** TODAY drawer → 🖨 next to any sale of the day → prints again marked
+*** REPRINT *** (works because pos-today now returns items_json).
+
+Also: split tenders itemised on the receipt with any credit balance; Training Center POS card
+updated with all of this (per V3-FIRST rule).
+
+Files: app/Http/Controllers/Panel/PosController.php (client_ref idempotency + duplicate
+fast-path & race catch, payments[] validation, split short-pay guard, all=1 catalogue fetch,
+items_json in pos-today) · resources/panel/pos.html (everything above) ·
+resources/panel/help-center.html (POS card). No migration — upload + Rebuild.
+
+NOT built (deliberately, discussed with Bhavin): shift open/close with denomination count
+(next candidate — fits the Trust philosophy), returns/exchanges, manager-approval PINs,
+promotions/loyalty, customer display, ESC/POS drawer kick (needs a local print agent),
+scale barcodes. Roadmap-ordered in chat.
+
+## v3.9 — Shift & control pack (17/17 browser checks green)
+
+**⚠ THIS DROP HAS A MIGRATION:** after upload + Rebuild run `php artisan migrate --force`
+(creates the `pos_shifts` table; hasTable-guarded, safe to re-run).
+
+**1. Cashier shifts — float → sales → count → variance.**
+- Till shows a soft banner until a shift is open: "▶ Open shift" asks for the opening float
+  (count the drawer BEFORE the first sale). Selling is never blocked — the banner is a nudge.
+- TODAY drawer now has a live shift box: opened-at, float, cash sales this shift, expected in
+  drawer. One button: "⏹ Close shift & count cash".
+- Closing = a DENOMINATION SHEET (notes for USD/SSP/UGX auto-picked by till currency, plus a
+  coins/other line). The system totals it live, compares against expected
+  (float + this operator's POS cash payments from the unified CustomerPayment ledger, joined
+  through POS order numbers), shows the variance in green/amber/red, saves everything to
+  `pos_shifts` (denominations JSON included, for audit), and prints an 80mm CASH-UP SLIP with
+  cashier + supervisor signature lines.
+- Shifts are PER OPERATOR (user id): two cashiers on two logins each balance their own drawer.
+
+**2. Manager PIN for big discounts — enforced server-side.**
+- Settings → Payments → **POS till**: "Discount limit without manager (%)" (default 5) and
+  "Manager PIN". No PIN configured = no gate (zero-setup back-compat).
+- Above the limit the till asks for the PIN (F-keys pause, Enter submits); the SERVER
+  re-verifies with hash_equals — bypassing the UI cannot bypass the check. Wrong PIN re-asks.
+  Offline sales carry the PIN and are verified at sync time.
+- Replays of already-created sales resolve BEFORE the PIN check, so changing the PIN never
+  strands the offline queue.
+
+**3. Offline sync panel.** The ⚡ chip is now tappable: every queued sale listed (time, amount,
+method, QUEUED status), failed ones marked FAILED with a discard button (after the owner has
+seen them), and a RETRY NOW button for manual sync.
+
+Files: PosController (shift/shiftOpen/shiftClose + shiftCash ledger query + PIN gate +
+DISCLIMIT/PINSET placeholders) · PosShift model + pos_shifts migration · routes (3 papi) ·
+SettingsSchema + SettingsWriteService (pos_discount_limit, pos_manager_pin) · pos.html ·
+help-center.html (POS card teaches shifts, PIN, sync panel).
+
+Honest notes: the PIN is stored as a tenant setting (owner-only screen) — fine for a till
+PIN, not for real secrets. shiftCash counts POS cash payments where holder = the operator;
+if a manager records a POS payment on the cashier's behalf under their own name, it lands in
+the manager's shift, not the cashier's — train "whoever takes the cash records it".
+PHP verified by lint + review; browser flows fully tested against a mock of the new contract.

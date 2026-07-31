@@ -133,6 +133,29 @@ button{font-family:inherit}
 .hrow .hn{font-size:13.5px;font-weight:700} .hrow .hm{font-size:11px;color:var(--muted)}
 .rp{background:#eef2f7;border:none;border-radius:8px;padding:5px 9px;cursor:pointer;font-size:13px}
 
+/* v3.9 — shift control + PIN + sync panel */
+.net{cursor:pointer;border:none}
+.shiftbar{background:#fff8f0;border-bottom:1px solid #f3dfc4;color:#7c4a03;font-size:12.5px;font-weight:700;padding:7px 14px;display:none;align-items:center;gap:10px;flex:0 0 auto}
+.shiftbar.show{display:flex}
+.shiftbar button{background:var(--amber);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:800;font-size:12px;cursor:pointer}
+.shiftBox{background:#f4faf5;border:1px solid #dcefe0;border-radius:12px;padding:12px 14px;margin:0 0 12px}
+.shiftBox .sv{display:flex;justify-content:space-between;font-size:12.5px;padding:2px 0;color:#334155}
+.shiftBox .sv b{font-weight:800}
+.shiftBox .act{margin-top:8px;display:flex;gap:8px}
+.drow2{display:flex;align-items:center;gap:8px;margin:5px 0}
+.drow2 .dn{flex:0 0 84px;font-size:13.5px;font-weight:800;text-align:right}
+.drow2 .dx{color:var(--muted);font-size:12px}
+.drow2 input{flex:1;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-size:15px;font-weight:700;text-align:center;width:auto;min-width:0}
+.drow2 .dt{flex:0 0 90px;text-align:right;font-size:12.5px;font-weight:700;color:#475569}
+.varline{display:flex;justify-content:space-between;font-size:13.5px;font-weight:800;padding:3px 0}
+.varline.big{font-size:16px;border-top:2px solid var(--line);padding-top:8px;margin-top:6px}
+.v-ok{color:var(--green2)} .v-bad{color:var(--red)} .v-warn{color:var(--amber)}
+.qitem{display:flex;justify-content:space-between;gap:8px;padding:8px 2px;border-bottom:1px solid #f0f3f0;font-size:12.5px}
+.qitem .qs{font-size:10.5px;font-weight:800;letter-spacing:.5px;padding:2px 8px;border-radius:12px;background:#fef3e2;color:var(--amber);white-space:nowrap}
+.qitem .qs.bad{background:#fdecea;color:var(--red)}
+.pinbox{display:flex;justify-content:center;margin:10px 0}
+.pinbox input{width:170px;text-align:center;font-size:24px;letter-spacing:8px;font-weight:800}
+
 /* ---------- 80 mm receipt (print only) ---------- */
 #receipt{display:none}
 @media print{
@@ -160,11 +183,13 @@ button{font-family:inherit}
 <div class="top">
   <button class="back" id="backBtn" onclick="location.href='/panel/app'">‹</button>
   <div><h1>🧾 POS</h1><div class="tn">{{TENANT}} · {{OPERATOR}}</div></div>
-  <span class="net" id="netChip" style="display:none"></span>
+  <span class="net" id="netChip" style="display:none" onclick="openSync()" title="Tap to see sales waiting to sync"></span>
   <button class="today" onclick="openToday()"><small>TODAY</small><span id="todaySum">…</span></button>
   <button class="helpb" id="fsBtn" style="display:none" onclick="window.open('/panel/pos','_blank')" title="Open full screen">⛶</button>
   <button class="helpb" onclick="startTour()" title="Quick tour">?</button>
 </div>
+<div class="shiftbar" id="shiftBar"><span>No shift open — open one with your float so tonight's cash count balances.</span>
+  <button onclick="openShiftUI()">▶ Open shift</button></div>
 
 <div class="main">
   <div class="left">
@@ -246,10 +271,63 @@ button{font-family:inherit}
 <div class="drawer" id="drawer">
   <div class="dh"><b>Today at the till</b><button class="void" onclick="$('drawer').classList.remove('show')">✕ Close</button></div>
   <div class="db">
+    <div class="shiftBox" id="shiftBox" style="display:none"></div>
     <div class="dsum"><div class="v" id="dTot">…</div><div class="l"><span id="dCnt">0</span> sales · POS · today</div></div>
     <div id="dRows"></div>
   </div>
 </div>
+
+<!-- open shift -->
+<div class="ov" id="soOv"><div class="md">
+  <h3>▶ Open your shift</h3>
+  <label>Opening float in the drawer ({{CURRENCY}})</label>
+  <input id="soFloat" type="number" min="0" step="any" inputmode="decimal" placeholder="0">
+  <div class="chg" style="margin-top:8px;font-size:12px">Count the drawer BEFORE the first sale — tonight's variance is measured against this.</div>
+  <div class="mrow">
+    <button class="mb no" onclick="$('soOv').classList.remove('show');focusQ()">Cancel</button>
+    <button class="mb go" onclick="submitShiftOpen()">OPEN SHIFT</button>
+  </div>
+</div></div>
+
+<!-- close shift: denomination count -->
+<div class="ov" id="scOv"><div class="md">
+  <h3>⏹ Close shift — count the drawer</h3>
+  <div id="scDenoms"></div>
+  <label>Coins / other amount ({{CURRENCY}})</label>
+  <input id="scOther" type="number" min="0" step="any" inputmode="decimal" placeholder="0" oninput="paintCashup()">
+  <div style="margin-top:10px">
+    <div class="varline"><span>Counted</span><span id="scCounted">0</span></div>
+    <div class="varline"><span>Expected (float + cash sales)</span><span id="scExpected">…</span></div>
+    <div class="varline big"><span>Variance</span><span id="scVar">…</span></div>
+  </div>
+  <label>Note (optional — explain any difference)</label>
+  <input id="scNote" autocomplete="off" placeholder="e.g. 500 change shortage from morning">
+  <div class="mrow">
+    <button class="mb no" onclick="$('scOv').classList.remove('show');focusQ()">Cancel</button>
+    <button class="mb go" id="scGo" onclick="submitShiftClose()">CLOSE SHIFT</button>
+  </div>
+</div></div>
+
+<!-- manager PIN -->
+<div class="ov" id="pinOv"><div class="md">
+  <h3>🔐 Manager PIN needed</h3>
+  <p style="margin:4px 0 0;font-size:13.5px;color:#475569" id="pinWhy">This discount is above the till limit.</p>
+  <div class="pinbox"><input id="pinIn" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></div>
+  <div class="mrow">
+    <button class="mb no" onclick="$('pinOv').classList.remove('show')">Cancel</button>
+    <button class="mb go" onclick="submitPin()">APPROVE</button>
+  </div>
+</div></div>
+
+<!-- offline sync panel -->
+<div class="ov" id="syncOv"><div class="md">
+  <h3>⚡ Sales waiting to sync</h3>
+  <div id="syncList"></div>
+  <div class="mrow">
+    <button class="mb no" onclick="$('syncOv').classList.remove('show');focusQ()">Close</button>
+    <button class="mb go" onclick="NET_DOWN=false;syncQueue();setTimeout(openSync,800)">↻ RETRY NOW</button>
+  </div>
+</div></div>
 
 <div class="toast" id="toast"></div>
 <div id="receipt"></div>
@@ -273,6 +351,9 @@ var CUR='{{CURRENCY}}', SHOP='{{TENANT}}', OPER='{{OPERATOR}}', ADDR='{{ADDRESS}
 // Embedded inside the V3 shell (#/pos → iframe /panel/pos?embed=1): V3 provides the chrome, so
 // hide the back button and offer a full-screen launcher for dedicated till stations instead.
 var EMBED=/[?&]embed=1/.test(location.search);
+// Discount control (v3.9): limit % + whether a manager PIN is configured (the PIN itself
+// NEVER reaches the browser — the server checks it).
+var DISCLIMIT=parseFloat('{{DISCLIMIT}}')||0, PINSET='{{PINSET}}'==='1', MPIN=null;
 var DP = (CUR==='USD')?2:0;                     // USD shows cents; UGX/SSP whole numbers
 var $=function(id){return document.getElementById(id);};
 function api(u,opt){opt=opt||{};opt.headers=Object.assign({'X-Requested-With':'XMLHttpRequest'},opt.headers||{});opt.credentials='same-origin';opt.cache='no-store';return fetch(u,opt).then(function(r){return r.json();});}
@@ -457,6 +538,13 @@ function confirmPay(){
   } else {
     paylist=[{method:payMethod,amount:t.tot}];
   }
+  // Big-discount gate: over the limit → manager PIN first (server re-checks — this is UX, not security).
+  if(PINSET && t.disc>0 && t.sub>0 && (t.disc/t.sub*100)>DISCLIMIT && !MPIN){
+    $('pinWhy').textContent='Discount of '+money(t.disc)+' '+CUR+' is above the '+DISCLIMIT+'% till limit.';
+    $('pinIn').value='';$('pinOv').classList.add('show');
+    setTimeout(function(){$('pinIn').focus();},60);
+    return;
+  }
   // One idempotency ref per sale: however many times this checkout retries (or syncs from the
   // offline queue), the server can only ever create ONE order for it.
   SALE_REF=SALE_REF||('w'+Date.now().toString(36)+Math.random().toString(36).slice(2,8));
@@ -465,9 +553,11 @@ function confirmPay(){
             discount:t.disc,method:payMethod,client_ref:SALE_REF,
             customer_name:needName?name:'',customer_phone:needName?phone:''};
   if(payMethod==='split')body.payments=paylist;
+  if(MPIN)body.manager_pin=MPIN;
   busy=true;$('payGo').disabled=true;$('payGo').textContent='Saving…';
   var unlock=function(){busy=false;$('payGo').disabled=false;$('payGo').textContent='COMPLETE SALE';};
   postJson('/papi/pos-checkout',body).then(function(d){
+    if(d&&!d.ok&&d.need_pin){unlock();MPIN=null;$('pinWhy').textContent='Wrong PIN — try again.';$('pinIn').value='';$('pinOv').classList.add('show');setTimeout(function(){$('pinIn').focus();},60);return;}
     if(!d||!d.ok){unlock();toast(d&&d.error?d.error:'Could not save the sale');return;}
     NET_DOWN=false;
     var after=function(){unlock();finishSale({id:d.id,no:d.order_no,tot:d.total,sub:d.subtotal!=null?d.subtotal:t.sub,disc:d.discount!=null?d.discount:t.disc},paylist,false);};
@@ -505,7 +595,8 @@ function showOk(){
   buildReceipt();
   $('okOv').classList.add('show');
 }
-function newSale(){cart=[];SALE_REF=null;$('disc').value='';$('cName').value='';$('cPhone').value='';paint();$('okOv').classList.remove('show');focusQ();}
+function newSale(){cart=[];SALE_REF=null;MPIN=null;$('disc').value='';$('cName').value='';$('cPhone').value='';paint();$('okOv').classList.remove('show');focusQ();}
+function submitPin(){MPIN=$('pinIn').value.trim()||null;$('pinOv').classList.remove('show');if(MPIN)confirmPay();}
 
 /* ---------------- receipt (80mm) ---------------- */
 function buildReceipt(){
@@ -662,9 +753,119 @@ setInterval(syncQueue,20000);
 window.addEventListener('online',function(){NET_DOWN=false;paintNet();syncQueue();});
 window.addEventListener('offline',paintNet);
 
+/* ---------------- shift control (v3.9): float → sales → count → variance ---------------- */
+var SHIFT=null;
+function loadShift(){api('/papi/pos-shift').then(function(d){if(!d||!d.ok)return;SHIFT=d.open?d:null;paintShift();}).catch(function(){paintShift();});}
+function paintShift(){
+  $('shiftBar').classList.toggle('show',!SHIFT);
+  var b=$('shiftBox');
+  if(!SHIFT){b.style.display='none';return;}
+  b.style.display='';
+  b.innerHTML='<div class="sv"><span>Shift open since</span><b>'+esc(SHIFT.opened_at||'')+'</b></div>'
+   +'<div class="sv"><span>Opening float</span><b>'+money(SHIFT.float)+' '+CUR+'</b></div>'
+   +'<div class="sv"><span>Cash sales this shift</span><b>'+money(SHIFT.cash_sales)+' '+CUR+'</b></div>'
+   +'<div class="sv"><span>Expected in drawer</span><b>'+money(SHIFT.expected)+' '+CUR+'</b></div>'
+   +'<div class="act"><button class="mb go" style="padding:9px;font-size:13px" onclick="closeShiftUI()">⏹ Close shift &amp; count cash</button></div>';
+}
+function openShiftUI(){$('soFloat').value='';$('soOv').classList.add('show');setTimeout(function(){$('soFloat').focus();},60);}
+function submitShiftOpen(){
+  postJson('/papi/pos-shift-open',{float:parseFloat($('soFloat').value)||0}).then(function(d){
+    if(!d||!d.ok){toast(d&&d.error?d.error:'Could not open the shift');return;}
+    $('soOv').classList.remove('show');toast('Shift open — sell away');loadShift();focusQ();
+  }).catch(function(){toast('Opening a shift needs internet — try again shortly');});
+}
+var DENOMS={USD:[100,50,20,10,5,1],SSP:[1000,500,200,100,50],UGX:[50000,20000,10000,5000,2000,1000,500,200,100]};
+function closeShiftUI(){
+  $('drawer').classList.remove('show');
+  var set=DENOMS[CUR]||[];
+  $('scDenoms').innerHTML=set.length?set.map(function(n){
+    return '<div class="drow2"><span class="dn">'+money(n)+'</span><span class="dx">×</span>'
+      +'<input type="number" min="0" step="1" inputmode="numeric" data-note="'+n+'" oninput="paintCashup()" placeholder="0">'
+      +'<span class="dt" id="dt'+n+'"></span></div>';
+  }).join(''):'';
+  $('scOther').value='';$('scNote').value='';
+  $('scExpected').textContent=SHIFT?(money(SHIFT.expected)+' '+CUR):'…';
+  // Refresh the live expected figure right before counting (last sales included).
+  api('/papi/pos-shift').then(function(d){if(d&&d.ok&&d.open){SHIFT=d;$('scExpected').textContent=money(d.expected)+' '+CUR;paintCashup();}}).catch(function(){});
+  paintCashup();$('scOv').classList.add('show');
+}
+function countedNow(){
+  var c=parseFloat($('scOther').value)||0;
+  document.querySelectorAll('#scDenoms input').forEach(function(i){
+    var n=parseFloat(i.dataset.note),q=parseFloat(i.value)||0,lt=n*q;
+    var dt=document.getElementById('dt'+i.dataset.note);if(dt)dt.textContent=lt?money(lt):'';
+    c+=lt;
+  });
+  return Math.round(c*100)/100;
+}
+function paintCashup(){
+  var c=countedNow();$('scCounted').textContent=money(c)+' '+CUR;
+  if(!SHIFT){$('scVar').textContent='…';return;}
+  var v=Math.round((c-SHIFT.expected)*100)/100,el=$('scVar');
+  el.textContent=(v>0?'+':'')+money(v)+' '+CUR;
+  el.className='varline big '+(Math.abs(v)<0.01?'v-ok':(v<0?'v-bad':'v-warn'));
+}
+function submitShiftClose(){
+  var den={};document.querySelectorAll('#scDenoms input').forEach(function(i){var q=parseFloat(i.value)||0;if(q>0)den[i.dataset.note]=q;});
+  $('scGo').disabled=true;
+  postJson('/papi/pos-shift-close',{denominations:den,other:parseFloat($('scOther').value)||0,note:$('scNote').value.trim()}).then(function(d){
+    $('scGo').disabled=false;
+    if(!d||!d.ok){toast(d&&d.error?d.error:'Could not close the shift');return;}
+    $('scOv').classList.remove('show');SHIFT=null;paintShift();
+    printCashup(d);
+    toast('Shift closed — variance '+(d.variance>0?'+':'')+money(d.variance)+' '+CUR);
+    loadShift();
+  }).catch(function(){$('scGo').disabled=false;toast('Closing the shift needs internet — the drawer count can wait a moment');});
+}
+function printCashup(d){
+  var dr='';
+  Object.keys(d.denominations||{}).forEach(function(k){
+    if(k==='other'){dr+='<tr><td>Coins/other</td><td class="r">'+money(d.denominations[k])+'</td></tr>';}
+    else{dr+='<tr><td>'+money(parseFloat(k))+' × '+d.denominations[k]+'</td><td class="r">'+money(parseFloat(k)*d.denominations[k])+'</td></tr>';}
+  });
+  var h='<div class="c shop">'+esc(SHOP)+'</div><div class="c b">SHIFT CASH-UP</div><hr>'
+   +'<table><tr><td>Cashier</td><td class="r">'+esc(OPER)+'</td></tr>'
+   +'<tr><td>Opened</td><td class="r">'+esc(d.opened_at||'')+'</td></tr>'
+   +'<tr><td>Closed</td><td class="r">'+esc(d.closed_at||'')+'</td></tr></table><hr>'
+   +'<table><tr><td>Opening float</td><td class="r">'+money(d.float)+'</td></tr>'
+   +'<tr><td>Cash sales</td><td class="r">'+money(d.cash_sales)+'</td></tr>'
+   +'<tr><td class="b">Expected</td><td class="r b">'+money(d.expected)+'</td></tr></table><hr>'
+   +(dr?'<table>'+dr+'</table><hr>':'')
+   +'<table><tr><td class="b">Counted</td><td class="r b">'+money(d.counted)+'</td></tr>'
+   +'<tr><td class="tot">VARIANCE '+CUR+'</td><td class="r tot">'+(d.variance>0?'+':'')+money(d.variance)+'</td></tr></table>'
+   +'<hr><br><div>Cashier: ______________________</div><br><div>Checked by: ___________________</div>';
+  $('receipt').innerHTML=h;window.print();
+}
+
+/* ---------------- offline sync panel ---------------- */
+function openSync(){
+  var q=qload(),bad=[];try{bad=JSON.parse(localStorage.getItem('pos_qbad')||'[]');}catch(e){}
+  var pad=function(n){return(n<10?'0':'')+n;},h='';
+  q.forEach(function(s){
+    var d=new Date(s.when),items=(s.body&&s.body.items)||[];
+    var tot=items.reduce(function(a,l){return a+l.price*l.qty;},0)-((s.body&&s.body.discount)||0);
+    h+='<div class="qitem"><div><b>'+money(tot)+' '+CUR+'</b> · '+esc((s.body&&s.body.method)||'')
+      +'<div style="color:var(--muted);font-size:11px">'+pad(d.getHours())+':'+pad(d.getMinutes())+' · '+items.length+' item'+(items.length>1?'s':'')+'</div></div>'
+      +'<span class="qs">QUEUED</span></div>';
+  });
+  bad.forEach(function(s,i){
+    h+='<div class="qitem"><div><b>Rejected sale</b><div style="color:var(--muted);font-size:11px">the server refused it — show the owner</div></div>'
+      +'<span style="display:flex;gap:6px;align-items:center"><span class="qs bad">FAILED</span><button class="x" onclick="dropBad('+i+')">✕</button></span></div>';
+  });
+  $('syncList').innerHTML=h||'<div class="cartEmpty">Nothing waiting — every sale is synced. ✓</div>';
+  $('syncOv').classList.add('show');
+}
+function dropBad(i){
+  if(!confirm('Discard this failed sale record? Only do this after the owner has seen it.'))return;
+  try{var f=JSON.parse(localStorage.getItem('pos_qbad')||'[]');f.splice(i,1);localStorage.setItem('pos_qbad',JSON.stringify(f));}catch(e){}
+  openSync();
+}
+
 /* ---------------- keyboard shortcuts (F-keys like a real till) ---------------- */
 document.addEventListener('keydown',function(e){
   var payOpen=$('payOv').classList.contains('show'),okOpen=$('okOv').classList.contains('show');
+  if(e.key==='Enter'&&$('pinOv').classList.contains('show')){e.preventDefault();submitPin();return;}
+  if(e.key==='Enter'&&$('soOv').classList.contains('show')){e.preventDefault();submitShiftOpen();return;}
   if(e.key==='Enter'&&payOpen){e.preventDefault();confirmPay();return;}
   if(e.key==='Enter'&&okOpen){e.preventDefault();newSale();return;}
   if(payOpen||okOpen)return;
@@ -702,14 +903,14 @@ $('q').addEventListener('keydown',function(e){
     .catch(function(){NET_DOWN=true;paintNet();settle(offSearch(v,''));});   // scanner works offline too
 });
 document.addEventListener('keydown',function(e){
-  if(e.key==='Escape'){['payOv','okOv','heldOv'].forEach(function(id){$(id).classList.remove('show');});$('drawer').classList.remove('show');}
+  if(e.key==='Escape'){['payOv','okOv','heldOv','soOv','scOv','pinOv','syncOv'].forEach(function(id){$(id).classList.remove('show');});$('drawer').classList.remove('show');}
   // Any bare typing outside an input refocuses the search box → the barcode scanner always works.
   if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1&&document.activeElement.tagName!=='INPUT'&&!$('payOv').classList.contains('show')&&!$('okOv').classList.contains('show')){$('q').focus();}
 });
 
 if(EMBED){$('backBtn').style.display='none';$('fsBtn').style.display='';}
 paint();loadProducts('');loadToday();focusQ();
-cacheAll();paintHeld();paintNet();syncQueue();
+cacheAll();paintHeld();paintNet();syncQueue();loadShift();
 
 /* ---------------- quick tour (3 steps, first visit + ? button) ---------------- */
 var TOUR=[
