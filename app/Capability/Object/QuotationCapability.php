@@ -20,7 +20,13 @@ use Illuminate\Support\Carbon;
  */
 final class QuotationCapability implements ObjectCapability
 {
-    private const OPEN = ['sent', 'accepted', 'draft', 'pending'];
+    // v4.6.3: action gates now derive from the Quotation MODEL's own lifecycle (isOpen /
+    // isEditable) instead of a local status whitelist. The old list ['sent','accepted','draft',
+    // 'pending'] predated the revision engine — a revised quotation (status 'revised' /
+    // 'customer_revised') lost its Convert/Accept/Decline buttons entirely, dead-ending the
+    // main sales flow ("no way to convert that quotation into order"). The model's definition
+    // is closed ("open unless converted/declined/expired/archived"), so future statuses can
+    // never silently fall out of the workflow again.
 
     public function key(): string { return 'quotation'; }
 
@@ -45,11 +51,12 @@ final class QuotationCapability implements ObjectCapability
         $qdate = $q->created_at ? Carbon::parse($q->created_at)->format('Y-m-d') : null;
         $fmt = fn ($v) => $rc->text((float) $v, $cur, null, $qdate);
         $status = strtolower((string) $q->status);
+        $statusLabel = ucfirst(str_replace('_', ' ', $status ?: 'draft'));   // "customer_revised" → "Customer revised"
         $valid = $q->valid_until ? Carbon::parse($q->valid_until) : null;
         $created = $q->created_at ? Carbon::parse($q->created_at) : null;
         $ep = '/api/v1/workspace/quotation/' . $q->id;
         $converted = (bool) $q->order_id;
-        $canConvert = ! $converted && in_array($status, self::OPEN, true);
+        $canConvert = ! $converted && $q->isOpen();   // open incl. revised/customer_revised/accepted
 
         $qPhone = preg_replace('/[^0-9]/', '', (string) $q->customer_phone);
         $profile = $qPhone === '' ? null : CustomerProfile::where('tenant_id', $ctx->tenantId())
@@ -74,7 +81,7 @@ final class QuotationCapability implements ObjectCapability
 
         // --- pipeline ---
         $st = fn ($done, $now) => $done ? 'done' : ($now ? 'now' : 'wait');
-        $sent = in_array($status, ['sent', 'accepted', 'converted'], true);
+        $sent = in_array($status, ['sent', 'accepted', 'converted', 'revised', 'customer_revised'], true);   // a revision is always re-sent
         $pipeline = [
             ['label' => 'Drafted', 'value' => $q->quote_no, 'state' => 'done', 'icon' => 'edit'],
             ['label' => 'Sent', 'value' => $sent ? 'Sent' : 'Not sent', 'state' => $st($sent, ! $sent), 'icon' => 'send'],
@@ -127,7 +134,7 @@ final class QuotationCapability implements ObjectCapability
                 ['Currency', $cur],
                 $valid ? ['Valid until', $valid->format('d M Y')] : null,
                 $created ? ['Created', $created->format('d M Y')] : null,
-                ['Status', ucfirst($status ?: 'draft')],
+                ['Status', $statusLabel],
             ]))],
         ]);
 
@@ -141,12 +148,15 @@ final class QuotationCapability implements ObjectCapability
             ['key' => 'items', 'label' => 'Line items', 'value' => number_format($q->items->count())],
             ['key' => 'valid', 'label' => 'Valid until', 'value' => $valid ? $valid->format('d M Y') : '—', 'tone' => ($valid && $valid->isPast() && ! $converted) ? 'warn' : ''],
             ['key' => 'created', 'label' => 'Created', 'value' => $created ? $created->format('d M Y') : '—'],
-            ['key' => 'status', 'label' => 'Status', 'value' => ucfirst($status ?: 'draft')],
+            ['key' => 'status', 'label' => 'Status', 'value' => $statusLabel],
         ];
 
         // --- CRUD actions (reuse the panel's proven /papi endpoints; no engine changes) ---
-        $isOpen = ! $converted && in_array($status, ['sent', 'pending', 'draft'], true);
-        $canEdit = ! $converted && $status !== 'accepted';
+        // Accept/Decline/Expire: any OPEN quote not yet accepted (incl. revised states).
+        // Revise: the model's own editability rule — the revise service enforces the same one,
+        // so the button now only shows where the action can actually succeed.
+        $isOpen = ! $converted && $q->isOpen() && $status !== 'accepted';
+        $canEdit = ! $converted && $q->isEditable();
 
         $editLines = $q->items->map(fn ($it) => [
             'name' => (string) $it->name, 'unit' => (string) ($it->unit_label ?? ''),
@@ -213,6 +223,12 @@ final class QuotationCapability implements ObjectCapability
         }
         if ($valid && $valid->isPast()) {
             return new Brief('med', 'Quotation expired.', 'Validity lapsed on ' . $valid->format('d M Y') . '. Re-issue with fresh pricing if the customer is still interested.', ['tone' => 'warn', 'label' => 'Expired']);
+        }
+        if ($status === 'customer_revised') {
+            return new Brief('med', 'Customer edited this quotation.', 'They changed it on their review link (Revision ' . max(1, (int) $q->current_rev) . ') — check the changes, then convert it to an order or reply.', ['tone' => 'info', 'label' => 'Customer revised']);
+        }
+        if ($status === 'revised') {
+            return new Brief('low', 'Quotation revised (Revision ' . max(1, (int) $q->current_rev) . ').', 'The customer got the updated items and total on WhatsApp. Convert to an order when they accept.', ['tone' => 'info', 'label' => 'Revised']);
         }
 
         return new Brief('low', $fmt($q->total) . ' quotation to ' . ($q->customer_name ?: 'the customer') . '.', 'Awaiting the customer\'s reply. Convert it to an order when they accept.', ['tone' => 'info', 'label' => 'Awaiting reply']);

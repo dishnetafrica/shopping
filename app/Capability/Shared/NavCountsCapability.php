@@ -62,7 +62,7 @@ final class NavCountsCapability implements Capability
             'customers'         => $safe(fn () => $c(CustomerProfile::query())),
             'chats'             => $safe(fn () => $c(Conversation::query()->where('unread', '>', 0))),
             'salesOrder'        => $safe(fn () => $c(Order::query())),
-            'quotations'        => $safe(fn () => $c(Quotation::query()->whereRaw("lower(coalesce(status,'')) in ('sent','accepted','pending')")->whereNull('order_id'))),
+            'quotations'        => $safe(fn () => $c(Quotation::query()->whereRaw("lower(coalesce(status,'')) in ('sent','accepted','pending','revised','customer_revised')")->whereNull('order_id'))),   // revised quotes stay in the "waiting" badge (v4.6.3)
             'invoice'           => $safe(fn () => $c(Invoice::query())),
             'payment'           => $safe(fn () => $c(CustomerPayment::query())),
             'product'           => $safe(fn () => $c(Product::query())),

@@ -47,16 +47,17 @@ final class QuotationListCapability implements ProcessCapability
             $status = strtolower((string) $q->status);
             $qcur = (string) ($q->currency ?: $native);
             $qdate = $q->created_at ? Carbon::parse($q->created_at)->toDateString() : null;
-            if ($status === 'sent') { $awaiting++; $openRows[] = ['amount' => (float) $q->total, 'currency' => $qcur, 'date' => $qdate]; }
+            // Revised quotes are still awaiting the customer (v4.6.3 — they were falling out of every bucket).
+            if (in_array($status, ['sent', 'revised', 'customer_revised'], true)) { $awaiting++; $openRows[] = ['amount' => (float) $q->total, 'currency' => $qcur, 'date' => $qdate]; }
             if (in_array($status, ['accepted', 'converted'], true)) { $accepted++; }
             if ($status === 'converted') { $converted++; }
 
-            $label = ucfirst($status);
+            $label = ucfirst(str_replace('_', ' ', $status));   // "customer_revised" → "Customer revised"
             $badge = match ($status) {
                 'accepted', 'converted' => 'ok',
                 'declined' => 'danger',
                 'expired' => 'default',
-                'sent' => 'info',
+                'sent', 'revised', 'customer_revised' => 'info',
                 default => 'default',
             };
             $valid = $q->valid_until ? Carbon::parse($q->valid_until) : null;
