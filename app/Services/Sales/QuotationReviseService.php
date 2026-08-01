@@ -177,8 +177,105 @@ class QuotationReviseService
                 'total'       => $grand,
                 'currency'    => (string) $q->currency,
                 'change_count' => count($summary),
+                // For notifications: the full new line set + the diff, so WhatsApp messages can show
+                // the customer WHAT the quotation now contains instead of a bare total (live fix 01 Aug).
+                'lines'       => array_values($lines),
+                'changes'     => array_values($summary),
             ];
         });
+    }
+
+    /* ---------------------------------------------------------------------------------------------
+     * WhatsApp message composition helpers (pure functions — no DB, no framework calls) so both the
+     * panel revise notification and the portal sales notification render revisions the same way.
+     * ------------------------------------------------------------------------------------------- */
+
+    /** Money for chat text: 2dp with thousands separators, trailing ".00" trimmed (152.51 → "152.51", 120.00 → "120"). Never silently rounds cents away. */
+    public static function money(float $v): string
+    {
+        $s = number_format($v, 2);
+
+        return substr($s, -3) === '.00' ? substr($s, 0, -3) : $s;
+    }
+
+    /** The current line set as a WhatsApp block — one "• qty x name — sum" row per line, capped, with freight shown so the rows visibly add up to the total. */
+    public static function itemsBlock(array $lines, float $freight = 0.0, int $cap = 15): string
+    {
+        $out = [];
+        foreach (array_slice($lines, 0, $cap) as $l) {
+            $qty  = max(1, (int) ($l['qty'] ?? 1));
+            $sum  = $qty * (float) ($l['price'] ?? 0);
+            $row  = '• ' . $qty . ' x ' . trim((string) ($l['name'] ?? ''));
+            $disc = (float) ($l['disc'] ?? 0);
+            if ($disc > 0) {
+                $row .= ' (' . self::money($disc) . '% off)';
+            }
+            $out[] = $row . ' — ' . self::money($sum);
+        }
+        $more = count($lines) - $cap;
+        if ($more > 0) {
+            $out[] = '…and ' . $more . ' more item' . ($more === 1 ? '' : 's') . ' (full list in the PDF)';
+        }
+        if ($freight > 0) {
+            $out[] = '• Transport/delivery — ' . self::money($freight);
+        }
+
+        return implode("\n", $out);
+    }
+
+    /**
+     * One human line describing this revision's diff ("" when nothing listable). $withRequests
+     * includes customer price-review/comment requests — wanted on the SALES notification, noise on
+     * the customer copy (they wrote them).
+     */
+    public static function changesText(array $changes, bool $withRequests = false, int $cap = 5): string
+    {
+        $parts = [];
+        foreach ($changes as $c) {
+            $name = trim((string) ($c['name'] ?? ''));
+            switch ((string) ($c['type'] ?? '')) {
+                case 'add':
+                    $parts[] = 'added ' . max(1, (int) ($c['qty'] ?? 1)) . ' x ' . $name;
+                    break;
+                case 'remove':
+                    $parts[] = 'removed ' . $name;
+                    break;
+                case 'qty':
+                    $parts[] = $name . ' qty ' . (int) ($c['from'] ?? 0) . ' → ' . (int) ($c['to'] ?? 0);
+                    break;
+                case 'price':
+                    $parts[] = $name . ' price ' . self::money((float) ($c['from'] ?? 0)) . ' → ' . self::money((float) ($c['to'] ?? 0));
+                    break;
+                case 'discount':
+                    $parts[] = $name . ' discount ' . self::money((float) ($c['from'] ?? 0)) . '% → ' . self::money((float) ($c['to'] ?? 0)) . '%';
+                    break;
+                case 'freight':
+                    $parts[] = 'transport/delivery set to ' . self::money((float) ($c['to'] ?? 0));
+                    break;
+                case 'comment':
+                    $txt = trim((string) ($c['text'] ?? ''));
+                    if ($txt !== '') {
+                        $parts[] = '"' . mb_substr($txt, 0, 120) . '"';
+                    }
+                    break;
+                case 'request':
+                    if ($withRequests) {
+                        $txt = trim((string) ($c['text'] ?? ''));
+                        if ($txt !== '') {
+                            $parts[] = 'customer asked: "' . mb_substr($txt, 0, 120) . '"';
+                        }
+                    }
+                    break;
+                    // 'remarks' prints on the PDF + portal — too long for a chat line.
+            }
+        }
+        if (! $parts) {
+            return '';
+        }
+        $extra = count($parts) - $cap;
+        $parts = array_slice($parts, 0, $cap);
+
+        return 'What changed: ' . implode('; ', $parts) . ($extra > 0 ? ' (+' . $extra . ' more)' : '');
     }
 
     /** Create Revision 1 from the current items if the ledger is empty (idempotent). */

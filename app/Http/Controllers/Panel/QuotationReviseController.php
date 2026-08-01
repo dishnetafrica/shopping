@@ -54,15 +54,37 @@ class QuotationReviseController extends Controller
         }
 
         // Notify the customer their quotation was updated by sales (best-effort WhatsApp with portal link).
+        // Live fix 01 Aug: the old message showed ONLY the new total — the customer couldn't see a
+        // single line item ("customer is not able to see anything from line"). Now the message carries
+        // the full updated line set + a "what changed" diff, so it stands on its own like the original
+        // quotation message does.
         try {
             $phone = preg_replace('/[^0-9]/', '', (string) $q->customer_phone);
             if ($phone !== '' && $q->public_token) {
-                $portal = url('/q/' . $q->public_token);
+                $portal = $q->canonicalPortalUrl();
+                $items  = QuotationReviseService::itemsBlock($res['lines'] ?? [], (float) ($q->freight ?? 0));
+                $what   = QuotationReviseService::changesText($res['changes'] ?? []);
+
+                $msg = "📄 Your quotation {$q->quote_no} has been updated (Revision {$res['revision']}).";
+                if ($items !== '') {
+                    $msg .= "\n\n" . $items;
+                }
+                if ($what !== '') {
+                    $msg .= "\n\n" . $what;
+                }
+                $msg .= "\n\nNew total: {$q->currency} " . QuotationReviseService::money((float) $res['total'])
+                    . "\nReview & approve: {$portal}";
+
                 $gw = app(WhatsAppManager::class)->forTenant($t);
-                $gw->sendText($t->whatsapp_instance, $phone,
-                    "Your quotation {$q->quote_no} has been updated (Revision {$res['revision']}).\nNew total: {$q->currency} " . number_format((float) $res['total']) . "\nReview & approve: {$portal}");
-                if (method_exists($gw, 'sendDocument') && $q->pdf_path) {
-                    $gw->sendDocument($t->whatsapp_instance, $phone, Storage::disk('public')->url($q->pdf_path), 'Quotation-' . $q->quote_no . '.pdf', 'Updated quotation ' . $q->quote_no);
+                $gw->sendText($t->whatsapp_instance, $phone, $msg);
+
+                if (method_exists($gw, 'sendDocument')) {
+                    // Public streaming route (/q/{token}/pdf) — works for BOTH Evolution (URL fetch)
+                    // and Cloud API (needs a public https link). The old Storage::disk('public')->url()
+                    // path 404s without a storage symlink, so the updated PDF never arrived.
+                    $gw->sendDocument($t->whatsapp_instance, $phone, rtrim($portal, '/') . '/pdf',
+                        'Quotation-' . $q->quote_no . '.pdf',
+                        'Updated quotation ' . $q->quote_no . ' (Revision ' . $res['revision'] . ')');
                 }
             }
         } catch (\Throwable $e) {

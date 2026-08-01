@@ -7,6 +7,7 @@ use App\Models\Quotation;
 use App\Models\Tenant;
 use App\Services\Bot\QuotationService;
 use App\Services\Sales\QuotationConvertService;
+use App\Services\Sales\QuotationReviseService;
 use App\Services\WhatsApp\WhatsAppManager;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
@@ -235,7 +236,7 @@ class QuotationPortalController extends Controller
         $to      = trim((string) $r->input('to', ''));
 
         $portal  = url(rtrim($base, '/') . '/q/' . $q->public_token);
-        $summary = "📄 Quotation {$q->quote_no}\nTotal: {$q->currency} " . number_format((float) $q->total)
+        $summary = "📄 Quotation {$q->quote_no}\nTotal: {$q->currency} " . QuotationReviseService::money((float) $q->total)
             . (optional($q->valid_until)->toFormattedDateString() ? "\nValid until: " . $q->valid_until->toFormattedDateString() : '')
             . "\nView & approve online: {$portal}";
 
@@ -253,7 +254,7 @@ class QuotationPortalController extends Controller
                     \App\Support\Comms::sendQuotation($tenant, $to, [
                         'customer_name'    => (string) ($q->customer_name ?: 'Customer'),
                         'quotation_number' => (string) $q->quote_no,
-                        'total'            => trim($q->currency . ' ' . number_format((float) $q->total)),
+                        'total'            => trim($q->currency . ' ' . QuotationReviseService::money((float) $q->total)),
                         'valid_until'      => optional($q->valid_until)->toFormattedDateString() ?: '—',
                         'portal_url'       => $portal,
                         'quotation_id'     => $q->id,
@@ -376,8 +377,13 @@ class QuotationPortalController extends Controller
             if ($salesPhone !== '') {
                 $portal = url(rtrim($base, '/') . '/q/' . $q->public_token);
                 $gw = app(WhatsAppManager::class)->forTenant($tenant);
+                // Show sales WHAT changed (incl. customer requests) — not just the new total.
+                $what = QuotationReviseService::changesText($res['changes'] ?? [], true);
                 $gw->sendText($tenant->whatsapp_instance, $salesPhone,
-                    "✏️ Quotation {$q->quote_no} was updated by the customer (Revision {$res['revision']}).\nNew total: {$q->currency} " . number_format((float) $res['total']) . "\nReview: {$portal}");
+                    "✏️ Quotation {$q->quote_no} was updated by the customer (Revision {$res['revision']})."
+                    . ($what !== '' ? "\n" . $what : '')
+                    . "\nNew total: {$q->currency} " . QuotationReviseService::money((float) $res['total'])
+                    . "\nReview: {$portal}");
             }
         } catch (\Throwable $e) {
             // best-effort
