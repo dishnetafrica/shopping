@@ -33,6 +33,17 @@ class QuotationPortalController extends Controller
         } else {
             $tenant = Tenant::byCustomDomain(request()->getHost());
             $base   = '';
+            // Host-independent fallback (v4.6.1). The shopless /q/{token} used to resolve ONLY via
+            // a custom-domain host match — so https://mycloudbss.com/q/… 404'd for every tenant
+            // (the platform domain is nobody's custom_domain) and every WhatsApp link was dead.
+            // The 40-char unguessable token IS the credential, so resolve by token alone: the
+            // portal now opens on any host that serves the app, and a custom domain simply starts
+            // working the day it actually points here. withoutGlobalScopes: this runs before
+            // TenantContext is set, and the tenant scope would otherwise match no rows.
+            if (! $tenant && $token !== '') {
+                $byToken = Quotation::withoutGlobalScopes()->where('public_token', $token)->first();
+                $tenant  = $byToken ? Tenant::find($byToken->tenant_id) : null;
+            }
         }
         abort_if(! $tenant, 404);
         abort_if(($tenant->status ?? 'active') === 'suspended', 404);

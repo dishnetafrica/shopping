@@ -71,6 +71,7 @@ final class SettingsWriteService
         'show_model_boxer100', 'show_model_boxer125hd', 'show_model_boxer150',
         'show_model_boxer125x', 'show_model_ct125hd', 'show_model_boxer150x',
         'sf_hide_oos',  // storefront: hide out-of-stock parts (sell only what you have)
+        'custom_domain_live',  // owner confirms the custom domain serves CloudBSS → use it in sent links (v4.6.1)
     ];
 
     /** Enum settings: [key => allowed values]. Document PDF page setup (read by the PDF renderers). */

@@ -87,16 +87,21 @@ class Quotation extends Model
         return url(rtrim($base, '/') . '/q/' . $this->public_token);
     }
 
-    /** Canonical portal URL resolved from the tenant (custom domain if set, else platform slug) — host-independent. */
+    /**
+     * Canonical portal URL for links the system SENDS (WhatsApp messages, PDF QR codes).
+     * v4.6.1: the custom domain is used ONLY when the owner has confirmed it actually points at
+     * CloudBSS (Settings → Storefront → "My domain points to CloudBSS"). familyshoppers.net was
+     * hosted elsewhere, which made every sent quotation link a dead 404. Default: the platform
+     * URL — always valid, since the shopless /q/{token} route now resolves by token on any host.
+     */
     public function canonicalPortalUrl(): string
     {
         $tenant = $this->relationLoaded('tenant') ? $this->tenant : Tenant::find($this->tenant_id);
         $dom = strtolower(trim((string) ($tenant->custom_domain ?? '')));
-        if ($dom !== '') {
+        if ($dom !== '' && $tenant && (bool) $tenant->setting('custom_domain_live', false)) {
             return 'https://' . rtrim($dom, '/') . '/q/' . $this->public_token;
         }
-        $slug = $tenant && $tenant->slug ? '/' . $tenant->slug : '';
 
-        return url($slug . '/q/' . $this->public_token);
+        return url('/q/' . $this->public_token);
     }
 }

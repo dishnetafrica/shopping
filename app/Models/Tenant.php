@@ -155,7 +155,14 @@ class Tenant extends Model
         $dom  = strtolower(trim((string) ($this->custom_domain ?? '')));
         $dom  = preg_replace('#^https?://#', '', $dom);   // tolerate scheme if ever stored
         $dom  = preg_replace('#/.*$#', '', $dom);          // tolerate trailing path
-        return $dom !== '' ? 'https://' . $dom . $path : url($path);
+        // v4.6.1: only link the shop's own domain when the owner confirmed it points at CloudBSS
+        // (Settings → Storefront). Otherwise order-tracking / job / digest links sent on WhatsApp
+        // land on whatever else is hosted there (dead 404s). Platform URL always works.
+        if ($dom !== '' && (bool) $this->setting('custom_domain_live', false)) {
+            return 'https://' . $dom . $path;
+        }
+
+        return url($path);
     }
 
     /** Staff-login seat limit for the active plan. null = unlimited. */

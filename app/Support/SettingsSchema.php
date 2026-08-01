@@ -133,6 +133,11 @@ final class SettingsSchema
                 ['label' => 'Availability', 'help' => 'For a parts business — sell only what you actually have.', 'fields' => [
                     ['key' => 'sf_hide_oos', 'type' => 'bool', 'label' => 'Show only parts in stock (hide out-of-stock)', 'default' => false, 'help' => 'When ON, any part with 0 stock is hidden from listings, search and browse. Parts with no stock number set (untracked) still show as “to order”.'],
                 ]],
+                // v4.6.1 — which host goes into links the system SENDS (quotation review, order tracking).
+                ['label' => 'Custom domain', 'help' => 'Which web address customers see in WhatsApp links (quotation review, order tracking).', 'fields' => [
+                    ['key' => 'custom_domain_live', 'type' => 'bool', 'label' => 'My own domain points to CloudBSS', 'default' => false,
+                     'help' => 'Turn ON only after your domain (e.g. familyshoppers.net) is actually connected to CloudBSS hosting — links will then use it. While OFF, links use the platform address, which always works. If your domain hosts a separate website, keep this OFF or every sent link breaks.'],
+                ]],
                 ['label' => 'Trust & delivery promises', 'help' => 'Shown on your product pages and homepage to reassure customers before they buy. Leave blank to use sensible defaults.', 'fields' => [
                     ['key' => 'sf_genuine',      'type' => 'text', 'label' => 'Genuine-parts promise', 'help' => 'e.g. 100% genuine Bajaj — verify the hologram, or your money back.'],
                     ['key' => 'sf_delivery_eta', 'type' => 'text', 'label' => 'Delivery time', 'help' => 'e.g. Same-day in town · 24–48h upcountry'],
