@@ -109,6 +109,7 @@ Route::get('/a/{token}',        [\App\Http\Controllers\Panel\ShipmentTrackContro
 Route::post('/a/{token}/action',[\App\Http\Controllers\Panel\ShipmentTrackController::class, 'agentAction']);
 Route::post('/a/{token}/scan',  [\App\Http\Controllers\Panel\ShipmentTrackController::class, 'agentScan']);
 Route::post('/a/{token}/scan-confirm',[\App\Http\Controllers\Panel\ShipmentTrackController::class, 'agentScanConfirm']);
+Route::post('/a/{token}/line',  [\App\Http\Controllers\Panel\ShipmentTrackController::class, 'agentLine']);   // v4.7: tick a customer off the manifest
 
 // PWA assets (public — a manifest / service worker / icon must load without a session).
 Route::get('/manifest.webmanifest', [PwaController::class, 'manifest']);
@@ -740,6 +741,11 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::match(['get','post'], 'consignment-request-quick', [\App\Http\Controllers\Panel\ConsignmentController::class, 'requestQuick']);
         Route::get('consignment-contacts', [\App\Http\Controllers\Panel\ConsignmentController::class, 'contacts']);
         Route::get('consignment-sheet',            [\App\Http\Controllers\Panel\ConsignmentController::class, 'sheet']);
+        // Box packing (v4.7): which box holds whose goods, packed how.
+        Route::get('consignment-boxes',            [\App\Http\Controllers\Panel\ConsignmentController::class, 'boxes']);
+        Route::match(['get','post'], 'consignment-box-save',   [\App\Http\Controllers\Panel\ConsignmentController::class, 'boxSave']);
+        Route::match(['get','post'], 'consignment-box-remove', [\App\Http\Controllers\Panel\ConsignmentController::class, 'boxRemove']);
+        Route::match(['get','post'], 'consignment-add-many',   [\App\Http\Controllers\Panel\ConsignmentController::class, 'addMany']);
         // Ads (Facebook-ad bot understanding: toggle + activity)
         Route::get('ads',                          [\App\Http\Controllers\Panel\AdsController::class, 'data']);
         Route::match(['get','post'], 'ads-toggle', [\App\Http\Controllers\Panel\AdsController::class, 'toggle']);

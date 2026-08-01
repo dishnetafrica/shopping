@@ -208,11 +208,56 @@ class ShipmentController extends Controller
             }
 
             $res = $this->shipments->recordAction($s, (string) $r->query('action'), $payload);
+
+            // v4.7: dispatching WhatsApps the Juba agent the packed manifest + their no-login
+            // receive link — the structured replacement for the group-chat box photos. Best-effort.
+            if (($res['ok'] ?? false) && (string) $r->query('action') === 'dispatch') {
+                try { $this->notifyAgentDispatched($s->fresh()); } catch (\Throwable $e) { /* never break dispatch */ }
+            }
+
             return response()->json($res);
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('shipment action failed: ' . $e->getMessage());
             return response()->json(['ok' => false, 'error' => $e->getMessage()]);
         }
+    }
+
+    /** WhatsApp the destination agent: consignment summary, box-by-box contents, receive link. */
+    private function notifyAgentDispatched(Shipment $s): void
+    {
+        $phone = preg_replace('/[^0-9]/', '', (string) ($s->destination_agent_phone
+            ?: ($s->tenant ? $s->tenant->setting('consignment_agent_phone', '') : '')));
+        if ($phone === '' || ! $s->token || ! $s->tenant) {
+            return;
+        }
+
+        $lines  = \App\Models\ShipmentOrder::where('shipment_id', $s->id)->get();
+        $orders = $lines->count() ? Order::whereIn('id', $lines->pluck('order_id'))->get()->keyBy('id') : collect();
+        $boxes  = \App\Models\ShipmentBox::where('shipment_id', $s->id)->orderBy('box_number')->get();
+
+        $msg = "🚌 Consignment {$s->shipment_number} dispatched"
+            . ($s->bus_number ? " — bus {$s->bus_number}" : '')
+            . ($s->transport_company ? " ({$s->transport_company})" : '') . "\n"
+            . trim((string) $s->origin_city . ' → ' . (string) $s->destination_city, ' →') . "\n"
+            . 'Boxes: ' . ((int) ($s->boxes_sent ?? $boxes->count())) . ' · Orders: ' . $lines->count();
+
+        $shown = 0;
+        foreach ($boxes as $b) {
+            if ($shown >= 10) { $msg .= "\n…and " . ($boxes->count() - $shown) . ' more boxes (see manifest)'; break; }
+            $who = implode(', ', array_values(array_filter(array_map(
+                fn ($oid) => ($o = $orders->get((int) $oid)) ? (string) ($o->customer_name ?: $o->customer_phone) : '',
+                (array) ($b->order_ids ?? [])
+            ))));
+            if ($who === '' && ! $b->packing && ! $b->note) continue;
+            $msg .= "\n• Box {$b->box_number}" . ($b->packing ? " ({$b->packing})" : '') . ($who !== '' ? ": {$who}" : '')
+                . ($b->note ? ' — ' . mb_substr((string) $b->note, 0, 60) : '');
+            $shown++;
+        }
+
+        $msg .= "\n\nReceive & tick off here (no login):\n" . url('/a/' . $s->token);
+
+        app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($s->tenant)
+            ->sendText($s->tenant->whatsapp_instance, $phone, $msg);
     }
 
     /** Mark a discrepancy resolved (owner has chased it down). */
@@ -402,8 +447,20 @@ class ShipmentController extends Controller
                 ->header('Content-Type', 'text/html; charset=UTF-8');
         }
 
+        // v4.7: a label shows WHOSE goods are inside + how the box is packed (falls back to the
+        // legacy single-order customer when the box has no packing record).
+        $lineOrders = collect();
+        try {
+            $oids = $boxes->flatMap(fn ($b) => (array) ($b->order_ids ?? []))->unique()->values()->all();
+            if ($oids) $lineOrders = Order::whereIn('id', $oids)->get()->keyBy('id');
+        } catch (\Throwable $e) { /* labels never fail over contents */ }
+
         $cards = '';
         foreach ($boxes as $b) {
+            $who = implode(', ', array_values(array_filter(array_map(
+                fn ($oid) => ($o = $lineOrders->get((int) $oid)) ? (string) ($o->customer_name ?: $o->customer_phone) : '',
+                (array) ($b->order_ids ?? [])
+            ))));
             $cards .= '<div class="lbl">'
                 . '<div class="top"><div class="sh">' . e($s->shipment_number) . '</div>'
                 . '<div class="bx">BOX ' . (int) $b->box_number . ' / ' . $total . '</div></div>'
@@ -411,7 +468,10 @@ class ShipmentController extends Controller
                 . '<div class="code">' . e($b->code) . '</div>'
                 . '<div class="meta"><div><b>' . e($shop) . '</b></div>'
                 . ($route !== '' ? '<div>' . e($route) . '</div>' : '')
-                . ($cust !== '' ? '<div>' . e($cust) . ($phone !== '' ? ' · ' . e($phone) : '') . '</div>' : '')
+                . ($who !== '' ? '<div style="font-weight:700">' . e($who) . '</div>'
+                    : ($cust !== '' ? '<div>' . e($cust) . ($phone !== '' ? ' · ' . e($phone) : '') . '</div>' : ''))
+                . ($b->packing ? '<div>Packed: ' . e($b->packing) . '</div>' : '')
+                . ($b->note ? '<div class="s">' . e(mb_substr($b->note, 0, 60)) . '</div>' : '')
                 . '</div></div>';
         }
 

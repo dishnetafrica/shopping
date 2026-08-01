@@ -176,10 +176,19 @@ mark{background:#fdf2c7;border-radius:3px;padding:0 1px}
   <div class="warn"><b>Say it the way the system means it:</b> a queue item is a question, never an accusation. "Clean" answers most of them. Using it to blame people will make staff stop counting honestly — and then the numbers are worth nothing.</div>
 </div>
 
-<div class="card" id="stockmove" data-role="store owner" data-kw="consignment deliveries transport kampala juba movement">
-  <h2>🚚 Consignments &amp; Deliveries — goods on the move</h2>
-  <p class="where">Open: Menu → Stock → Consignments / Deliveries</p>
-  <p><b>Consignments</b> track goods sent to be sold elsewhere (e.g. Kampala → Juba): what left, what arrived, what sold. <b>Deliveries</b> is the day's outbound board. Long-haul movements also have the <b>Transport register</b> (open <code>/transport</code> on a phone) for the movement ledger.</p>
+<div class="card" id="stockmove" data-role="store owner sales" data-kw="consignment deliveries transport kampala juba movement bus box packing manifest labels agent send by bus">
+  <h2>🚚 Consignments — the Kampala → Juba bus, box by box</h2>
+  <p class="where">Open: Menu → Inventory → Consignments — or select orders on Sales Orders and tap <b>🚌 Send by bus</b></p>
+  <p>One consignment = one bus load. It carries <b>customer orders</b> (the manifest) and <b>loose market stock</b>, and tracks custody the whole way: packed → handed to transporter → departed → arrived, with box counts at every handoff — one box missing is flagged automatically on the exact leg where it disappeared.</p>
+  <ol>
+    <li><b>Load it:</b> on Sales Orders, tick the orders going on the bus → <b>🚌 Send by bus</b> → create (or pick) the consignment. Add any market stock below the manifest.</li>
+    <li><b>Pack it:</b> in "How it is packed", add a box for each carton/bag, choose the packing (carton, plastic bag, sack…), tick whose goods go inside, add a note. This replaces typing "1 box for gurpreet, 2box - rawu,michel" in the group chat — and it prints.</li>
+    <li><b>Paper &amp; labels:</b> 🖨 Print manifest (orders + box map + signatures for loading/receiving) and 🏷 Print box labels (QR per box showing whose goods and the packing).</li>
+    <li><b>Dispatch:</b> tap Dispatch with the bus details. The Juba agent automatically gets a WhatsApp with the box-by-box list and a <b>no-login receive link</b>; "Tell customers it's on the way" messages every customer once it departs.</li>
+    <li><b>Receive in Juba:</b> the agent opens the link on any phone — scans or ticks each box, confirms arrival with a photo, then ticks each customer as they collect (<b>✓ Given</b>). Each tick marks the real order Delivered — invoice and customer message happen by themselves.</li>
+  </ol>
+  <div class="tip"><b>Juba needs stock?</b> The Request card on the Consignments screen sends the "please pack &amp; send" list straight to Kampala's WhatsApp — and unsold stock carries over to the next consignment automatically.</div>
+  <div class="warn"><b>Box count is sacred.</b> Count at every handoff. If Juba receives 11 of 12, the system flags exactly which leg lost the box — that is your claim against the transporter, in writing.</div>
 </div>
 
 <div class="grp">Money</div>

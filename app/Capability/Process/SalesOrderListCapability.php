@@ -92,6 +92,9 @@ final class SalesOrderListCapability implements ProcessCapability
             ->table($columns, $rows, [], [
                 'selectable' => true,
                 'bulk' => [
+                    // v4.7: hand the selected orders to the Consignments screen ("client" actions
+                    // are handled inside the shell — no server endpoint).
+                    ['label' => '🚌 Send by bus', 'client' => 'sendbus', 'tone' => 'primary'],
                     ['label' => 'Export CSV', 'method' => 'GET', 'endpoint' => '/papi/export/orders?format=csv'],
                     ['label' => 'Export PDF', 'method' => 'GET', 'endpoint' => '/papi/export/orders?format=pdf'],
                 ],

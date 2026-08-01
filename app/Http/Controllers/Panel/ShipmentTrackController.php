@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
+use App\Models\Order;
 use App\Models\Shipment;
+use App\Models\ShipmentBox;
+use App\Models\ShipmentOrder;
 use App\Services\Logistics\ShipmentService;
 use App\Services\Logistics\ShipmentStateMachine as SM;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -62,6 +66,48 @@ class ShipmentTrackController extends Controller
     public function agentScan(string $token, Request $r)        { return $this->doScan($this->resolve($token), 'destination_agent', $r); }
     public function transporterScanConfirm(string $token, Request $r) { return $this->doScanConfirm($this->resolve($token), 'transport', $r); }
     public function agentScanConfirm(string $token, Request $r)       { return $this->doScanConfirm($this->resolve($token), 'destination_agent', $r); }
+
+    /**
+     * v4.7 — the agent ticks a customer's order off the manifest (delivered / returned) from the
+     * no-login page. Mirrors the panel's consignment-line-status exactly: the ShipmentOrder line is
+     * stamped AND the underlying Order flips (Delivered → invoice + stock + customer WhatsApp ride
+     * the normal observer chain). Only after the shipment has arrived — receive first, then hand out.
+     */
+    public function agentLine(string $token, Request $r)
+    {
+        $s = $this->resolve($token);
+        if ($s->status !== SM::ARRIVED && ! $s->arrived_at) {
+            return response()->json(['ok' => false, 'error' => 'Confirm arrival first, then tick customers off.'], 409);
+        }
+
+        $line = ShipmentOrder::where('shipment_id', $s->id)->find((int) $r->input('line_id'));
+        if (! $line) {
+            return response()->json(['ok' => false, 'error' => 'Line not found on this consignment.'], 404);
+        }
+        $to = strtolower((string) $r->input('status', ''));
+        if (! in_array($to, [ShipmentOrder::DELIVERED, ShipmentOrder::RETURNED, ShipmentOrder::ON_BOARD], true)) {
+            return response()->json(['ok' => false, 'error' => 'bad_status'], 422);
+        }
+        $actor = (string) ($s->destination_agent_name ?: 'Destination agent');
+
+        DB::transaction(function () use ($line, $to, $actor, $s) {
+            $line->status = $to;
+            $line->delivered_at = $to === ShipmentOrder::DELIVERED ? now() : null;
+            $line->delivered_by = $to === ShipmentOrder::DELIVERED ? $actor : null;
+            $line->save();
+
+            $order = Order::where('tenant_id', $s->tenant_id)->find($line->order_id);
+            if ($order) {
+                if ($to === ShipmentOrder::DELIVERED && $order->status !== 'Delivered') {
+                    $order->status = 'Delivered'; $order->save();   // OrderObserver → invoice + customer WhatsApp
+                } elseif ($to === ShipmentOrder::RETURNED && $order->status !== 'Returned') {
+                    $order->status = 'Returned'; $order->save();
+                }
+            }
+        });
+
+        return response()->json(['ok' => true, 'status' => $line->status]);
+    }
 
     /** The scannable custody stage for this role at the shipment's current status (or null). */
     private function scanStage(Shipment $s, string $role): ?string
@@ -245,12 +291,68 @@ class ShipmentTrackController extends Controller
             $card = '<div class="action"><div class="muted">' . $msg . '</div></div>';
         }
 
+        // v4.7 — the AGENT sees what is inside each box and ticks customers off the manifest.
+        $packHtml = '';
+        $maniHtml = '';
+        if ($role === 'destination_agent') {
+            $lines  = ShipmentOrder::where('shipment_id', $s->id)->orderBy('id')->get();
+            $orders = $lines->count() ? Order::whereIn('id', $lines->pluck('order_id'))->get()->keyBy('id') : collect();
+            $bxs    = ShipmentBox::where('shipment_id', $s->id)->orderBy('box_number')->get();
+
+            $boxOf = [];
+            $packRows = '';
+            foreach ($bxs as $b) {
+                $who = [];
+                foreach ((array) ($b->order_ids ?? []) as $oid) {
+                    $boxOf[(int) $oid][] = 'B' . (int) $b->box_number;
+                    $o = $orders->get((int) $oid);
+                    if ($o) $who[] = (string) ($o->customer_name ?: $o->customer_phone);
+                }
+                if (! $who && ! $b->packing && ! $b->note) continue;
+                $packRows .= '<div class="pk"><b>Box ' . (int) $b->box_number . '</b>'
+                    . ($b->packing ? ' <span class="pill">' . e($b->packing) . '</span>' : '')
+                    . ($who ? '<div>' . e(implode(', ', $who)) . '</div>' : '')
+                    . ($b->note ? '<div class="muted">' . e($b->note) . '</div>' : '') . '</div>';
+            }
+            if ($packRows !== '') {
+                $packHtml = '<div class="tl"><div class="tlh">What is in each box</div>' . $packRows . '</div>';
+            }
+
+            if ($lines->count()) {
+                $canTick = ($s->status === SM::ARRIVED || $s->arrived_at);
+                $mrows = '';
+                foreach ($lines as $ln) {
+                    $o = $orders->get($ln->order_id);
+                    $name = $o ? (string) ($o->customer_name ?: $o->customer_phone) : ('#' . $ln->order_id);
+                    $whereB = isset($boxOf[(int) $ln->order_id]) ? implode(' ', $boxOf[(int) $ln->order_id]) : '';
+                    $chip = $ln->status === ShipmentOrder::DELIVERED
+                        ? '<span class="pill ok">✓ delivered</span>'
+                        : ($ln->status === ShipmentOrder::RETURNED ? '<span class="pill bad">returned</span>' : '<span class="pill">on board</span>');
+                    $btns = '';
+                    if ($canTick && $ln->status === ShipmentOrder::ON_BOARD) {
+                        $btns = '<div class="lnbtns">'
+                            . '<button class="btn mini lnbtn" data-line="' . (int) $ln->id . '" data-to="delivered">✓ Given</button>'
+                            . '<button class="btn mini ghost lnbtn" data-line="' . (int) $ln->id . '" data-to="returned">↩ Back to Kampala</button>'
+                            . '</div>';
+                    }
+                    $mrows .= '<div class="mline"><div><b>' . e($name) . '</b> <span class="muted">' . e($o->order_no ?? '') . '</span>'
+                        . ($whereB !== '' ? ' <span class="pill">' . e($whereB) . '</span>' : '')
+                        . ($o && $o->items_text ? '<div class="muted" style="margin-top:2px">' . e(mb_substr((string) $o->items_text, 0, 90)) . '</div>' : '')
+                        . '</div><div>' . $chip . $btns . '</div></div>';
+                }
+                $hint = $canTick ? '' : '<div class="muted" style="margin-bottom:6px">Confirm arrival above first — then tick each customer as they collect.</div>';
+                $maniHtml = '<div class="tl"><div class="tlh">Customer orders (' . $lines->count() . ')</div>' . $hint . $mrows . '</div>';
+            }
+        }
+
         $body = '<div class="card">'
             . '<div class="hdr">📦 ' . e($shop) . ' · ' . e($roleLabel) . '</div>'
             . '<h1>' . e($s->shipment_number) . ' ' . $statusBadge . '</h1>'
             . ($route ? '<div class="muted">' . $route . '</div>' : '')
             . ($expected !== null ? '<div class="exp">Expected boxes: <b>' . (int) $expected . '</b></div>' : '')
             . $card
+            . $packHtml
+            . $maniHtml
             . '<div class="tl"><div class="tlh">Custody chain</div>' . $tl . '</div>'
             . '</div>';
 
@@ -295,6 +397,13 @@ class ShipmentTrackController extends Controller
             . '.btn.ghost2{background:#eef2f8;color:#1f3a5f;width:100%;margin-top:6px}'
             . '.manrow{display:flex;gap:8px;margin-top:8px}.manrow input{flex:1}.manrow .btn{padding:11px 14px;width:auto}'
             . '#cam{width:100%;border-radius:12px;margin-top:8px;background:#000;max-height:280px;object-fit:cover}'
+            . '.pill{font-size:11px;font-weight:800;background:#eef2ee;color:#46554B;border-radius:8px;padding:2px 8px}'
+            . '.pill.ok{background:#e7f6ec;color:#15803D}.pill.bad{background:#fdecec;color:#b23b3b}'
+            . '.pk{padding:7px 0;border-bottom:1px dashed #e7ece8;font-size:14px}'
+            . '.mline{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px dashed #e7ece8;font-size:14px}'
+            . '.lnbtns{display:flex;flex-direction:column;gap:6px;margin-top:6px}'
+            . '.btn.mini{background:#15803D;color:#fff;padding:8px 10px;font-size:12px;border-radius:9px;white-space:nowrap}'
+            . '.btn.mini.ghost{background:#eef2f8;color:#1f3a5f}'
             . '</style></head><body>' . $body
             . '<script>' . $this->pageJs($role, $token) . '</script></body></html>';
 
@@ -310,6 +419,20 @@ class ShipmentTrackController extends Controller
   var base="__BASE__";
   var go=document.getElementById("go"), msg=document.getElementById("msg");
   var act=document.querySelector(".action[data-stage]");
+
+  /* v4.7 — agent manifest tick-off (delegated; buttons exist only after arrival) */
+  document.addEventListener("click",function(ev){
+    var b=ev.target.closest?ev.target.closest(".lnbtn"):null;
+    if(!b)return;
+    var to=b.getAttribute("data-to");
+    if(to==="returned" && !window.confirm("Send this customer's goods back to Kampala?"))return;
+    b.disabled=true; b.textContent="…";
+    fetch(base+"/line",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({line_id:parseInt(b.getAttribute("data-line"),10),status:to})})
+      .then(function(r){return r.json();}).then(function(d){
+        if(d&&d.ok){ location.reload(); }
+        else { b.disabled=false; b.textContent=to==="delivered"?"✓ Given":"↩ Back to Kampala"; alert((d&&d.error)?d.error:"Could not save."); }
+      }).catch(function(){ b.disabled=false; alert("Network error"); });
+  });
 
   if(act && go){ /* ---- BOX SCAN MODE (v6) ---- */
     var total=parseInt(act.getAttribute("data-total"),10)||0;

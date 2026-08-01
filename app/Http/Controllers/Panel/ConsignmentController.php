@@ -491,6 +491,125 @@ class ConsignmentController extends Controller
 
     /** POST /papi/consignment-notify — tell every customer still on board their order is on the way
      *  to Juba. Reuses the "In transit" order status (fires the existing customer WhatsApp). */
+    /* -------------------------------------------------------------------------------------------
+     * Box packing (v4.7) — records HOW each box is packed and WHOSE goods are inside, replacing
+     * the WhatsApp-group improvisation ("1 box for gurpreet / 2box - rawu,michel / plastic").
+     * Boxes can be packed BEFORE dispatch; box_number grows boxes_sent automatically so the
+     * custody chain (labels, scans, missing-box exceptions) rides the same rows.
+     * ----------------------------------------------------------------------------------------- */
+
+    /** GET /papi/consignment-boxes — boxes with packing + contents, plus manifest lines for the picker. */
+    public function boxes(Request $request)
+    {
+        $t = $request->user()->tenant;
+        if (! $t) return response()->json(['ok' => false], 401);
+        $s = Shipment::where('tenant_id', $t->id)->find((int) $request->query('id'));
+        if (! $s) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        $lines  = ShipmentOrder::where('tenant_id', $t->id)->where('shipment_id', $s->id)->orderBy('id')->get();
+        $orders = $lines->count() ? Order::whereIn('id', $lines->pluck('order_id'))->get()->keyBy('id') : collect();
+        $label  = function ($oid) use ($orders) {
+            $o = $orders->get((int) $oid);
+            return $o ? trim((string) ($o->customer_name ?: $o->customer_phone) . ' (' . $o->order_no . ')') : ('#' . $oid);
+        };
+
+        $boxes = \App\Models\ShipmentBox::where('shipment_id', $s->id)->orderBy('box_number')->get()
+            ->map(fn ($b) => [
+                'box_number' => (int) $b->box_number,
+                'code'       => (string) $b->code,
+                'packing'    => (string) ($b->packing ?? ''),
+                'note'       => (string) ($b->note ?? ''),
+                'order_ids'  => array_values(array_map('intval', (array) ($b->order_ids ?? []))),
+                'labels'     => array_values(array_map($label, (array) ($b->order_ids ?? []))),
+            ])->values();
+
+        return response()->json([
+            'ok' => true, 'boxes' => $boxes, 'boxes_sent' => (int) ($s->boxes_sent ?? 0),
+            'manifest' => $lines->map(fn ($ln) => [
+                'order_id' => (int) $ln->order_id, 'label' => $label($ln->order_id), 'status' => (string) $ln->status,
+            ])->values(),
+        ]);
+    }
+
+    /** POST /papi/consignment-box-save — create/update one box: packing, note, which orders inside. */
+    public function boxSave(Request $request)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok' => false], 401);
+        if (! $this->priv($u)) return response()->json(['ok' => false, 'error' => 'not_allowed'], 403);
+        $s = Shipment::where('tenant_id', $t->id)->find((int) $request->input('id'));
+        if (! $s) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        $no = (int) $request->input('box_number');
+        if ($no < 1 || $no > 200) return response()->json(['ok' => false, 'error' => 'bad_box_number'], 422);
+
+        // Only orders actually ON this consignment can be packed into its boxes.
+        $onBoard = ShipmentOrder::where('tenant_id', $t->id)->where('shipment_id', $s->id)->pluck('order_id')->map(fn ($v) => (int) $v)->all();
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array) $request->input('order_ids', [])), fn ($v) => in_array($v, $onBoard, true))));
+
+        $box = \App\Models\ShipmentBox::firstOrCreate(
+            ['shipment_id' => $s->id, 'box_number' => $no],
+            ['tenant_id' => $t->id, 'code' => $s->shipment_number . '-B' . $no]
+        );
+        $box->packing   = mb_substr(trim((string) $request->input('packing', '')), 0, 40) ?: null;
+        $box->note      = mb_substr(trim((string) $request->input('note', '')), 0, 500) ?: null;
+        $box->order_ids = $ids ?: null;
+        $box->save();
+
+        // Packing box N implies the consignment has at least N boxes — keep the custody count true.
+        if ($no > (int) ($s->boxes_sent ?? 0)) {
+            $s->boxes_sent = $no;
+            $s->save();
+        }
+
+        return response()->json(['ok' => true, 'box_number' => $no, 'code' => (string) $box->code]);
+    }
+
+    /** POST /papi/consignment-box-remove — remove an (unscanned) box; boxes_sent shrinks to the max left. */
+    public function boxRemove(Request $request)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok' => false], 401);
+        if (! $this->priv($u)) return response()->json(['ok' => false, 'error' => 'not_allowed'], 403);
+        $s = Shipment::where('tenant_id', $t->id)->find((int) $request->input('id'));
+        if (! $s) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        $box = \App\Models\ShipmentBox::where('shipment_id', $s->id)->where('box_number', (int) $request->input('box_number'))->first();
+        if (! $box) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        if ($box->scans()->exists()) return response()->json(['ok' => false, 'error' => 'scanned', 'message' => 'This box was already scanned in custody — it cannot be removed.'], 422);
+        $box->delete();
+
+        $s->boxes_sent = (int) (\App\Models\ShipmentBox::where('shipment_id', $s->id)->max('box_number') ?? 0);
+        $s->save();
+
+        return response()->json(['ok' => true, 'boxes_sent' => (int) $s->boxes_sent]);
+    }
+
+    /** POST /papi/consignment-add-many — load several selected orders in one call ("Send by bus"). */
+    public function addMany(Request $request)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok' => false], 401);
+        if (! $this->priv($u)) return response()->json(['ok' => false, 'error' => 'not_allowed'], 403);
+        $s = Shipment::where('tenant_id', $t->id)->find((int) $request->input('id'));
+        if (! $s) return response()->json(['ok' => false, 'error' => 'consignment_not_found'], 404);
+
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array) $request->input('order_ids', [])))));
+        if (! $ids) return response()->json(['ok' => false, 'error' => 'no_orders'], 422);
+
+        $n = 0; $skipped = [];
+        foreach (Order::where('tenant_id', $t->id)->whereIn('id', $ids)->get() as $order) {
+            if (in_array($order->status, self::TERMINAL, true)) { $skipped[] = (string) $order->order_no; continue; }
+            $line = ShipmentOrder::firstOrCreate(
+                ['shipment_id' => $s->id, 'order_id' => $order->id],
+                ['tenant_id' => $t->id, 'status' => ShipmentOrder::ON_BOARD]
+            );
+            if ($line->wasRecentlyCreated) $n++;
+        }
+
+        return response()->json(['ok' => true, 'added' => $n, 'skipped' => $skipped]);
+    }
+
     public function notify(Request $request)
     {
         $t = $request->user()->tenant;
@@ -682,6 +801,15 @@ class ConsignmentController extends Controller
         $shop = $s->tenant ? (string) $s->tenant->name : 'Consignment';
         $route = trim((string) $s->origin_city . ' → ' . (string) $s->destination_city, ' →');
 
+        // v4.7: reverse box map (order_id → "Box 2, Box 3") so Juba sees WHERE each customer's goods are.
+        $boxes = \App\Models\ShipmentBox::where('shipment_id', $s->id)->orderBy('box_number')->get();
+        $boxOf = [];
+        foreach ($boxes as $b) {
+            foreach ((array) ($b->order_ids ?? []) as $oid) {
+                $boxOf[(int) $oid][] = 'Box ' . (int) $b->box_number;
+            }
+        }
+
         $rows = '';
         $i = 0;
         foreach ($lines as $ln) {
@@ -690,10 +818,27 @@ class ConsignmentController extends Controller
             $rows .= '<tr><td>' . $i . '</td><td>' . $e($o->order_no ?? ('#' . $ln->order_id)) . '</td>'
                 . '<td>' . $e($o->customer_name ?? '') . '<br><span class="s">' . $e($o->customer_phone ?? '') . '</span></td>'
                 . '<td>' . $e($o ? ($o->items_text ?: '') : '') . '</td>'
+                . '<td>' . $e(isset($boxOf[(int) $ln->order_id]) ? implode(', ', $boxOf[(int) $ln->order_id]) : '—') . '</td>'
                 . '<td class="r">' . ($o ? number_format((float) $o->total) : '') . '</td>'
                 . '<td class="c">☐</td></tr>';
         }
-        if ($rows === '') $rows = '<tr><td colspan="6" class="s" style="text-align:center;padding:16px">No orders on this consignment.</td></tr>';
+        if ($rows === '') $rows = '<tr><td colspan="7" class="s" style="text-align:center;padding:16px">No orders on this consignment.</td></tr>';
+
+        // v4.7: "How it is packed" — one row per box: packing material, whose goods, note.
+        $packRows = '';
+        foreach ($boxes as $b) {
+            $who = implode(', ', array_values(array_filter(array_map(function ($oid) use ($orders) {
+                $o = $orders->get((int) $oid);
+                return $o ? (string) ($o->customer_name ?: $o->customer_phone) : '';
+            }, (array) ($b->order_ids ?? [])))));
+            $packRows .= '<tr><td class="r" style="font-weight:800">Box ' . (int) $b->box_number . '</td>'
+                . '<td>' . $e($b->packing ?: '—') . '</td>'
+                . '<td>' . $e($who !== '' ? $who : '—') . '</td>'
+                . '<td>' . $e($b->note ?: '') . '</td>'
+                . '<td class="c">☐</td></tr>';
+        }
+        $packBlock = $packRows === '' ? '' :
+            '<h3>How it is packed (' . $boxes->count() . ' boxes)</h3><table><thead><tr><th>Box</th><th>Packing</th><th>Whose goods</th><th>Note</th><th class="c">Rcvd</th></tr></thead><tbody>' . $packRows . '</tbody></table>';
 
         $stockRows = '';
         foreach ($stock as $k) {
@@ -719,7 +864,8 @@ class ConsignmentController extends Controller
             . '<div>Agent (Juba): ' . $e($s->destination_agent_name ?: '—') . '</div>'
             . '<div>Date: ' . $e(optional($s->created_at)->format('d M Y H:i')) . '</div></div></div>'
             . '<h3>Customer orders (' . $lines->count() . ')</h3>'
-            . '<table><thead><tr><th>#</th><th>Order</th><th>Customer</th><th>Items</th><th class="r">Value</th><th class="c">Rcvd</th></tr></thead><tbody>' . $rows . '</tbody></table>'
+            . '<table><thead><tr><th>#</th><th>Order</th><th>Customer</th><th>Items</th><th>Box</th><th class="r">Value</th><th class="c">Rcvd</th></tr></thead><tbody>' . $rows . '</tbody></table>'
+            . $packBlock
             . $stockBlock
             . '<div class="sign"><div>Dispatched by (Kampala)</div><div>Received by (Juba)</div></div>'
             . '<button onclick="window.print()" style="margin-top:18px;padding:10px 16px;font-weight:700;cursor:pointer">🖨 Print</button>'

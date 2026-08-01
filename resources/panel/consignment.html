@@ -56,8 +56,10 @@
 <div class="top">
   <button class="back" id="topBack" onclick="goList()" style="visibility:hidden">‹ Back</button>
   <h1>🚚 Consignments</h1>
-  <a class="back" href="/panel" style="text-decoration:none">Panel</a>
+  <a class="back" href="/panel" style="text-decoration:none" id="panelLink">Panel</a>
 </div>
+<script>/* v4.7: inside the V3 shell (embed=1) the Panel link is noise — hide it. */
+if(location.search.indexOf('embed=1')>=0){document.getElementById('panelLink').style.display='none';}</script>
 <div class="wrap" id="wrap"><div class="empty">Loading…</div></div>
 
 <!-- New consignment modal -->
@@ -93,7 +95,17 @@ function load(){
   api('/papi/consignments').then(function(d){
     if(!d||!d.ok){$('wrap').innerHTML='<div class="empty">Could not load.</div>';return;}
     var list=d.consignments||[];
-    var html='<button class="add" onclick="openNew()">＋ New consignment</button>';
+    var html='';
+    // v4.7 — orders selected on the Sales Orders screen, waiting to be loaded on a bus.
+    var pend=pendingBus();
+    if(pend){
+      html+='<div class="card" style="cursor:default;border:2px solid var(--green)">'
+        +'<div class="row"><b>🚌 '+pend.ids.length+' order'+(pend.ids.length===1?'':'s')+' selected for the bus</b>'
+        +'<button class="btn grey" onclick="clearPending();load()">✕</button></div>'
+        +'<div class="sub">Create a new consignment with them, or open an open consignment below and they will be loaded onto it.</div>'
+        +'<div class="btnrow"><button class="btn g" onclick="openNew()">＋ New consignment with these '+pend.ids.length+'</button></div></div>';
+    }
+    html+='<button class="add" onclick="openNew()">＋ New consignment</button>';
     // Asish's one-tap request: pick from the catalogue OR paste; lands on today's open consignment.
     var fst='width:100%;padding:9px;border:1px solid var(--line,#e4e9e4);border-radius:9px;font-size:13px;font-family:inherit';
     html+='<div class="card" style="cursor:default">'+
@@ -270,10 +282,112 @@ function loadDetail(){
       }).join('');
     }
 
-    $('wrap').innerHTML=head+manifest+addSec+stockSec;
+    // v4.7 — box packing section (between manifest and add-orders)
+    window.__CSTATUS=c.status; window.__MANI=m;
+    var boxSec='<div class="sec">📦 How it is packed <span id="boxCount"></span></div><div id="boxSec"><div class="note">Loading boxes…</div></div>';
+
+    $('wrap').innerHTML=head+manifest+boxSec+addSec+stockSec;
     fillProdDL();
     if(addSec) searchCand();
+    loadBoxes();
+    maybeAddPending(c);
   });
+}
+
+/* ============ v4.7: box packing — which box holds whose goods, packed how ============ */
+var PACKINGS=['Carton','Plastic bag','Sack','Bale','Drum','Other'];
+function boxEditable(){ return window.__CSTATUS==='packed'||window.__CSTATUS==='sent_to_transporter'; }
+function loadBoxes(){
+  api('/papi/consignment-boxes?id='+CID).then(function(d){
+    if(!d||!d.ok){ if($('boxSec'))$('boxSec').innerHTML='<div class="note">Could not load boxes.</div>'; return; }
+    window.__BOXES=d.boxes||[];
+    window.__BOXMANI=d.manifest||[];   // {order_id,label,status} — the picker's source of truth
+    renderBoxes();
+  });
+}
+function renderBoxes(){
+  var el=$('boxSec'); if(!el)return;
+  var boxes=window.__BOXES||[], edit=boxEditable();
+  if($('boxCount'))$('boxCount').textContent=boxes.length?('· '+boxes.length+' box'+(boxes.length===1?'':'es')):'';
+  var html='';
+  boxes.forEach(function(b){
+    if(edit){
+      var packs='<select id="bp'+b.box_number+'" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-size:14px">'
+        +'<option value="">Packing…</option>'
+        +PACKINGS.map(function(p){return '<option'+((b.packing||'')===p?' selected':'')+'>'+p+'</option>';}).join('')
+        +((b.packing&&PACKINGS.indexOf(b.packing)<0)?('<option selected>'+esc(b.packing)+'</option>'):'')
+        +'</select>';
+      var whoChk=(window.__BOXMANI||[]).map(function(l){
+        var on=(b.order_ids||[]).indexOf(l.order_id)>=0;
+        return '<label style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;padding:4px 0">'
+          +'<input type="checkbox" class="bo'+b.box_number+'" value="'+l.order_id+'"'+(on?' checked':'')+' style="width:auto"> '
+          +esc(l.label||('#'+l.order_id))+'</label>';
+      }).join('');
+      html+='<div class="line" id="boxrow'+b.box_number+'"><div class="row"><b>Box '+b.box_number+'</b><span class="pill">'+esc(b.code)+'</span></div>'
+        +'<div style="margin-top:8px">'+packs+'</div>'
+        +(whoChk?('<div style="margin-top:6px"><div class="note" style="margin-bottom:2px">Whose goods are inside:</div>'+whoChk+'</div>'):'')
+        +'<input id="bn'+b.box_number+'" placeholder="Note (e.g. postal sticks wrapped inside)" value="'+esc(b.note||'')+'" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-size:13px;margin-top:6px">'
+        +'<div class="btnrow"><button class="btn g" onclick="saveBox('+b.box_number+')">Save box</button>'
+        +'<button class="btn d" onclick="removeBox('+b.box_number+')">Remove</button></div></div>';
+    } else {
+      html+='<div class="line"><div class="row"><b>Box '+b.box_number+'</b>'+(b.packing?('<span class="pill">'+esc(b.packing)+'</span>'):'')+'</div>'
+        +((b.labels||[]).length?('<div class="sub">'+esc(b.labels.join(', '))+'</div>'):'')
+        +(b.note?('<div class="sub">'+esc(b.note)+'</div>'):'')+'</div>';
+    }
+  });
+  if(edit){
+    html+='<div class="btnrow" style="margin-bottom:10px"><button class="btn b" onclick="addBoxUI()">＋ Add box '+(boxes.length+1)+'</button>'
+      +(boxes.length?'<button class="btn grey" onclick="window.open(\'/papi/shipment-labels?id=\'+CID,\'_blank\')">🏷 Print box labels</button>':'')
+      +'</div>'
+      +(!boxes.length?'<div class="note" style="margin-bottom:10px">Add a box for each carton/bag on the bus, tick whose goods go inside, and choose the packing. The manifest, labels and the Juba receive page all show it.</div>':'');
+  } else if(boxes.length){
+    html+='<div class="btnrow" style="margin-bottom:10px"><button class="btn grey" onclick="window.open(\'/papi/shipment-labels?id=\'+CID,\'_blank\')">🏷 Print box labels</button></div>';
+  } else {
+    html='<div class="note" style="margin-bottom:10px">No boxes were recorded for this consignment.</div>';
+  }
+  el.innerHTML=html;
+}
+function addBoxUI(){
+  var n=(window.__BOXES||[]).length+1;
+  api('/papi/consignment-box-save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({id:CID,box_number:n})}).then(function(r){
+    if(r&&r.ok)loadBoxes(); else alert(r&&r.error==='not_allowed'?'Owner/manager only':('Failed: '+((r&&r.error)||'error')));
+  });
+}
+function saveBox(n){
+  var ids=[].slice.call(document.querySelectorAll('.bo'+n+':checked')).map(function(c){return c.value;});
+  var b=new URLSearchParams({id:CID,box_number:n,packing:($('bp'+n)&&$('bp'+n).value)||'',note:($('bn'+n)&&$('bn'+n).value)||''});
+  ids.forEach(function(v){b.append('order_ids[]',v);});
+  api('/papi/consignment-box-save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b}).then(function(r){
+    if(r&&r.ok){loadBoxes();} else alert('Failed: '+((r&&r.error)||'error'));
+  });
+}
+function removeBox(n){
+  if(!confirm('Remove box '+n+'?'))return;
+  api('/papi/consignment-box-remove',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({id:CID,box_number:n})}).then(function(r){
+    if(r&&r.ok)loadBoxes(); else alert((r&&r.message)||('Failed: '+((r&&r.error)||'error')));
+  });
+}
+
+/* ============ v4.7: "Send by bus" handoff from the V3 Sales Orders list ============ */
+function pendingBus(){
+  try{ var j=JSON.parse(localStorage.getItem('cons_add_ids')||'null');
+    if(j&&j.ids&&j.ids.length&&(Date.now()-(j.ts||0))<3600000)return j; }catch(e){}
+  return null;
+}
+function clearPending(){ try{localStorage.removeItem('cons_add_ids');}catch(e){} }
+function addManyTo(id,ids,then){
+  var b=new URLSearchParams({id:id}); ids.forEach(function(v){b.append('order_ids[]',v);});
+  api('/papi/consignment-add-many',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b}).then(function(r){
+    if(r&&r.ok){ clearPending(); if(then)then(r); }
+    else alert(r&&r.error==='not_allowed'?'Owner/manager only':('Failed: '+((r&&r.error)||'error')));
+  });
+}
+function maybeAddPending(c){
+  var p=pendingBus(); if(!p)return;
+  if(c.status!=='packed'&&c.status!=='sent_to_transporter')return;
+  if(confirm('Load the '+p.ids.length+' selected order'+(p.ids.length===1?'':'s')+' onto '+(c.number||'this consignment')+'?')){
+    addManyTo(CID,p.ids,function(r){ alert('✓ Added '+r.added+(r.skipped&&r.skipped.length?(' · skipped (already delivered/cancelled): '+r.skipped.join(', ')):'')); loadDetail(); });
+  } else { clearPending(); }
 }
 
 function advance(action){
@@ -487,7 +601,13 @@ function createConsignment(){
   if(CARRY_SRC&&$('nCarry').checked)p.carry_from=CARRY_SRC;
   api('/papi/consignment-create',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(p)}).then(function(r){
     b.disabled=false;b.textContent='Create consignment';
-    if(r&&r.ok){closeNew();openC(r.id);} else $('nMsg').textContent='Failed: '+((r&&(r.error==='not_allowed'?'owner/manager only':r.error))||'error');
+    if(r&&r.ok){
+      closeNew();
+      // v4.7 — orders picked on the Sales Orders screen ride straight onto the new consignment.
+      var pend=pendingBus();
+      if(pend){ addManyTo(r.id,pend.ids,function(){ openC(r.id); }); }
+      else openC(r.id);
+    } else $('nMsg').textContent='Failed: '+((r&&(r.error==='not_allowed'?'owner/manager only':r.error))||'error');
   }).catch(function(){b.disabled=false;b.textContent='Create consignment';$('nMsg').textContent='Network error';});
 }
 

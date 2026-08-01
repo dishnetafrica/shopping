@@ -557,6 +557,9 @@ async function route(key, id){
   if(key==='settings'){ if(isAppUI()){ bosSettings(); return; } document.getElementById('view').innerHTML='<iframe title="Settings" src="/panel/settings-manager" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   // POS till — V3 is the front door (V3-FIRST.md); the till screen embeds edge-to-edge like Settings.
   if(key==='pos'){ document.getElementById('view').innerHTML='<iframe title="POS Till" src="/panel/pos?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
+  // Consignments (v4.7) — the full Kampala→Juba management page (create, load orders, pack boxes,
+  // custody chain, market stock, Juba requests) embeds like POS; richer than the old list view.
+  if(key==='consignments'){ document.getElementById('view').innerHTML='<iframe title="Consignments" src="/panel/consignment?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   // AI Campaign generator (v4.5) — owner tool; embedded like settings/pos.
   if(key==='ai.campaign'){ document.getElementById('view').innerHTML='<iframe title="AI Campaign" src="/panel/ai-campaign?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   // Help & Training — the in-product Training Center (replaces the old server guide workspace).
@@ -2982,6 +2985,13 @@ function tselClear(){ TBL.sel={}; TBL.lastIdx=null; renderTable(); }
 function tselRun(i,btn){ const b=TBL.bulk[i]; if(!b) return; const ids=Object.keys(TBL.sel);
   if(!ids.length){ toast('Select some rows first', true); return; }
   if(b.confirm && !window.confirm(b.confirm.replace('{n}', ids.length))) return;
+  // v4.7 — "client" bulk actions run inside the shell. sendbus: hand the selected orders to the
+  // Consignments screen (Kampala → Juba bus), which offers to load them onto a consignment.
+  if(b.client==='sendbus'){
+    try{ localStorage.setItem('cons_add_ids', JSON.stringify({ids:ids.map(Number), ts:Date.now()})); }catch(e){}
+    toast('🚌 '+ids.length+' order'+(ids.length===1?'':'s')+' ready to load — pick or create the consignment');
+    TBL.sel={}; route('consignments'); return;
+  }
   if((b.method||'GET')==='GET'){ window.open(b.endpoint+(b.endpoint.includes('?')?'&':'?')+'ids='+ids.join(','), '_blank'); return; }
   (async()=>{ let old='';
     if(btn){ old=btn.textContent; btn.disabled=true; btn.textContent=old.replace(/\s*\(\d+\)$/,'')+'…'; }

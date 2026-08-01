@@ -11,8 +11,8 @@ class ShipmentBox extends Model
 {
     use BelongsToTenant;
 
-    protected $fillable = ['tenant_id', 'shipment_id', 'box_number', 'code'];
-    protected $casts = ['box_number' => 'integer'];
+    protected $fillable = ['tenant_id', 'shipment_id', 'box_number', 'code', 'packing', 'note', 'order_ids'];
+    protected $casts = ['box_number' => 'integer', 'order_ids' => 'array'];
 
     public function shipment(): BelongsTo { return $this->belongsTo(Shipment::class); }
     public function scans(): HasMany { return $this->hasMany(ShipmentBoxScan::class, 'box_id'); }
