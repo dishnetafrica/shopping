@@ -66,6 +66,7 @@ if(location.search.indexOf('embed=1')>=0){document.getElementById('panelLink').s
 <div class="modalwrap hide" id="newM"><div class="modal">
   <button class="x" onclick="closeNew()">×</button>
   <h3>New consignment (Kampala → Juba)</h3>
+  <div class="hintline hide" id="nPend"></div>
   <div class="f"><label>Transporter / bus company</label><input id="nTransport" placeholder="e.g. Nile Coach"></div>
   <div class="f"><label>Bus number (optional)</label><input id="nBus" placeholder="e.g. UAX 123A"></div>
   <div class="f"><label>Receiver in Juba (agent)</label><input id="nAgent" placeholder="e.g. Asish"></div>
@@ -96,14 +97,26 @@ function load(){
     if(!d||!d.ok){$('wrap').innerHTML='<div class="empty">Could not load.</div>';return;}
     var list=d.consignments||[];
     var html='';
-    // v4.7 — orders selected on the Sales Orders screen, waiting to be loaded on a bus.
+    // v4.7.1 — arriving from "Send by bus" is a FOCUSED task: one card, clear choices, no noise.
+    // (v4.7 showed the banner above the normal screen — two similar green buttons + the Juba
+    // request card made it confusing.)
     var pend=pendingBus();
     if(pend){
+      var openOnes=list.filter(function(c){return c.status==='packed'||c.status==='sent_to_transporter';});
       html+='<div class="card" style="cursor:default;border:2px solid var(--green)">'
-        +'<div class="row"><b>🚌 '+pend.ids.length+' order'+(pend.ids.length===1?'':'s')+' selected for the bus</b>'
-        +'<button class="btn grey" onclick="clearPending();load()">✕</button></div>'
-        +'<div class="sub">Create a new consignment with them, or open an open consignment below and they will be loaded onto it.</div>'
-        +'<div class="btnrow"><button class="btn g" onclick="openNew()">＋ New consignment with these '+pend.ids.length+'</button></div></div>';
+        +'<div class="row"><b>🚌 '+pend.ids.length+' order'+(pend.ids.length===1?'':'s')+' ready for the bus</b>'
+        +'<button class="btn grey" onclick="clearPending();load()">✕ Cancel</button></div>'
+        +'<div class="sub" style="margin:4px 0 8px">'+(openOnes.length
+            ?'Load them onto today’s open consignment, or start a new one:'
+            :'Start the consignment for this bus — the orders load onto it automatically.')+'</div>'
+        +'<div class="btnrow">'
+        +openOnes.map(function(c){return '<button class="btn b" onclick="quickLoad('+c.id+')">📦 Load onto '+esc(c.number||('#'+c.id))+' ('+c.orders+' order'+(c.orders===1?'':'s')+' on it)</button>';}).join('')
+        +'<button class="btn g" onclick="openNew()">＋ New consignment with these '+pend.ids.length+'</button>'
+        +'</div></div>';
+      $('wrap').innerHTML=html;
+      // Nothing to choose between? Go straight into the create form.
+      if(!openOnes.length) openNew();
+      return;
     }
     html+='<button class="add" onclick="openNew()">＋ New consignment</button>';
     // Asish's one-tap request: pick from the catalogue OR paste; lands on today's open consignment.
@@ -389,6 +402,11 @@ function maybeAddPending(c){
     addManyTo(CID,p.ids,function(r){ alert('✓ Added '+r.added+(r.skipped&&r.skipped.length?(' · skipped (already delivered/cancelled): '+r.skipped.join(', ')):'')); loadDetail(); });
   } else { clearPending(); }
 }
+/* v4.7.1 — one-tap load from the focused banner: straight onto an open consignment. */
+function quickLoad(id){
+  var p=pendingBus(); if(!p){openC(id);return;}
+  addManyTo(id,p.ids,function(r){ openC(id); });
+}
 
 function advance(action){
   var extra='';
@@ -589,6 +607,9 @@ var CARRY_SRC=null;
 function openNew(){
   ['nTransport','nBus','nAgent','nAgentPh'].forEach(function(id){$(id).value='';});
   $('nMsg').textContent='';$('nCarry').checked=false;$('carryWrap').classList.add('hide');CARRY_SRC=null;
+  // v4.7.1 — coming from "Send by bus": say plainly what will happen, right in the form.
+  var p=pendingBus(), np=$('nPend');
+  if(np){ if(p){ np.textContent='🚌 The '+p.ids.length+' selected order'+(p.ids.length===1?'':'s')+' will be loaded onto this consignment automatically. Then you can pack the boxes.'; np.classList.remove('hide'); } else np.classList.add('hide'); }
   $('newM').classList.remove('hide');
   api('/papi/consignment-carry-source').then(function(d){
     if(d&&d.ok&&d.source){CARRY_SRC=d.source.id;$('carryLbl').textContent='Carry over '+d.source.items+' unsent request'+(d.source.items===1?'':'s')+' from '+d.source.number;$('carryWrap').classList.remove('hide');}
