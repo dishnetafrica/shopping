@@ -585,6 +585,34 @@ class ConsignmentController extends Controller
         return response()->json(['ok' => true, 'boxes_sent' => (int) $s->boxes_sent]);
     }
 
+    /**
+     * POST /papi/consignment-agent-link (v4.7.2) — WhatsApp the destination agent their briefing +
+     * no-login receive link, at ANY stage (before dispatch: "being loaded for you"; after:
+     * "dispatched"). A phone passed here is saved onto the shipment, so the automatic dispatch
+     * message later reaches the same person.
+     */
+    public function agentLink(Request $request)
+    {
+        $t = $request->user()->tenant; $u = $request->user();
+        if (! $t) return response()->json(['ok' => false], 401);
+        if (! $this->priv($u)) return response()->json(['ok' => false, 'error' => 'not_allowed'], 403);
+        $s = Shipment::where('tenant_id', $t->id)->find((int) $request->input('id'));
+        if (! $s) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        $name = trim((string) $request->input('agent_name', ''));
+        if ($name !== '' && $name !== (string) $s->destination_agent_name) {
+            $s->destination_agent_name = mb_substr($name, 0, 80);
+            $s->save();
+        }
+
+        $res = app(\App\Services\Logistics\AgentNotify::class)->send($s, trim((string) $request->input('phone', '')) ?: null);
+        if (! ($res['ok'] ?? false)) {
+            $msgs = ['no_phone' => 'No WhatsApp number for the agent — pick a person or type a number.'];
+            return response()->json(['ok' => false, 'error' => $res['error'] ?? 'failed', 'message' => $msgs[$res['error'] ?? ''] ?? 'Could not send.'], 422);
+        }
+        return response()->json(['ok' => true, 'phone' => $res['phone']]);
+    }
+
     /** POST /papi/consignment-add-many — load several selected orders in one call ("Send by bus"). */
     public function addMany(Request $request)
     {

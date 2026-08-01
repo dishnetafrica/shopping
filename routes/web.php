@@ -746,6 +746,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::match(['get','post'], 'consignment-box-save',   [\App\Http\Controllers\Panel\ConsignmentController::class, 'boxSave']);
         Route::match(['get','post'], 'consignment-box-remove', [\App\Http\Controllers\Panel\ConsignmentController::class, 'boxRemove']);
         Route::match(['get','post'], 'consignment-add-many',   [\App\Http\Controllers\Panel\ConsignmentController::class, 'addMany']);
+        Route::match(['get','post'], 'consignment-agent-link', [\App\Http\Controllers\Panel\ConsignmentController::class, 'agentLink']);   // v4.7.2
         // Ads (Facebook-ad bot understanding: toggle + activity)
         Route::get('ads',                          [\App\Http\Controllers\Panel\AdsController::class, 'data']);
         Route::match(['get','post'], 'ads-toggle', [\App\Http\Controllers\Panel\AdsController::class, 'toggle']);

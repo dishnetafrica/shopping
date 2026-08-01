@@ -222,42 +222,10 @@ class ShipmentController extends Controller
         }
     }
 
-    /** WhatsApp the destination agent: consignment summary, box-by-box contents, receive link. */
+    /** WhatsApp the destination agent — composition lives in AgentNotify (shared with the manual button, v4.7.2). */
     private function notifyAgentDispatched(Shipment $s): void
     {
-        $phone = preg_replace('/[^0-9]/', '', (string) ($s->destination_agent_phone
-            ?: ($s->tenant ? $s->tenant->setting('consignment_agent_phone', '') : '')));
-        if ($phone === '' || ! $s->token || ! $s->tenant) {
-            return;
-        }
-
-        $lines  = \App\Models\ShipmentOrder::where('shipment_id', $s->id)->get();
-        $orders = $lines->count() ? Order::whereIn('id', $lines->pluck('order_id'))->get()->keyBy('id') : collect();
-        $boxes  = \App\Models\ShipmentBox::where('shipment_id', $s->id)->orderBy('box_number')->get();
-
-        $msg = "🚌 Consignment {$s->shipment_number} dispatched"
-            . ($s->bus_number ? " — bus {$s->bus_number}" : '')
-            . ($s->transport_company ? " ({$s->transport_company})" : '') . "\n"
-            . trim((string) $s->origin_city . ' → ' . (string) $s->destination_city, ' →') . "\n"
-            . 'Boxes: ' . ((int) ($s->boxes_sent ?? $boxes->count())) . ' · Orders: ' . $lines->count();
-
-        $shown = 0;
-        foreach ($boxes as $b) {
-            if ($shown >= 10) { $msg .= "\n…and " . ($boxes->count() - $shown) . ' more boxes (see manifest)'; break; }
-            $who = implode(', ', array_values(array_filter(array_map(
-                fn ($oid) => ($o = $orders->get((int) $oid)) ? (string) ($o->customer_name ?: $o->customer_phone) : '',
-                (array) ($b->order_ids ?? [])
-            ))));
-            if ($who === '' && ! $b->packing && ! $b->note) continue;
-            $msg .= "\n• Box {$b->box_number}" . ($b->packing ? " ({$b->packing})" : '') . ($who !== '' ? ": {$who}" : '')
-                . ($b->note ? ' — ' . mb_substr((string) $b->note, 0, 60) : '');
-            $shown++;
-        }
-
-        $msg .= "\n\nReceive & tick off here (no login):\n" . url('/a/' . $s->token);
-
-        app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($s->tenant)
-            ->sendText($s->tenant->whatsapp_instance, $phone, $msg);
+        app(\App\Services\Logistics\AgentNotify::class)->send($s);
     }
 
     /** Mark a discrepancy resolved (owner has chased it down). */
