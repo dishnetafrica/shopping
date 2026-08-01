@@ -4,14 +4,32 @@ namespace App\Jobs;
 use App\Models\Order;
 use App\Models\Tenant;
 use App\Services\WhatsApp\WhatsAppManager;
+use App\Support\HumanText;
 use App\Support\MessageLog;
 use App\Support\TenantContext;
+use App\Support\Vertical;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
+/**
+ * WhatsApp message to the customer when an order's status changes (dispatched by OrderObserver).
+ *
+ * v4.6.2: the wording is now VERTICAL-AWARE. The original copy was written for a restaurant
+ * ("the kitchen is starting on it", "👨‍🍳 being prepared", "our rider") and was sent to every
+ * tenant — a wholesale customer buying 20 cartons of flour was told a chef was cooking it.
+ * Restaurant/snacks tenants keep the kitchen voice; every other vertical (grocery, wholesale/
+ * manufacturer, solar, auto parts, legacy-unset) gets trade wording ("packed at our store",
+ * "on the way to you"). The hardcoded "left Kampala … on its way to Juba" route is gone.
+ *
+ * Owners can override ANY status line with a tenant setting — key `status_msg_<status slug>`
+ * (lowercase, spaces → underscores: status_msg_preparing, status_msg_out_for_delivery, …) with
+ * placeholders {name} (customer first name), {order_no}, {business}, {status}. Same pattern as
+ * the sales-cadence templates (sales_msg_*). Greeting uses HumanText::firstName — "HOTEL DE
+ * JUBA" is greeted as "Hotel", "ABDIFATAH AHMED SHOP NO 48" as "Abdifatah", never raw CAPS.
+ */
 class SendOrderStatusNotification implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -25,37 +43,68 @@ class SendOrderStatusNotification implements ShouldQueue
         $tenant = Tenant::find($this->tenantId);
         if (!$order || !$tenant || !$order->customer_phone) return;
 
-        $first = trim(explode(' ', (string) $order->customer_name)[0] ?: 'there');
+        $first = HumanText::firstName((string) $order->customer_name) ?: 'there';
         $name  = $tenant->name;
+        $no    = (string) $order->order_no;
 
-        $messages = [
-            // Restaurant kitchen flow
-            'Accepted'         => "\u{1F373} Hi {$first}! {$name} has accepted your order *{$order->order_no}*. The kitchen is starting on it now.",
-            'Preparing'        => "\u{1F468}\u{200D}\u{1F373} {$first}, your order *{$order->order_no}* is being prepared. It won't be long!",
-            'Ready'            => "\u{2705} {$first}, your order *{$order->order_no}* is ready! It will be dispatched shortly.",
-            'Dispatched'       => "\u{1F6F5} Your {$name} order *{$order->order_no}* is on the way! Our rider will reach you soon.",
-            'Rejected'         => "We're sorry {$first} \u{1F64F} — {$name} couldn't take order *{$order->order_no}* right now. Reply here and we'll help.",
-            // Legacy grocery flow (kept for existing tenants)
-            'Confirmed'        => "Hi {$first}! \u{1F389} Your {$name} order *{$order->order_no}* is confirmed. We're preparing it now.",
-            'Packed'           => "\u{1F4E6} {$first}, your order *{$order->order_no}* is packed and ready to go!",
-            'In transit'       => "\u{1F69A} {$first}, your order *{$order->order_no}* has left Kampala and is on its way to Juba. We'll let you know as soon as it arrives.",
-            'Out for delivery' => "\u{1F6F5} Your {$name} order is on the way! Our rider will reach you shortly.",
-            'Delivered'        => "\u{2705} Your order *{$order->order_no}* has been delivered. Thank you for choosing {$name}! \u{1F64F}",
-            'Cancelled'        => "Your {$name} order *{$order->order_no}* has been cancelled. Reply here if you need help.",
-        ];
-
-        // Pickup tenants (snacks / advance-booking) don't deliver — reword the
-        // delivery-specific stages so the customer is told to collect, not wait for a rider.
-        if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::SNACKS) {
-            $messages = array_merge($messages, [
-                'Ready'            => "\u{2705} {$first}, your order *{$order->order_no}* is ready for collection! Come by {$name} when you're ready.",
-                'Dispatched'       => "\u{1F6CD} {$first}, your {$name} order *{$order->order_no}* is ready for pickup. See you soon!",
-                'Out for delivery' => "\u{1F6CD} {$first}, your {$name} order *{$order->order_no}* is ready for pickup. See you soon!",
-                'Delivered'        => "\u{2705} Thanks for collecting order *{$order->order_no}*, {$first}! Hope to see you again at {$name}. \u{1F64F}",
+        // 1) Owner override wins for any status (settings key status_msg_<slug>).
+        $slug = strtolower(str_replace([' ', '-'], '_', $this->status));
+        $tpl  = trim((string) $tenant->setting('status_msg_' . $slug, ''));
+        if ($tpl !== '') {
+            $text = strtr($tpl, [
+                '{name}'     => $first,
+                '{order_no}' => $no,
+                '{business}' => $name,
+                '{status}'   => $this->status,
             ]);
+        } else {
+            $vertical = Vertical::of($tenant);
+            $kitchen  = in_array($vertical, [Vertical::RESTAURANT, Vertical::SNACKS], true);
+
+            $messages = $kitchen
+                ? [
+                    // Restaurant kitchen voice (unchanged for food tenants).
+                    'Accepted'         => "\u{1F373} Hi {$first}! {$name} has accepted your order *{$no}*. The kitchen is starting on it now.",
+                    'Preparing'        => "\u{1F468}\u{200D}\u{1F373} {$first}, your order *{$no}* is being prepared. It won't be long!",
+                    'Ready'            => "\u{2705} {$first}, your order *{$no}* is ready! It will be dispatched shortly.",
+                    'Dispatched'       => "\u{1F6F5} Your {$name} order *{$no}* is on the way! Our rider will reach you soon.",
+                    'Rejected'         => "We're sorry {$first} \u{1F64F} — {$name} couldn't take order *{$no}* right now. Reply here and we'll help.",
+                    'Confirmed'        => "Hi {$first}! \u{1F389} Your {$name} order *{$no}* is confirmed. We're preparing it now.",
+                    'Packed'           => "\u{1F4E6} {$first}, your order *{$no}* is packed and ready to go!",
+                    'In transit'       => "\u{1F69A} {$first}, your order *{$no}* is in transit. We'll let you know as soon as it arrives.",
+                    'Out for delivery' => "\u{1F6F5} Your {$name} order is on the way! Our rider will reach you shortly.",
+                    'Delivered'        => "\u{2705} Your order *{$no}* has been delivered. Thank you for choosing {$name}! \u{1F64F}",
+                    'Cancelled'        => "Your {$name} order *{$no}* has been cancelled. Reply here if you need help.",
+                ]
+                : [
+                    // Trade voice — grocery / wholesale / manufacturer / solar / auto parts / legacy.
+                    'Accepted'         => "\u{2705} Hi {$first}! {$name} has accepted your order *{$no}*. We're getting it ready.",
+                    'Preparing'        => "\u{1F4E6} {$first}, your order *{$no}* is being packed at our store.",
+                    'Ready'            => "\u{2705} {$first}, your order *{$no}* is packed and ready. It will be dispatched shortly.",
+                    'Dispatched'       => "\u{1F69A} Your {$name} order *{$no}* is on the way to you.",
+                    'Rejected'         => "We're sorry {$first} \u{1F64F} — {$name} can't take order *{$no}* right now. Reply here and we'll help.",
+                    'Confirmed'        => "Hi {$first}! \u{2705} Your {$name} order *{$no}* is confirmed. We're getting it ready.",
+                    'Packed'           => "\u{1F4E6} {$first}, your order *{$no}* is packed and ready to go!",
+                    'In transit'       => "\u{1F69A} {$first}, your order *{$no}* is in transit. We'll let you know as soon as it arrives.",
+                    'Out for delivery' => "\u{1F69A} Your {$name} order *{$no}* is out for delivery and will reach you shortly.",
+                    'Delivered'        => "\u{2705} Your order *{$no}* has been delivered. Thank you for choosing {$name}! \u{1F64F}",
+                    'Cancelled'        => "Your {$name} order *{$no}* has been cancelled. Reply here if you need help.",
+                ];
+
+            // Pickup tenants (snacks / advance-booking) don't deliver — reword the
+            // delivery-specific stages so the customer is told to collect, not wait for a rider.
+            if ($vertical === Vertical::SNACKS) {
+                $messages = array_merge($messages, [
+                    'Ready'            => "\u{2705} {$first}, your order *{$no}* is ready for collection! Come by {$name} when you're ready.",
+                    'Dispatched'       => "\u{1F6CD} {$first}, your {$name} order *{$no}* is ready for pickup. See you soon!",
+                    'Out for delivery' => "\u{1F6CD} {$first}, your {$name} order *{$no}* is ready for pickup. See you soon!",
+                    'Delivered'        => "\u{2705} Thanks for collecting order *{$no}*, {$first}! Hope to see you again at {$name}. \u{1F64F}",
+                ]);
+            }
+
+            $text = $messages[$this->status] ?? null;
         }
 
-        $text = $messages[$this->status] ?? null;
         if (!$text) return;
 
         $inst = $tenant->sendInstance();

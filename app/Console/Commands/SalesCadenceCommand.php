@@ -248,27 +248,9 @@ class SalesCadenceCommand extends Command
      */
     private function firstName(string $name): string
     {
-        $name = trim($name);
-        if ($name === '') {
-            return '';
-        }
-        $out = [];
-        foreach (preg_split('/\s+/u', $name) as $w) {
-            if (preg_match('/^(shop|store|stall|duka|no\.?|nr\.?|#|\p{N})/iu', $w)) {
-                break;   // "Shop No 48" and friends are labels, not names
-            }
-            $out[] = $w;
-            if (count($out) >= 2) {
-                break;
-            }
-        }
-
-        $first = $out ? $out[0] : $name;   // first name alone reads warmest
-        if (preg_match('/^\p{Lu}{3,}$/u', $first)) {
-            $first = mb_convert_case(mb_strtolower($first), MB_CASE_TITLE, 'UTF-8');   // "ABDI" → "Abdi"
-        }
-
-        return $first;
+        // Canonical copy lives in App\Support\HumanText (v4.6.2) so order-status
+        // notifications and cadence follow-ups greet customers identically.
+        return \App\Support\HumanText::firstName($name);
     }
 
     /**
