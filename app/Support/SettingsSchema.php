@@ -99,6 +99,13 @@ final class SettingsSchema
                     ['key' => 'bot_website_link',  'type' => 'text',     'label' => 'Website link'],
                     ['key' => 'faq',               'type' => 'textarea', 'label' => 'FAQ'],
                 ]],
+                // MOQ enforcement (v4.6) — the engine has always supported this (OrderCalculator +
+                // AiBrain read moq_mode), but the switch only lived in the one-time onboarding wizard.
+                ['label' => 'Selling rules', 'help' => 'How the assistant treats each product\'s minimum order quantity (the MOQ field on the product).', 'fields' => [
+                    ['key' => 'moq_mode', 'type' => 'enum', 'label' => 'Minimum order quantities', 'options' => ['off', 'roundup'], 'default' => 'off',
+                     'optionLabels' => ['off' => 'Advisory — quote any quantity, mention the minimum', 'roundup' => 'Enforced — round below-minimum requests up to the MOQ'],
+                     'help' => 'Enforced: when a customer asks for less than a product\'s MOQ, the quote is raised to the MOQ, the line says "min order N — set to N", and the AI is instructed never to confirm a smaller quantity. Only products with the MOQ field filled are enforced (Products → edit, or import column "min order").'],
+                ]],
             ]],
             ['key' => 'notifications', 'label' => 'Notifications', 'icon' => 'bell', 'groups' => [
                 ['label' => 'Daily digest', 'help' => 'A summary of the day sent to you.', 'fields' => [

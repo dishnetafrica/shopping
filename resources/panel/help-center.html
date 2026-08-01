@@ -201,13 +201,14 @@ mark{background:#fdf2c7;border-radius:3px;padding:0 1px}
 
 <div class="grp">WhatsApp &amp; Messaging</div>
 
-<div class="card" id="bot" data-role="sales owner" data-kw="bot assistant ai answers catalogue category quotation pdf delivery policy fresh products teach">
+<div class="card" id="bot" data-role="sales owner" data-kw="bot assistant ai answers catalogue category quotation pdf delivery policy fresh products teach moq minimum order quantity carton enforce round up">
   <h2>🤖 The WhatsApp assistant — what it does on its own</h2>
   <p>It answers customers using <b>your live product list</b> — new products and price changes reach it within a minute, automatically. It quotes your <b>delivery policy</b> from Settings word-for-word. Ask it for a price list and it sends the catalogue; name a category ("exercise books price list") and it sends <b>just that category's</b> PDF. When a customer confirms an order, it prepares a <b>quotation PDF</b> and alerts the owner.</p>
   <ul>
     <li><b>It will not</b> attach catalogues to shipping-cost questions, spam documents (one document per few minutes), or quote the same order twice — a repeat "yes" becomes a <b>confirmation alert to the owner</b> instead.</li>
     <li><b>Teach it</b> in Settings → Business profile: FAQ, brand knowledge, and the Delivery policy box (exact wording it must use).</li>
   </ul>
+  <div class="tip"><b>Minimum order quantities (MOQ):</b> two switches must both be on for the bot to refuse small quantities. (1) Each product needs its <b>MOQ field</b> filled (Products → edit, or the "min order" column on import) — a minimum written only inside the product NAME enforces nothing. (2) Settings → WhatsApp & bot → <b>Selling rules</b> must be set to <b>Enforced</b>. Then a request below the minimum is rounded up, the quote line says "min order 5 — set to 5", and the AI tells the customer plainly. On <b>Advisory</b> (the default) the bot quotes any quantity and only mentions the minimum. The till is never blocked — a seller at the counter can always sell below MOQ deliberately.</div>
   <div class="warn"><b>The bot cannot finish a sale.</b> A confirmed quotation still needs a human to convert it to an order — that step is yours.</div>
 </div>
 

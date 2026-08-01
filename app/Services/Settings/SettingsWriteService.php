@@ -81,6 +81,9 @@ final class SettingsWriteService
         'receipt_orientation' => ['portrait', 'landscape'],
         // native = base currency (USD) IS the operating currency for selling; converted = local (UGX).
         'currency_basis'      => ['native', 'converted'],
+        // MOQ handling in bot quotes/orders (read by OrderCalculator + AiBrain; v4.6 exposes it here —
+        // previously only the one-time onboarding wizard could set it).
+        'moq_mode'            => ['off', 'roundup'],
     ];
 
     /**
