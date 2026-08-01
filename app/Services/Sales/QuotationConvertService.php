@@ -64,6 +64,12 @@ final class QuotationConvertService
         $q->status   = 'converted';
         $q->save();
 
+        // Mirror the lines into order_items so the V3 order screen / margin / analytics see them
+        // (v4.6.4 — converted orders used to show "No line items recorded"). Best-effort.
+        try {
+            app(OrderItemSync::class)->sync($t, $o);
+        } catch (\Throwable $e) { /* never break the conversion */ }
+
         // BOS spine (Slice 4): record QuoteConverted for the customer timeline. Guarded + never-throws.
         \App\BOS\Emit::customerEvent($t->id, 'QuoteConverted', (string) $q->customer_phone, [
             'quote_no' => (string) $q->quote_no, 'order_no' => (string) $o->order_no,

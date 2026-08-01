@@ -859,6 +859,12 @@ class AiBrain
             $order->channel        = 'whatsapp';
             $order->save(); // OrderObserver: order_no + track_token + NotifyOwnerNewOrder (staff alert)
 
+            // Mirror the lines into order_items so the V3 order screen / margin / analytics see
+            // them (v4.6.4 — AI-captured orders wrote only items_json). Best-effort.
+            try {
+                app(\App\Services\Sales\OrderItemSync::class)->sync($tenant, $order);
+            } catch (\Throwable $e) { /* never break order capture */ }
+
             $cur   = (string) ($quote['currency'] ?? 'UGX');
             $track = $order->track_token ? $tenant->publicUrl('/papi/track?o=' . $order->id . '&t=' . $order->track_token) : '';
 

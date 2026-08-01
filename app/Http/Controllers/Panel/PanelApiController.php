@@ -1247,6 +1247,18 @@ class PanelApiController extends Controller
 
         $o->save();   // OrderObserver assigns order_no + track_token on create
 
+        // Mirror created/edited lines into order_items (v4.6.4 — panel orders showed no line
+        // items on the V3 screen and were invisible to margin/analytics). Rebuild-style sync,
+        // only when this request actually carried items. Best-effort.
+        if (is_array($items) && $items) {
+            try {
+                $st = $r->user()->tenant ?? \App\Models\Tenant::find($o->tenant_id);
+                if ($st) {
+                    app(\App\Services\Sales\OrderItemSync::class)->sync($st, $o);
+                }
+            } catch (\Throwable $e) { /* never break the save */ }
+        }
+
         return response()->json([
             'ok'       => true,
             'created'  => $isNew,
@@ -1596,6 +1608,11 @@ class PanelApiController extends Controller
         $q->order_id = (int) $o->id;
         $q->status   = 'converted';
         $q->save();
+
+        // Mirror the lines into order_items (v4.6.4 — converted orders showed no line items). Best-effort.
+        try {
+            app(\App\Services\Sales\OrderItemSync::class)->sync($t, $o);
+        } catch (\Throwable $e) { /* never break the conversion */ }
 
         // BOS spine (Slice 4): record QuoteConverted for the customer timeline. Guarded + never-throws.
         \App\BOS\Emit::customerEvent($t->id, 'QuoteConverted', (string) $q->customer_phone, [
