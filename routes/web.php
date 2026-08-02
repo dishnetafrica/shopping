@@ -538,6 +538,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('settings-hub', [PanelApiController::class, 'settingsHub']);
         Route::post('settings-hub-save', [PanelApiController::class, 'settingsHubSave']);
         Route::post('branding-upload', [\App\Http\Controllers\Panel\BrandingUploadController::class, 'upload']); // image upload for Settings image fields
+        Route::get('bike-photos', [\App\Http\Controllers\Panel\BikePhotoPackController::class, 'page']);         // v4.16 — one-shot bike photo pack (owner page)
+        Route::post('bike-photos-zip', [\App\Http\Controllers\Panel\BikePhotoPackController::class, 'upload']);  // v4.16 — zip → storage + model_image_* settings
         Route::get('bot/quote-diagnostics', [PanelApiController::class, 'botQuoteDiagnostics']);
         Route::match(['get', 'post'], 'backfill-customers', [PanelApiController::class, 'backfillCustomers']);
         Route::match(['get', 'post'], 'merge-customers', [PanelApiController::class, 'mergeCustomers']);

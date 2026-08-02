@@ -127,7 +127,7 @@ final class SettingsSchema
                 ]],
             ]],
             ['key' => 'storefront', 'label' => 'Storefront', 'icon' => 'doc', 'groups' => [
-                ['label' => 'Bike models on the website', 'help' => 'Turn a model ON to show it on your customer website, OFF to hide it. Changes take effect as soon as you save. Tip: keep at least one model on.', 'fields' => [
+                ['label' => 'Bike models on the website', 'help' => 'Turn a model ON to show it on your customer website, OFF to hide it. Changes take effect as soon as you save. Tip: keep at least one model on. To set ALL the photos in one go, open /papi/bike-photos and upload the bike photo pack zip.', 'fields' => [
                     ['key' => 'show_model_boxer100',   'type' => 'bool', 'label' => 'Boxer 100 KS',  'default' => true],
                     ['key' => 'show_model_boxer125hd', 'type' => 'bool', 'label' => 'Boxer 125 HD',  'default' => true],
                     ['key' => 'show_model_boxer150',   'type' => 'bool', 'label' => 'Boxer BM150',   'default' => true],
