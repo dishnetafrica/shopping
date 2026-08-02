@@ -407,6 +407,69 @@ class StorefrontController extends Controller
         return $this->compressed($html, 'text/html; charset=utf-8', 'private, max-age=300');
     }
 
+    /**
+     * v4.8.2 — POST /{shop}/part-id (Storefront 2.0 Phase 3). A customer photographs their old part;
+     * the same vision capability the WhatsApp bot has had for weeks identifies it against THIS shop's
+     * catalogue and returns up to 3 candidate products. Session-less and throttled at the route; the
+     * SPA falls back to the WhatsApp deep-link whenever this returns ok=false.
+     */
+    public function partId(\Illuminate\Http\Request $request, ?string $shop = null)
+    {
+        [$tenant] = $this->resolveShop($shop);
+
+        $file = $request->file('photo');
+        if (! $file || ! $file->isValid()) return response()->json(['ok' => false, 'error' => 'no_photo']);
+        $mime = strtolower((string) $file->getMimeType());
+        if (! str_starts_with($mime, 'image/')) return response()->json(['ok' => false, 'error' => 'not_image']);
+        if ($file->getSize() > 6 * 1024 * 1024) return response()->json(['ok' => false, 'error' => 'too_big']);
+
+        $bytes = (string) file_get_contents($file->getRealPath());
+        // Big phone photos → downscale for the vision call when GD is available (cost + latency).
+        if (strlen($bytes) > 900 * 1024 && function_exists('imagecreatefromstring')) {
+            try {
+                $im = @imagecreatefromstring($bytes);
+                if ($im !== false) {
+                    $w = imagesx($im); $h = imagesy($im);
+                    $scale = min(1.0, 1024 / max($w, $h));
+                    if ($scale < 1.0) {
+                        $im2 = imagescale($im, (int) round($w * $scale), (int) round($h * $scale));
+                        if ($im2 !== false) { $im = $im2; }
+                    }
+                    ob_start(); imagejpeg($im, null, 82); $j = ob_get_clean();
+                    if ($j !== false && $j !== '') { $bytes = $j; $mime = 'image/jpeg'; }
+                    imagedestroy($im);
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+
+        $res = app(\App\Services\Vision\PartIdentifier::class)->identify($tenant, base64_encode($bytes), $mime);
+        if (! ($res['ok'] ?? false)) return response()->json(['ok' => false, 'error' => (string) ($res['error'] ?? 'failed')]);
+
+        // Hydrate matches into card-ready products (same field names the /catalogue feed uses).
+        $ids = array_column($res['matches'], 'id');
+        $byId = $ids ? Product::withoutGlobalScopes()->where('tenant_id', $tenant->id)
+            ->whereIn('id', $ids)->where('active', true)->get()->keyBy('id') : collect();
+        $matches = [];
+        foreach ($res['matches'] as $m) {
+            $p = $byId->get($m['id']);
+            if (! $p) continue;   // model may not invent ids — but never trust it
+            $matches[] = [
+                '_row' => (int) $p->id, 'Product Name' => (string) $p->name,
+                'Brand' => (string) ($p->brand ?? ''), 'Category' => (string) ($p->category ?? ''),
+                'Price_UGX' => (float) ($p->price ?? 0), 'Image' => $this->imageUrl($p->image_url),
+                'OEM' => (string) ($p->oem_number ?? ''), 'SKU' => (string) ($p->sku ?? ''),
+                'Stock' => $p->stock === null ? null : (int) $p->stock,
+                'Keywords' => (string) ($p->keywords ?? ''),
+                'confidence' => $m['confidence'], 'reason' => $m['reason'],
+            ];
+        }
+        \App\Support\BotTrace::log($tenant->id, 'sf_partid', $request->ip() ?: 'web', 'web_part_id',
+            'seen=' . ($res['seen'] ?? '') . ' matches=' . count($matches));
+
+        return response()->json(['ok' => true, 'seen' => (string) ($res['seen'] ?? ''), 'matches' => $matches]);
+    }
+
     /** gzip a response when the client accepts it (proxies won't double-encode a set Content-Encoding). */
     private function compressed(string $body, string $type, string $cache)
     {

@@ -30,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/webhook/*', 'papi/*',
             'order', '*/order',
             'quote', '*/quote',
+            'part-id', '*/part-id',   // v4.8.2 — storefront photo part-identification (session-less)
             'solar/*', '*/solar/*',
             'event', '*/event',
             'clienterror', '*/clienterror',
