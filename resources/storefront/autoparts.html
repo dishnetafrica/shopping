@@ -357,6 +357,10 @@ function sid(x){return String(x==null?'':x).replace(/[^\w-]/g,'');}
    (for TVS HLX that's the silhouette), so an offline CDN can never leave a broken card. */
 function modelImg(id){ var ov=(CFG.modelImages||{})[id]; return ov||IMG[id]||''; }
 function mimgErr(el,id){ el.onerror=null; var f=IMG[id]||''; if(f&&el.src!==f){ el.src=f; } }
+/* v4.7.7: a part's number — the real OEM number from the catalogue feed when filled,
+   else the legacy keyword-derived guess. As OEM numbers land, cards, cart lines and the
+   exploded-diagram cross-links (byPn) all upgrade to authoritative numbers for free. */
+function pnOf(p){ var v=String((p&&p.pn)||'').trim(); return v||partNo((p&&p.kw)||''); }
 function partNo(kw){
   var s=String(kw||''); var segs=s.split('|'); var re=/^[A-Z0-9]{2}\s?[A-Z0-9]{3,4}\s?[A-Z0-9]{2}$/;
   for(var i=1;i<segs.length;i++){ var t=segs[i].trim(); if(re.test(t)) return t; }  /* skip seg 0 (model name) */
@@ -383,6 +387,7 @@ function normalize(json){
       stock: (p.Stock!=null?p.Stock:(p.stock!=null?p.stock:null)),
       img: p.Image||p.image||p.image_url||'',
       kw: p.Keywords||p.keywords||'',
+      pn: (p.OEM||p.oem||'').toString().trim(),
       desc: p.Description||p.description||''
     };
   }).filter(function(p){return p.name;});
@@ -394,7 +399,7 @@ function loadCatalogue(){
     // "Sell only what we have": hide parts with an explicit 0 stock (untracked/null still shows).
     STATE.products = CFG.hideOOS ? all.filter(function(p){ return !(p.stock!=null && p.stock<=0); }) : all;
     // byPn from ALL parts so exploded diagrams still resolve every callout
-    all.forEach(function(p){ var pn=normPn(partNo(p.kw)); if(pn && !STATE.byPn[pn])STATE.byPn[pn]=p; });
+    all.forEach(function(p){ var pn=normPn(pnOf(p)); if(pn && !STATE.byPn[pn])STATE.byPn[pn]=p; });
     var sysNames=(CFG.systems||[]).map(function(s){return s.name;});
     STATE.products.forEach(function(p){
       (STATE.byCat[p.cat]=STATE.byCat[p.cat]||[]).push(p);
@@ -435,7 +440,7 @@ function bikeSeries(b){ var m=String((b&&(b.catName||b.name))||'').toLowerCase()
  */
 // Compatible model ids for a part, from the official catalogue cross-reference (or null if the
 // part number isn't in it). This is authoritative multi-model fitment.
-function compatIds(p){ var pn=normPn(partNo(p.kw||'')); return (pn && PNFITS && PNFITS[pn])||null; }
+function compatIds(p){ var pn=normPn(pnOf(p)); return (pn && PNFITS && PNFITS[pn])||null; }
 var _pnfitsModels=null;
 function pnfitsCovers(id){ if(!_pnfitsModels){ _pnfitsModels={}; for(var k in (PNFITS||{})){ (PNFITS[k]||[]).forEach(function(m){_pnfitsModels[m]=1;}); } } return !!_pnfitsModels[id]; }
 function compatibleModels(p){ var ids=compatIds(p); if(!ids) return []; return (MODELS||[]).filter(function(m){return ids.indexOf(m.id)>=0;}); }
@@ -508,7 +513,7 @@ function fitGuide(p){
 // in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- order on WhatsApp (owns the checkout) ---------- */
 function waOrder(p){
-  var b=getBike(); var pn=partNo(p.kw);
+  var b=getBike(); var pn=pnOf(p);
   var t='Hello '+(CFG.name||'')+', I want to order this genuine part:%0a• '+p.name+(pn?(' (Part No '+pn+')'):'')
     +'%0a• Price: '+money(p.price)+'%0a• Qty: 1'+(b?('%0a• My motorcycle: '+b.name):'')
     +'%0a%0aIs it in stock and how soon can I get it?';
@@ -526,7 +531,7 @@ function cartCount(){ return cartGet().reduce(function(n,i){return n+i.qty;},0);
 function cartTotal(){ return cartGet().reduce(function(s,i){return s+(i.price||0)*i.qty;},0); }
 function cartAdd(id){ var p=STATE.products.filter(function(x){return String(x.id)===String(id);})[0]; if(!p)return;
   var c=cartGet(); var e=c.filter(function(i){return String(i.id)===String(p.id);})[0];
-  if(e)e.qty++; else c.push({id:p.id,name:p.name,pn:partNo(p.kw),price:p.price||0,qty:1});
+  if(e)e.qty++; else c.push({id:p.id,name:p.name,pn:pnOf(p),price:p.price||0,qty:1});
   cartSave(c); track('add',{product_id:p.id}); toast('“'+p.name+'” added to cart'); }
 function cartSet(id,d){ var c=cartGet(); for(var i=0;i<c.length;i++){ if(String(c[i].id)===String(id)){ c[i].qty=Math.max(0,c[i].qty+d); if(!c[i].qty)c.splice(i,1); break; } } cartSave(c); render(); }
 function updateCartBadge(){ var n=(function(){try{return cartCount();}catch(e){return 0;}})(); Array.prototype.forEach.call(document.querySelectorAll('.cartn'),function(el){ el.textContent=n; el.style.display=n?'inline-flex':'none'; }); }
@@ -733,7 +738,7 @@ function fitBadge(p){
   return ''; // unknown fit — show nothing rather than a scary "not for"
 }
 function prodCard(p){
-  var pn=partNo(p.kw); var inS=p.stock===null||p.stock>0; var priced=p.price>0;
+  var pn=pnOf(p); var inS=p.stock===null||p.stock>0; var priced=p.price>0;
   var sys=String(p.cat||'').split('>').slice(-1)[0].trim()||'';
   return '<div class="card pc" onclick="go(\'part/'+sid(p.id)+'\')"><div class="im">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'" loading="lazy">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
     +'<div class="bd"><h4>'+esc(p.name)+'</h4>'+fitBadge(p)
@@ -760,7 +765,7 @@ function vSystem(cat){
 function vPart(id){
   var p=STATE.products.filter(function(x){return String(x.id)===String(id);})[0];
   if(!p) return nav()+'<div class="empty">Part not found.</div>'+foot();
-  var pn=partNo(p.kw); var inS=p.stock===null||p.stock>0; var priced=p.price>0;
+  var pn=pnOf(p); var inS=p.stock===null||p.stock>0; var priced=p.price>0;
   var b=getBike(); var f=fitsBike(p);
   var fitLine = !b ? '<div class="fitbig ask" onclick="go(\'\')"><i class="fa fa-plus"></i> Add your motorcycle to confirm this fits</div>'
                    : (f===true ? '<div class="fitbig ok">✓ Fits your '+esc(b.name)+' — guaranteed, or free return.</div>'

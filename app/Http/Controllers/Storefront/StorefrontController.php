@@ -439,7 +439,11 @@ class StorefrontController extends Controller
 
             return Product::where('active', true)->orderByDesc('display_order')->orderBy('name')
                 ->toBase()
-                ->get(['id', 'name', 'description', 'category', 'brand', 'keywords', 'base_price', 'price', 'stock', 'image_url', 'display_order', 'moq', 'pack_size', 'unit_label', 'popularity', 'created_at'])
+                ->get(array_merge(
+                    ['id', 'name', 'description', 'category', 'brand', 'keywords', 'base_price', 'price', 'stock', 'image_url', 'display_order', 'moq', 'pack_size', 'unit_label', 'popularity', 'created_at'],
+                    // v4.7.7 column — guarded so the feed keeps serving if the migration hasn't run yet.
+                    \Illuminate\Support\Facades\Schema::hasColumn('products', 'oem_number') ? ['oem_number'] : []
+                ))
                 ->map(function ($p) use ($mods) {
                     return [
                         'Product Name' => (string) $p->name,
@@ -448,6 +452,7 @@ class StorefrontController extends Controller
                         'Description'  => (string) ($p->description ?? ''),
                         'Category'     => (string) ($p->category ?? 'Other'),
                         'Keywords'     => (string) ($p->keywords ?? ''),
+                        'OEM'          => (string) ($p->oem_number ?? ''),   // v4.7.7 — real part-number chip + diagram cross-links
                         'Price_UGX'    => (float) ($p->price ?? $p->base_price ?? 0),   // price = selling truth (price-drift fix 2026-07-18)
                         'Stock'        => $p->stock === null ? null : (int) $p->stock,
                         'Image'        => $this->imageUrl($p->image_url),

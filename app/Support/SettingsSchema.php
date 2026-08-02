@@ -48,6 +48,9 @@ final class SettingsSchema
                     ['key' => 'catalog_best_sellers', 'type' => 'text', 'label' => 'Best sellers', 'help' => 'Comma-separated SKUs or exact product names → green BEST SELLER badge.'],
                     ['key' => 'catalog_hot_deals', 'type' => 'text', 'label' => 'Hot deals', 'help' => 'Comma-separated SKUs or exact names → orange HOT DEAL badge.'],
                     ['key' => 'catalog_audience', 'type' => 'text', 'label' => 'Cover checklist', 'help' => 'Comma list, e.g. Hotels,Restaurants,Supermarkets,Retailers.'],
+                    // v4.7.7 — trust badge + value-prop tags (catalogue review).
+                    ['key' => 'catalog_badge', 'type' => 'text', 'label' => 'Trust badge', 'help' => 'Short badge on the cover & back page, e.g. "✓ Genuine OEM-quality parts". Only claim Genuine once your supplier confirms it in writing.'],
+                    ['key' => 'catalog_cover_tags', 'type' => 'text', 'label' => 'Cover tags', 'help' => 'One line under the title, e.g. "Wholesale Distributor · East Africa Coverage · Fast Delivery".'],
                 ]],
             ]],
             ['key' => 'currency', 'label' => 'Currency & rates', 'icon' => 'dollar', 'groups' => [

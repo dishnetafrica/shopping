@@ -182,6 +182,8 @@ final class CatalogRenderer
                     'moq' => $p->moq ? (int) $p->moq : null,
                     'price' => (float) $p->price,
                     'sku' => (string) ($p->sku ?: ''),
+                    'oem' => (string) ($p->oem_number ?? ''),      // v4.7.7 — manufacturer part no. (mechanics order by this)
+                    'brand' => (string) ($p->brand ?? ''),         // v4.7.7 — powers the per-card "Fits" line
                     'image' => (string) ($p->image_url ?: ''),
                 ];
             }
@@ -246,6 +248,8 @@ final class CatalogRenderer
                     'moq' => $p->moq ? (int) $p->moq : null,
                     'price' => (float) $p->price,
                     'sku' => (string) ($p->sku ?: ''),
+                    'oem' => (string) ($p->oem_number ?? ''),      // v4.7.7
+                    'brand' => (string) ($p->brand ?? ''),         // v4.7.7
                     'image' => (string) ($p->image_url ?: ''),
                 ];
             }
@@ -672,6 +676,12 @@ final class CatalogRenderer
         $company = e((string) $tenant->name);
         $tagline = e((string) ($tenant->setting('tagline', '') ?: $tenant->setting('address', '') ?: ''));
         $phone = trim((string) ($tenant->setting('public_phone', '') ?: $tenant->whatsapp_number));
+        // v4.7.7 — a half-typed public_phone ("+2567") was printing on every page. If the setting
+        // doesn't hold a dialable number, fall back to the connected WhatsApp number.
+        if (strlen(preg_replace('/\D+/', '', $phone)) < 9) {
+            $alt = trim((string) $tenant->whatsapp_number);
+            if (strlen(preg_replace('/\D+/', '', $alt)) >= 9) $phone = $alt;
+        }
         $email = trim((string) $tenant->setting('public_email', $tenant->setting('email', '')));
         $webRaw = trim((string) ($tenant->setting('public_website', '') ?: $tenant->setting('bot_website_link', '')));
         $webText = $webRaw !== '' ? preg_replace('~^https?://~i', '', rtrim($webRaw, '/')) : '';
@@ -733,9 +743,17 @@ final class CatalogRenderer
         $fromCity = trim((string) $tenant->setting('delivery_from_city', 'Juba')) ?: 'Juba';
         $deliveryLine = trim((string) $tenant->setting('delivery_note', ''))
             ?: 'Free delivery within ' . $fromCity . ' — outside ' . $fromCity . ', transport is confirmed at order';
+        // v4.7.7 — business details for the back page (review #8). Only filled settings print.
+        $infoRows = array_values(array_filter([
+            ['Business hours',  (string) $tenant->setting('business_hours', '')],
+            ['Delivery areas',  (string) $tenant->setting('delivery_areas', '')],
+            ['Payment methods', (string) $tenant->setting('sf_pay_methods', '')],
+            ['Email',           $email],
+            ['Location',        trim((string) $tenant->setting('address', '') . ' ' . (string) $tenant->setting('city', ''))],
+        ], fn ($r) => trim($r[1]) !== ''));
         $back = $this->backHtml($company, $logo, $date, $phone, $email, $currency, $dateFull,
             $withPrices, $showOverview ? '' : $promoImg, $qr, ! $showOverview, $webText, $webHref,
-            $deliveryLine);
+            $deliveryLine, $infoRows, trim((string) $tenant->setting('catalog_badge', '')));
 
         return <<<HTML
 <!doctype html><html><head><meta charset="utf-8"><style>
@@ -871,6 +889,14 @@ HTML;
             ? '<a href="' . e($webHref) . '" style="color:#d1fae5;text-decoration:none;font-weight:bold">' . e($webText) . '</a>'
             : '';
         $brand = self::BRAND; $brandD = self::BRAND_DARK;
+        // v4.7.7 — optional trust badge + value-prop tags on the cover (catalogue review #3/#7).
+        // Both are plain settings; blank = exactly the old cover. e.g. badge "✓ Genuine OEM-quality
+        // parts", tags "Wholesale Distributor · East Africa Coverage · Fast Delivery".
+        $badgeTxt  = trim((string) $tenant->setting('catalog_badge', ''));
+        $coverTags = trim((string) $tenant->setting('catalog_cover_tags', ''));
+        $badgeChip = $badgeTxt !== ''
+            ? '<span style="display:inline-block;background:#f0fdf4;border:1px solid #86efac;color:' . self::BRAND_DARK . ';font-size:10px;font-weight:bold;padding:4px 12px;border-radius:12px">' . e($this->clipLine($badgeTxt, 46)) . '</span>'
+            : '';
         $logoBlockDark = $logo !== ''
             ? '<img src="' . e($logo) . '" style="height:40px;max-width:150px">'
             : '<div style="font-size:19px;font-weight:bold;color:' . $brandD . '">' . $company . '</div>';
@@ -909,7 +935,8 @@ HTML;
                 . '<td style="width:47%;vertical-align:top;padding-top:22px">'
                 . '<div style="font-size:15px;font-weight:bold;letter-spacing:3px;color:#64748b">WHOLESALE</div>'
                 . '<div class="ctitle2" style="color:' . $brandD . '">PRODUCT<br>CATALOGUE</div>'
-                . '<div style="margin-top:14px"><span class="datechip">' . $date . '</span></div>'
+                . '<div style="margin-top:14px"><span class="datechip">' . $date . '</span>' . ($badgeChip !== '' ? ' ' . $badgeChip : '') . '</div>'
+                . ($coverTags !== '' ? '<div style="margin-top:10px;font-size:9.5px;font-weight:bold;color:#64748b;letter-spacing:.4px">' . e($this->clipLine($coverTags, 90)) . '</div>' : '')
                 . '<div style="margin-top:20px">' . $audRows . '</div>'
                 . '<table style="border-collapse:collapse;margin-top:24px"><tr><td><div class="statbox">'
                 . '<div style="font-size:22px;font-weight:bold">' . number_format($totalItems) . '+</div>'
@@ -951,7 +978,9 @@ HTML;
             . ($tagline ? '<div style="margin-top:14px;font-size:12px;color:#d1fae5;font-weight:bold;letter-spacing:.6px">' . $tagline . '</div>' : '')
             . '</td></tr></table>'
             . '<div style="text-align:center;margin-top:34px"><div class="ctitle">PRODUCT CATALOGUE</div>'
-            . '<div style="margin-top:8px"><span class="datechip">' . $date . '</span></div></div>'
+            . '<div style="margin-top:8px"><span class="datechip">' . $date . '</span>' . ($badgeChip !== '' ? ' ' . $badgeChip : '') . '</div>'
+            . ($coverTags !== '' ? '<div style="margin-top:10px;font-size:10px;font-weight:bold;color:#64748b;letter-spacing:.5px">' . e($this->clipLine($coverTags, 90)) . '</div>' : '')
+            . '</div>'
             . $middle
             . ($qr !== '' ? '<div style="text-align:center;margin-top:26px"><span class="qrbox" style="border:1px solid #e2e8f0"><img src="' . e($qr) . '" style="height:74px;width:74px"></span>'
                 . '<div style="font-size:8.5px;font-weight:bold;color:#94a3b8;letter-spacing:1px;margin-top:5px">SCAN TO ORDER ON WHATSAPP</div></div>' : '')
@@ -1140,7 +1169,7 @@ HTML;
     private function backHtml(string $company, string $logo, string $date, string $phone,
         string $email, string $currency, string $dateFull, bool $withPrices, string $promoImg,
         string $qr, bool $withPromo = true, string $webText = '', string $webHref = '',
-        string $deliveryLine = ''): string
+        string $deliveryLine = '', array $infoRows = [], string $badgeTxt = ''): string
     {
         $ink = self::INK; $brandD = self::BRAND_DARK;
         $promo = $withPromo ? $this->promoBand($promoImg) : '';
@@ -1178,10 +1207,42 @@ HTML;
             . '</tr></table>'
             . '</div>'
             . '</td></tr></table>'
+            . $this->backInfo($infoRows, $badgeTxt)
             . '<div style="margin-top:22px;font-size:9px;color:#94a3b8">'
             . ($withPrices ? 'All prices in ' . e($currency) . ', valid as of ' . e($dateFull) . ' and subject to change without notice. ' : '')
             . 'Availability confirmed on order. Thank you for your business.</div>'
             . '</div>';
+    }
+
+    /**
+     * v4.7.7 — compact business-details block on the back page (hours, delivery areas, payment,
+     * email, location) + a standing dealer-enquiry line. Rows come pre-filtered (only settings the
+     * shop actually filled); with none, only the dealer line prints. Two columns, table flow only.
+     */
+    private function backInfo(array $infoRows, string $badgeTxt): string
+    {
+        $ink = self::INK; $brandD = self::BRAND_DARK;
+        $cells = [];
+        foreach ($infoRows as [$label, $value]) {
+            $cells[] = '<td style="width:50%;padding:7px 10px;vertical-align:top">'
+                . '<div style="font-size:8px;font-weight:bold;letter-spacing:1.2px;color:#94a3b8">' . strtoupper(e($label)) . '</div>'
+                . '<div style="font-size:10.5px;font-weight:bold;color:' . $ink . ';margin-top:2px">' . e($this->clipLine($value, 70)) . '</div>'
+                . '</td>';
+        }
+        $rows = '';
+        foreach (array_chunk($cells, 2) as $pair) {
+            if (count($pair) === 1) $pair[] = '<td style="width:50%"></td>';
+            $rows .= '<tr>' . implode('', $pair) . '</tr>';
+        }
+        $table = $rows !== ''
+            ? '<table style="width:100%;border-collapse:collapse;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin-top:16px">' . $rows . '</table>'
+            : '';
+        $dealer = '<div style="margin-top:12px;font-size:11px;font-weight:bold;color:' . $brandD . '">'
+            . '🤝 Dealer &amp; bulk enquiries welcome — ask for the trade price list.'
+            . ($badgeTxt !== '' ? ' &nbsp;·&nbsp; ' . e($this->clipLine($badgeTxt, 46)) : '')
+            . '</div>';
+
+        return $table . $dealer;
     }
 
     private function pageHeader(string $company, string $logo, string $date, string $brandD): string
@@ -1212,9 +1273,14 @@ HTML;
                 . '</div>';
 
             $unit = trim((string) ($it['unit'] ?? ''));
+            // v4.7.7 — the two info lines are multi-purpose so card height never changes:
+            //   line 1: OEM part number when known (mechanics order by this), else the selling unit.
+            //   line 2: MOQ when set (FMCG tenants), else a brand "Fits" line (parts tenants), else blank.
+            $oem = trim((string) ($it['oem'] ?? ''));
+            $pbrand = trim((string) ($it['brand'] ?? ''));
             $moq = ! empty($it['moq'])
                 ? 'Min order: ' . e((string) $it['moq']) . ' &times; ' . e($unit !== '' ? $unit : 'units')
-                : '&nbsp;';
+                : ($pbrand !== '' ? 'Fits: <b>' . e($this->clipLine($pbrand, 24)) . '</b> models' : '&nbsp;');
             $priceCell = $withPrices
                 ? '<div class="pfrom">FROM</div><div class="pr">' . $this->money((float) $it['price'], $currency) . '</div>'
                 : '<div class="pr" style="color:#94a3b8;font-size:10px">Ask for price</div>';
@@ -1222,7 +1288,7 @@ HTML;
             $cells[] = '<td class="cell">' . $bstrip . $photo
                 . '<div class="pbody">'
                 . $this->nameLines((string) $it['name'])
-                . '<div class="pu">' . ($unit !== '' ? e($unit) : '&nbsp;') . '</div>'
+                . '<div class="pu">' . ($oem !== '' ? '<b style="color:#334155">OEM: ' . e($this->clipLine($oem, 26)) . '</b>' : ($unit !== '' ? e($unit) : '&nbsp;')) . '</div>'
                 . '<div class="pm">' . $moq . '</div>'
                 . '<table class="prow"><tr><td>' . $priceCell . '</td>'
                 . '<td class="sku">' . ($it['sku'] ? e((string) $it['sku']) : '') . '</td></tr></table>'

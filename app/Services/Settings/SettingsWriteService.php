@@ -36,6 +36,7 @@ final class SettingsWriteService
         'public_website', 'free_delivery_towns', 'delivery_from_city',
         'catalog_cover_image', 'catalog_promo_image', 'catalog_qr_image',
         'catalog_best_sellers', 'catalog_hot_deals', 'catalog_audience',
+        'catalog_badge', 'catalog_cover_tags',   // v4.7.7 — trust badge + cover value-prop line
         // POS till controls (v3.9).
         'pos_manager_pin',
         // Storefront model photo override (v4.7.6): any image URL; blank = official TVS photo.

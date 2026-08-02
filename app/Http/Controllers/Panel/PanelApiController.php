@@ -118,6 +118,7 @@ class PanelApiController extends Controller
                 'StockByBranch'=> null,
                 'Barcode'      => (string) ($p->barcode ?? ''),
                 'Item_Code'    => (string) ($p->sku ?? ''),
+                'OEM_Number'   => (string) ($p->oem_number ?? ''),   // v4.7.7 — manufacturer part no.
                 'Image'        => (string) ($p->image_url ?? ''),
                 'Gallery_1'    => (string) ($p->gallery_1 ?? ''),
                 'Gallery_2'    => (string) ($p->gallery_2 ?? ''),
@@ -1834,6 +1835,10 @@ class PanelApiController extends Controller
         if ($r->filled('name')) $p->name = trim((string) $r->query('name'));
         if ($r->filled('category')) $p->category = trim((string) $r->query('category', ''));
         if ($r->has('moq'))        $p->moq        = $r->query('moq') !== '' ? max(1, (int) $r->query('moq')) : null;
+        if ($r->has('sku'))        $p->sku        = trim((string) $r->query('sku', '')) ?: null;          // v4.7.7
+        if ($r->has('oem') && \Illuminate\Support\Facades\Schema::hasColumn('products', 'oem_number')) {
+            $p->oem_number = trim((string) $r->query('oem', '')) ?: null;                                // v4.7.7
+        }
         if ($r->has('pack_size'))  $p->pack_size  = $r->query('pack_size') !== '' ? max(1, (int) $r->query('pack_size')) : null;
         if ($r->has('unit_label')) $p->unit_label = trim((string) $r->query('unit_label', '')) ?: null;
         if ($r->has('sell_mode')) {
@@ -2271,6 +2276,8 @@ class PanelApiController extends Controller
         // These columns are written by the export but were previously ignored on import, so a
         // round-trip (export → re-import) silently lost Cost, SKU, Unit, Pack Size and MOQ.
         $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
+        $iOem = $col(['oem number', 'oem_number', 'oem', 'oem no', 'part number', 'part no']);   // v4.7.7
+        if ($iOem !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'oem_number')) $iOem = null;   // migration not run yet — ignore the column
         $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
         $iBrand = $col(['brand']);
         $iSell  = $col(['sell mode', 'sell_mode', 'sales mode']);   // 'buy' (default) or 'quote'
@@ -2329,6 +2336,7 @@ class PanelApiController extends Controller
             $stock = $iStock !== null ? (int) preg_replace('/[^0-9-]/', '', (string) ($c[$iStock] ?? '')) : 0;
             $kw    = $iKw !== null ? trim((string) ($c[$iKw] ?? '')) : '';
             $sku   = $iSku !== null ? trim((string) ($c[$iSku] ?? '')) : '';
+            $oem   = $iOem !== null ? trim((string) ($c[$iOem] ?? '')) : '';
             $brand = $iBrand !== null ? trim((string) ($c[$iBrand] ?? '')) : '';
             $cost  = $iCost !== null ? (float) preg_replace('/[^0-9.]/', '', (string) ($c[$iCost] ?? '')) : 0;
             $unit  = $iUnit !== null ? trim((string) ($c[$iUnit] ?? '')) : '';
@@ -2394,6 +2402,7 @@ class PanelApiController extends Controller
                     'sell_mode'  => $sell,
                     'active'     => $price > 0,
                 ]);
+                if ($oem !== '') { $product->oem_number = $oem; $product->save(); }   // v4.7.7 (guard: $iOem null pre-migration)
                 if ($specColMap) {
                     $pairs = [];
                     foreach ($specColMap as $idx => $key) { $pairs[$key] = (string) ($c[$idx] ?? ''); }
@@ -2456,6 +2465,8 @@ class PanelApiController extends Controller
         $iGal2 = $col(['gallery 2', 'gallery_2', 'gallery2', 'image 3', 'photo 3']);
         $iGal3 = $col(['gallery 3', 'gallery_3', 'gallery3', 'image 4', 'photo 4']);
         $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
+        $iOem = $col(['oem number', 'oem_number', 'oem', 'oem no', 'part number', 'part no']);   // v4.7.7
+        if ($iOem !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'oem_number')) $iOem = null;   // migration not run yet — ignore the column
         $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
         $iBrand = $col(['brand']);
         $iSell  = $col(['sell mode', 'sell_mode', 'sales mode']);   // 'buy' (default) or 'quote'
@@ -2500,6 +2511,7 @@ class PanelApiController extends Controller
             $stock = $iStock !== null ? (int) preg_replace('/[^0-9-]/', '', (string) ($c[$iStock] ?? '')) : 0;
             $kw    = $iKw !== null ? trim((string) ($c[$iKw] ?? '')) : '';
             $sku   = $iSku !== null ? trim((string) ($c[$iSku] ?? '')) : '';
+            $oem   = $iOem !== null ? trim((string) ($c[$iOem] ?? '')) : '';
             $brand = $iBrand !== null ? trim((string) ($c[$iBrand] ?? '')) : '';
             $unit  = $iUnit !== null ? trim((string) ($c[$iUnit] ?? '')) : '';
             $pack  = $iPack !== null ? (int) preg_replace('/[^0-9]/', '', (string) ($c[$iPack] ?? '')) : 0;
@@ -2539,6 +2551,7 @@ class PanelApiController extends Controller
                     'sell_mode' => $sell,
                     'active' => $price > 0,
                 ]);
+                if ($oem !== '') { $product->oem_number = $oem; $product->save(); }   // v4.7.7 (guard: $iOem null pre-migration)
                 if ($specColMap) {
                     $pairs = [];
                     foreach ($specColMap as $idx => $key) { $pairs[$key] = (string) ($c[$idx] ?? ''); }
