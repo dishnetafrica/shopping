@@ -483,6 +483,50 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 .sswrap{max-width:640px;margin:0 auto}
 .sug3{position:static;border-top:1px solid #e2e8f0;border-radius:14px;margin-top:8px}
 </style>
+<style>/* v4.10.1 search journey */
+.shead{display:flex;align-items:center;gap:12px;padding:14px 20px 0;max-width:720px;margin:0 auto}
+.sback{font-size:24px;line-height:1;color:var(--ink);cursor:pointer;padding:4px 12px 7px;border-radius:11px;background:#fff;border:1px solid var(--line)}
+.shead h2{font-size:19px;font-weight:800}
+.shub{padding-top:12px;padding-bottom:34px;max-width:720px}
+.shs{box-shadow:0 6px 18px rgba(12,18,32,.08);border:1.5px solid var(--line)}
+.shblk{margin-top:18px}
+.shhd{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+.shhd b{font-size:14.5px}
+.rschips{display:flex;flex-wrap:wrap;gap:8px}
+.rsc{background:#fff;border:1px solid var(--line);border-radius:99px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;min-height:36px;display:inline-flex;align-items:center}
+.poprow{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 13px;margin-bottom:8px;font-size:13.5px;font-weight:600;cursor:pointer}
+.poprow .li{color:#8a94a6}
+.poprow span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.poprow i{font-style:normal;color:#c2c9d4;font-size:17px}
+.shub .qact{padding-top:16px}
+.shub .bkline a{color:var(--accent);font-weight:700;cursor:pointer}
+/* results: tabs + list rows */
+.stabs{display:flex;gap:2px;border-bottom:2px solid var(--line);margin-bottom:12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.stabs::-webkit-scrollbar{display:none}
+.stb{padding:9px 13px;font-size:13.5px;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:2.5px solid transparent;margin-bottom:-2px}
+.stb i{font-style:normal;color:#9aa4b4;font-weight:600}
+.stb.on{color:var(--accent);border-bottom-color:var(--accent)}
+.lrows{display:flex;flex-direction:column;gap:10px}
+.lrow{display:flex;gap:12px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;cursor:pointer;align-items:center;transition:border-color .14s,box-shadow .14s}
+.lrow:hover{border-color:#d9b3b3;box-shadow:0 4px 12px rgba(12,18,32,.07)}
+.lim{width:74px;height:74px;flex:none;background:var(--soft);border-radius:10px;display:grid;place-items:center;overflow:hidden}
+.lim img{width:100%;height:100%;object-fit:cover}
+.lin{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.lnm{font-size:14px;font-weight:700;line-height:1.25}
+.loem{font-size:11px;color:var(--muted)}
+.loem .mono{font-size:11px;font-weight:700;color:#334155}
+.lfits{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lpr{display:flex;align-items:center;gap:10px;margin-top:2px}
+.lpr b{font-size:14.5px;color:var(--accent)}
+.lpr .dyour{color:#166534}
+.ladd{flex:none;width:42px;height:42px;border:0;border-radius:11px;background:var(--accent);color:#fff;display:grid;place-items:center;cursor:pointer}
+.ladd:active{background:var(--accent-d)}
+.dghd{font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:16px 0 8px}
+/* buy bar with WhatsApp */
+.buybar .btn{white-space:nowrap;padding:11px 13px}
+.buybar .bbwa{gap:5px}
+@media(max-width:420px){.buybar .bb-l span{display:none}}
+</style>
 </head>
 <body>
 <main id="app" role="main"></main>
@@ -736,6 +780,10 @@ function vsr(inpId,boxId){
 function rvAdd(id){ try{ var l=JSON.parse(localStorage.getItem('ea_rv')||'[]').filter(function(x){return String(x)!==String(id);}); l.unshift(String(id)); localStorage.setItem('ea_rv',JSON.stringify(l.slice(0,8))); }catch(e){} }
 function rvList(){ var l=[]; try{ l=JSON.parse(localStorage.getItem('ea_rv')||'[]'); }catch(e){ return []; }
   var out=[]; l.forEach(function(id){ var p=STATE.products.filter(function(x){return String(x.id)===String(id);})[0]; if(p)out.push(p); }); return out.slice(0,5); }
+/* v4.10.1 — recent searches (dedicated search screen) */
+function rsAdd(q){ q=String(q||'').trim().slice(0,40); if(!q)return; try{ var l=JSON.parse(localStorage.getItem('ea_rs')||'[]').filter(function(x){return String(x).toLowerCase()!==q.toLowerCase();}); l.unshift(q); localStorage.setItem('ea_rs',JSON.stringify(l.slice(0,8))); }catch(e){} }
+function rsList(){ try{ var l=JSON.parse(localStorage.getItem('ea_rs')||'[]'); return l.filter(function(x){return typeof x==='string';}); }catch(e){ return []; } }
+function rsClear(){ try{ localStorage.removeItem('ea_rs'); }catch(e){} render(); }
 /* ---------- v4.9.1: dealer sign-in (WhatsApp code) + YOUR PRICE overlay ---------- */
 function dlrState(){ try{ return JSON.parse(localStorage.getItem('ea_dealer')||'null'); }catch(e){ return null; } }
 function dlrSave(o){ try{ if(o)localStorage.setItem('ea_dealer',JSON.stringify(o)); else localStorage.removeItem('ea_dealer'); }catch(e){} }
@@ -1170,17 +1218,28 @@ function trust(){
 // NOTE: these src/ files share one runtime scope; build_storefront.py concatenates them
 // in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- views ---------- */
+/* v4.10.1 — shared by the homepage and the dedicated search screen */
+function bikeCardsHtml(){
+  var b=getBike();
+  return activeModels().map(function(m){ var on=b&&b.id===m.id;
+    return '<div class="bkc'+(on?' on':'')+'" role="button" tabindex="0" aria-pressed="'+(on?'true':'false')+'" onclick="'+(on?'clearBike();':'setBike(\''+sid(m.id)+'\');')+'render();">'
+      +(on?'<span class="bkck">'+li('check',12)+'</span>':'')
+      +'<div class="bki"><img src="'+esc(modelImg(m.id))+'" alt="" loading="lazy" onerror="mimgErr(this,\''+sid(m.id)+'\')"></div><b>'+esc(m.name)+'</b></div>';
+  }).join('');
+}
+function qactHtml(srcTag){
+  return '<div class="qact">'
+   +'<a class="qab ph" role="button" tabindex="0" onclick="pidTrigger()">'+li('camera',22)+'<span><b>Photo of old part</b><i>We\u2019ll identify it for you</i></span></a>'
+   +'<a class="qab wag" href="'+esc(waLink())+'" target="_blank" rel="noopener" onclick="track(\'whatsapp\',{source:\''+(srcTag||'quickact')+'\'})">'+li('message-circle',22)+'<span><b>WhatsApp a mechanic</b><i>Get expert help now</i></span></a>'
+   +'</div>';
+}
 function vHome(){
   var b=getBike();
   /* v4.10 — search-first home (approved reference): the search bar IS the hero. */
   var hT=String(CFG.heroTitle||'Find the correct part. In seconds.');
   var hCut=hT.indexOf('. ');
   var hH=hCut>0?esc(hT.slice(0,hCut+1))+' <span class="hl">'+esc(hT.slice(hCut+1))+'</span>':esc(hT);
-  var bks=activeModels().map(function(m){ var on=b&&b.id===m.id;
-    return '<div class="bkc'+(on?' on':'')+'" role="button" tabindex="0" aria-pressed="'+(on?'true':'false')+'" onclick="'+(on?'clearBike();':'setBike(\''+sid(m.id)+'\');')+'render();">'
-      +(on?'<span class="bkck">'+li('check',12)+'</span>':'')
-      +'<div class="bki"><img src="'+esc(modelImg(m.id))+'" alt="" loading="lazy" onerror="mimgErr(this,\''+sid(m.id)+'\')"></div><b>'+esc(m.name)+'</b></div>';
-  }).join('');
+  var bks=bikeCardsHtml();
   var pops=popChips().map(function(f){return '<a onclick="qsearch(\''+f+'\')">'+esc(f)+'</a>';}).join('');
   var ccs=systemsLive().map(function(s){
     return '<div class="cc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')"><div class="cci">'+(s.cover?'<img src="'+esc(s.cover)+'" alt="" loading="lazy">':li('wrench',26))+'</div><b>'+esc(s.name)+'</b><span>'+s.count+' parts</span></div>';
@@ -1205,10 +1264,7 @@ function vHome(){
    +'<section class="bksec"><div class="wrap"><div class="bkhd"><h2>Select your motorcycle</h2><span class="link" onclick="openBikePicker()">View all ›</span></div><div class="bkrow" aria-label="Choose your motorcycle">'+bks+'</div>'
      +(b?'<div class="bkline">'+li('check',14)+'<span>Showing parts for <b>'+esc(b.name)+'</b></span><a onclick="openBikePicker()">Change</a><a onclick="clearBike();render();">Show all parts</a><a onclick="go(\'model/'+sid(b.id)+'\')">Model page ›</a></div>':'')
    +'</div></section>'
-   +'<div class="wrap"><div class="qact">'
-     +'<a class="qab ph" role="button" tabindex="0" onclick="pidTrigger()">'+li('camera',22)+'<span><b>Photo of old part</b><i>We’ll identify it for you</i></span></a>'
-     +'<a class="qab wag" href="'+esc(waLink())+'" target="_blank" rel="noopener" onclick="track(\'whatsapp\',{source:\'quickact\'})">'+li('message-circle',22)+'<span><b>WhatsApp a mechanic</b><i>Get expert help now</i></span></a>'
-   +'</div>'+(pops?'<div class="popsec"><span class="pst">Popular searches:</span>'+pops+'</div>':'')+'</div>'
+   +'<div class="wrap">'+qactHtml('quickact')+(pops?'<div class="popsec"><span class="pst">Popular searches:</span>'+pops+'</div>':'')+'</div>'
    +'<section class="blk wrap"><div class="hd"><div><h2>Shop by Category</h2></div><span class="link" onclick="go(\'parts\')">View all ›</span></div><div class="ccrow">'+ccs+'</div></section>'
    +(best?'<section class="blk wrap"><div class="hd"><div><h2>Popular Parts <span class="tagred">Best sellers</span></h2></div><span class="link" onclick="go(\'parts\')">View all ›</span></div><div class="g5">'+best+'</div></section>':'')
    +(svc?'<section class="blk wrap"><div class="hd"><div><h2>Common replacements for your '+esc(b.name)+'</h2><div class="sub">The parts every boda changes most often.</div></div></div><div class="g5">'+svc+'</div></section>':'')
@@ -1298,10 +1354,10 @@ function vPart(id){
      +'<div class="qa-b"><h4><i class="fa fa-undo"></i> Warranty &amp; returns</h4><p>'+esc(CFG.warranty||'1-year warranty')+'<br>'+esc(CFG.returns||'Returns on unfitted parts')+'</p></div>'
    +'</div>'
    +'</div></div>'
-   +(function(){ var gw=goesWith(p,4).map(prodCard).join(''); return gw?'<div class="blk"><div class="hd"><div><h2>Goes well with</h2><div class="sub">Mechanics usually replace these together.</div></div></div><div class="g4">'+gw+'</div></div>':''; })()
+   +(function(){ var gw=goesWith(p,4).map(prodCard).join(''); return gw?'<div class="blk"><div class="hd"><div><h2>Frequently bought together</h2><div class="sub">Mechanics usually replace these together.</div></div></div><div class="g4">'+gw+'</div></div>':''; })()
    +(also?'<div class="blk"><div class="hd"><div><h2>More in this system</h2></div></div><div class="g4">'+also+'</div></div>':'')
    +'</section>'
-   +'<div class="buybar"><div class="bb-l"><b>'+(function(){var dp=dlrPrice(p);if(dp!=null)return money(dp);return priced?money(p.price):'Ask price';})()+'</b><span>'+esc(p.name)+'</span></div><button class="btn btn-p" onclick="cartAdd(\''+sid(p.id)+'\')"><i class="fa fa-shopping-cart"></i> Add to cart</button></div>'
+   +'<div class="buybar"><div class="bb-l"><b>'+(function(){var dp=dlrPrice(p);if(dp!=null)return money(dp);return priced?money(p.price):'Ask price';})()+'</b><span>'+esc(p.name)+'</span></div><button class="btn btn-p" onclick="cartAdd(\''+sid(p.id)+'\')"><i class="fa fa-shopping-cart"></i> Add to cart</button><a class="btn btn-w bbwa" href="'+esc(waOrder(p))+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:[\''+sid(p.id)+'\']})">'+li('message-circle',15)+' WhatsApp</a></div>'
    +foot();
 }
 function galleryFor(id){ var g=(GAL&&GAL[id])||[]; if(!g.length){ var mi=modelImg(id); if(mi)g=[mi]; } return g; }
@@ -1369,21 +1425,100 @@ function vModel(id){
    +foot();
 }
 function scrollTo2(id){var e=document.getElementById(id); if(e)e.scrollIntoView({behavior:'smooth',block:'start'});}
+/* v4.10.1 — Amazon-style results: text/OEM/diagram buckets + tab strip + scannable list rows. */
+function searchSets(q){
+  var qn=normQ(q);
+  var text=applyListFilters(vehFilter(STATE.products).filter(function(p){return (p.name+' '+p.kw+' '+p.cat).toLowerCase().indexOf(q)>=0;}));
+  var oem=(qn&&qn.length>=3)?applyListFilters(vehFilter(STATE.products).filter(function(p){var pn=normQ(pnOf(p)||''),sk=normQ(String(p.sku||''));return (pn&&pn.indexOf(qn)>=0)||(sk&&sk.indexOf(qn)>=0);})):[];
+  var seen={},all=[];
+  text.concat(oem).forEach(function(p){ if(!seen[p.id]){seen[p.id]=1;all.push(p);} });
+  var plates=q?(((typeof DIAG!=='undefined'&&DIAG&&DIAG.plates)||[]).filter(function(pl){
+    if((String(pl.system||'')+' '+String(pl.name||'')).toLowerCase().indexOf(q)>=0) return true;
+    return (pl.parts||[]).some(function(x){return String(x.pn||'').toLowerCase().indexOf(q)>=0||String(x.d||'').toLowerCase().indexOf(q)>=0;});
+  })):[];
+  return {text:text,oem:oem,all:all,plates:plates};
+}
+function stab(key,label,n,cur){ return '<span class="stb'+(key===cur?' on':'')+'" role="button" onclick="STATE.searchTab=\''+key+'\';render();">'+label+' <i>('+n+')</i></span>'; }
+function resultRow(p){
+  var pn=pnOf(p); var inS=p.stock===null||p.stock>0;
+  var dp=dlrPrice(p);
+  var priceH=dp!=null?('<span class="dstrike">'+money(p.price)+'</span><b class="dyour">'+money(dp)+'</b>'):(p.price>0?'<b>'+money(p.price)+'</b>':'<span class="askp">Ask price</span>');
+  return '<div class="lrow" role="button" onclick="go(\'part/'+sid(p.id)+'\')">'
+   +'<div class="lim">'+(p.img?'<img src="'+esc(p.img)+'" alt="" loading="lazy">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
+   +'<div class="lin"><b class="lnm">'+esc(p.name)+'</b>'
+     +(pn?'<span class="loem">OEM <span class="mono">'+esc(pn)+'</span></span>':'')
+     +'<span class="lfits">'+esc(cardFits(p))+'</span>'
+     +'<span class="lpr">'+priceH+'<span class="stock '+(inS?'y':'n')+'">'+(p.stock>0?(p.stock+' in stock'):(p.stock===null?'In stock':'To order'))+'</span></span></div>'
+   +'<button class="ladd" aria-label="Add to cart" onclick="event.stopPropagation();cartAdd(\''+sid(p.id)+'\')">'+li('shopping-cart',16)+'</button></div>';
+}
+function diagRow(pl){
+  var img=plateImg(pl);
+  return '<div class="lrow" role="button" onclick="go(\'plate/'+sid(pl.plate)+'\')">'
+   +'<div class="lim">'+(img?'<img src="'+esc(img)+'" alt="" loading="lazy">':'<div class="imph"><i class="fa fa-sitemap"></i></div>')+'</div>'
+   +'<div class="lin"><b class="lnm">'+esc(pl.name)+'</b><span class="lfits">'+esc(pl.system)+' · Plate '+pl.plate+' · '+((pl.parts||[]).length)+' parts on the diagram</span>'
+   +'<span class="lpr"><b style="color:var(--accent)">View diagram ›</b></span></div></div>';
+}
 function vSearch(q){
   q=decodeURIComponent(q||'').toLowerCase();
-  var res=applyListFilters(vehFilter(STATE.products).filter(function(p){return (p.name+' '+p.kw+' '+p.cat).toLowerCase().indexOf(q)>=0;}));
-  track('search',{q:q,results:res.length});
-  STATE.lastMiss=res.length?'':q;   /* v4.9.2 — feeds the part-request form without quote-escaping games */
-  return nav({search:true})+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › Search</div>'
-   +'<section class="blk wrap listlayout">'+filterSidebar('')
-   +'<div class="listmain"><div class="hd"><div><h2>Results for "'+esc(q)+'"</h2><div class="sub">'+res.length+' parts found</div></div></div>'
-   +(res.length?'<div class="pgrid">'+res.slice(0,60).map(prodCard).join('')+'</div>':
-     '<div class="norec"><div class="nrh">We don’t list “'+esc(q)+'” today.</div><p>That doesn’t mean we can’t get it — our mechanic will ask the supplier network and WhatsApp you options with prices, usually the same day.</p>'
+  var s=searchSets(q);
+  if(STATE.lastQ!==q){ STATE.lastQ=q; STATE.searchTab='all'; }
+  var tab=STATE.searchTab||'all';
+  track('search',{q:q,results:s.all.length});
+  if(q) rsAdd(q);
+  var totalAll=s.all.length+s.plates.length;
+  STATE.lastMiss=s.all.length?'':q;   /* v4.9.2 — no stocked PART matched (a diagram slot alone doesn't count) */
+  setTimeout(function(){ var i=document.getElementById('q2'); if(i&&i.value!==q) i.value=q; },40);
+  var tabs='<div class="stabs">'+stab('all','All',totalAll,tab)+stab('products','Products',s.text.length,tab)
+    +(s.plates.length?stab('diagrams','Diagrams',s.plates.length,tab):'')
+    +(s.oem.length?stab('oem','OEM',s.oem.length,tab):'')+'</div>';
+  var list=tab==='products'?s.text:(tab==='oem'?s.oem:(tab==='diagrams'?[]:s.all));
+  var rowsH=list.slice(0,60).map(resultRow).join('');
+  var diagsH=(tab==='all'||tab==='diagrams')?s.plates.slice(0,10).map(diagRow).join(''):'';
+  function nrec(h){ return '<div class="norec"><div class="nrh">'+h+'</div><p>That doesn’t mean we can’t get it — our mechanic will ask the supplier network and WhatsApp you options with prices, usually the same day.</p>'
      +'<div class="nrb"><a class="btn btn-p" onclick="reqSheet(STATE.lastMiss||\'\')">🔧 Ask my colleague to find it</a>'
      +'<a class="btn btn-w" href="'+esc(waLink())+'" target="_blank" rel="noopener"><i class="fa fa-whatsapp"></i> Chat on WhatsApp</a>'
      +'<a class="btn btn-o" onclick="go(\'ai\')"><i class="fa fa-comments"></i> Describe the problem</a>'
-     +'<a class="btn btn-o" onclick="go(\'\')"><i class="fa fa-tachometer"></i> Browse by motorcycle</a></div></div>')+'</div></section>'+foot();
+     +'<a class="btn btn-o" onclick="go(\'\')"><i class="fa fa-tachometer"></i> Browse by motorcycle</a></div></div>'; }
+  var body;
+  if(!totalAll){ body=nrec('We don’t list “'+esc(q)+'” today.'); }
+  else if(tab==='diagrams'){ body='<div class="lrows">'+diagsH+'</div>'; }
+  else if(!rowsH&&!diagsH){ body='<div class="empty">No matches in this view — try the All tab.</div>'; }
+  else { body=(rowsH?'<div class="lrows">'+rowsH+'</div>':'')
+    +(tab==='all'&&diagsH?'<div class="dghd">Exploded diagrams</div><div class="lrows">'+diagsH+'</div>':'')
+    +((tab==='all'&&!s.all.length)?nrec('“'+esc(q)+'” is on the diagram — the part itself isn’t in stock today.'):''); }
+  return nav({search:true})+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › Search</div>'
+   +'<section class="blk wrap listlayout">'+filterSidebar('')
+   +'<div class="listmain"><div class="hd"><div><h2>Results for "'+esc(q)+'"</h2><div class="sub">'+totalAll+' result'+(totalAll===1?'':'s')+'</div></div></div>'
+   +(totalAll?tabs:'')
+   +body+'</div></section>'+foot();
 }
+/* v4.10.1 — dedicated search screen (bottom-nav Search tab): recent + popular searches,
+   bike row and quick actions, with the full keyboard-free canvas the reference asked for. */
+function vSearchHub(){
+  var rs=rsList();
+  STATE.popSearch=bestSellerList().map(function(p){return p.name;});
+  if(!STATE.popSearch.length) STATE.popSearch=popChips();
+  STATE.popSearch=STATE.popSearch.slice(0,5);
+  var b=getBike();
+  var rsH=rs.length?('<div class="shblk"><div class="shhd"><b>Recent Searches</b><a class="link" onclick="rsClear()">Clear all</a></div><div class="rschips">'+rs.map(function(x,i){return '<a class="rsc" role="button" onclick="qsearch(rsList()['+i+'])">'+esc(x)+'</a>';}).join('')+'</div></div>'):'';
+  var popH=STATE.popSearch.length?('<div class="shblk"><div class="shhd"><b>Popular Searches</b></div>'+STATE.popSearch.map(function(x,i){return '<a class="poprow" role="button" onclick="qsearch(STATE.popSearch['+i+'])">'+li('search',15)+'<span>'+esc(x)+'</span><i>›</i></a>';}).join('')+'</div>'):'';
+  setTimeout(function(){ var i=document.getElementById('qh'); if(i){ try{ i.focus(); }catch(e){} } },80);
+  return nav()
+   +'<div class="wrap shead"><a class="sback" role="button" aria-label="Back to home" onclick="go(\'\')">‹</a><h2>Search Parts</h2></div>'
+   +'<section class="wrap shub">'
+   +'<div class="sugwrap"><form class="hsearch2 shs" onsubmit="return doSearchH(event)" role="search">'
+     +'<span class="hsic">'+li('search',18)+'</span>'
+     +'<input id="qh" aria-label="Search parts by OEM number, name or SKU" autocomplete="off" placeholder="Search OEM, part name, SKU…" oninput="sugInput(\'qh\',\'sugbox4\')" onkeydown="sugKey(event,\'qh\',\'sugbox4\')">'
+     +'<span class="hact" role="button" aria-label="Search with a photo of your old part" onclick="pidTrigger()">'+li('camera',18)+'</span>'
+     +'<span class="hact" role="button" aria-label="Voice search" onclick="vsr(\'qh\',\'sugbox4\')">'+li('mic',18)+'</span></form>'
+   +'<div id="sugbox4" class="sugbox sug3" role="listbox" style="display:none"></div></div>'
+   +rsH+popH
+   +'<div class="shblk"><div class="shhd"><b>Browse by Motorcycle</b><a class="link" onclick="openBikePicker()">View all ›</a></div><div class="bkrow">'+bikeCardsHtml()+'</div>'
+     +(b?'<div class="bkline">'+li('check',14)+'<span>Showing parts for <b>'+esc(b.name)+'</b></span><a onclick="clearBike();render();">Show all parts</a></div>':'')+'</div>'
+   +qactHtml('searchhub')
+   +'</section>'+foot();
+}
+function doSearchH(e){e.preventDefault();var v=((document.getElementById('qh')||{}).value||'').trim();if(v)qsearch(v);return false;}
 function plateImg(pl){ for(var i=0;i<(pl.parts||[]).length;i++){var pr=STATE.byPn[normPn(pl.parts[i].pn)]; if(pr&&pr.img)return pr.img;} return ''; }
 function vDiagram(plateNo){
   var plates=(DIAG&&DIAG.plates)||[]; if(!plates.length) return nav()+'<div class="empty">Diagrams unavailable.</div>'+foot();
@@ -1503,7 +1638,7 @@ function vCart(){
 // in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- router ---------- */
 function waLink(){return CFG.waNumber?('https://wa.me/'+CFG.waNumber):'#';}
-function openSearch(){var s=document.getElementById('ssheet');if(s){s.classList.add('on');var i=document.getElementById('ssin');if(i){i.value='';setTimeout(function(){i.focus();},50);i.onkeydown=function(e){if(e.key==='Enter')doSheetSearch();if(e.key==='Escape')closeSearch();};}}}
+function openSearch(){go('search');}   /* v4.10.1 — the Search tab opens the dedicated search screen */
 function closeSearch(){var s=document.getElementById('ssheet');if(s)s.classList.remove('on');}
 function doSheetSearch(){var i=document.getElementById('ssin');var q=(i&&i.value||'').trim();closeSearch();if(q)go('search/'+encodeURIComponent(q));}
 function go(path){location.hash='#/'+path;}
@@ -1522,7 +1657,7 @@ function render(){
   else if(parts[0]==='model') v=vModel(parts[1]);
   else if(parts[0]==='parts') v=vParts();
   else if(parts[0]==='plate'||parts[0]==='diagram'||parts[0]==='diagrams') v=vDiagram(parts[1]);
-  else if(parts[0]==='search') v=vSearch(parts.slice(1).join('/'));
+  else if(parts[0]==='search'){ var _sq=parts.slice(1).join('/'); v=_sq?vSearch(_sq):vSearchHub(); }
   else if(parts[0]==='ai') v=vAI();
   else if(parts[0]==='cart') v=vCart();
   else v=vHome();
