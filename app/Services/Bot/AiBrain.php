@@ -152,6 +152,27 @@ class AiBrain
             }
         }
 
+        // <<SOURCING>> block (v4.9.2 — the mechanic-human AI): when the model tells a customer
+        // "let me ask my colleague and come back with options" for a part we don't stock, it
+        // emits this hidden line. Mouth and hands, coupled — the line IS the asking: it records
+        // a part_request follow-up + alerts the owner, then is stripped. A malformed/truncated
+        // block is stripped to end-of-message so it can never leak to the customer.
+        if (preg_match('/<<SOURCING\s*(\{.*?\})\s*>>/s', $reply, $srm)) {
+            $reply = trim(str_replace($srm[0], '', $reply));
+            try {
+                $sj = json_decode($srm[1], true) ?: [];
+                app(\App\Services\Bot\PartRequestService::class)->capture(
+                    $tenant, $from,
+                    (string) ($sj['part'] ?? ''), 'bot',
+                    mb_substr($text, 0, 300),
+                    (string) ($sj['vehicle'] ?? ($sj['bike'] ?? ''))
+                );
+            } catch (\Throwable $e) { /* capture must never break the reply */ }
+        }
+        if (($srp = stripos($reply, '<<SOURCING')) !== false) {
+            $reply = trim(substr($reply, 0, $srp));   // truncated block — never leaks
+        }
+
         // 3a. order capture — if the model confirmed an order it emits a hidden <<ORDER {json}>>
         //     block. Create a real, trackable order (number + staff alert via OrderObserver),
         //     price it from OUR catalogue (never the LLM), and append a clean confirmation.
@@ -279,6 +300,7 @@ class AiBrain
             $items = $this->extractItems($tenant, $convo, $from, $text);
             if (! $items) return '';
             $quote = app(OrderCalculator::class)->quote($tenant, $items, $from);
+            app(PartRequestService::class)->captureUnmatched($tenant, $from, $quote, mb_substr($text, 0, 300));   // v4.9.2
             return app(OrderCalculator::class)->render($quote);
         } catch (\Throwable $e) {
             Log::warning('AiBrain total failed: ' . $e->getMessage());
@@ -297,6 +319,7 @@ class AiBrain
             $items = $this->extractItems($tenant, $convoRow, $from, $text);
             if (! $items) return false;
             $quote = app(OrderCalculator::class)->quote($tenant, $items, $from);
+            app(PartRequestService::class)->captureUnmatched($tenant, $from, $quote, mb_substr($text, 0, 300));   // v4.9.2
             $doc   = $svc->generate($tenant, $from, (string) ($convoRow->customer_name ?? ''), $quote);
             if (! $doc) return false;
 
@@ -819,6 +842,10 @@ class AiBrain
             if (preg_match('/"note"\s*:\s*"([^"]*)"/', $block, $nm)) $note = trim($nm[1]);
 
             $quote = app(\App\Services\Bot\OrderCalculator::class)->quote($tenant, $calcItems, $from);
+            // v4.9.2 — an ordered item that didn't match the catalogue is demand we're missing:
+            // record it so the team sources it (dedupe inside makes re-emits harmless).
+            app(\App\Services\Bot\PartRequestService::class)->captureUnmatched($tenant, $from, $quote,
+                'ordered: ' . implode(', ', array_map(fn ($i) => $i['query'], $calcItems)));
 
             $parts = [];
             foreach ($quote['lines'] as $l) $parts[] = $l['qty'] . ' x ' . $l['name'];
@@ -1065,6 +1092,7 @@ class AiBrain
 
             $convoRow = Conversation::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('customer_phone', $from)->first() ?: $convo;
             $quote = app(OrderCalculator::class)->quote($tenant, $items, $from);
+            app(PartRequestService::class)->captureUnmatched($tenant, $from, $quote, mb_substr($text, 0, 300));   // v4.9.2
 
             // Guard: only send if at least one line actually matched a priced product. This is what
             // stops the old "wrong items / random products" quotations from going out.
@@ -1429,6 +1457,19 @@ class AiBrain
         $p .= "- Never invent, promise, or imply a discount, \"bulk price\" or \"special price\". Quote the listed prices. If the customer asks for a bulk discount and none is offered, say the price is as listed and offer a formal quotation — the team can review bulk pricing separately. Do not claim a discount exists unless it is actually shown here.\n";
         $p .= "- Some items show \"price on request\" (e.g. jumbo parent reels) — these have no fixed price. Don't guess a figure: capture what they need (type, grade, GSM, quantity, origin) and tell them the team will send a quote.\n";
         $p .= "- Use the recent conversation for context; don't re-ask what the customer already told you.\n";
+        // v4.9.2 — the mechanic-human persona (auto-parts tenants only). Two jobs: sound like the
+        // experienced person behind the counter, and NEVER dead-end a customer whose part we don't
+        // stock — the "ask my colleague" promise is made real by the <<SOURCING>> line, which the
+        // system captures for the team (AI Follow-ups + owner alert) before stripping it.
+        if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::AUTO_PARTS) {
+            $p .= "YOU ARE THE MECHANIC AT THE COUNTER (this shop sells motorcycle spare parts — talk like the experienced mechanic serving a rider, never like a call centre or a system):\n";
+            $p .= "- Sound human: short lines, plain words, no corporate phrases (\"kindly note\", \"as per\", \"our records indicate\" are banned). It's fine to say \"let me check\", \"that one I have\", \"bring the old one along if you can\".\n";
+            $p .= "- FITMENT FIRST: a part that doesn't fit is worse than no part. If you don't yet know their motorcycle (make + model, e.g. Bajaj Boxer 100, TVS HLX 125), ask for it ONCE before quoting a fitment-specific part (filters, cables, plates, gaskets, shoes). Universal items (oil, bulbs where generic) don't need it.\n";
+            $p .= "- BE STRAIGHT ABOUT THE SHELF: if it's in PRODUCTS, quote it with confidence — name, price, stock tag, done. Never oversell, never invent a spec or a stock figure.\n";
+            $p .= "- WHEN WE DON'T STOCK IT (the most important rule): NEVER a flat \"we don't have it\" and NEVER pretend we do. Answer the way a real mechanic would: \"That one isn't on my shelf right now — let me ask my colleague and I'll come back to you with options.\" Make sure you know WHAT part and for WHICH motorcycle (ask if missing), then append a hidden machine line as the VERY LAST thing in that same reply, exactly: <<SOURCING {\"part\":\"what they need e.g. Air filter\",\"vehicle\":\"their bike e.g. TVS HLX 125\"}>> — the system records the request for the team and alerts the boss, then removes the line; the customer never sees it. The line IS the asking: saying you'll check WITHOUT it does nothing. Emit it once per distinct part, not again when the customer repeats the same ask.\n";
+            $p .= "- AFTER promising to check: don't invent an outcome later in the chat. The team comes back with real options; if the customer asks meanwhile, say the team is on it — options usually come the same day.\n";
+            $p .= "- CLOSE LIKE A MECHANIC, briefly and only when it truly helps: chain with sprockets, cables that commonly fail in pairs, \"bring the old part or send a photo\" for tricky matches. One suggestion max, then stop.\n";
+        }
         $p .= "AD LEADS (messages starting with [NEW AD LEAD] clicked our advert - highest-value first contact):\n";
         $p .= "- They came from an ad showing WHOLESALE PRICES and expect prices, not policy. Never say 'the price is as listed' - they have not seen any list yet.\n";
         $p .= "- Reply shape: (1) ONE warm welcome line to the shop, (2) answer their exact question concretely (bulk = carton prices; name real examples), (3) END with <<SEND {\"doc\":\"price_list\"}>> so the photo catalogue with prices lands immediately, (4) at most ONE qualifying question (hotel, restaurant, or shop? which area?).\n";

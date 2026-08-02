@@ -789,6 +789,8 @@ Route::middleware('web')->group(function () use ($qToken) {
     Route::get('/catalogue',       [\App\Http\Controllers\Storefront\StorefrontController::class, 'catalogue']);
     // v4.8.2 — photo part-identification (Storefront 2.0 Phase 3). Throttled: vision calls cost money.
     Route::post('/part-id',        [\App\Http\Controllers\Storefront\StorefrontController::class, 'partId'])->middleware('throttle:8,1');
+    // v4.9.2 — "ask my colleague": part request when search finds nothing. Throttled: writes + owner alert.
+    Route::post('/part-request',   [\App\Http\Controllers\Storefront\StorefrontController::class, 'partRequest'])->middleware('throttle:6,1');
     // v4.9.1 — dealer sign-in (WhatsApp code) + the authed dealer price/history feed.
     Route::post('/dealer-otp',     [\App\Http\Controllers\Storefront\StorefrontController::class, 'dealerOtp'])->middleware('throttle:6,1');
     Route::post('/dealer-verify',  [\App\Http\Controllers\Storefront\StorefrontController::class, 'dealerVerify'])->middleware('throttle:12,1');
@@ -827,6 +829,7 @@ Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::get('/{shop}/shop',      [\App\Http\Controllers\Storefront\StorefrontController::class, 'show'])->where('shop', $shopSlug);
     Route::get('/{shop}/catalogue', [\App\Http\Controllers\Storefront\StorefrontController::class, 'catalogue'])->where('shop', $shopSlug);
     Route::post('/{shop}/part-id',  [\App\Http\Controllers\Storefront\StorefrontController::class, 'partId'])->where('shop', $shopSlug)->middleware('throttle:8,1');   // v4.8.2
+    Route::post('/{shop}/part-request',  [\App\Http\Controllers\Storefront\StorefrontController::class, 'partRequest'])->where('shop', $shopSlug)->middleware('throttle:6,1'); // v4.9.2
     Route::post('/{shop}/dealer-otp',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'dealerOtp'])->where('shop', $shopSlug)->middleware('throttle:6,1');    // v4.9.1
     Route::post('/{shop}/dealer-verify', [\App\Http\Controllers\Storefront\StorefrontController::class, 'dealerVerify'])->where('shop', $shopSlug)->middleware('throttle:12,1');
     Route::get('/{shop}/dealer-feed',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'dealerFeed'])->where('shop', $shopSlug)->middleware('throttle:30,1');

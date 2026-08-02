@@ -32,6 +32,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'quote', '*/quote',
             'part-id', '*/part-id',   // v4.8.2 — storefront photo part-identification (session-less)
             'dealer-otp', '*/dealer-otp', 'dealer-verify', '*/dealer-verify',   // v4.9.1 — dealer sign-in (session-less)
+            'part-request', '*/part-request',   // v4.9.2 — "ask my colleague" part request (session-less)
             'solar/*', '*/solar/*',
             'event', '*/event',
             'clienterror', '*/clienterror',

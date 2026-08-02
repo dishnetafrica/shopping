@@ -378,6 +378,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 .dagain{background:#d92027;color:#fff;border:0;border-radius:9px;padding:8px 12px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap}
 .dlrfoot{cursor:pointer;font-weight:700}
 </style>
+<style>/* v4.9.2 part request */
+.rql{display:block;font-size:12px;font-weight:700;color:#334155;margin:8px 0 4px}
+.norec .nrb .btn-p{font-weight:800}
+</style>
 </head>
 <body>
 <main id="app" role="main"></main>
@@ -567,6 +571,36 @@ function pidOpen(html){
   ov.classList.add('on');
 }
 function pidClose(){ var ov=document.getElementById('pidov'); if(ov) ov.classList.remove('on'); }
+/* ---------- v4.9.2: "ask my colleague" — part request when we don't stock it ---------- */
+function reqUrl(){ return String(CFG.catalogueUrl||'/catalogue').replace(/catalogue$/,'part-request'); }
+function reqSheet(part){
+  part=String(part||'').slice(0,160); var b=getBike();
+  track('part_request_open',{part:part});
+  pidOpen('<div class="pidhead"><b>🔧 Let me ask my colleague</b><p>'+(part?'We don\'t list “'+esc(part)+'” today. ':'')+'Leave your WhatsApp number — we\'ll check our suppliers and send you options with prices, usually the same day.</p></div>'
+    +'<label class="rql" for="rqPart">Part you need</label><input id="rqPart" class="dlin" value="'+esc(part)+'" maxlength="160" placeholder="e.g. Air filter">'
+    +'<label class="rql" for="rqBike">Your motorcycle</label><input id="rqBike" class="dlin" value="'+esc(b?b.name:'')+'" maxlength="60" placeholder="e.g. Bajaj Boxer 100">'
+    +'<label class="rql" for="rqPhone">WhatsApp number (we reply here)</label><input id="rqPhone" class="dlin" type="tel" inputmode="tel" autocomplete="tel" placeholder="e.g. 2567XXXXXXXX">'
+    +'<button class="btn btn-p" style="display:block;width:100%" onclick="reqSend()">Ask about this part</button>'
+    +'<div id="rqMsg" style="font-size:12.5px;color:#64748b;margin-top:8px" role="status"></div>'
+    +'<a class="btn btn-w" style="display:block;text-align:center;margin-top:8px" href="'+esc(waLink())+'" target="_blank" rel="noopener"><i class="fa fa-whatsapp"></i> Or chat now on WhatsApp ›</a>');
+  var i=document.getElementById(part?'rqPhone':'rqPart'); if(i)setTimeout(function(){i.focus();},50);
+}
+function reqSend(){
+  var part=((document.getElementById('rqPart')||{}).value||'').trim();
+  var bike=((document.getElementById('rqBike')||{}).value||'').trim();
+  var ph=((document.getElementById('rqPhone')||{}).value||'').replace(/[^0-9]/g,'');
+  var m=document.getElementById('rqMsg');
+  if(!part){ if(m)m.textContent='Tell us which part you need.'; return; }
+  if(ph.length<7){ if(m)m.textContent='Enter your WhatsApp number with the country code, e.g. 2567…'; return; }
+  if(m)m.textContent='Sending…';
+  fetch(reqUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({part:part,bike:bike,phone:ph})})
+    .then(function(r){return r.json();}).then(function(j){
+      if(!j||!j.ok){ if(m)m.textContent=(j&&j.error)||'Could not send — please use WhatsApp below.'; return; }
+      track('part_request',{part:part});
+      pidOpen('<div class="pidhead"><b>✅ Got it — asking the team now</b><p>Your request for “'+esc(part)+'”'+(bike?' ('+esc(bike)+')':'')+' is with our parts team. Watch WhatsApp on '+esc(ph)+' — options and prices are on the way, usually the same day.</p></div>'
+        +'<a class="btn btn-p" style="display:block;text-align:center" onclick="pidClose()">Done</a>');
+    }).catch(function(){ if(m)m.textContent='Network problem — try again, or use the WhatsApp button.'; });
+}
 /* ---------- v4.9.1: dealer sign-in (WhatsApp code) + YOUR PRICE overlay ---------- */
 function dlrState(){ try{ return JSON.parse(localStorage.getItem('ea_dealer')||'null'); }catch(e){ return null; } }
 function dlrSave(o){ try{ if(o)localStorage.setItem('ea_dealer',JSON.stringify(o)); else localStorage.removeItem('ea_dealer'); }catch(e){} }
@@ -1188,12 +1222,14 @@ function vSearch(q){
   q=decodeURIComponent(q||'').toLowerCase();
   var res=applyListFilters(vehFilter(STATE.products).filter(function(p){return (p.name+' '+p.kw+' '+p.cat).toLowerCase().indexOf(q)>=0;}));
   track('search',{q:q,results:res.length});
+  STATE.lastMiss=res.length?'':q;   /* v4.9.2 — feeds the part-request form without quote-escaping games */
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › Search</div>'
    +'<section class="blk wrap listlayout">'+filterSidebar('')
    +'<div class="listmain"><div class="hd"><div><h2>Results for "'+esc(q)+'"</h2><div class="sub">'+res.length+' parts found</div></div></div>'
    +(res.length?'<div class="pgrid">'+res.slice(0,60).map(prodCard).join('')+'</div>':
-     '<div class="norec"><div class="nrh">No parts matched “'+esc(q)+'”.</div><p>Don’t worry — we’ll find it for you.</p>'
-     +'<div class="nrb"><a class="btn btn-w" href="'+esc(waLink())+'" target="_blank" rel="noopener"><i class="fa fa-whatsapp"></i> Ask us on WhatsApp</a>'
+     '<div class="norec"><div class="nrh">We don’t list “'+esc(q)+'” today.</div><p>That doesn’t mean we can’t get it — our mechanic will ask the supplier network and WhatsApp you options with prices, usually the same day.</p>'
+     +'<div class="nrb"><a class="btn btn-p" onclick="reqSheet(STATE.lastMiss||\'\')">🔧 Ask my colleague to find it</a>'
+     +'<a class="btn btn-w" href="'+esc(waLink())+'" target="_blank" rel="noopener"><i class="fa fa-whatsapp"></i> Chat on WhatsApp</a>'
      +'<a class="btn btn-o" onclick="go(\'ai\')"><i class="fa fa-comments"></i> Describe the problem</a>'
      +'<a class="btn btn-o" onclick="go(\'\')"><i class="fa fa-tachometer"></i> Browse by motorcycle</a></div></div>')+'</div></section>'+foot();
 }

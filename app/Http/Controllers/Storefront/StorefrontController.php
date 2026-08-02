@@ -470,6 +470,51 @@ class StorefrontController extends Controller
         return response()->json(['ok' => true, 'seen' => (string) ($res['seen'] ?? ''), 'matches' => $matches]);
     }
 
+    /**
+     * v4.9.2 — POST /{shop}/part-request {part, bike?, phone} — the mechanic-human promise from
+     * the web. When search finds nothing, the customer leaves the part + their WhatsApp number;
+     * PartRequestService records it (AI Follow-ups draft + owner alert + BotTrace) and the shop's
+     * own bot sends the customer a one-line confirmation, opening the WhatsApp thread the team
+     * will answer on. Session-less, throttled at the route, CSRF-exempt like /order and /quote.
+     */
+    public function partRequest(\Illuminate\Http\Request $request, ?string $shop = null)
+    {
+        [$tenant] = $this->resolveShop($shop);
+        $part  = trim(mb_substr((string) $request->input('part', ''), 0, 160));
+        $bike  = trim(mb_substr((string) $request->input('bike', ''), 0, 60));
+        $phone = preg_replace('/[^0-9]/', '', (string) $request->input('phone', ''));
+        if ($part === '' || strlen($phone) < 7) {
+            return response()->json(['ok' => false, 'error' => 'Tell us the part you need and a WhatsApp number we can reply to.']);
+        }
+
+        $new = app(\App\Services\Bot\PartRequestService::class)->capture(
+            $tenant, $phone, $part, 'storefront', 'Storefront search/request: ' . $part, $bike
+        );
+
+        // Confirmation on WhatsApp — only for a NEW request (a repeat within the dedupe window
+        // was already confirmed) and at most 2/hour/phone so the form can't be used to pester
+        // an arbitrary number. Best-effort: the request is recorded either way.
+        if ($new) {
+            try {
+                $cKey = "partreq:conf:{$tenant->id}:{$phone}";
+                $sent = (int) \Illuminate\Support\Facades\Cache::get($cKey, 0);
+                if ($sent < 2 && $tenant->whatsapp_instance) {
+                    \Illuminate\Support\Facades\Cache::put($cKey, $sent + 1, 3600);
+                    app(\App\Services\WhatsApp\WhatsAppManager::class)->driver('evolution')->sendText(
+                        (string) $tenant->whatsapp_instance, $phone,
+                        "\u{1F527} Got your request from our website — *{$part}*" . ($bike !== '' ? " for your {$bike}" : '') . ".\n"
+                        . "I'm checking with my colleague and will come back to you here with options and prices, usually the same day. \u{1F44D}"
+                    );
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('part-request confirm send failed: ' . $e->getMessage());
+            }
+        }
+
+        return response()->json(['ok' => true,
+            'message' => "Got it — we're checking with the team. You'll get a WhatsApp reply with options."]);
+    }
+
     // ── v4.9.1 Dealer Programme 4b: WhatsApp-code sign-in + the dealer overlay feed ──────────────
 
     /** POST /{shop}/dealer-otp {phone} — sends a 4-digit code on WhatsApp when the number is an enrolled dealer. */
