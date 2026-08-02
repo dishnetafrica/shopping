@@ -382,18 +382,119 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 .rql{display:block;font-size:12px;font-weight:700;color:#334155;margin:8px 0 4px}
 .norec .nrb .btn-p{font-weight:800}
 </style>
+<style>/* v4.10 search-first home */
+.li{display:inline-block;vertical-align:middle;flex:none}
+/* nav: icon buttons + pinned search */
+.nav .wrap{position:relative}
+.icobtn,.nav .cart{width:40px;height:40px;border-radius:11px;background:#1b2436;display:grid;place-items:center;color:#fff;cursor:pointer;padding:0;flex:none}
+.nav .cart{position:relative}
+.nav .cart .cartn{position:absolute;top:-5px;right:-5px;margin:0}
+.nav .navsearch{display:none;flex:1;max-width:520px;background:#fff;border-radius:12px;align-items:center;gap:6px;padding:0 4px 0 12px;height:44px;margin:0 4px;min-width:0}
+.nav.srch .navsearch{display:flex}
+.nav.srch .sp{display:none}
+.navsearch input{flex:1;border:0;outline:0;font-size:15px;font-family:inherit;color:var(--ink);min-width:0;height:100%;background:transparent}
+.navsearch .nsl{color:#8a94a6;display:grid;place-items:center}
+.nsico{width:38px;height:38px;display:grid;place-items:center;color:#5A6472;cursor:pointer;border-radius:9px}
+.nsico:active{background:#f0f2f6}
+@media(max-width:980px){.nav.srch .brand .bt{display:none}.nav.srch .icobtn{display:none}}
+.sugbox2{position:absolute;left:12px;right:12px;top:100%;margin:0;border-radius:0 0 14px 14px;max-width:640px}
+@media(min-width:981px){.sugbox2{left:50%;transform:translateX(-50%);width:560px}}
+/* hero2 — the search bar is the hero */
+.hero2{background:var(--ink);color:#fff}
+.hero2 .hg{display:grid;grid-template-columns:1fr;gap:24px;align-items:center;padding:30px 20px 24px}
+.hero2 .hg>div{min-width:0}
+@media(min-width:981px){.hero2 .hg{grid-template-columns:1.1fr .9fr;padding:44px 20px 34px}}
+.hero2 h1{font-size:31px;font-weight:800;line-height:1.07;letter-spacing:-.02em}
+.hero2 h1 .hl{color:var(--accent);filter:brightness(1.35)}
+.hero2 p{color:#aeb8cc;font-size:15.5px;margin:10px 0 18px;max-width:46ch}
+@media(min-width:981px){.hero2 h1{font-size:42px}.hero2 p{font-size:17px}}
+.hsearch2{display:flex;align-items:center;gap:2px;background:#fff;border-radius:16px;height:60px;padding:6px 6px 6px 14px;max-width:560px;box-shadow:0 18px 40px rgba(0,0,0,.35)}
+.hsearch2 .hsic{color:var(--accent);display:grid;place-items:center;flex:none;margin-right:4px}
+.hsearch2 input{flex:1;min-width:0;border:0;outline:0;font-size:16px;font-family:inherit;color:var(--ink);height:100%;background:transparent}
+.hsearch2 .hact{flex:none;width:44px;height:44px;border:0;background:transparent;color:#5A6472;display:grid;place-items:center;border-radius:11px;cursor:pointer}
+.hsearch2 .hact:active{background:#f0f2f6}
+.hsearch2 .hgo{height:46px;border-radius:12px;padding:0 18px;font-size:15px;margin-left:2px}
+@media(max-width:400px){.hsearch2{padding-left:10px}.hsearch2 .hact{width:38px}.hsearch2 .hgo{padding:0 14px}}
+.htr{display:flex;margin-top:20px;border-top:1px solid rgba(255,255,255,.13);padding-top:14px;max-width:560px}
+.htr div{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;font-size:10.5px;font-weight:700;color:#dfe5f0;text-align:center;position:relative;padding:0 4px}
+.htr div+div::before{content:"";position:absolute;left:0;top:4px;bottom:4px;width:1px;background:rgba(255,255,255,.13)}
+.htr .li{color:#fff;opacity:.92}
+.hph2{display:none}
+@media(min-width:981px){.hph2{display:block;text-align:center}.hph2 img{width:100%;max-width:520px;border-radius:18px;box-shadow:0 26px 50px rgba(0,0,0,.5);object-fit:cover;aspect-ratio:16/11}}
+/* bike selector — photo cards */
+.bksec{background:#fff;border-bottom:1px solid var(--line);padding:18px 0 16px}
+.bkhd{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.bkhd h2{font-size:18px;font-weight:800}
+.bkrow{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
+.bkrow::-webkit-scrollbar{display:none}
+.bkc{flex:0 0 124px;scroll-snap-align:start;border:1.5px solid var(--line);border-radius:16px;padding:10px 8px 9px;text-align:center;cursor:pointer;position:relative;background:#fff;min-height:48px}
+.bkc b{font-size:12.5px;font-weight:700;display:block;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bkc .bki{height:62px;display:grid;place-items:center}
+.bkc .bki img{max-width:100%;max-height:62px;object-fit:contain}
+.bkc.on{border-color:var(--accent);box-shadow:0 0 0 1.5px var(--accent)}
+.bkc.on b{color:var(--accent)}
+.bkck{position:absolute;top:6px;right:6px;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;z-index:2}
+.bkline{margin-top:10px;background:#E7F6EE;color:#0d7a42;border-radius:10px;padding:9px 12px;font-size:13.5px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.bkline b{color:#0b5e34}.bkline a{color:var(--accent);font-weight:700;cursor:pointer;white-space:nowrap}
+/* quick actions */
+.qact{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 0 4px}
+.qab{display:flex;align-items:center;gap:11px;border-radius:16px;padding:13px 14px;min-height:64px;cursor:pointer}
+.qab span b{display:block;font-size:13.5px;line-height:1.25}
+.qab span i{font-style:normal;font-size:11.5px;opacity:.85}
+.qab.ph{background:#FDECEC;color:#7a1016}.qab.ph .li{color:var(--accent)}
+.qab.wag{background:#E7F6EE;color:#0b5e34}.qab.wag .li{color:#0B7A3D}
+@media(max-width:370px){.qact{grid-template-columns:1fr}}
+/* popular searches */
+.popsec{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 0 0}
+.popsec .pst{font-size:12px;color:var(--muted);font-weight:700}
+.popsec a{background:#fff;border:1px solid var(--line);border-radius:99px;padding:8px 15px;font-size:13px;font-weight:600;cursor:pointer;min-height:36px;display:inline-flex;align-items:center}
+/* category cards */
+.ccrow{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+@media(max-width:980px){.ccrow{display:flex;overflow-x:auto;gap:10px;padding-bottom:6px;-webkit-overflow-scrolling:touch}.ccrow::-webkit-scrollbar{display:none}.cc{flex:0 0 148px}}
+.cc{background:#fff;border:1px solid var(--line);border-radius:16px;padding:10px;cursor:pointer;text-align:center}
+.cc .cci{height:88px;background:var(--soft);border-radius:12px;display:grid;place-items:center;overflow:hidden;margin-bottom:8px;color:#9aa4b4}
+.cc .cci img{width:100%;height:100%;object-fit:cover;border-radius:12px}
+.cc b{font-size:13.5px;display:block}.cc span{font-size:11.5px;color:var(--muted)}
+.tagred{background:#FDECEC;color:var(--accent);font-size:11px;font-weight:800;border-radius:99px;padding:3px 10px;margin-left:8px;vertical-align:2px}
+/* help strip */
+.helpstrip{display:flex;gap:14px;align-items:center;background:#FDECEC;border:1px solid #f6d3d5;border-radius:18px;padding:16px;margin:28px 0 0;flex-wrap:wrap}
+.helpstrip .hsic{width:44px;height:44px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;flex:none}
+.helpstrip b{font-size:15px}
+.helpstrip p{font-size:12.5px;color:#7a5a5c;margin-top:2px;max-width:46ch}
+.helpstrip .hsbtns{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap;align-items:center}
+@media(max-width:640px){.helpstrip .hsbtns{margin-left:0;width:100%}.helpstrip .hsbtns .btn{flex:1;justify-content:center}}
+/* richer suggestions */
+.sgi{justify-content:flex-start}
+.sgi>.li{color:#8a94a6}
+.sgmain{flex:1;min-width:0}
+.sgmain b{font-size:13.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sgsub{font-size:11.5px;color:var(--muted);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sgsub .mono{font-size:11px;color:#334155;font-weight:600}
+.sgr{text-align:right;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.sgr b{font-size:13px;color:var(--ink)}
+.sgbadge{display:inline-block;background:#EEF2F7;color:#334155;font-size:9.5px;font-weight:800;border-radius:6px;padding:2px 6px;letter-spacing:.4px;white-space:nowrap}
+.sgi.all{justify-content:space-between}
+/* bottom nav */
+.botbar em{font-style:normal}
+.botbar a{color:#5A6472}
+.botbar a.on{color:var(--accent)}
+.botbar a.on .li{stroke-width:2.4}
+/* search sheet suggestions */
+.sswrap{max-width:640px;margin:0 auto}
+.sug3{position:static;border-top:1px solid #e2e8f0;border-radius:14px;margin-top:8px}
+</style>
 </head>
 <body>
 <main id="app" role="main"></main>
 <a class="wa btn btn-w" id="waFloat" target="_blank" rel="noopener" aria-label="Chat with us on WhatsApp">WhatsApp</a>
 <nav class="botbar" id="botbar" aria-label="Primary">
-  <a onclick="go('')"><span><i class="fa fa-home"></i></span>Home</a>
-  <a onclick="openSearch()"><span><i class="fa fa-search"></i></span>Search</a>
-  <a onclick="go('diagrams')"><span><i class="fa fa-sitemap"></i></span>Diagrams</a>
-  <a onclick="go('ai')"><span><i class="fa fa-comments"></i></span>Assistant</a>
-  <a onclick="go('cart')"><span><i class="fa fa-shopping-cart"></i><i class="cartn"></i></span>Cart</a>
+  <a data-r="" onclick="go('')"><span><svg class="li" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span><em>Home</em></a>
+  <a data-r="parts" onclick="go('parts')"><span><svg class="li" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span><em>Categories</em></a>
+  <a data-r="search" onclick="openSearch()"><span><svg class="li" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span><em>Search</em></a>
+  <a data-r="diagrams" onclick="go('diagrams')"><span><svg class="li" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span><em>Diagrams</em></a>
+  <a data-r="ai" onclick="go('ai')"><span><svg class="li" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></span><em>Assistant</em></a>
 </nav>
-<div class="ssheet" id="ssheet"><div class="ssbox"><input id="ssin" type="search" placeholder="Search part, number, or problem…" autocomplete="off"><button onclick="doSheetSearch()">Go</button><span class="ssx" onclick="closeSearch()">✕</span></div></div>
+<div class="ssheet" id="ssheet"><div class="sswrap"><div class="ssbox"><input id="ssin" type="search" placeholder="Search OEM number, part name, SKU…" autocomplete="off" oninput="sugInput('ssin','sugbox3')"><button onclick="doSheetSearch()">Go</button><span class="ssx" onclick="closeSearch()">✕</span></div><div id="sugbox3" class="sugbox sug3" role="listbox" style="display:none"></div></div></div>
 <div class="bikepick" id="bikepick"><div class="bpbox"><div class="bph"><b id="bptitle">Choose your motorcycle</b><span class="bpx" onclick="closeBikePick()">✕</span></div><input id="bpsearch" class="bpsearch" placeholder="Type your vehicle…" autocomplete="off"><div class="bptabs" id="bptabs" style="display:none"></div><div class="bpgrid"></div></div></div>
 <script>
 var CFG = __AUTOPARTS_CONFIG__;
@@ -463,27 +564,32 @@ function suggest(q){
   return {list:scored.slice(0,3).map(function(x){return x[1];}), total:scored.length};
 }
 var SUG={t:null,idx:-1,n:0};
-function sugInput(){ clearTimeout(SUG.t); SUG.t=setTimeout(renderSug,120); }
-function renderSug(){
-  var box=document.getElementById('sugbox'), inp=document.getElementById('q');
+/* v4.10 — parametric: the same engine powers the hero, the sticky nav bar and the search sheet. */
+function sugInput(inpId,boxId){ clearTimeout(SUG.t); SUG.t=setTimeout(function(){renderSug(inpId,boxId);},120); }
+function renderSug(inpId,boxId){
+  inpId=inpId||'q'; boxId=boxId||'sugbox';
+  var box=document.getElementById(boxId), inp=document.getElementById(inpId);
   if(!box||!inp) return;
   var q=inp.value||'', r=suggest(q);
-  SUG.idx=-1; SUG.n=r.list.length?r.list.length+1:0;
+  SUG.idx=-1; SUG.n=r.list.length?r.list.length+1:0; SUG.box=boxId;
   if(!r.list.length){ box.style.display='none'; box.innerHTML=''; inp.setAttribute('aria-expanded','false'); return; }
   box.style.display='block'; inp.setAttribute('aria-expanded','true');
   box.innerHTML=r.list.map(function(p,i){
-    return '<div class="sgi" id="sg'+i+'" role="option" onclick="go(\'part/'+sid(p.id)+'\')"><span><b>'+esc(p.name)+'</b>'
-      +(p.price>0?' — '+money(p.price):'')+'</span><span class="sgt">'+esc(String(p.brand||'').split(' ')[0].toUpperCase()||'PART')+'</span></div>';
+    var pn=pnOf(p); var cm=compatibleModels(p); var badge=cm.length?cm[0].name:(String(p.brand||'').split(' ')[0]);
+    return '<div class="sgi" id="'+boxId+'-sg'+i+'" role="option" onclick="go(\'part/'+sid(p.id)+'\')">'+li('search',15)
+      +'<span class="sgmain"><b>'+esc(p.name)+'</b><span class="sgsub">'+(pn?'<span class="mono">'+esc(pn)+'</span>':'')+(p.brand?((pn?' · ':'')+esc(p.brand)):'')+'</span></span>'
+      +'<span class="sgr">'+(p.price>0?'<b>'+money(p.price)+'</b>':'')+(badge?'<span class="sgbadge">'+esc(String(badge).toUpperCase())+'</span>':'')+'</span></div>';
   }).join('')
-  +'<div class="sgi all" id="sg'+r.list.length+'" role="option" onclick="qsearch(document.getElementById(\'q\').value)">Search everything for \u201C'+esc(q)+'\u201D \u2192<span class="sgt">'+r.total+' PARTS</span></div>';
+  +'<div class="sgi all" id="'+boxId+'-sg'+r.list.length+'" role="option" onclick="qsearch(document.getElementById(\''+inpId+'\').value)">Search everything for \u201C'+esc(q)+'\u201D \u2192<span class="sgt">'+r.total+' PARTS</span></div>';
 }
-function sugKey(e){
-  var box=document.getElementById('sugbox'); if(!box||box.style.display==='none') return;
+function sugKey(e,inpId,boxId){
+  boxId=boxId||'sugbox';
+  var box=document.getElementById(boxId); if(!box||box.style.display==='none') return;
   if(e.key==='ArrowDown'||e.key==='ArrowUp'){
     e.preventDefault();
     SUG.idx=(SUG.idx+(e.key==='ArrowDown'?1:-1)+SUG.n)%SUG.n;
-    for(var i=0;i<SUG.n;i++){ var el=document.getElementById('sg'+i); if(el)el.classList.toggle('on',i===SUG.idx); }
-  } else if(e.key==='Enter'&&SUG.idx>=0){ e.preventDefault(); var el2=document.getElementById('sg'+SUG.idx); if(el2)el2.click(); }
+    for(var i=0;i<SUG.n;i++){ var el=document.getElementById(boxId+'-sg'+i); if(el)el.classList.toggle('on',i===SUG.idx); }
+  } else if(e.key==='Enter'&&SUG.idx>=0){ e.preventDefault(); var el2=document.getElementById(boxId+'-sg'+SUG.idx); if(el2)el2.click(); }
   else if(e.key==='Escape'){ box.style.display='none'; }
 }
 function waBuy(p){
@@ -601,6 +707,35 @@ function reqSend(){
         +'<a class="btn btn-p" style="display:block;text-align:center" onclick="pidClose()">Done</a>');
     }).catch(function(){ if(m)m.textContent='Network problem — try again, or use the WhatsApp button.'; });
 }
+/* ---------- v4.10: search-first home — Lucide chrome, voice search, recently viewed ---------- */
+var LI={
+ 'search':'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+ 'camera':'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
+ 'mic':'<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>',
+ 'house':'<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+ 'grid':'<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+ 'wrench':'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+ 'message-circle':'<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+ 'bot':'<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
+ 'shopping-cart':'<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
+ 'shield-check':'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+ 'tag':'<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
+ 'truck':'<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+ 'undo-2':'<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
+ 'check':'<path d="M20 6 9 17l-5-5"/>'
+};
+function li(n,s){ s=s||18; return '<svg class="li" width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(LI[n]||'')+'</svg>'; }
+function pidTrigger(){ var f=document.getElementById('pidf'); if(f)f.click(); }
+function vsr(inpId,boxId){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition; var inp=document.getElementById(inpId||'q');
+  if(!SR){ if(inp)inp.focus(); toast('Voice search needs Chrome — just type instead'); return; }
+  var r=new SR(); r.lang='en-US';
+  r.onresult=function(ev){ var t=ev.results[0][0].transcript; if(inp){ inp.value=t; renderSug(inpId,boxId); } track('voice_search',{q:t}); };
+  try{ r.start(); toast('Listening… say the part name'); }catch(e){}
+}
+function rvAdd(id){ try{ var l=JSON.parse(localStorage.getItem('ea_rv')||'[]').filter(function(x){return String(x)!==String(id);}); l.unshift(String(id)); localStorage.setItem('ea_rv',JSON.stringify(l.slice(0,8))); }catch(e){} }
+function rvList(){ var l=[]; try{ l=JSON.parse(localStorage.getItem('ea_rv')||'[]'); }catch(e){ return []; }
+  var out=[]; l.forEach(function(id){ var p=STATE.products.filter(function(x){return String(x.id)===String(id);})[0]; if(p)out.push(p); }); return out.slice(0,5); }
 /* ---------- v4.9.1: dealer sign-in (WhatsApp code) + YOUR PRICE overlay ---------- */
 function dlrState(){ try{ return JSON.parse(localStorage.getItem('ea_dealer')||'null'); }catch(e){ return null; } }
 function dlrSave(o){ try{ if(o)localStorage.setItem('ea_dealer',JSON.stringify(o)); else localStorage.removeItem('ea_dealer'); }catch(e){} }
@@ -953,15 +1088,20 @@ function bikeBar(){
   if(barDismissed()) return '<div class="bikebar slim"><span>You’re browsing all parts.</span><a onclick="openBikePicker()">Pick your '+vehWord()+' to filter ›</a></div>';
   return '<div class="bikebar"><span class="bl" onclick="openBikePicker()"><b>Which '+vehWord()+' do you have?</b> Pick it to see only parts that fit — or just browse everything below.</span><span class="bbtn" onclick="openBikePicker()">Choose</span><i class="fa fa-times bx" onclick="dismissBikeBar()" title="Hide"></i></div>';
 }
-function nav(){
-  return '<header class="nav"><div class="wrap">'
-   +'<div class="brand" onclick="go(\'\')"><span class="emb">'+esc(CFG.initials||'EA')+'</span><span><b>'+esc(CFG.name||'Auto Part')+'</b><i>'+esc((CFG.eyebrow||'GENUINE SPARES').toUpperCase())+'</i></span></div>'
+function nav(o){
+  o=o||{};
+  return '<header class="nav'+(o.home?' homehero':'')+(o.search?' srch':'')+'" id="topnav"><div class="wrap">'
+   +'<div class="brand" onclick="go(\'\')"><span class="emb">'+esc(CFG.initials||'EA')+'</span><span class="bt"><b>'+esc(CFG.name||'Auto Part')+'</b><i>'+esc((CFG.eyebrow||'GENUINE SPARES').toUpperCase())+'</i></span></div>'
+   +'<form class="navsearch" role="search" onsubmit="return doSearch2(event)"><span class="nsl">'+li('search',15)+'</span><input id="q2" aria-label="Search parts by OEM number, name or SKU" autocomplete="off" placeholder="Search OEM, part name, SKU…" oninput="sugInput(\'q2\',\'sugbox2\')" onkeydown="sugKey(event,\'q2\',\'sugbox2\')"><span class="nsico" role="button" aria-label="Search with a photo" onclick="pidTrigger()">'+li('camera',16)+'</span></form>'
    +'<span class="sp"></span>'
    +'<span class="lnk" onclick="go(\'\')">Home</span>'
    +'<span class="lnk" onclick="go(\'parts\')">Parts</span>'
    +'<span class="lnk" onclick="go(\'ai\')">AI Assistant</span>'
-   +'<a class="cart" onclick="go(\'cart\')">Cart <span class="cartn"></span></a>'
-   +'</div></header>'+bikeBar()+dlrBar();
+   +'<a class="icobtn" href="'+esc(waLink())+'" target="_blank" rel="noopener" aria-label="Chat on WhatsApp" onclick="track(\'whatsapp\',{source:\'nav\'})">'+li('message-circle',17)+'</a>'
+   +'<a class="cart" onclick="go(\'cart\')" aria-label="Cart">'+li('shopping-cart',17)+'<span class="cartn"></span></a>'
+   +'</div><div id="sugbox2" class="sugbox sugbox2" role="listbox" style="display:none"></div></header>'
+   +'<input type="file" id="pidf" accept="image/*" capture="environment" style="display:none" onchange="partIdGo(this)">'
+   +(o.home?'':bikeBar())+dlrBar();
 }
 /* Left filter sidebar for listing pages: jump between systems + narrow by stock/fit. */
 function filterSidebar(active){
@@ -1031,39 +1171,50 @@ function trust(){
 // in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- views ---------- */
 function vHome(){
-  var models=activeModels().slice(0,8).map(function(m){
-    return '<div class="card mc" onclick="go(\'model/'+m.id+'\')"><div class="im"><img src="'+esc(modelImg(m.id))+'" alt="" loading="lazy" onerror="mimgErr(this,\''+sid(m.id)+'\')"></div><div class="bd"><b>'+esc(m.name)+'</b><p>'+esc(m.tagline)+'</p><span class="go">Explore parts ›</span></div></div>';
-  }).join('');
-  var sys=systemsLive().map(function(s){
-    var bg=s.cover?'<img src="'+esc(s.img||s.cover)+'" alt="" loading="lazy">':'<div class="ph">'+esc(s.name)+'</div>';
-    return '<div class="sc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')">'+ (s.cover?'<img src="'+esc(s.cover)+'" loading="lazy">':'')+'<div class="ph" style="'+(s.cover?'display:none':'')+'"></div><div class="m"><b>'+esc(s.name)+'</b><span>'+s.count+' parts</span></div></div>';
-  }).join('');
   var b=getBike();
-  var chips=activeModels().slice(0,8).map(function(m){
-    var on=b&&b.id===m.id;
-    return '<span class="bch'+(on?' on':'')+'" role="button" tabindex="0" onclick="setBike(\''+sid(m.id)+'\');render();">'+(on?'🏍 ':'')+esc(m.name)+'</span>';
-  }).join('')+'<span class="bch'+(b?'':' on')+'" role="button" tabindex="0" onclick="clearBike()">All bikes</span>';
+  /* v4.10 — search-first home (approved reference): the search bar IS the hero. */
+  var hT=String(CFG.heroTitle||'Find the correct part. In seconds.');
+  var hCut=hT.indexOf('. ');
+  var hH=hCut>0?esc(hT.slice(0,hCut+1))+' <span class="hl">'+esc(hT.slice(hCut+1))+'</span>':esc(hT);
+  var bks=activeModels().map(function(m){ var on=b&&b.id===m.id;
+    return '<div class="bkc'+(on?' on':'')+'" role="button" tabindex="0" aria-pressed="'+(on?'true':'false')+'" onclick="'+(on?'clearBike();':'setBike(\''+sid(m.id)+'\');')+'render();">'
+      +(on?'<span class="bkck">'+li('check',12)+'</span>':'')
+      +'<div class="bki"><img src="'+esc(modelImg(m.id))+'" alt="" loading="lazy" onerror="mimgErr(this,\''+sid(m.id)+'\')"></div><b>'+esc(m.name)+'</b></div>';
+  }).join('');
   var pops=popChips().map(function(f){return '<a onclick="qsearch(\''+f+'\')">'+esc(f)+'</a>';}).join('');
-  var newArr=vehFilter(STATE.products).slice().sort(function(a,c){return (c.created||0)-(a.created||0);}).slice(0,5).map(prodCard).join('');
+  var ccs=systemsLive().map(function(s){
+    return '<div class="cc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')"><div class="cci">'+(s.cover?'<img src="'+esc(s.cover)+'" alt="" loading="lazy">':li('wrench',26))+'</div><b>'+esc(s.name)+'</b><span>'+s.count+' parts</span></div>';
+  }).join('');
   var best=bestSellerList().map(prodCard).join('');
+  if(!best){ best=vehFilter(STATE.products).filter(function(p){return (p.popularity||0)>0;}).sort(function(a,c){return (c.popularity||0)-(a.popularity||0);}).slice(0,5).map(prodCard).join(''); }
+  var rv=rvList().map(prodCard).join('');
+  var newArr=vehFilter(STATE.products).slice().sort(function(a,c){return (c.created||0)-(a.created||0);}).slice(0,5).map(prodCard).join('');
   var svc=b?findParts(['chain','brake','cable','piston','plug','bulb'],5).filter(function(p){return fitsBike(p)!==false;}).slice(0,5).map(prodCard).join(''):'';
-  var byPop=vehFilter(STATE.products).filter(function(p){return (p.popularity||0)>0;});
-  var pop=byPop.length?byPop.sort(function(a,c){return (c.popularity||0)-(a.popularity||0);}).slice(0,5).map(prodCard).join(''):'';
-  return nav()
-   +'<section class="hero"><div class="g wrap"><div><h1>'+esc(CFG.heroTitle||'Find the correct part. In seconds.')+'</h1><p>'+esc(CFG.heroText||'Search by part number, part name, or your motorcycle.')+'</p>'
-     +'<div class="sugwrap"><form class="hsearch" onsubmit="return doSearch(event)" role="search"><input id="q" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-label="Search parts by OEM number, name or SKU" autocomplete="off" placeholder="OEM number · part name · SKU…" oninput="sugInput()" onkeydown="sugKey(event)"><button class="btn btn-p" type="submit">Search</button></form>'
+  return nav({home:true})
+   +'<section class="hero2"><div class="wrap hg"><div>'
+     +'<h1>'+hH+'</h1><p>'+esc(CFG.heroText||'Search by part number, part name, or your motorcycle.')+'</p>'
+     +'<div class="sugwrap"><form class="hsearch2" onsubmit="return doSearch(event)" role="search">'
+       +'<span class="hsic">'+li('search',19)+'</span>'
+       +'<input id="q" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-label="Search parts by OEM number, name or SKU" autocomplete="off" placeholder="Search OEM number, part name, SKU…" oninput="sugInput()" onkeydown="sugKey(event)">'
+       +'<span class="hact" role="button" aria-label="Search with a photo of your old part" onclick="pidTrigger()">'+li('camera',19)+'</span>'
+       +'<span class="hact" role="button" aria-label="Voice search" onclick="vsr(\'q\',\'sugbox\')">'+li('mic',19)+'</span>'
+       +'<button class="btn btn-p hgo" type="submit">Search</button></form>'
      +'<div id="sugbox" class="sugbox" role="listbox" style="display:none"></div></div>'
-     +'<div class="bikechips" aria-label="Choose your motorcycle">'+chips+'</div>'
-     +'<div class="cfstrip"><label class="cfb ph2" for="pidf">📷 Photo of old part</label><input type="file" id="pidf" accept="image/*" capture="environment" style="display:none" onchange="partIdGo(this)"><a class="cfb ai2" onclick="go(\'ai\')">🔧 Describe the problem</a></div>'
-     +(pops?'<div class="pop"><span>Popular:</span>'+pops+'</div>':'')
-   +'</div><div style="text-align:center"><img class="hph" src="'+(IMG.hero||'')+'" alt="" loading="lazy"></div></div></section>'
-   +trust()
-   +'<section class="blk wrap"><div class="hd"><div><h2>Which motorcycle do you own?</h2><div class="sub">Select your model to explore parts.</div></div></div><div class="g5">'+models+'</div></section>'
-   +'<section class="blk wrap"><div class="hd"><div><h2>Browse by system</h2><div class="sub">Jump straight to the parts for each system.</div></div><span class="link" onclick="go(\'diagrams\')">Shop from the diagram ›</span></div><div class="g5">'+sys+'</div></section>'
-   +(newArr?'<section class="blk wrap"><div class="hd"><div><h2>Recently added</h2></div></div><div class="g5">'+newArr+'</div></section>':'')
-   +(best?'<section class="blk wrap"><div class="hd"><div><h2>Best sellers</h2></div></div><div class="g5">'+best+'</div></section>':'')
+     +'<div class="htr"><div>'+li('shield-check',20)+'Genuine Parts</div><div>'+li('tag',20)+'Best Prices</div><div>'+li('truck',20)+'Fast Delivery</div><div>'+li('undo-2',20)+'Easy Returns</div></div>'
+   +'</div><div class="hph2">'+(IMG.hero?'<img src="'+IMG.hero+'" alt="" loading="lazy">':'')+'</div></div></section>'
+   +'<section class="bksec"><div class="wrap"><div class="bkhd"><h2>Select your motorcycle</h2><span class="link" onclick="openBikePicker()">View all ›</span></div><div class="bkrow" aria-label="Choose your motorcycle">'+bks+'</div>'
+     +(b?'<div class="bkline">'+li('check',14)+'<span>Showing parts for <b>'+esc(b.name)+'</b></span><a onclick="openBikePicker()">Change</a><a onclick="clearBike();render();">Show all parts</a><a onclick="go(\'model/'+sid(b.id)+'\')">Model page ›</a></div>':'')
+   +'</div></section>'
+   +'<div class="wrap"><div class="qact">'
+     +'<a class="qab ph" role="button" tabindex="0" onclick="pidTrigger()">'+li('camera',22)+'<span><b>Photo of old part</b><i>We’ll identify it for you</i></span></a>'
+     +'<a class="qab wag" href="'+esc(waLink())+'" target="_blank" rel="noopener" onclick="track(\'whatsapp\',{source:\'quickact\'})">'+li('message-circle',22)+'<span><b>WhatsApp a mechanic</b><i>Get expert help now</i></span></a>'
+   +'</div>'+(pops?'<div class="popsec"><span class="pst">Popular searches:</span>'+pops+'</div>':'')+'</div>'
+   +'<section class="blk wrap"><div class="hd"><div><h2>Shop by Category</h2></div><span class="link" onclick="go(\'parts\')">View all ›</span></div><div class="ccrow">'+ccs+'</div></section>'
+   +(best?'<section class="blk wrap"><div class="hd"><div><h2>Popular Parts <span class="tagred">Best sellers</span></h2></div><span class="link" onclick="go(\'parts\')">View all ›</span></div><div class="g5">'+best+'</div></section>':'')
    +(svc?'<section class="blk wrap"><div class="hd"><div><h2>Common replacements for your '+esc(b.name)+'</h2><div class="sub">The parts every boda changes most often.</div></div></div><div class="g5">'+svc+'</div></section>':'')
-   +(pop?'<section class="blk wrap"><div class="hd"><div><h2>Popular parts</h2></div></div><div class="g5">'+pop+'</div></section>':'')
+   +(rv?'<section class="blk wrap"><div class="hd"><div><h2>Recently viewed</h2></div></div><div class="g5">'+rv+'</div></section>':'')
+   +(newArr?'<section class="blk wrap"><div class="hd"><div><h2>Recently added</h2></div></div><div class="g5">'+newArr+'</div></section>':'')
+   +'<section class="wrap"><div class="helpstrip"><span class="hsic">'+li('message-circle',20)+'</span><div><b>Can’t find the part you need?</b><p>Send a photo on WhatsApp — or leave the name and our mechanic will source it from the supplier network.</p></div><div class="hsbtns"><a class="btn btn-p" href="'+esc(waLink())+'" target="_blank" rel="noopener">Chat on WhatsApp</a><a class="btn btn-o" onclick="reqSheet(\'\')">Ask my colleague</a></div></div></section>'
    + (STATE.error?'<div class="wrap"><div class="notice">Live catalogue is loading or unavailable right now — parts appear once the shop feed responds.</div></div>':'')
    +foot();
 }
@@ -1088,14 +1239,14 @@ function vParts(){
   var cards=sys.map(function(s){
     return '<div class="card mc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')"><div class="im" style="background:var(--ink)">'+(s.cover?'<img src="'+esc(s.cover)+'" loading="lazy">':'')+'</div><div class="bd"><b>'+esc(s.name)+'</b><p>'+s.count+' parts</p><span class="go">View parts ›</span></div></div>';
   }).join('');
-  return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › Parts</div>'
+  return nav({search:true})+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › Parts</div>'
     +'<section class="blk wrap"><div class="hd"><div><h2>Parts — browse by category</h2><div class="sub">'+STATE.products.length+' genuine parts across '+sys.length+' systems.</div></div><span class="link" onclick="go(\'diagrams\')">View exploded diagrams ›</span></div><div class="g4">'+cards+'</div></section>'+foot();
 }
 function vSystem(cat){
   var list=applyListFilters(partsInSystem(cat));
   var _pl=((typeof DIAG!=='undefined'&&DIAG&&DIAG.plates)||[]).filter(function(x){return nk(x.system)===nk(cat);})[0];
   var _dg=_pl?'<span class="link" onclick="go(\'plate/'+sid(_pl.plate)+'\')">Exploded diagram ›</span>':'';
-  return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › <a onclick="go(\'parts\')">Parts</a> › '+esc(cat)+'</div>'
+  return nav({search:true})+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › <a onclick="go(\'parts\')">Parts</a> › '+esc(cat)+'</div>'
     +'<section class="blk wrap listlayout">'+filterSidebar(cat)
     +'<div class="listmain"><div class="hd"><div><h2>'+esc(cat)+'</h2><div class="sub">'+list.length+' parts</div></div>'+_dg+'</div>'
     +(list.length?'<div class="pgrid">'+list.map(prodCard).join('')+'</div>':'<div class="empty">No parts match these filters. <a onclick="clearListFilters()">Clear filters</a></div>')
@@ -1118,7 +1269,7 @@ function vPart(id){
   var cm=compatibleModels(p);
   var cmH = cm.length ? '<div class="fitck"><div class="fh">🟢 FITS</div>'+cm.map(function(m){return '<div class="fr" role="button" tabindex="0" onclick="go(\'model/'+sid(m.id)+'\')"><b>✓</b> '+esc(m.name)+(b&&m.id===b.id?' — your bike':'')+'</div>';}).join('')+'</div>'
      : (p.brand?'<div class="fitck"><div class="fh">🟢 FITS</div><div class="fr"><b>✓</b> '+esc(p.brand)+' models</div></div>':'');
-  track('view',{product_id:p.id});
+  track('view',{product_id:p.id}); rvAdd(p.id);
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › <a onclick="go(\'parts\')">Parts</a> › '+esc(p.name)+'</div>'
    +'<section class="page wrap"><div class="pd"><div class="pdmedia"><div class="big">'+(p.img?'<img id="ppMain" class="zoomable" title="Tap to zoom" onclick="zoom(this.src)" src="'+esc(p.img)+'" alt="'+esc(p.name)+'" loading="lazy">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
    +(function(){ var ph=[p.img].concat(p.gal||[]).filter(Boolean); if(ph.length<2) return '';
@@ -1223,7 +1374,7 @@ function vSearch(q){
   var res=applyListFilters(vehFilter(STATE.products).filter(function(p){return (p.name+' '+p.kw+' '+p.cat).toLowerCase().indexOf(q)>=0;}));
   track('search',{q:q,results:res.length});
   STATE.lastMiss=res.length?'':q;   /* v4.9.2 — feeds the part-request form without quote-escaping games */
-  return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › Search</div>'
+  return nav({search:true})+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › Search</div>'
    +'<section class="blk wrap listlayout">'+filterSidebar('')
    +'<div class="listmain"><div class="hd"><div><h2>Results for "'+esc(q)+'"</h2><div class="sub">'+res.length+' parts found</div></div></div>'
    +(res.length?'<div class="pgrid">'+res.slice(0,60).map(prodCard).join('')+'</div>':
@@ -1358,6 +1509,9 @@ function doSheetSearch(){var i=document.getElementById('ssin');var q=(i&&i.value
 function go(path){location.hash='#/'+path;}
 function qsearch(q){go('search/'+encodeURIComponent(q));}
 function doSearch(e){e.preventDefault();var v=$('#q').value.trim();if(v)qsearch(v);return false;}
+function doSearch2(e){e.preventDefault();var v=((document.getElementById('q2')||{}).value||'').trim();if(v)qsearch(v);return false;}
+function updBotbar(r){ try{ var map={'':'','parts':'parts','system':'parts','model':'parts','search':'search','diagrams':'diagrams','diagram':'diagrams','plate':'diagrams','ai':'ai'}; var cur=map[r];
+  Array.prototype.forEach.call(document.querySelectorAll('#botbar a'),function(a){ a.classList.toggle('on', cur!==undefined && a.getAttribute('data-r')===cur); }); }catch(e){} }
 function qd(d){var n=$('#qn');n.value=Math.max(1,(parseInt(n.value)||1)+d);}
 function render(){
   var h=(location.hash||'').replace(/^#\//,''); var parts=h.split('/');
@@ -1375,6 +1529,7 @@ function render(){
   document.getElementById('app').innerHTML=v;
   window.scrollTo(0,0);
   updateCartBadge();
+  updBotbar(parts[0]);
   var r=document.documentElement.style; if(CFG.accent)r.setProperty('--accent',CFG.accent); if(CFG.accentDark)r.setProperty('--accent-d',CFG.accentDark);
   var wf=document.getElementById('waFloat'); if(wf){wf.href=waLink(); wf.onclick=function(){track('whatsapp',{source:'float'});};}
   var bc=document.getElementById('botCart'); if(bc)bc.href=CFG.shopUrl||'#';
@@ -1416,6 +1571,12 @@ document.addEventListener('keydown',function(e){
   if(native) return;
   if(el.hasAttribute('onclick')||el.getAttribute('role')==='button'){ e.preventDefault(); el.click(); }
 });
+/* v4.10 — sticky search: once the hero search scrolls away on the homepage, the nav grows
+   a pinned search bar so a mechanic can fire the next search without scrolling back up. */
+window.addEventListener('scroll',function(){
+  var h=document.getElementById('topnav'); if(!h||!h.classList.contains('homehero')) return;
+  h.classList.toggle('srch',(window.scrollY||document.documentElement.scrollTop||0)>330);
+},{passive:true});
 window.addEventListener('hashchange',render);
 (function(){var r=document.documentElement.style;if(CFG.accent)r.setProperty('--accent',CFG.accent);if(CFG.accentDark)r.setProperty('--accent-d',CFG.accentDark);
  document.getElementById('waFloat').href=waLink(); render(); loadCatalogue();})();
