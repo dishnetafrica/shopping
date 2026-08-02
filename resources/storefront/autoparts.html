@@ -352,6 +352,11 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){retur
 // Safe identifier: ids/plate keys are identifiers, never markup. Whitelist so a hostile
 // catalogue value can't break out of the single-quoted JS string inside an onclick handler.
 function sid(x){return String(x==null?'':x).replace(/[^\w-]/g,'');}
+/* v4.7.6: model images — tenant override (CFG.modelImages, e.g. a branding upload) wins,
+   then the baked IMG library. mimgErr() swaps a dead remote photo back to the baked image
+   (for TVS HLX that's the silhouette), so an offline CDN can never leave a broken card. */
+function modelImg(id){ var ov=(CFG.modelImages||{})[id]; return ov||IMG[id]||''; }
+function mimgErr(el,id){ el.onerror=null; var f=IMG[id]||''; if(f&&el.src!==f){ el.src=f; } }
 function partNo(kw){
   var s=String(kw||''); var segs=s.split('|'); var re=/^[A-Z0-9]{2}\s?[A-Z0-9]{3,4}\s?[A-Z0-9]{2}$/;
   for(var i=1;i<segs.length;i++){ var t=segs[i].trim(); if(re.test(t)) return t; }  /* skip seg 0 (model name) */
@@ -668,9 +673,9 @@ function renderPickerList(){
   var grid=document.getElementById('bikepick').querySelector('.bpgrid');
   if(!list.length){ grid.className='bpgrid'; grid.innerHTML='<div class="bpnone">No match for that. <a onclick="waPick()">Ask us on WhatsApp ›</a></div>'; return; }
   if(list.length<=12){ grid.className='bpgrid';
-    grid.innerHTML=list.map(function(m){return '<div class="bpc" onclick="pickBike(\''+String(m.id).replace(/\x27/g,"")+'\')"><div class="bpi"><img src="'+(IMG[m.id]||'')+'" alt="'+esc(m.name)+'" loading="lazy"></div><b>'+esc(m.name)+'</b><span>'+esc(m.tagline||m.make||'')+'</span></div>';}).join('');
+    grid.innerHTML=list.map(function(m){return '<div class="bpc" onclick="pickBike(\''+String(m.id).replace(/\x27/g,"")+'\')"><div class="bpi"><img onerror="mimgErr(this,\''+sid(m.id)+'\')" src="'+esc(modelImg(m.id))+'" alt="'+esc(m.name)+'" loading="lazy"></div><b>'+esc(m.name)+'</b><span>'+esc(m.tagline||m.make||'')+'</span></div>';}).join('');
   } else { grid.className='bpgrid rows';
-    grid.innerHTML=list.map(function(m){return '<div class="bprow" onclick="pickBike(\''+String(m.id).replace(/\x27/g,"")+'\')"><img src="'+(IMG[m.id]||'')+'" alt="" loading="lazy"><div><b>'+esc(m.name)+'</b><span>'+esc((m.make||'')+(m.type?(' · '+m.type):''))+'</span></div><i class="fa fa-chevron-right"></i></div>';}).join('');
+    grid.innerHTML=list.map(function(m){return '<div class="bprow" onclick="pickBike(\''+String(m.id).replace(/\x27/g,"")+'\')"><img onerror="mimgErr(this,\''+sid(m.id)+'\')" src="'+esc(modelImg(m.id))+'" alt="" loading="lazy"><div><b>'+esc(m.name)+'</b><span>'+esc((m.make||'')+(m.type?(' · '+m.type):''))+'</span></div><i class="fa fa-chevron-right"></i></div>';}).join('');
   }
 }
 function waPick(){ closeBikePick(); window.open(waLink(),'_blank'); }
@@ -698,7 +703,7 @@ function trust(){
 /* ---------- views ---------- */
 function vHome(){
   var models=activeModels().slice(0,8).map(function(m){
-    return '<div class="card mc" onclick="go(\'model/'+m.id+'\')"><div class="im"><img src="'+(IMG[m.id]||'')+'" alt="" loading="lazy"></div><div class="bd"><b>'+esc(m.name)+'</b><p>'+esc(m.tagline)+'</p><span class="go">Explore parts ›</span></div></div>';
+    return '<div class="card mc" onclick="go(\'model/'+m.id+'\')"><div class="im"><img src="'+esc(modelImg(m.id))+'" alt="" loading="lazy" onerror="mimgErr(this,\''+sid(m.id)+'\')"></div><div class="bd"><b>'+esc(m.name)+'</b><p>'+esc(m.tagline)+'</p><span class="go">Explore parts ›</span></div></div>';
   }).join('');
   var sys=systemsLive().map(function(s){
     var bg=s.cover?'<img src="'+esc(s.img||s.cover)+'" alt="" loading="lazy">':'<div class="ph">'+esc(s.name)+'</div>';
@@ -790,7 +795,7 @@ function vPart(id){
    +'<div class="buybar"><div class="bb-l"><b>'+(priced?money(p.price):'Ask price')+'</b><span>'+esc(p.name)+'</span></div><button class="btn btn-p" onclick="cartAdd(\''+sid(p.id)+'\')"><i class="fa fa-shopping-cart"></i> Add to cart</button></div>'
    +foot();
 }
-function galleryFor(id){ var g=(GAL&&GAL[id])||[]; if(!g.length&&IMG[id])g=[IMG[id]]; return g; }
+function galleryFor(id){ var g=(GAL&&GAL[id])||[]; if(!g.length){ var mi=modelImg(id); if(mi)g=[mi]; } return g; }
 function findParts(words,n){
   var out=[],seen={};
   words.forEach(function(w){ w=w.toLowerCase();
@@ -829,7 +834,7 @@ function vModel(id){
        +'<div class="mybike"><i class="fa fa-tachometer"></i> Saved as <b>your motorcycle</b> — parts are now checked to fit '+esc(m.name)+'.</div>'
        +'<a class="btn btn-p" onclick="go(\'parts\')">Explore Parts & Diagrams ›</a> <a class="btn btn-o" onclick="go(\'ai\')"><i class="fa fa-comments"></i> Describe a problem</a>'
      +'</div>'
-     +'<div class="ovh-media"><div class="ovh-main">'+(main?'<img id="ovMain" class="zoomable" title="Click to zoom" onclick="zoom(this.src)" src="'+main+'" loading="lazy"><span class="zhint"><i class="fa fa-search-plus"></i> Zoom</span>':'')+'</div><div class="ovh-thumbs">'+thumbs+'</div></div>'
+     +'<div class="ovh-media"><div class="ovh-main">'+(main?'<img id="ovMain" class="zoomable" title="Click to zoom" onclick="zoom(this.src)" onerror="mimgErr(this,\''+sid(m.id)+'\')" src="'+main+'" loading="lazy"><span class="zhint"><i class="fa fa-search-plus"></i> Zoom</span>':'')+'</div><div class="ovh-thumbs">'+thumbs+'</div></div>'
    +'</div></section>'
    +'<div class="wrap"><nav class="tabs">'+tabH+'</nav></div>'
    +'<section class="page wrap ov-body">'

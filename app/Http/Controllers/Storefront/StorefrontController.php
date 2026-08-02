@@ -368,6 +368,14 @@ class StorefrontController extends Controller
                 // model + a brand-family fitment guard, so TVS-line parts check against it correctly.
                 'tvshlx125'  => (bool) $tenant->setting('show_model_tvshlx125', true)  ? 'tvshlx125'  : null,
             ])),
+            // v4.7.6: per-model photo overrides. The TVS HLX 125 defaults to the official TVS
+            // media-library product shot; the shop can point it at its own photo (any URL —
+            // e.g. a branding upload) via the model_image_tvshlx125 setting. If the remote
+            // image ever dies, the SPA falls back to the baked silhouette (mimgErr).
+            'modelImages' => array_filter([
+                'tvshlx125' => (string) ($tenant->setting('model_image_tvshlx125', '')
+                    ?: 'https://www.tvsmotor.com/tvs-hlx/-/media/Feature/HLX/Gallary/HLX-125.png'),
+            ]),
             // Trust & delivery promises shown across the storefront (editable in Settings → Storefront).
             'genuineLine' => (string) ($tenant->setting('sf_genuine', '') ?: '100% genuine Bajaj — verify the hologram, or your money back.'),
             'deliveryEta' => (string) ($tenant->setting('sf_delivery_eta', '') ?: 'Same-day in town · 24–48h upcountry'),

@@ -38,6 +38,8 @@ final class SettingsWriteService
         'catalog_best_sellers', 'catalog_hot_deals', 'catalog_audience',
         // POS till controls (v3.9).
         'pos_manager_pin',
+        // Storefront model photo override (v4.7.6): any image URL; blank = official TVS photo.
+        'model_image_tvshlx125',
     ];
 
     /** Numeric settings: [key => ['int'|'float', min]]. */
