@@ -400,9 +400,29 @@ class StorefrontController extends Controller
         $html = str_replace('__SEO_META__', $meta, $html);
         $html = str_replace('__AUTOPARTS_CONFIG__', json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $html);
 
-        return response($html, 200)
-            ->header('Content-Type', 'text/html; charset=utf-8')
-            ->header('Cache-Control', 'no-store');
+        // v4.8.1 — first-load performance. The single-file storefront is ~4 MB of text; gzip cuts
+        // it to ~1.1 MB, and a short private cache stops repeat visitors re-downloading it on every
+        // page view. Config baked into the HTML (models/settings) tolerates 5 minutes of staleness —
+        // the same window the /catalogue feed already caches server-side.
+        return $this->compressed($html, 'text/html; charset=utf-8', 'private, max-age=300');
+    }
+
+    /** gzip a response when the client accepts it (proxies won't double-encode a set Content-Encoding). */
+    private function compressed(string $body, string $type, string $cache)
+    {
+        $resp = response($body, 200)->header('Content-Type', $type)->header('Cache-Control', $cache);
+        try {
+            if (function_exists('gzencode')
+                && str_contains((string) request()->header('Accept-Encoding', ''), 'gzip')) {
+                $gz = gzencode($body, 6);
+                if ($gz !== false && strlen($gz) < strlen($body)) {
+                    $resp->setContent($gz);
+                    $resp->header('Content-Encoding', 'gzip')->header('Vary', 'Accept-Encoding');
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        return $resp;
     }
     // <<< AUTO_PARTS
 
@@ -439,14 +459,31 @@ class StorefrontController extends Controller
                 $mods = [];
             }
 
+            // v4.8.1 — product specs for the storefront specs table (one query each, tenant-scoped).
+            $specMap = [];
+            try {
+                $defs = \App\Models\SpecDefinition::query()->get()->keyBy('id');
+                if ($defs->isNotEmpty()) {
+                    foreach (\App\Models\ProductSpec::query()->whereNotNull('value_text')->get() as $psx) {
+                        $d = $defs->get($psx->spec_definition_id);
+                        if (! $d) continue;
+                        $label = trim((string) ($d->label ?: $d->key)) . ($d->unit ? ' (' . $d->unit . ')' : '');
+                        if ($label !== '') $specMap[$psx->product_id][$label] = (string) $psx->value_text;
+                    }
+                }
+            } catch (\Throwable $e) {
+                $specMap = [];
+            }
+
             return Product::where('active', true)->orderByDesc('display_order')->orderBy('name')
                 ->toBase()
                 ->get(array_merge(
-                    ['id', 'name', 'description', 'category', 'brand', 'keywords', 'base_price', 'price', 'stock', 'image_url', 'display_order', 'moq', 'pack_size', 'unit_label', 'popularity', 'created_at', 'sku'],
+                    ['id', 'name', 'description', 'category', 'brand', 'keywords', 'base_price', 'price', 'stock', 'image_url', 'display_order', 'moq', 'pack_size', 'unit_label', 'popularity', 'created_at', 'sku',
+                     'gallery_1', 'gallery_2', 'gallery_3'],
                     // v4.7.7 column — guarded so the feed keeps serving if the migration hasn't run yet.
                     \Illuminate\Support\Facades\Schema::hasColumn('products', 'oem_number') ? ['oem_number'] : []
                 ))
-                ->map(function ($p) use ($mods) {
+                ->map(function ($p) use ($mods, $specMap) {
                     return [
                         'Product Name' => (string) $p->name,
                         'Variant'      => '',
@@ -466,6 +503,11 @@ class StorefrontController extends Controller
                         // Merchandising signals for the self-updating home rails (Popular / New arrivals).
                         'Popularity'   => (int) ($p->popularity ?? 0),
                         'Created'      => $p->created_at ? strtotime((string) $p->created_at) : 0,
+                        // v4.8.1 — extra photos (slot 1 = packaging by convention) + specs table.
+                        'Gallery'      => array_values(array_filter([
+                            $this->imageUrl($p->gallery_1), $this->imageUrl($p->gallery_2), $this->imageUrl($p->gallery_3),
+                        ])),
+                        'Specs'        => (object) ($specMap[$p->id] ?? []),
                         '_row'         => (int) $p->id,
                     ];
                 })->values();
@@ -485,7 +527,9 @@ class StorefrontController extends Controller
             ))->values();
         }
 
-        return response()->json([
+        // v4.8.1 — the ~89-product feed serializes to a few hundred KB; gzip + a 2-minute private
+        // cache make in-site navigation and quick return visits effectively free on mobile data.
+        $payload = [
             'products' => $rows,
             'branches' => $this->branches($tenant),
             'settings' => [
@@ -506,7 +550,12 @@ class StorefrontController extends Controller
                 'vertical' => \App\Support\Vertical::of($tenant),
                 'trending' => $this->trendingIds($tenant),
             ],
-        ])->header('Cache-Control', 'no-store');
+        ];
+
+        return $this->compressed(
+            (string) json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            'application/json', 'private, max-age=120'
+        );
     }
 
     /** Today's set-meal for the storefront (computed server-side so it matches the bot). */
