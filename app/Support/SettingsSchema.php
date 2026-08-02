@@ -135,8 +135,8 @@ final class SettingsSchema
                     ['key' => 'show_model_ct125hd',    'type' => 'bool', 'label' => 'CT 125 HD',     'default' => true],
                     ['key' => 'show_model_boxer150x',  'type' => 'bool', 'label' => 'Boxer BM150 X', 'default' => true],
                     ['key' => 'show_model_tvshlx125',  'type' => 'bool', 'label' => 'TVS HLX 125',   'default' => true],   // v4.7.5
-                    // v4.7.6: paste any image URL to replace the official TVS photo on the HLX card.
-                    ['key' => 'model_image_tvshlx125', 'type' => 'text', 'label' => 'TVS HLX 125 photo URL (blank = official TVS photo)'],
+                    // v4.7.8: upload a photo to replace the built-in TVS HLX 125 shot (blank = built-in photo).
+                    ['key' => 'model_image_tvshlx125', 'type' => 'image', 'label' => 'TVS HLX 125 photo', 'help' => 'Shown on the homepage card, bike picker and model page. Leave empty to use the built-in photo.'],
                 ]],
                 ['label' => 'Availability', 'help' => 'For a parts business — sell only what you actually have.', 'fields' => [
                     ['key' => 'sf_hide_oos', 'type' => 'bool', 'label' => 'Show only parts in stock (hide out-of-stock)', 'default' => false, 'help' => 'When ON, any part with 0 stock is hidden from listings, search and browse. Parts with no stock number set (untracked) still show as “to order”.'],

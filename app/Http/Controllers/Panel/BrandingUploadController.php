@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\Storage;
  */
 class BrandingUploadController extends Controller
 {
-    private const KEYS = ['logo', 'catalog_cover_image', 'catalog_promo_image', 'catalog_qr_image'];
+    private const KEYS = ['logo', 'catalog_cover_image', 'catalog_promo_image', 'catalog_qr_image',
+        'model_image_tvshlx125'];   // v4.7.8 — storefront TVS HLX 125 photo (Settings → Storefront)
 
     public function upload(Request $request)
     {
