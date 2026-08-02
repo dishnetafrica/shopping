@@ -49,7 +49,23 @@ class WebhookController
 
         \App\Support\BotTrace::log($tenant->id, $trace, $incoming['from'], 'queued');
         $incoming['t_recv'] = microtime(true);   // for end-to-end latency logging
-        ProcessIncomingMessage::dispatch($tenant->id, $driver, $incoming);
+
+        // Burst coalescing (v4.7.4): plain-text customer messages are stamped with an arrival
+        // sequence and processed after a short window, so a two-line burst ("email…" then
+        // "Pls share the details") gets ONE combined answer instead of two. Media, location
+        // pins and owner (from_me) messages are never delayed. bot_coalesce_seconds=0 disables.
+        $coalesce = 0;
+        if (empty($incoming['from_me']) && ! $hasMedia && ! $hasPin && trim((string) $incoming['text']) !== '') {
+            $coalesce = max(0, min(10, (int) $tenant->setting('bot_coalesce_seconds', 4)));
+        }
+        if ($coalesce > 0) {
+            $ck = 'coal:' . $tenant->id . ':' . preg_replace('/[^0-9]/', '', (string) $incoming['from']);
+            \Illuminate\Support\Facades\Cache::add($ck, 0, 300);
+            $incoming['coal_seq'] = (int) \Illuminate\Support\Facades\Cache::increment($ck);
+            ProcessIncomingMessage::dispatch($tenant->id, $driver, $incoming)->delay(now()->addSeconds($coalesce));
+        } else {
+            ProcessIncomingMessage::dispatch($tenant->id, $driver, $incoming);
+        }
         return response()->json(['ok' => true]);
     }
 

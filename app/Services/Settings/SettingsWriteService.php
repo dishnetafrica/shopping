@@ -53,6 +53,7 @@ final class SettingsWriteService
         'min_order' => ['float', 0.0],
         'ai_catalogue_limit' => ['int', 1],
         'pos_discount_limit' => ['float', 0.0],   // % of sale a cashier may discount without the manager PIN
+        'bot_coalesce_seconds' => ['int', 0],     // burst window before the bot answers (0 = off, capped 10 at read)
     ];
 
     /** On/off toggle settings (stored as booleans). */

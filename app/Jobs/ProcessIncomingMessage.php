@@ -222,6 +222,72 @@ class ProcessIncomingMessage implements ShouldQueue
         $from  = (string) $this->incoming['from'];
         BotTrace::log($this->tenantId, $trace, $from, 'started');
 
+        // Email capture (v4.7.4, RA International fix): a customer sending their email address is
+        // GIVING it to us — save it to their profile, and when they also ask for "the details" /
+        // price list / catalogue, raise an AI Follow-up so the team actually emails the documents.
+        // Deterministic and silent; the AI's spoken reply is handled by its own prompt rules.
+        // Runs BEFORE burst-coalescing so an email in a superseded message is never lost.
+        try {
+            $txtIn = (string) $this->incoming['text'];
+            if (preg_match('/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/u', $txtIn, $em)) {
+                $email = mb_strtolower($em[0]);
+                $prof = \App\Models\CustomerProfile::firstOrCreate(
+                    ['tenant_id' => $this->tenantId, 'phone' => preg_replace('/[^0-9]/', '', $from)],
+                    []
+                );
+                if (trim((string) $prof->email) === '') {
+                    $prof->email = $email;
+                    $prof->save();
+                    BotTrace::log($this->tenantId, $trace, $from, 'email_captured', $email);
+                } elseif (mb_strtolower(trim((string) $prof->email)) !== $email) {
+                    $prof->notes = trim((string) $prof->notes . "\nAlt email given on WhatsApp: " . $email);
+                    $prof->save();
+                    BotTrace::log($this->tenantId, $trace, $from, 'email_captured', 'alt: ' . $email);
+                }
+            }
+            // Details-intent: a share/send verb + a documents noun (this message), with an email known
+            // (this message or already on the profile) → follow-up proposal for the team to email docs.
+            $wantsDocs = preg_match('/\b(share|send|give|forward|mail|email|provide|need|want)\b/iu', $txtIn)
+                && preg_match('/\b(details?|price\s*lists?|prices?|pricelists?|catalogues?|catalogs?|profiles?|quotations?|quotes?|documents?|docs?|information|info)\b/iu', $txtIn);
+            if ($wantsDocs) {
+                $prof = $prof ?? \App\Models\CustomerProfile::where('tenant_id', $this->tenantId)
+                    ->where('phone', preg_replace('/[^0-9]/', '', $from))->first();
+                $knownEmail = isset($em[0]) ? mb_strtolower($em[0]) : mb_strtolower(trim((string) ($prof->email ?? '')));
+                if ($knownEmail !== '') {
+                    $dup = \App\Models\FollowupProposal::where('tenant_id', $this->tenantId)
+                        ->where('customer_phone', $from)->where('trigger', 'email_request')
+                        ->whereIn('status', ['draft', 'pending', 'approved'])
+                        ->where('created_at', '>=', now()->subDays(7))->exists();
+                    if (! $dup) {
+                        \App\Models\FollowupProposal::create([
+                            'tenant_id' => $this->tenantId, 'customer_phone' => $from,
+                            'source' => 'bot', 'trigger' => 'email_request',
+                            'trigger_reason' => 'Customer shared ' . $knownEmail . ' and asked for details/documents by email',
+                            'evidence' => mb_substr($txtIn, 0, 300),
+                            'draft' => 'Email our catalogue / price list / company profile to ' . $knownEmail . ' (they asked on WhatsApp).',
+                            'confidence' => 0.9, 'status' => 'draft',
+                        ]);
+                        BotTrace::log($this->tenantId, $trace, $from, 'email_followup_created', $knownEmail);
+                    }
+                }
+            }
+        } catch (\Throwable $e) { /* capture must never break the pipeline */ }
+
+        // Burst coalescing (v4.7.4): customers often send two rapid lines ("jjayakumar@…" then
+        // "Pls share the details") and the bot used to answer each one separately. The webhook
+        // stamps every plain-text message with its arrival sequence and delays the job a few
+        // seconds; here, if a NEWER text from this customer has already arrived, this message
+        // stays silent — it is logged above (so the newest reply sees it in history) and the
+        // newest message answers the whole burst once.
+        $mySeq = (int) ($this->incoming['coal_seq'] ?? 0);
+        if ($mySeq > 0) {
+            $ck = 'coal:' . $this->tenantId . ':' . preg_replace('/[^0-9]/', '', $from);
+            if ((int) \Illuminate\Support\Facades\Cache::get($ck, $mySeq) > $mySeq) {
+                BotTrace::log($this->tenantId, $trace, $from, 'coalesced', 'superseded by a newer message in the burst');
+                return;
+            }
+        }
+
         // Staff lead claim: "CLAIM 1045" from a configured recipient → atomic first-wins.
         // Handled before the auto-reply gates so it works even when the bot is off.
         if (preg_match('/^\s*claim\s+#?(\d+)\b/i', (string) $this->incoming['text'], $cm)) {

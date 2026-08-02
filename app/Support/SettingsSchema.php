@@ -98,6 +98,8 @@ final class SettingsSchema
                     ['key' => 'business_hours',    'type' => 'text',     'label' => 'Business hours'],
                     ['key' => 'bot_website_link',  'type' => 'text',     'label' => 'Website link'],
                     ['key' => 'faq',               'type' => 'textarea', 'label' => 'FAQ'],
+                    ['key' => 'bot_coalesce_seconds', 'type' => 'number', 'label' => 'Wait before replying (seconds)', 'default' => 4,
+                     'help' => 'Customers often send two or three quick messages in a row. The bot waits this many seconds and answers the whole burst ONCE instead of replying to every line. 0 = answer each message immediately. Max 10.'],
                 ]],
                 // MOQ enforcement (v4.6) — the engine has always supported this (OrderCalculator +
                 // AiBrain read moq_mode), but the switch only lived in the one-time onboarding wizard.
