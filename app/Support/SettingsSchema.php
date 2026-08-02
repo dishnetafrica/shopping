@@ -138,6 +138,13 @@ final class SettingsSchema
                     // v4.7.8: upload a photo to replace the built-in TVS HLX 125 shot (blank = built-in photo).
                     ['key' => 'model_image_tvshlx125', 'type' => 'image', 'label' => 'TVS HLX 125 photo', 'help' => 'Shown on the homepage card, bike picker and model page. Leave empty to use the built-in photo.'],
                 ]],
+                // v4.9 — Dealer programme 4a. The bot quotes these prices automatically for customers
+                // marked as dealers on their profile; the storefront joins in drop 4b.
+                ['label' => 'Dealer programme', 'help' => 'Discounts for customers marked as Dealer/Wholesale on their profile. The margin floor is a hard guard: no dealer price ever goes below cost + floor %.', 'fields' => [
+                    ['key' => 'dealer_pct',            'type' => 'number', 'label' => 'Dealer tier discount', 'unit' => '%', 'default' => 10, 'help' => 'Off the retail price.'],
+                    ['key' => 'wholesale_pct',         'type' => 'number', 'label' => 'Wholesale tier discount', 'unit' => '%', 'default' => 15],
+                    ['key' => 'dealer_min_margin_pct', 'type' => 'number', 'label' => 'Margin floor over cost', 'unit' => '%', 'default' => 5, 'help' => 'Prices clamp here instead of selling at a loss.'],
+                ]],
                 ['label' => 'Availability', 'help' => 'For a parts business — sell only what you actually have.', 'fields' => [
                     ['key' => 'sf_hide_oos', 'type' => 'bool', 'label' => 'Show only parts in stock (hide out-of-stock)', 'default' => false, 'help' => 'When ON, any part with 0 stock is hidden from listings, search and browse. Parts with no stock number set (untracked) still show as “to order”.'],
                 ]],

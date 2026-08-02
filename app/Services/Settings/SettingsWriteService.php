@@ -57,6 +57,10 @@ final class SettingsWriteService
         'ai_catalogue_limit' => ['int', 1],
         'pos_discount_limit' => ['float', 0.0],   // % of sale a cashier may discount without the manager PIN
         'bot_coalesce_seconds' => ['int', 0],     // burst window before the bot answers (0 = off, capped 10 at read)
+        // Dealer programme 4a (v4.9): tier discount defaults + the margin floor PriceResolver enforces.
+        'dealer_pct' => ['float', 0.0],
+        'wholesale_pct' => ['float', 0.0],
+        'dealer_min_margin_pct' => ['float', 0.0],
     ];
 
     /** On/off toggle settings (stored as booleans). */

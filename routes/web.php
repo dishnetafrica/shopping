@@ -663,6 +663,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('add-product',    [PanelApiController::class, 'addProduct']);
         Route::post('ai-identify',   [PanelApiController::class, 'aiIdentify']);
         Route::post('products-import', [PanelApiController::class, 'productsImport']);
+        Route::get('dealer',       [PanelApiController::class, 'dealerGet']);    // v4.9 — dealer programme 4a
+        Route::post('dealer-set',  [PanelApiController::class, 'dealerSet']);    // owner-only inside
         Route::post('photos-import',   [PanelApiController::class, 'photosImport']);
         Route::post('products-restore', [PanelApiController::class, 'productsRestore']);
         Route::get('product-bulk-meta', [PanelApiController::class, 'productBulkMeta']);

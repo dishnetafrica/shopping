@@ -34,6 +34,15 @@ class ProfileContext
             $bits = [];
             if ($p->name)  $bits[] = 'Name: '.$p->name;
             if ($p->segment) $bits[] = 'Segment: '.$p->segment;
+            // v4.9 dealer programme 4a: the AI must KNOW this customer trades at dealer prices — and
+            // that the calculator (not the AI) computes them. Guarded: attribute is null pre-migration.
+            if (isset($p->dealer_tier) && in_array((string) $p->dealer_tier, ['dealer', 'wholesale'], true)) {
+                $pct = \App\Services\Pricing\PriceResolver::pctFor($tenant, $p);
+                $bits[] = 'DEALER STATUS: ' . strtoupper((string) $p->dealer_tier) . ' — this customer buys at trade prices ('
+                    . rtrim(rtrim(number_format($pct, 1), '0'), '.') . '% off list, protected by a margin floor). '
+                    . 'The order calculator applies their price automatically — quote ITS numbers, never invent further discounts, '
+                    . 'and treat them as trade: talk stock, lead times and repeat orders, not retail persuasion.';
+            }
             if ($p->stage) $bits[] = 'Relationship stage: '.$p->stage;
             if ($p->lang)  $bits[] = 'Preferred language: '.$p->lang;
             foreach ((array) ($p->facts ?? []) as $k => $v) {

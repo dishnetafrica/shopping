@@ -278,7 +278,7 @@ class AiBrain
             if (! $convo) return '';
             $items = $this->extractItems($tenant, $convo, $from, $text);
             if (! $items) return '';
-            $quote = app(OrderCalculator::class)->quote($tenant, $items);
+            $quote = app(OrderCalculator::class)->quote($tenant, $items, $from);
             return app(OrderCalculator::class)->render($quote);
         } catch (\Throwable $e) {
             Log::warning('AiBrain total failed: ' . $e->getMessage());
@@ -296,7 +296,7 @@ class AiBrain
             $convoRow = Conversation::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('customer_phone', $from)->first() ?: $convo;
             $items = $this->extractItems($tenant, $convoRow, $from, $text);
             if (! $items) return false;
-            $quote = app(OrderCalculator::class)->quote($tenant, $items);
+            $quote = app(OrderCalculator::class)->quote($tenant, $items, $from);
             $doc   = $svc->generate($tenant, $from, (string) ($convoRow->customer_name ?? ''), $quote);
             if (! $doc) return false;
 
@@ -818,7 +818,7 @@ class AiBrain
             $note = '';
             if (preg_match('/"note"\s*:\s*"([^"]*)"/', $block, $nm)) $note = trim($nm[1]);
 
-            $quote = app(\App\Services\Bot\OrderCalculator::class)->quote($tenant, $calcItems);
+            $quote = app(\App\Services\Bot\OrderCalculator::class)->quote($tenant, $calcItems, $from);
 
             $parts = [];
             foreach ($quote['lines'] as $l) $parts[] = $l['qty'] . ' x ' . $l['name'];
@@ -1064,7 +1064,7 @@ class AiBrain
             }
 
             $convoRow = Conversation::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('customer_phone', $from)->first() ?: $convo;
-            $quote = app(OrderCalculator::class)->quote($tenant, $items);
+            $quote = app(OrderCalculator::class)->quote($tenant, $items, $from);
 
             // Guard: only send if at least one line actually matched a priced product. This is what
             // stops the old "wrong items / random products" quotations from going out.

@@ -119,6 +119,7 @@ class PanelApiController extends Controller
                 'Barcode'      => (string) ($p->barcode ?? ''),
                 'Item_Code'    => (string) ($p->sku ?? ''),
                 'OEM_Number'   => (string) ($p->oem_number ?? ''),   // v4.7.7 — manufacturer part no.
+                'Dealer_Price' => isset($p->dealer_price) && $p->dealer_price !== null ? (float) $p->dealer_price : '',   // v4.9
                 'Image'        => (string) ($p->image_url ?? ''),
                 'Gallery_1'    => (string) ($p->gallery_1 ?? ''),
                 'Gallery_2'    => (string) ($p->gallery_2 ?? ''),
@@ -1800,6 +1801,70 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true, 'deleted' => true]);
     }
 
+    /**
+     * v4.9 dealer programme 4a — read a customer's dealer status for the panel card.
+     * GET /papi/dealer?phone=…  →  {ok, tier, pct, since, notes, defaults:{dealer,wholesale,floor}}
+     */
+    public function dealerGet(Request $r)
+    {
+        $t = $r->user()->tenant;
+        app(\App\Support\TenantContext::class)->set($t->id);
+        $phone = preg_replace('/[^0-9]/', '', (string) $r->query('phone', ''));
+        if ($phone === '') return response()->json(['ok' => false, 'error' => 'no_phone'], 422);
+        $has = \Illuminate\Support\Facades\Schema::hasColumn('customer_profiles', 'dealer_tier');
+        $p = $has ? \App\Models\CustomerProfile::withoutGlobalScopes()
+            ->where('tenant_id', $t->id)->where('phone', $phone)->first() : null;
+        return response()->json([
+            'ok' => true, 'migrated' => $has,
+            'tier'  => $p ? (string) ($p->dealer_tier ?? '') : '',
+            'pct'   => $p && $p->dealer_discount_pct !== null ? (float) $p->dealer_discount_pct : null,
+            'since' => $p && $p->dealer_since ? (string) $p->dealer_since : '',
+            'notes' => $p ? (string) ($p->dealer_notes ?? '') : '',
+            'defaults' => [
+                'dealer'    => (float) $t->setting('dealer_pct', 10),
+                'wholesale' => (float) $t->setting('wholesale_pct', 15),
+                'floor'     => (float) $t->setting('dealer_min_margin_pct', 5),
+            ],
+        ]);
+    }
+
+    /**
+     * v4.9 dealer programme 4a — grant/change/revoke dealer status. OWNER-ONLY (like catalogue
+     * RESTART): pricing power stays with the owner at launch. Every change is BotTraced.
+     * POST /papi/dealer-set {phone, tier: ''|dealer|wholesale, pct?, notes?}
+     */
+    public function dealerSet(Request $r)
+    {
+        if (! $r->user()->isOwnerLike()) return response()->json(['ok' => false, 'error' => 'owner_only'], 403);
+        $t = $r->user()->tenant;
+        app(\App\Support\TenantContext::class)->set($t->id);
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('customer_profiles', 'dealer_tier')) {
+            return response()->json(['ok' => false, 'error' => 'migration_required', 'message' => 'Run php artisan migrate first.']);
+        }
+        $phone = preg_replace('/[^0-9]/', '', (string) $r->input('phone', ''));
+        $tier  = strtolower(trim((string) $r->input('tier', '')));
+        if ($phone === '') return response()->json(['ok' => false, 'error' => 'no_phone'], 422);
+        if (! in_array($tier, ['', 'dealer', 'wholesale'], true)) {
+            return response()->json(['ok' => false, 'error' => 'bad_tier'], 422);
+        }
+        $pctRaw = trim((string) $r->input('pct', ''));
+        $pct = $pctRaw === '' ? null : max(0.0, min(90.0, (float) $pctRaw));
+
+        $p = \App\Models\CustomerProfile::withoutGlobalScopes()
+            ->firstOrCreate(['tenant_id' => $t->id, 'phone' => $phone], []);
+        $was = (string) ($p->dealer_tier ?? '');
+        $p->dealer_tier = $tier !== '' ? $tier : null;
+        $p->dealer_discount_pct = $tier !== '' ? $pct : null;
+        $p->dealer_since = $tier !== '' ? ($p->dealer_since ?: now()) : null;
+        if ($r->has('notes')) $p->dealer_notes = mb_substr(trim((string) $r->input('notes', '')), 0, 300) ?: null;
+        $p->save();
+
+        \App\Support\BotTrace::log($t->id, 'dealer_grant', $phone, $tier !== '' ? 'granted' : 'revoked',
+            trim(($was ?: 'retail') . ' → ' . ($tier ?: 'retail') . ($pct !== null ? " @ {$pct}%" : ' @ tier default')));
+
+        return response()->json(['ok' => true, 'tier' => $tier, 'pct' => $pct]);
+    }
+
     public function updateProduct(Request $r)
     {
         $p = Product::find((int) $r->query('row'));
@@ -2278,6 +2343,8 @@ class PanelApiController extends Controller
         $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
         $iOem = $col(['oem number', 'oem_number', 'oem', 'oem no', 'part number', 'part no']);   // v4.7.7
         if ($iOem !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'oem_number')) $iOem = null;   // migration not run yet — ignore the column
+        $iDlr = $col(['dealer price', 'dealer_price']);   // v4.9 — per-product dealer override
+        if ($iDlr !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'dealer_price')) $iDlr = null;
         $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
         $iBrand = $col(['brand']);
         $iSell  = $col(['sell mode', 'sell_mode', 'sales mode']);   // 'buy' (default) or 'quote'
@@ -2337,6 +2404,7 @@ class PanelApiController extends Controller
             $kw    = $iKw !== null ? trim((string) ($c[$iKw] ?? '')) : '';
             $sku   = $iSku !== null ? trim((string) ($c[$iSku] ?? '')) : '';
             $oem   = $iOem !== null ? trim((string) ($c[$iOem] ?? '')) : '';
+            $dlr   = $iDlr !== null ? (float) preg_replace('/[^0-9.]/', '', (string) ($c[$iDlr] ?? '')) : 0.0;
             $brand = $iBrand !== null ? trim((string) ($c[$iBrand] ?? '')) : '';
             $cost  = $iCost !== null ? (float) preg_replace('/[^0-9.]/', '', (string) ($c[$iCost] ?? '')) : 0;
             $unit  = $iUnit !== null ? trim((string) ($c[$iUnit] ?? '')) : '';
@@ -2402,7 +2470,9 @@ class PanelApiController extends Controller
                     'sell_mode'  => $sell,
                     'active'     => $price > 0,
                 ]);
-                if ($oem !== '') { $product->oem_number = $oem; $product->save(); }   // v4.7.7 (guard: $iOem null pre-migration)
+                if ($oem !== '') { $product->oem_number = $oem; }   // v4.7.7 (guard: $iOem null pre-migration)
+                if ($dlr > 0)     { $product->dealer_price = $dlr; }   // v4.9 (guard: $iDlr null pre-migration)
+                if ($oem !== '' || $dlr > 0) { $product->save(); }
                 if ($specColMap) {
                     $pairs = [];
                     foreach ($specColMap as $idx => $key) { $pairs[$key] = (string) ($c[$idx] ?? ''); }
@@ -2467,6 +2537,8 @@ class PanelApiController extends Controller
         $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
         $iOem = $col(['oem number', 'oem_number', 'oem', 'oem no', 'part number', 'part no']);   // v4.7.7
         if ($iOem !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'oem_number')) $iOem = null;   // migration not run yet — ignore the column
+        $iDlr = $col(['dealer price', 'dealer_price']);   // v4.9 — per-product dealer override
+        if ($iDlr !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'dealer_price')) $iDlr = null;
         $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
         $iBrand = $col(['brand']);
         $iSell  = $col(['sell mode', 'sell_mode', 'sales mode']);   // 'buy' (default) or 'quote'
@@ -2512,6 +2584,7 @@ class PanelApiController extends Controller
             $kw    = $iKw !== null ? trim((string) ($c[$iKw] ?? '')) : '';
             $sku   = $iSku !== null ? trim((string) ($c[$iSku] ?? '')) : '';
             $oem   = $iOem !== null ? trim((string) ($c[$iOem] ?? '')) : '';
+            $dlr   = $iDlr !== null ? (float) preg_replace('/[^0-9.]/', '', (string) ($c[$iDlr] ?? '')) : 0.0;
             $brand = $iBrand !== null ? trim((string) ($c[$iBrand] ?? '')) : '';
             $unit  = $iUnit !== null ? trim((string) ($c[$iUnit] ?? '')) : '';
             $pack  = $iPack !== null ? (int) preg_replace('/[^0-9]/', '', (string) ($c[$iPack] ?? '')) : 0;
@@ -2551,7 +2624,9 @@ class PanelApiController extends Controller
                     'sell_mode' => $sell,
                     'active' => $price > 0,
                 ]);
-                if ($oem !== '') { $product->oem_number = $oem; $product->save(); }   // v4.7.7 (guard: $iOem null pre-migration)
+                if ($oem !== '') { $product->oem_number = $oem; }   // v4.7.7 (guard: $iOem null pre-migration)
+                if ($dlr > 0)     { $product->dealer_price = $dlr; }   // v4.9 (guard: $iDlr null pre-migration)
+                if ($oem !== '' || $dlr > 0) { $product->save(); }
                 if ($specColMap) {
                     $pairs = [];
                     foreach ($specColMap as $idx => $key) { $pairs[$key] = (string) ($c[$idx] ?? ''); }

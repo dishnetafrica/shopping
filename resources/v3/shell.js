@@ -1978,7 +1978,7 @@ const ACTICON={record_payment:'card',log_contact:'phone',log_whatsapp:'mail',edi
 function actIcon(a){ return (a&&(a.icon||ACTICON[a.key]))||'chev'; }
 function actJson(a){ return JSON.stringify(a).replace(/'/g,'&#39;'); }
 
-function renderRecord(p){ LAST_REC=p; document.getElementById('view').innerHTML=recordHtml(p); hydrateCardTables(); try{ waCustCard(p); }catch(e){} }
+function renderRecord(p){ LAST_REC=p; document.getElementById('view').innerHTML=recordHtml(p); hydrateCardTables(); try{ waCustCard(p); }catch(e){} try{ dealerCard(p); }catch(e){} }
 
 /* ===== WhatsApp on the customer record (v4.4) =====
    One place for the customer's chat: tail + composer (posts the PROVEN /papi/chats/send,
@@ -1990,6 +1990,44 @@ function recPhone(p){
     const m=JSON.stringify(p||{}).match(/"phone"\s*:\s*"\+?([0-9][0-9 ()-]{7,17})"/i);
     return m?m[1].replace(/[^0-9]/g,''):'';
   }catch(e){ return ''; }
+}
+/* v4.9 — Dealer programme 4a: grant/revoke trade pricing from the customer card (owner-only server-side). */
+function dealerCard(p){
+  const cap=(p&&p.meta&&p.meta.capability)||CUR.key;
+  if(cap!=='customer'&&CUR.key!=='customers') return;
+  const phone=recPhone(p); if(!phone) return;
+  const v=document.getElementById('view'); if(!v||document.getElementById('dealerCard')) return;
+  const d=document.createElement('div');
+  d.className='card'; d.id='dealerCard'; d.style.marginTop='14px';
+  d.innerHTML='<h3 style="margin:0 0 8px;font-size:15px">💼 Dealer pricing</h3><div id="dlBody" style="font-size:13px;color:#8a94a0">Loading…</div>';
+  v.appendChild(d);
+  dealerLoad(phone);
+}
+function dealerLoad(phone){
+  getQuery('/papi/dealer',{phone:phone}).then(function(d){
+    const el=document.getElementById('dlBody'); if(!el) return;
+    if(!d||!d.ok){ el.textContent='Could not load dealer status.'; return; }
+    if(d.migrated===false){ el.innerHTML='Run <code>php artisan migrate</code> to enable the dealer programme.'; return; }
+    const tier=d.tier||''; const def=d.defaults||{};
+    const badge= tier ? '<span style="background:'+(tier==='wholesale'?'#eef2ff;color:#3730a3':'#eaf6ee;color:#166534')+';font-weight:800;font-size:11px;border-radius:99px;padding:3px 10px">'+tier.toUpperCase()+(d.pct!=null?' · '+d.pct+'%':' · tier default')+'</span>'
+                       : '<span style="background:#f1f3f5;color:#5b6572;font-weight:800;font-size:11px;border-radius:99px;padding:3px 10px">RETAIL CUSTOMER</span>';
+    el.innerHTML='<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'+badge+(d.since?'<span style="font-size:11px;color:#8a94a0">since '+esc(String(d.since).slice(0,10))+'</span>':'')+'</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+      +'<select id="dlTier" style="padding:8px 10px;border:1px solid var(--line,#e2e6ea);border-radius:9px;font:inherit">'
+        +'<option value=""'+(tier===''?' selected':'')+'>Retail (no dealer pricing)</option>'
+        +'<option value="dealer"'+(tier==='dealer'?' selected':'')+'>Dealer — default '+(def.dealer!=null?def.dealer:10)+'%</option>'
+        +'<option value="wholesale"'+(tier==='wholesale'?' selected':'')+'>Wholesale — default '+(def.wholesale!=null?def.wholesale:15)+'%</option></select>'
+      +'<input id="dlPct" type="number" min="0" max="90" step="0.5" placeholder="custom %" value="'+(d.pct!=null?d.pct:'')+'" style="width:96px;padding:8px 10px;border:1px solid var(--line,#e2e6ea);border-radius:9px;font:inherit">'
+      +'<button class="btn sm pri" onclick="dealerSave(\''+phone+'\')">Save</button></div>'
+      +'<div style="font-size:11.5px;color:#8a94a0;margin-top:8px">Blank % = tier default. Floor: never below cost +'+(def.floor!=null?def.floor:5)+'%. The WhatsApp bot quotes their price automatically. Owner only.</div>';
+  }).catch(function(){});
+}
+async function dealerSave(phone){
+  const tier=(document.getElementById('dlTier')||{}).value||'';
+  const pct=(document.getElementById('dlPct')||{}).value||'';
+  const res=await post('/papi/dealer-set',{phone:phone,tier:tier,pct:pct});
+  if(res&&res.ok){ toast(tier?('Dealer pricing saved — '+tier.toUpperCase()):'Back to retail'); dealerLoad(phone); }
+  else toast((res&&(res.message||res.error))||'Could not save (owner only)',true);
 }
 function waCustCard(p){
   const cap=(p&&p.meta&&p.meta.capability)||CUR.key;

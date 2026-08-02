@@ -15,12 +15,20 @@ class OrderCalculator
 {
     public function __construct(private CatalogueMatcher $matcher) {}
 
-    /** @param array $items list of ['query'=>string,'qty'=>int]  →  ['lines'=>[], 'total'=>float, 'currency'=>string] */
-    public function quote(Tenant $tenant, array $items): array
+    /**
+     * @param array $items list of ['query'=>string,'qty'=>int]  →  ['lines'=>[], 'total'=>float, 'currency'=>string]
+     * @param string|null $customerPhone v4.9 dealer programme 4a: when the conversing customer's phone is
+     *                                   given and their profile is a dealer, every matched line resolves
+     *                                   through PriceResolver (tier %/override, margin-floor guarded).
+     */
+    public function quote(Tenant $tenant, array $items, ?string $customerPhone = null): array
     {
         $products = $this->catalogue($tenant);
         $currency = (string) ($tenant->setting('currency', 'UGX'));
         $moqMode  = strtolower((string) ($tenant->setting('moq_mode', 'off'))); // off | roundup
+        $dealer   = \App\Services\Pricing\PriceResolver::profileFor($tenant, $customerPhone);
+        $dealerPct = $dealer ? \App\Services\Pricing\PriceResolver::pctFor($tenant, $dealer) : null;
+        $floorPct  = $dealer ? \App\Services\Pricing\PriceResolver::floorFor($tenant) : 0.0;
         $lines = [];
         $total = 0.0;
 
@@ -79,6 +87,24 @@ class OrderCalculator
                 $lines[] = ['name' => ($p['name'] ?? $query), 'qty' => $qty, 'price' => null, 'sum' => null, 'matched' => false];
                 continue;
             }
+            // Dealer pricing (v4.9, 4a): tier %/per-product override through the ONE resolver, floor-guarded.
+            // Weighted items are exempt in v1 (their price already came from WeightPricer variants).
+            $isDealerLine = false;
+            if ($dealer && ! ($grams > 0 && ! empty($p['sold_by_weight']))) {
+                [$dp, $src] = \App\Services\Pricing\PriceResolver::compute(
+                    $price, isset($p['cost']) ? (float) $p['cost'] : null,
+                    isset($p['dealer_price']) ? (float) $p['dealer_price'] : null,
+                    $dealerPct, $floorPct
+                );
+                if ($src !== 'retail') {
+                    if ($src === 'clamped') {
+                        \App\Support\BotTrace::log($tenant->id, 'dealer_clamp', (string) $customerPhone,
+                            'price_floor', $name . ': ' . $price . ' → ' . $dp);
+                    }
+                    $price = $dp;
+                    $isDealerLine = true;
+                }
+            }
             $moq      = isset($p['moq']) ? (int) $p['moq'] : null;
             $reqQty   = $qty;
             $adjusted = false;
@@ -104,6 +130,7 @@ class OrderCalculator
                 'adjusted'     => $adjusted,
                 'image'        => (string) ($p['image'] ?? ''),
                 'matched'      => true,
+                'dealer'       => $isDealerLine,
             ];
         }
 
@@ -141,6 +168,10 @@ class OrderCalculator
             $out[] = "• {$l['qty']} × {$l['name']}{$unit} = {$cur} " . number_format($l['sum'], $dec) . $note . $per;
         }
         $out[] = "————\n*Total: {$cur} " . number_format($quote['total'], $dec) . "*";
+        // v4.9 — dealers see plainly that their trade price is already applied.
+        foreach ($quote['lines'] as $l) {
+            if (! empty($l['dealer'])) { $out[] = '_✓ Your dealer price is applied._'; break; }
+        }
         return implode("\n", $out);
     }
 
@@ -152,6 +183,10 @@ class OrderCalculator
                 ->get()
                 ->map(fn ($p) => [
                     'id' => $p->id, 'name' => (string) $p->name, 'price' => (float) ($p->price ?? $p->base_price ?? 0),   // price-drift fix: the BOT charges the panel's price
+                    // v4.9 dealer programme: cost feeds the margin floor; dealer_price is the per-product
+                    // override (attribute reads null pre-migration — fully guarded).
+                    'cost' => $p->cost_price !== null ? (float) $p->cost_price : null,
+                    'dealer_price' => isset($p->dealer_price) && $p->dealer_price !== null ? (float) $p->dealer_price : null,
                     'category' => (string) ($p->category ?? ''), 'keywords' => (string) ($p->keywords ?? ''),
                     'unit_label' => (string) ($p->unit_label ?? ''), 'moq' => $p->moq ? (int) $p->moq : null,
                     'pack_size' => $p->pack_size ? (int) $p->pack_size : 0,
