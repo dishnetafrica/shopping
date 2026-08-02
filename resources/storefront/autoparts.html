@@ -527,10 +527,65 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 .buybar .bbwa{gap:5px}
 @media(max-width:420px){.buybar .bb-l span{display:none}}
 </style>
+<style>/* v4.10.2 reviewer round */
+/* search-mode chips */
+.schips{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.sch{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.2);color:#e6ebf4;border-radius:99px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:36px}
+.sch .li{opacity:.85}
+.sch:hover{background:rgba(255,255,255,.16)}
+/* two-line trust strip */
+.htr.h2l div{gap:3px}
+.htr.h2l b{font-size:11px;font-weight:800}
+.htr.h2l i{font-style:normal;font-size:9.5px;color:#aeb8cc;max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* garage cards */
+.bksub{display:block;font-size:10px;font-weight:800;letter-spacing:.4px;color:var(--accent);margin-top:2px;text-transform:uppercase}
+.bksub.cur{color:#0d7a42}
+.bkadd{border-style:dashed;color:var(--muted)}
+.bkadd .bkplus{font-size:30px;font-weight:300;color:#9aa4b4;display:grid;place-items:center}
+.bkadd .bksub{color:var(--muted)}
+/* smaller categories (reviewer: don't waste vertical space) */
+.cc{padding:8px}
+.cc .cci{height:62px;margin-bottom:6px}
+.cc b{font-size:12px}
+.cc span{font-size:10.5px}
+@media(max-width:980px){.cc{flex:0 0 112px}}
+@media(min-width:981px){.ccrow{grid-template-columns:repeat(9,1fr);gap:10px}}
+/* three quick actions */
+.qact.q3{grid-template-columns:1fr 1fr 1fr}
+.qab.vc{background:#EAF1FF;color:#0E3A94}
+.qab.vc .li{color:#2563eb}
+@media(max-width:640px){.qact.q3{grid-template-columns:1fr 1fr}.qab.vc{grid-column:1/-1}}
+/* AI mechanic card */
+.aicard{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;max-width:560px}
+.aich{display:flex;align-items:center;gap:8px}
+.aich b{font-size:16px}
+.beta{background:#FDECEC;color:var(--accent);font-size:10px;font-weight:800;border-radius:6px;padding:2px 7px;letter-spacing:.5px}
+.aicard p{color:var(--muted);font-size:13px;margin:6px 0 10px}
+.aichips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}
+.aichips a{background:#F3F5F8;border:1px solid var(--line);border-radius:99px;padding:7px 13px;font-size:12.5px;font-weight:600;cursor:pointer}
+/* dealer / bulk strip */
+.dstrip{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.dsc{background:#FDECEC;border:1px solid #f6d3d5;border-radius:16px;padding:15px}
+.dsc b{font-size:14.5px}
+.dsc p{font-size:12px;color:#7a5a5c;margin:3px 0 10px}
+@media(max-width:640px){.dstrip{grid-template-columns:1fr}}
+/* floating identify-part (desktop; mobile has the botbar + hero camera) */
+.pidfloat{position:fixed;right:16px;bottom:64px;z-index:60;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:99px;padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 8px 22px rgba(12,18,32,.16);display:block}
+@media(max-width:980px){.pidfloat{display:none}}
+/* suggestions: in-stock */
+.sgstk{display:inline-block;background:#E7F6EE;color:#0d7a42;font-size:9.5px;font-weight:800;border-radius:6px;padding:2px 6px;white-space:nowrap}
+/* results: AI problem banner */
+.aihint{background:#EAF1FF;border:1px solid #d5e2fb;color:#0E3A94;border-radius:12px;padding:11px 14px;font-size:13.5px;margin-bottom:12px;cursor:pointer}
+.aihint b{color:#0E3A94}
+/* desktop: search always in the nav + My Bike */
+@media(min-width:981px){.nav .navsearch{display:flex}}
+@media(max-width:980px){.mybtn{display:none}}
+</style>
 </head>
 <body>
 <main id="app" role="main"></main>
 <a class="wa btn btn-w" id="waFloat" target="_blank" rel="noopener" aria-label="Chat with us on WhatsApp">WhatsApp</a>
+<a class="pidfloat" role="button" onclick="pidTrigger()" aria-label="Identify a part from a photo">📷 Identify Part</a>
 <nav class="botbar" id="botbar" aria-label="Primary">
   <a data-r="" onclick="go('')"><span><svg class="li" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span><em>Home</em></a>
   <a data-r="parts" onclick="go('parts')"><span><svg class="li" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span><em>Categories</em></a>
@@ -622,7 +677,7 @@ function renderSug(inpId,boxId){
     var pn=pnOf(p); var cm=compatibleModels(p); var badge=cm.length?cm[0].name:(String(p.brand||'').split(' ')[0]);
     return '<div class="sgi" id="'+boxId+'-sg'+i+'" role="option" onclick="go(\'part/'+sid(p.id)+'\')">'+li('search',15)
       +'<span class="sgmain"><b>'+esc(p.name)+'</b><span class="sgsub">'+(pn?'<span class="mono">'+esc(pn)+'</span>':'')+(p.brand?((pn?' · ':'')+esc(p.brand)):'')+'</span></span>'
-      +'<span class="sgr">'+(p.price>0?'<b>'+money(p.price)+'</b>':'')+(badge?'<span class="sgbadge">'+esc(String(badge).toUpperCase())+'</span>':'')+'</span></div>';
+      +'<span class="sgr">'+(p.price>0?'<b>'+money(p.price)+'</b>':'')+((p.stock===null||p.stock>0)?'<span class="sgstk">In stock</span>':(badge?'<span class="sgbadge">'+esc(String(badge).toUpperCase())+'</span>':''))+'</span></div>';
   }).join('')
   +'<div class="sgi all" id="'+boxId+'-sg'+r.list.length+'" role="option" onclick="qsearch(document.getElementById(\''+inpId+'\').value)">Search everything for \u201C'+esc(q)+'\u201D \u2192<span class="sgt">'+r.total+' PARTS</span></div>';
 }
@@ -647,8 +702,8 @@ function waPhoto(){
   return CFG.waNumber?('https://wa.me/'+CFG.waNumber+'?text='+encodeURIComponent(t)):'#';
 }
 function popChips(){
-  var fams=['Chain','Piston','Brake','Cable','Clutch','Headlight'], out=[];
-  fams.forEach(function(f){ if(out.length>=4) return;
+  var fams=['Chain','Brake Shoe','Cam Chain','CDI','Spark Plug','Oil Filter','Piston','Gasket','Cable','Clutch','Headlight'], out=[];
+  fams.forEach(function(f){ if(out.length>=8) return;
     var n=STATE.products.filter(function(p){return (p.name+' '+p.kw).toLowerCase().indexOf(f.toLowerCase())>=0;}).length;
     if(n>0) out.push(f);
   });
@@ -766,7 +821,9 @@ var LI={
  'tag':'<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
  'truck':'<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
  'undo-2':'<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
- 'check':'<path d="M20 6 9 17l-5-5"/>'
+ 'check':'<path d="M20 6 9 17l-5-5"/>',
+ 'bike':'<circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/>',
+ 'lock':'<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'
 };
 function li(n,s){ s=s||18; return '<svg class="li" width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(LI[n]||'')+'</svg>'; }
 function pidTrigger(){ var f=document.getElementById('pidf'); if(f)f.click(); }
@@ -776,6 +833,12 @@ function vsr(inpId,boxId){
   var r=new SR(); r.lang='en-US';
   r.onresult=function(ev){ var t=ev.results[0][0].transcript; if(inp){ inp.value=t; renderSug(inpId,boxId); } track('voice_search',{q:t}); };
   try{ r.start(); toast('Listening… say the part name'); }catch(e){}
+}
+/* v4.10.2 — voice from whichever search box this view has */
+function vsrHere(){
+  if(document.getElementById('qh')) return vsr('qh','sugbox4');
+  if(document.getElementById('q'))  return vsr('q','sugbox');
+  return vsr('q2','sugbox2');
 }
 function rvAdd(id){ try{ var l=JSON.parse(localStorage.getItem('ea_rv')||'[]').filter(function(x){return String(x)!==String(id);}); l.unshift(String(id)); localStorage.setItem('ea_rv',JSON.stringify(l.slice(0,8))); }catch(e){} }
 function rvList(){ var l=[]; try{ l=JSON.parse(localStorage.getItem('ea_rv')||'[]'); }catch(e){ return []; }
@@ -1145,6 +1208,7 @@ function nav(o){
    +'<span class="lnk" onclick="go(\'\')">Home</span>'
    +'<span class="lnk" onclick="go(\'parts\')">Parts</span>'
    +'<span class="lnk" onclick="go(\'ai\')">AI Assistant</span>'
+   +'<a class="icobtn mybtn" role="button" aria-label="My motorcycle" onclick="openBikePicker()">'+li('bike',17)+'</a>'
    +'<a class="icobtn" href="'+esc(waLink())+'" target="_blank" rel="noopener" aria-label="Chat on WhatsApp" onclick="track(\'whatsapp\',{source:\'nav\'})">'+li('message-circle',17)+'</a>'
    +'<a class="cart" onclick="go(\'cart\')" aria-label="Cart">'+li('shopping-cart',17)+'<span class="cartn"></span></a>'
    +'</div><div id="sugbox2" class="sugbox sugbox2" role="listbox" style="display:none"></div></header>'
@@ -1224,13 +1288,32 @@ function bikeCardsHtml(){
   return activeModels().map(function(m){ var on=b&&b.id===m.id;
     return '<div class="bkc'+(on?' on':'')+'" role="button" tabindex="0" aria-pressed="'+(on?'true':'false')+'" onclick="'+(on?'clearBike();':'setBike(\''+sid(m.id)+'\');')+'render();">'
       +(on?'<span class="bkck">'+li('check',12)+'</span>':'')
-      +'<div class="bki"><img src="'+esc(modelImg(m.id))+'" alt="" loading="lazy" onerror="mimgErr(this,\''+sid(m.id)+'\')"></div><b>'+esc(m.name)+'</b></div>';
-  }).join('');
+      +'<div class="bki"><img src="'+esc(modelImg(m.id))+'" alt="" loading="lazy" onerror="mimgErr(this,\''+sid(m.id)+'\')"></div><b>'+esc(m.name)+'</b>'
+      +'<span class="bksub'+(on?' cur':'')+'">'+(on?'Current':'Switch')+'</span></div>';
+  }).join('')
+  +'<div class="bkc bkadd" role="button" tabindex="0" onclick="openBikePicker()"><div class="bki bkplus">+</div><b>Add New</b><span class="bksub">Your bike</span></div>';
 }
 function qactHtml(srcTag){
-  return '<div class="qact">'
-   +'<a class="qab ph" role="button" tabindex="0" onclick="pidTrigger()">'+li('camera',22)+'<span><b>Photo of old part</b><i>We\u2019ll identify it for you</i></span></a>'
-   +'<a class="qab wag" href="'+esc(waLink())+'" target="_blank" rel="noopener" onclick="track(\'whatsapp\',{source:\''+(srcTag||'quickact')+'\'})">'+li('message-circle',22)+'<span><b>WhatsApp a mechanic</b><i>Get expert help now</i></span></a>'
+  return '<div class="qact q3">'
+   +'<a class="qab ph" role="button" tabindex="0" onclick="pidTrigger()">'+li('camera',22)+'<span><b>Photo of your part</b><i>We\u2019ll identify it for you</i></span></a>'
+   +'<a class="qab wag" href="'+esc(waLink())+'" target="_blank" rel="noopener" onclick="track(\'whatsapp\',{source:\''+(srcTag||'quickact')+'\'})">'+li('message-circle',22)+'<span><b>WhatsApp Mechanic</b><i>Chat with our expert</i></span></a>'
+   +'<a class="qab vc" role="button" tabindex="0" onclick="vsrHere()">'+li('mic',22)+'<span><b>Voice Search</b><i>Say what you need</i></span></a>'
+   +'</div>';
+}
+/* v4.10.2 — search-mode chips: teach every way to search (reviewer: everything encourages searching) */
+function schip(mode){
+  if(mode==='moto'){ openBikePicker(); return; }
+  var ph={oem:'Type the OEM number… e.g. JB151076',name:'Type the part name… e.g. drive chain',sku:'Type the SKU… e.g. BB-BM-CHA-00'}[mode]||'';
+  var i=document.getElementById('q')||document.getElementById('qh');
+  if(i&&ph){ i.placeholder=ph; try{i.focus();}catch(e){} }
+  track('search_mode',{mode:mode});
+}
+function schipsHtml(){
+  return '<div class="schips">'
+   +'<a class="sch" role="button" onclick="schip(\'oem\')">'+li('tag',14)+' Search by OEM</a>'
+   +'<a class="sch" role="button" onclick="schip(\'name\')">'+li('search',14)+' Search by Part Name</a>'
+   +'<a class="sch" role="button" onclick="schip(\'moto\')">'+li('bike',14)+' Search by Motorcycle</a>'
+   +'<a class="sch" role="button" onclick="schip(\'sku\')">'+li('grid',14)+' Search by SKU</a>'
    +'</div>';
 }
 function vHome(){
@@ -1259,9 +1342,10 @@ function vHome(){
        +'<span class="hact" role="button" aria-label="Voice search" onclick="vsr(\'q\',\'sugbox\')">'+li('mic',19)+'</span>'
        +'<button class="btn btn-p hgo" type="submit">Search</button></form>'
      +'<div id="sugbox" class="sugbox" role="listbox" style="display:none"></div></div>'
-     +'<div class="htr"><div>'+li('shield-check',20)+'Genuine Parts</div><div>'+li('tag',20)+'Best Prices</div><div>'+li('truck',20)+'Fast Delivery</div><div>'+li('undo-2',20)+'Easy Returns</div></div>'
+     +schipsHtml()
+     +'<div class="htr h2l"><div>'+li('shield-check',20)+'<b>100% Genuine Parts</b><i>Authorized dealer</i></div><div>'+li('undo-2',20)+'<b>Easy Returns</b><i>'+esc(CFG.returns||'7-day, unfitted parts')+'</i></div><div>'+li('truck',20)+'<b>Fast Delivery</b><i>'+esc(CFG.deliveryEta||'Across East Africa')+'</i></div><div>'+li('lock',20)+'<b>Secure Payment</b><i>'+esc(CFG.payMethods||'Safe & trusted')+'</i></div></div>'
    +'</div><div class="hph2">'+(IMG.hero?'<img src="'+IMG.hero+'" alt="" loading="lazy">':'')+'</div></div></section>'
-   +'<section class="bksec"><div class="wrap"><div class="bkhd"><h2>Select your motorcycle</h2><span class="link" onclick="openBikePicker()">View all ›</span></div><div class="bkrow" aria-label="Choose your motorcycle">'+bks+'</div>'
+   +'<section class="bksec"><div class="wrap"><div class="bkhd"><h2>Your Motorcycle</h2><span class="link" onclick="openBikePicker()">Manage Garage ›</span></div><div class="bkrow" aria-label="Choose your motorcycle">'+bks+'</div>'
      +(b?'<div class="bkline">'+li('check',14)+'<span>Showing parts for <b>'+esc(b.name)+'</b></span><a onclick="openBikePicker()">Change</a><a onclick="clearBike();render();">Show all parts</a><a onclick="go(\'model/'+sid(b.id)+'\')">Model page ›</a></div>':'')
    +'</div></section>'
    +'<div class="wrap">'+qactHtml('quickact')+(pops?'<div class="popsec"><span class="pst">Popular searches:</span>'+pops+'</div>':'')+'</div>'
@@ -1270,6 +1354,11 @@ function vHome(){
    +(svc?'<section class="blk wrap"><div class="hd"><div><h2>Common replacements for your '+esc(b.name)+'</h2><div class="sub">The parts every boda changes most often.</div></div></div><div class="g5">'+svc+'</div></section>':'')
    +(rv?'<section class="blk wrap"><div class="hd"><div><h2>Recently viewed</h2></div></div><div class="g5">'+rv+'</div></section>':'')
    +(newArr?'<section class="blk wrap"><div class="hd"><div><h2>Recently added</h2></div></div><div class="g5">'+newArr+'</div></section>':'')
+   +'<section class="blk wrap"><div class="aicard"><div class="aich"><b>AI Mechanic Assistant</b><span class="beta">BETA</span></div><p>Describe your problem or what you need — the mechanic answers like a person.</p>'
+     +'<div class="aichips">'+((TB&&TB.problems)||[]).slice(0,3).map(function(pb,i){return '<a role="button" onclick="STATE.aiSeed=TB.problems['+i+'].query;go(\'ai\')">'+esc(pb.label)+'</a>';}).join('')+'</div>'
+     +'<a class="btn btn-p" onclick="go(\'ai\')">'+li('message-circle',16)+' Ask AI Mechanic</a></div>'
+   +'<div class="dstrip"><div class="dsc"><b>Dealer / Wholesale?</b><p>Special pricing & priority support for the trade.</p><a class="btn btn-o" onclick="dlrSheet()">💼 '+(STATE.dealer?'My dealer account':'Dealer sign-in')+'</a></div>'
+     +'<div class="dsc"><b>Bulk Orders</b><p>Best prices for bulk purchases.</p><a class="btn btn-w" href="'+esc(waLink())+'" target="_blank" rel="noopener">WhatsApp Us</a></div></div></section>'
    +'<section class="wrap"><div class="helpstrip"><span class="hsic">'+li('message-circle',20)+'</span><div><b>Can’t find the part you need?</b><p>Send a photo on WhatsApp — or leave the name and our mechanic will source it from the supplier network.</p></div><div class="hsbtns"><a class="btn btn-p" href="'+esc(waLink())+'" target="_blank" rel="noopener">Chat on WhatsApp</a><a class="btn btn-o" onclick="reqSheet(\'\')">Ask my colleague</a></div></div></section>'
    + (STATE.error?'<div class="wrap"><div class="notice">Live catalogue is loading or unavailable right now — parts appear once the shop feed responds.</div></div>':'')
    +foot();
@@ -1333,8 +1422,8 @@ function vPart(id){
         return '<div class="pgt'+(i===0?' on':'')+'" onclick="ppSwap(this,\''+esc(src)+'\')"><img src="'+esc(src)+'" loading="lazy">'+(i===1?'<span class="pglab">PACKAGING</span>':'')+'</div>';
       }).join('')+'</div>'; })()
    +'</div>'
-   +'<div>'+(p.brand?'<span class="chip g">'+esc(p.brand)+'</span> ':'')+'<h1 style="margin-top:8px">'+esc(p.name)+'</h1>'+(pn?'<div class="oembig"><span class="lb">OEM</span><b>'+esc(pn)+'</b>'+(p.sku?'<span class="skusml">SKU '+esc(p.sku)+'</span>':'')+'</div>':(p.sku?'<div class="mono" style="margin-top:4px">SKU: '+esc(p.sku)+'</div>':''))
-   +'<div class="price">'+(function(){ var dp=dlrPrice(p); if(dp!=null) return '<span class="dstrike" style="font-size:15px">'+money(p.price)+'</span> <span class="dyour">'+money(dp)+'</span><span style="display:block;font-size:10px;font-weight:800;letter-spacing:1px;color:#166534">YOUR DEALER PRICE</span>'; return priced?money(p.price):'<span class="askp">Ask for price</span>'; })()+'</div><div class="stock '+(inS?'y':'n')+'" style="margin-bottom:12px">'+(inS?('✓ In stock'+(p.stock!=null&&p.stock>0?(' ('+p.stock+')'):'')):'Available to order')+'</div>'
+   +'<div>'+(p.brand?'<span class="chip g">'+((CFG.genuineLine)?'🟢 Genuine ':'')+esc(p.brand)+'</span> ':'')+'<h1 style="margin-top:8px">'+esc(p.name)+'</h1>'+(pn?'<div class="oembig"><span class="lb">OEM</span><b>'+esc(pn)+'</b>'+(p.sku?'<span class="skusml">SKU '+esc(p.sku)+'</span>':'')+'</div>':(p.sku?'<div class="mono" style="margin-top:4px">SKU: '+esc(p.sku)+'</div>':''))
+   +'<div class="price">'+(function(){ var dp=dlrPrice(p); if(dp!=null) return '<span class="dstrike" style="font-size:15px">'+money(p.price)+'</span> <span class="dyour">'+money(dp)+'</span><span style="display:block;font-size:10px;font-weight:800;letter-spacing:1px;color:#166534">YOUR DEALER PRICE</span>'; return priced?money(p.price):'<span class="askp">Ask for price</span>'; })()+'</div><div class="stock '+(inS?'y':'n')+'" style="margin-bottom:12px">'+(inS?('✓ In stock'+(p.stock!=null&&p.stock>0?(' ('+p.stock+')'):'')+' — ready to dispatch'):'Available to order')+'</div>'
    +fitLine
    +cmH
    +(p.desc?'<p style="color:var(--muted);margin:14px 0 16px">'+esc(p.desc)+'</p>':'<div style="height:6px"></div>')
@@ -1432,6 +1521,10 @@ function searchSets(q){
   var oem=(qn&&qn.length>=3)?applyListFilters(vehFilter(STATE.products).filter(function(p){var pn=normQ(pnOf(p)||''),sk=normQ(String(p.sku||''));return (pn&&pn.indexOf(qn)>=0)||(sk&&sk.indexOf(qn)>=0);})):[];
   var seen={},all=[];
   text.concat(oem).forEach(function(p){ if(!seen[p.id]){seen[p.id]=1;all.push(p);} });
+  /* v4.10.2 — rank by relevance, never catalogue order: exact OEM/SKU > prefix > name > keywords, fitting bikes first */
+  var _sc={}; all.forEach(function(p){ _sc[p.id]=suggScore(p,q,qn)+(fitsBike(p)===true?5:0); });
+  var byScore=function(a,b){ return (_sc[b.id]||0)-(_sc[a.id]||0); };
+  all.sort(byScore); text.sort(byScore); oem.sort(byScore);
   var plates=q?(((typeof DIAG!=='undefined'&&DIAG&&DIAG.plates)||[]).filter(function(pl){
     if((String(pl.system||'')+' '+String(pl.name||'')).toLowerCase().indexOf(q)>=0) return true;
     return (pl.parts||[]).some(function(x){return String(x.pn||'').toLowerCase().indexOf(q)>=0||String(x.d||'').toLowerCase().indexOf(q)>=0;});
@@ -1468,6 +1561,12 @@ function vSearch(q){
   var totalAll=s.all.length+s.plates.length;
   STATE.lastMiss=s.all.length?'':q;   /* v4.9.2 — no stocked PART matched (a diagram slot alone doesn't count) */
   setTimeout(function(){ var i=document.getElementById('q2'); if(i&&i.value!==q) i.value=q; },40);
+  var hint=null;
+  if(q&&typeof TB!=='undefined'&&TB&&TB.problems){ var _bs=0; TB.problems.forEach(function(pb){ var hay=(pb.label+' '+pb.query).toLowerCase(); var sc=0;
+    q.split(/[^a-z0-9]+/).forEach(function(w){ if(w.length>3&&hay.indexOf(w)>=0)sc++; });
+    ['noise','start','brake','smoke','leak','power','stall'].forEach(function(w){ if(q.indexOf(w)>=0&&hay.indexOf(w)>=0)sc++; });
+    if(sc>_bs){_bs=sc;hint=pb;} }); if(_bs<2)hint=null; }
+  var hintH=hint?'<div class="aihint" role="button" onclick="STATE.aiSeed=STATE.lastQ;go(\'ai\')">🔧 Sounds like a problem, not a part — <b>Ask the AI Mechanic</b> about \u201C'+esc(hint.label)+'\u201D ›</div>':'';
   var tabs='<div class="stabs">'+stab('all','All',totalAll,tab)+stab('products','Products',s.text.length,tab)
     +(s.plates.length?stab('diagrams','Diagrams',s.plates.length,tab):'')
     +(s.oem.length?stab('oem','OEM',s.oem.length,tab):'')+'</div>';
@@ -1489,6 +1588,7 @@ function vSearch(q){
   return nav({search:true})+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › Search</div>'
    +'<section class="blk wrap listlayout">'+filterSidebar('')
    +'<div class="listmain"><div class="hd"><div><h2>Results for "'+esc(q)+'"</h2><div class="sub">'+totalAll+' result'+(totalAll===1?'':'s')+'</div></div></div>'
+   +hintH
    +(totalAll?tabs:'')
    +body+'</div></section>'+foot();
 }
@@ -1579,6 +1679,11 @@ function vAI(){
    +'</div></section>'+foot();
 }
 function submitAI(){ var i=document.getElementById('aiq'); askAI((i&&i.value||'').trim()); }
+/* v4.10.2 — a chip elsewhere can seed the AI page with a question */
+(function(){ var _v=vAI; vAI=function(){ var h=_v();
+  if(STATE.aiSeed){ var s=String(STATE.aiSeed); STATE.aiSeed=null;
+    setTimeout(function(){ var i=document.getElementById('aiq'); if(i)i.value=s; askAI(s); },120); }
+  return h; }; })();
 function micAI(){ var SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR){ var i=document.getElementById('aiq'); if(i){i.focus();} return; }
   var r=new SR(); r.lang='en-US'; r.onresult=function(ev){ var t=ev.results[0][0].transcript; var i=document.getElementById('aiq'); if(i)i.value=t; askAI(t); }; try{r.start();}catch(e){} }
 function askAI(text){
