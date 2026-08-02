@@ -304,6 +304,37 @@ a,button,input,select,textarea,[role="button"],[tabindex]{outline:none}
 a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[role="button"]:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--accent,#0b6);outline-offset:2px;border-radius:4px}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 </style>
+<style>/* v4.8 part-finder */
+.sugwrap{position:relative}
+.sugbox{position:absolute;left:0;right:0;top:100%;z-index:60;background:#fff;border:1px solid #e2e8f0;border-top:0;border-radius:0 0 12px 12px;box-shadow:0 14px 34px rgba(15,23,42,.16);overflow:hidden}
+.sgi{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px;padding:8px 14px;font-size:13.5px;color:var(--ink,#0f172a);border-top:1px solid #f1f5f9;cursor:pointer}
+.sgi:hover,.sgi.on{background:#fef2f2}
+.sgi .sgt{color:#94a3b8;font-size:10.5px;font-weight:800;letter-spacing:.4px;white-space:nowrap}
+.sgi.all{color:#334155;font-weight:600}
+.hero .g > div{min-width:0}
+.bikechips{display:flex;gap:8px;overflow-x:auto;max-width:100%;padding:10px 2px 2px;-webkit-overflow-scrolling:touch}
+.bch{white-space:nowrap;border:1.5px solid rgba(148,163,184,.55);border-radius:99px;padding:7px 13px;font-size:12.5px;font-weight:700;cursor:pointer;color:inherit}
+.bch.on{background:#fff;color:#0f172a;border-color:#fff}
+.cfstrip{display:flex;gap:10px;margin-top:10px}
+.cfb{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;border-radius:12px;min-height:44px;padding:10px 6px;font-size:13px;font-weight:800;cursor:pointer;text-decoration:none}
+.cfb.ph2{background:rgba(255,255,255,.14);color:#fff}
+.cfb.ai2{background:rgba(255,255,255,.92);color:#0f172a}
+.pc .im.imxl{height:185px;background:#fff}
+.pc .im.imxl img{width:100%;height:100%;object-fit:contain;background:#fff}
+.oemchip{display:inline-block;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;font-weight:800;color:#0f172a;background:#f1f5f9;border-radius:6px;padding:2px 7px;margin-bottom:5px}
+.fitsline{font-size:11px;color:#64748b;margin:3px 0 6px;min-height:14px}
+.cbtns{display:flex;gap:7px;align-items:stretch}
+.cbtns .add{flex:1}
+.wabuy{display:flex;align-items:center;justify-content:center;min-width:44px;background:#16a34a;color:#fff;border-radius:9px;font-size:16px;text-decoration:none}
+.oembig{display:flex;align-items:baseline;gap:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:8px 14px;margin:8px 0 4px}
+.oembig span.lb{font-size:9px;font-weight:800;letter-spacing:1.4px;color:#94a3b8}
+.oembig b{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:19px;color:#0f172a}
+.oembig .skusml{font-size:11px;color:#94a3b8;margin-left:auto}
+.fitck{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;margin:10px 0 4px}
+.fitck .fh{font-size:11px;font-weight:800;letter-spacing:.6px;color:#166534;margin-bottom:5px}
+.fitck .fr{font-size:13px;color:#0f172a;padding:2px 0;cursor:pointer}
+.fitck .fr b{color:#166534}
+</style>
 </head>
 <body>
 <main id="app" role="main"></main>
@@ -361,6 +392,84 @@ function mimgErr(el,id){ el.onerror=null; var f=IMG[id]||''; if(f&&el.src!==f){ 
    else the legacy keyword-derived guess. As OEM numbers land, cards, cart lines and the
    exploded-diagram cross-links (byPn) all upgrade to authoritative numbers for free. */
 function pnOf(p){ var v=String((p&&p.pn)||'').trim(); return v||partNo((p&&p.kw)||''); }
+/* ---------- v4.8: part-finder search engine + card helpers ---------- */
+function normQ(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
+function suggScore(p,q,nq){
+  var name=String(p.name||'').toLowerCase();
+  var pn=normQ(p.pn), sk=normQ(p.sku);
+  if(nq&&nq.length>=3){ if(pn===nq||sk===nq) return 100; if((pn&&pn.indexOf(nq)===0)||(sk&&sk.indexOf(nq)===0)) return 90; }
+  if(name.indexOf(q)===0) return 80;
+  if(name.indexOf(q)>=0) return 60;
+  if((String(p.kw||'')+' '+String(p.cat||'')+' '+String(p.brand||'')).toLowerCase().indexOf(q)>=0) return 40;
+  return 0;
+}
+function suggest(q){
+  q=String(q||'').trim().toLowerCase(); if(q.length<2) return {list:[],total:0};
+  var nq=normQ(q), scored=[];
+  for(var i=0;i<STATE.products.length;i++){ var p=STATE.products[i];
+    if(fitsBike(p)===false) continue;                 /* never suggest a wrong-bike part */
+    var s=suggScore(p,q,nq); if(!s) continue;
+    if(fitsBike(p)===true) s+=5;                      /* fitting parts outrank unknown */
+    scored.push([s,p]);
+  }
+  scored.sort(function(a,b){return b[0]-a[0];});
+  return {list:scored.slice(0,3).map(function(x){return x[1];}), total:scored.length};
+}
+var SUG={t:null,idx:-1,n:0};
+function sugInput(){ clearTimeout(SUG.t); SUG.t=setTimeout(renderSug,120); }
+function renderSug(){
+  var box=document.getElementById('sugbox'), inp=document.getElementById('q');
+  if(!box||!inp) return;
+  var q=inp.value||'', r=suggest(q);
+  SUG.idx=-1; SUG.n=r.list.length?r.list.length+1:0;
+  if(!r.list.length){ box.style.display='none'; box.innerHTML=''; inp.setAttribute('aria-expanded','false'); return; }
+  box.style.display='block'; inp.setAttribute('aria-expanded','true');
+  box.innerHTML=r.list.map(function(p,i){
+    return '<div class="sgi" id="sg'+i+'" role="option" onclick="go(\'part/'+sid(p.id)+'\')"><span><b>'+esc(p.name)+'</b>'
+      +(p.price>0?' — '+money(p.price):'')+'</span><span class="sgt">'+esc(String(p.brand||'').split(' ')[0].toUpperCase()||'PART')+'</span></div>';
+  }).join('')
+  +'<div class="sgi all" id="sg'+r.list.length+'" role="option" onclick="qsearch(document.getElementById(\'q\').value)">Search everything for \u201C'+esc(q)+'\u201D \u2192<span class="sgt">'+r.total+' PARTS</span></div>';
+}
+function sugKey(e){
+  var box=document.getElementById('sugbox'); if(!box||box.style.display==='none') return;
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    e.preventDefault();
+    SUG.idx=(SUG.idx+(e.key==='ArrowDown'?1:-1)+SUG.n)%SUG.n;
+    for(var i=0;i<SUG.n;i++){ var el=document.getElementById('sg'+i); if(el)el.classList.toggle('on',i===SUG.idx); }
+  } else if(e.key==='Enter'&&SUG.idx>=0){ e.preventDefault(); var el2=document.getElementById('sg'+SUG.idx); if(el2)el2.click(); }
+  else if(e.key==='Escape'){ box.style.display='none'; }
+}
+function waBuy(p){
+  var b=getBike(), pn=pnOf(p);
+  var t='Hello, I want to buy: '+p.name+(pn?(' (OEM '+pn+')'):'')+(p.price>0?(' \u2014 '+money(p.price)):'')+(b?('\nMy motorcycle: '+b.name):'')+'\nPlease confirm availability.';
+  return CFG.waNumber?('https://wa.me/'+CFG.waNumber+'?text='+encodeURIComponent(t)):'#';
+}
+function waPhoto(){
+  var b=getBike();
+  var t='Hello, I will send a photo of my old part \u2014 please identify the replacement.'+(b?('\nMy motorcycle: '+b.name):'');
+  return CFG.waNumber?('https://wa.me/'+CFG.waNumber+'?text='+encodeURIComponent(t)):'#';
+}
+function popChips(){
+  var fams=['Chain','Piston','Brake','Cable','Clutch','Headlight'], out=[];
+  fams.forEach(function(f){ if(out.length>=4) return;
+    var n=STATE.products.filter(function(p){return (p.name+' '+p.kw).toLowerCase().indexOf(f.toLowerCase())>=0;}).length;
+    if(n>0) out.push(f);
+  });
+  return out;
+}
+function cardFits(p){
+  var cm=compatibleModels(p);
+  if(cm.length) return 'Fits '+cm.slice(0,3).map(function(m){return m.name;}).join(' \u00B7 ')+(cm.length>3?' +'+(cm.length-3):'');
+  if(p.brand) return 'Fits '+p.brand+' models';
+  return String(p.cat||'').split('>').slice(-1)[0].trim();
+}
+function bestSellerList(){
+  var raw=String(CFG.bestSellers||'').split(',').map(function(s){return s.trim().toLowerCase();}).filter(Boolean);
+  if(!raw.length) return [];
+  return vehFilter(STATE.products).filter(function(p){
+    return raw.indexOf(String(p.sku||'').toLowerCase())>=0 || raw.indexOf(String(p.name||'').toLowerCase())>=0;
+  }).slice(0,5);
+}
 function partNo(kw){
   var s=String(kw||''); var segs=s.split('|'); var re=/^[A-Z0-9]{2}\s?[A-Z0-9]{3,4}\s?[A-Z0-9]{2}$/;
   for(var i=1;i<segs.length;i++){ var t=segs[i].trim(); if(re.test(t)) return t; }  /* skip seg 0 (model name) */
@@ -388,6 +497,10 @@ function normalize(json){
       img: p.Image||p.image||p.image_url||'',
       kw: p.Keywords||p.keywords||'',
       pn: (p.OEM||p.oem||'').toString().trim(),
+      sku: (p.SKU||p.Item_Code||'').toString().trim(),
+      brand: p.Brand||p.brand||'',
+      created: p.Created||0,
+      popularity: p.Popularity||0,
       desc: p.Description||p.description||''
     };
   }).filter(function(p){return p.name;});
@@ -714,19 +827,32 @@ function vHome(){
     var bg=s.cover?'<img src="'+esc(s.img||s.cover)+'" alt="" loading="lazy">':'<div class="ph">'+esc(s.name)+'</div>';
     return '<div class="sc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')">'+ (s.cover?'<img src="'+esc(s.cover)+'" loading="lazy">':'')+'<div class="ph" style="'+(s.cover?'display:none':'')+'"></div><div class="m"><b>'+esc(s.name)+'</b><span>'+s.count+' parts</span></div></div>';
   }).join('');
-  var popSrc=vehFilter(STATE.products);
-  var pop=popSrc.slice().sort(function(a,b){return (b.price)-(a.price);}).slice(0,5).map(prodCard).join('')
-        || popSrc.slice(0,5).map(prodCard).join('');
+  var b=getBike();
+  var chips=activeModels().slice(0,8).map(function(m){
+    var on=b&&b.id===m.id;
+    return '<span class="bch'+(on?' on':'')+'" role="button" tabindex="0" onclick="setBike(\''+sid(m.id)+'\');render();">'+(on?'🏍 ':'')+esc(m.name)+'</span>';
+  }).join('')+'<span class="bch'+(b?'':' on')+'" role="button" tabindex="0" onclick="clearBike()">All bikes</span>';
+  var pops=popChips().map(function(f){return '<a onclick="qsearch(\''+f+'\')">'+esc(f)+'</a>';}).join('');
+  var newArr=vehFilter(STATE.products).slice().sort(function(a,c){return (c.created||0)-(a.created||0);}).slice(0,5).map(prodCard).join('');
+  var best=bestSellerList().map(prodCard).join('');
+  var svc=b?findParts(['chain','brake','cable','piston','plug','bulb'],5).filter(function(p){return fitsBike(p)!==false;}).slice(0,5).map(prodCard).join(''):'';
+  var byPop=vehFilter(STATE.products).filter(function(p){return (p.popularity||0)>0;});
+  var pop=byPop.length?byPop.sort(function(a,c){return (c.popularity||0)-(a.popularity||0);}).slice(0,5).map(prodCard).join(''):'';
   return nav()
-   +'<section class="hero"><div class="g wrap"><div><h1>'+esc(CFG.heroTitle||'Find. Understand. Buy.')+'</h1><p>'+esc(CFG.heroText||'')+'</p>'
-     +'<form class="hsearch" onsubmit="return doSearch(event)"><input id="q" placeholder="Search part, number, or describe the problem…"><button class="btn btn-p" type="submit">Search</button></form>'
-     +'<a class="herobroke" onclick="go(\'ai\')"><i class="fa fa-wrench"></i> Bike won\'t start or making a noise? <b>Describe the problem →</b></a>'
-     +'<div class="pop"><span>Popular:</span><a onclick="qsearch(\'Clutch\')">Clutch Plate</a><a onclick="qsearch(\'Filter\')">Air Filter</a><a onclick="qsearch(\'Spark\')">Spark Plug</a><a onclick="qsearch(\'Brake\')">Brake Shoe</a></div>'
+   +'<section class="hero"><div class="g wrap"><div><h1>'+esc(CFG.heroTitle||'Find the correct part. In seconds.')+'</h1><p>'+esc(CFG.heroText||'Search by part number, part name, or your motorcycle.')+'</p>'
+     +'<div class="sugwrap"><form class="hsearch" onsubmit="return doSearch(event)" role="search"><input id="q" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-label="Search parts by OEM number, name or SKU" autocomplete="off" placeholder="OEM number · part name · SKU…" oninput="sugInput()" onkeydown="sugKey(event)"><button class="btn btn-p" type="submit">Search</button></form>'
+     +'<div id="sugbox" class="sugbox" role="listbox" style="display:none"></div></div>'
+     +'<div class="bikechips" aria-label="Choose your motorcycle">'+chips+'</div>'
+     +'<div class="cfstrip"><a class="cfb ph2" href="'+esc(waPhoto())+'" target="_blank" rel="noopener">📷 Photo of old part</a><a class="cfb ai2" onclick="go(\'ai\')">🔧 Describe the problem</a></div>'
+     +(pops?'<div class="pop"><span>Popular:</span>'+pops+'</div>':'')
    +'</div><div style="text-align:center"><img class="hph" src="'+(IMG.hero||'')+'" alt="" loading="lazy"></div></div></section>'
    +trust()
    +'<section class="blk wrap"><div class="hd"><div><h2>Which motorcycle do you own?</h2><div class="sub">Select your model to explore parts.</div></div></div><div class="g5">'+models+'</div></section>'
-   +'<section class="blk wrap"><div class="hd"><div><h2>Browse by system</h2><div class="sub">Jump straight to the parts for each system.</div></div><span class="link" onclick="go(\'parts\')">View all parts ›</span></div><div class="g5">'+sys+'</div></section>'
-   + (STATE.products.length? '<section class="blk wrap"><div class="hd"><div><h2>Popular parts</h2></div></div><div class="g5">'+pop+'</div></section>':'')
+   +'<section class="blk wrap"><div class="hd"><div><h2>Browse by system</h2><div class="sub">Jump straight to the parts for each system.</div></div><span class="link" onclick="go(\'diagrams\')">Shop from the diagram ›</span></div><div class="g5">'+sys+'</div></section>'
+   +(newArr?'<section class="blk wrap"><div class="hd"><div><h2>Recently added</h2></div></div><div class="g5">'+newArr+'</div></section>':'')
+   +(best?'<section class="blk wrap"><div class="hd"><div><h2>Best sellers</h2></div></div><div class="g5">'+best+'</div></section>':'')
+   +(svc?'<section class="blk wrap"><div class="hd"><div><h2>Common replacements for your '+esc(b.name)+'</h2><div class="sub">The parts every boda changes most often.</div></div></div><div class="g5">'+svc+'</div></section>':'')
+   +(pop?'<section class="blk wrap"><div class="hd"><div><h2>Popular parts</h2></div></div><div class="g5">'+pop+'</div></section>':'')
    + (STATE.error?'<div class="wrap"><div class="notice">Live catalogue is loading or unavailable right now — parts appear once the shop feed responds.</div></div>':'')
    +foot();
 }
@@ -739,12 +865,12 @@ function fitBadge(p){
 }
 function prodCard(p){
   var pn=pnOf(p); var inS=p.stock===null||p.stock>0; var priced=p.price>0;
-  var sys=String(p.cat||'').split('>').slice(-1)[0].trim()||'';
-  return '<div class="card pc" onclick="go(\'part/'+sid(p.id)+'\')"><div class="im">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'" loading="lazy">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
-    +'<div class="bd"><h4>'+esc(p.name)+'</h4>'+fitBadge(p)
-    +'<div class="cat">'+esc(sys)+(pn?' · <span class="mono">'+esc(pn)+'</span>':'')+'</div>'
-    +'<div class="ft"><b>'+(priced?money(p.price):'<span class="askp">Ask price</span>')+'</b><span class="stock '+(inS?'y':'n')+'">'+(inS?'In stock':'To order')+'</span></div>'
-    +'<button class="btn btn-p btn-sm add" onclick="event.stopPropagation();cartAdd(\''+sid(p.id)+'\')"><i class="fa fa-plus"></i> Add to cart</button></div></div>';
+  var stockTxt=p.stock>0?(p.stock+' in stock'):(p.stock===null?'In stock':'To order');
+  return '<div class="card pc" onclick="go(\'part/'+sid(p.id)+'\')"><div class="im imxl">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'" loading="lazy">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
+    +'<div class="bd">'+(pn?'<span class="oemchip">OEM '+esc(pn)+'</span>':'')+'<h4>'+esc(p.name)+'</h4>'+fitBadge(p)
+    +'<div class="fitsline">'+esc(cardFits(p))+(p.sku?' · <span class="mono">'+esc(p.sku)+'</span>':'')+'</div>'
+    +'<div class="ft"><b>'+(priced?money(p.price):'<span class="askp">Ask price</span>')+'</b><span class="stock '+(inS?'y':'n')+'">'+stockTxt+'</span></div>'
+    +'<div class="cbtns"><button class="btn btn-p btn-sm add" onclick="event.stopPropagation();cartAdd(\''+sid(p.id)+'\')"><i class="fa fa-plus"></i> Add to cart</button><a class="wabuy" href="'+esc(waBuy(p))+'" target="_blank" rel="noopener" onclick="event.stopPropagation();" aria-label="Buy on WhatsApp"><i class="fa fa-whatsapp"></i></a></div></div></div>';
 }
 function vParts(){
   var sys=systemsLive();
@@ -756,9 +882,11 @@ function vParts(){
 }
 function vSystem(cat){
   var list=applyListFilters(partsInSystem(cat));
+  var _pl=((typeof DIAG!=='undefined'&&DIAG&&DIAG.plates)||[]).filter(function(x){return nk(x.system)===nk(cat);})[0];
+  var _dg=_pl?'<span class="link" onclick="go(\'plate/'+sid(_pl.plate)+'\')">Exploded diagram ›</span>':'';
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › <a onclick="go(\'parts\')">Parts</a> › '+esc(cat)+'</div>'
     +'<section class="blk wrap listlayout">'+filterSidebar(cat)
-    +'<div class="listmain"><div class="hd"><div><h2>'+esc(cat)+'</h2><div class="sub">'+list.length+' parts</div></div></div>'
+    +'<div class="listmain"><div class="hd"><div><h2>'+esc(cat)+'</h2><div class="sub">'+list.length+' parts</div></div>'+_dg+'</div>'
     +(list.length?'<div class="pgrid">'+list.map(prodCard).join('')+'</div>':'<div class="empty">No parts match these filters. <a onclick="clearListFilters()">Clear filters</a></div>')
     +'</div></section>'+foot();
 }
@@ -777,12 +905,12 @@ function vPart(id){
   var diagBtn=pl?('<a class="btn btn-o" onclick="go(\'plate/'+sid(pl)+'\')"><i class="fa fa-wrench"></i> Show on diagram</a>'):'';
   var fg=fitGuide(p);
   var cm=compatibleModels(p);
-  var cmH = cm.length ? '<div class="compat"><span class="cmh"><i class="fa fa-motorcycle"></i> Compatible models ('+cm.length+')</span><span class="cmchips">'
-     +cm.map(function(m){return '<span class="cmchip'+(b&&m.id===b.id?' me':'')+'" role="button" tabindex="0" onclick="go(\'model/'+sid(m.id)+'\')">'+esc(m.name)+'</span>';}).join('')+'</span></div>' : '';
+  var cmH = cm.length ? '<div class="fitck"><div class="fh">🟢 FITS</div>'+cm.map(function(m){return '<div class="fr" role="button" tabindex="0" onclick="go(\'model/'+sid(m.id)+'\')"><b>✓</b> '+esc(m.name)+(b&&m.id===b.id?' — your bike':'')+'</div>';}).join('')+'</div>'
+     : (p.brand?'<div class="fitck"><div class="fh">🟢 FITS</div><div class="fr"><b>✓</b> '+esc(p.brand)+' models</div></div>':'');
   track('view',{product_id:p.id});
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › <a onclick="go(\'parts\')">Parts</a> › '+esc(p.name)+'</div>'
    +'<section class="page wrap"><div class="pd"><div class="big">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'" loading="lazy">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
-   +'<div><span class="chip g">✓ Genuine Bajaj</span> <h1 style="margin-top:8px">'+esc(p.name)+'</h1>'+(pn?'<div class="mono" style="margin-top:4px">Part No: '+esc(pn)+'</div>':'')
+   +'<div>'+(p.brand?'<span class="chip g">'+esc(p.brand)+'</span> ':'')+'<h1 style="margin-top:8px">'+esc(p.name)+'</h1>'+(pn?'<div class="oembig"><span class="lb">OEM</span><b>'+esc(pn)+'</b>'+(p.sku?'<span class="skusml">SKU '+esc(p.sku)+'</span>':'')+'</div>':(p.sku?'<div class="mono" style="margin-top:4px">SKU: '+esc(p.sku)+'</div>':''))
    +'<div class="price">'+(priced?money(p.price):'<span class="askp">Ask for price</span>')+'</div><div class="stock '+(inS?'y':'n')+'" style="margin-bottom:12px">'+(inS?('✓ In stock'+(p.stock!=null&&p.stock>0?(' ('+p.stock+')'):'')):'Available to order')+'</div>'
    +fitLine
    +cmH

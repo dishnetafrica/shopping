@@ -376,6 +376,8 @@ class StorefrontController extends Controller
             'modelImages' => array_filter([
                 'tvshlx125' => (string) $tenant->setting('model_image_tvshlx125', ''),
             ]),
+            // v4.8 — the Best-sellers rail reads the same comma list the catalogue PDF badges use.
+            'bestSellers' => (string) $tenant->setting('catalog_best_sellers', ''),
             // Trust & delivery promises shown across the storefront (editable in Settings → Storefront).
             'genuineLine' => (string) ($tenant->setting('sf_genuine', '') ?: '100% genuine Bajaj — verify the hologram, or your money back.'),
             'deliveryEta' => (string) ($tenant->setting('sf_delivery_eta', '') ?: 'Same-day in town · 24–48h upcountry'),
@@ -440,7 +442,7 @@ class StorefrontController extends Controller
             return Product::where('active', true)->orderByDesc('display_order')->orderBy('name')
                 ->toBase()
                 ->get(array_merge(
-                    ['id', 'name', 'description', 'category', 'brand', 'keywords', 'base_price', 'price', 'stock', 'image_url', 'display_order', 'moq', 'pack_size', 'unit_label', 'popularity', 'created_at'],
+                    ['id', 'name', 'description', 'category', 'brand', 'keywords', 'base_price', 'price', 'stock', 'image_url', 'display_order', 'moq', 'pack_size', 'unit_label', 'popularity', 'created_at', 'sku'],
                     // v4.7.7 column — guarded so the feed keeps serving if the migration hasn't run yet.
                     \Illuminate\Support\Facades\Schema::hasColumn('products', 'oem_number') ? ['oem_number'] : []
                 ))
@@ -453,6 +455,7 @@ class StorefrontController extends Controller
                         'Category'     => (string) ($p->category ?? 'Other'),
                         'Keywords'     => (string) ($p->keywords ?? ''),
                         'OEM'          => (string) ($p->oem_number ?? ''),   // v4.7.7 — real part-number chip + diagram cross-links
+                        'SKU'          => (string) ($p->sku ?? ''),          // v4.8 — searchable + shown on cards
                         'Price_UGX'    => (float) ($p->price ?? $p->base_price ?? 0),   // price = selling truth (price-drift fix 2026-07-18)
                         'Stock'        => $p->stock === null ? null : (int) $p->stock,
                         'Image'        => $this->imageUrl($p->image_url),
