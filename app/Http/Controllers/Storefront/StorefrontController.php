@@ -392,7 +392,42 @@ class StorefrontController extends Controller
         $desc  = (string) ($tenant->setting('meta_description', '') ?: (
             $tenant->name . ' — genuine Bajaj Boxer motorcycle spare parts with exploded diagrams and part numbers. Fast delivery. Order on WhatsApp.'
         ));
-        $meta = '<meta name="description" content="' . e($desc) . '"><meta name="robots" content="index,follow">';
+        // v4.10.4 (SEO audit) — the SPA shell now carries the same head SEO the brand page has:
+        // canonical, Open Graph, Twitter card, and Organization + WebSite JSON-LD. Product-level
+        // schema is not possible from a hash-routed SPA shell (documented limitation).
+        $canon = request()->getSchemeAndHttpHost() . ($shop ? '/' . $tenant->slug : '/');
+        $logo  = $tenant->setting('logo', '') ? $this->imageUrl((string) $tenant->setting('logo', '')) : '';
+        $jflags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
+        $orgLd = array_filter([
+            '@context' => 'https://schema.org', '@type' => 'AutoPartsStore',
+            'name' => $tenant->name, 'url' => $canon, 'logo' => $logo ?: null,
+            'telephone' => trim((string) $tenant->setting('public_phone', '')) ?: null,
+            'address' => trim((string) $tenant->setting('address', '')) !== ''
+                ? ['@type' => 'PostalAddress', 'streetAddress' => trim((string) $tenant->setting('address', '')), 'addressCountry' => 'UG'] : null,
+        ]);
+        $siteLd = [
+            '@context' => 'https://schema.org', '@type' => 'WebSite',
+            'name' => $tenant->name, 'url' => $canon,
+            'potentialAction' => [
+                '@type' => 'SearchAction',
+                'target' => rtrim($canon, '/') . '/#/search/{search_term_string}',
+                'query-input' => 'required name=search_term_string',
+            ],
+        ];
+        $meta = implode("\n", array_filter([
+            '<meta name="description" content="' . e($desc) . '">',
+            '<meta name="robots" content="index,follow">',
+            '<link rel="canonical" href="' . e($canon) . '">',
+            '<meta property="og:type" content="website">',
+            '<meta property="og:site_name" content="' . e($tenant->name) . '">',
+            '<meta property="og:title" content="' . e($title) . '">',
+            '<meta property="og:description" content="' . e($desc) . '">',
+            '<meta property="og:url" content="' . e($canon) . '">',
+            $logo ? '<meta property="og:image" content="' . e($logo) . '">' : '',
+            '<meta name="twitter:card" content="summary_large_image">',
+            '<script type="application/ld+json">' . json_encode($orgLd, $jflags) . '</script>',
+            '<script type="application/ld+json">' . json_encode($siteLd, $jflags) . '</script>',
+        ]));
 
         $path = resource_path('storefront/autoparts.html');
         $html = is_file($path) ? file_get_contents($path) : '<h1>Store unavailable</h1>';

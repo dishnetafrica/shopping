@@ -592,6 +592,13 @@ button,input,select,textarea{font-family:inherit}
 .lrow .lin{width:0}   /* nowrap fits-line must not leak intrinsic width into the page */
 /* tablet: 3-up product grids (2-up at 768px renders oversized cards) */
 @media(min-width:700px) and (max-width:980px){.g4,.g5{grid-template-columns:repeat(3,1fr)}}
+/* v4.10.4 — audit part 2 */
+.dymrow{text-align:center;font-size:16px;margin:4px 0 -12px;padding-top:18px}
+.dymrow a{color:var(--accent);cursor:pointer}
+.dymrow b{font-weight:800}
+.notice .ntry{color:var(--accent);font-weight:800;cursor:pointer;white-space:nowrap}
+.btn-sm{min-height:40px}
+.pc .cbtns .add{min-height:40px}
 /* header fits 320px phones */
 @media(max-width:374px){.nav .wrap{gap:10px;padding:0 12px}.nav .brand .bt i{display:none}.nav .brand .bt b{font-size:13px}.nav .cart .cartn{right:0;top:-3px}}
 /* touch targets >=44px */
@@ -862,6 +869,43 @@ function vsrHere(){
   if(document.getElementById('qh')) return vsr('qh','sugbox4');
   if(document.getElementById('q'))  return vsr('q','sugbox');
   return vsr('q2','sugbox2');
+}
+/* v4.10.4 — "did you mean": typo recovery before the human fallback. Vocabulary = catalogue
+   name/keyword tokens; per-word correction with edit-distance <=1 (short) / <=2 (longer). */
+var _VOC=null;
+function vocab(){
+  if(_VOC) return _VOC;
+  var set={};
+  STATE.products.forEach(function(p){
+    String(p.name+' '+(p.kw||'')).toLowerCase().split(/[^a-z]+/).forEach(function(t){ if(t.length>=3&&t.length<=18) set[t]=1; });
+  });
+  _VOC=Object.keys(set); return _VOC;
+}
+function lev(a,b){
+  if(Math.abs(a.length-b.length)>2) return 9;
+  var m=a.length,n=b.length,prev=[],cur=[];
+  for(var j=0;j<=n;j++)prev[j]=j;
+  for(var i=1;i<=m;i++){ cur=[i];
+    for(var k=1;k<=n;k++){ cur[k]=Math.min(prev[k]+1,cur[k-1]+1,prev[k-1]+(a[i-1]===b[k-1]?0:1)); }
+    prev=cur; }
+  return prev[n];
+}
+function didYouMean(q){
+  var words=String(q||'').toLowerCase().split(/\s+/).filter(Boolean);
+  if(!words.length||words.length>5) return null;
+  var changed=false;
+  var out=words.map(function(w){
+    if(w.length<3||/[0-9]/.test(w)) return w;
+    if(searchSets(w).all.length) return w;                 /* word already finds parts — keep it */
+    var best=null,bd=9,lim=w.length<=4?1:2;
+    var V=vocab();
+    for(var i=0;i<V.length;i++){ var d=lev(w,V[i]); if(d<=lim&&d<bd){ bd=d; best=V[i]; if(d===1&&w.length>5)break; } }
+    if(best){ changed=true; return best; }
+    return w;
+  }).join(' ');
+  if(!changed||out===q) return null;
+  var s=searchSets(out);
+  return (s.all.length||s.plates.length)?out:null;
 }
 function rvAdd(id){ try{ var l=JSON.parse(localStorage.getItem('ea_rv')||'[]').filter(function(x){return String(x)!==String(id);}); l.unshift(String(id)); localStorage.setItem('ea_rv',JSON.stringify(l.slice(0,8))); }catch(e){} }
 function rvList(){ var l=[]; try{ l=JSON.parse(localStorage.getItem('ea_rv')||'[]'); }catch(e){ return []; }
@@ -1348,7 +1392,7 @@ function vHome(){
   var bks=bikeCardsHtml();
   var pops=popChips().map(function(f){return '<a onclick="qsearch(\''+f+'\')">'+esc(f)+'</a>';}).join('');
   var ccs=systemsLive().map(function(s){
-    return '<div class="cc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')"><div class="cci">'+(s.cover?'<img src="'+esc(s.cover)+'" alt="" loading="lazy">':li('wrench',26))+'</div><b>'+esc(s.name)+'</b><span>'+s.count+' parts</span></div>';
+    return '<div class="cc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')"><div class="cci">'+(s.cover?'<img src="'+esc(s.cover)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':li('wrench',26))+'</div><b>'+esc(s.name)+'</b><span>'+s.count+' parts</span></div>';
   }).join('');
   var best=bestSellerList().map(prodCard).join('');
   if(!best){ best=vehFilter(STATE.products).filter(function(p){return (p.popularity||0)>0;}).sort(function(a,c){return (c.popularity||0)-(a.popularity||0);}).slice(0,5).map(prodCard).join(''); }
@@ -1383,7 +1427,7 @@ function vHome(){
    +'<div class="dstrip"><div class="dsc"><b>Dealer / Wholesale?</b><p>Special pricing & priority support for the trade.</p><a class="btn btn-o" onclick="dlrSheet()">💼 '+(STATE.dealer?'My dealer account':'Dealer sign-in')+'</a></div>'
      +'<div class="dsc"><b>Bulk Orders</b><p>Best prices for bulk purchases.</p><a class="btn btn-w" href="'+esc(waLink())+'" target="_blank" rel="noopener">WhatsApp Us</a></div></div></section>'
    +'<section class="wrap"><div class="helpstrip"><span class="hsic">'+li('message-circle',20)+'</span><div><b>Can’t find the part you need?</b><p>Send a photo on WhatsApp — or leave the name and our mechanic will source it from the supplier network.</p></div><div class="hsbtns"><a class="btn btn-p" href="'+esc(waLink())+'" target="_blank" rel="noopener">Chat on WhatsApp</a><a class="btn btn-o" onclick="reqSheet(\'\')">Ask my colleague</a></div></div></section>'
-   + (STATE.error?'<div class="wrap"><div class="notice">Live catalogue is loading or unavailable right now — parts appear once the shop feed responds.</div></div>':'')
+   + (STATE.error?'<div class="wrap"><div class="notice">Live catalogue is loading or unavailable right now. <a class="ntry" role="button" onclick="STATE.error=false;render();loadCatalogue()">Try again ›</a></div></div>':'')
    +foot();
 }
 function fitBadge(p){
@@ -1396,7 +1440,7 @@ function fitBadge(p){
 function prodCard(p){
   var pn=pnOf(p); var inS=p.stock===null||p.stock>0; var priced=p.price>0;
   var stockTxt=p.stock>0?(p.stock+' in stock'):(p.stock===null?'In stock':'To order');
-  return '<div class="card pc" onclick="go(\'part/'+sid(p.id)+'\')"><div class="im imxl">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'" loading="lazy">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
+  return '<div class="card pc" onclick="go(\'part/'+sid(p.id)+'\')"><div class="im imxl">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'" loading="lazy" onerror="this.style.display=\'none\'">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
     +'<div class="bd">'+(pn?'<span class="oemchip">OEM '+esc(pn)+'</span>':'')+'<h4>'+esc(p.name)+'</h4>'+fitBadge(p)
     +'<div class="fitsline">'+esc(cardFits(p))+(p.sku?' · <span class="mono">'+esc(p.sku)+'</span>':'')+'</div>'
     +'<div class="ft"><b>'+(function(){ var dp=dlrPrice(p); if(dp!=null) return '<span class="dstrike">'+money(p.price)+'</span><span class="dyour">'+money(dp)+'</span>'; return priced?money(p.price):'<span class="askp">Ask price</span>'; })()+'</b><span class="stock '+(inS?'y':'n')+'">'+stockTxt+'</span></div>'
@@ -1560,7 +1604,7 @@ function resultRow(p){
   var dp=dlrPrice(p);
   var priceH=dp!=null?('<span class="dstrike">'+money(p.price)+'</span><b class="dyour">'+money(dp)+'</b>'):(p.price>0?'<b>'+money(p.price)+'</b>':'<span class="askp">Ask price</span>');
   return '<div class="lrow" role="button" onclick="go(\'part/'+sid(p.id)+'\')">'
-   +'<div class="lim">'+(p.img?'<img src="'+esc(p.img)+'" alt="" loading="lazy">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
+   +'<div class="lim">'+(p.img?'<img src="'+esc(p.img)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
    +'<div class="lin"><b class="lnm">'+esc(p.name)+'</b>'
      +(pn?'<span class="loem">OEM <span class="mono">'+esc(pn)+'</span></span>':'')
      +'<span class="lfits">'+esc(cardFits(p))+'</span>'
@@ -1601,8 +1645,11 @@ function vSearch(q){
      +'<a class="btn btn-w" href="'+esc(waLink())+'" target="_blank" rel="noopener"><i class="fa fa-whatsapp"></i> Chat on WhatsApp</a>'
      +'<a class="btn btn-o" onclick="go(\'ai\')"><i class="fa fa-comments"></i> Describe the problem</a>'
      +'<a class="btn btn-o" onclick="go(\'\')"><i class="fa fa-tachometer"></i> Browse by motorcycle</a></div></div>'; }
+  var dym=totalAll?null:didYouMean(q);
+  var dymH=dym?'<div class="dymrow">Did you mean <a role="button" onclick="qsearch(STATE.dym)"><b>'+esc(dym)+'</b></a>?</div>':'';
+  if(dym) STATE.dym=dym;
   var body;
-  if(!totalAll){ body=nrec('We don’t list “'+esc(q)+'” today.'); }
+  if(!totalAll){ body=dymH+nrec('We don’t list “'+esc(q)+'” today.'); }
   else if(tab==='diagrams'){ body='<div class="lrows">'+diagsH+'</div>'; }
   else if(!rowsH&&!diagsH){ body='<div class="empty">No matches in this view — try the All tab.</div>'; }
   else { body=(rowsH?'<div class="lrows">'+rowsH+'</div>':'')
