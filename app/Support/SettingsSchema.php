@@ -147,6 +147,8 @@ final class SettingsSchema
                 ]],
                 ['label' => 'Availability', 'help' => 'For a parts business — sell only what you actually have.', 'fields' => [
                     ['key' => 'sf_hide_oos', 'type' => 'bool', 'label' => 'Show only parts in stock (hide out-of-stock)', 'default' => false, 'help' => 'When ON, any part with 0 stock is hidden from listings, search and browse. Parts with no stock number set (untracked) still show as “to order”.'],
+                    // v4.10.5 — parts-first suppliers (boraboda) have no exploded-diagram plates; hide the whole surface by default.
+                    ['key' => 'sf_diagrams', 'type' => 'bool', 'label' => 'Show exploded diagrams', 'default' => false, 'help' => 'OFF hides diagrams everywhere (menu, search tab, product & model links). Turn ON only when you have real diagram plates for your catalogue.'],
                 ]],
                 // v4.6.1 — which host goes into links the system SENDS (quotation review, order tracking).
                 ['label' => 'Custom domain', 'help' => 'Which web address customers see in WhatsApp links (quotation review, order tracking).', 'fields' => [

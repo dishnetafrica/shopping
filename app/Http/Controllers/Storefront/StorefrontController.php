@@ -386,6 +386,9 @@ class StorefrontController extends Controller
             'returns'     => (string) ($tenant->setting('sf_returns', '') ?: '7-day returns on unfitted parts'),
             // Sell only what you have: when on, parts with 0 stock are hidden from the storefront.
             'hideOOS'     => (bool) $tenant->setting('sf_hide_oos', false),
+            // v4.10.5 — exploded diagrams hidden by default (parts-first suppliers like boraboda
+            // have no plates; empty diagrams confuse). Flip sf_diagrams ON when real plates exist.
+            'showDiagrams' => (bool) $tenant->setting('sf_diagrams', false),
         ];
 
         $title = $tenant->name . ' — Genuine Motorcycle Spare Parts';
