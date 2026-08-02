@@ -60,7 +60,8 @@ a{color:#14532D}
 <div class="card">
   <h1>Bike photo pack</h1>
   <p>Upload <b>one zip</b> with your motorcycle photos and every photo field is filled in one go.
-     Name each file after its bike: <code>{$ids}</code> (.jpg / .png / .webp).</p>
+     Name each file after its bike: <code>{$ids}</code> (.jpg / .png / .webp).
+     Gallery photos for the model pages: <code>gal-boxer125hd-1.jpg</code>, <code>gal-boxer125hd-2.jpg</code>, … (up to 8 per bike).</p>
   <p>Photos are stored with your business data — they stay through every update and rebuild.</p>
   <div class="drop" id="drop">Drop the zip here, or click to choose<input type="file" id="file" accept=".zip" style="display:none"></div>
   <button class="btn" id="go" disabled>Upload pack</button>

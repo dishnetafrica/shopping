@@ -1519,7 +1519,7 @@ function vPart(id){
    +'<div class="buybar"><div class="bb-l"><b>'+(function(){var dp=dlrPrice(p);if(dp!=null)return money(dp);return priced?money(p.price):'Ask price';})()+'</b><span>'+esc(p.name)+'</span></div><button class="btn btn-p" onclick="cartAdd(\''+sid(p.id)+'\')"><i class="fa fa-shopping-cart"></i> Add to cart</button><a class="btn btn-w bbwa" href="'+esc(waOrder(p))+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:[\''+sid(p.id)+'\']})">'+li('message-circle',15)+' WhatsApp</a></div>'
    +foot();
 }
-function galleryFor(id){ var g=(GAL&&GAL[id])||[]; if(!g.length){ var mi=modelImg(id); if(mi)g=[mi]; } return g; }
+function galleryFor(id){ var og=(CFG.modelGalleries||{})[id]; if(og&&og.length) return og.slice(0,8); var g=((GAL&&GAL[id])||[]).slice(); var ov=(CFG.modelImages||{})[id]; if(ov){ if(!g.length) g=[ov]; else if(g.indexOf(ov)<0) g.unshift(ov); } if(!g.length){ var mi=modelImg(id); if(mi)g=[mi]; } return g; }
 function findParts(words,n){
   var out=[],seen={};
   words.forEach(function(w){ w=w.toLowerCase();
@@ -1534,7 +1534,7 @@ function vModel(id){
   var m=(MODELS||[]).filter(function(x){return x.id===id;})[0]; if(!m) return go('');
   setBike(id);
   var g=galleryFor(id);
-  var thumbs=g.slice(0,4).map(function(src,i){return '<div class="ovthumb'+(i===0?' on':'')+'" title="View photo '+(i+1)+'" data-src="'+src+'" onclick="ovMain(this)"><img src="'+src+'" alt="" loading="lazy"></div>';}).join('')
+  var thumbs=g.slice(0,4).map(function(src,i){return '<div class="ovthumb'+(i===0?' on':'')+'" title="View photo '+(i+1)+'" data-src="'+src+'" onclick="ovMain(this)"><img src="'+src+'" alt="" loading="lazy" onerror="var t=this.parentNode;if(t)t.style.display=\'none\'"></div>';}).join('')
     + (g.length>4?'<div class="ovthumb more">+'+(g.length-4)+'<span>View more</span></div>':'');
   var ks=(m.keySpecs||[]).slice(0,4).map(function(k){return '<div class="ks1"><b>'+esc(k.v)+'</b><span>'+esc(k.l)+'</span></div>';}).join('');
   var tabs=[['Overview','ov-top'],['Systems & Parts','ov-sys']].concat(showDiag()?[['Diagrams','diagrams']]:[]).concat([['Specifications','ov-spec']]);

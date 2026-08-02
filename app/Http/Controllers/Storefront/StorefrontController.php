@@ -383,6 +383,29 @@ class StorefrontController extends Controller
                 'boxer150x'  => (string) $tenant->setting('model_image_boxer150x', ''),
                 'tvshlx125'  => (string) $tenant->setting('model_image_tvshlx125', ''),
             ]),
+            // v4.17: per-model photo GALLERIES from the bike photo pack (gal-{model}-{n}.jpg
+            // entries → model_gallery_{id} JSON array). When set, the model page gallery shows
+            // the owner's photos instead of the built-in set.
+            'modelGalleries' => (function () use ($tenant) {
+                $out = [];
+                foreach (['boxer100', 'boxer125hd', 'boxer150', 'boxer125x', 'ct125hd', 'boxer150x', 'tvshlx125'] as $mid) {
+                    $raw = (string) $tenant->setting('model_gallery_' . $mid, '');
+                    if ($raw === '') {
+                        continue;
+                    }
+                    $arr = json_decode($raw, true);
+                    if (! is_array($arr)) {
+                        continue;
+                    }
+                    $urls = array_values(array_filter(array_map('strval', $arr),
+                        fn ($u) => $u !== '' && (str_starts_with($u, '/') || preg_match('~^https?://~i', $u))));
+                    if ($urls) {
+                        $out[$mid] = array_slice($urls, 0, 8);
+                    }
+                }
+
+                return $out;
+            })(),
             // v4.8 — the Best-sellers rail reads the same comma list the catalogue PDF badges use.
             'bestSellers' => (string) $tenant->setting('catalog_best_sellers', ''),
             // Trust & delivery promises shown across the storefront (editable in Settings → Storefront).
