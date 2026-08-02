@@ -1395,7 +1395,7 @@ function vHome(){
   var bks=bikeCardsHtml();
   var pops=popChips().map(function(f){return '<a onclick="qsearch(\''+f+'\')">'+esc(f)+'</a>';}).join('');
   var ccs=systemsLive().map(function(s){
-    return '<div class="cc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')"><div class="cci">'+(s.cover?'<img src="'+esc(s.cover)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':li('wrench',26))+'</div><b>'+esc(s.name)+'</b><span>'+s.count+' parts</span></div>';
+    return '<a class="cc" href="'+esc(urlFor('system/'+encodeURIComponent(s.name)))+'" onclick="return goL(event,\'system/'+encodeURIComponent(s.name)+'\')"><div class="cci">'+(s.cover?'<img src="'+esc(s.cover)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':li('wrench',26))+'</div><b>'+esc(s.name)+'</b><span>'+s.count+' parts</span></a>';
   }).join('');
   var best=bestSellerList().map(prodCard).join('');
   if(!best){ best=vehFilter(STATE.products).filter(function(p){return (p.popularity||0)>0;}).sort(function(a,c){return (c.popularity||0)-(a.popularity||0);}).slice(0,5).map(prodCard).join(''); }
@@ -1444,7 +1444,7 @@ function prodCard(p){
   var pn=pnOf(p); var inS=p.stock===null||p.stock>0; var priced=p.price>0;
   var stockTxt=p.stock>0?(p.stock+' in stock'):(p.stock===null?'In stock':'To order');
   return '<div class="card pc" onclick="go(\'part/'+sid(p.id)+'\')"><div class="im imxl">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'" loading="lazy" onerror="this.style.display=\'none\'">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
-    +'<div class="bd">'+(pn?'<span class="oemchip">OEM '+esc(pn)+'</span>':'')+'<h4>'+esc(p.name)+'</h4>'+fitBadge(p)
+    +'<div class="bd">'+(pn?'<span class="oemchip">OEM '+esc(pn)+'</span>':'')+'<h4><a href="'+esc(urlFor('part/'+sid(p.id)))+'" onclick="return goL(event,\'part/'+sid(p.id)+'\')">'+esc(p.name)+'</a></h4>'+fitBadge(p)
     +'<div class="fitsline">'+esc(cardFits(p))+(p.sku?' · <span class="mono">'+esc(p.sku)+'</span>':'')+'</div>'
     +'<div class="ft"><b>'+(function(){ var dp=dlrPrice(p); if(dp!=null) return '<span class="dstrike">'+money(p.price)+'</span><span class="dyour">'+money(dp)+'</span>'; return priced?money(p.price):'<span class="askp">Ask price</span>'; })()+'</b><span class="stock '+(inS?'y':'n')+'">'+stockTxt+'</span></div>'
     +'<div class="cbtns"><button class="btn btn-p btn-sm add" onclick="event.stopPropagation();cartAdd(\''+sid(p.id)+'\')"><i class="fa fa-plus"></i> Add to cart</button><a class="wabuy" href="'+esc(waBuy(p))+'" target="_blank" rel="noopener" onclick="event.stopPropagation();" aria-label="Buy on WhatsApp"><i class="fa fa-whatsapp"></i></a></div></div></div>';
@@ -1606,13 +1606,13 @@ function resultRow(p){
   var pn=pnOf(p); var inS=p.stock===null||p.stock>0;
   var dp=dlrPrice(p);
   var priceH=dp!=null?('<span class="dstrike">'+money(p.price)+'</span><b class="dyour">'+money(dp)+'</b>'):(p.price>0?'<b>'+money(p.price)+'</b>':'<span class="askp">Ask price</span>');
-  return '<div class="lrow" role="button" onclick="go(\'part/'+sid(p.id)+'\')">'
+  return '<a class="lrow" href="'+esc(urlFor('part/'+sid(p.id)))+'" onclick="return goL(event,\'part/'+sid(p.id)+'\')">'
    +'<div class="lim">'+(p.img?'<img src="'+esc(p.img)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
    +'<div class="lin"><b class="lnm">'+esc(p.name)+'</b>'
      +(pn?'<span class="loem">OEM <span class="mono">'+esc(pn)+'</span></span>':'')
      +'<span class="lfits">'+esc(cardFits(p))+'</span>'
      +'<span class="lpr">'+priceH+'<span class="stock '+(inS?'y':'n')+'">'+(p.stock>0?(p.stock+' in stock'):(p.stock===null?'In stock':'To order'))+'</span></span></div>'
-   +'<button class="ladd" aria-label="Add to cart" onclick="event.stopPropagation();cartAdd(\''+sid(p.id)+'\')">'+li('shopping-cart',16)+'</button></div>';
+   +'<button class="ladd" aria-label="Add to cart" onclick="event.preventDefault();event.stopPropagation();cartAdd(\''+sid(p.id)+'\')">'+li('shopping-cart',16)+'</button></a>';
 }
 function diagRow(pl){
   var img=plateImg(pl);
@@ -1819,7 +1819,29 @@ function waLink(){return CFG.waNumber?('https://wa.me/'+CFG.waNumber):'#';}
 function openSearch(){go('search');}   /* v4.10.1 — the Search tab opens the dedicated search screen */
 function closeSearch(){var s=document.getElementById('ssheet');if(s)s.classList.remove('on');}
 function doSheetSearch(){var i=document.getElementById('ssin');var q=(i&&i.value||'').trim();closeSearch();if(q)go('search/'+encodeURIComponent(q));}
-function go(path){location.hash='#/'+path;}
+/* v4.11 — real URLs (no #): navigate with the History API so every part/category/search has
+   its own indexable, shareable address. Legacy #/x links are translated on arrival. */
+function spaBase(){ return String((CFG&&CFG.basePath)||''); }
+function urlFor(path){ path=String(path||'').replace(/^\/+/,''); return (spaBase()+'/'+path)||'/'; }
+function go(path){
+  try{ history.pushState({},'',urlFor(path)); }catch(e){ location.hash='#/'+path; }
+  render();
+}
+function goL(e,path){
+  if(e&&(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey||e.button===1)) return true;  /* new tab stays native */
+  if(e&&e.preventDefault)e.preventDefault(); if(e&&e.stopPropagation)e.stopPropagation();
+  go(path); return false;
+}
+function curRoute(){
+  var h=(location.hash||'').replace(/^#\//,'');
+  if(h) return h;                                   /* legacy deep link (translated by boot ASAP) */
+  var p=String(location.pathname||'/');
+  var b=spaBase(); if(b&&p.indexOf(b)===0) p=p.slice(b.length);
+  p=p.replace(/^\/+|\/+$/g,'');
+  if(p==='') return '';
+  var known=['part','parts','system','model','search','cart','ai','diagrams','plate','diagram'];
+  return known.indexOf(p.split('/')[0])>=0 ? p : '';
+}
 function qsearch(q){go('search/'+encodeURIComponent(q));}
 function doSearch(e){e.preventDefault();var v=$('#q').value.trim();if(v)qsearch(v);return false;}
 function doSearch2(e){e.preventDefault();var v=((document.getElementById('q2')||{}).value||'').trim();if(v)qsearch(v);return false;}
@@ -1827,7 +1849,7 @@ function updBotbar(r){ try{ var map={'':'','parts':'parts','system':'parts','mod
   Array.prototype.forEach.call(document.querySelectorAll('#botbar a'),function(a){ a.classList.toggle('on', cur!==undefined && a.getAttribute('data-r')===cur); }); }catch(e){} }
 function qd(d){var n=$('#qn');n.value=Math.max(1,(parseInt(n.value)||1)+d);}
 function render(){
-  var h=(location.hash||'').replace(/^#\//,''); var parts=h.split('/');
+  var h=curRoute(); var parts=h.split('/');
   var v;
   if(!STATE.loaded && !STATE.error){ v=nav()+'<div class="spin"></div>'; document.getElementById('app').innerHTML=v; return; }
   if(parts[0]==='part') v=vPart(parts[1]);
@@ -1890,7 +1912,15 @@ window.addEventListener('scroll',function(){
   var h=document.getElementById('topnav'); if(!h||!h.classList.contains('homehero')) return;
   h.classList.toggle('srch',(window.scrollY||document.documentElement.scrollTop||0)>330);
 },{passive:true});
-window.addEventListener('hashchange',render);
+/* v4.11 — real URLs: translate legacy #/x links to real paths, listen to history navigation. */
+function hashMigrate(){
+  var m=(location.hash||'').match(/^#\/(.*)$/);
+  if(m){ try{ history.replaceState({},'',urlFor(m[1])); }catch(e){} }
+}
+try{ history.scrollRestoration='manual'; }catch(e){}
+window.addEventListener('popstate',render);
+window.addEventListener('hashchange',function(){ hashMigrate(); render(); });
+hashMigrate();
 (function(){var r=document.documentElement.style;if(CFG.accent)r.setProperty('--accent',CFG.accent);if(CFG.accentDark)r.setProperty('--accent-d',CFG.accentDark);
  document.getElementById('waFloat').href=waLink(); render(); loadCatalogue();})();
 

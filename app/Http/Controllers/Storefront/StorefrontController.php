@@ -389,16 +389,68 @@ class StorefrontController extends Controller
             // v4.10.5 — exploded diagrams hidden by default (parts-first suppliers like boraboda
             // have no plates; empty diagrams confuse). Flip sf_diagrams ON when real plates exist.
             'showDiagrams' => (bool) $tenant->setting('sf_diagrams', false),
+            // v4.11 — real URLs: the SPA router needs to know its mount point ('' on a custom
+            // domain, '/{slug}' on the platform host) to build and parse history-API paths.
+            'basePath' => $shop ? '/' . $tenant->slug : '',
         ];
 
         $title = $tenant->name . ' — Genuine Motorcycle Spare Parts';
         $desc  = (string) ($tenant->setting('meta_description', '') ?: (
             $tenant->name . ' — genuine Bajaj Boxer motorcycle spare parts with exploded diagrams and part numbers. Fast delivery. Order on WhatsApp.'
         ));
-        // v4.10.4 (SEO audit) — the SPA shell now carries the same head SEO the brand page has:
-        // canonical, Open Graph, Twitter card, and Organization + WebSite JSON-LD. Product-level
-        // schema is not possible from a hash-routed SPA shell (documented limitation).
+        // v4.10.4 (SEO audit) — canonical, Open Graph, Twitter card, Organization + WebSite JSON-LD.
+        // v4.11 (real URLs) — the shell is now served on REAL paths (/part/13, /parts, /search/…),
+        // and each URL gets its own title/description/canonical; part pages additionally get an
+        // og:image of the part and full Product JSON-LD (name, OEM as mpn, price, availability),
+        // so Google indexes every part and a WhatsApp-shared link previews the actual product.
         $canon = request()->getSchemeAndHttpHost() . ($shop ? '/' . $tenant->slug : '/');
+        $reqPath = trim(request()->path(), '/');
+        if ($shop && str_starts_with($reqPath, $tenant->slug)) {
+            $reqPath = trim(substr($reqPath, strlen($tenant->slug)), '/');
+        }
+        $spaViews = ['part', 'parts', 'system', 'model', 'search', 'cart', 'ai', 'diagrams', 'plate', 'diagram'];
+        $seg = explode('/', $reqPath);
+        $spaRoute = in_array($seg[0] ?? '', $spaViews, true) ? $reqPath : '';
+        $status = 200; $robots = 'index,follow'; $productLd = null; $ogImage = null;
+        $pageCanon = $spaRoute !== '' ? rtrim($canon, '/') . '/' . $spaRoute : $canon;
+        if (($seg[0] ?? '') === 'part' && isset($seg[1])) {
+            $pp = Product::withoutGlobalScopes()->where('tenant_id', $tenant->id)
+                ->where('active', true)->find((int) $seg[1]);
+            if ($pp) {
+                $oem   = trim((string) ($pp->oem_number ?? ''));
+                $title = $pp->name . ($oem !== '' ? ' — OEM ' . $oem : '') . ' | ' . $tenant->name;
+                $cur   = (string) ($tenant->setting('currency', 'UGX'));
+                $desc  = $pp->name . ($oem !== '' ? ' (OEM ' . $oem . ')' : '') . ' — genuine motorcycle spare part.'
+                    . ((float) ($pp->price ?? 0) > 0 ? ' Price ' . $cur . ' ' . number_format((float) $pp->price) . '.' : '')
+                    . ' Order on WhatsApp from ' . $tenant->name . '.';
+                if ((string) ($pp->image_url ?? '') !== '') $ogImage = $this->imageUrl((string) $pp->image_url);
+                $productLd = array_filter([
+                    '@context' => 'https://schema.org', '@type' => 'Product',
+                    'name'  => (string) $pp->name,
+                    'mpn'   => $oem !== '' ? $oem : null,
+                    'sku'   => (string) ($pp->sku ?? '') !== '' ? (string) $pp->sku : null,
+                    'image' => $ogImage,
+                    'brand' => (string) ($pp->brand ?? '') !== '' ? ['@type' => 'Brand', 'name' => (string) $pp->brand] : null,
+                    'offers' => ((float) ($pp->price ?? 0) > 0) ? [
+                        '@type' => 'Offer', 'price' => (string) (float) $pp->price, 'priceCurrency' => $cur ?: 'UGX',
+                        'availability' => 'https://schema.org/' . (($pp->stock === null || (int) $pp->stock > 0) ? 'InStock' : 'OutOfStock'),
+                        'url' => $pageCanon,
+                    ] : null,
+                ]);
+            } else {
+                $status = 404; $robots = 'noindex,nofollow';
+                $title = 'Part not found | ' . $tenant->name;
+            }
+        } elseif (($seg[0] ?? '') === 'system' && isset($seg[1])) {
+            $title = urldecode($seg[1]) . ' — motorcycle parts | ' . $tenant->name;
+            $desc  = 'Genuine ' . urldecode($seg[1]) . ' parts with OEM numbers and prices. ' . $tenant->name . '.';
+        } elseif (($seg[0] ?? '') === 'parts') {
+            $title = 'All parts by category | ' . $tenant->name;
+        } elseif (($seg[0] ?? '') === 'model' && isset($seg[1])) {
+            $title = 'Parts for your motorcycle | ' . $tenant->name;
+        } elseif (in_array($seg[0] ?? '', ['search', 'cart', 'ai', 'diagrams', 'plate', 'diagram'], true)) {
+            $robots = 'noindex,follow';   // internal search/cart/tools should not be indexed
+        }
         $logo  = $tenant->setting('logo', '') ? $this->imageUrl((string) $tenant->setting('logo', '')) : '';
         $jflags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
         $orgLd = array_filter([
@@ -419,17 +471,18 @@ class StorefrontController extends Controller
         ];
         $meta = implode("\n", array_filter([
             '<meta name="description" content="' . e($desc) . '">',
-            '<meta name="robots" content="index,follow">',
-            '<link rel="canonical" href="' . e($canon) . '">',
-            '<meta property="og:type" content="website">',
+            '<meta name="robots" content="' . e($robots) . '">',
+            '<link rel="canonical" href="' . e($pageCanon) . '">',
+            '<meta property="og:type" content="' . ($productLd ? 'product' : 'website') . '">',
             '<meta property="og:site_name" content="' . e($tenant->name) . '">',
             '<meta property="og:title" content="' . e($title) . '">',
             '<meta property="og:description" content="' . e($desc) . '">',
-            '<meta property="og:url" content="' . e($canon) . '">',
-            $logo ? '<meta property="og:image" content="' . e($logo) . '">' : '',
+            '<meta property="og:url" content="' . e($pageCanon) . '">',
+            ($ogImage ?: $logo) ? '<meta property="og:image" content="' . e($ogImage ?: $logo) . '">' : '',
             '<meta name="twitter:card" content="summary_large_image">',
             '<script type="application/ld+json">' . json_encode($orgLd, $jflags) . '</script>',
             '<script type="application/ld+json">' . json_encode($siteLd, $jflags) . '</script>',
+            $productLd ? '<script type="application/ld+json">' . json_encode($productLd, $jflags) . '</script>' : '',
         ]));
 
         $path = resource_path('storefront/autoparts.html');
@@ -442,7 +495,7 @@ class StorefrontController extends Controller
         // it to ~1.1 MB, and a short private cache stops repeat visitors re-downloading it on every
         // page view. Config baked into the HTML (models/settings) tolerates 5 minutes of staleness —
         // the same window the /catalogue feed already caches server-side.
-        return $this->compressed($html, 'text/html; charset=utf-8', 'private, max-age=300');
+        return $this->compressed($html, 'text/html; charset=utf-8', 'private, max-age=300', $status);
     }
 
     /**
@@ -667,9 +720,9 @@ class StorefrontController extends Controller
     }
 
     /** gzip a response when the client accepts it (proxies won't double-encode a set Content-Encoding). */
-    private function compressed(string $body, string $type, string $cache)
+    private function compressed(string $body, string $type, string $cache, int $status = 200)
     {
-        $resp = response($body, 200)->header('Content-Type', $type)->header('Cache-Control', $cache);
+        $resp = response($body, $status)->header('Content-Type', $type)->header('Cache-Control', $cache);
         try {
             if (function_exists('gzencode')
                 && str_contains((string) request()->header('Accept-Encoding', ''), 'gzip')) {
@@ -1477,6 +1530,15 @@ class StorefrontController extends Controller
         $urls = ['<url><loc>'.e(url('/')).'</loc><changefreq>daily</changefreq></url>'];
         foreach (array_keys($this->liveCategories($tenant)) as $cat) {
             $urls[] = '<url><loc>'.e(url('/c/'.\Illuminate\Support\Str::slug($cat))).'</loc><changefreq>weekly</changefreq></url>';
+        }
+        // v4.11 — real URLs: every active part gets its own indexable page on the SPA.
+        if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::AUTO_PARTS) {
+            $urls[] = '<url><loc>'.e(url('/parts')).'</loc><changefreq>daily</changefreq></url>';
+            Product::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('active', true)
+                ->orderBy('id')->limit(5000)->get(['id'])
+                ->each(function ($p) use (&$urls) {
+                    $urls[] = '<url><loc>'.e(url('/part/'.$p->id)).'</loc><changefreq>weekly</changefreq></url>';
+                });
         }
 
         return response('<?xml version="1.0" encoding="UTF-8"?>'

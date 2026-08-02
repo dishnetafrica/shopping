@@ -797,6 +797,12 @@ Route::middleware('web')->group(function () use ($qToken) {
     Route::get('/dealer-feed',     [\App\Http\Controllers\Storefront\StorefrontController::class, 'dealerFeed'])->middleware('throttle:30,1');
     Route::get('/c/{slug}',        [\App\Http\Controllers\Storefront\StorefrontController::class, 'category']);
     Route::get('/sitemap.xml',     [\App\Http\Controllers\Storefront\StorefrontController::class, 'sitemap']);
+    // v4.11 — REAL URLs for the auto-parts SPA (kills the #): the shell is served on every SPA
+    // path so deep links, refreshes and Google all work. Constrained to the SPA's view prefixes,
+    // so it can never swallow a real endpoint (part-id/part-request differ at the char after
+    // 'part'; POST routes differ by verb). Per-URL SEO (title/OG/Product JSON-LD/404) inside.
+    Route::get('/{spa}', fn () => app(\App\Http\Controllers\Storefront\StorefrontController::class)->autoParts())
+        ->where('spa', '(part|parts|system|model|search|cart|ai|diagrams|plate|diagram)(/.*)?');
     Route::post('/order',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'placeOrder']);
     // Quotation-first flow (B2B): submit cart -> instant Quotation + public portal.
     Route::post('/quote',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'requestQuote']);
@@ -834,6 +840,8 @@ Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::post('/{shop}/dealer-verify', [\App\Http\Controllers\Storefront\StorefrontController::class, 'dealerVerify'])->where('shop', $shopSlug)->middleware('throttle:12,1');
     Route::get('/{shop}/dealer-feed',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'dealerFeed'])->where('shop', $shopSlug)->middleware('throttle:30,1');
     Route::get('/{shop}/c/{slug}',  [\App\Http\Controllers\Storefront\StorefrontController::class, 'category'])->where('shop', $shopSlug);
+    Route::get('/{shop}/{spa}', fn (string $shop) => app(\App\Http\Controllers\Storefront\StorefrontController::class)->autoParts($shop))
+        ->where('shop', $shopSlug)->where('spa', '(part|parts|system|model|search|cart|ai|diagrams|plate|diagram)(/.*)?');   // v4.11 real URLs
     Route::post('/{shop}/order',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'placeOrder'])->where('shop', $shopSlug);
     // Quotation-first flow (platform slug variants).
     Route::post('/{shop}/quote',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'requestQuote'])->where('shop', $shopSlug);
