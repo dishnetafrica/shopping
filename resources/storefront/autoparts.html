@@ -581,6 +581,29 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 @media(min-width:981px){.nav .navsearch{display:flex}}
 @media(max-width:980px){.mybtn{display:none}}
 </style>
+<style>/* v4.10.3 audit fixes */
+button,input,select,textarea{font-family:inherit}
+/* trust strip must shrink with the hero column (320-414px overflow) */
+.htr div{min-width:0}
+.htr.h2l i{max-width:100%}
+/* result tabs cannot force page width: width:0 + min-width:100% stops intrinsic-width leakage
+   (Chromium computes wrapped-flex min-content as if nowrap), and wrap handles tiny screens */
+.stabs{flex-wrap:wrap;width:0;min-width:100%}
+.lrow .lin{width:0}   /* nowrap fits-line must not leak intrinsic width into the page */
+/* tablet: 3-up product grids (2-up at 768px renders oversized cards) */
+@media(min-width:700px) and (max-width:980px){.g4,.g5{grid-template-columns:repeat(3,1fr)}}
+/* header fits 320px phones */
+@media(max-width:374px){.nav .wrap{gap:10px;padding:0 12px}.nav .brand .bt i{display:none}.nav .brand .bt b{font-size:13px}.nav .cart .cartn{right:0;top:-3px}}
+/* touch targets >=44px */
+.sback{min-width:44px;min-height:44px;display:grid;place-items:center;padding:0}
+.nsico{width:44px;height:44px}
+.ladd{width:44px;height:44px}
+.crumb a{display:inline-block;padding:12px 4px;margin:-12px -4px}
+.hd .link{display:inline-block;padding:11px 0;margin:-11px 0}
+.bpx{min-width:44px;min-height:44px;display:grid;place-items:center;padding:0}
+.pidx{min-width:44px;min-height:44px;display:grid;place-items:center}
+.brand{padding:4px 4px 4px 0}
+</style>
 </head>
 <body>
 <main id="app" role="main"></main>
@@ -1382,7 +1405,7 @@ function prodCard(p){
 function vParts(){
   var sys=systemsLive();
   var cards=sys.map(function(s){
-    return '<div class="card mc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')"><div class="im" style="background:var(--ink)">'+(s.cover?'<img src="'+esc(s.cover)+'" loading="lazy">':'')+'</div><div class="bd"><b>'+esc(s.name)+'</b><p>'+s.count+' parts</p><span class="go">View parts ›</span></div></div>';
+    return '<div class="card mc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')"><div class="im" style="background:var(--ink)">'+(s.cover?'<img src="'+esc(s.cover)+'" alt="" loading="lazy">':'')+'</div><div class="bd"><b>'+esc(s.name)+'</b><p>'+s.count+' parts</p><span class="go">View parts ›</span></div></div>';
   }).join('');
   return nav({search:true})+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › Parts</div>'
     +'<section class="blk wrap"><div class="hd"><div><h2>Parts — browse by category</h2><div class="sub">'+STATE.products.length+' genuine parts across '+sys.length+' systems.</div></div><span class="link" onclick="go(\'diagrams\')">View exploded diagrams ›</span></div><div class="g4">'+cards+'</div></section>'+foot();
@@ -1419,7 +1442,7 @@ function vPart(id){
    +'<section class="page wrap"><div class="pd"><div class="pdmedia"><div class="big">'+(p.img?'<img id="ppMain" class="zoomable" title="Tap to zoom" onclick="zoom(this.src)" src="'+esc(p.img)+'" alt="'+esc(p.name)+'" loading="lazy">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
    +(function(){ var ph=[p.img].concat(p.gal||[]).filter(Boolean); if(ph.length<2) return '';
       return '<div class="pgal">'+ph.map(function(src,i){
-        return '<div class="pgt'+(i===0?' on':'')+'" onclick="ppSwap(this,\''+esc(src)+'\')"><img src="'+esc(src)+'" loading="lazy">'+(i===1?'<span class="pglab">PACKAGING</span>':'')+'</div>';
+        return '<div class="pgt'+(i===0?' on':'')+'" title="View photo '+(i+1)+'" onclick="ppSwap(this,\''+esc(src)+'\')"><img src="'+esc(src)+'" alt="" loading="lazy">'+(i===1?'<span class="pglab">PACKAGING</span>':'')+'</div>';
       }).join('')+'</div>'; })()
    +'</div>'
    +'<div>'+(p.brand?'<span class="chip g">'+((CFG.genuineLine)?'🟢 Genuine ':'')+esc(p.brand)+'</span> ':'')+'<h1 style="margin-top:8px">'+esc(p.name)+'</h1>'+(pn?'<div class="oembig"><span class="lb">OEM</span><b>'+esc(pn)+'</b>'+(p.sku?'<span class="skusml">SKU '+esc(p.sku)+'</span>':'')+'</div>':(p.sku?'<div class="mono" style="margin-top:4px">SKU: '+esc(p.sku)+'</div>':''))
@@ -1464,7 +1487,7 @@ function vModel(id){
   var m=(MODELS||[]).filter(function(x){return x.id===id;})[0]; if(!m) return go('');
   setBike(id);
   var g=galleryFor(id);
-  var thumbs=g.slice(0,4).map(function(src,i){return '<div class="ovthumb'+(i===0?' on':'')+'" data-src="'+src+'" onclick="ovMain(this)"><img src="'+src+'" loading="lazy"></div>';}).join('')
+  var thumbs=g.slice(0,4).map(function(src,i){return '<div class="ovthumb'+(i===0?' on':'')+'" title="View photo '+(i+1)+'" data-src="'+src+'" onclick="ovMain(this)"><img src="'+src+'" alt="" loading="lazy"></div>';}).join('')
     + (g.length>4?'<div class="ovthumb more">+'+(g.length-4)+'<span>View more</span></div>':'');
   var ks=(m.keySpecs||[]).slice(0,4).map(function(k){return '<div class="ks1"><b>'+esc(k.v)+'</b><span>'+esc(k.l)+'</span></div>';}).join('');
   var tabs=[['Overview','ov-top'],['Systems & Parts','ov-sys'],['Diagrams','diagrams'],['Specifications','ov-spec']];
@@ -1472,8 +1495,8 @@ function vModel(id){
     var oc = t[1]==='diagrams'?'go(\'diagrams\')':'scrollTo2(\''+t[1]+'\')';
     return '<span class="tab'+(i===0?' on':'')+'" onclick="'+oc+'">'+esc(t[0])+'</span>';
   }).join('');
-  var sys=systemsLive().map(function(s){return '<div class="sc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')">'+(s.cover?'<img src="'+esc(s.cover)+'" loading="lazy">':'')+'<div class="m"><b>'+esc(s.name)+'</b></div></div>';}).join('');
-  var common=findParts(['clutch','chain','brake shoe'],3).map(function(p){return '<a class="cmp" onclick="go(\'part/'+sid(p.id)+'\')">'+(p.img?'<img src="'+esc(p.img)+'" loading="lazy">':'')+'<span>'+esc(p.name)+'</span></a>';}).join('');
+  var sys=systemsLive().map(function(s){return '<div class="sc" onclick="go(\'system/'+encodeURIComponent(s.name)+'\')">'+(s.cover?'<img src="'+esc(s.cover)+'" alt="" loading="lazy">':'')+'<div class="m"><b>'+esc(s.name)+'</b></div></div>';}).join('');
+  var common=findParts(['clutch','chain','brake shoe'],3).map(function(p){return '<a class="cmp" onclick="go(\'part/'+sid(p.id)+'\')">'+(p.img?'<img src="'+esc(p.img)+'" alt="" loading="lazy">':'')+'<span>'+esc(p.name)+'</span></a>';}).join('');
   var mineParts=STATE.products.filter(function(p){return nk(String(p.kw||'').split('|')[0])===nk(m.catName||m.name);});
   var popSrc=(mineParts.length?mineParts:STATE.products.filter(function(p){return fitsBike(p)!==false;})).slice();
   var pop=popSrc.sort(function(a,b){return (b.price||0)-(a.price||0);}).slice(0,6).map(prodCard).join('');
@@ -1489,7 +1512,7 @@ function vModel(id){
        +'<div class="mybike"><i class="fa fa-tachometer"></i> Saved as <b>your motorcycle</b> — parts are now checked to fit '+esc(m.name)+'.</div>'
        +'<a class="btn btn-p" onclick="go(\'parts\')">Explore Parts & Diagrams ›</a> <a class="btn btn-o" onclick="go(\'ai\')"><i class="fa fa-comments"></i> Describe a problem</a>'
      +'</div>'
-     +'<div class="ovh-media"><div class="ovh-main">'+(main?'<img id="ovMain" class="zoomable" title="Click to zoom" onclick="zoom(this.src)" onerror="mimgErr(this,\''+sid(m.id)+'\')" src="'+main+'" loading="lazy"><span class="zhint"><i class="fa fa-search-plus"></i> Zoom</span>':'')+'</div><div class="ovh-thumbs">'+thumbs+'</div></div>'
+     +'<div class="ovh-media"><div class="ovh-main">'+(main?'<img id="ovMain" class="zoomable" alt="'+esc(m.name)+'" title="Click to zoom" onclick="zoom(this.src)" onerror="mimgErr(this,\''+sid(m.id)+'\')" src="'+main+'" loading="lazy"><span class="zhint"><i class="fa fa-search-plus"></i> Zoom</span>':'')+'</div><div class="ovh-thumbs">'+thumbs+'</div></div>'
    +'</div></section>'
    +'<div class="wrap"><nav class="tabs">'+tabH+'</nav></div>'
    +'<section class="page wrap ov-body">'
@@ -1636,7 +1659,7 @@ function vDiagram(plateNo){
     var img=pr&&pr.img;
     var inS=pr?(pr.stock===null||pr.stock>0):null;
     var open=pr?('onclick="go(\'part/'+sid(pr.id)+'\')"'):'';
-    var thumb=img?'<img src="'+esc(img)+'" loading="lazy">':'<span class="pno-b">'+esc(x.no)+'</span>';
+    var thumb=img?'<img src="'+esc(img)+'" alt="" loading="lazy">':'<span class="pno-b">'+esc(x.no)+'</span>';
     var priceHtml=pr?('<b>'+money(pr.price)+'</b>'+(inS!=null?'<span class="stock '+(inS?'y':'n')+'">'+(inS?'In stock':'On order')+'</span>':'')):'<span class="tbd">Ask us</span>';
     var add=pr?('<button class="miniadd" onclick="event.stopPropagation();cartAdd(\''+String(pr.id).replace(/\x27/g,"")+'\')" title="Add to cart"><i class="fa fa-plus"></i> Add</button>'):'';
     return '<div class="prow" '+open+(pr?' role="button"':'')+'>'
@@ -1650,7 +1673,7 @@ function vDiagram(plateNo){
   return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › <a onclick="go(\'parts\')">Parts</a> › Diagrams › '+esc(cur.system)+'</div>'
    +'<section class="page wrap"><div class="diag">'
    +'<aside class="dnav">'+navHtml+'</aside>'
-   +'<div class="dframe">'+(img?'<img src="'+esc(img)+'" loading="lazy">':'<div class="empty">Diagram appears once parts are imported.</div>')+'<span class="dbadge">Plate '+cur.plate+'</span></div>'
+   +'<div class="dframe">'+(img?'<img src="'+esc(img)+'" alt="Exploded diagram" loading="lazy">':'<div class="empty">Diagram appears once parts are imported.</div>')+'<span class="dbadge">Plate '+cur.plate+'</span></div>'
    +'<div class="dlist"><div class="dtitle"><b>'+esc(cur.system)+' › '+esc(cur.name)+'</b><div class="mono">Plate '+cur.plate+' · '+(cur.parts||[]).length+' parts · tap any part to view or add it</div></div>'
    +'<div class="plist">'+rows+'</div></div>'
    +'</div></section>'+foot();
