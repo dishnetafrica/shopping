@@ -6,39 +6,57 @@ use App\Models\Tenant;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Branded PRODUCT CATALOGUE PDF — a photo-first brochure the wholesaler sends to customers.
+ * Branded PRODUCT CATALOGUE PDF — a photo-first document the business sends on WhatsApp.
  *
- * v3 "rich" layout (same public API as v1/v2). Every rich element is optional and degrades
- * gracefully, so the catalogue always renders even with zero setup:
+ * v2.0 "design system" release. Every page is composed from ONE set of tokens and reusable
+ * components — pages are never styled independently:
  *
- *   cover        photographic cover when the `catalog_cover_image` setting is set (hero photo,
- *                audience checklist, product count, QR) — else the clean brand-band cover.
- *   overview     "Explore our categories" page (photo card per category + page numbers) when
- *                there are ≥2 categories; single-category catalogues keep the index on the cover.
- *   category     first page opens with a hero band (name, count, top-seller mini-strip, hero
- *                photo) + 6 cards; continuation pages carry 9 cards.
- *   badges       BEST SELLER / HOT DEAL chips on cards, driven by the `catalog_best_sellers`
- *                and `catalog_hot_deals` settings (comma-separated SKUs or exact names).
- *   QR           WhatsApp order QR (wa.me link) — `catalog_qr_image` setting if provided, else
- *                fetched once from quickchart.io and cached; omitted silently if unreachable.
- *   back page    promo band ("Need a product you don't see?" + optional `catalog_promo_image`),
- *                3 ordering steps, big WhatsApp block, QR.
+ *   tokens       C_* colour constants (dark green / white / black / light grey + WhatsApp
+ *                green for order elements + red STRICTLY for promotions) and a 3-weight
+ *                Inter type scale (400 body / 600 medium / 800 display) registered from
+ *                public/fonts/inter/*.ttf — automatic DejaVu fallback when unavailable.
+ *   components   pageHeader, pageFooter (WhatsApp + QR + validity on every page), catBand,
+ *                card (product), chip/badge/stockChip, catChip (category monogram),
+ *                promoBand, bikeStrip (AUTO_PARTS only), infoGrid.
+ *   pages        cover (uploaded portrait art still becomes the ENTIRE page untouched;
+ *                the generated cover is a dark-green plate with hero photo + QR bar),
+ *                index, category intro / slim hero, 3×3 product pages, OEM cross-reference
+ *                (auto-appears when ≥6 parts carry OEM numbers), how-to-order guide,
+ *                closing contact page.
  *
- * Inherited from v2 (all verified against dompdf 3): strict page budgets (no orphan/blank
- * pages), correct index page numbers, "Page N of T" numbering, photos pre-fetched in parallel
- * and normalised onto identical 4:3 white canvases (disk-cached, data-URI embedded — a 33 MB
- * v1 document becomes ~3-4 MB), deterministic two-line names, equal-height cards, font
- * subsetting. dompdf has no flex/grid engine, so everything is tables + block flow.
- * Renders only; reads product data and prices as-is. Degrades gracefully without GD.
+ * Inherited and unchanged: the 3-stage failure ladder (rich → thumbs-only → plain), strict
+ * page budgets, parallel photo pre-fetch normalised onto identical 4:3 white canvases
+ * (disk-cached, data-URI embedded), deterministic two-line names, font subsetting,
+ * "Page N of T" numbering. dompdf has no flex/grid engine, so everything is tables + block
+ * flow. Renders only; reads product data and prices as-is. Degrades gracefully without GD.
  */
 final class CatalogRenderer
 {
     private const PER_PAGE = 9;           // product grid pages: 3 × 3
     private const INTRO_MIN = 7;          // categories this big open with a full intro page
                                           // (slim-band pages hold ≤6 cards — band + 3 card rows overflows A4)
-    private const BRAND = '#16a34a';
-    private const BRAND_DARK = '#0f7a37';
-    private const INK = '#0f172a';
+
+    // ── design tokens: colour (the ONLY colours any component may use) ──
+    private const C_GREEN_DEEP = '#0B3D20';   // cover / contact plates, order card
+    private const C_GREEN = '#14532D';        // bands, titles, prices
+    private const C_GREEN_MID = '#175C36';    // chips on deep green
+    private const C_WA = '#25D366';           // WhatsApp green — order elements only
+    private const C_TINT = '#EAF5EE';         // light green surface
+    private const C_TINT_LINE = '#CFE6D8';
+    private const C_RED = '#DC2626';          // promotions ONLY (HOT DEAL)
+    private const C_INK = '#111827';
+    private const C_GREY = '#6B7280';
+    private const C_FAINT = '#9CA3AF';
+    private const C_LINE = '#E5E7EB';
+    private const C_WELL = '#F7F8F8';         // image wells / soft cards
+    private const C_BLUE = '#1D4ED8';         // OEM chip
+    private const C_BLUE_BG = '#EFF6FF';
+    private const C_BLUE_LINE = '#BFDBFE';
+
+    // legacy aliases (external callers / old settings docs reference these names)
+    private const BRAND = self::C_GREEN;
+    private const BRAND_DARK = self::C_GREEN_DEEP;
+    private const INK = self::C_INK;
 
     private const THUMB_W = 440;          // 4:3 canvas every photo is normalised onto
     private const THUMB_H = 330;
@@ -70,6 +88,17 @@ final class CatalogRenderer
         // PHP's default 30-60s web time limit kill the request halfway (fatal 500, uncatchable).
         @set_time_limit(300);
 
+        // The Dompdf instance is created BEFORE the HTML so the Inter registration outcome can
+        // steer the CSS font stacks (automatic DejaVu fallback when the TTFs are missing).
+        try {
+            $dompdf = $this->makeDompdf();
+        } catch (\Throwable $e) {
+            \Log::warning('CatalogRenderer: dompdf init failed: ' . $e->getMessage());
+
+            return null;
+        }
+        $fonts = $this->registerFonts($dompdf);
+
         // Three-stage ladder. Each stage narrows the failure domain and is logged with file:line,
         // so laravel.log names the broken feature while the customer still gets a catalogue:
         //   1. rich        thumbnails + cover art + QR + badges
@@ -86,14 +115,14 @@ final class CatalogRenderer
 
         $html = null;
         try {
-            $html = $this->html($tenant, $groups, $currency, $withPrices, $thumbs);
+            $html = $this->html($tenant, $groups, $currency, $withPrices, $thumbs, false, $fonts);
         } catch (\Throwable $e) {
             \Log::warning('CatalogRenderer rich layout failed: ' . $e->getMessage()
                 . ' @ ' . basename($e->getFile()) . ':' . $e->getLine() . ' — retrying without artwork/QR/badges');
         }
         if ($html === null) {
             try {
-                $html = $this->html($tenant, $groups, $currency, $withPrices, $thumbs, true);
+                $html = $this->html($tenant, $groups, $currency, $withPrices, $thumbs, true, $fonts);
             } catch (\Throwable $e) {
                 \Log::warning('CatalogRenderer thumbs-only layout failed: ' . $e->getMessage()
                     . ' @ ' . basename($e->getFile()) . ':' . $e->getLine() . ' — retrying plain');
@@ -102,15 +131,8 @@ final class CatalogRenderer
 
         try {
             if ($html === null) {
-                $html = $this->html($tenant, $groups, $currency, $withPrices, [], true);
+                $html = $this->html($tenant, $groups, $currency, $withPrices, [], true, $fonts);
             }
-            $dompdf = new \Dompdf\Dompdf([
-                'isRemoteEnabled' => true,
-                'isHtml5ParserEnabled' => true,
-                // Embed only the glyphs actually used instead of whole font files — shaves a few
-                // hundred KB off every document for free.
-                'isFontSubsettingEnabled' => true,
-            ]);
             $dompdf->loadHtml($html);
             $dompdf->setPaper('A4');
             $dompdf->render();
@@ -118,7 +140,7 @@ final class CatalogRenderer
             // "Page N of T" on every page except the cover.
             try {
                 $canvas = $dompdf->getCanvas();
-                $font = $dompdf->getFontMetrics()->getFont('DejaVu Sans', 'normal');
+                $font = $dompdf->getFontMetrics()->getFont($fonts ? 'inter' : 'DejaVu Sans', 'normal');
                 $w = $canvas->get_width();
                 $canvas->page_script(function ($pageNumber, $pageCount, $c) use ($font, $w) {
                     if ($pageNumber > 1) {
@@ -143,6 +165,68 @@ final class CatalogRenderer
         try { Storage::disk('public')->put($path, $pdf); } catch (\Throwable $e) { /* best-effort */ }
 
         return ['path' => $path, 'url' => $this->url($path), 'b64' => base64_encode($pdf), 'fileName' => $fileName];
+    }
+
+    /** Dompdf configured for the design system: subsetting on, writable font dir for Inter. */
+    private function makeDompdf(): \Dompdf\Dompdf
+    {
+        $opts = [
+            'isRemoteEnabled' => true,
+            'isHtml5ParserEnabled' => true,
+            // Embed only the glyphs actually used instead of whole font files — shaves a few
+            // hundred KB off every document for free.
+            'isFontSubsettingEnabled' => true,
+        ];
+        try {
+            $fontDir = storage_path('fonts/dompdf');
+            if (! is_dir($fontDir)) {
+                @mkdir($fontDir, 0775, true);
+            }
+            if (is_dir($fontDir) && is_writable($fontDir)) {
+                $opts['fontDir'] = $fontDir;
+                $opts['fontCache'] = $fontDir;
+                $opts['chroot'] = [public_path('fonts')];
+            }
+        } catch (\Throwable $e) {
+            // no writable font dir → dompdf defaults (DejaVu only), still fully functional
+        }
+
+        return new \Dompdf\Dompdf($opts);
+    }
+
+    /**
+     * Register the Inter family (400 body / 600 medium / 800 display — the design system's
+     * three weights) from public/fonts/inter. Returns false when anything is missing or
+     * unwritable, and every stylesheet silently falls back to DejaVu Sans.
+     */
+    private function registerFonts(\Dompdf\Dompdf $dompdf): bool
+    {
+        try {
+            $dir = public_path('fonts/inter');
+            $files = [
+                ['inter', 'normal', $dir . '/Inter-400.ttf'],
+                ['inter', 'bold', $dir . '/Inter-800.ttf'],
+                ['intermd', 'normal', $dir . '/Inter-600.ttf'],
+                ['intermd', 'bold', $dir . '/Inter-800.ttf'],
+            ];
+            foreach ($files as [, , $f]) {
+                if (! is_file($f)) {
+                    return false;
+                }
+            }
+            $fm = $dompdf->getFontMetrics();
+            foreach ($files as [$family, $weight, $f]) {
+                if (! $fm->registerFont(['family' => $family, 'style' => 'normal', 'weight' => $weight], 'file://' . $f)) {
+                    return false;
+                }
+            }
+
+            return true;
+        } catch (\Throwable $e) {
+            \Log::warning('CatalogRenderer: Inter registration failed (' . $e->getMessage() . ') — using DejaVu');
+
+            return false;
+        }
     }
 
     /**
@@ -185,6 +269,7 @@ final class CatalogRenderer
                     'oem' => (string) ($p->oem_number ?? ''),      // v4.7.7 — manufacturer part no. (mechanics order by this)
                     'brand' => (string) ($p->brand ?? ''),         // v4.7.7 — powers the per-card "Fits" line
                     'image' => (string) ($p->image_url ?: ''),
+                    'stock' => $p->stock === null ? null : (int) $p->stock,   // v2.0 — stock chip (same rule as the storefront)
                 ];
             }
             ksort($grouped, SORT_NATURAL | SORT_FLAG_CASE);
@@ -251,6 +336,7 @@ final class CatalogRenderer
                     'oem' => (string) ($p->oem_number ?? ''),      // v4.7.7
                     'brand' => (string) ($p->brand ?? ''),         // v4.7.7
                     'image' => (string) ($p->image_url ?: ''),
+                    'stock' => $p->stock === null ? null : (int) $p->stock,   // v2.0
                 ];
             }
 
@@ -279,6 +365,16 @@ final class CatalogRenderer
         $sym = $cur === 'USD' ? '$' : '';
 
         return $sym . number_format($n, $dec) . ($sym ? '' : ' ' . $cur);
+    }
+
+    /** [big, small] halves of a price for the card price row ("12,500" + "UGX"). */
+    private function moneyParts(float $n, string $cur): array
+    {
+        if ($cur === 'USD') {
+            return ['$' . number_format($n, 2), ''];
+        }
+
+        return [number_format($n, 0), $cur];
     }
 
     // ─────────────────────────── photo pipeline ───────────────────────────
@@ -668,10 +764,99 @@ final class CatalogRenderer
             300, true);
     }
 
+    // ─────────────────────────── AUTO_PARTS extras ───────────────────────────
+
+    /**
+     * Real motorcycle photos for parts tenants — the same images the storefront ships
+     * (public/assets/sfm, referenced by the built SPA's IMG/MODELS data). Returns up to
+     * $max entries [name, dataUri], deduped by file (some models share a photo), [] for
+     * every other vertical or on ANY failure — grocery catalogues are untouched.
+     *
+     * @return array<int,array{0:string,1:string}>
+     */
+    private function bikePhotos(Tenant $tenant, int $max = 4): array
+    {
+        try {
+            if (! class_exists(\App\Support\Vertical::class)
+                || \App\Support\Vertical::of($tenant) !== \App\Support\Vertical::AUTO_PARTS) {
+                return [];
+            }
+            $spa = resource_path('storefront/autoparts.html');
+            if (! is_file($spa)) {
+                return [];
+            }
+            $s = (string) file_get_contents($spa);
+            if (! preg_match('/var IMG = (\{.*?\});/s', $s, $mi) || ! preg_match('/var MODELS = (\[.*?\]);\s*\n/s', $s, $mm)) {
+                return [];
+            }
+            $img = json_decode($mi[1], true);
+            $models = json_decode($mm[1], true);
+            if (! is_array($img) || ! is_array($models)) {
+                return [];
+            }
+
+            $out = [];
+            $seen = [];
+            foreach ($models as $m) {
+                if (count($out) >= $max) {
+                    break;
+                }
+                $id = (string) ($m['id'] ?? '');
+                $rel = (string) ($img[$id] ?? '');
+                if ($id === '' || $rel === '' || isset($seen[$rel]) || ! str_starts_with($rel, '/assets/')) {
+                    continue;
+                }
+                $file = public_path(ltrim($rel, '/'));
+                if (! is_file($file)) {
+                    continue;
+                }
+                $uri = $this->asset($tenant, $file, 360);
+                if ($uri === '') {
+                    continue;
+                }
+                $seen[$rel] = true;
+                $out[] = [(string) ($m['name'] ?? $id), $uri];
+            }
+
+            return $out;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /** The storefront's hero motorcycle shot for the generated cover ('' when unavailable). */
+    private function bikeHero(Tenant $tenant): string
+    {
+        try {
+            if (! class_exists(\App\Support\Vertical::class)
+                || \App\Support\Vertical::of($tenant) !== \App\Support\Vertical::AUTO_PARTS) {
+                return '';
+            }
+            $spa = resource_path('storefront/autoparts.html');
+            if (! is_file($spa)) {
+                return '';
+            }
+            $s = (string) file_get_contents($spa);
+            if (! preg_match('/var IMG = (\{.*?\});/s', $s, $mi)) {
+                return '';
+            }
+            $img = json_decode($mi[1], true);
+            $rel = is_array($img) ? (string) ($img['hero'] ?? '') : '';
+            if ($rel === '' || ! str_starts_with($rel, '/assets/')) {
+                return '';
+            }
+            $file = public_path(ltrim($rel, '/'));
+
+            return is_file($file) ? $this->asset($tenant, $file, 620) : '';
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
     // ─────────────────────────── document ───────────────────────────
 
     /** @param array<int,array<string,mixed>> $groups */
-    private function html(Tenant $tenant, array $groups, string $currency, bool $withPrices, array $thumbs, bool $plain = false): string
+    private function html(Tenant $tenant, array $groups, string $currency, bool $withPrices, array $thumbs, bool $plain = false, bool $fonts = false): string
     {
         $company = e((string) $tenant->name);
         $tagline = e((string) ($tenant->setting('tagline', '') ?: $tenant->setting('address', '') ?: ''));
@@ -689,19 +874,28 @@ final class CatalogRenderer
         $logo = (string) $tenant->setting('logo', '');
         $date = now()->format('F Y');
         $dateFull = now()->format('d M Y');
-        $brand = self::BRAND; $brandD = self::BRAND_DARK; $ink = self::INK;
+        $version = 'v' . now()->format('Y.m');
+
+        try {
+            $isParts = class_exists(\App\Support\Vertical::class)
+                && \App\Support\Vertical::of($tenant) === \App\Support\Vertical::AUTO_PARTS;
+        } catch (\Throwable $e) {
+            $isParts = false;
+        }
 
         $badges = $plain ? [] : $this->badgeMap($tenant);
         [$coverImg, $coverMode] = $plain ? ['', 'hero'] : $this->coverAsset($tenant, (string) $tenant->setting('catalog_cover_image', ''));
         $promoImg = $plain ? '' : $this->asset($tenant, (string) $tenant->setting('catalog_promo_image', ''), 800);
         $qr = $plain ? '' : $this->qr($tenant, $phone);
+        $bikes = $plain ? [] : $this->bikePhotos($tenant);
+        $bikeHero = $plain ? '' : $this->bikeHero($tenant);
         $totalItems = 0;
         foreach ($groups as $g) $totalItems += count($g['items']);
 
-        // --- pagination plan: cover(1) [overview(2)] categories... back page(last) ---
-        $showOverview = count($groups) >= 2;
+        // --- pagination plan: cover(1) [index(2)] categories… [cross-ref] guide, contact ---
+        $showIndex = count($groups) >= 2;
         $plan = [];
-        $page = $showOverview ? 3 : 2;
+        $page = $showIndex ? 3 : 2;
         foreach ($groups as $g) {
             $items = $g['items'];
             $chunks = $items ? array_chunk($items, self::PER_PAGE) : [[]];
@@ -711,39 +905,61 @@ final class CatalogRenderer
             $page += count($chunks) + ($intro ? 1 : 0);
         }
 
+        // OEM cross-reference (auto: only when enough parts carry manufacturer numbers)
+        $refs = [];
+        foreach ($plan as $p) {
+            $pg = $p['startPage'] + ($p['intro'] ? 1 : 0);
+            foreach ($p['chunks'] as $ci => $chunk) {
+                foreach ($chunk as $it) {
+                    $o = trim((string) ($it['oem'] ?? ''));
+                    if ($o !== '') {
+                        $refs[] = ['oem' => $o, 'name' => (string) $it['name'], 'sku' => (string) ($it['sku'] ?? ''), 'page' => $pg + $ci];
+                    }
+                }
+            }
+        }
+        usort($refs, fn ($a, $b) => strnatcasecmp($a['oem'], $b['oem']));
+        $crossPages = count($refs) >= 6 ? array_chunk($refs, 48) : [];
+
+        $footQr = $plain ? '' : $qr;
+        $foot = fn () => $this->pageFooter($company, $phone, $currency, $dateFull, $withPrices, $webText, $webHref, $version, $footQr);
+
         $cover = $this->coverHtml($tenant, $plan, $company, $tagline, $logo, $phone, $email,
-            $date, $coverImg, $qr, $totalItems, $showOverview, $webText, $webHref, $coverMode);
-        $overview = $showOverview
-            ? $this->overviewHtml($company, $logo, $date, $plan, $thumbs, $brandD, $promoImg)
+            $date, $coverImg, $qr, $totalItems, $showIndex, $webText, $webHref, $coverMode, $bikeHero);
+        $index = $showIndex
+            ? $this->indexHtml($company, $logo, $date, $plan, $bikes, $promoImg, $totalItems, count($crossPages) > 0, $isParts, $foot)
             : '';
 
         // --- category pages ---
         $body = '';
         foreach ($plan as $p) {
             if ($p['intro']) {
-                $body .= $this->categoryIntro($p, $thumbs, $badges, $currency, $withPrices,
-                    $company, $logo, $date, $phone, $dateFull);
+                $body .= $this->categoryIntro($p, $thumbs, $badges, $currency, $withPrices, $company, $logo, $date, $isParts, $foot);
             }
             $total = count($p['chunks']);
             foreach ($p['chunks'] as $ci => $items) {
-                $contLabel = $total > 1 ? ' <span style="font-weight:normal;color:#bbf7d0;font-size:10px">&nbsp;' . ($ci + 1) . ' / ' . $total . '</span>' : '';
                 $head = (! $p['intro'] && $ci === 0)
                     ? $this->categoryHero($p, $thumbs, $badges)
-                    : '<table class="catband"><tr><td>' . e($p['category']) . $contLabel . '</td>'
-                        . '<td style="text-align:right"><span class="pill">' . (int) $p['count'] . ' products</span></td></tr></table>';
+                    : $this->catBand($p['category'], $p['count'] . ' products', $total > 1 ? [$ci + 1, $total] : null);
                 $body .= '<div class="page">'
-                    . $this->pageHeader($company, $logo, $date, $brandD)
+                    . $this->pageHeader($company, $logo, $date)
                     . $head
                     . $this->grid($items, $currency, $withPrices, $thumbs, $badges)
-                    . $this->pageFooter($phone, $currency, $dateFull, $withPrices, $webText, $webHref)
+                    . $foot()
                     . '</div>';
             }
+        }
+
+        // --- OEM cross-reference pages ---
+        $cross = '';
+        foreach ($crossPages as $ci => $chunk) {
+            $cross .= $this->crossRefHtml($chunk, $company, $logo, $date, $ci + 1, count($crossPages), $foot);
         }
 
         $fromCity = trim((string) $tenant->setting('delivery_from_city', 'Juba')) ?: 'Juba';
         $deliveryLine = trim((string) $tenant->setting('delivery_note', ''))
             ?: 'Free delivery within ' . $fromCity . ' — outside ' . $fromCity . ', transport is confirmed at order';
-        // v4.7.7 — business details for the back page (review #8). Only filled settings print.
+        // v4.7.7 — business details for the back pages. Only filled settings print.
         $infoRows = array_values(array_filter([
             ['Business hours',  (string) $tenant->setting('business_hours', '')],
             ['Delivery areas',  (string) $tenant->setting('delivery_areas', '')],
@@ -751,102 +967,152 @@ final class CatalogRenderer
             ['Email',           $email],
             ['Location',        trim((string) $tenant->setting('address', '') . ' ' . (string) $tenant->setting('city', ''))],
         ], fn ($r) => trim($r[1]) !== ''));
-        $back = $this->backHtml($company, $logo, $date, $phone, $email, $currency, $dateFull,
-            $withPrices, $showOverview ? '' : $promoImg, $qr, ! $showOverview, $webText, $webHref,
-            $deliveryLine, $infoRows, trim((string) $tenant->setting('catalog_badge', '')));
+        $guide = $this->orderGuideHtml($company, $logo, $date, $phone, $email, $qr,
+            $showIndex ? '' : $promoImg, ! $showIndex, $webText, $webHref, $deliveryLine, $infoRows,
+            trim((string) $tenant->setting('catalog_badge', '')), $isParts, $foot);
+        $contact = $this->contactHtml($tenant, $company, $tagline, $logo, $phone, $email, $qr,
+            $webText, $webHref, $infoRows, $currency, $dateFull, $withPrices, $version, $date);
+
+        // ── stylesheet: every rule reads the token constants — components share one system ──
+        $gd = self::C_GREEN_DEEP; $g = self::C_GREEN; $gm = self::C_GREEN_MID; $wa = self::C_WA;
+        $tint = self::C_TINT; $tintLn = self::C_TINT_LINE; $ink = self::C_INK; $gy = self::C_GREY;
+        $ft = self::C_FAINT; $ln = self::C_LINE; $wl = self::C_WELL;
+        $blue = self::C_BLUE; $blueBg = self::C_BLUE_BG; $blueLn = self::C_BLUE_LINE;
+        $fB = $fonts ? '"inter","DejaVu Sans",sans-serif' : '"DejaVu Sans",Arial,sans-serif';
+        $fM = $fonts ? '"intermd","DejaVu Sans",sans-serif' : '"DejaVu Sans",Arial,sans-serif';
 
         return <<<HTML
 <!doctype html><html><head><meta charset="utf-8"><style>
-@page { margin: 26px 30px 34px; }
-*{font-family:"DejaVu Sans",Arial,sans-serif;}
-body{margin:0;padding:0;color:{$ink};}
-.band{width:100%;border-collapse:collapse;background:{$brand};border-radius:12px;}
-.ctitle{font-size:27px;font-weight:bold;letter-spacing:5px;color:{$ink};}
-.ctitle2{font-size:31px;font-weight:bold;letter-spacing:1px;color:{$ink};line-height:1.12;}
-.datechip{display:inline-block;background:#f0fdf4;border:1px solid #bbf7d0;color:{$brandD};font-size:10.5px;font-weight:bold;padding:5px 14px;border-radius:12px;letter-spacing:1px;}
-table.idx{border-collapse:collapse;width:100%;border:1px solid #e2e8f0;border-radius:8px;}
-table.idx th{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;border-bottom:2px solid {$brand};background:#ffffff;}
-.coverfoot{width:100%;border-collapse:collapse;margin-top:26px;border-top:1px solid #e2e8f0;}
-.coverfoot td{padding-top:12px;text-align:center;font-size:9.5px;color:#94a3b8;font-weight:bold;}
+@page { margin: 24px 30px 34px; }
+*{font-family:{$fB};}
+.m, .m div, .m td, .m span{font-family:{$fM};}
+body{margin:0;padding:0;color:{$ink};font-size:10px;}
+.page{page-break-before:always;}
+
+/* ── plates & bands ── */
+.plate{width:100%;border-collapse:collapse;background:{$gd};border-radius:16px;}
+table.catband{width:100%;border-collapse:collapse;margin:10px 0 2px;background:{$g};border-radius:10px;}
+table.catband td{padding:9px 13px;vertical-align:middle;color:#ffffff;}
+.cbname{font-size:15px;font-weight:bold;letter-spacing:-.2px;}
+.cbmeta{text-align:right;font-size:8.5px;color:{$tint};}
+.eyebrow{font-size:8px;font-weight:bold;letter-spacing:2.5px;color:{$wa};}
+.eyebrowg{font-size:8px;font-weight:bold;letter-spacing:2.5px;color:{$g};}
+
+/* ── page chrome ── */
+.phead{width:100%;border-collapse:collapse;border-bottom:2px solid {$g};}
+.phead td{padding:0 0 6px;vertical-align:bottom;}
+.pcompany{font-size:12.5px;font-weight:bold;}
+.pdoc{font-size:8px;font-weight:bold;letter-spacing:2px;color:{$g};text-transform:uppercase;}
+.pdate{font-size:8px;color:{$ft};}
+.pfoot{width:100%;border-collapse:collapse;border-top:1px solid {$ln};margin-top:9px;}
+.pfoot td{padding-top:6px;font-size:7.5px;color:{$ft};vertical-align:middle;}
+.pfootwa{font-size:8.5px;font-weight:bold;color:{$g};}
+
+/* ── chips & badges ── */
+.pill{background:#ffffff;color:{$g};font-size:8.5px;font-weight:bold;padding:3px 10px;border-radius:9px;letter-spacing:.4px;}
+.pillg{background:{$g};color:#ffffff;font-size:8.5px;font-weight:bold;padding:3px 10px;border-radius:9px;letter-spacing:.4px;}
+.pillt{background:{$tint};border:1px solid {$tintLn};color:{$g};font-size:8.5px;font-weight:bold;padding:3px 10px;border-radius:9px;}
+.badge{display:inline-block;color:#ffffff;font-size:7px;font-weight:bold;letter-spacing:.8px;padding:2px 7px;border-radius:8px;}
+.oem{display:inline-block;background:{$blueBg};border:1px solid {$blueLn};color:{$blue};font-size:7.5px;font-weight:bold;letter-spacing:.4px;padding:1px 6px;border-radius:7px;}
+.stok{display:inline-block;font-size:6.5px;font-weight:bold;letter-spacing:.6px;padding:2px 6px;border-radius:7px;}
+.stok-in{background:{$tint};color:{$g};}
+.stok-low{background:#F3F4F6;color:{$gy};}
+.catchip{display:inline-block;width:20px;background:{$tint};border:1px solid {$tintLn};border-radius:6px;color:{$g};font-size:8px;font-weight:bold;text-align:center;padding:4px 0;}
+
+/* ── product card ── */
+table.grid{width:100%;border-collapse:separate;border-spacing:8px;table-layout:fixed;}
+td.cell{width:33%;border:1px solid {$ln};border-radius:10px;vertical-align:top;padding:0;background:#ffffff;}
+td.cellpad{border:none;background:none;}
+.bstrip{padding:5px 7px 0;}
+.bstrip table{width:100%;border-collapse:collapse;}
+table.phw{width:100%;border-collapse:collapse;}
+table.phw td{height:138px;text-align:center;vertical-align:middle;padding:0 4px;background:#ffffff;}
+table.phw img{max-height:132px;max-width:100%;}
+.noimg{display:inline-block;color:{$ft};font-size:8px;font-weight:bold;letter-spacing:1.5px;border:1px dashed {$ln};border-radius:6px;padding:22px 16px;background:{$wl};}
+.pbody{padding:6px 9px 8px;border-top:1px solid #F3F4F6;}
+.pn1{font-size:10.5px;height:15px;overflow:hidden;}
+.pu{font-size:8px;color:{$gy};height:14px;overflow:hidden;margin-top:2px;}
+.pfits{font-size:8px;color:{$g};font-weight:bold;height:12px;overflow:hidden;margin-top:1px;}
+table.prow{width:100%;border-collapse:collapse;margin-top:5px;border-top:1px solid #F3F4F6;}
+table.prow td{padding-top:5px;vertical-align:bottom;}
+.pr{color:{$g};font-weight:bold;font-size:13.5px;white-space:nowrap;}
+.prc{font-size:7px;color:{$ft};font-weight:bold;}
+.pfrom{font-size:6.5px;color:{$ft};font-weight:bold;letter-spacing:.5px;}
+.sku{text-align:right;font-size:7.5px;color:{$ft};}
+
+/* ── index / hero / intro ── */
+table.idx{border-collapse:collapse;width:100%;}
+table.idx td{border-bottom:1px solid #F3F4F6;padding:7px 4px;vertical-align:middle;}
+.idxn{font-size:10.5px;font-weight:bold;}
+.idxc{font-size:8px;color:{$ft};}
+.idxp{text-align:right;font-size:10px;font-weight:bold;color:{$g};white-space:nowrap;}
+table.hero{width:100%;border-collapse:collapse;margin:12px 0 4px;background:{$g};border-radius:12px;}
+table.hero td{padding:13px 16px;vertical-align:middle;}
+.heroname{font-size:19px;font-weight:bold;letter-spacing:-.3px;color:#ffffff;}
+table.ihero{width:100%;border-collapse:collapse;margin:12px 0 4px;background:{$gd};border-radius:16px;}
+.ts{font-size:7.5px;font-weight:bold;letter-spacing:2px;color:{$tint};}
+table.tsrow{border-collapse:separate;border-spacing:6px 0;margin-top:8px;}
+table.tsrow td{background:#ffffff;border-radius:8px;padding:3px;}
+table.tsrow img{height:40px;max-width:52px;}
+.heroimg{background:#ffffff;border-radius:10px;padding:6px;}
+.wcard{background:#ffffff;border-radius:12px;padding:8px;}
+
+/* ── strips & panels ── */
+table.feat{width:100%;border-collapse:collapse;margin-top:12px;background:{$wl};border:1px solid {$ln};border-radius:10px;}
+table.feat td{padding:9px 12px;font-size:8.5px;color:{$gy};font-weight:bold;}
+.promo{width:100%;border-collapse:collapse;background:{$gd};border-radius:12px;margin:12px 0 0;}
+.promo td{padding:14px 18px;vertical-align:middle;}
+.promoimg img{max-height:76px;max-width:150px;border-radius:6px;}
+table.bikes{width:100%;border-collapse:separate;border-spacing:7px 0;table-layout:fixed;}
+td.bike{background:{$wl};border:1px solid {$ln};border-radius:10px;text-align:center;padding:8px 4px 7px;}
+td.bike img{max-height:74px;max-width:100%;border-radius:6px;}
+.bikename{font-size:8px;font-weight:bold;margin-top:5px;color:{$ink};}
+.qrbox{background:#ffffff;border-radius:8px;padding:5px;display:inline-block;}
+.statv{font-size:20px;font-weight:bold;color:#ffffff;}
+.statl{font-size:7px;font-weight:bold;letter-spacing:1.5px;color:{$tint};}
+
+/* ── cross-reference ── */
+table.xref{border-collapse:collapse;width:100%;}
+table.xref th{font-size:7.5px;text-transform:uppercase;letter-spacing:1px;color:{$ft};text-align:left;padding:5px 6px;border-bottom:2px solid {$g};}
+table.xref td{font-size:8px;padding:5px 6px;border-bottom:1px solid #F3F4F6;vertical-align:middle;}
+.xoem{font-weight:bold;letter-spacing:.3px;white-space:nowrap;}
+.xsku{color:{$g};font-weight:bold;white-space:nowrap;font-size:7.5px;}
+.xpg{text-align:right;color:{$ft};}
+
+/* ── order guide / contact ── */
+.step{width:100%;border-collapse:collapse;margin:0 0 18px;}
+.stepn{width:30px;height:30px;background:{$tint};border:1px solid {$tintLn};border-radius:15px;color:{$g};font-weight:bold;font-size:14px;text-align:center;line-height:30px;}
+.ordercard{background:{$gd};border-radius:14px;padding:18px 20px;}
+.chk{width:15px;height:15px;background:{$tint};border:1px solid {$tintLn};border-radius:8px;color:{$g};font-weight:bold;font-size:9px;text-align:center;line-height:15px;}
+.infocell{background:{$wl};border:1px solid {$ln};border-radius:10px;}
+
+/* ── cover ── */
+.ctitle{font-size:34px;font-weight:bold;letter-spacing:-.8px;color:#ffffff;line-height:1.08;}
+.datechip{display:inline-block;background:#ffffff;color:{$gd};font-size:9.5px;font-weight:bold;padding:4px 13px;border-radius:11px;letter-spacing:1px;}
+.covertag{display:inline-block;border:1px solid {$gm};color:{$tint};font-size:8.5px;font-weight:bold;padding:4px 11px;border-radius:11px;}
 .coverfix{position:relative;height:1056px;}
 .coverbar{position:absolute;top:966px;left:0;width:100%;}
 .coverfeat{position:absolute;top:872px;left:0;width:100%;}
-.featsub{font-size:8px;color:#94a3b8;font-weight:normal;margin-top:2px;}
-.page{page-break-before:always;}
+.featsub{font-size:8px;color:{$ft};font-weight:normal;margin-top:2px;}
 .backpage{page-break-before:always;}
-.phead{width:100%;border-collapse:collapse;border-bottom:2px solid {$brand};}
-.phead td{padding:0 0 7px;vertical-align:bottom;}
-.pcompany{font-size:14px;font-weight:bold;}
-.pdoc{font-size:9px;font-weight:bold;letter-spacing:2px;color:{$brandD};text-transform:uppercase;}
-.pdate{font-size:8.5px;color:#94a3b8;}
-table.catband{width:100%;border-collapse:collapse;margin:12px 0 4px;background:{$brandD};border-radius:8px;}
-table.catband td{padding:9px 14px;vertical-align:middle;font-size:16px;font-weight:bold;color:#ffffff;letter-spacing:-.2px;}
-.pill{background:#ffffff;color:{$brandD};font-size:9px;font-weight:bold;padding:3px 10px;border-radius:9px;letter-spacing:.5px;}
-.pillg{background:{$brandD};color:#ffffff;font-size:9px;font-weight:bold;padding:3px 10px;border-radius:9px;letter-spacing:.5px;}
-table.hero{width:100%;border-collapse:collapse;margin:12px 0 4px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;}
-table.ihero{width:100%;border-collapse:collapse;margin:12px 0 4px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;}
-table.hero td{padding:14px 16px;vertical-align:middle;}
-.heroname{font-size:21px;font-weight:bold;letter-spacing:-.3px;}
-.ts{font-size:8px;font-weight:bold;letter-spacing:1.5px;color:{$brandD};}
-table.tsrow{border-collapse:separate;border-spacing:6px 0;margin-top:8px;}
-table.tsrow td{background:#ffffff;border:1px solid #dcfce7;border-radius:8px;padding:3px;}
-table.tsrow img{height:44px;max-width:56px;}
-.heroimg img{max-height:120px;max-width:160px;}
-table.grid{width:100%;border-collapse:separate;border-spacing:8px;table-layout:fixed;}
-td.cell{width:33%;border:1px solid #e2e8f0;border-radius:8px;vertical-align:top;padding:0;background:#ffffff;}
-td.cellpad{border:none;background:none;}
-.bstrip{height:17px;padding:3px 6px 0;}
-.badge{display:inline-block;color:#ffffff;font-size:7.5px;font-weight:bold;letter-spacing:.8px;padding:2px 7px;border-radius:8px;}
-table.phw{width:100%;border-collapse:collapse;}
-table.phw td{height:132px;text-align:center;vertical-align:middle;padding:0 4px;}
-table.phw img{max-height:126px;max-width:100%;}
-.noimg{display:inline-block;color:#cbd5e1;font-size:8px;font-weight:bold;letter-spacing:1.5px;border:1px dashed #e2e8f0;border-radius:6px;padding:22px 16px;background:#f8fafc;}
-.pbody{padding:6px 10px 9px;}
-.pn1{font-weight:bold;font-size:11px;height:16px;overflow:hidden;}
-.pu{font-size:9.5px;color:#64748b;font-weight:bold;height:13px;overflow:hidden;margin-top:2px;}
-.pm{font-size:9px;color:#94a3b8;height:12px;overflow:hidden;margin-top:1px;}
-table.prow{width:100%;border-collapse:collapse;margin-top:6px;border-top:1px solid #f1f5f9;}
-table.prow td{padding-top:5px;vertical-align:bottom;}
-.pr{color:{$brandD};font-weight:bold;font-size:13.5px;white-space:nowrap;}
-.pfrom{font-size:7.5px;color:#94a3b8;font-weight:bold;letter-spacing:.5px;}
-.sku{text-align:right;font-size:8.5px;color:#94a3b8;font-weight:bold;}
-.pfoot{width:100%;border-collapse:collapse;border-top:1px solid #e2e8f0;margin-top:8px;}
-.pfoot td{padding:7px 2px 0;font-size:9px;color:#94a3b8;font-weight:bold;}
-.pfoot .wa{text-align:right;color:{$brandD};}
-.step{width:100%;border-collapse:collapse;margin:0 0 14px;}
-.stepn{width:26px;height:26px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:13px;color:{$brandD};font-weight:bold;font-size:13px;text-align:center;line-height:26px;}
-.ordercard{background:{$brandD};border-radius:10px;padding:18px 20px;}
-.chk{width:15px;height:15px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;color:{$brandD};font-weight:bold;font-size:9px;text-align:center;line-height:15px;}
-.statbox{background:{$brandD};border-radius:10px;padding:13px 18px;color:#ffffff;}
-table.ovg{width:100%;border-collapse:separate;border-spacing:9px;table-layout:fixed;}
-td.ovcell{border:1px solid #e2e8f0;border-radius:10px;vertical-align:top;padding:0;background:#ffffff;}
-table.ovph{width:100%;border-collapse:collapse;}
-table.ovph td{height:104px;text-align:center;vertical-align:middle;background:#f8fafc;border-bottom:1px solid #f1f5f9;}
-table.ovph img{max-height:96px;max-width:90%;}
-.ovbody{padding:9px 12px 11px;}
-.ovname{font-weight:bold;font-size:12px;height:16px;overflow:hidden;}
-table.feat{width:100%;border-collapse:collapse;margin-top:14px;background:#f8faf8;border:1px solid #eef2ee;border-radius:10px;}
-table.feat td{padding:10px 12px;font-size:9.5px;color:#475569;font-weight:bold;}
-.promo{width:100%;border-collapse:collapse;background:{$brandD};border-radius:10px;margin:12px 0 14px;}
-.promo td{padding:16px 18px;vertical-align:middle;}
-.promoimg img{max-height:86px;max-width:150px;border-radius:6px;}
-.qrbox{background:#ffffff;border-radius:8px;padding:6px;display:inline-block;}
 </style></head><body>
 {$cover}
-{$overview}
+{$index}
 {$body}
-{$back}
+{$cross}
+{$guide}
+{$contact}
 </body></html>
 HTML;
     }
 
-    /** Comma-separated settings → [normalised sku/name => badge]. */
+    /** Comma-separated settings → [normalised sku/name => badge]. Red is reserved for HOT DEAL. */
     private function badgeMap(Tenant $tenant): array
     {
         $map = [];
         $lists = [
-            ['keys' => (string) $tenant->setting('catalog_best_sellers', ''), 'label' => 'BEST SELLER', 'bg' => self::BRAND],
-            ['keys' => (string) $tenant->setting('catalog_hot_deals', ''), 'label' => 'HOT DEAL', 'bg' => '#ea580c'],
+            ['keys' => (string) $tenant->setting('catalog_best_sellers', ''), 'label' => 'BEST SELLER', 'bg' => self::C_GREEN],
+            ['keys' => (string) $tenant->setting('catalog_hot_deals', ''), 'label' => 'HOT DEAL', 'bg' => self::C_RED],
         ];
         foreach ($lists as $l) {
             foreach (explode(',', $l['keys']) as $k) {
@@ -873,10 +1139,52 @@ HTML;
         return null;
     }
 
+    /** Two-letter category monogram chip ("Engine & Fuel" → EF). */
+    private function catChip(string $category): string
+    {
+        $words = preg_split('/[^\p{L}\p{N}]+/u', $category, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $code = '';
+        foreach ($words as $w) {
+            $code .= mb_strtoupper(mb_substr($w, 0, 1, 'UTF-8'), 'UTF-8');
+            if (mb_strlen($code, 'UTF-8') >= 2) {
+                break;
+            }
+        }
+        if ($code === '') {
+            $code = '·';
+        }
+
+        return '<span class="catchip">' . e($code) . '</span>';
+    }
+
+    /** Stock chip from the item's stock value (null = untracked = available, storefront rule). */
+    private function stockChip($stock): string
+    {
+        if ($stock === null || (int) $stock > 5) {
+            return '<span class="stok stok-in">IN STOCK</span>';
+        }
+        if ((int) $stock > 0) {
+            return '<span class="stok stok-low">LOW STOCK</span>';
+        }
+
+        return '<span class="stok stok-low">ON REQUEST</span>';
+    }
+
+    /** Green category band above product grids: name + pill + "i / j" pager (null pill hides). */
+    private function catBand(string $category, ?string $pill, ?array $pager): string
+    {
+        $cont = $pager ? ' <span style="font-weight:normal;color:' . self::C_TINT . ';font-size:9px">&nbsp;' . (int) $pager[0] . ' / ' . (int) $pager[1] . '</span>' : '';
+
+        return '<table class="catband"><tr>'
+            . '<td class="cbname">' . e($category) . $cont . '</td>'
+            . '<td class="cbmeta">' . ($pill !== null ? '<span class="pill">' . e($pill) . '</span>' : '&nbsp;') . '</td>'
+            . '</tr></table>';
+    }
+
     private function coverHtml(Tenant $tenant, array $plan, string $company, string $tagline,
         string $logo, string $phone, string $email, string $date, string $coverImg, string $qr,
-        int $totalItems, bool $showOverview, string $webText = '', string $webHref = '',
-        string $coverMode = 'hero'): string
+        int $totalItems, bool $showIndex, string $webText = '', string $webHref = '',
+        string $coverMode = 'hero', string $bikeHero = ''): string
     {
         // Fully-designed portrait artwork = the whole first page, nothing drawn over it.
         if ($coverImg !== '' && $coverMode === 'full') {
@@ -885,40 +1193,33 @@ HTML;
                 . '</div>';
         }
 
-        $webLine = $webText !== ''
-            ? '<a href="' . e($webHref) . '" style="color:#d1fae5;text-decoration:none;font-weight:bold">' . e($webText) . '</a>'
-            : '';
-        $brand = self::BRAND; $brandD = self::BRAND_DARK;
-        // v4.7.7 — optional trust badge + value-prop tags on the cover (catalogue review #3/#7).
-        // Both are plain settings; blank = exactly the old cover. e.g. badge "✓ Genuine OEM-quality
-        // parts", tags "Wholesale Distributor · East Africa Coverage · Fast Delivery".
-        $badgeTxt  = trim((string) $tenant->setting('catalog_badge', ''));
+        $gd = self::C_GREEN_DEEP; $gm = self::C_GREEN_MID; $wa = self::C_WA;
+        $tint = self::C_TINT; $ft = self::C_FAINT;
+        $badgeTxt = trim((string) $tenant->setting('catalog_badge', ''));
         $coverTags = trim((string) $tenant->setting('catalog_cover_tags', ''));
-        $badgeChip = $badgeTxt !== ''
-            ? '<span style="display:inline-block;background:#f0fdf4;border:1px solid #86efac;color:' . self::BRAND_DARK . ';font-size:10px;font-weight:bold;padding:4px 12px;border-radius:12px">' . e($this->clipLine($badgeTxt, 46)) . '</span>'
+        $isParts = $bikeHero !== '';
+        $docLine = $isParts ? 'GENUINE MOTORCYCLE SPARE PARTS' : 'WHOLESALE PRODUCT CATALOGUE';
+
+        $webLine = $webText !== ''
+            ? '<a href="' . e($webHref) . '" style="color:' . $tint . ';text-decoration:none;font-weight:bold">' . e($webText) . '</a>'
             : '';
-        $logoBlockDark = $logo !== ''
-            ? '<img src="' . e($logo) . '" style="height:40px;max-width:150px">'
-            : '<div style="font-size:19px;font-weight:bold;color:' . $brandD . '">' . $company . '</div>';
 
-        $contactBar = '<table style="width:100%;border-collapse:collapse;background:' . $brandD . ';border-radius:10px;margin-top:16px"><tr>'
-            . ($qr !== '' ? '<td style="width:74px;padding:10px 0 10px 14px"><span class="qrbox"><img src="' . e($qr) . '" style="height:52px;width:52px"></span></td>'
-                . '<td style="padding:10px 6px;color:#ffffff;font-size:10px;font-weight:bold;width:120px">SCAN TO ORDER<br>ON WHATSAPP</td>' : '')
-            . '<td style="padding:10px 14px;text-align:right;color:#d1fae5;font-size:9.5px;font-weight:bold">'
-            . ($phone !== '' ? '☎ ' . e($phone) . '<br>' : '') . ($email !== '' ? '✉ ' . e($email) : '')
-            . ($webLine !== '' ? ($phone !== '' || $email !== '' ? '<br>' : '') . $webLine : '')
-            . '</td></tr></table>';
-
+        // Photographic cover (landscape art uploaded): keep the composed layout, v2 tokens.
         if ($coverImg !== '') {
-            // Photographic cover: text column left, hero photo right, contact/QR bar bottom.
             $audience = array_filter(array_map('trim', explode(',',
                 (string) $tenant->setting('catalog_audience', 'Hotels,Restaurants,Supermarkets,Retailers'))));
             $audRows = '';
             foreach (array_slice($audience, 0, 5) as $a) {
                 $audRows .= '<table style="border-collapse:collapse;margin-top:7px"><tr>'
                     . '<td style="width:21px"><div class="chk">✓</div></td>'
-                    . '<td style="font-size:11px;font-weight:bold;color:#334155;padding-left:4px">For ' . e($a) . '</td></tr></table>';
+                    . '<td style="font-size:11px;font-weight:bold;color:' . self::C_INK . ';padding-left:4px">For ' . e($a) . '</td></tr></table>';
             }
+            $badgeChip = $badgeTxt !== ''
+                ? '<span class="pillt">' . e($this->clipLine($badgeTxt, 46)) . '</span>'
+                : '';
+            $logoBlock = $logo !== ''
+                ? '<img src="' . e($logo) . '" style="height:40px;max-width:150px">'
+                : '<div style="font-size:19px;font-weight:bold;color:' . self::C_GREEN . '">' . $company . '</div>';
 
             $features = '<div class="coverfeat"><table class="feat"><tr>'
                 . '<td style="width:25%">✓ Great prices<div class="featsub">Best wholesale rates</div></td>'
@@ -926,161 +1227,179 @@ HTML;
                 . '<td style="width:25%">✓ Fast-moving lines<div class="featsub">High-demand stock</div></td>'
                 . '<td style="width:25%">✓ Reliable supply<div class="featsub">Consistent availability</div></td>'
                 . '</tr></table></div>';
+            $contactBar = '<table style="width:100%;border-collapse:collapse;background:' . $gd . ';border-radius:12px"><tr>'
+                . ($qr !== '' ? '<td style="width:74px;padding:10px 0 10px 14px"><span class="qrbox"><img src="' . e($qr) . '" style="height:52px;width:52px"></span></td>'
+                    . '<td style="padding:10px 6px;color:#ffffff;font-size:9px;font-weight:bold;width:120px;letter-spacing:.5px">SCAN TO ORDER<br>ON WHATSAPP</td>' : '')
+                . '<td style="padding:10px 14px;text-align:right;color:' . $tint . ';font-size:9.5px;font-weight:bold">'
+                . ($phone !== '' ? e($phone) . '<br>' : '') . ($email !== '' ? e($email) : '')
+                . ($webLine !== '' ? ($phone !== '' || $email !== '' ? '<br>' : '') . $webLine : '')
+                . '</td></tr></table>';
 
             return '<div class="cover coverfix">'
-                . '<table style="width:100%;border-collapse:collapse"><tr><td style="padding:2px 0 10px">' . $logoBlockDark
-                . ($tagline ? '<div style="font-size:9.5px;color:#64748b;font-weight:bold;margin-top:3px">' . $tagline . '</div>' : '')
+                . '<table style="width:100%;border-collapse:collapse"><tr><td style="padding:2px 0 10px">' . $logoBlock
+                . ($tagline ? '<div style="font-size:9.5px;color:' . self::C_GREY . ';font-weight:bold;margin-top:3px">' . $tagline . '</div>' : '')
                 . '</td></tr></table>'
                 . '<table style="width:100%;border-collapse:collapse"><tr>'
                 . '<td style="width:47%;vertical-align:top;padding-top:22px">'
-                . '<div style="font-size:15px;font-weight:bold;letter-spacing:3px;color:#64748b">WHOLESALE</div>'
-                . '<div class="ctitle2" style="color:' . $brandD . '">PRODUCT<br>CATALOGUE</div>'
-                . '<div style="margin-top:14px"><span class="datechip">' . $date . '</span>' . ($badgeChip !== '' ? ' ' . $badgeChip : '') . '</div>'
-                . ($coverTags !== '' ? '<div style="margin-top:10px;font-size:9.5px;font-weight:bold;color:#64748b;letter-spacing:.4px">' . e($this->clipLine($coverTags, 90)) . '</div>' : '')
-                . '<div style="margin-top:20px">' . $audRows . '</div>'
-                . '<table style="border-collapse:collapse;margin-top:24px"><tr><td><div class="statbox">'
-                . '<div style="font-size:22px;font-weight:bold">' . number_format($totalItems) . '+</div>'
-                . '<div style="font-size:8px;font-weight:bold;letter-spacing:1.5px;color:#bbf7d0">WHOLESALE PRODUCTS</div>'
+                . '<div class="eyebrowg" style="font-size:11px">' . e($docLine) . '</div>'
+                . '<div class="ctitle" style="color:' . self::C_GREEN . ';font-size:31px">PRODUCT<br>CATALOGUE</div>'
+                . '<div style="margin-top:14px"><span class="datechip" style="background:' . self::C_GREEN . ';color:#ffffff">' . $date . '</span>' . ($badgeChip !== '' ? ' ' . $badgeChip : '') . '</div>'
+                . ($coverTags !== '' ? '<div style="margin-top:10px;font-size:9.5px;font-weight:bold;color:' . self::C_GREY . ';letter-spacing:.4px">' . e($this->clipLine($coverTags, 90)) . '</div>' : '')
+                . '<div style="margin-top:18px">' . $audRows . '</div>'
+                . '<table style="border-collapse:collapse;margin-top:22px"><tr><td><div class="ordercard" style="padding:13px 18px">'
+                . '<div class="statv">' . number_format($totalItems) . '+</div>'
+                . '<div class="statl">PRODUCTS INSIDE</div>'
                 . '</div></td></tr></table>'
                 . '</td>'
                 . '<td style="width:53%;vertical-align:top;padding:12px 0 0 16px">'
-                . '<img src="' . e($coverImg) . '" style="width:100%;border-radius:12px">'
+                . '<img src="' . e($coverImg) . '" style="width:100%;border-radius:14px">'
                 . '</td></tr></table>'
                 . $features
                 . '<div class="coverbar">' . $contactBar . '</div>'
                 . '</div>';
         }
 
-        // Brand-band cover (no artwork needed). Single-category catalogues keep the index here.
-        $logoBlock = $logo !== ''
-            ? '<div style="background:#ffffff;border-radius:10px;padding:12px 20px;display:inline-block"><img src="' . e($logo) . '" style="height:56px;max-width:170px"></div>'
-            : '<div style="font-size:30px;font-weight:bold;color:#ffffff;letter-spacing:-.5px">' . $company . '</div>';
-
-        $middle = '';
-        if (! $showOverview) {
-            $rows = '';
-            foreach ($plan as $i => $p) {
-                $bg = $i % 2 === 0 ? '#ffffff' : '#f8faf8';
-                $rows .= '<tr><td style="padding:8px 12px;background:' . $bg . ';font-weight:bold;font-size:11.5px">' . e($p['category']) . '</td>'
-                    . '<td style="padding:8px 6px;background:' . $bg . ';color:#94a3b8;font-size:10px">' . (int) $p['count'] . ' items</td>'
-                    . '<td style="padding:8px 12px;background:' . $bg . ';text-align:right;color:' . $brandD . ';font-weight:bold;font-size:11px">p.' . (int) $p['startPage'] . '</td></tr>';
-            }
-            $middle = '<div style="margin-top:26px"><table class="idx" style="width:78%;margin:0 auto">'
-                . '<tr><th style="text-align:left;padding:7px 12px">Category</th><th style="text-align:left;padding:7px 6px">Items</th><th style="text-align:right;padding:7px 12px">Page</th></tr>'
-                . $rows . '</table></div>';
-        } else {
-            $middle = '<div style="text-align:center;margin-top:26px;font-size:11px;color:#64748b;font-weight:bold">'
-                . number_format($totalItems) . ' products · ' . count($plan) . ' categories — see the category guide on page 2</div>';
+        // Generated cover — the design-system plate: deep green, hero photo, stats, QR bar.
+        $initials = '';
+        foreach (preg_split('/[^\p{L}\p{N}]+/u', $company, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $w) {
+            $initials .= mb_strtoupper(mb_substr($w, 0, 1, 'UTF-8'), 'UTF-8');
+            if (mb_strlen($initials, 'UTF-8') >= 2) break;
         }
+        $logoBlock = $logo !== ''
+            ? '<div style="background:#ffffff;border-radius:12px;padding:10px 18px;display:inline-block"><img src="' . e($logo) . '" style="height:46px;max-width:170px"></div>'
+            : '<span style="display:inline-block;background:' . $gm . ';color:#ffffff;font-size:17px;font-weight:bold;border-radius:14px;padding:12px 16px;letter-spacing:1px">' . e($initials ?: '•') . '</span>';
+
+        // hero art: motorcycle shot for parts tenants, else up to 3 product-thumb cards
+        $heroBlock = '';
+        if ($bikeHero !== '') {
+            $heroBlock = '<div class="wcard" style="display:inline-block;max-width:520px"><img src="' . e($bikeHero) . '" style="max-width:504px;max-height:346px;border-radius:8px"></div>';
+        }
+
+        $stats = '<table style="border-collapse:separate;border-spacing:8px 0;margin:0 auto"><tr>'
+            . '<td style="background:' . $gm . ';border-radius:12px;padding:11px 20px;text-align:center"><div class="statv">' . number_format($totalItems) . '+</div><div class="statl">GENUINE PARTS</div></td>'
+            . '<td style="background:' . $gm . ';border-radius:12px;padding:11px 20px;text-align:center"><div class="statv">' . count($plan) . '</div><div class="statl">CATEGORIES</div></td>'
+            . '<td style="background:' . $gm . ';border-radius:12px;padding:11px 20px;text-align:center"><div class="statv">' . now()->format('Y') . '</div><div class="statl">EDITION</div></td>'
+            . '</tr></table>';
+        if (! $bikeHero) {
+            $stats = str_replace('GENUINE PARTS', 'PRODUCTS', $stats);
+        }
+
+        $tagChips = '';
+        if ($coverTags !== '') {
+            foreach (array_slice(array_filter(array_map('trim', preg_split('/[·,]+/u', $coverTags))), 0, 3) as $t) {
+                $tagChips .= '<span class="covertag">' . e($this->clipLine($t, 28)) . '</span>&nbsp; ';
+            }
+        }
+        $badgeChip = $badgeTxt !== ''
+            ? '<div style="margin-top:10px"><span class="covertag" style="border-color:' . $wa . ';color:#ffffff">' . e($this->clipLine($badgeTxt, 46)) . '</span></div>'
+            : '';
+
+        $contactBar = '<table style="width:100%;border-collapse:collapse;background:#ffffff;border-radius:12px"><tr>'
+            . ($qr !== '' ? '<td style="width:66px;padding:9px 0 9px 12px"><img src="' . e($qr) . '" style="height:54px;width:54px"></td>'
+                . '<td style="padding:9px 6px;width:118px"><div style="font-size:8px;font-weight:bold;letter-spacing:1px;color:' . self::C_GREEN . '">SCAN TO ORDER</div>'
+                . '<div style="font-size:8px;font-weight:bold;letter-spacing:1px;color:' . self::C_INK . '">ON WHATSAPP</div></td>' : '')
+            . '<td style="padding:9px 14px;text-align:right">'
+            . ($phone !== '' ? '<div style="font-size:12.5px;font-weight:bold;color:' . self::C_INK . '">' . e($phone) . '</div>' : '')
+            . '<div style="font-size:9px;font-weight:bold;color:' . self::C_GREEN . '">'
+            . implode(' &nbsp;·&nbsp; ', array_filter([$webText !== '' ? e($webText) : '', $email !== '' ? e($email) : '']))
+            . '</div></td></tr></table>';
 
         return '<div class="cover">'
-            . '<table class="band"><tr><td style="text-align:center;padding:44px 30px 40px">' . $logoBlock
-            . ($tagline ? '<div style="margin-top:14px;font-size:12px;color:#d1fae5;font-weight:bold;letter-spacing:.6px">' . $tagline . '</div>' : '')
-            . '</td></tr></table>'
-            . '<div style="text-align:center;margin-top:34px"><div class="ctitle">PRODUCT CATALOGUE</div>'
-            . '<div style="margin-top:8px"><span class="datechip">' . $date . '</span>' . ($badgeChip !== '' ? ' ' . $badgeChip : '') . '</div>'
-            . ($coverTags !== '' ? '<div style="margin-top:10px;font-size:10px;font-weight:bold;color:#64748b;letter-spacing:.5px">' . e($this->clipLine($coverTags, 90)) . '</div>' : '')
-            . '</div>'
-            . $middle
-            . ($qr !== '' ? '<div style="text-align:center;margin-top:26px"><span class="qrbox" style="border:1px solid #e2e8f0"><img src="' . e($qr) . '" style="height:74px;width:74px"></span>'
-                . '<div style="font-size:8.5px;font-weight:bold;color:#94a3b8;letter-spacing:1px;margin-top:5px">SCAN TO ORDER ON WHATSAPP</div></div>' : '')
-            . '<table class="coverfoot"><tr><td>' . $company
-            . ($phone ? ' &nbsp;·&nbsp; ' . e($phone) : '') . ($email ? ' &nbsp;·&nbsp; ' . e($email) : '')
-            . ($webText !== '' ? ' &nbsp;·&nbsp; <a href="' . e($webHref) . '" style="color:#0f7a37;text-decoration:none">' . e($webText) . '</a>' : '')
+            . '<table class="plate"><tr><td style="padding:34px 34px 30px;text-align:center;height:990px;vertical-align:top">'
+            . $logoBlock
+            . '<div class="eyebrow" style="margin-top:30px;font-size:9px">' . e($docLine) . '</div>'
+            . '<div class="ctitle" style="margin-top:10px;font-size:36px">' . $company . '</div>'
+            . ($tagline ? '<div style="margin-top:10px;font-size:10.5px;color:' . $tint . ';font-weight:bold">' . $tagline . '</div>' : '')
+            . '<div style="margin-top:18px"><span class="datechip">' . strtoupper($date) . ' CATALOGUE</span></div>'
+            . ($tagChips !== '' ? '<div style="margin-top:12px">' . $tagChips . '</div>' : '')
+            . $badgeChip
+            . ($heroBlock !== '' ? '<div style="margin-top:30px">' . $heroBlock . '</div>' : '<div style="margin-top:16px"></div>')
+            . '<div style="margin-top:30px">' . $stats . '</div>'
+            . '<div style="margin-top:34px">' . $contactBar . '</div>'
             . '</td></tr></table>'
             . '</div>';
     }
 
-    private function overviewHtml(string $company, string $logo, string $date, array $plan,
-        array $thumbs, string $brandD, string $promoImg = ''): string
+    /** The trust strip — one component, vertical-aware copy. */
+    private function featStrip(bool $isParts): string
     {
-        // >12 categories: compact two-column text index (photo cards would overflow the page)
-        if (count($plan) > 12) {
-            $rows = [];
-            foreach ($plan as $i => $p) {
-                $bg = $i % 2 === 0 ? '#ffffff' : '#f8faf8';
-                $rows[] = '<tr><td style="padding:7px 10px;background:' . $bg . ';font-weight:bold;font-size:10.5px">' . e($this->clipLine($p['category'], 26)) . '</td>'
-                    . '<td style="padding:7px 4px;background:' . $bg . ';color:#94a3b8;font-size:9px;white-space:nowrap">' . (int) $p['count'] . '</td>'
-                    . '<td style="padding:7px 10px;background:' . $bg . ';text-align:right;color:' . $brandD . ';font-weight:bold;font-size:10px;white-space:nowrap">p.' . (int) $p['startPage'] . '</td></tr>';
-            }
-            $head = '<tr><th style="text-align:left;padding:6px 10px">Category</th><th style="text-align:left;padding:6px 4px">Items</th><th style="text-align:right;padding:6px 10px">Page</th></tr>';
-            $half = (int) ceil(count($rows) / 2);
-            $index = '<table style="width:100%;border-collapse:separate;border-spacing:12px 0"><tr>'
-                . '<td style="width:50%;vertical-align:top"><table class="idx">' . $head . implode('', array_slice($rows, 0, $half)) . '</table></td>'
-                . '<td style="width:50%;vertical-align:top"><table class="idx">' . $head . implode('', array_slice($rows, $half)) . '</table></td></tr></table>';
-
-            return '<div class="page">'
-                . $this->pageHeader($company, $logo, $date, $brandD)
-                . '<div style="margin:14px 0 2px;font-size:19px;font-weight:bold;color:' . $brandD . '">Explore our categories</div>'
-                . '<div style="font-size:10px;color:#94a3b8;font-weight:bold;margin-bottom:8px">Everything your business needs, in one place.</div>'
-                . $index
-                . $this->promoBand($promoImg)
-                . '</div>';
+        $cells = $isParts
+            ? ['✓ 100% genuine parts', '✓ Same-day dispatch', '✓ Fitment help on WhatsApp', '✓ Dealer prices available']
+            : ['✓ Wholesale prices', '✓ Genuine brands', '✓ Bulk discounts', '✓ Delivery on request'];
+        $tds = '';
+        foreach ($cells as $c) {
+            $tds .= '<td style="width:25%">' . $c . '</td>';
         }
 
-        $perRow = count($plan) <= 6 ? 2 : 3;
-        $cells = [];
+        return '<table class="feat"><tr>' . $tds . '</tr></table>';
+    }
+
+    /** Page 2 — "What's inside": category index (+ motorcycle strip for parts tenants). */
+    private function indexHtml(string $company, string $logo, string $date, array $plan,
+        array $bikes, string $promoImg, int $totalItems, bool $hasCross, bool $isParts, \Closure $foot): string
+    {
+        $rows = [];
         foreach ($plan as $p) {
-            $src = '';
-            foreach ($p['items'] as $it) {
-                $img = trim((string) ($it['image'] ?? ''));
-                if ($img !== '' && ($thumbs[$img] ?? '') !== '') { $src = $thumbs[$img]; break; }
-            }
-            $photo = $src !== ''
-                ? '<table class="ovph"><tr><td><img src="' . e($src) . '"></td></tr></table>'
-                : '<table class="ovph"><tr><td><span class="noimg">' . e(mb_strtoupper(mb_substr($p['category'], 0, 14))) . '</span></td></tr></table>';
-            $ph = $perRow === 2 ? ' style="height:158px"' : '';
-            $cells[] = '<td class="ovcell">' . str_replace('<td>', '<td' . $ph . '>', $photo)
-                . '<div class="ovbody"><div class="ovname">' . e($this->clipLine($p['category'], $perRow === 2 ? 34 : 24)) . '</div>'
-                . '<table style="width:100%;border-collapse:collapse;margin-top:6px"><tr>'
-                . '<td><span class="pillg">' . (int) $p['count'] . ' products</span></td>'
-                . '<td style="text-align:right;font-size:10px;font-weight:bold;color:' . $brandD . '">p.' . (int) $p['startPage'] . ' →</td>'
-                . '</tr></table></div></td>';
+            $rows[] = '<tr>'
+                . '<td style="width:26px">' . $this->catChip($p['category']) . '</td>'
+                . '<td><div class="idxn m">' . e($this->clipLine($p['category'], 30)) . '</div>'
+                . '<div class="idxc">' . (int) $p['count'] . ' products</div></td>'
+                . '<td class="idxp">p.' . (int) $p['startPage'] . '</td>'
+                . '</tr>';
         }
-        while (count($cells) % $perRow !== 0) {
-            $cells[] = '<td class="ovcell" style="border:none;background:none"></td>';
-        }
-        $rows = '';
-        foreach (array_chunk($cells, $perRow) as $row) {
-            $rows .= '<tr>' . implode('', $row) . '</tr>';
-        }
-
-        $feat = '<table class="feat"><tr>'
-            . '<td style="width:25%">✓ Wholesale prices</td><td style="width:25%">✓ Genuine brands</td>'
-            . '<td style="width:25%">✓ Bulk discounts</td><td style="width:25%">✓ Delivery on request</td>'
+        $half = (int) ceil(count($rows) / 2);
+        $index = '<table style="width:100%;border-collapse:separate;border-spacing:14px 0;margin-top:4px"><tr>'
+            . '<td style="width:50%;vertical-align:top"><table class="idx">' . implode('', array_slice($rows, 0, $half)) . '</table></td>'
+            . '<td style="width:50%;vertical-align:top"><table class="idx">' . implode('', array_slice($rows, $half)) . '</table></td>'
             . '</tr></table>';
 
+        $bikeStrip = '';
+        if ($bikes) {
+            $tds = '';
+            foreach ($bikes as [$name, $uri]) {
+                $tds .= '<td class="bike"><img src="' . e($uri) . '"><div class="bikename">' . e($this->clipLine($name, 16)) . '</div></td>';
+            }
+            $bikeStrip = '<div class="eyebrowg" style="margin:16px 0 7px">PARTS FOR THESE MOTORCYCLES</div>'
+                . '<table class="bikes"><tr>' . $tds . '</tr></table>';
+        }
+
+        $crossNote = $hasCross
+            ? '<table class="feat" style="margin-top:14px"><tr>'
+                . '<td style="width:26px;padding-right:0">' . $this->catChip('O E') . '</td>'
+                . '<td><b style="color:' . self::C_INK . '">Order by OEM number</b> — the cross-reference at the back matches every manufacturer part number to our stock.</td>'
+                . '</tr></table>'
+            : '';
+
         return '<div class="page">'
-            . $this->pageHeader($company, $logo, $date, $brandD)
-            . '<div style="margin:14px 0 2px;font-size:19px;font-weight:bold;color:' . $brandD . '">Explore our categories</div>'
-            . '<div style="font-size:10px;color:#94a3b8;font-weight:bold;margin-bottom:6px">Everything your business needs, in one place.</div>'
-            . '<table class="ovg">' . $rows . '</table>'
-            . $feat
+            . $this->pageHeader($company, $logo, $date)
+            . '<div style="margin:16px 0 2px;font-size:22px;font-weight:bold;letter-spacing:-.4px">What\'s inside</div>'
+            . '<div style="font-size:9.5px;color:' . self::C_GREY . ';margin-bottom:8px">' . number_format($totalItems) . ' products across ' . count($plan) . ' categories — '
+            . ($isParts ? 'every one genuine, stock confirmed on order.' : 'wholesale prices, stock confirmed on order.') . '</div>'
+            . $index
+            . $bikeStrip
+            . $crossNote
             . $this->promoBand($promoImg)
+            . $foot()
             . '</div>';
     }
 
-    /** The "Need a product you don't see?" green band (promo photo optional). */
+    /** The "Don't see the part you need?" deep-green band (promo photo optional). */
     private function promoBand(string $promoImg): string
     {
         return '<table class="promo"><tr>'
-            . '<td><div style="font-size:16px;font-weight:bold;color:#ffffff">Need a product you don\'t see?</div>'
-            . '<div style="font-size:10.5px;color:#d1fae5;margin-top:5px;font-weight:bold">Chat with us on WhatsApp — we source it for you.</div></td>'
+            . '<td><div style="font-size:15px;font-weight:bold;color:#ffffff">Don\'t see what you need?</div>'
+            . '<div style="font-size:9.5px;color:' . self::C_TINT . ';margin-top:5px;font-weight:bold">Message us on WhatsApp — we check with our supplier network and source it for you.</div></td>'
             . ($promoImg !== '' ? '<td style="width:170px;text-align:right" class="promoimg"><img src="' . e($promoImg) . '"></td>' : '')
             . '</tr></table>';
     }
 
     /**
-     * Full intro page for a big category (≥ INTRO_MIN items): headline band, hero photo,
-     * top-picks card row, feature strip. Mirrors the marketing-mock structure while staying
-     * inside the dompdf page budget.
+     * Full intro page for a big category (≥ INTRO_MIN items): deep-green hero plate, top-picks
+     * card row (the SAME card component as product pages), trust strip.
      */
     private function categoryIntro(array $p, array $thumbs, array $badges, string $currency,
-        bool $withPrices, string $company, string $logo, string $date, string $phone,
-        string $dateFull): string
+        bool $withPrices, string $company, string $logo, string $date, bool $isParts, \Closure $foot): string
     {
-        $brandD = self::BRAND_DARK;
-
         // hero photo: first badged item with a photo, else first item with a photo
         $heroSrc = '';
         foreach ($p['items'] as $it) {
@@ -1101,37 +1420,35 @@ HTML;
         }
         $picks = array_slice($picks, 0, 3);
 
+        $pages = 'pages ' . (int) $p['startPage'] . '–' . ((int) $p['startPage'] + count($p['chunks']));
         $hero = '<table class="ihero"><tr>'
-            . '<td style="vertical-align:middle;padding:22px 24px">'
-            . '<div style="font-size:26px;font-weight:bold;letter-spacing:-.4px">' . e($p['category']) . '</div>'
-            . '<div style="margin-top:9px"><span class="pillg">' . (int) $p['count'] . ' products</span>'
-            . '&nbsp;&nbsp;<span style="font-size:9px;color:#64748b;font-weight:bold">pages ' . (int) $p['startPage'] . '–' . ((int) $p['startPage'] + count($p['chunks'])) . '</span></div>'
-            . '<div style="margin-top:14px;font-size:10.5px;color:#475569;font-weight:bold;line-height:1.6">'
-            . 'Wholesale prices on every pack size ·<br>stock confirmed on order.</div>'
+            . '<td style="vertical-align:middle;padding:24px 26px">'
+            . '<div class="eyebrow">' . e(mb_strtoupper($this->clipLine($p['category'], 30))) . '</div>'
+            . '<div style="font-size:25px;font-weight:bold;letter-spacing:-.4px;color:#ffffff;margin-top:6px">' . e($p['category']) . '</div>'
+            . '<div style="margin-top:10px"><span class="pill">' . (int) $p['count'] . ' products</span>'
+            . '&nbsp;&nbsp;<span style="font-size:8.5px;color:' . self::C_TINT . ';font-weight:bold">' . $pages . '</span></div>'
+            . '<div style="margin-top:13px;font-size:9.5px;color:' . self::C_TINT . ';line-height:1.6">'
+            . ($isParts ? 'Every part checked genuine before dispatch —<br>stock and fitment confirmed on your order.'
+                : 'Wholesale prices on every pack size —<br>stock confirmed on your order.') . '</div>'
             . '</td>'
-            . ($heroSrc !== '' ? '<td style="width:280px;text-align:center;vertical-align:middle;padding:14px"><div style="background:#ffffff;border:1px solid #dcfce7;border-radius:12px;padding:10px"><img src="' . e($heroSrc) . '" style="max-height:218px;max-width:100%"></div></td>' : '')
+            . ($heroSrc !== '' ? '<td style="width:270px;text-align:center;vertical-align:middle;padding:16px"><div class="wcard"><img src="' . e($heroSrc) . '" style="max-height:206px;max-width:100%"></div></td>' : '')
             . '</tr></table>';
 
         $pickRow = $picks
-            ? '<div style="margin:14px 0 2px;font-size:9px;font-weight:bold;letter-spacing:2px;color:' . $brandD . '">★ TOP SELLERS IN ' . e(mb_strtoupper($p['category'])) . '</div>'
+            ? '<div class="eyebrowg" style="margin:13px 0 1px">★ TOP SELLERS IN ' . e(mb_strtoupper($this->clipLine($p['category'], 26))) . '</div>'
                 . $this->grid($picks, $currency, $withPrices, $thumbs, $badges)
             : '';
 
-        $feat = '<table class="feat"><tr>'
-            . '<td style="width:25%">✓ Great prices</td><td style="width:25%">✓ Quality assured</td>'
-            . '<td style="width:25%">✓ Fast-moving lines</td><td style="width:25%">✓ Reliable supply</td>'
-            . '</tr></table>';
-
         return '<div class="page">'
-            . $this->pageHeader($company, $logo, $date, self::BRAND_DARK)
+            . $this->pageHeader($company, $logo, $date)
             . $hero
             . $pickRow
-            . $feat
-            . $this->pageFooter($phone, $currency, $dateFull, $withPrices, '', '')
+            . $this->featStrip($isParts)
+            . $foot()
             . '</div>';
     }
 
-    /** First page of a category: light hero band — name, count, top-seller strip, hero photo. */
+    /** First page of a small category: green hero band — name, count, top-seller strip, photo. */
     private function categoryHero(array $p, array $thumbs, array $badges): string
     {
         $heroSrc = '';
@@ -1153,101 +1470,184 @@ HTML;
         if ($tops) {
             $tds = '';
             foreach ($tops as $t) $tds .= '<td><img src="' . e($t) . '"></td>';
-            $strip = '<div class="ts" style="margin-top:10px">★ TOP SELLERS</div><table class="tsrow"><tr>' . $tds . '</tr></table>';
+            $strip = '<div class="ts" style="margin-top:9px">★ TOP SELLERS</div><table class="tsrow"><tr>' . $tds . '</tr></table>';
         }
         $total = count($p['chunks']);
-        $cont = $total > 1 ? ' <span style="font-weight:normal;color:#94a3b8;font-size:10px">1 / ' . $total . '</span>' : '';
+        $cont = $total > 1 ? ' <span style="font-weight:normal;color:' . self::C_TINT . ';font-size:10px">1 / ' . $total . '</span>' : '';
 
         return '<table class="hero"><tr>'
             . '<td><div class="heroname">' . e($p['category']) . $cont . '</div>'
-            . '<div style="margin-top:7px"><span class="pillg">' . (int) $p['count'] . ' products</span></div>'
+            . '<div style="margin-top:7px"><span class="pill">' . (int) $p['count'] . ' products</span></div>'
             . $strip . '</td>'
-            . ($heroSrc !== '' ? '<td style="width:175px;text-align:right" class="heroimg"><img src="' . e($heroSrc) . '"></td>' : '')
+            . ($heroSrc !== '' ? '<td style="width:150px;text-align:right"><span class="heroimg" style="display:inline-block"><img src="' . e($heroSrc) . '" style="max-height:96px;max-width:128px"></span></td>' : '')
             . '</tr></table>';
     }
 
-    private function backHtml(string $company, string $logo, string $date, string $phone,
-        string $email, string $currency, string $dateFull, bool $withPrices, string $promoImg,
-        string $qr, bool $withPromo = true, string $webText = '', string $webHref = '',
-        string $deliveryLine = '', array $infoRows = [], string $badgeTxt = ''): string
+    /** OEM cross-reference page: manufacturer number → our part, SKU, page. */
+    private function crossRefHtml(array $refs, string $company, string $logo, string $date,
+        int $pageNo, int $pageTotal, \Closure $foot): string
     {
-        $ink = self::INK; $brandD = self::BRAND_DARK;
-        $promo = $withPromo ? $this->promoBand($promoImg) : '';
+        $head = '<tr><th style="width:25%">OEM number</th><th>Part</th><th style="width:27%">Our SKU</th><th style="width:9%;text-align:right">Page</th></tr>';
+        $mkRows = function (array $chunk) {
+            $rows = '';
+            foreach ($chunk as $r) {
+                $rows .= '<tr>'
+                    . '<td class="xoem m">' . e($this->clipLine($r['oem'], 15)) . '</td>'
+                    . '<td>' . e($this->clipLine($r['name'], 21)) . '</td>'
+                    . '<td class="xsku">' . e($this->clipLine($r['sku'] !== '' ? $r['sku'] : '—', 16)) . '</td>'
+                    . '<td class="xpg">' . (int) $r['page'] . '</td>'
+                    . '</tr>';
+            }
 
+            return $rows;
+        };
+        $half = (int) ceil(count($refs) / 2);
+        $cols = '<table style="width:100%;border-collapse:separate;border-spacing:12px 0;margin-top:6px"><tr>'
+            . '<td style="width:50%;vertical-align:top"><table class="xref">' . $head . $mkRows(array_slice($refs, 0, $half)) . '</table></td>'
+            . '<td style="width:50%;vertical-align:top"><table class="xref">' . $head . $mkRows(array_slice($refs, $half)) . '</table></td>'
+            . '</tr></table>';
+
+        $pager = $pageTotal > 1 ? [$pageNo, $pageTotal] : null;
+
+        return '<div class="page">'
+            . $this->pageHeader($company, $logo, $date)
+            . $this->catBand('OEM Cross-Reference', count($refs) . ' numbers', $pager)
+            . '<div style="font-size:9px;color:' . self::C_GREY . ';margin:2px 0 4px">Order by the number stamped on your part or listed in the service manual — we match it to our stock. Send the OEM number on WhatsApp for instant confirmation.</div>'
+            . $cols
+            . $foot()
+            . '</div>';
+    }
+
+    /** "How to order" guide: steps, order card with QR, business details grid. */
+    private function orderGuideHtml(string $company, string $logo, string $date, string $phone,
+        string $email, string $qr, string $promoImg, bool $withPromo, string $webText,
+        string $webHref, string $deliveryLine, array $infoRows, string $badgeTxt, bool $isParts, \Closure $foot): string
+    {
+        $ink = self::C_INK;
+        $promo = $withPromo ? $this->promoBand($promoImg) . '<div style="height:6px"></div>' : '';
+
+        $ask = $isParts ? 'part name, OEM number or a photo all work' : 'product names and quantities — a photo of your list works too';
+        $confirm = $isParts ? 'You get the exact price, availability and fitment confirmation back' : 'You get the exact total and availability back in one message';
         $steps = [
-            ['1', 'Send your order on WhatsApp', $phone !== '' ? e($phone) : 'our WhatsApp line'],
-            ['2', 'We confirm stock &amp; total', 'You get an order confirmation with the amount'],
+            ['1', 'Send your order on WhatsApp', ucfirst($phone !== '' ? 'message ' . e($phone) . ' — ' . $ask : $ask)],
+            ['2', 'We confirm stock &amp; total', $confirm],
             ['3', 'Pick up or delivery', $deliveryLine !== '' ? e($this->clipLine($deliveryLine, 110)) : 'Collect at the store or ask about delivery'],
         ];
         $stepHtml = '';
         foreach ($steps as [$n, $t, $s]) {
             $stepHtml .= '<table class="step"><tr>'
-                . '<td style="width:34px"><div class="stepn">' . $n . '</div></td>'
-                . '<td><div style="font-size:13px;font-weight:bold;color:' . $ink . '">' . $t . '</div>'
-                . '<div style="font-size:10.5px;color:#64748b;margin-top:2px">' . $s . '</div></td>'
+                . '<td style="width:40px"><div class="stepn">' . $n . '</div></td>'
+                . '<td><div style="font-size:14px;font-weight:bold;color:' . $ink . '">' . $t . '</div>'
+                . '<div style="font-size:10px;color:' . self::C_GREY . ';margin-top:3px;line-height:1.5">' . $s . '</div></td>'
                 . '</tr></table>';
         }
 
         return '<div class="backpage">'
-            . $this->pageHeader($company, $logo, $date, $brandD)
-            . '<table class="catband"><tr><td>How to order</td></tr></table>'
+            . $this->pageHeader($company, $logo, $date)
+            . $this->catBand('How to order', null, null)
             . $promo
-            . '<table style="width:100%;border-collapse:collapse"><tr><td style="width:55%;vertical-align:top;padding-right:16px">' . $stepHtml . '</td>'
+            . '<table style="width:100%;border-collapse:collapse;margin-top:14px"><tr><td style="width:55%;vertical-align:top;padding-right:16px">' . $stepHtml . '</td>'
             . '<td style="vertical-align:top">'
             . '<div class="ordercard">'
             . '<table style="width:100%;border-collapse:collapse"><tr><td>'
-            . '<div style="font-size:10px;font-weight:bold;letter-spacing:1.5px;color:#bbf7d0">ORDER ON WHATSAPP</div>'
-            . '<div style="font-size:19px;font-weight:bold;color:#ffffff;margin-top:6px">' . ($phone !== '' ? e($phone) : $company) . '</div>'
-            . ($email !== '' ? '<div style="font-size:10.5px;color:#d1fae5;margin-top:8px">' . e($email) . '</div>' : '')
-            . ($webText !== '' ? '<div style="font-size:11px;margin-top:9px;padding-top:9px;border-top:1px solid #ffffff33">'
-                . '<span style="font-size:8px;font-weight:bold;letter-spacing:1.5px;color:#bbf7d0">OR ORDER ONLINE</span><br>'
-                . '<a href="' . e($webHref) . '" style="color:#ffffff;font-weight:bold;text-decoration:none;font-size:13px">' . e($webText) . '</a></div>' : '')
+            . '<div class="eyebrow">ORDER ON WHATSAPP</div>'
+            . '<div style="font-size:18px;font-weight:bold;color:#ffffff;margin-top:6px">' . ($phone !== '' ? e($phone) : $company) . '</div>'
+            . ($email !== '' ? '<div style="font-size:10px;color:' . self::C_TINT . ';margin-top:8px">' . e($email) . '</div>' : '')
+            . ($webText !== '' ? '<div style="font-size:11px;margin-top:9px;padding-top:9px;border-top:1px solid ' . self::C_GREEN_MID . '">'
+                . '<span class="eyebrow" style="font-size:7px">OR ORDER ONLINE</span><br>'
+                . '<a href="' . e($webHref) . '" style="color:#ffffff;font-weight:bold;text-decoration:none;font-size:12.5px">' . e($webText) . '</a></div>' : '')
             . '</td>'
             . ($qr !== '' ? '<td style="width:74px;text-align:right;vertical-align:top"><span class="qrbox"><img src="' . e($qr) . '" style="height:62px;width:62px"></span></td>' : '')
             . '</tr></table>'
             . '</div>'
             . '</td></tr></table>'
             . $this->backInfo($infoRows, $badgeTxt)
-            . '<div style="margin-top:22px;font-size:9px;color:#94a3b8">'
-            . ($withPrices ? 'All prices in ' . e($currency) . ', valid as of ' . e($dateFull) . ' and subject to change without notice. ' : '')
-            . 'Availability confirmed on order. Thank you for your business.</div>'
+            . str_replace('<table class="feat">', '<table class="feat" style="margin-top:14px">', $this->featStrip($isParts))
+            . $foot()
             . '</div>';
     }
 
     /**
-     * v4.7.7 — compact business-details block on the back page (hours, delivery areas, payment,
-     * email, location) + a standing dealer-enquiry line. Rows come pre-filtered (only settings the
-     * shop actually filled); with none, only the dealer line prints. Two columns, table flow only.
+     * Compact business-details block (hours, delivery areas, payment, email, location) + a
+     * standing dealer-enquiry line. Rows come pre-filtered (only settings the shop filled).
      */
     private function backInfo(array $infoRows, string $badgeTxt): string
     {
-        $ink = self::INK; $brandD = self::BRAND_DARK;
         $cells = [];
         foreach ($infoRows as [$label, $value]) {
-            $cells[] = '<td style="width:50%;padding:7px 10px;vertical-align:top">'
-                . '<div style="font-size:8px;font-weight:bold;letter-spacing:1.2px;color:#94a3b8">' . strtoupper(e($label)) . '</div>'
-                . '<div style="font-size:10.5px;font-weight:bold;color:' . $ink . ';margin-top:2px">' . e($this->clipLine($value, 70)) . '</div>'
+            $cells[] = '<td style="width:50%;padding:11px 13px;vertical-align:top" class="infocell">'
+                . '<div style="font-size:7.5px;font-weight:bold;letter-spacing:1.2px;color:' . self::C_FAINT . '">' . strtoupper(e($label)) . '</div>'
+                . '<div style="font-size:10.5px;font-weight:bold;color:' . self::C_INK . ';margin-top:3px">' . e($this->clipLine($value, 70)) . '</div>'
                 . '</td>';
         }
         $rows = '';
         foreach (array_chunk($cells, 2) as $pair) {
-            if (count($pair) === 1) $pair[] = '<td style="width:50%"></td>';
+            if (count($pair) === 1) $pair[] = '<td style="width:50%;border:none;background:none"></td>';
             $rows .= '<tr>' . implode('', $pair) . '</tr>';
         }
         $table = $rows !== ''
-            ? '<table style="width:100%;border-collapse:collapse;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin-top:16px">' . $rows . '</table>'
+            ? '<table style="width:100%;border-collapse:separate;border-spacing:6px;margin-top:10px">' . $rows . '</table>'
             : '';
-        $dealer = '<div style="margin-top:12px;font-size:11px;font-weight:bold;color:' . $brandD . '">'
-            . '🤝 Dealer &amp; bulk enquiries welcome — ask for the trade price list.'
+        $dealer = '<div style="margin-top:10px;font-size:10.5px;font-weight:bold;color:' . self::C_GREEN . '">'
+            . 'Dealer &amp; bulk enquiries welcome — ask for the trade price list.'
             . ($badgeTxt !== '' ? ' &nbsp;·&nbsp; ' . e($this->clipLine($badgeTxt, 46)) : '')
             . '</div>';
 
         return $table . $dealer;
     }
 
-    private function pageHeader(string $company, string $logo, string $date, string $brandD): string
+    /** Closing page — deep-green contact plate: WhatsApp, website, details, QR, version. */
+    private function contactHtml(Tenant $tenant, string $company, string $tagline, string $logo,
+        string $phone, string $email, string $qr, string $webText, string $webHref,
+        array $infoRows, string $currency, string $dateFull, bool $withPrices,
+        string $version, string $date): string
     {
-        $logoTag = $logo !== '' ? '<img src="' . e($logo) . '" style="height:26px;max-width:90px">' : '';
+        $gd = self::C_GREEN_DEEP; $gm = self::C_GREEN_MID; $tint = self::C_TINT;
+
+        $initials = '';
+        foreach (preg_split('/[^\p{L}\p{N}]+/u', $company, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $w) {
+            $initials .= mb_strtoupper(mb_substr($w, 0, 1, 'UTF-8'), 'UTF-8');
+            if (mb_strlen($initials, 'UTF-8') >= 2) break;
+        }
+        $logoBlock = $logo !== ''
+            ? '<div style="background:#ffffff;border-radius:12px;padding:10px 18px;display:inline-block"><img src="' . e($logo) . '" style="height:40px;max-width:150px"></div>'
+            : '<span style="display:inline-block;background:' . $gm . ';color:#ffffff;font-size:15px;font-weight:bold;border-radius:12px;padding:10px 14px;letter-spacing:1px">' . e($initials ?: '•') . '</span>';
+
+        $detailCells = '';
+        foreach (array_slice($infoRows, 0, 4) as [$label, $value]) {
+            $detailCells .= '<td style="background:' . $gm . ';border-radius:10px;padding:9px 12px;vertical-align:top">'
+                . '<div style="font-size:7px;font-weight:bold;letter-spacing:1.2px;color:' . $tint . '">' . strtoupper(e($label)) . '</div>'
+                . '<div style="font-size:9px;font-weight:bold;color:#ffffff;margin-top:2px">' . e($this->clipLine($value, 42)) . '</div>'
+                . '</td>';
+        }
+        $details = $detailCells !== ''
+            ? '<table style="width:100%;border-collapse:separate;border-spacing:6px;margin-top:20px"><tr>' . $detailCells . '</tr></table>'
+            : '';
+
+        return '<div class="backpage">'
+            . '<table class="plate"><tr><td style="padding:110px 40px 40px;text-align:center;height:910px;vertical-align:top">'
+            . $logoBlock
+            . '<div class="ctitle" style="margin-top:30px;font-size:29px">' . $company . '</div>'
+            . ($tagline ? '<div style="margin-top:10px;font-size:10.5px;color:' . $tint . ';font-weight:bold">' . $tagline . '</div>' : '')
+            . '<div style="margin-top:56px" class="eyebrow">ORDER ON WHATSAPP</div>'
+            . ($phone !== '' ? '<div style="font-size:28px;font-weight:bold;color:#ffffff;margin-top:10px">' . e($phone) . '</div>' : '')
+            . ($webText !== '' ? '<div style="margin-top:16px;font-size:13px;font-weight:bold"><a href="' . e($webHref) . '" style="color:' . self::C_WA . ';text-decoration:none">' . e($webText) . '</a></div>' : '')
+            . ($email !== '' ? '<div style="margin-top:7px;font-size:9.5px;color:' . $tint . '">' . e($email) . '</div>' : '')
+            . ($qr !== '' ? '<div style="margin-top:56px"><span class="qrbox" style="padding:8px"><img src="' . e($qr) . '" style="height:96px;width:96px"></span>'
+                . '<div style="font-size:8px;font-weight:bold;letter-spacing:1.5px;color:' . $tint . ';margin-top:8px">SCAN · ORDER · DELIVERED</div></div>' : '')
+            . str_replace('margin-top:20px', 'margin-top:64px', $details)
+            . '<div style="margin-top:64px;border-top:1px solid ' . $gm . ';padding-top:12px;font-size:7.5px;color:' . $tint . '">'
+            . e($company) . ' · Catalogue ' . e($date) . ' · ' . e($version)
+            . ($withPrices ? ' — prices in ' . e($currency) . ', valid as of ' . e($dateFull) . ', subject to change without notice. Availability confirmed on order.' : ' — availability confirmed on order.')
+            . ' Thank you for your business.'
+            . '</div>'
+            . '</td></tr></table>'
+            . '</div>';
+    }
+
+    private function pageHeader(string $company, string $logo, string $date): string
+    {
+        $logoTag = $logo !== '' ? '<img src="' . e($logo) . '" style="height:24px;max-width:90px">' : '';
 
         return '<table class="phead"><tr>'
             . '<td><div class="pcompany">' . $company . '</div></td>'
@@ -1268,30 +1668,39 @@ HTML;
                 : '<table class="phw"><tr><td><span class="noimg">PHOTO<br>COMING SOON</span></td></tr></table>';
 
             $b = $this->badgeFor($it, $badges);
-            $bstrip = '<div class="bstrip">'
-                . ($b ? '<span class="badge" style="background:' . $b['bg'] . '">' . $b['label'] . '</span>' : '&nbsp;')
-                . '</div>';
+            $bstrip = '<div class="bstrip"><table><tr>'
+                . '<td>' . ($b ? '<span class="badge" style="background:' . $b['bg'] . '">' . $b['label'] . '</span>' : '&nbsp;') . '</td>'
+                . '<td style="text-align:right">' . (array_key_exists('stock', $it) ? $this->stockChip($it['stock']) : '&nbsp;') . '</td>'
+                . '</tr></table></div>';
 
             $unit = trim((string) ($it['unit'] ?? ''));
-            // v4.7.7 — the two info lines are multi-purpose so card height never changes:
-            //   line 1: OEM part number when known (mechanics order by this), else the selling unit.
-            //   line 2: MOQ when set (FMCG tenants), else a brand "Fits" line (parts tenants), else blank.
+            // The two info lines are multi-purpose so card height never changes:
+            //   line 1: OEM chip when known (mechanics order by this) + unit, else the selling unit.
+            //   line 2: MOQ when set (FMCG tenants), else a brand "Fits" line (parts tenants).
             $oem = trim((string) ($it['oem'] ?? ''));
             $pbrand = trim((string) ($it['brand'] ?? ''));
-            $moq = ! empty($it['moq'])
-                ? 'Min order: ' . e((string) $it['moq']) . ' &times; ' . e($unit !== '' ? $unit : 'units')
-                : ($pbrand !== '' ? 'Fits: <b>' . e($this->clipLine($pbrand, 24)) . '</b> models' : '&nbsp;');
-            $priceCell = $withPrices
-                ? '<div class="pfrom">FROM</div><div class="pr">' . $this->money((float) $it['price'], $currency) . '</div>'
-                : '<div class="pr" style="color:#94a3b8;font-size:10px">Ask for price</div>';
+            $line1 = $oem !== ''
+                ? '<span class="oem">OEM ' . e($this->clipLine($oem, 18)) . '</span>' . ($unit !== '' ? ' <span style="font-size:7px;color:' . self::C_FAINT . '">per ' . e($this->clipLine($unit, 12)) . '</span>' : '')
+                : ($unit !== '' ? 'Sold per ' . e($unit) : '&nbsp;');
+            $line2 = ! empty($it['moq'])
+                ? '<span style="color:' . self::C_GREY . ';font-weight:normal">Min order: ' . e((string) $it['moq']) . ' &times; ' . e($unit !== '' ? $unit : 'units') . '</span>'
+                : ($pbrand !== '' ? '✓ Fits ' . e($this->clipLine($pbrand, 22)) . ' models' : '&nbsp;');
+
+            if ($withPrices) {
+                [$big, $small] = $this->moneyParts((float) $it['price'], $currency);
+                $priceCell = '<div class="pfrom">FROM</div><div class="pr">' . $big
+                    . ($small !== '' ? ' <span class="prc">' . e($small) . '</span>' : '') . '</div>';
+            } else {
+                $priceCell = '<div class="pr" style="color:' . self::C_FAINT . ';font-size:10px">Ask for price</div>';
+            }
 
             $cells[] = '<td class="cell">' . $bstrip . $photo
                 . '<div class="pbody">'
-                . $this->nameLines((string) $it['name'])
-                . '<div class="pu">' . ($oem !== '' ? '<b style="color:#334155">OEM: ' . e($this->clipLine($oem, 26)) . '</b>' : ($unit !== '' ? e($unit) : '&nbsp;')) . '</div>'
-                . '<div class="pm">' . $moq . '</div>'
+                . '<div class="m">' . $this->nameLines((string) $it['name']) . '</div>'
+                . '<div class="pu">' . $line1 . '</div>'
+                . '<div class="pfits">' . $line2 . '</div>'
                 . '<table class="prow"><tr><td>' . $priceCell . '</td>'
-                . '<td class="sku">' . ($it['sku'] ? e((string) $it['sku']) : '') . '</td></tr></table>'
+                . '<td class="sku">' . ($it['sku'] ? 'SKU ' . e((string) $it['sku']) : '') . '</td></tr></table>'
                 . '</div></td>';
         }
 
@@ -1312,7 +1721,7 @@ HTML;
      * Product name as EXACTLY two fixed-height single-line divs (second may be blank).
      * dompdf's line boxes ignore CSS line-height enough to glyph-slice a clipped multi-line
      * block, so we do the wrapping ourselves: greedy word wrap at a char budget per line,
-     * ellipsis if it can't fit two lines. Every card gets the same 32px name zone.
+     * ellipsis if it can't fit two lines. Every card gets the same 30px name zone.
      */
     private function nameLines(string $name, int $perLine = 30): string
     {
@@ -1344,20 +1753,29 @@ HTML;
         return mb_strlen($s, 'UTF-8') > $max ? rtrim(mb_substr($s, 0, $max - 1, 'UTF-8')) . '…' : $s;
     }
 
-    private function pageFooter(string $phone, string $currency, string $dateFull, bool $withPrices,
-        string $webText = '', string $webHref = ''): string
+    /** Footer on every content page: validity + version left, WhatsApp + QR right. */
+    private function pageFooter(string $company, string $phone, string $currency, string $dateFull,
+        bool $withPrices, string $webText = '', string $webHref = '', string $version = '', string $qr = ''): string
     {
-        $left = $withPrices
-            ? 'Prices in ' . e($currency) . ' · valid as of ' . e($dateFull) . ' · subject to change'
-            : 'Product catalogue · ' . e($dateFull);
+        $left = $company
+            . ($withPrices ? ' · Prices in ' . e($currency) . ', valid as of ' . e($dateFull) . ' — subject to change' : ' · Product catalogue')
+            . ($version !== '' ? ' · ' . e($version) : '');
         $parts = [];
         if ($phone !== '') {
-            $parts[] = 'Order on WhatsApp: ' . e($phone);
+            $parts[] = '<span class="pfootwa">WhatsApp ' . e($phone) . '</span>';
         }
         if ($webText !== '') {
-            $parts[] = '<a href="' . e($webHref) . '" style="color:#0f7a37;text-decoration:none">' . e($webText) . '</a>';
+            $parts[] = '<a href="' . e($webHref) . '" style="color:' . self::C_GREEN . ';text-decoration:none;font-weight:bold">' . e($webText) . '</a>';
         }
+        $right = implode(' &nbsp;·&nbsp; ', $parts);
+        $qrTd = $qr !== ''
+            ? '<td style="width:34px;text-align:right;padding-left:8px"><img src="' . e($qr) . '" style="height:30px;width:30px"></td>'
+            : '';
 
-        return '<table class="pfoot"><tr><td>' . $left . '</td><td class="wa">' . implode(' &nbsp;·&nbsp; ', $parts) . '</td></tr></table>';
+        return '<table class="pfoot"><tr>'
+            . '<td>' . $left . '</td>'
+            . '<td style="text-align:right">' . $right . '</td>'
+            . $qrTd
+            . '</tr></table>';
     }
 }
