@@ -664,7 +664,7 @@ function sid(x){return String(x==null?'':x).replace(/[^\w-]/g,'');}
    then the baked IMG library. mimgErr() swaps a dead remote photo back to the baked image
    (for TVS HLX that's the silhouette), so an offline CDN can never leave a broken card. */
 function modelImg(id){ var ov=(CFG.modelImages||{})[id]; return ov||IMG[id]||''; }
-function mimgErr(el,id){ el.onerror=null; var f=IMG[id]||''; if(f&&el.src!==f){ el.src=f; } }
+function mimgErr(el,id){ el.onerror=function(){ el.onerror=null; el.style.display='none'; }; var f=IMG[id]||''; if(f&&el.src!==f){ el.src=f; } else { el.onerror=null; el.style.display='none'; } }
 /* v4.7.7: a part's number — the real OEM number from the catalogue feed when filled,
    else the legacy keyword-derived guess. As OEM numbers land, cards, cart lines and the
    exploded-diagram cross-links (byPn) all upgrade to authoritative numbers for free. */
@@ -1414,7 +1414,7 @@ function vHome(){
      +'<div id="sugbox" class="sugbox" role="listbox" style="display:none"></div></div>'
      +schipsHtml()
      +'<div class="htr h2l"><div>'+li('shield-check',20)+'<b>100% Genuine Parts</b><i>Authorized dealer</i></div><div>'+li('undo-2',20)+'<b>Easy Returns</b><i>'+esc(CFG.returns||'7-day, unfitted parts')+'</i></div><div>'+li('truck',20)+'<b>Fast Delivery</b><i>'+esc(CFG.deliveryEta||'Across East Africa')+'</i></div><div>'+li('lock',20)+'<b>Secure Payment</b><i>'+esc(CFG.payMethods||'Safe & trusted')+'</i></div></div>'
-   +'</div><div class="hph2">'+(IMG.hero?'<img src="'+IMG.hero+'" alt="" loading="lazy">':'')+'</div></div></section>'
+   +'</div><div class="hph2">'+(modelImg('hero')?'<img src="'+modelImg('hero')+'" alt="" loading="lazy" onerror="mimgErr(this,\'hero\')">':'')+'</div></div></section>'
    +'<section class="bksec"><div class="wrap"><div class="bkhd"><h2>Your Motorcycle</h2><span class="link" onclick="openBikePicker()">Manage Garage ›</span></div><div class="bkrow" aria-label="Choose your motorcycle">'+bks+'</div>'
      +(b?'<div class="bkline">'+li('check',14)+'<span>Showing parts for <b>'+esc(b.name)+'</b></span><a onclick="openBikePicker()">Change</a><a onclick="clearBike();render();">Show all parts</a><a onclick="go(\'model/'+sid(b.id)+'\')">Model page ›</a></div>':'')
    +'</div></section>'
