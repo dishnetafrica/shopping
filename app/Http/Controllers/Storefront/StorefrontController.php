@@ -364,6 +364,9 @@ class StorefrontController extends Controller
                 'boxer125x'  => (bool) $tenant->setting('show_model_boxer125x', true)  ? 'boxer125x'  : null,
                 'ct125hd'    => (bool) $tenant->setting('show_model_ct125hd', true)    ? 'ct125hd'    : null,
                 'boxer150x'  => (bool) $tenant->setting('show_model_boxer150x', true)  ? 'boxer150x'  : null,
+                // v4.7.5: the TVS HLX 125 — the other half of the boda market. The SPA now ships the
+                // model + a brand-family fitment guard, so TVS-line parts check against it correctly.
+                'tvshlx125'  => (bool) $tenant->setting('show_model_tvshlx125', true)  ? 'tvshlx125'  : null,
             ])),
             // Trust & delivery promises shown across the storefront (editable in Settings → Storefront).
             'genuineLine' => (string) ($tenant->setting('sf_genuine', '') ?: '100% genuine Bajaj — verify the hologram, or your money back.'),

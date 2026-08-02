@@ -71,6 +71,7 @@ final class SettingsWriteService
         // Storefront: per-model show/hide toggles (default on). Read by StorefrontController.
         'show_model_boxer100', 'show_model_boxer125hd', 'show_model_boxer150',
         'show_model_boxer125x', 'show_model_ct125hd', 'show_model_boxer150x',
+        'show_model_tvshlx125',   // v4.7.5: TVS HLX 125 on the customer storefront
         'sf_hide_oos',  // storefront: hide out-of-stock parts (sell only what you have)
         'custom_domain_live',  // owner confirms the custom domain serves CloudBSS → use it in sent links (v4.6.1)
     ];
