@@ -368,13 +368,20 @@ class StorefrontController extends Controller
                 // model + a brand-family fitment guard, so TVS-line parts check against it correctly.
                 'tvshlx125'  => (bool) $tenant->setting('show_model_tvshlx125', true)  ? 'tvshlx125'  : null,
             ])),
-            // v4.7.8: per-model photo overrides. The TVS HLX 125 photo is BAKED into the SPA
-            // (the owner's own red HLX shot — no external hotlink, loads instantly like the
-            // Bajaj bikes). This setting still wins when set: Settings → Storefront → TVS HLX
-            // 125 photo → Choose photo (branding-upload stores it and drops the URL here).
-            // A dead override URL falls back to the baked photo via mimgErr.
+            // v4.7.8 → v4.15: per-model photo overrides, now for EVERY model + the homepage
+            // hero. Settings → Storefront → "<model> photo" → Choose photo (branding-upload
+            // stores it and drops the URL here). Uploads live in /storage (survive rebuilds,
+            // no repo involvement); blank = the built-in repo photo; a dead override URL
+            // falls back to the built-in via mimgErr. The PDF catalogue reads the same keys.
             'modelImages' => array_filter([
-                'tvshlx125' => (string) $tenant->setting('model_image_tvshlx125', ''),
+                'hero'       => (string) $tenant->setting('model_image_hero', ''),
+                'boxer100'   => (string) $tenant->setting('model_image_boxer100', ''),
+                'boxer125hd' => (string) $tenant->setting('model_image_boxer125hd', ''),
+                'boxer150'   => (string) $tenant->setting('model_image_boxer150', ''),
+                'boxer125x'  => (string) $tenant->setting('model_image_boxer125x', ''),
+                'ct125hd'    => (string) $tenant->setting('model_image_ct125hd', ''),
+                'boxer150x'  => (string) $tenant->setting('model_image_boxer150x', ''),
+                'tvshlx125'  => (string) $tenant->setting('model_image_tvshlx125', ''),
             ]),
             // v4.8 — the Best-sellers rail reads the same comma list the catalogue PDF badges use.
             'bestSellers' => (string) $tenant->setting('catalog_best_sellers', ''),

@@ -137,6 +137,16 @@ final class SettingsSchema
                     ['key' => 'show_model_tvshlx125',  'type' => 'bool', 'label' => 'TVS HLX 125',   'default' => true],   // v4.7.5
                     // v4.7.8: upload a photo to replace the built-in TVS HLX 125 shot (blank = built-in photo).
                     ['key' => 'model_image_tvshlx125', 'type' => 'image', 'label' => 'TVS HLX 125 photo', 'help' => 'Shown on the homepage card, bike picker and model page. Leave empty to use the built-in photo.'],
+                    // v4.15: manage EVERY bike photo from here — your upload wins over the built-in
+                    // photo on the website AND in the PDF catalogue; blank = built-in. If an uploaded
+                    // photo link ever dies, the site falls back to the built-in automatically.
+                    ['key' => 'model_image_hero',       'type' => 'image', 'label' => 'Homepage hero photo', 'help' => 'The big motorcycle photo at the top of your website and on the catalogue cover. Leave empty to use the built-in shot.'],
+                    ['key' => 'model_image_boxer100',   'type' => 'image', 'label' => 'Boxer 100 KS photo'],
+                    ['key' => 'model_image_boxer125hd', 'type' => 'image', 'label' => 'Boxer 125 HD photo'],
+                    ['key' => 'model_image_boxer150',   'type' => 'image', 'label' => 'Boxer BM150 photo'],
+                    ['key' => 'model_image_boxer125x',  'type' => 'image', 'label' => 'Boxer BM125X photo'],
+                    ['key' => 'model_image_ct125hd',    'type' => 'image', 'label' => 'CT 125 HD photo'],
+                    ['key' => 'model_image_boxer150x',  'type' => 'image', 'label' => 'Boxer BM150 X photo'],
                 ]],
                 // v4.9 — Dealer programme 4a. The bot quotes these prices automatically for customers
                 // marked as dealers on their profile; the storefront joins in drop 4b.

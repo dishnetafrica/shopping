@@ -815,8 +815,34 @@ final class CatalogRenderer
     }
 
     /**
-     * Real motorcycle photos for parts tenants (public/assets/sfm, referenced by the SPA's
-     * IMG/MODELS data). Up to $max entries [name, dataUri], deduped by file.
+     * v4.15 — the owner's uploaded photo for a model ('' when not set). Same settings the
+     * storefront reads (model_image_{id}); a site-relative "/storage/…" value is resolved
+     * to the local file so the photo pipeline never needs HTTP for it.
+     */
+    private function modelOverride(Tenant $tenant, string $id): string
+    {
+        $u = trim((string) $tenant->setting('model_image_' . $id, ''));
+        if ($u === '') {
+            return '';
+        }
+        if (preg_match('~^/storage/(.+)$~', $u, $m)) {
+            try {
+                $p = public_path('storage/' . urldecode($m[1]));
+                if (is_file($p)) {
+                    return $p;
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+
+        return $u;
+    }
+
+    /**
+     * Real motorcycle photos for parts tenants: the owner's PANEL UPLOAD for a model wins
+     * (Settings → Storefront → "<model> photo"), else the built-in repo photo
+     * (public/assets/sfm, referenced by the SPA's IMG/MODELS data). Up to $max entries
+     * [name, dataUri], deduped by source.
      * @return array<int,array{0:string,1:string}>
      */
     private function bikePhotos(Tenant $tenant, int $max = 4): array
@@ -833,19 +859,29 @@ final class CatalogRenderer
                     break;
                 }
                 $id = (string) ($m['id'] ?? '');
-                $rel = (string) ($data['img'][$id] ?? '');
-                if ($id === '' || $rel === '' || isset($seen[$rel]) || ! str_starts_with($rel, '/assets/')) {
+                if ($id === '') {
                     continue;
                 }
-                $file = public_path(ltrim($rel, '/'));
-                if (! is_file($file)) {
+                $src = $this->modelOverride($tenant, $id);   // uploaded photo wins
+                if ($src === '') {
+                    $rel = (string) ($data['img'][$id] ?? '');
+                    if ($rel === '' || ! str_starts_with($rel, '/assets/')) {
+                        continue;
+                    }
+                    $file = public_path(ltrim($rel, '/'));
+                    if (! is_file($file)) {
+                        continue;
+                    }
+                    $src = $file;
+                }
+                if (isset($seen[$src])) {
                     continue;
                 }
-                $uri = $this->asset($tenant, $file, 360);
+                $uri = $this->asset($tenant, $src, 360);
                 if ($uri === '') {
                     continue;
                 }
-                $seen[$rel] = true;
+                $seen[$src] = true;
                 $out[] = [(string) ($m['name'] ?? $id), $uri];
             }
 
@@ -855,12 +891,22 @@ final class CatalogRenderer
         }
     }
 
-    /** The storefront's hero motorcycle shot for the generated cover ('' when unavailable). */
+    /** The hero motorcycle shot for the generated cover: panel upload wins, else built-in. */
     private function bikeHero(Tenant $tenant): string
     {
         try {
             $data = $this->spaData($tenant);
-            $rel = $data ? (string) ($data['img']['hero'] ?? '') : '';
+            if (! $data) {
+                return '';
+            }
+            $ov = $this->modelOverride($tenant, 'hero');
+            if ($ov !== '') {
+                $uri = $this->asset($tenant, $ov, 620);
+                if ($uri !== '') {
+                    return $uri;
+                }
+            }
+            $rel = (string) ($data['img']['hero'] ?? '');
             if ($rel === '' || ! str_starts_with($rel, '/assets/')) {
                 return '';
             }

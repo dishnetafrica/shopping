@@ -41,6 +41,8 @@ final class SettingsWriteService
         'pos_manager_pin',
         // Storefront model photo override (v4.7.6): any image URL; blank = official TVS photo.
         'model_image_tvshlx125',
+        'model_image_hero', 'model_image_boxer100', 'model_image_boxer125hd', 'model_image_boxer150',   // v4.15
+        'model_image_boxer125x', 'model_image_ct125hd', 'model_image_boxer150x',                        // v4.15
     ];
 
     /** Numeric settings: [key => ['int'|'float', min]]. */
