@@ -270,6 +270,10 @@ final class CatalogRenderer
                     'brand' => (string) ($p->brand ?? ''),         // v4.7.7 — powers the per-card "Fits" line
                     'image' => (string) ($p->image_url ?: ''),
                     'stock' => $p->stock === null ? null : (int) $p->stock,   // v2.0 — stock chip (same rule as the storefront)
+                    'id' => (int) $p->id,                                     // v2.1 — per-product QR → /part/{id}
+                    'keywords' => (string) ($p->keywords ?? ''),              // v2.1 — model fitment matching
+                    'pop' => (int) ($p->popularity ?? 0),                     // v2.1 — auto POPULAR badge
+                    'new' => (bool) ($p->created_at && $p->created_at->getTimestamp() > time() - 45 * 86400),   // v2.1 — NEW badge
                 ];
             }
             ksort($grouped, SORT_NATURAL | SORT_FLAG_CASE);
@@ -337,6 +341,10 @@ final class CatalogRenderer
                     'brand' => (string) ($p->brand ?? ''),         // v4.7.7
                     'image' => (string) ($p->image_url ?: ''),
                     'stock' => $p->stock === null ? null : (int) $p->stock,   // v2.0
+                    'id' => (int) $p->id,                                     // v2.1
+                    'keywords' => (string) ($p->keywords ?? ''),              // v2.1
+                    'pop' => (int) ($p->popularity ?? 0),                     // v2.1
+                    'new' => (bool) ($p->created_at && $p->created_at->getTimestamp() > time() - 45 * 86400),   // v2.1
                 ];
             }
 
@@ -766,43 +774,66 @@ final class CatalogRenderer
 
     // ─────────────────────────── AUTO_PARTS extras ───────────────────────────
 
+    /** @var array{tid:int,data:array|false}|null memo: parsed SPA data (false = unavailable) */
+    private ?array $spaMemo = null;
+
     /**
-     * Real motorcycle photos for parts tenants — the same images the storefront ships
-     * (public/assets/sfm, referenced by the built SPA's IMG/MODELS data). Returns up to
-     * $max entries [name, dataUri], deduped by file (some models share a photo), [] for
-     * every other vertical or on ANY failure — grocery catalogues are untouched.
-     *
+     * IMG map + MODELS list from the built storefront SPA — one parse per render, null
+     * for every other vertical or on ANY failure — grocery catalogues are untouched.
+     * @return array{img:array<string,string>,models:array<int,array<string,mixed>>}|null
+     */
+    private function spaData(Tenant $tenant): ?array
+    {
+        if ($this->spaMemo !== null && $this->spaMemo['tid'] === (int) $tenant->id) {
+            return $this->spaMemo['data'] ?: null;
+        }
+        $this->spaMemo = ['tid' => (int) $tenant->id, 'data' => false];
+        try {
+            if (! class_exists(\App\Support\Vertical::class)
+                || \App\Support\Vertical::of($tenant) !== \App\Support\Vertical::AUTO_PARTS) {
+                return null;
+            }
+            $spa = resource_path('storefront/autoparts.html');
+            if (! is_file($spa)) {
+                return null;
+            }
+            $s = (string) file_get_contents($spa);
+            if (! preg_match('/var IMG = (\{.*?\});/s', $s, $mi) || ! preg_match('/var MODELS = (\[.*?\]);\s*\n/s', $s, $mm)) {
+                return null;
+            }
+            $img = json_decode($mi[1], true);
+            $models = json_decode($mm[1], true);
+            if (! is_array($img) || ! is_array($models)) {
+                return null;
+            }
+            $this->spaMemo['data'] = ['img' => $img, 'models' => $models];
+
+            return $this->spaMemo['data'];
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Real motorcycle photos for parts tenants (public/assets/sfm, referenced by the SPA's
+     * IMG/MODELS data). Up to $max entries [name, dataUri], deduped by file.
      * @return array<int,array{0:string,1:string}>
      */
     private function bikePhotos(Tenant $tenant, int $max = 4): array
     {
         try {
-            if (! class_exists(\App\Support\Vertical::class)
-                || \App\Support\Vertical::of($tenant) !== \App\Support\Vertical::AUTO_PARTS) {
+            $data = $this->spaData($tenant);
+            if (! $data) {
                 return [];
             }
-            $spa = resource_path('storefront/autoparts.html');
-            if (! is_file($spa)) {
-                return [];
-            }
-            $s = (string) file_get_contents($spa);
-            if (! preg_match('/var IMG = (\{.*?\});/s', $s, $mi) || ! preg_match('/var MODELS = (\[.*?\]);\s*\n/s', $s, $mm)) {
-                return [];
-            }
-            $img = json_decode($mi[1], true);
-            $models = json_decode($mm[1], true);
-            if (! is_array($img) || ! is_array($models)) {
-                return [];
-            }
-
             $out = [];
             $seen = [];
-            foreach ($models as $m) {
+            foreach ($data['models'] as $m) {
                 if (count($out) >= $max) {
                     break;
                 }
                 $id = (string) ($m['id'] ?? '');
-                $rel = (string) ($img[$id] ?? '');
+                $rel = (string) ($data['img'][$id] ?? '');
                 if ($id === '' || $rel === '' || isset($seen[$rel]) || ! str_starts_with($rel, '/assets/')) {
                     continue;
                 }
@@ -828,20 +859,8 @@ final class CatalogRenderer
     private function bikeHero(Tenant $tenant): string
     {
         try {
-            if (! class_exists(\App\Support\Vertical::class)
-                || \App\Support\Vertical::of($tenant) !== \App\Support\Vertical::AUTO_PARTS) {
-                return '';
-            }
-            $spa = resource_path('storefront/autoparts.html');
-            if (! is_file($spa)) {
-                return '';
-            }
-            $s = (string) file_get_contents($spa);
-            if (! preg_match('/var IMG = (\{.*?\});/s', $s, $mi)) {
-                return '';
-            }
-            $img = json_decode($mi[1], true);
-            $rel = is_array($img) ? (string) ($img['hero'] ?? '') : '';
+            $data = $this->spaData($tenant);
+            $rel = $data ? (string) ($data['img']['hero'] ?? '') : '';
             if ($rel === '' || ! str_starts_with($rel, '/assets/')) {
                 return '';
             }
@@ -850,6 +869,201 @@ final class CatalogRenderer
             return is_file($file) ? $this->asset($tenant, $file, 620) : '';
         } catch (\Throwable $e) {
             return '';
+        }
+    }
+
+    /**
+     * The storefront's model list as [[name, lowercase match tokens], …] for per-card
+     * fitment lines. Tokens are the alpha words of the model name/id (≥3 chars).
+     * @return array<int,array{0:string,1:array<int,string>}>
+     */
+    private function fitModels(Tenant $tenant): array
+    {
+        try {
+            $data = $this->spaData($tenant);
+            if (! $data) {
+                return [];
+            }
+            // Maker names alone ("bajaj", "tvs") appear in nearly every item's keywords and
+            // would match every model of that maker — match only on DISTINCTIVE tokens
+            // (model family words like "boxer"/"hlx"/"v15"), so a V15 part never claims to
+            // fit every Bajaj, and pure-maker items fall back to the brand line.
+            $makers = ['bajaj' => true, 'tvs' => true, 'honda' => true, 'yamaha' => true, 'suzuki' => true, 'ct' => true];
+            $out = [];
+            foreach ($data['models'] as $m) {
+                $name = trim((string) ($m['name'] ?? ''));
+                if ($name === '') {
+                    continue;
+                }
+                $toks = [];
+                foreach (preg_split('/[^a-z0-9]+/', mb_strtolower($name . ' ' . (string) ($m['id'] ?? ''), 'UTF-8'), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $t) {
+                    if (strlen($t) >= 3 && ! ctype_digit($t) && ! isset($makers[$t])) {
+                        $toks[$t] = true;
+                    }
+                }
+                if ($toks) {
+                    $out[] = [$name, array_keys($toks)];
+                }
+            }
+
+            return $out;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /**
+     * "✓ Fits Boxer 100 KS · 125 HD · 150" — specific models matched from the item's
+     * brand+keywords against the storefront model list. '' when nothing matches
+     * (caller falls back to the brand line).
+     */
+    private function fitsLineFor(array $item, array $fitModels): string
+    {
+        if (! $fitModels) {
+            return '';
+        }
+        $hay = mb_strtolower((string) ($item['brand'] ?? '') . ' ' . (string) ($item['keywords'] ?? ''), 'UTF-8');
+        if (trim($hay) === '') {
+            return '';
+        }
+        $names = [];
+        foreach ($fitModels as [$name, $toks]) {
+            foreach ($toks as $t) {
+                if (str_contains($hay, $t)) {
+                    $names[] = $name;
+                    break;
+                }
+            }
+        }
+        if (! $names) {
+            return '';
+        }
+        // Compress a shared family word: Boxer 100 KS + Boxer 125 HD → "Boxer 100 KS · 125 HD"
+        $first = explode(' ', $names[0])[0];
+        $sameFamily = count(array_filter($names, fn ($n) => str_starts_with($n, $first . ' ') || $n === $first)) === count($names);
+        $shown = array_slice($names, 0, 3);
+        if ($sameFamily && count($names) > 1) {
+            $rest = array_map(fn ($n) => trim(substr($n, strlen($first))) ?: $n, $shown);
+            $line = $first . ' ' . implode(' · ', $rest);
+        } else {
+            $line = implode(' · ', $shown);
+        }
+        if (count($names) > 3) {
+            $line .= ' +' . (count($names) - 3);
+        }
+
+        return '✓ Fits ' . $this->clipLine($line, 34);
+    }
+
+    /**
+     * Split a product name into [display name, spec line]: trailing parentheticals become
+     * the spec ("Drive Chain (428H-112L)" → ["Drive Chain", "428H-112L"]). Parentheticals
+     * that are just fitment words (Boxer/TVS/…) are dropped — the fits line covers them.
+     */
+    private function nameSpec(string $name, array $fitModels): array
+    {
+        if (! preg_match_all('/\(([^()]{1,40})\)/', $name, $mm)) {
+            return [trim($name), ''];
+        }
+        $fitWords = ['bajaj' => true, 'boxer' => true, 'tvs' => true];
+        foreach ($fitModels as [, $toks]) {
+            foreach ($toks as $t) {
+                $fitWords[$t] = true;
+            }
+        }
+        $specs = [];
+        $strip = [];
+        foreach ($mm[1] as $i => $inner) {
+            $words = preg_split('/[^a-z0-9]+/', mb_strtolower($inner, 'UTF-8'), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            $alpha = array_filter($words, fn ($w) => ! ctype_digit($w));
+            $isFit = $alpha !== [] && count(array_filter($alpha, fn ($w) => isset($fitWords[$w]))) === count($alpha);
+            if ($isFit) {
+                $strip[] = $mm[0][$i];          // pure fitment marker → fits line covers it
+            } else {
+                $specs[] = trim($inner);
+                $strip[] = $mm[0][$i];
+            }
+        }
+        $base = trim(preg_replace('/\s{2,}/', ' ', str_replace($strip, '', $name)));
+        if (mb_strlen($base, 'UTF-8') < 3) {
+            return [trim($name), ''];           // stripping everything left nothing usable
+        }
+
+        return [$base, implode(' · ', array_slice($specs, 0, 2))];
+    }
+
+    /**
+     * Batch-generate per-product QR codes (parallel fetch, same disk cache as asset()).
+     * Parts tenants with a website get the REAL product URL (/part/{id} — the v4.11 SEO
+     * pages); otherwise a prefilled wa.me link. [] in plain mode or with no phone+website.
+     * @return array<string,string> item key (id|sku|name) => dataUri
+     */
+    private function qrBatch(Tenant $tenant, array $groups, bool $isParts, string $webHref, string $phone): array
+    {
+        try {
+            $digits = preg_replace('/\D+/', '', $phone);
+            $base = ($isParts && $webHref !== '') ? rtrim($webHref, '/') : '';
+            if ($base === '' && $digits === '') {
+                return [];
+            }
+
+            $urls = [];   // itemKey => quickchart url
+            foreach ($groups as $g) {
+                foreach ($g['items'] as $it) {
+                    $key = (string) ($it['id'] ?? '') !== '' ? 'i' . $it['id'] : (string) ($it['sku'] ?? $it['name'] ?? '');
+                    if ($key === '' || isset($urls[$key])) {
+                        continue;
+                    }
+                    if ($base !== '' && ! empty($it['id'])) {
+                        $target = $base . '/part/' . (int) $it['id'];
+                    } elseif ($digits !== '') {
+                        $ref = trim((string) ($it['sku'] ?? '')) ?: $this->clipLine((string) ($it['name'] ?? ''), 40);
+                        $target = 'https://wa.me/' . $digits . '?text=' . rawurlencode('Order ' . $ref);
+                    } else {
+                        continue;
+                    }
+                    $urls[$key] = 'https://quickchart.io/qr?text=' . urlencode($target) . '&size=120&margin=1';
+                }
+            }
+            if (! $urls) {
+                return [];
+            }
+
+            // disk-cache pass (same key scheme as asset() so caches interoperate)
+            $out = [];
+            $missing = [];   // fetch url => [key, cache path]
+            foreach ($urls as $key => $qurl) {
+                $cache = 'catalog-thumbs/' . $tenant->id . '/asset-' . md5($qurl . ':raw') . '.png';
+                $hit = null;
+                try {
+                    if (Storage::disk('public')->exists($cache)) {
+                        $bytes = Storage::disk('public')->get($cache);
+                        if ($bytes) {
+                            $hit = 'data:image/png;base64,' . base64_encode($bytes);
+                        }
+                    }
+                } catch (\Throwable $e) {
+                }
+                if ($hit !== null) {
+                    $out[$key] = $hit;
+                } else {
+                    $missing[$qurl] = [$key, $cache];
+                }
+            }
+            if ($missing) {
+                foreach ($this->fetchMany(array_keys($missing)) as $qurl => $raw) {
+                    [$key, $cache] = $missing[$qurl];
+                    if ($raw === null || $raw === '') {
+                        continue;   // unreachable → card simply has no QR
+                    }
+                    try { Storage::disk('public')->put($cache, $raw); } catch (\Throwable $e) { }
+                    $out[$key] = 'data:image/png;base64,' . base64_encode($raw);
+                }
+            }
+
+            return $out;
+        } catch (\Throwable $e) {
+            return [];
         }
     }
 
@@ -891,6 +1105,24 @@ final class CatalogRenderer
         $bikeHero = $plain ? '' : $this->bikeHero($tenant);
         $totalItems = 0;
         foreach ($groups as $g) $totalItems += count($g['items']);
+
+        // v2.1 card context: per-product QRs, model fitment, auto badges
+        $fits = $plain ? [] : $this->fitModels($tenant);
+        $qrMap = $plain ? [] : $this->qrBatch($tenant, $groups, $isParts, $webHref, $phone);
+        $popIds = [];
+        if (! $plain) {
+            $pops = [];
+            foreach ($groups as $g) {
+                foreach ($g['items'] as $it) {
+                    if ((int) ($it['pop'] ?? 0) >= 3 && ! empty($it['id'])) {
+                        $pops[(int) $it['id']] = (int) $it['pop'];
+                    }
+                }
+            }
+            arsort($pops);
+            $popIds = array_slice(array_keys($pops), 0, min(8, (int) ceil($totalItems * 0.1)), true);
+        }
+        $ctx = ['fits' => $fits, 'qr' => $qrMap, 'pop' => array_flip($popIds)];
 
         // --- pagination plan: cover(1) [index(2)] categories… [cross-ref] guide, contact ---
         $showIndex = count($groups) >= 2;
@@ -934,7 +1166,7 @@ final class CatalogRenderer
         $body = '';
         foreach ($plan as $p) {
             if ($p['intro']) {
-                $body .= $this->categoryIntro($p, $thumbs, $badges, $currency, $withPrices, $company, $logo, $date, $isParts, $foot);
+                $body .= $this->categoryIntro($p, $thumbs, $badges, $currency, $withPrices, $company, $logo, $date, $isParts, $ctx, $foot);
             }
             $total = count($p['chunks']);
             foreach ($p['chunks'] as $ci => $items) {
@@ -944,7 +1176,7 @@ final class CatalogRenderer
                 $body .= '<div class="page">'
                     . $this->pageHeader($company, $logo, $date)
                     . $head
-                    . $this->grid($items, $currency, $withPrices, $thumbs, $badges)
+                    . $this->grid($items, $currency, $withPrices, $thumbs, $badges, $ctx)
                     . $foot()
                     . '</div>';
             }
@@ -1019,19 +1251,22 @@ table.catband td{padding:9px 13px;vertical-align:middle;color:#ffffff;}
 .stok-low{background:#F3F4F6;color:{$gy};}
 .catchip{display:inline-block;width:20px;background:{$tint};border:1px solid {$tintLn};border-radius:6px;color:{$g};font-size:8px;font-weight:bold;text-align:center;padding:4px 0;}
 
-/* ── product card ── */
+/* ── product card (v3: 60% image with overlays — badge TL, stock TR, QR BR) ── */
 table.grid{width:100%;border-collapse:separate;border-spacing:8px;table-layout:fixed;}
 td.cell{width:33%;border:1px solid {$ln};border-radius:10px;vertical-align:top;padding:0;background:#ffffff;}
 td.cellpad{border:none;background:none;}
-.bstrip{padding:5px 7px 0;}
-.bstrip table{width:100%;border-collapse:collapse;}
-table.phw{width:100%;border-collapse:collapse;}
-table.phw td{height:138px;text-align:center;vertical-align:middle;padding:0 4px;background:#ffffff;}
-table.phw img{max-height:132px;max-width:100%;}
-.noimg{display:inline-block;color:{$ft};font-size:8px;font-weight:bold;letter-spacing:1.5px;border:1px dashed {$ln};border-radius:6px;padding:22px 16px;background:{$wl};}
+.well{position:relative;height:160px;text-align:center;}
+.well img.ph{max-height:150px;max-width:96%;margin-top:5px;}
+.ov-tl{position:absolute;top:6px;left:7px;color:#ffffff;font-size:6.5px;font-weight:bold;letter-spacing:.6px;padding:2px 7px;border-radius:8px;}
+.ov-tlo{position:absolute;top:6px;left:7px;background:#ffffff;border:1px solid {$tintLn};color:{$g};font-size:6.5px;font-weight:bold;letter-spacing:.6px;padding:1px 6px;border-radius:8px;}
+.ov-tr{position:absolute;top:6px;right:7px;font-size:6px;font-weight:bold;letter-spacing:.5px;padding:2px 6px;border-radius:7px;}
+.ov-br{position:absolute;bottom:4px;right:5px;background:#ffffff;border:1px solid {$ln};border-radius:5px;padding:2px;}
+.ov-br img{height:36px;width:36px;display:block;}
+.noimg{display:inline-block;color:{$ft};font-size:8px;font-weight:bold;letter-spacing:1.5px;border:1px dashed {$ln};border-radius:6px;padding:30px 16px;background:{$wl};margin-top:26px;}
 .pbody{padding:6px 9px 8px;border-top:1px solid #F3F4F6;}
 .pn1{font-size:10.5px;height:15px;overflow:hidden;}
-.pu{font-size:8px;color:{$gy};height:14px;overflow:hidden;margin-top:2px;}
+.pu{font-size:8px;color:{$gy};height:15px;overflow:hidden;}
+.pspec{font-size:7.5px;color:{$gy};}
 .pfits{font-size:8px;color:{$g};font-weight:bold;height:12px;overflow:hidden;margin-top:1px;}
 table.prow{width:100%;border-collapse:collapse;margin-top:5px;border-top:1px solid #F3F4F6;}
 table.prow td{padding-top:5px;vertical-align:bottom;}
@@ -1398,7 +1633,7 @@ HTML;
      * card row (the SAME card component as product pages), trust strip.
      */
     private function categoryIntro(array $p, array $thumbs, array $badges, string $currency,
-        bool $withPrices, string $company, string $logo, string $date, bool $isParts, \Closure $foot): string
+        bool $withPrices, string $company, string $logo, string $date, bool $isParts, array $ctx, \Closure $foot): string
     {
         // hero photo: first badged item with a photo, else first item with a photo
         $heroSrc = '';
@@ -1436,7 +1671,7 @@ HTML;
 
         $pickRow = $picks
             ? '<div class="eyebrowg" style="margin:13px 0 1px">★ TOP SELLERS IN ' . e(mb_strtoupper($this->clipLine($p['category'], 26))) . '</div>'
-                . $this->grid($picks, $currency, $withPrices, $thumbs, $badges)
+                . $this->grid($picks, $currency, $withPrices, $thumbs, $badges, $ctx)
             : '';
 
         return '<div class="page">'
@@ -1475,9 +1710,23 @@ HTML;
         $total = count($p['chunks']);
         $cont = $total > 1 ? ' <span style="font-weight:normal;color:' . self::C_TINT . ';font-size:10px">1 / ' . $total . '</span>' : '';
 
+        // the brands stocked in this category, as chips ("Bajaj Boxer · TVS" tells a mechanic
+        // instantly whether their bike is covered)
+        $brands = [];
+        foreach ($p['items'] as $it) {
+            $bn = trim((string) ($it['brand'] ?? ''));
+            if ($bn !== '') {
+                $brands[$bn] = true;
+            }
+        }
+        $brandChips = '';
+        foreach (array_slice(array_keys($brands), 0, 3) as $bn) {
+            $brandChips .= ' <span class="pill" style="background:' . self::C_TINT . '">' . e($this->clipLine($bn, 16)) . '</span>';
+        }
+
         return '<table class="hero"><tr>'
             . '<td><div class="heroname">' . e($p['category']) . $cont . '</div>'
-            . '<div style="margin-top:7px"><span class="pill">' . (int) $p['count'] . ' products</span></div>'
+            . '<div style="margin-top:7px"><span class="pill">' . (int) $p['count'] . ' products</span>' . $brandChips . '</div>'
             . $strip . '</td>'
             . ($heroSrc !== '' ? '<td style="width:150px;text-align:right"><span class="heroimg" style="display:inline-block"><img src="' . e($heroSrc) . '" style="max-height:96px;max-width:128px"></span></td>' : '')
             . '</tr></table>';
@@ -1624,6 +1873,14 @@ HTML;
             ? '<table style="width:100%;border-collapse:separate;border-spacing:6px;margin-top:20px"><tr>' . $detailCells . '</tr></table>'
             : '';
 
+        // the dealer programme is live (OTP sign-in, trade prices) — recruit from the catalogue
+        $dealerCard = '<table style="width:100%;border-collapse:collapse;background:#ffffff;border-radius:12px;margin-top:26px"><tr>'
+            . '<td style="padding:14px 18px;text-align:left">'
+            . '<div class="eyebrowg" style="font-size:8.5px">BECOME A DEALER</div>'
+            . '<div style="font-size:11px;font-weight:bold;color:' . self::C_INK . ';margin-top:4px">Garages &amp; shops: trade prices and priority stock.</div>'
+            . '<div style="font-size:9px;color:' . self::C_GREY . ';margin-top:3px">Message ' . ($phone !== '' ? e($phone) : 'us') . ' with your business name to enrol — takes two minutes.</div>'
+            . '</td></tr></table>';
+
         return '<div class="backpage">'
             . '<table class="plate"><tr><td style="padding:110px 40px 40px;text-align:center;height:910px;vertical-align:top">'
             . $logoBlock
@@ -1633,10 +1890,11 @@ HTML;
             . ($phone !== '' ? '<div style="font-size:28px;font-weight:bold;color:#ffffff;margin-top:10px">' . e($phone) . '</div>' : '')
             . ($webText !== '' ? '<div style="margin-top:16px;font-size:13px;font-weight:bold"><a href="' . e($webHref) . '" style="color:' . self::C_WA . ';text-decoration:none">' . e($webText) . '</a></div>' : '')
             . ($email !== '' ? '<div style="margin-top:7px;font-size:9.5px;color:' . $tint . '">' . e($email) . '</div>' : '')
-            . ($qr !== '' ? '<div style="margin-top:56px"><span class="qrbox" style="padding:8px"><img src="' . e($qr) . '" style="height:96px;width:96px"></span>'
+            . ($qr !== '' ? '<div style="margin-top:48px"><span class="qrbox" style="padding:8px"><img src="' . e($qr) . '" style="height:96px;width:96px"></span>'
                 . '<div style="font-size:8px;font-weight:bold;letter-spacing:1.5px;color:' . $tint . ';margin-top:8px">SCAN · ORDER · DELIVERED</div></div>' : '')
-            . str_replace('margin-top:20px', 'margin-top:64px', $details)
-            . '<div style="margin-top:64px;border-top:1px solid ' . $gm . ';padding-top:12px;font-size:7.5px;color:' . $tint . '">'
+            . str_replace('margin-top:20px', 'margin-top:48px', $details)
+            . $dealerCard
+            . '<div style="margin-top:32px;border-top:1px solid ' . $gm . ';padding-top:12px;font-size:7.5px;color:' . $tint . '">'
             . e($company) . ' · Catalogue ' . e($date) . ' · ' . e($version)
             . ($withPrices ? ' — prices in ' . e($currency) . ', valid as of ' . e($dateFull) . ', subject to change without notice. Availability confirmed on order.' : ' — availability confirmed on order.')
             . ' Thank you for your business.'
@@ -1656,48 +1914,86 @@ HTML;
             . '</tr></table>';
     }
 
-    /** @param array<int,array<string,mixed>> $items */
-    private function grid(array $items, string $currency, bool $withPrices, array $thumbs, array $badges = []): string
+    /**
+     * THE product card (one component, everywhere): 60% photo with overlaid badge / stock
+     * chip / product QR, then OEM+spec row, name, fitment line, price row.
+     * $ctx: ['fits' => fitModels(), 'qr' => qrBatch(), 'pop' => set of POPULAR ids]
+     * @param array<int,array<string,mixed>> $items
+     */
+    private function grid(array $items, string $currency, bool $withPrices, array $thumbs, array $badges = [], array $ctx = []): string
     {
+        $fitModels = $ctx['fits'] ?? [];
+        $qrMap = $ctx['qr'] ?? [];
+        $popSet = $ctx['pop'] ?? [];
+
         $cells = [];
         foreach ($items as $it) {
             $img = trim((string) ($it['image'] ?? ''));
             $src = $img !== '' ? ($thumbs === [] ? $img : ($thumbs[$img] ?? '')) : '';
-            $photo = $src !== ''
-                ? '<table class="phw"><tr><td><img src="' . e($src) . '"></td></tr></table>'
-                : '<table class="phw"><tr><td><span class="noimg">PHOTO<br>COMING SOON</span></td></tr></table>';
 
+            // overlays: owner badge > auto POPULAR > auto NEW (top-left), stock (top-right), QR (bottom-right)
             $b = $this->badgeFor($it, $badges);
-            $bstrip = '<div class="bstrip"><table><tr>'
-                . '<td>' . ($b ? '<span class="badge" style="background:' . $b['bg'] . '">' . $b['label'] . '</span>' : '&nbsp;') . '</td>'
-                . '<td style="text-align:right">' . (array_key_exists('stock', $it) ? $this->stockChip($it['stock']) : '&nbsp;') . '</td>'
-                . '</tr></table></div>';
+            $badgeTag = '';
+            if ($b) {
+                $badgeTag = '<span class="ov-tl" style="background:' . $b['bg'] . '">' . $b['label'] . '</span>';
+            } elseif (! empty($it['id']) && isset($popSet[(int) $it['id']])) {
+                $badgeTag = '<span class="ov-tl" style="background:' . self::C_GREEN_MID . '">POPULAR</span>';
+            } elseif (! empty($it['new'])) {
+                $badgeTag = '<span class="ov-tlo">NEW</span>';
+            }
+            $stockTag = array_key_exists('stock', $it)
+                ? str_replace('class="stok ', 'class="ov-tr stok ', $this->stockChip($it['stock']))
+                : '';
+            $key = (string) ($it['id'] ?? '') !== '' ? 'i' . $it['id'] : (string) ($it['sku'] ?? $it['name'] ?? '');
+            $qrUri = $qrMap[$key] ?? '';
+            $qrTag = $qrUri !== '' ? '<span class="ov-br"><img src="' . e($qrUri) . '"></span>' : '';
+            $photo = '<div class="well">'
+                . ($src !== '' ? '<img class="ph" src="' . e($src) . '">' : '<span class="noimg">PHOTO<br>COMING SOON</span>')
+                . $badgeTag . $stockTag . $qrTag
+                . '</div>';
 
             $unit = trim((string) ($it['unit'] ?? ''));
-            // The two info lines are multi-purpose so card height never changes:
-            //   line 1: OEM chip when known (mechanics order by this) + unit, else the selling unit.
-            //   line 2: MOQ when set (FMCG tenants), else a brand "Fits" line (parts tenants).
             $oem = trim((string) ($it['oem'] ?? ''));
             $pbrand = trim((string) ($it['brand'] ?? ''));
-            $line1 = $oem !== ''
-                ? '<span class="oem">OEM ' . e($this->clipLine($oem, 18)) . '</span>' . ($unit !== '' ? ' <span style="font-size:7px;color:' . self::C_FAINT . '">per ' . e($this->clipLine($unit, 12)) . '</span>' : '')
-                : ($unit !== '' ? 'Sold per ' . e($unit) : '&nbsp;');
-            $line2 = ! empty($it['moq'])
-                ? '<span style="color:' . self::C_GREY . ';font-weight:normal">Min order: ' . e((string) $it['moq']) . ' &times; ' . e($unit !== '' ? $unit : 'units') . '</span>'
-                : ($pbrand !== '' ? '✓ Fits ' . e($this->clipLine($pbrand, 22)) . ' models' : '&nbsp;');
+            [$dispName, $spec] = $this->nameSpec((string) ($it['name'] ?? ''), $fitModels);
+
+            // row 1 (above the name — mechanics find parts by number first): OEM chip + spec,
+            // else spec alone, else the selling unit.
+            $specTag = $spec !== '' ? '<span class="pspec">' . e($this->clipLine($spec, $oem !== '' ? 14 : 30)) . '</span>' : '';
+            if ($oem !== '') {
+                $line1 = '<span class="oem">OEM ' . e($this->clipLine($oem, 18)) . '</span>' . ($specTag !== '' ? ' ' . $specTag : '');
+            } elseif ($specTag !== '') {
+                $line1 = $specTag;
+            } else {
+                $line1 = $unit !== '' ? 'Sold per ' . e($unit) : '&nbsp;';
+            }
+
+            // fitment line: specific models when matchable, else brand family, else MOQ (FMCG)
+            $fitLine = $this->fitsLineFor($it, $fitModels);
+            if (! empty($it['moq'])) {
+                $line2 = '<span style="color:' . self::C_GREY . ';font-weight:normal">Min order: ' . e((string) $it['moq']) . ' &times; ' . e($unit !== '' ? $unit : 'units') . '</span>';
+            } elseif ($fitLine !== '') {
+                $line2 = e($fitLine);
+            } elseif ($pbrand !== '') {
+                $line2 = '✓ Fits ' . e($this->clipLine($pbrand, 22)) . ' models';
+            } else {
+                $line2 = '&nbsp;';
+            }
 
             if ($withPrices) {
                 [$big, $small] = $this->moneyParts((float) $it['price'], $currency);
+                $unitSuffix = ($unit !== '' && ! in_array(mb_strtolower($unit, 'UTF-8'), ['piece', 'pc', 'pcs', 'unit'], true))
+                    ? ' <span class="prc">/ ' . e($this->clipLine($unit, 10)) . '</span>' : '';
                 $priceCell = '<div class="pfrom">FROM</div><div class="pr">' . $big
-                    . ($small !== '' ? ' <span class="prc">' . e($small) . '</span>' : '') . '</div>';
+                    . ($small !== '' ? ' <span class="prc">' . e($small) . '</span>' : '') . $unitSuffix . '</div>';
             } else {
                 $priceCell = '<div class="pr" style="color:' . self::C_FAINT . ';font-size:10px">Ask for price</div>';
             }
 
-            $cells[] = '<td class="cell">' . $bstrip . $photo
+            $cells[] = '<td class="cell">' . $photo
                 . '<div class="pbody">'
-                . '<div class="m">' . $this->nameLines((string) $it['name']) . '</div>'
                 . '<div class="pu">' . $line1 . '</div>'
+                . '<div class="m">' . $this->nameLines($dispName) . '</div>'
                 . '<div class="pfits">' . $line2 . '</div>'
                 . '<table class="prow"><tr><td>' . $priceCell . '</td>'
                 . '<td class="sku">' . ($it['sku'] ? 'SKU ' . e((string) $it['sku']) : '') . '</td></tr></table>'
