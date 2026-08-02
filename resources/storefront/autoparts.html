@@ -364,6 +364,20 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 .pidg{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:12px}
 .pidone .pidconf{font-size:10.5px;font-weight:800;letter-spacing:.5px;margin:0 0 4px}
 </style>
+<style>/* v4.9.1 dealer */
+.dlrbar{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#0f172a;color:#e2e8f0;font-size:12px;padding:7px 14px}
+.dlrbar b{color:#fff}
+.dlrbar .dacts a{color:#86efac;font-weight:800;margin-left:14px;cursor:pointer}
+.dlin{display:block;width:100%;box-sizing:border-box;border:1.5px solid #e2e8f0;border-radius:10px;padding:11px 12px;font:inherit;font-size:15px;margin:0 0 10px}
+.dlcode{text-align:center;letter-spacing:12px;font-weight:800;font-size:22px}
+.dstrike{color:#94a3b8;text-decoration:line-through;font-size:11.5px;margin-right:6px;font-weight:600}
+.dyour{color:#166534}
+.dh{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.dhrow{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid #e2e8f0;border-radius:10px;padding:9px 12px;font-size:13px}
+.dhrow .dhi{color:#64748b;font-size:11.5px;margin-top:2px}
+.dagain{background:#d92027;color:#fff;border:0;border-radius:9px;padding:8px 12px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap}
+.dlrfoot{cursor:pointer;font-weight:700}
+</style>
 </head>
 <body>
 <main id="app" role="main"></main>
@@ -553,6 +567,84 @@ function pidOpen(html){
   ov.classList.add('on');
 }
 function pidClose(){ var ov=document.getElementById('pidov'); if(ov) ov.classList.remove('on'); }
+/* ---------- v4.9.1: dealer sign-in (WhatsApp code) + YOUR PRICE overlay ---------- */
+function dlrState(){ try{ return JSON.parse(localStorage.getItem('ea_dealer')||'null'); }catch(e){ return null; } }
+function dlrSave(o){ try{ if(o)localStorage.setItem('ea_dealer',JSON.stringify(o)); else localStorage.removeItem('ea_dealer'); }catch(e){} }
+function dlrUrl(p){ return String(CFG.catalogueUrl||'/catalogue').replace(/catalogue$/,p); }
+function dlrPrice(p){ var d=STATE.dealer; if(!d||!d.prices||!p) return null; var v=d.prices[String(p.id)]; return (v!=null&&v>0&&v<(p.price||1/0))?v:null; }
+function dlrLoad(){
+  var s=dlrState(); if(!s||!s.token){ STATE.dealer=null; return; }
+  fetch(dlrUrl('dealer-feed')+'?t='+encodeURIComponent(s.token)).then(function(r){return r.json();}).then(function(j){
+    if(!j||!j.ok){ if(j&&j.error==='signin_required') dlrSave(null); STATE.dealer=null; render(); return; }
+    STATE.dealer={tier:j.tier,pct:j.pct,name:j.name,prices:j.prices||{},history:j.history||[],token:s.token};
+    dlrReprice(); render();
+  }).catch(function(){});
+}
+function dlrReprice(){
+  var c=cartGet(); var ch=false;
+  c.forEach(function(i){ var p=STATE.products.filter(function(x){return String(x.id)===String(i.id);})[0]; if(!p)return;
+    var dp=dlrPrice(p); var want=(dp!=null?dp:(p.price||0));
+    if(i.price!==want){ i.price=want; ch=true; } });
+  if(ch) cartSave(c);
+}
+function dlrSignout(){ dlrSave(null); STATE.dealer=null; dlrReprice(); pidClose(); render(); }
+function dlrBar(){
+  var d=STATE.dealer; if(!d) return '';
+  return '<div class="dlrbar"><span>💼 <b>'+esc(d.name||'Dealer')+'</b> — '+esc(String(d.tier||'dealer').toUpperCase())+' pricing ('+(d.pct||0)+'% off list)</span>'
+    +'<span class="dacts"><a onclick="dlrSheet()">My orders</a><a onclick="dlrSignout()">Sign out</a></span></div>';
+}
+function dlrSheet(){
+  var d=STATE.dealer;
+  if(d){
+    var hist=(d.history||[]).map(function(h,ix){
+      var its=(h.items||[]).slice(0,4).map(function(i){return i.qty+'× '+i.name;}).join(', ')+((h.items||[]).length>4?' +'+(h.items.length-4)+' more':'');
+      return '<div class="dhrow"><div><b>'+esc(h.no)+'</b> · '+esc(h.date)+(h.status?' · '+esc(h.status):'')+'<div class="dhi">'+esc(its)+'</div></div>'
+        +'<button class="dagain" onclick="dlrAgain('+ix+')">Order again</button></div>';
+    }).join('');
+    pidOpen('<div class="pidhead"><b>💼 '+esc(d.name||'Dealer account')+'</b><p>'+esc(String(d.tier||'').toUpperCase())+' · '+(d.pct||0)+'% off list · prices shown are YOUR prices.</p></div>'
+      +(hist?'<div class="dh">'+hist+'</div>':'<p style="color:#64748b;font-size:13px;margin-top:10px">No orders yet — your first quotation will appear here.</p>')
+      +'<a class="btn btn-o" style="display:block;text-align:center;margin-top:12px" onclick="dlrSignout()">Sign out</a>');
+    return;
+  }
+  pidOpen('<div class="pidhead"><b>💼 Dealer sign-in</b><p>Enter your WhatsApp number — we send a 4-digit code to it. For enrolled trade customers.</p></div>'
+    +'<input id="dlPhone" class="dlin" type="tel" inputmode="tel" placeholder="e.g. 2567XXXXXXXX" autocomplete="tel">'
+    +'<button class="btn btn-p" style="display:block;width:100%" onclick="dlrSend()">Send my code</button>'
+    +'<div id="dlMsg" style="font-size:12.5px;color:#64748b;margin-top:8px"></div>');
+}
+function dlrSend(){
+  var ph=((document.getElementById('dlPhone')||{}).value||'').replace(/[^0-9]/g,'');
+  if(ph.length<7){ var m=document.getElementById('dlMsg'); if(m)m.textContent='Enter the full number with country code.'; return; }
+  fetch(dlrUrl('dealer-otp'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:ph})})
+    .then(function(r){return r.json();}).catch(function(){return null;});
+  pidOpen('<div class="pidhead"><b>Check WhatsApp</b><p>We sent a 4-digit code to '+esc(ph)+' (if it’s enrolled). Enter it below.</p></div>'
+    +'<input id="dlCode" class="dlin dlcode" type="tel" inputmode="numeric" maxlength="4" placeholder="••••">'
+    +'<button class="btn btn-p" style="display:block;width:100%" onclick="dlrVerify(\''+ph+'\')">Verify & sign in</button>'
+    +'<div id="dlMsg" style="font-size:12.5px;color:#64748b;margin-top:8px"></div>'
+    +'<a class="link" style="display:block;text-align:center;margin-top:8px" onclick="dlrSheet()">Different number</a>');
+  var i=document.getElementById('dlCode'); if(i)setTimeout(function(){i.focus();},50);
+}
+function dlrVerify(ph){
+  var code=((document.getElementById('dlCode')||{}).value||'').replace(/[^0-9]/g,'');
+  var m=document.getElementById('dlMsg');
+  fetch(dlrUrl('dealer-verify'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:ph,code:code})})
+    .then(function(r){return r.json();}).then(function(j){
+      if(!j||!j.ok){ if(m)m.textContent=(j&&j.error)||'Could not verify — try again.'; return; }
+      dlrSave({token:j.token,phone:ph});
+      pidClose(); dlrLoad(); toast('Signed in — your dealer prices are now shown');
+    }).catch(function(){ if(m)m.textContent='Network problem — try again.'; });
+}
+function dlrAgain(ix){
+  var d=STATE.dealer; var h=d&&d.history&&d.history[ix]; if(!h) return;
+  var c=cartGet();
+  (h.items||[]).forEach(function(it){
+    var p=STATE.products.filter(function(x){return String(x.name).toLowerCase()===String(it.name).toLowerCase();})[0];
+    if(!p) return;
+    var dp=dlrPrice(p); var price=(dp!=null?dp:(p.price||0));
+    var e=c.filter(function(i){return String(i.id)===String(p.id);})[0];
+    if(e) e.qty+=Math.max(1,it.qty|0); else c.push({id:p.id,name:p.name,pn:pnOf(p),price:price,qty:Math.max(1,it.qty|0)});
+  });
+  cartSave(c); pidClose(); go('cart'); toast('Order loaded into your cart');
+}
 function partNo(kw){
   var s=String(kw||''); var segs=s.split('|'); var re=/^[A-Z0-9]{2}\s?[A-Z0-9]{3,4}\s?[A-Z0-9]{2}$/;
   for(var i=1;i<segs.length;i++){ var t=segs[i].trim(); if(re.test(t)) return t; }  /* skip seg 0 (model name) */
@@ -605,8 +697,8 @@ function loadCatalogue(){
       sysNames.forEach(function(sn){ var k=nk(sn); if(segs.indexOf(k)>=0){ (STATE.bySys[k]=STATE.bySys[k]||[]).push(p); } });
     });
     (DIAG&&DIAG.plates||[]).forEach(function(pl){ (pl.parts||[]).forEach(function(x){ STATE.pnPlate[normPn(x.pn)]=pl.plate; }); });
-    STATE.loaded=true; render();
-  }).catch(function(){ STATE.error=true; STATE.loaded=true; render(); });
+    STATE.loaded=true; render(); try{ dlrLoad(); }catch(e){}
+  }).catch(function(){ STATE.error=true; STATE.loaded=true; render(); try{ dlrLoad(); }catch(e){} });
 }
 function systemsWithCounts(){
   return (CFG.systems||[]).map(function(s){
@@ -729,7 +821,7 @@ function cartCount(){ return cartGet().reduce(function(n,i){return n+i.qty;},0);
 function cartTotal(){ return cartGet().reduce(function(s,i){return s+(i.price||0)*i.qty;},0); }
 function cartAdd(id){ var p=STATE.products.filter(function(x){return String(x.id)===String(id);})[0]; if(!p)return;
   var c=cartGet(); var e=c.filter(function(i){return String(i.id)===String(p.id);})[0];
-  if(e)e.qty++; else c.push({id:p.id,name:p.name,pn:pnOf(p),price:p.price||0,qty:1});
+  if(e)e.qty++; else c.push({id:p.id,name:p.name,pn:pnOf(p),price:(function(){var dp=dlrPrice(p);return dp!=null?dp:(p.price||0);})(),qty:1});
   cartSave(c); track('add',{product_id:p.id}); toast('“'+p.name+'” added to cart'); }
 function cartSet(id,d){ var c=cartGet(); for(var i=0;i<c.length;i++){ if(String(c[i].id)===String(id)){ c[i].qty=Math.max(0,c[i].qty+d); if(!c[i].qty)c.splice(i,1); break; } } cartSave(c); render(); }
 function updateCartBadge(){ var n=(function(){try{return cartCount();}catch(e){return 0;}})(); Array.prototype.forEach.call(document.querySelectorAll('.cartn'),function(el){ el.textContent=n; el.style.display=n?'inline-flex':'none'; }); }
@@ -775,7 +867,7 @@ window.addEventListener('unhandledrejection', function(e){
 });
 function waCartOrder(){ var c=cartGet(); if(!c.length)return waLink(); var b=getBike();
   var lines=c.map(function(i){return '• '+i.qty+'x '+i.name+(i.pn?(' ('+i.pn+')'):'')+(i.price>0?(' — '+money(i.price*i.qty)):'');}).join('%0a');
-  var t='Hello '+(CFG.name||'')+', I want to order these genuine parts:%0a'+lines+'%0a%0aTotal: '+money(cartTotal())+(b?('%0aMy motorcycle: '+b.name):'')+'%0a%0aPlease confirm stock, delivery time and payment.';
+  var t='Hello '+(CFG.name||'')+', I want to order these genuine parts:'+(STATE.dealer?' (DEALER ORDER — my trade prices below)':'')+'%0a'+lines+'%0a%0aTotal: '+money(cartTotal())+(b?('%0aMy motorcycle: '+b.name):'')+'%0a%0aPlease confirm stock, delivery time and payment.';
   return CFG.waNumber?('https://wa.me/'+CFG.waNumber+'?text='+t):'#'; }
 /* ---------- which bike models to show ----------
    1) If the shop set an explicit list (Settings -> Storefront), show exactly those, in order.
@@ -835,7 +927,7 @@ function nav(){
    +'<span class="lnk" onclick="go(\'parts\')">Parts</span>'
    +'<span class="lnk" onclick="go(\'ai\')">AI Assistant</span>'
    +'<a class="cart" onclick="go(\'cart\')">Cart <span class="cartn"></span></a>'
-   +'</div></header>'+bikeBar();
+   +'</div></header>'+bikeBar()+dlrBar();
 }
 /* Left filter sidebar for listing pages: jump between systems + narrow by stock/fit. */
 function filterSidebar(active){
@@ -886,7 +978,7 @@ function pickBike(id){ setBike(id); closeBikePick(); toast('Showing parts for yo
 function closeBikePick(){ var el=document.getElementById('bikepick'); if(el)el.classList.remove('on'); }
 function foot(){
   var cc=[];if(CFG.phone)cc.push(esc(CFG.phone));if(CFG.email)cc.push(esc(CFG.email));if(CFG.website)cc.push(esc(CFG.website));
-  return '<footer class="foot"><div class="wrap"><div><b>'+esc(CFG.name||'')+'</b> · '+esc(CFG.eyebrow||'')+'<div style="font-size:12px;margin-top:4px">'+cc.join(' · ')+'</div></div><div style="font-size:12px">Genuine parts guarantee · 1 Year Warranty</div></div></footer>';
+  return '<footer class="foot"><div class="wrap"><div><b>'+esc(CFG.name||'')+'</b> · '+esc(CFG.eyebrow||'')+' · <span class="dlrfoot" onclick="dlrSheet()">💼 '+(STATE.dealer?'My dealer account':'Dealer sign-in')+'</span>'+'<div style="font-size:12px;margin-top:4px">'+cc.join(' · ')+'</div></div><div style="font-size:12px">Genuine parts guarantee · 1 Year Warranty</div></div></footer>';
 }
 function trust(){
   var items=[
@@ -954,7 +1046,7 @@ function prodCard(p){
   return '<div class="card pc" onclick="go(\'part/'+sid(p.id)+'\')"><div class="im imxl">'+(p.img?'<img src="'+esc(p.img)+'" alt="'+esc(p.name)+'" loading="lazy">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
     +'<div class="bd">'+(pn?'<span class="oemchip">OEM '+esc(pn)+'</span>':'')+'<h4>'+esc(p.name)+'</h4>'+fitBadge(p)
     +'<div class="fitsline">'+esc(cardFits(p))+(p.sku?' · <span class="mono">'+esc(p.sku)+'</span>':'')+'</div>'
-    +'<div class="ft"><b>'+(priced?money(p.price):'<span class="askp">Ask price</span>')+'</b><span class="stock '+(inS?'y':'n')+'">'+stockTxt+'</span></div>'
+    +'<div class="ft"><b>'+(function(){ var dp=dlrPrice(p); if(dp!=null) return '<span class="dstrike">'+money(p.price)+'</span><span class="dyour">'+money(dp)+'</span>'; return priced?money(p.price):'<span class="askp">Ask price</span>'; })()+'</b><span class="stock '+(inS?'y':'n')+'">'+stockTxt+'</span></div>'
     +'<div class="cbtns"><button class="btn btn-p btn-sm add" onclick="event.stopPropagation();cartAdd(\''+sid(p.id)+'\')"><i class="fa fa-plus"></i> Add to cart</button><a class="wabuy" href="'+esc(waBuy(p))+'" target="_blank" rel="noopener" onclick="event.stopPropagation();" aria-label="Buy on WhatsApp"><i class="fa fa-whatsapp"></i></a></div></div></div>';
 }
 function vParts(){
@@ -1001,7 +1093,7 @@ function vPart(id){
       }).join('')+'</div>'; })()
    +'</div>'
    +'<div>'+(p.brand?'<span class="chip g">'+esc(p.brand)+'</span> ':'')+'<h1 style="margin-top:8px">'+esc(p.name)+'</h1>'+(pn?'<div class="oembig"><span class="lb">OEM</span><b>'+esc(pn)+'</b>'+(p.sku?'<span class="skusml">SKU '+esc(p.sku)+'</span>':'')+'</div>':(p.sku?'<div class="mono" style="margin-top:4px">SKU: '+esc(p.sku)+'</div>':''))
-   +'<div class="price">'+(priced?money(p.price):'<span class="askp">Ask for price</span>')+'</div><div class="stock '+(inS?'y':'n')+'" style="margin-bottom:12px">'+(inS?('✓ In stock'+(p.stock!=null&&p.stock>0?(' ('+p.stock+')'):'')):'Available to order')+'</div>'
+   +'<div class="price">'+(function(){ var dp=dlrPrice(p); if(dp!=null) return '<span class="dstrike" style="font-size:15px">'+money(p.price)+'</span> <span class="dyour">'+money(dp)+'</span><span style="display:block;font-size:10px;font-weight:800;letter-spacing:1px;color:#166534">YOUR DEALER PRICE</span>'; return priced?money(p.price):'<span class="askp">Ask for price</span>'; })()+'</div><div class="stock '+(inS?'y':'n')+'" style="margin-bottom:12px">'+(inS?('✓ In stock'+(p.stock!=null&&p.stock>0?(' ('+p.stock+')'):'')):'Available to order')+'</div>'
    +fitLine
    +cmH
    +(p.desc?'<p style="color:var(--muted);margin:14px 0 16px">'+esc(p.desc)+'</p>':'<div style="height:6px"></div>')
@@ -1024,7 +1116,7 @@ function vPart(id){
    +(function(){ var gw=goesWith(p,4).map(prodCard).join(''); return gw?'<div class="blk"><div class="hd"><div><h2>Goes well with</h2><div class="sub">Mechanics usually replace these together.</div></div></div><div class="g4">'+gw+'</div></div>':''; })()
    +(also?'<div class="blk"><div class="hd"><div><h2>More in this system</h2></div></div><div class="g4">'+also+'</div></div>':'')
    +'</section>'
-   +'<div class="buybar"><div class="bb-l"><b>'+(priced?money(p.price):'Ask price')+'</b><span>'+esc(p.name)+'</span></div><button class="btn btn-p" onclick="cartAdd(\''+sid(p.id)+'\')"><i class="fa fa-shopping-cart"></i> Add to cart</button></div>'
+   +'<div class="buybar"><div class="bb-l"><b>'+(function(){var dp=dlrPrice(p);if(dp!=null)return money(dp);return priced?money(p.price):'Ask price';})()+'</b><span>'+esc(p.name)+'</span></div><button class="btn btn-p" onclick="cartAdd(\''+sid(p.id)+'\')"><i class="fa fa-shopping-cart"></i> Add to cart</button></div>'
    +foot();
 }
 function galleryFor(id){ var g=(GAL&&GAL[id])||[]; if(!g.length){ var mi=modelImg(id); if(mi)g=[mi]; } return g; }

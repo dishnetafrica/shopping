@@ -470,6 +470,119 @@ class StorefrontController extends Controller
         return response()->json(['ok' => true, 'seen' => (string) ($res['seen'] ?? ''), 'matches' => $matches]);
     }
 
+    // ── v4.9.1 Dealer Programme 4b: WhatsApp-code sign-in + the dealer overlay feed ──────────────
+
+    /** POST /{shop}/dealer-otp {phone} — sends a 4-digit code on WhatsApp when the number is an enrolled dealer. */
+    public function dealerOtp(\Illuminate\Http\Request $request, ?string $shop = null)
+    {
+        [$tenant] = $this->resolveShop($shop);
+        $phone = preg_replace('/[^0-9]/', '', (string) $request->input('phone', ''));
+        // The reply is deliberately identical whether or not the number is enrolled — no probing.
+        $neutral = ['ok' => true, 'message' => 'If this number is enrolled as a dealer, a sign-in code has been sent on WhatsApp.'];
+        if (strlen($phone) < 7) return response()->json($neutral);
+
+        $cntKey = "dlrotp:cnt:{$tenant->id}:{$phone}";
+        $sent = (int) \Illuminate\Support\Facades\Cache::get($cntKey, 0);
+        if ($sent >= 3) return response()->json($neutral);                       // 3 codes / hour / phone
+
+        $profile = \App\Services\Pricing\PriceResolver::profileFor($tenant, $phone);
+        if (! $profile) return response()->json($neutral);                        // not a dealer — same reply
+
+        try {
+            $code = (string) random_int(1000, 9999);
+            \Illuminate\Support\Facades\Cache::put("dlrotp:{$tenant->id}:{$phone}", ['code' => $code, 'tries' => 0], 300);
+            \Illuminate\Support\Facades\Cache::put($cntKey, $sent + 1, 3600);
+            app(\App\Services\WhatsApp\WhatsAppManager::class)->driver('evolution')->sendText(
+                (string) $tenant->whatsapp_instance, $phone,
+                "🔐 {$tenant->name} dealer sign-in code: *{$code}*\nValid 5 minutes. Never share this code."
+            );
+            \App\Support\BotTrace::log($tenant->id, 'dealer_otp', $phone, 'sent');
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('dealer-otp send failed: ' . $e->getMessage());
+        }
+        return response()->json($neutral);
+    }
+
+    /** POST /{shop}/dealer-verify {phone, code} → {ok, token, tier, pct, name}. */
+    public function dealerVerify(\Illuminate\Http\Request $request, ?string $shop = null)
+    {
+        [$tenant] = $this->resolveShop($shop);
+        $phone = preg_replace('/[^0-9]/', '', (string) $request->input('phone', ''));
+        $code  = preg_replace('/[^0-9]/', '', (string) $request->input('code', ''));
+        $key   = "dlrotp:{$tenant->id}:{$phone}";
+        $rec   = \Illuminate\Support\Facades\Cache::get($key);
+        if (! is_array($rec)) return response()->json(['ok' => false, 'error' => 'Code expired — request a new one.']);
+        if ((int) ($rec['tries'] ?? 0) >= 5) {
+            \Illuminate\Support\Facades\Cache::forget($key);
+            return response()->json(['ok' => false, 'error' => 'Too many attempts — request a new code.']);
+        }
+        if (! hash_equals((string) $rec['code'], $code)) {
+            $rec['tries'] = (int) ($rec['tries'] ?? 0) + 1;
+            \Illuminate\Support\Facades\Cache::put($key, $rec, 300);
+            return response()->json(['ok' => false, 'error' => 'Wrong code — check WhatsApp and try again.']);
+        }
+        \Illuminate\Support\Facades\Cache::forget($key);
+        $profile = \App\Services\Pricing\PriceResolver::profileFor($tenant, $phone);
+        if (! $profile) return response()->json(['ok' => false, 'error' => 'This number is not enrolled as a dealer.']);
+        $token = \App\Services\Pricing\DealerAuth::mint($tenant->id, $phone, time() + \App\Services\Pricing\DealerAuth::TTL_DAYS * 86400);
+        \App\Support\BotTrace::log($tenant->id, 'dealer_login', $phone, 'web_signin');
+        return response()->json([
+            'ok' => true, 'token' => $token,
+            'tier' => (string) $profile->dealer_tier,
+            'pct'  => \App\Services\Pricing\PriceResolver::pctFor($tenant, $profile),
+            'name' => (string) ($profile->name ?? ''),
+        ]);
+    }
+
+    /** GET /{shop}/dealer-feed?t=<token> — per-product dealer prices + recent orders. Always no-store. */
+    public function dealerFeed(\Illuminate\Http\Request $request, ?string $shop = null)
+    {
+        [$tenant] = $this->resolveShop($shop);
+        $auth = \App\Services\Pricing\DealerAuth::check((string) ($request->query('t', '') ?: $request->header('X-Dealer-Token', '')));
+        if (! $auth || $auth['tenant'] !== (int) $tenant->id) {
+            return response()->json(['ok' => false, 'error' => 'signin_required'], 401)->header('Cache-Control', 'no-store');
+        }
+        $profile = \App\Services\Pricing\PriceResolver::profileFor($tenant, $auth['phone']);
+        if (! $profile) return response()->json(['ok' => false, 'error' => 'signin_required'], 401)->header('Cache-Control', 'no-store');
+
+        $pct   = \App\Services\Pricing\PriceResolver::pctFor($tenant, $profile);
+        $floor = \App\Services\Pricing\PriceResolver::floorFor($tenant);
+        $hasDlr = \Illuminate\Support\Facades\Schema::hasColumn('products', 'dealer_price');
+        $prices = [];
+        $q = Product::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('active', true)->whereNull('archived_at');
+        foreach ($q->get(array_merge(['id', 'price', 'cost_price'], $hasDlr ? ['dealer_price'] : [])) as $p) {
+            [$dp, $src] = \App\Services\Pricing\PriceResolver::compute(
+                (float) ($p->price ?? 0),
+                $p->cost_price !== null ? (float) $p->cost_price : null,
+                $hasDlr && $p->dealer_price !== null ? (float) $p->dealer_price : null,
+                $pct, $floor
+            );
+            if ($src !== 'retail') $prices[(int) $p->id] = $dp;
+        }
+
+        $history = [];
+        try {
+            $qs = \App\Models\Quotation::withoutGlobalScopes()->with('items')
+                ->where('tenant_id', $tenant->id)->where('customer_phone', $auth['phone'])
+                ->latest('id')->limit(5)->get();
+            foreach ($qs as $qq) {
+                $history[] = [
+                    'no'    => (string) ($qq->quote_no ?? $qq->id),
+                    'date'  => $qq->created_at ? $qq->created_at->format('d M Y') : '',
+                    'total' => (float) ($qq->total ?? 0),
+                    'status' => (string) ($qq->status ?? ''),
+                    'items' => $qq->items->map(fn ($it) => ['name' => (string) $it->name, 'qty' => (int) $it->qty])->values()->all(),
+                ];
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return response()->json([
+            'ok' => true, 'tier' => (string) $profile->dealer_tier, 'pct' => $pct,
+            'name' => (string) ($profile->name ?? ''), 'prices' => (object) $prices, 'history' => $history,
+        ])->header('Cache-Control', 'no-store');
+    }
+
     /** gzip a response when the client accepts it (proxies won't double-encode a set Content-Encoding). */
     private function compressed(string $body, string $type, string $cache)
     {
@@ -866,6 +979,27 @@ class StorefrontController extends Controller
             return response()->json(['ok' => false, 'error' => 'Please add items and your name + WhatsApp number.'], 422);
         }
 
+        // v4.9.1 — a valid dealer token makes the SERVER the price authority: every line is
+        // re-priced through PriceResolver (client-sent prices ignored for dealers). The token's
+        // phone must belong to an enrolled dealer of THIS tenant.
+        $dealerProfile = null;
+        $dealerPct = null; $dealerFloor = 0.0; $dealerPriceCol = false; $productsByName = null;
+        if ($tok = trim((string) $r->input('dealer_token', ''))) {
+            $auth = \App\Services\Pricing\DealerAuth::check($tok);
+            if ($auth && $auth['tenant'] === (int) $tenant->id) {
+                $dealerProfile = \App\Services\Pricing\PriceResolver::profileFor($tenant, $auth['phone']);
+                if ($dealerProfile) {
+                    $dealerPct = \App\Services\Pricing\PriceResolver::pctFor($tenant, $dealerProfile);
+                    $dealerFloor = \App\Services\Pricing\PriceResolver::floorFor($tenant);
+                    $dealerPriceCol = \Illuminate\Support\Facades\Schema::hasColumn('products', 'dealer_price');
+                    $productsByName = Product::withoutGlobalScopes()
+                        ->where('tenant_id', $tenant->id)->where('active', true)->whereNull('archived_at')
+                        ->get(array_merge(['id', 'name', 'price', 'cost_price'], $dealerPriceCol ? ['dealer_price'] : []))
+                        ->keyBy(fn ($p) => mb_strtolower(trim((string) $p->name)));
+                }
+            }
+        }
+
         // Map the storefront cart to the line shape the frozen engine expects ({name, qty, price}).
         $lines = [];
         foreach ($items as $it) {
@@ -873,10 +1007,23 @@ class StorefrontController extends Controller
             if ($pname === '') {
                 continue;
             }
+            $price = (isset($it['price']) && $it['price'] !== '' && $it['price'] !== null) ? (float) $it['price'] : null;
+            if ($dealerProfile && $productsByName) {
+                $p = $productsByName->get(mb_strtolower($pname));
+                if ($p) {
+                    [$dp] = \App\Services\Pricing\PriceResolver::compute(
+                        (float) ($p->price ?? 0),
+                        $p->cost_price !== null ? (float) $p->cost_price : null,
+                        $dealerPriceCol && $p->dealer_price !== null ? (float) $p->dealer_price : null,
+                        $dealerPct, $dealerFloor
+                    );
+                    $price = $dp;
+                }
+            }
             $lines[] = [
                 'name'  => $pname,
                 'qty'   => max(1, (int) ($it['qty'] ?? 1)),
-                'price' => (isset($it['price']) && $it['price'] !== '' && $it['price'] !== null) ? (float) $it['price'] : null,
+                'price' => $price,
             ];
         }
         if (! $lines) {
