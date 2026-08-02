@@ -2277,6 +2277,7 @@ class PanelApiController extends Controller
         // Product specs (Wattage, Voltage, Capacity, Battery Chemistry, …): map any CSV column whose
         // heading matches a spec definition (by label or key) so specs fill in on import. Tenant-generic
         // — reads whatever spec catalogue this tenant has (solar seeds one); empty for tenants with none.
+        $iDesc      = $col(['description', 'desc', 'details', 'about']);   // v4.7.3 — imported, single-line text
         $specSvc    = \App\Services\Catalog\ProductSpecService::forTenant($t);
         $specColMap = $this->buildSpecColMap($specSvc, $header);
         if ($iName === null) { $za->close(); @unlink($tmp); return response()->json(['ok' => false, 'error' => 'csv_no_name'], 422); }
@@ -2381,9 +2382,11 @@ class PanelApiController extends Controller
                 $g2 = $iGal2 !== null ? $resolveImg((string) ($c[$iGal2] ?? '')) : '';
                 $g3 = $iGal3 !== null ? $resolveImg((string) ($c[$iGal3] ?? '')) : '';
                 $sell = ($iSell !== null && stripos((string) ($c[$iSell] ?? ''), 'quote') !== false) ? 'quote' : 'buy';
+                $desc = $iDesc !== null ? trim((string) ($c[$iDesc] ?? '')) : '';
                 $product = Product::create([
                     'tenant_id'  => $t->id, 'name' => $name, 'category' => $cat, 'brand' => ($brand ?: null), 'keywords' => $kw,
                     'sku'        => ($sku ?: null), 'cost_price' => ($cost > 0 ? $cost : null),
+                    'description' => ($desc !== '' ? mb_substr($desc, 0, 2000) : null),
                     'unit_label' => ($unit ?: null),
                     'pack_size'  => ($pack > 0 ? $pack : null), 'moq' => ($moq > 0 ? $moq : null),
                     'base_price' => $price, 'price' => $price, 'stock' => $stock, 'image_url' => $url,
@@ -2456,6 +2459,7 @@ class PanelApiController extends Controller
         $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
         $iBrand = $col(['brand']);
         $iSell  = $col(['sell mode', 'sell_mode', 'sales mode']);   // 'buy' (default) or 'quote'
+        $iDesc  = $col(['description', 'desc', 'details', 'about']);   // v4.7.3 — imported, single-line text
         // Product specs (see productsImport): map CSV columns matching this tenant's spec definitions.
         $specSvc    = \App\Services\Catalog\ProductSpecService::forTenant($t);
         $specColMap = $this->buildSpecColMap($specSvc, $header);
@@ -2524,8 +2528,10 @@ class PanelApiController extends Controller
                 $g2 = $iGal2 !== null ? $resolveImg((string) ($c[$iGal2] ?? '')) : '';
                 $g3 = $iGal3 !== null ? $resolveImg((string) ($c[$iGal3] ?? '')) : '';
                 $sell = ($iSell !== null && stripos((string) ($c[$iSell] ?? ''), 'quote') !== false) ? 'quote' : 'buy';
+                $desc = $iDesc !== null ? trim((string) ($c[$iDesc] ?? '')) : '';
                 $product = Product::create([
                     'tenant_id' => $t->id, 'name' => $name, 'category' => $cat, 'brand' => ($brand ?: null), 'keywords' => $kw, 'sku' => ($sku ?: null),
+                    'description' => ($desc !== '' ? mb_substr($desc, 0, 2000) : null),
                     'unit_label' => ($unit ?: null), 'pack_size' => ($pack > 0 ? $pack : null), 'moq' => ($moq > 0 ? $moq : null),
                     'base_price' => $price, 'price' => $price, 'cost_price' => ($cost > 0 ? $cost : null),
                     'stock' => $stock, 'image_url' => $url,
