@@ -123,10 +123,18 @@ final class TenderAnalyzer
     private function systemPrompt(Tenant $tenant): string
     {
         $profile = trim((string) $tenant->setting('tender_profile', ''));
+        // v4.20.1 — division names follow the tenant. A CUSTOM profile classifies against its
+        // own division names (so Family Shoppers can use e.g. "Food & FMCG / Household", not
+        // ISP); the blank-profile default keeps the DishNet ISP + General Trading enum.
+        $custom = $profile !== '';
         if ($profile === '') {
             $profile = "Primary Business (ISP): Internet Services, Fiber Connectivity, Wireless Internet, Managed Network Services, Starlink Solutions, Network Installation, IT Infrastructure, Networking Equipment, CCTV, Servers, Cloud Solutions, Managed IT Services.\n"
                 . "Secondary Business (General Trading): Office Supplies, Stationery, Furniture, Computers, Printers, Toners, Electrical Items, Solar Equipment, Construction Materials, Plumbing, Hardware, Cleaning Supplies, Food Supplies, Hotel & Restaurant Supplies, Medical Supplies, Safety Equipment, Vehicle Spare Parts, Agricultural Supplies, Industrial Equipment, Household Products, Packaging, Wholesale Distribution.";
         }
+        $divRule = $custom
+            ? 'CLASSIFY division: pick the best-matching division NAME from the BUSINESS PROFILE above (use its exact wording), "Both" when two divisions share the work, or "Ignore" when nothing in the profile fits — with the reason.'
+            : 'CLASSIFY division: ISP, General Trading, Both, or Ignore — with the reason.';
+        $divEnum = $custom ? 'best-matching division name from the profile|Both|Ignore' : 'ISP|General Trading|Both|Ignore';
         $docs = trim((string) $tenant->setting('tender_company_docs', ''));
 
         return <<<PROMPT
@@ -140,7 +148,7 @@ COMPANY DOCUMENTS ON FILE (mark compliance items against this list; if empty, ma
 
 ANALYSE the tender material you are given and produce, for management:
 1. EXTRACT: organization, tender number, title, issue date, DEADLINE, submission method/address/email, opening date, tender type, estimated budget + currency, delivery location, lots, required experience, certifications, evaluation criteria, bid security, performance security, payment terms, warranty, delivery period, mandatory documents. State clearly when something is not in the documents — NEVER invent information.
-2. CLASSIFY division: ISP, General Trading, Both, or Ignore — with the reason.
+2. {$divRule}
 3. SCORE: opportunity_score 0-100 and win_probability (Low/Medium/High/Very High) with reasoning.
 4. RECOMMEND: BID / PREQUALIFICATION / REGISTER / PARTNER / IGNORE — with the reason. Suggest partnership when eligibility cannot be met alone.
 5. COMPLIANCE: every required document, each marked Available / Need Renewal / Missing / Unknown against the company documents list.
@@ -152,7 +160,7 @@ OUTPUT — reply with ONE valid JSON object and NOTHING else (no markdown fences
 {
  "whatsapp_summary": "the executive WhatsApp message — UNDER 250 words, exactly this shape:\\n🚨 NEW OPPORTUNITY\\n🏢 Organization: …\\n📄 Tender: …\\n🏷 Division: …\\n⭐ Opportunity: NN%\\n🏆 Recommendation: …\\n📅 Deadline: … (N days remaining)\\n📦 Main Products Required\\n• …\\n💰 Quotations Required Today\\n• …\\n📄 Missing Documents\\n• …\\n⚠ Major Risks\\n• …\\n📌 AI Verdict: max three sentences telling management whether to proceed.",
  "report": {
-   "tender_id": "", "organization": "", "title": "", "category": "", "division": "ISP|General Trading|Both|Ignore",
+   "tender_id": "", "organization": "", "title": "", "category": "", "division": "{$divEnum}",
    "division_reason": "", "opportunity_score": 0, "win_probability": "", "recommendation": "", "recommendation_reason": "",
    "deadline": "YYYY-MM-DD or empty", "days_remaining": 0, "submission": {"method": "", "address": "", "email": ""},
    "estimated_budget": "", "currency": "", "delivery_location": "", "lots": [],
