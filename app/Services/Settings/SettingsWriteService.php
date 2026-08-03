@@ -79,6 +79,8 @@ final class SettingsWriteService
         'vat_enabled',          // charge VAT / sales tax (never hardcoded)
         'prices_include_vat',   // catalogue prices are VAT-inclusive
         'task_reminders',       // twice-daily WhatsApp task reminders to assignees
+        // v4.25 — WhatsApp the CUSTOMER their invoice, and a receipt with the running balance.
+        'notify_customer_invoice', 'notify_customer_receipt',
         'combo_recommendations', // bot "Goes well with" / "Often bought together" cross-sell suggestions
         'send_product_images',   // bot sends product photos with replies
         // Storefront: per-model show/hide toggles (default on). Read by StorefrontController.

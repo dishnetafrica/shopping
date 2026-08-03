@@ -106,6 +106,15 @@ class InvoiceService
             'currency' => (string) $inv->currency, 'balance' => (float) $inv->balance,
         ], ['actor' => ['type' => 'system', 'name' => $source]]);
 
+        // v4.25 — and tell the CUSTOMER: their invoice PDF plus, in plain words, what it is for and
+        // what is left to pay. Queued, so a slow gateway never delays issuing the invoice, and
+        // guarded, so a failure here can never lose an invoice that is already saved.
+        try {
+            \App\Jobs\NotifyCustomerBilling::dispatch($t->id, 'invoice', (int) $inv->id);
+        } catch (\Throwable $e) {
+            \Log::warning('customer invoice notice not queued: ' . $e->getMessage());
+        }
+
         return $inv;
     }
 

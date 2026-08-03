@@ -125,6 +125,11 @@ final class SettingsSchema
                     ['key' => 'low_stock_threshold', 'type' => 'number', 'label' => 'Low-stock threshold', 'unit' => 'units', 'default' => 5],
                     ['key' => 'reorder_days',        'type' => 'number', 'label' => 'Reorder lead time', 'unit' => 'days', 'default' => 30],
                 ]],
+                // v4.25 — the customer's side of billing: they should never have to ask what they owe.
+                ['label' => 'Customer billing messages', 'help' => 'WhatsApp your customer automatically when you invoice them and when you receive their money. Each message carries the PDF plus a plain summary — what it is for, what is paid, and what is still due. Sent to the phone number on the invoice or payment.', 'fields' => [
+                    ['key' => 'notify_customer_invoice', 'type' => 'bool', 'label' => 'Send the invoice when it is issued', 'default' => true, 'help' => 'Invoice PDF + total, anything already paid, the balance, the due date and how to pay. Sent once per invoice.'],
+                    ['key' => 'notify_customer_receipt', 'type' => 'bool', 'label' => 'Send a receipt when payment is received', 'default' => true, 'help' => 'Receipt PDF + what they just paid, what they have paid in total against that invoice, and the balance still due (or "fully paid"). Works for part payments and advances.'],
+                ]],
             ]],
             ['key' => 'storefront', 'label' => 'Storefront', 'icon' => 'doc', 'groups' => [
                 ['label' => 'Bike models on the website', 'help' => 'Turn a model ON to show it on your customer website, OFF to hide it. Changes take effect as soon as you save. Tip: keep at least one model on. To set ALL the photos in one go, open /papi/bike-photos and upload the bike photo pack zip.', 'fields' => [

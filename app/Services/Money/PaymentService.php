@@ -87,6 +87,18 @@ class PaymentService
             try { $this->syncOrderPaid($t, $orderNo); } catch (\Throwable $e) {}
         }
 
+        // v4.25 — the customer's side of the loop: receipt PDF + what they paid now, what they have
+        // paid in total against the invoice, and what is still due. Dispatched AFTER the sync above so
+        // the balance quoted to them is the real one. Never inside the transaction, never fatal:
+        // a payment that is recorded must stay recorded even if WhatsApp is unreachable.
+        if (empty($result['duplicate'])) {
+            try {
+                \App\Jobs\NotifyCustomerBilling::dispatch($t->id, 'receipt', (int) $result['id']);
+            } catch (\Throwable $e) {
+                \Log::warning('customer receipt notice not queued: ' . $e->getMessage());
+            }
+        }
+
         // Optional discount at collection ("give USD X off, close the invoice"). Applied HERE in the one
         // recorder — after the payment records (fresh only; a duplicate returned early above) — so EVERY
         // payment path (customer-timeline Collect, invoice "Pay", the order button, Payments, staff-cash)
