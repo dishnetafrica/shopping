@@ -52,6 +52,10 @@ class AiBrain
         $imageB64 = (string) ($media['imageB64'] ?? '');
         $mime     = (string) ($media['mime'] ?? 'image/jpeg');
         $quoted   = trim((string) ($media['quoted'] ?? ''));
+        // v4.24 — what the customer's photo actually is, and which of OUR products match it, decided
+        // by PhotoCatalogueMatch against the live catalogue BEFORE the model sees anything. Passed in
+        // as facts so the AI writes the reply but never picks the product or the price.
+        $photoMatch = is_array($media['photoMatch'] ?? null) ? $media['photoMatch'] : null;
 
         // Nothing we can read (sticker / contact / empty) → ask politely instead of feeding junk to the AI.
         if (trim($text) === '' && $imageB64 === '') {
@@ -91,9 +95,15 @@ class AiBrain
             : ['role' => 'user', 'content' => $modelText];
 
         $planning = (bool) $tenant->setting('ai_planning', false);
+        // The photo block goes LAST in the system message, right before the conversation: it is about
+        // the message being answered right now, and must outrank the general catalogue knowledge.
+        $photoBlock = $photoMatch
+            ? app(\App\Services\Bot\PhotoCatalogueMatch::class)->promptBlock($tenant, $photoMatch)
+            : '';
         $messages = array_merge([['role' => 'system', 'content' => $this->systemPrompt($tenant)
             .\App\Services\Relationship\ProfileContext::block($tenant, $from)
-            .($planning ? \App\Services\Relationship\PlanParser::instructions() : '')]], $prior, [$current]);
+            .($planning ? \App\Services\Relationship\PlanParser::instructions() : '')
+            .$photoBlock]], $prior, [$current]);
 
         // 3. call OpenAI (per-tenant key override, else the global CloudBSS key). Images need a
         //    vision model — fall back to gpt-4o-mini (vision-capable) if one isn't configured.

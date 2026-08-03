@@ -421,8 +421,9 @@ class ProcessIncomingMessage implements ShouldQueue
                 }
             }
 
-            // Image → hand the bytes to the AI (vision).
+            // Image → match it against our real catalogue, then hand the bytes to the AI (vision).
             $imageB64 = '';
+            $photoMatch = null;
             if (! empty($this->incoming['has_image'] ?? false)) {
                 // A photo dump must not get a reply per photo. First work out WHO is sending:
                 //  • a SUPPLIER offering goods (their number is in Suppliers, or selling words in the
@@ -494,11 +495,25 @@ class ProcessIncomingMessage implements ShouldQueue
                     $imageB64 = (string) ($gateway->getMediaBase64($tenant->whatsapp_instance, $this->incoming['media_key']) ?? '');
                 }
                 if (trim($aiText) === '') $aiText = (string) ($this->incoming['image_caption'] ?? '');
+
+                // v4.24 — "do we actually sell what is in this photo?" The rules brain has checked
+                // photos against the real catalogue since v4.4; on the AI brain the picture went
+                // straight to the vision model, which could describe it beautifully and quote a price
+                // for something we do not stock. Match FIRST, then let the AI write the sentence.
+                if ($imageB64 !== '') {
+                    try {
+                        $photoMatch = app(\App\Services\Bot\PhotoCatalogueMatch::class)
+                            ->match($tenant, $imageB64, (string) ($this->incoming['image_caption'] ?? ''), $trace, $from);
+                    } catch (\Throwable $e) {
+                        $photoMatch = null;
+                    }
+                }
             }
 
             $ok = app(\App\Services\Bot\AiBrain::class)->handle(
                 $tenant, $convo, $from, $aiText, $gateway,
                 ['imageB64' => $imageB64, 'mime' => (string) ($this->incoming['media_mime'] ?? 'image/jpeg'),
+                 'photoMatch' => $photoMatch ?? null,
                  // Quoted-reply context (2026-07-30): when the customer taps Reply on one of our
                  // earlier messages (product push, quotation, …), the AI must know WHICH message —
                  // otherwise "when will you deliver it" has no referent.
