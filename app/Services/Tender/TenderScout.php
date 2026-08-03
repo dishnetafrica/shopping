@@ -90,10 +90,18 @@ final class TenderScout
                     'Forum post: ' . $title . ' — ' . $base . '/t/' . $id, $postText);
                 if ($tender) {
                     $out['analysed'][] = $title;
+                    // v4.20 — action items become real tasks in the ops inbox (assignee gets
+                    // the standard WhatsApp nudge + reminders/escalation automatically)
+                    $nTasks = 0;
+                    try {
+                        $nTasks = app(TenderTasks::class)->forTender($tenant, $tender);
+                    } catch (\Throwable $e) {
+                    }
                     if ($tender->summary && $tender->status !== 'failed'
                         && (bool) $tenant->setting('tender_notify', true)) {
                         try {
-                            \App\Jobs\NotifyOwner::dispatch($tenant->id, $tender->summary);
+                            \App\Jobs\NotifyOwner::dispatch($tenant->id, $tender->summary
+                                . ($nTasks > 0 ? "\n\n📋 {$nTasks} task(s) created for your team — check the task inbox." : ''));
                         } catch (\Throwable $e) {
                         }
                     }

@@ -46,6 +46,10 @@ class TenderController extends Controller
                     : ($days <= 7 ? '<span class="chip warn">' . $days . 'd</span>' : '<span class="chip">' . $days . 'd</span>')))
                 : '<span class="chip">no date</span>';
             $score = $td->opportunity_score !== null ? $td->opportunity_score . '%' : '—';
+            $opts = '';
+            foreach (self::STATUSES as $s) {
+                $opts .= '<option value="' . $s . '"' . ($td->status === $s ? ' selected' : '') . '>' . $s . '</option>';
+            }
             $rows .= '<div class="trow" onclick="tog(this)">'
                 . '<div class="tmain"><b>' . e((string) ($td->title ?: 'Untitled')) . '</b>'
                 . '<span class="tsub">' . e((string) ($td->organization ?: $td->source)) . ' · ' . e((string) ($td->division ?: '')) . '</span></div>'
@@ -53,6 +57,10 @@ class TenderController extends Controller
                 . '<span class="chip">' . e((string) ($td->recommendation ?: '…')) . '</span>' . $dchip
                 . '<span class="chip st">' . e((string) $td->status) . '</span></div>'
                 . '<pre class="tsum">' . e((string) ($td->summary ?: 'No summary.')) . '</pre>'
+                . '<div class="tact" onclick="event.stopPropagation()">'
+                . '<select onchange="stSet(' . (int) $td->id . ',this.value)">' . $opts . '</select>'
+                . '<button class="mini" onclick="rfqCopy(' . (int) $td->id . ',this)">📋 Copy supplier RFQ</button>'
+                . '</div>'
                 . '</div>';
         }
         if ($rows === '') {
@@ -83,6 +91,10 @@ h1{font-size:20px;margin:0 0 4px} p{font-size:13px;color:#6B7280;line-height:1.5
 .chip.crit{background:#FEE2E2;color:#B91C1C}.chip.bad{background:#F3F4F6;color:#9CA3AF}.chip.st{background:#EFF6FF;color:#1D4ED8}
 .tsum{display:none;background:#F9FAFB;border-radius:8px;padding:10px;font-size:12px;white-space:pre-wrap;font-family:inherit;margin:8px 0 0}
 .trow.open .tsum{display:block}
+.tact{display:none;margin-top:8px}
+.trow.open .tact{display:flex;gap:8px;align-items:center}
+.tact select{font-size:12px;padding:5px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff}
+.mini{background:#fff;color:#14532D;border:1px solid #CFE6D8;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer}
 a{color:#14532D}
 </style></head><body>
 <div class="card">
@@ -107,6 +119,24 @@ drop.ondragover=function(e){ e.preventDefault(); drop.classList.add('on'); };
 drop.ondragleave=function(){ drop.classList.remove('on'); };
 drop.ondrop=function(e){ e.preventDefault(); drop.classList.remove('on'); pick(e.dataTransfer.files); };
 function tog(el){ el.classList.toggle('open'); }
+function stSet(id,st){
+  fetch('/papi/tenders-status',{method:'POST',credentials:'same-origin',
+    headers:{'X-CSRF-TOKEN':'{$csrf}','Content-Type':'application/json'},body:JSON.stringify({id:id,status:st})})
+    .then(function(r){return r.json();})
+    .then(function(j){ msg.className=j.ok?'ok':'bad'; msg.textContent=j.ok?('Status → '+st):'Could not update status.'; });
+}
+function rfqCopy(id,btn){
+  fetch('/papi/tenders-rfq',{method:'POST',credentials:'same-origin',
+    headers:{'X-CSRF-TOKEN':'{$csrf}','Content-Type':'application/json'},body:JSON.stringify({id:id})})
+    .then(function(r){return r.json();})
+    .then(function(j){
+      if(!j.ok){ msg.className='bad'; msg.textContent=j.message||'No RFQ available.'; return; }
+      function done(){ btn.textContent='✓ Copied — paste to your supplier on WhatsApp'; setTimeout(function(){btn.textContent='📋 Copy supplier RFQ';},3500); }
+      if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(j.text).then(done,function(){fallback(j.text);done();}); }
+      else { fallback(j.text); done(); }
+      function fallback(t){ var ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); }
+    });
+}
 go.onclick=function(){
   if(!F.length) return; go.disabled=true; go.textContent='Analysing… (30–90s)';
   var fd=new FormData(); F.forEach(function(f){ fd.append('files[]',f); });
@@ -154,15 +184,23 @@ HTML;
         if (! $tender) {
             return response()->json(['ok' => false, 'message' => 'Analysis failed — check that the AI key is configured, then try again.'], 500);
         }
+        // v4.20 — action items become real ops tasks (WhatsApp nudge + reminders for free)
+        $nTasks = 0;
+        try {
+            $nTasks = app(\App\Services\Tender\TenderTasks::class)->forTender($t, $tender);
+        } catch (\Throwable $e) {
+        }
         if ($tender->summary && $tender->status !== 'failed' && (bool) $t->setting('tender_notify', true)) {
             try {
-                \App\Jobs\NotifyOwner::dispatch($t->id, $tender->summary);
+                \App\Jobs\NotifyOwner::dispatch($t->id, $tender->summary
+                    . ($nTasks > 0 ? "\n\n📋 {$nTasks} task(s) created for your team — check the task inbox." : ''));
             } catch (\Throwable $e) {
             }
         }
 
         return response()->json(['ok' => $tender->status !== 'failed', 'id' => $tender->id,
-            'summary' => (string) $tender->summary, 'message' => $tender->status === 'failed' ? (string) $tender->summary : 'Analysed.']);
+            'summary' => (string) $tender->summary . ($nTasks > 0 ? "\n\n📋 {$nTasks} task(s) created." : ''),
+            'message' => $tender->status === 'failed' ? (string) $tender->summary : 'Analysed.']);
     }
 
     public function scanNow(Request $request)
@@ -181,15 +219,44 @@ HTML;
                 : 'Scan done — ' . $res['scanned'] . ' recent forum posts checked, nothing new to analyse. ' . $res['note']]);
     }
 
+    /** v4.20 — the tender lifecycle (reviewer's "first-class business object"). */
+    public const STATUSES = ['new', 'reviewing', 'qualified', 'pricing', 'proposal', 'approval',
+        'submitted', 'evaluation', 'won', 'lost', 'ignored', 'cancelled'];
+
     public function setStatus(Request $request)
     {
         $t = $this->gate($request);
         if (! $t) {
             return response()->json(['ok' => false], 403);
         }
-        $data = $request->validate(['id' => 'required|integer', 'status' => 'required|string|in:new,reviewing,bidding,submitted,won,lost,ignored']);
+        $data = $request->validate(['id' => 'required|integer', 'status' => 'required|string|in:' . implode(',', self::STATUSES)]);
         $n = Tender::where('tenant_id', $t->id)->where('id', (int) $data['id'])->update(['status' => $data['status']]);
+        if ($n > 0) {
+            try {
+                \App\Support\BotTrace::log($t->id, 'tender_status', 'panel', (string) $data['id'], $data['status']);
+            } catch (\Throwable $e) {
+            }
+        }
 
         return response()->json(['ok' => $n > 0]);
+    }
+
+    /** v4.20 — ready-to-send supplier RFQ text built from the stored report (no AI cost). */
+    public function rfq(Request $request)
+    {
+        $t = $this->gate($request);
+        if (! $t) {
+            return response()->json(['ok' => false], 403);
+        }
+        $data = $request->validate(['id' => 'required|integer']);
+        $td = Tender::where('tenant_id', $t->id)->where('id', (int) $data['id'])->first();
+        if (! $td) {
+            return response()->json(['ok' => false, 'message' => 'Tender not found.'], 404);
+        }
+        $msg = app(\App\Services\Tender\TenderTasks::class)->rfqMessage($t, $td);
+
+        return $msg === ''
+            ? response()->json(['ok' => false, 'message' => 'No quotation-needed products in this tender\'s report.'])
+            : response()->json(['ok' => true, 'text' => $msg]);
     }
 }

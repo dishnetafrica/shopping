@@ -157,6 +157,8 @@ final class SettingsSchema
                     ['key' => 'tender_profile', 'type' => 'textarea', 'label' => 'Business profile for classification', 'help' => 'What your company sells/does, by division — TenderBot uses this to classify each tender (ISP / General Trading / Both / Ignore). Leave empty for the built-in ISP + General Trading profile.'],
                     ['key' => 'tender_company_docs', 'type' => 'textarea', 'label' => 'Company documents on file', 'help' => 'One per line, e.g. "Tax Clearance — valid to Dec 2026". TenderBot marks each tender\'s requirements Available / Need Renewal / Missing against this list.'],
                     ['key' => 'tender_notify', 'type' => 'bool', 'label' => 'WhatsApp me each analysis', 'default' => true],
+                    // v4.20 — the Procurement Task Engine: analysis action-items become real tasks.
+                    ['key' => 'tender_tasks', 'type' => 'bool', 'label' => 'Create tasks from each analysis', 'default' => true, 'help' => 'Each tender\'s action plan becomes real tasks in your task inbox (with WhatsApp nudges, reminders and escalation).'],
                 ]],
                 ['label' => 'Dealer programme', 'help' => 'Discounts for customers marked as Dealer/Wholesale on their profile. The margin floor is a hard guard: no dealer price ever goes below cost + floor %.', 'fields' => [
                     ['key' => 'dealer_pct',            'type' => 'number', 'label' => 'Dealer tier discount', 'unit' => '%', 'default' => 10, 'help' => 'Off the retail price.'],

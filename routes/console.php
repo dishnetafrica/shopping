@@ -19,6 +19,8 @@ Schedule::command('relationship:review')->monthlyOn(1, '08:00')->timezone('Afric
 Schedule::command('demand:weekly')->weeklyOn(1, '08:00')->timezone('Africa/Kampala')->withoutOverlapping()->onOneServer();
 // v4.19 TenderBot — twice-daily sweep of the configured tender forum for enabled tenants.
 Schedule::command('tenders:scan')->twiceDailyAt(7, 13, 0)->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
+// v4.20 TenderBot — hourly deadline escalation (7d / 48h / 24h; each stage fires once per tender).
+Schedule::command('tenders:remind')->hourly()->withoutOverlapping()->onOneServer();
 Schedule::command('bot:digest')->hourly()->withoutOverlapping()->onOneServer();
 
 // Reliability: catch dropped WhatsApp connections fast (a down number silently kills orders),
