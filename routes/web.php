@@ -548,6 +548,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('tender-file', [\App\Http\Controllers\Panel\TenderController::class, 'file']);                // v4.22 — open a stored tender document
         Route::post('tender-item-save', [\App\Http\Controllers\Panel\TenderController::class, 'itemSave']);      // v4.22 — capture a supplier price
         Route::get('tender-items.csv', [\App\Http\Controllers\Panel\TenderController::class, 'itemsCsv']);       // v4.22 — the pricing board as a spreadsheet
+        Route::post('tender-assign-pricing', [\App\Http\Controllers\Panel\TenderController::class, 'assignPricing']); // v4.23 — split pricing between the buyers
         Route::get('bot/quote-diagnostics', [PanelApiController::class, 'botQuoteDiagnostics']);
         Route::match(['get', 'post'], 'backfill-customers', [PanelApiController::class, 'backfillCustomers']);
         Route::match(['get', 'post'], 'merge-customers', [PanelApiController::class, 'mergeCustomers']);

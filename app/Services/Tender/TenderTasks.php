@@ -95,6 +95,238 @@ final class TenderTasks
         }
     }
 
+    /**
+     * v4.23 — hand the pricing work to the people who actually walk the market.
+     *
+     * A 68-line RFQ is not one person's afternoon. This splits the tender's unpriced lines into buying
+     * categories (sports / stationery / toiletries …), deals those categories round-robin to the team
+     * named in Settings → Tenders → "Who sources prices", and gives each person ONE task carrying their
+     * lines as a tick-list. They get the usual WhatsApp nudge with a no-login link, so nobody needs a
+     * panel login to work from the market.
+     *
+     * One task per person, never one per item: 68 separate nudges would be noise, and a buyer wants a
+     * shopping list, not an inbox.
+     *
+     * @return array{tasks:int, people:array<int,string>, unmatched:array<int,string>, items:int, message:string}
+     */
+    public function assignSourcing(Tenant $tenant, Tender $tender): array
+    {
+        $out = ['tasks' => 0, 'people' => [], 'unmatched' => [], 'items' => 0, 'message' => ''];
+        try {
+            if (in_array($tender->status, ['failed', 'ignored'], true)) {
+                $out['message'] = 'This tender is closed — no pricing work assigned.';
+
+                return $out;
+            }
+            $rows = \App\Models\TenderItem::where('tenant_id', $tenant->id)
+                ->where('tender_id', $tender->id)
+                ->whereIn('status', ['to_price', 'quoted'])
+                ->orderBy('line')->limit(300)->get();
+            $out['items'] = $rows->count();
+            if ($rows->isEmpty()) {
+                $out['message'] = 'Nothing to price on this tender — every line already has a cost.';
+
+                return $out;
+            }
+
+            [$people, $unmatched] = $this->pricingTeam($tenant);
+            $out['unmatched'] = $unmatched;
+            if (! $people) {
+                $out['message'] = $unmatched
+                    ? 'Could not find ' . implode(' or ', $unmatched) . ' in your team. Check the spelling in Settings → Tenders → "Who sources prices", or add them under Settings → Team.'
+                    : 'No one is listed in Settings → Tenders → "Who sources prices", so there is nobody to assign to.';
+
+                return $out;
+            }
+
+            // group the lines by buying category, then deal whole categories to people in turn
+            $svc = app(TenderItems::class);
+            $buckets = [];
+            foreach ($rows as $r) {
+                $buckets[$svc->bucket((string) $r->item)][] = $r;
+            }
+            ksort($buckets);
+            $share = [];
+            $i = 0;
+            foreach ($buckets as $name => $lines) {
+                $who = $i % count($people);
+                $share[$who]['buckets'][] = $name;
+                foreach ($lines as $l) {
+                    $share[$who]['lines'][] = $l;
+                }
+                $i++;
+            }
+
+            $market = trim((string) $tenant->setting('tender_sourcing_market', '')) ?: 'the market';
+            $short = $this->clip((string) ($tender->organization ?: $tender->tender_no ?: $tender->title ?: ('Tender #' . $tender->id)), 40);
+            $due = $this->sourcingDue($tender);
+            $prio = $this->sourcingPriority($tender);
+            $engine = app(\App\Services\Ops\TaskEngine::class);
+
+            foreach ($share as $idx => $part) {
+                $person = $people[$idx];
+                $lines = $part['lines'] ?? [];
+                if (! $lines) {
+                    continue;
+                }
+                $title = '💵 ' . $market . ' prices — ' . count($lines) . ' item(s) · ' . $short;
+                $res = $engine->assignAdHoc($tenant, $person, $this->clip($title, 170), $due, $prio);
+                if (! is_array($res) || ! ($res['ok'] ?? false)) {
+                    continue;
+                }
+                $out['tasks']++;
+                $out['people'][] = (string) ($person->name ?: ('user ' . $person->id));
+                $this->attachChecklist((int) ($res['task_id'] ?? 0), $lines, $part['buckets'] ?? []);
+            }
+
+            if ($out['tasks'] > 0) {
+                try {
+                    \App\Support\BotTrace::log($tenant->id, 'tender_sourcing', 'system', (string) $tender->id,
+                        $out['tasks'] . ' pricing task(s) → ' . implode(', ', $out['people']) . ' · ' . $out['items'] . ' line(s)');
+                } catch (\Throwable $e) {
+                }
+                $out['message'] = $out['items'] . ' item(s) split between ' . implode(' and ', $out['people'])
+                    . ' — each has the list on their phone.'
+                    . ($unmatched ? ' (Could not find: ' . implode(', ', $unmatched) . '.)' : '');
+            }
+
+            return $out;
+        } catch (\Throwable $e) {
+            \Log::warning('TenderTasks assignSourcing failed: ' . $e->getMessage());
+            $out['message'] = 'Could not assign the pricing work.';
+
+            return $out;
+        }
+    }
+
+    /**
+     * Resolve the names typed in Settings → Tenders → "Who sources prices" to real team members.
+     *
+     * Matches on name (either way round, so "Jayesh" finds "Jayesh Patel" and "Jayesh bhai" finds
+     * "Jayesh") or on the last 9 digits of a phone number. Names that match nobody are returned so the
+     * panel can say so out loud instead of silently assigning the work to the owner.
+     *
+     * @return array{0:array<int,object>, 1:array<int,string>}
+     */
+    private function pricingTeam(Tenant $tenant): array
+    {
+        $raw = trim((string) $tenant->setting('tender_pricing_team', ''));
+        if ($raw === '') {
+            return [[], []];
+        }
+        $wanted = array_values(array_filter(array_map('trim', preg_split('/[,;\n]+/', $raw) ?: [])));
+        if (! $wanted) {
+            return [[], []];
+        }
+        $users = \App\Models\User::where('tenant_id', $tenant->id)->orderBy('id')->limit(200)->get();
+
+        $people = [];
+        $unmatched = [];
+        $seen = [];
+        foreach ($wanted as $w) {
+            $needle = $this->nameKey($w);
+            $digits = preg_replace('/\D+/', '', $w);
+            $hit = null;
+            foreach ($users as $u) {
+                $uname = $this->nameKey((string) ($u->name ?? ''));
+                $uphone = preg_replace('/\D+/', '', (string) ($u->phone ?? ''));
+                $byName = $uname !== '' && $needle !== ''
+                    && (str_contains($uname, $needle) || str_contains($needle, $uname));
+                $byPhone = strlen((string) $digits) >= 9 && $uphone !== ''
+                    && substr($uphone, -9) === substr((string) $digits, -9);
+                if ($byName || $byPhone) {
+                    $hit = $u;
+                    break;
+                }
+            }
+            if (! $hit) {
+                $unmatched[] = $w;
+                continue;
+            }
+            if (isset($seen[$hit->id])) {
+                continue;
+            }
+            $seen[$hit->id] = true;
+            $people[] = $hit;
+        }
+
+        return [$people, $unmatched];
+    }
+
+    /** Comparison key for a person's name: lowercase, honorifics and punctuation removed. */
+    private function nameKey(string $s): string
+    {
+        $s = mb_strtolower(trim($s));
+        // "bhai", "bhai ji", "mr", "sir" are how people are addressed here, not part of the record
+        $s = preg_replace('/\b(bhai|bhaiya|ji|mr|mrs|ms|miss|sir|madam|uncle)\b/u', ' ', $s) ?? $s;
+        $s = preg_replace('/[^a-z0-9 ]+/u', ' ', $s) ?? $s;
+
+        return trim(preg_replace('/\s+/', ' ', $s) ?? '');
+    }
+
+    /** Prices are wanted well before submission: deadline − 3 days, else next business day. */
+    private function sourcingDue(Tender $tender): \Illuminate\Support\Carbon
+    {
+        $due = $this->nextBusinessDay();
+        if ($tender->deadline) {
+            $target = $tender->deadline->copy()->subDays(3)->setTime(17, 0);
+            if ($target->isFuture()) {
+                return $target->gt($due) ? $due : $target;
+            }
+            // already inside the last three days — get the prices today
+            return now()->hour >= 14 ? now()->addHours(4) : now()->setTime(17, 0);
+        }
+
+        return $due;
+    }
+
+    private function sourcingPriority(Tender $tender): int
+    {
+        if (! $tender->deadline) {
+            return 2;
+        }
+        $days = now()->startOfDay()->diffInDays($tender->deadline, false);
+
+        return ($days >= 0 && $days <= 7) ? 3 : 2;
+    }
+
+    /**
+     * Put the person's lines on the task as a tick-list they can work through in the market.
+     * Silently skipped when the deployment's tasks table predates the checklist column.
+     */
+    private function attachChecklist(int $taskId, array $lines, array $buckets): void
+    {
+        if ($taskId <= 0) {
+            return;
+        }
+        try {
+            $table = (new \App\Models\OrderTask())->getTable();
+            if (! \Illuminate\Support\Facades\Schema::hasColumn($table, 'checklist')) {
+                return;
+            }
+            $task = \App\Models\OrderTask::find($taskId);
+            if (! $task) {
+                return;
+            }
+            $list = [];
+            if ($buckets) {
+                $list[] = ['label' => '📂 ' . implode(' · ', $buckets), 'done' => false];
+            }
+            foreach (array_slice($lines, 0, 60) as $l) {
+                $label = trim((string) $l->item)
+                    . ($l->qty ? ' — ' . $l->qty : '')
+                    . ($l->brand ? ' [' . $l->brand . ']' : '');
+                $list[] = ['label' => $this->clip($label, 110), 'done' => false];
+            }
+            if (count($lines) > 60) {
+                $list[] = ['label' => '… and ' . (count($lines) - 60) . ' more on the Tenders → Items to price screen', 'done' => false];
+            }
+            $task->checklist = $list;
+            $task->save();
+        } catch (\Throwable $e) {
+        }
+    }
+
     /** The supplier RFQ message for this tender's quotation-needed products (no AI cost). */
     public function rfqMessage(Tenant $tenant, Tender $tender): string
     {

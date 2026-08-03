@@ -123,6 +123,7 @@ class TenderController extends Controller
                 $byTender[(int) $it->tender_id][] = $it;
             }
 
+            $chips = '<div class="tfil"><button class="tf on" data-t="all" onclick="filtT(\'all\',this)">All tenders</button>';
             foreach ($byTender as $gid => $group) {
                 $gCost = 0.0;
                 $gBid = 0.0;
@@ -141,8 +142,12 @@ class TenderController extends Controller
                     }
                 }
                 $left = count($group) - $gPriced;
-                $board .= '<h2 style="font-size:14px;margin:18px 0 6px">'
-                    . e((string) ($titles[$gid] ?? ('Tender #' . $gid))) . '</h2>'
+                $gTitle = (string) ($titles[$gid] ?? ('Tender #' . $gid));
+                $chips .= '<button class="tf" data-t="' . (int) $gid . '" onclick="filtT(' . (int) $gid . ',this)">'
+                    . e(mb_strlen($gTitle) > 34 ? mb_substr($gTitle, 0, 33) . '…' : $gTitle)
+                    . ' <b>' . ($left > 0 ? $left : '✓') . '</b></button>';
+                $board .= '<div class="tgrp" data-t="' . (int) $gid . '">'
+                    . '<h2 style="font-size:14px;margin:18px 0 6px">' . e($gTitle) . '</h2>'
                     . '<div class="tot"><span>' . count($group) . ' line(s)</span>'
                     . '<span>' . ($left > 0 ? '<b>' . $left . '</b> still to price' : 'all priced ✓') . '</span>'
                     . ($gPriced > 0
@@ -201,7 +206,10 @@ class TenderController extends Controller
                     . '</div>' . $bidHtml
                     . '</div>';
             }
+            $board .= '<div class="gact"><button class="mini" onclick="assignPricing(' . (int) $gid . ',this)">'
+                . '👥 Assign this tender\'s pricing to the team</button></div></div>';
             }
+            $board = $chips . '</div>' . $board;
         } catch (\Throwable $e) {
             \Log::warning('Tender pricing board failed: ' . $e->getMessage());
             $board = '<p style="color:#B45309">The pricing board could not be built. If this is the first run after an update, the new table is missing — run <code>php artisan migrate</code>.</p>';
@@ -269,6 +277,11 @@ a{color:#14532D}
 .bid{font-size:12.5px;color:#14532D;margin-top:6px}
 .tot{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;background:#F8FBF9;border:1px solid #CFE6D8;border-radius:10px;padding:10px 14px;margin-bottom:10px}
 .tot b{color:#14532D}
+.tfil{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 4px}
+.tf{background:#fff;border:1px solid #E5E7EB;border-radius:20px;padding:6px 12px;font-size:12.5px;color:#374151;cursor:pointer}
+.tf.on{background:#14532D;border-color:#14532D;color:#fff}
+.tf b{margin-left:4px;opacity:.85}
+.gact{margin:10px 0 4px}
 </style></head><body>
 <div class="card">
   <h1>🏆 TenderBot — Senior Procurement &amp; Bid Manager</h1>
@@ -311,8 +324,40 @@ function showTab(k){
   });
   try{ location.hash = k==='I' ? '#items' : ''; }catch(e){}
 }
-if(location.hash==='#items') showTab('I');
-function goItems(id){ showTab('I'); var el=document.querySelector('#paneI .irow'); if(el) el.scrollIntoView({block:'center'}); }
+(function(){
+  var h=location.hash||'';
+  if(h.indexOf('#items')!==0) return;
+  showTab('I');
+  var m=h.match(/^#items\/(\d+)$/);
+  if(m){ var b=document.querySelector('#paneI .tf[data-t="'+m[1]+'"]'); if(b) filtT(m[1], b); }
+})();
+function filtT(id, btn){
+  document.querySelectorAll('#paneI .tf').forEach(function(b){ b.classList.toggle('on', b===btn); });
+  document.querySelectorAll('#paneI .tgrp').forEach(function(g){
+    g.style.display = (id==='all' || String(g.dataset.t)===String(id)) ? '' : 'none';
+  });
+  try{ location.hash = (id==='all') ? '#items' : ('#items/'+id); }catch(e){}
+}
+function goItems(id){
+  showTab('I');
+  var btn=document.querySelector('#paneI .tf[data-t="'+id+'"]');
+  if(btn){ filtT(id, btn); btn.scrollIntoView({block:'nearest'}); }
+  var g=document.querySelector('#paneI .tgrp[data-t="'+id+'"]');
+  if(g) g.scrollIntoView({block:'start'});
+}
+function assignPricing(id, btn){
+  btn.disabled=true; var old=btn.textContent; btn.textContent='Assigning…';
+  fetch('/papi/tender-assign-pricing',{method:'POST',credentials:'same-origin',
+    headers:{'X-CSRF-TOKEN':'{$csrf}','Content-Type':'application/json'},body:JSON.stringify({id:id})})
+    .then(function(r){return r.json();})
+    .then(function(j){
+      btn.disabled=false; btn.textContent=old;
+      msg.className=(j.ok&&j.tasks>0)?'ok':'bad';
+      msg.textContent=(j.tasks>0?'✅ ':'')+(j.message||'Nothing to assign.');
+      showTab('I');
+    })
+    .catch(function(){ btn.disabled=false; btn.textContent=old; msg.className='bad'; msg.textContent='Could not assign.'; });
+}
 function useMem(id, cost, a){ var c=document.getElementById('c'+id); if(c){ c.value=cost; c.focus(); } var r=a.closest('.mem'); if(r) r.style.opacity=.5; }
 function savePrice(id, btn){
   var body={ id:id,
@@ -413,8 +458,12 @@ HTML;
         }
         // v4.22 — and every BOQ line lands on the pricing board
         $nItems = 0;
+        $sourcing = ['tasks' => 0, 'people' => [], 'message' => ''];
         try {
             $nItems = app(\App\Services\Tender\TenderItems::class)->sync($t, $tender);
+            if ($nItems > 0) {
+                $sourcing = app(\App\Services\Tender\TenderTasks::class)->assignSourcing($t, $tender);
+            }
         } catch (\Throwable $e) {
         }
         if ($tender->summary && $tender->status !== 'failed' && (bool) $t->setting('tender_notify', true)) {
@@ -429,7 +478,8 @@ HTML;
         return response()->json(['ok' => $tender->status !== 'failed', 'id' => $tender->id,
             'summary' => (string) $tender->summary
                 . ($nTasks > 0 ? "\n\n📋 {$nTasks} task(s) created." : '')
-                . ($nItems > 0 ? "\n🧾 {$nItems} item(s) on the pricing board — open the “Items to price” tab." : ''),
+                . ($nItems > 0 ? "\n🧾 {$nItems} item(s) on the pricing board — open the “Items to price” tab." : '')
+                . (($sourcing['tasks'] ?? 0) > 0 ? "\n💵 " . $sourcing['message'] : ''),
             'message' => $tender->status === 'failed' ? (string) $tender->summary : 'Analysed.']);
     }
 
@@ -607,6 +657,32 @@ HTML;
             'ok' => true, 'status' => $row->status, 'unit' => (string) ($row->unit ?: ''),
             'bid_unit' => $row->bid_unit !== null ? number_format((float) $row->bid_unit, 2) : null,
             'bid_line' => $bidLine !== null ? number_format($bidLine, 2) : null,
+        ]);
+    }
+
+    /**
+     * POST /papi/tender-assign-pricing — split this tender's unpriced lines between the buyers named
+     * in Settings → Tenders → "Who sources prices" and give each of them a task with their list.
+     * Runs automatically after every analysis too; this is the "do it again" button.
+     */
+    public function assignPricing(Request $request)
+    {
+        $t = $this->gate($request);
+        if (! $t) {
+            return response()->json(['ok' => false, 'message' => 'Owner access required.'], 403);
+        }
+        $data = $request->validate(['id' => 'required|integer']);
+        $td = Tender::where('tenant_id', $t->id)->where('id', (int) $data['id'])->first();
+        if (! $td) {
+            return response()->json(['ok' => false, 'message' => 'Tender not found.'], 404);
+        }
+        $res = app(\App\Services\Tender\TenderTasks::class)->assignSourcing($t, $td);
+
+        return response()->json([
+            'ok' => true,
+            'tasks' => $res['tasks'],
+            'people' => $res['people'],
+            'message' => $res['message'] !== '' ? $res['message'] : 'Nothing to assign on this tender.',
         ]);
     }
 

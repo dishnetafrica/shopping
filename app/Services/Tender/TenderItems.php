@@ -244,6 +244,45 @@ final class TenderItems
         ];
     }
 
+    /**
+     * v4.23 — which buying category a line belongs to.
+     *
+     * Used to split a long RFQ between the people who source prices: one person walks the stationery
+     * shops, another the sports shops, instead of both wandering the whole market. Deliberately a
+     * keyword map, not AI — it must be instant, free and predictable, and a wrong guess only changes
+     * who checks the price, never what is quoted. Order matters: the first match wins.
+     */
+    public function bucket(string $item): string
+    {
+        $s = mb_strtolower($item);
+        $map = [
+            // most specific first: "balls with bells for children with disability" is bought from an
+            // adaptive-equipment supplier, not the sports shop, so this bucket must beat 'ball'.
+            'Special-needs & learning aids' => ['bells', 'disabilit', 'communication board', 'finger puppet',
+                'building block', 'emotional card', 'story card', 'safeguarding'],
+            'Sports & games' => ['football', 'jersey', 'volley', 'net', 'skipping', 'tug of war', 'ludo',
+                'scrabble', 'domino', 'playing card', 'puzzle', 'chess', 'brick game', 'snakes', 'trophy', 'ball', 'whistle'],
+            'Stationery & art' => ['crayon', 'pencil', 'clay', 'drawing', 'craft paper', 'flip chart', 'marker',
+                'glue', 'scissor', 'masking', 'chalk', 'paint', 'rubber', 'counter book', 'exercise book', 'pen',
+                'ruler', 'mathematical', 'book', 'poster', 'card', 'paper', 'stationer'],
+            'Furniture & equipment' => ['mat', 'chair', 'table', 'speaker', 'board'],
+            'Solar & electrical' => ['solar', 'lamp', 'torch', 'battery', 'cable', 'bulb'],
+            'Toiletries & personal items' => ['soap', 'comb', 'sanitary', 'underwear', 'vest', 'toilet bag',
+                'vaseline', 'sandal', 'umbrella', 'bottle', 'mug', 'bag', 'towel', 'hygiene'],
+            'Food & provisions' => ['rice', 'sugar', 'oil', 'flour', 'salt', 'bean', 'sorghum', 'maize',
+                'milk', 'tea', 'water', 'food'],
+        ];
+        foreach ($map as $name => $words) {
+            foreach ($words as $w) {
+                if (str_contains($s, $w)) {
+                    return $name;
+                }
+            }
+        }
+
+        return 'General items';
+    }
+
     /** "40 MT" → 40.0 · "8,000" → 8000.0 · "" → null. First number wins. */
     private function qtyNum(string $qty): ?float
     {

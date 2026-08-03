@@ -162,6 +162,9 @@ final class SettingsSchema
                     // v4.22 — most forum notices are photographed/scanned pages with no text at all.
                     ['key' => 'tender_ocr', 'type' => 'bool', 'label' => 'Read scanned documents (OCR)', 'default' => true, 'help' => 'Many tender PDFs are scans, with no text a computer can read. When ON, TenderBot photographs the pages and has the AI read them (first 15 pages per document). Costs a little AI credit, only for documents that cannot be read normally. OFF = those tenders come back with "not read".'],
                     ['key' => 'tender_margin_pct', 'type' => 'number', 'label' => 'Bid margin', 'unit' => '%', 'default' => 20, 'help' => 'Added on top of a supplier\'s cost to work out your bid price on the Items-to-price board. You can override it on any single line.'],
+                    // v4.23 — the buyers who actually walk the market.
+                    ['key' => 'tender_pricing_team', 'type' => 'text', 'label' => 'Who sources prices', 'help' => 'Team members who go and find prices, separated by commas — e.g. "Savan, Jayesh". Each tender\'s items are split between them by category (one takes stationery, another sports) and each gets ONE task with their list on WhatsApp. They must exist under Settings → Team. Leave empty to switch this off.'],
+                    ['key' => 'tender_sourcing_market', 'type' => 'text', 'label' => 'Where they check prices', 'default' => 'Kampala market', 'help' => 'Named in the task, e.g. "Kampala market" or "Juba, Konyo Konyo".'],
                 ]],
                 ['label' => 'Dealer programme', 'help' => 'Discounts for customers marked as Dealer/Wholesale on their profile. The margin floor is a hard guard: no dealer price ever goes below cost + floor %.', 'fields' => [
                     ['key' => 'dealer_pct',            'type' => 'number', 'label' => 'Dealer tier discount', 'unit' => '%', 'default' => 10, 'help' => 'Off the retail price.'],

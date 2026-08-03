@@ -99,8 +99,13 @@ final class TenderScout
                     }
                     // v4.22 — every BOQ line lands on the "Items to price" board
                     $nItems = 0;
+                    $sourcing = ['tasks' => 0, 'message' => ''];
                     try {
                         $nItems = app(TenderItems::class)->sync($tenant, $tender);
+                        // v4.23 — and the pricing work goes straight to the buyers
+                        if ($nItems > 0) {
+                            $sourcing = app(TenderTasks::class)->assignSourcing($tenant, $tender);
+                        }
                     } catch (\Throwable $e) {
                     }
                     if ($tender->summary && $tender->status !== 'failed'
@@ -108,7 +113,8 @@ final class TenderScout
                         try {
                             \App\Jobs\NotifyOwner::dispatch($tenant->id, $tender->summary
                                 . ($nTasks > 0 ? "\n\n📋 {$nTasks} task(s) created for your team — check the task inbox." : '')
-                                . ($nItems > 0 ? "\n🧾 {$nItems} item(s) added to the pricing board — open Tenders → Items to price." : ''));
+                                . ($nItems > 0 ? "\n🧾 {$nItems} item(s) added to the pricing board — open Tenders → Items to price." : '')
+                                . (($sourcing['tasks'] ?? 0) > 0 ? "\n💵 Pricing assigned to " . implode(' and ', $sourcing['people']) . '.' : ''));
                         } catch (\Throwable $e) {
                         }
                     }
