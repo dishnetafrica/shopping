@@ -34,7 +34,6 @@ COPY database/        ./database/
 COPY routes/          ./routes/
 COPY bootstrap/       ./bootstrap/
 COPY resources/       ./resources/
-COPY public/          ./public/
 COPY cloudbss-kernel/ ./cloudbss-kernel/
 COPY composer.json    ./composer.json
 # 5) rebuild the optimized autoloader now that our code + composer.json are in place
