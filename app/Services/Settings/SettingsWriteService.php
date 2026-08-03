@@ -22,6 +22,7 @@ final class SettingsWriteService
     private const TEXT_KEYS = [
         'tender_watch_url', 'tender_profile', 'tender_company_docs',   // v4.19 TenderBot
         'tender_pricing_team', 'tender_sourcing_market',               // v4.23 — who sources prices, and where
+        'books.loan_holders',                                          // v4.26 — director-loan lender name(s)
         'address', 'city', 'country', 'public_email', 'public_phone', 'tin', 'logo', 'tagline',
         'invoice_title', 'invoice_footer', 'bank_details', 'trading_as', 'owner_name',
         'cashbook_digest_to', // daily cashbook digest recipient (blank = off)
@@ -67,6 +68,9 @@ final class SettingsWriteService
         'dealer_min_margin_pct' => ['float', 0.0],
         // v4.22 TenderBot — margin added to a supplier cost to reach the bid price.
         'tender_margin_pct' => ['float', 0.0],
+        // v4.26 — director loan: rate is a FRACTION per month (0.03 = 3%); stock is a USD value.
+        'books.loan_rate' => ['float', 0.0],
+        'books.stock_usd' => ['float', 0.0],
     ];
 
     /** On/off toggle settings (stored as booleans). */

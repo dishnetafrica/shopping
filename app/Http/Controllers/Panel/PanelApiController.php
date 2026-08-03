@@ -6673,6 +6673,27 @@ class PanelApiController extends Controller
         if ($g = $this->ownerGate($r)) return $g;
         $path = resource_path('panel/situation-report.html');
         $html = is_file($path) ? (string) file_get_contents($path) : '<h1>Report unavailable</h1>';
+
+        // v4.26 — the lender name, the interest rate and the stock value were HARDCODED inside this
+        // file (3%/month, /bhavin/i, $3798.33), so no owner could ever change their own loan terms.
+        // They now come from tenant settings and are injected here, the same way the field-task page
+        // receives its task. The page keeps its old constants as fallbacks, so a stale cached copy
+        // still renders.
+        $t = $r->user()->tenant;
+        $rate = (float) $t->setting('books.loan_rate', 0.03);
+        if ($rate < 0 || $rate > 1) $rate = 0.03;                       // a fraction per month, not a percentage
+        // The stock value was literally `const STOCK_USD = 3798.33` in the file. A tenant that has
+        // never set it must keep seeing exactly that, or their balance sheet would silently lose
+        // $3,798 of assets the moment this deploys. Once they save the setting, theirs wins.
+        $stock = $t->setting('books.stock_usd', null);
+        $cfg = [
+            'rate'      => $rate,
+            'lenders'   => trim((string) $t->setting('books.loan_holders', 'Bhavin')),
+            'stock_usd' => $stock === null || $stock === '' ? 3798.33 : (float) $stock,
+        ];
+        $inject = '<script>window.BOOKS_CFG=' . json_encode($cfg, JSON_UNESCAPED_SLASHES) . ';</script>';
+        $html = preg_replace('#</head>#', $inject . '</head>', $html, 1);
+
         return response($html, 200)
             ->header('Content-Type', 'text/html; charset=UTF-8')
             ->header('Cache-Control', 'no-store');

@@ -59,6 +59,13 @@ final class SettingsSchema
                     ['key' => 'currency_basis',       'type' => 'enum', 'label' => 'Sell in', 'options' => ['native', 'converted'], 'default' => 'converted', 'optionLabels' => ['native' => 'Base currency (USD) — no conversion', 'converted' => 'Local currency (UGX)'], 'help' => 'Native = prices, orders, invoices & payments are all in your base currency. Choose this if you sell in USD.'],
                     ['key' => 'report_currency_mode', 'type' => 'enum', 'label' => 'Report mode', 'options' => ['base', 'original'], 'default' => 'base', 'optionLabels' => ['base' => 'Consolidated to base', 'original' => 'Original currency']],
                 ]],
+                // v4.26 — the director-loan terms were hardcoded inside the Books report file; an owner
+                // could never see or change their own rate. They are settings now.
+                ['label' => 'Director loan', 'help' => 'Money a director or partner lent the business, shown as a liability on the Books screen with interest as a finance cost. Anyone named here has their capital treated as a LOAN to be repaid, not as owner\'s equity.', 'fields' => [
+                    ['key' => 'books.loan_holders', 'type' => 'text', 'label' => 'Lender name(s)', 'default' => 'Bhavin', 'help' => 'Comma-separated. Cash they put in counts as a loan; cash paid back to them (with "loan" or "repay" in the note) reduces it.'],
+                    ['key' => 'books.loan_rate', 'type' => 'number', 'label' => 'Interest per month', 'unit' => 'fraction', 'default' => 0.03, 'help' => 'A FRACTION, not a percentage: 0.03 = 3% per month (≈42.6% a year compounded). Put 0.0025 for 3% a year. Interest accrues only on what is still outstanding, so repaying reduces it.'],
+                    ['key' => 'books.stock_usd', 'type' => 'number', 'label' => 'Inventory value (USD)', 'default' => 0, 'help' => 'Manual stock value for the balance sheet until stock tracks from purchases.'],
+                ]],
                 ['label' => 'Exchange rates (per 1 USD)', 'help' => 'Used to convert local-currency amounts for reporting.', 'fields' => [
                     ['key' => 'rate_ugx_per_usd', 'type' => 'number', 'label' => 'UGX per USD'],
                     ['key' => 'rate_ssp_per_usd', 'type' => 'number', 'label' => 'SSP per USD'],

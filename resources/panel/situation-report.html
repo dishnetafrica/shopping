@@ -45,8 +45,17 @@
 (async () => {
   const app = document.getElementById('app');
   const get = (u) => fetch(u, { credentials: 'same-origin', headers: { Accept: 'application/json' } }).then(r => r.json()).catch(() => null);
-  const STOCK_USD = 3798.33;            // manual stock value until it tracks from purchases (Books > Set stock value)
-  const RATE = 0.03, LENDER = /bhavin/i;
+  /* v4.26 — these three were hardcoded here, so no owner could change their own loan terms.
+     They now arrive from Settings → Finance → Director loan (window.BOOKS_CFG, injected by
+     the controller). The old literals stay as fallbacks so a cached copy still renders. */
+  const CFG = window.BOOKS_CFG || {};
+  const STOCK_USD = Number(CFG.stock_usd) || 0;
+  const RATE = (Number(CFG.rate) > 0 && Number(CFG.rate) <= 1) ? Number(CFG.rate) : 0.03;
+  const LENDER = (() => {
+    const names = String(CFG.lenders || 'Bhavin').split(',').map(s => s.trim()).filter(Boolean)
+      .map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    return new RegExp(names.length ? names.join('|') : 'bhavin', 'i');
+  })();
 
   const [pnl, fin, ct, cb] = await Promise.all([
     get('/papi/cash-pnl'), get('/papi/finance-overview'), get('/papi/capital-trace'), get('/papi/trade-cashbook/all'),
@@ -56,17 +65,62 @@
 
   const today = new Date();
   const days = (d) => Math.max(0, Math.floor((today - new Date(d)) / 86400000));
-  const adv = ((ct && ct.entries) || []).filter(e => LENDER.test((e.holder || '') + ' ' + (e.note || '')));
-  let loanP = 0, loanI = 0;
-  adv.forEach(e => { const p = +e.usd || 0; loanP += p; loanI += p * (Math.pow(1 + RATE, days(e.date) / 30) - 1); });
-  let intPaid = 0, prinPaid = 0;
-  ((cb && cb.entries) || []).forEach(e => {
-    const txt = (e.holder || '') + ' ' + (e.note || '') + ' ' + (e.category || '');
-    if (+e.out > 0 && (e.status || '').toLowerCase() !== 'void' && LENDER.test(txt) && /loan|interest|repay|return/i.test(txt))
-      { if (/interest/i.test(txt)) intPaid += +e.usd || 0; else prinPaid += +e.usd || 0; }
+
+  /* ── v4.26 director loan — real amortisation ───────────────────────────────────────────
+     Before: interest was recomputed from each ORIGINAL advance forever, and repayments were
+     only subtracted from the total. Paying money back therefore never reduced what the loan
+     cost you — the clock kept running on the full principal.
+
+     Now: advances and repayments go onto ONE timeline in date order and the outstanding
+     balance compounds between events, so a repayment stops interest on the money returned —
+     which is the whole point of repaying. Each repayment clears accrued interest first, then
+     principal (normal practice), so the note no longer has to say "interest" or "principal";
+     it only has to identify the payment as a loan repayment to the lender.
+
+     With no repayments recorded the two models agree to the cent — every dollar still
+     compounds from its own advance date — so switching over changes nobody's balance today. */
+  const advRows = ((ct && ct.entries) || []).filter(e => LENDER.test((e.holder || '') + ' ' + (e.note || '')));
+  const repayRows = ((cb && cb.entries) || []).filter(e => {
+    /* `person` is what /papi/trade-cashbook/all returns; `holder` was read before and is never
+       present there, so a repayment only counted if the NOTE happened to name the lender. */
+    const txt = (e.person || e.holder || '') + ' ' + (e.note || '') + ' ' + (e.category || '');
+    return +e.out > 0 && String(e.status || '').toLowerCase() !== 'void'
+      && LENDER.test(txt) && /loan|interest|repay|repaid|return/i.test(txt);
   });
-  const loanOwed = loanP + loanI - intPaid - prinPaid;
-  const financeCost = loanI - intPaid;
+
+  const timeline = [
+    ...advRows.map(e => ({ t: new Date(e.date).getTime(), kind: 'advance', usd: +e.usd || 0, note: e.note || '' })),
+    ...repayRows.map(e => ({ t: new Date(e.date).getTime(), kind: 'repay', usd: +e.usd || 0, note: e.note || '' })),
+  ].filter(x => isFinite(x.t) && x.usd > 0).sort((a, b) => a.t - b.t);
+
+  let loanP = 0, loanI = 0, intPaid = 0, prinPaid = 0, owedRun = 0, unpaidInt = 0, cursor = null;
+  const accrue = (toMs) => {
+    if (cursor === null || owedRun <= 0) { cursor = toMs; return; }
+    /* whole calendar days, the same convention the old per-advance figure used, so switching
+       to amortisation does not nudge anybody's balance on the day it deploys */
+    const d = Math.max(0, Math.floor(toMs / 86400000) - Math.floor(cursor / 86400000));
+    if (d > 0) {
+      const grow = owedRun * (Math.pow(1 + RATE, d / 30) - 1);
+      owedRun += grow; unpaidInt += grow; loanI += grow;
+    }
+    cursor = toMs;
+  };
+  timeline.forEach(ev => {
+    if (cursor === null) cursor = ev.t; else accrue(ev.t);
+    if (ev.kind === 'advance') { owedRun += ev.usd; loanP += ev.usd; return; }
+    let left = ev.usd;
+    /* interest first, then principal — and the interest must come OFF the balance before the
+       principal share is sized, or an overpayment books more principal than was ever borrowed */
+    const toInt = Math.min(left, unpaidInt);
+    unpaidInt -= toInt; intPaid += toInt; left -= toInt; owedRun -= toInt;
+    const toPrin = Math.min(left, Math.max(0, owedRun));
+    prinPaid += toPrin; left -= toPrin;
+    owedRun = Math.max(0, owedRun - toPrin);
+  });
+  accrue(today.getTime());                            // interest up to today
+
+  const loanOwed = Math.max(0, owedRun);
+  const financeCost = unpaidInt;                      // interest accrued but not yet settled
 
   const eq = {};
   ((ct && ct.by_partner) ? Object.entries(ct.by_partner) : []).forEach(([n, v]) => { if (!LENDER.test(n)) eq[n] = (eq[n] || 0) + (+v || 0); });
@@ -152,7 +206,7 @@
       <div class="rep-btns"><button onclick="window.print()">⭳ Save PDF</button><button onclick="location.reload()">↻ Refresh</button></div></div>
     <div class="kpis">
       ${kpi_('Net profit', net, tone(net))}${kpi_('Cash (all currencies)', cash, 'ok')}${kpi_('Owed to suppliers', pay, 'warn')}
-      ${kpi_('Loan owed (Bhavin)', loanOwed, 'warn')}${kpi_('Owners’ equity', equity, '')}
+      ${kpi_('Loan owed (' + String(CFG.lenders || 'Bhavin') + ')', loanOwed, 'warn')}${kpi_('Owners’ equity', equity, '')}
       <div class="kpi"><div class="kv">${margin.toFixed(1)}%</div><div class="kl">Gross margin</div></div></div>
     <div class="card"><h2>How the profit is made</h2>
       <p class="cap">From cash received to net profit — blue = totals, red = money out, green = what's left.</p>${waterfall()}</div>
@@ -168,7 +222,8 @@
           ${intPaid ? `<tr><td>Interest paid</td><td>−${money(intPaid)}</td></tr>` : ''}
           ${prinPaid ? `<tr><td>Principal repaid</td><td>−${money(prinPaid)}</td></tr>` : ''}
           <tr class="tot"><td>Balance owed</td><td>${money(loanOwed)}</td></tr>
-          <tr><td>Interest next month ≈</td><td>${money(loanOwed * RATE)}</td></tr></table></div></div>
+          <tr><td>Interest next month ≈</td><td>${money(loanOwed * RATE)}</td></tr>
+          <tr><td>Rate</td><td>${(RATE * 100).toFixed(2)}% / month</td></tr></table></div></div>
     <div class="foot">Live from your cashbook · stock is the manual value (${money(STOCK_USD)}) until it tracks from purchases · read-only</div>
   </div>`;
 })();
