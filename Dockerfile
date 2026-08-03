@@ -49,6 +49,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         nginx supervisor libpq-dev libzip-dev libpng-dev libonig-dev libicu-dev unzip \
         libjpeg62-turbo-dev libwebp-dev libfreetype6-dev \
         postgresql-client \
+        # v4.22 TenderBot: poppler-utils gives pdftotext (layout-preserving BOQ/table text — the
+        # primary PDF reader) and pdftoppm (renders pages to JPEG so scanned tender notices can be
+        # OCR'd by the vision model). ~15MB; without it scanned tenders stay unreadable.
+        poppler-utils \
     # GD must be configured BEFORE install or it builds PNG-only (no imagejpeg() —
     # exactly the fatal that broke catalogue thumbnails in production).
     && docker-php-ext-configure gd --with-jpeg --with-webp --with-freetype \

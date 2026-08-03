@@ -45,23 +45,86 @@ final class TenderExtract
         }
     }
 
+    /**
+     * PDF text, best reader first.
+     *
+     * 1. `pdftotext -layout` (poppler-utils, installed in the runtime image since v4.22). It keeps
+     *    columns aligned, which is what makes a BOQ table survive as readable rows — smalot flattens
+     *    them into one run-on line.
+     * 2. smalot/pdfparser when poppler is missing (optional composer package).
+     * 3. Neither found any text → the file is a SCAN. Flag `ocr` so the analyzer can render the pages
+     *    and have the vision model read them; the extractor itself stays AI-free and testable.
+     */
     private function pdf(string $bytes): array
     {
-        if (class_exists(\Smalot\PdfParser\Parser::class)) {
-            try {
-                $doc = (new \Smalot\PdfParser\Parser())->parseContent($bytes);
-                $text = trim((string) $doc->getText());
-                if ($text !== '') {
-                    return ['text' => $this->clip($text), 'parsed' => true, 'note' => ''];
-                }
+        $text = $this->meaningful($this->pdfToText($bytes));
 
-                return ['text' => '', 'parsed' => false, 'note' => 'PDF has no extractable text (likely scanned images)'];
+        if ($text === '' && class_exists(\Smalot\PdfParser\Parser::class)) {
+            try {
+                $text = $this->meaningful((string) (new \Smalot\PdfParser\Parser())->parseContent($bytes)->getText());
             } catch (\Throwable $e) {
-                return ['text' => '', 'parsed' => false, 'note' => 'PDF could not be parsed'];
+                $text = '';
             }
         }
 
-        return ['text' => '', 'parsed' => false, 'note' => 'PDF reader not installed on server (smalot/pdfparser)'];
+        if ($text !== '') {
+            return ['text' => $this->clip($text), 'parsed' => true, 'note' => ''];
+        }
+
+        return ['text' => '', 'parsed' => false, 'ocr' => true,
+            'note' => 'scanned PDF — no text layer'];
+    }
+
+    /** poppler's pdftotext over a temp file; '' when the binary is absent or the PDF has no text. */
+    private function pdfToText(string $bytes): string
+    {
+        $bin = $this->popplerBin('pdftotext');
+        if ($bin === null) {
+            return '';
+        }
+        $in = tempnam(sys_get_temp_dir(), 'tb') . '.pdf';
+        $out = $in . '.txt';
+        try {
+            file_put_contents($in, $bytes);
+            @exec(escapeshellcmd($bin) . ' -layout -q -enc UTF-8 ' . escapeshellarg($in) . ' ' . escapeshellarg($out) . ' 2>/dev/null');
+
+            return is_file($out) ? (string) file_get_contents($out) : '';
+        } catch (\Throwable $e) {
+            return '';
+        } finally {
+            @unlink($in);
+            @unlink($out);
+        }
+    }
+
+    /**
+     * Is there REAL text here, or only page furniture?
+     *
+     * pdftotext emits a form feed (\f) for every page, so a fully scanned document comes back as
+     * "\f\f\f" — and `trim()` does NOT strip \f. Without this, every scanned tender would look
+     * successfully read, the OCR fallback would never fire, and the analysis would run blind on a
+     * notice title alone. Found by the v4.22 harness on a real scanned fixture.
+     */
+    private function meaningful(string $text): string
+    {
+        $clean = str_replace("\f", "\n", $text);
+        $clean = (string) preg_replace('/[\x00-\x08\x0B\x0E-\x1F]/u', '', $clean);
+        $clean = trim((string) preg_replace('/\n{3,}/', "\n\n", $clean));
+
+        // A handful of stray characters is not a document — treat it as no text layer.
+        return mb_strlen(preg_replace('/\s+/', '', $clean) ?? '') >= 20 ? $clean : '';
+    }
+
+    /** Absolute path to a poppler binary, or null when it is not installed. */
+    public function popplerBin(string $name): ?string
+    {
+        foreach (['/usr/bin/', '/usr/local/bin/', '/opt/homebrew/bin/'] as $dir) {
+            if (is_file($dir . $name) && is_executable($dir . $name)) {
+                return $dir . $name;
+            }
+        }
+
+        return null;
     }
 
     private function docx(string $bytes): array

@@ -97,11 +97,18 @@ final class TenderScout
                         $nTasks = app(TenderTasks::class)->forTender($tenant, $tender);
                     } catch (\Throwable $e) {
                     }
+                    // v4.22 — every BOQ line lands on the "Items to price" board
+                    $nItems = 0;
+                    try {
+                        $nItems = app(TenderItems::class)->sync($tenant, $tender);
+                    } catch (\Throwable $e) {
+                    }
                     if ($tender->summary && $tender->status !== 'failed'
                         && (bool) $tenant->setting('tender_notify', true)) {
                         try {
                             \App\Jobs\NotifyOwner::dispatch($tenant->id, $tender->summary
-                                . ($nTasks > 0 ? "\n\n📋 {$nTasks} task(s) created for your team — check the task inbox." : ''));
+                                . ($nTasks > 0 ? "\n\n📋 {$nTasks} task(s) created for your team — check the task inbox." : '')
+                                . ($nItems > 0 ? "\n🧾 {$nItems} item(s) added to the pricing board — open Tenders → Items to price." : ''));
                         } catch (\Throwable $e) {
                         }
                     }

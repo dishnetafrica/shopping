@@ -64,6 +64,8 @@ final class SettingsWriteService
         'dealer_pct' => ['float', 0.0],
         'wholesale_pct' => ['float', 0.0],
         'dealer_min_margin_pct' => ['float', 0.0],
+        // v4.22 TenderBot — margin added to a supplier cost to reach the bid price.
+        'tender_margin_pct' => ['float', 0.0],
     ];
 
     /** On/off toggle settings (stored as booleans). */
@@ -85,6 +87,7 @@ final class SettingsWriteService
         'sf_hide_oos',  // storefront: hide out-of-stock parts (sell only what you have)
         'sf_diagrams',  // v4.10.5 — show exploded diagrams (default off; parts-first catalogues)
         'tender_enabled', 'tender_notify', 'tender_tasks',   // v4.19/v4.20 TenderBot (bool)
+        'tender_ocr',                                        // v4.22 — read scanned tender documents
         'custom_domain_live',  // owner confirms the custom domain serves CloudBSS → use it in sent links (v4.6.1)
     ];
 

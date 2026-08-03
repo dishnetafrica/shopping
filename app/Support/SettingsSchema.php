@@ -159,6 +159,9 @@ final class SettingsSchema
                     ['key' => 'tender_notify', 'type' => 'bool', 'label' => 'WhatsApp me each analysis', 'default' => true],
                     // v4.20 — the Procurement Task Engine: analysis action-items become real tasks.
                     ['key' => 'tender_tasks', 'type' => 'bool', 'label' => 'Create tasks from each analysis', 'default' => true, 'help' => 'Each tender\'s action plan becomes real tasks in your task inbox (with WhatsApp nudges, reminders and escalation).'],
+                    // v4.22 — most forum notices are photographed/scanned pages with no text at all.
+                    ['key' => 'tender_ocr', 'type' => 'bool', 'label' => 'Read scanned documents (OCR)', 'default' => true, 'help' => 'Many tender PDFs are scans, with no text a computer can read. When ON, TenderBot photographs the pages and has the AI read them (first 15 pages per document). Costs a little AI credit, only for documents that cannot be read normally. OFF = those tenders come back with "not read".'],
+                    ['key' => 'tender_margin_pct', 'type' => 'number', 'label' => 'Bid margin', 'unit' => '%', 'default' => 20, 'help' => 'Added on top of a supplier\'s cost to work out your bid price on the Items-to-price board. You can override it on any single line.'],
                 ]],
                 ['label' => 'Dealer programme', 'help' => 'Discounts for customers marked as Dealer/Wholesale on their profile. The margin floor is a hard guard: no dealer price ever goes below cost + floor %.', 'fields' => [
                     ['key' => 'dealer_pct',            'type' => 'number', 'label' => 'Dealer tier discount', 'unit' => '%', 'default' => 10, 'help' => 'Off the retail price.'],

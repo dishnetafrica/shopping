@@ -42,19 +42,38 @@ final class TenderAnalyzer
             $unparsed = [];
             $stored = [];
             $total = 0;
+            $ocr = app(TenderOcr::class);
             foreach (array_slice($files, 0, 15) as $f) {
                 $name = trim((string) ($f['name'] ?? 'file'));
                 $bytes = (string) ($f['bytes'] ?? '');
                 if ($bytes === '') {
                     continue;
                 }
+                $path = null;
                 try {
                     $path = 'tenders/' . $tenant->id . '/' . date('Ymd') . '-' . substr(md5($bytes), 0, 8) . '-' . preg_replace('/[^A-Za-z0-9._-]+/', '_', mb_substr($name, 0, 80));
                     Storage::disk('public')->put($path, $bytes);
-                    $stored[] = $path;
                 } catch (\Throwable $e) {
+                    $path = null;
                 }
                 $r = $ex->extract($name, $bytes);
+
+                // v4.22 — a PDF with no text layer is a SCAN, not a dead end: render its pages and let
+                // the vision model read them. Only ever runs when normal extraction found nothing.
+                $ocrPages = 0;
+                if ($r['text'] === '' && ! empty($r['ocr'])) {
+                    try {
+                        $o = $ocr->read($tenant, $bytes, $name);
+                        if ($o['text'] !== '') {
+                            $r = ['text' => $o['text'], 'parsed' => true, 'note' => $o['note']];
+                        } else {
+                            $r['note'] = $o['note'] ?: $r['note'];
+                        }
+                        $ocrPages = (int) $o['pages'];
+                    } catch (\Throwable $e) {
+                    }
+                }
+
                 if ($r['text'] !== '' && $total < self::MAX_TOTAL_TEXT) {
                     $keep = mb_substr($r['text'], 0, self::MAX_TOTAL_TEXT - $total, 'UTF-8');
                     $total += mb_strlen($keep, 'UTF-8');
@@ -62,6 +81,17 @@ final class TenderAnalyzer
                 } else {
                     $unparsed[] = $name . ($r['note'] !== '' ? " ({$r['note']})" : '');
                 }
+
+                // Keep the real filename/size/read-status so the panel can list the documents the way
+                // a back office needs them (open the original, see what could NOT be read, and why).
+                $stored[] = [
+                    'path' => $path,
+                    'name' => $name,
+                    'size' => strlen($bytes),
+                    'parsed' => $r['text'] !== '',
+                    'ocr_pages' => $ocrPages,
+                    'note' => (string) ($r['note'] ?? ''),
+                ];
             }
             if ($postText !== '') {
                 array_unshift($sections, "===== TENDER NOTICE TEXT =====\n" . mb_substr($postText, 0, 20000, 'UTF-8'));
@@ -156,15 +186,20 @@ ANALYSE the tender material you are given and produce, for management:
 7. ACTION PLAN: today's prioritised tasks (supplier calls, quotations to request, documents to renew/collect, proposals to prepare, bid security to arrange).
 8. RISKS: short deadline, unrealistic delivery, strict experience, high competition, missing documents, low margin, financial/technical/compliance risk — with an overall risk note. Deadlines within 7 days are HIGH PRIORITY; within 48 hours CRITICAL. If the tender has multiple lots, analyse each lot in the report.
 
+WRITING RULES — every field you output is read by staff who will act on it:
+- Fill in REAL values everywhere. Never echo a placeholder, an ellipsis, "N", "NN", "<...>" or the word "TBD". If the documents do not say, write "not stated in the documents".
+- days_remaining = whole days from TODAY'S DATE (given in the material) to the deadline. If there is no deadline in the documents, use 0 and leave "deadline" empty.
+- products_required is the buying list your back office will work from. List EVERY line item, lot item and BOQ row you can see — one entry each, with its own quantity and unit. If the documents contain no product list (a service tender, or documents you could not read), return an empty array rather than inventing items.
+
 OUTPUT — reply with ONE valid JSON object and NOTHING else (no markdown fences):
 {
- "whatsapp_summary": "the executive WhatsApp message — UNDER 250 words, exactly this shape:\\n🚨 NEW OPPORTUNITY\\n🏢 Organization: …\\n📄 Tender: …\\n🏷 Division: …\\n⭐ Opportunity: NN%\\n🏆 Recommendation: …\\n📅 Deadline: … (N days remaining)\\n📦 Main Products Required\\n• …\\n💰 Quotations Required Today\\n• …\\n📄 Missing Documents\\n• …\\n⚠ Major Risks\\n• …\\n📌 AI Verdict: max three sentences telling management whether to proceed.",
+ "whatsapp_summary": "the executive WhatsApp message — UNDER 250 words. FILL IN REAL VALUES: never copy the shape's placeholder wording, never print an ellipsis, the letters N/NN, or bracketed hints. When a fact is not in the documents write 'not stated in the documents'. Line shape:\\n🚨 NEW OPPORTUNITY\\n🏢 Organization: <name>\\n📄 Tender: <title>\\n🏷 Division: <division>\\n⭐ Opportunity: <number>%\\n🏆 Recommendation: <recommendation>\\n📅 Deadline: <the real date, then the real day count in brackets, e.g. '14 Aug 2026 (11 days remaining)'>\\n📦 Main Products Required\\n• <one line per product, or 'not stated in the documents'>\\n💰 Quotations Required Today\\n• <supplier quotes to request, or 'none'>\\n📄 Missing Documents\\n• <documents you do not hold, or 'none'>\\n⚠ Major Risks\\n• <risks>\\n📌 AI Verdict: max three sentences telling management whether to proceed.",
  "report": {
    "tender_id": "", "organization": "", "title": "", "category": "", "division": "{$divEnum}",
    "division_reason": "", "opportunity_score": 0, "win_probability": "", "recommendation": "", "recommendation_reason": "",
    "deadline": "YYYY-MM-DD or empty", "days_remaining": 0, "submission": {"method": "", "address": "", "email": ""},
    "estimated_budget": "", "currency": "", "delivery_location": "", "lots": [],
-   "products_required": [{"item": "", "qty": "", "spec": "", "brand": "", "alt_brand": "", "est_price": "", "needs_quote": true, "urgency": ""}],
+   "products_required": [{"item": "", "qty": "", "unit": "", "lot": "", "spec": "", "brand": "", "alt_brand": "", "est_price": "", "needs_quote": true, "urgency": ""}],
    "quotation_requests": [], "compliance_requirements": [{"document": "", "status": "Available|Need Renewal|Missing|Unknown"}],
    "missing_documents": [], "risks": [{"risk": "", "level": ""}], "risk_score": "",
    "action_items": [{"task": "", "priority": ""}], "attachments_processed": 0, "unparsed_files": [], "confidence_score": 0

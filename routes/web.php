@@ -545,6 +545,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::post('tenders-scan', [\App\Http\Controllers\Panel\TenderController::class, 'scanNow']);           // v4.19 — manual forum sweep
         Route::post('tenders-status', [\App\Http\Controllers\Panel\TenderController::class, 'setStatus']);       // v4.19 — pipeline status update
         Route::post('tenders-rfq', [\App\Http\Controllers\Panel\TenderController::class, 'rfq']);                // v4.20 — supplier RFQ text generator
+        Route::get('tender-file', [\App\Http\Controllers\Panel\TenderController::class, 'file']);                // v4.22 — open a stored tender document
+        Route::post('tender-item-save', [\App\Http\Controllers\Panel\TenderController::class, 'itemSave']);      // v4.22 — capture a supplier price
+        Route::get('tender-items.csv', [\App\Http\Controllers\Panel\TenderController::class, 'itemsCsv']);       // v4.22 — the pricing board as a spreadsheet
         Route::get('bot/quote-diagnostics', [PanelApiController::class, 'botQuoteDiagnostics']);
         Route::match(['get', 'post'], 'backfill-customers', [PanelApiController::class, 'backfillCustomers']);
         Route::match(['get', 'post'], 'merge-customers', [PanelApiController::class, 'mergeCustomers']);
