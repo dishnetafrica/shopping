@@ -20,6 +20,7 @@ final class SettingsWriteService
 
     /** Plain text settings written verbatim (trimmed). */
     private const TEXT_KEYS = [
+        'tender_watch_url', 'tender_profile', 'tender_company_docs',   // v4.19 TenderBot
         'address', 'city', 'country', 'public_email', 'public_phone', 'tin', 'logo', 'tagline',
         'invoice_title', 'invoice_footer', 'bank_details', 'trading_as', 'owner_name',
         'cashbook_digest_to', // daily cashbook digest recipient (blank = off)
@@ -83,6 +84,7 @@ final class SettingsWriteService
         'show_model_tvshlx125',   // v4.7.5: TVS HLX 125 on the customer storefront
         'sf_hide_oos',  // storefront: hide out-of-stock parts (sell only what you have)
         'sf_diagrams',  // v4.10.5 — show exploded diagrams (default off; parts-first catalogues)
+        'tender_enabled', 'tender_notify',   // v4.19 TenderBot (bool)
         'custom_domain_live',  // owner confirms the custom domain serves CloudBSS → use it in sent links (v4.6.1)
     ];
 

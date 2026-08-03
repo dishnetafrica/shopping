@@ -27,6 +27,10 @@ RUN composer require openai-php/laravel \
 # 3b) optional: error tracking. Inert unless SENTRY_LARAVEL_DSN is set in the env.
 RUN composer require sentry/sentry-laravel \
         --no-interaction --no-scripts --prefer-dist --ignore-platform-reqs --with-all-dependencies || true
+# 3c) optional: PDF text extraction for TenderBot (v4.19). Without it, PDF tenders are
+#     stored but reported as "open manually" — nothing breaks.
+RUN composer require smalot/pdfparser \
+        --no-interaction --no-scripts --prefer-dist --ignore-platform-reqs --with-all-dependencies || true
 # 4) overlay our application code (merges into the skeleton, keeps skeleton defaults)
 COPY app/             ./app/
 COPY config/          ./config/
@@ -34,6 +38,7 @@ COPY database/        ./database/
 COPY routes/          ./routes/
 COPY bootstrap/       ./bootstrap/
 COPY resources/       ./resources/
+COPY public/          ./public/
 COPY cloudbss-kernel/ ./cloudbss-kernel/
 COPY composer.json    ./composer.json
 # 5) rebuild the optimized autoloader now that our code + composer.json are in place

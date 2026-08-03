@@ -150,6 +150,14 @@ final class SettingsSchema
                 ]],
                 // v4.9 — Dealer programme 4a. The bot quotes these prices automatically for customers
                 // marked as dealers on their profile; the storefront joins in drop 4b.
+                // v4.19 — TenderBot: the AI procurement department. Upload page + daily forum watcher.
+                ['label' => 'Tenders (TenderBot)', 'help' => 'Your AI bid manager: it reads tender documents, scores the opportunity, checks compliance and WhatsApps you the executive summary. Upload tenders (or scan the forum) at /papi/tenders.', 'fields' => [
+                    ['key' => 'tender_enabled', 'type' => 'bool', 'label' => 'Watch for tenders', 'default' => false, 'help' => 'When ON, TenderBot checks the forum below twice a day by itself and analyses anything new.'],
+                    ['key' => 'tender_watch_url', 'type' => 'text', 'label' => 'Tender forum to watch', 'default' => 'https://comms.southsudanngoforum.org/c/tenders/8', 'help' => 'A Discourse category URL. New posts here are analysed automatically.'],
+                    ['key' => 'tender_profile', 'type' => 'textarea', 'label' => 'Business profile for classification', 'help' => 'What your company sells/does, by division — TenderBot uses this to classify each tender (ISP / General Trading / Both / Ignore). Leave empty for the built-in ISP + General Trading profile.'],
+                    ['key' => 'tender_company_docs', 'type' => 'textarea', 'label' => 'Company documents on file', 'help' => 'One per line, e.g. "Tax Clearance — valid to Dec 2026". TenderBot marks each tender\'s requirements Available / Need Renewal / Missing against this list.'],
+                    ['key' => 'tender_notify', 'type' => 'bool', 'label' => 'WhatsApp me each analysis', 'default' => true],
+                ]],
                 ['label' => 'Dealer programme', 'help' => 'Discounts for customers marked as Dealer/Wholesale on their profile. The margin floor is a hard guard: no dealer price ever goes below cost + floor %.', 'fields' => [
                     ['key' => 'dealer_pct',            'type' => 'number', 'label' => 'Dealer tier discount', 'unit' => '%', 'default' => 10, 'help' => 'Off the retail price.'],
                     ['key' => 'wholesale_pct',         'type' => 'number', 'label' => 'Wholesale tier discount', 'unit' => '%', 'default' => 15],

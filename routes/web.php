@@ -540,6 +540,10 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::post('branding-upload', [\App\Http\Controllers\Panel\BrandingUploadController::class, 'upload']); // image upload for Settings image fields
         Route::get('bike-photos', [\App\Http\Controllers\Panel\BikePhotoPackController::class, 'page']);         // v4.16 — one-shot bike photo pack (owner page)
         Route::post('bike-photos-zip', [\App\Http\Controllers\Panel\BikePhotoPackController::class, 'upload']);  // v4.16 — zip → storage + model_image_* settings
+        Route::get('tenders', [\App\Http\Controllers\Panel\TenderController::class, 'page']);                    // v4.19 — TenderBot owner page
+        Route::post('tenders-analyze', [\App\Http\Controllers\Panel\TenderController::class, 'analyze']);        // v4.19 — upload files → analysis
+        Route::post('tenders-scan', [\App\Http\Controllers\Panel\TenderController::class, 'scanNow']);           // v4.19 — manual forum sweep
+        Route::post('tenders-status', [\App\Http\Controllers\Panel\TenderController::class, 'setStatus']);       // v4.19 — pipeline status update
         Route::get('bot/quote-diagnostics', [PanelApiController::class, 'botQuoteDiagnostics']);
         Route::match(['get', 'post'], 'backfill-customers', [PanelApiController::class, 'backfillCustomers']);
         Route::match(['get', 'post'], 'merge-customers', [PanelApiController::class, 'mergeCustomers']);
