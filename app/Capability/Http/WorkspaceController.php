@@ -41,6 +41,17 @@ final class WorkspaceController
             $counts = [];
         }
 
+        // v4.21 — feature flags for bespoke menu entries that are NOT capabilities: owner tools that
+        // live behind a tenant setting (TenderBot). Same discipline as counts above — a flag that
+        // throws must never take the sidebar down with it.
+        $flags = [];
+        try {
+            $flags['tenders'] = method_exists($ctx->user, 'isOwnerLike') && $ctx->user->isOwnerLike()
+                && (bool) (method_exists($ctx->tenant, 'setting') ? $ctx->tenant->setting('tender_enabled', false) : false);
+        } catch (\Throwable $e) {
+            $flags = [];
+        }
+
         // Currency & reporting: the shell renders a global report-currency selector from this.
         $override = strtolower(trim((string) $request->query('cur')));
         $currency = [
@@ -55,6 +66,7 @@ final class WorkspaceController
             'ok' => true,
             'user' => ['name' => (string) ($request->user()->name ?? 'User'), 'role' => $ctx->role, 'org' => (string) ($ctx->tenant->name ?? '')],
             'counts' => $counts,
+            'flags' => $flags,
             'currency' => $currency,
             'capabilities' => $caps,
         ]);

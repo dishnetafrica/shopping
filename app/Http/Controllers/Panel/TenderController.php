@@ -67,7 +67,10 @@ class TenderController extends Controller
             $rows = '<p style="color:#9CA3AF">No tenders analysed yet — drop the first one above, or press "Scan forum now".</p>';
         }
         $enabledNote = $enabled ? ''
-            : '<p style="background:#FEF3C7;border-radius:8px;padding:8px 12px;font-size:12.5px">Automatic daily scanning is OFF — turn on <b>Settings → Tenders → Watch for tenders</b> to have TenderBot check the forum twice a day by itself.</p>';
+            : '<p style="background:#FEF3C7;border-radius:8px;padding:8px 12px;font-size:12.5px">Automatic daily scanning is OFF — turn on <b>Settings → Storefront → Tenders (TenderBot) → Watch for tenders</b> to have TenderBot check the forum twice a day by itself (that also puts <b>Tenders</b> in your left menu).</p>';
+        // v4.21 — when the v3 shell embeds this page in an iframe, the back-link must move the WHOLE
+        // window (target=_top), or Settings would open inside the frame.
+        $backLink = '<p style="margin-top:10px"><a href="/v3#/settings" target="_top">← Settings</a></p>';
 
         $html = <<<HTML
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -106,7 +109,7 @@ a{color:#14532D}
   <button class="btn o" id="scan">Scan forum now</button>
   <span style="font-size:11.5px;color:#9CA3AF"> watching: {$watch}</span>
   <div id="msg"></div>
-  <p style="margin-top:10px"><a href="/v3#/settings">← Settings</a></p>
+  {$backLink}
 </div>
 <div class="card"><h1 style="font-size:16px">Recent tenders</h1>{$rows}</div>
 <script>

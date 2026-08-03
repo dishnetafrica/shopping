@@ -5,9 +5,10 @@ const LABELS = { pos:'POS Till', 'ai.campaign':'AI Campaign', advisor:'Solar Adv
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
   salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings', ads:'Facebook Ads', campaigns:'Campaigns', 'storefront.insights':'Storefront Insights',
   jobs:'Jobs', workOrder:'Job', maintenance:'Maintenance', maintenancePlan:'Service Plan', claims:'Warranty Claims', warrantyClaim:'Claim', modules:'Modules', billing:'Billing', team:'Team & Roles',
-  'storefront.collections':'Shop for Every Need', 'storefront.kits':'Ready-made Kits', 'storefront.delivery':'Delivery & Free Shipping' };
+  'storefront.collections':'Shop for Every Need', 'storefront.kits':'Ready-made Kits', 'storefront.delivery':'Delivery & Free Shipping',
+  tenders:'Tenders' };
 const GROUPS = [ ['Overview',['setup','briefing','worklist','guide']],
-  ['Sales',['pos','advisor','customers','leads','followups','salesOrders','scheduled','quotations','invoices','payments','collections']],
+  ['Sales',['pos','advisor','customers','leads','tenders','followups','salesOrders','scheduled','quotations','invoices','payments','collections']],
   ['Messaging',['chats','communication','diagnostics']],
   ['Inventory',['products','categories','purchase.process','suppliers','consignments']],
   ['Procurement',['procurement.hub','demand.plans','juba.stock']],
@@ -18,7 +19,7 @@ const GROUPS = [ ['Overview',['setup','briefing','worklist','guide']],
 // Which nav key reads which count from the catalog's counts map.
 const NAVCOUNT = { followups:'followups', diagnostics:'diagnostics', chats:'chats', communication:'communication', consignments:'consignments', scheduled:'scheduled', customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // Full workspaces that resolve to a real screen (all menu items are now built).
-const READY = new Set(['pos','ai.campaign','advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','books','warehouse','dispatch','tasks','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team']);
+const READY = new Set(['pos','ai.campaign','advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','books','warehouse','dispatch','tasks','settings','cashbook','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team','tenders']);
 // Storefront config pages are client-rendered (not server workspaces) and always available to the owner.
 const SF_KEYS = new Set(['storefront.collections','storefront.kits','storefront.delivery','transport']);
 // Dedicated list views still pending — none; kept for future additions.
@@ -41,6 +42,7 @@ const P = {
   modules:'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   billing:'M2 7h20v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM2 10h20M6 15h4',
   team:'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
+  tenders:'M8 3h8v5a4 4 0 0 1-8 0zM8 5H5v1a3 3 0 0 0 3 3M16 5h3v1a3 3 0 0 1-3 3M12 12v4M8.5 20h7l-.8-2.5H9.3z',
   consignments:'M1 3h15v13H1zM16 8h4l3 3v5h-7zM5.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM18.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
   consignment:'M1 3h15v13H1zM16 8h4l3 3v5h-7z',
   guide:'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z',
@@ -166,6 +168,7 @@ async function boot(){
   const cat = await api('/');
   CFG.user = cat.user || CFG.user;
   CFG.counts = cat.counts || {};
+  CFG.flags = cat.flags || {};   // v4.21 — setting-gated menu entries (TenderBot)
   CFG.currency = cat.currency || { base:'UGX', mode:'base', options:['base','original','USD','UGX','SSP'] };
   initCur();
   const nm = CFG.user.name||'User';
@@ -232,6 +235,7 @@ async function boot(){
       var cat=await api('/');
       if(!cat || !cat.counts) return;
       CFG.counts=cat.counts;
+      if(cat.flags) CFG.flags=cat.flags;   // v4.21 — turning TenderBot on in Settings brings the menu entry in without a reload
       if(cat.capabilities && cat.capabilities.length) renderNav(cat.capabilities);
       var n=Number(cat.counts.chats||0);
       document.title = n>0 ? '('+n+') '+TITLE : TITLE;
@@ -376,7 +380,9 @@ function renderNav(caps){
   // A SOON item shows if its underlying entity exists (has a count) even without a list capability yet.
   /* pnl is a legacy-iframe screen with no capability of its own — gate it on the
      permission-filtered finance capability so restricted roles don't see P&L. */
-  const has = k => (k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || k==='ai.campaign' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
+  /* v4.21 — TenderBot is an owner tool behind a tenant setting, not a capability: the server sends
+     flags.tenders (owner AND Settings → Tenders → Watch for tenders is ON). Off = no menu entry. */
+  const has = k => (k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || k==='ai.campaign' || (k==='tenders' && !!(CFG.flags && CFG.flags.tenders)) || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
   // The top-bar POS launcher follows the same gate as the menu entry.
   try{ var pb=document.getElementById('posTop'); if(pb) pb.style.display = has('pos') ? 'flex' : 'none'; }catch(e){}
   let html='';
@@ -562,6 +568,9 @@ async function route(key, id){
   if(key==='consignments'){ document.getElementById('view').innerHTML='<iframe title="Consignments" src="/panel/consignment?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   // AI Campaign generator (v4.5) — owner tool; embedded like settings/pos.
   if(key==='ai.campaign'){ document.getElementById('view').innerHTML='<iframe title="AI Campaign" src="/panel/ai-campaign?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
+  // TenderBot (v4.21) — the AI bid desk; owner tool, embedded like POS/AI Campaign. Menu entry only
+  // appears when Settings → Tenders → Watch for tenders is ON (server flag), but the route always works.
+  if(key==='tenders'){ document.getElementById('view').innerHTML='<iframe title="TenderBot" src="/papi/tenders?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   // Help & Training — the in-product Training Center (replaces the old server guide workspace).
   if(key==='guide'){ document.getElementById('view').innerHTML='<iframe title="Training" src="/panel/training" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   if(key==='advisor'){ advisorHome(id); return; }
