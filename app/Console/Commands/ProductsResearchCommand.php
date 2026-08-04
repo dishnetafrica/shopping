@@ -192,22 +192,34 @@ class ProductsResearchCommand extends Command
         $this->newLine(2);
 
         if ($samples) {
-            $this->table(['product', 'fields filled', 'first value'], $samples);
+            $this->table(['product', $apply ? 'fields filled' : 'fields it WOULD fill', 'first value'], $samples);
         }
-        $this->line(sprintf(
-            'Looked at %d · filled %d products · queued %d for review · barcode lookups %d',
-            $seen, $touched, $queued, $barcodeCalls
-        ));
+        // v4.31.1 — the verbs must match what actually happened. A dry run previously reported
+        // "queued 835 for review" when it had queued nothing, so the Suggestions screen was
+        // empty and the menu entry stayed hidden — which reads exactly like a broken deploy.
+        $this->line($apply
+            ? sprintf('Looked at %d · filled %d products · queued %d for review · barcode lookups %d',
+                $seen, $touched, $queued, $barcodeCalls)
+            : sprintf('Looked at %d · WOULD fill %d products · WOULD queue %d for review · barcode lookups %d',
+                $seen, $touched, $queued, $barcodeCalls));
         $this->line(sprintf(
             'Decisions — apply %d · review %d · kept (already filled, untouched) %d · skipped %d',
             $counts['apply'], $counts['review'], $counts['keep'], $counts['skip']
         ));
         if (! $apply) {
-            $this->warn('Dry run — nothing was written. Re-run with --apply.');
+            $this->newLine();
+            $this->warn('DRY RUN — nothing was saved. The Suggestions screen is still empty.');
+            $this->warn('To actually create the ' . $queued . ' suggestions, run the same command with --apply:');
+            $this->line('   php artisan products:research --tenant=' . $tenantId . ' --apply');
+            if ($barcodeCalls === 0 && $counts['apply'] === 0) {
+                $this->newLine();
+                $this->line('Tip: add --barcode-api and the products with a real barcode fill themselves in');
+                $this->line('     from fact rather than joining the review queue.');
+            }
         } else {
             BotTrace::log($tenantId, 'products:research', 'cli', 'research_run',
                 "seen={$seen} filled={$touched} queued={$queued} off={$barcodeCalls}", 0);
-            $this->info('Done. Review queue: Products → Suggestions in the panel.');
+            $this->info('Done. Open the panel → Inventory → Suggestions (' . $queued . ' waiting).');
         }
 
         return self::SUCCESS;

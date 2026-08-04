@@ -249,8 +249,17 @@ function chip(label,on,onclick){return '<button class="chip'+(on?' on':'')+'" on
 function render(){
   const d=DATA, s=d.summary||{}, app=document.getElementById('app');
   if(!s.total){
-    app.innerHTML='<div class="empty"><h2>Nothing waiting</h2><p>Anything the AI was sure about has already been filled in.<br>'+
-      'Run <code>php artisan products:research --tenant=…</code> to look for more.</p></div>';
+    app.innerHTML='<div class="empty" style="text-align:left;max-width:660px;margin:0 auto">'+
+      '<h2 style="text-align:center">Nothing waiting</h2>'+
+      '<p>Either everything has been decided, or the catalogue has not been researched yet.</p>'+
+      '<p><b>The most common reason:</b> the research command was run without <code>--apply</code>. '+
+      'That is a dry run — it reports what it <i>would</i> do and saves nothing, so this screen stays empty.</p>'+
+      '<p>To actually create the suggestions:</p>'+
+      '<pre style="background:#111827;color:#fff;padding:11px 13px;border-radius:9px;overflow:auto">'+
+      'php artisan products:research --tenant=17 --apply</pre>'+
+      '<p>Add <code>--barcode-api</code> and the products that carry a real barcode fill themselves in '+
+      'from fact instead of joining this queue. Add <code>--descriptions</code> to have descriptions written too.</p>'+
+      '</div>';
     return;
   }
   let h='<div class="card"><b>'+s.total+'</b> suggestions across <b>'+(s.products||0)+'</b> products.';

@@ -170,7 +170,7 @@ async function boot(){
   CFG.user = cat.user || CFG.user;
   CFG.counts = cat.counts || {};
   CFG.flags = cat.flags || {};   // v4.21 — setting-gated menu entries (TenderBot)
-  if(CFG.flags.suggestions) CFG.counts.suggestions = CFG.flags.suggestions;   // v4.31 — badge on the Suggestions entry
+  CFG.counts.suggestions = CFG.flags.suggestions || '';   // v4.31 — badge on the Suggestions entry ('' = no badge at zero)
   CFG.currency = cat.currency || { base:'UGX', mode:'base', options:['base','original','USD','UGX','SSP'] };
   initCur();
   const nm = CFG.user.name||'User';
@@ -390,7 +390,7 @@ function renderNav(caps){
      this gate can only ever reveal too much, never hide a tool someone is using. */
   const vert = (CFG.flags && typeof CFG.flags.vertical === 'string') ? CFG.flags.vertical : '';
   const solarish = k => k!=='advisor' || vert==='' || vert==='solar';
-  const has = k => ((k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || k==='ai.campaign' || (k==='tenders' && !!(CFG.flags && CFG.flags.tenders)) || (k==='suggestions' && !!(CFG.flags && CFG.flags.suggestions)) || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null)) && solarish(k);
+  const has = k => ((k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || k==='ai.campaign' || (k==='tenders' && !!(CFG.flags && CFG.flags.tenders)) || (k==='suggestions' && !!(CFG.flags && (CFG.flags.suggestions || CFG.flags.research))) || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null)) && solarish(k);
   // The top-bar POS launcher follows the same gate as the menu entry.
   try{ var pb=document.getElementById('posTop'); if(pb) pb.style.display = has('pos') ? 'flex' : 'none'; }catch(e){}
   let html='';

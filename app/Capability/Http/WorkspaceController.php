@@ -54,14 +54,20 @@ final class WorkspaceController
             // failure here can only ever show too much, never too little.
             $flags['vertical'] = method_exists($ctx->tenant, 'setting')
                 ? \App\Support\SettingsVisibility::verticalOf($ctx->tenant) : '';
-            // v4.31 — the Suggestions entry appears only while something is actually waiting,
-            // and takes itself away once the queue is empty. A menu item that permanently reads
-            // "(0)" teaches people to stop looking at it.
+            // v4.31 — the Suggestions entry carries the number waiting.
+            // v4.31.1 — it ALSO shows at zero once research is switched on, and this matters:
+            // hiding it at zero meant that after a dry run (which saves nothing) the entry never
+            // appeared, and there was no way to tell "no suggestions yet" from "the deploy failed".
+            // A feature you cannot find is worse than a menu entry reading (0).
             $flags['suggestions'] = 0;
-            if (\Illuminate\Support\Facades\Schema::hasTable('product_suggestions')
-                && method_exists($ctx->user, 'isOwnerLike') && $ctx->user->isOwnerLike()) {
-                $flags['suggestions'] = (int) \App\Models\ProductSuggestion::where('tenant_id', $ctx->tenantId())
-                    ->where('status', 'pending')->count();
+            $flags['research'] = false;
+            if (method_exists($ctx->user, 'isOwnerLike') && $ctx->user->isOwnerLike()) {
+                $flags['research'] = (bool) (method_exists($ctx->tenant, 'setting')
+                    ? $ctx->tenant->setting('research_enabled', false) : false);
+                if (\Illuminate\Support\Facades\Schema::hasTable('product_suggestions')) {
+                    $flags['suggestions'] = (int) \App\Models\ProductSuggestion::where('tenant_id', $ctx->tenantId())
+                        ->where('status', 'pending')->count();
+                }
             }
         } catch (\Throwable $e) {
             $flags = [];
