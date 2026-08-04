@@ -113,8 +113,41 @@ class StorefrontController extends Controller
         return $this->renderShop($tenant, $base);
     }
 
+    /**
+     * v4.27 — REAL, indexable URLs for the shop (the # is gone).
+     *
+     * GET /p/{slug}-{id} — a product's own page. The id at the end is authoritative; the slug in
+     * front is decoration for Google and humans, so a stale slug still resolves and the canonical
+     * always points at the current one. Serves the SAME shop shell with per-product title,
+     * description, canonical, og:image (the product photo, so a WhatsApp share previews the item)
+     * and Product JSON-LD — then tells the page to open that product.
+     */
+    public function productPage(?string $shop = null, ?string $slugId = null)
+    {
+        // On a custom domain the route has one segment; on the platform it is /{shop}/p/{slugId}.
+        if ($slugId === null) { $slugId = (string) $shop; $shop = null; }
+        [$tenant, $base] = $this->resolveShop($shop);
+
+        // trailing digits are the id — "sugar-2kg-kakira-412" → 412
+        $id = preg_match('/(\d+)$/', (string) $slugId, $m) ? (int) $m[1] : 0;
+        $product = $id > 0
+            ? Product::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('active', true)->find($id)
+            : null;
+
+        return $this->renderShop($tenant, $base, null, $product, $id);
+    }
+
+    /** The SEO slug for a product URL — id-suffixed so lookups never depend on the words. */
+    public static function productSlug($product): string
+    {
+        $name = \Illuminate\Support\Str::slug((string) ($product->name ?? ''));
+        $name = $name !== '' ? \Illuminate\Support\Str::limit($name, 60, '') : 'item';
+
+        return trim($name, '-') . '-' . (int) $product->id;
+    }
+
     /** Render the shop HTML for a resolved tenant. $base is '' on a custom domain, '/{slug}' on the platform. */
-    private function renderShop(Tenant $tenant, string $base, ?string $seoCat = null)
+    private function renderShop(Tenant $tenant, string $base, ?string $seoCat = null, $seoProduct = null, int $wantedId = 0)
     {
 
         $cfg = [
@@ -154,6 +187,69 @@ class StorefrontController extends Controller
                 .($cfg['logo'] ? "\n".'<meta property="og:image" content="'.e($cfg['logo']).'">' : ''), $html);
         }
         $html = str_replace('__SHOP_CONFIG__', json_encode($cfg, JSON_UNESCAPED_UNICODE), $html);
+
+        // ---- v4.27 per-URL SEO: a product page is a real page, not a modal behind a # ----
+        // Injected into <head> so crawlers and link previews read it in the bytes. The shell is
+        // identical either way; only the metadata and the "open this product" flag differ.
+        $seoHead = '';
+        if ($wantedId > 0 && ! $seoProduct) {
+            // asked for a product that is gone or not ours → a real 404, never a soft one
+            $seoHead = '<meta name="robots" content="noindex,nofollow">'
+                . '<title>' . e('Product not found — ' . $tenant->name) . '</title>';
+            $html = str_replace('<title>' . $safeName . ' — order on WhatsApp</title>', $seoHead, $html);
+
+            return response($html, 404)->header('Content-Type', 'text/html; charset=UTF-8');
+        }
+        if ($seoProduct) {
+            $cur   = $this->currency($tenant);
+            $price = (float) ($seoProduct->price ?? 0);
+            $img   = (string) ($seoProduct->image_url ?? '') !== '' ? $this->imageUrl((string) $seoProduct->image_url) : '';
+            $canonUrl = request()->getSchemeAndHttpHost() . $base . '/p/' . self::productSlug($seoProduct);
+            $pTitle = trim((string) $seoProduct->name) . ' — buy in ' . ((string) $tenant->setting('city', '') ?: 'Juba') . ' | ' . $tenant->name;
+            $pDesc  = trim((string) ($seoProduct->description ?? '')) !== ''
+                ? \Illuminate\Support\Str::limit(trim((string) $seoProduct->description), 150)
+                : trim((string) $seoProduct->name)
+                    . ((string) ($seoProduct->category ?? '') !== '' ? ' — ' . $seoProduct->category : '')
+                    . ($price > 0 ? '. Price ' . $cur . ' ' . number_format($price) : '')
+                    . '. Order on WhatsApp from ' . $tenant->name . '.';
+
+            $ld = array_filter([
+                '@context' => 'https://schema.org', '@type' => 'Product',
+                'name'        => (string) $seoProduct->name,
+                'description' => $pDesc,
+                'image'       => $img ?: null,
+                'sku'         => (string) ($seoProduct->sku ?? '') !== '' ? (string) $seoProduct->sku : null,
+                'brand'       => (string) ($seoProduct->brand ?? '') !== ''
+                    ? ['@type' => 'Brand', 'name' => (string) $seoProduct->brand] : null,
+                'category'    => (string) ($seoProduct->category ?? '') ?: null,
+                'offers'      => $price > 0 ? [
+                    '@type' => 'Offer', 'price' => (string) $price, 'priceCurrency' => $cur,
+                    'availability' => 'https://schema.org/'
+                        . (($seoProduct->stock === null || (int) $seoProduct->stock > 0) ? 'InStock' : 'OutOfStock'),
+                    'url' => $canonUrl,
+                    'seller' => ['@type' => 'Organization', 'name' => (string) $tenant->name],
+                ] : null,
+            ]);
+
+            $jf = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
+            $seoHead = implode("\n", array_filter([
+                '<title>' . e($pTitle) . '</title>',
+                '<meta name="description" content="' . e($pDesc) . '">',
+                '<link rel="canonical" href="' . e($canonUrl) . '">',
+                '<meta property="og:type" content="product">',
+                '<meta property="og:title" content="' . e((string) $seoProduct->name) . '">',
+                '<meta property="og:description" content="' . e($pDesc) . '">',
+                '<meta property="og:url" content="' . e($canonUrl) . '">',
+                $img !== '' ? '<meta property="og:image" content="' . e($img) . '">' : null,
+                '<meta name="twitter:card" content="' . ($img !== '' ? 'summary_large_image' : 'summary') . '">',
+                '<script type="application/ld+json">' . json_encode($ld, $jf) . '</script>',
+            ]));
+            // replace the generic title outright so there is only ONE title element
+            $html = str_replace('<title>' . $safeName . ' — order on WhatsApp</title>', $seoHead, $html);
+            $html = str_replace('__OPEN_PRODUCT__', (string) (int) $seoProduct->id, $html);
+        }
+        // no product on this URL → the placeholder must still disappear
+        $html = str_replace('__OPEN_PRODUCT__', '0', $html);
 
         // Solar Experience Center CTA — a top strip on solar shops linking to the guided assessment.
         if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::SOLAR) {
@@ -1560,6 +1656,14 @@ class StorefrontController extends Controller
         $urls = ['<url><loc>'.e(url('/')).'</loc><changefreq>daily</changefreq></url>'];
         foreach (array_keys($this->liveCategories($tenant)) as $cat) {
             $urls[] = '<url><loc>'.e(url('/c/'.\Illuminate\Support\Str::slug($cat))).'</loc><changefreq>weekly</changefreq></url>';
+        }
+        // v4.27 — every active product on a normal shop has its own page at /p/{slug}-{id}.
+        if (\App\Support\Vertical::of($tenant) !== \App\Support\Vertical::AUTO_PARTS) {
+            Product::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('active', true)
+                ->orderBy('id')->limit(5000)->get(['id', 'name'])
+                ->each(function ($p) use (&$urls) {
+                    $urls[] = '<url><loc>' . e(url('/p/' . self::productSlug($p))) . '</loc><changefreq>weekly</changefreq></url>';
+                });
         }
         // v4.11 — real URLs: every active part gets its own indexable page on the SPA.
         if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::AUTO_PARTS) {

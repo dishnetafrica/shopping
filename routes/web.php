@@ -807,6 +807,10 @@ Route::middleware('web')->group(function () use ($qToken) {
     Route::post('/dealer-verify',  [\App\Http\Controllers\Storefront\StorefrontController::class, 'dealerVerify'])->middleware('throttle:12,1');
     Route::get('/dealer-feed',     [\App\Http\Controllers\Storefront\StorefrontController::class, 'dealerFeed'])->middleware('throttle:30,1');
     Route::get('/c/{slug}',        [\App\Http\Controllers\Storefront\StorefrontController::class, 'category']);
+    // v4.27 — a real, indexable page per product: /p/sugar-2kg-kakira-412. The trailing id is what
+    // resolves it, so renaming a product never breaks an indexed link (the canonical updates itself).
+    Route::get('/p/{slugId}',      [\App\Http\Controllers\Storefront\StorefrontController::class, 'productPage'])
+        ->where('slugId', '[A-Za-z0-9\-]*[0-9]+');
     Route::get('/sitemap.xml',     [\App\Http\Controllers\Storefront\StorefrontController::class, 'sitemap']);
     // v4.11 — REAL URLs for the auto-parts SPA (kills the #): the shell is served on every SPA
     // path so deep links, refreshes and Google all work. Constrained to the SPA's view prefixes,
@@ -851,6 +855,10 @@ Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::post('/{shop}/dealer-verify', [\App\Http\Controllers\Storefront\StorefrontController::class, 'dealerVerify'])->where('shop', $shopSlug)->middleware('throttle:12,1');
     Route::get('/{shop}/dealer-feed',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'dealerFeed'])->where('shop', $shopSlug)->middleware('throttle:30,1');
     Route::get('/{shop}/c/{slug}',  [\App\Http\Controllers\Storefront\StorefrontController::class, 'category'])->where('shop', $shopSlug);
+    // v4.27 — product page on the platform host. Declared BEFORE the /{shop}/{spa} catch-all so
+    // 'p' can never be swallowed by it (the spa pattern does not include 'p', but order is safer).
+    Route::get('/{shop}/p/{slugId}', [\App\Http\Controllers\Storefront\StorefrontController::class, 'productPage'])
+        ->where('shop', $shopSlug)->where('slugId', '[A-Za-z0-9\-]*[0-9]+');
     Route::get('/{shop}/{spa}', fn (string $shop) => app(\App\Http\Controllers\Storefront\StorefrontController::class)->autoParts($shop))
         ->where('shop', $shopSlug)->where('spa', '(part|parts|system|model|search|cart|ai|diagrams|plate|diagram)(/.*)?');   // v4.11 real URLs
     Route::post('/{shop}/order',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'placeOrder'])->where('shop', $shopSlug);

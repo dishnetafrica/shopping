@@ -59,6 +59,8 @@
   @media(min-width:560px){.grid{grid-template-columns:1fr 1fr 1fr}}
   .pc{background:var(--card);border:1px solid var(--line);border-radius:13px;overflow:hidden;display:flex;flex-direction:column}
   .pc .img{aspect-ratio:1/1;background:#fff;border-bottom:1px solid var(--line);display:grid;place-items:center;overflow:hidden;cursor:pointer}
+  /* v4.27 — the image well is an <a> now (crawlable). Kill link styling so it looks identical. */
+  a.img{text-decoration:none;color:inherit;-webkit-tap-highlight-color:transparent}
   .pc .img img{width:100%;height:100%;object-fit:contain;padding:9px}.pc .img .ph{font-size:28px;color:#B9CDBE}
   .pc .bd{padding:8px 9px 10px;display:flex;flex-direction:column;gap:4px;flex:1}
   .pc .nm{font-size:12.5px;font-weight:600;line-height:1.25;min-height:31px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -1154,6 +1156,7 @@ button{ -webkit-tap-highlight-color:transparent }
 <script>
 /* ====================== CONFIG (injected per shop by the server) ====================== */
 window.SHOP = __SHOP_CONFIG__;
+window.__OPEN_PRODUCT_ID__ = __OPEN_PRODUCT__;   /* v4.27 — set by the server on /p/{slug}-{id} */
 var SHOP = window.SHOP || {};
 /* Vertical-driven storefront mode. 'snacks' = advance-booking pickup (no delivery). */
 var VERTICAL  = SHOP.vertical || 'grocery';
@@ -1547,7 +1550,12 @@ async function load(){
     buildSearchIndex();   // pre-warm the smart-search inverted index for instant queries at scale
     render();
     applyQuickOrder();
-    handleHash();
+    /* v4.27 — the server already knows which product this URL is for (it rendered the
+       page's title/OG/JSON-LD for it), so open that first; else migrate a legacy #p link;
+       else read the path. */
+    var boot=Number(window.__OPEN_PRODUCT_ID__||0);
+    if(boot>0) openDetail(boot);
+    else if(!hashMigrate()) handleRoute();
   }catch(e){
     $('content').innerHTML='<div class="empty">Couldn’t load the catalogue.<br>Please try again shortly.</div>';
   }
@@ -2391,12 +2399,19 @@ function prodCard(p){
   if(p.poa)return poaCard(p.name,p.category,p.image,packLine(p));
   var key=p.name, inCart=CART[key];
   var ic=catIcon(p.category);
-  var dopen=p.id?(' onclick="goDetail('+jk(p.id)+')" style="cursor:pointer"'):'';
+  /* v4.27 — a REAL <a href> so Google can crawl to the product page. The click is
+     intercepted for the instant overlay; ctrl/cmd/middle-click fall through to a normal
+     navigation, which is what people expect of a link. */
+  var dopen=p.id?(' onclick="return cardGo(event,'+jk(p.id)+','+jk(p.name)+')" style="cursor:pointer"'):'';
   var btns=p.id?('<div class="cardbtns">'+
       '<button class="wish'+(isWished(p.id)?' on':'')+'" aria-label="Save to wishlist" aria-pressed="'+(isWished(p.id)?'true':'false')+'" onclick="toggleWish('+p.id+',this,event)">'+HEART_SVG+'</button>'+
       '<button class="cmp'+(CMP[p.id]?' on':'')+'" aria-label="Compare" onclick="toggleCompare('+p.id+',this,event)">'+CMP_SVG+'</button>'+
     '</div>'):'';
-  var img='<div class="img"'+dopen+'>'+cardBadges(p)+btns+ic+(p.image?'<img alt="" src="'+esc(p.image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+'</div>';
+  var img=(p.id
+    ? '<a class="img" href="'+esc(productHref(p.id,p.name))+'"'+dopen+'>'
+    : '<div class="img">')
+    +cardBadges(p)+btns+ic+(p.image?'<img alt="'+esc(p.name)+'" src="'+esc(p.image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')
+    +(p.id?'</a>':'</div>');
   var hasMods=p.modifiers&&p.modifiers.length;
   var chips=THEME.specChips?specChipsFor(p):[];
   var chipsHtml=chips.length?('<div class="chips">'+chips.map(function(c){return '<span class="chip">'+esc(c)+'</span>';}).join('')+'</div>'):'';
@@ -2981,14 +2996,76 @@ function detailHeader(){
 function detailSearch(){
   var v=($('dq')&&$('dq').value)||'';
   closeDetailUI();
-  try{ if(/^#p\d+/.test(location.hash)) history.replaceState(null,'',location.pathname+location.search); }catch(e){}
+  try{
+    if(idFromPath()) history.replaceState(null,'',(SHOP_BASE||'')+'/'+location.search);
+    else if(/^#p\d+/.test(location.hash)) history.replaceState(null,'',location.pathname+location.search);
+  }catch(e){}
   searchSubmit(v);
 }
-function goDetail(id){ if(location.hash!=='#p'+id){ location.hash='p'+id; } else { openDetail(id); } }
-function closeDetail(){ if(/^#p\d+/.test(location.hash)) history.back(); else closeDetailUI(); }
+/* ── v4.27 REAL URLs — the # is gone ────────────────────────────────────────────────
+   A product used to live at "#p412", which Google treats as the same page as the shop
+   itself: one URL, one title, nothing per-product to index. Now every product has its
+   own path, /p/sugar-2kg-kakira-412, served by the server with its own title, meta
+   description, og:image and Product JSON-LD. In-app it still opens as the same instant
+   overlay — we just push the real URL instead of a hash, so Back works, refresh works,
+   the link is shareable, and a WhatsApp share previews the actual product photo.
+   The trailing id is what resolves the page, so renaming a product never 404s an
+   indexed link — the canonical simply updates itself. */
+/* Let a modified click (new tab, middle click) behave like a normal link; otherwise
+   open the overlay and push the URL. Returning false stops the browser navigating. */
+function cardGo(ev,id,name){
+  if(ev&&(ev.metaKey||ev.ctrlKey||ev.shiftKey||ev.altKey||ev.button===1)) return true;
+  if(ev&&ev.preventDefault) ev.preventDefault();
+  goDetail(id,name);
+  return false;
+}
+function pSlug(name,id){
+  var s=String(name||'').toLowerCase()
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60).replace(/-+$/,'');
+  return (s||'item')+'-'+id;
+}
+function nameOfId(id){
+  id=String(id);
+  var all=(window.PRODUCTS||[]);
+  for(var i=0;i<all.length;i++){ if(String(all[i].id)===id) return all[i].name; }
+  var d=DETAIL_CACHE[id]; return (d&&(d.product?d.product.name:d.name))||'';
+}
+function productHref(id,name){ return (SHOP_BASE||'')+'/p/'+pSlug(name||nameOfId(id),id); }
+/* current path, minus the shop base, e.g. "/p/sugar-412" */
+function curPath(){
+  var p=location.pathname||'/';
+  if(SHOP_BASE && p.indexOf(SHOP_BASE)===0) p=p.slice(SHOP_BASE.length);
+  return p||'/';
+}
+function idFromPath(){ var m=curPath().match(/^\/p\/[A-Za-z0-9\-]*?(\d+)$/); return m?m[1]:null; }
+function goDetail(id,name){
+  var href=productHref(id,name);
+  if(location.pathname!==href){
+    try{ history.pushState({p:String(id)},'',href); }catch(e){ location.href=href; return; }
+  }
+  openDetail(id);
+}
+function closeDetail(){ if(idFromPath()) history.back(); else closeDetailUI(); }
 function closeDetailUI(){ var el=$('detail'); if(!el)return; el.classList.remove('show'); el.innerHTML=''; document.body.style.overflow=''; CUR_DETAIL=null; }
-function handleHash(){ var m=(location.hash||'').match(/^#p(\d+)/); if(m) openDetail(m[1]); else closeDetailUI(); }
-window.addEventListener('hashchange',handleHash);
+/* one handler for both the old hash links and the new paths */
+function handleRoute(){
+  var id=idFromPath();
+  if(id){ openDetail(id); return; }
+  var m=(location.hash||'').match(/^#p(\d+)/);
+  if(m){ openDetail(m[1]); return; }
+  closeDetailUI();
+}
+window.addEventListener('popstate',handleRoute);
+/* legacy "#p412" links already shared or indexed still work — swap them for the real
+   URL in place (replaceState, so no extra history entry) and carry on. */
+function hashMigrate(){
+  var m=(location.hash||'').match(/^#p(\d+)/);
+  if(!m) return false;
+  var id=m[1];
+  try{ history.replaceState({p:id},'',productHref(id)); }catch(e){}
+  openDetail(id);
+  return true;
+}
 
 async function openDetail(id){
   id=String(id); var el=$('detail'); if(!el)return;
