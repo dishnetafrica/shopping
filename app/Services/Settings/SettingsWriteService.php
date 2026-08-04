@@ -21,7 +21,9 @@ final class SettingsWriteService
     /** Plain text settings written verbatim (trimmed). */
     private const TEXT_KEYS = [
         'tender_watch_url', 'tender_profile', 'tender_company_docs',   // v4.19 TenderBot
-        'tender_pricing_team', 'tender_sourcing_market',               // v4.23 — who sources prices, and where
+        'tender_pricing_team', 'tender_sourcing_market',
+                                                                       // v4.23 — who sources prices, and where
+        'campaign_exclude',                                            // v4.32 — campaign do-not-message list
         'books.loan_holders',                                          // v4.26 — director-loan lender name(s)
         'address', 'city', 'country', 'public_email', 'public_phone', 'tin', 'logo', 'tagline',
         'invoice_title', 'invoice_footer', 'bank_details', 'trading_as', 'owner_name',
@@ -97,6 +99,7 @@ final class SettingsWriteService
         'tender_enabled', 'tender_notify', 'tender_tasks',   // v4.19/v4.20 TenderBot (bool)
         'tender_ocr',                                        // v4.22 — read scanned tender documents
         'research_enabled', 'research_descriptions',         // v4.29 — AI product research
+        'campaign_exclude_staff',                            // v4.32 — never message my own team
         'custom_domain_live',  // owner confirms the custom domain serves CloudBSS → use it in sent links (v4.6.1)
     ];
 

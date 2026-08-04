@@ -11,6 +11,9 @@ use App\Models\Product;
  */
 class AudienceResolver
 {
+    /** How many numbers the most recent phones() call dropped as excluded. */
+    protected int $lastRemoved = 0;
+
     /** @return string[] distinct digit-only phone numbers */
     public function phones(string $audience, ?string $category = null): array
     {
@@ -65,14 +68,50 @@ class AudienceResolver
         return count($this->phones($audience, $category));
     }
 
-    /** Normalise to digits, drop blanks, de-duplicate. */
+    /**
+     * Normalise to digits, drop blanks, de-duplicate — and remove anyone the shop has
+     * excluded.
+     *
+     * v4.32: the exclusion is applied HERE, in the one place every audience mode passes
+     * through, rather than in each of the five branches above. Add a sixth audience mode
+     * tomorrow and it is filtered without anyone remembering to do it.
+     */
     protected function norm($collection): array
     {
-        return collect($collection)
+        $phones = collect($collection)
             ->map(fn ($p) => preg_replace('/[^0-9]/', '', (string) $p))
             ->filter()
             ->unique()
             ->values()
             ->all();
+
+        $ex = \App\Services\Marketing\CampaignExclusions::for($this->tenant());
+        if ($ex->isEmpty()) {
+            $this->lastRemoved = 0;
+
+            return $phones;
+        }
+        $res = $ex->filter($phones);
+        $this->lastRemoved = count($res['removed']);
+
+        return $res['kept'];
+    }
+
+    /** How many people the LAST phones() call actually removed — not the size of the list. */
+    public function lastRemoved(): int
+    {
+        return $this->lastRemoved;
+    }
+
+    /** The tenant this resolver is running for — queries above are tenant-scoped by context. */
+    protected function tenant(): ?\App\Models\Tenant
+    {
+        try {
+            $id = app(\App\Support\TenantContext::class)->id();
+
+            return $id ? \App\Models\Tenant::find($id) : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 }

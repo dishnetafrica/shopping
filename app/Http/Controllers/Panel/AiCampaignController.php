@@ -109,7 +109,26 @@ class AiCampaignController extends Controller
         $sample = $q->limit(8)->get(['name', 'phone', 'stage'])
             ->map(fn ($c) => ['name' => (string) ($c->name ?: $c->phone), 'stage' => (string) ($c->stage ?? '')]);
 
-        return response()->json(['ok' => true, 'count' => $count, 'sample' => $sample, 'suppressed' => count($this->suppressedPhones($t))]);
+        // v4.32 — show how many of THIS audience the do-not-message list removes, so the
+        // number on screen is the number that will actually be contacted.
+        $ex = \App\Services\Marketing\CampaignExclusions::for($t);
+        $excluded = 0;
+        if (! $ex->isEmpty()) {
+            foreach ((clone $q)->pluck('phone') as $p) {
+                if ($ex->blocks((string) $p)) {
+                    $excluded++;
+                }
+            }
+        }
+
+        return response()->json([
+            'ok' => true,
+            'count' => max(0, $count - $excluded),
+            'total' => $count,
+            'excluded' => $excluded,
+            'sample' => $sample,
+            'suppressed' => count($this->suppressedPhones($t)),
+        ]);
     }
 
     public function generate(Request $request)
@@ -151,6 +170,7 @@ class AiCampaignController extends Controller
         }
 
         $suppressed = $this->suppressedPhones($t);
+        $excluded = \App\Services\Marketing\CampaignExclusions::for($t);   // v4.32 do-not-message list
         // Phones already sitting in ANY active AI campaign (don't double-target across campaigns).
         $busy = AiCampaignDraft::where('tenant_id', $t->id)
             ->whereIn('status', ['draft', 'approved'])
@@ -169,7 +189,10 @@ class AiCampaignController extends Controller
                 break;
             }
             $phone = preg_replace('/[^0-9]/', '', (string) $p->phone);
-            if ($phone === '' || isset($suppressed[$phone]) || isset($busy[$phone])) {
+            // v4.32 — the shop's do-not-message list. Checked here so no AI message is even
+            // WRITTEN for an excluded number (each draft costs a model call), and again at
+            // send time in AiCampaignSendCommand for anyone added to the list afterwards.
+            if ($phone === '' || isset($suppressed[$phone]) || isset($busy[$phone]) || $excluded->blocks($phone)) {
                 $skipped++;
                 continue;
             }

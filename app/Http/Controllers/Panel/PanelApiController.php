@@ -5194,8 +5194,10 @@ class PanelApiController extends Controller
     /** Preview how many customers an audience covers. */
     public function campaignAudience(Request $r, AudienceResolver $aud)
     {
+        // v4.32 — count() already has the do-not-message list applied, so this is the number
+        // that will actually be contacted. `excluded` says how many were removed.
         $count = $aud->count((string) $r->input('audience', 'all'), $r->input('category'));
-        return response()->json(['ok' => true, 'count' => $count]);
+        return response()->json(['ok' => true, 'count' => $count, 'excluded' => $aud->lastRemoved()]);
     }
 
     /** AI suggests a promotion the owner can review and approve. */

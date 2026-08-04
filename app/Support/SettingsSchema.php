@@ -124,6 +124,11 @@ final class SettingsSchema
                 ]],
                 // MOQ enforcement (v4.6) — the engine has always supported this (OrderCalculator +
                 // AiBrain read moq_mode), but the switch only lived in the one-time onboarding wizard.
+                // v4.32 — nothing used to stop a broadcast reaching anyone in the audience.
+                ['label' => 'Never message these numbers', 'help' => 'A do-not-message list for campaigns and broadcasts. Anyone here is skipped by every campaign — the classic WhatsApp blast, AI Campaign and the Email Center. It does NOT stop the bot replying to them if they message you first; that is Chats → mute.', 'fields' => [
+                    ['key' => 'campaign_exclude', 'type' => 'textarea', 'label' => 'Numbers to exclude', 'help' => 'One per line, or separated by commas. Any format works — 0772 123 456, +256772123456, 256-772-123456 all match the same person, so you do not have to know how the number was saved. Leave blank for none.'],
+                    ['key' => 'campaign_exclude_staff', 'type' => 'bool', 'label' => 'Never message my own team', 'default' => true, 'help' => 'Skips your own WhatsApp line, your owner-alert numbers and anyone on the order-notification list. ON by default: broadcasting to your own staff looks careless to them and quietly skews every reply figure you then read.'],
+                ]],
                 ['label' => 'Selling rules', 'help' => 'How the assistant treats each product\'s minimum order quantity (the MOQ field on the product).', 'fields' => [
                     ['key' => 'moq_mode', 'type' => 'enum', 'label' => 'Minimum order quantities', 'options' => ['off', 'roundup'], 'default' => 'off',
                      'optionLabels' => ['off' => 'Advisory — quote any quantity, mention the minimum', 'roundup' => 'Enforced — round below-minimum requests up to the MOQ'],

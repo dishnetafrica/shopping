@@ -66,9 +66,18 @@ class AiCampaignSendCommand extends Command
                 $gateway = $wa->forTenant($t);
                 $inst = method_exists($t, 'sendInstance') ? $t->sendInstance() : $t->whatsapp_instance;
 
+                // v4.32 — checked HERE, at send time, not only when the drafts were generated.
+                // A draft can be approved days before it goes out, and a number added to the
+                // exclusion list in between must still be honoured.
+                $exclusions = \App\Services\Marketing\CampaignExclusions::for($t);
+
                 foreach ($due as $d) {
                     if ($budget <= 0) {
                         break;
+                    }
+                    if ($exclusions->blocks((string) $d->phone)) {
+                        $d->update(['status' => 'skipped', 'error' => 'on the do-not-message list']);
+                        continue;                       // costs no budget — it was never sent
                     }
                     $budget--;
                     $recipient = \App\Support\Idempotency::recipient($d->phone);

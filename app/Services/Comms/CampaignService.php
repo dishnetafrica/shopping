@@ -187,6 +187,10 @@ class CampaignService
                 if ($ch === 'whatsapp' && $p->phone) {
                     $digits = preg_replace('/[^0-9]/', '', (string) $p->phone);
                     if (strlen($digits) < 7 || $this->already($c, 'whatsapp', $digits)) continue;
+                    // v4.32 — the shop's do-not-message list. WhatsAppService already checks the
+                    // suppression table, but that misses the Settings list and staff numbers, and
+                    // stopping here saves enqueueing a message only to cancel it later.
+                    if (\App\Services\Marketing\CampaignExclusions::for($tenant)->blocks($digits)) continue;
                     if ($c->template_key) {
                         $this->whatsapp->queueTemplate($tenant, $c->template_key, $digits, $vars, $opts + ['to_name' => $p->name]);
                     } else {
