@@ -7144,7 +7144,17 @@ class PanelApiController extends Controller
             }
         };
 
+        // v4.30 — show only what this kind of business needs. A group is hidden solely when it
+        // does not match the shop's vertical AND the shop has never set anything in it, so a
+        // grocery that also bids for tenders keeps its Tenders group. `?all=1` is the escape
+        // hatch behind "Show settings for other business types".
+        // NOTE: SettingsSchema::fields() is deliberately NOT filtered — it is static, has no
+        // tenant, and BrandingUploadController derives its image-upload allow-list from it.
         $sections = \App\Support\SettingsSchema::sections();
+        [$sections, $hiddenGroups] = \App\Support\SettingsVisibility::apply(
+            $sections, $t, (string) $r->query('all', '') === '1'
+        );
+
         foreach ($sections as &$sec) {
             // NB: iterate the real $sec['groups'] key by reference — NOT `($sec['groups'] ?? [])`, which
             // is a temporary copy, so the resolved `value`s would never propagate back into $sections.
@@ -7173,8 +7183,11 @@ class PanelApiController extends Controller
 
         return response()->json([
             'ok' => true,
-            'build' => 'readfix-2',   // bumped when this endpoint changes — the diagnostic prints it to prove the new code is live
+            'build' => 'vertical-1',   // bumped when this endpoint changes — the diagnostic prints it to prove the new code is live
             'sections' => $sections,
+            'vertical' => \App\Support\SettingsVisibility::verticalOf($t),
+            'vertical_label' => \App\Support\Vertical::LABELS[\App\Support\SettingsVisibility::verticalOf($t)] ?? '',
+            'hidden_groups' => $hiddenGroups,
             'team' => $team,
             'roles' => ['sales', 'manager', 'staff', 'purchaser', 'product_staff', 'field'],
             'whatsapp' => [

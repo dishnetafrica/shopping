@@ -65,11 +65,24 @@
   function post(u,b){return fetch(u,{method:'POST',credentials:'include',headers:{'Accept':'application/json','Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify(b||{})}).then(function(r){return r.json();});}
   function sec(k){return (HUB.sections||[]).filter(function(s){return s.key===k;})[0];}
 
+  /* v4.30 — settings are filtered to this shop's kind of business. The escape hatch below
+     is the whole reason that is safe to do: nothing is ever unreachable, it is just out of
+     the way. Reloads with ?all=1, which the server honours. */
+  var SHOW_ALL=false;
   function renderNav(){
-    document.getElementById('snav').innerHTML=(HUB.sections||[]).map(function(s){
+    var html=(HUB.sections||[]).map(function(s){
       return '<a class="'+(s.key===ACTIVE?'on':'')+'" onclick="go(\''+esc(s.key)+'\')"><span class="dot"></span>'+esc(s.label)+'</a>';
     }).join('');
+    var n=Number(HUB.hidden_groups||0);
+    if(SHOW_ALL){
+      html+='<a onclick="toggleAll(false)" style="opacity:.75;margin-top:10px">↩ Just my business again</a>';
+    }else if(n>0){
+      html+='<a onclick="toggleAll(true)" style="opacity:.75;margin-top:10px" title="'+n+' group'+(n===1?'':'s')+' hidden">'+
+        '<span class="dot"></span>Show other business types</a>';
+    }
+    document.getElementById('snav').innerHTML=html;
   }
+  function toggleAll(on){ SHOW_ALL=!!on; ACTIVE=null; load(); }
   function go(k){ ACTIVE=k; renderNav(); renderSection(); }
 
   function fieldCtl(f){
@@ -98,7 +111,10 @@
     if(s.special==='team'){ return renderTeam(); }
     var html='<h2>'+esc(s.label)+'</h2><div class="lead">Changes apply only to your business.</div>';
     (s.groups||[]).forEach(function(g){
-      html+='<div class="group"><h3>'+esc(g.label)+'</h3>'+(g.help?'<div class="ghelp">'+esc(g.help)+'</div>':'');
+      // Shown even though it belongs to another kind of business — because this shop has set
+      // something in it. Say so, or it looks like the filter is broken.
+      var tag=g.off_vertical?' <span class="tag" style="font-weight:600">not usual for your business — you have set this up</span>':'';
+      html+='<div class="group"><h3>'+esc(g.label)+tag+'</h3>'+(g.help?'<div class="ghelp">'+esc(g.help)+'</div>':'');
       (g.fields||[]).forEach(function(f){
         html+='<div class="fld"><label>'+esc(f.label)+(f.help?'<span class="fhelp">'+esc(f.help)+'</span>':'')+'</label><div class="ctl">'+fieldCtl(f)+'</div></div>';
       });
@@ -144,7 +160,8 @@
     post('/papi/settings-hub-save',{values:vals}).then(function(r){
       if(r&&r.ok){
         // Re-read from the server so the form always reflects what's actually stored (confirms the save).
-        return get('/papi/settings-hub').then(function(h){
+        // Uses hubUrl() so changing the business type re-filters the screen immediately.
+        return get(hubUrl()).then(function(h){
           if(h&&h.ok){ HUB=h; renderNav(); renderSection(); }
           var m=document.getElementById('msg'); if(m){ m.className='msg ok'; m.textContent=(r.message||'Saved.'); }
         });
@@ -188,12 +205,20 @@
   }
   function val(id){ var e=document.getElementById(id); return e?e.value:''; }
 
-  function reload(){ return get('/papi/settings-hub').then(function(r){ if(r&&r.ok){ HUB=r; renderNav(); renderSection(); } }); }
+  function hubUrl(){ return '/papi/settings-hub'+(SHOW_ALL?'?all=1':''); }
+  function load(){
+    return get(hubUrl()).then(function(r){
+      if(!r||!r.ok){ document.getElementById('main').innerHTML='<div class="empty">Could not load settings ('+esc(r&&r.error||'')+').</div>'; return; }
+      HUB=r;
+      // keep the open section if it survived the filter, else fall back to the first
+      var keys=(r.sections||[]).map(function(s){return s.key;});
+      if(!ACTIVE||keys.indexOf(ACTIVE)<0) ACTIVE=keys[0]||null;
+      renderNav(); renderSection();
+    });
+  }
+  function reload(){ return load(); }
 
-  get('/papi/settings-hub').then(function(r){
-    if(!r||!r.ok){ document.getElementById('main').innerHTML='<div class="empty">Could not load settings ('+esc(r&&r.error||'')+').</div>'; return; }
-    HUB=r; ACTIVE=(r.sections&&r.sections[0]&&r.sections[0].key)||null; renderNav(); renderSection();
-  });
+  load();
 </script>
 </body>
 </html>

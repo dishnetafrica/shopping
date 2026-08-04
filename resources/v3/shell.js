@@ -382,7 +382,13 @@ function renderNav(caps){
      permission-filtered finance capability so restricted roles don't see P&L. */
   /* v4.21 — TenderBot is an owner tool behind a tenant setting, not a capability: the server sends
      flags.tenders (owner AND Settings → Tenders → Watch for tenders is ON). Off = no menu entry. */
-  const has = k => (k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || k==='ai.campaign' || (k==='tenders' && !!(CFG.flags && CFG.flags.tenders)) || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null);
+  /* v4.30 — the Solar Advisor was shown to every shop, so a grocery had "Solar Advisor" sitting
+     in its Sales menu. It now follows the business type. An EMPTY vertical means the server did
+     not tell us (older build, or the flags block threw), and that deliberately shows the entry —
+     this gate can only ever reveal too much, never hide a tool someone is using. */
+  const vert = (CFG.flags && typeof CFG.flags.vertical === 'string') ? CFG.flags.vertical : '';
+  const solarish = k => k!=='advisor' || vert==='' || vert==='solar';
+  const has = k => ((k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || k==='ai.campaign' || (k==='tenders' && !!(CFG.flags && CFG.flags.tenders)) || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null)) && solarish(k);
   // The top-bar POS launcher follows the same gate as the menu entry.
   try{ var pb=document.getElementById('posTop'); if(pb) pb.style.display = has('pos') ? 'flex' : 'none'; }catch(e){}
   let html='';

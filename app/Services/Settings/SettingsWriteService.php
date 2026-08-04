@@ -111,6 +111,10 @@ final class SettingsWriteService
         // MOQ handling in bot quotes/orders (read by OrderCalculator + AiBrain; v4.6 exposes it here —
         // previously only the one-time onboarding wizard could set it).
         'moq_mode'            => ['off', 'roundup'],
+        // v4.30 — the shop's own business type. Previously only a master admin could set this
+        // through the Filament admin, so a shop had no way to say what it sells and therefore
+        // no way to stop being shown another trade's settings. Read by Vertical::of().
+        'vertical'            => \App\Support\Vertical::ALL,
     ];
 
     /**

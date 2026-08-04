@@ -48,6 +48,12 @@ final class WorkspaceController
         try {
             $flags['tenders'] = method_exists($ctx->user, 'isOwnerLike') && $ctx->user->isOwnerLike()
                 && (bool) (method_exists($ctx->tenant, 'setting') ? $ctx->tenant->setting('tender_enabled', false) : false);
+            // v4.30 — what kind of business this is, so the shell can stop offering a grocery
+            // shop the Solar Advisor. Sent as a plain string; the shell treats an ABSENT
+            // vertical as "show everything", so an older cached shell.js is unaffected and a
+            // failure here can only ever show too much, never too little.
+            $flags['vertical'] = method_exists($ctx->tenant, 'setting')
+                ? \App\Support\SettingsVisibility::verticalOf($ctx->tenant) : '';
         } catch (\Throwable $e) {
             $flags = [];
         }
