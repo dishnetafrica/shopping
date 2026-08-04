@@ -34,6 +34,10 @@ class ProductImporter
         'moq'        => ['moq', 'min order', 'minimum order', 'min qty', 'minimum qty', 'min order qty'],
         'pack_size'  => ['pack size', 'packsize', 'pack', 'units per pack', 'pcs per carton', 'pcs in ctn', 'pcs in carton', 'pieces per pack'],
         'unit_label' => ['unit', 'selling unit', 'uom', 'pack unit', 'sold as'],
+        // v4.28 — brand was missing entirely, so a supplier sheet with a Brand column lost it.
+        'brand'      => ['brand', 'make', 'manufacturer'],
+        'unit_size'  => ['size', 'unit size', 'unitsize', 'pack size ml', 'volume', 'weight', 'net weight', 'content', 'contents'],
+        'origin_country' => ['origin', 'country', 'country of origin', 'countryoforigin', 'made in', 'origin country'],
     ];
 
     public function importCsv(string $path, string $mode = 'replace'): array
@@ -89,7 +93,15 @@ class ProductImporter
                 'moq'        => $get('moq') !== '' ? max(1, (int) $this->num($get('moq'))) : null,
                 'pack_size'  => $get('pack_size') !== '' ? max(1, (int) $this->num($get('pack_size'))) : null,
                 'unit_label' => $get('unit_label') ?: null,
+                'brand'      => $get('brand') ?: null,
             ];
+            // v4.28 — Schema-guarded: a raw insert() bypasses the model, so an unmigrated
+            // box would hard-fail the whole import rather than just miss two columns.
+            foreach (['unit_size', 'origin_country'] as $newCol) {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('products', $newCol)) {
+                    $row[$newCol] = $get($newCol) ?: null;
+                }
+            }
 
             if ($mode === 'merge') {
                 $existing = Product::where('name', $row['name'])->first();
@@ -100,8 +112,8 @@ class ProductImporter
                     $upd = ['name' => $row['name']];
                     if ($get('price') !== '')      $upd['price']      = $price;
                     if ($get('base_price') !== '') $upd['base_price'] = $this->num($get('base_price'));
-                    foreach (['description', 'sku', 'category', 'keywords', 'unit_label'] as $f) {
-                        if ($get($f) !== '') $upd[$f] = $row[$f];
+                    foreach (['description', 'sku', 'category', 'keywords', 'unit_label', 'brand', 'unit_size', 'origin_country'] as $f) {
+                        if (array_key_exists($f, $row) && $get($f) !== '') $upd[$f] = $row[$f];
                     }
                     if ($get('stock') !== '')     $upd['stock']     = $row['stock'];
                     if ($get('barcode') !== '')   $upd['barcode']   = $row['barcode'];

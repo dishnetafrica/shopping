@@ -108,6 +108,9 @@ class PanelApiController extends Controller
                 'Variant'      => '',
                 'Brand'        => (string) ($p->brand ?? ''),
                 'Category'     => (string) ($p->category ?? ''),
+                'Description'  => (string) ($p->description ?? ''),                  // v4.28 — editable in the panel at last
+                'Unit_Size'    => (string) ($p->unit_size ?? ''),                    // v4.28 — "500ml", size of ONE piece
+                'Origin'       => (string) ($p->origin_country ?? ''),               // v4.28
                 'Keywords'     => (string) ($p->keywords ?? ''),
                 'Price_UGX'    => (float) ($p->base_price ?? $p->price ?? 0),
                 'Price'        => (float) ($p->price ?? 0),
@@ -1906,6 +1909,17 @@ class PanelApiController extends Controller
         }
         if ($r->has('pack_size'))  $p->pack_size  = $r->query('pack_size') !== '' ? max(1, (int) $r->query('pack_size')) : null;
         if ($r->has('unit_label')) $p->unit_label = trim((string) $r->query('unit_label', '')) ?: null;
+        // v4.28 — the catalogue detail the panel could never edit. brand/barcode/description
+        // are long-standing columns that simply had no field; unit_size/origin_country are new
+        // and Schema-guarded so a box that has not run the migration yet still saves the rest.
+        if ($r->has('brand'))       $p->brand       = trim((string) $r->query('brand', '')) ?: null;
+        if ($r->has('barcode'))     $p->barcode     = trim((string) $r->query('barcode', '')) ?: null;
+        if ($r->has('description')) $p->description = trim((string) $r->query('description', '')) ?: null;
+        foreach (['unit_size', 'origin_country'] as $col) {
+            if ($r->has($col) && \Illuminate\Support\Facades\Schema::hasColumn('products', $col)) {
+                $p->{$col} = trim((string) $r->query($col, '')) ?: null;
+            }
+        }
         if ($r->has('sell_mode')) {
             $sm = strtolower(trim((string) $r->query('sell_mode', '')));
             $p->sell_mode = in_array($sm, ['buy', 'quote'], true) ? $sm : 'buy';
@@ -2347,6 +2361,10 @@ class PanelApiController extends Controller
         if ($iDlr !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'dealer_price')) $iDlr = null;
         $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
         $iBrand = $col(['brand']);
+        $iSize = $col(['size', 'unit size', 'unit_size', 'volume', 'net weight', 'content']);       // v4.28 — size of ONE piece
+        if ($iSize !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'unit_size')) $iSize = null;
+        $iOrig = $col(['origin', 'country of origin', 'origin country', 'made in', 'country']);      // v4.28
+        if ($iOrig !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'origin_country')) $iOrig = null;
         $iSell  = $col(['sell mode', 'sell_mode', 'sales mode']);   // 'buy' (default) or 'quote'
         // Product specs (Wattage, Voltage, Capacity, Battery Chemistry, …): map any CSV column whose
         // heading matches a spec definition (by label or key) so specs fill in on import. Tenant-generic
@@ -2472,7 +2490,11 @@ class PanelApiController extends Controller
                 ]);
                 if ($oem !== '') { $product->oem_number = $oem; }   // v4.7.7 (guard: $iOem null pre-migration)
                 if ($dlr > 0)     { $product->dealer_price = $dlr; }   // v4.9 (guard: $iDlr null pre-migration)
-                if ($oem !== '' || $dlr > 0) { $product->save(); }
+                $usz = $iSize !== null ? trim((string) ($c[$iSize] ?? '')) : '';   // v4.28 (guard: null pre-migration)
+                $orc = $iOrig !== null ? trim((string) ($c[$iOrig] ?? '')) : '';
+                if ($usz !== '') { $product->unit_size = mb_substr($usz, 0, 40); }
+                if ($orc !== '') { $product->origin_country = mb_substr($orc, 0, 60); }
+                if ($oem !== '' || $dlr > 0 || $usz !== '' || $orc !== '') { $product->save(); }
                 if ($specColMap) {
                     $pairs = [];
                     foreach ($specColMap as $idx => $key) { $pairs[$key] = (string) ($c[$idx] ?? ''); }
@@ -2541,6 +2563,10 @@ class PanelApiController extends Controller
         if ($iDlr !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'dealer_price')) $iDlr = null;
         $iUnit = $col(['unit', 'unit label']); $iPack = $col(['pack size', 'pack_size']); $iMoq = $col(['moq']);
         $iBrand = $col(['brand']);
+        $iSize = $col(['size', 'unit size', 'unit_size', 'volume', 'net weight', 'content']);       // v4.28 — size of ONE piece
+        if ($iSize !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'unit_size')) $iSize = null;
+        $iOrig = $col(['origin', 'country of origin', 'origin country', 'made in', 'country']);      // v4.28
+        if ($iOrig !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'origin_country')) $iOrig = null;
         $iSell  = $col(['sell mode', 'sell_mode', 'sales mode']);   // 'buy' (default) or 'quote'
         $iDesc  = $col(['description', 'desc', 'details', 'about']);   // v4.7.3 — imported, single-line text
         // Product specs (see productsImport): map CSV columns matching this tenant's spec definitions.
@@ -2626,7 +2652,11 @@ class PanelApiController extends Controller
                 ]);
                 if ($oem !== '') { $product->oem_number = $oem; }   // v4.7.7 (guard: $iOem null pre-migration)
                 if ($dlr > 0)     { $product->dealer_price = $dlr; }   // v4.9 (guard: $iDlr null pre-migration)
-                if ($oem !== '' || $dlr > 0) { $product->save(); }
+                $usz = $iSize !== null ? trim((string) ($c[$iSize] ?? '')) : '';   // v4.28 (guard: null pre-migration)
+                $orc = $iOrig !== null ? trim((string) ($c[$iOrig] ?? '')) : '';
+                if ($usz !== '') { $product->unit_size = mb_substr($usz, 0, 40); }
+                if ($orc !== '') { $product->origin_country = mb_substr($orc, 0, 60); }
+                if ($oem !== '' || $dlr > 0 || $usz !== '' || $orc !== '') { $product->save(); }
                 if ($specColMap) {
                     $pairs = [];
                     foreach ($specColMap as $idx => $key) { $pairs[$key] = (string) ($c[$idx] ?? ''); }
@@ -2841,20 +2871,36 @@ class PanelApiController extends Controller
         $variant = trim((string) $r->query('variant', ''));
         $full = $variant !== '' ? $name.' '.$variant : $name;
 
-        Product::create([
-            'name'       => $full,
-            'category'   => $category,
-            'keywords'   => (string) $r->query('keywords', ''),
-            'base_price' => $price,
-            'price'      => $price,
-            'cost_price' => $r->filled('cost') ? (float) $r->query('cost') : null,
-            'stock'      => (int) $r->query('stock', 0),
-            'image_url'  => trim((string) $r->query('image', '')),
-            'moq'        => $r->filled('moq') ? max(1, (int) $r->query('moq')) : null,
-            'pack_size'  => $r->filled('pack_size') ? max(1, (int) $r->query('pack_size')) : null,
-            'unit_label' => trim((string) $r->query('unit_label', '')) ?: null,
-            'active'     => true,
-        ]);
+        $data = [
+            'name'        => $full,
+            'category'    => $category,
+            'keywords'    => (string) $r->query('keywords', ''),
+            'base_price'  => $price,
+            'price'       => $price,
+            'cost_price'  => $r->filled('cost') ? (float) $r->query('cost') : null,
+            'stock'       => (int) $r->query('stock', 0),
+            'image_url'   => trim((string) $r->query('image', '')),
+            'moq'         => $r->filled('moq') ? max(1, (int) $r->query('moq')) : null,
+            'pack_size'   => $r->filled('pack_size') ? max(1, (int) $r->query('pack_size')) : null,
+            'unit_label'  => trim((string) $r->query('unit_label', '')) ?: null,
+            // v4.28 — brand was ALREADY being sent by the Add form and silently dropped here,
+            // so every product added through the panel lost its brand. sku/barcode/description
+            // are long-standing columns that the form simply never offered.
+            'brand'       => trim((string) $r->query('brand', '')) ?: null,
+            'sku'         => trim((string) $r->query('sku', '')) ?: null,
+            'barcode'     => trim((string) $r->query('barcode', '')) ?: null,
+            'description' => trim((string) $r->query('description', '')) ?: null,
+            'active'      => true,
+        ];
+        // New columns — guarded so adding a product still works on a box where the
+        // v4.28 migration has not been run yet (it just won't record these two).
+        foreach (['unit_size', 'origin_country'] as $col) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('products', $col)) {
+                $data[$col] = trim((string) $r->query($col, '')) ?: null;
+            }
+        }
+
+        Product::create($data);
 
         return response()->json(['ok' => true]);
     }

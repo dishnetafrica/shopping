@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Product extends Model
 {
     use BelongsToTenant;
-    protected $fillable = ['tenant_id','name','description','sku','oem_number','category','brand','price','base_price','cost_price','stock','barcode','keywords','image_url','gallery_1','gallery_2','gallery_3','active','sell_mode','serialized','warranty_manufacturer_months','warranty_company_months','is_kit','sold_by_weight','weight_unit','reference_weight_grams','reference_price','display_order','is_fresh_today','moq','pack_size','unit_label','archived_at'];
+    protected $fillable = ['tenant_id','name','description','sku','oem_number','category','brand','price','base_price','cost_price','stock','barcode','keywords','image_url','gallery_1','gallery_2','gallery_3','active','sell_mode','serialized','warranty_manufacturer_months','warranty_company_months','is_kit','sold_by_weight','weight_unit','reference_weight_grams','reference_price','display_order','is_fresh_today','moq','pack_size','unit_label','unit_size','origin_country','archived_at'];
 
     /** Configurable product specifications (Asset Lifecycle · product_specs). Additive read relation. */
     public function specs(): \Illuminate\Database\Eloquent\Relations\HasMany

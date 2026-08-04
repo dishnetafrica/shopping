@@ -214,10 +214,24 @@ class StorefrontController extends Controller
             $ogImg = $img !== '' ? $img : (string) $cfg['logo'];
             $canonUrl = request()->getSchemeAndHttpHost() . $base . '/p/' . self::productSlug($seoProduct);
             $pTitle = trim((string) $seoProduct->name) . ' — buy in ' . ((string) $tenant->setting('city', '') ?: 'Juba') . ' | ' . $tenant->name;
+            // v4.28 — "how is it packed" belongs in the generated description: it is what a
+            // wholesale buyer scanning search results needs, and it is the difference between
+            // a listing that reads as retail and one that reads as trade.
+            $uSize = trim((string) ($seoProduct->unit_size ?? ''));
+            $pk    = (int) ($seoProduct->pack_size ?? 0);
+            $uLab  = trim((string) ($seoProduct->unit_label ?? ''));
+            $packBit = '';
+            if ($pk > 1) {
+                $packBit = '. Sold by ' . ($uLab !== '' ? mb_strtolower($uLab) : 'pack')
+                    . ' of ' . $pk . ($uSize !== '' ? ' × ' . $uSize : '');
+            } elseif ($uSize !== '') {
+                $packBit = '. ' . $uSize;
+            }
             $pDesc  = trim((string) ($seoProduct->description ?? '')) !== ''
                 ? \Illuminate\Support\Str::limit(trim((string) $seoProduct->description), 150)
                 : trim((string) $seoProduct->name)
                     . ((string) ($seoProduct->category ?? '') !== '' ? ' — ' . $seoProduct->category : '')
+                    . $packBit
                     . ($price > 0 ? '. Price ' . $cur . ' ' . number_format($price) : '')
                     . '. Order on WhatsApp from ' . $tenant->name . '.';
 
@@ -230,6 +244,8 @@ class StorefrontController extends Controller
                 'brand'       => (string) ($seoProduct->brand ?? '') !== ''
                     ? ['@type' => 'Brand', 'name' => (string) $seoProduct->brand] : null,
                 'category'    => (string) ($seoProduct->category ?? '') ?: null,
+                'size'            => $uSize ?: null,                                       // v4.28
+                'countryOfOrigin' => trim((string) ($seoProduct->origin_country ?? '')) ?: null,
                 'offers'      => $price > 0 ? [
                     '@type' => 'Offer', 'price' => (string) $price, 'priceCurrency' => $cur,
                     'availability' => 'https://schema.org/'

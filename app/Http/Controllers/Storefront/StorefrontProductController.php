@@ -91,6 +91,13 @@ class StorefrontProductController extends Controller
                 'unit'        => $product->unit_label ?? null,
                 'pack_size'   => $product->pack_size !== null ? (int) $product->pack_size : null,
                 'moq'         => $product->moq !== null ? (int) $product->moq : null,
+                // v4.28 — the wholesale detail a buyer asks for before ordering a carton.
+                // Null-coalesced rather than Schema-guarded: an unmigrated box returns null
+                // from the model and the storefront simply does not render the row.
+                'brand'       => $product->brand ?: null,
+                'sku'         => $product->sku ?: null,
+                'unit_size'   => $product->unit_size ?: null,
+                'origin'      => $product->origin_country ?: null,
                 'stock'       => $product->stock === null ? null : (int) $product->stock,
                 // Solar / equipment vertical — how this product is sold on the storefront.
                 'sell_mode'   => in_array($product->sell_mode, ['buy', 'quote'], true) ? $product->sell_mode : 'buy',

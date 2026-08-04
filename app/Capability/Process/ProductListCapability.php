@@ -177,15 +177,21 @@ final class ProductListCapability implements ProcessCapability
             ->unique()->sort()->values()->all();
 
         return array_filter([
-            'name'       => 'text',
-            'category'   => 'combo:' . implode('|', $cats),
-            'price'      => 'money',
-            'cost'       => 'money',
-            'stock'      => 'number',
-            'moq'        => 'number',
-            'pack_size'  => 'number',
-            'unit_label' => 'text',
-            'photos'     => 'gallery',
+            'name'           => 'text',
+            'brand'          => 'text',
+            'category'       => 'combo:' . implode('|', $cats),
+            'unit_size'      => 'text',          // v4.28 — size of ONE piece, e.g. "500ml"
+            'price'          => 'money',
+            'cost'           => 'money',
+            'stock'          => 'number',
+            'moq'            => 'number',
+            'pack_size'      => 'number',
+            'unit_label'     => 'text',
+            'origin_country' => 'text',          // v4.28
+            'sku'            => 'text',
+            'barcode'        => 'text',
+            'description'    => 'text',
+            'photos'         => 'gallery',
         ]);
     }
 

@@ -13,7 +13,15 @@ use Illuminate\Support\Facades\Storage;
  */
 final class CatalogExport
 {
-    private const HEADERS = ['Product Name', 'Category', 'Price UGX', 'Cost', 'Stock', 'SKU', 'Keywords', 'Unit', 'Pack Size', 'MOQ', 'Image'];
+    /**
+     * v4.28 — Brand, Size, Origin, Barcode and Description are now exported.
+     *
+     * They were not, and the importer DOES read them, so the obvious workflow — export,
+     * edit in Excel, import back in replace mode — silently wiped every one of those fields
+     * on every product. New columns are appended at the END so an existing spreadsheet
+     * template keeps working; the importer matches on header name, not position.
+     */
+    private const HEADERS = ['Product Name', 'Category', 'Price UGX', 'Cost', 'Stock', 'SKU', 'Keywords', 'Unit', 'Pack Size', 'MOQ', 'Image', 'Brand', 'Size', 'Origin', 'Barcode', 'Description'];
 
     /** @return \Illuminate\Support\Collection<int,Product> */
     private function products(Tenant $t)
@@ -46,6 +54,11 @@ final class CatalogExport
                 $p->pack_size !== null ? (string) (0 + $p->pack_size) : '',
                 $p->moq !== null ? (string) (0 + $p->moq) : '',
                 $img,
+                (string) ($p->brand ?: ''),
+                (string) ($p->unit_size ?: ''),
+                (string) ($p->origin_country ?: ''),
+                (string) ($p->barcode ?: ''),
+                (string) ($p->description ?: ''),
             ]);
         }
         rewind($out);

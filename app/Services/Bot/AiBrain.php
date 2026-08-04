@@ -1573,12 +1573,18 @@ class AiBrain
                 $unit = $p->unit_label ? ' per ' . $p->unit_label : '';
                 $pack = $p->pack_size ? ' (' . (int) $p->pack_size . '/unit)' : '';
                 $moq  = $p->moq ? ', MOQ ' . (int) $p->moq : '';
+                // v4.28 — brand and origin were absent, so "do you have Pearl River Bridge?"
+                // or "is this Chinese or Indian?" had nothing to answer from and the model
+                // either guessed or said no. Only added when the product actually carries them.
+                $brand = (trim((string) ($p->brand ?? '')) !== '' && stripos((string) $p->name, (string) $p->brand) === false)
+                    ? ' [' . trim((string) $p->brand) . ']' : '';
+                $orig  = trim((string) ($p->origin_country ?? '')) !== '' ? ', origin ' . trim((string) $p->origin_country) : '';
                 $price = ((float) $p->price > 0) ? (string) $p->price : 'price on request';
                 $use  = '';
                 if (trim((string) ($p->description ?? '')) !== '') {
                     $use = ' — use: ' . mb_substr(trim(preg_replace('/\s+/', ' ', (string) $p->description)), 0, 60);
                 }
-                return "• {$p->name}{$pack} — {$price}{$unit}{$moq}{$use} [{$inv->botTag($p)}]";
+                return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$moq}{$orig}{$use} [{$inv->botTag($p)}]";
             })->all();
         });
         return implode("\n", $rows);

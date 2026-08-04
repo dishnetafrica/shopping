@@ -37,10 +37,41 @@ final class ProductWriteService
             'pack_size'  => isset($d['pack_size']) && $d['pack_size'] !== '' ? max(1, (int) $d['pack_size']) : null,
             'unit_label' => trim((string) ($d['unit_label'] ?? '')) ?: null,
             'active'     => true,
-        ], $this->photoColumns($d) ?: ['image_url' => trim((string) ($d['image'] ?? ''))]));
+        ], $this->detailColumns($d), $this->photoColumns($d) ?: ['image_url' => trim((string) ($d['image'] ?? ''))]));
         $this->ensureCategory($t, $category);
 
         return $p;
+    }
+
+    /**
+     * v4.28 — catalogue detail: brand, sku, barcode, description, unit_size, origin_country.
+     * Kept in one place so the v3 workspace and the legacy panel cannot drift apart on which
+     * fields a product carries. unit_size/origin_country are Schema-guarded because they are
+     * new columns and a box may not have run the migration yet.
+     *
+     * @param  bool  $onlyPresent  true (update) → return only keys actually supplied, so a
+     *                             partial edit never blanks a field the caller did not send.
+     * @return array<string,?string>
+     */
+    private function detailColumns(array $d, bool $onlyPresent = false): array
+    {
+        $out = [];
+        foreach (['brand', 'sku', 'barcode', 'description', 'unit_size', 'origin_country'] as $col) {
+            if ($onlyPresent && ! array_key_exists($col, $d)) {
+                continue;
+            }
+            if (in_array($col, ['unit_size', 'origin_country'], true)
+                && ! \Illuminate\Support\Facades\Schema::hasColumn('products', $col)) {
+                continue;
+            }
+            $v = trim((string) ($d[$col] ?? ''));
+            if ($v === '' && ! $onlyPresent) {
+                continue;                       // create: leave the column at its default
+            }
+            $out[$col] = $v ?: null;
+        }
+
+        return $out;
     }
 
     /** Make sure a category typed on a product also exists as a Category record (so it lists + filters). */
@@ -112,6 +143,9 @@ final class ProductWriteService
         }
         if (array_key_exists('unit_label', $d)) {
             $p->unit_label = trim((string) $d['unit_label']) ?: null;
+        }
+        foreach ($this->detailColumns($d, true) as $col => $val) {
+            $p->{$col} = $val;
         }
         $p->save();
         $this->ensureCategory($t, (string) $p->category);
