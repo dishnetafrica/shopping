@@ -67,10 +67,38 @@ class QuotationPortalController extends Controller
         return [$tenant, $base, $q];
     }
 
-    /** The portal page itself (static HTML hydrated from the data endpoint). */
-    public function show(?string $shop = null, string $token = '')
+    /**
+     * v4.31.4 — read the route parameters BY NAME.
+     *
+     * THE BUG THIS FIXES. These methods used to be declared
+     * `show(?string $shop = null, string $token = '')`, and the shopless route `/q/{token}`
+     * supplies exactly ONE parameter. Laravel binds controller arguments POSITIONALLY: with a
+     * single route value, slot 0 is filled and $shop received the TOKEN, while $token fell back
+     * to its default ''. The portal then looked for a tenant whose slug was the 40-character
+     * token, found none, and returned 404 — on every host, for every quotation, since the day
+     * the shopless route was added.
+     *
+     * It went unnoticed because `/{shop}/q/{token}` supplies two values, so the platform-style
+     * links bound correctly and worked fine.
+     *
+     * Route parameters are keyed by name, so reading them by name cannot be mis-ordered no
+     * matter how many the route defines. Do not reintroduce positional parameters here.
+     */
+    private function resolveRequest(Request $request): array
     {
-        [$tenant, $base, $q] = $this->resolve($shop, $token);
+        $shop  = $request->route('shop');
+        $token = $request->route('token');
+
+        return $this->resolve(
+            $shop === null ? null : (string) $shop,
+            $token === null ? '' : (string) $token
+        );
+    }
+
+    /** The portal page itself (static HTML hydrated from the data endpoint). */
+    public function show(Request $request)
+    {
+        [$tenant, $base, $q] = $this->resolveRequest($request);
 
         // Stamp first-view for the "expected response" UX + audit (best-effort, never blocks).
         if ($q->viewed_at === null) {
@@ -103,9 +131,9 @@ class QuotationPortalController extends Controller
     }
 
     /** The live quotation data the portal renders — a projection of the current record. */
-    public function data(?string $shop = null, string $token = '')
+    public function data(Request $request)
     {
-        [$tenant, $base, $q] = $this->resolve($shop, $token);
+        [$tenant, $base, $q] = $this->resolveRequest($request);
 
         $items = $q->items->map(function ($it) {
             $qty   = (int) $it->qty;
@@ -208,9 +236,9 @@ class QuotationPortalController extends Controller
     }
 
     /** Stream the quotation PDF — serve the stored file, else regenerate via the frozen renderer. */
-    public function pdf(?string $shop = null, string $token = '')
+    public function pdf(Request $request)
     {
-        [$tenant, $base, $q] = $this->resolve($shop, $token);
+        [$tenant, $base, $q] = $this->resolveRequest($request);
 
         $disk = Storage::disk('public');
         if ($q->pdf_path && $disk->exists($q->pdf_path)) {
@@ -249,9 +277,9 @@ class QuotationPortalController extends Controller
     }
 
     /** Share the quotation by WhatsApp or Email (reuses the frozen gateway / Mail::raw pattern). */
-    public function share(Request $r, ?string $shop = null, string $token = '')
+    public function share(Request $r)
     {
-        [$tenant, $base, $q] = $this->resolve($shop, $token);
+        [$tenant, $base, $q] = $this->resolveRequest($r);
         $channel = strtolower((string) $r->input('channel', 'whatsapp'));
         $to      = trim((string) $r->input('to', ''));
 
@@ -317,9 +345,9 @@ class QuotationPortalController extends Controller
      * Approve the quotation → lock + convert to a Sales Order in one click.
      * Reuses the FROZEN QuotationConvertService (idempotent via order_id — no duplicate orders).
      */
-    public function approve(Request $r, ?string $shop = null, string $token = '')
+    public function approve(Request $r)
     {
-        [$tenant, $base, $q] = $this->resolve($shop, $token);
+        [$tenant, $base, $q] = $this->resolveRequest($r);
 
         if (! $q->isOpen() && $q->status !== 'accepted') {
             // Already converted/declined/expired — return the existing order if any.
@@ -356,9 +384,9 @@ class QuotationPortalController extends Controller
      * Delegates to QuotationReviseService (which reprices via the frozen QuotationService, so the
      * PDF, portal and WhatsApp stay in sync) and notifies the sales team best-effort.
      */
-    public function revise(Request $r, ?string $shop = null, string $token = '')
+    public function revise(Request $r)
     {
-        [$tenant, $base, $q] = $this->resolve($shop, $token);
+        [$tenant, $base, $q] = $this->resolveRequest($r);
 
         if (! $q->isEditable()) {
             return response()->json(['ok' => false, 'error' => 'This quotation is locked and can no longer be edited.'], 409);
