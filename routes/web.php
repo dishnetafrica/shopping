@@ -680,6 +680,14 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('research-apply',   [PanelApiController::class, 'researchApply']);
         Route::get('research-dismiss', [PanelApiController::class, 'researchDismiss']);
         // v4.31 — the review screen the v3 shell embeds, with bulk decisions.
+        // v4.33 — transaction evidence. Files stream through evidence-file (authenticated,
+        // tenant-scoped), never from /storage/, which has no tenant check at all.
+        Route::get('evidence',         [\App\Http\Controllers\Panel\EvidenceController::class, 'page']);
+        Route::get('evidence-list',    [\App\Http\Controllers\Panel\EvidenceController::class, 'list']);
+        Route::get('evidence-docs',    [\App\Http\Controllers\Panel\EvidenceController::class, 'docs']);
+        Route::get('evidence-file',    [\App\Http\Controllers\Panel\EvidenceController::class, 'file']);
+        Route::post('evidence-attach', [\App\Http\Controllers\Panel\EvidenceController::class, 'attach']);
+        Route::post('evidence-detach', [\App\Http\Controllers\Panel\EvidenceController::class, 'detach']);
         Route::get('research',        [\App\Http\Controllers\Panel\ResearchController::class, 'page']);
         Route::get('research-list',   [\App\Http\Controllers\Panel\ResearchController::class, 'list']);
         Route::post('research-bulk',  [\App\Http\Controllers\Panel\ResearchController::class, 'bulk']);

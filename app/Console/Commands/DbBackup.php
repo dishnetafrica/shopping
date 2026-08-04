@@ -24,6 +24,7 @@ class DbBackup extends Command
     protected $signature = 'db:backup
         {--keep=7 : How many local dumps to retain (older ones are deleted)}
         {--disk= : Optional filesystem disk to also upload the dump to (e.g. s3) for offsite DR}
+        {--files : ALSO archive storage/app/public — receipts, invoices and every uploaded document}
         {--verify : Verify the dump is restorable with pg_restore --list before keeping it}
         {--path= : Local directory for dumps (default: storage/app/backups)}';
 
@@ -114,10 +115,56 @@ class DbBackup extends Command
             }
         }
 
+        // 3b) FILES — v4.33. pg_dump backs up the DATABASE only. Every receipt, supplier
+        //     invoice and product photo lives in storage/app/public, which had NO backup at
+        //     all: one volume failure and an audit archive is empty rows pointing at nothing.
+        //     The evidence table records a sha256 per file, so a restored archive can be
+        //     verified against it with `php artisan evidence:verify`.
+        if ($this->option('files')) {
+            $this->backupFiles($dir, $disk ?: '');
+        }
+
         // 4) ROTATE — keep the newest --keep local dumps.
         $this->rotate($dir, $db, max(1, (int) $this->option('keep')));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Archive the uploads directory beside the database dump, and offsite too when a disk
+     * is configured. Never fails the backup: a good database dump with no file archive is
+     * far better than no backup because tar hit one unreadable file.
+     */
+    private function backupFiles(string $dir, string $disk): void
+    {
+        $src = storage_path('app/public');
+        if (! is_dir($src)) {
+            $this->warn('No storage/app/public directory — nothing to archive.');
+            return;
+        }
+        $out = rtrim($dir, '/') . '/files-' . date('Ymd-His') . '.tar.gz';
+        try {
+            $p = new Process(['tar', '-czf', $out, '-C', $src, '.']);
+            $p->setTimeout(1800);
+            $p->run();
+            // tar exits 1 for "file changed as we read it", which is normal on a live system
+            // and still produces a usable archive. Only a hard failure (2+) is fatal.
+            if (! is_file($out) || filesize($out) < 100) {
+                $this->error('File archive failed: ' . mb_substr($p->getErrorOutput(), 0, 300));
+                return;
+            }
+            $this->info(sprintf('Files archived: %s (%.1f MB)', basename($out), filesize($out) / 1048576));
+
+            if ($disk !== '') {
+                $key = 'backups/' . basename($out);
+                $stream = fopen($out, 'rb');
+                Storage::disk($disk)->writeStream($key, $stream);
+                if (is_resource($stream)) fclose($stream);
+                $this->info("Uploaded offsite: [{$disk}] {$key}");
+            }
+        } catch (\Throwable $e) {
+            $this->error('File archive failed (database backup is still good): ' . $e->getMessage());
+        }
     }
 
     private function binaryExists(string $bin): bool
