@@ -22,7 +22,8 @@ class QuoteCheckCommand extends Command
 {
     protected $signature = 'quote:check
         {token? : the 40-character token from the /q/ link}
-        {--audit : also report quotations that have no portal token at all}';
+        {--audit : also report quotations that have no portal token at all}
+        {--fix : give a portal token to every quotation that has none (never rotates an existing one)}';
 
     protected $description = 'Diagnose a quotation review link that returns 404';
 
@@ -97,8 +98,19 @@ class QuoteCheckCommand extends Command
             $total = Quotation::withoutGlobalScopes()->count();
             $this->line("Quotations without a portal token: {$missing} of {$total}");
             if ($missing > 0) {
-                $this->warn('Those cannot have a working review link. They were created by a path that');
-                $this->warn('bypassed the model (a raw insert skips the token-generating hook).');
+                $this->warn('Those cannot have a working review link, and the revision notifier skips the');
+                $this->warn('WhatsApp message entirely when the token is empty — so those customers were');
+                $this->warn('never told their quotation changed.');
+                $this->line('Cause: public_token was added on 2026-07-16 with no backfill, so every quotation');
+                $this->line('made before that date has none. Fix them with:  php artisan quote:check --fix');
+                $this->line('(the v4.31.3 migration does the same thing automatically.)');
+            }
+            if ($this->option('fix') && $missing > 0) {
+                $this->newLine();
+                $this->line('Filling in ' . $missing . ' missing tokens…');
+                $done = $this->backfill();
+                $this->info('Done — ' . $done . ' quotations now have a working review link.');
+                $this->line('Existing tokens were not touched: links already sent to customers still work.');
             }
 
             // A tenant claiming the platform host as its custom domain breaks host resolution
@@ -116,5 +128,36 @@ class QuoteCheckCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Give a token to every quotation that has none. Never rotates an existing one —
+     * those links are already with customers. Same logic as the v4.31.3 migration, kept
+     * here so it can be re-run if rows ever appear without a token again.
+     */
+    private function backfill(): int
+    {
+        $done = 0;
+        \Illuminate\Support\Facades\DB::table('quotations')
+            ->where(function ($q) {
+                $q->whereNull('public_token')->orWhere('public_token', '');
+            })
+            ->orderBy('id')
+            ->chunkById(200, function ($rows) use (&$done) {
+                foreach ($rows as $row) {
+                    for ($try = 0; $try < 5; $try++) {
+                        $token = \Illuminate\Support\Str::lower(\Illuminate\Support\Str::random(40));
+                        if (\Illuminate\Support\Facades\DB::table('quotations')->where('public_token', $token)->exists()) {
+                            continue;
+                        }
+                        \Illuminate\Support\Facades\DB::table('quotations')
+                            ->where('id', $row->id)->update(['public_token' => $token]);
+                        $done++;
+                        break;
+                    }
+                }
+            });
+
+        return $done;
     }
 }
