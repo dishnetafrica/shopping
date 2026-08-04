@@ -23,6 +23,13 @@
   .card{background:var(--surface);border:1px solid var(--grid);border-radius:14px;padding:16px 18px;margin-top:12px}
   .card h2{font-size:14px;margin:0 0 2px}
   .cap{font-size:12px;color:var(--muted);margin:0 0 10px}
+  /* v4.36 — period selector and the tie-out warning */
+  .per{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 16px}
+  .per button{font:inherit;font-size:12px;font-weight:600;border:1px solid var(--grid);background:#fff;color:var(--ink2);border-radius:999px;padding:6px 14px;cursor:pointer}
+  .per button:hover{background:#f0f4f1}
+  .per button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+  .warn-b{border:1px solid #fecaca;background:#fef2f2;color:#7f1d1d;border-radius:10px;padding:12px 14px;margin:0 0 16px;font-size:13px;line-height:1.5}
+  @media print{.per{display:none}}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .bar-row{display:flex;align-items:center;gap:10px;margin:8px 0}
   .bar-lab{width:44px;font-size:12px;color:var(--ink2);font-weight:600}
@@ -57,8 +64,15 @@
     return new RegExp(names.length ? names.join('|') : 'bhavin', 'i');
   })();
 
+  /* v4.36 — the profit figures now cover a period. The balance sheet does not: it is a
+     point-in-time statement and stays "as at now", which the caption says out loud. */
+  const PERIODS = [['month','This month'],['last_month','Last month'],['quarter','This quarter'],['year','This year'],['all','Since inception']];
+  const savedPeriod = (() => { try { return sessionStorage.getItem('books.period'); } catch (e) { return null; } })();
+  let PERIOD = PERIODS.some(p => p[0] === savedPeriod) ? savedPeriod : 'month';
+
   const [pnl, fin, ct, cb] = await Promise.all([
-    get('/papi/cash-pnl'), get('/papi/finance-overview'), get('/papi/capital-trace'), get('/papi/trade-cashbook/all'),
+    get('/papi/cash-pnl?period=' + encodeURIComponent(PERIOD)), get('/papi/finance-overview'),
+    get('/papi/capital-trace'), get('/papi/trade-cashbook/all'),
   ]);
   if (!pnl || !pnl.ok) { app.innerHTML = '<div class="state">Please open this while signed in as the owner.</div>'; return; }
   const is = pnl.income_statement || {}, kpi = (fin && fin.kpis) || {};
@@ -84,8 +98,16 @@
     /* `person` is what /papi/trade-cashbook/all returns; `holder` was read before and is never
        present there, so a repayment only counted if the NOTE happened to name the lender. */
     const txt = (e.person || e.holder || '') + ' ' + (e.note || '') + ' ' + (e.category || '');
-    return +e.out > 0 && String(e.status || '').toLowerCase() !== 'void'
-      && LENDER.test(txt) && /loan|interest|repay|repaid|return/i.test(txt);
+    /* v4.36 — this endpoint filters no status at all, so the exclusions every server-side total
+       applies have to be applied here: REJECTED entries were being counted as real repayments,
+       which understated the loan and overstated profit. Conversion/Transfer legs are excluded
+       for the same reason they are everywhere else — they are one pot of money moving, not a
+       payment. And \b around the keywords stops "return" matching inside an unrelated word. */
+    const st = String(e.status || '').toLowerCase();
+    const cat = String(e.category || '');
+    if (st === 'void' || st === 'rejected') return false;
+    if (cat === 'Conversion' || cat === 'Transfer') return false;
+    return +e.out > 0 && LENDER.test(txt) && /\b(loan|interest|repay|repaid|return)\w*\b/i.test(txt);
   });
 
   const timeline = [
@@ -93,14 +115,28 @@
     ...repayRows.map(e => ({ t: new Date(e.date).getTime(), kind: 'repay', usd: +e.usd || 0, note: e.note || '' })),
   ].filter(x => isFinite(x.t) && x.usd > 0).sort((a, b) => a.t - b.t);
 
-  let loanP = 0, loanI = 0, intPaid = 0, prinPaid = 0, owedRun = 0, unpaidInt = 0, cursor = null;
+  /* v4.36 — the reporting window, in whole days, so interest can be attributed to the period
+     it was actually incurred in. 'Since inception' has no bounds. */
+  const dayOf = (iso) => Math.floor(Date.parse(iso + 'T00:00:00Z') / 86400000);
+  const PER = (pnl && pnl.period) || {};
+  const P_FROM = (PER.key === 'all' || !PER.from) ? -Infinity : dayOf(PER.from);
+  const P_TO   = (PER.key === 'all' || !PER.to)   ?  Infinity : dayOf(PER.to);
+
+  let loanP = 0, loanI = 0, loanIPeriod = 0, intPaid = 0, prinPaid = 0, owedRun = 0, unpaidInt = 0, cursor = null;
   const accrue = (toMs) => {
     if (cursor === null || owedRun <= 0) { cursor = toMs; return; }
     /* whole calendar days, the same convention the old per-advance figure used, so switching
        to amortisation does not nudge anybody's balance on the day it deploys */
-    const d = Math.max(0, Math.floor(toMs / 86400000) - Math.floor(cursor / 86400000));
+    const c0 = Math.floor(cursor / 86400000);
+    const d = Math.max(0, Math.floor(toMs / 86400000) - c0);
     if (d > 0) {
       const grow = owedRun * (Math.pow(1 + RATE, d / 30) - 1);
+      /* The slice of this gap lying inside the reporting window, priced by the SAME curve —
+         growth from day a to day b is owed × ((1+r)^(b/30) − (1+r)^(a/30)). Exact, so the
+         period figures sum to the all-time figure and no balance moves by a cent. */
+      const a = Math.min(Math.max(P_FROM - c0, 0), d);
+      const b = Math.min(Math.max(P_TO + 1 - c0, 0), d);
+      if (b > a) loanIPeriod += owedRun * (Math.pow(1 + RATE, b / 30) - Math.pow(1 + RATE, a / 30));
       owedRun += grow; unpaidInt += grow; loanI += grow;
     }
     cursor = toMs;
@@ -120,11 +156,18 @@
   accrue(today.getTime());                            // interest up to today
 
   const loanOwed = Math.max(0, owedRun);
-  const financeCost = unpaidInt;                      // interest accrued but not yet settled
+  /* v4.36 — this was `unpaidInt`, the unpaid interest BALANCE, which is not an expense: it
+     charged $2 against profit while the loan panel beside it reported $47 of interest to date.
+     An interest expense is interest INCURRED in the period. (Identity: loanI = unpaidInt + intPaid.) */
+  const financeCost = loanIPeriod;
 
   const eq = {};
   ((ct && ct.by_partner) ? Object.entries(ct.by_partner) : []).forEach(([n, v]) => { if (!LENDER.test(n)) eq[n] = (eq[n] || 0) + (+v || 0); });
   const equityContributed = Object.values(eq).reduce((a, b) => a + b, 0);
+  const eqSrv = (pnl && pnl.equity) || {};
+  const capIn = +eqSrv.capital_introduced || 0, draws = +eqSrv.drawings || 0;
+  const opAllTime = +eqSrv.operating_profit_all_time || 0;
+  const retained = opAllTime - loanI;                  // every dollar of profit ever kept in the business
 
   const rev = +is.sales_revenue || 0, cogs = +is.cost_of_goods || 0, gross = +is.gross_profit || 0;
   const opex = +is.operating_expenses || 0, oOut = +is.other_cash_out_review || 0, oIn = +is.other_cash_in_review || 0;
@@ -132,7 +175,18 @@
   const net = op - financeCost;
   const margin = rev > 0 ? (gross / rev * 100) : 0;
   const cash = +kpi.cash_on_hand || 0, recv = +kpi.receivable || 0, pay = +kpi.payable || 0;
-  const assets = cash + STOCK_USD + recv, liab = pay + loanOwed, equity = assets - liab;
+  const assets = cash + STOCK_USD + recv, liab = pay + loanOwed;
+  /* v4.36 — equity used to be `assets - liab` and nothing else, which made the balance check
+     `0 < 0.5` — true always, for any inputs, however wrong. Both figures are now computed
+     independently and the gap between them is shown rather than absorbed.
+       earned  = what the cash books say equity is
+       equity  = what the balance sheet needs it to be
+       unrecog = the difference, and it is not an error: stock on the shelf and money customers
+                 owe you are assets a CASH-basis P&L has never seen, and unpaid supplier bills
+                 are costs it has not seen either. Naming it is the honest move. */
+  const equityEarned = capIn - draws + retained;
+  const equity = assets - liab;
+  const unrecognised = equity - equityEarned;
   const byCur = (fin && fin.cash_by_currency) || [];
 
   const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -142,7 +196,7 @@
   const waterfall = () => {
     const steps = [
       { l: 'Revenue', v: rev, t: 'start' }, { l: 'Cost of goods', v: -cogs, t: 'sub' }, { l: 'Gross profit', v: gross, t: 'total' },
-      { l: 'Expenses', v: -opex, t: 'sub' }, { l: 'Transport & other', v: -oOut, t: 'sub' },
+      { l: 'Expenses', v: -opex, t: 'sub' }, { l: 'Other cash out', v: -oOut, t: 'sub' },
       ...(oIn ? [{ l: 'Other in', v: oIn, t: 'add' }] : []),
       { l: 'Operating profit', v: op, t: 'total' }, { l: 'Loan interest', v: -financeCost, t: 'sub' }, { l: 'NET PROFIT', v: net, t: 'net' },
     ];
@@ -173,10 +227,13 @@
       let yy = padT + plotH, out = '';
       segs.forEach(s => { if (s.v <= 0) return; const h = s.v * scale; yy -= h;
         out += `<rect x="${x}" y="${yy + 1}" width="${colW}" height="${Math.max(1, h - 2)}" fill="${s.c}"/>`;
-        if (h > 18) out += `<text x="${x + colW / 2}" y="${yy + h / 2 + 4}" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">${esc(s.l)} ${k(s.v)}</text>`; });
+        /* v4.36 — a segment too thin for a label inside it gets one OUTSIDE it instead. Receivables
+           drew as an unnamed sliver of colour: a real asset on the balance sheet with no name on it. */
+        if (h > 18) out += `<text x="${x + colW / 2}" y="${yy + h / 2 + 4}" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">${esc(s.l)} ${k(s.v)}</text>`;
+        else out += `<text x="${x + colW + 6}" y="${yy + h / 2 + 4}" font-size="10" font-weight="600" fill="${s.c}">${esc(s.l)} ${k(s.v)}</text>`; });
       return out;
     };
-    const A = seg([{ l: 'Cash', v: cash, c: 'var(--s1)' }, { l: 'Stock', v: STOCK_USD, c: 'var(--s2)' }, ...(recv > 1 ? [{ l: 'Recv', v: recv, c: 'var(--s3)' }] : [])], x1);
+    const A = seg([{ l: 'Cash', v: cash, c: 'var(--s1)' }, { l: 'Stock', v: STOCK_USD, c: 'var(--s2)' }, ...(recv > 0.005 ? [{ l: 'Owed to us', v: recv, c: 'var(--s3)' }] : [])], x1);
     const L = seg([{ l: 'Payables', v: pay, c: 'var(--s4)' }, { l: 'Loan', v: loanOwed, c: 'var(--s5)' }, { l: 'Equity', v: equity, c: 'var(--s6)' }], x2);
     const base = padT + plotH;
     return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Balance sheet">${A}${L}
@@ -199,26 +256,65 @@
   const tone = (v) => v >= 0 ? 'ok' : 'bad';
   const kpi_ = (label, val, t) => `<div class="kpi ${t || ''}"><div class="kv">${money(val)}</div><div class="kl">${label}</div></div>`;
   const stamp = today.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const balances = Math.abs(assets - (liab + equity)) < 0.5;
+  const perLabel = PER.label || 'This month';
+
+  /* v4.36 — the check that can actually fail.
+     The old one compared the assets column against (liabilities + equity) while equity was DEFINED
+     as assets − liabilities: it reduced to 0 < 0.5 and printed ✓ for any inputs at all. This
+     compares two figures produced by two different endpoints from two different code paths —
+     the cash KPI from finance-overview, and the cashbook closing from cash-pnl. If a row is
+     unclassified, or an FX conversion is lop-sided, they disagree and it says so. */
+  const rec = (pnl && pnl.reconciliation) || {};
+  /* implied_ending_cash is built from the classified buckets; the cash KPI is a raw signed sum
+     over the same rows in a different controller. They agree unless a row landed in no bucket. */
+  const closing = +rec.implied_ending_cash || 0;
+  const cashGap = cash - closing;
+  const cashOk = Math.abs(cashGap) < 0.05;
+  const classifiedOk = rec.reconciles !== false;
+  const gapNote = +rec.difference || 0;
+
+  app.addEventListener('click', (ev) => {
+    const b = ev.target && ev.target.closest ? ev.target.closest('.per button') : null;
+    if (!b) return;
+    try { sessionStorage.setItem('books.period', b.getAttribute('data-per')); } catch (e) {}
+    location.reload();
+  });
 
   app.innerHTML = `<div class="rep">
-    <div class="rep-head"><div><h1>Family Shoppers</h1><div class="sub">Company situation · as at ${stamp}</div></div>
+    <div class="rep-head"><div><h1>Family Shoppers</h1>
+        <div class="sub">Profit for <b>${esc(perLabel)}</b> · what we own and owe as at ${stamp}</div></div>
       <div class="rep-btns"><button onclick="window.print()">⭳ Save PDF</button><button onclick="location.reload()">↻ Refresh</button></div></div>
+    <div class="per">${PERIODS.map(([k2, l]) => `<button class="${k2 === PERIOD ? 'on' : ''}" data-per="${k2}">${esc(l)}</button>`).join('')}</div>
+    ${(!cashOk || !classifiedOk) ? `<div class="warn-b"><b>These figures do not tie out.</b>
+      ${!cashOk ? `The cash on hand (${money(cash)}) and the cash the profit statement accounts for (${money(closing)}) differ by <b>${money(Math.abs(cashGap))}</b>. ` : ''}
+      ${!classifiedOk ? `${money(Math.abs(gapNote))} of cash movement did not fall into any category on the profit statement. ` : ''}
+      Treat the profit figure as provisional until this is resolved — it usually means an entry type nobody has classified, or one leg of a currency conversion recorded without its pair.</div>` : ''}
     <div class="kpis">
-      ${kpi_('Net profit', net, tone(net))}${kpi_('Cash (all currencies)', cash, 'ok')}${kpi_('Owed to suppliers', pay, 'warn')}
+      ${kpi_('Net profit · ' + perLabel, net, tone(net))}${kpi_('Cash (all currencies)', cash, 'ok')}${kpi_('Owed to suppliers', pay, 'warn')}
       ${kpi_('Loan owed (' + String(CFG.lenders || 'Bhavin') + ')', loanOwed, 'warn')}${kpi_('Owners’ equity', equity, '')}
-      <div class="kpi"><div class="kv">${margin.toFixed(1)}%</div><div class="kl">Gross margin</div></div></div>
+      <div class="kpi"><div class="kv">${margin.toFixed(1)}%</div><div class="kl">Gross margin · ${esc(perLabel)}</div></div></div>
     <div class="card"><h2>How the profit is made</h2>
-      <p class="cap">From cash received to net profit — blue = totals, red = money out, green = what's left.</p>${waterfall()}</div>
+      <p class="cap">${esc(perLabel)} · from cash received to net profit — blue = totals, red = money out, green = what's left.
+        Cash basis: a sale counts when the money arrives, a cost when it is paid.</p>${waterfall()}</div>
     <div class="grid2">
       <div class="card"><h2>What we own vs what we owe</h2>
-        <p class="cap">The two columns match — the books balance ${balances ? '✓' : '(check)'}.</p>${balanceChart()}</div>
+        <p class="cap">As at ${stamp}. Owners' equity is what would be left if everything owed were settled.</p>${balanceChart()}
+        <table class="mini" style="margin-top:14px">
+          <tr><td>Capital put in</td><td>${money(capIn)}</td></tr>
+          ${draws ? `<tr><td>Less drawings</td><td>−${money(draws)}</td></tr>` : ''}
+          <tr><td>Profit kept in the business (all time)</td><td>${money(retained)}</td></tr>
+          <tr><td>Stock, money owed to us, bills not yet paid</td><td>${money(unrecognised)}</td></tr>
+          <tr class="tot"><td>Owners' equity</td><td>${money(equity)}</td></tr></table>
+        <p class="cap" style="margin-top:8px">The last line before the total is the part the cash books have not
+          recognised yet — goods on the shelf and money customers owe you are not cash, and unpaid supplier bills
+          are not yet a cost. ${Math.abs(unrecognised) > Math.abs(net) ? '<b>It is currently larger than the profit figure</b>, so read that figure with care.' : ''}</p></div>
       <div class="card"><h2>Where the cash sits</h2>
         <p class="cap">Cash on hand by currency, valued in USD.</p><div>${cashChart()}</div>
-        <h2 style="margin-top:18px">Loan — Bhavin</h2>
+        <h2 style="margin-top:18px">Loan — ${esc(String(CFG.lenders || 'Bhavin'))}</h2>
         <table class="mini">
           <tr><td>Principal</td><td>${money(loanP)}</td></tr>
           <tr><td>Interest to date</td><td>${money(loanI)}</td></tr>
+          <tr><td>…of which ${esc(perLabel)}</td><td>${money(loanIPeriod)}</td></tr>
           ${intPaid ? `<tr><td>Interest paid</td><td>−${money(intPaid)}</td></tr>` : ''}
           ${prinPaid ? `<tr><td>Principal repaid</td><td>−${money(prinPaid)}</td></tr>` : ''}
           <tr class="tot"><td>Balance owed</td><td>${money(loanOwed)}</td></tr>

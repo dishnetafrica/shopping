@@ -6607,6 +6607,72 @@ class PanelApiController extends Controller
      * each entry's recorded cost-basis rate — the same basis as the Company Account Cash Book PDF, so
      * it reconciles to that closing balance. Writes nothing. Owner-only.
      */
+    /**
+     * The reporting window for the income statement — `?period=month|quarter|year|all` or an explicit
+     * `?from=&to=`. Defaults to the current calendar month, because "net profit" with no date on it
+     * reads as this month to everyone who has ever looked at a set of books.
+     *
+     * @return array{0:string,1:string,2:string,3:string}  from, to, key, label
+     */
+    private function pnlPeriod(Request $r): array
+    {
+        $from = trim((string) $r->query('from', ''));
+        $to   = trim((string) $r->query('to', ''));
+        $ok   = fn ($d) => (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $d);
+        if ($ok($from) && $ok($to)) {
+            if ($from > $to) [$from, $to] = [$to, $from];
+
+            return [$from, $to, 'custom', $from . ' to ' . $to];
+        }
+
+        $now = now();
+        switch (strtolower((string) $r->query('period', 'month'))) {
+            case 'all':
+                return ['0000-01-01', '9999-12-31', 'all', 'Since inception'];
+            case 'year':
+                return [$now->copy()->startOfYear()->toDateString(), $now->copy()->endOfYear()->toDateString(),
+                    'year', $now->format('Y')];
+            case 'quarter':
+                return [$now->copy()->startOfQuarter()->toDateString(), $now->copy()->endOfQuarter()->toDateString(),
+                    'quarter', 'Q' . $now->quarter . ' ' . $now->format('Y')];
+            case 'last_month':
+                $m = $now->copy()->subMonthNoOverflow();
+
+                return [$m->copy()->startOfMonth()->toDateString(), $m->copy()->endOfMonth()->toDateString(),
+                    'last_month', $m->format('F Y')];
+            default:
+                return [$now->copy()->startOfMonth()->toDateString(), $now->copy()->endOfMonth()->toDateString(),
+                    'month', $now->format('F Y')];
+        }
+    }
+
+    /** A case-insensitive alternation of the tenant's lender names, safe to feed to preg_match. */
+    private static function lenderPattern(string $names): string
+    {
+        $parts = array_filter(array_map('trim', explode(',', $names)));
+        $parts = array_map(fn ($n) => preg_quote($n, '/'), $parts);
+
+        return '/' . ($parts ? implode('|', $parts) : 'bhavin') . '/i';
+    }
+
+    /**
+     * Is this cash row a repayment of an owner loan?
+     *
+     * Money going out, naming a lender, and saying so. `\b` around the keywords matters: without it
+     * "return" matches inside ordinary words and an unrelated payment becomes a loan repayment.
+     */
+    private static function isLoanRepayment(string $lenders, string $stage, string $holder, string $note, string $category): bool
+    {
+        if (in_array($stage, ['funding', 'cash_in', 'customer_payment'], true)) {
+            return false;   // money coming in is never a repayment
+        }
+        $text = trim($holder . ' ' . $note . ' ' . $category);
+
+        return $text !== ''
+            && preg_match($lenders, $text) === 1
+            && preg_match('/\b(loan|interest|repay|repaid|return)\w*\b/i', $text) === 1;
+    }
+
     public function cashPnl(Request $r)
     {
         if ($g = $this->ownerGate($r)) return $g;
@@ -6616,36 +6682,66 @@ class PanelApiController extends Controller
         // Classify each cash row. Capital is often typed as a generic cash_in with a "capital/introduced"
         // note rather than the funding stage — detect that so equity isn't misread as income. Status
         // filter matches the cashbook (everything not void/rejected) so this reconciles to its closing.
+        // v4.36 — the income statement now covers a PERIOD (default: this calendar month), while the
+        // equity figures stay inception-to-date, because retained profit is by definition all of it.
+        // One pass fills both, so the period selector costs no extra query.
+        [$from, $to, $periodKey, $periodLabel] = $this->pnlPeriod($r);
+
+        // Loan repayments are financing, not trading. Repaying principal is not a cost — it turns cash
+        // into a smaller debt — so it must not sit in an expense bucket. Detected the same way the
+        // Books screen detects it, from the same tenant setting, so the two cannot drift apart.
+        $lenders = self::lenderPattern((string) $t->setting('books.loan_holders', 'Bhavin'));
+
         $isCapitalNote = fn ($n) => (bool) preg_match('/capital|startup|introduc|invest/i', (string) $n);
-        $cap = ['capital' => 0.0, 'revenue' => 0.0, 'purchase' => 0.0, 'supplier' => 0.0,
-                'opex' => 0.0, 'other_in' => 0.0, 'other_out' => 0.0, 'drawings' => 0.0];
+        $blank = ['capital' => 0.0, 'revenue' => 0.0, 'purchase' => 0.0, 'supplier' => 0.0,
+                  'opex' => 0.0, 'other_in' => 0.0, 'other_out' => 0.0, 'drawings' => 0.0, 'financing' => 0.0];
+        $cap = $blank; $all = $blank;
         foreach (\App\Models\OrderCost::where('tenant_id', $t->id)
                     ->whereNotIn('status', ['void', 'rejected'])
                     ->where(function ($w) { $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status'); })
                     ->where(function ($w) { $w->whereNull('category')->orWhereNotIn('category', ['Conversion', 'Transfer']); })
-                    ->get(['stage', 'usd_amount', 'note']) as $c) {
+                    ->get(['stage', 'usd_amount', 'note', 'holder', 'category', 'created_at']) as $c) {
             $s = (string) $c->stage; $usd = (float) $c->usd_amount;
-            if ($s === 'funding' || ($s === 'cash_in' && $isCapitalNote($c->note))) $cap['capital'] += $usd;
-            elseif ($s === 'customer_payment') $cap['revenue'] += $usd;
-            elseif ($s === 'cash_in') $cap['other_in'] += $usd;
-            elseif ($s === 'purchase') $cap['purchase'] += $usd;
-            elseif ($s === 'supplier_payment') $cap['supplier'] += $usd;
-            elseif ($s === 'expense') $cap['opex'] += $usd;
-            elseif ($s === 'drawing') $cap['drawings'] += $usd;
-            elseif ($s === 'cash_out') $cap['other_out'] += $usd;
+            $at = optional($c->created_at)->format('Y-m-d') ?: '';
+            $inPeriod = $at !== '' && $at >= $from && $at <= $to;
+
+            $bucket = null;
+            if (self::isLoanRepayment($lenders, $s, (string) $c->holder, (string) $c->note, (string) $c->category)) {
+                $bucket = 'financing';
+            } elseif ($s === 'funding' || ($s === 'cash_in' && $isCapitalNote($c->note))) $bucket = 'capital';
+            elseif ($s === 'customer_payment') $bucket = 'revenue';
+            elseif ($s === 'cash_in') $bucket = 'other_in';
+            elseif ($s === 'purchase') $bucket = 'purchase';
+            elseif ($s === 'supplier_payment') $bucket = 'supplier';
+            elseif ($s === 'expense') $bucket = 'opex';
+            elseif ($s === 'drawing') $bucket = 'drawings';
+            elseif ($s === 'cash_out') $bucket = 'other_out';
+            if ($bucket === null) continue;                 // unknown stage — the reconciliation check below catches it
+
+            $all[$bucket] += $usd;
+            if ($inPeriod) $cap[$bucket] += $usd;
         }
         $revenue  = round($cap['revenue'], 2);
         $cogs     = round($cap['purchase'] + $cap['supplier'], 2);
         $opex     = round($cap['opex'], 2);
         $otherIn  = round($cap['other_in'], 2);
         $otherOut = round($cap['other_out'], 2);
-        $capital  = round($cap['capital'], 2);
-        $drawings = round($cap['drawings'], 2);
+        $capital  = round($all['capital'], 2);            // equity is inception-to-date, never a period
+        $drawings = round($all['drawings'], 2);
         $buckets  = array_map(fn ($v) => round($v, 2), $cap);
 
         $grossProfit = round($revenue - $cogs, 2);
         $operatingProfit = round($grossProfit - $opex - $otherOut + $otherIn, 2);
-        $endingCash = round($capital + $revenue + $otherIn - $cogs - $opex - $otherOut - $drawings, 2);
+
+        // Inception-to-date operating profit — what retained earnings is built from. The Books screen
+        // subtracts all-time loan interest from this to get retained profit, because the interest clock
+        // lives with the loan timeline.
+        $allOperating = round(
+            $all['revenue'] - ($all['purchase'] + $all['supplier']) - $all['opex'] - $all['other_out'] + $all['other_in'], 2
+        );
+        $endingCash = round($capital + $all['revenue'] + $all['other_in']
+            - ($all['purchase'] + $all['supplier']) - $all['opex'] - $all['other_out']
+            - $drawings - $all['financing'], 2);
 
         // True cashbook closing = signed usd over EVERY cash row (incl. conversions/transfers, which net
         // to zero). If this differs from the classified ending cash, some row was dropped or a conversion
@@ -6671,8 +6767,15 @@ class PanelApiController extends Controller
                 'other_cash_out_review' => $otherOut,
                 'other_cash_in_review'  => $otherIn,
                 'operating_profit'   => $operatingProfit,
+                'period_from' => $from, 'period_to' => $to,
             ],
-            'equity' => ['capital_introduced' => $capital, 'drawings' => $drawings],
+            'period' => ['from' => $from, 'to' => $to, 'key' => $periodKey, 'label' => $periodLabel],
+            'equity' => ['capital_introduced' => $capital, 'drawings' => $drawings,
+                'operating_profit_all_time' => $allOperating,
+                'note' => 'capital_introduced and drawings are inception-to-date, never the period — retained profit is by definition all of it.'],
+            'financing' => ['loan_repayments' => round($cap['financing'], 2),
+                'loan_repayments_all_time' => round($all['financing'], 2),
+                'note' => 'Loan repayments are financing, not trading — kept out of the expense buckets so repaying principal does not read as a cost.'],
             'excluded' => ['fx_conversions_and_transfers' => 'net zero — omitted from P&L'],
             'reconciliation' => ['implied_ending_cash' => $endingCash,
                 'cashbook_closing' => $cashbookClosing, 'reconciles' => $reconciles,
