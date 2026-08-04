@@ -181,7 +181,11 @@ class StorefrontController extends Controller
         $html = str_replace('<div class="lg">SH</div>', '<div class="lg">'.e($cfg['initials']).'</div>', $html);
         $html = str_replace('<div><b>Shop</b><span class="sub"', '<div><b>'.$safeName.'</b><span class="sub"', $html);
         $html = str_replace('<span id="footName">Shop</span>', '<span id="footName">'.$safeName.'</span>', $html);
-        if (! str_contains($html, 'og:title')) {
+        // v4.27.1: skip the shop-wide tags on a product page. This block injects AFTER
+        // </title>, and the per-product block below replaces the <title> element itself —
+        // so these would survive underneath the product's own og:* and shadow them
+        // (parsers that take the last occurrence showed the shop name, not the product).
+        if (! str_contains($html, 'og:title') && ! $seoProduct) {
             $html = str_replace('</title>', '</title>'."\n".'<meta property="og:title" content="'.$safeName.'">'
                 ."\n".'<meta property="og:description" content="Browse the catalogue and order on WhatsApp — '.$safeName.'">'
                 .($cfg['logo'] ? "\n".'<meta property="og:image" content="'.e($cfg['logo']).'">' : ''), $html);
@@ -204,6 +208,10 @@ class StorefrontController extends Controller
             $cur   = $this->currency($tenant);
             $price = (float) ($seoProduct->price ?? 0);
             $img   = (string) ($seoProduct->image_url ?? '') !== '' ? $this->imageUrl((string) $seoProduct->image_url) : '';
+            // v4.27.1: a product with no photo still deserves *a* preview image, which the
+            // shop-wide block used to supply. JSON-LD keeps the real photo only (never the
+            // logo — that would be a false product image to Google); this is the OG fallback.
+            $ogImg = $img !== '' ? $img : (string) $cfg['logo'];
             $canonUrl = request()->getSchemeAndHttpHost() . $base . '/p/' . self::productSlug($seoProduct);
             $pTitle = trim((string) $seoProduct->name) . ' — buy in ' . ((string) $tenant->setting('city', '') ?: 'Juba') . ' | ' . $tenant->name;
             $pDesc  = trim((string) ($seoProduct->description ?? '')) !== ''
@@ -240,7 +248,7 @@ class StorefrontController extends Controller
                 '<meta property="og:title" content="' . e((string) $seoProduct->name) . '">',
                 '<meta property="og:description" content="' . e($pDesc) . '">',
                 '<meta property="og:url" content="' . e($canonUrl) . '">',
-                $img !== '' ? '<meta property="og:image" content="' . e($img) . '">' : null,
+                $ogImg !== '' ? '<meta property="og:image" content="' . e($ogImg) . '">' : null,
                 '<meta name="twitter:card" content="' . ($img !== '' ? 'summary_large_image' : 'summary') . '">',
                 '<script type="application/ld+json">' . json_encode($ld, $jf) . '</script>',
             ]));
