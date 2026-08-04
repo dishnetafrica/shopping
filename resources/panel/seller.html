@@ -599,7 +599,7 @@
       <div id="pageProducts" class="hide">
         <div class="crumb">Home / <b>Products</b></div>
         <div class="card">
-          <div class="head" style="flex-wrap:wrap;gap:8px">Products <input id="pmScan" inputmode="numeric" placeholder="⌨ Scan to edit + Enter" style="border:none;border-radius:8px;padding:7px 10px;font-size:13px;min-width:160px"><button id="pmScanCam" class="btn ghost" style="padding:7px 11px">📷 Scan</button><button class="btn" id="addProdBtn" style="margin-left:auto">+ Add product</button><button class="btn" id="pmExport" style="margin-left:8px">⤓ Export CSV</button><button class="btn" id="pmBulkMeta" style="margin-left:8px">⚙ Unit/Pack</button><button class="btn" id="pmStockSync" style="margin-left:8px">⬆ Update stock</button><button class="btn" id="pmCatalogImport" style="margin-left:8px">⬆ Import catalogue</button><button class="btn" id="pmPhotoImport" style="margin-left:8px">🖼 Photos from ZIP</button><button class="btn ghost" id="pmRestore" style="margin-left:8px;display:none">↩ Restore archived</button><button class="btn" id="pmFillImages" style="margin-left:8px;display:none">🖼 Fill images</button><input type="file" id="pmStockFile" accept=".csv" style="display:none"><input type="file" id="pmCatalogFile" accept=".zip" style="display:none"><input type="file" id="pmPhotoFile" accept=".zip" style="display:none"></div>
+          <div class="head" style="flex-wrap:wrap;gap:8px">Products <input id="pmScan" inputmode="numeric" placeholder="⌨ Scan to edit + Enter" style="border:none;border-radius:8px;padding:7px 10px;font-size:13px;min-width:160px"><button id="pmScanCam" class="btn ghost" style="padding:7px 11px">📷 Scan</button><button class="btn" id="addProdBtn" style="margin-left:auto">+ Add product</button><button class="btn" id="pmExport" style="margin-left:8px">⤓ Export CSV</button><button class="btn" id="pmBulkMeta" style="margin-left:8px">⚙ Unit/Pack</button><button class="btn" id="pmStockSync" style="margin-left:8px">⬆ Update stock</button><button class="btn" id="pmCatalogImport" style="margin-left:8px">⬆ Import catalogue</button><button class="btn" id="pmPhotoImport" style="margin-left:8px">🖼 Photos from ZIP</button><button class="btn ghost" id="pmSuggest" style="margin-left:8px;display:none">💡 Suggestions</button><button class="btn ghost" id="pmRestore" style="margin-left:8px;display:none">↩ Restore archived</button><button class="btn" id="pmFillImages" style="margin-left:8px;display:none">🖼 Fill images</button><input type="file" id="pmStockFile" accept=".csv" style="display:none"><input type="file" id="pmCatalogFile" accept=".zip" style="display:none"><input type="file" id="pmPhotoFile" accept=".zip" style="display:none"></div>
           <div class="body">
             <div class="filters">
               <div class="fg search"><label>Search</label><input id="pmSearch" placeholder="name, brand, keyword…"></div>
@@ -1284,6 +1284,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   kitchen:'/papi/kitchen',kitchenAdv:'/papi/kitchen-advance',
   updStatus:'/papi/update-status',saveOrder:'/papi/save-order',quoteSend:'/papi/quotation-send',quotations:'/papi/quotations',quoteResend:'/papi/quotation-resend',quoteStatus:'/papi/quotation-status',quoteConvert:'/papi/quotation-convert',quoteShow:'/papi/quotation-show',quoteUpdate:'/papi/quotation-update',quoteDelete:'/papi/quotation-delete',
   updProduct:'/papi/update-product',addProduct:'/papi/add-product',delProduct:'/papi/delete-product',aiIdentify:'/papi/ai-identify',
+  prodLookup:'/papi/product-lookup',rsQueue:'/papi/research-queue',rsApply:'/papi/research-apply',rsDismiss:'/papi/research-dismiss',
   uploadImage:'/papi/upload-image',
   uploadDoc:'/papi/upload-doc',
   catImages:'/papi/category-images',catImageSave:'/papi/category-image-save',
@@ -3016,6 +3017,7 @@ function pmInit(){
   if($('pmPhotoImport'))$('pmPhotoImport').onclick=function(){$('pmPhotoFile').click();};
   if($('pmPhotoFile'))$('pmPhotoFile').onchange=photoImportPick;
   if($('pmRestore'))$('pmRestore').onclick=restoreArchived;
+  if($('pmSuggest')){$('pmSuggest').onclick=openSuggestions;refreshSuggestBadge();}
   if($('pmFillImages')){
     var srcs=(SETTINGS.imageSources&&SETTINGS.imageSources.length)?SETTINGS.imageSources:null;
     if(srcs){$('pmFillImages').style.display='';$('pmFillImages').onclick=function(){imagesBorrowRun(0);};}
@@ -3473,6 +3475,128 @@ function bindBarcodeScan(id){
   b.onclick=function(){openCameraScan(function(code){var f=$(id);if(f){f.value=code;toast('Barcode '+code);}},true);};
 }
 
+/* ================= RESEARCH (v4.29) =========================================
+   Look a product up and fill in what we do not know. THE RULE, enforced here in
+   the browser as well as on the server: it only ever writes into a box that is
+   EMPTY. Anything you have typed is reported back as "kept yours" and left
+   exactly as it is, so pressing this can never lose your work.               */
+var RS_FIELDS=[['brand','Brand'],['unit_size','Size'],['origin_country','Origin'],
+               ['category','Cat'],['description','Desc']];
+function rsEl(pfx,field){
+  for(var i=0;i<RS_FIELDS.length;i++) if(RS_FIELDS[i][0]===field) return $(pfx+RS_FIELDS[i][1]);
+  if(field==='name_hint') return $(pfx+'Name');
+  if(field==='image_hint') return $('pImg');
+  return null;
+}
+function rsFlash(el){
+  if(!el)return; var old=el.style.background;
+  el.style.background='#ECFDF5'; el.style.transition='background .8s';
+  setTimeout(function(){el.style.background=old||'';},1400);
+}
+async function doLookup(pfx){
+  var btn=$(pfx+'Lookup'), note=$(pfx+'LookupNote'); if(!btn)return;
+  var bc=fv(pfx+'Barcode'), nm=fv(pfx+'Name');
+  if(!bc&&!nm){toast('Scan a barcode or type a product name first');return;}
+  btn.disabled=true; var label=btn.textContent; btn.textContent='Looking…';
+  if(note)note.innerHTML='';
+  try{
+    var q='?token='+encodeURIComponent(token)+'&barcode='+encodeURIComponent(bc)+'&name='+encodeURIComponent(nm)+
+      '&brand='+encodeURIComponent(fv(pfx+'Brand'))+'&category='+encodeURIComponent(fv(pfx+'Cat'))+
+      '&unit_size='+encodeURIComponent(fv(pfx+'Size'))+'&origin_country='+encodeURIComponent(fv(pfx+'Origin'));
+    var r=await fetch(EP.prodLookup+q,{cache:'no-store'});
+    var d=await r.json();
+    if(!d||!d.ok){
+      if(note)note.innerHTML='<span style="color:#B45309">'+esc((d&&d.message)||'Nothing found for this one — type the details in.')+'</span>';
+      return;
+    }
+    var filled=[],kept=[],f=d.fields||{};
+    Object.keys(f).forEach(function(k){
+      var el=rsEl(pfx,k); if(!el)return;
+      var val=String(f[k].value||''); if(!val)return;
+      if(String(el.value||'').trim()!==''){ if(k!=='name_hint'&&k!=='image_hint')kept.push(k); return; }
+      el.value=val; rsFlash(el);
+      filled.push((k==='name_hint'?'name':k==='image_hint'?'photo':k)+(f[k].source==='barcode'?'':' *'));
+    });
+    if(pfx==='a')refreshNamePreview('a'); else refreshNameFix();
+    if(note){
+      var bits=[];
+      if(filled.length)bits.push('<b style="color:#14532D">Filled:</b> '+esc(filled.join(', ')));
+      if(kept.length)bits.push('<span style="color:#6b7280">Kept yours:</span> '+esc(kept.join(', ')));
+      if(!filled.length&&!kept.length)bits.push('<span style="color:#B45309">Nothing new found.</span>');
+      if(filled.join(' ').indexOf('*')>=0)bits.push('<span style="color:#B45309">* guessed from the name — check it</span>');
+      if(d.attribution)bits.push('<span style="color:#9ca3af;font-size:11px">'+esc(d.attribution)+'</span>');
+      note.innerHTML=bits.join('<br>');
+    }
+    if(filled.length)toast('Filled '+filled.length+' field'+(filled.length>1?'s':''));
+  }catch(e){ if(note)note.innerHTML='<span style="color:#B91C1C">Could not reach the lookup service.</span>'; }
+  btn.disabled=false; btn.textContent=label;
+}
+
+/* ---- the review queue: what research was not confident enough to write ---- */
+var RS_ITEMS=[];
+async function openSuggestions(){
+  $('modalTitle').textContent='Suggestions';
+  $('modalBody').innerHTML='<div class="note">Loading…</div>';
+  $('modal').classList.remove('hide');
+  try{
+    var r=await fetch(EP.rsQueue+'?token='+encodeURIComponent(token),{cache:'no-store'});
+    var d=await r.json();
+    RS_ITEMS=(d&&d.items)?d.items:[];
+  }catch(e){ RS_ITEMS=[]; }
+  renderSuggestions();
+}
+function renderSuggestions(){
+  if(!RS_ITEMS.length){
+    $('modalBody').innerHTML='<div class="note" style="padding:14px 0;line-height:1.6">'+
+      'Nothing waiting. Anything the AI was <b>sure</b> about has already been filled in; '+
+      'this list only holds what it wanted a person to look at.</div>';
+    return;
+  }
+  $('modalBody').innerHTML='<div class="note" style="margin-bottom:10px;line-height:1.55">'+
+      RS_ITEMS.length+' waiting. Each one is a field that was <b>empty</b> — approving can never '+
+      'overwrite something you typed.</div>'+
+    RS_ITEMS.map(function(it){
+      var pct=Math.round((it.confidence||0)*100);
+      var src=it.source==='barcode'?'from the barcode':(it.source==='written'?'written by AI':'AI guess');
+      return '<div class="mfield" data-sg="'+it.id+'" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px">'+
+        '<div style="font-size:12px;color:#6b7280">'+esc(it.product)+'</div>'+
+        '<div style="font-weight:700;margin:2px 0 4px">'+esc(it.label)+'</div>'+
+        '<div style="font-size:14px;line-height:1.5">'+esc(it.suggested)+'</div>'+
+        '<div class="note" style="margin-top:6px">'+esc(src)+' · '+pct+'% sure'+(it.note?(' · '+esc(it.note)):'')+'</div>'+
+        '<div style="display:flex;gap:8px;margin-top:8px">'+
+          '<button type="button" class="btn" onclick="sgApply('+it.id+')">Use it</button>'+
+          '<button type="button" class="btn ghost" onclick="sgDismiss('+it.id+')">No thanks</button>'+
+        '</div></div>';
+    }).join('');
+}
+function sgDrop(id){ RS_ITEMS=RS_ITEMS.filter(function(x){return x.id!==id;}); renderSuggestions(); }
+async function sgApply(id){
+  try{
+    var r=await fetch(EP.rsApply+'?token='+encodeURIComponent(token)+'&id='+id,{cache:'no-store'});
+    var d=await r.json();
+    if(d&&d.ok){toast('Applied');}
+    else{toast((d&&d.message)||'Could not apply');}
+  }catch(e){toast('Network error');}
+  sgDrop(id);
+  await loadData(); renderPM();
+}
+async function sgDismiss(id){
+  try{ await fetch(EP.rsDismiss+'?token='+encodeURIComponent(token)+'&id='+id,{cache:'no-store'}); }catch(e){}
+  sgDrop(id);
+}
+/* The button only appears when there is something in the queue — an empty button
+   that always says "Suggestions (0)" trains people to ignore it. */
+async function refreshSuggestBadge(){
+  var b=$('pmSuggest'); if(!b)return;
+  try{
+    var r=await fetch(EP.rsQueue+'?token='+encodeURIComponent(token),{cache:'no-store'});
+    var d=await r.json();
+    var n=(d&&d.items)?d.items.length:0;
+    b.style.display=n>0?'':'none';
+    b.textContent='💡 Suggestions ('+n+')';
+  }catch(e){ b.style.display='none'; }
+}
+
 function openEdit(row){
   var p=findProd(row);if(!p)return;
   var cats=pmCats();
@@ -3512,6 +3636,8 @@ function openEdit(row){
       '<div class="mfield" style="flex:1"><label>Barcode</label><div style="display:flex;gap:6px">'+
         '<input id="mBarcode" inputmode="numeric" value="'+esc(p.barcodeRaw||p.barcode||'')+'" placeholder="EAN / UPC" style="flex:1">'+
         '<button type="button" class="btn ghost" id="mBarcodeScan" style="padding:8px 10px;white-space:nowrap">\ud83d\udcf7</button></div></div></div>'+
+    '<button type="button" class="btn ghost" id="mLookup" style="width:100%;margin:-4px 0 6px">\ud83d\udd0e Look this product up</button>'+
+    '<div class="note" id="mLookupNote" style="margin:0 0 10px"></div>'+
     '<div class="mfield"><label>Description <span style="font-weight:400;color:#6b7280">\u2014 customers read this on the product page</span></label>'+
       '<textarea id="mDesc" rows="3" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit">'+esc(p.desc||'')+'</textarea></div>'+
     '<button type="button" class="btn ghost" id="mOOS" style="margin:-4px 0 10px">'+((prodStock(p)<=0)?'\u2713 Out of stock \u2014 Save to apply':'Mark out of stock')+'</button>'+
@@ -3525,6 +3651,7 @@ function openEdit(row){
   pmMarginBox('mCost','mPrice','mMargin');
   if($('mOOS'))$('mOOS').onclick=toggleOOS;
   bindBarcodeScan('mBarcode');
+  if($('mLookup'))$('mLookup').onclick=function(){doLookup('m');};
   ['mName','mBrand','mSize','mPack','mUnit'].forEach(function(id){
     var el=$(id); if(!el)return; var prev=el.oninput;
     el.oninput=function(e){if(prev)prev.call(el,e);refreshNameFix();};
@@ -3599,6 +3726,8 @@ function openAdd(){
       '<div class="mfield" style="flex:1"><label>Barcode</label><div style="display:flex;gap:6px">'+
         '<input id="aBarcode" inputmode="numeric" placeholder="EAN / UPC" style="flex:1">'+
         '<button type="button" class="btn ghost" id="aBarcodeScan" style="padding:8px 10px;white-space:nowrap">\ud83d\udcf7</button></div></div></div>'+
+    '<button type="button" class="btn ghost" id="aLookup" style="width:100%;margin:-4px 0 6px">\ud83d\udd0e Look this product up</button>'+
+    '<div class="note" id="aLookupNote" style="margin:0 0 10px"></div>'+
     '<div class="mfield"><label>Description <span style="font-weight:400;color:#6b7280">\u2014 customers read this on the product page</span></label>'+
       '<textarea id="aDesc" rows="3" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit" placeholder="What it is, what it is used for, how it is packed."></textarea></div>'+
     '<div class="mfield"><label>Keywords</label><input id="aKw" placeholder="comma separated"></div>'+
@@ -3612,6 +3741,7 @@ function openAdd(){
   $('aIdentify').onclick=aiIdentifyFill;
   pmMarginBox('aCost','aPrice','aMargin');
   bindBarcodeScan('aBarcode');
+  if($('aLookup'))$('aLookup').onclick=function(){doLookup('a');};
   bindNameBuilder('a');
 }
 async function aiIdentifyFill(){

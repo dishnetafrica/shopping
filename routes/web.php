@@ -673,6 +673,12 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('delete-product', [PanelApiController::class, 'deleteProduct']);
         Route::get('add-product',    [PanelApiController::class, 'addProduct']);
         Route::post('ai-identify',   [PanelApiController::class, 'aiIdentify']);
+        // v4.29 — product research. Lookup is one live call per real scan; the queue
+        // endpoints move a suggestion out of "pending" once a human has decided.
+        Route::get('product-lookup',   [PanelApiController::class, 'productLookup']);
+        Route::get('research-queue',   [PanelApiController::class, 'researchQueue']);
+        Route::get('research-apply',   [PanelApiController::class, 'researchApply']);
+        Route::get('research-dismiss', [PanelApiController::class, 'researchDismiss']);
         Route::post('products-import', [PanelApiController::class, 'productsImport']);
         Route::get('dealer',       [PanelApiController::class, 'dealerGet']);    // v4.9 — dealer programme 4a
         Route::post('dealer-set',  [PanelApiController::class, 'dealerSet']);    // owner-only inside

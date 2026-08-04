@@ -68,6 +68,7 @@ final class SettingsWriteService
         'dealer_min_margin_pct' => ['float', 0.0],
         // v4.22 TenderBot — margin added to a supplier cost to reach the bid price.
         'tender_margin_pct' => ['float', 0.0],
+        'research_daily_cap' => ['int', 0],                  // v4.29 — per-shop ceiling on AI research calls
         // v4.26 — director loan: rate is a FRACTION per month (0.03 = 3%); stock is a USD value.
         'books.loan_rate' => ['float', 0.0],
         'books.stock_usd' => ['float', 0.0],
@@ -95,6 +96,7 @@ final class SettingsWriteService
         'sf_diagrams',  // v4.10.5 — show exploded diagrams (default off; parts-first catalogues)
         'tender_enabled', 'tender_notify', 'tender_tasks',   // v4.19/v4.20 TenderBot (bool)
         'tender_ocr',                                        // v4.22 — read scanned tender documents
+        'research_enabled', 'research_descriptions',         // v4.29 — AI product research
         'custom_domain_live',  // owner confirms the custom domain serves CloudBSS → use it in sent links (v4.6.1)
     ];
 

@@ -2962,6 +2962,142 @@ class PanelApiController extends Controller
         }
     }
 
+    /* ================================================================================
+     | v4.29 — product research. Four endpoints:
+     |   product-lookup    one product, live, from the Add/Edit form (a real scan)
+     |   research-queue    what is waiting for a human
+     |   research-apply    approve one suggestion
+     |   research-dismiss  reject one
+     | Nothing here writes a field that already has a value; see ProductResearch::plan().
+     ================================================================================ */
+
+    /**
+     * Look one product up on demand. This is the "1 API call = 1 real scan" path that
+     * Open Food Facts' terms describe — a person is standing there with the bottle.
+     * Returns CLAIMS for the form to prefill; it writes nothing itself.
+     */
+    public function productLookup(Request $r)
+    {
+        if (! $r->user()->canMenu('products')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        $t = $r->user()->tenant;
+        if (! \App\Services\Research\ProductResearch::enabled($t)) {
+            return response()->json(['ok' => false, 'error' => 'disabled',
+                'message' => 'Turn on Settings → Products → Research this product for me.'], 422);
+        }
+        if (\App\Services\Research\ProductResearch::capReached((int) $t->id)) {
+            return response()->json(['ok' => false, 'error' => 'cap',
+                'message' => 'Daily research limit reached — try again tomorrow.'], 429);
+        }
+
+        $product = [
+            'name'           => trim((string) $r->query('name', '')),
+            'barcode'        => trim((string) $r->query('barcode', '')),
+            'brand'          => trim((string) $r->query('brand', '')),
+            'category'       => trim((string) $r->query('category', '')),
+            'unit_size'      => trim((string) $r->query('unit_size', '')),
+            'origin_country' => trim((string) $r->query('origin_country', '')),
+            'description'    => trim((string) $r->query('description', '')),
+        ];
+        if ($product['name'] === '' && \App\Services\Research\Providers\BarcodeProvider::normalise($product['barcode']) === '') {
+            return response()->json(['ok' => false, 'error' => 'nothing_to_go_on',
+                'message' => 'Scan a barcode or type a product name first.'], 422);
+        }
+
+        try {
+            $findings = (new \App\Services\Research\ProductResearch())->gather($product);
+            \App\Services\Research\ProductResearch::countCall((int) $t->id);
+        } catch (\Throwable $e) {
+            Log::warning('productLookup failed: ' . $e->getMessage());
+            return response()->json(['ok' => false, 'error' => 'lookup_failed'], 500);
+        }
+
+        $review = (float) config('research.confidence.review', 0.55);
+        $fields = [];
+        $verified = false;
+        foreach ($findings as $f) {
+            if ($f->confidence < $review) continue;                 // too weak to put in front of anyone
+            if ($f->source === 'barcode') $verified = true;
+            $fields[$f->field] = $f->toArray();
+        }
+
+        \App\Support\BotTrace::log((int) $t->id, 'product-lookup', (string) $r->user()->id, 'research_lookup',
+            substr(($product['barcode'] ?: $product['name']) . ' → ' . implode(',', array_keys($fields)), 0, 290), 0);
+
+        return response()->json([
+            'ok' => true, 'fields' => $fields, 'verified' => $verified,
+            'attribution' => $verified ? \App\Services\Research\ProductResearch::ATTRIBUTION : '',
+        ]);
+    }
+
+    /** The review queue. Newest first, with the product name joined in for display. */
+    public function researchQueue(Request $r)
+    {
+        if (! $r->user()->canMenu('products')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        if (! \Illuminate\Support\Facades\Schema::hasTable('product_suggestions')) {
+            return response()->json(['ok' => true, 'items' => [], 'note' => 'migration_pending']);
+        }
+        $rows = \App\Models\ProductSuggestion::pending()->with('product:id,name,category')
+            ->orderByDesc('confidence')->orderByDesc('id')->limit(500)->get()
+            ->map(fn ($s) => [
+                'id'         => (int) $s->id,
+                'product_id' => (int) $s->product_id,
+                'product'    => (string) ($s->product->name ?? '(deleted)'),
+                'field'      => (string) $s->field,
+                'label'      => \App\Models\ProductSuggestion::label((string) $s->field),
+                'current'    => (string) ($s->current_value ?? ''),
+                'suggested'  => (string) $s->suggested_value,
+                'confidence' => round((float) $s->confidence, 2),
+                'source'     => (string) $s->source,
+                'note'       => (string) ($s->note ?? ''),
+            ]);
+
+        return response()->json(['ok' => true, 'items' => $rows, 'count' => $rows->count()]);
+    }
+
+    /**
+     * Approve one suggestion. Re-checks that the field is STILL empty before writing:
+     * the row may have been raised days ago and someone may have filled it in since,
+     * and a queued suggestion must never be able to overwrite a person's work.
+     */
+    public function researchApply(Request $r)
+    {
+        if (! $r->user()->canMenu('products')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        $s = \App\Models\ProductSuggestion::where('id', (int) $r->query('id'))->pending()->first();
+        if (! $s) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+
+        $p = Product::find($s->product_id);
+        if (! $p) {
+            $s->update(['status' => 'dismissed', 'decided_by' => $r->user()->id, 'decided_at' => now()]);
+            return response()->json(['ok' => false, 'error' => 'product_gone'], 404);
+        }
+        $field = (string) $s->field;
+        if (! in_array($field, (array) config('research.fields', []), true)
+            || ! \Illuminate\Support\Facades\Schema::hasColumn('products', $field)) {
+            return response()->json(['ok' => false, 'error' => 'field_not_writable'], 422);
+        }
+        if (trim((string) ($p->{$field} ?? '')) !== '') {
+            $s->update(['status' => 'dismissed', 'decided_by' => $r->user()->id, 'decided_at' => now()]);
+            return response()->json(['ok' => false, 'error' => 'already_filled',
+                'message' => 'Someone filled that in already — suggestion dropped.'], 409);
+        }
+
+        $p->{$field} = (string) $s->suggested_value;
+        $p->save();
+        $s->update(['status' => 'applied', 'decided_by' => $r->user()->id, 'decided_at' => now()]);
+
+        return response()->json(['ok' => true, 'product_id' => (int) $p->id, 'field' => $field]);
+    }
+
+    public function researchDismiss(Request $r)
+    {
+        if (! $r->user()->canMenu('products')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+        $s = \App\Models\ProductSuggestion::where('id', (int) $r->query('id'))->pending()->first();
+        if (! $s) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        $s->update(['status' => 'dismissed', 'decided_by' => $r->user()->id, 'decided_at' => now()]);
+
+        return response()->json(['ok' => true]);
+    }
+
     public function uploadImage(Request $r)
     {
         $data = (string) $r->input('data', '');
