@@ -679,6 +679,10 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('research-queue',   [PanelApiController::class, 'researchQueue']);
         Route::get('research-apply',   [PanelApiController::class, 'researchApply']);
         Route::get('research-dismiss', [PanelApiController::class, 'researchDismiss']);
+        // v4.31 — the review screen the v3 shell embeds, with bulk decisions.
+        Route::get('research',        [\App\Http\Controllers\Panel\ResearchController::class, 'page']);
+        Route::get('research-list',   [\App\Http\Controllers\Panel\ResearchController::class, 'list']);
+        Route::post('research-bulk',  [\App\Http\Controllers\Panel\ResearchController::class, 'bulk']);
         Route::post('products-import', [PanelApiController::class, 'productsImport']);
         Route::get('dealer',       [PanelApiController::class, 'dealerGet']);    // v4.9 — dealer programme 4a
         Route::post('dealer-set',  [PanelApiController::class, 'dealerSet']);    // owner-only inside

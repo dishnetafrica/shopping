@@ -54,6 +54,15 @@ final class WorkspaceController
             // failure here can only ever show too much, never too little.
             $flags['vertical'] = method_exists($ctx->tenant, 'setting')
                 ? \App\Support\SettingsVisibility::verticalOf($ctx->tenant) : '';
+            // v4.31 — the Suggestions entry appears only while something is actually waiting,
+            // and takes itself away once the queue is empty. A menu item that permanently reads
+            // "(0)" teaches people to stop looking at it.
+            $flags['suggestions'] = 0;
+            if (\Illuminate\Support\Facades\Schema::hasTable('product_suggestions')
+                && method_exists($ctx->user, 'isOwnerLike') && $ctx->user->isOwnerLike()) {
+                $flags['suggestions'] = (int) \App\Models\ProductSuggestion::where('tenant_id', $ctx->tenantId())
+                    ->where('status', 'pending')->count();
+            }
         } catch (\Throwable $e) {
             $flags = [];
         }
