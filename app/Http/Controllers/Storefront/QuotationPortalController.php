@@ -27,33 +27,42 @@ class QuotationPortalController extends Controller
     /** Resolve [tenant, base, quotation] from the shop + token, or 404. */
     private function resolve(?string $shop, string $token): array
     {
-        if ($shop !== null && $shop !== '') {
-            $tenant = Tenant::where('slug', strtolower(trim($shop)))->first();
-            $base   = '/' . strtolower(trim($shop));
-        } else {
-            $tenant = Tenant::byCustomDomain(request()->getHost());
-            $base   = '';
-            // Host-independent fallback (v4.6.1). The shopless /q/{token} used to resolve ONLY via
-            // a custom-domain host match — so https://mycloudbss.com/q/… 404'd for every tenant
-            // (the platform domain is nobody's custom_domain) and every WhatsApp link was dead.
-            // The 40-char unguessable token IS the credential, so resolve by token alone: the
-            // portal now opens on any host that serves the app, and a custom domain simply starts
-            // working the day it actually points here. withoutGlobalScopes: this runs before
-            // TenantContext is set, and the tenant scope would otherwise match no rows.
-            if (! $tenant && $token !== '') {
-                $byToken = Quotation::withoutGlobalScopes()->where('public_token', $token)->first();
-                $tenant  = $byToken ? Tenant::find($byToken->tenant_id) : null;
-            }
+        $base = ($shop !== null && $shop !== '') ? '/' . strtolower(trim($shop)) : '';
+
+        // v4.31.2 — THE TOKEN COMES FIRST.
+        //
+        // This used to resolve the TENANT from the host (or the /{shop} segment) and only fall
+        // back to the token when no tenant matched. That fallback never ran on a host that DOES
+        // resolve to a tenant — so the moment the resolved tenant was not the quotation's owner,
+        // a perfectly valid link 404'd, and there was no way to tell that from a bad token.
+        //
+        // The 40-character token is unguessable and globally unique: it IS the credential, and it
+        // identifies the quotation on its own. So look the quotation up first and take the tenant
+        // from the record. The host and the /{shop} segment now only decide how links on the page
+        // are written, never whether the page exists.
+        //
+        // withoutGlobalScopes: this runs before TenantContext is set, so the tenant scope would
+        // otherwise match no rows at all.
+        $q = $token !== ''
+            ? Quotation::withoutGlobalScopes()->where('public_token', $token)->first()
+            : null;
+
+        $tenant = $q ? Tenant::withoutGlobalScopes()->find($q->tenant_id) : null;
+
+        if (! $tenant) {
+            // No such token — fall back to identifying the shop so a bad link at least 404s as
+            // that shop rather than as nothing.
+            $tenant = ($shop !== null && $shop !== '')
+                ? Tenant::where('slug', strtolower(trim($shop)))->first()
+                : Tenant::byCustomDomain(request()->getHost());
         }
+
         abort_if(! $tenant, 404);
         abort_if(($tenant->status ?? 'active') === 'suspended', 404);
         app(TenantContext::class)->set($tenant->id);
-
-        $q = Quotation::where('tenant_id', $tenant->id)
-            ->where('public_token', $token)
-            ->with('items')
-            ->first();
         abort_if(! $q, 404);
+
+        $q->load('items');                       // after the context is set, so item scopes resolve
 
         return [$tenant, $base, $q];
     }
