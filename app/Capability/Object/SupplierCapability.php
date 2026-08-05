@@ -139,12 +139,18 @@ final class SupplierCapability implements ObjectCapability
 
         // --- actions ---
         $recordBill = ['key' => 'record_bill', 'label' => 'Record purchase', 'method' => 'POST', 'endpoint' => '/papi/order-costs', 'actor' => 'human', 'tone' => 'primary',
-            'schema' => ['native_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'pay_status' => 'enum:credit,cash', 'note' => 'text', 'holder' => $comboPeople],
-            'labels' => ['native_amount' => 'Bill amount', 'rate_to_usd' => 'Rate (native per $1)', 'pay_status' => 'Credit (owe) or cash (paid now)', 'note' => 'Item / description', 'holder' => 'Paid by (if cash)'],
+            // v4.41 — this had no item at all: one amount and a note the form auto-filled with
+            // "Purchase from <supplier>", so the supplier's name landed in the Item column and a
+            // cleared box left the list printing the word "Purchase". The item is now its own
+            // field, and the auto-note follows the item instead of overwriting it.
+            'schema' => ['product' => $productCombo, 'qty' => 'number', 'unit_cost' => 'money',
+                'native_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'pay_status' => 'enum:credit,cash', 'note' => 'text', 'holder' => $comboPeople],
+            'labels' => ['product' => 'Item (pick one, or type any description)', 'qty' => 'Quantity (optional)', 'unit_cost' => 'Cost each (optional)',
+                'native_amount' => 'Bill amount', 'rate_to_usd' => 'Rate (native per $1)', 'pay_status' => 'Credit (owe) or cash (paid now)', 'note' => 'Note (optional)', 'holder' => 'Paid by (if cash)'],
             'prefill' => ['currency' => $baseCur, 'rate_to_usd' => $rateMap[$baseCur] ?? 1, 'pay_status' => 'credit', 'holder' => $me],
             'body' => ['stage' => 'purchase', 'supplier_id' => $s->id],
             'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
-            'autoNote' => ['template' => 'Purchase from ' . $s->name, 'watch' => []]];
+            'autoNote' => ['template' => '{product}', 'watch' => ['product']]];
         // Product-linked purchase: pick a catalogue product + qty + unit cost. Posts to /papi/purchases,
         // which books the cost to THIS supplier (credit/cash), links the product, and updates its cost.
         $buyProduct = ['key' => 'record_product_purchase', 'label' => 'Buy product', 'method' => 'POST', 'endpoint' => '/papi/purchases', 'actor' => 'human', 'tone' => 'primary',

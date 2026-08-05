@@ -122,6 +122,28 @@ class OrderCostController extends Controller
         $stage = (string) $request->input('stage','purchase');
         $payStatus = strtolower((string) $request->input('pay_status','cash')) === 'credit' ? 'credit' : 'cash';
         if (in_array($stage, ['funding','cash_in'], true)) $payStatus = 'cash'; // cash movements are always paid
+
+        /* v4.41 — a purchase recorded here used to carry no item at all: one row whose only
+           description was a free-text note the form auto-filled with "Purchase from <supplier>".
+           The Purchases list reads that note, so the supplier's name showed where the item should
+           be, and when the box was cleared the list fell back to printing the word "Purchase".
+           A product may now be named or picked; quantity and unit cost ride along when given. */
+        $itemName = trim((string) $request->input('product', ''));
+        $prodId   = (int) $request->input('product_id', 0) ?: null;
+        if (! $prodId && $itemName !== '') {
+            $prodId = (int) (\App\Models\Product::where('tenant_id', $t->id)->where('name', $itemName)->value('id') ?? 0) ?: null;
+        }
+        if ($prodId && $itemName === '') {
+            $itemName = (string) (\App\Models\Product::where('tenant_id', $t->id)->where('id', $prodId)->value('name') ?? '');
+        }
+        $note = trim((string) $request->input('note', ''));
+        // An item beats the generic auto-note. Anything the user actually typed beats both.
+        if ($itemName !== '' && ($note === '' || stripos($note, 'Purchase from') === 0)) {
+            $note = $itemName;
+        }
+        $qty      = (float) $request->input('qty', 0);
+        $unitCost = (float) $request->input('unit_cost', 0);
+
         $c = OrderCost::create([
             'tenant_id'=>$t->id, 'order_id'=>$order?->id, 'order_no'=>$order?->order_no,
             'supplier_id'=>$supId, 'supplier_name'=>$supName,
@@ -130,7 +152,11 @@ class OrderCostController extends Controller
             'currency'=>$cur, 'native_amount'=>$native, 'rate_to_usd'=>$rate,
             'usd_amount'=>OrderCost::toUsd($native,$rate),
             'holder'=>$holderName, 'holder_user_id'=>$holderUserId,
-            'receipt_path'=>$path, 'note'=>(string)$request->input('note',''),
+            'receipt_path'=>$path, 'note'=>$note,
+            'product_id'=>$prodId,
+            'qty'=>$qty > 0 ? $qty : null, 'unit_cost'=>$unitCost > 0 ? $unitCost : null,
+            'category'=>$request->filled('category') ? (string)$request->input('category')
+                : ($stage === 'purchase' ? 'Purchase' : null),
             'status'=>($user->isOwnerLike() || in_array((string)$user->role,['manager'],true)) ? 'approved' : (((bool)$t->setting('cost_approval', true)) ? 'pending' : 'approved'),
             'created_by'=>$user->name ?? '',
         ]);
@@ -278,6 +304,13 @@ class OrderCostController extends Controller
                     $pid = (int) (\App\Models\Product::where('tenant_id', $t->id)->where('name', $pname)->value('id') ?? 0);
                 }
                 if (! $pid && $pname === '') continue;
+                // v4.41 — slot 1's name never arrives: the form maps the picked product to an id and
+                // then drops the display value, so line 1 was written with an empty note and the
+                // Purchases list printed the fallback word "Purchase" while lines 2-4 kept their
+                // names. Recover it from the id here, so it holds whatever the browser sends.
+                if ($pname === '' && $pid) {
+                    $pname = (string) (\App\Models\Product::where('tenant_id', $t->id)->where('id', $pid)->value('name') ?? '');
+                }
                 $lines[] = ['product_id' => $pid ?: null, 'qty' => $qty, 'unit_cost' => $unit, 'name' => $pname];
             }
         }
@@ -325,7 +358,7 @@ class OrderCostController extends Controller
                 if ($native <= 0) continue;
                 $totalNative += $native;
 
-                OrderCost::create([
+                $created = OrderCost::create([
                     'tenant_id'=>$t->id, 'stage'=>'purchase',
                     'product_id'=>$pid, 'qty'=>$qty, 'unit_cost'=>$unit,
                     'currency'=>$cur, 'native_amount'=>$native, 'rate_to_usd'=>$rate,
@@ -345,13 +378,16 @@ class OrderCostController extends Controller
                         if ($p) { $p->cost_price = round($toUgx($unit), 2); $p->save(); }
                     } catch (\Throwable $e) {}
                 }
-                $out[] = ['product_id'=>$pid,'name'=>$name,'qty'=>$qty,'unit_cost'=>$unit,'native'=>$native];
+                $out[] = ['id'=>(int)$created->id,'product_id'=>$pid,'name'=>$name,'qty'=>$qty,'unit_cost'=>$unit,'native'=>$native];
             }
         });
 
         if (! count($out)) return response()->json(['ok'=>false,'error'=>'no_valid_lines'],422);
+        // v4.35 — every line id, so ONE supplier invoice can be attached to the whole purchase
+        // in a single upload rather than photographed again for each line.
         return response()->json(['ok'=>true,'group_id'=>$group,'count'=>count($out),
-            'total_native'=>round($totalNative,2),'currency'=>$cur,'pay_status'=>$payStatus,'lines'=>$out]);
+            'total_native'=>round($totalNative,2),'currency'=>$cur,'pay_status'=>$payStatus,'lines'=>$out,
+            'ids'=>array_values(array_map(fn($l)=>(int)$l['id'], $out)),'evidence_type'=>'purchase']);
     }
 
     /** GET /papi/purchases — recent purchases grouped by purchase_group_id. */
@@ -362,7 +398,7 @@ class OrderCostController extends Controller
         $rows = OrderCost::where('tenant_id',$t->id)->where('stage','purchase')
             ->whereNotNull('purchase_group_id')
             ->orderByDesc('id')->limit(400)->get();
-        $groups = [];
+        $groups = []; $seenIds = [];
         foreach ($rows as $r) {
             $g = $r->purchase_group_id;
             if (! isset($groups[$g])) $groups[$g] = [
@@ -374,7 +410,24 @@ class OrderCostController extends Controller
             $groups[$g]['items'][] = ['id'=>$r->id,'name'=>$r->note,
                 'qty'=>$r->qty===null?null:(float)$r->qty,'unit_cost'=>$r->unit_cost===null?null:(float)$r->unit_cost,
                 'native'=>(float)$r->native_amount,'currency'=>$r->currency,'pay_status'=>$r->pay_status,'status'=>$r->status];
+            $seenIds[] = (int)$r->id;
         }
+
+        // v4.35 — how many documents each line carries, so the paperclip can show a count.
+        $docCounts = [];
+        if (\App\Services\Evidence\EvidenceService::available() && $seenIds) {
+            foreach (\App\Services\Evidence\MissingEvidence::COST_SLUGS as $slug) {
+                foreach (\App\Services\Evidence\EvidenceService::countsFor((int)$t->id,$slug,$seenIds) as $id=>$n) {
+                    $docCounts[(int)$id] = ($docCounts[(int)$id] ?? 0) + (int)$n;
+                }
+            }
+        }
+        foreach ($groups as $g2=>$grp) {
+            foreach ($grp['items'] as $i=>$it) {
+                $groups[$g2]['items'][$i]['docs'] = (int)($docCounts[(int)$it['id']] ?? 0);
+            }
+        }
+
         return response()->json(['ok'=>true,'purchases'=>array_values($groups)]);
     }
 

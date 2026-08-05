@@ -69,11 +69,13 @@ final class SupplierListCapability implements ProcessCapability
                 $rowBtns[] = ['icon' => 'cart', 'title' => 'Record bill from ' . $s->name, 'action' => [
                     'key' => 'record_bill', 'label' => 'Record purchase — ' . $s->name, 'method' => 'POST', 'endpoint' => '/papi/order-costs', 'actor' => 'human', 'tone' => 'primary',
                     'schema' => ['native_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'pay_status' => 'enum:credit,cash', 'note' => 'text', 'holder' => $comboPeople],
-                    'labels' => ['native_amount' => 'Bill amount', 'rate_to_usd' => 'Rate (native per $1)', 'pay_status' => 'Credit (owe) or cash (paid now)', 'note' => 'Item / description', 'holder' => 'Paid by (if cash)'],
+                    'labels' => ['native_amount' => 'Bill amount', 'rate_to_usd' => 'Rate (native per $1)', 'pay_status' => 'Credit (owe) or cash (paid now)', 'note' => 'Item / description — what did you buy?', 'holder' => 'Paid by (if cash)'],
                     'prefill' => ['currency' => $scur, 'rate_to_usd' => $srate, 'pay_status' => 'credit', 'holder' => $me],
                     'body' => ['stage' => 'purchase', 'supplier_id' => $s->id],
                     'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
-                    'autoNote' => ['template' => 'Purchase from ' . $s->name, 'watch' => []],
+                    // v4.41 — autoNote used to overwrite this box with "Purchase from <supplier>",
+                    // which is what put the supplier's name in the Item column of every bill.
+                    // The box is the item now; nothing fills it but the person recording the bill.
                 ]];
                 $rowBtns[] = ['icon' => 'dollar', 'title' => 'Pay ' . $s->name, 'action' => [
                     'key' => 'pay_supplier', 'label' => 'Pay ' . $s->name, 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'primary',
