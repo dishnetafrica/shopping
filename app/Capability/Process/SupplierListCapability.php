@@ -67,7 +67,7 @@ final class SupplierListCapability implements ProcessCapability
             $rowBtns = [];
             if ($canEdit) {
                 $rowBtns[] = ['icon' => 'cart', 'title' => 'Record bill from ' . $s->name, 'action' => [
-                    'key' => 'record_bill', 'label' => 'Record purchase — ' . $s->name, 'method' => 'POST', 'endpoint' => '/papi/order-costs', 'actor' => 'human', 'tone' => 'primary',
+                    'key' => 'record_bill', 'label' => 'Record a bill — ' . $s->name, 'method' => 'POST', 'endpoint' => '/papi/order-costs', 'actor' => 'human', 'tone' => 'primary',
                     'schema' => ['native_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'pay_status' => 'enum:credit,cash', 'note' => 'text', 'holder' => $comboPeople],
                     'labels' => ['native_amount' => 'Bill amount', 'rate_to_usd' => 'Rate (native per $1)', 'pay_status' => 'Credit (owe) or cash (paid now)', 'note' => 'Item / description — what did you buy?', 'holder' => 'Paid by (if cash)'],
                     'prefill' => ['currency' => $scur, 'rate_to_usd' => $srate, 'pay_status' => 'credit', 'holder' => $me],

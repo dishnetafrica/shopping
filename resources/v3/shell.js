@@ -2428,6 +2428,24 @@ function formModal(a){
       fields+='<div class="fld"><label>'+lbl+' <span class="mut" style="font-weight:400">(type a new one or pick existing)</span></label>'+
         '<input id="f_'+k+'" list="dl_'+k+'" autocomplete="off" value="'+esc(val)+'" placeholder="Type or choose…">'+
         '<datalist id="dl_'+k+'">'+opts.map(o=>'<option value="'+esc(o)+'"></option>').join('')+'</datalist></div>'; }
+    else if(type==='lines:products'){
+      /* v4.42 — as many items on one purchase as the invoice has. The four fixed slots this
+         replaces meant a five-line delivery had to be entered as two purchases. Rows are posted
+         as the same `lines` array the classic Purchases screen sends, so the endpoint is unchanged. */
+      window.LINES=window.LINES||{}; window.LINES[k]={map:(a.productMap||{})};
+      const _opts=Object.keys(a.productMap||{}).map(o=>'<option value="'+esc(o)+'"></option>').join('');
+      fields+='<div class="fld"><label>'+lbl+'</label>'+
+        '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>'+
+          '<th style="text-align:left;padding:4px 6px;font-size:11px;color:var(--muted,#6b7280)">Item</th>'+
+          '<th style="text-align:left;padding:4px 6px;width:70px;font-size:11px;color:var(--muted,#6b7280)">Qty</th>'+
+          '<th style="text-align:left;padding:4px 6px;width:92px;font-size:11px;color:var(--muted,#6b7280)">Cost each</th>'+
+          '<th style="text-align:right;padding:4px 6px;width:86px;font-size:11px;color:var(--muted,#6b7280)">Line</th>'+
+          '<th style="width:30px"></th></tr></thead><tbody id="lnb_'+k+'"></tbody></table>'+
+        '<datalist id="dl_'+k+'">'+_opts+'</datalist>'+
+        '<div style="display:flex;align-items:center;gap:10px;margin-top:8px">'+
+          '<button type="button" class="btn sm" onclick="lnAdd(\''+k+'\')">+ Add item</button>'+
+          '<span id="lntot_'+k+'" style="margin-left:auto;font-weight:700">\u2014</span>'+
+        '</div></div>'; }
     else if(type==='textarea'){
       fields+='<div class="fld"><label>'+lbl+'</label><textarea id="f_'+k+'" rows="4" style="width:100%;padding:9px 11px;border:1px solid var(--line,#e4e9e4);border-radius:9px;font:inherit;font-size:14px;resize:vertical">'+esc(val)+'</textarea></div>'; }
     else if(type==='date'){
@@ -2473,11 +2491,26 @@ function formModal(a){
     ['left','right','curField'].forEach(k=>{ if(a.preview[k]){ const el=document.getElementById('f_'+a.preview[k]); if(el){ el.addEventListener('input',compute); el.addEventListener('change',compute); } } });
     compute();
   }
+  // v4.42 — start a line table with two empty rows; the person adds more as they type.
+  Object.entries(a.schema).forEach(([k,type])=>{ if(type==='lines:products'){ lnAdd(k); lnAdd(k); } });
+
   document.getElementById('mok').onclick=async()=>{ const body=Object.assign({}, a.body||{});
     Object.entries(a.schema).forEach(([k,type])=>{ if(type==='gallery'){ body[k]=window.GAL[k]||[]; }
       else if(type==='mediapick'){ const el=document.getElementById('f_'+k); if(el) body[k]=(el.value||'').trim();
         body.product_ids=((window.MP&&window.MP[k]&&window.MP[k].products)||[]).map(p=>p.id).filter(x=>x!=null); }
+      else if(type==='lines:products'){
+        const rows=[]; const map=(window.LINES&&window.LINES[k]&&window.LINES[k].map)||{};
+        document.querySelectorAll('#lnb_'+k+' tr').forEach(tr=>{
+          const nm=((tr.querySelector('.ln-p')||{}).value||'').trim();
+          const q=parseFloat((tr.querySelector('.ln-q')||{}).value)||0;
+          const u=parseFloat((tr.querySelector('.ln-u')||{}).value)||0;
+          if(nm!=='' && q>0) rows.push({product_id:(map[nm]||null), name:nm, qty:q, unit_cost:u});
+        });
+        body.lines=JSON.stringify(rows); body.__lineCount=rows.length; }
       else { const el=document.getElementById('f_'+k); if(el) body[k]=el.value; } });
+    // A purchase with no usable row is a mistake, not an empty purchase — say so and stay open.
+    if(body.__lineCount===0){ toast('Add at least one item with a quantity.',true); return; }
+    delete body.__lineCount;
     // pathMap: resolve the target URL from a picked field value (e.g. supplier name → /papi/suppliers/{id}/pay).
     let ep=a.endpoint;
     if(a.pathMap && a.pathMap.field && a.pathMap.map){ const sel=body[a.pathMap.field]; const mapped=a.pathMap.map[sel];
@@ -3369,3 +3402,42 @@ if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('/sw.
 })();
 
 boot();
+
+/* v4.42 — purchase line rows. Kept as plain globals so the inline onclick/oninput in the row
+   markup can reach them, matching how every other field type in this form works. */
+function lnAdd(k){
+  const tb=document.getElementById('lnb_'+k); if(!tb) return;
+  const tr=document.createElement('tr');
+  tr.innerHTML='<td style="padding:3px 6px"><input class="ln-p" list="dl_'+k+'" autocomplete="off" placeholder="Type or choose\u2026" oninput="lnCalc(\''+k+'\')" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--line,#e4e9e4);border-radius:7px"></td>'+
+    '<td style="padding:3px 6px"><input class="ln-q" type="number" step="1" min="0" oninput="lnCalc(\''+k+'\')" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--line,#e4e9e4);border-radius:7px"></td>'+
+    '<td style="padding:3px 6px"><input class="ln-u" type="number" step="0.01" min="0" oninput="lnCalc(\''+k+'\')" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--line,#e4e9e4);border-radius:7px"></td>'+
+    '<td class="ln-s" style="padding:3px 6px;text-align:right;color:var(--muted,#6b7280)">\u2014</td>'+
+    '<td style="padding:3px 2px"><button type="button" title="Remove this row" onclick="lnDel(this,\''+k+'\')" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:6px;width:24px;height:24px;cursor:pointer;font-weight:800;line-height:1">\u00d7</button></td>';
+  tb.appendChild(tr);
+  const f=tr.querySelector('.ln-p'); if(f) f.focus();
+  lnCalc(k);
+}
+function lnDel(btn,k){
+  const tb=document.getElementById('lnb_'+k); if(!tb) return;
+  // never leave the table with nothing to type into
+  if(tb.querySelectorAll('tr').length<=1){ ['.ln-p','.ln-q','.ln-u'].forEach(s=>{ const e=btn.closest('tr').querySelector(s); if(e) e.value=''; }); }
+  else { btn.closest('tr').remove(); }
+  lnCalc(k);
+}
+function lnCalc(k){
+  const tb=document.getElementById('lnb_'+k); if(!tb) return;
+  let total=0, n=0;
+  tb.querySelectorAll('tr').forEach(tr=>{
+    const nm=((tr.querySelector('.ln-p')||{}).value||'').trim();
+    const q=parseFloat((tr.querySelector('.ln-q')||{}).value)||0;
+    const u=parseFloat((tr.querySelector('.ln-u')||{}).value)||0;
+    const sum=q*u; const cell=tr.querySelector('.ln-s');
+    if(cell) cell.textContent = (nm!=='' && q>0) ? sum.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '\u2014';
+    if(nm!=='' && q>0){ total+=sum; n++; }
+  });
+  const t=document.getElementById('lntot_'+k);
+  if(t) t.textContent = n ? (n+' item'+(n>1?'s':'')+' \u00b7 '+total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})) : '\u2014';
+  // keep the bill amount in step with the rows, so nobody types a total that disagrees with them
+  const amt=document.getElementById('f_native_amount');
+  if(amt && n) amt.value = Math.round(total*100)/100;
+}

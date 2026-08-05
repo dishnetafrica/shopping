@@ -69,13 +69,14 @@ final class SupplierCapability implements ObjectCapability
         $comboPeople = 'combo:' . (count($members) ? implode('|', $members) : ($me ?: 'Me'));
 
         // --- product pick-list (name → id) so a purchase on THIS supplier links to a catalogue product ---
-        $prodMap = []; $prodNames = [];
+        // v4.42 — the line editor takes this map straight; the flattened combo string it used to be
+        // built into went with the four fixed slots.
+        $prodMap = [];
         foreach (\App\Models\Product::where('tenant_id', $t)->whereNull('archived_at')->orderBy('name')->limit(1000)->get(['id', 'name']) as $p) {
             $nm = trim((string) $p->name);
             if ($nm === '' || isset($prodMap[$nm])) continue;
-            $prodMap[$nm] = $p->id; $prodNames[] = $nm;
+            $prodMap[$nm] = $p->id;
         }
-        $productCombo = 'combo:' . (count($prodNames) ? implode('|', $prodNames) : 'Product');
 
         // --- purchases (bills) list with edit/delete per row ---
         $bills = OrderCost::where('tenant_id', $t)->where('supplier_id', $s->id)
@@ -138,39 +139,34 @@ final class SupplierCapability implements ObjectCapability
         ]))];
 
         // --- actions ---
-        $recordBill = ['key' => 'record_bill', 'label' => 'Record purchase', 'method' => 'POST', 'endpoint' => '/papi/order-costs', 'actor' => 'human', 'tone' => 'primary',
-            // v4.41 — this had no item at all: one amount and a note the form auto-filled with
-            // "Purchase from <supplier>", so the supplier's name landed in the Item column and a
-            // cleared box left the list printing the word "Purchase". The item is now its own
-            // field, and the auto-note follows the item instead of overwriting it.
-            'schema' => ['product' => $productCombo, 'qty' => 'number', 'unit_cost' => 'money',
-                'native_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'pay_status' => 'enum:credit,cash', 'note' => 'text', 'holder' => $comboPeople],
-            'labels' => ['product' => 'Item (pick one, or type any description)', 'qty' => 'Quantity (optional)', 'unit_cost' => 'Cost each (optional)',
-                'native_amount' => 'Bill amount', 'rate_to_usd' => 'Rate (native per $1)', 'pay_status' => 'Credit (owe) or cash (paid now)', 'note' => 'Note (optional)', 'holder' => 'Paid by (if cash)'],
+        $recordBill = ['key' => 'record_bill', 'label' => 'Record a bill', 'method' => 'POST', 'endpoint' => '/papi/order-costs', 'actor' => 'human', 'tone' => 'primary',
+            // This stays a ONE-LINE bill on purpose — a transport charge, a service fee, a lump-sum
+            // invoice with no item breakdown. Use "Buy product" for stock. What changed in v4.41 is
+            // that the box below is the item: autoNote used to overwrite it with "Purchase from
+            // <supplier>", which is how the supplier's name ended up in the Item column of the
+            // Purchases list, and how a cleared box left the list printing the word "Purchase".
+            'schema' => ['native_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'pay_status' => 'enum:credit,cash', 'note' => 'text', 'holder' => $comboPeople],
+            'labels' => ['native_amount' => 'Bill amount', 'rate_to_usd' => 'Rate (native per $1)', 'pay_status' => 'Credit (owe) or cash (paid now)', 'note' => 'Item / description — what did you buy?', 'holder' => 'Paid by (if cash)'],
             'prefill' => ['currency' => $baseCur, 'rate_to_usd' => $rateMap[$baseCur] ?? 1, 'pay_status' => 'credit', 'holder' => $me],
             'body' => ['stage' => 'purchase', 'supplier_id' => $s->id],
-            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
-            'autoNote' => ['template' => '{product}', 'watch' => ['product']]];
+            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]];
         // Product-linked purchase: pick a catalogue product + qty + unit cost. Posts to /papi/purchases,
         // which books the cost to THIS supplier (credit/cash), links the product, and updates its cost.
-        $buyProduct = ['key' => 'record_product_purchase', 'label' => 'Buy product', 'method' => 'POST', 'endpoint' => '/papi/purchases', 'actor' => 'human', 'tone' => 'primary',
+        $buyProduct = ['key' => 'record_product_purchase', 'label' => 'Buy stock', 'method' => 'POST', 'endpoint' => '/papi/purchases', 'actor' => 'human', 'tone' => 'primary',
+            // v4.42 — one row per item, add as many as the invoice has. This was four fixed slots,
+            // so a five-line delivery had to be split into two purchases; and the first slot lost
+            // its product name on the way out, because the form mapped it to an id and then dropped
+            // the name it had mapped from. Rows post as the `lines` array the classic Purchases
+            // screen already sends, so the endpoint did not change.
             'schema' => [
-                'product' => $productCombo, 'qty' => 'number', 'unit_cost' => 'money',
-                'product2' => $productCombo, 'qty2' => 'number', 'unit_cost2' => 'money',
-                'product3' => $productCombo, 'qty3' => 'number', 'unit_cost3' => 'money',
-                'product4' => $productCombo, 'qty4' => 'number', 'unit_cost4' => 'money',
+                'items' => 'lines:products',
                 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'pay_status' => 'enum:credit,cash', 'holder' => $comboPeople],
-            'labels' => [
-                'product' => 'Product (from your catalogue)', 'qty' => 'Quantity (e.g. cartons / bags)', 'unit_cost' => 'Cost per unit',
-                'product2' => 'Product 2 (optional)', 'qty2' => 'Quantity 2', 'unit_cost2' => 'Cost per unit 2',
-                'product3' => 'Product 3 (optional)', 'qty3' => 'Quantity 3', 'unit_cost3' => 'Cost per unit 3',
-                'product4' => 'Product 4 (optional)', 'qty4' => 'Quantity 4', 'unit_cost4' => 'Cost per unit 4',
-                'rate_to_usd' => 'Rate (native per $1)', 'pay_status' => 'Credit (owe) or cash (paid now)', 'holder' => 'Paid by (if cash)'],
+            'labels' => ['items' => 'What did you buy?', 'rate_to_usd' => 'Rate (native per $1)',
+                'pay_status' => 'Credit (owe) or cash (paid now)', 'holder' => 'Paid by (if cash)'],
             'prefill' => ['currency' => $baseCur, 'rate_to_usd' => $rateMap[$baseCur] ?? 1, 'pay_status' => 'credit', 'holder' => $me],
+            'productMap' => $prodMap,
             'body' => ['supplier_id' => $s->id, 'update_cost' => true],
-            'valueMap' => ['field' => 'product', 'into' => 'product_id', 'map' => $prodMap, 'error' => 'Pick a product from the list (or add it in Products first).'],
-            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap],
-            'autoNote' => ['template' => 'Bought: {product}', 'watch' => ['product']]];
+            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]];
         $paySupplier = ['key' => 'pay_supplier', 'label' => 'Pay supplier', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'default',
             'schema' => ['amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'holder' => $comboPeople, 'note' => 'text'],
             'labels' => ['amount' => 'Amount paid', 'rate_to_usd' => 'Rate (native per $1)', 'holder' => 'Paid by (whose cash)', 'note' => 'Note'],
