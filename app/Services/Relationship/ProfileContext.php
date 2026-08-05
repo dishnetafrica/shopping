@@ -66,6 +66,18 @@ class ProfileContext
 
             // Progressive profiling: surface what we STILL don't know, so the bot can
             // close ONE gap per conversation at a natural moment — never an interrogation.
+            // v4.39 — where we last delivered. This block used to touch `address` ONLY to test
+            // whether it was empty, so the extractor could spend months harvesting "Shop 307,
+            // Konyo Konyo" out of chat and the bot would still ask every single time. Offer it
+            // back and let them correct it; a customer confirming an address is faster, and far
+            // less irritating, than a customer typing one.
+            $where = trim((string) $p->address) ?: trim((string) $p->city);
+            if ($where !== '') {
+                $bits[] = 'We have delivered to them at: ' . $where
+                    . '. When delivery comes up, OFFER this back for confirmation ("same place — ' . $where . '?") '
+                    . 'rather than asking where they are. If they name somewhere different, use the new one.';
+            }
+
             $gaps = [];
             if (! trim((string) $p->name)) $gaps[] = 'their name';
             if (! trim((string) $p->address) && ! trim((string) $p->city)) $gaps[] = 'their shop + area (needed for delivery)';

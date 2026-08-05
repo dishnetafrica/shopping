@@ -764,6 +764,11 @@ class AiBrain
                     }
                 }
                 $q = $svc->persist($tenant, $from, $name, $qArr, $doc, 'bot');
+                // v4.39 — the address is confirmed exactly here and nowhere else. Keep it against
+                // the customer so the next conversation can offer it back instead of asking again.
+                if ($delivery !== '') {
+                    \App\Services\Crm\DeliveryMemory::remember($tenant, $from, $delivery);
+                }
                 if ($q) {
                     $add = [];
                     if ($delivery !== '') $add['delivery'] = $delivery;

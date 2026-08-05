@@ -2816,6 +2816,11 @@ class BotBrain
             \Log::warning('quote-first: quotation build failed: ' . $e->getMessage());
         }
 
+        // v4.39 — the delivery area lives in conversation state and the next two lines destroy it.
+        // It is never more certain than right now, so keep it against the customer first.
+        \App\Services\Crm\DeliveryMemory::remember($tenant, (string) $convo->customer_phone,
+            (string) (($convo->state['delivery_text'] ?? '') ?: ($convo->state['delivery_area'] ?? '')));
+
         // Basket is now captured in the quotation — clear it so the next message starts fresh.
         $convo->cart = [];
         $convo->state = [];
@@ -2947,6 +2952,8 @@ class BotBrain
             if ($noteBits) { $order->notes = implode(' | ', $noteBits); $order->save(); }
         }
 
+        \App\Services\Crm\DeliveryMemory::remember($tenant, (string) $convo->customer_phone,
+            (string) (($convo->state['delivery_text'] ?? '') ?: ($convo->state['delivery_area'] ?? '')));
         $convo->cart = []; $convo->state = []; $convo->save();
 
         $cur = $this->currencyFor($tenant);

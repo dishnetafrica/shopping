@@ -226,7 +226,9 @@ class CustomerAuthController extends Controller
         return [
             'phone'   => $phone,
             'name'    => (string) ($c->name ?? ($last->customer_name ?? '')),
-            'address' => (string) ($c->address ?? ''),
+            // v4.39 — the comment above promised this fallback; only `name` ever did it, and the
+            // last order's location was fetched and dropped on the floor one line later.
+            'address' => (string) (trim((string) ($c->address ?? '')) ?: (string) ($last->location ?? '')),
             'buyer'   => $buyer,
         ];
     }
