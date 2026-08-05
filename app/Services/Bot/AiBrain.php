@@ -795,7 +795,7 @@ class AiBrain
                   . ($delivery !== '' ? " and confirm delivery to *{$delivery}*" : '') . '.';
             $conf .= $delivery !== '' ? $this->deliveryNote($tenant, $delivery)
                 : "\nWhere should we deliver? Delivery to Juba is free; for other towns we'll confirm transport.";
-            return $clean . $conf;
+            return self::stripQuoteClaims($clean) . $conf;
         }
 
         $totalTxt = number_format((float) ($quote['total'] ?? 0), \App\Services\Pricing::decimalsForCurrency($cur)) . ' ' . $cur;
@@ -804,25 +804,103 @@ class AiBrain
         if ($delivery !== '') { $conf .= "\nDeliver to: " . $delivery . $this->deliveryNote($tenant, $delivery); }
         $conf .= "\nOur team will confirm availability & prices, then send you the order to complete. 🙏";
 
-        return $clean . $conf;
+        return self::stripQuoteClaims($clean) . $conf;
     }
 
+    /** Default towns we know of but do not deliver free to — South Sudan, then Uganda. */
+    private const KNOWN_TOWNS_DEFAULT = 'Wau, Malakal, Yei, Torit, Bor, Rumbek, Aweil, Yambio, Kuajok, Bentiu, Renk, '
+        . 'Nimule, Kaya, Maridi, Tambura, Kapoeta, Pibor, Akobo, Nasir, Mundri, Kajo Keji, Magwi, Terekeka, Yirol, '
+        . 'Kampala, Entebbe, Gulu, Arua, Mbarara, Jinja, Elegu, Koboko, Moyo, Adjumani, Nairobi, Mombasa, Khartoum';
+
     /**
-     * Delivery-cost line for a destination. Free-delivery towns (setting free_delivery_towns, default
-     * "Juba") ship free; every other town is negotiated per shipment (the bot never quotes a freight
-     * price itself). Returns '' when no destination is known.
+     * Where does this destination stand — 'free', 'paid', or 'unknown'?
+     *
+     * v4.38. This used to be two states: matches a free town, or everything else is "outside our
+     * free-delivery area". A customer who answered the "which area?" question with their own shop
+     * name — "Shop 31", "Zyad shop" — was told, next to a priced quotation, that their delivery was
+     * chargeable. We had no idea where they were. Zyad Shop may be two streets from the store.
+     *
+     * Unknown is now its own answer, and it asks instead of asserting.
+     *
+     * Matching is on whole words. `stripos` found "Custom" inside "customer" and "Hai" inside
+     * "Shanghai", so a free-delivery promise could be triggered by a word that was not a place.
+     */
+    private function placeStatus(Tenant $tenant, string $town): string
+    {
+        $hit = function (string $csv, string $default) use ($town): bool {
+            foreach (array_filter(array_map('trim', explode(',', $csv ?: $default))) as $t) {
+                if ($t !== '' && preg_match('/\b' . preg_quote($t, '/') . '\b/iu', $town) === 1) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
+        if ($hit((string) $tenant->setting('free_delivery_towns', ''), self::FREE_TOWNS_DEFAULT)) {
+            return 'free';
+        }
+        if ($hit((string) $tenant->setting('known_delivery_towns', ''), self::KNOWN_TOWNS_DEFAULT)) {
+            return 'paid';
+        }
+
+        return 'unknown';
+    }
+
+    private const FREE_TOWNS_DEFAULT = 'Juba, Konyo Konyo, Custom, Jebel, Munuki, Gudele, Hai, Malakia, Gumbo, '
+        . 'Sherikat, Thongping, Nimra Talata, Suk';
+
+    /**
+     * Delivery line for a destination. Free towns ship free; a town we know but do not cover free is
+     * negotiated per shipment (the bot never quotes a freight price itself); anything we do not
+     * recognise as a place gets a question, not a claim. Returns '' when no destination is known.
      */
     private function deliveryNote(Tenant $tenant, string $delivery): string
     {
         $town = trim($delivery);
         if ($town === '') return '';
-        $free = array_values(array_filter(array_map('trim', explode(',', (string) $tenant->setting('free_delivery_towns',
-            'Juba, Konyo Konyo, Custom, Jebel, Munuki, Gudele, Hai, Malakia, Gumbo, Sherikat, Thongping, Nimra Talata, Suk')))));
-        foreach ($free as $f) {
-            if ($f !== '' && stripos($town, $f) !== false) return "\n\u{2705} Delivery to " . $town . " is *free* (from our store).";
-        }
         $from = trim((string) $tenant->setting('delivery_from_city', 'Juba')) ?: 'Juba';
-        return "\n\u{1F69A} " . $town . " is outside our free-delivery area — our team will confirm whether we can deliver there and the transport cost from our " . $from . " store, or you can collect from " . $from . ".";
+
+        switch ($this->placeStatus($tenant, $town)) {
+            case 'free':
+                return "\n\u{2705} Delivery to " . $town . " is *free* (from our store).";
+            case 'paid':
+                return "\n\u{1F69A} " . $town . " is outside our free-delivery area — our team will confirm whether we can deliver there and the transport cost from our " . $from . " store, or you can collect from " . $from . ".";
+            default:
+                // Say what we do not know, then ask. Never price, never refuse, never imply distance.
+                return "\n\u{1F4CD} Which town or area is *" . $town . "* in? Delivery inside " . $from
+                     . " and its markets is free; for anywhere else our team confirms the transport cost, "
+                     . "or you can collect from " . $from . ".";
+        }
+    }
+
+    /**
+     * Strip any claim about a quotation out of the model's own prose.
+     *
+     * v4.38. The model paraphrases its earlier turns, and a real reference it said once comes back
+     * out looking like a fresh document: a customer was shown "Quotation ORD-Q260804-0LKF prepared"
+     * twice for one quotation, the second time with a delivery sentence nobody had written. The
+     * numbered block below is generated by us and is the only one entitled to make that claim.
+     */
+    private static function stripQuoteClaims(string $text): string
+    {
+        $ref = '/\b[A-Z]{1,6}-Q\d{6}-[A-Z0-9]{4}\b/';
+        $out = [];
+        foreach (preg_split('/\R/u', $text) as $line) {
+            // A whole line announcing a quotation is ours to write, not the model's.
+            if (preg_match('/quotation/i', $line) && preg_match('/prepar|ready|created|generated|attach/i', $line)) {
+                continue;
+            }
+            if (preg_match($ref, $line)) {
+                $line = trim((string) preg_replace(['/\s*\(' . trim($ref, '/') . '\)/', $ref], ['', ''], $line));
+                if ($line === '' || preg_match('/^[\p{P}\p{S}\s]*$/u', $line)) {
+                    continue;
+                }
+            }
+            $out[] = $line;
+        }
+
+        return trim(implode("\n", $out));
     }
 
     private function captureOrder(Tenant $tenant, Conversation $convo, string $from, string $reply): string
@@ -1425,7 +1503,10 @@ class AiBrain
                     'Juba, Konyo Konyo, Custom, Jebel, Munuki, Gudele, Hai, Malakia, Gumbo, Sherikat, Thongping, Nimra Talata, Suk')))));
                 $p .= "- DELIVERY & PRICING POLICY: listed prices ALREADY INCLUDE free delivery within {$fromCity} and our free-delivery areas ("
                     . implode(', ', array_slice($freeTowns, 0, 6)) . (count($freeTowns) > 6 ? ', …' : '') . "). "
-                    . "NEVER say prices exclude shipping or delivery. For destinations outside the free-delivery areas, our team confirms the transport cost separately at order time — never invent or estimate a freight price yourself.\n";
+                    . "NEVER say prices exclude shipping or delivery. For destinations outside the free-delivery areas, our team confirms the transport cost separately at order time — never invent or estimate a freight price yourself, "
+                    . "and always mention they can collect from our {$fromCity} store instead.\n"
+                    // v4.38 — the model was asserting coverage for places it had never heard of.
+                    . "- IF YOU DO NOT RECOGNISE THE PLACE the customer names — it may be their own shop name, a person, or a typo — do NOT say it is outside the free-delivery area and do NOT say delivery is free. Ask which town or area it is in. Never state a fact about our delivery coverage for a place you cannot identify.\n";
             }
             $p .= "\n";
         }

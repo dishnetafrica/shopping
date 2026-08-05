@@ -46,6 +46,10 @@ final class SettingsSchema
                 ['label' => 'Delivery', 'help' => 'What the bot AND the catalogue say about delivery and transport.', 'fields' => [
                     ['key' => 'delivery_note', 'type' => 'textarea', 'label' => 'Delivery policy', 'help' => 'One or two sentences, e.g. "All prices include free delivery within Juba. Outside Juba, our team confirms transport cost when you order." Leave blank to auto-build from the towns below.'],
                     ['key' => 'free_delivery_towns', 'type' => 'text', 'label' => 'Free-delivery areas', 'help' => 'Comma-separated. Default: Juba, Konyo Konyo, Custom, Jebel, Munuki, Gudele, Hai, Malakia, Gumbo, Sherikat, Thongping, Nimra Talata, Suk'],
+                    // v4.38 — towns we know of but do not deliver free to. Anything matching NEITHER
+                    // list is treated as "we do not recognise this place" and the bot asks which town
+                    // it is in, instead of telling the customer their delivery is chargeable.
+                    ['key' => 'known_delivery_towns', 'type' => 'text', 'label' => 'Other towns we know', 'help' => 'Comma-separated towns we can quote transport to. A destination in neither list makes the bot ask which town it is in, rather than assume it is far away. Default covers South Sudan, Uganda and the regional cities.'],
                     ['key' => 'delivery_from_city', 'type' => 'text', 'label' => 'Delivering from', 'help' => 'Default: Juba'],
                 ]],
                 ['label' => 'Catalogue', 'help' => 'Artwork and highlights for the photo catalogue PDF customers receive on WhatsApp.', 'fields' => [
@@ -143,6 +147,14 @@ final class SettingsSchema
                 ]],
                 ['label' => 'Task reminders', 'help' => 'WhatsApp each staff member a digest of their own open tasks twice a day (9am & 2pm, Juba time). Only people with open tasks and a phone number are messaged.', 'fields' => [
                     ['key' => 'task_reminders', 'type' => 'bool', 'label' => 'Send task reminders to assignees'],
+                ]],
+                // v4.34 — the other half of the evidence archive: gaps you never see never close.
+                ['label' => 'Weekly receipt reminder', 'help' => 'Every Monday morning, a WhatsApp listing the payments that still have no receipt or invoice attached, biggest first. It goes to your owner-alert numbers. If nothing is missing, nothing is sent — so a message arriving always means there is something to do. Attach the documents in Finance → Evidence.', 'fields' => [
+                    ['key' => 'evidence_digest', 'type' => 'bool', 'label' => 'Send the weekly receipt reminder', 'default' => true,
+                     'help' => 'ON by default. Turn it off and the Evidence screen still works — you simply have to remember to look.'],
+                    ['key' => 'evidence_digest_min', 'type' => 'number', 'label' => 'Only remind me about payments above', 'unit' => 'USD', 'default' => 0,
+                     'help' => '0 = every payment. Set it to 50 and small cash items stop appearing, so the list stays short enough to actually work through.'],
+                    ['key' => 'evidence_digest_numbers', 'type' => 'text', 'label' => 'Also send to', 'help' => 'Extra numbers, comma separated. Your owner-alert numbers always receive it. Blank = just them.'],
                 ]],
                 ['label' => 'Stock alerts', 'fields' => [
                     ['key' => 'low_stock_threshold', 'type' => 'number', 'label' => 'Low-stock threshold', 'unit' => 'units', 'default' => 5],
