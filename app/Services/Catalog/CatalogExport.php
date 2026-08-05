@@ -23,6 +23,28 @@ final class CatalogExport
      */
     private const HEADERS = ['Product Name', 'Category', 'Price UGX', 'Cost', 'Stock', 'SKU', 'Keywords', 'Unit', 'Pack Size', 'MOQ', 'Image', 'Brand', 'Size', 'Origin', 'Barcode', 'Description'];
 
+    /**
+     * v4.37 — the price header now names the currency the numbers are actually in.
+     *
+     * It was the constant 'Price UGX' for every tenant. Family Shoppers sells in USD, so 376
+     * dollar prices were exported under a UGX heading — an invitation for whoever opens the file
+     * to "correct" them by a factor of 3,655. Cost gets the same treatment: it is stored in the
+     * same currency as the price, and saying so is the cheapest guard against the mixed-currency
+     * cost column this catalogue already has.
+     *
+     * Every importer accepts all of these — `price ugx`, `price usd`, `price (usd)` and a bare
+     * `price` — so an older spreadsheet still loads.
+     */
+    private static function headersFor(Tenant $t): array
+    {
+        $cur = \App\Services\Money\SalesBaseCurrency::baseCurrency($t);
+        $h = self::HEADERS;
+        $h[2] = 'Price ' . $cur;
+        $h[3] = 'Cost ' . $cur;
+
+        return $h;
+    }
+
     /** @return \Illuminate\Support\Collection<int,Product> */
     private function products(Tenant $t)
     {
@@ -33,7 +55,7 @@ final class CatalogExport
     public function csv(Tenant $t, bool $imageAsFile = false): string
     {
         $out = fopen('php://temp', 'r+');
-        fputcsv($out, self::HEADERS);
+        fputcsv($out, self::headersFor($t));
         $used = [];
         foreach ($this->products($t) as $p) {
             $img = '';

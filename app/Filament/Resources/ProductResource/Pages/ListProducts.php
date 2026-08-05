@@ -27,10 +27,21 @@ class ListProducts extends ListRecords
                         ->acceptedFileTypes(['text/csv', 'text/plain', 'application/vnd.ms-excel', 'application/csv'])
                         ->storeFiles(false)
                         ->required(),
+                    // v4.37 — this defaulted to ON, and 'replace' is a hard DELETE of every product
+                    // row: cost prices, extra photos, OEM numbers, dealer prices and the order-item
+                    // links all go with them. Adding to a catalogue is the common case; wiping one is
+                    // not, so it now has to be asked for and then typed out.
                     Forms\Components\Toggle::make('replace')
                         ->label('Replace the whole catalogue')
-                        ->helperText('On: clears this business\'s products first, then loads the file (recommended for a full pricelist). Off: adds/updates by name (slower, for small edits).')
-                        ->default(true),
+                        ->helperText('Off (recommended): adds new products and updates existing ones by name — nothing is lost. On: permanently deletes every product in this business first, including cost prices and photos.')
+                        ->default(false)
+                        ->live(),
+                    Forms\Components\TextInput::make('confirm')
+                        ->label('Type REPLACE to confirm')
+                        ->helperText('This cannot be undone.')
+                        ->visible(fn (Forms\Get $get) => (bool) $get('replace'))
+                        ->required(fn (Forms\Get $get) => (bool) $get('replace'))
+                        ->rule('in:REPLACE'),
                 ])
                 ->action(function (array $data): void {
                     $file = $data['file'];
@@ -44,7 +55,7 @@ class ListProducts extends ListRecords
                         return;
                     }
 
-                    $mode = ($data['replace'] ?? true) ? 'replace' : 'merge';
+                    $mode = ($data['replace'] ?? false) ? 'replace' : 'merge';
                     $r = app(ProductImporter::class)->importCsv($path, $mode);
 
                     if (isset($r['error'])) {

@@ -2345,7 +2345,7 @@ class PanelApiController extends Controller
         $lines  = preg_split('/\r\n|\r|\n/', trim($csv));
         $header = array_map(fn ($h) => strtolower(trim($h)), str_getcsv((string) array_shift($lines)));
         $col = function ($names) use ($header) { foreach ($names as $n) { $i = array_search($n, $header, true); if ($i !== false) return $i; } return null; };
-        $iName = $col(['product name', 'name']); $iCat = $col(['category']); $iPrice = $col(['price ugx', 'price usd', 'price (usd)', 'price']);
+        $iName = $col(['product name', 'name']); $iCat = $col(['category']); $iPrice = $col(['price ugx', 'price usd', 'price ssp', 'price (usd)', 'price']);
         $iStock = $col(['stock']); $iKw = $col(['keywords']); $iImg = $col(['image', 'photo']);
         // Up to 3 extra gallery photos per product (main photo stays in the Image column). Each may be a
         // filename inside this ZIP or a direct image URL. Missing/blank gallery cells are simply ignored.
@@ -2354,7 +2354,7 @@ class PanelApiController extends Controller
         $iGal3 = $col(['gallery 3', 'gallery_3', 'gallery3', 'image 4', 'photo 4']);
         // These columns are written by the export but were previously ignored on import, so a
         // round-trip (export → re-import) silently lost Cost, SKU, Unit, Pack Size and MOQ.
-        $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
+        $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price', 'cost usd', 'cost ugx', 'cost ssp', 'cost (usd)']);
         $iOem = $col(['oem number', 'oem_number', 'oem', 'oem no', 'part number', 'part no']);   // v4.7.7
         if ($iOem !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'oem_number')) $iOem = null;   // migration not run yet — ignore the column
         $iDlr = $col(['dealer price', 'dealer_price']);   // v4.9 — per-product dealer override
@@ -2550,13 +2550,13 @@ class PanelApiController extends Controller
         $lines  = preg_split('/\r\n|\r|\n/', trim($csv));
         $header = array_map(fn ($h) => strtolower(trim($h)), str_getcsv((string) array_shift($lines)));
         $col = function ($names) use ($header) { foreach ($names as $n) { $i = array_search($n, $header, true); if ($i !== false) return $i; } return null; };
-        $iName = $col(['product name', 'name']); $iCat = $col(['category']); $iPrice = $col(['price ugx', 'price usd', 'price (usd)', 'price']);
+        $iName = $col(['product name', 'name']); $iCat = $col(['category']); $iPrice = $col(['price ugx', 'price usd', 'price ssp', 'price (usd)', 'price']);
         $iStock = $col(['stock']); $iKw = $col(['keywords']); $iImg = $col(['image', 'photo']);
         // Up to 3 extra gallery photos. In a CSV-only import (no ZIP) these must be direct image URLs.
         $iGal1 = $col(['gallery 1', 'gallery_1', 'gallery1', 'image 2', 'photo 2']);
         $iGal2 = $col(['gallery 2', 'gallery_2', 'gallery2', 'image 3', 'photo 3']);
         $iGal3 = $col(['gallery 3', 'gallery_3', 'gallery3', 'image 4', 'photo 4']);
-        $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price']);
+        $iSku = $col(['sku']); $iCost = $col(['cost', 'cost price', 'cost usd', 'cost ugx', 'cost ssp', 'cost (usd)']);
         $iOem = $col(['oem number', 'oem_number', 'oem', 'oem no', 'part number', 'part no']);   // v4.7.7
         if ($iOem !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'oem_number')) $iOem = null;   // migration not run yet — ignore the column
         $iDlr = $col(['dealer price', 'dealer_price']);   // v4.9 — per-product dealer override

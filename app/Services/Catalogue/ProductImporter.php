@@ -23,7 +23,12 @@ class ProductImporter
         'description'=> ['description', 'desc', 'details', 'about', 'blurb'],
         'variant'    => ['variant', 'variation'],
         'price'      => ['price', 'price ugx', 'priceugx', 'sell price', 'sellprice', 'selling price', 'retail', 'mrp', 'rate'],
-        'base_price' => ['base price', 'baseprice', 'cost', 'cost price', 'costprice', 'buying price'],
+        // v4.37 — 'cost' used to live on this line, so a Cost column landed in base_price: the one
+        // field the storefront detail page and the panel product list read IN PREFERENCE TO price.
+        // A catalogue exported and re-imported came back advertising what you paid as what you
+        // charge, with every cost_price left null. A cost is a cost.
+        'base_price' => ['base price', 'baseprice'],
+        'cost_price' => ['cost', 'cost price', 'costprice', 'buying price', 'buy price', 'purchase price'],
         'stock'      => ['stock', 'qty', 'quantity', 'sell qty', 'sellqty', 'on hand', 'onhand'],
         'category'   => ['category', 'item group', 'itemgroup', 'group', 'department'],
         'keywords'   => ['keywords', 'tags', 'search'],
@@ -85,6 +90,7 @@ class ProductImporter
                 'category'   => $get('category') ?: null,
                 'price'      => $price,
                 'base_price' => $get('base_price') !== '' ? $this->num($get('base_price')) : $price,
+                'cost_price' => $get('cost_price') !== '' ? $this->num($get('cost_price')) : null,
                 'stock'      => $get('stock') !== '' ? (int) $this->num($get('stock')) : null,
                 'barcode'    => $this->cleanBarcode($get('barcode')),
                 'keywords'   => $get('keywords') ?: null,
@@ -97,6 +103,11 @@ class ProductImporter
             ];
             // v4.28 — Schema-guarded: a raw insert() bypasses the model, so an unmigrated
             // box would hard-fail the whole import rather than just miss two columns.
+            // A raw insert() bypasses the model, so an unmigrated box must not be handed a column
+            // the table does not have — it would hard-fail the whole import, not skip one field.
+            if (! \Illuminate\Support\Facades\Schema::hasColumn('products', 'cost_price')) {
+                unset($row['cost_price']);
+            }
             foreach (['unit_size', 'origin_country'] as $newCol) {
                 if (\Illuminate\Support\Facades\Schema::hasColumn('products', $newCol)) {
                     $row[$newCol] = $get($newCol) ?: null;
@@ -112,6 +123,7 @@ class ProductImporter
                     $upd = ['name' => $row['name']];
                     if ($get('price') !== '')      $upd['price']      = $price;
                     if ($get('base_price') !== '') $upd['base_price'] = $this->num($get('base_price'));
+                    if ($get('cost_price') !== '') $upd['cost_price'] = $this->num($get('cost_price'));
                     foreach (['description', 'sku', 'category', 'keywords', 'unit_label', 'brand', 'unit_size', 'origin_country'] as $f) {
                         if (array_key_exists($f, $row) && $get($f) !== '') $upd[$f] = $row[$f];
                     }
@@ -140,10 +152,18 @@ class ProductImporter
     private function resolveColumns(array $header): array
     {
         $norm = array_map(fn ($h) => $this->normalize($h), $header);
+        /* v4.37 — the exporter now names the currency in the heading ("Price USD", "Cost UGX")
+           so nobody re-types dollar prices as shillings. Strip a trailing currency code before
+           matching, and every past and future heading resolves without enumerating them all. */
+        $bare = array_map(
+            fn ($h) => trim((string) preg_replace('/\s*\(?\b[a-z]{3}\b\)?$/', '', $h)) ?: $h,
+            $norm
+        );
         $map = [];
         foreach ($this->aliases as $field => $names) {
             foreach ($names as $alias) {
                 $idx = array_search($alias, $norm, true);
+                if ($idx === false) $idx = array_search($alias, $bare, true);
                 if ($idx !== false) { $map[$field] = $idx; break; }
             }
         }

@@ -655,7 +655,14 @@ var PNFITS = {"JZ511021": ["boxer100", "boxer150", "boxer150x"], "JV541007": ["b
 var STATE = { products:[], byCat:{}, byPn:{}, bySys:{}, pnPlate:{}, loaded:false, error:false, filters:{stock:false, fit:false} };
 function normPn(s){return String(s||'').replace(/\s+/g,'').toUpperCase();}
 var $ = function(s,r){return (r||document).querySelector(s);};
-function money(n){var c=(CFG.currency&&CFG.currency.symbol)||CFG.currency||'UGX';return c+' '+Number(n||0).toLocaleString('en-US');}
+/* v4.37 — no fixed decimals, so a price rendered inconsistently: 65 showed as "65" and 65.5 as
+   "65.5". Matches the main shop page now. */
+function money(n){ n=Number(n)||0;
+  var cur=String((CFG.currency&&(CFG.currency.code||CFG.currency.symbol))||CFG.currency||'UGX').toUpperCase();
+  var zero=['UGX','KES','TZS','RWF','BIF','SSP','JPY','KRW','VND','XAF','XOF','GNF','MGA','CLP','PYG','ISK','KMF','XPF'];
+  var d=zero.indexOf(cur)>=0?0:2;
+  var s=n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+  return cur==='USD' ? ('$'+s) : (cur+' '+s); }
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 // Safe identifier: ids/plate keys are identifiers, never markup. Whitelist so a hostile
 // catalogue value can't break out of the single-quoted JS string inside an onclick handler.

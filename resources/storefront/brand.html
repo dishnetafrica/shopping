@@ -191,7 +191,16 @@ __SEO_META__
 <script>
 var CFG = __BRAND_CONFIG__;
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function ugx(n){return (CFG.currency||'UGX')+' '+Math.round(n||0).toLocaleString('en-US');}
+/* v4.37 — this rounded to whole units with no decimal places, so on a USD shop a $1.20 packet
+   of cloves advertised as "USD 1" and a $0.86 one as "USD 1". Nearly two thirds of a grocery
+   catalogue sits under $10. Same rule as the main shop page now: zero-decimal currencies stay
+   whole, everything else keeps its cents, and USD gets its symbol. */
+function ugx(n){ n=Number(n)||0;
+  var cur=String((CFG.currency&&CFG.currency.code)||CFG.currency||'UGX').toUpperCase();
+  var zero=['UGX','KES','TZS','RWF','BIF','SSP','JPY','KRW','VND','XAF','XOF','GNF','MGA','CLP','PYG','ISK','KMF','XPF'];
+  var d=zero.indexOf(cur)>=0?0:2;
+  var s=n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+  return cur==='USD' ? ('$'+s) : (cur+' '+s); }
 function shopLink(params){var u=CFG.shopUrl||'#';return params?(u+'?'+params):u;}
 function $(id){return document.getElementById(id);}
 
