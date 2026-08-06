@@ -212,7 +212,8 @@ class OrderConfirmationService
         $lines = [];
         try {
             foreach ($o->items()->get() as $it) {
-                $lines[] = ['name' => (string) $it->name, 'qty' => (float) $it->qty, 'price' => (float) $it->price, 'unit' => (string) ($it->unit ?? '')];
+                $lines[] = ['name' => (string) $it->name, 'qty' => (float) $it->qty, 'price' => (float) $it->price,
+                            'unit' => (string) ($it->unit ?? ''), 'product_id' => $it->product_id ? (int) $it->product_id : null];
             }
         } catch (\Throwable $e) { /* fall through */ }
 
@@ -220,12 +221,15 @@ class OrderConfirmationService
             foreach ((array) ($o->items_json ?? []) as $l) {
                 if (! is_array($l)) continue;
                 $lines[] = ['name' => (string) ($l['name'] ?? ''), 'qty' => (float) ($l['qty'] ?? $l['quantity'] ?? 1),
-                            'price' => (float) ($l['price'] ?? $l['unit_price'] ?? 0), 'unit' => (string) ($l['unit'] ?? '')];
+                            'price' => (float) ($l['price'] ?? $l['unit_price'] ?? 0), 'unit' => (string) ($l['unit'] ?? ''),
+                            'product_id' => isset($l['product_id']) ? (int) $l['product_id'] : null];
             }
         }
         if (! $lines && trim((string) $o->items_text) !== '') {
-            $lines[] = ['name' => (string) $o->items_text, 'qty' => 1, 'price' => 0, 'unit' => ''];
+            $lines[] = ['name' => (string) $o->items_text, 'qty' => 1, 'price' => 0, 'unit' => '', 'product_id' => null];
         }
+
+        $lines = $this->decorate($t, $lines);
 
         $terms = trim((string) $t->setting('order_confirm_terms', ''));
         if ($terms === '') {
@@ -249,6 +253,89 @@ class OrderConfirmationService
             'terms'         => $terms,
             'contact'       => trim((string) ($t->setting('public_phone', '') ?: ($t->whatsapp_number ?? ''))),
         ];
+    }
+
+    /**
+     * v4.44 — hang the product's photo and its pack rule on each line.
+     *
+     * WHY THIS IS NOT PART OF THE DEAL
+     * `canonical()` reads name, quantity, price, total, currency, address and terms — and nothing
+     * else. A photo swapped or a pack label tidied is NOT a change to what was agreed, so it must
+     * never invalidate a confirmation the customer already gave. Anything added here is decoration
+     * that helps them recognise the goods; the moment one of these fields could change the
+     * fingerprint, re-photographing a product would silently void live agreements.
+     *
+     * ONE query for ids and ONE for names, never per line — an order with 30 lines must not become
+     * 30 lookups on a page a customer is waiting for.
+     */
+    private function decorate(Tenant $t, array $lines): array
+    {
+        if (! $lines) {
+            return $lines;
+        }
+        try {
+            $ids   = array_values(array_filter(array_map(fn ($l) => $l['product_id'] ?? null, $lines)));
+            $names = array_values(array_filter(array_map(
+                fn ($l) => ($l['product_id'] ?? null) ? null : trim((string) ($l['name'] ?? '')), $lines)));
+
+            $cols = ['id', 'name', 'image_url', 'pack_size', 'unit_label', 'moq'];
+            $byId = $ids ? \App\Models\Product::where('tenant_id', $t->id)->whereIn('id', $ids)->get($cols)->keyBy('id') : collect();
+            // Lines that never carried a product_id (older AI-captured orders) still get a photo when
+            // the name matches the catalogue exactly. Best effort — a miss just means no thumbnail.
+            $byName = $names ? \App\Models\Product::where('tenant_id', $t->id)->whereIn('name', $names)->get($cols)
+                ->keyBy(fn ($p) => mb_strtolower(trim((string) $p->name))) : collect();
+
+            foreach ($lines as $i => $l) {
+                $p = ($l['product_id'] ?? null) ? ($byId[$l['product_id']] ?? null)
+                                                : ($byName[mb_strtolower(trim((string) ($l['name'] ?? '')))] ?? null);
+                $lines[$i]['image'] = $p ? $this->absoluteImage($t, (string) $p->image_url) : '';
+                $lines[$i]['pack']  = $p ? self::packLabel((string) $p->pack_size, (string) $p->unit_label, (float) $p->moq) : '';
+            }
+        } catch (\Throwable $e) {
+            foreach ($lines as $i => $l) {
+                $lines[$i]['image'] = $lines[$i]['image'] ?? '';
+                $lines[$i]['pack']  = $lines[$i]['pack'] ?? '';
+            }
+        }
+
+        return $lines;
+    }
+
+    /**
+     * "carton of 6pc · min 5" — the pack rule as its own quiet line.
+     *
+     * These belong in `pack_size` / `unit_label` / `moq` (real columns since v4.28), not baked into
+     * the product name. A name like "ALUMINIUM FOIL 45CM GOLDEN (CARTON OF 6PC, USD 165.00 MIN 5
+     * CARTON)" puts a price inside the name, so the confirmation page shows that price beside the
+     * unit price AND the line total — three prices in one row on a page whose whole job is "check
+     * this is right". Filling the columns lets the name be just the product.
+     */
+    public static function packLabel(string $packSize, string $unitLabel, float $moq): string
+    {
+        $bits = [];
+        $pack = self::squash($packSize);
+        $unit = self::squash($unitLabel);
+        if ($pack !== '') {
+            $bits[] = $unit !== '' ? ($unit . ' of ' . $pack) : $pack;
+        } elseif ($unit !== '') {
+            $bits[] = $unit;
+        }
+        if ($moq > 1) {
+            $bits[] = 'min ' . rtrim(rtrim(number_format($moq, 2, '.', ''), '0'), '.');
+        }
+
+        return implode(' · ', $bits);
+    }
+
+    /** A stored path becomes a real URL; anything already absolute is left alone. */
+    private function absoluteImage(Tenant $t, string $url): string
+    {
+        $url = trim($url);
+        if ($url === '' || preg_match('#^(https?:)?//#i', $url) || str_starts_with($url, 'data:')) {
+            return $url;
+        }
+
+        return $t->publicUrl($url);
     }
 
     // ── sending ────────────────────────────────────────────────────────────────────────
