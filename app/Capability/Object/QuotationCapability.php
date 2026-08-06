@@ -178,12 +178,40 @@ final class QuotationCapability implements ObjectCapability
         $resend  = ($qPhone !== '' && ! $converted) ? ['key' => 'quote_resend', 'label' => 'Resend to customer', 'method' => 'POST', 'endpoint' => '/papi/quotation-resend', 'actor' => 'human', 'tone' => 'default', 'body' => ['id' => (int) $q->id], 'confirm' => 'Resend quotation ' . $q->quote_no . ' to ' . ($q->customer_name ?: 'the customer') . ' on WhatsApp?'] : null;
         $archive = ! $converted ? ['key' => 'quote_archive', 'label' => 'Archive quotation', 'method' => 'POST', 'endpoint' => '/papi/quotation-delete', 'actor' => 'human', 'tone' => 'danger', 'body' => ['id' => (int) $q->id], 'confirm' => 'Archive quotation ' . $q->quote_no . '? It is hidden from the active list but kept for records.'] : null;
 
+        // v4.45 — send this basket to somebody else.
+        //
+        // The same line builder that powers "Revise quotation" and "New quotation", opened in CREATE
+        // mode and seeded with THIS quotation's lines: delete the ones you don't want, change
+        // quantities, search products to add more, pick a different customer, press create. That is
+        // what answers "all or a few" without a single new screen, and it posts to the existing
+        // create endpoint, so the copy is a genuinely new quotation with its own number, its own
+        // portal token and its own PDF — never a second document wearing the first one's number.
+        //
+        // Prices come across as they were AGREED here, not re-fetched from the catalogue. Silently
+        // re-pricing would change figures without saying which ones moved; carrying them across is
+        // visible and every line is editable before anything is sent. `sourceNote` puts whose prices
+        // these are on the screen, because a discount negotiated with one customer should not reach
+        // the next one by accident.
+        $copyQuote = $editLines ? [
+            'key' => 'copy_quotation', 'label' => 'Copy to another customer',
+            'method' => 'POST', 'endpoint' => '/api/v1/workspace/quotations/_/create_quotation',
+            'actor' => 'human', 'tone' => 'default', 'builder' => 'quotation', 'pickCustomer' => true,
+            'customerSearch' => '/api/v1/workspace/customers/_/search',
+            'productSearch' => '/api/v1/workspace/products/_/search',
+            'currencies' => array_values(array_unique([$cur, 'USD', 'UGX', 'SSP'])),
+            'lines' => $editLines,
+            'sourceNote' => 'Prices copied from ' . $q->quote_no
+                          . ($q->customer_name ? ' · ' . $q->customer_name : '')
+                          . ' — check them before sending.',
+            'prefill' => ['currency' => $cur],
+        ] : null;
+
         $headerActions = array_values(array_filter([$primary, $editQuote]));
         $moreActions = array_values(array_filter([
             $downloadPdf === $primary ? null : $downloadPdf,
-            $accept, $decline, $resend, $expire, $openCustomer, $archive,
+            $copyQuote, $accept, $decline, $resend, $expire, $openCustomer, $archive,
         ]));
-        $quickActions = array_values(array_filter([$downloadPdf, $canConvert ? $convert : null, $editQuote, $resend, $openOrder, $openCustomer]));
+        $quickActions = array_values(array_filter([$downloadPdf, $canConvert ? $convert : null, $editQuote, $copyQuote, $resend, $openOrder, $openCustomer]));
 
         return (new WorkspacePayload)
             ->object([

@@ -102,6 +102,15 @@ final class SettingsSchema
                 ]],
             ]],
             ['key' => 'documents', 'label' => 'Documents', 'icon' => 'doc', 'groups' => [
+                // v4.45 — quotation numbers you can read, say on the phone, and put in order.
+                ['label' => 'Quotation numbering', 'help' => 'Quotation numbers have been a date plus four random characters (ORD-Q260806-ZH9Z) — impossible to read, impossible to put in order, and it was random collisions that forced the duplicate clean-up in v4.38. Switching to In order gives you QUO-2026-0001, QUO-2026-0002 … the same way your invoices (INV-2026-0001) and credit notes already work. Quotations already issued keep the numbers your customers were given; the new series starts at 1 and applies from the moment you switch.', 'fields' => [
+                    ['key' => 'quote_number_mode', 'type' => 'enum', 'label' => 'Quotation numbers', 'options' => ['legacy', 'sequential'], 'default' => 'legacy',
+                     'help' => 'legacy = ORD-Q260806-ZH9Z (date + random). sequential = QUO-2026-0001, counting up. Nothing already issued changes either way.'],
+                    ['key' => 'quote_prefix', 'type' => 'text', 'label' => 'Quotation prefix', 'default' => 'QUO',
+                     'help' => 'The letters before the year, e.g. QUO gives QUO-2026-0001. Only used when numbering is set to sequential. Keep it different from your invoice prefix so the two can never be confused.'],
+                    ['key' => 'quote_number_reset', 'type' => 'enum', 'label' => 'Start again each year', 'options' => ['year', 'plain'], 'default' => 'year',
+                     'help' => 'year = QUO-2026-0001 and the count restarts every January. plain = QUO-0001 running forever, never resetting.'],
+                ]],
                 ['label' => 'PDF page setup', 'help' => 'Page size & layout for the PDFs your customers receive. Defaults match the built-in layout.', 'fields' => [
                     ['key' => 'invoice_page_size',   'type' => 'enum', 'label' => 'Invoice page size', 'options' => ['A4', 'A5', 'Letter'], 'default' => 'A4'],
                     ['key' => 'invoice_orientation', 'type' => 'enum', 'label' => 'Invoice orientation', 'options' => ['portrait', 'landscape'], 'default' => 'portrait'],

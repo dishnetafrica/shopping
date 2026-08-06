@@ -36,6 +36,8 @@ final class SettingsWriteService
         // v4.43 — the payment wording printed on every order confirmation ("cash on delivery",
         // "30 days from invoice"). Blank = derived from what the order has already been paid.
         'order_confirm_terms',
+        // v4.45 — the letters before a sequential quotation number (QUO → QUO-2026-0001).
+        'quote_prefix',
         // Storefront trust & delivery promises (shown on product pages / homepage).
         'sf_genuine', 'sf_delivery_eta', 'sf_pay_methods', 'sf_warranty', 'sf_returns',
         // VAT is fully tenant-configurable (never hardcoded): label + tax registration no.
@@ -114,6 +116,10 @@ final class SettingsWriteService
         'invoice_orientation' => ['portrait', 'landscape'],
         'receipt_page_size'   => ['A4', 'A5'],
         'receipt_orientation' => ['portrait', 'landscape'],
+        // v4.45 — legacy = ORD-Q + date + 4 random chars; sequential = QUO-2026-0001 counting up.
+        // Numbers already issued are never rewritten, whichever way this is set.
+        'quote_number_mode'   => ['legacy', 'sequential'],
+        'quote_number_reset'  => ['year', 'plain'],
         // native = base currency (USD) IS the operating currency for selling; converted = local (UGX).
         'currency_basis'      => ['native', 'converted'],
         // MOQ handling in bot quotes/orders (read by OrderCalculator + AiBrain; v4.6 exposes it here —

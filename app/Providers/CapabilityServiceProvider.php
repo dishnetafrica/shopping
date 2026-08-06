@@ -42,6 +42,29 @@ final class CapabilityServiceProvider extends ServiceProvider
         \App\Models\InvoiceItem::observe(\App\Observers\LineSpecSnapshotObserver::class);
         \App\Models\QuotationItem::observe(\App\Observers\LineSpecSnapshotObserver::class);
 
+        // v4.45 — quotation numbers that run in order (QUO-2026-0001), for tenants who switch it on.
+        //
+        // Registered HERE, and deliberately AFTER the observers above, for one reason: `creating`
+        // listeners fire in registration order, and the number has to be ours last. Whatever minted
+        // `quote_no` before this point — the frozen QuotationService, the storefront, the bot — set
+        // the attribute; this fires immediately before the INSERT and replaces it. That makes every
+        // creation path pick up the new series without touching any of them.
+        //
+        // Only when the switch is on, only when a tenant can be resolved, and never fatal: a
+        // quotation that cannot be numbered keeps whatever number it already had rather than
+        // failing to save. A customer-facing document is worth more than a tidy sequence.
+        \App\Models\Quotation::creating(function (\App\Models\Quotation $q) {
+            try {
+                $t = $q->tenant_id ? \App\Models\Tenant::find($q->tenant_id) : null;
+                if (! $t || ! \App\Services\Sales\QuoteNumber::sequential($t)) {
+                    return;
+                }
+                $q->quote_no = \App\Services\Sales\QuoteNumber::next($t);
+            } catch (\Throwable $e) {
+                \Log::warning('QuoteNumber: kept the minted number — ' . $e->getMessage());
+            }
+        });
+
         Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware\ConfineTransportRole::class])->group(function () {
             // The new shell (SPA). Hash-routed, so one entry point serves every workspace.
             Route::get('/v3/{path?}', fn () => view('shell'))->where('path', '.*');

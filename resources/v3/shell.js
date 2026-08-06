@@ -2724,12 +2724,16 @@ function quoteBuilder(a){
   const curOpts=(a.currencies||[cur]).map(c=>'<option'+(c===cur?' selected':'')+'>'+esc(c)+'</option>').join('');
   const m=document.getElementById('modal'); m.classList.remove('wa-modal'); m.style.maxWidth='660px'; __WAPV=null;
   const custBlock=a.pickCustomer?'<div class="qb-custwrap" id="qbcustwrap"></div>':'';
+  // v4.45 — when the lines were copied from another customer's quotation, say so. The prices in
+  // them were agreed with somebody else; carrying them across is deliberate and visible, and every
+  // line is editable right here, but nobody should have to remember whose discount this was.
+  const srcNote=a.sourceNote?'<div class="qb-src" style="display:flex;gap:8px;align-items:flex-start;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:10px;padding:9px 11px;font-size:12.5px;line-height:1.45;margin-bottom:10px"><span>⚠️</span><span>'+esc(a.sourceNote)+'</span></div>':'';
   const noun=invoice?'invoice':'quotation';
   const title=(edit?'Edit ':'New ')+noun+(a.customer?' — '+esc(a.customer):'');
   const okLabel=edit?'Save changes':('Create '+noun);
   const waBlock=(edit||invoice)?'':'<label class="qb-wa"><input type="checkbox" id="qbwa"> Also send the PDF to the customer on WhatsApp</label>';
   m.innerHTML='<div class="h">'+title+'<button class="x" onclick="closeQB()">'+icon('x')+'</button></div>'+
-    '<div class="b">'+custBlock+
+    '<div class="b">'+srcNote+custBlock+
       '<div class="qb-pick"><input id="qbq" placeholder="Search products to add…" autocomplete="off" oninput="qbSearch()"><div class="qb-res" id="qbres"></div></div>'+
       '<div id="qblines"></div>'+
       (invoice?'<div class="qb-adj"><label>Discount <input id="qbdisc" type="number" min="0" step="0.01" value="0" oninput="qbTotal()"></label>'+
