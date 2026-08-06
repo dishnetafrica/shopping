@@ -65,6 +65,13 @@ final class ReceiptRenderer
 
     private function html(Tenant $tenant, CustomerPayment $p, string $no): string
     {
+        // v4.46 — this receipt has printed the words "Official stamp" over an empty rule since it
+        // was written, and staff have been stamping the printout by hand. Fill the box that is
+        // already there. Scaled down because a receipt is a small page and the box is small with it.
+        // `.sig .c` has no fixed height, so this one can simply grow — but it shares a table row
+        // with "Received by", and a receipt is a small page, so it is still capped.
+        $stamp = \App\Services\Documents\DocumentStamp::img($tenant, 'receipt',
+            min(100, \App\Services\Documents\DocumentStamp::sizePx($tenant)));
         $company = e((string) $tenant->name);
         $address = nl2br(e((string) ($tenant->setting('address', '') ?: '')));
         $tin = trim((string) $tenant->setting('tin', ''));
@@ -137,7 +144,7 @@ table.kv td.v{font-weight:bold;text-align:right;}
 
 <div class="sig">
   <div class="c">Received by: {$by}<div class="sigline"></div>Signature</div>
-  <div class="c" style="text-align:right;">&nbsp;<div class="sigline"></div>Official stamp</div>
+  <div class="c" style="text-align:right;">{$stamp}<div class="sigline"></div>Official stamp</div>
 </div>
 </body></html>
 HTML;

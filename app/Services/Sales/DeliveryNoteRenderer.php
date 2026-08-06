@@ -64,6 +64,15 @@ final class DeliveryNoteRenderer
 
     private function html(Tenant $tenant, array $d): string
     {
+        // v4.46 — the third signature box already says "AUTHORIZED SIGNATORY / For {company}".
+        //
+        // MEASURED, NOT GUESSED. `.sigbox` is a FIXED 86px tall and holds a label (~11px), a
+        // signature rule (16px) and a caption (~12px) inside 24px of padding — about 23px spare.
+        // Dropping a 90px stamp in would have pushed the rule and the caption out of the box, so
+        // the stamp is capped at 60px and the box grows to fit it only when one is present.
+        $stampPx = min(60, \App\Services\Documents\DocumentStamp::sizePx($tenant));
+        $stamp = \App\Services\Documents\DocumentStamp::img($tenant, 'delivery_note', $stampPx);
+        $sigH  = $stamp !== '' ? (86 + $stampPx + 4) : 86;
         $brand = self::BRAND; $brandD = self::BRAND_DARK; $ink = self::INK;
         $company = e((string) $tenant->name);
         $addr = trim(implode(', ', array_filter([
@@ -129,7 +138,7 @@ table.items td{padding:7px 10px;border-bottom:1px solid #e2e8f0;font-size:11px;v
 .goods{margin-top:16px;font-size:11px;font-weight:bold;}
 table.sig{width:100%;border-collapse:separate;border-spacing:14px 0;margin-top:26px;}
 table.sig td{width:33%;vertical-align:bottom;padding:0;}
-.sigbox{border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;height:86px;}
+.sigbox{border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;height:{$sigH}px;}
 .siglabel{font-size:8.5px;font-weight:bold;letter-spacing:1px;color:#64748b;}
 .sigline{border-bottom:1px solid #94a3b8;height:34px;margin-top:8px;}
 .sigsub{font-size:8px;color:#94a3b8;margin-top:4px;}
@@ -166,7 +175,7 @@ HTML
 <table class="sig"><tr>
 <td><div class="sigbox"><div class="siglabel">RECEIVED BY (CUSTOMER)</div><div class="sigline"></div><div class="sigsub">Name, signature &amp; date</div></div></td>
 <td><div class="sigbox"><div class="siglabel">DELIVERED BY</div><div class="sigline"></div><div class="sigsub">Name, signature &amp; date</div></div></td>
-<td><div class="sigbox"><div class="siglabel">AUTHORIZED SIGNATORY</div><div class="sigline"></div><div class="sigsub">For {$company}</div></div></td>
+<td><div class="sigbox"><div class="siglabel">AUTHORIZED SIGNATORY</div>{$stamp}<div class="sigline"></div><div class="sigsub">For {$company}</div></div></td>
 </tr></table>
 
 <div class="foot">{$company} — this delivery note confirms receipt of goods only; it is not a tax invoice or receipt of payment.</div>

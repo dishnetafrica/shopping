@@ -38,6 +38,8 @@ final class SettingsWriteService
         'order_confirm_terms',
         // v4.45 — the letters before a sequential quotation number (QUO → QUO-2026-0001).
         'quote_prefix',
+        // v4.46 — the company stamp printed on customer documents (an image field holds its URL).
+        'stamp_image',
         // Storefront trust & delivery promises (shown on product pages / homepage).
         'sf_genuine', 'sf_delivery_eta', 'sf_pay_methods', 'sf_warranty', 'sf_returns',
         // VAT is fully tenant-configurable (never hardcoded): label + tax registration no.
@@ -68,6 +70,7 @@ final class SettingsWriteService
         'min_order' => ['float', 0.0],
         'ai_catalogue_limit' => ['int', 1],
         'pos_discount_limit' => ['float', 0.0],   // % of sale a cashier may discount without the manager PIN
+        'stamp_size' => ['int', 0],               // v4.46 — printed stamp size in px (clamped 60–260 at read)
         'bot_coalesce_seconds' => ['int', 0],     // burst window before the bot answers (0 = off, capped 10 at read)
         // Dealer programme 4a (v4.9): tier discount defaults + the margin floor PriceResolver enforces.
         'dealer_pct' => ['float', 0.0],
@@ -95,6 +98,9 @@ final class SettingsWriteService
         'notify_customer_invoice', 'notify_customer_receipt',
         // v4.43 — the itemised order confirmation, and whether it carries a tap-to-confirm link.
         'notify_order_confirmation', 'order_confirm_link',
+        // v4.46 — which customer documents carry the company stamp (all no-ops until one is uploaded).
+        'stamp_on_invoice', 'stamp_on_receipt', 'stamp_on_quotation',
+        'stamp_on_delivery_note', 'stamp_on_credit_note',
         'combo_recommendations', // bot "Goes well with" / "Often bought together" cross-sell suggestions
         'send_product_images',   // bot sends product photos with replies
         // Storefront: per-model show/hide toggles (default on). Read by StorefrontController.

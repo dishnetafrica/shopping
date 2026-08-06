@@ -274,8 +274,14 @@ class InvoiceRenderer
             $credit  = trim((string) $t->setting('credit_terms', $default));
             if ($credit !== '') $creditHtml = '<div class="terms"><span class="h">Payment terms:</span> ' . nl2br(e($credit)) . '</div>';
         }
-        $footer = trim((string) $t->setting('invoice_footer',
-            'Thank you for your business. This is a computer-generated invoice and is valid without signature.'));
+        // v4.46 — the invoice was the one document with no stamp area at all, and its default
+        // footer said "valid without signature", which is the exact sentence customers are pushing
+        // back on. Stamped, that sentence is both wrong and self-defeating, so it changes — but
+        // only the DEFAULT: an owner who wrote their own footer keeps it, stamp or no stamp.
+        $stampHtml = \App\Services\Documents\DocumentStamp::block($t, 'invoice');
+        $footer = trim((string) $t->setting('invoice_footer', $stampHtml !== ''
+            ? 'Thank you for your business. This invoice is issued and stamped by ' . $t->name . '.'
+            : 'Thank you for your business. This is a computer-generated invoice and is valid without signature.'));
 
         return <<<HTML
 <!doctype html><html><head><meta charset="utf-8"><style>
@@ -366,6 +372,7 @@ table.tot tr.bal td { font-weight:bold; font-size:11.5px; }
 {$creditHtml}
 {$termsHtml}
 {$bankHtml}
+{$stampHtml}
 
 <div class="foot">{$footer}</div>
 </body></html>
@@ -483,8 +490,12 @@ HTML;
             . '. It may be set off against this or a future invoice, or refunded as agreed.'));
         $blurbHtml = $blurb !== '' ? '<div class="terms"><span class="h">Note:</span> ' . nl2br(e($blurb)) . '</div>' : '';
 
-        $footer = trim((string) $t->setting('invoice_footer',
-            'This is a computer-generated credit note and is valid without signature.'));
+        // v4.46 — a credit note reduces what somebody owes, so it is the document most likely to be
+        // waved at us later. Same treatment as the invoice.
+        $stampHtml = \App\Services\Documents\DocumentStamp::block($t, 'credit_note');
+        $footer = trim((string) $t->setting('invoice_footer', $stampHtml !== ''
+            ? 'This credit note is issued and stamped by ' . $t->name . '.'
+            : 'This is a computer-generated credit note and is valid without signature.'));
 
         return <<<HTML
 <!doctype html><html><head><meta charset="utf-8"><style>
@@ -568,6 +579,7 @@ table.tot tr.grand td { font-weight:bold; font-size:12px; background:#FCEBEB; co
 </tr></table>
 
 {$blurbHtml}
+{$stampHtml}
 
 <div class="foot">{$footer}</div>
 </body></html>

@@ -205,6 +205,15 @@ class QuotationService
 
     private function html(Tenant $tenant, string $no, string $phone, string $name, array $quote, array $totals, ?string $portalUrl = null): string
     {
+        // v4.46 — the approval table already prints "Company Stamp & Authorised Signature" over an
+        // empty box. Fill it instead of floating an image somewhere else on the page.
+        //
+        // `.abox` is a FIXED 88px tall with 18px of padding and an ~11px label — roughly 59px of
+        // room. The stamp is capped at 72px and the box grows only when one is actually printed,
+        // so an unstamped quotation is byte-identical to what it was before this drop.
+        $stampPx = min(72, \App\Services\Documents\DocumentStamp::sizePx($tenant));
+        $stamp = \App\Services\Documents\DocumentStamp::img($tenant, 'quotation', $stampPx);
+        $aboxH = $stamp !== '' ? (88 + $stampPx - 40) : 88;
         $cur = $quote['currency'];
         $dec = \App\Services\Pricing::decimalsForCurrency($cur);
         $m2  = 2; // money in the quote grid always shows 2dp, like the Patronics form
@@ -370,7 +379,7 @@ table.tot tr.grand td { background:#0C831F; color:#fff; font-size:13.5px; font-w
 .terms .h { font-weight:bold; color:#111; }
 .appr { width:100%; border-collapse:collapse; margin-top:16px; }
 .appr td { width:50%; vertical-align:top; padding-right:14px; }
-.abox { border:1px dashed #b7c0b9; border-radius:10px; height:88px; padding:9px 11px; }
+.abox { border:1px dashed #b7c0b9; border-radius:10px; height:{$aboxH}px; padding:9px 11px; }
 .abox .t { font-size:8.5px; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; font-weight:bold; }
 .foot { position:fixed; bottom:-40px; left:0; right:0; text-align:center; font-size:8.5px; color:#8a8f8a; border-top:1px solid #e6e9e6; padding-top:6px; }
 .pageno:after { content: "Page " counter(page); }
@@ -445,7 +454,7 @@ table.tot tr.grand td { background:#0C831F; color:#fff; font-size:13.5px; font-w
 
 <table class="appr">
   <tr>
-    <td><div class="abox"><div class="t">Company Stamp &amp; Authorised Signature</div></div></td>
+    <td><div class="abox"><div class="t">Company Stamp &amp; Authorised Signature</div>{$stamp}</div></td>
     <td style="padding-right:0"><div class="abox"><div class="t">Customer Approval — Name / Signature / Date</div></div></td>
   </tr>
 </table>

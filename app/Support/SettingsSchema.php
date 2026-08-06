@@ -111,6 +111,19 @@ final class SettingsSchema
                     ['key' => 'quote_number_reset', 'type' => 'enum', 'label' => 'Start again each year', 'options' => ['year', 'plain'], 'default' => 'year',
                      'help' => 'year = QUO-2026-0001 and the count restarts every January. plain = QUO-0001 running forever, never resetting.'],
                 ]],
+                // v4.46 — customers were asking for stamped invoices and receipts, and staff were
+                // stamping printouts by hand. Three of these documents already reserved a box for it.
+                ['label' => 'Company stamp', 'help' => 'Upload your stamp once and it prints on the documents your customers receive, in the box each one already reserves for it. Use a PNG with a TRANSPARENT background — a stamp saved on a white square prints as a white box over the page. Leave the image empty and nothing is stamped, whatever the switches below say.', 'fields' => [
+                    ['key' => 'stamp_image', 'type' => 'image', 'label' => 'Stamp image',
+                     'help' => 'A square PNG with a transparent background works best. Around 1000×1000 is plenty.'],
+                    ['key' => 'stamp_size', 'type' => 'number', 'label' => 'Printed size', 'unit' => 'px', 'default' => 150,
+                     'help' => 'Roughly 150 suits an A4 invoice. Receipts, quotations and delivery notes scale down from this automatically to fit their own boxes.'],
+                    ['key' => 'stamp_on_invoice',       'type' => 'bool', 'label' => 'Stamp invoices',        'default' => true],
+                    ['key' => 'stamp_on_receipt',       'type' => 'bool', 'label' => 'Stamp receipts',        'default' => true],
+                    ['key' => 'stamp_on_quotation',     'type' => 'bool', 'label' => 'Stamp quotations',      'default' => true],
+                    ['key' => 'stamp_on_delivery_note', 'type' => 'bool', 'label' => 'Stamp delivery notes',  'default' => true],
+                    ['key' => 'stamp_on_credit_note',   'type' => 'bool', 'label' => 'Stamp credit notes',    'default' => true],
+                ]],
                 ['label' => 'PDF page setup', 'help' => 'Page size & layout for the PDFs your customers receive. Defaults match the built-in layout.', 'fields' => [
                     ['key' => 'invoice_page_size',   'type' => 'enum', 'label' => 'Invoice page size', 'options' => ['A4', 'A5', 'Letter'], 'default' => 'A4'],
                     ['key' => 'invoice_orientation', 'type' => 'enum', 'label' => 'Invoice orientation', 'options' => ['portrait', 'landscape'], 'default' => 'portrait'],
