@@ -85,8 +85,12 @@
 </style>
 </head>
 <body><div class="wrap">
-  <div class="top"><h1>🧑‍🤝‍🧑 Partners</h1><a href="/panel">← Panel</a></div>
-  <div class="sub">Capital accounts — who put in what</div>
+  <div class="top"><h1>🧑‍🤝‍🧑 Partners</h1><a href="/panel" id="panelLink">← Panel</a></div>
+  <div class="sub">Capital accounts — who put in what, and what they have taken out</div>
+  <script>/* v4.47: inside the V3 shell (#/partners → iframe ?embed=1) V3 provides the chrome,
+     and a link back into the classic panel is a dead end — hide it. House pattern, same as
+     consignment.html and ai-campaign.html. */
+  if(/[?&]embed=1/.test(location.search)){var _pl=document.getElementById('panelLink'); if(_pl)_pl.style.display='none';}</script>
   <div id="tot"></div>
   <div id="pctline"></div>
   <button class="addp" onclick="addPartner()">＋ Add partner</button>
