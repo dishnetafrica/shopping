@@ -75,6 +75,15 @@ Route::middleware('throttle:30,1')->group(function () {
 // Public customer order-tracking page (no auth — order id + secret token are the key).
 Route::get('/papi/track', [TrackController::class, 'show']);
 
+// v4.43 — the customer's one-tap order confirmation (no auth — the 32-char token IS the key,
+// same pattern as /task/{nonce} and /r/{token}). Throttled so the token cannot be brute-forced.
+// Outside the 'web' group on purpose: no session, so the POST needs no CSRF token — the customer
+// arrives from a WhatsApp link, not from a page we rendered for them earlier.
+Route::middleware('throttle:60,1')->group(function () {
+    Route::get('/o/{token}',         [\App\Http\Controllers\Storefront\OrderConfirmController::class, 'show']);
+    Route::post('/o/{token}/accept', [\App\Http\Controllers\Storefront\OrderConfirmController::class, 'accept']);
+});
+
 // Public self-serve signup — provision a new shop with no human in the loop. Needs 'web' for the
 // session so the owner is logged straight in. papi/* is CSRF-exempt (see bootstrap/app.php).
 Route::middleware('web')->group(function () {

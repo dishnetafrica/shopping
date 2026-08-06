@@ -165,6 +165,15 @@ final class SettingsSchema
                     ['key' => 'notify_customer_invoice', 'type' => 'bool', 'label' => 'Send the invoice when it is issued', 'default' => true, 'help' => 'Invoice PDF + total, anything already paid, the balance, the due date and how to pay. Sent once per invoice.'],
                     ['key' => 'notify_customer_receipt', 'type' => 'bool', 'label' => 'Send a receipt when payment is received', 'default' => true, 'help' => 'Receipt PDF + what they just paid, what they have paid in total against that invoice, and the balance still due (or "fully paid"). Works for part payments and advances.'],
                 ]],
+                // v4.43 — the message that settles the argument at the truck.
+                ['label' => 'Order confirmation', 'help' => 'When you confirm an order, WhatsApp the customer exactly what they are getting — every item, quantity and unit price, the total, the delivery address and the payment terms — and ask them to confirm it. The order screen then shows whether they agreed, and warns you if the order was changed afterwards. This replaces the old one-line "your order is confirmed" message (and any custom wording you set for that status).', 'fields' => [
+                    ['key' => 'notify_order_confirmation', 'type' => 'bool', 'label' => 'Send the full order for the customer to check', 'default' => true,
+                     'help' => 'ON by default. Turn it off and the customer goes back to receiving only the order number — which is nothing they can be held to.'],
+                    ['key' => 'order_confirm_link', 'type' => 'bool', 'label' => 'Include a one-tap confirm link', 'default' => true,
+                     'help' => 'Adds a link that records the date and time they agreed. Replying YES on WhatsApp counts the same, so turning this off does not stop confirmations — it only removes the button.'],
+                    ['key' => 'order_confirm_terms', 'type' => 'text', 'label' => 'Payment wording on the confirmation',
+                     'help' => 'e.g. "cash on delivery" or "30 days from invoice". Leave blank and each order says what it already has against it — "due on delivery", or the amount paid and the balance.'],
+                ]],
             ]],
             ['key' => 'storefront', 'label' => 'Storefront', 'icon' => 'doc', 'groups' => [
                 ['label' => 'Bike models on the website', 'only' => ['auto_parts'], 'help' => 'Turn a model ON to show it on your customer website, OFF to hide it. Changes take effect as soon as you save. Tip: keep at least one model on. To set ALL the photos in one go, open /papi/bike-photos and upload the bike photo pack zip.', 'fields' => [

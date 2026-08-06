@@ -210,6 +210,22 @@ class ProcessIncomingMessage implements ShouldQueue
             // the 🌐 button remains as manual fallback
         }
 
+        // v4.43 — a plain "yes" against an order confirmation we sent is the customer signing for
+        // it. Recorded here, BEFORE burst-coalescing, for the same reason email capture is: an
+        // acceptance sitting in a message that a later one supersedes must not be thrown away.
+        //
+        // Deliberately silent and never blocking — the bot still answers normally. The matcher
+        // (OrderConfirmationService::looksLikeYes) refuses anything long or carrying a negation or
+        // a change word, because "yes but make it 5" is not agreement and inventing evidence would
+        // be worse than having none: the team would walk into the dispute believing they were covered.
+        try {
+            \App\Services\Sales\OrderConfirmationService::noteInboundYes(
+                $this->tenantId, (string) $this->incoming['from'], (string) $this->incoming['text']
+            );
+        } catch (\Throwable $e) {
+            // an order confirmation stamp must never cost us an inbound message
+        }
+
         if ($this->incoming['messageId']) {
             $gateway->markRead($tenant->whatsapp_instance, $this->incoming['messageId']);
         }

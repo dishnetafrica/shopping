@@ -74,11 +74,26 @@ final class SalesOrderCapability implements ObjectCapability
         $profile = $oPhone === '' ? null : CustomerProfile::where('tenant_id', $ctx->tenantId())
             ->whereRaw("regexp_replace(coalesce(phone,''),'[^0-9]','','g') = ?", [$oPhone])->first();
 
+        // v4.43 — has the CUSTOMER agreed to these exact lines, and do they still match what he
+        // agreed to? This is the question the team needs answered before the truck is loaded, so
+        // it is computed here and drives the brief, the pipeline and the next-best-action below.
+        $conf = app(\App\Services\Sales\OrderConfirmationService::class)->stateFor($ctx->tenant, $o);
+        $custOk = ($conf['state'] ?? '') === 'confirmed';
+
         // --- pipeline ---
         $st = fn ($done, $now) => $done ? 'done' : ($now ? 'now' : 'wait');
         $pipeline = [
             ['label' => 'Order', 'value' => (string) $o->order_no, 'state' => 'done', 'icon' => 'cart'],
             ['label' => 'Confirmed', 'value' => $accepted ? 'Yes' : ($cancelled ? 'Cancelled' : 'Pending'), 'state' => $st($accepted, ! $accepted && ! $cancelled), 'icon' => 'check'],
+            ['label' => 'Customer agreed',
+             'value' => match ($conf['state'] ?? 'none') {
+                 'confirmed' => 'Yes',
+                 'changed'   => 'Changed since',
+                 'sent'      => 'Sent, waiting',
+                 default     => 'Not sent',
+             },
+             'state' => ($conf['state'] ?? '') === 'confirmed' ? 'done' : (($conf['state'] ?? '') === 'changed' ? 'now' : ($cancelled ? 'wait' : 'now')),
+             'icon' => 'check'],
             ['label' => 'Delivered', 'value' => $delivered ? Carbon::parse($o->delivered_at)->format('d M Y') : 'Pending', 'state' => $st($delivered, $accepted && ! $cancelled), 'icon' => 'truck'],
             ['label' => 'Invoiced', 'value' => $inv ? (string) $inv->invoice_no : 'Not raised', 'state' => $st((bool) $inv, $delivered), 'icon' => 'invoice'],
             ['label' => 'Paid', 'value' => $invPaid ? 'Paid' : ($inv ? $fmt($inv->balance) . ' due' : '—'), 'state' => $st($invPaid, (bool) $inv), 'icon' => 'card'],
@@ -91,10 +106,30 @@ final class SalesOrderCapability implements ObjectCapability
         $openCustomer = $profile ? ['key' => 'open_customer', 'label' => 'Open customer', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customer/' . $profile->id, 'actor' => 'human', 'tone' => 'default'] : null;
         // Signature paper for the driver: quantities only, received-by / delivered-by blocks.
         $deliveryNote = ['key' => 'delivery_note', 'label' => 'Print delivery note', 'href' => '/api/v1/doc/delivery-note/' . $o->id, 'actor' => 'human', 'tone' => 'default'];
+        // v4.43 — WhatsApp the customer the itemised order and ask them to agree to it.
+        $sendConfirmation = ! $cancelled ? ['key' => 'send_confirmation',
+            'label' => ($conf['state'] ?? 'none') === 'none' ? 'Send order to customer' : 'Send again',
+            'method' => 'POST', 'endpoint' => $ep . '/send_confirmation', 'actor' => 'human',
+            'tone' => $custOk ? 'default' : 'primary',
+            'confirm' => 'WhatsApp order ' . $o->order_no . ' to ' . ($o->customer_name ?: 'the customer')
+                       . ' with every line, the total and the delivery address, and ask them to confirm it?'] : null;
 
-        if (! $delivered && ! $cancelled) {
+        if (! $delivered && ! $cancelled && ($conf['state'] ?? '') === 'changed') {
+            // The most dangerous state in the whole record: the customer agreed to something we
+            // have since edited. Loading the truck on the old agreement is how the argument starts.
+            $primary = $sendConfirmation;
+            $nbaText = 'This order was CHANGED after ' . ($o->customer_name ?: 'the customer') . ' confirmed it. '
+                     . 'What they agreed to is not what is on the order now — send it again before you deliver.';
+            $nbaAction = $sendConfirmation;
+        } elseif (! $delivered && ! $cancelled && ! $custOk) {
+            $primary = $sendConfirmation;
+            $nbaText = ($conf['state'] ?? '') === 'sent'
+                ? ('Sent to ' . ($o->customer_name ?: 'the customer') . ' — they have not confirmed these lines yet. Chase it before loading the truck.')
+                : ('Nobody has sent ' . ($o->customer_name ?: 'the customer') . ' what they are getting. Send the order so there is something in writing before you deliver.');
+            $nbaAction = $sendConfirmation;
+        } elseif (! $delivered && ! $cancelled) {
             $primary = $markDelivered;
-            $nbaText = 'Mark this order delivered when the goods arrive — an invoice is issued automatically to ' . ($o->customer_name ?: 'the customer') . '.';
+            $nbaText = 'Confirmed by the customer. Mark this order delivered when the goods arrive — an invoice is issued automatically to ' . ($o->customer_name ?: 'the customer') . '.';
             $nbaAction = $markDelivered;
         } elseif ($delivered && ! $inv) {
             $primary = $createInvoice;
@@ -143,6 +178,7 @@ final class SalesOrderCapability implements ObjectCapability
         ], fn ($v) => $v !== null) : null;
 
         $quick = array_values(array_filter([
+            (! $delivered && ! $cancelled && ! $custOk) ? $sendConfirmation : null,
             (! $delivered && ! $cancelled) ? $markDelivered : null,
             ($delivered && ! $inv) ? $createInvoice : null,
             $openInvoice, $recordPayment, $changeStatus, $openCustomer,
@@ -158,6 +194,12 @@ final class SalesOrderCapability implements ObjectCapability
             : ['icon' => 'invoice', 'color' => '#98a1ad', 'title' => 'Not invoiced yet', 'sub' => $delivered ? 'Ready to invoice' : 'Invoice on delivery', 'right' => '', 'link' => null];
 
         $overviewCards = [
+            // v4.43 — first card on the record, deliberately: whether the customer has agreed to
+            // these lines decides whether the rest of this screen is worth anything in a dispute.
+            ['kind' => 'dl', 'title' => 'Customer agreement', 'rows' => array_values(array_filter([
+                [$custOk ? 'Confirmed' : (($conf['state'] ?? '') === 'changed' ? '⚠ Changed after confirming' : 'Not confirmed'), (string) ($conf['label'] ?? '')],
+                isset($conf['via']) ? ['How', $conf['via'] === 'whatsapp' ? 'Replied on WhatsApp' : ($conf['via'] === 'staff' ? 'Recorded by staff' : 'Tapped the link')] : null,
+            ]))],
             ['kind' => 'links', 'title' => 'Related', 'items' => $relItems],
             ['kind' => 'table', 'title' => 'Line items', 'sub' => count($lineRows) . ' products',
              'columns' => [['label' => 'Product'], ['label' => 'Qty', 'align' => 'right'], ['label' => 'Unit price', 'align' => 'right'], ['label' => 'Amount', 'align' => 'right']],
@@ -184,6 +226,25 @@ final class SalesOrderCapability implements ObjectCapability
         $tl = [];
         if ($o->created_at) { $tl[] = ['title' => 'Order created', 'at' => Carbon::parse($o->created_at)->format('d M Y'), 'actor' => (string) ($o->created_by ?? 'Sales')]; }
         if ($o->accepted_at) { $tl[] = ['title' => 'Order confirmed', 'at' => Carbon::parse($o->accepted_at)->format('d M Y')]; }
+        // v4.43 — every confirmation sent and every acceptance, in the customer's own words where
+        // they replied. This is the evidence trail the dispute at the truck gets settled with.
+        try {
+            foreach (\App\Models\OrderConfirmation::where('tenant_id', $ctx->tenantId())->where('order_id', $o->id)
+                        ->orderBy('id')->get() as $c) {
+                if ($c->sent_at) {
+                    $tl[] = ['title' => 'Order sent to customer to check', 'at' => Carbon::parse($c->sent_at)->format('d M Y H:i'), 'actor' => 'WhatsApp'];
+                }
+                if ($c->confirmed_at) {
+                    $tl[] = ['title' => 'Customer confirmed'
+                                . ($c->confirmed_note ? ' — "' . mb_substr((string) $c->confirmed_note, 0, 60) . '"' : ''),
+                        'at' => Carbon::parse($c->confirmed_at)->format('d M Y H:i'),
+                        'actor' => $c->confirmed_via === 'whatsapp' ? 'Replied on WhatsApp' : ($c->confirmed_via === 'staff' ? (string) ($c->confirmed_by ?: 'Staff') : 'Tapped the link')];
+                }
+                if ($c->superseded_at && $c->confirmed_at) {
+                    $tl[] = ['title' => '⚠ Order changed after the customer confirmed it', 'at' => Carbon::parse($c->superseded_at)->format('d M Y H:i')];
+                }
+            }
+        } catch (\Throwable $e) { /* timeline is never worth an error page */ }
         if ($o->ready_at) { $tl[] = ['title' => 'Picked & packed', 'at' => Carbon::parse($o->ready_at)->format('d M Y'), 'actor' => 'Warehouse']; }
         if ($o->delivered_at) { $tl[] = ['title' => 'Delivered', 'at' => Carbon::parse($o->delivered_at)->format('d M Y'), 'actor' => 'Dispatch']; }
         if ($inv) { $tl[] = ['title' => 'Invoice ' . $inv->invoice_no . ' created', 'at' => $inv->issued_at ? Carbon::parse($inv->issued_at)->format('d M Y') : Carbon::parse($inv->created_at)->format('d M Y')]; }
@@ -205,7 +266,7 @@ final class SalesOrderCapability implements ObjectCapability
                 'status' => $cancelled ? 'cancelled' : ($delivered ? 'delivered' : strtolower((string) ($o->status ?: 'pending'))),
             ])
             ->headline($fmt($total), $delivered ? 'delivered' : ($cancelled ? 'cancelled' : 'in progress'), $cancelled ? 'danger' : ($delivered ? 'ok' : 'default'))
-            ->brief($this->orderBrief($o, $inv, $delivered, $cancelled, $balance, $fmt))
+            ->brief($this->orderBrief($o, $inv, $delivered, $cancelled, $balance, $fmt, $conf))
             ->financials($rail)
             ->nba($nbaText, $nbaAction ?: ['key' => 'noop', 'label' => 'OK', 'method' => 'GET', 'endpoint' => $ep, 'actor' => 'human', 'tone' => 'default'])
             ->quickActions($quick)
@@ -227,13 +288,32 @@ final class SalesOrderCapability implements ObjectCapability
             ->meta(['capability' => 'salesOrder', 'ttl' => 30, 'layout' => 'record', 'listKey' => 'salesOrders', 'permissions' => ['menu:orders']]);
     }
 
-    private function orderBrief(Order $o, ?Invoice $inv, bool $delivered, bool $cancelled, float $balance, callable $fmt): \App\Capability\Dto\Brief
+    private function orderBrief(Order $o, ?Invoice $inv, bool $delivered, bool $cancelled, float $balance, callable $fmt, array $conf = []): \App\Capability\Dto\Brief
     {
         if ($cancelled) {
             return new \App\Capability\Dto\Brief('low', 'This order was cancelled.', 'No further action needed — duplicate it if the customer re-orders.', ['tone' => 'default', 'label' => 'Cancelled']);
         }
         if (! $delivered) {
-            return new \App\Capability\Dto\Brief('med', 'Order ' . $o->order_no . ' is in progress.', 'Stock is committed to this order. Mark it delivered on arrival to bill the customer automatically.', ['tone' => 'info', 'label' => 'In progress']);
+            // v4.43 — an undelivered order's real risk is not stock, it is that nobody can prove
+            // what was agreed. Lead with that while there is still time to fix it.
+            $state = (string) ($conf['state'] ?? '');
+            if ($state === 'changed') {
+                return new \App\Capability\Dto\Brief('high', 'Changed after the customer confirmed it.',
+                    'What ' . ($o->customer_name ?: 'the customer') . ' agreed to is not what this order says now. Send it again and get a fresh confirmation before the goods leave.',
+                    ['tone' => 'danger', 'label' => 'Agreement stale']);
+            }
+            if ($state === 'sent') {
+                return new \App\Capability\Dto\Brief('med', 'Waiting for the customer to confirm.',
+                    'They have the itemised order but have not agreed to it yet. If you deliver now and they dispute it, there is nothing signed.',
+                    ['tone' => 'warn', 'label' => 'Not confirmed']);
+            }
+            if ($state !== 'confirmed') {
+                return new \App\Capability\Dto\Brief('med', 'Nothing sent to the customer.',
+                    ($o->customer_name ?: 'The customer') . ' has never been shown these lines, quantities or prices. Send the order before you load the truck.',
+                    ['tone' => 'warn', 'label' => 'Nothing in writing']);
+            }
+
+            return new \App\Capability\Dto\Brief('low', 'Order ' . $o->order_no . ' is confirmed by the customer.', 'They agreed to these exact lines and prices. Mark it delivered on arrival to bill automatically.', ['tone' => 'ok', 'label' => 'Confirmed']);
         }
         if (! $inv) {
             return new \App\Capability\Dto\Brief('high', 'Delivered but not invoiced.', 'Revenue is recognised only when invoiced — this is money earned but not yet billed. Create the invoice now.', ['tone' => 'danger', 'label' => 'Not invoiced']);
@@ -252,8 +332,30 @@ final class SalesOrderCapability implements ObjectCapability
             'create_invoice' => $this->createInvoice($ctx, $input),
             'change_status' => $this->changeStatus($ctx, $input),
             'cancel_order' => $this->cancelOrder($ctx, $input),
+            'send_confirmation' => $this->sendConfirmation($ctx, $input),
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
+    }
+
+    /**
+     * v4.43 — WhatsApp the customer the itemised order and ask them to agree to it.
+     *
+     * Runs INLINE rather than through the queue so the person who pressed the button is told what
+     * actually happened ("no phone on this order", "already sent") instead of a cheerful "queued"
+     * that hides a failure. The status-change path stays queued, where nobody is watching.
+     */
+    private function sendConfirmation(CapabilityContext $ctx, array $input): array
+    {
+        $o = Order::where('tenant_id', $ctx->tenantId())->findOrFail((int) ($input['id'] ?? 0));
+        if (in_array(strtolower((string) $o->status), ['cancelled', 'canceled', 'rejected'], true)) {
+            return ['ok' => false, 'error' => 'closed', 'message' => 'This order is cancelled — nothing to confirm.'];
+        }
+        $res = app(\App\Services\Sales\OrderConfirmationService::class)->send($ctx->tenant, $o, 'manual');
+        if (! empty($res['sent'])) {
+            return ['ok' => true, 'message' => 'Sent to ' . ($o->customer_name ?: $o->customer_phone) . ' — the order screen will show it once they confirm.'];
+        }
+
+        return ['ok' => false, 'error' => 'not_sent', 'message' => 'Not sent: ' . (string) ($res['reason'] ?? 'unknown reason')];
     }
 
     /** Set the order status (validated). The model save fires the OrderObserver — same path the panel uses. */

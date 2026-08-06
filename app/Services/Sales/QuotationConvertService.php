@@ -75,6 +75,15 @@ final class QuotationConvertService
             'quote_no' => (string) $q->quote_no, 'order_no' => (string) $o->order_no,
         ], ['actor' => ['type' => 'system', 'name' => 'convert']]);
 
+        // v4.43 — a converted quotation IS a confirmed order, but it lands on status 'New', which
+        // is not in SendOrderStatusNotification's map at all: until now this path told the customer
+        // NOTHING. They agreed to a quotation, we turned it into an order at whatever the current
+        // rate and catalogue said, and the first they heard of the real figures was the invoice on
+        // delivery. Send them the order they are actually going to receive.
+        try {
+            \App\Jobs\NotifyOrderConfirmation::dispatch($t->id, (int) $o->id, 'quote_converted');
+        } catch (\Throwable $e) { /* never break the conversion over a message */ }
+
         return ['order' => $o, 'already' => false];
     }
 }

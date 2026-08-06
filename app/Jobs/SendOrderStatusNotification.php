@@ -47,6 +47,24 @@ class SendOrderStatusNotification implements ShouldQueue
         $name  = $tenant->name;
         $no    = (string) $order->order_no;
 
+        // v4.43 — CONFIRMATION IS THE ONE STATUS THAT NEEDS THE DETAIL.
+        //
+        // "Your order ORD-1041 is confirmed" contains no fact anyone can be held to. The itemised
+        // numbers only reached the customer on the invoice, which auto-issues on DELIVERY — after
+        // the argument at the truck has already happened. For this status we send the full frozen
+        // order instead: every line, quantity, unit price, total, address and terms, plus a
+        // one-tap confirm link. See App\Services\Sales\OrderConfirmationService.
+        //
+        // The `status_msg_confirmed` / `status_msg_accepted` owner override is superseded while
+        // this is on (documented in Settings) — two messages for one event would be worse than
+        // either alone. Turning `notify_order_confirmation` OFF restores the old one-liner exactly.
+        if (in_array($this->status, ['Confirmed', 'Accepted'], true)
+            && (bool) $tenant->setting('notify_order_confirmation', true)) {
+            \App\Jobs\NotifyOrderConfirmation::dispatch($this->tenantId, (int) $order->id, 'confirmed');
+
+            return;
+        }
+
         // 1) Owner override wins for any status (settings key status_msg_<slug>).
         $slug = strtolower(str_replace([' ', '-'], '_', $this->status));
         $tpl  = trim((string) $tenant->setting('status_msg_' . $slug, ''));

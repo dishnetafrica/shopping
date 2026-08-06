@@ -33,6 +33,9 @@ final class SettingsWriteService
         'ai_persona', 'business_hours', 'delivery_areas', 'faq', 'brand_knowledge', 'languages',
         // Delivery notes shown to customers / staff.
         'delivery_note', 'moq_note',
+        // v4.43 — the payment wording printed on every order confirmation ("cash on delivery",
+        // "30 days from invoice"). Blank = derived from what the order has already been paid.
+        'order_confirm_terms',
         // Storefront trust & delivery promises (shown on product pages / homepage).
         'sf_genuine', 'sf_delivery_eta', 'sf_pay_methods', 'sf_warranty', 'sf_returns',
         // VAT is fully tenant-configurable (never hardcoded): label + tax registration no.
@@ -88,6 +91,8 @@ final class SettingsWriteService
         'task_reminders',       // twice-daily WhatsApp task reminders to assignees
         // v4.25 — WhatsApp the CUSTOMER their invoice, and a receipt with the running balance.
         'notify_customer_invoice', 'notify_customer_receipt',
+        // v4.43 — the itemised order confirmation, and whether it carries a tap-to-confirm link.
+        'notify_order_confirmation', 'order_confirm_link',
         'combo_recommendations', // bot "Goes well with" / "Often bought together" cross-sell suggestions
         'send_product_images',   // bot sends product photos with replies
         // Storefront: per-model show/hide toggles (default on). Read by StorefrontController.
