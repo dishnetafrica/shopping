@@ -53,6 +53,13 @@ class StampCheckCommand extends Command
 
         $bad = 0;
         foreach ($tenants as $t) {
+            // A console run has NO request-bound tenant, and every model using BelongsToTenant
+            // adds a global scope `where tenant_id = <context id>`. Unset, that becomes
+            // `tenant_id = NULL` and matches nothing — so the payment lookup below silently found
+            // zero rows on a shop with sixty payments, and this command reported "no payment to
+            // render" as if that were the truth. Same trap that once made `cashbook:digest` read
+            // $0.00 for every tenant. Set it explicitly, per tenant, before touching any model.
+            app(\App\Support\TenantContext::class)->set((int) $t->id);
             DocumentStamp::forget();   // per-tenant, never a cached answer from the last one
             $this->line('');
             $this->line("── {$t->name} (tenant {$t->id}) · {$doc}");
@@ -92,7 +99,17 @@ class StampCheckCommand extends Command
                 $bad++;
                 continue;
             }
-            $this->info('   ✓ readable, ' . number_format(strlen($uri) / 1024, 1) . ' KB inlined');
+            // The image is base64-inlined into EVERY document, so its size is carried by every
+            // receipt, invoice and quotation — including the ones WhatsApped to customers. A stamp
+            // printed at 150px needs nothing like a megapixel; 600×600 is already generous.
+            $kb = strlen($uri) / 1024;
+            if ($kb > 400) {
+                $this->warn('   ! readable, but LARGE: ' . number_format($kb, 0) . ' KB added to every PDF');
+                $this->line('     → it prints at ' . DocumentStamp::sizePx($t) . 'px. Re-upload it around 600×600');
+                $this->line('       and every document gets smaller and renders faster.');
+            } else {
+                $this->info('   ✓ readable, ' . number_format($kb, 1) . ' KB inlined');
+            }
 
             // 4 — is this document switched on?
             if (! DocumentStamp::on($t, $doc)) {
