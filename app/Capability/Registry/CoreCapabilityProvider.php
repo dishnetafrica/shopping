@@ -26,6 +26,7 @@ use App\Capability\Process\WarrantyClaimListCapability;
 use App\Capability\Process\CampaignListCapability;
 use App\Capability\Process\CashbookCapability;
 use App\Capability\Process\CategoryListCapability;
+use App\Capability\Process\GrowthCapability;
 use App\Capability\Process\CollectionsCapability;
 use App\Capability\Process\CustomerListCapability;
 use App\Capability\Process\DispatchCapability;
@@ -163,6 +164,9 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register(new ProductListCapability(), new CapabilityManifest(key: 'products', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/products'));
         $r->register(new SupplierListCapability(), new CapabilityManifest(key: 'suppliers', type: 'process', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/suppliers'));
         $r->register(new CategoryListCapability(), new CapabilityManifest(key: 'categories', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/categories'));
+        // v4.55 — Growth: who has gone quiet and who is about to, derived from the order book.
+        // Read-only and self-contained; the only command is a manual recalculate.
+        $r->register(new GrowthCapability(), new CapabilityManifest(key: 'growth', type: 'process', owner: 'sales', permission: 'menu:customers', commands: [['key' => 'refresh', 'actor' => 'human']], api: '/api/v1/workspace/growth'));
         $r->register($purchase, new CapabilityManifest(key: 'purchase.process', type: 'process', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/purchase.process'));
         $r->register(new DemandPlanListCapability(), new CapabilityManifest(key: 'demand.plans', type: 'process', owner: 'purchasing', permission: 'menu:purchases', commands: [['key' => 'create_plan', 'actor' => 'human']], api: '/api/v1/workspace/demand.plans'));
         $r->register(new ProcurementDashboardCapability(), new CapabilityManifest(key: 'procurement.hub', type: 'process', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/procurement.hub'));
